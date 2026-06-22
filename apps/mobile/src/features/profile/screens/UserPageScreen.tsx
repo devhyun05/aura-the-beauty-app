@@ -45,12 +45,12 @@ export const UserPageScreen = ({
   if (!userPageData) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>유저페이지를 불러오는 중이에요.</Text>
+        <Text style={styles.loadingText}>마이페이지를 불러오는 중이에요.</Text>
       </View>
     );
   }
 
-  const recentReports = userPageData.reports.slice(0, 2);
+  const recentReports = userPageData.reports.slice(0, 3);
   const previewStyles = userPageData.makeupStyles.slice(0, 3);
   const previewProducts = userPageData.favoriteProducts.slice(0, 3);
 
@@ -67,7 +67,7 @@ export const UserPageScreen = ({
 
         <View style={styles.section}>
           <SectionHeader
-            actionLabel="전체 보기"
+            actionLabel="전체보기"
             onPressAction={onPressReports}
             title="분석 결과"
           />
@@ -85,7 +85,7 @@ export const UserPageScreen = ({
 
         <View style={styles.section}>
           <SectionHeader
-            actionLabel="전체 보기"
+            actionLabel="전체보기"
             onPressAction={onPressMakeupStyles}
             title="메이크업 스타일"
           />
@@ -101,9 +101,9 @@ export const UserPageScreen = ({
 
         <View style={styles.productSection}>
           <SectionHeader
-            actionLabel="전체 보기"
+            actionLabel="전체보기"
             onPressAction={onPressFavoriteProducts}
-            title="좋아요한 제품목록"
+            title="좋아한 제품목록"
           />
 
           <View style={styles.productList}>

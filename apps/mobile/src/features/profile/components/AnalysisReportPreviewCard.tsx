@@ -22,10 +22,12 @@ export const AnalysisReportPreviewCard = ({
       <View style={styles.header}>
         <View style={styles.titleGroup}>
           <Text style={styles.title}>{report.title}</Text>
-          <Text style={styles.date}>{report.analyzedAt}</Text>
+          <Text numberOfLines={1} style={styles.date}>
+            {report.analyzedAt} · {report.environmentLabel}
+          </Text>
         </View>
 
-        <Text style={styles.chevron}>&gt;</Text>
+        <ChevronRightIcon />
       </View>
 
       <View style={styles.content}>
@@ -38,7 +40,7 @@ export const AnalysisReportPreviewCard = ({
         <View style={styles.details}>
           <View style={styles.tags}>
             <ProfileChip label={report.personalColor} />
-            <ProfileChip label={report.skinType} />
+            <ProfileChip label={report.recommendedMood} />
           </View>
 
           <Text numberOfLines={2} style={styles.summary}>
@@ -50,6 +52,15 @@ export const AnalysisReportPreviewCard = ({
   );
 };
 
+function ChevronRightIcon() {
+  return (
+    <View pointerEvents="none" style={styles.chevronIcon}>
+      <View style={[styles.chevronLine, styles.chevronLineTop]} />
+      <View style={[styles.chevronLine, styles.chevronLineBottom]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: userPageColors.surface,
@@ -59,10 +70,26 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
   },
-  chevron: {
-    color: userPageColors.accentMuted,
-    fontSize: 24,
-    lineHeight: 24,
+  chevronIcon: {
+    height: 24,
+    position: 'relative',
+    width: 18,
+  },
+  chevronLine: {
+    backgroundColor: userPageColors.accentMuted,
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
+    right: 2,
+    width: 10,
+  },
+  chevronLineBottom: {
+    top: 13,
+    transform: [{ rotate: '-45deg' }],
+  },
+  chevronLineTop: {
+    top: 7,
+    transform: [{ rotate: '45deg' }],
   },
   content: {
     alignItems: 'center',

@@ -5,10 +5,12 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {UserPageScreen} from '../features/profile';
 
-type AppScreen = 'login' | 'faceCapture';
+type AppScreen = 'login' | 'faceCapture' | 'userPage' | 'analysisResults';
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -24,12 +26,24 @@ export function AppRoot() {
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
         <>
-          <StatusBar style={activeScreen === 'login' ? 'dark' : 'light'} />
+          <StatusBar style={activeScreen === 'faceCapture' ? 'light' : 'dark'} />
           {activeScreen === 'login' ? (
             <LoginScreen onLoginSuccess={() => setActiveScreen('faceCapture')} />
-          ) : (
-            <FaceCaptureScreen onClose={() => setActiveScreen('login')} />
-          )}
+          ) : null}
+          {activeScreen === 'faceCapture' ? (
+            <FaceCaptureScreen
+              onCapture={() => setActiveScreen('userPage')}
+              onClose={() => setActiveScreen('login')}
+            />
+          ) : null}
+          {activeScreen === 'userPage' ? (
+            <UserPageScreen
+              onPressReports={() => setActiveScreen('analysisResults')}
+            />
+          ) : null}
+          {activeScreen === 'analysisResults' ? (
+            <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
+          ) : null}
         </>
       </SafeAreaProvider>
     </TamaguiProvider>
