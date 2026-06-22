@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, Text, View } from 'tamagui';
@@ -18,19 +18,22 @@ interface AnalysisResultsScreenProps {
   onPressResult?: (resultId: string) => void;
 }
 
+const PAGE_SIZE = 5;
+
 export const AnalysisResultsScreen = ({
   onBack,
   onPressResult,
 }: AnalysisResultsScreenProps) => {
   const insets = useSafeAreaInsets();
   const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     let isMounted = true;
 
     getAnalysisResults().then((analysisResults) => {
       if (isMounted) {
-        setResults(analysisResults.slice(0, 5));
+        setResults(analysisResults);
       }
     });
 
@@ -38,6 +41,21 @@ export const AnalysisResultsScreen = ({
       isMounted = false;
     };
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+  const pageResults = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+
+    return results.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [currentPage, results]);
+
+  const handlePreviousPage = () => {
+    setCurrentPage((page) => Math.max(1, page - 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage((page) => Math.min(totalPages, page + 1));
+  };
 
   return (
     <View style={styles.screen}>
@@ -66,20 +84,79 @@ export const AnalysisResultsScreen = ({
         <View style={styles.summaryPanel}>
           <Text style={styles.summaryTitle}>최근 분석 기록</Text>
           <Text style={styles.summaryCaption}>
-            저장된 분석 결과 5개를 날짜순으로 관리해요.
+            저장된 분석 결과를 5개씩 날짜순으로 관리해요.
           </Text>
         </View>
 
         {results.length > 0 ? (
-          <View style={styles.list}>
-            {results.map((result) => (
-              <AnalysisResultHistoryCard
-                key={result.id}
-                onPress={() => onPressResult?.(result.id)}
-                result={result}
-              />
-            ))}
-          </View>
+          <>
+            <View style={styles.list}>
+              {pageResults.map((result) => (
+                <AnalysisResultHistoryCard
+                  key={result.id}
+                  onPress={() => onPressResult?.(result.id)}
+                  result={result}
+                />
+              ))}
+            </View>
+
+            <View style={styles.pagination}>
+              <Pressable
+                accessibilityLabel="이전 분석 결과 페이지"
+                accessibilityRole="button"
+                disabled={currentPage === 1}
+                onPress={handlePreviousPage}
+                style={[
+                  styles.pageButton,
+                  currentPage === 1 ? styles.pageButtonDisabled : null,
+                ]}
+              >
+                <ChevronLeftIcon />
+              </Pressable>
+
+              <View style={styles.pageIndicatorGroup}>
+                {Array.from({ length: totalPages }, (_, index) => {
+                  const page = index + 1;
+                  const isActive = page === currentPage;
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${page}페이지로 이동`}
+                      accessibilityRole="button"
+                      key={page}
+                      onPress={() => setCurrentPage(page)}
+                      style={[
+                        styles.pageNumber,
+                        isActive ? styles.pageNumberActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.pageNumberText,
+                          isActive ? styles.pageNumberTextActive : null,
+                        ]}
+                      >
+                        {page}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable
+                accessibilityLabel="다음 분석 결과 페이지"
+                accessibilityRole="button"
+                disabled={currentPage === totalPages}
+                onPress={handleNextPage}
+                style={[
+                  styles.pageButton,
+                  currentPage === totalPages ? styles.pageButtonDisabled : null,
+                ]}
+              >
+                <ChevronRightIcon />
+              </Pressable>
+            </View>
+          </>
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>저장된 분석 결과가 없어요</Text>
@@ -98,6 +175,24 @@ function BackIcon() {
     <View pointerEvents="none" style={styles.backIcon}>
       <View style={[styles.backLine, styles.backLineTop]} />
       <View style={[styles.backLine, styles.backLineBottom]} />
+    </View>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <View pointerEvents="none" style={styles.pageChevronIcon}>
+      <View style={[styles.pageChevronLine, styles.pageChevronLeftTop]} />
+      <View style={[styles.pageChevronLine, styles.pageChevronLeftBottom]} />
+    </View>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <View pointerEvents="none" style={styles.pageChevronIcon}>
+      <View style={[styles.pageChevronLine, styles.pageChevronRightTop]} />
+      <View style={[styles.pageChevronLine, styles.pageChevronRightBottom]} />
     </View>
   );
 }
@@ -175,6 +270,85 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 12,
+  },
+  pageButton: {
+    alignItems: 'center',
+    borderColor: userPageColors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  pageButtonDisabled: {
+    borderColor: userPageColors.borderSubtle,
+    opacity: 0.35,
+  },
+  pageChevronIcon: {
+    height: 18,
+    position: 'relative',
+    width: 18,
+  },
+  pageChevronLeftBottom: {
+    left: 4,
+    top: 10,
+    transform: [{ rotate: '45deg' }],
+  },
+  pageChevronLeftTop: {
+    left: 4,
+    top: 6,
+    transform: [{ rotate: '-45deg' }],
+  },
+  pageChevronLine: {
+    backgroundColor: userPageColors.text,
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
+    width: 9,
+  },
+  pageChevronRightBottom: {
+    right: 4,
+    top: 10,
+    transform: [{ rotate: '-45deg' }],
+  },
+  pageChevronRightTop: {
+    right: 4,
+    top: 6,
+    transform: [{ rotate: '45deg' }],
+  },
+  pageIndicatorGroup: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pageNumber: {
+    alignItems: 'center',
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  pageNumberActive: {
+    backgroundColor: userPageColors.text,
+    borderColor: userPageColors.text,
+  },
+  pageNumberText: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.caption,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  pageNumberTextActive: {
+    color: userPageColors.surface,
+  },
+  pagination: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'center',
+    paddingTop: 2,
   },
   screen: {
     backgroundColor: userPageColors.background,
