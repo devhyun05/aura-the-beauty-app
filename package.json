@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "commitlint": "commitlint --last --verbose"
+    "commitlint": "commitlint --last --verbose",
+    "mobile:start": "npm --prefix apps/mobile run start",
+    "mobile:ios": "npm --prefix apps/mobile run ios",
+    "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
