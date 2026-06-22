@@ -1,38 +1,29 @@
 import React from 'react';
-import {StyleSheet} from 'react-native';
+import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
-import {TamaguiProvider, Text, YStack} from 'tamagui';
+import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {LoginScreen} from '../features/auth';
 
 export function AppRoot() {
+  const [fontsLoaded] = useFonts({
+    'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <YStack style={styles.screen}>
+        <>
           <StatusBar style="dark" />
-          <Text style={styles.title}>AI AR Makeup Guide</Text>
-        </YStack>
+          <LoginScreen />
+        </>
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  title: {
-    color: '#111111',
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: 0,
-    lineHeight: 28,
-    textAlign: 'center',
-  },
-});
