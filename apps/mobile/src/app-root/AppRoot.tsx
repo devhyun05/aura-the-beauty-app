@@ -1,24 +1,62 @@
-import React from 'react';
-import {StyleSheet} from 'react-native';
+import React, {useState} from 'react';
+import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
+import {StyleSheet} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {LoginScreen} from '../features/auth';
+import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
 import {colors} from '../shared/theme';
-import {AppFooter, AppHeader} from '../shared/ui';
+import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
+
+type AppScreen = 'login' | 'home' | 'faceCapture' | 'custom';
 
 export function AppRoot() {
+  const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
+  const [fontsLoaded] = useFonts({
+    'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  const handleFooterTabPress = (tab: FooterTabKey) => {
+    if (tab === 'capture') {
+      setActiveScreen('faceCapture');
+      return;
+    }
+
+    setActiveScreen(tab);
+  };
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <HeaderPreview />
+        {activeScreen === 'login' ? (
+          <>
+            <StatusBar style="dark" />
+            <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />
+          </>
+        ) : activeScreen === 'faceCapture' ? (
+          <FaceCaptureScreen onClose={() => setActiveScreen('home')} />
+        ) : (
+          <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
+        )}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
 
-function HeaderPreview() {
+function AppShell({
+  activeTab,
+  onTabPress,
+}: {
+  activeTab: Exclude<AppScreen, 'login' | 'faceCapture'>;
+  onTabPress: (tab: FooterTabKey) => void;
+}) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -26,7 +64,7 @@ function HeaderPreview() {
       <StatusBar style="dark" />
       <AppHeader topInset={insets.top} />
       <YStack style={styles.body} />
-      <AppFooter bottomInset={insets.bottom} />
+      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
     </YStack>
   );
 }
