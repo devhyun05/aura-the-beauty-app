@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScrollView, Text, View } from 'tamagui';
@@ -10,24 +10,13 @@ import {
   userPageSpacing,
   userPageTypography,
 } from '../../../shared/theme/tokens';
-import type {
-  AnalysisResult,
-  AnalysisSubjectType,
-} from '../../../shared/types/analysis';
+import type { AnalysisResult } from '../../../shared/types/analysis';
 import { AnalysisResultHistoryCard } from '../components/AnalysisResultHistoryCard';
-
-type AnalysisFilter = 'all' | AnalysisSubjectType;
 
 interface AnalysisResultsScreenProps {
   onBack?: () => void;
   onPressResult?: (resultId: string) => void;
 }
-
-const filterOptions: Array<{ label: string; value: AnalysisFilter }> = [
-  { label: '전체', value: 'all' },
-  { label: '내 결과', value: 'me' },
-  { label: '친구', value: 'friend' },
-];
 
 export const AnalysisResultsScreen = ({
   onBack,
@@ -35,7 +24,6 @@ export const AnalysisResultsScreen = ({
 }: AnalysisResultsScreenProps) => {
   const insets = useSafeAreaInsets();
   const [results, setResults] = useState<AnalysisResult[]>([]);
-  const [activeFilter, setActiveFilter] = useState<AnalysisFilter>('all');
 
   useEffect(() => {
     let isMounted = true;
@@ -51,16 +39,7 @@ export const AnalysisResultsScreen = ({
     };
   }, []);
 
-  const filteredResults = useMemo(() => {
-    if (activeFilter === 'all') {
-      return results;
-    }
-
-    return results.filter((result) => result.subjectType === activeFilter);
-  }, [activeFilter, results]);
-
   const latestResult = results[0];
-  const friendCount = results.filter((result) => result.subjectType === 'friend').length;
 
   return (
     <View style={styles.screen}>
@@ -89,14 +68,7 @@ export const AnalysisResultsScreen = ({
         <View style={styles.summaryPanel}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryNumber}>{results.length}</Text>
-            <Text style={styles.summaryLabel}>전체 기록</Text>
-          </View>
-
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{friendCount}</Text>
-            <Text style={styles.summaryLabel}>친구 촬영</Text>
+            <Text style={styles.summaryLabel}>저장 기록</Text>
           </View>
 
           <View style={styles.summaryDivider} />
@@ -107,38 +79,20 @@ export const AnalysisResultsScreen = ({
             </Text>
             <Text style={styles.summaryLabel}>최근 분석</Text>
           </View>
+
+          <View style={styles.summaryDivider} />
+
+          <View style={styles.summaryItemWide}>
+            <Text numberOfLines={1} style={styles.latestMood}>
+              {latestResult?.recommendedMood ?? '-'}
+            </Text>
+            <Text style={styles.summaryLabel}>최근 무드</Text>
+          </View>
         </View>
 
-        <View style={styles.filters}>
-          {filterOptions.map((option) => {
-            const isActive = option.value === activeFilter;
-
-            return (
-              <Pressable
-                accessibilityRole="button"
-                key={option.value}
-                onPress={() => setActiveFilter(option.value)}
-                style={[
-                  styles.filterButton,
-                  isActive ? styles.filterButtonActive : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.filterText,
-                    isActive ? styles.filterTextActive : null,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {filteredResults.length > 0 ? (
+        {results.length > 0 ? (
           <View style={styles.list}>
-            {filteredResults.map((result) => (
+            {results.map((result) => (
               <AnalysisResultHistoryCard
                 key={result.id}
                 onPress={() => onPressResult?.(result.id)}
@@ -224,33 +178,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     lineHeight: 16,
   },
-  filterButton: {
-    alignItems: 'center',
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.chip,
-    borderWidth: 1,
-    flex: 1,
-    minHeight: 40,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  filterButtonActive: {
-    backgroundColor: userPageColors.accent,
-    borderColor: userPageColors.accent,
-  },
-  filterText: {
-    color: userPageColors.textMuted,
-    fontSize: userPageTypography.caption,
-    fontWeight: '700',
-  },
-  filterTextActive: {
-    color: userPageColors.surface,
-  },
-  filters: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   header: {
     alignItems: 'center',
     backgroundColor: userPageColors.background,
@@ -271,6 +198,12 @@ const styles = StyleSheet.create({
     fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',
     lineHeight: 24,
+  },
+  latestMood: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.body,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   list: {
     gap: 12,
@@ -301,7 +234,7 @@ const styles = StyleSheet.create({
   },
   summaryItemWide: {
     alignItems: 'center',
-    flex: 1.35,
+    flex: 1.3,
     gap: 4,
     minWidth: 0,
   },

@@ -23,7 +23,7 @@ export const AnalysisReportPreviewCard = ({
         <View style={styles.titleGroup}>
           <Text style={styles.title}>{report.title}</Text>
           <Text numberOfLines={1} style={styles.date}>
-            {report.analyzedAt} · {report.environmentLabel}
+            {report.personalColor} · {report.skinType}
           </Text>
         </View>
 

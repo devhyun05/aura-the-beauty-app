@@ -37,12 +37,8 @@ export const AnalysisResultHistoryCard = ({
               {result.title}
             </Text>
             <Text numberOfLines={1} style={styles.meta}>
-              {result.analyzedAt} · {result.environmentLabel}
+              {result.personalColor} · {result.skinType}
             </Text>
-          </View>
-
-          <View style={styles.subjectBadge}>
-            <Text style={styles.subjectText}>{result.personLabel}</Text>
           </View>
         </View>
 
@@ -108,18 +104,6 @@ const styles = StyleSheet.create({
     fontSize: userPageTypography.caption,
     fontWeight: '700',
     lineHeight: 16,
-  },
-  subjectBadge: {
-    backgroundColor: userPageColors.accentSoft,
-    borderRadius: userPageRadius.chip,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  subjectText: {
-    color: userPageColors.accent,
-    fontSize: userPageTypography.caption,
-    fontWeight: '700',
-    lineHeight: 14,
   },
   summary: {
     color: userPageColors.textMuted,
