@@ -44,8 +44,8 @@ export const AnalysisMakeupGuideCard = ({
 
 const styles = StyleSheet.create({
   body: {
-    gap: 6,
-    padding: 12,
+    gap: 5,
+    padding: 11,
   },
   card: {
     backgroundColor: userPageColors.surface,
@@ -53,16 +53,16 @@ const styles = StyleSheet.create({
     borderRadius: userPageRadius.image,
     borderWidth: 1,
     overflow: 'hidden',
-    width: 168,
+    width: 176,
   },
   description: {
     color: userPageColors.textMuted,
     fontSize: userPageTypography.caption,
-    lineHeight: 17,
+    lineHeight: 16,
   },
   image: {
     backgroundColor: userPageColors.surfaceMuted,
-    height: 96,
+    height: 100,
     width: '100%',
   },
   subtitle: {
@@ -76,8 +76,8 @@ const styles = StyleSheet.create({
     color: userPageColors.textMuted,
     fontSize: userPageTypography.caption,
     lineHeight: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   tags: {
     flexDirection: 'row',
@@ -89,6 +89,6 @@ const styles = StyleSheet.create({
     color: userPageColors.text,
     fontSize: userPageTypography.body,
     fontWeight: '700',
-    lineHeight: 20,
+    lineHeight: 19,
   },
 });

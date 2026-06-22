@@ -1,7 +1,11 @@
 import { Image, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
-import { userPageColors } from '../../../shared/theme/tokens';
+import {
+  userPageColors,
+  userPageRadius,
+  userPageTypography,
+} from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
 import { HeartIcon } from './HeartIcon';
 
@@ -42,8 +46,9 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
 const styles = StyleSheet.create({
   brandName: {
     color: userPageColors.textMuted,
-    fontSize: 14,
+    fontSize: userPageTypography.caption,
     fontWeight: '600',
+    lineHeight: 16,
   },
   card: {
     flex: 1,
@@ -53,7 +58,7 @@ const styles = StyleSheet.create({
   heartBadge: {
     alignItems: 'center',
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: 12,
     borderWidth: 1,
     bottom: 8,
@@ -69,23 +74,25 @@ const styles = StyleSheet.create({
   },
   imageFrame: {
     aspectRatio: 1,
+    backgroundColor: userPageColors.surfaceMuted,
     borderColor: userPageColors.borderSubtle,
-    borderRadius: 6,
+    borderRadius: userPageRadius.image,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
   },
   price: {
     color: userPageColors.text,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: userPageTypography.body,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   productName: {
     color: userPageColors.textMuted,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: userPageTypography.caption,
+    lineHeight: 17,
   },
   textGroup: {
-    gap: 6,
+    gap: 4,
   },
 });

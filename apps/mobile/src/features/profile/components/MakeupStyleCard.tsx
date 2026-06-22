@@ -34,13 +34,13 @@ export const MakeupStyleCard = ({ style }: MakeupStyleCardProps) => {
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     width: 104,
   },
   heartBadge: {
     alignItems: 'center',
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: 12,
     borderWidth: 1,
     height: 24,
@@ -55,16 +55,19 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   imageFrame: {
-    borderColor: userPageColors.border,
+    backgroundColor: userPageColors.surfaceMuted,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    height: 150,
+    height: 144,
     overflow: 'hidden',
     width: 104,
   },
   title: {
-    color: userPageColors.textMuted,
+    color: userPageColors.text,
     fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
     textAlign: 'center',
   },
 });

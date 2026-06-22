@@ -226,9 +226,9 @@ function BackIcon() {
 const styles = StyleSheet.create({
   backButton: {
     alignItems: 'center',
-    height: 42,
+    height: 38,
     justifyContent: 'center',
-    width: 42,
+    width: 38,
   },
   backIcon: {
     height: 22,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
   carouselContent: {
-    gap: 12,
+    gap: 10,
     paddingRight: userPageSpacing.screenX,
   },
   emptyDescription: {
@@ -277,18 +277,18 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: userPageColors.textSoft,
-    fontSize: userPageTypography.caption,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    lineHeight: 16,
+    letterSpacing: 1.4,
+    lineHeight: 14,
   },
   faceGuideCard: {
     backgroundColor: userPageColors.surface,
     borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    gap: 6,
-    padding: 12,
+    gap: 5,
+    padding: 11,
     width: '48%',
   },
   faceGuideDescription: {
@@ -313,25 +313,27 @@ const styles = StyleSheet.create({
     borderBottomColor: userPageColors.divider,
     borderBottomWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    paddingBottom: 14,
+    gap: 8,
+    paddingBottom: 12,
     paddingHorizontal: userPageSpacing.screenX,
   },
   headerText: {
+    alignItems: 'center',
     flex: 1,
-    gap: 3,
+    gap: 2,
+    marginRight: 38,
     minWidth: 0,
   },
   heroImage: {
     backgroundColor: userPageColors.surfaceMuted,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    height: 318,
+    height: 334,
     width: '100%',
   },
   heroSection: {
-    gap: 12,
+    gap: 10,
   },
   paragraph: {
     color: userPageColors.text,
@@ -354,23 +356,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    gap: 22,
+    gap: 20,
     paddingBottom: 56,
     paddingHorizontal: userPageSpacing.screenX,
-    paddingTop: 20,
+    paddingTop: 16,
   },
   scrollView: {
     backgroundColor: userPageColors.background,
     flex: 1,
   },
   section: {
-    gap: 12,
+    borderTopColor: userPageColors.divider,
+    borderTopWidth: 1,
+    gap: 10,
+    paddingTop: 18,
   },
   sectionTitle: {
     color: userPageColors.text,
     fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   summaryChip: {
     backgroundColor: userPageColors.surface,
@@ -378,10 +383,10 @@ const styles = StyleSheet.create({
     borderRadius: userPageRadius.image,
     borderWidth: 1,
     flex: 1,
-    gap: 5,
-    minHeight: 78,
+    gap: 4,
+    minHeight: 70,
     minWidth: '47%',
-    padding: 12,
+    padding: 11,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -401,8 +406,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: userPageColors.text,
-    fontSize: userPageTypography.title,
+    fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',
-    lineHeight: 30,
+    lineHeight: 22,
   },
 });

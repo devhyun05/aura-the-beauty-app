@@ -3,7 +3,11 @@ import { StyleSheet } from 'react-native';
 import { ScrollView, Text, View } from 'tamagui';
 
 import { getUserPageData } from '../../../shared/services/userPageService';
-import { userPageColors, userPageSpacing } from '../../../shared/theme/tokens';
+import {
+  userPageColors,
+  userPageSpacing,
+  userPageTypography,
+} from '../../../shared/theme/tokens';
 import type { UserPageData } from '../../../shared/types/userPage';
 import { AnalysisReportPreviewCard } from '../components/AnalysisReportPreviewCard';
 import { FavoriteProductCard } from '../components/FavoriteProductCard';
@@ -121,13 +125,14 @@ const styles = StyleSheet.create({
   container: {
     gap: userPageSpacing.sectionGap,
     minHeight: 874,
-    paddingBottom: 64,
+    paddingBottom: 56,
     paddingHorizontal: userPageSpacing.screenX,
-    paddingTop: 88,
+    paddingTop: 64,
   },
   divider: {
     backgroundColor: userPageColors.divider,
     height: 1,
+    marginVertical: 2,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -137,18 +142,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: userPageColors.textMuted,
-    fontSize: 15,
+    fontSize: userPageTypography.body,
   },
   productList: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 18,
+    gap: 12,
   },
   productSection: {
-    gap: 18,
+    gap: 14,
   },
   reportList: {
-    gap: 10,
+    gap: 8,
   },
   scrollView: {
     backgroundColor: userPageColors.background,
@@ -160,6 +165,7 @@ const styles = StyleSheet.create({
   styleList: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: 10,
     justifyContent: 'space-between',
   },
 });

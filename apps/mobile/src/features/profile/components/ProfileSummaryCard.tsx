@@ -1,7 +1,11 @@
 import { Image, Pressable, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
-import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
+import {
+  userPageColors,
+  userPageRadius,
+  userPageTypography,
+} from '../../../shared/theme/tokens';
 import type { UserProfile } from '../../../shared/types/userPage';
 import { ProfileChip } from './ProfileChip';
 
@@ -64,38 +68,38 @@ function SettingsIcon() {
 
 const styles = StyleSheet.create({
   avatar: {
-    borderColor: userPageColors.border,
-    borderRadius: 46,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 38,
     borderWidth: 1,
-    height: 92,
-    width: 92,
+    height: 76,
+    width: 76,
   },
   card: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
-    borderRadius: userPageRadius.image,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: userPageRadius.card,
     borderWidth: 1,
-    elevation: 2,
-    padding: 22,
+    elevation: 1,
+    padding: 18,
     shadowColor: userPageColors.shadow,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
   },
   content: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 16,
+    gap: 14,
   },
   email: {
     alignSelf: 'stretch',
     color: userPageColors.textMuted,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: userPageTypography.body,
+    lineHeight: 19,
   },
   name: {
     color: userPageColors.text,
-    fontSize: 24,
+    fontSize: userPageTypography.title,
     fontWeight: '700',
   },
   profileInfo: {
@@ -108,11 +112,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     borderColor: userPageColors.borderSubtle,
-    borderRadius: 18,
+    borderRadius: 17,
     borderWidth: 1,
-    height: 36,
+    height: 34,
     justifyContent: 'center',
-    width: 36,
+    width: 34,
   },
   settingsDot: {
     backgroundColor: userPageColors.text,
@@ -128,7 +132,7 @@ const styles = StyleSheet.create({
   tags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     width: '100%',
   },
 });
