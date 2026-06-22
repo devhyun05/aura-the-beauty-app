@@ -1,5 +1,5 @@
 import { userPageMock } from '../mocks/userPage.mock';
-import type { UserPageData } from '../types/userPage';
+import type { FavoriteProductPreview, UserPageData } from '../types/userPage';
 import { getRecentAnalysisResults } from './analysisResultService';
 
 export const getUserPageData = async (): Promise<UserPageData> => {
@@ -9,4 +9,10 @@ export const getUserPageData = async (): Promise<UserPageData> => {
     ...userPageMock,
     reports,
   };
+};
+
+export const getFavoriteProducts = async (): Promise<
+  FavoriteProductPreview[]
+> => {
+  return userPageMock.favoriteProducts;
 };
