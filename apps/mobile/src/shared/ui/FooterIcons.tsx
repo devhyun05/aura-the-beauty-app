@@ -34,44 +34,44 @@ export function BrushFooterIcon({color = colors.black}: FooterIconProps) {
   return (
     <YStack pointerEvents="none" style={styles.brushRoot}>
       <YStack style={[styles.brushHandle, {backgroundColor: color}]} />
-      <YStack style={[styles.brushTip, {backgroundColor: color}]} />
-      <YStack style={[styles.brushStroke, {backgroundColor: color}]} />
+      <YStack style={[styles.brushFerrule, {backgroundColor: color}]} />
+      <YStack style={[styles.brushBristle, {backgroundColor: color}]} />
     </YStack>
   );
 }
 
 const styles = StyleSheet.create({
   homeRoot: {
-    height: 28,
-    width: 30,
+    height: 24,
+    width: 32,
   },
   homeRoof: {
-    borderLeftWidth: 3,
+    borderLeftWidth: 2.8,
     borderRadius: 4,
-    borderTopWidth: 3,
-    height: 19,
-    left: 5,
+    borderTopWidth: 2.8,
+    height: 17,
+    left: 7,
     position: 'absolute',
-    top: 0,
+    top: 1,
     transform: [{rotate: '45deg'}],
-    width: 19,
+    width: 17,
   },
   homeBody: {
     alignItems: 'center',
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderRightWidth: 3,
+    borderBottomWidth: 2.8,
+    borderLeftWidth: 2.8,
+    borderRightWidth: 2.8,
     bottom: 0,
-    height: 16,
+    height: 14,
     justifyContent: 'flex-end',
-    left: 6,
+    left: 7,
     position: 'absolute',
     width: 18,
   },
   homeDoor: {
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
-    height: 8,
+    height: 7,
     width: 5,
   },
   cameraRoot: {
@@ -109,32 +109,33 @@ const styles = StyleSheet.create({
     width: 32,
   },
   brushHandle: {
-    borderRadius: 9,
-    height: 27,
+    borderRadius: 4,
+    height: 24,
     position: 'absolute',
-    right: 4,
-    top: 0,
-    transform: [{rotate: '42deg'}],
-    width: 10,
+    right: 7,
+    top: 1,
+    transform: [{rotate: '45deg'}],
+    width: 5,
   },
-  brushTip: {
-    borderRadius: 9,
-    bottom: 5,
-    height: 17,
-    left: 8,
+  brushFerrule: {
+    borderRadius: 3,
+    height: 10,
+    left: 11,
     position: 'absolute',
-    transform: [{rotate: '24deg'}],
-    width: 11,
+    top: 13,
+    transform: [{rotate: '45deg'}],
+    width: 8,
   },
-  brushStroke: {
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 3,
-    borderTopLeftRadius: 2,
-    bottom: 1,
-    height: 8,
-    left: 0,
+  brushBristle: {
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 9,
+    borderTopLeftRadius: 9,
+    borderTopRightRadius: 9,
+    height: 13,
+    left: 6,
     position: 'absolute',
-    transform: [{rotate: '-16deg'}],
-    width: 17,
+    top: 17,
+    transform: [{rotate: '45deg'}],
+    width: 9,
   },
 });
