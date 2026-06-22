@@ -1,6 +1,7 @@
 import {mockARMakeupGuideData, mockRecommendationResult} from '../mocks/makeupGuide.mock';
 import type {
   ARMakeupGuideData,
+  ComparisonModeOption,
   FilterCategoryId,
   MakeupFilter,
   MakeupLook,
@@ -25,6 +26,12 @@ export function getDefaultMakeupFilter(
   data: ARMakeupGuideData = mockARMakeupGuideData,
 ): MakeupFilter {
   return data.filters[0];
+}
+
+export function getDefaultComparisonMode(
+  data: ARMakeupGuideData = mockARMakeupGuideData,
+): ComparisonModeOption {
+  return data.comparisonModes[0];
 }
 
 export function getFiltersByCategory(

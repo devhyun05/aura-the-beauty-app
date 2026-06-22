@@ -11,6 +11,7 @@ import {
 } from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {
+  ComparisonMode,
   FacePartId,
   FilterCategoryId,
   GuideMode,
@@ -21,6 +22,7 @@ import type {
 type CaptureMode = 'photo' | 'video';
 
 type ARMakeupFilterScreenProps = {
+  initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
   onBack?: () => void;
   onOpenLocationAdjust?: () => void;
@@ -34,6 +36,7 @@ const STYLE_OPTION_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = 
 ];
 
 export function ARMakeupFilterScreen({
+  initialComparisonMode = 'full',
   initialGuideMode = 'basic',
   onBack,
   onOpenLocationAdjust,
@@ -44,6 +47,8 @@ export function ARMakeupFilterScreen({
   const defaultFilter = getDefaultMakeupFilter(arGuideData);
 
   const [guideMode, setGuideMode] = useState<GuideMode>(initialGuideMode);
+  const [selectedComparisonMode, setSelectedComparisonMode] =
+    useState<ComparisonMode>(initialComparisonMode);
   const [selectedCategoryId, setSelectedCategoryId] = useState<FilterCategoryId>(
     arGuideData.categories[0].id,
   );
@@ -88,6 +93,9 @@ export function ARMakeupFilterScreen({
   const selectedTexture =
     selectedFilter.textureOptions.find(option => option.id === selectedTextureId) ??
     selectedFilter.textureOptions[0];
+  const selectedComparison =
+    arGuideData.comparisonModes.find(mode => mode.id === selectedComparisonMode) ??
+    arGuideData.comparisonModes[0];
 
   return (
     <View style={styles.screen}>
@@ -135,6 +143,19 @@ export function ARMakeupFilterScreen({
             onPress={() => setGuideMode('half')}
           />
         </XStack>
+
+        {guideMode === 'half' ? (
+          <XStack style={styles.comparisonBar}>
+            {arGuideData.comparisonModes.map(mode => (
+              <ComparisonModeButton
+                key={mode.id}
+                isActive={mode.id === selectedComparisonMode}
+                label={mode.label}
+                onPress={() => setSelectedComparisonMode(mode.id)}
+              />
+            ))}
+          </XStack>
+        ) : null}
       </YStack>
 
       <YStack style={styles.previewArea}>
@@ -149,12 +170,35 @@ export function ARMakeupFilterScreen({
           <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
           <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
           <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
+          {guideMode === 'half' ? (
+            <>
+              {selectedComparisonMode !== 'full' ? (
+                <View
+                  style={[
+                    styles.comparisonShade,
+                    selectedComparisonMode === 'left'
+                      ? styles.comparisonShadeRight
+                      : styles.comparisonShadeLeft,
+                  ]}
+                />
+              ) : null}
+              <View style={styles.comparisonDivider} />
+              <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
+                Before
+              </Text>
+              <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
+                After
+              </Text>
+            </>
+          ) : null}
           <YStack style={styles.previewBadge}>
             <Text style={styles.previewBadgeLabel}>
-              {guideMode === 'basic' ? '기본 모드' : '반반 가이드'}
+              {guideMode === 'basic' ? '기본 모드' : selectedComparison.label}
             </Text>
             <Text style={styles.previewBadgeText}>
-              {selectedColor.label} · {selectedType.label} · {selectedTexture.label}
+              {guideMode === 'half'
+                ? selectedComparison.description
+                : `${selectedColor.label} · ${selectedType.label} · ${selectedTexture.label}`}
             </Text>
           </YStack>
         </View>
@@ -338,6 +382,32 @@ function SegmentButton({isActive, label, onPress}: SegmentButtonProps) {
   );
 }
 
+type ComparisonModeButtonProps = {
+  isActive: boolean;
+  label: string;
+  onPress: () => void;
+};
+
+function ComparisonModeButton({isActive, label, onPress}: ComparisonModeButtonProps) {
+  return (
+    <Button
+      accessibilityRole="button"
+      accessibilityState={{selected: isActive}}
+      onPress={onPress}
+      pressStyle={{scale: 0.98}}
+      style={[styles.comparisonButton, isActive ? styles.comparisonButtonActive : undefined]}
+      unstyled>
+      <Text
+        style={[
+          styles.comparisonButtonText,
+          isActive ? styles.comparisonButtonTextActive : undefined,
+        ]}>
+        {label}
+      </Text>
+    </Button>
+  );
+}
+
 type HorizontalSectionProps = {
   children: React.ReactNode;
   label: string;
@@ -507,6 +577,39 @@ const styles = StyleSheet.create({
   segmentTextActive: {
     color: colors.black,
   },
+  comparisonBar: {
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  comparisonButton: {
+    alignItems: 'center',
+    borderColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  comparisonButtonActive: {
+    backgroundColor: colors.white,
+  },
+  comparisonButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  comparisonButtonTextActive: {
+    color: colors.black,
+  },
   previewArea: {
     alignItems: 'center',
     flex: 1,
@@ -571,6 +674,48 @@ const styles = StyleSheet.create({
     opacity: 0.62,
     position: 'absolute',
     right: '43%',
+  },
+  comparisonShade: {
+    backgroundColor: colors.black,
+    bottom: spacing.md,
+    opacity: 0.42,
+    position: 'absolute',
+    top: spacing.md,
+    width: '50%',
+  },
+  comparisonShadeLeft: {
+    left: 0,
+  },
+  comparisonShadeRight: {
+    right: 0,
+  },
+  comparisonDivider: {
+    backgroundColor: colors.white,
+    bottom: spacing.md,
+    opacity: 0.88,
+    position: 'absolute',
+    top: spacing.md,
+    width: 2,
+  },
+  comparisonLabel: {
+    backgroundColor: colors.glassSurface,
+    borderRadius: radius.pill,
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    position: 'absolute',
+    bottom: spacing.xl,
+  },
+  comparisonLabelBefore: {
+    left: spacing.xl,
+  },
+  comparisonLabelAfter: {
+    right: spacing.xl,
   },
   previewBadge: {
     alignItems: 'flex-start',

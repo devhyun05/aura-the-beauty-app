@@ -69,6 +69,12 @@ export type FilterTextOption = {
   label: string;
 };
 
+export type ComparisonModeOption = {
+  id: ComparisonMode;
+  label: string;
+  description: string;
+};
+
 export type MakeupFilter = {
   id: string;
   imageSource: ImageSourcePropType;
@@ -84,6 +90,7 @@ export type MakeupFilter = {
 
 export type ARMakeupGuideData = {
   categories: readonly FilterCategory[];
+  comparisonModes: readonly ComparisonModeOption[];
   faceParts: readonly FacePart[];
   filters: readonly MakeupFilter[];
 };

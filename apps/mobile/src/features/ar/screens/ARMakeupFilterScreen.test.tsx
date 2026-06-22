@@ -8,3 +8,5 @@ import {ARMakeupFilterScreen} from './ARMakeupFilterScreen';
   onOpenLocationAdjust={() => undefined}
   onOpenStyleAdjust={() => undefined}
 />;
+
+<ARMakeupFilterScreen initialComparisonMode="left" initialGuideMode="half" />;

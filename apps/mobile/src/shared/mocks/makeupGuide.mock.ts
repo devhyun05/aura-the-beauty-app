@@ -93,6 +93,23 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     {id: 'personalColor', label: '퍼스널컬러'},
     {id: 'popular', label: '인기'},
   ],
+  comparisonModes: [
+    {
+      id: 'full',
+      label: '전체 비교',
+      description: '왼쪽은 적용 전, 오른쪽은 적용 후처럼 전체 기준으로 보여줘요.',
+    },
+    {
+      id: 'left',
+      label: '왼쪽 적용',
+      description: '왼쪽 얼굴 영역에만 필터가 적용된 상태를 mock으로 표현해요.',
+    },
+    {
+      id: 'right',
+      label: '오른쪽 적용',
+      description: '오른쪽 얼굴 영역에만 필터가 적용된 상태를 mock으로 표현해요.',
+    },
+  ],
   faceParts: [
     {id: 'all', label: '전체'},
     {id: 'base', label: '베이스'},
