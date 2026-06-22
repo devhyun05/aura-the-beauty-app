@@ -3,7 +3,7 @@ import {StyleSheet} from 'react-native';
 import {Button, Text, XStack, YStack, type XStackProps} from 'tamagui';
 
 import {colors, radius, shadows, spacing, typography} from '../theme';
-import {ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
+import {ProfileHeaderIcon} from './HeaderIcons';
 
 type AppHeaderProps = {
   title?: string;
@@ -11,9 +11,7 @@ type AppHeaderProps = {
   showTitle?: boolean;
   topInset?: number;
   rightSlot?: ReactNode;
-  onSearchPress?: () => void;
   onProfilePress?: () => void;
-  searchAccessibilityLabel?: string;
   profileAccessibilityLabel?: string;
   containerProps?: XStackProps;
 };
@@ -24,9 +22,7 @@ export function AppHeader({
   showTitle = true,
   topInset = 0,
   rightSlot,
-  onSearchPress,
   onProfilePress,
-  searchAccessibilityLabel = '검색',
   profileAccessibilityLabel = '사용자 페이지',
   containerProps,
 }: AppHeaderProps) {
@@ -66,18 +62,11 @@ export function AppHeader({
 
       <XStack style={styles.actions}>
         {rightSlot ?? (
-          <>
-            <HeaderIconButton
-              accessibilityLabel={searchAccessibilityLabel}
-              onPress={onSearchPress}>
-              <SearchHeaderIcon />
-            </HeaderIconButton>
-            <HeaderIconButton
-              accessibilityLabel={profileAccessibilityLabel}
-              onPress={onProfilePress}>
-              <ProfileHeaderIcon />
-            </HeaderIconButton>
-          </>
+          <HeaderIconButton
+            accessibilityLabel={profileAccessibilityLabel}
+            onPress={onProfilePress}>
+            <ProfileHeaderIcon />
+          </HeaderIconButton>
         )}
       </XStack>
     </XStack>
