@@ -34,8 +34,9 @@ export function BrushFooterIcon({color = colors.black}: FooterIconProps) {
   return (
     <YStack pointerEvents="none" style={styles.brushRoot}>
       <YStack style={[styles.brushHandle, {backgroundColor: color}]} />
+      <YStack style={[styles.brushHandleEnd, {backgroundColor: color}]} />
       <YStack style={[styles.brushFerrule, {backgroundColor: color}]} />
-      <YStack style={[styles.brushBristle, {backgroundColor: color}]} />
+      <YStack style={[styles.brushBristle, {borderBottomColor: color}]} />
     </YStack>
   );
 }
@@ -106,36 +107,46 @@ const styles = StyleSheet.create({
   },
   brushRoot: {
     height: 30,
-    width: 32,
+    width: 34,
   },
   brushHandle: {
-    borderRadius: 4,
-    height: 24,
+    borderRadius: 3,
+    height: 23,
     position: 'absolute',
-    right: 7,
+    right: 9,
+    top: 1,
+    transform: [{rotate: '45deg'}],
+    width: 4,
+  },
+  brushHandleEnd: {
+    borderRadius: 3,
+    height: 5,
+    position: 'absolute',
+    right: 5,
     top: 1,
     transform: [{rotate: '45deg'}],
     width: 5,
   },
   brushFerrule: {
-    borderRadius: 3,
-    height: 10,
-    left: 11,
+    borderRadius: 2,
+    height: 9,
+    left: 12,
     position: 'absolute',
     top: 13,
     transform: [{rotate: '45deg'}],
     width: 8,
   },
   brushBristle: {
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 9,
-    borderTopLeftRadius: 9,
-    borderTopRightRadius: 9,
-    height: 13,
-    left: 6,
+    borderBottomWidth: 13,
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 5,
+    borderRightColor: 'transparent',
+    borderRightWidth: 5,
+    height: 0,
+    left: 5,
     position: 'absolute',
-    top: 17,
+    top: 18,
     transform: [{rotate: '45deg'}],
-    width: 9,
+    width: 0,
   },
 });
