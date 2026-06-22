@@ -6,12 +6,20 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {UserPageScreen} from '../features/profile';
 import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
-type AppScreen = 'login' | 'home' | 'faceCapture' | 'custom';
+type AppScreen =
+  | 'login'
+  | 'home'
+  | 'faceCapture'
+  | 'custom'
+  | 'userPage'
+  | 'analysisResults';
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -39,16 +47,31 @@ export function AppRoot() {
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        {activeScreen === 'login' ? (
-          <>
-            <StatusBar style="dark" />
-            <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />
-          </>
-        ) : activeScreen === 'faceCapture' ? (
-          <FaceCaptureScreen onClose={() => setActiveScreen('home')} />
-        ) : (
-          <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
-        )}
+{activeScreen === 'login' ? (
+  <>
+    <StatusBar style="dark" />
+    <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />
+  </>
+) : activeScreen === 'faceCapture' ? (
+  <FaceCaptureScreen
+    onCapture={() => setActiveScreen('userPage')}
+    onClose={() => setActiveScreen('home')}
+  />
+) : activeScreen === 'userPage' ? (
+  <>
+    <StatusBar style="dark" />
+    <UserPageScreen
+      onPressReports={() => setActiveScreen('analysisResults')}
+    />
+  </>
+) : activeScreen === 'analysisResults' ? (
+  <>
+    <StatusBar style="dark" />
+    <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
+  </>
+) : (
+  <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
+)}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
