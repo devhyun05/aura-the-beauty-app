@@ -1,5 +1,16 @@
 # Project Guidelines
 
+## Mobile Frontend Guide
+
+For all mobile frontend work under `apps/mobile`, always read and follow:
+
+```text
+docs/mobile/FRONTEND_WORK_GUIDE.md
+```
+
+This guide is the source of truth for mobile frontend scope, design direction,
+folder structure, mock data rules, shared UI rules, and Codex prompt conventions.
+
 ## Commit Message Rules
 
 All commit messages must follow the Conventional Commits format.
