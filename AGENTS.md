@@ -57,3 +57,23 @@ fix:
 
 Commit messages may use Korean in the subject, but the type must be one of
 the allowed English keywords.
+
+## Codex Commit Behavior
+
+When Codex creates commits in this repository, it must automatically follow
+the commit message rules above.
+
+- Choose the commit type from the allowed English keywords without asking when
+  the change scope is clear.
+- Use `feat` for new user-facing functionality.
+- Use `fix` for bug fixes or visual corrections.
+- Use `docs` for documentation-only changes.
+- Use `refactor` for structure changes that do not alter behavior.
+- Use `test` for test additions or test updates.
+- Use `chore` for dependency, configuration, or maintenance changes.
+- Use `ci` for GitHub Actions or CI/CD changes.
+- Write the subject in concise Korean by default.
+- Keep the full commit header within 72 characters.
+- Do not use non-allowed types such as `feature`, `기능`, `update`, or `style`.
+- Before pushing, verify that the commit message follows the configured
+  `commitlint` rules when the project dependencies are available.
