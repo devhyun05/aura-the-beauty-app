@@ -8,8 +8,10 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {StatusBar} from 'expo-status-bar';
+import {Image as ImageIcon, RefreshCw, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
+import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {mockReadyFaceCaptureChecks} from '../mocks/faceCapture.mock';
 import {
   evaluateFaceCaptureGuidance,
@@ -30,7 +32,6 @@ type FaceCaptureScreenProps = {
 type ControlButtonProps = {
   accessibilityLabel: string;
   children: React.ReactNode;
-  tintColor: string;
   onPress?: (event: GestureResponderEvent) => void;
 };
 
@@ -75,7 +76,7 @@ export function FaceCaptureScreen({
         hitSlop={12}
         onPress={onClose}
         style={[styles.closeButton, {top: insets.top + 18}]}>
-        <CloseIcon color={guidance.tintColor} />
+        <X color={guidance.tintColor} size={iconSize.xl} strokeWidth={1.8} />
       </Pressable>
 
       {guidance.message ? (
@@ -116,24 +117,23 @@ export function FaceCaptureScreen({
             bottom: controlsBottom,
           },
         ]}>
-        <ControlButton accessibilityLabel="앨범에서 사진 가져오기" tintColor={guidance.tintColor} onPress={onPickImage}>
-          <GalleryIcon color={guidance.tintColor} />
+        <ControlButton accessibilityLabel="앨범에서 사진 가져오기" onPress={onPickImage}>
+          <ImageIcon color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
         </ControlButton>
 
         <CaptureButton guidance={guidance} onPress={onCapture} />
 
         <ControlButton
           accessibilityLabel={`${cameraDirection === 'front' ? '후면' : '전면'} 카메라로 전환`}
-          tintColor={guidance.tintColor}
           onPress={handleToggleCamera}>
-          <SwitchCameraIcon color={guidance.tintColor} />
+          <RefreshCw color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
         </ControlButton>
       </View>
     </View>
   );
 }
 
-function ControlButton({accessibilityLabel, children, tintColor, onPress}: ControlButtonProps) {
+function ControlButton({accessibilityLabel, children, onPress}: ControlButtonProps) {
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel}
@@ -183,40 +183,9 @@ function CaptureButton({guidance, onPress}: CaptureButtonProps) {
   );
 }
 
-function CloseIcon({color}: {color: string}) {
-  return (
-    <View style={styles.closeIcon}>
-      <View style={[styles.closeIconLine, styles.closeIconLineFirst, {backgroundColor: color}]} />
-      <View style={[styles.closeIconLine, styles.closeIconLineSecond, {backgroundColor: color}]} />
-    </View>
-  );
-}
-
-function GalleryIcon({color}: {color: string}) {
-  return (
-    <View style={[styles.galleryIcon, {borderColor: color}]}>
-      <View style={[styles.galleryPlusHorizontal, {backgroundColor: color}]} />
-      <View style={[styles.galleryPlusVertical, {backgroundColor: color}]} />
-    </View>
-  );
-}
-
-function SwitchCameraIcon({color}: {color: string}) {
-  return (
-    <View style={styles.switchIcon}>
-      <View style={[styles.switchLine, styles.switchLineTop, {backgroundColor: color}]} />
-      <View style={[styles.switchLine, styles.switchLineBottom, {backgroundColor: color}]} />
-      <View style={[styles.switchArrowHeadTopFirst, {backgroundColor: color}]} />
-      <View style={[styles.switchArrowHeadTopSecond, {backgroundColor: color}]} />
-      <View style={[styles.switchArrowHeadBottomFirst, {backgroundColor: color}]} />
-      <View style={[styles.switchArrowHeadBottomSecond, {backgroundColor: color}]} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: '#000000',
+    backgroundColor: colors.black,
     flex: 1,
     overflow: 'hidden',
   },
@@ -228,178 +197,77 @@ const styles = StyleSheet.create({
     right: 22,
     width: 48,
   },
-  closeIcon: {
-    height: 30,
-    position: 'relative',
-    width: 30,
-  },
-  closeIconLine: {
-    borderRadius: 1.25,
-    height: 2.5,
-    left: 4,
-    position: 'absolute',
-    top: 14,
-    width: 22,
-  },
-  closeIconLineFirst: {
-    transform: [{rotate: '45deg'}],
-  },
-  closeIconLineSecond: {
-    transform: [{rotate: '-45deg'}],
-  },
   errorBubble: {
-    borderRadius: 18,
+    borderRadius: radius.lg,
     maxWidth: 310,
     minHeight: 42,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
     position: 'absolute',
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 8,
-      width: 0,
-    },
-    shadowOpacity: 0.16,
-    shadowRadius: 16,
+    shadowColor: shadows.errorBubble.shadowColor,
+    shadowOffset: shadows.errorBubble.shadowOffset,
+    shadowOpacity: shadows.errorBubble.shadowOpacity,
+    shadowRadius: shadows.errorBubble.shadowRadius,
   },
   errorBubbleHost: {
     alignItems: 'center',
-    left: 24,
+    left: spacing.xxl,
     position: 'absolute',
-    right: 24,
+    right: spacing.xxl,
   },
   errorText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: 20,
+    lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
   },
   faceGuide: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.035)',
+    backgroundColor: colors.guideSurface,
     borderWidth: 3,
     justifyContent: 'center',
     position: 'absolute',
-    shadowColor: '#FFFFFF',
-    shadowOffset: {
-      height: 0,
-      width: 0,
-    },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
+    shadowColor: shadows.guideGlow.shadowColor,
+    shadowOffset: shadows.guideGlow.shadowOffset,
+    shadowOpacity: shadows.guideGlow.shadowOpacity,
+    shadowRadius: shadows.guideGlow.shadowRadius,
   },
   controls: {
     alignItems: 'center',
     alignSelf: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 52,
+    paddingHorizontal: spacing.xxl * 2 + spacing.xs,
     position: 'absolute',
     width: '100%',
   },
   controlButton: {
     alignItems: 'center',
-    height: 56,
+    height: iconSize.xl + spacing.xxl,
     justifyContent: 'center',
-    width: 56,
+    width: iconSize.xl + spacing.xxl,
   },
   captureButton: {
     alignItems: 'center',
-    borderRadius: 42,
+    borderRadius: radius.pill,
     borderWidth: 1,
     height: 78,
     justifyContent: 'center',
     width: 78,
   },
   captureButtonInner: {
-    borderRadius: 31,
+    borderRadius: radius.pill,
     height: 62,
     width: 62,
   },
   liquidGlassSurface: {
-    backgroundColor: 'rgba(255, 255, 255, 0.13)',
-    shadowColor: '#FFFFFF',
-    shadowOffset: {
-      height: 0,
-      width: 0,
-    },
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-  },
-  galleryIcon: {
-    alignItems: 'center',
-    borderRadius: 5,
-    borderWidth: 2.4,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
-  galleryPlusHorizontal: {
-    borderRadius: 1.2,
-    height: 2.4,
-    width: 12,
-  },
-  galleryPlusVertical: {
-    borderRadius: 1.2,
-    height: 12,
-    position: 'absolute',
-    width: 2.4,
-  },
-  switchArrowHeadBottomFirst: {
-    borderRadius: 1.1,
-    bottom: 7,
-    height: 2.2,
-    left: 4,
-    position: 'absolute',
-    transform: [{rotate: '45deg'}],
-    width: 9,
-  },
-  switchArrowHeadBottomSecond: {
-    borderRadius: 1.1,
-    bottom: 12,
-    height: 2.2,
-    left: 4,
-    position: 'absolute',
-    transform: [{rotate: '-45deg'}],
-    width: 9,
-  },
-  switchArrowHeadTopFirst: {
-    borderRadius: 1.1,
-    height: 2.2,
-    position: 'absolute',
-    right: 4,
-    top: 7,
-    transform: [{rotate: '-45deg'}],
-    width: 9,
-  },
-  switchArrowHeadTopSecond: {
-    borderRadius: 1.1,
-    height: 2.2,
-    position: 'absolute',
-    right: 4,
-    top: 12,
-    transform: [{rotate: '45deg'}],
-    width: 9,
-  },
-  switchIcon: {
-    height: 32,
-    position: 'relative',
-    width: 34,
-  },
-  switchLine: {
-    borderRadius: 1.25,
-    height: 2.5,
-    position: 'absolute',
-    width: 23,
-  },
-  switchLineBottom: {
-    bottom: 11,
-    left: 5,
-  },
-  switchLineTop: {
-    right: 5,
-    top: 11,
+    backgroundColor: colors.glassSurface,
+    shadowColor: shadows.liquidGlassGlow.shadowColor,
+    shadowOffset: shadows.liquidGlassGlow.shadowOffset,
+    shadowOpacity: shadows.liquidGlassGlow.shadowOpacity,
+    shadowRadius: shadows.liquidGlassGlow.shadowRadius,
   },
 });

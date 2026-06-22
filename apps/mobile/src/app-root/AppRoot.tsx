@@ -8,7 +8,7 @@ import {TamaguiProvider, YStack} from 'tamagui';
 import {tamaguiConfig} from '../../tamagui.config';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
-import {colors} from '../shared/theme';
+import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
 type AppScreen = 'login' | 'home' | 'faceCapture' | 'custom';
@@ -17,6 +17,10 @@ export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+    [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
+    [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
+    [typography.fontFamily.semibold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
+    [typography.fontFamily.bold]: require('../assets/fonts/Pretendard-Bold.otf'),
   });
 
   if (!fontsLoaded) {
