@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet } from 'react-native';
-import { Image, Text, View } from 'tamagui';
+import { Image, Pressable, StyleSheet } from 'react-native';
+import { Text, View } from 'tamagui';
 
 import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
 import type { UserProfile } from '../../../shared/types/userPage';
@@ -19,7 +19,11 @@ export const ProfileSummaryCard = ({
   return (
     <View style={styles.card}>
       <View style={styles.content}>
-        <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+        <Image
+          resizeMode="cover"
+          source={profile.avatarSource}
+          style={styles.avatar}
+        />
 
         <View style={styles.profileInfo}>
           <Text style={styles.name}>{profile.name} 님</Text>

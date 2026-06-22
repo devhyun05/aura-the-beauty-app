@@ -1,5 +1,5 @@
-import { StyleSheet } from 'react-native';
-import { Image, Text, View } from 'tamagui';
+import { Image, StyleSheet } from 'react-native';
+import { Text, View } from 'tamagui';
 
 import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
 import type { MakeupStylePreview } from '../../../shared/types/userPage';
@@ -12,7 +12,11 @@ export const MakeupStyleCard = ({ style }: MakeupStyleCardProps) => {
   return (
     <View style={styles.card}>
       <View style={styles.imageFrame}>
-        <Image source={{ uri: style.imageUrl }} style={styles.image} />
+        <Image
+          resizeMode="cover"
+          source={style.imageSource}
+          style={styles.image}
+        />
 
         {style.isSaved ? (
           <View style={styles.savedBadge}>

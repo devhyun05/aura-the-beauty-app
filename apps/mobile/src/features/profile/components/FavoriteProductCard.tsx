@@ -1,5 +1,5 @@
-import { StyleSheet } from 'react-native';
-import { Image, Text, View } from 'tamagui';
+import { Image, StyleSheet } from 'react-native';
+import { Text, View } from 'tamagui';
 
 import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
@@ -16,7 +16,11 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
   return (
     <View style={styles.card}>
       <View style={styles.imageFrame}>
-        <Image source={{ uri: product.imageUrl }} style={styles.image} />
+        <Image
+          resizeMode="contain"
+          source={product.imageSource}
+          style={styles.image}
+        />
 
         <Text style={styles.likeIcon}>{product.isLiked ? '♥' : '♡'}</Text>
       </View>

@@ -1,8 +1,10 @@
+import type { ImageSourcePropType } from 'react-native';
+
 export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  avatarUrl: string;
+  avatarSource: ImageSourcePropType;
   personalColor: string;
   skinType: string;
   skinTone: string;
@@ -12,6 +14,7 @@ export interface AnalysisReportPreview {
   id: string;
   analyzedAt: string;
   title: string;
+  imageSource: ImageSourcePropType;
   personalColor: string;
   skinType: string;
   summary: string;
@@ -20,7 +23,7 @@ export interface AnalysisReportPreview {
 export interface MakeupStylePreview {
   id: string;
   title: string;
-  imageUrl: string;
+  imageSource: ImageSourcePropType;
   isSaved: boolean;
 }
 
@@ -29,7 +32,7 @@ export interface FavoriteProductPreview {
   brandName: string;
   productName: string;
   price: number;
-  imageUrl: string;
+  imageSource: ImageSourcePropType;
   isLiked: boolean;
 }
 
