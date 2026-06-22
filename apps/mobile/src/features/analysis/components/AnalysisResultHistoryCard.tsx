@@ -28,28 +28,53 @@ export const AnalysisResultHistoryCard = ({
         },
       ]}
     >
-      <Image resizeMode="cover" source={result.imageSource} style={styles.image} />
+      <View style={styles.reportHeader}>
+        <Text style={styles.reportTitle}>맞춤 분석 보고서</Text>
+        <Text style={styles.reportMeta}>{result.analyzedAt} 서진님</Text>
+      </View>
 
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.titleGroup}>
-            <Text numberOfLines={1} style={styles.title}>
-              {result.title}
-            </Text>
-            <Text numberOfLines={1} style={styles.meta}>
-              {result.personalColor} · {result.skinType}
-            </Text>
-          </View>
+      <View style={styles.reportImageFrame}>
+        <Image resizeMode="cover" source={result.imageSource} style={styles.image} />
+
+        <View pointerEvents="none" style={styles.dotColumn}>
+          <View style={styles.dot} />
+          <View style={styles.dot} />
+          <View style={styles.dot} />
+          <View style={styles.dot} />
         </View>
+
+        <View pointerEvents="none" style={[styles.annotation, styles.annotationBrow]}>
+          <View style={styles.annotationLine} />
+          <Text style={styles.annotationText}>눈썹</Text>
+        </View>
+
+        <View pointerEvents="none" style={[styles.annotation, styles.annotationCheek]}>
+          <View style={styles.annotationLine} />
+          <Text style={styles.annotationText}>블러셔</Text>
+        </View>
+
+        <View pointerEvents="none" style={[styles.annotation, styles.annotationLip]}>
+          <View style={styles.annotationLine} />
+          <Text style={styles.annotationText}>립</Text>
+        </View>
+      </View>
+
+      <View style={styles.reportBody}>
+        <Text numberOfLines={1} style={styles.sectionTitle}>
+          베이스 특징별 메이크업
+        </Text>
 
         <Text numberOfLines={2} style={styles.summary}>
           {result.shortSummary}
         </Text>
 
-        <View style={styles.footer}>
-          <Text numberOfLines={1} style={styles.mood}>
-            {result.recommendedMood}
-          </Text>
+        <View style={styles.recommendationRow}>
+          <View style={styles.recommendationBlock}>
+            <Text style={styles.recommendationLabel}>추천</Text>
+            <Text numberOfLines={1} style={styles.recommendationText}>
+              {result.recommendedMood}
+            </Text>
+          </View>
 
           <View style={styles.tags}>
             {result.tags.slice(0, 2).map((tag) => (
@@ -65,45 +90,117 @@ export const AnalysisResultHistoryCard = ({
 };
 
 const styles = StyleSheet.create({
+  annotation: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    position: 'absolute',
+  },
+  annotationBrow: {
+    right: 12,
+    top: 54,
+  },
+  annotationCheek: {
+    left: 10,
+    top: 128,
+  },
+  annotationLine: {
+    backgroundColor: userPageColors.text,
+    height: 1,
+    width: 28,
+  },
+  annotationLip: {
+    bottom: 42,
+    right: 20,
+  },
+  annotationText: {
+    color: userPageColors.text,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
   card: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.card,
+    borderColor: userPageColors.border,
+    borderRadius: userPageRadius.image,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    padding: 14,
+    overflow: 'hidden',
   },
-  content: {
-    flex: 1,
-    gap: 10,
-    minWidth: 0,
+  dot: {
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.text,
+    borderRadius: 4,
+    borderWidth: 1,
+    height: 7,
+    width: 7,
   },
-  footer: {
+  dotColumn: {
     gap: 8,
-  },
-  header: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
+    left: '50%',
+    marginLeft: -3,
+    position: 'absolute',
+    top: 52,
   },
   image: {
-    backgroundColor: userPageColors.background,
-    borderRadius: userPageRadius.image,
-    height: 108,
-    width: 94,
+    height: 244,
+    width: '100%',
   },
-  meta: {
+  recommendationBlock: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  recommendationLabel: {
     color: userPageColors.textSoft,
     fontSize: userPageTypography.caption,
     lineHeight: 16,
   },
-  mood: {
-    color: userPageColors.accent,
-    fontSize: userPageTypography.caption,
+  recommendationRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  recommendationText: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.body,
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: 21,
+  },
+  reportBody: {
+    gap: 10,
+    padding: 16,
+  },
+  reportHeader: {
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 14,
+  },
+  reportImageFrame: {
+    borderColor: userPageColors.border,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  reportMeta: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.body,
+    lineHeight: 21,
+  },
+  reportTitle: {
+    color: userPageColors.text,
+    fontSize: 28,
+    fontWeight: '300',
+    lineHeight: 34,
+  },
+  sectionTitle: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.sectionTitle,
+    fontWeight: '700',
+    lineHeight: 24,
   },
   summary: {
     color: userPageColors.textMuted,
@@ -111,11 +208,11 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   tag: {
-    backgroundColor: userPageColors.background,
-    borderColor: userPageColors.borderSubtle,
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
     borderRadius: userPageRadius.chip,
     borderWidth: 1,
-    color: userPageColors.textMuted,
+    color: userPageColors.text,
     fontSize: userPageTypography.caption,
     lineHeight: 16,
     paddingHorizontal: 10,
@@ -125,16 +222,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-  },
-  title: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.body,
-    fontWeight: '700',
-    lineHeight: 21,
-  },
-  titleGroup: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
+    justifyContent: 'flex-end',
   },
 });

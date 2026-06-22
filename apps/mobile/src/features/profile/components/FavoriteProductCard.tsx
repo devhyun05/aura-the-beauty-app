@@ -1,7 +1,7 @@
 import { Image, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
-import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
+import { userPageColors } from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
 
 interface FavoriteProductCardProps {
@@ -22,7 +22,11 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
           style={styles.image}
         />
 
-        <Text style={styles.likeIcon}>{product.isLiked ? '♥' : '♡'}</Text>
+        {product.isLiked ? (
+          <View style={styles.likeBadge}>
+            <LikedIcon />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.textGroup}>
@@ -33,6 +37,15 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
     </View>
   );
 };
+
+function LikedIcon() {
+  return (
+    <View pointerEvents="none" style={styles.likedIcon}>
+      <View style={[styles.likedLine, styles.likedLineLeft]} />
+      <View style={[styles.likedLine, styles.likedLineRight]} />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   brandName: {
@@ -57,14 +70,39 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  likeIcon: {
+  likeBadge: {
+    alignItems: 'center',
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
+    borderRadius: 11,
+    borderWidth: 1,
     bottom: 8,
-    color: userPageColors.accent,
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 22,
+    height: 22,
+    justifyContent: 'center',
     position: 'absolute',
     right: 8,
+    width: 22,
+  },
+  likedIcon: {
+    height: 12,
+    position: 'relative',
+    width: 12,
+  },
+  likedLine: {
+    backgroundColor: userPageColors.text,
+    borderRadius: 1,
+    height: 2,
+    position: 'absolute',
+    top: 5,
+    width: 9,
+  },
+  likedLineLeft: {
+    left: 0,
+    transform: [{ rotate: '45deg' }],
+  },
+  likedLineRight: {
+    right: 0,
+    transform: [{ rotate: '-45deg' }],
   },
   price: {
     color: userPageColors.text,

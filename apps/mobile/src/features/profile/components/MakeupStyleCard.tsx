@@ -20,7 +20,7 @@ export const MakeupStyleCard = ({ style }: MakeupStyleCardProps) => {
 
         {style.isSaved ? (
           <View style={styles.savedBadge}>
-            <Text style={styles.savedIcon}>⌑</Text>
+            <SavedIcon />
           </View>
         ) : null}
       </View>
@@ -29,6 +29,15 @@ export const MakeupStyleCard = ({ style }: MakeupStyleCardProps) => {
     </View>
   );
 };
+
+function SavedIcon() {
+  return (
+    <View pointerEvents="none" style={styles.savedIcon}>
+      <View style={styles.savedIconTop} />
+      <View style={styles.savedIconBottom} />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   card: {
@@ -41,7 +50,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   imageFrame: {
+    borderColor: userPageColors.border,
     borderRadius: userPageRadius.image,
+    borderWidth: 1,
     height: 150,
     overflow: 'hidden',
     width: 104,
@@ -49,7 +60,9 @@ const styles = StyleSheet.create({
   savedBadge: {
     alignItems: 'center',
     backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
     borderRadius: 10,
+    borderWidth: 1,
     height: 20,
     justifyContent: 'center',
     position: 'absolute',
@@ -58,9 +71,27 @@ const styles = StyleSheet.create({
     width: 20,
   },
   savedIcon: {
-    color: userPageColors.accent,
-    fontSize: 13,
-    fontWeight: '700',
+    height: 11,
+    position: 'relative',
+    width: 9,
+  },
+  savedIconBottom: {
+    borderBottomColor: userPageColors.text,
+    borderBottomWidth: 1.5,
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 4.5,
+    borderRightColor: 'transparent',
+    borderRightWidth: 4.5,
+    bottom: 0,
+    height: 0,
+    position: 'absolute',
+    width: 0,
+  },
+  savedIconTop: {
+    backgroundColor: userPageColors.text,
+    borderRadius: 1,
+    height: 8,
+    width: 9,
   },
   title: {
     color: userPageColors.textMuted,

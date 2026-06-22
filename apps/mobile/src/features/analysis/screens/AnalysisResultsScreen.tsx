@@ -55,7 +55,7 @@ export const AnalysisResultsScreen = ({
         </Pressable>
 
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>ANALYSIS HISTORY</Text>
+          <Text style={styles.eyebrow}>ANALYSIS REPORTS</Text>
           <Text style={styles.title}>분석 결과</Text>
         </View>
       </View>
@@ -66,27 +66,25 @@ export const AnalysisResultsScreen = ({
         style={styles.scrollView}
       >
         <View style={styles.summaryPanel}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{results.length}</Text>
-            <Text style={styles.summaryLabel}>저장 기록</Text>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryTitle}>맞춤 분석 보고서</Text>
+            <Text style={styles.summaryCaption}>
+              지금까지 저장된 분석 보고서를 날짜순으로 확인할 수 있어요.
+            </Text>
           </View>
 
-          <View style={styles.summaryDivider} />
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryNumber}>{results.length}</Text>
+              <Text style={styles.summaryLabel}>저장 기록</Text>
+            </View>
 
-          <View style={styles.summaryItemWide}>
-            <Text numberOfLines={1} style={styles.latestDate}>
-              {latestResult?.analyzedAt ?? '-'}
-            </Text>
-            <Text style={styles.summaryLabel}>최근 분석</Text>
-          </View>
-
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.summaryItemWide}>
-            <Text numberOfLines={1} style={styles.latestMood}>
-              {latestResult?.recommendedMood ?? '-'}
-            </Text>
-            <Text style={styles.summaryLabel}>최근 무드</Text>
+            <View style={styles.summaryItem}>
+              <Text numberOfLines={1} style={styles.summaryValue}>
+                {latestResult?.analyzedAt ?? '-'}
+              </Text>
+              <Text style={styles.summaryLabel}>최근 분석</Text>
+            </View>
           </View>
         </View>
 
@@ -160,7 +158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: userPageColors.surface,
     borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.card,
+    borderRadius: userPageRadius.image,
     borderWidth: 1,
     gap: 8,
     padding: 28,
@@ -193,27 +191,15 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
-  latestDate: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.sectionTitle,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  latestMood: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.body,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
   list: {
-    gap: 12,
+    gap: 18,
   },
   screen: {
     backgroundColor: userPageColors.background,
     flex: 1,
   },
   scrollContent: {
-    gap: 18,
+    gap: 20,
     paddingBottom: 48,
     paddingHorizontal: userPageSpacing.screenX,
     paddingTop: 18,
@@ -222,21 +208,24 @@ const styles = StyleSheet.create({
     backgroundColor: userPageColors.background,
     flex: 1,
   },
-  summaryDivider: {
-    backgroundColor: userPageColors.divider,
-    height: 42,
-    width: 1,
+  summaryCaption: {
+    color: userPageColors.textMuted,
+    fontSize: userPageTypography.body,
+    lineHeight: 22,
+  },
+  summaryGrid: {
+    borderTopColor: userPageColors.divider,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    paddingTop: 16,
+  },
+  summaryHeader: {
+    gap: 8,
   },
   summaryItem: {
-    alignItems: 'center',
     flex: 1,
     gap: 4,
-  },
-  summaryItemWide: {
-    alignItems: 'center',
-    flex: 1.3,
-    gap: 4,
-    minWidth: 0,
   },
   summaryLabel: {
     color: userPageColors.textSoft,
@@ -245,19 +234,29 @@ const styles = StyleSheet.create({
   },
   summaryNumber: {
     color: userPageColors.text,
-    fontSize: userPageTypography.title,
+    fontSize: 30,
     fontWeight: '700',
-    lineHeight: 30,
+    lineHeight: 36,
   },
   summaryPanel: {
-    alignItems: 'center',
-    backgroundColor: userPageColors.accentSoft,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.card,
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
+    borderRadius: userPageRadius.image,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     padding: 18,
+  },
+  summaryTitle: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.sectionTitle,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  summaryValue: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.sectionTitle,
+    fontWeight: '700',
+    lineHeight: 24,
   },
   title: {
     color: userPageColors.text,
