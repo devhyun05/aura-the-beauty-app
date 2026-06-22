@@ -1,5 +1,7 @@
-export const FACE_CAPTURE_READY_COLOR = '#FFFFFF';
-export const FACE_CAPTURE_ERROR_COLOR = '#FF5A4D';
+import {colors} from '../../../shared/theme';
+
+export const FACE_CAPTURE_READY_COLOR = colors.white;
+export const FACE_CAPTURE_ERROR_COLOR = colors.danger;
 
 export type FaceCaptureCheckKey =
   | 'isFaceCentered'
