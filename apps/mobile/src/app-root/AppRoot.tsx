@@ -8,9 +8,10 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {MakeupRecommendationResultScreen} from '../features/recommendation/screens/MakeupRecommendationResultScreen';
 import {typography} from '../shared/theme';
 
-type AppScreen = 'login' | 'faceCapture' | 'analysisLoading';
+type AppScreen = 'login' | 'faceCapture' | 'analysisLoading' | 'recommendationResult';
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -40,7 +41,21 @@ export function AppRoot() {
       );
     }
 
-    return <AIAnalysisLoadingScreen onBack={() => setActiveScreen('faceCapture')} />;
+    if (activeScreen === 'analysisLoading') {
+      return (
+        <AIAnalysisLoadingScreen
+          onBack={() => setActiveScreen('faceCapture')}
+          onComplete={() => setActiveScreen('recommendationResult')}
+        />
+      );
+    }
+
+    return (
+      <MakeupRecommendationResultScreen
+        onBack={() => setActiveScreen('analysisLoading')}
+        onStartARGuide={() => undefined}
+      />
+    );
   };
 
   return (
