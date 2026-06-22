@@ -5,7 +5,12 @@ import type { AnalysisResult } from './analysis';
 export interface UserProfile {
   id: string;
   name: string;
+  nickname: string;
+  phone: string;
   email: string;
+  birthDate: string;
+  gender: string;
+  interest: string;
   avatarSource: ImageSourcePropType;
   personalColor: string;
   skinType: string;
