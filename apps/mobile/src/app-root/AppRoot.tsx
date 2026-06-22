@@ -1,41 +1,37 @@
-import React from 'react';
-import {StyleSheet} from 'react-native';
+import React, {useState} from 'react';
+import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
-import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
-import {TamaguiProvider, YStack} from 'tamagui';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
-import {colors} from '../shared/theme';
-import {AppHeader} from '../shared/ui';
+import {LoginScreen} from '../features/auth';
+import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+
+type AppScreen = 'login' | 'faceCapture';
 
 export function AppRoot() {
+  const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
+  const [fontsLoaded] = useFonts({
+    'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <HeaderPreview />
+        <>
+          <StatusBar style={activeScreen === 'login' ? 'dark' : 'light'} />
+          {activeScreen === 'login' ? (
+            <LoginScreen onLoginSuccess={() => setActiveScreen('faceCapture')} />
+          ) : (
+            <FaceCaptureScreen onClose={() => setActiveScreen('login')} />
+          )}
+        </>
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
-
-function HeaderPreview() {
-  const insets = useSafeAreaInsets();
-
-  return (
-    <YStack style={styles.screen}>
-      <StatusBar style="dark" />
-      <AppHeader topInset={insets.top} />
-      <YStack style={styles.body} />
-    </YStack>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
-  body: {
-    flex: 1,
-  },
-});
