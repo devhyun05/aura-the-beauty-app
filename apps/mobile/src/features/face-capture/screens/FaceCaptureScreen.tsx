@@ -53,8 +53,9 @@ export function FaceCaptureScreen({
   const guidance = useMemo(() => evaluateFaceCaptureGuidance(checks), [checks]);
   const guideWidth = Math.min(Math.max(width * 0.48, 174), 202);
   const guideHeight = guideWidth * 1.28;
+  const guideScaleY = guideHeight / guideWidth;
   const guideCenterY = Math.max(insets.top + guideHeight / 2 + 130, height * 0.48);
-  const guideTop = guideCenterY - guideHeight / 2;
+  const guideTop = guideCenterY - guideWidth / 2;
   const controlsBottom = Math.max(insets.bottom + 64, height * 0.1);
   const errorTop = Math.max(insets.top + 82, guideCenterY - guideHeight / 2 - 74);
 
@@ -98,10 +99,11 @@ export function FaceCaptureScreen({
           styles.faceGuide,
           {
             borderColor: guidance.tintColor,
-            borderRadius: '50%',
-            height: guideHeight,
+            borderRadius: guideWidth / 2,
+            height: guideWidth,
             left: (width - guideWidth) / 2,
             top: guideTop,
+            transform: [{scaleY: guideScaleY}],
             width: guideWidth,
           },
         ]}
@@ -182,7 +184,12 @@ function CaptureButton({guidance, onPress}: CaptureButtonProps) {
 }
 
 function CloseIcon({color}: {color: string}) {
-  return <Text style={[styles.closeIconText, {color}]}>×</Text>;
+  return (
+    <View style={styles.closeIcon}>
+      <View style={[styles.closeIconLine, styles.closeIconLineFirst, {backgroundColor: color}]} />
+      <View style={[styles.closeIconLine, styles.closeIconLineSecond, {backgroundColor: color}]} />
+    </View>
+  );
 }
 
 function GalleryIcon({color}: {color: string}) {
@@ -195,7 +202,16 @@ function GalleryIcon({color}: {color: string}) {
 }
 
 function SwitchCameraIcon({color}: {color: string}) {
-  return <Text style={[styles.switchIconText, {color}]}>↻</Text>;
+  return (
+    <View style={styles.switchIcon}>
+      <View style={[styles.switchLine, styles.switchLineTop, {backgroundColor: color}]} />
+      <View style={[styles.switchLine, styles.switchLineBottom, {backgroundColor: color}]} />
+      <View style={[styles.switchArrowHeadTopFirst, {backgroundColor: color}]} />
+      <View style={[styles.switchArrowHeadTopSecond, {backgroundColor: color}]} />
+      <View style={[styles.switchArrowHeadBottomFirst, {backgroundColor: color}]} />
+      <View style={[styles.switchArrowHeadBottomSecond, {backgroundColor: color}]} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -212,12 +228,24 @@ const styles = StyleSheet.create({
     right: 22,
     width: 48,
   },
-  closeIconText: {
-    fontSize: 36,
-    fontWeight: '200',
-    includeFontPadding: false,
-    lineHeight: 40,
-    textAlign: 'center',
+  closeIcon: {
+    height: 30,
+    position: 'relative',
+    width: 30,
+  },
+  closeIconLine: {
+    borderRadius: 1.25,
+    height: 2.5,
+    left: 4,
+    position: 'absolute',
+    top: 14,
+    width: 22,
+  },
+  closeIconLineFirst: {
+    transform: [{rotate: '45deg'}],
+  },
+  closeIconLineSecond: {
+    transform: [{rotate: '-45deg'}],
   },
   errorBubble: {
     borderRadius: 18,
@@ -319,11 +347,59 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 2.4,
   },
-  switchIconText: {
-    fontSize: 35,
-    fontWeight: '300',
-    includeFontPadding: false,
-    lineHeight: 38,
-    textAlign: 'center',
+  switchArrowHeadBottomFirst: {
+    borderRadius: 1.1,
+    bottom: 7,
+    height: 2.2,
+    left: 4,
+    position: 'absolute',
+    transform: [{rotate: '45deg'}],
+    width: 9,
+  },
+  switchArrowHeadBottomSecond: {
+    borderRadius: 1.1,
+    bottom: 12,
+    height: 2.2,
+    left: 4,
+    position: 'absolute',
+    transform: [{rotate: '-45deg'}],
+    width: 9,
+  },
+  switchArrowHeadTopFirst: {
+    borderRadius: 1.1,
+    height: 2.2,
+    position: 'absolute',
+    right: 4,
+    top: 7,
+    transform: [{rotate: '-45deg'}],
+    width: 9,
+  },
+  switchArrowHeadTopSecond: {
+    borderRadius: 1.1,
+    height: 2.2,
+    position: 'absolute',
+    right: 4,
+    top: 12,
+    transform: [{rotate: '45deg'}],
+    width: 9,
+  },
+  switchIcon: {
+    height: 32,
+    position: 'relative',
+    width: 34,
+  },
+  switchLine: {
+    borderRadius: 1.25,
+    height: 2.5,
+    position: 'absolute',
+    width: 23,
+  },
+  switchLineBottom: {
+    bottom: 11,
+    left: 5,
+  },
+  switchLineTop: {
+    right: 5,
+    top: 11,
   },
 });
