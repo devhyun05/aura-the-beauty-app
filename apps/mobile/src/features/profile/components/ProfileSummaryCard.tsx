@@ -34,7 +34,9 @@ export const ProfileSummaryCard = ({
             ))}
           </View>
 
-          <Text style={styles.email}>{profile.email}</Text>
+          <Text numberOfLines={1} style={styles.email}>
+            {profile.email}
+          </Text>
         </View>
 
         <Pressable onPress={onPressSettings} style={styles.settingsButton}>
@@ -47,29 +49,32 @@ export const ProfileSummaryCard = ({
 
 const styles = StyleSheet.create({
   avatar: {
-    borderRadius: 42,
-    height: 84,
-    width: 84,
+    borderRadius: 46,
+    height: 92,
+    width: 92,
   },
   card: {
     backgroundColor: userPageColors.surface,
     borderColor: userPageColors.border,
     borderRadius: userPageRadius.card,
     borderWidth: 1,
+    elevation: 3,
     padding: 22,
     shadowColor: userPageColors.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
   },
   content: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 18,
+    gap: 16,
   },
   email: {
+    alignSelf: 'stretch',
     color: userPageColors.textMuted,
     fontSize: 15,
+    lineHeight: 20,
   },
   name: {
     color: userPageColors.text,
@@ -77,8 +82,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   profileInfo: {
+    alignItems: 'flex-start',
     flex: 1,
     gap: 8,
+    minWidth: 0,
   },
   settingsButton: {
     alignItems: 'center',
@@ -95,5 +102,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    width: '100%',
   },
 });
