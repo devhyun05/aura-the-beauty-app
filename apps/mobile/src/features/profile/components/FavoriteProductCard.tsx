@@ -3,6 +3,7 @@ import { Text, View } from 'tamagui';
 
 import { userPageColors } from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
+import { HeartIcon } from './HeartIcon';
 
 interface FavoriteProductCardProps {
   product: FavoriteProductPreview;
@@ -23,8 +24,8 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
         />
 
         {product.isLiked ? (
-          <View style={styles.likeBadge}>
-            <LikedIcon />
+          <View style={styles.heartBadge}>
+            <HeartIcon />
           </View>
         ) : null}
       </View>
@@ -38,15 +39,6 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
   );
 };
 
-function LikedIcon() {
-  return (
-    <View pointerEvents="none" style={styles.likedIcon}>
-      <View style={[styles.likedLine, styles.likedLineLeft]} />
-      <View style={[styles.likedLine, styles.likedLineRight]} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   brandName: {
     color: userPageColors.textMuted,
@@ -57,6 +49,19 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 10,
     minWidth: 0,
+  },
+  heartBadge: {
+    alignItems: 'center',
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    bottom: 8,
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 8,
+    width: 24,
   },
   image: {
     height: '100%',
@@ -69,40 +74,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
-  },
-  likeBadge: {
-    alignItems: 'center',
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
-    borderRadius: 11,
-    borderWidth: 1,
-    bottom: 8,
-    height: 22,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 8,
-    width: 22,
-  },
-  likedIcon: {
-    height: 12,
-    position: 'relative',
-    width: 12,
-  },
-  likedLine: {
-    backgroundColor: userPageColors.text,
-    borderRadius: 1,
-    height: 2,
-    position: 'absolute',
-    top: 5,
-    width: 9,
-  },
-  likedLineLeft: {
-    left: 0,
-    transform: [{ rotate: '45deg' }],
-  },
-  likedLineRight: {
-    right: 0,
-    transform: [{ rotate: '-45deg' }],
   },
   price: {
     color: userPageColors.text,

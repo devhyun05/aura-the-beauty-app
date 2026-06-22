@@ -103,7 +103,7 @@ export const UserPageScreen = ({
           <SectionHeader
             actionLabel="전체보기"
             onPressAction={onPressFavoriteProducts}
-            title="좋아한 제품목록"
+            title="좋아요한 제품목록"
           />
 
           <View style={styles.productList}>

@@ -30,7 +30,7 @@ export const AnalysisResultsScreen = ({
 
     getAnalysisResults().then((analysisResults) => {
       if (isMounted) {
-        setResults(analysisResults);
+        setResults(analysisResults.slice(0, 5));
       }
     });
 
@@ -38,8 +38,6 @@ export const AnalysisResultsScreen = ({
       isMounted = false;
     };
   }, []);
-
-  const latestResult = results[0];
 
   return (
     <View style={styles.screen}>
@@ -55,7 +53,7 @@ export const AnalysisResultsScreen = ({
         </Pressable>
 
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>ANALYSIS REPORTS</Text>
+          <Text style={styles.eyebrow}>ANALYSIS RESULTS</Text>
           <Text style={styles.title}>분석 결과</Text>
         </View>
       </View>
@@ -66,26 +64,10 @@ export const AnalysisResultsScreen = ({
         style={styles.scrollView}
       >
         <View style={styles.summaryPanel}>
-          <View style={styles.summaryHeader}>
-            <Text style={styles.summaryTitle}>맞춤 분석 보고서</Text>
-            <Text style={styles.summaryCaption}>
-              지금까지 저장된 분석 보고서를 날짜순으로 확인할 수 있어요.
-            </Text>
-          </View>
-
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryNumber}>{results.length}</Text>
-              <Text style={styles.summaryLabel}>저장 기록</Text>
-            </View>
-
-            <View style={styles.summaryItem}>
-              <Text numberOfLines={1} style={styles.summaryValue}>
-                {latestResult?.analyzedAt ?? '-'}
-              </Text>
-              <Text style={styles.summaryLabel}>최근 분석</Text>
-            </View>
-          </View>
+          <Text style={styles.summaryTitle}>최근 분석 기록</Text>
+          <Text style={styles.summaryCaption}>
+            저장된 분석 결과 5개를 날짜순으로 관리해요.
+          </Text>
         </View>
 
         {results.length > 0 ? (
@@ -102,7 +84,7 @@ export const AnalysisResultsScreen = ({
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>저장된 분석 결과가 없어요</Text>
             <Text style={styles.emptyDescription}>
-              촬영을 완료하면 이곳에서 모든 분석 기록을 다시 확인할 수 있어요.
+              촬영을 완료하면 이곳에서 분석 기록을 다시 확인할 수 있어요.
             </Text>
           </View>
         )}
@@ -192,14 +174,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   list: {
-    gap: 18,
+    gap: 12,
   },
   screen: {
     backgroundColor: userPageColors.background,
     flex: 1,
   },
   scrollContent: {
-    gap: 20,
+    gap: 18,
     paddingBottom: 48,
     paddingHorizontal: userPageSpacing.screenX,
     paddingTop: 18,
@@ -213,46 +195,15 @@ const styles = StyleSheet.create({
     fontSize: userPageTypography.body,
     lineHeight: 22,
   },
-  summaryGrid: {
-    borderTopColor: userPageColors.divider,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    paddingTop: 16,
-  },
-  summaryHeader: {
-    gap: 8,
-  },
-  summaryItem: {
-    flex: 1,
-    gap: 4,
-  },
-  summaryLabel: {
-    color: userPageColors.textSoft,
-    fontSize: userPageTypography.caption,
-    lineHeight: 16,
-  },
-  summaryNumber: {
-    color: userPageColors.text,
-    fontSize: 30,
-    fontWeight: '700',
-    lineHeight: 36,
-  },
   summaryPanel: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    gap: 16,
-    padding: 18,
+    gap: 6,
+    padding: 16,
   },
   summaryTitle: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.sectionTitle,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  summaryValue: {
     color: userPageColors.text,
     fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',

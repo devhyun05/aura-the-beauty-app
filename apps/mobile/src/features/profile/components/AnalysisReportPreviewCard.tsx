@@ -19,24 +19,19 @@ export const AnalysisReportPreviewCard = ({
 }: AnalysisReportPreviewCardProps) => {
   return (
     <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.thumbnailFrame}>
-        <Image
-          resizeMode="cover"
-          source={report.imageSource}
-          style={styles.thumbnail}
-        />
-        <View pointerEvents="none" style={styles.faceGuide}>
-          <View style={styles.guideDot} />
-          <View style={styles.guideDot} />
-          <View style={styles.guideDot} />
-        </View>
-      </View>
+      <Image
+        resizeMode="cover"
+        source={report.imageSource}
+        style={styles.thumbnail}
+      />
 
       <View style={styles.details}>
         <View style={styles.header}>
           <View style={styles.titleGroup}>
-            <Text style={styles.kicker}>맞춤 분석 보고서</Text>
             <Text style={styles.title}>{report.title}</Text>
+            <Text numberOfLines={1} style={styles.meta}>
+              {report.personalColor} · {report.skinType}
+            </Text>
           </View>
 
           <ChevronRightIcon />
@@ -101,29 +96,13 @@ const styles = StyleSheet.create({
     gap: 9,
     minWidth: 0,
   },
-  faceGuide: {
-    alignItems: 'center',
-    gap: 5,
-    left: '50%',
-    marginLeft: -3,
-    position: 'absolute',
-    top: 26,
-  },
   footer: {
     alignSelf: 'flex-start',
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.chip,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
-  },
-  guideDot: {
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.text,
-    borderRadius: 4,
-    borderWidth: 1,
-    height: 6,
-    width: 6,
   },
   header: {
     alignItems: 'flex-start',
@@ -131,10 +110,9 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'space-between',
   },
-  kicker: {
+  meta: {
     color: userPageColors.textSoft,
     fontSize: userPageTypography.caption,
-    fontWeight: '700',
     lineHeight: 16,
   },
   mood: {
@@ -149,17 +127,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   thumbnail: {
-    height: 104,
-    width: 86,
-  },
-  thumbnailFrame: {
     backgroundColor: userPageColors.surfaceMuted,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: 12,
     borderWidth: 1,
     height: 104,
-    overflow: 'hidden',
-    position: 'relative',
     width: 86,
   },
   title: {
@@ -170,7 +142,7 @@ const styles = StyleSheet.create({
   },
   titleGroup: {
     flex: 1,
-    gap: 2,
+    gap: 3,
     minWidth: 0,
   },
 });
