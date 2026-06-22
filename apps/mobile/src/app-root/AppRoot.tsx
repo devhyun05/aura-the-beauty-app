@@ -8,12 +8,13 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultDetailScreen, AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
-import {UserPageScreen} from '../features/profile';
+import {ProfileEditScreen, UserPageScreen} from '../features/profile';
 
 type AppScreen =
   | 'login'
   | 'faceCapture'
   | 'userPage'
+  | 'profileEdit'
   | 'analysisResults'
   | 'analysisResultDetail';
 type DetailBackScreen = 'userPage' | 'analysisResults';
@@ -58,11 +59,15 @@ export function AppRoot() {
           ) : null}
           {activeScreen === 'userPage' ? (
             <UserPageScreen
+              onPressSettings={() => setActiveScreen('profileEdit')}
               onPressReport={(reportId) =>
                 openAnalysisDetail(reportId, 'userPage')
               }
               onPressReports={() => setActiveScreen('analysisResults')}
             />
+          ) : null}
+          {activeScreen === 'profileEdit' ? (
+            <ProfileEditScreen onBack={() => setActiveScreen('userPage')} />
           ) : null}
           {activeScreen === 'analysisResults' ? (
             <AnalysisResultsScreen
