@@ -10,3 +10,11 @@ export const getRecentAnalysisResults = async (
 ): Promise<AnalysisResult[]> => {
   return Promise.resolve(analysisResultsMock.slice(0, limit));
 };
+
+export const getAnalysisResultById = async (
+  resultId: string,
+): Promise<AnalysisResult | null> => {
+  const result = analysisResultsMock.find((item) => item.id === resultId);
+
+  return Promise.resolve(result ?? null);
+};
