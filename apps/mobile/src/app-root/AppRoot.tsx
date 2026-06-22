@@ -6,7 +6,7 @@ import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {colors} from '../shared/theme';
-import {AppHeader} from '../shared/ui';
+import {AppFooter, AppHeader} from '../shared/ui';
 
 export function AppRoot() {
   return (
@@ -26,6 +26,7 @@ function HeaderPreview() {
       <StatusBar style="dark" />
       <AppHeader topInset={insets.top} />
       <YStack style={styles.body} />
+      <AppFooter bottomInset={insets.bottom} />
     </YStack>
   );
 }
