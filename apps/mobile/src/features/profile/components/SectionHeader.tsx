@@ -1,4 +1,5 @@
-import { Button, Text, XStack } from 'tamagui';
+import { Pressable, StyleSheet } from 'react-native';
+import { Text, View } from 'tamagui';
 
 import { userPageColors, userPageTypography } from '../../../shared/theme/tokens';
 
@@ -14,35 +15,43 @@ export const SectionHeader = ({
   onPressAction,
 }: SectionHeaderProps) => {
   return (
-    <XStack alignItems="center" justifyContent="space-between">
-      <Text
-        color={userPageColors.text}
-        fontSize={userPageTypography.sectionTitle}
-        fontWeight="700"
-      >
-        {title}
-      </Text>
+    <View style={styles.header}>
+      <Text style={styles.title}>{title}</Text>
 
       {actionLabel ? (
-        <Button
-          alignItems="center"
-          backgroundColor="transparent"
-          borderWidth={0}
-          flexDirection="row"
-          gap={8}
-          height={32}
-          onPress={onPressAction}
-          paddingHorizontal={0}
-          pressStyle={{ opacity: 0.65 }}
-        >
-          <Text color={userPageColors.textSoft} fontSize={12}>
-            {actionLabel}
-          </Text>
-          <Text color={userPageColors.accentMuted} fontSize={28} lineHeight={28}>
-            &gt;
-          </Text>
-        </Button>
+        <Pressable onPress={onPressAction} style={styles.action}>
+          <Text style={styles.actionLabel}>{actionLabel}</Text>
+          <Text style={styles.chevron}>&gt;</Text>
+        </Pressable>
       ) : null}
-    </XStack>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  action: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 32,
+  },
+  actionLabel: {
+    color: userPageColors.textSoft,
+    fontSize: 12,
+  },
+  chevron: {
+    color: userPageColors.accentMuted,
+    fontSize: 28,
+    lineHeight: 28,
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  title: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.sectionTitle,
+    fontWeight: '700',
+  },
+});

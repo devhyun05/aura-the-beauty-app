@@ -1,4 +1,5 @@
-import { Image, Stack, Text, YStack } from 'tamagui';
+import { StyleSheet } from 'react-native';
+import { Image, Text, View } from 'tamagui';
 
 import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
 import type { MakeupStylePreview } from '../../../shared/types/userPage';
@@ -9,32 +10,57 @@ interface MakeupStyleCardProps {
 
 export const MakeupStyleCard = ({ style }: MakeupStyleCardProps) => {
   return (
-    <YStack alignItems="center" gap={10} width={104}>
-      <Stack borderRadius={userPageRadius.image} height={150} overflow="hidden" width={104}>
-        <Image height="100%" source={{ uri: style.imageUrl }} width="100%" />
+    <View style={styles.card}>
+      <View style={styles.imageFrame}>
+        <Image source={{ uri: style.imageUrl }} style={styles.image} />
 
         {style.isSaved ? (
-          <Stack
-            alignItems="center"
-            backgroundColor={userPageColors.surface}
-            borderRadius={10}
-            height={20}
-            justifyContent="center"
-            position="absolute"
-            right={8}
-            top={8}
-            width={20}
-          >
-            <Text color={userPageColors.accent} fontSize={13} fontWeight="700">
-              ⌑
-            </Text>
-          </Stack>
+          <View style={styles.savedBadge}>
+            <Text style={styles.savedIcon}>⌑</Text>
+          </View>
         ) : null}
-      </Stack>
+      </View>
 
-      <Text color={userPageColors.textMuted} fontSize={12} textAlign="center">
-        {style.title}
-      </Text>
-    </YStack>
+      <Text style={styles.title}>{style.title}</Text>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  card: {
+    alignItems: 'center',
+    gap: 10,
+    width: 104,
+  },
+  image: {
+    height: '100%',
+    width: '100%',
+  },
+  imageFrame: {
+    borderRadius: userPageRadius.image,
+    height: 150,
+    overflow: 'hidden',
+    width: 104,
+  },
+  savedBadge: {
+    alignItems: 'center',
+    backgroundColor: userPageColors.surface,
+    borderRadius: 10,
+    height: 20,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 20,
+  },
+  savedIcon: {
+    color: userPageColors.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  title: {
+    color: userPageColors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+});

@@ -1,4 +1,5 @@
-import { Image, Stack, Text, YStack } from 'tamagui';
+import { StyleSheet } from 'react-native';
+import { Image, Text, View } from 'tamagui';
 
 import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
@@ -13,41 +14,65 @@ const formatPrice = (price: number) => {
 
 export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
   return (
-    <YStack flex={1} gap={10} minWidth={0}>
-      <Stack
-        aspectRatio={1}
-        borderColor={userPageColors.borderSubtle}
-        borderRadius={6}
-        borderWidth={1}
-        overflow="hidden"
-        position="relative"
-      >
-        <Image height="100%" source={{ uri: product.imageUrl }} width="100%" />
+    <View style={styles.card}>
+      <View style={styles.imageFrame}>
+        <Image source={{ uri: product.imageUrl }} style={styles.image} />
 
-        <Text
-          bottom={8}
-          color={userPageColors.accent}
-          fontSize={22}
-          fontWeight="700"
-          lineHeight={22}
-          position="absolute"
-          right={8}
-        >
-          {product.isLiked ? '♥' : '♡'}
-        </Text>
-      </Stack>
+        <Text style={styles.likeIcon}>{product.isLiked ? '♥' : '♡'}</Text>
+      </View>
 
-      <YStack gap={6}>
-        <Text color={userPageColors.textMuted} fontSize={14} fontWeight="600">
-          {product.brandName}
-        </Text>
-        <Text color={userPageColors.textMuted} fontSize={14} lineHeight={19}>
-          {product.productName}
-        </Text>
-        <Text color={userPageColors.text} fontSize={17} fontWeight="800">
-          {formatPrice(product.price)}
-        </Text>
-      </YStack>
-    </YStack>
+      <View style={styles.textGroup}>
+        <Text style={styles.brandName}>{product.brandName}</Text>
+        <Text style={styles.productName}>{product.productName}</Text>
+        <Text style={styles.price}>{formatPrice(product.price)}</Text>
+      </View>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  brandName: {
+    color: userPageColors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  card: {
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
+  },
+  image: {
+    height: '100%',
+    width: '100%',
+  },
+  imageFrame: {
+    aspectRatio: 1,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 6,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  likeIcon: {
+    bottom: 8,
+    color: userPageColors.accent,
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 22,
+    position: 'absolute',
+    right: 8,
+  },
+  price: {
+    color: userPageColors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  productName: {
+    color: userPageColors.textMuted,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  textGroup: {
+    gap: 6,
+  },
+});

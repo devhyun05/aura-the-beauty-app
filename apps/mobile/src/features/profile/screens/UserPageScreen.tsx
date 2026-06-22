@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, Stack, Text, XStack, YStack } from 'tamagui';
+import { StyleSheet } from 'react-native';
+import { ScrollView, Text, View } from 'tamagui';
 
 import { getUserPageData } from '../../../shared/services/userPageService';
-import {
-  userPageColors,
-  userPageSpacing,
-  userPageTypography,
-} from '../../../shared/theme/tokens';
+import { userPageColors, userPageSpacing } from '../../../shared/theme/tokens';
 import type { UserPageData } from '../../../shared/types/userPage';
 import { AnalysisReportPreviewCard } from '../components/AnalysisReportPreviewCard';
 import { FavoriteProductCard } from '../components/FavoriteProductCard';
@@ -47,16 +44,9 @@ export const UserPageScreen = ({
 
   if (!userPageData) {
     return (
-      <YStack
-        alignItems="center"
-        backgroundColor={userPageColors.background}
-        flex={1}
-        justifyContent="center"
-      >
-        <Text color={userPageColors.textMuted} fontSize={userPageTypography.body}>
-          유저페이지를 불러오는 중이에요.
-        </Text>
-      </YStack>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>유저페이지를 불러오는 중이에요.</Text>
+      </View>
     );
   }
 
@@ -66,30 +56,23 @@ export const UserPageScreen = ({
 
   return (
     <ScrollView
-      backgroundColor={userPageColors.background}
-      flex={1}
       showsVerticalScrollIndicator={false}
+      style={styles.scrollView}
     >
-      <YStack
-        gap={userPageSpacing.sectionGap}
-        minHeight={874}
-        paddingBottom={64}
-        paddingHorizontal={userPageSpacing.screenX}
-        paddingTop={88}
-      >
+      <View style={styles.container}>
         <ProfileSummaryCard
           onPressSettings={onPressSettings}
           profile={userPageData.profile}
         />
 
-        <YStack gap={userPageSpacing.cardGap}>
+        <View style={styles.section}>
           <SectionHeader
             actionLabel="전체 보기"
             onPressAction={onPressReports}
             title="분석 결과"
           />
 
-          <YStack gap={10}>
+          <View style={styles.reportList}>
             {recentReports.map((report) => (
               <AnalysisReportPreviewCard
                 key={report.id}
@@ -97,39 +80,86 @@ export const UserPageScreen = ({
                 report={report}
               />
             ))}
-          </YStack>
-        </YStack>
+          </View>
+        </View>
 
-        <YStack gap={userPageSpacing.cardGap}>
+        <View style={styles.section}>
           <SectionHeader
             actionLabel="전체 보기"
             onPressAction={onPressMakeupStyles}
             title="메이크업 스타일"
           />
 
-          <XStack alignItems="flex-start" justifyContent="space-between">
+          <View style={styles.styleList}>
             {previewStyles.map((style) => (
               <MakeupStyleCard key={style.id} style={style} />
             ))}
-          </XStack>
-        </YStack>
+          </View>
+        </View>
 
-        <Stack backgroundColor={userPageColors.divider} height={1} />
+        <View style={styles.divider} />
 
-        <YStack gap={18}>
+        <View style={styles.productSection}>
           <SectionHeader
             actionLabel="전체 보기"
             onPressAction={onPressFavoriteProducts}
             title="좋아요한 제품목록"
           />
 
-          <XStack alignItems="flex-start" gap={18}>
+          <View style={styles.productList}>
             {previewProducts.map((product) => (
               <FavoriteProductCard key={product.id} product={product} />
             ))}
-          </XStack>
-        </YStack>
-      </YStack>
+          </View>
+        </View>
+      </View>
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    gap: userPageSpacing.sectionGap,
+    minHeight: 874,
+    paddingBottom: 64,
+    paddingHorizontal: userPageSpacing.screenX,
+    paddingTop: 88,
+  },
+  divider: {
+    backgroundColor: userPageColors.divider,
+    height: 1,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    backgroundColor: userPageColors.background,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: userPageColors.textMuted,
+    fontSize: 15,
+  },
+  productList: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 18,
+  },
+  productSection: {
+    gap: 18,
+  },
+  reportList: {
+    gap: 10,
+  },
+  scrollView: {
+    backgroundColor: userPageColors.background,
+    flex: 1,
+  },
+  section: {
+    gap: userPageSpacing.cardGap,
+  },
+  styleList: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+});
