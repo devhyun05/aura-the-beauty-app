@@ -6,12 +6,18 @@ import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
+import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
 import {MakeupRecommendationResultScreen} from '../features/recommendation/screens/MakeupRecommendationResultScreen';
 import {typography} from '../shared/theme';
 
-type AppScreen = 'login' | 'faceCapture' | 'analysisLoading' | 'recommendationResult';
+type AppScreen =
+  | 'login'
+  | 'faceCapture'
+  | 'analysisLoading'
+  | 'recommendationResult'
+  | 'arMakeupFilter';
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -50,10 +56,21 @@ export function AppRoot() {
       );
     }
 
+    if (activeScreen === 'recommendationResult') {
+      return (
+        <MakeupRecommendationResultScreen
+          onBack={() => setActiveScreen('analysisLoading')}
+          onStartARGuide={() => setActiveScreen('arMakeupFilter')}
+        />
+      );
+    }
+
     return (
-      <MakeupRecommendationResultScreen
-        onBack={() => setActiveScreen('analysisLoading')}
-        onStartARGuide={() => undefined}
+      <ARMakeupFilterScreen
+        initialGuideMode="basic"
+        onBack={() => setActiveScreen('recommendationResult')}
+        onOpenLocationAdjust={() => undefined}
+        onOpenStyleAdjust={() => undefined}
       />
     );
   };
@@ -62,7 +79,13 @@ export function AppRoot() {
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
         <>
-          <StatusBar style={activeScreen === 'faceCapture' ? 'light' : 'dark'} />
+          <StatusBar
+            style={
+              activeScreen === 'faceCapture' || activeScreen === 'arMakeupFilter'
+                ? 'light'
+                : 'dark'
+            }
+          />
           {renderActiveScreen()}
         </>
       </SafeAreaProvider>
