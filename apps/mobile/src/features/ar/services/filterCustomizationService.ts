@@ -1,5 +1,8 @@
-import type {FacePartId} from '../../../shared/types/makeupGuide';
-import {mockFilterLocationState} from '../mocks/filterCustomization.mock';
+import type {FacePartId, StyleOptionGroupId} from '../../../shared/types/makeupGuide';
+import {
+  mockFilterLocationState,
+  mockFilterStyleState,
+} from '../mocks/filterCustomization.mock';
 
 export type FilterLocationAdjustmentKey =
   | 'horizontal'
@@ -29,6 +32,14 @@ export type FilterLocationState = {
   adjustments: Record<FilterLocationAdjustmentKey, FilterLocationAdjustment>;
 };
 
+export type FilterStyleState = {
+  selectedFacePartId: FacePartId;
+  selectedOptionGroup: StyleOptionGroupId;
+  selectedColorId: string;
+  selectedTypeId: string;
+  selectedTextureId: string;
+};
+
 function clampValue(adjustment: FilterLocationAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
 }
@@ -53,5 +64,37 @@ export function updateFilterLocationAdjustment(
         value: clampValue(currentAdjustment, nextValue),
       },
     },
+  };
+}
+
+export function getMockFilterStyleState(): FilterStyleState {
+  return mockFilterStyleState;
+}
+
+export function updateFilterStyleSelection(
+  state: FilterStyleState,
+  optionGroup: StyleOptionGroupId,
+  optionId: string,
+): FilterStyleState {
+  if (optionGroup === 'color') {
+    return {
+      ...state,
+      selectedColorId: optionId,
+      selectedOptionGroup: optionGroup,
+    };
+  }
+
+  if (optionGroup === 'type') {
+    return {
+      ...state,
+      selectedTypeId: optionId,
+      selectedOptionGroup: optionGroup,
+    };
+  }
+
+  return {
+    ...state,
+    selectedTextureId: optionId,
+    selectedOptionGroup: optionGroup,
   };
 }
