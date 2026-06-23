@@ -13,10 +13,10 @@ const styleCleanSmoky =
 
 export const mockRecommendationResult: RecommendationResult = {
   userName: '서진',
-  analyzedAtLabel: '방금 촬영한 진단 사진 기준',
+  analyzedAtLabel: '방금 촬영한 얼굴 진단 기준',
   previewImageSource: reportBareFace,
   summary:
-    '맑고 정돈된 피부 표현에 뉴트럴 로즈 컬러를 얹으면 얼굴의 선이 부드럽게 살아나요.',
+    '맑고 정돈된 피부 표현에 뉴트럴 로즈 컬러를 더하는 AR 필터가 얼굴의 선을 부드럽게 살려줘요.',
   analysis: {
     skinTone: {
       label: '밝은 뉴트럴 톤',

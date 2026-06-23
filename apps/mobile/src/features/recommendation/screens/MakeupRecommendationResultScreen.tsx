@@ -46,7 +46,7 @@ export function MakeupRecommendationResultScreen({
         </Button>
 
         <Text numberOfLines={1} style={styles.headerTitle}>
-          추출된 메이크업
+          맞춤 필터 추천
         </Text>
 
         <XStack style={styles.headerActions}>
@@ -93,7 +93,7 @@ export function MakeupRecommendationResultScreen({
         </View>
 
         <YStack style={styles.resultCard}>
-          <Text style={styles.cardKicker}>추천 메이크업 스타일</Text>
+          <Text style={styles.cardKicker}>AI 추천 AR 필터</Text>
           <Text style={styles.resultTitle}>{primaryLook.title}</Text>
           <Text style={styles.resultBody}>{result.summary}</Text>
 
@@ -126,7 +126,7 @@ export function MakeupRecommendationResultScreen({
             style={styles.primaryButton}
             unstyled>
             <Play color={colors.white} fill={colors.white} size={iconSize.xs} strokeWidth={2} />
-            <Text style={styles.primaryButtonText}>AR 가이드 시작하기</Text>
+            <Text style={styles.primaryButtonText}>AR 필터 적용하기</Text>
           </Button>
         </YStack>
 
@@ -150,7 +150,7 @@ export function MakeupRecommendationResultScreen({
 
         <YStack style={styles.section}>
           <XStack style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>추천 룩</Text>
+            <Text style={styles.sectionTitle}>추천 필터</Text>
             <Text style={styles.sectionMeta}>{result.recommendedLooks.length}개</Text>
           </XStack>
           <ScrollView
