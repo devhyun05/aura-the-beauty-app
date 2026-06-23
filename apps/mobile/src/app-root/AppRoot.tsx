@@ -9,6 +9,7 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultsScreen} from '../features/analysis';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
+import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
 import {
@@ -35,6 +36,7 @@ type AppScreen =
   | 'faceCapture'
   | 'analysisLoading'
   | 'facialAnalysisResult'
+  | 'arMakeupFilter'
   | 'custom'
   | 'userPage'
   | 'analysisResults'
@@ -122,7 +124,18 @@ export function AppRoot() {
       return (
         <FacialAnalysisResultScreen
           onBack={() => setActiveScreen('analysisLoading')}
-          onStartARGuide={() => undefined}
+          onStartARGuide={() => setActiveScreen('arMakeupFilter')}
+        />
+      );
+    }
+
+    if (activeScreen === 'arMakeupFilter') {
+      return (
+        <ARMakeupFilterScreen
+          initialGuideMode="basic"
+          onBack={() => setActiveScreen('facialAnalysisResult')}
+          onOpenLocationAdjust={() => undefined}
+          onOpenStyleAdjust={() => undefined}
         />
       );
     }
@@ -208,7 +221,9 @@ export function AppRoot() {
       <SafeAreaProvider>
         <StatusBar
           style={
-            activeScreen === 'faceCapture' || activeScreen === 'feedbackCapture'
+            activeScreen === 'faceCapture' ||
+            activeScreen === 'feedbackCapture' ||
+            activeScreen === 'arMakeupFilter'
               ? 'light'
               : 'dark'
           }
