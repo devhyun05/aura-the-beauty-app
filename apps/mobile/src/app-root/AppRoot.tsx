@@ -11,9 +11,9 @@ import {
 } from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {MakeupStyleListScreen} from '../features/recommendation';
 import {
   LikedProductListScreen,
-  MakeupStyleListScreen,
   MyPageScreen,
   ProfileEditScreen,
 } from '../features/profile';
