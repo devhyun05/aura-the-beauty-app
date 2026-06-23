@@ -5,7 +5,7 @@ export type AnalysisAttribute = {
   description: string;
 };
 
-export type MakeupLook = {
+export type MakeupDirection = {
   id: string;
   imageSource: ImageSourcePropType;
   title: string;
@@ -16,13 +16,13 @@ export type MakeupLook = {
   tags: readonly string[];
 };
 
-export type AvoidMakeupExample = {
+export type FacialAnalysisAvoidExample = {
   id: string;
   title: string;
   reason: string;
 };
 
-export type RecommendationResult = {
+export type FacialAnalysisResult = {
   userName: string;
   analyzedAtLabel: string;
   previewImageSource: ImageSourcePropType;
@@ -32,8 +32,8 @@ export type RecommendationResult = {
     mood: AnalysisAttribute;
     faceBalance: AnalysisAttribute;
   };
-  recommendationPoints: readonly string[];
+  analysisPoints: readonly string[];
   cautionPoints: readonly string[];
-  recommendedLooks: readonly MakeupLook[];
-  avoidExamples: readonly AvoidMakeupExample[];
+  makeupDirections: readonly MakeupDirection[];
+  avoidExamples: readonly FacialAnalysisAvoidExample[];
 };

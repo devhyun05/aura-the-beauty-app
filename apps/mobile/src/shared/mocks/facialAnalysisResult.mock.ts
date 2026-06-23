@@ -1,6 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {RecommendationResult} from '../types/makeupGuide';
+import type {FacialAnalysisResult} from '../types/facialAnalysisResult';
 
 const reportBareFace =
   require('../../assets/images/user-page/report-bare-face-20260622.png') as ImageSourcePropType;
@@ -11,7 +11,7 @@ const styleMoriGirl =
 const styleCleanSmoky =
   require('../../assets/images/user-page/style-clean-smoky.png') as ImageSourcePropType;
 
-export const mockRecommendationResult: RecommendationResult = {
+export const mockFacialAnalysisResult: FacialAnalysisResult = {
   userName: '서진',
   analyzedAtLabel: '방금 촬영한 얼굴 진단 기준',
   previewImageSource: reportBareFace,
@@ -31,7 +31,7 @@ export const mockRecommendationResult: RecommendationResult = {
       description: '눈매는 가볍게 열고 립에 자연스러운 깊이를 더하면 균형이 좋아요.',
     },
   },
-  recommendationPoints: [
+  analysisPoints: [
     '베이스는 세미 글로우로 얇게 정리',
     '아이 메이크업은 그레이 브라운 음영 위주',
     '립은 뉴트럴 로즈와 말린 장미 계열이 자연스러움',
@@ -40,7 +40,7 @@ export const mockRecommendationResult: RecommendationResult = {
     '매트 베이스를 두껍게 올리면 피부 결이 답답해 보일 수 있어요.',
     '채도가 강한 코랄은 얼굴 톤보다 컬러가 먼저 보일 수 있어요.',
   ],
-  recommendedLooks: [
+  makeupDirections: [
     {
       id: 'clean-glow-neutral',
       imageSource: styleOjiGirl,

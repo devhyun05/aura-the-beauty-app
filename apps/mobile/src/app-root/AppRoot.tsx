@@ -13,7 +13,7 @@ import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScr
 import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
 import {UserPageScreen} from '../features/profile';
-import {MakeupRecommendationResultScreen} from '../features/recommendation/screens/MakeupRecommendationResultScreen';
+import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
@@ -23,7 +23,7 @@ type AppScreen =
   | 'home'
   | 'faceCapture'
   | 'analysisLoading'
-  | 'recommendationResult'
+  | 'facialAnalysisResult'
   | 'custom'
   | 'userPage'
   | 'analysisResults';
@@ -75,13 +75,13 @@ export function AppRoot() {
             <StatusBar style="dark" />
             <AIAnalysisLoadingScreen
               onBack={() => setActiveScreen('faceCapture')}
-              onComplete={() => setActiveScreen('recommendationResult')}
+              onComplete={() => setActiveScreen('facialAnalysisResult')}
             />
           </>
-        ) : activeScreen === 'recommendationResult' ? (
+        ) : activeScreen === 'facialAnalysisResult' ? (
           <>
             <StatusBar style="dark" />
-            <MakeupRecommendationResultScreen
+            <FacialAnalysisResultScreen
               onBack={() => setActiveScreen('analysisLoading')}
               onStartARGuide={() => undefined}
             />
