@@ -35,6 +35,10 @@ type AppScreen =
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
+  const [selectedAnalysisResultId, setSelectedAnalysisResultId] =
+    useState<string | null>(null);
+  const [analysisDetailBackScreen, setAnalysisDetailBackScreen] =
+    useState<AppScreen>('myPage');
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
   });
@@ -44,6 +48,14 @@ export function AppRoot() {
   }
 
   const goToMyPage = () => setActiveScreen('myPage');
+  const goToAnalysisReportDetail = (
+    resultId: string | null,
+    backScreen: AppScreen,
+  ) => {
+    setSelectedAnalysisResultId(resultId);
+    setAnalysisDetailBackScreen(backScreen);
+    setActiveScreen('analysisReportDetail');
+  };
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
@@ -61,8 +73,8 @@ export function AppRoot() {
           ) : null}
           {activeScreen === 'myPage' || activeScreen === 'userPage' ? (
             <MyPageScreen
-              onPressAnalysisResult={() =>
-                setActiveScreen('analysisReportDetail')
+              onPressAnalysisResult={(resultId) =>
+                goToAnalysisReportDetail(resultId, 'myPage')
               }
               onPressAnalysisResultList={() =>
                 setActiveScreen('analysisResultList')
@@ -80,11 +92,19 @@ export function AppRoot() {
             <ProfileEditScreen onBack={goToMyPage} />
           ) : null}
           {activeScreen === 'analysisResultList' || activeScreen === 'analysisResults' ? (
-            <AnalysisResultListScreen onBack={goToMyPage} />
+            <AnalysisResultListScreen
+              onBack={goToMyPage}
+              onPressResult={(resultId) =>
+                goToAnalysisReportDetail(resultId, 'analysisResultList')
+              }
+            />
           ) : null}
           {activeScreen === 'analysisReportDetail' ||
           activeScreen === 'analysisResultDetail' ? (
-            <AnalysisReportDetailScreen onBack={goToMyPage} />
+            <AnalysisReportDetailScreen
+              onBack={() => setActiveScreen(analysisDetailBackScreen)}
+              resultId={selectedAnalysisResultId}
+            />
           ) : null}
           {activeScreen === 'makeupStyleList' || activeScreen === 'makeupLooks' ? (
             <MakeupStyleListScreen onBack={goToMyPage} />

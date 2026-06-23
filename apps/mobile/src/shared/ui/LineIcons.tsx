@@ -169,6 +169,39 @@ export function HeartIcon({
   );
 }
 
+export function XIcon({color = colors.textPrimary, size = 18}: IconProps) {
+  const lineSize = size * 0.78;
+
+  return (
+    <View pointerEvents="none" style={{height: size, width: size}}>
+      <View
+        style={[
+          styles.xLine,
+          {
+            backgroundColor: color,
+            left: (size - lineSize) / 2,
+            top: size / 2 - 1,
+            width: lineSize,
+          },
+          styles.xLineForward,
+        ]}
+      />
+      <View
+        style={[
+          styles.xLine,
+          {
+            backgroundColor: color,
+            left: (size - lineSize) / 2,
+            top: size / 2 - 1,
+            width: lineSize,
+          },
+          styles.xLineBackward,
+        ]}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bookmarkBottom: {
     borderRadius: 1.5,
@@ -299,6 +332,17 @@ const styles = StyleSheet.create({
   heartDiamond: {
     borderRadius: 2,
     position: 'absolute',
+    transform: [{rotate: '45deg'}],
+  },
+  xLine: {
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
+  },
+  xLineBackward: {
+    transform: [{rotate: '-45deg'}],
+  },
+  xLineForward: {
     transform: [{rotate: '45deg'}],
   },
 });

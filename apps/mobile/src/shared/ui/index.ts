@@ -10,6 +10,7 @@ export {
   ChevronRightIcon,
   GearIcon,
   HeartIcon,
+  XIcon,
 } from './LineIcons';
 export {ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
 export {RoutePlaceholder} from './RoutePlaceholder';
