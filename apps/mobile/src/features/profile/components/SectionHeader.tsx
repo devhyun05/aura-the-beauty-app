@@ -21,12 +21,21 @@ export const SectionHeader = ({
       {actionLabel ? (
         <Pressable onPress={onPressAction} style={styles.action}>
           <Text style={styles.actionLabel}>{actionLabel}</Text>
-          <Text style={styles.chevron}>&gt;</Text>
+          <ChevronRightIcon />
         </Pressable>
       ) : null}
     </View>
   );
 };
+
+function ChevronRightIcon() {
+  return (
+    <View pointerEvents="none" style={styles.chevronIcon}>
+      <View style={[styles.chevronLine, styles.chevronLineTop]} />
+      <View style={[styles.chevronLine, styles.chevronLineBottom]} />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   action: {
@@ -39,10 +48,26 @@ const styles = StyleSheet.create({
     color: userPageColors.textSoft,
     fontSize: 12,
   },
-  chevron: {
-    color: userPageColors.accentMuted,
-    fontSize: 28,
-    lineHeight: 28,
+  chevronIcon: {
+    height: 18,
+    position: 'relative',
+    width: 14,
+  },
+  chevronLine: {
+    backgroundColor: userPageColors.accentMuted,
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
+    right: 1,
+    width: 8,
+  },
+  chevronLineBottom: {
+    top: 10,
+    transform: [{ rotate: '-45deg' }],
+  },
+  chevronLineTop: {
+    top: 5,
+    transform: [{ rotate: '45deg' }],
   },
   header: {
     alignItems: 'center',

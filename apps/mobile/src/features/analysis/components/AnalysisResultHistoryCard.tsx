@@ -6,31 +6,36 @@ import {
   userPageRadius,
   userPageTypography,
 } from '../../../shared/theme/tokens';
-import type { AnalysisReportPreview } from '../../../shared/types/userPage';
+import type { AnalysisResult } from '../../../shared/types/analysis';
 
-interface AnalysisReportPreviewCardProps {
-  report: AnalysisReportPreview;
+interface AnalysisResultHistoryCardProps {
+  result: AnalysisResult;
   onPress?: () => void;
 }
 
-export const AnalysisReportPreviewCard = ({
-  report,
+export const AnalysisResultHistoryCard = ({
+  result,
   onPress,
-}: AnalysisReportPreviewCardProps) => {
+}: AnalysisResultHistoryCardProps) => {
   return (
-    <Pressable onPress={onPress} style={styles.card}>
-      <Image
-        resizeMode="cover"
-        source={report.imageSource}
-        style={styles.thumbnail}
-      />
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      <Image resizeMode="cover" source={result.imageSource} style={styles.thumbnail} />
 
       <View style={styles.details}>
         <View style={styles.header}>
           <View style={styles.titleGroup}>
-            <Text style={styles.title}>{report.title}</Text>
+            <Text style={styles.title}>{result.title}</Text>
             <Text numberOfLines={1} style={styles.meta}>
-              {report.personalColor} · {report.skinType}
+              {result.personalColor} · {result.skinType}
             </Text>
           </View>
 
@@ -38,13 +43,21 @@ export const AnalysisReportPreviewCard = ({
         </View>
 
         <Text numberOfLines={2} style={styles.summary}>
-          {report.shortSummary}
+          {result.shortSummary}
         </Text>
 
         <View style={styles.footer}>
           <Text numberOfLines={1} style={styles.mood}>
-            {report.recommendedMood}
+            {result.recommendedMood}
           </Text>
+
+          <View style={styles.tags}>
+            {result.tags.slice(0, 2).map((tag) => (
+              <Text key={tag} style={styles.tag}>
+                {tag}
+              </Text>
+            ))}
+          </View>
         </View>
       </View>
     </Pressable>
@@ -97,12 +110,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   footer: {
-    alignSelf: 'flex-start',
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.chip,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
   },
   header: {
     alignItems: 'flex-start',
@@ -117,14 +128,30 @@ const styles = StyleSheet.create({
   },
   mood: {
     color: userPageColors.text,
+    flex: 1,
     fontSize: userPageTypography.caption,
     fontWeight: '700',
     lineHeight: 16,
   },
   summary: {
     color: userPageColors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: userPageTypography.body,
+    lineHeight: 21,
+  },
+  tag: {
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: userPageRadius.chip,
+    borderWidth: 1,
+    color: userPageColors.textMuted,
+    fontSize: userPageTypography.caption,
+    lineHeight: 16,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tags: {
+    flexDirection: 'row',
+    gap: 5,
   },
   thumbnail: {
     backgroundColor: userPageColors.surfaceMuted,

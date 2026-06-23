@@ -39,31 +39,48 @@ export const ProfileSummaryCard = ({
           </Text>
         </View>
 
-        <Pressable onPress={onPressSettings} style={styles.settingsButton}>
-          <Text style={styles.settingsIcon}>⚙</Text>
+        <Pressable
+          accessibilityLabel="프로필 설정"
+          accessibilityRole="button"
+          onPress={onPressSettings}
+          style={styles.settingsButton}
+        >
+          <SettingsIcon />
         </Pressable>
       </View>
     </View>
   );
 };
 
+function SettingsIcon() {
+  return (
+    <View pointerEvents="none" style={styles.settingsIcon}>
+      <View style={styles.settingsDot} />
+      <View style={styles.settingsDot} />
+      <View style={styles.settingsDot} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   avatar: {
+    borderColor: userPageColors.border,
     borderRadius: 46,
+    borderWidth: 1,
     height: 92,
     width: 92,
   },
   card: {
     backgroundColor: userPageColors.surface,
     borderColor: userPageColors.border,
-    borderRadius: userPageRadius.card,
+    borderRadius: userPageRadius.image,
     borderWidth: 1,
-    elevation: 3,
+    elevation: 2,
     padding: 22,
     shadowColor: userPageColors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   content: {
     alignItems: 'center',
@@ -90,13 +107,23 @@ const styles = StyleSheet.create({
   settingsButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 18,
+    borderWidth: 1,
     height: 36,
     justifyContent: 'center',
     width: 36,
   },
+  settingsDot: {
+    backgroundColor: userPageColors.text,
+    borderRadius: 2,
+    height: 4,
+    width: 4,
+  },
   settingsIcon: {
-    color: userPageColors.accentMuted,
-    fontSize: 26,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
   },
   tags: {
     flexDirection: 'row',
