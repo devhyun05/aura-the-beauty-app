@@ -1,139 +1,62 @@
-import React, {type ReactNode} from 'react';
-import {StyleSheet} from 'react-native';
-import {Button, Text, XStack, YStack, type XStackProps} from 'tamagui';
+import type { ReactNode } from 'react';
+import { StyleSheet } from 'react-native';
+import { Text, View } from 'tamagui';
 
-import {colors, radius, shadows, spacing, typography} from '../theme';
-import {ProfileHeaderIcon} from './HeaderIcons';
+import { colors, spacing, typography } from '../theme';
+import { ChevronLeftIcon } from './LineIcons';
+import { IconButton } from './IconButton';
 
 type AppHeaderProps = {
-  title?: string;
-  subtitle?: string;
-  showTitle?: boolean;
-  topInset?: number;
+  title: string;
+  leftSlot?: ReactNode;
   rightSlot?: ReactNode;
-  onProfilePress?: () => void;
-  profileAccessibilityLabel?: string;
-  containerProps?: XStackProps;
+  onBack?: () => void;
 };
 
 export function AppHeader({
-  title = 'AI AR Makeup',
-  subtitle = 'MAKEUP GUIDE',
-  showTitle = true,
-  topInset = 0,
+  title,
+  leftSlot,
   rightSlot,
-  onProfilePress,
-  profileAccessibilityLabel = '사용자 페이지',
-  containerProps,
+  onBack,
 }: AppHeaderProps) {
+  const leftContent =
+    leftSlot ??
+    (onBack ? (
+      <IconButton accessibilityLabel="뒤로가기" onPress={onBack}>
+        <ChevronLeftIcon />
+      </IconButton>
+    ) : null);
+
   return (
-    <XStack
-      {...containerProps}
-      style={[
-        styles.container,
-        {
-          minHeight: 64 + topInset,
-          paddingTop: spacing.md + topInset,
-        },
-        containerProps?.style,
-      ]}>
-      {showTitle ? (
-        <YStack style={styles.titleArea}>
-          <Text
-            color={colors.textSecondary}
-            fontSize={typography.caption.fontSize}
-            fontWeight={typography.caption.fontWeight}
-            letterSpacing={1.2}
-            lineHeight={typography.caption.lineHeight}
-            numberOfLines={1}>
-            {subtitle}
-          </Text>
-          <Text
-            color={colors.textPrimary}
-            fontSize={typography.title.fontSize}
-            fontWeight={typography.title.fontWeight}
-            letterSpacing={0}
-            lineHeight={typography.title.lineHeight}
-            numberOfLines={1}>
-            {title}
-          </Text>
-        </YStack>
-      ) : null}
-
-      <XStack style={styles.actions}>
-        {rightSlot ?? (
-          <HeaderIconButton
-            accessibilityLabel={profileAccessibilityLabel}
-            onPress={onProfilePress}>
-            <ProfileHeaderIcon />
-          </HeaderIconButton>
-        )}
-      </XStack>
-    </XStack>
-  );
-}
-
-type HeaderIconButtonProps = {
-  accessibilityLabel: string;
-  children: ReactNode;
-  onPress?: () => void;
-};
-
-function HeaderIconButton({
-  accessibilityLabel,
-  children,
-  onPress,
-}: HeaderIconButtonProps) {
-  return (
-    <Button
-      hitSlop={8}
-      pressStyle={{scale: 0.97}}
-      style={styles.actionButton}
-      unstyled
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}>
-      {children}
-    </Button>
+    <View style={styles.header}>
+      <View style={styles.side}>{leftContent}</View>
+      <Text numberOfLines={1} style={styles.title}>
+        {title}
+      </Text>
+      <View style={styles.side}>{rightSlot}</View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  header: {
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: spacing.lg,
     justifyContent: 'space-between',
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.xl,
+    minHeight: 44,
   },
-  titleArea: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  actions: {
+  side: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginLeft: 'auto',
-  },
-  actionButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 42,
+    height: 44,
     justifyContent: 'center',
-    padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
-    width: 42,
+    width: 44,
+  },
+  title: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xl,
+    textAlign: 'center',
   },
 });

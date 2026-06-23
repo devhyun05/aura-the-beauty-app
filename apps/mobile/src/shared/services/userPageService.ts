@@ -1,4 +1,3 @@
-import { userPageMock } from '../mocks/userPage.mock';
 import type {
   FavoriteProductPreview,
   MakeupStylePreview,
@@ -6,26 +5,36 @@ import type {
   UserProfile,
 } from '../types/userPage';
 import { getRecentAnalysisResults } from './analysisResultService';
+import { getMakeupLooks } from './makeupService';
+import { getLikedProductPreview } from './productService';
+import { getUserProfile as getUserProfileFromService } from './userService';
 
 export const getUserPageData = async (): Promise<UserPageData> => {
-  const reports = await getRecentAnalysisResults(3);
+  const [profile, reports, makeupStyles, favoriteProducts] = await Promise.all([
+    getUserProfileFromService(),
+    getRecentAnalysisResults(3),
+    getMakeupLooks(),
+    getLikedProductPreview(3),
+  ]);
 
   return {
-    ...userPageMock,
+    profile,
     reports,
+    makeupStyles,
+    favoriteProducts,
   };
 };
 
 export const getMakeupStyles = async (): Promise<MakeupStylePreview[]> => {
-  return userPageMock.makeupStyles;
+  return getMakeupLooks();
 };
 
 export const getFavoriteProducts = async (): Promise<
   FavoriteProductPreview[]
 > => {
-  return userPageMock.favoriteProducts;
+  return getLikedProductPreview(99);
 };
 
 export const getUserProfile = async (): Promise<UserProfile> => {
-  return userPageMock.profile;
+  return getUserProfileFromService();
 };
