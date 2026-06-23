@@ -25,6 +25,7 @@ type ARMakeupFilterScreenProps = {
   initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
   onBack?: () => void;
+  onComplete?: () => void;
   onOpenLocationAdjust?: () => void;
   onOpenStyleAdjust?: () => void;
 };
@@ -39,6 +40,7 @@ export function ARMakeupFilterScreen({
   initialComparisonMode = 'full',
   initialGuideMode = 'basic',
   onBack,
+  onComplete,
   onOpenLocationAdjust,
   onOpenStyleAdjust,
 }: ARMakeupFilterScreenProps) {
@@ -357,8 +359,9 @@ export function ARMakeupFilterScreen({
           </XStack>
 
           <Button
-            accessibilityLabel={captureMode === 'photo' ? '사진 촬영' : '동영상 촬영'}
+            accessibilityLabel={captureMode === 'photo' ? 'AR 사진 촬영 후 홈으로 이동' : 'AR 동영상 촬영 후 홈으로 이동'}
             accessibilityRole="button"
+            onPress={onComplete}
             pressStyle={{scale: 0.96}}
             style={styles.captureButton}
             unstyled>

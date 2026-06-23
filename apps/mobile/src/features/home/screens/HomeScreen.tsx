@@ -1,17 +1,19 @@
-import {type ReactNode, useEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {
   Image,
   Pressable,
   StyleSheet,
   type ImageSourcePropType,
+  useWindowDimensions,
 } from 'react-native';
 import {
-  Bell,
+  ArrowRight,
   ChevronRight,
-  ImagePlus,
+  PackageSearch,
   Palette,
-  ShoppingBag,
+  ScanFace,
   Sparkles,
+  WandSparkles,
 } from 'lucide-react-native';
 import {ScrollView, Text, View, XStack, YStack} from 'tamagui';
 
@@ -21,7 +23,6 @@ import type {
   HomeData,
   HomeFilterStoreItem,
   HomeMakeupLook,
-  HomeNotice,
   HomeTrendItem,
 } from '../types';
 
@@ -31,6 +32,8 @@ type HomeScreenProps = {
 
 export function HomeScreen({onPressCreateFilter}: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const {width} = useWindowDimensions();
+  const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
 
   useEffect(() => {
     let isMounted = true;
@@ -59,130 +62,148 @@ export function HomeScreen({onPressCreateFilter}: HomeScreenProps) {
       showsVerticalScrollIndicator={false}
       style={styles.scrollView}
       contentContainerStyle={styles.content}>
-      <HeroBanner
-        description={homeData.hero.description}
-        eyebrow={homeData.hero.eyebrow}
-        imageSource={homeData.hero.imageSource}
-        notices={homeData.hero.notices}
-        title={homeData.hero.title}
+      <HeroBannerCarousel
+        cardWidth={heroCardWidth}
+        fallbackImageSource={homeData.hero.imageSource}
         trends={homeData.hero.trends}
       />
 
-      <CreateFilterShortcut onPress={onPressCreateFilter} />
+      <QuickActionSection onPressCreateFilter={onPressCreateFilter} />
       <FilterStoreSection items={homeData.filterStore} />
       <RecommendedLooksSection looks={homeData.recommendedLooks} />
     </ScrollView>
   );
 }
 
-type HeroBannerProps = {
-  eyebrow: string;
-  title: string;
-  description: string;
-  imageSource: ImageSourcePropType;
-  notices: HomeNotice[];
+type HeroBannerCarouselProps = {
+  cardWidth: number;
+  fallbackImageSource: ImageSourcePropType;
   trends: HomeTrendItem[];
 };
 
-function HeroBanner({
-  description,
-  eyebrow,
-  imageSource,
-  notices,
-  title,
+type HeroBannerCardProps = {
+  cardWidth: number;
+  imageSource: ImageSourcePropType;
+  title: string;
+  tone: string;
+};
+
+function HeroBannerCarousel({
+  cardWidth,
+  fallbackImageSource,
   trends,
-}: HeroBannerProps) {
-  const primaryNotice = notices[0];
+}: HeroBannerCarouselProps) {
+  const heroItems =
+    trends.length > 0
+      ? trends.slice(0, 3)
+      : [
+          {
+            id: 'weekly-default',
+            imageSource: fallbackImageSource,
+            title: '코랄 글로우',
+            tone: '맑은 로즈 베이지',
+          },
+        ];
 
   return (
-    <YStack style={styles.heroCard}>
-      <XStack style={styles.heroTop}>
-        <YStack style={styles.heroCopy}>
-          <XStack style={styles.eyebrowPill}>
-            <Sparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={1.8} />
-            <Text style={styles.eyebrowText}>{eyebrow}</Text>
-          </XStack>
-
-          <Text style={styles.heroTitle}>{title}</Text>
-          <Text style={styles.heroDescription}>{description}</Text>
-        </YStack>
-
-        <View style={styles.heroImageFrame}>
-          <Image resizeMode="cover" source={imageSource} style={styles.heroImage} />
-        </View>
-      </XStack>
-
-      {primaryNotice ? <NoticeStrip notice={primaryNotice} /> : null}
-
-      <XStack style={styles.trendList}>
-        {trends.map((trend) => (
-          <TrendPreviewCard key={trend.id} trend={trend} />
-        ))}
-      </XStack>
-    </YStack>
+    <ScrollView
+      horizontal
+      decelerationRate="fast"
+      snapToAlignment="start"
+      snapToInterval={cardWidth + spacing.md}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.heroCarousel}>
+      {heroItems.map(item => (
+        <HeroBannerCard
+          cardWidth={cardWidth}
+          imageSource={item.imageSource}
+          key={item.id}
+          title={item.title}
+          tone={item.tone}
+        />
+      ))}
+    </ScrollView>
   );
 }
 
-function NoticeStrip({notice}: {notice: HomeNotice}) {
+function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardProps) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${notice.title} ${notice.description}`}
-      style={({pressed}) => [styles.noticeStrip, pressed && styles.pressed]}>
-      <XStack style={styles.noticeIconBox}>
-        <Bell color={colors.white} size={iconSize.xs} strokeWidth={2} />
-      </XStack>
+      accessibilityLabel={`이번 주 추천 메이크업 ${title} ${tone} 보기`}
+      style={({pressed}) => [
+        styles.heroBanner,
+        {width: cardWidth},
+        pressed && styles.pressed,
+      ]}>
+      <Image resizeMode="cover" source={imageSource} style={styles.heroBackgroundImage} />
+      <View style={styles.heroScrim} />
 
-      <YStack style={styles.noticeTextGroup}>
-        <Text style={styles.noticeTitle}>{notice.title}</Text>
-        <Text numberOfLines={1} style={styles.noticeDescription}>
-          {notice.description}
-        </Text>
-      </YStack>
-
-      <ChevronRight color={colors.textSecondary} size={iconSize.sm} strokeWidth={1.8} />
-    </Pressable>
-  );
-}
-
-function CreateFilterShortcut({onPress}: {onPress?: () => void}) {
-  return (
-    <Pressable
-      accessibilityLabel="이미지로 메이크업 필터 만들기"
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [styles.createFilterCard, pressed && styles.pressed]}>
-      <View style={styles.createFilterIcon}>
-        <ImagePlus color={colors.white} size={iconSize.md} strokeWidth={2} />
-      </View>
-
-      <YStack style={styles.createFilterCopy}>
-        <XStack style={styles.createFilterEyebrowRow}>
-          <Sparkles color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
-          <Text style={styles.createFilterEyebrow}>CREATE FILTER</Text>
+      <YStack style={styles.heroCopy}>
+        <XStack style={styles.heroBadge}>
+          <Sparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={1.8} />
+          <Text style={styles.heroBadgeText}>WEEKLY TREND</Text>
         </XStack>
-        <Text style={styles.createFilterTitle}>사진에서 메이크업 룩 추출하기</Text>
-        <Text style={styles.createFilterDescription}>
-          인플루언서나 유행하는 화장 사진을 업로드하고 내 얼굴용 AR 필터로 바꿔보세요.
-        </Text>
-      </YStack>
 
-      <ChevronRight color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+        <Text style={styles.heroTitle}>
+          이번 주 추천{'\n'}{title}{'\n'}{tone}
+        </Text>
+
+        <XStack style={styles.heroButton}>
+          <Text style={styles.heroButtonText}>룩 보러가기</Text>
+          <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
+        </XStack>
+      </YStack>
     </Pressable>
   );
 }
 
-function TrendPreviewCard({trend}: {trend: HomeTrendItem}) {
+const quickActions = [
+  {
+    id: 'ar',
+    label: '실시간 AR',
+    accessibilityLabel: '실시간 AR 시작',
+    icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
+  {
+    id: 'extract',
+    label: '메이크업 추출',
+    accessibilityLabel: '메이크업 추출',
+    icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
+  {
+    id: 'recommendation',
+    label: '추천 제품',
+    accessibilityLabel: '추천 제품 보기',
+    icon: (color: string) => (
+      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+] as const;
+
+function QuickActionSection({
+  onPressCreateFilter,
+}: {
+  onPressCreateFilter?: () => void;
+}) {
   return (
-    <View style={styles.trendCard}>
-      <Image resizeMode="cover" source={trend.imageSource} style={styles.trendImage} />
-      <Text numberOfLines={1} style={styles.trendTitle}>
-        {trend.title}
-      </Text>
-      <Text numberOfLines={1} style={styles.trendTone}>
-        {trend.tone}
-      </Text>
-    </View>
+    <XStack style={styles.quickActionList}>
+      {quickActions.map((action) => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.accessibilityLabel}
+          key={action.label}
+          onPress={action.id === 'extract' ? onPressCreateFilter : undefined}
+          style={({pressed}) => [styles.quickActionItem, pressed && styles.pressed]}>
+          <View style={styles.quickActionCircle}>
+            {action.icon(colors.textPrimary)}
+          </View>
+          <Text numberOfLines={1} style={styles.quickActionLabel}>
+            {action.label}
+          </Text>
+        </Pressable>
+      ))}
+    </XStack>
   );
 }
 
@@ -191,8 +212,6 @@ function FilterStoreSection({items}: {items: HomeFilterStoreItem[]}) {
     <YStack style={styles.section}>
       <SectionHeader
         actionLabel="스토어 보기"
-        eyebrow="FILTER STORE"
-        icon={<ShoppingBag color={colors.textPrimary} size={iconSize.sm} strokeWidth={1.8} />}
         title="필터 스토어"
       />
 
@@ -238,16 +257,17 @@ function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
     <YStack style={styles.section}>
       <SectionHeader
         actionLabel="전체 보기"
-        eyebrow="RECOMMENDED LOOKS"
-        icon={<Sparkles color={colors.textPrimary} size={iconSize.sm} strokeWidth={1.8} />}
-        title="추천 메이크업룩"
+        title="추천 메이크업 리스트"
       />
 
-      <XStack style={styles.lookList}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.lookList}>
         {looks.map((look) => (
           <RecommendedLookCard key={look.id} look={look} />
         ))}
-      </XStack>
+      </ScrollView>
     </YStack>
   );
 }
@@ -258,7 +278,9 @@ function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
       accessibilityRole="button"
       accessibilityLabel={`${look.title} ${look.description}`}
       style={({pressed}) => [styles.lookCard, pressed && styles.pressed]}>
-      <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
+      <View style={styles.lookImageFrame}>
+        <Image resizeMode="contain" source={look.imageSource} style={styles.lookImage} />
+      </View>
 
       <YStack style={styles.lookTextGroup}>
         <Text numberOfLines={1} style={styles.lookTitle}>
@@ -267,7 +289,6 @@ function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
         <Text numberOfLines={2} style={styles.lookDescription}>
           {look.description}
         </Text>
-        <Text style={styles.lookDate}>{look.date}</Text>
       </YStack>
     </Pressable>
   );
@@ -275,19 +296,13 @@ function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
 
 type SectionHeaderProps = {
   actionLabel: string;
-  eyebrow: string;
-  icon: ReactNode;
   title: string;
 };
 
-function SectionHeader({actionLabel, eyebrow, icon, title}: SectionHeaderProps) {
+function SectionHeader({actionLabel, title}: SectionHeaderProps) {
   return (
     <XStack style={styles.sectionHeader}>
       <YStack style={styles.sectionTitleGroup}>
-        <XStack style={styles.sectionEyebrowRow}>
-          {icon}
-          <Text style={styles.sectionEyebrow}>{eyebrow}</Text>
-        </XStack>
         <Text style={styles.sectionTitle}>{title}</Text>
       </YStack>
 
@@ -306,58 +321,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
   },
-  createFilterCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.textPrimary,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.lg,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: 0.08,
-    shadowRadius: shadows.soft.shadowRadius,
+  heroBackgroundImage: {
+    bottom: 0,
+    height: '100%',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: '100%',
   },
-  createFilterCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  createFilterDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  createFilterEyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    letterSpacing: 0.8,
-    lineHeight: typography.lineHeight.xs,
-  },
-  createFilterEyebrowRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  createFilterIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-  },
-  createFilterTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
-  },
-  eyebrowPill: {
+  heroBadge: {
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: colors.white,
@@ -369,11 +342,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
-  eyebrowText: {
+  heroBadgeText: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
+  },
+  heroCarousel: {
+    gap: spacing.md,
   },
   filterCard: {
     backgroundColor: colors.surface,
@@ -428,38 +404,20 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  heroCard: {
+  heroBanner: {
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.md,
+    height: 330,
+    justifyContent: 'flex-end',
     overflow: 'hidden',
-    padding: spacing.lg,
+    padding: spacing.xxl,
   },
   heroCopy: {
-    flex: 1,
-    gap: spacing.sm,
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  heroDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  heroImage: {
-    height: '100%',
-    width: '100%',
-  },
-  heroImageFrame: {
-    borderColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    height: 154,
-    overflow: 'hidden',
-    width: 120,
+    gap: spacing.lg,
+    maxWidth: 266,
+    zIndex: 1,
   },
   heroTitle: {
     color: colors.textPrimary,
@@ -467,10 +425,29 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xl,
     lineHeight: typography.lineHeight.xl,
   },
-  heroTop: {
+  heroButton: {
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.xl,
+  },
+  heroButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  heroScrim: {
+    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -489,15 +466,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    flex: 1,
-    minWidth: 0,
-    overflow: 'hidden',
-  },
-  lookDate: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    gap: spacing.sm,
+    padding: spacing.sm,
+    width: 138,
   },
   lookDescription: {
     color: colors.textSecondary,
@@ -506,16 +477,23 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   lookImage: {
-    aspectRatio: 0.88,
+    height: '100%',
     width: '100%',
   },
+  lookImageFrame: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    height: 150,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   lookList: {
-    flexDirection: 'row',
     gap: spacing.md,
+    paddingRight: spacing.lg,
   },
   lookTextGroup: {
     gap: 2,
-    padding: spacing.sm,
   },
   lookTitle: {
     color: colors.textPrimary,
@@ -523,43 +501,40 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  noticeDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+  pressed: {
+    opacity: 0.78,
   },
-  noticeIconBox: {
+  quickActionCircle: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 30,
-    justifyContent: 'center',
-    width: 30,
-  },
-  noticeStrip: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
+    height: 72,
+    justifyContent: 'center',
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    width: 72,
   },
-  noticeTextGroup: {
+  quickActionItem: {
+    alignItems: 'center',
     flex: 1,
-    gap: 1,
+    gap: spacing.xs,
     minWidth: 0,
   },
-  noticeTitle: {
+  quickActionLabel: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
   },
-  pressed: {
-    opacity: 0.78,
+  quickActionList: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   scrollView: {
     backgroundColor: colors.background,
@@ -580,18 +555,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  sectionEyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    letterSpacing: 0.8,
-    lineHeight: typography.lineHeight.xs,
-  },
-  sectionEyebrowRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -605,31 +568,5 @@ const styles = StyleSheet.create({
   },
   sectionTitleGroup: {
     gap: 2,
-  },
-  trendCard: {
-    flex: 1,
-    minWidth: 0,
-  },
-  trendImage: {
-    borderRadius: radius.md,
-    height: 82,
-    width: '100%',
-  },
-  trendList: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  trendTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    marginTop: spacing.xs,
-  },
-  trendTone: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
   },
 });
