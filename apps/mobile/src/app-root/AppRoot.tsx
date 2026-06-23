@@ -91,7 +91,10 @@ export function AppRoot() {
             />
           ) : null}
           {activeScreen === 'profileEdit' ? (
-            <ProfileEditScreen onBack={goToMyPage} />
+            <ProfileEditScreen
+              onBack={goToMyPage}
+              onLogout={() => setActiveScreen('login')}
+            />
           ) : null}
           {activeScreen === 'analysisResultList' || activeScreen === 'analysisResults' ? (
             <AnalysisResultListScreen

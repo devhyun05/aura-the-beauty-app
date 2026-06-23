@@ -7,15 +7,22 @@ import {PencilIcon} from '../../../shared/ui';
 
 type ProfileEditRowProps = {
   field: ProfileEditField;
+  isEditing?: boolean;
+  onPressEdit?: () => void;
 };
 
-export function ProfileEditRow({field}: ProfileEditRowProps) {
+export function ProfileEditRow({
+  field,
+  isEditing = false,
+  onPressEdit,
+}: ProfileEditRowProps) {
   return (
     <Pressable
       accessibilityLabel={`${field.label} 수정`}
       accessibilityRole="button"
-      disabled={!field.editable}
-      style={styles.row}
+      disabled={!field.editable || !onPressEdit}
+      onPress={onPressEdit}
+      style={[styles.row, isEditing ? styles.rowEditing : null]}
     >
       <Text numberOfLines={1} style={styles.label}>
         {field.label}
@@ -24,7 +31,7 @@ export function ProfileEditRow({field}: ProfileEditRowProps) {
         {field.value}
       </Text>
       <View style={styles.iconSlot}>
-        <PencilIcon />
+        {field.editable ? <PencilIcon /> : null}
       </View>
     </Pressable>
   );
@@ -48,6 +55,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     minHeight: 54,
+  },
+  rowEditing: {
+    borderBottomColor: colors.divider,
+    borderBottomWidth: 1,
   },
   value: {
     color: colors.textPrimary,
