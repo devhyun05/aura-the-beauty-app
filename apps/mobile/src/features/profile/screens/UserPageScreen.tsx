@@ -4,7 +4,7 @@ import { ScrollView, Text, View } from 'tamagui';
 
 import { getUserPageData } from '../../../shared/services/userPageService';
 import { userPageColors, userPageSpacing } from '../../../shared/theme/tokens';
-import type { UserPageData } from '../../../shared/types/userPage';
+import type { MakeupStylePreview, UserPageData } from '../../../shared/types/userPage';
 import { AnalysisReportPreviewCard } from '../components/AnalysisReportPreviewCard';
 import { FavoriteProductCard } from '../components/FavoriteProductCard';
 import { MakeupStyleCard } from '../components/MakeupStyleCard';
@@ -17,6 +17,7 @@ interface UserPageScreenProps {
   onPressReports?: () => void;
   onPressMakeupStyles?: () => void;
   onPressFavoriteProducts?: () => void;
+  savedMakeupStyle?: MakeupStylePreview | null;
 }
 
 export const UserPageScreen = ({
@@ -25,6 +26,7 @@ export const UserPageScreen = ({
   onPressReports,
   onPressMakeupStyles,
   onPressFavoriteProducts,
+  savedMakeupStyle,
 }: UserPageScreenProps) => {
   const [userPageData, setUserPageData] = useState<UserPageData | null>(null);
 
@@ -51,7 +53,13 @@ export const UserPageScreen = ({
   }
 
   const recentReports = userPageData.reports.slice(0, 3);
-  const previewStyles = userPageData.makeupStyles.slice(0, 3);
+  const makeupStyles = savedMakeupStyle
+    ? [
+        savedMakeupStyle,
+        ...userPageData.makeupStyles.filter((style) => style.id !== savedMakeupStyle.id),
+      ]
+    : userPageData.makeupStyles;
+  const previewStyles = makeupStyles.slice(0, 3);
   const previewProducts = userPageData.favoriteProducts.slice(0, 3);
 
   return (
