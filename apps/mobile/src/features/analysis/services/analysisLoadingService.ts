@@ -37,7 +37,7 @@ export const mockAnalysisLoadingSteps: readonly AnalysisLoadingStep[] = [
 ];
 
 export const analysisLoadingTip =
-  '정확한 추천 필터를 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
+  '정확한 맞춤 필터 생성을 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / ANALYSIS_LOADING_TOTAL_MS, 0), 1);
