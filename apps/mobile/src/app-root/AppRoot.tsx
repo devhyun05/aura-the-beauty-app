@@ -6,6 +6,7 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
@@ -20,6 +21,7 @@ type AppScreen =
   | 'tutorial'
   | 'home'
   | 'faceCapture'
+  | 'analysisLoading'
   | 'custom'
   | 'userPage'
   | 'analysisResults';
@@ -63,9 +65,17 @@ export function AppRoot() {
           </>
         ) : activeScreen === 'faceCapture' ? (
           <FaceCaptureScreen
-            onCapture={() => setActiveScreen('userPage')}
+            onCapture={() => setActiveScreen('analysisLoading')}
             onClose={() => setActiveScreen('home')}
           />
+        ) : activeScreen === 'analysisLoading' ? (
+          <>
+            <StatusBar style="dark" />
+            <AIAnalysisLoadingScreen
+              onBack={() => setActiveScreen('faceCapture')}
+              onComplete={() => setActiveScreen('analysisResults')}
+            />
+          </>
         ) : activeScreen === 'userPage' ? (
           <>
             <StatusBar style="dark" />
