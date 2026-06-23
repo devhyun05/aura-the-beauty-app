@@ -1,10 +1,10 @@
-import type { ImageSourcePropType } from 'react-native';
+import type {ImageSourcePropType} from 'react-native';
 
-import type { Product } from '../types/userPage';
+import type {Product} from '../types/userPage';
 
 const productRomandTint =
   require('../../assets/images/products/product-romand-tint.png') as ImageSourcePropType;
-const productHeraCushion =
+const productClioCushion =
   require('../../assets/images/products/product-clio-cushion.png') as ImageSourcePropType;
 const productDasiqueCheek =
   require('../../assets/images/products/product-dasique-cheek.png') as ImageSourcePropType;
@@ -17,51 +17,51 @@ const productAmuseTint =
 
 export const productsMock: Product[] = [
   {
-    id: 'product-romand-glasting-water-tint',
+    id: 'product-romand-juicy-lasting-tint',
     brandName: '롬앤',
-    productName: '글래스팅 워터 틴트',
+    productName: '쥬시 래스팅 틴트',
     price: 15000,
     imageSource: productRomandTint,
     isLiked: true,
   },
   {
-    id: 'product-hera-black-cushion',
-    brandName: '헤라',
-    productName: '블랙 쿠션 21N1',
+    id: 'product-clio-mesh-glow-cushion',
+    brandName: '클리오',
+    productName: '킬 커버 메쉬 글로우 쿠션',
     price: 32000,
-    imageSource: productHeraCushion,
+    imageSource: productClioCushion,
     isLiked: true,
   },
   {
-    id: 'product-dasique-mood-cheek',
+    id: 'product-dasique-blending-mood-cheek',
     brandName: '데이지크',
-    productName: '블렌딩 무드 치크 02',
+    productName: '블렌딩 무드 치크',
     price: 24000,
     imageSource: productDasiqueCheek,
     isLiked: true,
   },
   {
-    id: 'product-dasique-eye-palette',
+    id: 'product-dasique-shadow-palette',
     brandName: '데이지크',
-    productName: '뉴트럴 아이 팔레트',
-    price: 27000,
+    productName: '섀도우 팔레트',
+    price: 34000,
     imageSource: productDasiquePalette,
-    isLiked: false,
+    isLiked: true,
   },
   {
-    id: 'product-clio-liner',
+    id: 'product-clio-superproof-pen-liner',
     brandName: '클리오',
-    productName: '샤프 블랙 라이너',
-    price: 19000,
+    productName: '수퍼프루프 펜 라이너',
+    price: 14000,
     imageSource: productClioLiner,
-    isLiked: false,
+    isLiked: true,
   },
   {
-    id: 'product-amuse-tint',
+    id: 'product-amuse-dew-tint',
     brandName: '어뮤즈',
-    productName: '듀 틴트 코랄',
-    price: 18000,
+    productName: '듀 틴트',
+    price: 20000,
     imageSource: productAmuseTint,
-    isLiked: false,
+    isLiked: true,
   },
 ];
