@@ -8,13 +8,18 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultDetailScreen, AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
-import {MakeupLookScreen, UserPageScreen} from '../features/profile';
+import {
+  FavoriteProductsScreen,
+  MakeupLookScreen,
+  UserPageScreen,
+} from '../features/profile';
 
 type AppScreen =
   | 'login'
   | 'faceCapture'
   | 'userPage'
   | 'makeupLooks'
+  | 'favoriteProducts'
   | 'analysisResults'
   | 'analysisResultDetail';
 type DetailBackScreen = 'userPage' | 'analysisResults';
@@ -60,6 +65,9 @@ export function AppRoot() {
           {activeScreen === 'userPage' ? (
             <UserPageScreen
               onPressMakeupStyles={() => setActiveScreen('makeupLooks')}
+              onPressFavoriteProducts={() =>
+                setActiveScreen('favoriteProducts')
+              }
               onPressReport={(reportId) =>
                 openAnalysisDetail(reportId, 'userPage')
               }
@@ -68,6 +76,9 @@ export function AppRoot() {
           ) : null}
           {activeScreen === 'makeupLooks' ? (
             <MakeupLookScreen onBack={() => setActiveScreen('userPage')} />
+          ) : null}
+          {activeScreen === 'favoriteProducts' ? (
+            <FavoriteProductsScreen onBack={() => setActiveScreen('userPage')} />
           ) : null}
           {activeScreen === 'analysisResults' ? (
             <AnalysisResultsScreen
