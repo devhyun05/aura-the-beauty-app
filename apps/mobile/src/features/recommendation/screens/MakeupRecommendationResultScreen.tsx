@@ -46,12 +46,12 @@ export function MakeupRecommendationResultScreen({
         </Button>
 
         <Text numberOfLines={1} style={styles.headerTitle}>
-          맞춤 필터 추천
+          맞춤 필터 생성
         </Text>
 
         <XStack style={styles.headerActions}>
           <Button
-            accessibilityLabel="추천 결과 저장"
+            accessibilityLabel="생성 필터 결과 저장"
             accessibilityRole="button"
             hitSlop={8}
             onPress={onSave}
@@ -61,7 +61,7 @@ export function MakeupRecommendationResultScreen({
             <Bookmark color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
           </Button>
           <Button
-            accessibilityLabel="추천 결과 공유"
+            accessibilityLabel="생성 필터 결과 공유"
             accessibilityRole="button"
             hitSlop={8}
             onPress={onShare}
@@ -93,7 +93,7 @@ export function MakeupRecommendationResultScreen({
         </View>
 
         <YStack style={styles.resultCard}>
-          <Text style={styles.cardKicker}>AI 추천 AR 필터</Text>
+          <Text style={styles.cardKicker}>AI 생성 AR 필터</Text>
           <Text style={styles.resultTitle}>{primaryLook.title}</Text>
           <Text style={styles.resultBody}>{result.summary}</Text>
 
@@ -140,7 +140,7 @@ export function MakeupRecommendationResultScreen({
         </YStack>
 
         <YStack style={styles.section}>
-          <Text style={styles.sectionTitle}>주요 추천 포인트</Text>
+          <Text style={styles.sectionTitle}>필터 생성 기준</Text>
           <YStack style={styles.pointCard}>
             {result.recommendationPoints.map(point => (
               <PointText key={point} text={point} />
@@ -150,7 +150,7 @@ export function MakeupRecommendationResultScreen({
 
         <YStack style={styles.section}>
           <XStack style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>추천 필터</Text>
+            <Text style={styles.sectionTitle}>생성된 필터</Text>
             <Text style={styles.sectionMeta}>{result.recommendedLooks.length}개</Text>
           </XStack>
           <ScrollView
