@@ -1,12 +1,14 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {StyleSheet} from 'react-native';
-import {ChevronLeft} from 'lucide-react-native';
-import {Button, Spinner, Text, View, XStack, YStack} from 'tamagui';
+import {Image, StyleSheet} from 'react-native';
+import {CheckCircle2, ChevronLeft, Circle} from 'lucide-react-native';
+import Svg, {Circle as SvgCircle} from 'react-native-svg';
+import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {
   ANALYSIS_LOADING_TOTAL_MS,
+  analysisLoadingPreviewSource,
   analysisLoadingTip,
   getAnalysisProgressState,
   mockAnalysisLoadingSteps,
@@ -18,6 +20,10 @@ type AIAnalysisLoadingScreenProps = {
 };
 
 const PROGRESS_TICK_MS = 320;
+const RING_SIZE = 132;
+const RING_STROKE = 8;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function AIAnalysisLoadingScreen({
   onBack,
@@ -26,6 +32,9 @@ export function AIAnalysisLoadingScreen({
   const insets = useSafeAreaInsets();
   const [elapsedMs, setElapsedMs] = useState(0);
   const progressState = useMemo(() => getAnalysisProgressState(elapsedMs), [elapsedMs]);
+  const activeStepIndex = mockAnalysisLoadingSteps.findIndex(
+    step => step.id === progressState.activeStep.id,
+  );
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -67,59 +76,75 @@ export function AIAnalysisLoadingScreen({
           <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
         </Button>
 
-        <YStack style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>AI FACIAL ANALYSIS</Text>
-          <Text style={styles.headerTitle}>얼굴 분석 중</Text>
-        </YStack>
+        <Text numberOfLines={1} style={styles.headerTitle}>
+          메이크업 분석
+        </Text>
+
+        <View style={styles.headerSpacer} />
       </XStack>
 
       <YStack style={styles.content}>
-        <YStack style={styles.previewCard}>
-          <View style={styles.facePreview}>
-            <View style={styles.faceGuide} />
-            <View style={styles.scanLine} />
-          </View>
-
-          <YStack style={styles.previewCopy}>
-            <Spinner color={colors.textPrimary} size="large" />
-            <Text accessibilityLiveRegion="polite" style={styles.activeStepTitle}>
-              {progressState.activeStep.title}
-            </Text>
-            <Text style={styles.activeStepDescription}>
-              {progressState.activeStep.description}
-            </Text>
-          </YStack>
+        <YStack style={styles.heroCopy}>
+          <Text style={styles.heroTitle}>AI가 메이크업을 분석하고 있어요</Text>
+          <Text style={styles.heroDescription}>
+            촬영 이미지를 기준으로 톤, 균형, 추천 포인트를 정리합니다.
+          </Text>
         </YStack>
 
-        <YStack style={styles.progressSection}>
-          <XStack style={styles.progressMeta}>
-            <Text style={styles.progressLabel}>분석 진행률</Text>
-            <Text style={styles.progressValue}>{progressState.progressLabel}</Text>
-          </XStack>
-
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${progressState.progress * 100}%`,
-                },
-              ]}
+        <YStack style={styles.analysisCard}>
+          <View style={styles.previewFrame}>
+            <Image
+              resizeMode="cover"
+              source={analysisLoadingPreviewSource}
+              style={styles.previewImage}
             />
+            <View style={styles.previewDim} />
+            <View style={styles.scanLine} />
+            <XStack style={styles.previewBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.previewBadgeText}>진단 사진 분석 중</Text>
+            </XStack>
           </View>
 
-          <XStack style={styles.stepList}>
-            {mockAnalysisLoadingSteps.map(step => {
-              const isActive = step.id === progressState.activeStep.id;
+          <XStack style={styles.progressBlock}>
+            <ProgressRing
+              label={progressState.progressLabel}
+              progress={progressState.progress}
+            />
 
-              return (
-                <View
-                  key={step.id}
-                  accessibilityLabel={`${step.title} 단계`}
-                  style={[styles.stepDot, isActive ? styles.stepDotActive : undefined]}
-                />
-              );
-            })}
+            <YStack style={styles.stepList}>
+              {mockAnalysisLoadingSteps.map((step, stepIndex) => {
+                const isDone = progressState.isComplete || stepIndex < activeStepIndex;
+                const isActive = stepIndex === activeStepIndex && !progressState.isComplete;
+
+                return (
+                  <XStack key={step.id} style={styles.stepRow}>
+                    {isDone || isActive ? (
+                      <CheckCircle2
+                        color={colors.textPrimary}
+                        size={iconSize.xs}
+                        strokeWidth={2}
+                      />
+                    ) : (
+                      <Circle color={colors.borderStrong} size={iconSize.xs} strokeWidth={2} />
+                    )}
+                    <YStack style={styles.stepCopy}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.stepTitle,
+                          isDone || isActive ? styles.stepTitleActive : undefined,
+                        ]}>
+                        {step.title}
+                      </Text>
+                      <Text numberOfLines={2} style={styles.stepDescription}>
+                        {step.description}
+                      </Text>
+                    </YStack>
+                  </XStack>
+                );
+              })}
+            </YStack>
           </XStack>
         </YStack>
 
@@ -132,6 +157,44 @@ export function AIAnalysisLoadingScreen({
   );
 }
 
+type ProgressRingProps = {
+  label: string;
+  progress: number;
+};
+
+function ProgressRing({label, progress}: ProgressRingProps) {
+  return (
+    <View
+      accessibilityLabel={`분석 진행률 ${label}`}
+      accessibilityLiveRegion="polite"
+      style={styles.progressRing}>
+      <Svg height={RING_SIZE} width={RING_SIZE}>
+        <SvgCircle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          fill="none"
+          r={RING_RADIUS}
+          stroke={colors.surfaceMuted}
+          strokeWidth={RING_STROKE}
+        />
+        <SvgCircle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          fill="none"
+          r={RING_RADIUS}
+          stroke={colors.black}
+          strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+          strokeDashoffset={RING_CIRCUMFERENCE * (1 - progress)}
+          strokeLinecap="round"
+          strokeWidth={RING_STROKE}
+          transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+        />
+      </Svg>
+      <Text style={styles.progressValue}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
@@ -140,8 +203,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -155,85 +216,34 @@ const styles = StyleSheet.create({
     height: iconSize.xl + spacing.md,
     justifyContent: 'center',
     padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
     width: iconSize.xl + spacing.md,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  eyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.2,
-    lineHeight: typography.lineHeight.xs,
   },
   headerTitle: {
     color: colors.textPrimary,
+    flex: 1,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
+    lineHeight: typography.lineHeight.md,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    height: iconSize.xl + spacing.md,
+    width: iconSize.xl + spacing.md,
   },
   content: {
     flex: 1,
-    gap: spacing.xl,
+    gap: spacing.xxl,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxl,
   },
-  previewCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.xl,
-    padding: spacing.xl,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
-  },
-  facePreview: {
+  heroCopy: {
     alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: colors.black,
-    borderRadius: radius.lg,
-    height: 286,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: '100%',
+    gap: spacing.sm,
   },
-  faceGuide: {
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 174,
-    opacity: 0.86,
-    transform: [{scaleY: 1.18}],
-    width: 136,
-  },
-  scanLine: {
-    backgroundColor: colors.white,
-    height: 2,
-    left: spacing.xxl,
-    opacity: 0.5,
-    position: 'absolute',
-    right: spacing.xxl,
-    top: 128,
-  },
-  previewCopy: {
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  activeStepTitle: {
+  heroTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xl,
@@ -242,7 +252,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xl,
     textAlign: 'center',
   },
-  activeStepDescription: {
+  heroDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
@@ -251,53 +261,127 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
   },
-  progressSection: {
-    gap: spacing.md,
+  analysisCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.xl,
+    padding: spacing.md,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: shadows.soft.shadowOpacity,
+    shadowRadius: shadows.soft.shadowRadius,
   },
-  progressMeta: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  progressLabel: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  progressValue: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  progressTrack: {
+  previewFrame: {
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.pill,
-    height: spacing.sm,
+    borderRadius: radius.lg,
+    height: 214,
     overflow: 'hidden',
+    width: '100%',
   },
-  progressFill: {
-    backgroundColor: colors.black,
-    borderRadius: radius.pill,
+  previewImage: {
     height: '100%',
+    width: '100%',
   },
-  stepList: {
-    alignSelf: 'center',
-    gap: spacing.sm,
+  previewDim: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    opacity: 0.12,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
-  stepDot: {
-    backgroundColor: colors.borderStrong,
+  scanLine: {
+    backgroundColor: colors.white,
+    height: 2,
+    left: spacing.xl,
+    opacity: 0.82,
+    position: 'absolute',
+    right: spacing.xl,
+    top: 116,
+  },
+  previewBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    gap: spacing.xs,
+    left: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    position: 'absolute',
+    top: spacing.md,
+  },
+  liveDot: {
+    backgroundColor: colors.white,
     borderRadius: radius.pill,
     height: spacing.sm,
     width: spacing.sm,
   },
-  stepDotActive: {
-    backgroundColor: colors.black,
-    width: spacing.xxl,
+  previewBadgeText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  progressBlock: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  progressRing: {
+    alignItems: 'center',
+    height: RING_SIZE,
+    justifyContent: 'center',
+    width: RING_SIZE,
+  },
+  progressValue: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xl,
+    position: 'absolute',
+  },
+  stepList: {
+    flex: 1,
+    gap: spacing.md,
+    minWidth: 0,
+  },
+  stepRow: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  stepCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  stepTitle: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  stepTitleActive: {
+    color: colors.textPrimary,
+  },
+  stepDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.regular,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
   },
   tipCard: {
     backgroundColor: colors.surfaceMuted,

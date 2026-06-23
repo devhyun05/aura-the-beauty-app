@@ -1,3 +1,5 @@
+import type {ImageSourcePropType} from 'react-native';
+
 export type AnalysisLoadingStep = {
   id: string;
   title: string;
@@ -12,6 +14,9 @@ export type AnalysisProgressState = {
 };
 
 export const ANALYSIS_LOADING_TOTAL_MS = 3200;
+
+export const analysisLoadingPreviewSource =
+  require('../../../assets/images/user-page/report-bare-face-20260622.png') as ImageSourcePropType;
 
 export const mockAnalysisLoadingSteps: readonly AnalysisLoadingStep[] = [
   {
