@@ -8,6 +8,7 @@ import {
 import {
   Bell,
   ChevronRight,
+  ImagePlus,
   Palette,
   ShoppingBag,
   Sparkles,
@@ -24,7 +25,11 @@ import type {
   HomeTrendItem,
 } from '../types';
 
-export function HomeScreen() {
+type HomeScreenProps = {
+  onPressCreateFilter?: () => void;
+};
+
+export function HomeScreen({onPressCreateFilter}: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
 
   useEffect(() => {
@@ -63,6 +68,7 @@ export function HomeScreen() {
         trends={homeData.hero.trends}
       />
 
+      <CreateFilterShortcut onPress={onPressCreateFilter} />
       <FilterStoreSection items={homeData.filterStore} />
       <RecommendedLooksSection looks={homeData.recommendedLooks} />
     </ScrollView>
@@ -135,6 +141,33 @@ function NoticeStrip({notice}: {notice: HomeNotice}) {
       </YStack>
 
       <ChevronRight color={colors.textSecondary} size={iconSize.sm} strokeWidth={1.8} />
+    </Pressable>
+  );
+}
+
+function CreateFilterShortcut({onPress}: {onPress?: () => void}) {
+  return (
+    <Pressable
+      accessibilityLabel="이미지로 메이크업 필터 만들기"
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({pressed}) => [styles.createFilterCard, pressed && styles.pressed]}>
+      <View style={styles.createFilterIcon}>
+        <ImagePlus color={colors.white} size={iconSize.md} strokeWidth={2} />
+      </View>
+
+      <YStack style={styles.createFilterCopy}>
+        <XStack style={styles.createFilterEyebrowRow}>
+          <Sparkles color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
+          <Text style={styles.createFilterEyebrow}>CREATE FILTER</Text>
+        </XStack>
+        <Text style={styles.createFilterTitle}>사진에서 메이크업 룩 추출하기</Text>
+        <Text style={styles.createFilterDescription}>
+          인플루언서나 유행하는 화장 사진을 업로드하고 내 얼굴용 AR 필터로 바꿔보세요.
+        </Text>
+      </YStack>
+
+      <ChevronRight color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -272,6 +305,57 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+  },
+  createFilterCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.textPrimary,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: 0.08,
+    shadowRadius: shadows.soft.shadowRadius,
+  },
+  createFilterCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  createFilterDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  createFilterEyebrow: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    letterSpacing: 0.8,
+    lineHeight: typography.lineHeight.xs,
+  },
+  createFilterEyebrowRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  createFilterIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+  },
+  createFilterTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
   },
   eyebrowPill: {
     alignItems: 'center',

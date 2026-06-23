@@ -1,4 +1,5 @@
-import { MyPageScreen } from './MyPageScreen';
+import {MyPageScreen} from './MyPageScreen';
+import type {MakeupStylePreview} from '../../../shared/types/userPage';
 
 type UserPageScreenProps = {
   onPressSettings?: () => void;
@@ -6,6 +7,7 @@ type UserPageScreenProps = {
   onPressReports?: () => void;
   onPressMakeupStyles?: () => void;
   onPressFavoriteProducts?: () => void;
+  savedMakeupStyle?: MakeupStylePreview | null;
 };
 
 export function UserPageScreen({
@@ -14,6 +16,7 @@ export function UserPageScreen({
   onPressReports,
   onPressMakeupStyles,
   onPressFavoriteProducts,
+  savedMakeupStyle,
 }: UserPageScreenProps) {
   return (
     <MyPageScreen
@@ -22,6 +25,7 @@ export function UserPageScreen({
       onPressLikedProductList={onPressFavoriteProducts}
       onPressMakeupStyleList={onPressMakeupStyles}
       onPressProfileEdit={onPressSettings}
+      savedMakeupStyle={savedMakeupStyle}
     />
   );
 }
