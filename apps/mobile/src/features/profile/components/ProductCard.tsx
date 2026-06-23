@@ -1,8 +1,13 @@
-import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
+import {
+  Image,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import {AppCard, HeartIcon, ImagePlaceholder} from '../../../shared/ui';
+import {AppCard, ImagePlaceholder} from '../../../shared/ui';
 import type {Product} from '../../../shared/types/userPage';
 
 type ProductCardProps = {
@@ -10,6 +15,7 @@ type ProductCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+const heartFilledIcon = require('../../../assets/icons/profile/heart-filled.png');
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
 
 export function ProductCard({product, style}: ProductCardProps) {
@@ -23,7 +29,11 @@ export function ProductCard({product, style}: ProductCardProps) {
         />
 
         <View style={styles.heartBadge}>
-          <HeartIcon size={16} />
+          <Image
+            resizeMode="contain"
+            source={heartFilledIcon}
+            style={styles.heartIcon}
+          />
         </View>
       </View>
 
@@ -50,13 +60,16 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   card: {
+    backgroundColor: colors.background,
+    borderWidth: 0,
+    elevation: 0,
     minWidth: 0,
-    overflow: 'hidden',
+    shadowOpacity: 0,
   },
   heartBadge: {
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderColor: colors.border,
+    borderColor: colors.borderStrong,
     borderRadius: 14,
     borderWidth: 1,
     height: 28,
@@ -66,9 +79,17 @@ const styles = StyleSheet.create({
     top: 6,
     width: 28,
   },
+  heartIcon: {
+    height: 14,
+    tintColor: colors.heart,
+    width: 15,
+  },
   imageArea: {
     aspectRatio: 0.86,
     backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
     overflow: 'hidden',
     paddingHorizontal: 5,
     paddingVertical: 6,
