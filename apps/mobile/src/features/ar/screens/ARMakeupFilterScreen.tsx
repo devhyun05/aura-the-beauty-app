@@ -94,7 +94,7 @@ export function ARMakeupFilterScreen({
       <YStack style={[styles.topArea, {paddingTop: insets.top + spacing.md}]}>
         <XStack style={styles.header}>
           <Button
-            accessibilityLabel="추천 결과 화면으로 돌아가기"
+            accessibilityLabel="생성 결과 화면으로 돌아가기"
             accessibilityRole="button"
             hitSlop={8}
             onPress={onBack}

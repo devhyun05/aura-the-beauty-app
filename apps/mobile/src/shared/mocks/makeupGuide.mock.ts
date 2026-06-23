@@ -88,7 +88,7 @@ export const mockRecommendationResult: RecommendationResult = {
 
 export const mockARMakeupGuideData: ARMakeupGuideData = {
   categories: [
-    {id: 'recommended', label: '추천'},
+    {id: 'recommended', label: 'AI 생성'},
     {id: 'trend', label: '트렌드'},
     {id: 'personalColor', label: '퍼스널컬러'},
     {id: 'popular', label: '인기'},
