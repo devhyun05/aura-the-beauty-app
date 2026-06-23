@@ -77,7 +77,7 @@ export function AIAnalysisLoadingScreen({
         </Button>
 
         <Text numberOfLines={1} style={styles.headerTitle}>
-          메이크업 분석
+          얼굴 분석
         </Text>
 
         <View style={styles.headerSpacer} />
@@ -85,9 +85,9 @@ export function AIAnalysisLoadingScreen({
 
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>AI가 메이크업을 분석하고 있어요</Text>
+          <Text style={styles.heroTitle}>AI가 얼굴을 분석하고 있어요</Text>
           <Text style={styles.heroDescription}>
-            촬영 이미지를 기준으로 톤, 균형, 추천 포인트를 정리합니다.
+            촬영 이미지를 기준으로 톤, 균형, 맞춤 필터 조건을 정리합니다.
           </Text>
         </YStack>
 
@@ -102,7 +102,7 @@ export function AIAnalysisLoadingScreen({
             <View style={styles.scanLine} />
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.previewBadgeText}>진단 사진 분석 중</Text>
+              <Text style={styles.previewBadgeText}>얼굴 진단 중</Text>
             </XStack>
           </View>
 

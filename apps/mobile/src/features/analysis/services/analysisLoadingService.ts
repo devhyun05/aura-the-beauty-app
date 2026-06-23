@@ -31,13 +31,13 @@ export const mockAnalysisLoadingSteps: readonly AnalysisLoadingStep[] = [
   },
   {
     id: 'mood',
-    title: '무드와 추천 포인트를 정리해요',
-    description: '데모용 mock 데이터로 어울리는 메이크업 룩을 준비합니다.',
+    title: '맞춤 필터 조건을 설계해요',
+    description: '데모용 mock 데이터로 어울리는 베이스, 아이, 립 조합을 준비합니다.',
   },
 ];
 
 export const analysisLoadingTip =
-  '정확한 추천을 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
+  '정확한 추천 필터를 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / ANALYSIS_LOADING_TOTAL_MS, 0), 1);
