@@ -12,6 +12,7 @@ import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScr
 import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
 import {UserPageScreen} from '../features/profile';
+import {ProductRecommendationScreen} from '../features/recommendation';
 import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
@@ -69,7 +70,11 @@ export function AppRoot() {
         ) : activeScreen === 'userPage' ? (
           <>
             <StatusBar style="dark" />
-            <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />
+            <UserPageScreen
+              onPressFavoriteProducts={() => setActiveScreen('custom')}
+              onPressProductRecommendations={() => setActiveScreen('custom')}
+              onPressReports={() => setActiveScreen('analysisResults')}
+            />
           </>
         ) : activeScreen === 'analysisResults' ? (
           <>
@@ -102,11 +107,19 @@ function AppShell({
   return (
     <YStack style={styles.screen}>
       <StatusBar style="dark" />
-      <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
+      <AppHeader
+        subtitle={activeTab === 'custom' ? 'AI PRODUCT MATCH' : 'MAKEUP GUIDE'}
+        title={activeTab === 'custom' ? '추천 제품' : 'AI AR Makeup'}
+        topInset={insets.top}
+        onProfilePress={onProfilePress}
+      />
       <YStack style={styles.body}>
         {activeTab === 'home' ? <HomeScreen /> : null}
+        {activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
       </YStack>
-      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+      {activeTab === 'custom' ? null : (
+        <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+      )}
     </YStack>
   );
 }

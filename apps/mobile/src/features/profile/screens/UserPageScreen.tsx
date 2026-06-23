@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
+import { ChevronRight, ShoppingBag, Sparkles } from 'lucide-react-native';
 import { ScrollView, Text, View } from 'tamagui';
 
 import { getUserPageData } from '../../../shared/services/userPageService';
+import { colors, iconSize, typography } from '../../../shared/theme';
 import { userPageColors, userPageSpacing } from '../../../shared/theme/tokens';
 import type { UserPageData } from '../../../shared/types/userPage';
 import { AnalysisReportPreviewCard } from '../components/AnalysisReportPreviewCard';
@@ -17,6 +19,7 @@ interface UserPageScreenProps {
   onPressReports?: () => void;
   onPressMakeupStyles?: () => void;
   onPressFavoriteProducts?: () => void;
+  onPressProductRecommendations?: () => void;
 }
 
 export const UserPageScreen = ({
@@ -25,6 +28,7 @@ export const UserPageScreen = ({
   onPressReports,
   onPressMakeupStyles,
   onPressFavoriteProducts,
+  onPressProductRecommendations,
 }: UserPageScreenProps) => {
   const [userPageData, setUserPageData] = useState<UserPageData | null>(null);
 
@@ -64,6 +68,8 @@ export const UserPageScreen = ({
           onPressSettings={onPressSettings}
           profile={userPageData.profile}
         />
+
+        <ProductRecommendationEntryCard onPress={onPressProductRecommendations} />
 
         <View style={styles.section}>
           <SectionHeader
@@ -117,6 +123,41 @@ export const UserPageScreen = ({
   );
 };
 
+function ProductRecommendationEntryCard({ onPress }: { onPress?: () => void }) {
+  return (
+    <Pressable
+      accessibilityLabel="AI 제품 추천 페이지로 이동"
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.recommendationCard,
+        {
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      <View style={styles.recommendationIcon}>
+        <ShoppingBag color={colors.white} size={iconSize.md} strokeWidth={2} />
+      </View>
+
+      <View style={styles.recommendationCopy}>
+        <View style={styles.recommendationEyebrowRow}>
+          <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
+          <Text style={styles.recommendationEyebrow}>AI PRODUCT MATCH</Text>
+        </View>
+        <Text style={styles.recommendationTitle}>AI 제품 추천</Text>
+        <Text style={styles.recommendationDescription}>
+          최근 분석 톤에 맞는 립, 블러셔, 섀도우 제품을 바로 확인해보세요.
+        </Text>
+      </View>
+
+      <View style={styles.recommendationArrow}>
+        <ChevronRight color={colors.textPrimary} size={iconSize.sm} strokeWidth={2.2} />
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     gap: userPageSpacing.sectionGap,
@@ -149,6 +190,59 @@ const styles = StyleSheet.create({
   },
   reportList: {
     gap: 10,
+  },
+  recommendationArrow: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  recommendationCard: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 14,
+    padding: 18,
+  },
+  recommendationCopy: {
+    flex: 1,
+    gap: 5,
+    minWidth: 0,
+  },
+  recommendationDescription: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  recommendationEyebrow: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    letterSpacing: 0.8,
+    lineHeight: typography.lineHeight.xs,
+  },
+  recommendationEyebrowRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  recommendationIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 999,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+  recommendationTitle: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
   },
   scrollView: {
     backgroundColor: userPageColors.background,
