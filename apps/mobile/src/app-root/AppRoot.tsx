@@ -9,6 +9,7 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
 import {UserPageScreen} from '../features/profile';
 import {colors, typography} from '../shared/theme';
@@ -22,6 +23,7 @@ type AppScreen =
   | 'custom'
   | 'userPage'
   | 'analysisResults';
+type ShellTab = Exclude<FooterTabKey, 'capture'>;
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -75,7 +77,11 @@ export function AppRoot() {
             <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
           </>
         ) : (
-          <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
+          <AppShell
+            activeTab={activeScreen}
+            onProfilePress={() => setActiveScreen('userPage')}
+            onTabPress={handleFooterTabPress}
+          />
         )}
       </SafeAreaProvider>
     </TamaguiProvider>
@@ -84,12 +90,11 @@ export function AppRoot() {
 
 function AppShell({
   activeTab,
+  onProfilePress,
   onTabPress,
 }: {
-  activeTab: Exclude<
-    AppScreen,
-    'login' | 'tutorial' | 'faceCapture' | 'userPage' | 'analysisResults'
-  >;
+  activeTab: ShellTab;
+  onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -97,8 +102,10 @@ function AppShell({
   return (
     <YStack style={styles.screen}>
       <StatusBar style="dark" />
-      <AppHeader topInset={insets.top} />
-      <YStack style={styles.body} />
+      <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
+      <YStack style={styles.body}>
+        {activeTab === 'home' ? <HomeScreen /> : null}
+      </YStack>
       <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
     </YStack>
   );
