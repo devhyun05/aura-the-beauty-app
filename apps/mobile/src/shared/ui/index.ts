@@ -3,6 +3,7 @@ export {AppHeader} from './AppHeader';
 export {AppScreen} from './AppScreen';
 export {IconButton} from './IconButton';
 export {ImagePlaceholder} from './ImagePlaceholder';
+export {PaginationDots} from './PaginationDots';
 export {
   BookmarkIcon,
   ChevronLeftIcon,
