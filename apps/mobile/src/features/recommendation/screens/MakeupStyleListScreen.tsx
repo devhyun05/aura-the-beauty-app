@@ -21,7 +21,7 @@ export function MakeupStyleListScreen({onBack}: MakeupStyleListScreenProps) {
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
-  const cardWidth = Math.floor((contentWidth - gap * 2) / 3);
+  const cardWidth = Math.floor((contentWidth - gap) / 2);
 
   useEffect(() => {
     let isMounted = true;

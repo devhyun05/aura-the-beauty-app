@@ -2,18 +2,6 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {Product} from '../types/userPage';
 
-const productRomandTint =
-  require('../../assets/images/products/product-romand-tint.png') as ImageSourcePropType;
-const productClioCushion =
-  require('../../assets/images/products/product-clio-cushion.png') as ImageSourcePropType;
-const productDasiqueCheek =
-  require('../../assets/images/products/product-dasique-cheek.png') as ImageSourcePropType;
-const productDasiquePalette =
-  require('../../assets/images/products/product-dasique-palette.png') as ImageSourcePropType;
-const productClioLiner =
-  require('../../assets/images/products/product-clio-liner.png') as ImageSourcePropType;
-const productAmuseTint =
-  require('../../assets/images/products/product-amuse-tint.png') as ImageSourcePropType;
 const productSatinCushion =
   require('../../assets/images/product-like/product-satin-cushion.png') as ImageSourcePropType;
 const productRoseLacquer =
@@ -26,6 +14,8 @@ const productLilacCheek =
   require('../../assets/images/product-like/product-lilac-cheek.png') as ImageSourcePropType;
 const productClearGloss =
   require('../../assets/images/product-like/product-clear-gloss.png') as ImageSourcePropType;
+const productVelvetTint =
+  require('../../assets/images/product-like/product-velvet-tint.png') as ImageSourcePropType;
 
 export const productsMock: Product[] = [
   {
@@ -33,7 +23,7 @@ export const productsMock: Product[] = [
     brandName: '롬앤',
     productName: '쥬시 래스팅 틴트',
     price: 15000,
-    imageSource: productRomandTint,
+    imageSource: productVelvetTint,
     isLiked: true,
   },
   {
@@ -41,7 +31,7 @@ export const productsMock: Product[] = [
     brandName: '클리오',
     productName: '킬 커버 메쉬 글로우 쿠션',
     price: 32000,
-    imageSource: productClioCushion,
+    imageSource: productSatinCushion,
     isLiked: true,
   },
   {
@@ -49,7 +39,7 @@ export const productsMock: Product[] = [
     brandName: '데이지크',
     productName: '블렌딩 무드 치크',
     price: 24000,
-    imageSource: productDasiqueCheek,
+    imageSource: productLilacCheek,
     isLiked: true,
   },
   {
@@ -57,7 +47,7 @@ export const productsMock: Product[] = [
     brandName: '데이지크',
     productName: '섀도우 팔레트',
     price: 34000,
-    imageSource: productDasiquePalette,
+    imageSource: productNeutralPalette,
     isLiked: true,
   },
   {
@@ -65,7 +55,7 @@ export const productsMock: Product[] = [
     brandName: '클리오',
     productName: '수퍼프루프 펜 라이너',
     price: 14000,
-    imageSource: productClioLiner,
+    imageSource: productClearGloss,
     isLiked: true,
   },
   {
@@ -73,7 +63,7 @@ export const productsMock: Product[] = [
     brandName: '어뮤즈',
     productName: '듀 틴트',
     price: 20000,
-    imageSource: productAmuseTint,
+    imageSource: productRoseLacquer,
     isLiked: true,
   },
   {
