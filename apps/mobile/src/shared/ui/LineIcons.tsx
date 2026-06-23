@@ -1,7 +1,6 @@
-import { StyleSheet } from 'react-native';
-import { View } from 'tamagui';
+import {StyleSheet, View} from 'react-native';
 
-import { colors } from '../theme';
+import {colors} from '../theme';
 
 type IconProps = {
   color?: string;
@@ -9,59 +8,104 @@ type IconProps = {
   filled?: boolean;
 };
 
-export function ChevronRightIcon({ color = colors.textPrimary }: IconProps) {
+export function ChevronRightIcon({color = colors.textPrimary}: IconProps) {
   return (
     <View pointerEvents="none" style={styles.chevronRoot}>
-      <View style={[styles.chevronLine, styles.chevronRightTop, { backgroundColor: color }]} />
-      <View style={[styles.chevronLine, styles.chevronRightBottom, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-export function ChevronLeftIcon({ color = colors.textPrimary }: IconProps) {
-  return (
-    <View pointerEvents="none" style={styles.chevronRoot}>
-      <View style={[styles.chevronLine, styles.chevronLeftTop, { backgroundColor: color }]} />
-      <View style={[styles.chevronLine, styles.chevronLeftBottom, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-export function GearIcon({ color = colors.textPrimary }: IconProps) {
-  return (
-    <View pointerEvents="none" style={styles.gearRoot}>
-      <View style={[styles.gearRing, { borderColor: color }]}>
-        <View style={[styles.gearCenter, { borderColor: color }]} />
-      </View>
-      <View style={[styles.gearToothVertical, styles.gearToothTop, { backgroundColor: color }]} />
-      <View style={[styles.gearToothVertical, styles.gearToothBottom, { backgroundColor: color }]} />
-      <View style={[styles.gearToothHorizontal, styles.gearToothLeft, { backgroundColor: color }]} />
-      <View style={[styles.gearToothHorizontal, styles.gearToothRight, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-export function BookmarkIcon({
-  color = colors.textPrimary,
-  filled = false,
-}: IconProps) {
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.bookmarkRoot,
-        {
-          backgroundColor: filled ? color : colors.white,
-          borderColor: color,
-        },
-      ]}
-    >
       <View
         style={[
-          styles.bookmarkCut,
-          {
-            backgroundColor: colors.white,
-          },
+          styles.chevronLine,
+          styles.chevronRightTop,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.chevronLine,
+          styles.chevronRightBottom,
+          {backgroundColor: color},
+        ]}
+      />
+    </View>
+  );
+}
+
+export function ChevronLeftIcon({color = colors.textPrimary}: IconProps) {
+  return (
+    <View pointerEvents="none" style={styles.chevronRoot}>
+      <View
+        style={[
+          styles.chevronLine,
+          styles.chevronLeftTop,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.chevronLine,
+          styles.chevronLeftBottom,
+          {backgroundColor: color},
+        ]}
+      />
+    </View>
+  );
+}
+
+export function GearIcon({color = colors.textPrimary}: IconProps) {
+  return (
+    <View pointerEvents="none" style={styles.gearRoot}>
+      <View style={[styles.gearRing, {borderColor: color}]}>
+        <View style={[styles.gearCenter, {borderColor: color}]} />
+      </View>
+      <View
+        style={[
+          styles.gearToothVertical,
+          styles.gearToothTop,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.gearToothVertical,
+          styles.gearToothBottom,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.gearToothHorizontal,
+          styles.gearToothLeft,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.gearToothHorizontal,
+          styles.gearToothRight,
+          {backgroundColor: color},
+        ]}
+      />
+    </View>
+  );
+}
+
+export function BookmarkIcon({color = colors.textPrimary}: IconProps) {
+  return (
+    <View pointerEvents="none" style={styles.bookmarkRoot}>
+      <View style={[styles.bookmarkTop, {backgroundColor: color}]} />
+      <View style={[styles.bookmarkSide, styles.bookmarkLeft, {backgroundColor: color}]} />
+      <View style={[styles.bookmarkSide, styles.bookmarkRight, {backgroundColor: color}]} />
+      <View
+        style={[
+          styles.bookmarkBottom,
+          styles.bookmarkBottomLeft,
+          {backgroundColor: color},
+        ]}
+      />
+      <View
+        style={[
+          styles.bookmarkBottom,
+          styles.bookmarkBottomRight,
+          {backgroundColor: color},
         ]}
       />
     </View>
@@ -73,20 +117,23 @@ export function HeartIcon({
   filled = true,
   size = 22,
 }: IconProps) {
-  const heartSize = size * 0.55;
+  const fillColor = filled ? color : colors.white;
+  const circleSize = size * 0.56;
+  const diamondSize = size * 0.58;
 
   return (
-    <View pointerEvents="none" style={{ height: size, width: size }}>
+    <View pointerEvents="none" style={{height: size, width: size}}>
       <View
         style={[
           styles.heartCircle,
           {
-            backgroundColor: filled ? color : colors.white,
+            backgroundColor: fillColor,
             borderColor: color,
-            height: heartSize,
+            borderWidth: filled ? 0 : 1.6,
+            height: circleSize,
             left: size * 0.08,
-            top: size * 0.16,
-            width: heartSize,
+            top: size * 0.15,
+            width: circleSize,
           },
         ]}
       />
@@ -94,12 +141,13 @@ export function HeartIcon({
         style={[
           styles.heartCircle,
           {
-            backgroundColor: filled ? color : colors.white,
+            backgroundColor: fillColor,
             borderColor: color,
-            height: heartSize,
+            borderWidth: filled ? 0 : 1.6,
+            height: circleSize,
             right: size * 0.08,
-            top: size * 0.16,
-            width: heartSize,
+            top: size * 0.15,
+            width: circleSize,
           },
         ]}
       />
@@ -107,13 +155,13 @@ export function HeartIcon({
         style={[
           styles.heartDiamond,
           {
-            backgroundColor: filled ? color : colors.white,
-            borderBottomColor: color,
-            borderRightColor: color,
-            height: size * 0.6,
-            left: size * 0.2,
-            top: size * 0.33,
-            width: size * 0.6,
+            backgroundColor: fillColor,
+            borderColor: color,
+            borderWidth: filled ? 0 : 1.6,
+            height: diamondSize,
+            left: size * 0.21,
+            top: size * 0.38,
+            width: diamondSize,
           },
         ]}
       />
@@ -122,29 +170,56 @@ export function HeartIcon({
 }
 
 const styles = StyleSheet.create({
-  bookmarkCut: {
-    alignSelf: 'center',
-    height: 8,
-    marginTop: 13,
-    transform: [{ rotate: '45deg' }],
-    width: 8,
+  bookmarkBottom: {
+    borderRadius: 1.5,
+    height: 2.4,
+    position: 'absolute',
+    top: 17,
+    width: 10,
+  },
+  bookmarkBottomLeft: {
+    left: 2.4,
+    transform: [{rotate: '43deg'}],
+  },
+  bookmarkBottomRight: {
+    right: 2.4,
+    transform: [{rotate: '-43deg'}],
+  },
+  bookmarkLeft: {
+    left: 2,
+  },
+  bookmarkRight: {
+    right: 2,
   },
   bookmarkRoot: {
-    borderRadius: 3,
-    borderWidth: 2,
     height: 24,
-    overflow: 'hidden',
-    width: 18,
+    position: 'relative',
+    width: 20,
+  },
+  bookmarkSide: {
+    borderRadius: 1.5,
+    height: 17,
+    position: 'absolute',
+    top: 3,
+    width: 2.4,
+  },
+  bookmarkTop: {
+    borderRadius: 1.5,
+    height: 2.4,
+    left: 2,
+    position: 'absolute',
+    top: 3,
+    width: 16,
   },
   chevronLeftBottom: {
     left: 4,
     top: 11,
-    transform: [{ rotate: '45deg' }],
+    transform: [{rotate: '45deg'}],
   },
   chevronLeftTop: {
     left: 4,
     top: 6,
-    transform: [{ rotate: '-45deg' }],
+    transform: [{rotate: '-45deg'}],
   },
   chevronLine: {
     borderRadius: 2,
@@ -155,12 +230,12 @@ const styles = StyleSheet.create({
   chevronRightBottom: {
     right: 4,
     top: 11,
-    transform: [{ rotate: '-45deg' }],
+    transform: [{rotate: '-45deg'}],
   },
   chevronRightTop: {
     right: 4,
     top: 6,
-    transform: [{ rotate: '45deg' }],
+    transform: [{rotate: '45deg'}],
   },
   chevronRoot: {
     height: 22,
@@ -219,13 +294,11 @@ const styles = StyleSheet.create({
   },
   heartCircle: {
     borderRadius: 999,
-    borderWidth: 0,
     position: 'absolute',
   },
   heartDiamond: {
-    borderBottomWidth: 0,
-    borderRightWidth: 0,
+    borderRadius: 2,
     position: 'absolute',
-    transform: [{ rotate: '45deg' }],
+    transform: [{rotate: '45deg'}],
   },
 });
