@@ -179,7 +179,7 @@ export function AppRoot() {
 
   const renderScreen = () => {
     if (activeScreen === 'login') {
-      return <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />;
+      return <LoginScreen onLoginSuccess={() => setActiveScreen('tutorial')} />;
     }
 
     if (activeScreen === 'tutorial') {
@@ -217,7 +217,8 @@ export function AppRoot() {
       return (
         <ARMakeupFilterScreen
           initialGuideMode="half"
-          onBack={() => setActiveScreen('facialAnalysisResult')}
+          onBack={() => setActiveScreen('home')}
+          onComplete={() => setActiveScreen('home')}
           onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
           onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
         />
@@ -246,33 +247,43 @@ export function AppRoot() {
 
     if (activeScreen === 'userPage') {
       return (
-        <UserPageScreen
-          onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
-          onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
-          onPressProductRecommendations={() => setActiveScreen('custom')}
-          onPressReport={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'userPage')
-          }
-          onPressReports={() => setActiveScreen('analysisResultList')}
-          onPressSettings={() => setActiveScreen('profileEdit')}
-          savedMakeupStyle={savedMakeupStyle}
-        />
+        <AppShell
+          onCreateFilterPress={() => setActiveScreen('filterUpload')}
+          onProfilePress={goToMyPage}
+          onTabPress={handleFooterTabPress}>
+          <UserPageScreen
+            onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
+            onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
+            onPressProductRecommendations={() => setActiveScreen('custom')}
+            onPressReport={(resultId) =>
+              goToAnalysisReportDetail(resultId, 'userPage')
+            }
+            onPressReports={() => setActiveScreen('analysisResultList')}
+            onPressSettings={() => setActiveScreen('profileEdit')}
+            savedMakeupStyle={savedMakeupStyle}
+          />
+        </AppShell>
       );
     }
 
     if (activeScreen === 'myPage') {
       return (
-        <MyPageScreen
-          onPressAnalysisResult={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'myPage')
-          }
-          onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
-          onPressLikedProductList={() => setActiveScreen('likedProductList')}
-          onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
-          onPressProductRecommendations={() => setActiveScreen('custom')}
-          onPressProfileEdit={() => setActiveScreen('profileEdit')}
-          savedMakeupStyle={savedMakeupStyle}
-        />
+        <AppShell
+          onCreateFilterPress={() => setActiveScreen('filterUpload')}
+          onProfilePress={goToMyPage}
+          onTabPress={handleFooterTabPress}>
+          <MyPageScreen
+            onPressAnalysisResult={(resultId) =>
+              goToAnalysisReportDetail(resultId, 'myPage')
+            }
+            onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
+            onPressLikedProductList={() => setActiveScreen('likedProductList')}
+            onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
+            onPressProductRecommendations={() => setActiveScreen('custom')}
+            onPressProfileEdit={() => setActiveScreen('profileEdit')}
+            savedMakeupStyle={savedMakeupStyle}
+          />
+        </AppShell>
       );
     }
 
@@ -485,7 +496,14 @@ export function AppRoot() {
       );
     }
 
-    return <FeedbackEntryScreen onPressAiFeedback={() => setActiveScreen('feedbackCapture')} />;
+    return (
+      <AppShell
+        activeTab="home"
+        onCreateFilterPress={() => setActiveScreen('filterUpload')}
+        onProfilePress={goToMyPage}
+        onTabPress={handleFooterTabPress}
+      />
+    );
   };
 
   return (
@@ -508,12 +526,14 @@ export function AppRoot() {
 
 function AppShell({
   activeTab,
+  children,
   onCreateFilterPress,
   onProfilePress,
   onTabPress,
 }: {
-  activeTab: ShellTab;
-  onCreateFilterPress: () => void;
+  activeTab?: ShellTab;
+  children?: React.ReactNode;
+  onCreateFilterPress?: () => void;
   onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
 }) {
@@ -528,10 +548,11 @@ function AppShell({
         onProfilePress={onProfilePress}
       />
       <YStack style={styles.body}>
-        {activeTab === 'home' ? (
-          <HomeScreen onPressCreateFilter={onCreateFilterPress} />
-        ) : null}
-        {activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
+        {children ??
+          (activeTab === 'home' ? (
+            <HomeScreen onPressCreateFilter={onCreateFilterPress} />
+          ) : null)}
+        {!children && activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
       </YStack>
       <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
     </YStack>

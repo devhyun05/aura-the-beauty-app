@@ -2,7 +2,7 @@ import React, {type ReactNode} from 'react';
 import {StyleSheet} from 'react-native';
 import {Button, Text, XStack, YStack} from 'tamagui';
 
-import {colors, radius, shadows, spacing} from '../theme';
+import {colors, radius, shadows, spacing, typography} from '../theme';
 import {
   BrushFooterIcon,
   CameraFooterIcon,
@@ -46,7 +46,7 @@ const footerItems: FooterTabItem[] = [
 ];
 
 export function AppFooter({
-  activeTab = 'home',
+  activeTab,
   bottomInset = 0,
   onTabPress,
 }: AppFooterProps) {
@@ -62,8 +62,9 @@ export function AppFooter({
       <XStack style={styles.footerBar}>
         {footerItems.map(item => {
           const isActive = item.key === activeTab;
-          const iconColor = isActive ? colors.white : colors.textPrimary;
-          const labelColor = isActive ? colors.white : colors.textPrimary;
+          const isCaptureTab = item.key === 'capture';
+          const iconColor = isCaptureTab || isActive ? colors.white : colors.textPrimary;
+          const labelColor = isCaptureTab ? colors.textPrimary : isActive ? colors.white : colors.textPrimary;
 
           return (
             <Button
@@ -73,18 +74,19 @@ export function AppFooter({
               accessibilityState={{selected: isActive}}
               accessibilityLabel={item.accessibilityLabel}
               hitSlop={6}
-              pressStyle={{scale: 0.98}}
-              style={[styles.tabButton, isActive && styles.activeTabButton]}
+              pressStyle={{scale: isCaptureTab ? 0.96 : 0.98}}
+              style={[
+                isCaptureTab ? styles.captureTabButton : styles.tabButton,
+                !isCaptureTab && isActive ? styles.activeTabButton : undefined,
+              ]}
               onPress={() => onTabPress?.(item.key)}>
-              <YStack style={styles.tabContent}>
-                {item.icon(iconColor)}
+              <YStack style={isCaptureTab ? styles.captureTabContent : styles.tabContent}>
+                <YStack style={isCaptureTab ? styles.captureIconBubble : undefined}>
+                  {item.icon(iconColor)}
+                </YStack>
                 <Text
-                  color={labelColor}
-                  fontSize={14}
-                  fontWeight="700"
-                  letterSpacing={0}
-                  lineHeight={18}
-                  numberOfLines={1}>
+                  numberOfLines={1}
+                  style={[styles.tabLabel, {color: labelColor}]}>
                   {item.label}
                 </Text>
               </YStack>
@@ -100,7 +102,7 @@ const styles = StyleSheet.create({
   footerArea: {
     backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xl,
   },
   footerBar: {
     alignItems: 'center',
@@ -109,10 +111,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: spacing.sm,
-    height: 86,
+    height: 74,
     justifyContent: 'space-between',
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: 0.08,
@@ -122,16 +124,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radius.pill,
     flex: 1,
-    height: 68,
+    height: 58,
     justifyContent: 'center',
   },
   activeTabButton: {
     backgroundColor: colors.textPrimary,
+  },
+  captureTabButton: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flex: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  captureTabContent: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    transform: [{translateY: -12}],
+  },
+  captureIconBubble: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.white,
+    borderRadius: radius.pill,
+    borderWidth: 3,
+    height: 68,
+    justifyContent: 'center',
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    width: 68,
   },
   tabContent: {
     alignItems: 'center',
     gap: spacing.xs,
     justifyContent: 'center',
     minWidth: 0,
+  },
+  tabLabel: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
 });

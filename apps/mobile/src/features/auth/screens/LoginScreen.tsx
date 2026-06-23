@@ -8,7 +8,6 @@ import {SocialLoginButton} from '../components/SocialLoginButton';
 import {socialLoginProviders} from '../mocks/socialLoginProviders.mock';
 import {loginWithSocialProvider} from '../services/authService';
 import type {AuthSession, SocialLoginProvider} from '../types';
-import {TutorialIntroScreen} from '../../onboarding';
 
 type LoginFeedback = {
   message: string;
@@ -22,12 +21,7 @@ type LoginScreenProps = {
 
 export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: LoginScreenProps) {
   const [feedback, setFeedback] = useState<LoginFeedback | null>(null);
-  const [hasCompletedLogin, setHasCompletedLogin] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState<SocialLoginProvider | null>(null);
-
-  if (hasCompletedLogin) {
-    return <TutorialIntroScreen />;
-  }
 
   const handleSocialLogin = async (provider: SocialLoginProvider) => {
     if (loadingProvider !== null) {
@@ -46,7 +40,6 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
         message: '로그인되었습니다.',
         tone: 'success',
       });
-      setHasCompletedLogin(true);
       onLoginSuccess?.(session);
     } catch (error) {
       setFeedback({
