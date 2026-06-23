@@ -16,7 +16,7 @@ export const mockRecommendationResult: RecommendationResult = {
   analyzedAtLabel: '방금 촬영한 얼굴 진단 기준',
   previewImageSource: reportBareFace,
   summary:
-    '맑고 정돈된 피부 표현에 뉴트럴 로즈 컬러를 더하는 AR 필터가 얼굴의 선을 부드럽게 살려줘요.',
+    '맑고 정돈된 피부 표현과 뉴트럴 로즈 컬러가 얼굴의 선을 부드럽게 살려줘요.',
   analysis: {
     skinTone: {
       label: '밝은 뉴트럴 톤',
@@ -34,7 +34,7 @@ export const mockRecommendationResult: RecommendationResult = {
   recommendationPoints: [
     '베이스는 세미 글로우로 얇게 정리',
     '아이 메이크업은 그레이 브라운 음영 위주',
-    '립은 뉴트럴 로즈와 말린 장미 계열로 생성',
+    '립은 뉴트럴 로즈와 말린 장미 계열이 자연스러움',
   ],
   cautionPoints: [
     '매트 베이스를 두껍게 올리면 피부 결이 답답해 보일 수 있어요.',
