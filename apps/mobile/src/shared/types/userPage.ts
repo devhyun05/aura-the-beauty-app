@@ -17,6 +17,8 @@ export type AnalysisReportPreview = AnalysisResult;
 export interface MakeupStylePreview {
   id: string;
   title: string;
+  moodLabel: string;
+  shortDescription: string;
   imageSource: ImageSourcePropType;
   isSaved: boolean;
 }
