@@ -1,13 +1,12 @@
 import {useEffect, useState} from 'react';
-import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
-import {ChevronRight, ShoppingBag, Sparkles} from 'lucide-react-native';
+import {StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {getLatestAnalysisResult} from '../../../shared/services/analysisService';
 import {getMakeupLookPreview} from '../../../shared/services/makeupService';
 import {getLikedProductPreview} from '../../../shared/services/productService';
 import {getUserProfile} from '../../../shared/services/userService';
-import {colors, iconSize, spacing, typography} from '../../../shared/theme';
+import {colors, spacing, typography} from '../../../shared/theme';
 import type {AnalysisResult} from '../../../shared/types/analysis';
 import type {
   MakeupLook,
@@ -27,7 +26,6 @@ type MyPageScreenProps = {
   onPressAnalysisResultList?: () => void;
   onPressMakeupStyleList?: () => void;
   onPressLikedProductList?: () => void;
-  onPressProductRecommendations?: () => void;
   savedMakeupStyle?: MakeupStylePreview | null;
 };
 
@@ -44,7 +42,6 @@ export function MyPageScreen({
   onPressAnalysisResultList,
   onPressMakeupStyleList,
   onPressLikedProductList,
-  onPressProductRecommendations,
   savedMakeupStyle,
 }: MyPageScreenProps) {
   const {width} = useWindowDimensions();
@@ -113,8 +110,6 @@ export function MyPageScreen({
         profile={data.profile}
       />
 
-      <ProductRecommendationEntryCard onPress={onPressProductRecommendations} />
-
       <View style={styles.section}>
         <SectionHeader
           actionLabel="전체 보기"
@@ -168,38 +163,6 @@ export function MyPageScreen({
   );
 }
 
-function ProductRecommendationEntryCard({onPress}: {onPress?: () => void}) {
-  return (
-    <Pressable
-      accessibilityLabel="AI 제품 추천 페이지로 이동"
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.recommendationCard,
-        pressed ? styles.recommendationCardPressed : null,
-      ]}>
-      <View style={styles.recommendationIcon}>
-        <ShoppingBag color={colors.white} size={iconSize.md} strokeWidth={2} />
-      </View>
-
-      <View style={styles.recommendationCopy}>
-        <View style={styles.recommendationEyebrowRow}>
-          <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
-          <Text style={styles.recommendationEyebrow}>AI PRODUCT MATCH</Text>
-        </View>
-        <Text style={styles.recommendationTitle}>AI 제품 추천</Text>
-        <Text style={styles.recommendationDescription}>
-          최근 분석 톤에 맞는 립, 블러셔, 섀도우 제품을 확인해보세요.
-        </Text>
-      </View>
-
-      <View style={styles.recommendationArrow}>
-        <ChevronRight color={colors.textPrimary} size={iconSize.sm} strokeWidth={2.2} />
-      </View>
-    </Pressable>
-  );
-}
-
 function EmptySection({label}: {label: string}) {
   return (
     <View style={styles.empty}>
@@ -242,62 +205,6 @@ const styles = StyleSheet.create({
   productGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
-  },
-  recommendationArrow: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 999,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  recommendationCard: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.lg,
-  },
-  recommendationCardPressed: {
-    opacity: 0.78,
-  },
-  recommendationCopy: {
-    flex: 1,
-    gap: 5,
-    minWidth: 0,
-  },
-  recommendationDescription: {
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-  },
-  recommendationEyebrow: {
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0.8,
-    lineHeight: typography.lineHeight.xs,
-  },
-  recommendationEyebrowRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 4,
-  },
-  recommendationIcon: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    borderRadius: 999,
-    height: 46,
-    justifyContent: 'center',
-    width: 46,
-  },
-  recommendationTitle: {
-    color: colors.white,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.lg,
   },
   section: {
     gap: spacing.sm,
