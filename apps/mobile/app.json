@@ -11,6 +11,20 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aiarmakeupguide.mobile"
     },
-    "plugins": ["expo-status-bar"]
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "메이크업 피드백 사진 촬영을 위해 카메라 접근 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "메이크업 피드백 사진 업로드를 위해 사진 보관함 접근 권한이 필요합니다."
+        }
+      ]
+    ]
   }
 }
