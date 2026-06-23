@@ -5,7 +5,7 @@ import {Text, View} from 'tamagui';
 import {getAnalysisResults} from '../../../shared/services/analysisService';
 import {colors, spacing, typography} from '../../../shared/theme';
 import type {AnalysisResult} from '../../../shared/types/analysis';
-import {AppHeader, AppScreen, PaginationDots} from '../../../shared/ui';
+import {AppHeader, AppScreen, PagedGrid} from '../../../shared/ui';
 import {AnalysisResultCard} from '../components/AnalysisResultCard';
 
 type AnalysisResultListScreenProps = {
@@ -46,18 +46,20 @@ export function AnalysisResultListScreen({
         <Text style={styles.sortText}>최신순</Text>
       </View>
 
-      <View style={[styles.grid, {gap: cardGap}]}>
-        {results.map((result) => (
+      <PagedGrid
+        data={results}
+        keyExtractor={(result) => result.id}
+        pageSize={10}
+        pageStyle={[styles.grid, {gap: cardGap}]}
+        pageWidth={contentWidth}
+        renderItem={(result) => (
           <AnalysisResultCard
-            key={result.id}
             onPress={() => onPressResult?.(result.id)}
             result={result}
             style={{width: cardWidth}}
           />
-        ))}
-      </View>
-
-      <PaginationDots count={3} />
+        )}
+      />
     </AppScreen>
   );
 }

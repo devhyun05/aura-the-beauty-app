@@ -14,6 +14,18 @@ const productClioLiner =
   require('../../assets/images/products/product-clio-liner.png') as ImageSourcePropType;
 const productAmuseTint =
   require('../../assets/images/products/product-amuse-tint.png') as ImageSourcePropType;
+const productSatinCushion =
+  require('../../assets/images/product-like/product-satin-cushion.png') as ImageSourcePropType;
+const productRoseLacquer =
+  require('../../assets/images/product-like/product-rose-lacquer.png') as ImageSourcePropType;
+const productSheerPowder =
+  require('../../assets/images/product-like/product-sheer-powder.png') as ImageSourcePropType;
+const productNeutralPalette =
+  require('../../assets/images/product-like/product-neutral-palette.png') as ImageSourcePropType;
+const productLilacCheek =
+  require('../../assets/images/product-like/product-lilac-cheek.png') as ImageSourcePropType;
+const productClearGloss =
+  require('../../assets/images/product-like/product-clear-gloss.png') as ImageSourcePropType;
 
 export const productsMock: Product[] = [
   {
@@ -62,6 +74,54 @@ export const productsMock: Product[] = [
     productName: '듀 틴트',
     price: 20000,
     imageSource: productAmuseTint,
+    isLiked: true,
+  },
+  {
+    id: 'product-hera-satin-glow-cushion',
+    brandName: '헤라',
+    productName: '새틴 글로우 쿠션',
+    price: 36000,
+    imageSource: productSatinCushion,
+    isLiked: true,
+  },
+  {
+    id: 'product-romand-rose-lacquer',
+    brandName: '롬앤',
+    productName: '로즈 워터 래커',
+    price: 16000,
+    imageSource: productRoseLacquer,
+    isLiked: true,
+  },
+  {
+    id: 'product-laneige-sheer-powder',
+    brandName: '라네즈',
+    productName: '시어 피니시 파우더',
+    price: 28000,
+    imageSource: productSheerPowder,
+    isLiked: true,
+  },
+  {
+    id: 'product-dasique-neutral-palette',
+    brandName: '데이지크',
+    productName: '뉴트럴 브라운 팔레트',
+    price: 34000,
+    imageSource: productNeutralPalette,
+    isLiked: true,
+  },
+  {
+    id: 'product-clio-lilac-cheek',
+    brandName: '클리오',
+    productName: '라일락 블러 치크',
+    price: 22000,
+    imageSource: productLilacCheek,
+    isLiked: true,
+  },
+  {
+    id: 'product-amuse-clear-gloss',
+    brandName: '어뮤즈',
+    productName: '클리어 립 글로스',
+    price: 18000,
+    imageSource: productClearGloss,
     isLiked: true,
   },
 ];

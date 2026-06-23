@@ -13,7 +13,7 @@ import {
   AppHeader,
   AppScreen,
   ImagePlaceholder,
-  PaginationDots,
+  PagedGrid,
 } from '../../../shared/ui';
 
 const heartFilledIcon = require('../../../assets/icons/profile/heart-filled.png');
@@ -49,9 +49,14 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
     <AppScreen contentGap={spacing.xl}>
       <AppHeader onBack={onBack} title="좋아요 목록" />
 
-      <View style={[styles.grid, {columnGap: gap, rowGap: spacing.xxl}]}>
-        {products.map((product) => (
-          <View key={product.id} style={[styles.card, {width: cardWidth}]}>
+      <PagedGrid
+        data={products}
+        keyExtractor={(product) => product.id}
+        pageSize={10}
+        pageStyle={[styles.grid, {columnGap: gap, rowGap: spacing.xxl}]}
+        pageWidth={contentWidth}
+        renderItem={(product) => (
+          <View style={[styles.card, {width: cardWidth}]}>
             <View style={styles.imageArea}>
               <ImagePlaceholder
                 borderRadius={radius.md}
@@ -79,10 +84,8 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
               </Text>
             </View>
           </View>
-        ))}
-      </View>
-
-      <PaginationDots count={5} />
+        )}
+      />
     </AppScreen>
   );
 }
