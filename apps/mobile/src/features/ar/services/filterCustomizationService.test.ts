@@ -1,5 +1,7 @@
 import {
   getMockFilterLocationState,
+  getMockFilterStyleState,
+  updateFilterStyleSelection,
   updateFilterLocationAdjustment,
 } from './filterCustomizationService';
 
@@ -15,3 +17,10 @@ const movedState = updateFilterLocationAdjustment(initialState, 'horizontal', 12
 expectEqual(initialState.adjustments.horizontal.value, 0, 'initial horizontal adjustment');
 expectEqual(movedState.adjustments.horizontal.value, 12, 'updated horizontal adjustment');
 expectEqual(initialState.landmarks.length, 6, 'mock landmark count');
+
+const initialStyleState = getMockFilterStyleState();
+const updatedStyleState = updateFilterStyleSelection(initialStyleState, 'color', 'nude');
+
+expectEqual(initialStyleState.selectedColorId, 'rose', 'initial selected color');
+expectEqual(updatedStyleState.selectedColorId, 'nude', 'updated selected color');
+expectEqual(updatedStyleState.selectedOptionGroup, 'color', 'updated option group');
