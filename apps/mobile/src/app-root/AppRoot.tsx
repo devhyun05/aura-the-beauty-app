@@ -8,6 +8,7 @@ import {TamaguiProvider, YStack} from 'tamagui';
 import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultsScreen} from '../features/analysis';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
+import {ARFilterCustomLocationScreen} from '../features/ar/screens/ARFilterCustomLocationScreen';
 import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
@@ -37,6 +38,7 @@ type AppScreen =
   | 'analysisLoading'
   | 'facialAnalysisResult'
   | 'arMakeupFilter'
+  | 'arFilterLocation'
   | 'custom'
   | 'userPage'
   | 'analysisResults'
@@ -134,8 +136,18 @@ export function AppRoot() {
         <ARMakeupFilterScreen
           initialGuideMode="half"
           onBack={() => setActiveScreen('facialAnalysisResult')}
-          onOpenLocationAdjust={() => undefined}
+          onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
           onOpenStyleAdjust={() => undefined}
+        />
+      );
+    }
+
+    if (activeScreen === 'arFilterLocation') {
+      return (
+        <ARFilterCustomLocationScreen
+          onBack={() => setActiveScreen('arMakeupFilter')}
+          onOpenStyleAdjust={() => undefined}
+          onSave={() => setActiveScreen('arMakeupFilter')}
         />
       );
     }
