@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet } from 'react-native';
-import { Text, View } from 'tamagui';
+import {StyleSheet} from 'react-native';
+import {Text, View} from 'tamagui';
 
-import { colors, spacing, typography } from '../theme';
-import { ChevronRightIcon } from './LineIcons';
+import {colors, typography} from '../theme';
+import {IconButton} from './IconButton';
+import {MenuStackIcon} from './LineIcons';
 
 type SectionHeaderProps = {
   title: string;
@@ -20,42 +21,29 @@ export function SectionHeader({
       <Text style={styles.title}>{title}</Text>
 
       {actionLabel ? (
-        <Pressable
+        <IconButton
           accessibilityLabel={`${title} ${actionLabel}`}
-          accessibilityRole="button"
           onPress={onPressAction}
-          style={styles.action}
+          size={34}
         >
-          <Text style={styles.actionLabel}>{actionLabel}</Text>
-          <ChevronRightIcon />
-        </Pressable>
+          <MenuStackIcon color={colors.textPrimary} size={21} />
+        </IconButton>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  action: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  actionLabel: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.md,
-  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 32,
+    minHeight: 30,
   },
   title: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xl,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.lg,
   },
 });

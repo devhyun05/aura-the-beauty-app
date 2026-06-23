@@ -211,6 +211,32 @@ export function PencilIcon({color = colors.textPrimary}: IconProps) {
   );
 }
 
+export function MenuStackIcon({
+  color = colors.textPrimary,
+  size = 22,
+}: IconProps) {
+  const lineWidth = size * 0.82;
+
+  return (
+    <View pointerEvents="none" style={{height: size, width: size}}>
+      {[0, 1, 2].map((lineIndex) => (
+        <View
+          key={lineIndex}
+          style={[
+            styles.menuStackLine,
+            {
+              backgroundColor: color,
+              left: (size - lineWidth) / 2,
+              top: size * 0.24 + lineIndex * size * 0.24,
+              width: lineWidth,
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bookmarkBottom: {
     borderRadius: 1.5,
@@ -366,6 +392,11 @@ const styles = StyleSheet.create({
     top: 16,
     transform: [{rotate: '-45deg'}],
     width: 2,
+  },
+  menuStackLine: {
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
   },
   xLine: {
     borderRadius: 2,

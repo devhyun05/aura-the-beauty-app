@@ -11,6 +11,7 @@ export {
   ChevronRightIcon,
   GearIcon,
   HeartIcon,
+  MenuStackIcon,
   PencilIcon,
   XIcon,
 } from './LineIcons';

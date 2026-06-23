@@ -4,7 +4,7 @@ import { Text, View } from 'tamagui';
 import { colors, radius, spacing, typography } from '../../../shared/theme';
 import {
   AppCard,
-  GearIcon,
+  PencilIcon,
   IconButton,
   ImagePlaceholder,
 } from '../../../shared/ui';
@@ -52,7 +52,7 @@ export function ProfileSummaryCard({
           onPress={onPressSettings}
           size={42}
         >
-          <GearIcon />
+          <PencilIcon />
         </IconButton>
       </View>
     </AppCard>

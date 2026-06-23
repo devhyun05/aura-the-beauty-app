@@ -13,7 +13,7 @@ import type {
   Product,
   UserProfile,
 } from '../../../shared/types/userPage';
-import {AppHeader, AppScreen, SectionHeader} from '../../../shared/ui';
+import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {AnalysisSummaryCard} from '../components/AnalysisSummaryCard';
 import {MakeupLookCard} from '../components/MakeupLookCard';
 import {ProductCard} from '../components/ProductCard';
@@ -84,7 +84,6 @@ export function MyPageScreen({
   if (!data) {
     return (
       <AppScreen scroll={false}>
-        <AppHeader title="마이페이지" />
         <View style={styles.loading}>
           <Text style={styles.loadingText}>마이페이지를 불러오는 중이에요.</Text>
         </View>
@@ -95,9 +94,7 @@ export function MyPageScreen({
   const analysisResult = data.analysisResult;
 
   return (
-    <AppScreen contentGap={24}>
-      <AppHeader title="마이페이지" />
-
+    <AppScreen contentGap={spacing.xl}>
       <ProfileSummaryCard
         onPressSettings={onPressProfileEdit}
         profile={data.profile}
@@ -200,6 +197,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   section: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
 });
