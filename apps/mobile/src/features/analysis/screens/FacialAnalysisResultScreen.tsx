@@ -4,32 +4,32 @@ import {Bookmark, ChevronLeft, Play, Share2} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {getMockRecommendationResult} from '../../../shared/services/makeupGuideService';
+import {getMockFacialAnalysisResult} from '../../../shared/services/facialAnalysisResultService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {
   AnalysisAttribute,
-  AvoidMakeupExample,
-  MakeupLook,
-  RecommendationResult,
-} from '../../../shared/types/makeupGuide';
+  FacialAnalysisAvoidExample,
+  FacialAnalysisResult,
+  MakeupDirection,
+} from '../../../shared/types/facialAnalysisResult';
 
-type MakeupRecommendationResultScreenProps = {
-  result?: RecommendationResult;
+type FacialAnalysisResultScreenProps = {
+  result?: FacialAnalysisResult;
   onBack?: () => void;
   onSave?: () => void;
   onShare?: () => void;
   onStartARGuide?: () => void;
 };
 
-export function MakeupRecommendationResultScreen({
-  result = getMockRecommendationResult(),
+export function FacialAnalysisResultScreen({
+  result = getMockFacialAnalysisResult(),
   onBack,
   onSave,
   onShare,
   onStartARGuide,
-}: MakeupRecommendationResultScreenProps) {
+}: FacialAnalysisResultScreenProps) {
   const insets = useSafeAreaInsets();
-  const primaryLook = result.recommendedLooks[0];
+  const primaryDirection = result.makeupDirections[0];
   const analysisHeadline = `${result.analysis.skinTone.label} · ${result.analysis.mood.label}`;
   const analysisTags = [
     result.analysis.skinTone.label,
@@ -93,7 +93,7 @@ export function MakeupRecommendationResultScreen({
             style={styles.previewImage}
           />
           <YStack style={styles.matchBadge}>
-            <Text style={styles.matchValue}>{primaryLook.matchScore}%</Text>
+            <Text style={styles.matchValue}>{primaryDirection.matchScore}%</Text>
             <Text style={styles.matchLabel}>분석</Text>
           </YStack>
         </View>
@@ -114,10 +114,10 @@ export function MakeupRecommendationResultScreen({
           <YStack style={styles.paletteBlock}>
             <Text style={styles.smallLabel}>어울리는 컬러 팔레트</Text>
             <XStack style={styles.swatchList}>
-              {primaryLook.keyColors.map(color => (
+              {primaryDirection.keyColors.map(color => (
                 <View
                   key={color}
-                  accessibilityLabel={`${primaryLook.title} 컬러`}
+                  accessibilityLabel={`${primaryDirection.title} 컬러`}
                   style={[styles.colorSwatch, {backgroundColor: color}]}
                 />
               ))}
@@ -148,7 +148,7 @@ export function MakeupRecommendationResultScreen({
         <YStack style={styles.section}>
           <Text style={styles.sectionTitle}>얼굴 특징 기반 포인트</Text>
           <YStack style={styles.pointCard}>
-            {result.recommendationPoints.map(point => (
+            {result.analysisPoints.map(point => (
               <PointText key={point} text={point} />
             ))}
           </YStack>
@@ -157,14 +157,14 @@ export function MakeupRecommendationResultScreen({
         <YStack style={styles.section}>
           <XStack style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>어울리는 메이크업 방향</Text>
-            <Text style={styles.sectionMeta}>{result.recommendedLooks.length}개</Text>
+            <Text style={styles.sectionMeta}>{result.makeupDirections.length}개</Text>
           </XStack>
           <ScrollView
             contentContainerStyle={styles.lookList}
             horizontal
             showsHorizontalScrollIndicator={false}>
-            {result.recommendedLooks.map(look => (
-              <LookCard key={look.id} look={look} />
+            {result.makeupDirections.map(direction => (
+              <DirectionCard direction={direction} key={direction.id} />
             ))}
           </ScrollView>
         </YStack>
@@ -221,27 +221,27 @@ function PointText({text}: PointTextProps) {
   );
 }
 
-type LookCardProps = {
-  look: MakeupLook;
+type DirectionCardProps = {
+  direction: MakeupDirection;
 };
 
-function LookCard({look}: LookCardProps) {
+function DirectionCard({direction}: DirectionCardProps) {
   return (
     <YStack style={styles.lookCard}>
-      <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
+      <Image resizeMode="cover" source={direction.imageSource} style={styles.lookImage} />
       <YStack style={styles.lookCopy}>
         <Text numberOfLines={2} style={styles.lookTitle}>
-          {look.title}
+          {direction.title}
         </Text>
         <Text numberOfLines={1} style={styles.lookSubtitle}>
-          {look.subtitle}
+          {direction.subtitle}
         </Text>
       </YStack>
       <XStack style={styles.lookPalette}>
-        {look.keyColors.map(color => (
+        {direction.keyColors.map(color => (
           <View
-            key={`${look.id}-${color}`}
-            accessibilityLabel={`${look.title} 컬러 스와치`}
+            key={`${direction.id}-${color}`}
+            accessibilityLabel={`${direction.title} 컬러 스와치`}
             style={[styles.lookSwatch, {backgroundColor: color}]}
           />
         ))}
@@ -251,7 +251,7 @@ function LookCard({look}: LookCardProps) {
 }
 
 type AvoidCardProps = {
-  example: AvoidMakeupExample;
+  example: FacialAnalysisAvoidExample;
 };
 
 function AvoidCard({example}: AvoidCardProps) {
