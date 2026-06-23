@@ -1,11 +1,16 @@
 import React, {useCallback, useState} from 'react';
 import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
-import {SafeAreaProvider} from 'react-native-safe-area-context';
-import {TamaguiProvider} from 'tamagui';
+import {StyleSheet} from 'react-native';
+import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {AnalysisResultsScreen} from '../features/analysis';
+import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
+import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {LoginScreen} from '../features/auth';
+import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
 import {
   FeedbackCaptureScreen,
   FeedbackEntryScreen,
@@ -13,14 +18,26 @@ import {
   FeedbackLoadingScreen,
   FeedbackTipScreen,
   MakeupFeedbackScreen,
-  type FeedbackPoint,
   type FeedbackPhotoSelection,
+  type FeedbackPoint,
   type MakeupFeedbackResult,
 } from '../features/feedback';
-import {typography} from '../shared/theme';
+import {HomeScreen} from '../features/home';
+import {TutorialIntroScreen} from '../features/onboarding';
+import {UserPageScreen} from '../features/profile';
+import {colors, typography} from '../shared/theme';
+import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
 type AppScreen =
   | 'login'
+  | 'tutorial'
+  | 'home'
+  | 'faceCapture'
+  | 'analysisLoading'
+  | 'facialAnalysisResult'
+  | 'custom'
+  | 'userPage'
+  | 'analysisResults'
   | 'feedbackEntry'
   | 'feedbackCapture'
   | 'feedbackGuide'
@@ -28,11 +45,16 @@ type AppScreen =
   | 'feedbackResult'
   | 'feedbackTip';
 
+type ShellTab = Exclude<FooterTabKey, 'capture'>;
+
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
-  const [selectedPhoto, setSelectedPhoto] = useState<FeedbackPhotoSelection>({source: 'camera'});
+  const [selectedPhoto, setSelectedPhoto] = useState<FeedbackPhotoSelection>({
+    source: 'camera',
+  });
   const [feedbackResult, setFeedbackResult] = useState<MakeupFeedbackResult | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<FeedbackPoint | null>(null);
+
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
@@ -60,9 +82,57 @@ export function AppRoot() {
     return null;
   }
 
+  const handleFooterTabPress = (tab: FooterTabKey) => {
+    if (tab === 'capture') {
+      setActiveScreen('faceCapture');
+      return;
+    }
+
+    setActiveScreen(tab);
+  };
+
   const renderScreen = () => {
     if (activeScreen === 'login') {
       return <LoginScreen onLoginSuccess={() => setActiveScreen('feedbackEntry')} />;
+    }
+
+    if (activeScreen === 'tutorial') {
+      return <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />;
+    }
+
+    if (activeScreen === 'faceCapture') {
+      return (
+        <FaceCaptureScreen
+          onCapture={() => setActiveScreen('analysisLoading')}
+          onClose={() => setActiveScreen('home')}
+        />
+      );
+    }
+
+    if (activeScreen === 'analysisLoading') {
+      return (
+        <AIAnalysisLoadingScreen
+          onBack={() => setActiveScreen('faceCapture')}
+          onComplete={() => setActiveScreen('facialAnalysisResult')}
+        />
+      );
+    }
+
+    if (activeScreen === 'facialAnalysisResult') {
+      return (
+        <FacialAnalysisResultScreen
+          onBack={() => setActiveScreen('analysisLoading')}
+          onStartARGuide={() => undefined}
+        />
+      );
+    }
+
+    if (activeScreen === 'userPage') {
+      return <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />;
+    }
+
+    if (activeScreen === 'analysisResults') {
+      return <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />;
     }
 
     if (activeScreen === 'feedbackEntry') {
@@ -107,7 +177,7 @@ export function AppRoot() {
       );
     }
 
-    if (feedbackResult) {
+    if (activeScreen === 'feedbackResult' && feedbackResult) {
       return (
         <MakeupFeedbackScreen
           onBack={() => setActiveScreen('feedbackEntry')}
@@ -120,17 +190,63 @@ export function AppRoot() {
       );
     }
 
+    if (activeScreen === 'home' || activeScreen === 'custom') {
+      return (
+        <AppShell
+          activeTab={activeScreen}
+          onProfilePress={() => setActiveScreen('userPage')}
+          onTabPress={handleFooterTabPress}
+        />
+      );
+    }
+
     return <FeedbackEntryScreen onPressAiFeedback={() => setActiveScreen('feedbackCapture')} />;
   };
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <>
-          <StatusBar style={activeScreen === 'feedbackCapture' ? 'light' : 'dark'} />
-          {renderScreen()}
-        </>
+        <StatusBar
+          style={
+            activeScreen === 'faceCapture' || activeScreen === 'feedbackCapture'
+              ? 'light'
+              : 'dark'
+          }
+        />
+        {renderScreen()}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
+
+function AppShell({
+  activeTab,
+  onProfilePress,
+  onTabPress,
+}: {
+  activeTab: ShellTab;
+  onProfilePress: () => void;
+  onTabPress: (tab: FooterTabKey) => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <YStack style={styles.screen}>
+      <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
+      <YStack style={styles.body}>
+        {activeTab === 'home' ? <HomeScreen /> : null}
+      </YStack>
+      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+    </YStack>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  body: {
+    flex: 1,
+  },
+});

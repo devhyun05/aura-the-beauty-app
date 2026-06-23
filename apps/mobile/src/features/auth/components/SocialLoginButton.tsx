@@ -1,5 +1,5 @@
-import {ActivityIndicator, Image, StyleSheet} from 'react-native';
-import {Button} from 'tamagui';
+import {StyleSheet} from 'react-native';
+import {Button, Image, Spinner} from 'tamagui';
 
 import type {SocialLoginItem, SocialLoginProvider} from '../types';
 
@@ -21,15 +21,13 @@ export function SocialLoginButton({
       accessibilityLabel={item.label}
       accessibilityRole="button"
       disabled={disabled}
+      disabledStyle={{opacity: 0.4}}
       onPress={() => onPress(item.id)}
+      pressStyle={{opacity: 0.68}}
       style={styles.button}
       unstyled
     >
-      {isLoading ? (
-        <ActivityIndicator color="#8FA59A" size="small" />
-      ) : (
-        <SocialLoginMark item={item} />
-      )}
+      {isLoading ? <Spinner color="#8FA59A" size="small" /> : <SocialLoginMark item={item} />}
     </Button>
   );
 }
@@ -38,9 +36,10 @@ function SocialLoginMark({item}: {item: SocialLoginItem}) {
   if (item.id === 'kakao') {
     return (
       <Image
+        height={44}
         resizeMode="contain"
-        source={require('../../../assets/icons/auth/kakao-talk.png')}
-        style={styles.kakaoMark}
+        src={require('../../../assets/icons/auth/kakao-talk.png')}
+        width={44}
       />
     );
   }
@@ -48,18 +47,20 @@ function SocialLoginMark({item}: {item: SocialLoginItem}) {
   if (item.id === 'naver') {
     return (
       <Image
+        height={41}
         resizeMode="contain"
-        source={require('../../../assets/icons/auth/naver.png')}
-        style={styles.naverMark}
+        src={require('../../../assets/icons/auth/naver.png')}
+        width={41}
       />
     );
   }
 
   return (
     <Image
+      height={36}
       resizeMode="contain"
-      source={require('../../../assets/icons/auth/google.png')}
-      style={styles.googleMark}
+      src={require('../../../assets/icons/auth/google.png')}
+      width={36}
     />
   );
 }
@@ -73,18 +74,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
     paddingVertical: 0,
-    width: 64,
-  },
-  googleMark: {
-    height: 42,
-    width: 42,
-  },
-  kakaoMark: {
-    height: 42,
-    width: 42,
-  },
-  naverMark: {
-    height: 44,
-    width: 44,
+    width: 14,
   },
 });

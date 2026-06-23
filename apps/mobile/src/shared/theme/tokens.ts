@@ -1,16 +1,17 @@
 export const userPageColors = {
   background: '#FFFFFF',
   surface: '#FFFFFF',
-  text: '#222222',
-  textMuted: '#6F6A6A',
-  textSoft: '#9A9090',
-  border: '#F4C8CA',
-  borderSubtle: '#F8D9DA',
-  accent: '#FF6B7E',
-  accentSoft: '#FFF0F3',
-  accentMuted: '#B99A96',
-  shadow: '#F4C8CA',
-  divider: '#F5D6D8',
+  surfaceMuted: '#F6F6F6',
+  text: '#111111',
+  textMuted: '#5F5F5F',
+  textSoft: '#8A8A8A',
+  border: '#111111',
+  borderSubtle: '#DCDCDC',
+  accent: '#111111',
+  accentSoft: '#F2F2F2',
+  accentMuted: '#6F6F6F',
+  shadow: '#000000',
+  divider: '#E9E9E9',
 } as const;
 
 export const userPageSpacing = {
