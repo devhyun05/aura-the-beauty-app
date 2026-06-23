@@ -1,5 +1,5 @@
 import React from 'react';
-import {ScrollView, StyleSheet} from 'react-native';
+import {Image, ScrollView, StyleSheet} from 'react-native';
 import {Bookmark, ChevronLeft, Play, Share2} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -45,12 +45,9 @@ export function MakeupRecommendationResultScreen({
           <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
         </Button>
 
-        <YStack style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>RECOMMENDATION</Text>
-          <Text numberOfLines={1} style={styles.headerTitle}>
-            추천 결과
-          </Text>
-        </YStack>
+        <Text numberOfLines={1} style={styles.headerTitle}>
+          추출된 메이크업
+        </Text>
 
         <XStack style={styles.headerActions}>
           <Button
@@ -83,21 +80,43 @@ export function MakeupRecommendationResultScreen({
         ]}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
-        <YStack style={styles.heroCard}>
-          <XStack style={styles.heroTop}>
-            <View style={styles.previewFrame}>
-              <View style={styles.previewFace} />
-              <View style={styles.previewCheekLeft} />
-              <View style={styles.previewCheekRight} />
-              <View style={styles.previewLip} />
-            </View>
+        <View style={styles.previewFrame}>
+          <Image
+            resizeMode="cover"
+            source={result.previewImageSource}
+            style={styles.previewImage}
+          />
+          <YStack style={styles.matchBadge}>
+            <Text style={styles.matchValue}>{primaryLook.matchScore}%</Text>
+            <Text style={styles.matchLabel}>MATCH</Text>
+          </YStack>
+        </View>
 
-            <YStack style={styles.heroSummary}>
-              <Text style={styles.resultMeta}>{result.analyzedAtLabel}</Text>
-              <Text style={styles.resultTitle}>{primaryLook.title}</Text>
-              <Text style={styles.resultBody}>{result.summary}</Text>
-            </YStack>
+        <YStack style={styles.resultCard}>
+          <Text style={styles.cardKicker}>추천 메이크업 스타일</Text>
+          <Text style={styles.resultTitle}>{primaryLook.title}</Text>
+          <Text style={styles.resultBody}>{result.summary}</Text>
+
+          <XStack style={styles.tagList}>
+            {primaryLook.tags.map(tag => (
+              <Text key={tag} style={styles.tagText}>
+                {tag}
+              </Text>
+            ))}
           </XStack>
+
+          <YStack style={styles.paletteBlock}>
+            <Text style={styles.smallLabel}>컬러 팔레트</Text>
+            <XStack style={styles.swatchList}>
+              {primaryLook.keyColors.map(color => (
+                <View
+                  key={color}
+                  accessibilityLabel={`${primaryLook.title} 컬러`}
+                  style={[styles.colorSwatch, {backgroundColor: color}]}
+                />
+              ))}
+            </XStack>
+          </YStack>
 
           <Button
             accessibilityLabel="AR 가이드 시작하기"
@@ -113,44 +132,42 @@ export function MakeupRecommendationResultScreen({
 
         <YStack style={styles.section}>
           <Text style={styles.sectionTitle}>AI 분석 요약</Text>
-          <YStack style={styles.attributeList}>
-            <AnalysisCard title="피부 톤" attribute={result.analysis.skinTone} />
-            <AnalysisCard title="분위기" attribute={result.analysis.mood} />
-            <AnalysisCard title="얼굴 균형" attribute={result.analysis.faceBalance} />
+          <YStack style={styles.summaryList}>
+            <AnalysisRow title="피부 톤" attribute={result.analysis.skinTone} />
+            <AnalysisRow title="분위기" attribute={result.analysis.mood} />
+            <AnalysisRow title="얼굴 균형" attribute={result.analysis.faceBalance} />
           </YStack>
         </YStack>
 
         <YStack style={styles.section}>
-          <Text style={styles.sectionTitle}>추천 포인트</Text>
-          <YStack style={styles.infoCard}>
+          <Text style={styles.sectionTitle}>주요 추천 포인트</Text>
+          <YStack style={styles.pointCard}>
             {result.recommendationPoints.map(point => (
-              <Text key={point} style={styles.infoText}>
-                {point}
-              </Text>
+              <PointText key={point} text={point} />
             ))}
           </YStack>
         </YStack>
 
         <YStack style={styles.section}>
           <XStack style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>추천 메이크업 룩</Text>
+            <Text style={styles.sectionTitle}>추천 룩</Text>
             <Text style={styles.sectionMeta}>{result.recommendedLooks.length}개</Text>
           </XStack>
-
-          <YStack style={styles.lookList}>
+          <ScrollView
+            contentContainerStyle={styles.lookList}
+            horizontal
+            showsHorizontalScrollIndicator={false}>
             {result.recommendedLooks.map(look => (
               <LookCard key={look.id} look={look} />
             ))}
-          </YStack>
+          </ScrollView>
         </YStack>
 
         <YStack style={styles.section}>
           <Text style={styles.sectionTitle}>주의할 포인트</Text>
-          <YStack style={styles.infoCard}>
+          <YStack style={styles.pointCard}>
             {result.cautionPoints.map(point => (
-              <Text key={point} style={styles.infoText}>
-                {point}
-              </Text>
+              <PointText key={point} text={point} />
             ))}
           </YStack>
         </YStack>
@@ -168,18 +185,33 @@ export function MakeupRecommendationResultScreen({
   );
 }
 
-type AnalysisCardProps = {
+type AnalysisRowProps = {
   title: string;
   attribute: AnalysisAttribute;
 };
 
-function AnalysisCard({title, attribute}: AnalysisCardProps) {
+function AnalysisRow({title, attribute}: AnalysisRowProps) {
   return (
-    <YStack style={styles.attributeCard}>
-      <Text style={styles.cardKicker}>{title}</Text>
-      <Text style={styles.cardTitle}>{attribute.label}</Text>
-      <Text style={styles.cardBody}>{attribute.description}</Text>
-    </YStack>
+    <XStack style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{title}</Text>
+      <YStack style={styles.summaryCopy}>
+        <Text style={styles.summaryTitle}>{attribute.label}</Text>
+        <Text style={styles.summaryDescription}>{attribute.description}</Text>
+      </YStack>
+    </XStack>
+  );
+}
+
+type PointTextProps = {
+  text: string;
+};
+
+function PointText({text}: PointTextProps) {
+  return (
+    <XStack style={styles.pointRow}>
+      <View style={styles.pointDot} />
+      <Text style={styles.pointText}>{text}</Text>
+    </XStack>
   );
 }
 
@@ -190,32 +222,22 @@ type LookCardProps = {
 function LookCard({look}: LookCardProps) {
   return (
     <YStack style={styles.lookCard}>
-      <XStack style={styles.lookTop}>
-        <YStack style={styles.lookCopy}>
-          <Text style={styles.lookTitle}>{look.title}</Text>
-          <Text style={styles.lookSubtitle}>{look.subtitle}</Text>
-        </YStack>
-        <YStack style={styles.scoreBadge}>
-          <Text style={styles.scoreValue}>{look.matchScore}%</Text>
-          <Text style={styles.scoreLabel}>MATCH</Text>
-        </YStack>
-      </XStack>
-
-      <XStack style={styles.swatchList}>
+      <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
+      <YStack style={styles.lookCopy}>
+        <Text numberOfLines={2} style={styles.lookTitle}>
+          {look.title}
+        </Text>
+        <Text numberOfLines={1} style={styles.lookSubtitle}>
+          {look.subtitle}
+        </Text>
+      </YStack>
+      <XStack style={styles.lookPalette}>
         {look.keyColors.map(color => (
           <View
             key={`${look.id}-${color}`}
             accessibilityLabel={`${look.title} 컬러 스와치`}
-            style={[styles.colorSwatch, {backgroundColor: color}]}
+            style={[styles.lookSwatch, {backgroundColor: color}]}
           />
-        ))}
-      </XStack>
-
-      <XStack style={styles.tagList}>
-        {look.tags.map(tag => (
-          <Text key={`${look.id}-${tag}`} style={styles.tagText}>
-            {tag}
-          </Text>
         ))}
       </XStack>
     </YStack>
@@ -230,7 +252,7 @@ function AvoidCard({example}: AvoidCardProps) {
   return (
     <YStack style={styles.avoidCard}>
       <Text style={styles.avoidTitle}>{example.title}</Text>
-      <Text style={styles.cardBody}>{example.reason}</Text>
+      <Text style={styles.avoidBody}>{example.reason}</Text>
     </YStack>
   );
 }
@@ -243,16 +265,19 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
   },
-  headerCopy: {
+  headerTitle: {
+    color: colors.textPrimary,
     flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.md,
+    textAlign: 'center',
   },
   headerActions: {
     gap: spacing.sm,
@@ -266,107 +291,77 @@ const styles = StyleSheet.create({
     height: iconSize.xl + spacing.md,
     justifyContent: 'center',
     padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
     width: iconSize.xl + spacing.md,
-  },
-  eyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.2,
-    lineHeight: typography.lineHeight.xs,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    gap: spacing.xxl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
-  },
-  heroCard: {
-    backgroundColor: colors.black,
-    borderRadius: radius.lg,
     gap: spacing.xl,
-    overflow: 'hidden',
-    padding: spacing.xl,
-  },
-  heroTop: {
-    alignItems: 'center',
-    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
   },
   previewFrame: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    height: 172,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: 128,
-  },
-  previewFace: {
     backgroundColor: colors.surfaceMuted,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 122,
-    width: 88,
+    borderRadius: radius.lg,
+    height: 280,
+    overflow: 'hidden',
+    width: '100%',
   },
-  previewCheekLeft: {
-    backgroundColor: '#D8A09A',
-    borderRadius: radius.pill,
-    height: spacing.md,
-    left: 34,
-    opacity: 0.5,
+  previewImage: {
+    height: '100%',
+    width: '100%',
+  },
+  matchBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.black,
+    borderRadius: radius.lg,
+    bottom: spacing.md,
+    minWidth: 74,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     position: 'absolute',
-    top: 94,
-    width: spacing.xxl,
+    right: spacing.md,
   },
-  previewCheekRight: {
-    backgroundColor: '#D8A09A',
-    borderRadius: radius.pill,
-    height: spacing.md,
-    opacity: 0.5,
-    position: 'absolute',
-    right: 34,
-    top: 94,
-    width: spacing.xxl,
+  matchValue: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.md,
   },
-  previewLip: {
-    backgroundColor: '#A0645F',
-    borderRadius: radius.pill,
-    bottom: 50,
-    height: spacing.sm,
-    position: 'absolute',
-    width: spacing.xxl,
-  },
-  heroSummary: {
-    flex: 1,
-    gap: spacing.sm,
-    minWidth: 0,
-  },
-  resultMeta: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.medium,
+  matchLabel: {
+    color: colors.borderStrong,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  resultCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginTop: -spacing.xxl,
+    padding: spacing.lg,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: shadows.soft.shadowOpacity,
+    shadowRadius: shadows.soft.shadowRadius,
+  },
+  cardKicker: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
   },
   resultTitle: {
-    color: colors.white,
+    color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
@@ -374,24 +369,65 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xl,
   },
   resultBody: {
-    color: colors.borderStrong,
+    color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.regular,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
+  tagList: {
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  tagText: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  paletteBlock: {
+    gap: spacing.sm,
+  },
+  smallLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  swatchList: {
+    gap: spacing.sm,
+  },
+  colorSwatch: {
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    height: iconSize.xl,
+    width: iconSize.xl,
+  },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.black,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
     height: 52,
     justifyContent: 'center',
+    marginTop: spacing.xs,
   },
   primaryButtonText: {
-    color: colors.black,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
@@ -421,26 +457,34 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  attributeList: {
-    gap: spacing.md,
-  },
-  attributeCard: {
+  summaryList: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.sm,
+    overflow: 'hidden',
+  },
+  summaryRow: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing.md,
     padding: spacing.lg,
   },
-  cardKicker: {
+  summaryLabel: {
     color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.1,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
+    width: 58,
   },
-  cardTitle: {
+  summaryCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  summaryTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
@@ -448,7 +492,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
   },
-  cardBody: {
+  summaryDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
@@ -456,7 +500,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  infoCard: {
+  pointCard: {
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -464,8 +508,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.lg,
   },
-  infoText: {
+  pointRow: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  pointDot: {
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    height: spacing.xs,
+    marginTop: spacing.sm,
+    width: spacing.xs,
+  },
+  pointText: {
     color: colors.textPrimary,
+    flex: 1,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
@@ -474,103 +530,59 @@ const styles = StyleSheet.create({
   },
   lookList: {
     gap: spacing.md,
+    paddingRight: spacing.xl,
   },
   lookCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.lg,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
+    gap: spacing.sm,
+    overflow: 'hidden',
+    paddingBottom: spacing.md,
+    width: 150,
   },
-  lookTop: {
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    justifyContent: 'space-between',
+  lookImage: {
+    backgroundColor: colors.surfaceMuted,
+    height: 162,
+    width: '100%',
   },
   lookCopy: {
-    flex: 1,
     gap: spacing.xs,
-    minWidth: 0,
+    paddingHorizontal: spacing.md,
   },
   lookTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
+    lineHeight: typography.lineHeight.sm,
   },
   lookSubtitle: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  scoreBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.black,
-    borderRadius: radius.md,
-    minWidth: 64,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  scoreValue: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  scoreLabel: {
-    color: colors.borderStrong,
-    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
+    fontWeight: typography.fontWeight.regular,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
   },
-  swatchList: {
-    gap: spacing.sm,
+  lookPalette: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
-  colorSwatch: {
+  lookSwatch: {
     borderColor: colors.borderStrong,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: iconSize.md,
-    width: iconSize.md,
-  },
-  tagList: {
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  tagText: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    height: spacing.md,
+    width: spacing.md,
   },
   avoidList: {
     gap: spacing.md,
   },
   avoidCard: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -584,5 +596,13 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
+  },
+  avoidBody: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.regular,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
 });

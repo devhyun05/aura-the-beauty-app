@@ -1,8 +1,20 @@
+import type {ImageSourcePropType} from 'react-native';
+
 import type {RecommendationResult} from '../types/makeupGuide';
+
+const reportBareFace =
+  require('../../assets/images/user-page/report-bare-face-20260622.png') as ImageSourcePropType;
+const styleOjiGirl =
+  require('../../assets/images/user-page/style-oji-girl.png') as ImageSourcePropType;
+const styleMoriGirl =
+  require('../../assets/images/user-page/style-mori-girl.png') as ImageSourcePropType;
+const styleCleanSmoky =
+  require('../../assets/images/user-page/style-clean-smoky.png') as ImageSourcePropType;
 
 export const mockRecommendationResult: RecommendationResult = {
   userName: '서진',
   analyzedAtLabel: '방금 촬영한 진단 사진 기준',
+  previewImageSource: reportBareFace,
   summary:
     '맑고 정돈된 피부 표현에 뉴트럴 로즈 컬러를 얹으면 얼굴의 선이 부드럽게 살아나요.',
   analysis: {
@@ -31,6 +43,7 @@ export const mockRecommendationResult: RecommendationResult = {
   recommendedLooks: [
     {
       id: 'clean-glow-neutral',
+      imageSource: styleOjiGirl,
       title: '클린 글로우 뉴트럴',
       subtitle: '맑은 피부와 로즈 립 중심',
       finish: 'Semi glow',
@@ -40,6 +53,7 @@ export const mockRecommendationResult: RecommendationResult = {
     },
     {
       id: 'soft-rose-brown',
+      imageSource: styleMoriGirl,
       title: '소프트 로즈 브라운',
       subtitle: '눈매 음영과 말린 장미 컬러',
       finish: 'Soft satin',
@@ -49,6 +63,7 @@ export const mockRecommendationResult: RecommendationResult = {
     },
     {
       id: 'clear-mono-chic',
+      imageSource: styleCleanSmoky,
       title: '클리어 모노 시크',
       subtitle: '흑백 대비를 살린 얇은 포인트',
       finish: 'Natural matte',

@@ -1,3 +1,5 @@
+import type {ImageSourcePropType} from 'react-native';
+
 export type AnalysisAttribute = {
   label: string;
   description: string;
@@ -5,6 +7,7 @@ export type AnalysisAttribute = {
 
 export type MakeupLook = {
   id: string;
+  imageSource: ImageSourcePropType;
   title: string;
   subtitle: string;
   finish: string;
@@ -22,6 +25,7 @@ export type AvoidMakeupExample = {
 export type RecommendationResult = {
   userName: string;
   analyzedAtLabel: string;
+  previewImageSource: ImageSourcePropType;
   summary: string;
   analysis: {
     skinTone: AnalysisAttribute;
