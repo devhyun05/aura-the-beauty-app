@@ -5,4 +5,6 @@ export const spacing = {
   lg: 16,
   xl: 20,
   xxl: 24,
+  screenX: 14,
+  sectionGap: 30,
 } as const;

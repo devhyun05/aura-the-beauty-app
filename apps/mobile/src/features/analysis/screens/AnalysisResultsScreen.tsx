@@ -200,9 +200,9 @@ function ChevronRightIcon() {
 const styles = StyleSheet.create({
   backButton: {
     alignItems: 'center',
-    height: 42,
+    height: 38,
     justifyContent: 'center',
-    width: 42,
+    width: 38,
   },
   backIcon: {
     height: 22,
@@ -248,10 +248,10 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: userPageColors.textSoft,
-    fontSize: userPageTypography.caption,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    lineHeight: 16,
+    letterSpacing: 1.4,
+    lineHeight: 14,
   },
   header: {
     alignItems: 'center',
@@ -259,26 +259,28 @@ const styles = StyleSheet.create({
     borderBottomColor: userPageColors.divider,
     borderBottomWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    paddingBottom: 14,
+    gap: 8,
+    paddingBottom: 12,
     paddingHorizontal: userPageSpacing.screenX,
   },
   headerText: {
+    alignItems: 'center',
     flex: 1,
-    gap: 3,
+    gap: 2,
+    marginRight: 38,
     minWidth: 0,
   },
   list: {
-    gap: 12,
+    gap: 8,
   },
   pageButton: {
     alignItems: 'center',
-    borderColor: userPageColors.border,
-    borderRadius: 18,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 16,
     borderWidth: 1,
-    height: 36,
+    height: 32,
     justifyContent: 'center',
-    width: 36,
+    width: 32,
   },
   pageButtonDisabled: {
     borderColor: userPageColors.borderSubtle,
@@ -324,11 +326,11 @@ const styles = StyleSheet.create({
   pageNumber: {
     alignItems: 'center',
     borderColor: userPageColors.borderSubtle,
-    borderRadius: 16,
+    borderRadius: 15,
     borderWidth: 1,
-    height: 32,
+    height: 30,
     justifyContent: 'center',
-    width: 32,
+    width: 30,
   },
   pageNumberActive: {
     backgroundColor: userPageColors.text,
@@ -346,7 +348,7 @@ const styles = StyleSheet.create({
   pagination: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 16,
+    gap: 14,
     justifyContent: 'center',
     paddingTop: 2,
   },
@@ -355,10 +357,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    gap: 18,
+    gap: 16,
     paddingBottom: 48,
     paddingHorizontal: userPageSpacing.screenX,
-    paddingTop: 18,
+    paddingTop: 16,
   },
   scrollView: {
     backgroundColor: userPageColors.background,
@@ -374,8 +376,8 @@ const styles = StyleSheet.create({
     borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    gap: 6,
-    padding: 16,
+    gap: 5,
+    padding: 14,
   },
   summaryTitle: {
     color: userPageColors.text,
@@ -385,8 +387,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: userPageColors.text,
-    fontSize: userPageTypography.title,
+    fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',
-    lineHeight: 30,
+    lineHeight: 22,
   },
 });

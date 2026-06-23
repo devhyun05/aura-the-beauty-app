@@ -15,22 +15,22 @@ export const userPageColors = {
 } as const;
 
 export const userPageSpacing = {
-  screenX: 24,
-  sectionGap: 34,
-  cardGap: 14,
-  itemGap: 12,
+  screenX: 20,
+  sectionGap: 28,
+  cardGap: 12,
+  itemGap: 10,
 } as const;
 
 export const userPageRadius = {
-  card: 24,
-  image: 16,
+  card: 18,
+  image: 12,
   chip: 999,
 } as const;
 
 export const userPageTypography = {
-  title: 24,
-  sectionTitle: 18,
-  body: 15,
+  title: 22,
+  sectionTitle: 17,
+  body: 14,
   caption: 12,
 } as const;
 

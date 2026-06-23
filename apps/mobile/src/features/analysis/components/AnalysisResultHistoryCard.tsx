@@ -76,12 +76,12 @@ function ChevronRightIcon() {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
-    padding: 12,
+    gap: 12,
+    padding: 10,
   },
   chevronIcon: {
     height: 24,
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     width: 18,
   },
   chevronLine: {
-    backgroundColor: userPageColors.text,
+    backgroundColor: userPageColors.textSoft,
     borderRadius: 2,
     height: 2,
     position: 'absolute',
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   },
   details: {
     flex: 1,
-    gap: 9,
+    gap: 7,
     minWidth: 0,
   },
   footer: {
@@ -136,13 +136,11 @@ const styles = StyleSheet.create({
   summary: {
     color: userPageColors.textMuted,
     fontSize: userPageTypography.body,
-    lineHeight: 21,
+    lineHeight: 19,
   },
   tag: {
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
+    backgroundColor: userPageColors.surfaceMuted,
     borderRadius: userPageRadius.chip,
-    borderWidth: 1,
     color: userPageColors.textMuted,
     fontSize: userPageTypography.caption,
     lineHeight: 16,
@@ -155,11 +153,9 @@ const styles = StyleSheet.create({
   },
   thumbnail: {
     backgroundColor: userPageColors.surfaceMuted,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 104,
-    width: 86,
+    borderRadius: 10,
+    height: 96,
+    width: 82,
   },
   title: {
     color: userPageColors.text,

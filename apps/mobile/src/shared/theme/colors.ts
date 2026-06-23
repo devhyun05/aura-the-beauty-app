@@ -7,6 +7,8 @@ export const colors = {
   textTertiary: '#B7B2B2',
   border: '#E6E6E6',
   borderStrong: '#D8D8D8',
+  divider: '#F4F4F4',
+  heart: '#F25D61',
   brandMuted: '#8FA59A',
   successMuted: '#6F877A',
   danger: '#FF5A4D',
