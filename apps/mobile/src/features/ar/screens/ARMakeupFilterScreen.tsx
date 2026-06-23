@@ -244,17 +244,6 @@ export function ARMakeupFilterScreen({
             ))}
           </ScrollView>
 
-          <HorizontalSection label="얼굴 부위">
-            {arGuideData.faceParts.map(facePart => (
-              <ChipButton
-                key={facePart.id}
-                isActive={facePart.id === selectedFacePartId}
-                label={facePart.label}
-                onPress={() => setSelectedFacePartId(facePart.id)}
-              />
-            ))}
-          </HorizontalSection>
-
           <XStack style={styles.adjustRow}>
             <Button
               accessibilityLabel="필터 위치 조정 열기"
@@ -275,6 +264,17 @@ export function ARMakeupFilterScreen({
               <Text style={styles.secondaryActionText}>스타일 조정</Text>
             </Button>
           </XStack>
+
+          <HorizontalSection label="얼굴 부위">
+            {arGuideData.faceParts.map(facePart => (
+              <ChipButton
+                key={facePart.id}
+                isActive={facePart.id === selectedFacePartId}
+                label={facePart.label}
+                onPress={() => setSelectedFacePartId(facePart.id)}
+              />
+            ))}
+          </HorizontalSection>
 
           <HorizontalSection label="스타일 옵션">
             {STYLE_OPTION_GROUPS.map(group => (

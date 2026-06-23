@@ -1,4 +1,7 @@
-import type {FilterLocationState} from '../services/filterCustomizationService';
+import type {
+  FilterLocationState,
+  FilterStyleState,
+} from '../services/filterCustomizationService';
 
 export const mockFilterLocationState: FilterLocationState = {
   selectedFacePartId: 'all',
@@ -45,4 +48,12 @@ export const mockFilterLocationState: FilterLocationState = {
       value: 0,
     },
   },
+};
+
+export const mockFilterStyleState: FilterStyleState = {
+  selectedFacePartId: 'all',
+  selectedOptionGroup: 'color',
+  selectedColorId: 'rose',
+  selectedTypeId: 'lipstick',
+  selectedTextureId: 'semi-glow',
 };

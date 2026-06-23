@@ -18,7 +18,16 @@ export const AnalysisReportPreviewCard = ({
   onPress,
 }: AnalysisReportPreviewCardProps) => {
   return (
-    <Pressable onPress={onPress} style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.card,
+        {
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+    >
       <Image
         resizeMode="cover"
         source={report.imageSource}
@@ -63,12 +72,12 @@ function ChevronRightIcon() {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.border,
+    borderColor: userPageColors.borderSubtle,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
-    padding: 12,
+    gap: 12,
+    padding: 10,
   },
   chevronIcon: {
     height: 24,
@@ -76,7 +85,7 @@ const styles = StyleSheet.create({
     width: 18,
   },
   chevronLine: {
-    backgroundColor: userPageColors.text,
+    backgroundColor: userPageColors.textSoft,
     borderRadius: 2,
     height: 2,
     position: 'absolute',
@@ -93,16 +102,15 @@ const styles = StyleSheet.create({
   },
   details: {
     flex: 1,
-    gap: 9,
+    gap: 7,
     minWidth: 0,
   },
   footer: {
     alignSelf: 'flex-start',
-    borderColor: userPageColors.borderSubtle,
+    backgroundColor: userPageColors.surfaceMuted,
     borderRadius: userPageRadius.chip,
-    borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   header: {
     alignItems: 'flex-start',
@@ -123,16 +131,14 @@ const styles = StyleSheet.create({
   },
   summary: {
     color: userPageColors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: userPageTypography.body,
+    lineHeight: 19,
   },
   thumbnail: {
     backgroundColor: userPageColors.surfaceMuted,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 104,
-    width: 86,
+    borderRadius: 10,
+    height: 96,
+    width: 82,
   },
   title: {
     color: userPageColors.text,

@@ -6,9 +6,14 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
-import {AnalysisResultsScreen} from '../features/analysis';
+import {
+  AnalysisReportDetailScreen,
+  AnalysisResultListScreen,
+  AnalysisResultsScreen,
+} from '../features/analysis';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {ARFilterCustomLocationScreen} from '../features/ar/screens/ARFilterCustomLocationScreen';
+import {ARFilterCustomStyleScreen} from '../features/ar/screens/ARFilterCustomStyleScreen';
 import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
@@ -38,7 +43,11 @@ import {
 import {getFilterExtractionDataSync} from '../features/filter-extraction/services/filterExtractionService';
 import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
-import {UserPageScreen} from '../features/profile';
+import {MyPageScreen, ProfileEditScreen, UserPageScreen} from '../features/profile';
+import {
+  LikedProductListScreen,
+  MakeupStyleListScreen,
+} from '../features/recommendation';
 import {colors, typography} from '../shared/theme';
 import type {MakeupStylePreview} from '../shared/types/userPage';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
@@ -52,9 +61,19 @@ type AppScreen =
   | 'facialAnalysisResult'
   | 'arMakeupFilter'
   | 'arFilterLocation'
+  | 'arFilterStyle'
   | 'custom'
   | 'userPage'
+  | 'myPage'
+  | 'profileEdit'
+  | 'analysisResultList'
   | 'analysisResults'
+  | 'analysisReportDetail'
+  | 'analysisResultDetail'
+  | 'makeupStyleList'
+  | 'makeupLooks'
+  | 'favoriteProducts'
+  | 'likedProductList'
   | 'feedbackEntry'
   | 'feedbackCapture'
   | 'feedbackGuide'
@@ -83,6 +102,10 @@ export function AppRoot() {
     useState<MakeupStylePreview | null>(null);
   const [feedbackResult, setFeedbackResult] = useState<MakeupFeedbackResult | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<FeedbackPoint | null>(null);
+  const [selectedAnalysisResultId, setSelectedAnalysisResultId] =
+    useState<string | null>(null);
+  const [analysisDetailBackScreen, setAnalysisDetailBackScreen] =
+    useState<AppScreen>('myPage');
 
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
@@ -138,6 +161,19 @@ export function AppRoot() {
     setActiveScreen(tab);
   };
 
+  const goToMyPage = () => {
+    setActiveScreen('myPage');
+  };
+
+  const goToAnalysisReportDetail = (
+    resultId: string | null,
+    backScreen: AppScreen,
+  ) => {
+    setSelectedAnalysisResultId(resultId);
+    setAnalysisDetailBackScreen(backScreen);
+    setActiveScreen('analysisReportDetail');
+  };
+
   const renderScreen = () => {
     if (activeScreen === 'login') {
       return <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />;
@@ -180,7 +216,7 @@ export function AppRoot() {
           initialGuideMode="half"
           onBack={() => setActiveScreen('facialAnalysisResult')}
           onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
-          onOpenStyleAdjust={() => undefined}
+          onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
         />
       );
     }
@@ -189,7 +225,17 @@ export function AppRoot() {
       return (
         <ARFilterCustomLocationScreen
           onBack={() => setActiveScreen('arMakeupFilter')}
-          onOpenStyleAdjust={() => undefined}
+          onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
+          onSave={() => setActiveScreen('arMakeupFilter')}
+        />
+      );
+    }
+
+    if (activeScreen === 'arFilterStyle') {
+      return (
+        <ARFilterCustomStyleScreen
+          onBack={() => setActiveScreen('arMakeupFilter')}
+          onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
           onSave={() => setActiveScreen('arMakeupFilter')}
         />
       );
@@ -200,12 +246,83 @@ export function AppRoot() {
         <UserPageScreen
           onPressReports={() => setActiveScreen('analysisResults')}
           savedMakeupStyle={savedMakeupStyle}
+          onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
+          onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
+          onPressReport={(resultId) =>
+            goToAnalysisReportDetail(resultId, 'userPage')
+          }
+          onPressReports={() => setActiveScreen('analysisResultList')}
+          onPressSettings={() => setActiveScreen('profileEdit')}
+        />
+      );
+    }
+
+    if (activeScreen === 'myPage') {
+      return (
+        <MyPageScreen
+          onPressAnalysisResult={(resultId) =>
+            goToAnalysisReportDetail(resultId, 'myPage')
+          }
+          onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
+          onPressLikedProductList={() => setActiveScreen('likedProductList')}
+          onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
+          onPressProfileEdit={() => setActiveScreen('profileEdit')}
+        />
+      );
+    }
+
+    if (activeScreen === 'profileEdit') {
+      return (
+        <ProfileEditScreen
+          onBack={goToMyPage}
+          onLogout={() => setActiveScreen('login')}
+        />
+      );
+    }
+
+    if (activeScreen === 'analysisResultList') {
+      return (
+        <AnalysisResultListScreen
+          onBack={goToMyPage}
+          onPressResult={(resultId) =>
+            goToAnalysisReportDetail(resultId, 'analysisResultList')
+          }
         />
       );
     }
 
     if (activeScreen === 'analysisResults') {
-      return <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />;
+      return (
+        <AnalysisResultsScreen
+          onBack={() => setActiveScreen('userPage')}
+          onPressResult={(resultId) =>
+            goToAnalysisReportDetail(resultId, 'analysisResults')
+          }
+        />
+      );
+    }
+
+    if (
+      activeScreen === 'analysisReportDetail' ||
+      activeScreen === 'analysisResultDetail'
+    ) {
+      return (
+        <AnalysisReportDetailScreen
+          onBack={() => setActiveScreen(analysisDetailBackScreen)}
+          resultId={selectedAnalysisResultId}
+        />
+      );
+    }
+
+    if (activeScreen === 'makeupStyleList' || activeScreen === 'makeupLooks') {
+      return <MakeupStyleListScreen onBack={goToMyPage} />;
+    }
+
+    if (
+      activeScreen === 'likedProductList' ||
+      activeScreen === 'favoriteProducts'
+    ) {
+      return <LikedProductListScreen onBack={goToMyPage} />;
     }
 
     if (activeScreen === 'filterUpload') {
@@ -358,6 +475,7 @@ export function AppRoot() {
           activeTab={activeScreen}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
           onProfilePress={() => setActiveScreen('userPage')}
+          onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
         />
       );

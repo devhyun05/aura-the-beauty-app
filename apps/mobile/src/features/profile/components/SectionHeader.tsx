@@ -40,13 +40,19 @@ function ChevronRightIcon() {
 const styles = StyleSheet.create({
   action: {
     alignItems: 'center',
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
-    gap: 8,
-    minHeight: 32,
+    gap: 5,
+    minHeight: 30,
+    paddingHorizontal: 10,
   },
   actionLabel: {
-    color: userPageColors.textSoft,
-    fontSize: 12,
+    color: userPageColors.textMuted,
+    fontSize: userPageTypography.caption,
+    fontWeight: '600',
+    lineHeight: 16,
   },
   chevronIcon: {
     height: 18,
@@ -73,10 +79,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    minHeight: 32,
   },
   title: {
     color: userPageColors.text,
     fontSize: userPageTypography.sectionTitle,
     fontWeight: '700',
+    lineHeight: 22,
   },
 });
