@@ -1,9 +1,8 @@
 import {useEffect, useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
-import {Text, View} from 'tamagui';
 
 import {getAnalysisResults} from '../../../shared/services/analysisService';
-import {colors, spacing, typography} from '../../../shared/theme';
+import {spacing} from '../../../shared/theme';
 import type {AnalysisResult} from '../../../shared/types/analysis';
 import {AppHeader, AppScreen, PagedGrid} from '../../../shared/ui';
 import {AnalysisResultCard} from '../components/AnalysisResultCard';
@@ -41,11 +40,6 @@ export function AnalysisResultListScreen({
     <AppScreen contentGap={spacing.xl}>
       <AppHeader onBack={onBack} title="분석 결과" />
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryText}>최근 분석 {results.length}개</Text>
-        <Text style={styles.sortText}>최신순</Text>
-      </View>
-
       <PagedGrid
         data={results}
         keyExtractor={(result) => result.id}
@@ -68,22 +62,5 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  sortText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.sm,
-  },
-  summaryRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  summaryText: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
   },
 });

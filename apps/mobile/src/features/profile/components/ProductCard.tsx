@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   },
   heartIcon: {
     height: 14,
-    tintColor: colors.heart,
+    tintColor: colors.black,
     width: 15,
   },
   imageArea: {
