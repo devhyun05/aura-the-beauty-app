@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {ScrollView, StyleSheet} from 'react-native';
+import {Image, ScrollView, StyleSheet} from 'react-native';
 import {Camera, ChevronLeft, SlidersHorizontal, Video} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -138,22 +138,26 @@ export function ARMakeupFilterScreen({
       </YStack>
 
       <YStack style={styles.previewArea}>
-        <View style={styles.faceMock}>
-          <View style={styles.faceOval} />
+        <View style={styles.previewFrame}>
+          <Image
+            resizeMode="cover"
+            source={selectedFilter.imageSource}
+            style={styles.previewImage}
+          />
+          <View style={styles.previewDim} />
           <View style={[styles.eyeOverlay, {backgroundColor: selectedColor.hex}]} />
           <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
           <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
           <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
+          <YStack style={styles.previewBadge}>
+            <Text style={styles.previewBadgeLabel}>
+              {guideMode === 'basic' ? '기본 모드' : '반반 가이드'}
+            </Text>
+            <Text style={styles.previewBadgeText}>
+              {selectedColor.label} · {selectedType.label} · {selectedTexture.label}
+            </Text>
+          </YStack>
         </View>
-
-        <YStack style={styles.previewBadge}>
-          <Text style={styles.previewBadgeLabel}>
-            {guideMode === 'basic' ? '기본 모드' : '반반 가이드'}
-          </Text>
-          <Text style={styles.previewBadgeText}>
-            {selectedColor.label} · {selectedType.label} · {selectedTexture.label}
-          </Text>
-        </YStack>
       </YStack>
 
       <YStack style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.md}]}>
@@ -391,15 +395,18 @@ function FilterCard({filter, isActive, onPress}: FilterCardProps) {
       pressStyle={{scale: 0.98}}
       style={[styles.filterCard, isActive ? styles.filterCardActive : undefined]}
       unstyled>
-      <Text style={[styles.filterTitle, isActive ? styles.filterTitleActive : undefined]}>
-        {filter.title}
-      </Text>
-      <Text style={[styles.filterSubtitle, isActive ? styles.filterSubtitleActive : undefined]}>
-        {filter.subtitle}
-      </Text>
-      <Text style={[styles.filterMeta, isActive ? styles.filterMetaActive : undefined]}>
-        {filter.intensityLabel}
-      </Text>
+      <Image resizeMode="cover" source={filter.imageSource} style={styles.filterImage} />
+      <YStack style={styles.filterCopy}>
+        <Text numberOfLines={1} style={[styles.filterTitle, isActive ? styles.filterTitleActive : undefined]}>
+          {filter.title}
+        </Text>
+        <Text numberOfLines={1} style={[styles.filterSubtitle, isActive ? styles.filterSubtitleActive : undefined]}>
+          {filter.subtitle}
+        </Text>
+        <Text style={[styles.filterMeta, isActive ? styles.filterMetaActive : undefined]}>
+          {filter.intensityLabel}
+        </Text>
+      </YStack>
     </Button>
   );
 }
@@ -504,68 +511,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
-  faceMock: {
-    alignItems: 'center',
-    height: 268,
-    justifyContent: 'center',
-    width: 228,
+  previewFrame: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    height: '100%',
+    maxHeight: 360,
+    minHeight: 286,
+    overflow: 'hidden',
+    width: '100%',
   },
-  faceOval: {
-    backgroundColor: colors.guideSurface,
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 214,
-    opacity: 0.86,
-    transform: [{scaleY: 1.16}],
-    width: 154,
+  previewImage: {
+    height: '100%',
+    width: '100%',
+  },
+  previewDim: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    opacity: 0.08,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   eyeOverlay: {
     borderRadius: radius.pill,
-    height: spacing.sm,
-    opacity: 0.5,
+    height: spacing.xs,
+    left: '31%',
+    opacity: 0.32,
     position: 'absolute',
-    top: 106,
-    width: 112,
+    right: '31%',
+    top: '39%',
   },
   cheekOverlayLeft: {
     borderRadius: radius.pill,
     height: spacing.md,
-    left: 54,
-    opacity: 0.42,
+    left: '24%',
+    opacity: 0.24,
     position: 'absolute',
-    top: 142,
-    width: spacing.xxl,
+    top: '55%',
+    width: 42,
   },
   cheekOverlayRight: {
     borderRadius: radius.pill,
     height: spacing.md,
-    opacity: 0.42,
+    opacity: 0.24,
     position: 'absolute',
-    right: 54,
-    top: 142,
-    width: spacing.xxl,
+    right: '24%',
+    top: '55%',
+    width: 42,
   },
   lipOverlay: {
     borderRadius: radius.pill,
-    bottom: 58,
+    bottom: '23%',
     height: spacing.sm,
-    opacity: 0.72,
+    left: '43%',
+    opacity: 0.62,
     position: 'absolute',
-    width: 44,
+    right: '43%',
   },
   previewBadge: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: colors.glassSurface,
     borderColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: 1,
     gap: spacing.xs,
-    marginTop: spacing.lg,
+    left: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    position: 'absolute',
+    right: spacing.md,
+    top: spacing.md,
   },
   previewBadgeLabel: {
     color: colors.white,
@@ -589,7 +608,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.md,
-    maxHeight: 418,
+    maxHeight: 392,
     paddingTop: spacing.lg,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: -6},
@@ -645,16 +664,18 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xl,
   },
   filterCard: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.xs,
-    justifyContent: 'center',
-    minHeight: 112,
-    padding: spacing.lg,
-    width: 184,
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'flex-start',
+    minHeight: 92,
+    overflow: 'hidden',
+    padding: spacing.sm,
+    width: 226,
   },
   filterCardActive: {
     backgroundColor: colors.black,
@@ -692,6 +713,17 @@ const styles = StyleSheet.create({
   },
   filterMetaActive: {
     color: colors.white,
+  },
+  filterImage: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    height: 74,
+    width: 58,
+  },
+  filterCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
   },
   adjustRow: {
     gap: spacing.md,
