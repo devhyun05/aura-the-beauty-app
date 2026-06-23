@@ -2,43 +2,31 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {AnalysisMakeupCard, AnalysisResult} from '../types/analysis';
 
-const analysisSpringLight =
-  require('../../assets/images/analysis/analysis-seojin-spring-light.png') as ImageSourcePropType;
-const analysisWindow =
-  require('../../assets/images/analysis/analysis-window.png') as ImageSourcePropType;
-const analysisCafe =
-  require('../../assets/images/analysis/analysis-cafe.png') as ImageSourcePropType;
-const analysisNightLamp =
-  require('../../assets/images/analysis/analysis-night-lamp.png') as ImageSourcePropType;
-const analysisBrightWall =
-  require('../../assets/images/analysis/analysis-bright-wall.png') as ImageSourcePropType;
-const analysisSoftLight =
-  require('../../assets/images/analysis/analysis-soft-light.png') as ImageSourcePropType;
+const analysisCleanDaylight =
+  require('../../assets/images/analysis/analysis-clean-daylight.png') as ImageSourcePropType;
+const analysisWindowSoft =
+  require('../../assets/images/analysis/analysis-window-soft.png') as ImageSourcePropType;
+const analysisCafeWarm =
+  require('../../assets/images/analysis/analysis-cafe-warm.png') as ImageSourcePropType;
+const analysisNightNeutral =
+  require('../../assets/images/analysis/analysis-night-neutral.png') as ImageSourcePropType;
 const analysisVanityLight =
   require('../../assets/images/analysis/analysis-vanity-light.png') as ImageSourcePropType;
-const analysisNaturalLight =
-  require('../../assets/images/analysis/analysis-natural-light.png') as ImageSourcePropType;
-const analysisDarkWall =
-  require('../../assets/images/analysis/analysis-dark-wall.png') as ImageSourcePropType;
-const analysisWinterCool =
-  require('../../assets/images/analysis/analysis-winter-cool.png') as ImageSourcePropType;
-const analysisAutumnWarm =
-  require('../../assets/images/analysis/analysis-autumn-warm.png') as ImageSourcePropType;
-const analysisDifferentFace =
-  require('../../assets/images/analysis/analysis-different-face.png') as ImageSourcePropType;
+const analysisCoolRose =
+  require('../../assets/images/analysis/analysis-cool-rose.png') as ImageSourcePropType;
 
-const lookClearGloss =
-  require('../../assets/images/analysis-detail/look-clear-gloss.png') as ImageSourcePropType;
-const lookFruityJuice =
-  require('../../assets/images/analysis-detail/look-fruity-juice.png') as ImageSourcePropType;
-const lookCleanLine =
-  require('../../assets/images/analysis-detail/look-clean-line.png') as ImageSourcePropType;
-const avoidHeavyMatte =
-  require('../../assets/images/analysis-detail/avoid-heavy-matte.png') as ImageSourcePropType;
-const avoidMuddyShadow =
-  require('../../assets/images/analysis-detail/avoid-muddy-shadow.png') as ImageSourcePropType;
-const avoidOverLip =
-  require('../../assets/images/analysis-detail/avoid-over-lip.png') as ImageSourcePropType;
+const reportRecommendClearGloss =
+  require('../../assets/images/analysis-detail/report-recommend-clear-gloss.png') as ImageSourcePropType;
+const reportRecommendFruityJuice =
+  require('../../assets/images/analysis-detail/report-recommend-fruity-juice.png') as ImageSourcePropType;
+const reportRecommendCleanLine =
+  require('../../assets/images/analysis-detail/report-recommend-clean-line.png') as ImageSourcePropType;
+const reportAvoidHeavySmoky =
+  require('../../assets/images/analysis-detail/report-avoid-heavy-smoky.png') as ImageSourcePropType;
+const reportAvoidStrongContour =
+  require('../../assets/images/analysis-detail/report-avoid-strong-contour.png') as ImageSourcePropType;
+const reportAvoidHighSaturationLip =
+  require('../../assets/images/analysis-detail/report-avoid-high-saturation-lip.png') as ImageSourcePropType;
 
 type AnalysisMockSeed = {
   id: string;
@@ -64,7 +52,7 @@ const createRecommendedMakeups = (
     title: '클리어 & 글로시',
     subtitle: mood,
     description: '얇은 윤광 베이스와 투명한 립 표현으로 얼굴을 맑게 보여줘요.',
-    imageSource: lookClearGloss,
+    imageSource: reportRecommendClearGloss,
     tags: ['윤광', '맑은 립'],
   },
   {
@@ -72,7 +60,7 @@ const createRecommendedMakeups = (
     title: '과즙상',
     subtitle: '생기 포인트',
     description: '볼과 입술에 같은 계열 색을 낮게 얹어 자연스러운 생기를 더해요.',
-    imageSource: lookFruityJuice,
+    imageSource: reportRecommendFruityJuice,
     tags: ['생기', '톤온톤'],
   },
   {
@@ -80,7 +68,7 @@ const createRecommendedMakeups = (
     title: '깔끔한 또렷함',
     subtitle: '브라운 라인',
     description: '눈매는 얇게 정돈하고 컬러 포인트는 입술과 볼에 집중해요.',
-    imageSource: lookCleanLine,
+    imageSource: reportRecommendCleanLine,
     tags: ['브라운', '정돈감'],
   },
 ];
@@ -91,7 +79,7 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     title: '너무 진한 스모키',
     subtitle: '무거운 음영',
     description: '넓은 블랙 음영은 피부 톤을 답답하게 보이게 할 수 있어요.',
-    imageSource: avoidHeavyMatte,
+    imageSource: reportAvoidHeavySmoky,
     tags: ['진한 음영', '매트'],
   },
   {
@@ -99,7 +87,7 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     title: '과한 컨투어링',
     subtitle: '강한 윤곽',
     description: '진한 음영 경계는 얼굴의 맑은 분위기를 약하게 만들 수 있어요.',
-    imageSource: avoidMuddyShadow,
+    imageSource: reportAvoidStrongContour,
     tags: ['강한 쉐딩', '경계감'],
   },
   {
@@ -107,7 +95,7 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     title: '채도 높은 립',
     subtitle: '강한 포인트',
     description: '선명한 고채도 립은 전체 조화를 깨고 입술만 도드라질 수 있어요.',
-    imageSource: avoidOverLip,
+    imageSource: reportAvoidHighSaturationLip,
     tags: ['고채도', '오버립'],
   },
 ];
@@ -135,7 +123,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-spring-light-20260622',
     analyzedAt: '2026-06-22',
-    imageSource: analysisSpringLight,
+    imageSource: analysisCleanDaylight,
     environmentLabel: '밝은 자연광',
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',
@@ -151,7 +139,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-summer-cool-20260621',
     analyzedAt: '2026-06-21',
-    imageSource: analysisWindow,
+    imageSource: analysisWindowSoft,
     environmentLabel: '창가 자연광',
     personalColor: '여름 쿨',
     skinType: '복합성 피부',
@@ -167,7 +155,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-autumn-warm-20260620',
     analyzedAt: '2026-06-20',
-    imageSource: analysisCafe,
+    imageSource: analysisCafeWarm,
     environmentLabel: '카페 조명',
     personalColor: '가을 웜',
     skinType: '건성 피부',
@@ -183,7 +171,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-winter-cool-20260619',
     analyzedAt: '2026-06-19',
-    imageSource: analysisWinterCool,
+    imageSource: analysisCoolRose,
     environmentLabel: '차분한 실내광',
     personalColor: '겨울 쿨 딥',
     skinType: '중성 피부',
@@ -199,7 +187,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-summer-light-20260618',
     analyzedAt: '2026-06-18',
-    imageSource: analysisBrightWall,
+    imageSource: analysisCoolRose,
     environmentLabel: '밝은 배경',
     personalColor: '여름 쿨 라이트',
     skinType: '복합성 피부',
@@ -215,7 +203,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-spring-bright-20260617',
     analyzedAt: '2026-06-17',
-    imageSource: analysisSoftLight,
+    imageSource: analysisVanityLight,
     environmentLabel: '소프트 조명',
     personalColor: '봄웜 브라이트',
     skinType: '건성 피부',
@@ -247,7 +235,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-natural-20260615',
     analyzedAt: '2026-06-15',
-    imageSource: analysisNaturalLight,
+    imageSource: analysisCleanDaylight,
     environmentLabel: '야외 자연광',
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',
@@ -263,7 +251,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-dark-wall-20260614',
     analyzedAt: '2026-06-14',
-    imageSource: analysisDarkWall,
+    imageSource: analysisNightNeutral,
     environmentLabel: '어두운 배경',
     personalColor: '가을 웜 뮤트',
     skinType: '중성 피부',
@@ -279,7 +267,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-night-lamp-20260613',
     analyzedAt: '2026-06-13',
-    imageSource: analysisNightLamp,
+    imageSource: analysisNightNeutral,
     environmentLabel: '밤 조명',
     personalColor: '여름 쿨 뮤트',
     skinType: '복합성 피부',
@@ -295,7 +283,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-autumn-soft-20260612',
     analyzedAt: '2026-06-12',
-    imageSource: analysisAutumnWarm,
+    imageSource: analysisCafeWarm,
     environmentLabel: '실내 간접광',
     personalColor: '가을 웜 라이트',
     skinType: '건성 피부',
@@ -311,13 +299,13 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-friend-20260611',
     analyzedAt: '2026-06-11',
-    imageSource: analysisDifferentFace,
-    environmentLabel: '친구 촬영',
+    imageSource: analysisWindowSoft,
+    environmentLabel: '쿨톤 스튜디오 조명',
     personalColor: '겨울 쿨 브라이트',
     skinType: '중성 피부',
     toneSummary: '선명한 쿨 핑크 톤',
     recommendedMood: '클리어 로즈 포인트 룩',
-    tags: ['친구', '쿨브라이트', '로즈'],
+    tags: ['쿨톤', '브라이트', '로즈'],
     summary: '선명한 로즈 포인트가 또렷한 인상을 만들어줘요',
     skinAnalysisSummary:
       '선명한 대비가 잘 받는 얼굴이라 피부는 깨끗하게, 포인트는 좁게 쓰는 편이 좋습니다.',

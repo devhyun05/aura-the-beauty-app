@@ -19,7 +19,7 @@ const lookCherryBlossom =
 const lookPeachCoral =
   require('../../assets/images/looks/look-peach-coral.png') as ImageSourcePropType;
 const lookCoolRose =
-  require('../../assets/images/makeup-look/look-muted-rose.png') as ImageSourcePropType;
+  require('../../assets/images/looks/look-cool-rose.png') as ImageSourcePropType;
 const lookBerryPlum =
   require('../../assets/images/looks/look-berry-plum.png') as ImageSourcePropType;
 const lookDryRose =
