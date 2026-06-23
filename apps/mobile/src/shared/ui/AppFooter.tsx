@@ -39,8 +39,8 @@ const footerItems: FooterTabItem[] = [
   },
   {
     key: 'custom',
-    label: '커스텀',
-    accessibilityLabel: '커스텀 화면으로 이동',
+    label: '추천',
+    accessibilityLabel: '추천 제품 화면으로 이동',
     icon: color => <BrushFooterIcon color={color} />,
   },
 ];

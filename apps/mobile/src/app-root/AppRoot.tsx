@@ -47,6 +47,7 @@ import {MyPageScreen, ProfileEditScreen, UserPageScreen} from '../features/profi
 import {
   LikedProductListScreen,
   MakeupStyleListScreen,
+  ProductRecommendationScreen,
 } from '../features/recommendation';
 import {colors, typography} from '../shared/theme';
 import type {MakeupStylePreview} from '../shared/types/userPage';
@@ -143,6 +144,8 @@ export function AppRoot() {
       id: 'saved-extracted-makeup-look',
       imageSource: photo.imageSource,
       isSaved: true,
+      moodLabel: result.tags.slice(0, 2).join(' '),
+      shortDescription: result.subtitle,
       title: result.title,
     });
     setActiveScreen('filterSaved');
@@ -244,15 +247,15 @@ export function AppRoot() {
     if (activeScreen === 'userPage') {
       return (
         <UserPageScreen
-          onPressReports={() => setActiveScreen('analysisResults')}
-          savedMakeupStyle={savedMakeupStyle}
           onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
           onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
+          onPressProductRecommendations={() => setActiveScreen('custom')}
           onPressReport={(resultId) =>
             goToAnalysisReportDetail(resultId, 'userPage')
           }
           onPressReports={() => setActiveScreen('analysisResultList')}
           onPressSettings={() => setActiveScreen('profileEdit')}
+          savedMakeupStyle={savedMakeupStyle}
         />
       );
     }
@@ -266,7 +269,9 @@ export function AppRoot() {
           onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
           onPressLikedProductList={() => setActiveScreen('likedProductList')}
           onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
+          onPressProductRecommendations={() => setActiveScreen('custom')}
           onPressProfileEdit={() => setActiveScreen('profileEdit')}
+          savedMakeupStyle={savedMakeupStyle}
         />
       );
     }
@@ -474,7 +479,6 @@ export function AppRoot() {
         <AppShell
           activeTab={activeScreen}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
-          onProfilePress={() => setActiveScreen('userPage')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
         />
@@ -517,11 +521,17 @@ function AppShell({
 
   return (
     <YStack style={styles.screen}>
-      <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
+      <AppHeader
+        subtitle={activeTab === 'custom' ? 'AI PRODUCT MATCH' : 'MAKEUP GUIDE'}
+        title={activeTab === 'custom' ? '추천 제품' : 'AI AR Makeup'}
+        topInset={insets.top}
+        onProfilePress={onProfilePress}
+      />
       <YStack style={styles.body}>
         {activeTab === 'home' ? (
           <HomeScreen onPressCreateFilter={onCreateFilterPress} />
         ) : null}
+        {activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
       </YStack>
       <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
     </YStack>

@@ -7,6 +7,7 @@ type UserPageScreenProps = {
   onPressReports?: () => void;
   onPressMakeupStyles?: () => void;
   onPressFavoriteProducts?: () => void;
+  onPressProductRecommendations?: () => void;
   savedMakeupStyle?: MakeupStylePreview | null;
 };
 
@@ -16,6 +17,7 @@ export function UserPageScreen({
   onPressReports,
   onPressMakeupStyles,
   onPressFavoriteProducts,
+  onPressProductRecommendations,
   savedMakeupStyle,
 }: UserPageScreenProps) {
   return (
@@ -24,6 +26,7 @@ export function UserPageScreen({
       onPressAnalysisResultList={onPressReports}
       onPressLikedProductList={onPressFavoriteProducts}
       onPressMakeupStyleList={onPressMakeupStyles}
+      onPressProductRecommendations={onPressProductRecommendations}
       onPressProfileEdit={onPressSettings}
       savedMakeupStyle={savedMakeupStyle}
     />
