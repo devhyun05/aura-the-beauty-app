@@ -42,6 +42,13 @@ export interface Product {
 
 export type FavoriteProductPreview = Product;
 
+export interface ProfileEditField {
+  id: string;
+  label: string;
+  value: string;
+  editable: boolean;
+}
+
 export interface UserPageData {
   profile: UserProfile;
   reports: AnalysisReportPreview[];

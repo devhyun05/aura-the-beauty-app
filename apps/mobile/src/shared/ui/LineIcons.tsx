@@ -202,6 +202,15 @@ export function XIcon({color = colors.textPrimary, size = 18}: IconProps) {
   );
 }
 
+export function PencilIcon({color = colors.textPrimary}: IconProps) {
+  return (
+    <View pointerEvents="none" style={styles.pencilRoot}>
+      <View style={[styles.pencilBody, {borderColor: color}]} />
+      <View style={[styles.pencilTip, {backgroundColor: color}]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bookmarkBottom: {
     borderRadius: 1.5,
@@ -333,6 +342,30 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     position: 'absolute',
     transform: [{rotate: '45deg'}],
+  },
+  pencilBody: {
+    borderRadius: 3,
+    borderWidth: 2,
+    height: 7,
+    left: 4,
+    position: 'absolute',
+    top: 8,
+    transform: [{rotate: '-45deg'}],
+    width: 17,
+  },
+  pencilRoot: {
+    height: 24,
+    position: 'relative',
+    width: 24,
+  },
+  pencilTip: {
+    borderRadius: 1,
+    height: 6,
+    left: 3,
+    position: 'absolute',
+    top: 16,
+    transform: [{rotate: '-45deg'}],
+    width: 2,
   },
   xLine: {
     borderRadius: 2,
