@@ -11,6 +11,7 @@ import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScr
 import {
   FavoriteProductsScreen,
   MakeupLookScreen,
+  ProfileEditScreen,
   UserPageScreen,
 } from '../features/profile';
 
@@ -20,6 +21,7 @@ type AppScreen =
   | 'userPage'
   | 'makeupLooks'
   | 'favoriteProducts'
+  | 'profileEdit'
   | 'analysisResults'
   | 'analysisResultDetail';
 type DetailBackScreen = 'userPage' | 'analysisResults';
@@ -64,6 +66,7 @@ export function AppRoot() {
           ) : null}
           {activeScreen === 'userPage' ? (
             <UserPageScreen
+              onPressSettings={() => setActiveScreen('profileEdit')}
               onPressMakeupStyles={() => setActiveScreen('makeupLooks')}
               onPressFavoriteProducts={() =>
                 setActiveScreen('favoriteProducts')
@@ -73,6 +76,9 @@ export function AppRoot() {
               }
               onPressReports={() => setActiveScreen('analysisResults')}
             />
+          ) : null}
+          {activeScreen === 'profileEdit' ? (
+            <ProfileEditScreen onBack={() => setActiveScreen('userPage')} />
           ) : null}
           {activeScreen === 'makeupLooks' ? (
             <MakeupLookScreen onBack={() => setActiveScreen('userPage')} />

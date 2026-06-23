@@ -50,7 +50,12 @@ export const userPageMock: UserPageData = {
   profile: {
     id: 'user-seojin',
     name: '서진',
+    nickname: '여두치',
+    phone: '010-2342-1212',
     email: 'seojin@email.com',
+    birthDate: '2003-06-23',
+    gender: '여성',
+    interest: '데일리',
     avatarSource: profileAvatar,
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',

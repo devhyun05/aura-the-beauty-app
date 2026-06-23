@@ -3,6 +3,7 @@ import type {
   FavoriteProductPreview,
   MakeupStylePreview,
   UserPageData,
+  UserProfile,
 } from '../types/userPage';
 import { getRecentAnalysisResults } from './analysisResultService';
 
@@ -23,4 +24,8 @@ export const getFavoriteProducts = async (): Promise<
   FavoriteProductPreview[]
 > => {
   return userPageMock.favoriteProducts;
+};
+
+export const getUserProfile = async (): Promise<UserProfile> => {
+  return userPageMock.profile;
 };
