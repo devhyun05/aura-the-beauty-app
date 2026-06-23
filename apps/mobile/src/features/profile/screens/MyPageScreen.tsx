@@ -1,23 +1,28 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, useWindowDimensions } from 'react-native';
-import { Text, View } from 'tamagui';
+import {useEffect, useState} from 'react';
+import {StyleSheet, useWindowDimensions} from 'react-native';
+import {Text, View} from 'tamagui';
 
-import type { AnalysisResult } from '../../../shared/types/analysis';
-import type { MakeupLook, Product, UserProfile } from '../../../shared/types/userPage';
-import { getLatestAnalysisResult } from '../../../shared/services/analysisService';
-import { getMakeupLookPreview } from '../../../shared/services/makeupService';
-import { getLikedProductPreview } from '../../../shared/services/productService';
-import { getUserProfile } from '../../../shared/services/userService';
-import { colors, spacing, typography } from '../../../shared/theme';
-import { AppHeader, AppScreen, SectionHeader } from '../../../shared/ui';
-import { AnalysisSummaryCard } from '../components/AnalysisSummaryCard';
-import { MakeupLookCard } from '../components/MakeupLookCard';
-import { ProductCard } from '../components/ProductCard';
-import { ProfileSummaryCard } from '../components/ProfileSummaryCard';
+import {getLatestAnalysisResult} from '../../../shared/services/analysisService';
+import {getMakeupLookPreview} from '../../../shared/services/makeupService';
+import {getLikedProductPreview} from '../../../shared/services/productService';
+import {getUserProfile} from '../../../shared/services/userService';
+import {colors, spacing, typography} from '../../../shared/theme';
+import type {AnalysisResult} from '../../../shared/types/analysis';
+import type {
+  MakeupLook,
+  Product,
+  UserProfile,
+} from '../../../shared/types/userPage';
+import {AppHeader, AppScreen, SectionHeader} from '../../../shared/ui';
+import {AnalysisSummaryCard} from '../components/AnalysisSummaryCard';
+import {MakeupLookCard} from '../components/MakeupLookCard';
+import {ProductCard} from '../components/ProductCard';
+import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
 
 type MyPageScreenProps = {
   onPressProfileEdit?: () => void;
   onPressAnalysisResult?: (resultId: string) => void;
+  onPressAnalysisResultList?: () => void;
   onPressMakeupStyleList?: () => void;
   onPressLikedProductList?: () => void;
 };
@@ -32,10 +37,11 @@ type MyPageData = {
 export function MyPageScreen({
   onPressProfileEdit,
   onPressAnalysisResult,
+  onPressAnalysisResultList,
   onPressMakeupStyleList,
   onPressLikedProductList,
 }: MyPageScreenProps) {
-  const { width } = useWindowDimensions();
+  const {width} = useWindowDimensions();
   const [data, setData] = useState<MyPageData | null>(null);
   const contentWidth = width - spacing.screenX * 2;
   const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
@@ -88,7 +94,11 @@ export function MyPageScreen({
       />
 
       <View style={styles.section}>
-        <SectionHeader title="분석 결과" />
+        <SectionHeader
+          actionLabel="전체 보기"
+          onPressAction={onPressAnalysisResultList}
+          title="분석 결과"
+        />
         {analysisResult ? (
           <AnalysisSummaryCard
             onPress={() => onPressAnalysisResult?.(analysisResult.id)}
@@ -110,7 +120,7 @@ export function MyPageScreen({
             <MakeupLookCard
               key={look.id}
               look={look}
-              style={{ width: lookCardWidth }}
+              style={{width: lookCardWidth}}
             />
           ))}
         </View>
@@ -127,7 +137,7 @@ export function MyPageScreen({
             <ProductCard
               key={product.id}
               product={product}
-              style={{ width: productCardWidth }}
+              style={{width: productCardWidth}}
             />
           ))}
         </View>
@@ -136,7 +146,7 @@ export function MyPageScreen({
   );
 }
 
-function EmptySection({ label }: { label: string }) {
+function EmptySection({label}: {label: string}) {
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyText}>{label}</Text>
@@ -150,8 +160,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 18,
     borderWidth: 1,
-    minHeight: 104,
     justifyContent: 'center',
+    minHeight: 104,
     padding: spacing.lg,
   },
   emptyText: {

@@ -64,6 +64,9 @@ export function AppRoot() {
               onPressAnalysisResult={() =>
                 setActiveScreen('analysisReportDetail')
               }
+              onPressAnalysisResultList={() =>
+                setActiveScreen('analysisResultList')
+              }
               onPressLikedProductList={() =>
                 setActiveScreen('likedProductList')
               }

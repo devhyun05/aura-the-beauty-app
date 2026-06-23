@@ -11,12 +11,14 @@ type UserPageScreenProps = {
 export function UserPageScreen({
   onPressSettings,
   onPressReport,
+  onPressReports,
   onPressMakeupStyles,
   onPressFavoriteProducts,
 }: UserPageScreenProps) {
   return (
     <MyPageScreen
       onPressAnalysisResult={onPressReport}
+      onPressAnalysisResultList={onPressReports}
       onPressLikedProductList={onPressFavoriteProducts}
       onPressMakeupStyleList={onPressMakeupStyles}
       onPressProfileEdit={onPressSettings}
