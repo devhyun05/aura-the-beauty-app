@@ -96,6 +96,12 @@ export function ARMakeupFilterScreen({
   const selectedComparison =
     arGuideData.comparisonModes.find(mode => mode.id === selectedComparisonMode) ??
     arGuideData.comparisonModes[0];
+  const shouldShowLeftCheekOverlay =
+    guideMode !== 'half' || selectedComparisonMode === 'left';
+  const shouldShowRightCheekOverlay =
+    guideMode !== 'half' || selectedComparisonMode !== 'left';
+  const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
+  const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 
   return (
     <View style={styles.screen}>
@@ -167,8 +173,12 @@ export function ARMakeupFilterScreen({
           />
           <View style={styles.previewDim} />
           <View style={[styles.eyeOverlay, {backgroundColor: selectedColor.hex}]} />
-          <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
-          <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
+          {shouldShowLeftCheekOverlay ? (
+            <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
+          ) : null}
+          {shouldShowRightCheekOverlay ? (
+            <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
+          ) : null}
           <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
           {guideMode === 'half' ? (
             <>
@@ -184,10 +194,10 @@ export function ARMakeupFilterScreen({
               ) : null}
               <View style={styles.comparisonDivider} />
               <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
-                Before
+                {leftComparisonLabel}
               </Text>
               <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
-                After
+                {rightComparisonLabel}
               </Text>
             </>
           ) : null}
