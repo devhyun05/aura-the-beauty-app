@@ -30,6 +30,12 @@ export function MakeupRecommendationResultScreen({
 }: MakeupRecommendationResultScreenProps) {
   const insets = useSafeAreaInsets();
   const primaryLook = result.recommendedLooks[0];
+  const analysisHeadline = `${result.analysis.skinTone.label} · ${result.analysis.mood.label}`;
+  const analysisTags = [
+    result.analysis.skinTone.label,
+    result.analysis.mood.label,
+    result.analysis.faceBalance.label,
+  ] as const;
 
   return (
     <View style={styles.screen}>
@@ -46,12 +52,12 @@ export function MakeupRecommendationResultScreen({
         </Button>
 
         <Text numberOfLines={1} style={styles.headerTitle}>
-          맞춤 필터 생성
+          얼굴 분석 결과
         </Text>
 
         <XStack style={styles.headerActions}>
           <Button
-            accessibilityLabel="생성 필터 결과 저장"
+            accessibilityLabel="얼굴 분석 결과 저장"
             accessibilityRole="button"
             hitSlop={8}
             onPress={onSave}
@@ -61,7 +67,7 @@ export function MakeupRecommendationResultScreen({
             <Bookmark color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
           </Button>
           <Button
-            accessibilityLabel="생성 필터 결과 공유"
+            accessibilityLabel="얼굴 분석 결과 공유"
             accessibilityRole="button"
             hitSlop={8}
             onPress={onShare}
@@ -88,17 +94,17 @@ export function MakeupRecommendationResultScreen({
           />
           <YStack style={styles.matchBadge}>
             <Text style={styles.matchValue}>{primaryLook.matchScore}%</Text>
-            <Text style={styles.matchLabel}>MATCH</Text>
+            <Text style={styles.matchLabel}>분석</Text>
           </YStack>
         </View>
 
         <YStack style={styles.resultCard}>
-          <Text style={styles.cardKicker}>AI 생성 AR 필터</Text>
-          <Text style={styles.resultTitle}>{primaryLook.title}</Text>
+          <Text style={styles.cardKicker}>AI 얼굴 분석</Text>
+          <Text style={styles.resultTitle}>{analysisHeadline}</Text>
           <Text style={styles.resultBody}>{result.summary}</Text>
 
           <XStack style={styles.tagList}>
-            {primaryLook.tags.map(tag => (
+            {analysisTags.map(tag => (
               <Text key={tag} style={styles.tagText}>
                 {tag}
               </Text>
@@ -106,7 +112,7 @@ export function MakeupRecommendationResultScreen({
           </XStack>
 
           <YStack style={styles.paletteBlock}>
-            <Text style={styles.smallLabel}>컬러 팔레트</Text>
+            <Text style={styles.smallLabel}>어울리는 컬러 팔레트</Text>
             <XStack style={styles.swatchList}>
               {primaryLook.keyColors.map(color => (
                 <View
@@ -119,19 +125,19 @@ export function MakeupRecommendationResultScreen({
           </YStack>
 
           <Button
-            accessibilityLabel="AR 가이드 시작하기"
+            accessibilityLabel="맞춤 AR 필터 만들기"
             accessibilityRole="button"
             onPress={onStartARGuide}
             pressStyle={{scale: 0.98}}
             style={styles.primaryButton}
             unstyled>
             <Play color={colors.white} fill={colors.white} size={iconSize.xs} strokeWidth={2} />
-            <Text style={styles.primaryButtonText}>AR 필터 적용하기</Text>
+            <Text style={styles.primaryButtonText}>맞춤 AR 필터 만들기</Text>
           </Button>
         </YStack>
 
         <YStack style={styles.section}>
-          <Text style={styles.sectionTitle}>AI 분석 요약</Text>
+          <Text style={styles.sectionTitle}>세부 분석 결과</Text>
           <YStack style={styles.summaryList}>
             <AnalysisRow title="피부 톤" attribute={result.analysis.skinTone} />
             <AnalysisRow title="분위기" attribute={result.analysis.mood} />
@@ -140,7 +146,7 @@ export function MakeupRecommendationResultScreen({
         </YStack>
 
         <YStack style={styles.section}>
-          <Text style={styles.sectionTitle}>필터 생성 기준</Text>
+          <Text style={styles.sectionTitle}>얼굴 특징 기반 포인트</Text>
           <YStack style={styles.pointCard}>
             {result.recommendationPoints.map(point => (
               <PointText key={point} text={point} />
@@ -150,7 +156,7 @@ export function MakeupRecommendationResultScreen({
 
         <YStack style={styles.section}>
           <XStack style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>생성된 필터</Text>
+            <Text style={styles.sectionTitle}>어울리는 메이크업 방향</Text>
             <Text style={styles.sectionMeta}>{result.recommendedLooks.length}개</Text>
           </XStack>
           <ScrollView
