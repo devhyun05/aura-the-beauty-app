@@ -45,7 +45,7 @@ export function MyPageScreen({
   const [data, setData] = useState<MyPageData | null>(null);
   const contentWidth = width - spacing.screenX * 2;
   const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
-  const productCardWidth = Math.floor((contentWidth - spacing.md * 2) / 3);
+  const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const lookCardStyle = {
     flexBasis: lookCardWidth,
     maxWidth: lookCardWidth,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   productGrid: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   section: {
     gap: spacing.md,

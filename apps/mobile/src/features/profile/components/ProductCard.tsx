@@ -22,8 +22,8 @@ export function ProductCard({product, style}: ProductCardProps) {
           source={product.imageSource}
         />
 
-        <View style={styles.heart}>
-          <HeartIcon />
+        <View style={styles.heartBadge}>
+          <HeartIcon size={16} />
         </View>
       </View>
 
@@ -53,16 +53,25 @@ const styles = StyleSheet.create({
     minWidth: 0,
     overflow: 'hidden',
   },
-  heart: {
+  heartBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
     position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
+    right: 6,
+    top: 6,
+    width: 28,
   },
   imageArea: {
-    aspectRatio: 1,
+    aspectRatio: 0.86,
     backgroundColor: colors.surface,
     overflow: 'hidden',
-    padding: spacing.sm,
+    paddingHorizontal: 5,
+    paddingVertical: 6,
     position: 'relative',
   },
   name: {
@@ -70,18 +79,18 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.regular,
     lineHeight: typography.lineHeight.xs,
-    minHeight: typography.lineHeight.xs * 2,
+    minHeight: typography.lineHeight.xs,
   },
   price: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.md,
+    lineHeight: typography.lineHeight.sm,
   },
   textArea: {
-    gap: spacing.xs,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
+    gap: 2,
+    paddingBottom: 7,
+    paddingHorizontal: 8,
+    paddingTop: 6,
   },
 });

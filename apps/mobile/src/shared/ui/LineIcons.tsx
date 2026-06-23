@@ -118,8 +118,8 @@ export function HeartIcon({
   size = 22,
 }: IconProps) {
   const fillColor = filled ? color : colors.white;
-  const circleSize = size * 0.56;
-  const diamondSize = size * 0.58;
+  const circleSize = size * 0.5;
+  const diamondSize = size * 0.48;
 
   return (
     <View pointerEvents="none" style={{height: size, width: size}}>
@@ -131,7 +131,7 @@ export function HeartIcon({
             borderColor: color,
             borderWidth: filled ? 0 : 1.6,
             height: circleSize,
-            left: size * 0.08,
+            left: size * 0.14,
             top: size * 0.15,
             width: circleSize,
           },
@@ -145,7 +145,7 @@ export function HeartIcon({
             borderColor: color,
             borderWidth: filled ? 0 : 1.6,
             height: circleSize,
-            right: size * 0.08,
+            right: size * 0.14,
             top: size * 0.15,
             width: circleSize,
           },
@@ -159,8 +159,8 @@ export function HeartIcon({
             borderColor: color,
             borderWidth: filled ? 0 : 1.6,
             height: diamondSize,
-            left: size * 0.21,
-            top: size * 0.38,
+            left: size * 0.26,
+            top: size * 0.39,
             width: diamondSize,
           },
         ]}
