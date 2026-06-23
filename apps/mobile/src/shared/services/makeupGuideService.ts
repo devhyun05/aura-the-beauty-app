@@ -1,22 +1,10 @@
-import {mockARMakeupGuideData, mockRecommendationResult} from '../mocks/makeupGuide.mock';
+import {mockARMakeupGuideData} from '../mocks/makeupGuide.mock';
 import type {
   ARMakeupGuideData,
   ComparisonModeOption,
   FilterCategoryId,
   MakeupFilter,
-  MakeupLook,
-  RecommendationResult,
 } from '../types/makeupGuide';
-
-export function getMockRecommendationResult(): RecommendationResult {
-  return mockRecommendationResult;
-}
-
-export function getPrimaryRecommendedLook(
-  result: RecommendationResult = mockRecommendationResult,
-): MakeupLook {
-  return result.recommendedLooks[0];
-}
 
 export function getMockARMakeupGuideData(): ARMakeupGuideData {
   return mockARMakeupGuideData;

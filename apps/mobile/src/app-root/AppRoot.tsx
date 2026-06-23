@@ -9,14 +9,14 @@ import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLo
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
-import {MakeupRecommendationResultScreen} from '../features/recommendation/screens/MakeupRecommendationResultScreen';
+import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {typography} from '../shared/theme';
 
 type AppScreen =
   | 'login'
   | 'faceCapture'
   | 'analysisLoading'
-  | 'recommendationResult'
+  | 'facialAnalysisResult'
   | 'arMakeupFilter';
 
 export function AppRoot() {
@@ -51,14 +51,14 @@ export function AppRoot() {
       return (
         <AIAnalysisLoadingScreen
           onBack={() => setActiveScreen('faceCapture')}
-          onComplete={() => setActiveScreen('recommendationResult')}
+          onComplete={() => setActiveScreen('facialAnalysisResult')}
         />
       );
     }
 
-    if (activeScreen === 'recommendationResult') {
+    if (activeScreen === 'facialAnalysisResult') {
       return (
-        <MakeupRecommendationResultScreen
+        <FacialAnalysisResultScreen
           onBack={() => setActiveScreen('analysisLoading')}
           onStartARGuide={() => setActiveScreen('arMakeupFilter')}
         />
@@ -68,7 +68,7 @@ export function AppRoot() {
     return (
       <ARMakeupFilterScreen
         initialGuideMode="basic"
-        onBack={() => setActiveScreen('recommendationResult')}
+        onBack={() => setActiveScreen('facialAnalysisResult')}
         onOpenLocationAdjust={() => undefined}
         onOpenStyleAdjust={() => undefined}
       />
