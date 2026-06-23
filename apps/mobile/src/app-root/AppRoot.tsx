@@ -1,23 +1,35 @@
 import React, {useState} from 'react';
 import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
-import {SafeAreaProvider} from 'react-native-safe-area-context';
-import {TamaguiProvider} from 'tamagui';
+import {StyleSheet} from 'react-native';
+import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
+import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
+import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {HomeScreen} from '../features/home';
+import {TutorialIntroScreen} from '../features/onboarding';
+import {UserPageScreen} from '../features/profile';
 import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
-import {typography} from '../shared/theme';
+import {colors, typography} from '../shared/theme';
+import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
 type AppScreen =
   | 'login'
+  | 'tutorial'
+  | 'home'
   | 'faceCapture'
   | 'analysisLoading'
   | 'facialAnalysisResult'
-  | 'arMakeupFilter';
+  | 'arMakeupFilter'
+  | 'custom'
+  | 'userPage'
+  | 'analysisResults';
+type ShellTab = Exclude<FooterTabKey, 'capture'>;
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
@@ -33,62 +45,110 @@ export function AppRoot() {
     return null;
   }
 
-  const renderActiveScreen = () => {
-    if (activeScreen === 'login') {
-      return <LoginScreen onLoginSuccess={() => setActiveScreen('faceCapture')} />;
+  const handleFooterTabPress = (tab: FooterTabKey) => {
+    if (tab === 'capture') {
+      setActiveScreen('faceCapture');
+      return;
     }
 
-    if (activeScreen === 'faceCapture') {
-      return (
-        <FaceCaptureScreen
-          onCapture={() => setActiveScreen('analysisLoading')}
-          onClose={() => setActiveScreen('login')}
-        />
-      );
-    }
-
-    if (activeScreen === 'analysisLoading') {
-      return (
-        <AIAnalysisLoadingScreen
-          onBack={() => setActiveScreen('faceCapture')}
-          onComplete={() => setActiveScreen('facialAnalysisResult')}
-        />
-      );
-    }
-
-    if (activeScreen === 'facialAnalysisResult') {
-      return (
-        <FacialAnalysisResultScreen
-          onBack={() => setActiveScreen('analysisLoading')}
-          onStartARGuide={() => setActiveScreen('arMakeupFilter')}
-        />
-      );
-    }
-
-    return (
-      <ARMakeupFilterScreen
-        initialGuideMode="basic"
-        onBack={() => setActiveScreen('facialAnalysisResult')}
-        onOpenLocationAdjust={() => undefined}
-        onOpenStyleAdjust={() => undefined}
-      />
-    );
+    setActiveScreen(tab);
   };
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <>
-          <StatusBar
-            style={
-              activeScreen === 'faceCapture' || activeScreen === 'arMakeupFilter'
-                ? 'light'
-                : 'dark'
-            }
+        {activeScreen === 'login' ? (
+          <>
+            <StatusBar style="dark" />
+            <LoginScreen onLoginSuccess={() => setActiveScreen('tutorial')} />
+          </>
+        ) : activeScreen === 'tutorial' ? (
+          <>
+            <StatusBar style="dark" />
+            <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />
+          </>
+        ) : activeScreen === 'faceCapture' ? (
+          <FaceCaptureScreen
+            onCapture={() => setActiveScreen('analysisLoading')}
+            onClose={() => setActiveScreen('home')}
           />
-          {renderActiveScreen()}
-        </>
+        ) : activeScreen === 'analysisLoading' ? (
+          <>
+            <StatusBar style="dark" />
+            <AIAnalysisLoadingScreen
+              onBack={() => setActiveScreen('faceCapture')}
+              onComplete={() => setActiveScreen('facialAnalysisResult')}
+            />
+          </>
+        ) : activeScreen === 'facialAnalysisResult' ? (
+          <>
+            <StatusBar style="dark" />
+            <FacialAnalysisResultScreen
+              onBack={() => setActiveScreen('analysisLoading')}
+              onStartARGuide={() => setActiveScreen('arMakeupFilter')}
+            />
+          </>
+        ) : activeScreen === 'arMakeupFilter' ? (
+          <>
+            <StatusBar style="light" />
+            <ARMakeupFilterScreen
+              initialGuideMode="basic"
+              onBack={() => setActiveScreen('facialAnalysisResult')}
+              onOpenLocationAdjust={() => undefined}
+              onOpenStyleAdjust={() => undefined}
+            />
+          </>
+        ) : activeScreen === 'userPage' ? (
+          <>
+            <StatusBar style="dark" />
+            <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />
+          </>
+        ) : activeScreen === 'analysisResults' ? (
+          <>
+            <StatusBar style="dark" />
+            <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
+          </>
+        ) : (
+          <AppShell
+            activeTab={activeScreen}
+            onProfilePress={() => setActiveScreen('userPage')}
+            onTabPress={handleFooterTabPress}
+          />
+        )}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
+
+function AppShell({
+  activeTab,
+  onProfilePress,
+  onTabPress,
+}: {
+  activeTab: ShellTab;
+  onProfilePress: () => void;
+  onTabPress: (tab: FooterTabKey) => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <YStack style={styles.screen}>
+      <StatusBar style="dark" />
+      <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
+      <YStack style={styles.body}>
+        {activeTab === 'home' ? <HomeScreen /> : null}
+      </YStack>
+      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+    </YStack>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  body: {
+    flex: 1,
+  },
+});

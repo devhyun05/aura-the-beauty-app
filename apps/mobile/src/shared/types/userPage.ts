@@ -1,5 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
+import type { AnalysisResult } from './analysis';
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -10,15 +12,7 @@ export interface UserProfile {
   skinTone: string;
 }
 
-export interface AnalysisReportPreview {
-  id: string;
-  analyzedAt: string;
-  title: string;
-  imageSource: ImageSourcePropType;
-  personalColor: string;
-  skinType: string;
-  summary: string;
-}
+export type AnalysisReportPreview = AnalysisResult;
 
 export interface MakeupStylePreview {
   id: string;
