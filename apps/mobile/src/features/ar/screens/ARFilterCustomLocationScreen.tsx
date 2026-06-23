@@ -1,10 +1,13 @@
 import React, {useState} from 'react';
-import {StyleSheet} from 'react-native';
+import {Image, StyleSheet} from 'react-native';
 import {ChevronLeft, Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {getMockARMakeupGuideData} from '../../../shared/services/makeupGuideService';
+import {
+  getDefaultMakeupFilter,
+  getMockARMakeupGuideData,
+} from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {FacePartId} from '../../../shared/types/makeupGuide';
 import {
@@ -35,6 +38,7 @@ export function ARFilterCustomLocationScreen({
 }: ARFilterCustomLocationScreenProps) {
   const insets = useSafeAreaInsets();
   const arGuideData = getMockARMakeupGuideData();
+  const filter = getDefaultMakeupFilter(arGuideData);
   const [locationState, setLocationState] = useState<FilterLocationState>(
     getMockFilterLocationState(),
   );
@@ -127,7 +131,8 @@ export function ARFilterCustomLocationScreen({
 
       <YStack style={styles.previewSection}>
         <View style={styles.previewFrame}>
-          <View style={styles.faceShape} />
+          <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
+          <View style={styles.previewDim} />
           <View
             style={[
               styles.filterLayer,
@@ -160,26 +165,26 @@ export function ARFilterCustomLocationScreen({
                 />
               ))
             : null}
-        </View>
 
-        <XStack style={styles.quickActions}>
-          <ActionPill
-            icon={<RotateCcw color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
-            label="되돌리기"
-            onPress={handleReset}
-          />
-          <ActionPill
-            icon={
-              locationState.isOverlayVisible ? (
-                <EyeOff color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-              ) : (
-                <Eye color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-              )
-            }
-            label={locationState.isOverlayVisible ? '숨김' : '보기'}
-            onPress={toggleOverlay}
-          />
-        </XStack>
+          <XStack style={styles.quickActions}>
+            <ActionPill
+              icon={<RotateCcw color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
+              label="되돌리기"
+              onPress={handleReset}
+            />
+            <ActionPill
+              icon={
+                locationState.isOverlayVisible ? (
+                  <EyeOff color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
+                ) : (
+                  <Eye color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
+                )
+              }
+              label={locationState.isOverlayVisible ? '숨김' : '보기'}
+              onPress={toggleOverlay}
+            />
+          </XStack>
+        </View>
       </YStack>
 
       <YStack style={[styles.controlPanel, {paddingBottom: insets.bottom + spacing.lg}]}>
@@ -396,24 +401,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   previewFrame: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: radius.lg,
     height: 310,
     justifyContent: 'center',
     overflow: 'hidden',
     width: '100%',
   },
-  faceShape: {
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 210,
-    opacity: 0.85,
-    transform: [{scaleY: 1.16}],
-    width: 154,
+  previewImage: {
+    height: '100%',
+    transform: [{scale: 1.2}],
+    width: '100%',
+  },
+  previewDim: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    opacity: 0.1,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   filterLayer: {
     alignItems: 'center',
@@ -461,8 +472,10 @@ const styles = StyleSheet.create({
     width: spacing.md,
   },
   quickActions: {
+    bottom: spacing.md,
     gap: spacing.sm,
-    marginTop: spacing.md,
+    position: 'absolute',
+    right: spacing.md,
   },
   actionPill: {
     alignItems: 'center',
@@ -486,11 +499,15 @@ const styles = StyleSheet.create({
   },
   controlPanel: {
     backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     gap: spacing.lg,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: {width: 0, height: -6},
+    shadowOpacity: shadows.soft.shadowOpacity,
+    shadowRadius: shadows.soft.shadowRadius,
   },
   panelSection: {
     gap: spacing.sm,
