@@ -34,7 +34,7 @@ export const mockRecommendationResult: RecommendationResult = {
   recommendationPoints: [
     '베이스는 세미 글로우로 얇게 정리',
     '아이 메이크업은 그레이 브라운 음영 위주',
-    '립은 뉴트럴 로즈나 말린 장미 계열 추천',
+    '립은 뉴트럴 로즈와 말린 장미 계열로 생성',
   ],
   cautionPoints: [
     '매트 베이스를 두껍게 올리면 피부 결이 답답해 보일 수 있어요.',
