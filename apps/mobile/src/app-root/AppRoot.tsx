@@ -9,12 +9,14 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {AnalysisResultsScreen} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {TutorialIntroScreen} from '../features/onboarding';
 import {UserPageScreen} from '../features/profile';
 import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
 type AppScreen =
   | 'login'
+  | 'tutorial'
   | 'home'
   | 'faceCapture'
   | 'custom'
@@ -47,31 +49,34 @@ export function AppRoot() {
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-{activeScreen === 'login' ? (
-  <>
-    <StatusBar style="dark" />
-    <LoginScreen onLoginSuccess={() => setActiveScreen('home')} />
-  </>
-) : activeScreen === 'faceCapture' ? (
-  <FaceCaptureScreen
-    onCapture={() => setActiveScreen('userPage')}
-    onClose={() => setActiveScreen('home')}
-  />
-) : activeScreen === 'userPage' ? (
-  <>
-    <StatusBar style="dark" />
-    <UserPageScreen
-      onPressReports={() => setActiveScreen('analysisResults')}
-    />
-  </>
-) : activeScreen === 'analysisResults' ? (
-  <>
-    <StatusBar style="dark" />
-    <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
-  </>
-) : (
-  <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
-)}
+        {activeScreen === 'login' ? (
+          <>
+            <StatusBar style="dark" />
+            <LoginScreen onLoginSuccess={() => setActiveScreen('tutorial')} />
+          </>
+        ) : activeScreen === 'tutorial' ? (
+          <>
+            <StatusBar style="dark" />
+            <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />
+          </>
+        ) : activeScreen === 'faceCapture' ? (
+          <FaceCaptureScreen
+            onCapture={() => setActiveScreen('userPage')}
+            onClose={() => setActiveScreen('home')}
+          />
+        ) : activeScreen === 'userPage' ? (
+          <>
+            <StatusBar style="dark" />
+            <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />
+          </>
+        ) : activeScreen === 'analysisResults' ? (
+          <>
+            <StatusBar style="dark" />
+            <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
+          </>
+        ) : (
+          <AppShell activeTab={activeScreen} onTabPress={handleFooterTabPress} />
+        )}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
@@ -81,7 +86,10 @@ function AppShell({
   activeTab,
   onTabPress,
 }: {
-  activeTab: Exclude<AppScreen, 'login' | 'faceCapture'>;
+  activeTab: Exclude<
+    AppScreen,
+    'login' | 'tutorial' | 'faceCapture' | 'userPage' | 'analysisResults'
+  >;
   onTabPress: (tab: FooterTabKey) => void;
 }) {
   const insets = useSafeAreaInsets();
