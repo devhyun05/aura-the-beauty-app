@@ -1,9 +1,9 @@
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Text, View } from 'tamagui';
+import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
+import {Text, View} from 'tamagui';
 
-import { colors, radius, spacing, typography } from '../../../shared/theme';
-import { AppCard, HeartIcon, ImagePlaceholder } from '../../../shared/ui';
-import type { Product } from '../../../shared/types/userPage';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {AppCard, HeartIcon, ImagePlaceholder} from '../../../shared/ui';
+import type {Product} from '../../../shared/types/userPage';
 
 type ProductCardProps = {
   product: Product;
@@ -12,7 +12,7 @@ type ProductCardProps = {
 
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
 
-export function ProductCard({ product, style }: ProductCardProps) {
+export function ProductCard({product, style}: ProductCardProps) {
   return (
     <AppCard padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>

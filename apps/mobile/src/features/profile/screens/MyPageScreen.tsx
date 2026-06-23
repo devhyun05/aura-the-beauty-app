@@ -46,6 +46,16 @@ export function MyPageScreen({
   const contentWidth = width - spacing.screenX * 2;
   const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const productCardWidth = Math.floor((contentWidth - spacing.md * 2) / 3);
+  const lookCardStyle = {
+    flexBasis: lookCardWidth,
+    maxWidth: lookCardWidth,
+    width: lookCardWidth,
+  };
+  const productCardStyle = {
+    flexBasis: productCardWidth,
+    maxWidth: productCardWidth,
+    width: productCardWidth,
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -120,7 +130,7 @@ export function MyPageScreen({
             <MakeupLookCard
               key={look.id}
               look={look}
-              style={{width: lookCardWidth}}
+              style={lookCardStyle}
             />
           ))}
         </View>
@@ -137,7 +147,7 @@ export function MyPageScreen({
             <ProductCard
               key={product.id}
               product={product}
-              style={{width: productCardWidth}}
+              style={productCardStyle}
             />
           ))}
         </View>
