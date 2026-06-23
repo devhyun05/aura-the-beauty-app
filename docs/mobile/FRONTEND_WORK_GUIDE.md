@@ -37,7 +37,7 @@ AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바�
 4. Home Screen
 5. Face Capture Screen
 6. AI Analysis Loading Screen
-7. Makeup Recommendation Result Screen
+7. AI Facial Analysis Result Screen
 8. AR Makeup Guide Screen
 9. Saved Looks Screen
 10. My Page Screen
@@ -193,7 +193,7 @@ shared/mocks/makeup.mock.ts
 → 홈 화면
 → 얼굴 분석/촬영 진입
 → AI 분석 로딩 화면
-→ 추천 결과 화면
+→ AI 얼굴 분석 결과 화면
 → AR 가이드 화면 또는 저장 화면
 ```
 
@@ -206,6 +206,7 @@ shared/mocks/makeup.mock.ts
 - 큰 구조 변경은 팀원에게 먼저 공유합니다.
 - 하루 단위로 실제 동작하는 화면 또는 코드 결과물을 확인합니다.
 - 발표용으로 필요한 화면은 완성도를 우선하고, 내부 로직은 mock으로 대체할 수 있습니다.
+- Codex는 파일을 수정한 뒤 최종 응답에 수정한 파일 경로를 항상 명시합니다.
 
 ## 충돌 방지 규칙
 

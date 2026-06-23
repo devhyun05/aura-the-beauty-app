@@ -1,8 +1,9 @@
 import { Image, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
-import { userPageColors, userPageRadius } from '../../../shared/theme/tokens';
+import { userPageColors } from '../../../shared/theme/tokens';
 import type { FavoriteProductPreview } from '../../../shared/types/userPage';
+import { HeartIcon } from './HeartIcon';
 
 interface FavoriteProductCardProps {
   product: FavoriteProductPreview;
@@ -22,7 +23,11 @@ export const FavoriteProductCard = ({ product }: FavoriteProductCardProps) => {
           style={styles.image}
         />
 
-        <Text style={styles.likeIcon}>{product.isLiked ? '♥' : '♡'}</Text>
+        {product.isLiked ? (
+          <View style={styles.heartBadge}>
+            <HeartIcon />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.textGroup}>
@@ -45,6 +50,19 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
   },
+  heartBadge: {
+    alignItems: 'center',
+    backgroundColor: userPageColors.surface,
+    borderColor: userPageColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    bottom: 8,
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 8,
+    width: 24,
+  },
   image: {
     height: '100%',
     width: '100%',
@@ -56,15 +74,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
-  },
-  likeIcon: {
-    bottom: 8,
-    color: userPageColors.accent,
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 22,
-    position: 'absolute',
-    right: 8,
   },
   price: {
     color: userPageColors.text,

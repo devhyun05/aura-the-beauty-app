@@ -4,9 +4,9 @@ import { Text, View } from 'tamagui';
 import {
   userPageColors,
   userPageRadius,
+  userPageTypography,
 } from '../../../shared/theme/tokens';
 import type { AnalysisReportPreview } from '../../../shared/types/userPage';
-import { ProfileChip } from './ProfileChip';
 
 interface AnalysisReportPreviewCardProps {
   report: AnalysisReportPreview;
@@ -19,30 +19,31 @@ export const AnalysisReportPreviewCard = ({
 }: AnalysisReportPreviewCardProps) => {
   return (
     <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.header}>
-        <View style={styles.titleGroup}>
-          <Text style={styles.title}>{report.title}</Text>
-          <Text style={styles.date}>{report.analyzedAt}</Text>
-        </View>
+      <Image
+        resizeMode="cover"
+        source={report.imageSource}
+        style={styles.thumbnail}
+      />
 
-        <Text style={styles.chevron}>&gt;</Text>
-      </View>
-
-      <View style={styles.content}>
-        <Image
-          resizeMode="cover"
-          source={report.imageSource}
-          style={styles.thumbnail}
-        />
-
-        <View style={styles.details}>
-          <View style={styles.tags}>
-            <ProfileChip label={report.personalColor} />
-            <ProfileChip label={report.skinType} />
+      <View style={styles.details}>
+        <View style={styles.header}>
+          <View style={styles.titleGroup}>
+            <Text style={styles.title}>{report.title}</Text>
+            <Text numberOfLines={1} style={styles.meta}>
+              {report.personalColor} · {report.skinType}
+            </Text>
           </View>
 
-          <Text numberOfLines={2} style={styles.summary}>
-            {report.summary}
+          <ChevronRightIcon />
+        </View>
+
+        <Text numberOfLines={2} style={styles.summary}>
+          {report.shortSummary}
+        </Text>
+
+        <View style={styles.footer}>
+          <Text numberOfLines={1} style={styles.mood}>
+            {report.recommendedMood}
           </Text>
         </View>
       </View>
@@ -50,62 +51,98 @@ export const AnalysisReportPreviewCard = ({
   );
 };
 
+function ChevronRightIcon() {
+  return (
+    <View pointerEvents="none" style={styles.chevronIcon}>
+      <View style={[styles.chevronLine, styles.chevronLineTop]} />
+      <View style={[styles.chevronLine, styles.chevronLineBottom]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
+    borderColor: userPageColors.border,
     borderRadius: userPageRadius.image,
     borderWidth: 1,
-    gap: 12,
-    padding: 16,
-  },
-  chevron: {
-    color: userPageColors.accentMuted,
-    fontSize: 24,
-    lineHeight: 24,
-  },
-  content: {
-    alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 14,
+    padding: 12,
   },
-  date: {
-    color: userPageColors.textSoft,
-    fontSize: 12,
+  chevronIcon: {
+    height: 24,
+    position: 'relative',
+    width: 18,
+  },
+  chevronLine: {
+    backgroundColor: userPageColors.text,
+    borderRadius: 2,
+    height: 2,
+    position: 'absolute',
+    right: 2,
+    width: 10,
+  },
+  chevronLineBottom: {
+    top: 13,
+    transform: [{ rotate: '-45deg' }],
+  },
+  chevronLineTop: {
+    top: 7,
+    transform: [{ rotate: '45deg' }],
   },
   details: {
     flex: 1,
     gap: 9,
     minWidth: 0,
   },
+  footer: {
+    alignSelf: 'flex-start',
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: userPageRadius.chip,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   header: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: 8,
     justifyContent: 'space-between',
+  },
+  meta: {
+    color: userPageColors.textSoft,
+    fontSize: userPageTypography.caption,
+    lineHeight: 16,
+  },
+  mood: {
+    color: userPageColors.text,
+    fontSize: userPageTypography.caption,
+    fontWeight: '700',
+    lineHeight: 16,
   },
   summary: {
     color: userPageColors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
-  tags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   thumbnail: {
-    backgroundColor: userPageColors.background,
-    borderRadius: 14,
-    height: 74,
-    width: 74,
+    backgroundColor: userPageColors.surfaceMuted,
+    borderColor: userPageColors.borderSubtle,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 104,
+    width: 86,
   },
   title: {
     color: userPageColors.text,
-    fontSize: 16,
+    fontSize: userPageTypography.body,
     fontWeight: '700',
+    lineHeight: 21,
   },
   titleGroup: {
     flex: 1,
-    gap: 4,
+    gap: 3,
+    minWidth: 0,
   },
 });
