@@ -132,7 +132,7 @@ export function AppRoot() {
     if (activeScreen === 'arMakeupFilter') {
       return (
         <ARMakeupFilterScreen
-          initialGuideMode="basic"
+          initialGuideMode="half"
           onBack={() => setActiveScreen('facialAnalysisResult')}
           onOpenLocationAdjust={() => undefined}
           onOpenStyleAdjust={() => undefined}
