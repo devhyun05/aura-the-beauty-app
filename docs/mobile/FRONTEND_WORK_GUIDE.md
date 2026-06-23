@@ -37,7 +37,7 @@ AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바�
 4. Home Screen
 5. Face Capture Screen
 6. AI Analysis Loading Screen
-7. Makeup Recommendation Result Screen
+7. AI Facial Analysis Result Screen
 8. AR Makeup Guide Screen
 9. Saved Looks Screen
 10. My Page Screen
@@ -193,7 +193,7 @@ shared/mocks/makeup.mock.ts
 → 홈 화면
 → 얼굴 분석/촬영 진입
 → AI 분석 로딩 화면
-→ 추천 결과 화면
+→ AI 얼굴 분석 결과 화면
 → AR 가이드 화면 또는 저장 화면
 ```
 
