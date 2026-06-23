@@ -1,40 +1,44 @@
-import { Image, Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
+import { colors, radius, spacing, typography } from '../../../shared/theme';
 import {
-  userPageColors,
-  userPageRadius,
-  userPageTypography,
-} from '../../../shared/theme/tokens';
+  AppCard,
+  GearIcon,
+  IconButton,
+  ImagePlaceholder,
+} from '../../../shared/ui';
 import type { UserProfile } from '../../../shared/types/userPage';
-import { ProfileChip } from './ProfileChip';
 
-interface ProfileSummaryCardProps {
+type ProfileSummaryCardProps = {
   profile: UserProfile;
   onPressSettings?: () => void;
-}
+};
 
-export const ProfileSummaryCard = ({
+export function ProfileSummaryCard({
   profile,
   onPressSettings,
-}: ProfileSummaryCardProps) => {
-  const profileTags = [profile.personalColor, profile.skinType, profile.skinTone];
-
+}: ProfileSummaryCardProps) {
   return (
-    <View style={styles.card}>
-      <View style={styles.content}>
-        <Image
-          resizeMode="cover"
-          source={profile.avatarSource}
-          style={styles.avatar}
-        />
+    <AppCard style={styles.card}>
+      <View style={styles.row}>
+        <View style={styles.avatar}>
+          <ImagePlaceholder
+            borderRadius={radius.pill}
+            source={profile.avatarSource}
+          />
+        </View>
 
-        <View style={styles.profileInfo}>
-          <Text style={styles.name}>{profile.name} 님</Text>
+        <View style={styles.info}>
+          <Text numberOfLines={1} style={styles.name}>
+            {profile.name} 님
+          </Text>
 
           <View style={styles.tags}>
-            {profileTags.map((tag) => (
-              <ProfileChip key={tag} label={tag} />
+            {profile.tags.slice(0, 2).map((tag) => (
+              <Text key={tag} style={styles.tag}>
+                {tag}
+              </Text>
             ))}
           </View>
 
@@ -43,96 +47,67 @@ export const ProfileSummaryCard = ({
           </Text>
         </View>
 
-        <Pressable
-          accessibilityLabel="프로필 설정"
-          accessibilityRole="button"
+        <IconButton
+          accessibilityLabel="프로필 수정으로 이동"
           onPress={onPressSettings}
-          style={styles.settingsButton}
+          size={42}
         >
-          <SettingsIcon />
-        </Pressable>
+          <GearIcon />
+        </IconButton>
       </View>
-    </View>
-  );
-};
-
-function SettingsIcon() {
-  return (
-    <View pointerEvents="none" style={styles.settingsIcon}>
-      <View style={styles.settingsDot} />
-      <View style={styles.settingsDot} />
-      <View style={styles.settingsDot} />
-    </View>
+    </AppCard>
   );
 }
 
 const styles = StyleSheet.create({
   avatar: {
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: 38,
-    borderWidth: 1,
-    height: 76,
-    width: 76,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 52,
+    height: 96,
+    overflow: 'hidden',
+    width: 96,
   },
   card: {
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.card,
-    borderWidth: 1,
-    elevation: 1,
-    padding: 18,
-    shadowColor: userPageColors.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-  },
-  content: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 14,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   email: {
-    alignSelf: 'stretch',
-    color: userPageColors.textMuted,
-    fontSize: userPageTypography.body,
-    lineHeight: 19,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.md,
   },
-  name: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.title,
-    fontWeight: '700',
-  },
-  profileInfo: {
-    alignItems: 'flex-start',
+  info: {
     flex: 1,
-    gap: 8,
+    gap: spacing.sm,
     minWidth: 0,
   },
-  settingsButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: 17,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: 'center',
-    width: 34,
+  name: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
   },
-  settingsDot: {
-    backgroundColor: userPageColors.text,
-    borderRadius: 2,
-    height: 4,
-    width: 4,
-  },
-  settingsIcon: {
+  row: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 3,
+    gap: spacing.lg,
+  },
+  tag: {
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   tags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    width: '100%',
+    gap: spacing.sm,
   },
 });

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { View } from 'tamagui';
 
 import { colors, radius, shadows } from '../theme';
@@ -8,10 +8,16 @@ type AppCardProps = {
   children: ReactNode;
   onPress?: () => void;
   padded?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function AppCard({ children, onPress, padded = true }: AppCardProps) {
-  const cardStyle = [styles.card, padded ? styles.padded : null];
+export function AppCard({
+  children,
+  onPress,
+  padded = true,
+  style,
+}: AppCardProps) {
+  const cardStyle = [styles.card, padded ? styles.padded : null, style];
 
   if (onPress) {
     return (

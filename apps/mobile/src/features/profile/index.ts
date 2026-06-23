@@ -1,4 +1,5 @@
-export { FavoriteProductsScreen } from './screens/FavoriteProductsScreen';
-export { MakeupLookScreen } from './screens/MakeupLookScreen';
+export { LikedProductListScreen } from './screens/LikedProductListScreen';
+export { MakeupStyleListScreen } from './screens/MakeupStyleListScreen';
+export { MyPageScreen } from './screens/MyPageScreen';
 export { ProfileEditScreen } from './screens/ProfileEditScreen';
 export { UserPageScreen } from './screens/UserPageScreen';

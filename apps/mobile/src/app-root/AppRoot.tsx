@@ -5,34 +5,36 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
-import {AnalysisResultDetailScreen, AnalysisResultsScreen} from '../features/analysis';
+import {
+  AnalysisReportDetailScreen,
+  AnalysisResultListScreen,
+} from '../features/analysis';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
 import {
-  FavoriteProductsScreen,
-  MakeupLookScreen,
+  LikedProductListScreen,
+  MakeupStyleListScreen,
+  MyPageScreen,
   ProfileEditScreen,
-  UserPageScreen,
 } from '../features/profile';
 
 type AppScreen =
   | 'login'
   | 'faceCapture'
   | 'userPage'
+  | 'myPage'
+  | 'profileEdit'
+  | 'analysisResultList'
+  | 'analysisResults'
+  | 'analysisReportDetail'
+  | 'analysisResultDetail'
+  | 'makeupStyleList'
   | 'makeupLooks'
   | 'favoriteProducts'
-  | 'profileEdit'
-  | 'analysisResults'
-  | 'analysisResultDetail';
-type DetailBackScreen = 'userPage' | 'analysisResults';
+  | 'likedProductList';
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
-  const [selectedAnalysisResultId, setSelectedAnalysisResultId] = useState<
-    string | null
-  >(null);
-  const [detailBackScreen, setDetailBackScreen] =
-    useState<DetailBackScreen>('userPage');
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
   });
@@ -41,14 +43,7 @@ export function AppRoot() {
     return null;
   }
 
-  const openAnalysisDetail = (
-    resultId: string,
-    backScreen: DetailBackScreen,
-  ) => {
-    setSelectedAnalysisResultId(resultId);
-    setDetailBackScreen(backScreen);
-    setActiveScreen('analysisResultDetail');
-  };
+  const goToMyPage = () => setActiveScreen('myPage');
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
@@ -60,45 +55,40 @@ export function AppRoot() {
           ) : null}
           {activeScreen === 'faceCapture' ? (
             <FaceCaptureScreen
-              onCapture={() => setActiveScreen('userPage')}
+              onCapture={goToMyPage}
               onClose={() => setActiveScreen('login')}
             />
           ) : null}
-          {activeScreen === 'userPage' ? (
-            <UserPageScreen
-              onPressSettings={() => setActiveScreen('profileEdit')}
-              onPressMakeupStyles={() => setActiveScreen('makeupLooks')}
-              onPressFavoriteProducts={() =>
-                setActiveScreen('favoriteProducts')
+          {activeScreen === 'myPage' || activeScreen === 'userPage' ? (
+            <MyPageScreen
+              onPressAnalysisResult={() =>
+                setActiveScreen('analysisReportDetail')
               }
-              onPressReport={(reportId) =>
-                openAnalysisDetail(reportId, 'userPage')
+              onPressLikedProductList={() =>
+                setActiveScreen('likedProductList')
               }
-              onPressReports={() => setActiveScreen('analysisResults')}
+              onPressMakeupStyleList={() =>
+                setActiveScreen('makeupStyleList')
+              }
+              onPressProfileEdit={() => setActiveScreen('profileEdit')}
             />
           ) : null}
           {activeScreen === 'profileEdit' ? (
-            <ProfileEditScreen onBack={() => setActiveScreen('userPage')} />
+            <ProfileEditScreen onBack={goToMyPage} />
           ) : null}
-          {activeScreen === 'makeupLooks' ? (
-            <MakeupLookScreen onBack={() => setActiveScreen('userPage')} />
+          {activeScreen === 'analysisResultList' || activeScreen === 'analysisResults' ? (
+            <AnalysisResultListScreen onBack={goToMyPage} />
           ) : null}
-          {activeScreen === 'favoriteProducts' ? (
-            <FavoriteProductsScreen onBack={() => setActiveScreen('userPage')} />
+          {activeScreen === 'analysisReportDetail' ||
+          activeScreen === 'analysisResultDetail' ? (
+            <AnalysisReportDetailScreen onBack={goToMyPage} />
           ) : null}
-          {activeScreen === 'analysisResults' ? (
-            <AnalysisResultsScreen
-              onBack={() => setActiveScreen('userPage')}
-              onPressResult={(resultId) =>
-                openAnalysisDetail(resultId, 'analysisResults')
-              }
-            />
+          {activeScreen === 'makeupStyleList' || activeScreen === 'makeupLooks' ? (
+            <MakeupStyleListScreen onBack={goToMyPage} />
           ) : null}
-          {activeScreen === 'analysisResultDetail' ? (
-            <AnalysisResultDetailScreen
-              resultId={selectedAnalysisResultId}
-              onBack={() => setActiveScreen(detailBackScreen)}
-            />
+          {activeScreen === 'likedProductList' ||
+          activeScreen === 'favoriteProducts' ? (
+            <LikedProductListScreen onBack={goToMyPage} />
           ) : null}
         </>
       </SafeAreaProvider>

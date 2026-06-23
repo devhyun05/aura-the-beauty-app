@@ -11,4 +11,5 @@ export {
   HeartIcon,
 } from './LineIcons';
 export {ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
+export {RoutePlaceholder} from './RoutePlaceholder';
 export {SectionHeader} from './SectionHeader';
