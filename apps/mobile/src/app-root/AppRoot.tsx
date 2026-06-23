@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {useFonts} from 'expo-font';
 import {StatusBar} from 'expo-status-bar';
 import {StyleSheet} from 'react-native';
@@ -6,14 +6,25 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
-import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {AnalysisResultsScreen} from '../features/analysis';
+import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
+import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
+import {
+  FeedbackCaptureScreen,
+  FeedbackEntryScreen,
+  FeedbackGuideOverlayScreen,
+  FeedbackLoadingScreen,
+  FeedbackTipScreen,
+  MakeupFeedbackScreen,
+  type FeedbackPhotoSelection,
+  type FeedbackPoint,
+  type MakeupFeedbackResult,
+} from '../features/feedback';
 import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
 import {UserPageScreen} from '../features/profile';
-import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {colors, typography} from '../shared/theme';
 import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
 
@@ -26,11 +37,24 @@ type AppScreen =
   | 'facialAnalysisResult'
   | 'custom'
   | 'userPage'
-  | 'analysisResults';
+  | 'analysisResults'
+  | 'feedbackEntry'
+  | 'feedbackCapture'
+  | 'feedbackGuide'
+  | 'feedbackLoading'
+  | 'feedbackResult'
+  | 'feedbackTip';
+
 type ShellTab = Exclude<FooterTabKey, 'capture'>;
 
 export function AppRoot() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
+  const [selectedPhoto, setSelectedPhoto] = useState<FeedbackPhotoSelection>({
+    source: 'camera',
+  });
+  const [feedbackResult, setFeedbackResult] = useState<MakeupFeedbackResult | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<FeedbackPoint | null>(null);
+
   const [fontsLoaded] = useFonts({
     'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
@@ -38,6 +62,21 @@ export function AppRoot() {
     [typography.fontFamily.semibold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
     [typography.fontFamily.bold]: require('../assets/fonts/Pretendard-Bold.otf'),
   });
+
+  const handlePhotoSelected = useCallback((selection: FeedbackPhotoSelection) => {
+    setSelectedPhoto(selection);
+    setActiveScreen('feedbackLoading');
+  }, []);
+
+  const handleFeedbackComplete = useCallback((result: MakeupFeedbackResult) => {
+    setFeedbackResult(result);
+    setActiveScreen('feedbackResult');
+  }, []);
+
+  const handleOpenTip = useCallback((point: FeedbackPoint) => {
+    setSelectedPoint(point);
+    setActiveScreen('feedbackTip');
+  }, []);
 
   if (!fontsLoaded) {
     return null;
@@ -52,57 +91,129 @@ export function AppRoot() {
     setActiveScreen(tab);
   };
 
+  const renderScreen = () => {
+    if (activeScreen === 'login') {
+      return <LoginScreen onLoginSuccess={() => setActiveScreen('feedbackEntry')} />;
+    }
+
+    if (activeScreen === 'tutorial') {
+      return <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />;
+    }
+
+    if (activeScreen === 'faceCapture') {
+      return (
+        <FaceCaptureScreen
+          onCapture={() => setActiveScreen('analysisLoading')}
+          onClose={() => setActiveScreen('home')}
+        />
+      );
+    }
+
+    if (activeScreen === 'analysisLoading') {
+      return (
+        <AIAnalysisLoadingScreen
+          onBack={() => setActiveScreen('faceCapture')}
+          onComplete={() => setActiveScreen('facialAnalysisResult')}
+        />
+      );
+    }
+
+    if (activeScreen === 'facialAnalysisResult') {
+      return (
+        <FacialAnalysisResultScreen
+          onBack={() => setActiveScreen('analysisLoading')}
+          onStartARGuide={() => undefined}
+        />
+      );
+    }
+
+    if (activeScreen === 'userPage') {
+      return <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />;
+    }
+
+    if (activeScreen === 'analysisResults') {
+      return <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />;
+    }
+
+    if (activeScreen === 'feedbackEntry') {
+      return (
+        <FeedbackEntryScreen onPressAiFeedback={() => setActiveScreen('feedbackCapture')} />
+      );
+    }
+
+    if (activeScreen === 'feedbackCapture') {
+      return (
+        <FeedbackCaptureScreen
+          onClose={() => setActiveScreen('feedbackEntry')}
+          onSelectPhoto={handlePhotoSelected}
+        />
+      );
+    }
+
+    if (activeScreen === 'feedbackLoading') {
+      return (
+        <FeedbackLoadingScreen
+          onComplete={handleFeedbackComplete}
+          selection={selectedPhoto}
+        />
+      );
+    }
+
+    if (activeScreen === 'feedbackTip' && selectedPoint) {
+      return (
+        <FeedbackTipScreen
+          onBack={() => setActiveScreen('feedbackResult')}
+          point={selectedPoint}
+        />
+      );
+    }
+
+    if (activeScreen === 'feedbackGuide' && feedbackResult) {
+      return (
+        <FeedbackGuideOverlayScreen
+          onBack={() => setActiveScreen('feedbackResult')}
+          result={feedbackResult}
+        />
+      );
+    }
+
+    if (activeScreen === 'feedbackResult' && feedbackResult) {
+      return (
+        <MakeupFeedbackScreen
+          onBack={() => setActiveScreen('feedbackEntry')}
+          onOpenGuide={() => setActiveScreen('feedbackGuide')}
+          onOpenTip={handleOpenTip}
+          onRetake={() => setActiveScreen('feedbackCapture')}
+          onUploadAgain={() => setActiveScreen('feedbackCapture')}
+          result={feedbackResult}
+        />
+      );
+    }
+
+    if (activeScreen === 'home' || activeScreen === 'custom') {
+      return (
+        <AppShell
+          activeTab={activeScreen}
+          onProfilePress={() => setActiveScreen('userPage')}
+          onTabPress={handleFooterTabPress}
+        />
+      );
+    }
+
+    return <FeedbackEntryScreen onPressAiFeedback={() => setActiveScreen('feedbackCapture')} />;
+  };
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        {activeScreen === 'login' ? (
-          <>
-            <StatusBar style="dark" />
-            <LoginScreen onLoginSuccess={() => setActiveScreen('tutorial')} />
-          </>
-        ) : activeScreen === 'tutorial' ? (
-          <>
-            <StatusBar style="dark" />
-            <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />
-          </>
-        ) : activeScreen === 'faceCapture' ? (
-          <FaceCaptureScreen
-            onCapture={() => setActiveScreen('analysisLoading')}
-            onClose={() => setActiveScreen('home')}
-          />
-        ) : activeScreen === 'analysisLoading' ? (
-          <>
-            <StatusBar style="dark" />
-            <AIAnalysisLoadingScreen
-              onBack={() => setActiveScreen('faceCapture')}
-              onComplete={() => setActiveScreen('facialAnalysisResult')}
-            />
-          </>
-        ) : activeScreen === 'facialAnalysisResult' ? (
-          <>
-            <StatusBar style="dark" />
-            <FacialAnalysisResultScreen
-              onBack={() => setActiveScreen('analysisLoading')}
-              onStartARGuide={() => undefined}
-            />
-          </>
-        ) : activeScreen === 'userPage' ? (
-          <>
-            <StatusBar style="dark" />
-            <UserPageScreen onPressReports={() => setActiveScreen('analysisResults')} />
-          </>
-        ) : activeScreen === 'analysisResults' ? (
-          <>
-            <StatusBar style="dark" />
-            <AnalysisResultsScreen onBack={() => setActiveScreen('userPage')} />
-          </>
-        ) : (
-          <AppShell
-            activeTab={activeScreen}
-            onProfilePress={() => setActiveScreen('userPage')}
-            onTabPress={handleFooterTabPress}
-          />
-        )}
+        <StatusBar
+          style={
+            activeScreen === 'faceCapture' || activeScreen === 'feedbackCapture'
+              ? 'light'
+              : 'dark'
+          }
+        />
+        {renderScreen()}
       </SafeAreaProvider>
     </TamaguiProvider>
   );
@@ -121,7 +232,6 @@ function AppShell({
 
   return (
     <YStack style={styles.screen}>
-      <StatusBar style="dark" />
       <AppHeader topInset={insets.top} onProfilePress={onProfilePress} />
       <YStack style={styles.body}>
         {activeTab === 'home' ? <HomeScreen /> : null}
