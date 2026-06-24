@@ -5,6 +5,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {getFilterExtractionData} from '../services/filterExtractionService';
 import type {
   FilterExtractionData,
@@ -64,14 +65,22 @@ export function FilterImageUploadScreen({
 
   return (
     <View style={styles.screen}>
-      <YStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.headerRow}>
-          <View style={styles.headerSpacer} />
-          <Text style={styles.headerTitle}>메이크업 추출</Text>
-          <Pressable accessibilityLabel="닫기" accessibilityRole="button" onPress={onClose}>
-            <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-        </XStack>
+      <YStack style={styles.header}>
+        <AppHeader
+          containerProps={{style: styles.headerAppBar}}
+          leftSlot={<View />}
+          rightSlot={
+            <Pressable
+              accessibilityLabel="닫기"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onClose}>
+              <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
+            </Pressable>
+          }
+          title="메이크업 추출"
+          topInset={insets.top}
+        />
 
         <XStack style={styles.tabRow}>
           {sourceTabs.map((tab) => {
@@ -188,21 +197,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
     gap: spacing.lg,
+  },
+  headerAppBar: {
+    borderBottomWidth: 0,
     paddingHorizontal: spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  headerSpacer: {
-    width: iconSize.lg,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -296,6 +294,7 @@ const styles = StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   tabText: {
     color: colors.textSecondary,

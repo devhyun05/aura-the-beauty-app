@@ -1,9 +1,10 @@
 import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
-import {ArrowLeft, ChevronRight, Sparkles} from 'lucide-react-native';
+import {ChevronRight, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -25,15 +26,7 @@ export function FilterExtractionResultScreen({
 
   return (
     <View style={styles.screen}>
-      <YStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.headerRow}>
-          <Pressable accessibilityLabel="분석 화면으로 돌아가기" accessibilityRole="button" onPress={onBack}>
-            <ArrowLeft color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-          <Text style={styles.headerTitle}>분석 결과</Text>
-          <View style={styles.headerSpacer} />
-        </XStack>
-      </YStack>
+      <AppHeader onBack={onBack} title="분석 결과" topInset={insets.top} />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -182,25 +175,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     letterSpacing: 0.8,
     lineHeight: typography.lineHeight.xs,
-  },
-  header: {
-    backgroundColor: colors.background,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  headerSpacer: {
-    width: iconSize.lg,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
   },
   heroBadge: {
     backgroundColor: 'rgba(0, 0, 0, 0.72)',

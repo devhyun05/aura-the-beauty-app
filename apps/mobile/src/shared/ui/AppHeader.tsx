@@ -1,10 +1,17 @@
 import React, {type ReactNode} from 'react';
 import {StyleSheet} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Text, XStack, YStack, type XStackProps} from 'tamagui';
 
 import {colors, radius, shadows, spacing, typography} from '../theme';
 import {ChevronLeftIcon} from './LineIcons';
 import {ProfileHeaderIcon} from './HeaderIcons';
+
+export const APP_HEADER_BASE_HEIGHT = 56;
+export const APP_HEADER_VERTICAL_PADDING = spacing.sm;
+export const APP_HEADER_ACTION_BUTTON_SIZE = 40;
+export const APP_HEADER_SIDE_SIZE = 40;
+export const APP_HEADER_CENTER_TITLE_FONT_SIZE = typography.title.fontSize;
 
 type AppHeaderProps = {
   title?: string;
@@ -25,14 +32,16 @@ export function AppHeader({
   titleSlot,
   subtitle = 'MAKEUP GUIDE',
   showTitle = true,
-  topInset = 0,
+  topInset,
   leftSlot,
   rightSlot,
   onBack,
   onProfilePress,
-  profileAccessibilityLabel = '사용자 페이지',
+  profileAccessibilityLabel = '마이페이지',
   containerProps,
 }: AppHeaderProps) {
+  const insets = useSafeAreaInsets();
+  const resolvedTopInset = topInset ?? insets.top;
   const shouldUseCenteredTitle = Boolean(onBack || leftSlot);
   const leftContent =
     leftSlot ??
@@ -58,8 +67,8 @@ export function AppHeader({
         styles.container,
         shouldUseCenteredTitle && styles.centeredContainer,
         {
-          minHeight: 64 + topInset,
-          paddingTop: spacing.md + topInset,
+          minHeight: APP_HEADER_BASE_HEIGHT + resolvedTopInset,
+          paddingTop: APP_HEADER_VERTICAL_PADDING + resolvedTopInset,
         },
         containerProps?.style,
       ]}>
@@ -149,14 +158,14 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 42,
+    height: APP_HEADER_ACTION_BUTTON_SIZE,
     justifyContent: 'center',
     padding: 0,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
-    width: 42,
+    width: APP_HEADER_ACTION_BUTTON_SIZE,
   },
   centeredContainer: {
     gap: spacing.sm,
@@ -165,9 +174,9 @@ const styles = StyleSheet.create({
   centerTitle: {
     color: colors.textPrimary,
     flex: 1,
-    fontSize: typography.fontSize.xl,
+    fontSize: APP_HEADER_CENTER_TITLE_FONT_SIZE,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xl,
+    lineHeight: typography.title.lineHeight,
     textAlign: 'center',
   },
   centerTitleSlot: {
@@ -182,14 +191,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.lg,
     justifyContent: 'space-between',
-    paddingBottom: spacing.md,
+    paddingBottom: APP_HEADER_VERTICAL_PADDING,
     paddingHorizontal: spacing.xl,
   },
   side: {
     alignItems: 'center',
-    height: 44,
+    height: APP_HEADER_SIDE_SIZE,
     justifyContent: 'center',
-    width: 44,
+    width: APP_HEADER_SIDE_SIZE,
   },
   titleArea: {
     flex: 1,

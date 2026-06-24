@@ -1,10 +1,11 @@
 import {useMemo, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
-import {ArrowLeft, BookmarkPlus} from 'lucide-react-native';
+import {BookmarkPlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto, FilterRecipeTab} from '../types';
 
@@ -103,14 +104,13 @@ export function FilterRecipeDetailScreen({
 
   return (
     <View style={styles.screen}>
-      <YStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.headerRow}>
-          <Pressable accessibilityLabel="필터 조정으로 돌아가기" accessibilityRole="button" onPress={onBack}>
-            <ArrowLeft color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-          <Text style={styles.headerTitle}>상세 분석</Text>
-          <View style={styles.headerSpacer} />
-        </XStack>
+      <YStack style={styles.header}>
+        <AppHeader
+          containerProps={{style: styles.headerAppBar}}
+          onBack={onBack}
+          title="상세 분석"
+          topInset={insets.top}
+        />
 
         <XStack style={styles.mainTabs}>
           {mainTabs.map((tab) => {
@@ -291,22 +291,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
     gap: spacing.md,
+  },
+  headerAppBar: {
+    borderBottomWidth: 0,
     paddingHorizontal: spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  headerSpacer: {
-    width: iconSize.lg,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
   },
   imageDim: {
     ...StyleSheet.absoluteFill,
@@ -363,6 +351,7 @@ const styles = StyleSheet.create({
   mainTabs: {
     flexDirection: 'row',
     gap: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   numberBadge: {
     alignItems: 'center',

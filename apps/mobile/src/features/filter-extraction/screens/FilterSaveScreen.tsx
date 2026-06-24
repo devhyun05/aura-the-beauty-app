@@ -1,10 +1,11 @@
 import {useState} from 'react';
 import {Image, Pressable, StyleSheet, TextInput} from 'react-native';
-import {ArrowLeft, CheckCircle2, Plus, X} from 'lucide-react-native';
+import {CheckCircle2, Plus, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -24,17 +25,20 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
 
   return (
     <View style={styles.screen}>
-      <YStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.headerRow}>
-          <Pressable accessibilityLabel="필터 적용 화면으로 돌아가기" accessibilityRole="button" onPress={onBack}>
-            <ArrowLeft color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-          <Text style={styles.headerTitle}>필터 저장</Text>
-          <Pressable accessibilityLabel="저장 완료" accessibilityRole="button" onPress={onSave}>
+      <AppHeader
+        onBack={onBack}
+        rightSlot={
+          <Pressable
+            accessibilityLabel="저장 완료"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={onSave}>
             <Text style={styles.doneText}>완료</Text>
           </Pressable>
-        </XStack>
-      </YStack>
+        }
+        title="필터 저장"
+        topInset={insets.top}
+      />
 
       <YStack style={styles.content}>
         <XStack style={styles.summaryRow}>
@@ -185,22 +189,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-  },
-  header: {
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
   },
   input: {
     color: colors.textPrimary,
