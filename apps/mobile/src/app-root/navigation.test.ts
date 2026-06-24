@@ -1,5 +1,6 @@
 import {
   getAnalysisLoadingCompleteTargetScreen,
+  getAnalysisReportCloseTargetScreen,
   getAnalysisReportCreateFilterTargetScreen,
   getARMakeupFilterInitialGuideMode,
   getFooterTabTargetScreen,
@@ -28,6 +29,11 @@ expectEqual(
   getAnalysisReportCreateFilterTargetScreen(),
   'arFilterStyle',
   'analysis report create AR filter target',
+);
+expectEqual(
+  getAnalysisReportCloseTargetScreen(),
+  'home',
+  'analysis report close target',
 );
 expectEqual(
   getAnalysisLoadingCompleteTargetScreen(),

@@ -52,6 +52,7 @@ import type {MakeupStylePreview} from '../shared/types/userPage';
 import {AppFooter, AppHeader, AuraLogo, type FooterTabKey} from '../shared/ui';
 import {
   getAnalysisLoadingCompleteTargetScreen,
+  getAnalysisReportCloseTargetScreen,
   getAnalysisReportCreateFilterTargetScreen,
   getARMakeupFilterInitialGuideMode,
   getFooterTabTargetScreen,
@@ -107,8 +108,6 @@ export function AppRoot() {
   const [selectedPoint, setSelectedPoint] = useState<FeedbackPoint | null>(null);
   const [selectedAnalysisResultId, setSelectedAnalysisResultId] =
     useState<string | null>(null);
-  const [analysisDetailBackScreen, setAnalysisDetailBackScreen] =
-    useState<AppScreen>('myPage');
   const [arFilterAdjustBackScreen, setArFilterAdjustBackScreen] =
     useState<AppScreen>('arMakeupFilter');
 
@@ -167,18 +166,13 @@ export function AppRoot() {
     setActiveScreen('myPage');
   };
 
-  const goToAnalysisReportDetail = (
-    resultId: string | null,
-    backScreen: AppScreen,
-  ) => {
+  const goToAnalysisReportDetail = (resultId: string | null) => {
     setSelectedAnalysisResultId(resultId);
-    setAnalysisDetailBackScreen(backScreen);
     setActiveScreen('analysisReportDetail');
   };
 
-  const goToLatestAnalysisReportDetail = (backScreen: AppScreen) => {
+  const goToLatestAnalysisReportDetail = () => {
     setSelectedAnalysisResultId(null);
-    setAnalysisDetailBackScreen(backScreen);
     setActiveScreen(getAnalysisLoadingCompleteTargetScreen());
   };
 
@@ -224,7 +218,7 @@ export function AppRoot() {
       return (
         <AIAnalysisLoadingScreen
           onBack={() => setActiveScreen('faceCapture')}
-          onComplete={() => goToLatestAnalysisReportDetail('analysisLoading')}
+          onComplete={goToLatestAnalysisReportDetail}
         />
       );
     }
@@ -271,7 +265,7 @@ export function AppRoot() {
             onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
             onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
             onPressReport={(resultId) =>
-              goToAnalysisReportDetail(resultId, 'userPage')
+              goToAnalysisReportDetail(resultId)
             }
             onPressReports={() => setActiveScreen('analysisResultList')}
             onPressSettings={() => setActiveScreen('profileEdit')}
@@ -289,7 +283,7 @@ export function AppRoot() {
           onTabPress={handleFooterTabPress}>
           <MyPageScreen
             onPressAnalysisResult={(resultId) =>
-              goToAnalysisReportDetail(resultId, 'myPage')
+              goToAnalysisReportDetail(resultId)
             }
             onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
             onPressLikedProductList={() => setActiveScreen('likedProductList')}
@@ -315,7 +309,7 @@ export function AppRoot() {
         <AnalysisResultListScreen
           onBack={goToMyPage}
           onPressResult={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'analysisResultList')
+            goToAnalysisReportDetail(resultId)
           }
         />
       );
@@ -324,7 +318,7 @@ export function AppRoot() {
     if (activeScreen === 'analysisReportDetail') {
       return (
         <AnalysisReportDetailScreen
-          onBack={() => setActiveScreen(analysisDetailBackScreen)}
+          onBack={() => setActiveScreen(getAnalysisReportCloseTargetScreen())}
           onCreateARFilter={goToAnalysisReportCreateFilter}
           resultId={selectedAnalysisResultId}
         />

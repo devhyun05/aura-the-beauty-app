@@ -3,6 +3,7 @@ import type {GuideMode} from '../shared/types/makeupGuide';
 type FooterTabKey = 'home' | 'capture' | 'custom';
 export type FooterTabTargetScreen = 'home' | 'arMakeupFilter' | 'custom';
 export type AnalysisReportCreateFilterTargetScreen = 'arFilterStyle';
+export type AnalysisReportCloseTargetScreen = 'home';
 export type AnalysisLoadingCompleteTargetScreen = 'analysisReportDetail';
 export type HomeFaceDiagnosisTargetScreen = 'tutorial';
 
@@ -12,6 +13,10 @@ export function getARMakeupFilterInitialGuideMode(): GuideMode {
 
 export function getAnalysisReportCreateFilterTargetScreen(): AnalysisReportCreateFilterTargetScreen {
   return 'arFilterStyle';
+}
+
+export function getAnalysisReportCloseTargetScreen(): AnalysisReportCloseTargetScreen {
+  return 'home';
 }
 
 export function getAnalysisLoadingCompleteTargetScreen(): AnalysisLoadingCompleteTargetScreen {
