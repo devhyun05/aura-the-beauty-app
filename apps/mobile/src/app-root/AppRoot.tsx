@@ -77,8 +77,6 @@ type AppScreen =
   | 'imageAnalysisReportsList'
   | 'imageAnalysisReportDetail'
   | 'makeupStyleList'
-  | 'makeupLooks'
-  | 'favoriteProducts'
   | 'likedProductList'
   | 'feedbackEntry'
   | 'feedbackCapture'
@@ -313,14 +311,11 @@ export function AppRoot() {
       );
     }
 
-    if (activeScreen === 'makeupStyleList' || activeScreen === 'makeupLooks') {
+    if (activeScreen === 'makeupStyleList') {
       return <MakeupStyleListScreen onBack={goToMyPage} />;
     }
 
-    if (
-      activeScreen === 'likedProductList' ||
-      activeScreen === 'favoriteProducts'
-    ) {
+    if (activeScreen === 'likedProductList') {
       return <LikedProductListScreen onBack={goToMyPage} />;
     }
 
