@@ -47,6 +47,8 @@ type ImageAnalysisReportHeaderAction = 'share' | 'close';
 type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
 type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
+const CREATE_FILTER_BUTTON_HEIGHT = 56;
+
 const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
   {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
@@ -371,7 +373,7 @@ function ImageAnalysisReportScaffold({
     {
       paddingBottom:
         Math.max(insets.bottom, spacing.xl) +
-        CREATE_FILTER_BUTTON_HEIGHT +
+        (floatingAction ? CREATE_FILTER_BUTTON_HEIGHT : 0) +
         spacing.xxl,
     },
     contentStyle,
@@ -582,18 +584,24 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
     textAlign: 'center',
   },
+  floatingCreateFilterArea: {
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: spacing.screenX,
+    paddingTop: spacing.sm,
+    position: 'absolute',
+    right: 0,
+    zIndex: 20,
+  },
   createFilterButton: {
     ...imageAnalysisReportLiquidGlassButtonStyle,
     alignItems: 'center',
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.xs,
-    height: 56,
+    height: CREATE_FILTER_BUTTON_HEIGHT,
     justifyContent: 'center',
     width: '100%',
-  },
-  createFilterButtonWithTopMargin: {
-    marginTop: spacing.sm,
   },
   createFilterButtonText: {
     color: colors.textPrimary,
@@ -653,9 +661,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     height: 360,
     width: '100%',
-  },
-  heroSection: {
-    gap: spacing.md,
   },
   headerActionButton: {
     ...imageAnalysisReportLiquidGlassButtonStyle,

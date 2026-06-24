@@ -245,7 +245,7 @@ const quickActions = [
   },
   {
     id: 'feedback',
-    label: '피드백',
+    label: '메이크업 피드백',
     accessibilityLabel: '메이크업 피드백 시작',
     icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
