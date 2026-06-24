@@ -7,6 +7,8 @@ import {
   getImageAnalysisReportCloseTargetScreen,
   getImageAnalysisReportCreateFilterTargetScreen,
   getSavedContentTargetScreen,
+  getScreenChrome,
+  getScreensByChrome,
 } from './navigation';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -81,4 +83,25 @@ expectEqual(
   getAppShellHeaderCopy('default').subtitle,
   'MAKEUP GUIDE',
   'default shell header subtitle',
+);
+expectEqual(getScreenChrome('home'), 'shell', 'home chrome');
+expectEqual(getScreenChrome('custom'), 'shell', 'custom chrome');
+expectEqual(getScreenChrome('myPage'), 'shell', 'my page chrome');
+expectEqual(getScreenChrome('profileEdit'), 'header', 'profile edit chrome');
+expectEqual(
+  getScreenChrome('imageAnalysisReportDetail'),
+  'header',
+  'image analysis report detail chrome',
+);
+expectEqual(getScreenChrome('faceCapture'), 'fullscreen', 'face capture chrome');
+expectEqual(getScreenChrome('arMakeupFilter'), 'fullscreen', 'AR makeup filter chrome');
+expectEqual(
+  getScreenChrome('filterSaved'),
+  'fullscreen',
+  'filter saved chrome',
+);
+expectEqual(
+  getScreensByChrome('shell').join(','),
+  'home,custom,myPage',
+  'shell chrome screens',
 );

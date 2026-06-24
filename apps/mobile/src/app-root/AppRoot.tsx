@@ -59,44 +59,15 @@ import {
   getImageAnalysisReportCloseTargetScreen,
   getImageAnalysisReportCreateFilterTargetScreen,
   getSavedContentTargetScreen,
+  getScreenChrome,
   type AppShellHeaderVariant,
+  type AppScreenKey,
 } from './navigation';
-
-type AppScreen =
-  | 'login'
-  | 'tutorial'
-  | 'home'
-  | 'faceCapture'
-  | 'imageAnalysisLoading'
-  | 'arMakeupFilter'
-  | 'arFilterLocation'
-  | 'arFilterStyle'
-  | 'custom'
-  | 'myPage'
-  | 'profileEdit'
-  | 'imageAnalysisReportsList'
-  | 'imageAnalysisReportDetail'
-  | 'makeupStyleList'
-  | 'likedProductList'
-  | 'feedbackEntry'
-  | 'feedbackCapture'
-  | 'feedbackGuide'
-  | 'feedbackLoading'
-  | 'feedbackResult'
-  | 'feedbackTip'
-  | 'filterUpload'
-  | 'filterLoading'
-  | 'filterResult'
-  | 'filterTryOn'
-  | 'filterSave'
-  | 'filterSaved'
-  | 'filterRecipeDetail'
-  | 'recipeSaved';
 
 type ShellTab = Exclude<FooterTabKey, 'capture'>;
 
 export function AppRoot() {
-  const [activeScreen, setActiveScreen] = useState<AppScreen>('login');
+  const [activeScreen, setActiveScreen] = useState<AppScreenKey>('login');
   const [selectedPhoto, setSelectedPhoto] = useState<FeedbackPhotoSelection>({
     source: 'camera',
   });
@@ -109,7 +80,7 @@ export function AppRoot() {
   const [selectedImageAnalysisReportId, setSelectedImageAnalysisReportId] =
     useState<string | null>(null);
   const [arFilterAdjustBackScreen, setArFilterAdjustBackScreen] =
-    useState<AppScreen>('arMakeupFilter');
+    useState<AppScreenKey>('arMakeupFilter');
 
   const [fontsLoaded] = useFonts({
     [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
@@ -176,12 +147,12 @@ export function AppRoot() {
     setActiveScreen(getImageAnalysisLoadingCompleteTargetScreen());
   };
 
-  const goToARFilterLocation = (backScreen: AppScreen = 'arMakeupFilter') => {
+  const goToARFilterLocation = (backScreen: AppScreenKey = 'arMakeupFilter') => {
     setArFilterAdjustBackScreen(backScreen);
     setActiveScreen('arFilterLocation');
   };
 
-  const goToARFilterStyle = (backScreen: AppScreen = 'arMakeupFilter') => {
+  const goToARFilterStyle = (backScreen: AppScreenKey = 'arMakeupFilter') => {
     setArFilterAdjustBackScreen(backScreen);
     setActiveScreen('arFilterStyle');
   };
@@ -192,6 +163,8 @@ export function AppRoot() {
   };
 
   const renderScreen = () => {
+    const screenChrome = getScreenChrome(activeScreen);
+
     if (activeScreen === 'login') {
       return <LoginScreen onLoginSuccess={() => setActiveScreen('tutorial')} />;
     }
@@ -463,7 +436,7 @@ export function AppRoot() {
       );
     }
 
-    if (activeScreen === 'home' || activeScreen === 'custom') {
+    if (screenChrome === 'shell' && (activeScreen === 'home' || activeScreen === 'custom')) {
       return (
         <AppShell
           activeTab={activeScreen}
