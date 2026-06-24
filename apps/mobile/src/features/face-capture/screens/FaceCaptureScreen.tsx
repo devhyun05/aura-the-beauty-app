@@ -12,11 +12,11 @@ import {Image as ImageIcon, RefreshCw, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {CameraCaptureButton, LiveCameraLayer} from '../../../shared/ui';
 import {mockReadyFaceCaptureChecks} from '../mocks/faceCapture.mock';
 import {
   evaluateFaceCaptureGuidance,
   type FaceCaptureCheckState,
-  type FaceCaptureGuidance,
 } from '../services/faceCaptureValidation';
 
 type CameraDirection = 'front' | 'back';
@@ -35,10 +35,9 @@ type ControlButtonProps = {
   onPress?: (event: GestureResponderEvent) => void;
 };
 
-type CaptureButtonProps = {
-  guidance: FaceCaptureGuidance;
-  onPress?: () => void;
-};
+export function getFaceCaptureCameraMode(): 'live-camera' {
+  return 'live-camera';
+}
 
 export function FaceCaptureScreen({
   checks = mockReadyFaceCaptureChecks,
@@ -69,6 +68,7 @@ export function FaceCaptureScreen({
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
+      <LiveCameraLayer facing={cameraDirection} />
 
       <Pressable
         accessibilityLabel="촬영 화면 닫기"
@@ -121,7 +121,11 @@ export function FaceCaptureScreen({
           <ImageIcon color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
         </ControlButton>
 
-        <CaptureButton guidance={guidance} onPress={onCapture} />
+        <CameraCaptureButton
+          accessibilityLabel="사진 촬영"
+          disabled={!guidance.isCaptureEnabled}
+          onPress={onCapture}
+        />
 
         <ControlButton
           accessibilityLabel={`${cameraDirection === 'front' ? '후면' : '전면'} 카메라로 전환`}
@@ -147,38 +151,6 @@ function ControlButton({accessibilityLabel, children, onPress}: ControlButtonPro
         },
       ]}>
       {children}
-    </Pressable>
-  );
-}
-
-function CaptureButton({guidance, onPress}: CaptureButtonProps) {
-  const isDisabled = !guidance.isCaptureEnabled;
-
-  return (
-    <Pressable
-      accessibilityLabel="사진 촬영"
-      accessibilityRole="button"
-      accessibilityState={{disabled: isDisabled}}
-      disabled={isDisabled}
-      hitSlop={12}
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.captureButton,
-        styles.liquidGlassSurface,
-        {
-          borderColor: guidance.tintColor,
-          opacity: pressed ? 0.72 : 1,
-        },
-      ]}>
-      <View
-        style={[
-          styles.captureButtonInner,
-          {
-            backgroundColor: guidance.tintColor,
-            opacity: isDisabled ? 0.58 : 1,
-          },
-        ]}
-      />
     </Pressable>
   );
 }
@@ -249,25 +221,5 @@ const styles = StyleSheet.create({
     height: iconSize.xl + spacing.xxl,
     justifyContent: 'center',
     width: iconSize.xl + spacing.xxl,
-  },
-  captureButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 78,
-    justifyContent: 'center',
-    width: 78,
-  },
-  captureButtonInner: {
-    borderRadius: radius.pill,
-    height: 62,
-    width: 62,
-  },
-  liquidGlassSurface: {
-    backgroundColor: colors.glassSurface,
-    shadowColor: shadows.liquidGlassGlow.shadowColor,
-    shadowOffset: shadows.liquidGlassGlow.shadowOffset,
-    shadowOpacity: shadows.liquidGlassGlow.shadowOpacity,
-    shadowRadius: shadows.liquidGlassGlow.shadowRadius,
   },
 });

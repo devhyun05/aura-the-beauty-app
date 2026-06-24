@@ -3,9 +3,15 @@ export {AppFooter, type FooterTabKey} from './AppFooter';
 export {AppHeader} from './AppHeader';
 export {AppScreen} from './AppScreen';
 export {AuraLogo} from './AuraLogo';
+export {
+  CAMERA_CAPTURE_BUTTON_METRICS,
+  CameraCaptureButton,
+  CameraCaptureButtonSurface,
+} from './CameraCaptureButton';
 export {BrushFooterIcon, CameraFooterIcon, HomeFooterIcon} from './FooterIcons';
 export {IconButton} from './IconButton';
 export {ImagePlaceholder} from './ImagePlaceholder';
+export {LiveCameraLayer} from './LiveCameraLayer';
 export {
   BookmarkIcon,
   ChevronLeftIcon,

@@ -2,9 +2,17 @@ import React from 'react';
 
 import {
   ARMakeupFilterScreen,
+  getARMakeupFilterCameraMode,
+  getARMakeupFilterCaptureButtonMetrics,
+  getARMakeupFilterCategoryTitle,
+  getARMakeupFilterComparisonTabs,
+  getARMakeupFilterModeTabHeight,
+  getARMakeupFilterSelectedTabOpacity,
   getMakeupPreviewBadgeContent,
   getMakeupPreviewColorOverlayLayers,
+  shouldShowARMakeupFilterHeaderCopy,
 } from './ARMakeupFilterScreen';
+import {CAMERA_CAPTURE_BUTTON_METRICS} from '../../../shared/ui';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -23,6 +31,48 @@ expectEqual(
   expectedPreviewBadgeContent,
   null,
   'AR preview status badge content',
+);
+expectEqual(
+  getARMakeupFilterCameraMode(),
+  'live-camera',
+  'AR makeup filter camera mode',
+);
+const expectedHeaderCopyVisibility: false = shouldShowARMakeupFilterHeaderCopy();
+
+expectEqual(
+  expectedHeaderCopyVisibility,
+  false,
+  'AR makeup filter header copy visibility',
+);
+expectEqual(
+  getARMakeupFilterModeTabHeight(),
+  32,
+  'AR makeup filter mode tab height',
+);
+expectEqual(
+  getARMakeupFilterSelectedTabOpacity(),
+  0.62,
+  'AR makeup filter selected tab opacity',
+);
+expectEqual(
+  getARMakeupFilterCategoryTitle(),
+  null,
+  'AR makeup filter category title',
+);
+expectEqual(
+  getARMakeupFilterComparisonTabs().join(','),
+  '왼쪽,오른쪽',
+  'AR makeup filter comparison tabs',
+);
+expectEqual(
+  getARMakeupFilterCaptureButtonMetrics().outerSize,
+  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
+  'AR makeup filter capture button outer size',
+);
+expectEqual(
+  getARMakeupFilterCaptureButtonMetrics().innerScale,
+  CAMERA_CAPTURE_BUTTON_METRICS.innerScale,
+  'AR makeup filter capture button inner scale',
 );
 
 <ARMakeupFilterScreen

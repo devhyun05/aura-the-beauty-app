@@ -18,6 +18,11 @@ import type {
   MakeupFilter,
   StyleOptionGroupId,
 } from '../../../shared/types/makeupGuide';
+import {
+  CAMERA_CAPTURE_BUTTON_METRICS,
+  CameraCaptureButton,
+  LiveCameraLayer,
+} from '../../../shared/ui';
 
 type CaptureMode = 'photo' | 'video';
 
@@ -36,6 +41,14 @@ const STYLE_OPTION_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = 
   {id: 'texture', label: '질감'},
 ];
 
+const MODE_TAB_HEIGHT = 32;
+const SELECTED_TAB_BACKGROUND_OPACITY = 0.62;
+const SELECTED_TAB_BACKGROUND_COLOR = `rgba(255, 255, 255, ${SELECTED_TAB_BACKGROUND_OPACITY})`;
+const CAPTURE_BUTTON_METRICS = {
+  outerSize: CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
+  innerScale: CAMERA_CAPTURE_BUTTON_METRICS.innerScale,
+} as const;
+
 type MakeupPreviewColorOverlayLayer = {
   id: string;
   style: ViewStyle;
@@ -49,8 +62,36 @@ export function getMakeupPreviewBadgeContent(): null {
   return null;
 }
 
+export function getARMakeupFilterCameraMode(): 'live-camera' {
+  return 'live-camera';
+}
+
+export function shouldShowARMakeupFilterHeaderCopy(): false {
+  return false;
+}
+
+export function getARMakeupFilterModeTabHeight(): number {
+  return MODE_TAB_HEIGHT;
+}
+
+export function getARMakeupFilterSelectedTabOpacity(): number {
+  return SELECTED_TAB_BACKGROUND_OPACITY;
+}
+
+export function getARMakeupFilterCategoryTitle(): null {
+  return null;
+}
+
+export function getARMakeupFilterComparisonTabs(): readonly string[] {
+  return getMockARMakeupGuideData().comparisonModes.map(mode => mode.label);
+}
+
+export function getARMakeupFilterCaptureButtonMetrics(): typeof CAPTURE_BUTTON_METRICS {
+  return CAPTURE_BUTTON_METRICS;
+}
+
 export function ARMakeupFilterScreen({
-  initialComparisonMode = 'full',
+  initialComparisonMode = 'left',
   initialGuideMode = 'basic',
   onBack,
   onComplete,
@@ -113,11 +154,7 @@ export function ARMakeupFilterScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.cameraLayer}>
-        <Image
-          resizeMode="cover"
-          source={selectedFilter.imageSource}
-          style={styles.previewImage}
-        />
+        <LiveCameraLayer />
         <View style={styles.previewDim} />
         <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
         {shouldShowLeftCheekOverlay ? (
@@ -173,13 +210,6 @@ export function ARMakeupFilterScreen({
             <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
           </Button>
 
-          <YStack style={styles.headerCopy}>
-            <Text style={styles.headerEyebrow}>AR MAKEUP FILTER</Text>
-            <Text numberOfLines={1} style={styles.headerTitle}>
-              {selectedFilter.title}
-            </Text>
-          </YStack>
-
           <Button
             accessibilityLabel="필터 위치 조정"
             accessibilityRole="button"
@@ -224,7 +254,7 @@ export function ARMakeupFilterScreen({
           contentContainerStyle={styles.panelContent}
           horizontal={false}
           showsVerticalScrollIndicator={false}>
-          <HorizontalSection label="필터 카테고리">
+          <HorizontalSection label={getARMakeupFilterCategoryTitle()}>
             {arGuideData.categories.map(category => (
               <ChipButton
                 key={category.id}
@@ -361,15 +391,10 @@ export function ARMakeupFilterScreen({
             />
           </XStack>
 
-          <Button
+          <CameraCaptureButton
             accessibilityLabel={captureMode === 'photo' ? 'AR 사진 촬영 후 홈으로 이동' : 'AR 동영상 촬영 후 홈으로 이동'}
-            accessibilityRole="button"
             onPress={onComplete}
-            pressStyle={{scale: 0.96}}
-            style={styles.captureButton}
-            unstyled>
-            <View style={styles.captureButtonInner} />
-          </Button>
+          />
         </XStack>
       </YStack>
     </View>
@@ -426,13 +451,13 @@ function ComparisonModeButton({isActive, label, onPress}: ComparisonModeButtonPr
 
 type HorizontalSectionProps = {
   children: React.ReactNode;
-  label: string;
+  label?: string | null;
 };
 
 function HorizontalSection({children, label}: HorizontalSectionProps) {
   return (
     <YStack style={styles.horizontalSection}>
-      <Text style={styles.panelLabel}>{label}</Text>
+      {label ? <Text style={styles.panelLabel}>{label}</Text> : null}
       <ScrollView
         contentContainerStyle={styles.chipList}
         horizontal
@@ -543,6 +568,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     gap: spacing.md,
+    justifyContent: 'space-between',
   },
   roundIconButton: {
     alignItems: 'center',
@@ -555,27 +581,6 @@ const styles = StyleSheet.create({
     padding: 0,
     width: iconSize.xl + spacing.md,
   },
-  headerCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  headerEyebrow: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.2,
-    lineHeight: typography.lineHeight.xs,
-  },
-  headerTitle: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
   segmentedControl: {
     backgroundColor: colors.glassSurface,
     borderColor: colors.white,
@@ -587,11 +592,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radius.pill,
     flex: 1,
-    height: 38,
+    height: MODE_TAB_HEIGHT,
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: SELECTED_TAB_BACKGROUND_COLOR,
   },
   segmentText: {
     color: colors.white,
@@ -616,12 +621,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radius.pill,
     flex: 1,
-    minHeight: 36,
+    minHeight: MODE_TAB_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
   },
   comparisonButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: SELECTED_TAB_BACKGROUND_COLOR,
   },
   comparisonButtonText: {
     color: colors.white,
@@ -634,10 +639,6 @@ const styles = StyleSheet.create({
   },
   comparisonButtonTextActive: {
     color: colors.black,
-  },
-  previewImage: {
-    height: '100%',
-    width: '100%',
   },
   previewDim: {
     backgroundColor: colors.black,
@@ -924,22 +925,5 @@ const styles = StyleSheet.create({
   },
   modeButtonActive: {
     backgroundColor: colors.white,
-  },
-  captureButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.black,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 68,
-    justifyContent: 'center',
-    padding: 0,
-    width: 68,
-  },
-  captureButtonInner: {
-    backgroundColor: colors.black,
-    borderRadius: radius.pill,
-    height: 52,
-    width: 52,
   },
 });

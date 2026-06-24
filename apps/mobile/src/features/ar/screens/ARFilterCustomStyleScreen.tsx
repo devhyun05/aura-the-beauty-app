@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Image, ScrollView, StyleSheet, type ViewStyle} from 'react-native';
+import {ScrollView, StyleSheet, type ViewStyle} from 'react-native';
 import {ChevronLeft, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import {
 } from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {FacePartId, StyleOptionGroupId} from '../../../shared/types/makeupGuide';
+import {LiveCameraLayer} from '../../../shared/ui';
 import {
   getMockFilterStyleState,
   updateFilterStyleSelection,
@@ -27,6 +28,8 @@ const STYLE_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = [
   {id: 'type', label: '타입'},
   {id: 'texture', label: '질감'},
 ];
+const SELECTED_TAB_BACKGROUND_OPACITY = 0.62;
+const SELECTED_TAB_BACKGROUND_COLOR = `rgba(255, 255, 255, ${SELECTED_TAB_BACKGROUND_OPACITY})`;
 
 type StylePreviewColorOverlayLayer = {
   id: string;
@@ -39,6 +42,14 @@ export function getStylePreviewColorOverlayLayers(): readonly StylePreviewColorO
 
 export function getStylePreviewSummaryContent(): null {
   return null;
+}
+
+export function getARFilterCustomStyleCameraMode(): 'live-camera' {
+  return 'live-camera';
+}
+
+export function getARFilterCustomStyleSelectedTabOpacity(): number {
+  return SELECTED_TAB_BACKGROUND_OPACITY;
 }
 
 export function ARFilterCustomStyleScreen({
@@ -77,7 +88,7 @@ export function ARFilterCustomStyleScreen({
   return (
     <View style={styles.screen}>
       <View style={styles.cameraLayer}>
-        <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
+        <LiveCameraLayer />
         <View style={styles.previewDim} />
         <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
         <View style={[styles.cheekPreviewOverlayLeft, {backgroundColor: selectedColor.hex}]} />
@@ -334,7 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: SELECTED_TAB_BACKGROUND_COLOR,
   },
   segmentText: {
     color: colors.white,
@@ -346,10 +357,6 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: colors.black,
-  },
-  previewImage: {
-    height: '100%',
-    width: '100%',
   },
   previewDim: {
     backgroundColor: colors.black,

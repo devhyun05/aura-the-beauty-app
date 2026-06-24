@@ -2,6 +2,8 @@ import React from 'react';
 
 import {
   ARFilterCustomLocationScreen,
+  getARFilterCustomLocationCameraMode,
+  getARFilterCustomLocationSelectedTabOpacity,
   getLocationPreviewColorOverlayLayers,
 } from './ARFilterCustomLocationScreen';
 
@@ -15,6 +17,16 @@ expectEqual(
   getLocationPreviewColorOverlayLayers().length,
   0,
   'AR location preview color overlay layer count',
+);
+expectEqual(
+  getARFilterCustomLocationCameraMode(),
+  'live-camera',
+  'AR location camera mode',
+);
+expectEqual(
+  getARFilterCustomLocationSelectedTabOpacity(),
+  0.62,
+  'AR location selected tab opacity',
 );
 
 <ARFilterCustomLocationScreen

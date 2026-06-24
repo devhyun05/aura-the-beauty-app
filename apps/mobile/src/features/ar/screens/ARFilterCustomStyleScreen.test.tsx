@@ -2,6 +2,8 @@ import React from 'react';
 
 import {
   ARFilterCustomStyleScreen,
+  getARFilterCustomStyleCameraMode,
+  getARFilterCustomStyleSelectedTabOpacity,
   getStylePreviewColorOverlayLayers,
   getStylePreviewSummaryContent,
 } from './ARFilterCustomStyleScreen';
@@ -23,6 +25,16 @@ expectEqual(
   expectedStylePreviewSummaryContent,
   null,
   'AR style preview summary content',
+);
+expectEqual(
+  getARFilterCustomStyleCameraMode(),
+  'live-camera',
+  'AR style camera mode',
+);
+expectEqual(
+  getARFilterCustomStyleSelectedTabOpacity(),
+  0.62,
+  'AR style selected tab opacity',
 );
 
 <ARFilterCustomStyleScreen

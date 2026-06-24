@@ -13,6 +13,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {CameraCaptureButton} from '../../../shared/ui';
 import type {FeedbackPhotoSelection} from '../types';
 
 type FeedbackCaptureScreenProps = {
@@ -167,20 +168,11 @@ export function FeedbackCaptureScreen({onClose, onSelectPhoto}: FeedbackCaptureS
       </Pressable>
 
       <View style={[styles.captureControls, {bottom: insets.bottom + 112}]}>
-        <Pressable
+        <CameraCaptureButton
           accessibilityLabel="메이크업 사진 촬영"
-          accessibilityRole="button"
-          accessibilityState={{disabled: isTakingPhoto}}
           disabled={isTakingPhoto}
           onPress={handleCapture}
-          style={({pressed}) => [
-            styles.shutter,
-            {
-              opacity: pressed || isTakingPhoto ? 0.72 : 1,
-            },
-          ]}>
-          <View style={styles.shutterInner} />
-        </Pressable>
+        />
 
         <Pressable
           accessibilityLabel={`${cameraFacing === 'front' ? '후면' : '전면'} 카메라로 전환`}
@@ -335,21 +327,6 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.black,
     flex: 1,
-  },
-  shutter: {
-    alignItems: 'center',
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 3,
-    height: 66,
-    justifyContent: 'center',
-    width: 66,
-  },
-  shutterInner: {
-    backgroundColor: colors.white,
-    borderRadius: radius.pill,
-    height: 54,
-    width: 54,
   },
   switchControl: {
     alignItems: 'center',
