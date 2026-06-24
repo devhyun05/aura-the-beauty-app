@@ -1,7 +1,6 @@
 import React from 'react';
 import {Pressable, ScrollView, StyleSheet} from 'react-native';
 import {
-  ArrowLeft,
   CheckCircle2,
   ChevronRight,
   Eye,
@@ -23,6 +22,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackDetailHeader} from '../components/FeedbackDetailHeader';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {FeedbackPoint, FeedbackPointKind} from '../types';
 
@@ -100,25 +100,13 @@ export function FeedbackTipScreen({point, onBack}: FeedbackTipScreenProps) {
   const PointIcon = getPointIcon(point.kind);
 
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
+      <FeedbackDetailHeader onBack={onBack} variant="tip" />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <View style={styles.header}>
-            <Pressable
-              accessibilityLabel="피드백 결과로 돌아가기"
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={onBack}
-              style={styles.iconButton}>
-              <ArrowLeft color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />
-            </Pressable>
-            <Text style={styles.headerTitle}>수정팁</Text>
-            <View style={styles.iconButton} />
-          </View>
-
           <View style={styles.heroCard}>
             <Text style={styles.heroEyebrow}>{content.eyebrow}</Text>
             <View style={styles.heroTitleRow}>
@@ -321,20 +309,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  headerTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
   heroCard: {
     backgroundColor: feedbackColors.text,
     borderRadius: feedbackRadius.card,
@@ -380,12 +354,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.md,
-  },
-  iconButton: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
   },
   returnButton: {
     alignItems: 'center',

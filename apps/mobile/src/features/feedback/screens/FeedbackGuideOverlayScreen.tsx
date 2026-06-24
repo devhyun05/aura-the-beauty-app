@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import Svg, {Circle, Ellipse, G, Line, Path, Text as SvgText} from 'react-native-svg';
 import {
-  ArrowLeft,
   Brush,
   CheckCircle2,
   Eye,
@@ -29,6 +28,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackDetailHeader} from '../components/FeedbackDetailHeader';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
@@ -128,25 +128,13 @@ export function FeedbackGuideOverlayScreen({
   );
 
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
+      <FeedbackDetailHeader onBack={onBack} variant="guide" />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <View style={styles.header}>
-            <Pressable
-              accessibilityLabel="피드백 결과로 돌아가기"
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={onBack}
-              style={styles.iconButton}>
-              <ArrowLeft color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />
-            </Pressable>
-            <Text style={styles.headerTitle}>가이드 오버레이</Text>
-            <View style={styles.iconButton} />
-          </View>
-
           <View style={[styles.photoStage, {height: photoHeight, width: photoWidth}]}>
             <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
             <View pointerEvents="none" style={styles.photoScrim} />
@@ -469,27 +457,6 @@ const styles = StyleSheet.create({
   guideTitleWrap: {
     flex: 1,
     gap: spacing.xs,
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-    paddingHorizontal: feedbackSpacing.screenX,
-  },
-  headerTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
-  iconButton: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
   },
   overlaySvg: {
     bottom: 0,

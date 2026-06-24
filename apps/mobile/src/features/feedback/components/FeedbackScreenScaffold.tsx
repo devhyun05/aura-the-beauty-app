@@ -18,8 +18,16 @@ export function getFeedbackScreenScaffoldProps() {
 
 type FeedbackScreenScaffoldProps = {
   children: ReactNode;
+  topPadding?: 'safeArea' | 'none';
 };
 
-export function FeedbackScreenScaffold({children}: FeedbackScreenScaffoldProps) {
-  return <AppScreen {...feedbackScreenScaffoldProps}>{children}</AppScreen>;
+export function FeedbackScreenScaffold({
+  children,
+  topPadding = feedbackScreenScaffoldProps.topPadding,
+}: FeedbackScreenScaffoldProps) {
+  return (
+    <AppScreen {...feedbackScreenScaffoldProps} topPadding={topPadding}>
+      {children}
+    </AppScreen>
+  );
 }
