@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  Glasses,
   ScanFace,
   WandSparkles,
   X as XIcon,
@@ -43,8 +44,15 @@ type PhotoCaptureGuideStep = {
 };
 
 export const PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO = 448 / 362;
-const PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE = 1.08;
+const PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE = 1;
 export const PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL = '좌우로 넘겨 주세요.';
+
+const photoCaptureGuideIconNames = {
+  accessory: 'glasses',
+  face: 'scan-face',
+  framing: 'camera',
+  hair: 'wand-sparkles',
+} as const satisfies Record<PhotoCaptureGuideIconKey, string>;
 
 const photoCaptureGuideSteps = [
   {
@@ -98,7 +106,7 @@ const photoCaptureGuideVisualPresentation = {
   finalActionWidth: 'compact',
   finalPrivacyPlacement: 'below-pagination-above-action',
   headerDismissControl: 'close-to-home',
-  imageFillMode: 'zoomed-cover',
+  imageFillMode: 'fit-image',
   imageFillScale: PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
@@ -118,6 +126,10 @@ export function getPhotoCaptureGuideSteps() {
 
 export function getPhotoCaptureGuideNavigationMode() {
   return photoCaptureGuideNavigationMode;
+}
+
+export function getPhotoCaptureGuideIconNames() {
+  return photoCaptureGuideIconNames;
 }
 
 export function getPhotoCaptureGuideVisualPresentation() {
@@ -254,7 +266,7 @@ export function PhotoCaptureGuideScreen({
                   ]}>
                   <Image
                     accessibilityIgnoresInvertColors
-                    resizeMode="cover"
+                    resizeMode="contain"
                     source={step.imageSource}
                     style={styles.guideImage}
                   />
@@ -346,19 +358,21 @@ function renderGuideIcon(
   color: string,
   size: number,
 ) {
-  if (iconKey === 'face') {
+  const iconName = photoCaptureGuideIconNames[iconKey];
+
+  if (iconName === 'scan-face') {
     return <ScanFace color={color} size={size} strokeWidth={1.9} />;
   }
 
-  if (iconKey === 'framing') {
+  if (iconName === 'camera') {
     return <Camera color={color} size={size} strokeWidth={1.9} />;
   }
 
-  if (iconKey === 'hair') {
+  if (iconName === 'wand-sparkles') {
     return <WandSparkles color={color} size={size} strokeWidth={1.9} />;
   }
 
-  return <Circle color={color} size={size} strokeWidth={1.9} />;
+  return <Glasses color={color} size={size} strokeWidth={1.9} />;
 }
 
 const styles = StyleSheet.create({
@@ -394,12 +408,8 @@ const styles = StyleSheet.create({
     width: iconSize.xl + spacing.md,
   },
   guideImage: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    transform: [{scale: PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE}],
+    height: '100%',
+    width: '100%',
   },
   guideCarousel: {
     flexGrow: 0,
@@ -480,7 +490,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
-    position: 'relative',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: shadows.soft.shadowOpacity,

@@ -2,11 +2,15 @@ import React from 'react';
 import {StyleSheet} from 'react-native';
 import {YStack} from 'tamagui';
 
-import {colors} from '../theme';
+import {colors, iconSize} from '../theme';
 
 type HeaderIconProps = {
   color?: string;
 };
+
+export const PROFILE_HEADER_ICON_ROOT_SIZE = iconSize.sm;
+export const PROFILE_HEADER_ICON_HEAD_SIZE = 9;
+export const PROFILE_HEADER_ICON_SHOULDERS_WIDTH = 18;
 
 export function SearchHeaderIcon({color = colors.black}: HeaderIconProps) {
   return (
@@ -51,23 +55,23 @@ const styles = StyleSheet.create({
   },
   profileRoot: {
     alignItems: 'center',
-    height: 24,
-    width: 24,
+    height: PROFILE_HEADER_ICON_ROOT_SIZE,
+    width: PROFILE_HEADER_ICON_ROOT_SIZE,
   },
   profileHead: {
-    borderRadius: 5,
+    borderRadius: PROFILE_HEADER_ICON_HEAD_SIZE / 2,
     borderWidth: 2,
-    height: 10,
-    width: 10,
+    height: PROFILE_HEADER_ICON_HEAD_SIZE,
+    width: PROFILE_HEADER_ICON_HEAD_SIZE,
   },
   profileShoulders: {
     borderLeftWidth: 2,
     borderRightWidth: 2,
-    borderTopLeftRadius: 11,
-    borderTopRightRadius: 11,
+    borderTopLeftRadius: PROFILE_HEADER_ICON_SHOULDERS_WIDTH / 2,
+    borderTopRightRadius: PROFILE_HEADER_ICON_SHOULDERS_WIDTH / 2,
     borderTopWidth: 2,
-    height: 10,
-    marginTop: 4,
-    width: 22,
+    height: 9,
+    marginTop: 3,
+    width: PROFILE_HEADER_ICON_SHOULDERS_WIDTH,
   },
 });

@@ -4,6 +4,7 @@ import {
   PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO,
   PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL,
   PhotoCaptureGuideScreen,
+  getPhotoCaptureGuideIconNames,
   getPhotoCaptureGuideNavigationMode,
   getPhotoCaptureGuideVisualPresentation,
   getPhotoCaptureGuideSteps,
@@ -16,12 +17,21 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 const guideSteps = getPhotoCaptureGuideSteps();
+const iconNames = getPhotoCaptureGuideIconNames();
 const navigationMode = getPhotoCaptureGuideNavigationMode();
 const visualPresentation = getPhotoCaptureGuideVisualPresentation();
 const lastStep = guideSteps[guideSteps.length - 1];
+const imageFillPresentation: {
+  imageFillMode: 'fit-image';
+  imageFillScale: 1;
+} = visualPresentation;
+
+void imageFillPresentation;
 
 expectEqual(guideSteps.length, 4, 'photo capture guide step count');
 expectEqual(guideSteps[0].iconKey, 'face', 'photo capture first step icon');
+expectEqual(guideSteps[2].iconKey, 'accessory', 'photo capture accessory step icon');
+expectEqual(iconNames.accessory, 'glasses', 'photo capture accessory icon name');
 expectEqual(guideSteps[0].buttonLabel, null, 'photo capture first step action');
 expectEqual(navigationMode.stepAdvance, 'swipe', 'photo capture guide step advance');
 expectEqual(
@@ -40,12 +50,12 @@ expectEqual(visualPresentation.showsImageChip, false, 'photo capture image chip'
 expectEqual(visualPresentation.usesImageScrim, false, 'photo capture image scrim');
 expectEqual(
   visualPresentation.imageFillMode,
-  'zoomed-cover',
+  'fit-image',
   'photo capture image fill mode',
 );
 expectEqual(
   visualPresentation.imageFillScale,
-  1.08,
+  1,
   'photo capture image fill scale',
 );
 expectEqual(visualPresentation.finalActionWidth, 'compact', 'photo capture final action width');
