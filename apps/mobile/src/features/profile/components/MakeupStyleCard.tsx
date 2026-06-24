@@ -1,4 +1,4 @@
-import type { MakeupStylePreview } from '../../../shared/types/userPage';
+import type { MakeupStylePreview } from '../../../shared/types/myPage';
 import { MakeupLookCard } from './MakeupLookCard';
 
 type MakeupStyleCardProps = {

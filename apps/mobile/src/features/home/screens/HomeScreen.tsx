@@ -8,9 +8,9 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  Camera,
   ChevronRight,
   PackageSearch,
-  Palette,
   ScanFace,
   Sparkles,
   WandSparkles,
@@ -27,11 +27,20 @@ import type {
 } from '../types';
 
 type HomeScreenProps = {
+  onPressARFilter?: () => void;
   onPressCreateFilter?: () => void;
+  onPressFaceDiagnosis?: () => void;
+  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
-export function HomeScreen({onPressCreateFilter, onPressProductRecommendations}: HomeScreenProps) {
+export function HomeScreen({
+  onPressARFilter,
+  onPressCreateFilter,
+  onPressFaceDiagnosis,
+  onPressMakeupFeedback,
+  onPressProductRecommendations,
+}: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
@@ -59,10 +68,7 @@ export function HomeScreen({onPressCreateFilter, onPressProductRecommendations}:
   }
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      style={styles.scrollView}
-      contentContainerStyle={styles.content}>
+    <>
       <HeroBannerCarousel
         cardWidth={heroCardWidth}
         fallbackImageSource={homeData.hero.imageSource}
@@ -70,12 +76,15 @@ export function HomeScreen({onPressCreateFilter, onPressProductRecommendations}:
       />
 
       <QuickActionSection
+        onPressARFilter={onPressARFilter}
         onPressCreateFilter={onPressCreateFilter}
+        onPressFaceDiagnosis={onPressFaceDiagnosis}
+        onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection items={homeData.filterStore} />
       <RecommendedLooksSection looks={homeData.recommendedLooks} />
-    </ScrollView>
+    </>
   );
 }
 
@@ -91,6 +100,55 @@ type HeroBannerCardProps = {
   title: string;
   tone: string;
 };
+
+type HeroTrendHeadline<TTitle extends string, TTone extends string> =
+  `${TTone} 무드의\n${TTitle}`;
+
+export function getHeroTrendHeadline<
+  const TTitle extends string,
+  const TTone extends string,
+>({title, tone}: {title: TTitle; tone: TTone}): HeroTrendHeadline<TTitle, TTone> {
+  return `${tone} 무드의\n${title}` as HeroTrendHeadline<TTitle, TTone>;
+}
+
+export const heroTrendTitleReadableTextStyle = {
+  color: colors.textPrimary,
+  textShadowColor: 'rgba(255, 255, 255, 0.30)',
+  textShadowOffset: {width: 0, height: 2},
+  textShadowRadius: 8,
+} as const;
+
+export const heroTrendTitleMainTextStyle = {
+  ...heroTrendTitleReadableTextStyle,
+  fontFamily: typography.fontFamily.semibold,
+  fontSize: typography.fontSize.xxl,
+  lineHeight: typography.lineHeight.xxl,
+} as const;
+
+export const heroCtaLabel = '보러가기' as const;
+
+export function getFilterStoreCategoryChipLabel<const TCategory extends string>(
+  category: TCategory,
+): TCategory {
+  return category;
+}
+
+export const filterStoreCategoryChipContainerStyle = {
+  alignSelf: 'flex-start',
+  backgroundColor: colors.surfaceMuted,
+  borderColor: colors.border,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+} as const;
+
+export const filterStoreCategoryChipTextStyle = {
+  color: colors.textSecondary,
+  fontFamily: typography.fontFamily.semibold,
+  fontSize: typography.fontSize.xs,
+  lineHeight: typography.lineHeight.xs,
+} as const;
 
 function HeroBannerCarousel({
   cardWidth,
@@ -131,12 +189,14 @@ function HeroBannerCarousel({
 }
 
 function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardProps) {
-  const headline = `이번 주 추천 ${title} ${tone}`;
+  const headline = getHeroTrendHeadline({title, tone});
+  const [headlineLead, headlineTitle] = headline.split('\n');
+  const accessibilityHeadline = headline.replace('\n', ' ');
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${headline} 룩 보러가기`}
+      accessibilityLabel={`${accessibilityHeadline} ${heroCtaLabel}`}
       style={({pressed}) => [
         styles.heroBanner,
         {height: cardWidth, width: cardWidth},
@@ -147,19 +207,19 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
 
       <YStack style={styles.heroCopy}>
         <XStack style={styles.heroBadge}>
-          <Sparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={1.8} />
           <Text style={styles.heroBadgeText}>WEEKLY TREND</Text>
         </XStack>
 
-        <Text style={styles.heroTitle}>
-          이번 주 추천{'\n'}{title}{'\n'}{tone}
-        </Text>
-
-        <XStack style={styles.heroButton}>
-          <Text style={styles.heroButtonText}>룩 보러가기</Text>
-          <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
-        </XStack>
+        <YStack style={styles.heroTitleGroup}>
+          <Text style={styles.heroTitleLead}>{headlineLead}</Text>
+          <Text style={styles.heroTitleMain}>{headlineTitle}</Text>
+        </YStack>
       </YStack>
+
+      <XStack style={styles.heroButton}>
+        <Text style={styles.heroButtonText}>{heroCtaLabel}</Text>
+        <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
+      </XStack>
     </Pressable>
   );
 }
@@ -169,6 +229,12 @@ const quickActions = [
     id: 'ar',
     label: '실시간 AR',
     accessibilityLabel: '실시간 AR 시작',
+    icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
+  {
+    id: 'diagnosis',
+    label: '얼굴 진단',
+    accessibilityLabel: '얼굴 진단 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
@@ -176,6 +242,12 @@ const quickActions = [
     label: '메이크업 추출',
     accessibilityLabel: '메이크업 추출',
     icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
+  {
+    id: 'feedback',
+    label: '메이크업 피드백',
+    accessibilityLabel: '메이크업 피드백 시작',
+    icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
     id: 'recommendation',
@@ -187,13 +259,64 @@ const quickActions = [
   },
 ] as const;
 
-function QuickActionSection({
-  onPressCreateFilter,
-  onPressProductRecommendations,
-}: {
+type HomeQuickActionId = (typeof quickActions)[number]['id'];
+
+type HomeQuickActionHandlers = {
+  onPressARFilter?: () => void;
   onPressCreateFilter?: () => void;
+  onPressFaceDiagnosis?: () => void;
+  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
-}) {
+};
+
+export function getHomeQuickActionPressHandler(
+  actionId: HomeQuickActionId,
+  {
+    onPressARFilter,
+    onPressCreateFilter,
+    onPressFaceDiagnosis,
+    onPressMakeupFeedback,
+    onPressProductRecommendations,
+  }: HomeQuickActionHandlers,
+): (() => void) | undefined {
+  if (actionId === 'ar') {
+    return onPressARFilter;
+  }
+
+  if (actionId === 'diagnosis') {
+    return onPressFaceDiagnosis;
+  }
+
+  if (actionId === 'extract') {
+    return onPressCreateFilter;
+  }
+
+  if (actionId === 'feedback') {
+    return onPressMakeupFeedback;
+  }
+
+  if (actionId === 'recommendation') {
+    return onPressProductRecommendations;
+  }
+
+  return undefined;
+}
+
+function QuickActionSection({
+  onPressARFilter,
+  onPressCreateFilter,
+  onPressFaceDiagnosis,
+  onPressMakeupFeedback,
+  onPressProductRecommendations,
+}: HomeQuickActionHandlers) {
+  const quickActionHandlers: HomeQuickActionHandlers = {
+    onPressARFilter,
+    onPressCreateFilter,
+    onPressFaceDiagnosis,
+    onPressMakeupFeedback,
+    onPressProductRecommendations,
+  };
+
   return (
     <XStack style={styles.quickActionList}>
       {quickActions.map((action) => (
@@ -201,18 +324,12 @@ function QuickActionSection({
           accessibilityRole="button"
           accessibilityLabel={action.accessibilityLabel}
           key={action.label}
-          onPress={
-            action.id === 'extract'
-              ? onPressCreateFilter
-              : action.id === 'recommendation'
-                ? onPressProductRecommendations
-                : undefined
-          }
+          onPress={getHomeQuickActionPressHandler(action.id, quickActionHandlers)}
           style={({pressed}) => [styles.quickActionItem, pressed && styles.pressed]}>
           <View style={styles.quickActionCircle}>
             {action.icon(colors.textPrimary)}
           </View>
-          <Text numberOfLines={1} style={styles.quickActionLabel}>
+          <Text numberOfLines={2} style={styles.quickActionLabel}>
             {action.label}
           </Text>
         </Pressable>
@@ -245,13 +362,8 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.title} ${item.description}`}
+      accessibilityLabel={`${item.title} ${item.description} ${item.category}`}
       style={({pressed}) => [styles.filterCard, pressed && styles.pressed]}>
-      <XStack style={styles.filterHeader}>
-        <Text style={styles.filterCategory}>{item.category}</Text>
-        <Palette color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
-      </XStack>
-
       <View style={styles.filterImageFrame}>
         <Image resizeMode="contain" source={item.imageSource} style={styles.filterImage} />
       </View>
@@ -262,6 +374,11 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
       <Text numberOfLines={2} style={styles.filterDescription}>
         {item.description}
       </Text>
+      <XStack style={styles.filterCategoryChip}>
+        <Text style={styles.filterCategoryChipText}>
+          {getFilterStoreCategoryChipLabel(item.category)}
+        </Text>
+      </XStack>
     </Pressable>
   );
 }
@@ -329,12 +446,6 @@ function SectionHeader({actionLabel, title}: SectionHeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: spacing.xxl,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-  },
   heroBackgroundImage: {
     bottom: 0,
     height: '100%',
@@ -378,22 +489,17 @@ const styles = StyleSheet.create({
     shadowRadius: shadows.soft.shadowRadius,
     width: 156,
   },
-  filterCategory: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+  filterCategoryChip: {
+    ...filterStoreCategoryChipContainerStyle,
+  },
+  filterCategoryChipText: {
+    ...filterStoreCategoryChipTextStyle,
   },
   filterDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  filterHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   filterImage: {
     height: '100%',
@@ -427,28 +533,38 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   heroCopy: {
-    bottom: spacing.xl,
     gap: spacing.md,
     left: spacing.xl,
     maxWidth: 236,
     position: 'absolute',
+    top: spacing.xl,
     zIndex: 1,
   },
-  heroTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: 22,
-    lineHeight: 30,
+  heroTitleGroup: {
+    gap: spacing.xs,
+  },
+  heroTitleLead: {
+    ...heroTrendTitleReadableTextStyle,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
+  },
+  heroTitleMain: {
+    ...heroTrendTitleMainTextStyle,
   },
   heroButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: colors.textPrimary,
+    bottom: spacing.xl,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
     minHeight: 44,
     paddingHorizontal: spacing.xl,
+    position: 'absolute',
+    right: spacing.xl,
+    zIndex: 1,
   },
   heroButtonText: {
     color: colors.white,
@@ -525,13 +641,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 72,
+    height: 64,
     justifyContent: 'center',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    width: 72,
+    width: 64,
   },
   quickActionItem: {
     alignItems: 'center',
@@ -543,17 +659,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
+    minHeight: typography.lineHeight.xs * 2,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
   quickActionList: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
     justifyContent: 'space-between',
-  },
-  scrollView: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   section: {
     gap: spacing.md,

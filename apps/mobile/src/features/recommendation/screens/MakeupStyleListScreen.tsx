@@ -4,7 +4,7 @@ import {Text, View} from 'tamagui';
 
 import {getMakeupLooks} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLook} from '../../../shared/types/userPage';
+import type {MakeupLook} from '../../../shared/types/myPage';
 import {
   AppHeader,
   AppScreen,
@@ -38,7 +38,7 @@ export function MakeupStyleListScreen({onBack}: MakeupStyleListScreenProps) {
   }, []);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <AppHeader onBack={onBack} title="메이크업 룩" />
 
       <PagedGrid

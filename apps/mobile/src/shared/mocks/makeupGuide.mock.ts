@@ -18,18 +18,13 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
   ],
   comparisonModes: [
     {
-      id: 'full',
-      label: '전체 비교',
-      description: '왼쪽은 적용 전, 오른쪽은 적용 후처럼 전체 기준으로 보여줘요.',
-    },
-    {
       id: 'left',
-      label: '왼쪽 적용',
+      label: '왼쪽',
       description: '왼쪽 얼굴 영역에만 필터가 적용된 상태를 mock으로 표현해요.',
     },
     {
       id: 'right',
-      label: '오른쪽 적용',
+      label: '오른쪽',
       description: '오른쪽 얼굴 영역에만 필터가 적용된 상태를 mock으로 표현해요.',
     },
   ],
@@ -45,7 +40,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       id: 'neutral-rose-guide',
       imageSource: styleOjiGirl,
       categoryId: 'recommended',
-      title: '뉴트럴 로즈 가이드',
+      title: '뉴트럴 로즈',
       subtitle: '세미 글로우 베이스와 로즈 립',
       intensityLabel: '자연스럽게',
       facePartIds: ['all', 'base', 'eye', 'lip'],

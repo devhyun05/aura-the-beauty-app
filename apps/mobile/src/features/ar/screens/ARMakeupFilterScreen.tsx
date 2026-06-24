@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {Image, ScrollView, StyleSheet} from 'react-native';
+import {Image, ScrollView, StyleSheet, type ViewStyle} from 'react-native';
 import {Camera, ChevronLeft, SlidersHorizontal, Video} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -9,15 +9,28 @@ import {
   getFiltersByCategory,
   getMockARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
-import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   ComparisonMode,
   FacePartId,
+  FilterColorOption,
   FilterCategoryId,
   GuideMode,
   MakeupFilter,
   StyleOptionGroupId,
 } from '../../../shared/types/makeupGuide';
+import {
+  BottomOverlayPanel,
+  CAMERA_CAPTURE_BUTTON_METRICS,
+  FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
+  CameraCaptureButton,
+  FullscreenOverlayLayer,
+  FullscreenOverlayScreen,
+  LiveCameraLayer,
+  OverlayChipButton,
+  OverlayIconButton,
+  OverlaySegmentButton,
+} from '../../../shared/ui';
 
 type CaptureMode = 'photo' | 'video';
 
@@ -36,8 +49,80 @@ const STYLE_OPTION_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = 
   {id: 'texture', label: '질감'},
 ];
 
+const MODE_TAB_HEIGHT = 32;
+const SELECTED_TAB_BACKGROUND_OPACITY = FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY;
+const CAPTURE_BUTTON_METRICS = {
+  outerSize: CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
+  innerScale: CAMERA_CAPTURE_BUTTON_METRICS.innerScale,
+} as const;
+
+type ARMakeupFilterSelectedColor = Pick<FilterColorOption, 'hex' | 'label'>;
+
+const AR_MAKEUP_FILTER_FALLBACK_COLOR: ARMakeupFilterSelectedColor = {
+  hex: colors.white,
+  label: '기본',
+};
+
+type MakeupPreviewColorOverlayLayer = {
+  id: string;
+  style: ViewStyle;
+};
+
+export function getMakeupPreviewColorOverlayLayers(): readonly MakeupPreviewColorOverlayLayer[] {
+  return [];
+}
+
+export function getMakeupPreviewBadgeContent(): null {
+  return null;
+}
+
+export function getARMakeupFilterCameraMode(): 'live-camera' {
+  return 'live-camera';
+}
+
+export function shouldShowARMakeupFilterHeaderCopy(): false {
+  return false;
+}
+
+export function getARMakeupFilterModeTabHeight(): number {
+  return MODE_TAB_HEIGHT;
+}
+
+export function getARMakeupFilterSelectedTabOpacity(): number {
+  return SELECTED_TAB_BACKGROUND_OPACITY;
+}
+
+export function getARMakeupFilterCategoryTitle(): null {
+  return null;
+}
+
+export function getARMakeupFilterComparisonTabs(): readonly string[] {
+  return getMockARMakeupGuideData().comparisonModes.map(mode => mode.label);
+}
+
+export function getARMakeupFilterCaptureButtonMetrics(): typeof CAPTURE_BUTTON_METRICS {
+  return CAPTURE_BUTTON_METRICS;
+}
+
+export function getARMakeupFilterSelectedColor(
+  colorOptions: readonly FilterColorOption[],
+  selectedColorId: string,
+): ARMakeupFilterSelectedColor {
+  return (
+    colorOptions.find(option => option.id === selectedColorId) ??
+    colorOptions[0] ??
+    AR_MAKEUP_FILTER_FALLBACK_COLOR
+  );
+}
+
+export function getARMakeupFilterInitialColorId(
+  colorOptions: readonly FilterColorOption[],
+): string {
+  return colorOptions[0]?.id ?? '';
+}
+
 export function ARMakeupFilterScreen({
-  initialComparisonMode = 'full',
+  initialComparisonMode = 'left',
   initialGuideMode = 'basic',
   onBack,
   onComplete,
@@ -58,10 +143,12 @@ export function ARMakeupFilterScreen({
   const [selectedFacePartId, setSelectedFacePartId] = useState<FacePartId>('all');
   const [selectedOptionGroup, setSelectedOptionGroup] =
     useState<StyleOptionGroupId>('color');
-  const [selectedColorId, setSelectedColorId] = useState(defaultFilter.colorOptions[0].id);
-  const [selectedTypeId, setSelectedTypeId] = useState(defaultFilter.typeOptions[0].id);
+  const [selectedColorId, setSelectedColorId] = useState(
+    getARMakeupFilterInitialColorId(defaultFilter.colorOptions),
+  );
+  const [selectedTypeId, setSelectedTypeId] = useState(defaultFilter.typeOptions[0]?.id ?? '');
   const [selectedTextureId, setSelectedTextureId] = useState(
-    defaultFilter.textureOptions[0].id,
+    defaultFilter.textureOptions[0]?.id ?? '',
   );
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
 
@@ -81,71 +168,95 @@ export function ARMakeupFilterScreen({
 
   const handleFilterPress = (filter: MakeupFilter) => {
     setSelectedFilterId(filter.id);
-    setSelectedColorId(filter.colorOptions[0].id);
-    setSelectedTypeId(filter.typeOptions[0].id);
-    setSelectedTextureId(filter.textureOptions[0].id);
+    setSelectedColorId(getARMakeupFilterInitialColorId(filter.colorOptions));
+    setSelectedTypeId(filter.typeOptions[0]?.id ?? '');
+    setSelectedTextureId(filter.textureOptions[0]?.id ?? '');
   };
 
-  const selectedColor =
-    selectedFilter.colorOptions.find(option => option.id === selectedColorId) ??
-    selectedFilter.colorOptions[0];
-  const selectedType =
-    selectedFilter.typeOptions.find(option => option.id === selectedTypeId) ??
-    selectedFilter.typeOptions[0];
-  const selectedTexture =
-    selectedFilter.textureOptions.find(option => option.id === selectedTextureId) ??
-    selectedFilter.textureOptions[0];
-  const selectedComparison =
-    arGuideData.comparisonModes.find(mode => mode.id === selectedComparisonMode) ??
-    arGuideData.comparisonModes[0];
+  const selectedColor = getARMakeupFilterSelectedColor(
+    selectedFilter.colorOptions,
+    selectedColorId,
+  );
+  const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldShowLeftCheekOverlay =
-    guideMode !== 'half' || selectedComparisonMode === 'left';
+    guideMode !== 'half' || selectedComparisonMode !== 'right';
   const shouldShowRightCheekOverlay =
     guideMode !== 'half' || selectedComparisonMode !== 'left';
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
   const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 
   return (
-    <View style={styles.screen}>
+    <FullscreenOverlayScreen>
+      <FullscreenOverlayLayer>
+        <LiveCameraLayer />
+        <View style={styles.previewDim} />
+        <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        {shouldShowLeftCheekOverlay ? (
+          <View
+            style={[styles.cheekPreviewOverlayLeft, {backgroundColor: selectedColor.hex}]}
+          />
+        ) : null}
+        {shouldShowRightCheekOverlay ? (
+          <View
+            style={[styles.cheekPreviewOverlayRight, {backgroundColor: selectedColor.hex}]}
+          />
+        ) : null}
+        <View style={[styles.lipPreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        {previewColorOverlayLayers.map(layer => (
+          <View
+            key={layer.id}
+            style={[layer.style, {backgroundColor: selectedColor.hex}]}
+          />
+        ))}
+        {guideMode === 'half' ? (
+          <>
+            {selectedComparisonMode !== 'full' ? (
+              <View
+                style={[
+                  styles.comparisonShade,
+                  selectedComparisonMode === 'left'
+                    ? styles.comparisonShadeRight
+                    : styles.comparisonShadeLeft,
+                ]}
+              />
+            ) : null}
+            <View style={styles.comparisonDivider} />
+            <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
+              {leftComparisonLabel}
+            </Text>
+            <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
+              {rightComparisonLabel}
+            </Text>
+          </>
+        ) : null}
+      </FullscreenOverlayLayer>
+
       <YStack style={[styles.topArea, {paddingTop: insets.top + spacing.md}]}>
         <XStack style={styles.header}>
-          <Button
+          <OverlayIconButton
             accessibilityLabel="생성 결과 화면으로 돌아가기"
-            accessibilityRole="button"
-            hitSlop={8}
             onPress={onBack}
-            pressStyle={{scale: 0.97}}
-            style={styles.roundIconButton}
-            unstyled>
+          >
             <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
-          </Button>
+          </OverlayIconButton>
 
-          <YStack style={styles.headerCopy}>
-            <Text style={styles.headerEyebrow}>AR MAKEUP FILTER</Text>
-            <Text numberOfLines={1} style={styles.headerTitle}>
-              {selectedFilter.title}
-            </Text>
-          </YStack>
-
-          <Button
+          <OverlayIconButton
             accessibilityLabel="필터 위치 조정"
-            accessibilityRole="button"
-            hitSlop={8}
             onPress={onOpenLocationAdjust}
-            pressStyle={{scale: 0.97}}
-            style={styles.roundIconButton}
-            unstyled>
+          >
             <SlidersHorizontal color={colors.white} size={iconSize.sm} strokeWidth={2} />
-          </Button>
+          </OverlayIconButton>
         </XStack>
 
         <XStack style={styles.segmentedControl}>
-          <SegmentButton
+          <OverlaySegmentButton
+            height={MODE_TAB_HEIGHT}
             isActive={guideMode === 'basic'}
             label="기본"
             onPress={() => setGuideMode('basic')}
           />
-          <SegmentButton
+          <OverlaySegmentButton
+            height={MODE_TAB_HEIGHT}
             isActive={guideMode === 'half'}
             label="반반 가이드"
             onPress={() => setGuideMode('half')}
@@ -155,75 +266,28 @@ export function ARMakeupFilterScreen({
         {guideMode === 'half' ? (
           <XStack style={styles.comparisonBar}>
             {arGuideData.comparisonModes.map(mode => (
-              <ComparisonModeButton
+              <OverlaySegmentButton
                 key={mode.id}
+                height={MODE_TAB_HEIGHT}
                 isActive={mode.id === selectedComparisonMode}
                 label={mode.label}
                 onPress={() => setSelectedComparisonMode(mode.id)}
+                style={styles.comparisonButton}
+                textStyle={styles.comparisonButtonText}
               />
             ))}
           </XStack>
         ) : null}
       </YStack>
 
-      <YStack style={styles.previewArea}>
-        <View style={styles.previewFrame}>
-          <Image
-            resizeMode="cover"
-            source={selectedFilter.imageSource}
-            style={styles.previewImage}
-          />
-          <View style={styles.previewDim} />
-          <View style={[styles.eyeOverlay, {backgroundColor: selectedColor.hex}]} />
-          {shouldShowLeftCheekOverlay ? (
-            <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
-          ) : null}
-          {shouldShowRightCheekOverlay ? (
-            <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
-          ) : null}
-          <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
-          {guideMode === 'half' ? (
-            <>
-              {selectedComparisonMode !== 'full' ? (
-                <View
-                  style={[
-                    styles.comparisonShade,
-                    selectedComparisonMode === 'left'
-                      ? styles.comparisonShadeRight
-                      : styles.comparisonShadeLeft,
-                  ]}
-                />
-              ) : null}
-              <View style={styles.comparisonDivider} />
-              <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
-                {leftComparisonLabel}
-              </Text>
-              <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
-                {rightComparisonLabel}
-              </Text>
-            </>
-          ) : null}
-          <YStack style={styles.previewBadge}>
-            <Text style={styles.previewBadgeLabel}>
-              {guideMode === 'basic' ? '기본 모드' : selectedComparison.label}
-            </Text>
-            <Text style={styles.previewBadgeText}>
-              {guideMode === 'half'
-                ? selectedComparison.description
-                : `${selectedColor.label} · ${selectedType.label} · ${selectedTexture.label}`}
-            </Text>
-          </YStack>
-        </View>
-      </YStack>
-
-      <YStack style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.md}]}>
+      <BottomOverlayPanel style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.md}]}>
         <ScrollView
           contentContainerStyle={styles.panelContent}
           horizontal={false}
           showsVerticalScrollIndicator={false}>
-          <HorizontalSection label="필터 카테고리">
+          <HorizontalSection label={getARMakeupFilterCategoryTitle()}>
             {arGuideData.categories.map(category => (
-              <ChipButton
+              <OverlayChipButton
                 key={category.id}
                 isActive={category.id === selectedCategoryId}
                 label={category.label}
@@ -269,7 +333,7 @@ export function ARMakeupFilterScreen({
 
           <HorizontalSection label="얼굴 부위">
             {arGuideData.faceParts.map(facePart => (
-              <ChipButton
+              <OverlayChipButton
                 key={facePart.id}
                 isActive={facePart.id === selectedFacePartId}
                 label={facePart.label}
@@ -280,7 +344,7 @@ export function ARMakeupFilterScreen({
 
           <HorizontalSection label="스타일 옵션">
             {STYLE_OPTION_GROUPS.map(group => (
-              <ChipButton
+              <OverlayChipButton
                 key={group.id}
                 isActive={group.id === selectedOptionGroup}
                 label={group.label}
@@ -323,7 +387,7 @@ export function ARMakeupFilterScreen({
                     : option.id === selectedTextureId;
 
                 return (
-                  <ChipButton
+                  <OverlayChipButton
                     key={option.id}
                     isActive={isActive}
                     label={option.label}
@@ -358,78 +422,25 @@ export function ARMakeupFilterScreen({
             />
           </XStack>
 
-          <Button
+          <CameraCaptureButton
             accessibilityLabel={captureMode === 'photo' ? 'AR 사진 촬영 후 홈으로 이동' : 'AR 동영상 촬영 후 홈으로 이동'}
-            accessibilityRole="button"
             onPress={onComplete}
-            pressStyle={{scale: 0.96}}
-            style={styles.captureButton}
-            unstyled>
-            <View style={styles.captureButtonInner} />
-          </Button>
+          />
         </XStack>
-      </YStack>
-    </View>
-  );
-}
-
-type SegmentButtonProps = {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
-};
-
-function SegmentButton({isActive, label, onPress}: SegmentButtonProps) {
-  return (
-    <Button
-      accessibilityRole="button"
-      accessibilityState={{selected: isActive}}
-      onPress={onPress}
-      pressStyle={{scale: 0.98}}
-      style={[styles.segmentButton, isActive ? styles.segmentButtonActive : undefined]}
-      unstyled>
-      <Text style={[styles.segmentText, isActive ? styles.segmentTextActive : undefined]}>
-        {label}
-      </Text>
-    </Button>
-  );
-}
-
-type ComparisonModeButtonProps = {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
-};
-
-function ComparisonModeButton({isActive, label, onPress}: ComparisonModeButtonProps) {
-  return (
-    <Button
-      accessibilityRole="button"
-      accessibilityState={{selected: isActive}}
-      onPress={onPress}
-      pressStyle={{scale: 0.98}}
-      style={[styles.comparisonButton, isActive ? styles.comparisonButtonActive : undefined]}
-      unstyled>
-      <Text
-        style={[
-          styles.comparisonButtonText,
-          isActive ? styles.comparisonButtonTextActive : undefined,
-        ]}>
-        {label}
-      </Text>
-    </Button>
+      </BottomOverlayPanel>
+    </FullscreenOverlayScreen>
   );
 }
 
 type HorizontalSectionProps = {
   children: React.ReactNode;
-  label: string;
+  label?: string | null;
 };
 
 function HorizontalSection({children, label}: HorizontalSectionProps) {
   return (
     <YStack style={styles.horizontalSection}>
-      <Text style={styles.panelLabel}>{label}</Text>
+      {label ? <Text style={styles.panelLabel}>{label}</Text> : null}
       <ScrollView
         contentContainerStyle={styles.chipList}
         horizontal
@@ -440,27 +451,6 @@ function HorizontalSection({children, label}: HorizontalSectionProps) {
   );
 }
 
-type ChipButtonProps = {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
-};
-
-function ChipButton({isActive, label, onPress}: ChipButtonProps) {
-  return (
-    <Button
-      accessibilityRole="button"
-      accessibilityState={{selected: isActive}}
-      onPress={onPress}
-      pressStyle={{scale: 0.97}}
-      style={[styles.chip, isActive ? styles.chipActive : undefined]}
-      unstyled>
-      <Text style={[styles.chipText, isActive ? styles.chipTextActive : undefined]}>
-        {label}
-      </Text>
-    </Button>
-  );
-}
 
 type FilterCardProps = {
   filter: MakeupFilter;
@@ -517,50 +507,16 @@ function IconModeButton({accessibilityLabel, icon, isActive, onPress}: IconModeB
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.black,
-    flex: 1,
-  },
   topArea: {
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
+    zIndex: 3,
   },
   header: {
     alignItems: 'center',
     gap: spacing.md,
-  },
-  roundIconButton: {
-    alignItems: 'center',
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.xl + spacing.md,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.md,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  headerEyebrow: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.2,
-    lineHeight: typography.lineHeight.xs,
-  },
-  headerTitle: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
+    justifyContent: 'space-between',
   },
   segmentedControl: {
     backgroundColor: colors.glassSurface,
@@ -568,27 +524,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     padding: spacing.xs,
-  },
-  segmentButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flex: 1,
-    height: 38,
-    justifyContent: 'center',
-  },
-  segmentButtonActive: {
-    backgroundColor: colors.white,
-  },
-  segmentText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  segmentTextActive: {
-    color: colors.black,
   },
   comparisonBar: {
     backgroundColor: colors.glassSurface,
@@ -602,12 +537,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radius.pill,
     flex: 1,
-    minHeight: 36,
+    minHeight: MODE_TAB_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
-  },
-  comparisonButtonActive: {
-    backgroundColor: colors.white,
   },
   comparisonButtonText: {
     color: colors.white,
@@ -618,29 +550,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
-  comparisonButtonTextActive: {
-    color: colors.black,
-  },
-  previewArea: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  previewFrame: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    height: '100%',
-    maxHeight: 360,
-    minHeight: 286,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  previewImage: {
-    height: '100%',
-    width: '100%',
-  },
   previewDim: {
     backgroundColor: colors.black,
     bottom: 0,
@@ -650,48 +559,50 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  eyeOverlay: {
+  eyePreviewOverlay: {
     borderRadius: radius.pill,
-    height: spacing.xs,
-    left: '31%',
-    opacity: 0.32,
+    height: 34,
+    left: '27%',
+    opacity: 0.16,
     position: 'absolute',
-    right: '31%',
-    top: '39%',
+    right: '27%',
+    top: '38%',
   },
-  cheekOverlayLeft: {
+  cheekPreviewOverlayLeft: {
     borderRadius: radius.pill,
-    height: spacing.md,
-    left: '24%',
-    opacity: 0.24,
+    height: 54,
+    left: '20%',
+    opacity: 0.18,
     position: 'absolute',
-    top: '55%',
-    width: 42,
+    top: '52%',
+    transform: [{rotate: '-14deg'}],
+    width: 92,
   },
-  cheekOverlayRight: {
+  cheekPreviewOverlayRight: {
     borderRadius: radius.pill,
-    height: spacing.md,
-    opacity: 0.24,
+    height: 54,
+    opacity: 0.18,
     position: 'absolute',
-    right: '24%',
-    top: '55%',
-    width: 42,
+    right: '20%',
+    top: '52%',
+    transform: [{rotate: '14deg'}],
+    width: 92,
   },
-  lipOverlay: {
+  lipPreviewOverlay: {
     borderRadius: radius.pill,
-    bottom: '23%',
-    height: spacing.sm,
-    left: '43%',
-    opacity: 0.62,
+    bottom: '24%',
+    height: 24,
+    left: '39%',
+    opacity: 0.4,
     position: 'absolute',
-    right: '43%',
+    width: 82,
   },
   comparisonShade: {
     backgroundColor: colors.black,
-    bottom: spacing.md,
-    opacity: 0.42,
+    bottom: 0,
+    opacity: 0.34,
     position: 'absolute',
-    top: spacing.md,
+    top: 0,
     width: '50%',
   },
   comparisonShadeLeft: {
@@ -702,11 +613,12 @@ const styles = StyleSheet.create({
   },
   comparisonDivider: {
     backgroundColor: colors.white,
-    bottom: spacing.md,
-    opacity: 0.88,
+    bottom: '28%',
+    opacity: 0.86,
     position: 'absolute',
-    top: spacing.md,
+    top: '24%',
     width: 2,
+    left: '50%',
   },
   comparisonLabel: {
     backgroundColor: colors.glassSurface,
@@ -720,7 +632,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     position: 'absolute',
-    bottom: spacing.xl,
+    bottom: '31%',
   },
   comparisonLabelBefore: {
     left: spacing.xl,
@@ -728,48 +640,11 @@ const styles = StyleSheet.create({
   comparisonLabelAfter: {
     right: spacing.xl,
   },
-  previewBadge: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.xs,
-    left: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    position: 'absolute',
-    right: spacing.md,
-    top: spacing.md,
-  },
-  previewBadgeLabel: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  previewBadgeText: {
-    color: colors.borderStrong,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'left',
-  },
   controlsPanel: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
     gap: spacing.md,
     maxHeight: 392,
+    paddingHorizontal: 0,
     paddingTop: spacing.lg,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: {width: 0, height: -6},
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
   },
   panelContent: {
     gap: spacing.md,
@@ -789,31 +664,6 @@ const styles = StyleSheet.create({
   },
   chipList: {
     gap: spacing.sm,
-  },
-  chip: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  chipActive: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
-  },
-  chipText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  chipTextActive: {
-    color: colors.white,
   },
   filterList: {
     gap: spacing.md,
@@ -925,7 +775,7 @@ const styles = StyleSheet.create({
   },
   captureRow: {
     alignItems: 'center',
-    borderTopColor: colors.border,
+    borderTopColor: colors.divider,
     borderTopWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
@@ -948,22 +798,5 @@ const styles = StyleSheet.create({
   },
   modeButtonActive: {
     backgroundColor: colors.white,
-  },
-  captureButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.black,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 68,
-    justifyContent: 'center',
-    padding: 0,
-    width: 68,
-  },
-  captureButtonInner: {
-    backgroundColor: colors.black,
-    borderRadius: radius.pill,
-    height: 52,
-    width: 52,
   },
 });

@@ -8,7 +8,7 @@ import {
   IconButton,
   ImagePlaceholder,
 } from '../../../shared/ui';
-import type { UserProfile } from '../../../shared/types/userPage';
+import type { UserProfile } from '../../../shared/types/myPage';
 
 type ProfileSummaryCardProps = {
   profile: UserProfile;

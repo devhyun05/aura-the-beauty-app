@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import type {ProfileEditField, UserProfile} from '../types/userPage';
+import type {ProfileEditField, UserProfile} from '../types/myPage';
 
 const profileSeojinAvatar =
   require('../../assets/images/user-page/profile-seojin-avatar.png') as ImageSourcePropType;

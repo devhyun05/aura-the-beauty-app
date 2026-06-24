@@ -13,6 +13,8 @@ export const colors = {
   successMuted: '#6F877A',
   danger: '#FF5A4D',
   glassSurface: 'rgba(255, 255, 255, 0.13)',
+  liquidGlassBorder: 'rgba(255, 255, 255, 0.92)',
+  liquidGlassSurface: 'rgba(255, 255, 255, 0.74)',
   guideSurface: 'rgba(255, 255, 255, 0.035)',
   black: '#000000',
   white: '#FFFFFF',

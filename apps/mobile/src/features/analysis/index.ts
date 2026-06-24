@@ -1,4 +1,2 @@
-export { AnalysisReportDetailScreen } from './screens/AnalysisReportDetailScreen';
-export { AnalysisResultListScreen } from './screens/AnalysisResultListScreen';
-export { AnalysisResultsScreen } from './screens/AnalysisResultsScreen';
-export { AnalysisResultDetailScreen } from './screens/AnalysisResultDetailScreen';
+export {ImageAnalysisReportDetailScreen} from './screens/ImageAnalysisReportDetailScreen';
+export {ImageAnalysisReportsListScreen} from './screens/ImageAnalysisReportsListScreen';

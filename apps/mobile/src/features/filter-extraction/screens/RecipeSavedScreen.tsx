@@ -8,10 +8,10 @@ import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 
 type RecipeSavedScreenProps = {
   onBackToDetail: () => void;
-  onGoToUserPage: () => void;
+  onGoToMyPage: () => void;
 };
 
-export function RecipeSavedScreen({onBackToDetail, onGoToUserPage}: RecipeSavedScreenProps) {
+export function RecipeSavedScreen({onBackToDetail, onGoToMyPage}: RecipeSavedScreenProps) {
   const insets = useSafeAreaInsets();
   const {result} = getFilterExtractionDataSync();
 
@@ -43,7 +43,7 @@ export function RecipeSavedScreen({onBackToDetail, onGoToUserPage}: RecipeSavedS
         <Pressable
           accessibilityLabel="마이페이지로 이동"
           accessibilityRole="button"
-          onPress={onGoToUserPage}
+          onPress={onGoToMyPage}
           style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
           <Text style={styles.primaryButtonText}>마이페이지로 이동</Text>
         </Pressable>

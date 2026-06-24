@@ -1,6 +1,5 @@
 import React, {useEffect} from 'react';
 import {ActivityIndicator, StyleSheet} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {Sparkles} from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
@@ -13,6 +12,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import {requestMakeupFeedback} from '../services/makeupFeedbackService';
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
@@ -37,7 +37,7 @@ export function FeedbackLoadingScreen({selection, onComplete}: FeedbackLoadingSc
   }, [onComplete, selection]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <FeedbackScreenScaffold>
       <YStack style={styles.screen}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>
@@ -48,7 +48,7 @@ export function FeedbackLoadingScreen({selection, onComplete}: FeedbackLoadingSc
           <ActivityIndicator color={colors.black} size="large" style={styles.loader} />
         </View>
       </YStack>
-    </SafeAreaView>
+    </FeedbackScreenScaffold>
   );
 }
 
@@ -74,10 +74,6 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: spacing.xl,
-  },
-  safeArea: {
-    backgroundColor: feedbackColors.background,
-    flex: 1,
   },
   screen: {
     alignItems: 'center',

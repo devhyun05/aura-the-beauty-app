@@ -8,10 +8,10 @@ import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 
 type FilterSavedScreenProps = {
   onApplyNow: () => void;
-  onGoToUserPage: () => void;
+  onGoToMyPage: () => void;
 };
 
-export function FilterSavedScreen({onApplyNow, onGoToUserPage}: FilterSavedScreenProps) {
+export function FilterSavedScreen({onApplyNow, onGoToMyPage}: FilterSavedScreenProps) {
   const insets = useSafeAreaInsets();
   const {result} = getFilterExtractionDataSync();
 
@@ -46,9 +46,9 @@ export function FilterSavedScreen({onApplyNow, onGoToUserPage}: FilterSavedScree
           <Text style={styles.primaryButtonText}>지금 적용해보기</Text>
         </Pressable>
         <Pressable
-          accessibilityLabel="사용자 페이지로 이동"
+          accessibilityLabel="마이페이지로 이동"
           accessibilityRole="button"
-          onPress={onGoToUserPage}
+          onPress={onGoToMyPage}
           style={({pressed}) => [styles.secondaryButton, pressed && styles.pressed]}>
           <Text style={styles.secondaryButtonText}>마이페이지로 이동</Text>
         </Pressable>

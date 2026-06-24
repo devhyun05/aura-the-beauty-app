@@ -1,73 +1,46 @@
-import React from 'react';
-import {StyleSheet} from 'react-native';
-import {YStack} from 'tamagui';
+import {Search, UserRound, type LucideProps} from 'lucide-react-native';
 
-import {colors} from '../theme';
+import {colors, iconSize} from '../theme';
 
-type HeaderIconProps = {
-  color?: string;
-};
+type HeaderIconProps = LucideProps;
 
-export function SearchHeaderIcon({color = colors.black}: HeaderIconProps) {
+const defaultStrokeWidth = 2;
+
+export const HEADER_ICON_LIBRARY_NAMES = {
+  ProfileHeaderIcon: 'UserRound',
+  SearchHeaderIcon: 'Search',
+} as const;
+
+export function SearchHeaderIcon({
+  color = colors.black,
+  size = iconSize.md,
+  strokeWidth = defaultStrokeWidth,
+  ...props
+}: HeaderIconProps) {
   return (
-    <YStack pointerEvents="none" style={styles.searchRoot}>
-      <YStack style={[styles.searchLens, {borderColor: color}]} />
-      <YStack style={[styles.searchHandle, {backgroundColor: color}]} />
-    </YStack>
+    <Search
+      color={color}
+      pointerEvents="none"
+      size={size}
+      strokeWidth={strokeWidth}
+      {...props}
+    />
   );
 }
 
-export function ProfileHeaderIcon({color = colors.black}: HeaderIconProps) {
+export function ProfileHeaderIcon({
+  color = colors.black,
+  size = iconSize.sm,
+  strokeWidth = defaultStrokeWidth,
+  ...props
+}: HeaderIconProps) {
   return (
-    <YStack pointerEvents="none" style={styles.profileRoot}>
-      <YStack style={[styles.profileHead, {borderColor: color}]} />
-      <YStack style={[styles.profileShoulders, {borderColor: color}]} />
-    </YStack>
+    <UserRound
+      color={color}
+      pointerEvents="none"
+      size={size}
+      strokeWidth={strokeWidth}
+      {...props}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  searchRoot: {
-    height: 24,
-    width: 24,
-  },
-  searchLens: {
-    borderRadius: 8,
-    borderWidth: 2,
-    height: 15,
-    left: 2,
-    position: 'absolute',
-    top: 2,
-    width: 15,
-  },
-  searchHandle: {
-    borderRadius: 1,
-    bottom: 4,
-    height: 2,
-    position: 'absolute',
-    right: 2,
-    transform: [{rotate: '45deg'}],
-    width: 10,
-  },
-  profileRoot: {
-    alignItems: 'center',
-    height: 24,
-    width: 24,
-  },
-  profileHead: {
-    borderRadius: 5,
-    borderWidth: 2,
-    height: 10,
-    width: 10,
-  },
-  profileShoulders: {
-    borderLeftWidth: 2,
-    borderRightWidth: 2,
-    borderTopLeftRadius: 11,
-    borderTopRightRadius: 11,
-    borderTopWidth: 2,
-    height: 10,
-    marginTop: 4,
-    width: 22,
-  },
-});

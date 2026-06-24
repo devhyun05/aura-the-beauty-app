@@ -1,4 +1,4 @@
-import type { FavoriteProductPreview } from '../../../shared/types/userPage';
+import type { FavoriteProductPreview } from '../../../shared/types/myPage';
 import { ProductCard } from './ProductCard';
 
 type FavoriteProductCardProps = {

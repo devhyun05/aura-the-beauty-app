@@ -7,14 +7,12 @@ import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {
-  AnalysisReportDetailScreen,
-  AnalysisResultListScreen,
-  AnalysisResultsScreen,
+  ImageAnalysisReportDetailScreen,
+  ImageAnalysisReportsListScreen,
 } from '../features/analysis';
-import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
+import {ImageAnalysisLoadingScreen} from '../features/analysis/screens/ImageAnalysisLoadingScreen';
 import {ARFilterCustomLocationScreen} from '../features/ar/screens/ARFilterCustomLocationScreen';
 import {ARFilterCustomStyleScreen} from '../features/ar/screens/ARFilterCustomStyleScreen';
-import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
@@ -43,37 +41,42 @@ import {
 import {getFilterExtractionDataSync} from '../features/filter-extraction/services/filterExtractionService';
 import {HomeScreen} from '../features/home';
 import {TutorialIntroScreen} from '../features/onboarding';
-import {MyPageScreen, ProfileEditScreen, UserPageScreen} from '../features/profile';
+import {MyPageScreen, ProfileEditScreen} from '../features/profile';
 import {
   LikedProductListScreen,
   MakeupStyleListScreen,
   ProductRecommendationScreen,
 } from '../features/recommendation';
-import {colors, typography} from '../shared/theme';
-import type {MakeupStylePreview} from '../shared/types/userPage';
-import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
+import {colors, spacing, typography} from '../shared/theme';
+import type {MakeupStylePreview} from '../shared/types/myPage';
+import {AppFooter, AppHeader, AppScreen, AuraLogo, type FooterTabKey} from '../shared/ui';
+import {
+  getARMakeupFilterInitialGuideMode,
+  getAppShellHeaderCopy,
+  getFooterTabTargetScreen,
+  getHomeFaceDiagnosisTargetScreen,
+  getImageAnalysisLoadingCompleteTargetScreen,
+  getImageAnalysisReportCloseTargetScreen,
+  getImageAnalysisReportCreateFilterTargetScreen,
+  getSavedContentTargetScreen,
+  type AppShellHeaderVariant,
+} from './navigation';
 
 type AppScreen =
   | 'login'
   | 'tutorial'
   | 'home'
   | 'faceCapture'
-  | 'analysisLoading'
-  | 'facialAnalysisResult'
+  | 'imageAnalysisLoading'
   | 'arMakeupFilter'
   | 'arFilterLocation'
   | 'arFilterStyle'
   | 'custom'
-  | 'userPage'
   | 'myPage'
   | 'profileEdit'
-  | 'analysisResultList'
-  | 'analysisResults'
-  | 'analysisReportDetail'
-  | 'analysisResultDetail'
+  | 'imageAnalysisReportsList'
+  | 'imageAnalysisReportDetail'
   | 'makeupStyleList'
-  | 'makeupLooks'
-  | 'favoriteProducts'
   | 'likedProductList'
   | 'feedbackEntry'
   | 'feedbackCapture'
@@ -103,13 +106,13 @@ export function AppRoot() {
     useState<MakeupStylePreview | null>(null);
   const [feedbackResult, setFeedbackResult] = useState<MakeupFeedbackResult | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<FeedbackPoint | null>(null);
-  const [selectedAnalysisResultId, setSelectedAnalysisResultId] =
+  const [selectedImageAnalysisReportId, setSelectedImageAnalysisReportId] =
     useState<string | null>(null);
-  const [analysisDetailBackScreen, setAnalysisDetailBackScreen] =
-    useState<AppScreen>('myPage');
+  const [arFilterAdjustBackScreen, setArFilterAdjustBackScreen] =
+    useState<AppScreen>('arMakeupFilter');
 
   const [fontsLoaded] = useFonts({
-    'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+    [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
     [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
     [typography.fontFamily.semibold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
@@ -156,25 +159,36 @@ export function AppRoot() {
   }
 
   const handleFooterTabPress = (tab: FooterTabKey) => {
-    if (tab === 'capture') {
-      setActiveScreen('faceCapture');
-      return;
-    }
-
-    setActiveScreen(tab);
+    setActiveScreen(getFooterTabTargetScreen(tab));
   };
 
   const goToMyPage = () => {
     setActiveScreen('myPage');
   };
 
-  const goToAnalysisReportDetail = (
-    resultId: string | null,
-    backScreen: AppScreen,
-  ) => {
-    setSelectedAnalysisResultId(resultId);
-    setAnalysisDetailBackScreen(backScreen);
-    setActiveScreen('analysisReportDetail');
+  const goToImageAnalysisReportDetail = (reportId: string | null) => {
+    setSelectedImageAnalysisReportId(reportId);
+    setActiveScreen('imageAnalysisReportDetail');
+  };
+
+  const goToLatestImageAnalysisReportDetail = () => {
+    setSelectedImageAnalysisReportId(null);
+    setActiveScreen(getImageAnalysisLoadingCompleteTargetScreen());
+  };
+
+  const goToARFilterLocation = (backScreen: AppScreen = 'arMakeupFilter') => {
+    setArFilterAdjustBackScreen(backScreen);
+    setActiveScreen('arFilterLocation');
+  };
+
+  const goToARFilterStyle = (backScreen: AppScreen = 'arMakeupFilter') => {
+    setArFilterAdjustBackScreen(backScreen);
+    setActiveScreen('arFilterStyle');
+  };
+
+  const goToImageAnalysisReportCreateFilter = () => {
+    setArFilterAdjustBackScreen('imageAnalysisReportDetail');
+    setActiveScreen(getImageAnalysisReportCreateFilterTargetScreen());
   };
 
   const renderScreen = () => {
@@ -183,32 +197,28 @@ export function AppRoot() {
     }
 
     if (activeScreen === 'tutorial') {
-      return <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />;
+      return (
+        <TutorialIntroScreen
+          onCloseToHome={() => setActiveScreen('home')}
+          onStartCapture={() => setActiveScreen('faceCapture')}
+        />
+      );
     }
 
     if (activeScreen === 'faceCapture') {
       return (
         <FaceCaptureScreen
-          onCapture={() => setActiveScreen('analysisLoading')}
+          onCapture={() => setActiveScreen('imageAnalysisLoading')}
           onClose={() => setActiveScreen('home')}
         />
       );
     }
 
-    if (activeScreen === 'analysisLoading') {
+    if (activeScreen === 'imageAnalysisLoading') {
       return (
-        <AIAnalysisLoadingScreen
+        <ImageAnalysisLoadingScreen
           onBack={() => setActiveScreen('faceCapture')}
-          onComplete={() => setActiveScreen('facialAnalysisResult')}
-        />
-      );
-    }
-
-    if (activeScreen === 'facialAnalysisResult') {
-      return (
-        <FacialAnalysisResultScreen
-          onBack={() => setActiveScreen('analysisLoading')}
-          onStartARGuide={() => setActiveScreen('arMakeupFilter')}
+          onComplete={goToLatestImageAnalysisReportDetail}
         />
       );
     }
@@ -216,11 +226,11 @@ export function AppRoot() {
     if (activeScreen === 'arMakeupFilter') {
       return (
         <ARMakeupFilterScreen
-          initialGuideMode="half"
+          initialGuideMode={getARMakeupFilterInitialGuideMode()}
           onBack={() => setActiveScreen('home')}
           onComplete={() => setActiveScreen('home')}
-          onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
-          onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
+          onOpenLocationAdjust={() => goToARFilterLocation()}
+          onOpenStyleAdjust={() => goToARFilterStyle()}
         />
       );
     }
@@ -228,7 +238,7 @@ export function AppRoot() {
     if (activeScreen === 'arFilterLocation') {
       return (
         <ARFilterCustomLocationScreen
-          onBack={() => setActiveScreen('arMakeupFilter')}
+          onBack={() => setActiveScreen(arFilterAdjustBackScreen)}
           onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
           onSave={() => setActiveScreen('arMakeupFilter')}
         />
@@ -238,44 +248,28 @@ export function AppRoot() {
     if (activeScreen === 'arFilterStyle') {
       return (
         <ARFilterCustomStyleScreen
-          onBack={() => setActiveScreen('arMakeupFilter')}
+          onBack={() => setActiveScreen(arFilterAdjustBackScreen)}
           onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
           onSave={() => setActiveScreen('arMakeupFilter')}
         />
       );
     }
 
-    if (activeScreen === 'userPage') {
-      return (
-        <AppShell
-          onCreateFilterPress={() => setActiveScreen('filterUpload')}
-          onProfilePress={goToMyPage}
-          onTabPress={handleFooterTabPress}>
-          <UserPageScreen
-            onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
-            onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
-            onPressReport={(resultId) =>
-              goToAnalysisReportDetail(resultId, 'userPage')
-            }
-            onPressReports={() => setActiveScreen('analysisResultList')}
-            onPressSettings={() => setActiveScreen('profileEdit')}
-            savedMakeupStyle={savedMakeupStyle}
-          />
-        </AppShell>
-      );
-    }
-
     if (activeScreen === 'myPage') {
       return (
         <AppShell
+          headerVariant="default"
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
           onProfilePress={goToMyPage}
-          onTabPress={handleFooterTabPress}>
+          onTabPress={handleFooterTabPress}
+          wrapContentInScreen={false}>
           <MyPageScreen
-            onPressAnalysisResult={(resultId) =>
-              goToAnalysisReportDetail(resultId, 'myPage')
+            onPressImageAnalysisReport={(reportId) =>
+              goToImageAnalysisReportDetail(reportId)
             }
-            onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
+            onPressImageAnalysisReportsList={() =>
+              setActiveScreen('imageAnalysisReportsList')
+            }
             onPressLikedProductList={() => setActiveScreen('likedProductList')}
             onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
             onPressProfileEdit={() => setActiveScreen('profileEdit')}
@@ -294,48 +288,34 @@ export function AppRoot() {
       );
     }
 
-    if (activeScreen === 'analysisResultList') {
+    if (activeScreen === 'imageAnalysisReportsList') {
       return (
-        <AnalysisResultListScreen
+        <ImageAnalysisReportsListScreen
           onBack={goToMyPage}
-          onPressResult={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'analysisResultList')
+          onPressReport={(reportId) =>
+            goToImageAnalysisReportDetail(reportId)
           }
         />
       );
     }
 
-    if (activeScreen === 'analysisResults') {
+    if (activeScreen === 'imageAnalysisReportDetail') {
       return (
-        <AnalysisResultsScreen
-          onBack={() => setActiveScreen('userPage')}
-          onPressResult={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'analysisResults')
+        <ImageAnalysisReportDetailScreen
+          onBack={() =>
+            setActiveScreen(getImageAnalysisReportCloseTargetScreen())
           }
+          onCreateARFilter={goToImageAnalysisReportCreateFilter}
+          reportId={selectedImageAnalysisReportId}
         />
       );
     }
 
-    if (
-      activeScreen === 'analysisReportDetail' ||
-      activeScreen === 'analysisResultDetail'
-    ) {
-      return (
-        <AnalysisReportDetailScreen
-          onBack={() => setActiveScreen(analysisDetailBackScreen)}
-          resultId={selectedAnalysisResultId}
-        />
-      );
-    }
-
-    if (activeScreen === 'makeupStyleList' || activeScreen === 'makeupLooks') {
+    if (activeScreen === 'makeupStyleList') {
       return <MakeupStyleListScreen onBack={goToMyPage} />;
     }
 
-    if (
-      activeScreen === 'likedProductList' ||
-      activeScreen === 'favoriteProducts'
-    ) {
+    if (activeScreen === 'likedProductList') {
       return <LikedProductListScreen onBack={goToMyPage} />;
     }
 
@@ -402,7 +382,7 @@ export function AppRoot() {
       return (
         <FilterSavedScreen
           onApplyNow={() => setActiveScreen('filterTryOn')}
-          onGoToUserPage={() => setActiveScreen('userPage')}
+          onGoToMyPage={() => setActiveScreen(getSavedContentTargetScreen())}
         />
       );
     }
@@ -423,7 +403,7 @@ export function AppRoot() {
       return (
         <RecipeSavedScreen
           onBackToDetail={() => setActiveScreen('filterRecipeDetail')}
-          onGoToUserPage={() => setActiveScreen('userPage')}
+          onGoToMyPage={() => setActiveScreen(getSavedContentTargetScreen())}
         />
       );
     }
@@ -487,7 +467,10 @@ export function AppRoot() {
       return (
         <AppShell
           activeTab={activeScreen}
+          onARFilterPress={() => setActiveScreen('arMakeupFilter')}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
+          onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
+          onMakeupFeedbackPress={() => setActiveScreen('feedbackEntry')}
           onProductRecommendationsPress={() => setActiveScreen('custom')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
@@ -498,7 +481,10 @@ export function AppRoot() {
     return (
       <AppShell
         activeTab="home"
+        onARFilterPress={() => setActiveScreen('arMakeupFilter')}
         onCreateFilterPress={() => setActiveScreen('filterUpload')}
+        onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
+        onMakeupFeedbackPress={() => setActiveScreen('feedbackEntry')}
         onProfilePress={goToMyPage}
         onTabPress={handleFooterTabPress}
       />
@@ -526,39 +512,70 @@ export function AppRoot() {
 function AppShell({
   activeTab,
   children,
+  headerVariant,
+  onARFilterPress,
   onCreateFilterPress,
+  onFaceDiagnosisPress,
+  onMakeupFeedbackPress,
   onProductRecommendationsPress,
   onProfilePress,
   onTabPress,
+  wrapContentInScreen = true,
 }: {
   activeTab?: ShellTab;
   children?: React.ReactNode;
+  headerVariant?: AppShellHeaderVariant;
+  onARFilterPress?: () => void;
   onCreateFilterPress?: () => void;
+  onFaceDiagnosisPress?: () => void;
+  onMakeupFeedbackPress?: () => void;
   onProductRecommendationsPress?: () => void;
   onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
+  wrapContentInScreen?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const resolvedHeaderVariant = headerVariant ?? activeTab ?? 'default';
+  const headerCopy = getAppShellHeaderCopy(resolvedHeaderVariant);
+  const contentGap = resolvedHeaderVariant === 'home' ? spacing.xxl : spacing.xl;
+  const shellContent =
+    children ??
+    (activeTab === 'home' ? (
+      <HomeScreen
+        onPressARFilter={onARFilterPress}
+        onPressCreateFilter={onCreateFilterPress}
+        onPressFaceDiagnosis={onFaceDiagnosisPress}
+        onPressMakeupFeedback={onMakeupFeedbackPress}
+        onPressProductRecommendations={onProductRecommendationsPress}
+      />
+    ) : activeTab === 'custom' ? (
+      <ProductRecommendationScreen />
+    ) : null);
 
   return (
     <YStack style={styles.screen}>
       <AppHeader
-        subtitle={activeTab === 'custom' ? 'AI PRODUCT MATCH' : 'MAKEUP GUIDE'}
-        title={activeTab === 'custom' ? '추천 제품' : 'AI AR Makeup'}
+        subtitle={headerCopy.subtitle}
+        title={headerCopy.title}
+        titleSlot={resolvedHeaderVariant === 'home' ? <AuraLogo variant="header" /> : undefined}
         topInset={insets.top}
         onProfilePress={onProfilePress}
       />
       <YStack style={styles.body}>
-        {children ??
-          (activeTab === 'home' ? (
-            <HomeScreen
-              onPressCreateFilter={onCreateFilterPress}
-              onPressProductRecommendations={onProductRecommendationsPress}
-            />
-          ) : null)}
-        {!children && activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
+        {wrapContentInScreen ? (
+          <AppScreen contentGap={contentGap} topPadding="belowShellHeader">
+            {shellContent}
+          </AppScreen>
+        ) : (
+          shellContent
+        )}
       </YStack>
-      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+      <AppFooter
+        activeTab={activeTab}
+        bottomInset={insets.bottom}
+        floating
+        onTabPress={onTabPress}
+      />
     </YStack>
   );
 }
@@ -567,6 +584,7 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
   },
   body: {
     flex: 1,

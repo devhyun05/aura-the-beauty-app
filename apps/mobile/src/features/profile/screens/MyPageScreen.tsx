@@ -1,51 +1,44 @@
-import {useEffect, useState} from 'react';
-import {StyleSheet, useWindowDimensions} from 'react-native';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {getLatestAnalysisResult} from '../../../shared/services/analysisService';
-import {getMakeupLookPreview} from '../../../shared/services/makeupService';
-import {getLikedProductPreview} from '../../../shared/services/productService';
-import {getUserProfile} from '../../../shared/services/userService';
-import {colors, spacing, typography} from '../../../shared/theme';
-import type {AnalysisResult} from '../../../shared/types/analysis';
-import type {
-  MakeupLook,
-  MakeupStylePreview,
-  Product,
-  UserProfile,
-} from '../../../shared/types/userPage';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
+import type {MakeupStylePreview} from '../../../shared/types/myPage';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
-import {AnalysisSummaryCard} from '../components/AnalysisSummaryCard';
+import {ImageAnalysisSummaryCard} from '../components/ImageAnalysisSummaryCard';
 import {MakeupLookCard} from '../components/MakeupLookCard';
 import {ProductCard} from '../components/ProductCard';
 import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
+import {
+  MY_PAGE_LOAD_ERROR_DESCRIPTION,
+  MY_PAGE_LOAD_RETRY_LABEL,
+  type MyPageLoadState,
+  resolveMyPageLoadState,
+} from '../services/myPageLoadState';
+import {loadMyPageScreenData} from '../services/myPageScreenData';
 
 type MyPageScreenProps = {
   onPressProfileEdit?: () => void;
-  onPressAnalysisResult?: (resultId: string) => void;
-  onPressAnalysisResultList?: () => void;
+  onPressImageAnalysisReport?: (reportId: string) => void;
+  onPressImageAnalysisReportsList?: () => void;
   onPressMakeupStyleList?: () => void;
   onPressLikedProductList?: () => void;
   savedMakeupStyle?: MakeupStylePreview | null;
 };
 
-type MyPageData = {
-  profile: UserProfile;
-  analysisResult: AnalysisResult | null;
-  makeupLooks: MakeupLook[];
-  products: Product[];
-};
-
 export function MyPageScreen({
   onPressProfileEdit,
-  onPressAnalysisResult,
-  onPressAnalysisResultList,
+  onPressImageAnalysisReport,
+  onPressImageAnalysisReportsList,
   onPressMakeupStyleList,
   onPressLikedProductList,
   savedMakeupStyle,
 }: MyPageScreenProps) {
   const {width} = useWindowDimensions();
-  const [data, setData] = useState<MyPageData | null>(null);
+  const isMountedRef = useRef(false);
+  const [loadState, setLoadState] = useState<MyPageLoadState>({
+    status: 'loading',
+  });
   const contentWidth = width - spacing.screenX * 2;
   const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
@@ -60,41 +53,62 @@ export function MyPageScreen({
     width: productCardWidth,
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadMyPage = useCallback(() => {
+    setLoadState({status: 'loading'});
 
-    Promise.all([
-      getUserProfile(),
-      getLatestAnalysisResult(),
-      getMakeupLookPreview(3),
-      getLikedProductPreview(3),
-    ]).then(([profile, analysisResult, makeupLooks, products]) => {
-      if (isMounted) {
-        setData({
-          profile,
-          analysisResult,
-          makeupLooks,
-          products,
-        });
+    resolveMyPageLoadState(loadMyPageScreenData).then((nextState) => {
+      if (isMountedRef.current) {
+        setLoadState(nextState);
       }
     });
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
-  if (!data) {
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadMyPage();
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [loadMyPage]);
+
+  if (loadState.status === 'loading') {
     return (
-      <AppScreen scroll={false}>
-        <View style={styles.loading}>
-          <Text style={styles.loadingText}>마이페이지를 불러오는 중이에요.</Text>
-        </View>
-      </AppScreen>
+      <View style={styles.loading}>
+        <Text style={styles.loadingText}>마이페이지를 불러오는 중이에요.</Text>
+      </View>
     );
   }
 
-  const analysisResult = data.analysisResult;
+  if (loadState.status === 'error') {
+    return (
+      <View style={styles.loading}>
+        <View style={styles.errorContent}>
+          <Text accessibilityLiveRegion="polite" style={styles.errorTitle}>
+            {loadState.message}
+          </Text>
+          <Text style={styles.errorDescription}>
+            {MY_PAGE_LOAD_ERROR_DESCRIPTION}
+          </Text>
+          <Pressable
+            accessibilityLabel={MY_PAGE_LOAD_RETRY_LABEL}
+            accessibilityRole="button"
+            onPress={loadMyPage}
+            style={({pressed}) => [
+              styles.retryButton,
+              pressed ? styles.retryButtonPressed : null,
+            ]}
+          >
+            <Text style={styles.retryButtonText}>
+              {MY_PAGE_LOAD_RETRY_LABEL}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  const data = loadState.data;
+  const imageAnalysisReport = data.imageAnalysisReport;
   const makeupLooks = savedMakeupStyle
     ? [
         savedMakeupStyle,
@@ -104,7 +118,7 @@ export function MyPageScreen({
   const previewMakeupLooks = makeupLooks.slice(0, 3);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <ProfileSummaryCard
         onPressSettings={onPressProfileEdit}
         profile={data.profile}
@@ -113,16 +127,16 @@ export function MyPageScreen({
       <View style={styles.section}>
         <SectionHeader
           actionLabel="전체 보기"
-          onPressAction={onPressAnalysisResultList}
-          title="분석 결과"
+          onPressAction={onPressImageAnalysisReportsList}
+          title="이미지 분석 결과"
         />
-        {analysisResult ? (
-          <AnalysisSummaryCard
-            onPress={() => onPressAnalysisResult?.(analysisResult.id)}
-            result={analysisResult}
+        {imageAnalysisReport ? (
+          <ImageAnalysisSummaryCard
+            onPress={() => onPressImageAnalysisReport?.(imageAnalysisReport.id)}
+            report={imageAnalysisReport}
           />
         ) : (
-          <EmptySection label="저장된 분석 결과가 없어요." />
+          <EmptySection label="저장된 이미지 분석 결과가 없어요." />
         )}
       </View>
 
@@ -187,6 +201,25 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
+  errorContent: {
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xxl,
+  },
+  errorDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
+  },
+  errorTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.md,
+    textAlign: 'center',
+  },
   loading: {
     alignItems: 'center',
     flex: 1,
@@ -205,6 +238,23 @@ const styles = StyleSheet.create({
   productGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    minWidth: 112,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  retryButtonPressed: {
+    opacity: 0.78,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
   },
   section: {
     gap: spacing.sm,

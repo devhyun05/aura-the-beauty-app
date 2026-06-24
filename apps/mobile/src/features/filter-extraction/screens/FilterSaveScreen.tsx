@@ -1,10 +1,11 @@
 import {useState} from 'react';
 import {Image, Pressable, StyleSheet, TextInput} from 'react-native';
-import {ArrowLeft, CheckCircle2, Plus, X} from 'lucide-react-native';
+import {CheckCircle2, Plus, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {AppHeader, AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -23,18 +24,26 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   return (
-    <View style={styles.screen}>
-      <YStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.headerRow}>
-          <Pressable accessibilityLabel="필터 적용 화면으로 돌아가기" accessibilityRole="button" onPress={onBack}>
-            <ArrowLeft color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-          <Text style={styles.headerTitle}>필터 저장</Text>
-          <Pressable accessibilityLabel="저장 완료" accessibilityRole="button" onPress={onSave}>
+    <AppScreen
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
+      <AppHeader
+        onBack={onBack}
+        rightSlot={
+          <Pressable
+            accessibilityLabel="저장 완료"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={onSave}>
             <Text style={styles.doneText}>완료</Text>
           </Pressable>
-        </XStack>
-      </YStack>
+        }
+        title="필터 저장"
+      />
 
       <YStack style={styles.content}>
         <XStack style={styles.summaryRow}>
@@ -139,7 +148,7 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
           <Text style={styles.saveButtonText}>저장하기</Text>
         </Pressable>
       </YStack>
-    </View>
+    </AppScreen>
   );
 }
 
@@ -186,22 +195,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  header: {
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-  },
   input: {
     color: colors.textPrimary,
     flex: 1,
@@ -235,10 +228,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   summaryCopy: {
     flex: 1,

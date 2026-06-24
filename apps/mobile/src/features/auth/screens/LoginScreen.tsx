@@ -1,8 +1,9 @@
 import {useState} from 'react';
 import {StyleSheet} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
+import {colors, typography} from '../../../shared/theme';
+import {AppScreen} from '../../../shared/ui';
 import {AuraLogo} from '../components/AuraLogo';
 import {SocialLoginButton} from '../components/SocialLoginButton';
 import {socialLoginProviders} from '../mocks/socialLoginProviders.mock';
@@ -52,7 +53,13 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AppScreen
+      backgroundColor={colors.background}
+      bottomPadding="safeArea"
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="safeArea">
       <YStack style={styles.screen}>
         <View style={styles.logoArea}>
           <AuraLogo />
@@ -96,7 +103,7 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
           </Text>
         </YStack>
       </YStack>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 
@@ -105,10 +112,11 @@ const styles = StyleSheet.create({
     color: '#C05F57',
   },
   feedback: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     letterSpacing: 0,
-    lineHeight: 16,
+    lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
   feedbackSlot: {
@@ -131,12 +139,8 @@ const styles = StyleSheet.create({
     right: 0,
     top: '35%',
   },
-  safeArea: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-  },
   screen: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
   },
   socialRow: {
@@ -146,19 +150,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   successFeedback: {
-    color: '#6F877A',
+    color: colors.successMuted,
   },
   termsLink: {
-    color: '#242121',
-    fontWeight: '800',
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.bold,
     textDecorationLine: 'underline',
   },
   termsText: {
-    color: '#B7B2B2',
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
     letterSpacing: 0,
-    lineHeight: 18,
+    lineHeight: typography.lineHeight.xs,
     marginTop: 8,
     textAlign: 'center',
     width: '100%',

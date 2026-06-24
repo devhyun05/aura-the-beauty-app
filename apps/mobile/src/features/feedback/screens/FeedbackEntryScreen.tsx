@@ -1,6 +1,5 @@
 import React from 'react';
 import {Pressable, StyleSheet} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {Camera, ChevronRight, Sparkles} from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
@@ -15,6 +14,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 
 type FeedbackEntryScreenProps = {
   onPressAiFeedback: () => void;
@@ -22,7 +22,7 @@ type FeedbackEntryScreenProps = {
 
 export function FeedbackEntryScreen({onPressAiFeedback}: FeedbackEntryScreenProps) {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <FeedbackScreenScaffold>
       <YStack style={styles.screen}>
         <View style={styles.header}>
           <Text style={styles.brand}>AURA</Text>
@@ -56,7 +56,7 @@ export function FeedbackEntryScreen({onPressAiFeedback}: FeedbackEntryScreenProp
           <ChevronRight color={colors.white} size={iconSize.md} strokeWidth={2.2} />
         </Pressable>
       </YStack>
-    </SafeAreaView>
+    </FeedbackScreenScaffold>
   );
 }
 
@@ -136,10 +136,6 @@ const styles = StyleSheet.create({
     height: 64,
     justifyContent: 'center',
     width: 64,
-  },
-  safeArea: {
-    backgroundColor: feedbackColors.background,
-    flex: 1,
   },
   screen: {
     backgroundColor: feedbackColors.background,

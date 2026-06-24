@@ -1,6 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {MakeupLook} from '../types/userPage';
+import type {MakeupLook} from '../types/myPage';
 
 const lookOjiGirl =
   require('../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;

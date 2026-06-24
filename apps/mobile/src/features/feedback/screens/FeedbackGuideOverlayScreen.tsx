@@ -6,7 +6,6 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import Svg, {Circle, Ellipse, G, Line, Path, Text as SvgText} from 'react-native-svg';
 import {
   ArrowLeft,
@@ -30,6 +29,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
 type FeedbackGuideOverlayScreenProps = {
@@ -128,7 +128,7 @@ export function FeedbackGuideOverlayScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <FeedbackScreenScaffold>
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -200,7 +200,7 @@ export function FeedbackGuideOverlayScreen({
           </View>
         </ScrollView>
       </View>
-    </SafeAreaView>
+    </FeedbackScreenScaffold>
   );
 }
 
@@ -532,10 +532,6 @@ const styles = StyleSheet.create({
     backgroundColor: feedbackColors.surfaceMuted,
     overflow: 'hidden',
     position: 'relative',
-  },
-  safeArea: {
-    backgroundColor: feedbackColors.background,
-    flex: 1,
   },
   screen: {
     backgroundColor: feedbackColors.background,
