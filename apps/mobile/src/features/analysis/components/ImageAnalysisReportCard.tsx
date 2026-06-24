@@ -2,11 +2,11 @@ import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {AnalysisResult} from '../../../shared/types/analysis';
+import type {ImageAnalysisReport} from '../../../shared/types/imageAnalysis';
 import {AppCard, ImagePlaceholder} from '../../../shared/ui';
 
-type AnalysisResultCardProps = {
-  result: AnalysisResult;
+type ImageAnalysisReportCardProps = {
+  report: ImageAnalysisReport;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -20,29 +20,29 @@ const formatShortDate = (dateText: string) => {
   return `${year}.${month}.${day}`;
 };
 
-export function AnalysisResultCard({
-  result,
+export function ImageAnalysisReportCard({
+  report,
   onPress,
   style,
-}: AnalysisResultCardProps) {
+}: ImageAnalysisReportCardProps) {
   return (
     <AppCard onPress={onPress} padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>
         <ImagePlaceholder
           borderRadius={radius.md}
           resizeMode="cover"
-          source={result.imageSource}
+          source={report.imageSource}
         />
       </View>
       <View style={styles.content}>
         <Text numberOfLines={1} style={styles.date}>
-          {formatShortDate(result.analyzedAt)}
+          {formatShortDate(report.analyzedAt)}
         </Text>
         <Text numberOfLines={1} style={styles.title}>
-          {result.personalColor}
+          {report.personalColor}
         </Text>
         <Text numberOfLines={2} style={styles.description}>
-          {result.recommendedMood}
+          {report.recommendedMood}
         </Text>
       </View>
     </AppCard>

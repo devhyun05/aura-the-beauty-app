@@ -8,7 +8,7 @@ import {Text, View} from 'tamagui';
 
 import {getLikedProducts} from '../../../shared/services/productService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {Product} from '../../../shared/types/userPage';
+import type {Product} from '../../../shared/types/myPage';
 import {
   AppHeader,
   AppScreen,

@@ -1,6 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {AnalysisMakeupCard, AnalysisResult} from '../types/analysis';
+import type {ImageAnalysisMakeupCard, ImageAnalysisReport} from '../types/imageAnalysis';
 
 const analysisCleanDaylight =
   require('../../assets/images/analysis/analysis-clean-daylight.png') as ImageSourcePropType;
@@ -42,12 +42,12 @@ const reportAvoidStrongContour =
 const reportAvoidHighSaturationLip =
   require('../../assets/images/analysis-detail/avoid-over-lip.png') as ImageSourcePropType;
 
-const analysisAvoidedMakeupImageAssetNames = {
+const imageAnalysisAvoidedMakeupImageAssetNames = {
   '너무 진한 스모키': 'report-avoid-heavy-smoky.png',
   '과한 컨투어링': 'report-avoid-strong-contour.png',
 } as const;
 
-type AnalysisMockSeed = {
+type ImageAnalysisMockSeed = {
   id: string;
   analyzedAt: string;
   imageSource: ImageSourcePropType;
@@ -63,11 +63,11 @@ type AnalysisMockSeed = {
 };
 
 const createRecommendedMakeups = (
-  resultId: string,
+  reportId: string,
   mood: string,
-): AnalysisMakeupCard[] => [
+): ImageAnalysisMakeupCard[] => [
   {
-    id: `${resultId}-clear-gloss`,
+    id: `${reportId}-clear-gloss`,
     title: '클리어 & 글로시',
     subtitle: mood,
     description: '얇은 윤광 베이스와 투명한 립 표현으로 얼굴을 맑게 보여줘요.',
@@ -75,7 +75,7 @@ const createRecommendedMakeups = (
     tags: ['윤광', '맑은 립'],
   },
   {
-    id: `${resultId}-fruity-juice`,
+    id: `${reportId}-fruity-juice`,
     title: '과즙상',
     subtitle: '생기 포인트',
     description: '볼과 입술에 같은 계열 색을 낮게 얹어 자연스러운 생기를 더해요.',
@@ -83,7 +83,7 @@ const createRecommendedMakeups = (
     tags: ['생기', '톤온톤'],
   },
   {
-    id: `${resultId}-clean-line`,
+    id: `${reportId}-clean-line`,
     title: '깔끔한 또렷함',
     subtitle: '브라운 라인',
     description: '눈매는 얇게 정돈하고 컬러 포인트는 입술과 볼에 집중해요.',
@@ -92,9 +92,9 @@ const createRecommendedMakeups = (
   },
 ];
 
-const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
+const createAvoidedMakeups = (reportId: string): ImageAnalysisMakeupCard[] => [
   {
-    id: `${resultId}-avoid-smoky`,
+    id: `${reportId}-avoid-smoky`,
     title: '너무 진한 스모키',
     subtitle: '무거운 음영',
     description: '넓은 블랙 음영은 피부 톤을 답답하게 보이게 할 수 있어요.',
@@ -102,7 +102,7 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     tags: ['진한 음영', '매트'],
   },
   {
-    id: `${resultId}-avoid-contour`,
+    id: `${reportId}-avoid-contour`,
     title: '과한 컨투어링',
     subtitle: '강한 윤곽',
     description: '진한 음영 경계는 얼굴의 맑은 분위기를 약하게 만들 수 있어요.',
@@ -110,7 +110,7 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     tags: ['강한 쉐딩', '경계감'],
   },
   {
-    id: `${resultId}-avoid-lip`,
+    id: `${reportId}-avoid-lip`,
     title: '채도 높은 립',
     subtitle: '강한 포인트',
     description: '선명한 고채도 립은 전체 조화를 깨고 입술만 도드라질 수 있어요.',
@@ -119,8 +119,8 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
   },
 ];
 
-export function getAnalysisAvoidedMakeupImageAssetNames() {
-  return analysisAvoidedMakeupImageAssetNames;
+export function getImageAnalysisAvoidedMakeupImageAssetNames() {
+  return imageAnalysisAvoidedMakeupImageAssetNames;
 }
 
 const facePointGuide = {
@@ -132,7 +132,7 @@ const facePointGuide = {
   lip: 'MLBB 계열의 로지 누드 립이 가장 안정적이에요.',
 };
 
-const buildAnalysisResult = (seed: AnalysisMockSeed): AnalysisResult => ({
+const buildImageAnalysisReport = (seed: ImageAnalysisMockSeed): ImageAnalysisReport => ({
   ...seed,
   title: `${seed.personalColor}, ${seed.skinType}`,
   reportTitle: '맞춤 분석 보고서',
@@ -142,8 +142,8 @@ const buildAnalysisResult = (seed: AnalysisMockSeed): AnalysisResult => ({
   avoidedMakeups: createAvoidedMakeups(seed.id),
 });
 
-export const analysisMock: AnalysisResult[] = [
-  buildAnalysisResult({
+export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
+  buildImageAnalysisReport({
     id: 'analysis-spring-light-20260622',
     analyzedAt: '2026-06-22',
     imageSource: analysisCleanDaylight,
@@ -159,7 +159,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '두꺼운 매트 베이스보다 촉촉한 쿠션을 얇게 올리고, 광은 볼 중심으로 살려주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-summer-cool-20260621',
     analyzedAt: '2026-06-21',
     imageSource: analysisWindowSoft,
@@ -175,7 +175,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '쿨 베이지 베이스에 라이트 로즈 블러셔를 얇게 연결해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-autumn-warm-20260620',
     analyzedAt: '2026-06-20',
     imageSource: analysisCafeWarm,
@@ -191,7 +191,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '크림 베이스를 얇게 바르고 브릭 코랄을 낮은 채도로 올려주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-winter-cool-20260619',
     analyzedAt: '2026-06-19',
     imageSource: analysisCoolRose,
@@ -207,7 +207,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '피부는 깨끗하게 정돈하고 립이나 눈꼬리에만 플럼 포인트를 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-summer-light-20260618',
     analyzedAt: '2026-06-18',
     imageSource: analysisSummerCool,
@@ -223,7 +223,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '톤업 베이스는 최소화하고 라벤더 핑크 블러셔를 넓게 연결해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-spring-bright-20260617',
     analyzedAt: '2026-06-17',
     imageSource: analysisSeojinSpringLight,
@@ -239,7 +239,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '피치 톤 블러셔와 코랄 립을 같은 채도로 맞추면 조화롭습니다.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-vanity-20260616',
     analyzedAt: '2026-06-16',
     imageSource: analysisVanityLight,
@@ -255,7 +255,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '촉촉한 베이스 뒤에 파우더는 코 주변만 최소로 사용해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-natural-20260615',
     analyzedAt: '2026-06-15',
     imageSource: analysisNaturalLight,
@@ -271,7 +271,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '자외선 차단 베이스 위에 얇은 쿠션을 덧대고 립은 투명하게 마무리해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-dark-wall-20260614',
     analyzedAt: '2026-06-14',
     imageSource: analysisDarkWall,
@@ -287,7 +287,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '베이스는 반톤 밝게, 음영은 넓지 않게 눈가 중심으로 정리해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-night-lamp-20260613',
     analyzedAt: '2026-06-13',
     imageSource: analysisNightLamp,
@@ -303,7 +303,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       'T존 번들거림은 눌러주고 볼과 입술은 촉촉하게 남겨 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-autumn-soft-20260612',
     analyzedAt: '2026-06-12',
     imageSource: analysisAutumnWarm,
@@ -319,7 +319,7 @@ export const analysisMock: AnalysisResult[] = [
     baseMakeupGuide:
       '베이지 쿠션을 얇게 바르고 누디 코랄 립으로 마무리해 주세요.',
   }),
-  buildAnalysisResult({
+  buildImageAnalysisReport({
     id: 'analysis-friend-20260611',
     analyzedAt: '2026-06-11',
     imageSource: analysisDifferentFace,

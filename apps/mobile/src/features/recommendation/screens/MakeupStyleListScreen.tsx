@@ -4,7 +4,7 @@ import {Text, View} from 'tamagui';
 
 import {getMakeupLooks} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLook} from '../../../shared/types/userPage';
+import type {MakeupLook} from '../../../shared/types/myPage';
 import {
   AppHeader,
   AppScreen,

@@ -1,5 +1,5 @@
 import { productsMock } from '../mocks/products.mock';
-import type { Product } from '../types/userPage';
+import type { Product } from '../types/myPage';
 
 export const getProducts = async (): Promise<Product[]> => {
   return Promise.resolve(productsMock);

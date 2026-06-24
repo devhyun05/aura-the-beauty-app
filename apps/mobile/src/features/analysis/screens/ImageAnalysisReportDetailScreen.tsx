@@ -12,37 +12,37 @@ import {Share2, WandSparkles} from 'lucide-react-native';
 import {Button, Text, View, XStack} from 'tamagui';
 
 import {
-  getAnalysisResultById,
-  getLatestAnalysisResult,
-} from '../../../shared/services/analysisService';
+  getImageAnalysisReportById,
+  getLatestImageAnalysisReport,
+} from '../../../shared/services/imageAnalysisService';
 import {getUserProfile} from '../../../shared/services/userService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {
-  AnalysisFacePointGuide,
-  AnalysisMakeupCard,
-  AnalysisResult,
-} from '../../../shared/types/analysis';
-import type {UserProfile} from '../../../shared/types/userPage';
+  ImageAnalysisFacePointGuide,
+  ImageAnalysisMakeupCard,
+  ImageAnalysisReport,
+} from '../../../shared/types/imageAnalysis';
+import type {UserProfile} from '../../../shared/types/myPage';
 import {AppHeader, XIcon} from '../../../shared/ui';
 
-type AnalysisReportDetailScreenProps = {
-  resultId?: string | null;
+type ImageAnalysisReportDetailScreenProps = {
+  reportId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
-  onShare?: (result: AnalysisResult) => void;
+  onShare?: (report: ImageAnalysisReport) => void;
 };
 
 type GuideItem = {
-  key: keyof AnalysisFacePointGuide;
+  key: keyof ImageAnalysisFacePointGuide;
   label: string;
   point: string;
   detail: string;
 };
 
 type CreateFilterButtonPlacement = 'photo' | 'report-bottom';
-type AnalysisReportHeaderAction = 'share' | 'close';
-type AnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
-type AnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
+type ImageAnalysisReportHeaderAction = 'share' | 'close';
+type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
+type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
@@ -65,20 +65,20 @@ const createFilterButtonAccessibilityLabels: Record<
   photo: '사진 아래 AR 필터 만들기',
   'report-bottom': 'AR 필터 만들기',
 };
-const analysisReportHeaderActions = [
+const imageAnalysisReportHeaderActions = [
   'share',
   'close',
-] as const satisfies readonly AnalysisReportHeaderAction[];
-const analysisReportSubtitleTextStyle = {
+] as const satisfies readonly ImageAnalysisReportHeaderAction[];
+const imageAnalysisReportSubtitleTextStyle = {
   fontSize: typography.fontSize.md,
   lineHeight: typography.lineHeight.md,
 } as const;
-const analysisReportScreenFramePresentation = {
+const imageAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
   headerPlacement: 'fixed',
   headerUsesTopInset: true,
 } as const;
-const analysisReportLiquidGlassSurfaceStyle = {
+const imageAnalysisReportLiquidGlassSurfaceStyle = {
   backgroundColor: colors.liquidGlassSurface,
   borderColor: colors.liquidGlassBorder,
   borderWidth: 1,
@@ -88,44 +88,44 @@ const analysisReportLiquidGlassSurfaceStyle = {
   shadowOpacity: 0.1,
   shadowRadius: shadows.liquidGlassGlow.shadowRadius,
 } satisfies ViewStyle;
-const analysisReportLiquidGlassButtonStyle = {
-  ...analysisReportLiquidGlassSurfaceStyle,
+const imageAnalysisReportLiquidGlassButtonStyle = {
+  ...imageAnalysisReportLiquidGlassSurfaceStyle,
   elevation: 5,
   shadowOffset: {width: 0, height: 8},
   shadowOpacity: 0.12,
 } satisfies ViewStyle;
-const analysisReportLiquidGlassPresentation = {
+const imageAnalysisReportLiquidGlassPresentation = {
   buttonTargets: [
     'create-filter',
     'header-action',
-  ] as const satisfies readonly AnalysisReportLiquidGlassButtonTarget[],
+  ] as const satisfies readonly ImageAnalysisReportLiquidGlassButtonTarget[],
   cardTargets: [
     'hero',
     'summary',
     'makeup',
-  ] as const satisfies readonly AnalysisReportLiquidGlassCardTarget[],
-  shadowRadius: analysisReportLiquidGlassSurfaceStyle.shadowRadius,
+  ] as const satisfies readonly ImageAnalysisReportLiquidGlassCardTarget[],
+  shadowRadius: imageAnalysisReportLiquidGlassSurfaceStyle.shadowRadius,
   surfaceColor: colors.liquidGlassSurface,
 } as const;
 
-export function getAnalysisReportCreateFilterButtonPlacements() {
+export function getImageAnalysisReportCreateFilterButtonPlacements() {
   return createFilterButtonPlacements;
 }
 
-export function getAnalysisReportHeaderActions() {
-  return analysisReportHeaderActions;
+export function getImageAnalysisReportHeaderActions() {
+  return imageAnalysisReportHeaderActions;
 }
 
-export function getAnalysisReportSubtitleTextStyle() {
-  return analysisReportSubtitleTextStyle;
+export function getImageAnalysisReportSubtitleTextStyle() {
+  return imageAnalysisReportSubtitleTextStyle;
 }
 
-export function getAnalysisReportScreenFramePresentation() {
-  return analysisReportScreenFramePresentation;
+export function getImageAnalysisReportScreenFramePresentation() {
+  return imageAnalysisReportScreenFramePresentation;
 }
 
-export function getAnalysisReportLiquidGlassPresentation() {
-  return analysisReportLiquidGlassPresentation;
+export function getImageAnalysisReportLiquidGlassPresentation() {
+  return imageAnalysisReportLiquidGlassPresentation;
 }
 
 const formatReportDate = (dateText: string, name?: string) => {
@@ -138,13 +138,13 @@ const formatReportDate = (dateText: string, name?: string) => {
   return `${year}년 ${month}월 ${day}일 ${displayName}`;
 };
 
-export function AnalysisReportDetailScreen({
-  resultId,
+export function ImageAnalysisReportDetailScreen({
+  reportId,
   onBack,
   onCreateARFilter,
   onShare,
-}: AnalysisReportDetailScreenProps) {
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+}: ImageAnalysisReportDetailScreenProps) {
+  const [report, setReport] = useState<ImageAnalysisReport | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -154,11 +154,13 @@ export function AnalysisReportDetailScreen({
     setIsLoaded(false);
 
     Promise.all([
-      resultId ? getAnalysisResultById(resultId) : getLatestAnalysisResult(),
+      reportId
+        ? getImageAnalysisReportById(reportId)
+        : getLatestImageAnalysisReport(),
       getUserProfile(),
-    ]).then(([nextResult, nextProfile]) => {
+    ]).then(([nextReport, nextProfile]) => {
       if (isMounted) {
-        setResult(nextResult);
+        setReport(nextReport);
         setProfile(nextProfile);
         setIsLoaded(true);
       }
@@ -167,53 +169,53 @@ export function AnalysisReportDetailScreen({
     return () => {
       isMounted = false;
     };
-  }, [resultId]);
+  }, [reportId]);
 
   const guideItems = useMemo<GuideItem[]>(() => {
-    if (!result) {
+    if (!report) {
       return [];
     }
 
     return guideLabels.map((guide) => ({
       ...guide,
-      detail: result.facePointGuide[guide.key],
+      detail: report.facePointGuide[guide.key],
     }));
-  }, [result]);
+  }, [report]);
 
-  if (!result) {
+  if (!report) {
     return (
-      <AnalysisReportScaffold
+      <ImageAnalysisReportScaffold
         contentStyle={styles.empty}
         onClose={onBack}
         onShare={onShare}
         profileName={profile?.name}
-        result={result}
+        report={report}
         scroll={false}
       >
         <Text style={styles.emptyTitle}>
-          {isLoaded ? '분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
+          {isLoaded ? '이미지 분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
         </Text>
         <Text style={styles.emptyDescription}>
-          목록에서 분석 결과를 다시 선택해 주세요.
+          목록에서 이미지 분석 결과를 다시 선택해 주세요.
         </Text>
-      </AnalysisReportScaffold>
+      </ImageAnalysisReportScaffold>
     );
   }
 
   return (
-    <AnalysisReportScaffold
+    <ImageAnalysisReportScaffold
       onClose={onBack}
       onShare={onShare}
       profileName={profile?.name}
-      result={result}
+      report={report}
     >
       <Text style={styles.subtitle}>
-        {formatReportDate(result.analyzedAt, profile?.name)}
+        {formatReportDate(report.analyzedAt, profile?.name)}
       </Text>
 
       <View style={styles.heroSection}>
         <View style={styles.heroCard}>
-          <Image resizeMode="cover" source={result.imageSource} style={styles.heroImage} />
+          <Image resizeMode="cover" source={report.imageSource} style={styles.heroImage} />
         </View>
         <CreateFilterButton
           onPress={onCreateARFilter}
@@ -222,15 +224,15 @@ export function AnalysisReportDetailScreen({
       </View>
 
       <View style={styles.summaryGrid}>
-        <SummaryItem label="퍼스널 컬러" value={result.personalColor} />
-        <SummaryItem label="피부 타입" value={result.skinType} />
-        <SummaryItem label="톤 요약" value={result.toneSummary} />
-        <SummaryItem label="추천 무드" value={result.recommendedMood} />
+        <SummaryItem label="퍼스널 컬러" value={report.personalColor} />
+        <SummaryItem label="피부 타입" value={report.skinType} />
+        <SummaryItem label="톤 요약" value={report.toneSummary} />
+        <SummaryItem label="추천 무드" value={report.recommendedMood} />
       </View>
 
       <ReportSection title="분석 요약">
-        <Text style={styles.paragraph}>{result.skinAnalysisSummary}</Text>
-        <Text style={styles.paragraphMuted}>{result.shortSummary}</Text>
+        <Text style={styles.paragraph}>{report.skinAnalysisSummary}</Text>
+        <Text style={styles.paragraphMuted}>{report.shortSummary}</Text>
       </ReportSection>
 
       <ReportSection title="포인트 가이드">
@@ -250,15 +252,15 @@ export function AnalysisReportDetailScreen({
       </ReportSection>
 
       <ReportSection title="베이스 가이드">
-        <Text style={styles.paragraph}>{result.baseMakeupGuide}</Text>
+        <Text style={styles.paragraph}>{report.baseMakeupGuide}</Text>
       </ReportSection>
 
-      <MakeupCardRail title="추천 메이크업" items={result.recommendedMakeups} />
+      <MakeupCardRail title="추천 메이크업" items={report.recommendedMakeups} />
 
       <MakeupCardRail
         isAvoided
         title="비추천 메이크업 적용법"
-        items={result.avoidedMakeups}
+        items={report.avoidedMakeups}
       />
 
       <Text style={styles.notice}>
@@ -270,38 +272,38 @@ export function AnalysisReportDetailScreen({
         onPress={onCreateARFilter}
         placement="report-bottom"
       />
-    </AnalysisReportScaffold>
+    </ImageAnalysisReportScaffold>
   );
 }
 
-function AnalysisReportHeader({
+function ImageAnalysisReportHeader({
   onClose,
   onShare,
   profileName,
-  result,
+  report,
   topInset,
 }: {
   onClose?: () => void;
-  onShare?: (result: AnalysisResult) => void;
+  onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
-  result: AnalysisResult | null;
+  report: ImageAnalysisReport | null;
   topInset: number;
 }) {
   const handleSharePress = () => {
-    if (!result) {
+    if (!report) {
       return;
     }
 
     if (onShare) {
-      onShare(result);
+      onShare(report);
       return;
     }
 
     void Share.share({
       message: [
-        formatReportDate(result.analyzedAt, profileName),
-        `퍼스널 컬러: ${result.personalColor}`,
-        `추천 무드: ${result.recommendedMood}`,
+        formatReportDate(report.analyzedAt, profileName),
+        `퍼스널 컬러: ${report.personalColor}`,
+        `추천 무드: ${report.recommendedMood}`,
       ].join('\n'),
       title: '맞춤 분석 보고서',
     });
@@ -313,7 +315,7 @@ function AnalysisReportHeader({
         <XStack style={styles.headerActions}>
           <HeaderActionButton
             accessibilityLabel="공유하기"
-            disabled={!result}
+            disabled={!report}
             onPress={handleSharePress}
           >
             <Share2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
@@ -333,21 +335,21 @@ function AnalysisReportHeader({
   );
 }
 
-function AnalysisReportScaffold({
+function ImageAnalysisReportScaffold({
   children,
   contentStyle,
   onClose,
   onShare,
   profileName,
-  result,
+  report,
   scroll = true,
 }: {
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   onClose?: () => void;
-  onShare?: (result: AnalysisResult) => void;
+  onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
-  result: AnalysisResult | null;
+  report: ImageAnalysisReport | null;
   scroll?: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -359,11 +361,11 @@ function AnalysisReportScaffold({
 
   return (
     <View style={styles.screen}>
-      <AnalysisReportHeader
+      <ImageAnalysisReportHeader
         onClose={onClose}
         onShare={onShare}
         profileName={profileName}
-        result={result}
+        report={report}
         topInset={insets.top}
       />
       {scroll ? (
@@ -469,7 +471,7 @@ function MakeupCardRail({
   title,
 }: {
   isAvoided?: boolean;
-  items: AnalysisMakeupCard[];
+  items: ImageAnalysisMakeupCard[];
   title: string;
 }) {
   return (
@@ -551,7 +553,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   createFilterButton: {
-    ...analysisReportLiquidGlassButtonStyle,
+    ...imageAnalysisReportLiquidGlassButtonStyle,
     alignItems: 'center',
     borderRadius: radius.pill,
     flexDirection: 'row',
@@ -612,7 +614,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroCard: {
-    ...analysisReportLiquidGlassSurfaceStyle,
+    ...imageAnalysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.lg,
     padding: spacing.xs,
   },
@@ -626,7 +628,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   headerActionButton: {
-    ...analysisReportLiquidGlassButtonStyle,
+    ...imageAnalysisReportLiquidGlassButtonStyle,
     alignItems: 'center',
     borderRadius: radius.pill,
     height: 42,
@@ -651,7 +653,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   makeupCard: {
-    ...analysisReportLiquidGlassSurfaceStyle,
+    ...imageAnalysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.md,
     padding: spacing.xs,
     width: 170,
@@ -711,7 +713,7 @@ const styles = StyleSheet.create({
   reportContent: {
     gap: spacing.xl,
     paddingHorizontal: spacing.screenX,
-    paddingTop: analysisReportScreenFramePresentation.contentTopPadding,
+    paddingTop: imageAnalysisReportScreenFramePresentation.contentTopPadding,
   },
   screen: {
     backgroundColor: colors.surfaceMuted,
@@ -739,9 +741,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: analysisReportSubtitleTextStyle.fontSize,
+    fontSize: imageAnalysisReportSubtitleTextStyle.fontSize,
     fontWeight: typography.fontWeight.medium,
-    lineHeight: analysisReportSubtitleTextStyle.lineHeight,
+    lineHeight: imageAnalysisReportSubtitleTextStyle.lineHeight,
     textAlign: 'center',
   },
   summaryGrid: {
@@ -750,7 +752,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   summaryItem: {
-    ...analysisReportLiquidGlassSurfaceStyle,
+    ...imageAnalysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.md,
     flexGrow: 1,
     gap: spacing.xs,

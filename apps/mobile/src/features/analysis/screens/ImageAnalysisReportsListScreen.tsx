@@ -1,23 +1,23 @@
 import {useEffect, useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
 
-import {getAnalysisResults} from '../../../shared/services/analysisService';
+import {getImageAnalysisReports} from '../../../shared/services/imageAnalysisService';
 import {spacing} from '../../../shared/theme';
-import type {AnalysisResult} from '../../../shared/types/analysis';
+import type {ImageAnalysisReport} from '../../../shared/types/imageAnalysis';
 import {AppHeader, AppScreen, PagedGrid} from '../../../shared/ui';
-import {AnalysisResultCard} from '../components/AnalysisResultCard';
+import {ImageAnalysisReportCard} from '../components/ImageAnalysisReportCard';
 
-type AnalysisResultListScreenProps = {
+type ImageAnalysisReportsListScreenProps = {
   onBack?: () => void;
-  onPressResult?: (resultId: string) => void;
+  onPressReport?: (reportId: string) => void;
 };
 
-export function AnalysisResultListScreen({
+export function ImageAnalysisReportsListScreen({
   onBack,
-  onPressResult,
-}: AnalysisResultListScreenProps) {
+  onPressReport,
+}: ImageAnalysisReportsListScreenProps) {
   const {width} = useWindowDimensions();
-  const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [reports, setReports] = useState<ImageAnalysisReport[]>([]);
   const cardGap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
   const cardWidth = Math.floor((contentWidth - cardGap) / 2);
@@ -25,9 +25,9 @@ export function AnalysisResultListScreen({
   useEffect(() => {
     let isMounted = true;
 
-    getAnalysisResults().then((nextResults) => {
+    getImageAnalysisReports().then((nextReports) => {
       if (isMounted) {
-        setResults(nextResults);
+        setReports(nextReports);
       }
     });
 
@@ -38,18 +38,18 @@ export function AnalysisResultListScreen({
 
   return (
     <AppScreen contentGap={spacing.xl}>
-      <AppHeader onBack={onBack} title="분석 결과" />
+      <AppHeader onBack={onBack} title="이미지 분석 결과" />
 
       <PagedGrid
-        data={results}
-        keyExtractor={(result) => result.id}
+        data={reports}
+        keyExtractor={(report) => report.id}
         pageSize={10}
         pageStyle={[styles.grid, {gap: cardGap}]}
         pageWidth={contentWidth}
-        renderItem={(result) => (
-          <AnalysisResultCard
-            onPress={() => onPressResult?.(result.id)}
-            result={result}
+        renderItem={(report) => (
+          <ImageAnalysisReportCard
+            onPress={() => onPressReport?.(report.id)}
+            report={report}
             style={{width: cardWidth}}
           />
         )}

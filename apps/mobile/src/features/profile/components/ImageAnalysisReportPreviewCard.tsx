@@ -2,21 +2,21 @@ import { Image, Pressable, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
 import {
-  userPageColors,
-  userPageRadius,
-  userPageTypography,
+  myPageColors,
+  myPageRadius,
+  myPageTypography,
 } from '../../../shared/theme/tokens';
-import type { AnalysisReportPreview } from '../../../shared/types/userPage';
+import type { ImageAnalysisReportPreview } from '../../../shared/types/myPage';
 
-interface AnalysisReportPreviewCardProps {
-  report: AnalysisReportPreview;
+interface ImageAnalysisReportPreviewCardProps {
+  report: ImageAnalysisReportPreview;
   onPress?: () => void;
 }
 
-export const AnalysisReportPreviewCard = ({
+export const ImageAnalysisReportPreviewCard = ({
   report,
   onPress,
-}: AnalysisReportPreviewCardProps) => {
+}: ImageAnalysisReportPreviewCardProps) => {
   return (
     <Pressable
       accessibilityRole="button"
@@ -71,9 +71,9 @@ function ChevronRightIcon() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: userPageColors.surface,
-    borderColor: userPageColors.borderSubtle,
-    borderRadius: userPageRadius.image,
+    backgroundColor: myPageColors.surface,
+    borderColor: myPageColors.borderSubtle,
+    borderRadius: myPageRadius.image,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     width: 18,
   },
   chevronLine: {
-    backgroundColor: userPageColors.textSoft,
+    backgroundColor: myPageColors.textSoft,
     borderRadius: 2,
     height: 2,
     position: 'absolute',
@@ -107,8 +107,8 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignSelf: 'flex-start',
-    backgroundColor: userPageColors.surfaceMuted,
-    borderRadius: userPageRadius.chip,
+    backgroundColor: myPageColors.surfaceMuted,
+    borderRadius: myPageRadius.chip,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -119,30 +119,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   meta: {
-    color: userPageColors.textSoft,
-    fontSize: userPageTypography.caption,
+    color: myPageColors.textSoft,
+    fontSize: myPageTypography.caption,
     lineHeight: 16,
   },
   mood: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.caption,
+    color: myPageColors.text,
+    fontSize: myPageTypography.caption,
     fontWeight: '700',
     lineHeight: 16,
   },
   summary: {
-    color: userPageColors.textMuted,
-    fontSize: userPageTypography.body,
+    color: myPageColors.textMuted,
+    fontSize: myPageTypography.body,
     lineHeight: 19,
   },
   thumbnail: {
-    backgroundColor: userPageColors.surfaceMuted,
+    backgroundColor: myPageColors.surfaceMuted,
     borderRadius: 10,
     height: 96,
     width: 82,
   },
   title: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.body,
+    color: myPageColors.text,
+    fontSize: myPageTypography.body,
     fontWeight: '700',
     lineHeight: 21,
   },

@@ -2,28 +2,28 @@ import {useEffect, useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {getLatestAnalysisResult} from '../../../shared/services/analysisService';
+import {getLatestImageAnalysisReport} from '../../../shared/services/imageAnalysisService';
 import {getMakeupLookPreview} from '../../../shared/services/makeupService';
 import {getLikedProductPreview} from '../../../shared/services/productService';
 import {getUserProfile} from '../../../shared/services/userService';
 import {colors, spacing, typography} from '../../../shared/theme';
-import type {AnalysisResult} from '../../../shared/types/analysis';
+import type {ImageAnalysisReport} from '../../../shared/types/imageAnalysis';
 import type {
   MakeupLook,
   MakeupStylePreview,
   Product,
   UserProfile,
-} from '../../../shared/types/userPage';
+} from '../../../shared/types/myPage';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
-import {AnalysisSummaryCard} from '../components/AnalysisSummaryCard';
+import {ImageAnalysisSummaryCard} from '../components/ImageAnalysisSummaryCard';
 import {MakeupLookCard} from '../components/MakeupLookCard';
 import {ProductCard} from '../components/ProductCard';
 import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
 
 type MyPageScreenProps = {
   onPressProfileEdit?: () => void;
-  onPressAnalysisResult?: (resultId: string) => void;
-  onPressAnalysisResultList?: () => void;
+  onPressImageAnalysisReport?: (reportId: string) => void;
+  onPressImageAnalysisReportsList?: () => void;
   onPressMakeupStyleList?: () => void;
   onPressLikedProductList?: () => void;
   savedMakeupStyle?: MakeupStylePreview | null;
@@ -31,15 +31,15 @@ type MyPageScreenProps = {
 
 type MyPageData = {
   profile: UserProfile;
-  analysisResult: AnalysisResult | null;
+  imageAnalysisReport: ImageAnalysisReport | null;
   makeupLooks: MakeupLook[];
   products: Product[];
 };
 
 export function MyPageScreen({
   onPressProfileEdit,
-  onPressAnalysisResult,
-  onPressAnalysisResultList,
+  onPressImageAnalysisReport,
+  onPressImageAnalysisReportsList,
   onPressMakeupStyleList,
   onPressLikedProductList,
   savedMakeupStyle,
@@ -65,14 +65,14 @@ export function MyPageScreen({
 
     Promise.all([
       getUserProfile(),
-      getLatestAnalysisResult(),
+      getLatestImageAnalysisReport(),
       getMakeupLookPreview(3),
       getLikedProductPreview(3),
-    ]).then(([profile, analysisResult, makeupLooks, products]) => {
+    ]).then(([profile, imageAnalysisReport, makeupLooks, products]) => {
       if (isMounted) {
         setData({
           profile,
-          analysisResult,
+          imageAnalysisReport,
           makeupLooks,
           products,
         });
@@ -94,7 +94,7 @@ export function MyPageScreen({
     );
   }
 
-  const analysisResult = data.analysisResult;
+  const imageAnalysisReport = data.imageAnalysisReport;
   const makeupLooks = savedMakeupStyle
     ? [
         savedMakeupStyle,
@@ -113,16 +113,16 @@ export function MyPageScreen({
       <View style={styles.section}>
         <SectionHeader
           actionLabel="전체 보기"
-          onPressAction={onPressAnalysisResultList}
-          title="분석 결과"
+          onPressAction={onPressImageAnalysisReportsList}
+          title="이미지 분석 결과"
         />
-        {analysisResult ? (
-          <AnalysisSummaryCard
-            onPress={() => onPressAnalysisResult?.(analysisResult.id)}
-            result={analysisResult}
+        {imageAnalysisReport ? (
+          <ImageAnalysisSummaryCard
+            onPress={() => onPressImageAnalysisReport?.(imageAnalysisReport.id)}
+            report={imageAnalysisReport}
           />
         ) : (
-          <EmptySection label="저장된 분석 결과가 없어요." />
+          <EmptySection label="저장된 이미지 분석 결과가 없어요." />
         )}
       </View>
 

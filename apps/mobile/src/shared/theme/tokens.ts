@@ -1,4 +1,4 @@
-export const userPageColors = {
+export const myPageColors = {
   background: '#FFFFFF',
   surface: '#FFFFFF',
   surfaceMuted: '#F6F6F6',
@@ -14,20 +14,20 @@ export const userPageColors = {
   divider: '#E9E9E9',
 } as const;
 
-export const userPageSpacing = {
+export const myPageSpacing = {
   screenX: 20,
   sectionGap: 28,
   cardGap: 12,
   itemGap: 10,
 } as const;
 
-export const userPageRadius = {
+export const myPageRadius = {
   card: 18,
   image: 12,
   chip: 999,
 } as const;
 
-export const userPageTypography = {
+export const myPageTypography = {
   title: 22,
   sectionTitle: 17,
   body: 14,

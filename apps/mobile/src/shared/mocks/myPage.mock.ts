@@ -1,12 +1,12 @@
-import { analysisMock } from './analysis.mock';
+import { imageAnalysisReportsMock } from './imageAnalysis.mock';
 import { makeupLooksMock } from './makeupLooks.mock';
 import { productsMock } from './products.mock';
 import { userProfileMock } from './user.mock';
-import type { UserPageData } from '../types/userPage';
+import type { MyPageData } from '../types/myPage';
 
-export const userPageMock: UserPageData = {
+export const myPageMock: MyPageData = {
   profile: userProfileMock,
-  reports: analysisMock.slice(0, 3),
+  reports: imageAnalysisReportsMock.slice(0, 3),
   makeupStyles: makeupLooksMock,
   favoriteProducts: productsMock,
 };

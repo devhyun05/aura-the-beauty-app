@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
-import { userPageColors, userPageTypography } from '../../../shared/theme/tokens';
+import { myPageColors, myPageTypography } from '../../../shared/theme/tokens';
 
 interface SectionHeaderProps {
   title: string;
@@ -40,7 +40,7 @@ function ChevronRightIcon() {
 const styles = StyleSheet.create({
   action: {
     alignItems: 'center',
-    borderColor: userPageColors.borderSubtle,
+    borderColor: myPageColors.borderSubtle,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
@@ -49,8 +49,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   actionLabel: {
-    color: userPageColors.textMuted,
-    fontSize: userPageTypography.caption,
+    color: myPageColors.textMuted,
+    fontSize: myPageTypography.caption,
     fontWeight: '600',
     lineHeight: 16,
   },
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     width: 14,
   },
   chevronLine: {
-    backgroundColor: userPageColors.accentMuted,
+    backgroundColor: myPageColors.accentMuted,
     borderRadius: 2,
     height: 2,
     position: 'absolute',
@@ -82,8 +82,8 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   title: {
-    color: userPageColors.text,
-    fontSize: userPageTypography.sectionTitle,
+    color: myPageColors.text,
+    fontSize: myPageTypography.sectionTitle,
     fontWeight: '700',
     lineHeight: 22,
   },

@@ -1,6 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {Product} from '../types/userPage';
+import type {Product} from '../types/myPage';
 
 const productSatinCushion =
   require('../../assets/images/product-like/product-satin-cushion.png') as ImageSourcePropType;

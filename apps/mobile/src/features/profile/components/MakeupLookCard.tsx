@@ -3,7 +3,7 @@ import { Text, View } from 'tamagui';
 
 import { colors, radius, spacing, typography } from '../../../shared/theme';
 import { AppCard, ImagePlaceholder } from '../../../shared/ui';
-import type { MakeupLook } from '../../../shared/types/userPage';
+import type { MakeupLook } from '../../../shared/types/myPage';
 
 type MakeupLookCardProps = {
   look: MakeupLook;

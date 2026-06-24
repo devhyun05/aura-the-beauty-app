@@ -1,4 +1,4 @@
-import {getAnalysisAvoidedMakeupImageAssetNames} from './analysis.mock';
+import {getImageAnalysisAvoidedMakeupImageAssetNames} from './imageAnalysis.mock';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -6,7 +6,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const avoidedImageAssetNames = getAnalysisAvoidedMakeupImageAssetNames();
+const avoidedImageAssetNames = getImageAnalysisAvoidedMakeupImageAssetNames();
 const smokyImageAssetName: 'report-avoid-heavy-smoky.png' =
   avoidedImageAssetNames['너무 진한 스모키'];
 const contourImageAssetName: 'report-avoid-strong-contour.png' =

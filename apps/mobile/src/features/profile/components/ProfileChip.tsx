@@ -2,9 +2,9 @@ import { StyleSheet } from 'react-native';
 import { Text } from 'tamagui';
 
 import {
-  userPageColors,
-  userPageRadius,
-  userPageTypography,
+  myPageColors,
+  myPageRadius,
+  myPageTypography,
 } from '../../../shared/theme/tokens';
 
 interface ProfileChipProps {
@@ -17,12 +17,12 @@ export const ProfileChip = ({ label }: ProfileChipProps) => {
 
 const styles = StyleSheet.create({
   chip: {
-    backgroundColor: userPageColors.surfaceMuted,
-    borderColor: userPageColors.borderSubtle,
+    backgroundColor: myPageColors.surfaceMuted,
+    borderColor: myPageColors.borderSubtle,
     borderWidth: 1,
-    borderRadius: userPageRadius.chip,
-    color: userPageColors.textMuted,
-    fontSize: userPageTypography.caption,
+    borderRadius: myPageRadius.chip,
+    color: myPageColors.textMuted,
+    fontSize: myPageTypography.caption,
     fontWeight: '600',
     lineHeight: 16,
     paddingHorizontal: 10,

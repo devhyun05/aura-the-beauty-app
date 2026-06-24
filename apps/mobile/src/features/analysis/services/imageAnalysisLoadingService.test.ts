@@ -1,8 +1,8 @@
 import {
-  ANALYSIS_LOADING_TOTAL_MS,
-  getAnalysisProgressState,
-  mockAnalysisLoadingSteps,
-} from './analysisLoadingService';
+  IMAGE_ANALYSIS_LOADING_TOTAL_MS,
+  getImageAnalysisProgressState,
+  mockImageAnalysisLoadingSteps,
+} from './imageAnalysisLoadingService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -10,17 +10,21 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const firstProgressState = getAnalysisProgressState(0);
+const firstProgressState = getImageAnalysisProgressState(0);
 
-expectEqual(firstProgressState.activeStep.id, mockAnalysisLoadingSteps[0].id, 'first active step');
+expectEqual(
+  firstProgressState.activeStep.id,
+  mockImageAnalysisLoadingSteps[0].id,
+  'first active step',
+);
 expectEqual(firstProgressState.progressLabel, '0%', 'initial progress label');
 expectEqual(firstProgressState.isComplete, false, 'initial completion state');
 
-const lastProgressState = getAnalysisProgressState(ANALYSIS_LOADING_TOTAL_MS);
+const lastProgressState = getImageAnalysisProgressState(IMAGE_ANALYSIS_LOADING_TOTAL_MS);
 
 expectEqual(
   lastProgressState.activeStep.id,
-  mockAnalysisLoadingSteps[mockAnalysisLoadingSteps.length - 1].id,
+  mockImageAnalysisLoadingSteps[mockImageAnalysisLoadingSteps.length - 1].id,
   'last active step',
 );
 expectEqual(lastProgressState.progressLabel, '100%', 'complete progress label');

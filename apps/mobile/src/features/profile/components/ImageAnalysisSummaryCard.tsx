@@ -7,36 +7,36 @@ import {
   ChevronRightIcon,
   ImagePlaceholder,
 } from '../../../shared/ui';
-import type { AnalysisResult } from '../../../shared/types/analysis';
+import type { ImageAnalysisReport } from '../../../shared/types/imageAnalysis';
 
-type AnalysisSummaryCardProps = {
-  result: AnalysisResult;
+type ImageAnalysisSummaryCardProps = {
+  report: ImageAnalysisReport;
   onPress?: () => void;
 };
 
-export function AnalysisSummaryCard({
-  result,
+export function ImageAnalysisSummaryCard({
+  report,
   onPress,
-}: AnalysisSummaryCardProps) {
+}: ImageAnalysisSummaryCardProps) {
   return (
     <AppCard onPress={onPress} style={styles.card}>
       <View style={styles.row}>
         <View style={styles.imageFrame}>
           <ImagePlaceholder
             borderRadius={radius.md}
-            source={result.imageSource}
+            source={report.imageSource}
           />
         </View>
 
         <View style={styles.info}>
           <Text numberOfLines={1} style={styles.title}>
-            {result.title}
+            {report.title}
           </Text>
           <Text numberOfLines={2} style={styles.description}>
-            {result.shortSummary}
+            {report.shortSummary}
           </Text>
           <Text numberOfLines={1} style={styles.mood}>
-            {result.recommendedMood}
+            {report.recommendedMood}
           </Text>
         </View>
 

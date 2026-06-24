@@ -1,24 +1,24 @@
 import type {ImageSourcePropType} from 'react-native';
 
-export type AnalysisLoadingStep = {
+export type ImageAnalysisLoadingStep = {
   id: string;
   title: string;
   description: string;
 };
 
-export type AnalysisProgressState = {
-  activeStep: AnalysisLoadingStep;
+export type ImageAnalysisProgressState = {
+  activeStep: ImageAnalysisLoadingStep;
   progress: number;
   progressLabel: string;
   isComplete: boolean;
 };
 
-export const ANALYSIS_LOADING_TOTAL_MS = 3200;
+export const IMAGE_ANALYSIS_LOADING_TOTAL_MS = 3200;
 
-export const analysisLoadingPreviewSource =
+export const imageAnalysisLoadingPreviewSource =
   require('../../../assets/images/user-page/report-bare-face-20260622.png') as ImageSourcePropType;
 
-export const mockAnalysisLoadingSteps: readonly AnalysisLoadingStep[] = [
+export const mockImageAnalysisLoadingSteps: readonly ImageAnalysisLoadingStep[] = [
   {
     id: 'face-map',
     title: '얼굴 균형을 확인하고 있어요',
@@ -36,23 +36,25 @@ export const mockAnalysisLoadingSteps: readonly AnalysisLoadingStep[] = [
   },
 ];
 
-export const analysisLoadingTip =
+export const imageAnalysisLoadingTip =
   '정확한 맞춤 필터 생성을 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
 
 function clampProgress(elapsedMs: number) {
-  return Math.min(Math.max(elapsedMs / ANALYSIS_LOADING_TOTAL_MS, 0), 1);
+  return Math.min(Math.max(elapsedMs / IMAGE_ANALYSIS_LOADING_TOTAL_MS, 0), 1);
 }
 
-export function getAnalysisProgressState(elapsedMs: number): AnalysisProgressState {
+export function getImageAnalysisProgressState(
+  elapsedMs: number,
+): ImageAnalysisProgressState {
   const progress = clampProgress(elapsedMs);
   const stepIndex = Math.min(
-    Math.floor(progress * mockAnalysisLoadingSteps.length),
-    mockAnalysisLoadingSteps.length - 1,
+    Math.floor(progress * mockImageAnalysisLoadingSteps.length),
+    mockImageAnalysisLoadingSteps.length - 1,
   );
   const progressPercent = Math.round(progress * 100);
 
   return {
-    activeStep: mockAnalysisLoadingSteps[stepIndex],
+    activeStep: mockImageAnalysisLoadingSteps[stepIndex],
     progress,
     progressLabel: `${progressPercent}%`,
     isComplete: progress >= 1,

@@ -1,20 +1,21 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Image, StyleSheet} from 'react-native';
-import {CheckCircle2, ChevronLeft, Circle} from 'lucide-react-native';
+import {CheckCircle2, Circle} from 'lucide-react-native';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
-import {Button, Text, View, XStack, YStack} from 'tamagui';
+import {Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {
-  ANALYSIS_LOADING_TOTAL_MS,
-  analysisLoadingPreviewSource,
-  analysisLoadingTip,
-  getAnalysisProgressState,
-  mockAnalysisLoadingSteps,
-} from '../services/analysisLoadingService';
+  IMAGE_ANALYSIS_LOADING_TOTAL_MS,
+  getImageAnalysisProgressState,
+  imageAnalysisLoadingPreviewSource,
+  imageAnalysisLoadingTip,
+  mockImageAnalysisLoadingSteps,
+} from '../services/imageAnalysisLoadingService';
 
-type AIAnalysisLoadingScreenProps = {
+type ImageAnalysisLoadingScreenProps = {
   onBack?: () => void;
   onComplete?: () => void;
 };
@@ -25,21 +26,24 @@ const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-export function AIAnalysisLoadingScreen({
+export function ImageAnalysisLoadingScreen({
   onBack,
   onComplete,
-}: AIAnalysisLoadingScreenProps) {
+}: ImageAnalysisLoadingScreenProps) {
   const insets = useSafeAreaInsets();
   const [elapsedMs, setElapsedMs] = useState(0);
-  const progressState = useMemo(() => getAnalysisProgressState(elapsedMs), [elapsedMs]);
-  const activeStepIndex = mockAnalysisLoadingSteps.findIndex(
+  const progressState = useMemo(
+    () => getImageAnalysisProgressState(elapsedMs),
+    [elapsedMs],
+  );
+  const activeStepIndex = mockImageAnalysisLoadingSteps.findIndex(
     step => step.id === progressState.activeStep.id,
   );
 
   useEffect(() => {
     const intervalId = setInterval(() => {
       setElapsedMs(currentElapsedMs =>
-        Math.min(currentElapsedMs + PROGRESS_TICK_MS, ANALYSIS_LOADING_TOTAL_MS),
+        Math.min(currentElapsedMs + PROGRESS_TICK_MS, IMAGE_ANALYSIS_LOADING_TOTAL_MS),
       );
     }, PROGRESS_TICK_MS);
 
@@ -64,24 +68,7 @@ export function AIAnalysisLoadingScreen({
 
   return (
     <View style={styles.screen}>
-      <XStack style={[styles.header, {paddingTop: insets.top + spacing.md}]}>
-        <Button
-          accessibilityLabel="촬영 화면으로 돌아가기"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={onBack}
-          pressStyle={{scale: 0.97}}
-          style={styles.backButton}
-          unstyled>
-          <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
-        </Button>
-
-        <Text numberOfLines={1} style={styles.headerTitle}>
-          얼굴 분석
-        </Text>
-
-        <View style={styles.headerSpacer} />
-      </XStack>
+      <AppHeader onBack={onBack} title="얼굴 분석" topInset={insets.top} />
 
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
@@ -95,7 +82,7 @@ export function AIAnalysisLoadingScreen({
           <View style={styles.previewFrame}>
             <Image
               resizeMode="cover"
-              source={analysisLoadingPreviewSource}
+              source={imageAnalysisLoadingPreviewSource}
               style={styles.previewImage}
             />
             <View style={styles.previewDim} />
@@ -112,7 +99,7 @@ export function AIAnalysisLoadingScreen({
             />
 
             <YStack style={styles.stepList}>
-              {mockAnalysisLoadingSteps.map((step, stepIndex) => {
+              {mockImageAnalysisLoadingSteps.map((step, stepIndex) => {
                 const isDone = progressState.isComplete || stepIndex < activeStepIndex;
                 const isActive = stepIndex === activeStepIndex && !progressState.isComplete;
 
@@ -149,7 +136,7 @@ export function AIAnalysisLoadingScreen({
 
         <YStack style={styles.tipCard}>
           <Text style={styles.tipLabel}>TIP</Text>
-          <Text style={styles.tipText}>{analysisLoadingTip}</Text>
+          <Text style={styles.tipText}>{imageAnalysisLoadingTip}</Text>
         </YStack>
       </YStack>
     </View>
@@ -198,38 +185,6 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
-  },
-  header: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    gap: spacing.md,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.xl + spacing.md,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.md,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    flex: 1,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    height: iconSize.xl + spacing.md,
-    width: iconSize.xl + spacing.md,
   },
   content: {
     flex: 1,
