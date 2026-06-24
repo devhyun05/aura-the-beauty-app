@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {Image, ScrollView, StyleSheet} from 'react-native';
+import {Image, ScrollView, StyleSheet, type ViewStyle} from 'react-native';
 import {Camera, ChevronLeft, SlidersHorizontal, Video} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -35,6 +35,19 @@ const STYLE_OPTION_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = 
   {id: 'type', label: '타입'},
   {id: 'texture', label: '질감'},
 ];
+
+type MakeupPreviewColorOverlayLayer = {
+  id: string;
+  style: ViewStyle;
+};
+
+export function getMakeupPreviewColorOverlayLayers(): readonly MakeupPreviewColorOverlayLayer[] {
+  return [];
+}
+
+export function getMakeupPreviewBadgeContent(): null {
+  return null;
+}
 
 export function ARMakeupFilterScreen({
   initialComparisonMode = 'full',
@@ -89,17 +102,9 @@ export function ARMakeupFilterScreen({
   const selectedColor =
     selectedFilter.colorOptions.find(option => option.id === selectedColorId) ??
     selectedFilter.colorOptions[0];
-  const selectedType =
-    selectedFilter.typeOptions.find(option => option.id === selectedTypeId) ??
-    selectedFilter.typeOptions[0];
-  const selectedTexture =
-    selectedFilter.textureOptions.find(option => option.id === selectedTextureId) ??
-    selectedFilter.textureOptions[0];
-  const selectedComparison =
-    arGuideData.comparisonModes.find(mode => mode.id === selectedComparisonMode) ??
-    arGuideData.comparisonModes[0];
+  const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldShowLeftCheekOverlay =
-    guideMode !== 'half' || selectedComparisonMode === 'left';
+    guideMode !== 'half' || selectedComparisonMode !== 'right';
   const shouldShowRightCheekOverlay =
     guideMode !== 'half' || selectedComparisonMode !== 'left';
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
@@ -107,6 +112,54 @@ export function ARMakeupFilterScreen({
 
   return (
     <View style={styles.screen}>
+      <View style={styles.cameraLayer}>
+        <Image
+          resizeMode="cover"
+          source={selectedFilter.imageSource}
+          style={styles.previewImage}
+        />
+        <View style={styles.previewDim} />
+        <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        {shouldShowLeftCheekOverlay ? (
+          <View
+            style={[styles.cheekPreviewOverlayLeft, {backgroundColor: selectedColor.hex}]}
+          />
+        ) : null}
+        {shouldShowRightCheekOverlay ? (
+          <View
+            style={[styles.cheekPreviewOverlayRight, {backgroundColor: selectedColor.hex}]}
+          />
+        ) : null}
+        <View style={[styles.lipPreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        {previewColorOverlayLayers.map(layer => (
+          <View
+            key={layer.id}
+            style={[layer.style, {backgroundColor: selectedColor.hex}]}
+          />
+        ))}
+        {guideMode === 'half' ? (
+          <>
+            {selectedComparisonMode !== 'full' ? (
+              <View
+                style={[
+                  styles.comparisonShade,
+                  selectedComparisonMode === 'left'
+                    ? styles.comparisonShadeRight
+                    : styles.comparisonShadeLeft,
+                ]}
+              />
+            ) : null}
+            <View style={styles.comparisonDivider} />
+            <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
+              {leftComparisonLabel}
+            </Text>
+            <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
+              {rightComparisonLabel}
+            </Text>
+          </>
+        ) : null}
+      </View>
+
       <YStack style={[styles.topArea, {paddingTop: insets.top + spacing.md}]}>
         <XStack style={styles.header}>
           <Button
@@ -164,56 +217,6 @@ export function ARMakeupFilterScreen({
             ))}
           </XStack>
         ) : null}
-      </YStack>
-
-      <YStack style={styles.previewArea}>
-        <View style={styles.previewFrame}>
-          <Image
-            resizeMode="cover"
-            source={selectedFilter.imageSource}
-            style={styles.previewImage}
-          />
-          <View style={styles.previewDim} />
-          <View style={[styles.eyeOverlay, {backgroundColor: selectedColor.hex}]} />
-          {shouldShowLeftCheekOverlay ? (
-            <View style={[styles.cheekOverlayLeft, {backgroundColor: selectedColor.hex}]} />
-          ) : null}
-          {shouldShowRightCheekOverlay ? (
-            <View style={[styles.cheekOverlayRight, {backgroundColor: selectedColor.hex}]} />
-          ) : null}
-          <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
-          {guideMode === 'half' ? (
-            <>
-              {selectedComparisonMode !== 'full' ? (
-                <View
-                  style={[
-                    styles.comparisonShade,
-                    selectedComparisonMode === 'left'
-                      ? styles.comparisonShadeRight
-                      : styles.comparisonShadeLeft,
-                  ]}
-                />
-              ) : null}
-              <View style={styles.comparisonDivider} />
-              <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
-                {leftComparisonLabel}
-              </Text>
-              <Text style={[styles.comparisonLabel, styles.comparisonLabelAfter]}>
-                {rightComparisonLabel}
-              </Text>
-            </>
-          ) : null}
-          <YStack style={styles.previewBadge}>
-            <Text style={styles.previewBadgeLabel}>
-              {guideMode === 'basic' ? '기본 모드' : selectedComparison.label}
-            </Text>
-            <Text style={styles.previewBadgeText}>
-              {guideMode === 'half'
-                ? selectedComparison.description
-                : `${selectedColor.label} · ${selectedType.label} · ${selectedTexture.label}`}
-            </Text>
-          </YStack>
-        </View>
       </YStack>
 
       <YStack style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.md}]}>
@@ -520,11 +523,22 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.black,
     flex: 1,
+    overflow: 'hidden',
+  },
+  cameraLayer: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   topArea: {
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
+    zIndex: 3,
   },
   header: {
     alignItems: 'center',
@@ -621,22 +635,6 @@ const styles = StyleSheet.create({
   comparisonButtonTextActive: {
     color: colors.black,
   },
-  previewArea: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  previewFrame: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    height: '100%',
-    maxHeight: 360,
-    minHeight: 286,
-    overflow: 'hidden',
-    width: '100%',
-  },
   previewImage: {
     height: '100%',
     width: '100%',
@@ -650,48 +648,50 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  eyeOverlay: {
+  eyePreviewOverlay: {
     borderRadius: radius.pill,
-    height: spacing.xs,
-    left: '31%',
-    opacity: 0.32,
+    height: 34,
+    left: '27%',
+    opacity: 0.16,
     position: 'absolute',
-    right: '31%',
-    top: '39%',
+    right: '27%',
+    top: '38%',
   },
-  cheekOverlayLeft: {
+  cheekPreviewOverlayLeft: {
     borderRadius: radius.pill,
-    height: spacing.md,
-    left: '24%',
-    opacity: 0.24,
+    height: 54,
+    left: '20%',
+    opacity: 0.18,
     position: 'absolute',
-    top: '55%',
-    width: 42,
+    top: '52%',
+    transform: [{rotate: '-14deg'}],
+    width: 92,
   },
-  cheekOverlayRight: {
+  cheekPreviewOverlayRight: {
     borderRadius: radius.pill,
-    height: spacing.md,
-    opacity: 0.24,
+    height: 54,
+    opacity: 0.18,
     position: 'absolute',
-    right: '24%',
-    top: '55%',
-    width: 42,
+    right: '20%',
+    top: '52%',
+    transform: [{rotate: '14deg'}],
+    width: 92,
   },
-  lipOverlay: {
+  lipPreviewOverlay: {
     borderRadius: radius.pill,
-    bottom: '23%',
-    height: spacing.sm,
-    left: '43%',
-    opacity: 0.62,
+    bottom: '24%',
+    height: 24,
+    left: '39%',
+    opacity: 0.4,
     position: 'absolute',
-    right: '43%',
+    width: 82,
   },
   comparisonShade: {
     backgroundColor: colors.black,
-    bottom: spacing.md,
-    opacity: 0.42,
+    bottom: 0,
+    opacity: 0.34,
     position: 'absolute',
-    top: spacing.md,
+    top: 0,
     width: '50%',
   },
   comparisonShadeLeft: {
@@ -702,11 +702,12 @@ const styles = StyleSheet.create({
   },
   comparisonDivider: {
     backgroundColor: colors.white,
-    bottom: spacing.md,
-    opacity: 0.88,
+    bottom: '28%',
+    opacity: 0.86,
     position: 'absolute',
-    top: spacing.md,
+    top: '24%',
     width: 2,
+    left: '50%',
   },
   comparisonLabel: {
     backgroundColor: colors.glassSurface,
@@ -720,7 +721,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     position: 'absolute',
-    bottom: spacing.xl,
+    bottom: '31%',
   },
   comparisonLabelBefore: {
     left: spacing.xl,
@@ -728,48 +729,23 @@ const styles = StyleSheet.create({
   comparisonLabelAfter: {
     right: spacing.xl,
   },
-  previewBadge: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
+  controlsPanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.xs,
+    bottom: spacing.md,
+    gap: spacing.md,
     left: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    maxHeight: 392,
     position: 'absolute',
     right: spacing.md,
-    top: spacing.md,
-  },
-  previewBadgeLabel: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  previewBadgeText: {
-    color: colors.borderStrong,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'left',
-  },
-  controlsPanel: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    gap: spacing.md,
-    maxHeight: 392,
     paddingTop: spacing.lg,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
+    zIndex: 4,
   },
   panelContent: {
     gap: spacing.md,
@@ -925,7 +901,7 @@ const styles = StyleSheet.create({
   },
   captureRow: {
     alignItems: 'center',
-    borderTopColor: colors.border,
+    borderTopColor: colors.divider,
     borderTopWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,

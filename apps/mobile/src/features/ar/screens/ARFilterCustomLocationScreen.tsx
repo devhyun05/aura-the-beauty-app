@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Image, StyleSheet} from 'react-native';
+import {Image, StyleSheet, type ViewStyle} from 'react-native';
 import {ChevronLeft, Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -31,6 +31,15 @@ const ADJUSTMENT_KEYS: readonly FilterLocationAdjustmentKey[] = [
   'rotation',
 ];
 
+type LocationPreviewColorOverlayLayer = {
+  id: string;
+  style: ViewStyle;
+};
+
+export function getLocationPreviewColorOverlayLayers(): readonly LocationPreviewColorOverlayLayer[] {
+  return [];
+}
+
 export function ARFilterCustomLocationScreen({
   onBack,
   onOpenStyleAdjust,
@@ -39,6 +48,7 @@ export function ARFilterCustomLocationScreen({
   const insets = useSafeAreaInsets();
   const arGuideData = getMockARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
+  const locationFilterColor = filter.colorOptions[0]?.hex ?? colors.white;
   const [locationState, setLocationState] = useState<FilterLocationState>(
     getMockFilterLocationState(),
   );
@@ -76,6 +86,43 @@ export function ARFilterCustomLocationScreen({
 
   return (
     <View style={styles.screen}>
+      <View style={styles.cameraLayer}>
+        <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
+        <View style={styles.previewDim} />
+        <View
+          style={[
+            styles.filterLayer,
+            {
+              transform: [
+                {translateX: locationState.adjustments.horizontal.value},
+                {translateY: locationState.adjustments.vertical.value},
+                {scale: 1 + locationState.adjustments.scale.value / 100},
+                {rotate: `${locationState.adjustments.rotation.value}deg`},
+              ],
+            },
+          ]}>
+          <View style={[styles.filterEyeLayer, {backgroundColor: locationFilterColor}]} />
+          <View style={[styles.filterCheekLayer, {backgroundColor: locationFilterColor}]} />
+          <View style={[styles.filterLipLayer, {backgroundColor: locationFilterColor}]} />
+        </View>
+
+        {locationState.isOverlayVisible
+          ? locationState.landmarks.map(point => (
+              <View
+                key={point.id}
+                accessibilityLabel={`${point.id} 랜드마크`}
+                style={[
+                  styles.landmarkDot,
+                  {
+                    left: `${point.x}%`,
+                    top: `${point.y}%`,
+                  },
+                ]}
+              />
+            ))
+          : null}
+      </View>
+
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
         <XStack style={styles.header}>
           <Button
@@ -86,7 +133,7 @@ export function ARFilterCustomLocationScreen({
             pressStyle={{scale: 0.97}}
             style={styles.iconButton}
             unstyled>
-            <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
+            <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
           </Button>
 
           <YStack style={styles.headerCopy}>
@@ -104,7 +151,7 @@ export function ARFilterCustomLocationScreen({
             pressStyle={{scale: 0.97}}
             style={styles.iconButton}
             unstyled>
-            <Save color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
           </Button>
         </XStack>
 
@@ -127,64 +174,25 @@ export function ARFilterCustomLocationScreen({
             <Text style={styles.segmentText}>스타일 조정</Text>
           </Button>
         </XStack>
-      </YStack>
 
-      <YStack style={styles.previewSection}>
-        <View style={styles.previewFrame}>
-          <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
-          <View style={styles.previewDim} />
-          <View
-            style={[
-              styles.filterLayer,
-              {
-                transform: [
-                  {translateX: locationState.adjustments.horizontal.value},
-                  {translateY: locationState.adjustments.vertical.value},
-                  {scale: 1 + locationState.adjustments.scale.value / 100},
-                  {rotate: `${locationState.adjustments.rotation.value}deg`},
-                ],
-              },
-            ]}>
-            <View style={styles.filterEyeLayer} />
-            <View style={styles.filterCheekLayer} />
-            <View style={styles.filterLipLayer} />
-          </View>
-
-          {locationState.isOverlayVisible
-            ? locationState.landmarks.map(point => (
-                <View
-                  key={point.id}
-                  accessibilityLabel={`${point.id} 랜드마크`}
-                  style={[
-                    styles.landmarkDot,
-                    {
-                      left: `${point.x}%`,
-                      top: `${point.y}%`,
-                    },
-                  ]}
-                />
-              ))
-            : null}
-
-          <XStack style={styles.quickActions}>
-            <ActionPill
-              icon={<RotateCcw color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
-              label="되돌리기"
-              onPress={handleReset}
-            />
-            <ActionPill
-              icon={
-                locationState.isOverlayVisible ? (
-                  <EyeOff color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-                ) : (
-                  <Eye color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-                )
-              }
-              label={locationState.isOverlayVisible ? '숨김' : '보기'}
-              onPress={toggleOverlay}
-            />
-          </XStack>
-        </View>
+        <XStack style={styles.quickActions}>
+          <ActionPill
+            icon={<RotateCcw color={colors.white} size={iconSize.xs} strokeWidth={2} />}
+            label="되돌리기"
+            onPress={handleReset}
+          />
+          <ActionPill
+            icon={
+              locationState.isOverlayVisible ? (
+                <EyeOff color={colors.white} size={iconSize.xs} strokeWidth={2} />
+              ) : (
+                <Eye color={colors.white} size={iconSize.xs} strokeWidth={2} />
+              )
+            }
+            label={locationState.isOverlayVisible ? '숨김' : '보기'}
+            onPress={toggleOverlay}
+          />
+        </XStack>
       </YStack>
 
       <YStack style={[styles.controlPanel, {paddingBottom: insets.bottom + spacing.lg}]}>
@@ -317,16 +325,24 @@ function AdjustmentRow({adjustment, onDecrease, onIncrease}: AdjustmentRowProps)
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.black,
     flex: 1,
+    overflow: 'hidden',
+  },
+  cameraLayer: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   headerArea: {
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
+    zIndex: 3,
   },
   header: {
     alignItems: 'center',
@@ -334,17 +350,13 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
     height: iconSize.xl + spacing.md,
     justifyContent: 'center',
     padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
     width: iconSize.xl + spacing.md,
   },
   headerCopy: {
@@ -353,7 +365,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   eyebrow: {
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
@@ -361,7 +373,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   headerTitle: {
-    color: colors.textPrimary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
@@ -369,8 +381,8 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   segmentedControl: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
     padding: spacing.xs,
@@ -383,10 +395,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.white,
   },
   segmentText: {
-    color: colors.textSecondary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
@@ -394,34 +406,17 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   segmentTextActive: {
-    color: colors.white,
-  },
-  previewSection: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-  },
-  previewFrame: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    height: 310,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: '100%',
+    color: colors.black,
   },
   previewImage: {
     height: '100%',
-    transform: [{scale: 1.2}],
     width: '100%',
   },
   previewDim: {
     backgroundColor: colors.black,
     bottom: 0,
     left: 0,
-    opacity: 0.1,
+    opacity: 0.18,
     position: 'absolute',
     right: 0,
     top: 0,
@@ -430,11 +425,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 220,
     justifyContent: 'center',
+    left: '50%',
+    marginLeft: -90,
+    marginTop: -110,
     position: 'absolute',
+    top: '50%',
     width: 180,
   },
   filterEyeLayer: {
-    backgroundColor: colors.white,
     borderRadius: radius.pill,
     height: spacing.sm,
     opacity: 0.32,
@@ -443,20 +441,18 @@ const styles = StyleSheet.create({
     width: 106,
   },
   filterCheekLayer: {
-    backgroundColor: colors.white,
     borderRadius: radius.pill,
     height: spacing.lg,
-    opacity: 0.2,
+    opacity: 0.22,
     position: 'absolute',
     top: 118,
     width: 138,
   },
   filterLipLayer: {
-    backgroundColor: colors.white,
     borderRadius: radius.pill,
     bottom: 54,
     height: spacing.sm,
-    opacity: 0.6,
+    opacity: 0.62,
     position: 'absolute',
     width: 42,
   },
@@ -472,15 +468,13 @@ const styles = StyleSheet.create({
     width: spacing.md,
   },
   quickActions: {
-    bottom: spacing.md,
     gap: spacing.sm,
-    position: 'absolute',
-    right: spacing.md,
+    justifyContent: 'flex-end',
   },
   actionPill: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -490,7 +484,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   actionPillText: {
-    color: colors.textPrimary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
@@ -499,15 +493,21 @@ const styles = StyleSheet.create({
   },
   controlPanel: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    bottom: spacing.md,
     gap: spacing.lg,
+    left: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+    position: 'absolute',
+    right: spacing.md,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
+    zIndex: 4,
   },
   panelSection: {
     gap: spacing.sm,

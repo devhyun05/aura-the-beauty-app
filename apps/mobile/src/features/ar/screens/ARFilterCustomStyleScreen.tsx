@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Image, ScrollView, StyleSheet} from 'react-native';
+import {Image, ScrollView, StyleSheet, type ViewStyle} from 'react-native';
 import {ChevronLeft, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -28,6 +28,19 @@ const STYLE_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = [
   {id: 'texture', label: '질감'},
 ];
 
+type StylePreviewColorOverlayLayer = {
+  id: string;
+  style: ViewStyle;
+};
+
+export function getStylePreviewColorOverlayLayers(): readonly StylePreviewColorOverlayLayer[] {
+  return [];
+}
+
+export function getStylePreviewSummaryContent(): null {
+  return null;
+}
+
 export function ARFilterCustomStyleScreen({
   onBack,
   onOpenLocationAdjust,
@@ -37,16 +50,9 @@ export function ARFilterCustomStyleScreen({
   const arGuideData = getMockARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
   const [styleState, setStyleState] = useState<FilterStyleState>(getMockFilterStyleState());
-
   const selectedColor =
     filter.colorOptions.find(option => option.id === styleState.selectedColorId) ??
     filter.colorOptions[0];
-  const selectedType =
-    filter.typeOptions.find(option => option.id === styleState.selectedTypeId) ??
-    filter.typeOptions[0];
-  const selectedTexture =
-    filter.textureOptions.find(option => option.id === styleState.selectedTextureId) ??
-    filter.textureOptions[0];
 
   const handleFacePartPress = (facePartId: FacePartId) => {
     setStyleState(currentState => ({
@@ -70,6 +76,15 @@ export function ARFilterCustomStyleScreen({
 
   return (
     <View style={styles.screen}>
+      <View style={styles.cameraLayer}>
+        <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
+        <View style={styles.previewDim} />
+        <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        <View style={[styles.cheekPreviewOverlayLeft, {backgroundColor: selectedColor.hex}]} />
+        <View style={[styles.cheekPreviewOverlayRight, {backgroundColor: selectedColor.hex}]} />
+        <View style={[styles.lipPreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+      </View>
+
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
         <XStack style={styles.header}>
           <Button
@@ -80,7 +95,7 @@ export function ARFilterCustomStyleScreen({
             pressStyle={{scale: 0.97}}
             style={styles.iconButton}
             unstyled>
-            <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
+            <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
           </Button>
 
           <YStack style={styles.headerCopy}>
@@ -98,7 +113,7 @@ export function ARFilterCustomStyleScreen({
             pressStyle={{scale: 0.97}}
             style={styles.iconButton}
             unstyled>
-            <Save color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
           </Button>
         </XStack>
 
@@ -121,23 +136,6 @@ export function ARFilterCustomStyleScreen({
             <Text style={[styles.segmentText, styles.segmentTextActive]}>스타일 조정</Text>
           </Button>
         </XStack>
-      </YStack>
-
-      <YStack style={styles.previewSection}>
-        <View style={styles.previewFrame}>
-          <Image resizeMode="cover" source={filter.imageSource} style={styles.previewImage} />
-          <View style={styles.previewDim} />
-          <View style={[styles.eyeLayer, {backgroundColor: selectedColor.hex}]} />
-          <View style={[styles.cheekLayer, {backgroundColor: selectedColor.hex}]} />
-          <View style={[styles.lipLayer, {backgroundColor: selectedColor.hex}]} />
-
-          <YStack style={styles.selectionSummary}>
-            <Text style={styles.summaryTitle}>{filter.title}</Text>
-            <Text style={styles.summaryText}>
-              {selectedColor.label} · {selectedType.label} · {selectedTexture.label}
-            </Text>
-          </YStack>
-        </View>
       </YStack>
 
       <YStack style={[styles.controlPanel, {paddingBottom: insets.bottom + spacing.lg}]}>
@@ -266,16 +264,24 @@ function ChipButton({isActive, label, onPress}: ChipButtonProps) {
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.black,
     flex: 1,
+    overflow: 'hidden',
+  },
+  cameraLayer: {
+    backgroundColor: colors.black,
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   headerArea: {
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
+    zIndex: 3,
   },
   header: {
     alignItems: 'center',
@@ -283,17 +289,13 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
     height: iconSize.xl + spacing.md,
     justifyContent: 'center',
     padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
     width: iconSize.xl + spacing.md,
   },
   headerCopy: {
@@ -302,7 +304,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   eyebrow: {
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
@@ -310,7 +312,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   headerTitle: {
-    color: colors.textPrimary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
@@ -318,8 +320,8 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   segmentedControl: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+    backgroundColor: colors.glassSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
     padding: spacing.xs,
@@ -332,10 +334,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.white,
   },
   segmentText: {
-    color: colors.textSecondary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
@@ -343,23 +345,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   segmentTextActive: {
-    color: colors.white,
-  },
-  previewSection: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-  },
-  previewFrame: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    height: 300,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: '100%',
+    color: colors.black,
   },
   previewImage: {
     height: '100%',
@@ -369,80 +355,66 @@ const styles = StyleSheet.create({
     backgroundColor: colors.black,
     bottom: 0,
     left: 0,
-    opacity: 0.08,
+    opacity: 0.16,
     position: 'absolute',
     right: 0,
     top: 0,
   },
-  eyeLayer: {
+  eyePreviewOverlay: {
     borderRadius: radius.pill,
-    height: spacing.xs,
-    left: '31%',
-    opacity: 0.34,
+    height: 34,
+    left: '27%',
+    opacity: 0.16,
     position: 'absolute',
-    right: '31%',
-    top: '39%',
+    right: '27%',
+    top: '38%',
   },
-  cheekLayer: {
+  cheekPreviewOverlayLeft: {
     borderRadius: radius.pill,
-    height: spacing.lg,
-    left: '24%',
-    opacity: 0.24,
+    height: 54,
+    left: '20%',
+    opacity: 0.18,
     position: 'absolute',
-    right: '24%',
-    top: '55%',
+    top: '52%',
+    transform: [{rotate: '-14deg'}],
+    width: 92,
   },
-  lipLayer: {
+  cheekPreviewOverlayRight: {
     borderRadius: radius.pill,
-    bottom: '23%',
-    height: spacing.sm,
-    left: '43%',
-    opacity: 0.74,
+    height: 54,
+    opacity: 0.18,
     position: 'absolute',
-    right: '43%',
+    right: '20%',
+    top: '52%',
+    transform: [{rotate: '14deg'}],
+    width: 92,
   },
-  selectionSummary: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    bottom: spacing.md,
-    gap: spacing.xs,
-    left: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+  lipPreviewOverlay: {
+    borderRadius: radius.pill,
+    bottom: '24%',
+    height: 24,
+    left: '39%',
+    opacity: 0.4,
     position: 'absolute',
-    right: spacing.md,
-  },
-  summaryTitle: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  summaryText: {
-    color: colors.borderStrong,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'left',
+    width: 82,
   },
   controlPanel: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    bottom: spacing.md,
     gap: spacing.lg,
+    left: spacing.md,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
+    position: 'absolute',
+    right: spacing.md,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
+    zIndex: 4,
   },
   panelSection: {
     gap: spacing.sm,
