@@ -254,7 +254,6 @@ export function AppRoot() {
           <UserPageScreen
             onPressFavoriteProducts={() => setActiveScreen('likedProductList')}
             onPressMakeupStyles={() => setActiveScreen('makeupStyleList')}
-            onPressProductRecommendations={() => setActiveScreen('custom')}
             onPressReport={(resultId) =>
               goToAnalysisReportDetail(resultId, 'userPage')
             }
@@ -279,7 +278,6 @@ export function AppRoot() {
             onPressAnalysisResultList={() => setActiveScreen('analysisResultList')}
             onPressLikedProductList={() => setActiveScreen('likedProductList')}
             onPressMakeupStyleList={() => setActiveScreen('makeupStyleList')}
-            onPressProductRecommendations={() => setActiveScreen('custom')}
             onPressProfileEdit={() => setActiveScreen('profileEdit')}
             savedMakeupStyle={savedMakeupStyle}
           />
@@ -490,6 +488,7 @@ export function AppRoot() {
         <AppShell
           activeTab={activeScreen}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
+          onProductRecommendationsPress={() => setActiveScreen('custom')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
         />
@@ -528,12 +527,14 @@ function AppShell({
   activeTab,
   children,
   onCreateFilterPress,
+  onProductRecommendationsPress,
   onProfilePress,
   onTabPress,
 }: {
   activeTab?: ShellTab;
   children?: React.ReactNode;
   onCreateFilterPress?: () => void;
+  onProductRecommendationsPress?: () => void;
   onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
 }) {
@@ -550,7 +551,10 @@ function AppShell({
       <YStack style={styles.body}>
         {children ??
           (activeTab === 'home' ? (
-            <HomeScreen onPressCreateFilter={onCreateFilterPress} />
+            <HomeScreen
+              onPressCreateFilter={onCreateFilterPress}
+              onPressProductRecommendations={onProductRecommendationsPress}
+            />
           ) : null)}
         {!children && activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
       </YStack>

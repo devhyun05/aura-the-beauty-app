@@ -28,9 +28,10 @@ import type {
 
 type HomeScreenProps = {
   onPressCreateFilter?: () => void;
+  onPressProductRecommendations?: () => void;
 };
 
-export function HomeScreen({onPressCreateFilter}: HomeScreenProps) {
+export function HomeScreen({onPressCreateFilter, onPressProductRecommendations}: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
@@ -68,7 +69,10 @@ export function HomeScreen({onPressCreateFilter}: HomeScreenProps) {
         trends={homeData.hero.trends}
       />
 
-      <QuickActionSection onPressCreateFilter={onPressCreateFilter} />
+      <QuickActionSection
+        onPressCreateFilter={onPressCreateFilter}
+        onPressProductRecommendations={onPressProductRecommendations}
+      />
       <FilterStoreSection items={homeData.filterStore} />
       <RecommendedLooksSection looks={homeData.recommendedLooks} />
     </ScrollView>
@@ -127,13 +131,15 @@ function HeroBannerCarousel({
 }
 
 function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardProps) {
+  const headline = `이번 주 추천 ${title} ${tone}`;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`이번 주 추천 메이크업 ${title} ${tone} 보기`}
+      accessibilityLabel={`${headline} 룩 보러가기`}
       style={({pressed}) => [
         styles.heroBanner,
-        {width: cardWidth},
+        {height: cardWidth, width: cardWidth},
         pressed && styles.pressed,
       ]}>
       <Image resizeMode="cover" source={imageSource} style={styles.heroBackgroundImage} />
@@ -183,8 +189,10 @@ const quickActions = [
 
 function QuickActionSection({
   onPressCreateFilter,
+  onPressProductRecommendations,
 }: {
   onPressCreateFilter?: () => void;
+  onPressProductRecommendations?: () => void;
 }) {
   return (
     <XStack style={styles.quickActionList}>
@@ -193,7 +201,13 @@ function QuickActionSection({
           accessibilityRole="button"
           accessibilityLabel={action.accessibilityLabel}
           key={action.label}
-          onPress={action.id === 'extract' ? onPressCreateFilter : undefined}
+          onPress={
+            action.id === 'extract'
+              ? onPressCreateFilter
+              : action.id === 'recommendation'
+                ? onPressProductRecommendations
+                : undefined
+          }
           style={({pressed}) => [styles.quickActionItem, pressed && styles.pressed]}>
           <View style={styles.quickActionCircle}>
             {action.icon(colors.textPrimary)}
@@ -279,7 +293,7 @@ function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
       accessibilityLabel={`${look.title} ${look.description}`}
       style={({pressed}) => [styles.lookCard, pressed && styles.pressed]}>
       <View style={styles.lookImageFrame}>
-        <Image resizeMode="contain" source={look.imageSource} style={styles.lookImage} />
+        <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
       </View>
 
       <YStack style={styles.lookTextGroup}>
@@ -409,21 +423,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    height: 330,
-    justifyContent: 'flex-end',
     overflow: 'hidden',
-    padding: spacing.xxl,
+    position: 'relative',
   },
   heroCopy: {
-    gap: spacing.lg,
-    maxWidth: 266,
+    bottom: spacing.xl,
+    gap: spacing.md,
+    left: spacing.xl,
+    maxWidth: 236,
+    position: 'absolute',
     zIndex: 1,
   },
   heroTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
+    fontSize: 22,
+    lineHeight: 30,
   },
   heroButton: {
     alignItems: 'center',
@@ -442,7 +457,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   heroScrim: {
-    backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     bottom: 0,
     left: 0,
     position: 'absolute',

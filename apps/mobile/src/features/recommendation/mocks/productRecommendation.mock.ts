@@ -3,7 +3,7 @@ import type {ImageSourcePropType} from 'react-native';
 import type {ProductRecommendationData} from '../types';
 
 const lookImage =
-  require('../../../assets/images/user-page/report-retake-20260608.png') as ImageSourcePropType;
+  require('../../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
 
 const velureLipstickRoseWood =
   require('../../../assets/images/recommendation/velure-lipstick-rose-wood.png') as ImageSourcePropType;

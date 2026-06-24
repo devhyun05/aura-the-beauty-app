@@ -14,19 +14,33 @@ const analysisVanityLight =
   require('../../assets/images/analysis/analysis-vanity-light.png') as ImageSourcePropType;
 const analysisCoolRose =
   require('../../assets/images/analysis/analysis-cool-rose.png') as ImageSourcePropType;
+const analysisSummerCool =
+  require('../../assets/images/analysis/analysis-summer-cool.png') as ImageSourcePropType;
+const analysisSeojinSpringLight =
+  require('../../assets/images/analysis/analysis-seojin-spring-light.png') as ImageSourcePropType;
+const analysisNaturalLight =
+  require('../../assets/images/analysis/analysis-natural-light.png') as ImageSourcePropType;
+const analysisDarkWall =
+  require('../../assets/images/analysis/analysis-dark-wall.png') as ImageSourcePropType;
+const analysisNightLamp =
+  require('../../assets/images/analysis/analysis-night-lamp.png') as ImageSourcePropType;
+const analysisAutumnWarm =
+  require('../../assets/images/analysis/analysis-autumn-warm.png') as ImageSourcePropType;
+const analysisDifferentFace =
+  require('../../assets/images/analysis/analysis-different-face.png') as ImageSourcePropType;
 
 const reportRecommendClearGloss =
-  require('../../assets/images/analysis-detail/report-recommend-clear-gloss.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/look-clear-gloss.png') as ImageSourcePropType;
 const reportRecommendFruityJuice =
-  require('../../assets/images/analysis-detail/report-recommend-fruity-juice.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/look-fruity-juice.png') as ImageSourcePropType;
 const reportRecommendCleanLine =
-  require('../../assets/images/analysis-detail/report-recommend-clean-line.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/look-clean-line.png') as ImageSourcePropType;
 const reportAvoidHeavySmoky =
-  require('../../assets/images/analysis-detail/report-avoid-heavy-smoky.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/avoid-heavy-matte.png') as ImageSourcePropType;
 const reportAvoidStrongContour =
-  require('../../assets/images/analysis-detail/report-avoid-strong-contour.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/avoid-muddy-shadow.png') as ImageSourcePropType;
 const reportAvoidHighSaturationLip =
-  require('../../assets/images/analysis-detail/report-avoid-high-saturation-lip.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/avoid-over-lip.png') as ImageSourcePropType;
 
 type AnalysisMockSeed = {
   id: string;
@@ -187,7 +201,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-summer-light-20260618',
     analyzedAt: '2026-06-18',
-    imageSource: analysisCoolRose,
+    imageSource: analysisSummerCool,
     environmentLabel: '밝은 배경',
     personalColor: '여름 쿨 라이트',
     skinType: '복합성 피부',
@@ -203,7 +217,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-spring-bright-20260617',
     analyzedAt: '2026-06-17',
-    imageSource: analysisVanityLight,
+    imageSource: analysisSeojinSpringLight,
     environmentLabel: '소프트 조명',
     personalColor: '봄웜 브라이트',
     skinType: '건성 피부',
@@ -235,7 +249,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-natural-20260615',
     analyzedAt: '2026-06-15',
-    imageSource: analysisCleanDaylight,
+    imageSource: analysisNaturalLight,
     environmentLabel: '야외 자연광',
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',
@@ -251,7 +265,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-dark-wall-20260614',
     analyzedAt: '2026-06-14',
-    imageSource: analysisNightNeutral,
+    imageSource: analysisDarkWall,
     environmentLabel: '어두운 배경',
     personalColor: '가을 웜 뮤트',
     skinType: '중성 피부',
@@ -267,7 +281,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-night-lamp-20260613',
     analyzedAt: '2026-06-13',
-    imageSource: analysisNightNeutral,
+    imageSource: analysisNightLamp,
     environmentLabel: '밤 조명',
     personalColor: '여름 쿨 뮤트',
     skinType: '복합성 피부',
@@ -283,7 +297,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-autumn-soft-20260612',
     analyzedAt: '2026-06-12',
-    imageSource: analysisCafeWarm,
+    imageSource: analysisAutumnWarm,
     environmentLabel: '실내 간접광',
     personalColor: '가을 웜 라이트',
     skinType: '건성 피부',
@@ -299,7 +313,7 @@ export const analysisMock: AnalysisResult[] = [
   buildAnalysisResult({
     id: 'analysis-friend-20260611',
     analyzedAt: '2026-06-11',
-    imageSource: analysisWindowSoft,
+    imageSource: analysisDifferentFace,
     environmentLabel: '쿨톤 스튜디오 조명',
     personalColor: '겨울 쿨 브라이트',
     skinType: '중성 피부',
