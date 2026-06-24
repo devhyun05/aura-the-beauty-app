@@ -3,6 +3,7 @@ import React from 'react';
 import {
   APP_FOOTER_BAR_HEIGHT,
   APP_FOOTER_BAR_OVERFLOW,
+  APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   APP_FOOTER_CAPTURE_BUBBLE_SIZE,
   APP_FOOTER_CAPTURE_ICON_SIZE,
   APP_FOOTER_GLASS_BACKGROUND,
@@ -14,8 +15,10 @@ import {
   AppFooter,
 } from './AppFooter';
 
-const footerBarHeight: 49 = APP_FOOTER_BAR_HEIGHT;
-const footerTabHeight: 39 = APP_FOOTER_TAB_HEIGHT;
+const footerBarHeight: 46 = APP_FOOTER_BAR_HEIGHT;
+const footerTabHeight: 36 = APP_FOOTER_TAB_HEIGHT;
+const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
+  APP_FOOTER_ACTIVE_TAB_BACKGROUND;
 const footerCaptureBubbleSize: 50 = APP_FOOTER_CAPTURE_BUBBLE_SIZE;
 const footerHorizontalPadding: 24 = APP_FOOTER_HORIZONTAL_PADDING;
 const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;

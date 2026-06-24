@@ -1,8 +1,11 @@
 import {
+  heroCtaLabel,
   getHomeQuickActionPressHandler,
   getHeroTrendHeadline,
+  heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
 } from './HomeScreen';
+import {typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -21,6 +24,9 @@ const expectedShadowColor: 'rgba(255, 255, 255, 0.30)' =
   heroTrendTitleReadableTextStyle.textShadowColor;
 const expectedShadowRadius: 8 = heroTrendTitleReadableTextStyle.textShadowRadius;
 const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffset.height;
+const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
+const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
+  heroTrendTitleMainTextStyle.fontFamily;
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -42,6 +48,12 @@ expectEqual(
   heroTrendTitleReadableTextStyle.textShadowOffset.height,
   expectedShadowOffsetY,
   'weekly trend title shadow offset',
+);
+expectEqual(heroCtaLabel, expectedHeroCtaLabel, 'hero CTA label');
+expectEqual(
+  heroTrendTitleMainTextStyle.fontFamily,
+  expectedHeroTitleMainFontFamily,
+  'weekly trend main title font family',
 );
 
 let selectedQuickAction: 'ar' | null = null;

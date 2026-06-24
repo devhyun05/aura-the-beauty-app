@@ -4,6 +4,10 @@ import {Button, Text, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
 import {
+  CAMERA_CAPTURE_BUTTON_METRICS,
+  CameraCaptureButtonSurface,
+} from './CameraCaptureButton';
+import {
   BrushFooterIcon,
   CameraFooterIcon,
   HomeFooterIcon,
@@ -12,9 +16,11 @@ import {
 export type FooterTabKey = 'home' | 'capture' | 'custom';
 
 export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xxl;
-export const APP_FOOTER_BAR_HEIGHT = 49;
-export const APP_FOOTER_TAB_HEIGHT = 39;
-export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = 50;
+export const APP_FOOTER_BAR_HEIGHT = 46;
+export const APP_FOOTER_TAB_HEIGHT = 36;
+export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
+export const APP_FOOTER_CAPTURE_BUBBLE_SIZE =
+  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
 export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.md;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
@@ -100,9 +106,15 @@ export function AppFooter({
               ]}
               onPress={() => onTabPress?.(item.key)}>
               <YStack style={isCaptureTab ? styles.captureTabContent : styles.tabContent}>
-                <YStack style={isCaptureTab ? styles.captureIconBubble : undefined}>
-                  {item.icon(iconColor)}
-                </YStack>
+                {isCaptureTab ? (
+                  <CameraCaptureButtonSurface
+                    showInnerDot={false}
+                    size={APP_FOOTER_CAPTURE_BUBBLE_SIZE}>
+                    {item.icon(iconColor)}
+                  </CameraCaptureButtonSurface>
+                ) : (
+                  item.icon(iconColor)
+                )}
                 {showLabels ? (
                   <Text
                     numberOfLines={1}
@@ -167,7 +179,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   activeTabButton: {
-    backgroundColor: 'rgba(17, 17, 17, 0.86)',
+    backgroundColor: APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   },
   captureTabButton: {
     alignItems: 'center',
@@ -181,20 +193,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     justifyContent: 'center',
     transform: [{translateY: -8}],
-  },
-  captureIconBubble: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(17, 17, 17, 0.9)',
-    borderColor: 'rgba(255, 255, 255, 0.86)',
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-    justifyContent: 'center',
-    shadowColor: colors.black,
-    shadowOffset: {width: 0, height: 6},
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    width: APP_FOOTER_CAPTURE_BUBBLE_SIZE,
   },
   tabContent: {
     alignItems: 'center',

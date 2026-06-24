@@ -118,6 +118,15 @@ export const heroTrendTitleReadableTextStyle = {
   textShadowRadius: 8,
 } as const;
 
+export const heroTrendTitleMainTextStyle = {
+  ...heroTrendTitleReadableTextStyle,
+  fontFamily: typography.fontFamily.semibold,
+  fontSize: typography.fontSize.xxl,
+  lineHeight: typography.lineHeight.xxl,
+} as const;
+
+export const heroCtaLabel = '보러가기' as const;
+
 function HeroBannerCarousel({
   cardWidth,
   fallbackImageSource,
@@ -164,7 +173,7 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${accessibilityHeadline} 룩 보러가기`}
+      accessibilityLabel={`${accessibilityHeadline} ${heroCtaLabel}`}
       style={({pressed}) => [
         styles.heroBanner,
         {height: cardWidth, width: cardWidth},
@@ -185,7 +194,7 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
       </YStack>
 
       <XStack style={styles.heroButton}>
-        <Text style={styles.heroButtonText}>룩 보러가기</Text>
+        <Text style={styles.heroButtonText}>{heroCtaLabel}</Text>
         <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
       </XStack>
     </Pressable>
@@ -515,10 +524,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   heroTitleMain: {
-    ...heroTrendTitleReadableTextStyle,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xxl,
-    lineHeight: typography.lineHeight.xxl,
+    ...heroTrendTitleMainTextStyle,
   },
   heroButton: {
     alignItems: 'center',
