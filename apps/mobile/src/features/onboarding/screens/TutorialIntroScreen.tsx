@@ -1,10 +1,9 @@
 import {useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button, Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {AuraLogo} from '../../../shared/ui';
+import {AppScreen, AuraLogo} from '../../../shared/ui';
 import {PhotoCaptureGuideScreen} from './PhotoCaptureGuideScreen';
 
 type TutorialIntroScreenProps = {
@@ -59,7 +58,13 @@ export function TutorialIntroScreen({
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AppScreen
+      backgroundColor={colors.background}
+      bottomPadding="safeArea"
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="safeArea">
       <YStack
         style={[
           styles.screen,
@@ -90,7 +95,7 @@ export function TutorialIntroScreen({
           </Button>
         </YStack>
       </YStack>
-    </SafeAreaView>
+    </AppScreen>
   );
 }
 
@@ -127,10 +132,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
-  },
-  safeArea: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   screen: {
     alignItems: 'center',

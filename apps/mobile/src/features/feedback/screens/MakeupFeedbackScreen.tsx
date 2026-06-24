@@ -6,7 +6,6 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Camera,
@@ -30,6 +29,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {
   FeedbackPoint,
   FeedbackStrength,
@@ -68,7 +68,7 @@ export function MakeupFeedbackScreen({
   const photoScale = photoWidth / BASE_PHOTO_WIDTH;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <FeedbackScreenScaffold>
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -182,7 +182,7 @@ export function MakeupFeedbackScreen({
           </View>
         </ScrollView>
       </View>
-    </SafeAreaView>
+    </FeedbackScreenScaffold>
   );
 }
 
@@ -466,10 +466,6 @@ const styles = StyleSheet.create({
   resultCard: {
     alignSelf: 'center',
     backgroundColor: 'transparent',
-  },
-  safeArea: {
-    backgroundColor: feedbackColors.background,
-    flex: 1,
   },
   scoreBox: {
     alignItems: 'center',

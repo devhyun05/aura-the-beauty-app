@@ -1,6 +1,5 @@
 import React from 'react';
 import {Pressable, ScrollView, StyleSheet} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -24,6 +23,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {FeedbackPoint, FeedbackPointKind} from '../types';
 
 type FeedbackTipScreenProps = {
@@ -100,7 +100,7 @@ export function FeedbackTipScreen({point, onBack}: FeedbackTipScreenProps) {
   const PointIcon = getPointIcon(point.kind);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <FeedbackScreenScaffold>
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -191,7 +191,7 @@ export function FeedbackTipScreen({point, onBack}: FeedbackTipScreenProps) {
           </Pressable>
         </ScrollView>
       </View>
-    </SafeAreaView>
+    </FeedbackScreenScaffold>
   );
 }
 
@@ -427,10 +427,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
-  },
-  safeArea: {
-    backgroundColor: feedbackColors.background,
-    flex: 1,
   },
   screen: {
     backgroundColor: feedbackColors.background,
