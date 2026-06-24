@@ -1,13 +1,12 @@
 import {
-  Image,
   StyleSheet,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, radius, spacing, typography} from '../../../shared/theme';
-import {AppCard, ImagePlaceholder} from '../../../shared/ui';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {AppCard, HeartIcon, ImagePlaceholder} from '../../../shared/ui';
 import type {Product} from '../../../shared/types/myPage';
 
 type ProductCardProps = {
@@ -15,7 +14,8 @@ type ProductCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-const heartFilledIcon = require('../../../assets/icons/profile/heart-filled.png');
+export const PRODUCT_CARD_FAVORITE_ICON_NAME = 'Heart';
+
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
 
 export function ProductCard({product, style}: ProductCardProps) {
@@ -29,11 +29,7 @@ export function ProductCard({product, style}: ProductCardProps) {
         />
 
         <View style={styles.heartBadge}>
-          <Image
-            resizeMode="contain"
-            source={heartFilledIcon}
-            style={styles.heartIcon}
-          />
+          <HeartIcon color={colors.black} filled size={iconSize.xs} strokeWidth={2.1} />
         </View>
       </View>
 
@@ -78,11 +74,6 @@ const styles = StyleSheet.create({
     right: 6,
     top: 6,
     width: 28,
-  },
-  heartIcon: {
-    height: 14,
-    tintColor: colors.black,
-    width: 15,
   },
   imageArea: {
     aspectRatio: 0.86,

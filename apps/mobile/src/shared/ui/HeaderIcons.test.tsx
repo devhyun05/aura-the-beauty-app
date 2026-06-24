@@ -1,10 +1,7 @@
 import React from 'react';
 
-import {iconSize} from '../theme';
 import {
-  PROFILE_HEADER_ICON_HEAD_SIZE,
-  PROFILE_HEADER_ICON_ROOT_SIZE,
-  PROFILE_HEADER_ICON_SHOULDERS_WIDTH,
+  HEADER_ICON_LIBRARY_NAMES,
   ProfileHeaderIcon,
   SearchHeaderIcon,
 } from './HeaderIcons';
@@ -16,15 +13,14 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  PROFILE_HEADER_ICON_ROOT_SIZE,
-  iconSize.sm,
-  'profile header icon root size',
+  HEADER_ICON_LIBRARY_NAMES.SearchHeaderIcon,
+  'Search',
+  'search header icon library name',
 );
-expectEqual(PROFILE_HEADER_ICON_HEAD_SIZE, 9, 'profile header icon head size');
 expectEqual(
-  PROFILE_HEADER_ICON_SHOULDERS_WIDTH,
-  18,
-  'profile header icon shoulders width',
+  HEADER_ICON_LIBRARY_NAMES.ProfileHeaderIcon,
+  'UserRound',
+  'profile header icon library name',
 );
 
 <SearchHeaderIcon color="#111111" />;

@@ -1,22 +1,22 @@
 import {useEffect, useState} from 'react';
 import {
-  Image,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {getLikedProducts} from '../../../shared/services/productService';
-import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {Product} from '../../../shared/types/myPage';
 import {
   AppHeader,
   AppScreen,
+  HeartIcon,
   ImagePlaceholder,
   PagedGrid,
 } from '../../../shared/ui';
 
-const heartFilledIcon = require('../../../assets/icons/profile/heart-filled.png');
+export const LIKED_PRODUCT_LIST_FAVORITE_ICON_NAME = 'Heart';
 
 type LikedProductListScreenProps = {
   onBack?: () => void;
@@ -65,11 +65,7 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
                   source={product.imageSource}
                 />
                 <View style={styles.heartBadge}>
-                  <Image
-                    resizeMode="contain"
-                    source={heartFilledIcon}
-                    style={styles.heartIcon}
-                  />
+                  <HeartIcon color={colors.black} filled size={iconSize.xs} strokeWidth={2.1} />
                 </View>
               </View>
 
@@ -119,11 +115,6 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     top: spacing.sm,
     width: 28,
-  },
-  heartIcon: {
-    height: 14,
-    tintColor: colors.black,
-    width: 15,
   },
   imageArea: {
     aspectRatio: 1,

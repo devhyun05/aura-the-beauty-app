@@ -1,20 +1,17 @@
-import { Image, StyleSheet } from 'react-native';
+import {Heart} from 'lucide-react-native';
 
-const heartFilled = require('../../../assets/icons/profile/heart-filled.png');
+import {colors, iconSize} from '../../../shared/theme';
+
+export const PROFILE_HEART_ICON_LIBRARY_NAME = 'Heart';
 
 export const HeartIcon = () => {
   return (
-    <Image
-      resizeMode="contain"
-      source={heartFilled}
-      style={styles.icon}
+    <Heart
+      color={colors.black}
+      fill={colors.black}
+      pointerEvents="none"
+      size={iconSize.xs}
+      strokeWidth={2.1}
     />
   );
 };
-
-const styles = StyleSheet.create({
-  icon: {
-    height: 15,
-    width: 16,
-  },
-});

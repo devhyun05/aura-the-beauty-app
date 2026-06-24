@@ -1,13 +1,17 @@
 import { Pressable, StyleSheet } from 'react-native';
 import { Text, View } from 'tamagui';
 
+import { iconSize } from '../../../shared/theme';
 import { myPageColors, myPageTypography } from '../../../shared/theme/tokens';
+import { ChevronRightIcon } from '../../../shared/ui/LineIcons';
 
 interface SectionHeaderProps {
   title: string;
   actionLabel?: string;
   onPressAction?: () => void;
 }
+
+export const PROFILE_SECTION_HEADER_ACTION_ICON_NAME = 'ChevronRight';
 
 export const SectionHeader = ({
   title,
@@ -21,21 +25,12 @@ export const SectionHeader = ({
       {actionLabel ? (
         <Pressable onPress={onPressAction} style={styles.action}>
           <Text style={styles.actionLabel}>{actionLabel}</Text>
-          <ChevronRightIcon />
+          <ChevronRightIcon color={myPageColors.accentMuted} size={iconSize.xs} />
         </Pressable>
       ) : null}
     </View>
   );
 };
-
-function ChevronRightIcon() {
-  return (
-    <View pointerEvents="none" style={styles.chevronIcon}>
-      <View style={[styles.chevronLine, styles.chevronLineTop]} />
-      <View style={[styles.chevronLine, styles.chevronLineBottom]} />
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   action: {
@@ -53,27 +48,6 @@ const styles = StyleSheet.create({
     fontSize: myPageTypography.caption,
     fontWeight: '600',
     lineHeight: 16,
-  },
-  chevronIcon: {
-    height: 18,
-    position: 'relative',
-    width: 14,
-  },
-  chevronLine: {
-    backgroundColor: myPageColors.accentMuted,
-    borderRadius: 2,
-    height: 2,
-    position: 'absolute',
-    right: 1,
-    width: 8,
-  },
-  chevronLineBottom: {
-    top: 10,
-    transform: [{ rotate: '-45deg' }],
-  },
-  chevronLineTop: {
-    top: 5,
-    transform: [{ rotate: '45deg' }],
   },
   header: {
     alignItems: 'center',

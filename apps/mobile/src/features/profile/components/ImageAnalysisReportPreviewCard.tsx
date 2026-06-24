@@ -6,12 +6,16 @@ import {
   myPageRadius,
   myPageTypography,
 } from '../../../shared/theme/tokens';
+import {iconSize} from '../../../shared/theme';
+import {ChevronRightIcon} from '../../../shared/ui/LineIcons';
 import type { ImageAnalysisReportPreview } from '../../../shared/types/myPage';
 
 interface ImageAnalysisReportPreviewCardProps {
   report: ImageAnalysisReportPreview;
   onPress?: () => void;
 }
+
+export const IMAGE_ANALYSIS_REPORT_PREVIEW_ACTION_ICON_NAME = 'ChevronRight';
 
 export const ImageAnalysisReportPreviewCard = ({
   report,
@@ -43,7 +47,7 @@ export const ImageAnalysisReportPreviewCard = ({
             </Text>
           </View>
 
-          <ChevronRightIcon />
+          <ChevronRightIcon color={myPageColors.textSoft} size={iconSize.sm} />
         </View>
 
         <Text numberOfLines={2} style={styles.summary}>
@@ -60,15 +64,6 @@ export const ImageAnalysisReportPreviewCard = ({
   );
 };
 
-function ChevronRightIcon() {
-  return (
-    <View pointerEvents="none" style={styles.chevronIcon}>
-      <View style={[styles.chevronLine, styles.chevronLineTop]} />
-      <View style={[styles.chevronLine, styles.chevronLineBottom]} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   card: {
     backgroundColor: myPageColors.surface,
@@ -78,27 +73,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 10,
-  },
-  chevronIcon: {
-    height: 24,
-    position: 'relative',
-    width: 18,
-  },
-  chevronLine: {
-    backgroundColor: myPageColors.textSoft,
-    borderRadius: 2,
-    height: 2,
-    position: 'absolute',
-    right: 2,
-    width: 10,
-  },
-  chevronLineBottom: {
-    top: 13,
-    transform: [{ rotate: '-45deg' }],
-  },
-  chevronLineTop: {
-    top: 7,
-    transform: [{ rotate: '45deg' }],
   },
   details: {
     flex: 1,
