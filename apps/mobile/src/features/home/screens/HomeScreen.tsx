@@ -11,7 +11,6 @@ import {
   Camera,
   ChevronRight,
   PackageSearch,
-  Palette,
   ScanFace,
   WandSparkles,
 } from 'lucide-react-native';
@@ -126,6 +125,29 @@ export const heroTrendTitleMainTextStyle = {
 } as const;
 
 export const heroCtaLabel = '보러가기' as const;
+
+export function getFilterStoreCategoryChipLabel<const TCategory extends string>(
+  category: TCategory,
+): TCategory {
+  return category;
+}
+
+export const filterStoreCategoryChipContainerStyle = {
+  alignSelf: 'flex-start',
+  backgroundColor: colors.surfaceMuted,
+  borderColor: colors.border,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+} as const;
+
+export const filterStoreCategoryChipTextStyle = {
+  color: colors.textSecondary,
+  fontFamily: typography.fontFamily.semibold,
+  fontSize: typography.fontSize.xs,
+  lineHeight: typography.lineHeight.xs,
+} as const;
 
 function HeroBannerCarousel({
   cardWidth,
@@ -325,13 +347,8 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.title} ${item.description}`}
+      accessibilityLabel={`${item.title} ${item.description} ${item.category}`}
       style={({pressed}) => [styles.filterCard, pressed && styles.pressed]}>
-      <XStack style={styles.filterHeader}>
-        <Text style={styles.filterCategory}>{item.category}</Text>
-        <Palette color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
-      </XStack>
-
       <View style={styles.filterImageFrame}>
         <Image resizeMode="contain" source={item.imageSource} style={styles.filterImage} />
       </View>
@@ -342,6 +359,11 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
       <Text numberOfLines={2} style={styles.filterDescription}>
         {item.description}
       </Text>
+      <XStack style={styles.filterCategoryChip}>
+        <Text style={styles.filterCategoryChipText}>
+          {getFilterStoreCategoryChipLabel(item.category)}
+        </Text>
+      </XStack>
     </Pressable>
   );
 }
@@ -458,22 +480,17 @@ const styles = StyleSheet.create({
     shadowRadius: shadows.soft.shadowRadius,
     width: 156,
   },
-  filterCategory: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+  filterCategoryChip: {
+    ...filterStoreCategoryChipContainerStyle,
+  },
+  filterCategoryChipText: {
+    ...filterStoreCategoryChipTextStyle,
   },
   filterDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  filterHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   filterImage: {
     height: '100%',

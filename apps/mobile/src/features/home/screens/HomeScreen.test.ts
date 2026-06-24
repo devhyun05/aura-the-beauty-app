@@ -1,11 +1,14 @@
 import {
+  filterStoreCategoryChipContainerStyle,
+  filterStoreCategoryChipTextStyle,
+  getFilterStoreCategoryChipLabel,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
   getHeroTrendHeadline,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
 } from './HomeScreen';
-import {typography} from '../../../shared/theme';
+import {colors, radius, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -27,6 +30,14 @@ const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffse
 const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
+const filterStoreCategoryChipLabel = getFilterStoreCategoryChipLabel('Lip');
+const expectedFilterStoreCategoryChipLabel: 'Lip' = filterStoreCategoryChipLabel;
+const expectedFilterStoreCategoryChipRadius: typeof radius.pill =
+  filterStoreCategoryChipContainerStyle.borderRadius;
+const expectedFilterStoreCategoryChipBorderColor: typeof colors.border =
+  filterStoreCategoryChipContainerStyle.borderColor;
+const expectedFilterStoreCategoryChipTextFontFamily: typeof typography.fontFamily.semibold =
+  filterStoreCategoryChipTextStyle.fontFamily;
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -54,6 +65,26 @@ expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,
   expectedHeroTitleMainFontFamily,
   'weekly trend main title font family',
+);
+expectEqual(
+  filterStoreCategoryChipLabel,
+  expectedFilterStoreCategoryChipLabel,
+  'filter store category chip label',
+);
+expectEqual(
+  filterStoreCategoryChipContainerStyle.borderRadius,
+  expectedFilterStoreCategoryChipRadius,
+  'filter store category chip radius',
+);
+expectEqual(
+  filterStoreCategoryChipContainerStyle.borderColor,
+  expectedFilterStoreCategoryChipBorderColor,
+  'filter store category chip border color',
+);
+expectEqual(
+  filterStoreCategoryChipTextStyle.fontFamily,
+  expectedFilterStoreCategoryChipTextFontFamily,
+  'filter store category chip text font family',
 );
 
 let selectedQuickAction: 'ar' | null = null;
