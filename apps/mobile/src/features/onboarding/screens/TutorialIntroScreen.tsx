@@ -3,6 +3,8 @@ import {StyleSheet, useWindowDimensions} from 'react-native';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Image, Text, View, YStack} from 'tamagui';
 
+import {typography} from '../../../shared/theme';
+import {AuraLogo} from '../../../shared/ui';
 import {PhotoCaptureGuideScreen} from './PhotoCaptureGuideScreen';
 
 type TutorialIntroScreenProps = {
@@ -12,7 +14,7 @@ type TutorialIntroScreenProps = {
 
 const makeupImageSource = require('../../../assets/images/tutorial-makeup-strokes.png');
 const makeupImageRatio = 562 / 416;
-const logoLineHeight = 70;
+const logoLineHeight = typography.logoIntro.lineHeight;
 
 export function TutorialIntroScreen({
   onStartCapture,
@@ -68,16 +70,7 @@ export function TutorialIntroScreen({
           },
         ]}
       >
-        <Text
-          style={[
-            styles.logo,
-            {
-              marginTop: logoTopMargin,
-            },
-          ]}
-        >
-          AURA
-        </Text>
+        <AuraLogo variant="intro" style={{marginTop: logoTopMargin}} />
 
         <View style={{marginTop: imageTopMargin}}>
           <Image
@@ -135,14 +128,6 @@ const styles = StyleSheet.create({
   },
   footerSpacer: {
     flex: 1,
-  },
-  logo: {
-    color: '#8FA59A',
-    fontFamily: 'NixieOne-Regular',
-    fontSize: 44,
-    fontWeight: '400',
-    letterSpacing: 0,
-    lineHeight: logoLineHeight,
   },
   screen: {
     alignItems: 'center',

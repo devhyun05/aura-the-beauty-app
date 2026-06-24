@@ -8,6 +8,7 @@ const fontFamily = {
   medium: 'Pretendard-Medium',
   semibold: 'Pretendard-SemiBold',
   bold: 'Pretendard-Bold',
+  brand: 'NixieOne-Regular',
 } as const;
 
 export const typography = {
@@ -47,9 +48,21 @@ export const typography = {
     fontWeight: '600' satisfies FontWeight,
   },
   logo: {
-    fontFamily: fontFamily.bold,
+    fontFamily: fontFamily.brand,
     fontSize: 58,
     lineHeight: 70,
-    fontWeight: '700' satisfies FontWeight,
+    fontWeight: '400' satisfies FontWeight,
+  },
+  logoIntro: {
+    fontFamily: fontFamily.brand,
+    fontSize: 44,
+    lineHeight: 70,
+    fontWeight: '400' satisfies FontWeight,
+  },
+  logoHeader: {
+    fontFamily: fontFamily.brand,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '400' satisfies FontWeight,
   },
 } as const;

@@ -8,6 +8,7 @@ import {ProfileHeaderIcon} from './HeaderIcons';
 
 type AppHeaderProps = {
   title?: string;
+  titleSlot?: ReactNode;
   subtitle?: string;
   showTitle?: boolean;
   topInset?: number;
@@ -21,6 +22,7 @@ type AppHeaderProps = {
 
 export function AppHeader({
   title = 'AI AR Makeup',
+  titleSlot,
   subtitle = 'MAKEUP GUIDE',
   showTitle = true,
   topInset = 0,
@@ -64,33 +66,41 @@ export function AppHeader({
       {shouldUseCenteredTitle ? (
         <>
           <XStack style={styles.side}>{leftContent}</XStack>
-          <Text numberOfLines={1} style={styles.centerTitle}>
-            {title}
-          </Text>
+          {titleSlot ? (
+            <XStack style={styles.centerTitleSlot}>{titleSlot}</XStack>
+          ) : (
+            <Text numberOfLines={1} style={styles.centerTitle}>
+              {title}
+            </Text>
+          )}
           <XStack style={styles.side}>{rightContent}</XStack>
         </>
       ) : (
         <>
           {showTitle ? (
             <YStack style={styles.titleArea}>
-              <Text
-                color={colors.textSecondary}
-                fontSize={typography.caption.fontSize}
-                fontWeight={typography.caption.fontWeight}
-                letterSpacing={1.2}
-                lineHeight={typography.caption.lineHeight}
-                numberOfLines={1}>
-                {subtitle}
-              </Text>
-              <Text
-                color={colors.textPrimary}
-                fontSize={typography.title.fontSize}
-                fontWeight={typography.title.fontWeight}
-                letterSpacing={0}
-                lineHeight={typography.title.lineHeight}
-                numberOfLines={1}>
-                {title}
-              </Text>
+              {titleSlot ?? (
+                <>
+                  <Text
+                    color={colors.textSecondary}
+                    fontSize={typography.caption.fontSize}
+                    fontWeight={typography.caption.fontWeight}
+                    letterSpacing={1.2}
+                    lineHeight={typography.caption.lineHeight}
+                    numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                  <Text
+                    color={colors.textPrimary}
+                    fontSize={typography.title.fontSize}
+                    fontWeight={typography.title.fontWeight}
+                    letterSpacing={0}
+                    lineHeight={typography.title.lineHeight}
+                    numberOfLines={1}>
+                    {title}
+                  </Text>
+                </>
+              )}
             </YStack>
           ) : null}
 
@@ -159,6 +169,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xl,
     textAlign: 'center',
+  },
+  centerTitleSlot: {
+    alignItems: 'center',
+    flex: 1,
   },
   container: {
     alignItems: 'center',
