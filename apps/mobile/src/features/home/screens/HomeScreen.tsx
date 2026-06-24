@@ -12,6 +12,7 @@ import {
   ChevronRight,
   PackageSearch,
   ScanFace,
+  Sparkles,
   WandSparkles,
 } from 'lucide-react-native';
 import {ScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -29,6 +30,7 @@ type HomeScreenProps = {
   onPressARFilter?: () => void;
   onPressCreateFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
@@ -36,6 +38,7 @@ export function HomeScreen({
   onPressARFilter,
   onPressCreateFilter,
   onPressFaceDiagnosis,
+  onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
@@ -76,6 +79,7 @@ export function HomeScreen({
         onPressARFilter={onPressARFilter}
         onPressCreateFilter={onPressCreateFilter}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
+        onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection items={homeData.filterStore} />
@@ -240,6 +244,12 @@ const quickActions = [
     icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
+    id: 'feedback',
+    label: '피드백',
+    accessibilityLabel: '메이크업 피드백 시작',
+    icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
+  {
     id: 'recommendation',
     label: '추천 제품',
     accessibilityLabel: '추천 제품 보기',
@@ -255,6 +265,7 @@ type HomeQuickActionHandlers = {
   onPressARFilter?: () => void;
   onPressCreateFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
@@ -264,6 +275,7 @@ export function getHomeQuickActionPressHandler(
     onPressARFilter,
     onPressCreateFilter,
     onPressFaceDiagnosis,
+    onPressMakeupFeedback,
     onPressProductRecommendations,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
@@ -279,6 +291,10 @@ export function getHomeQuickActionPressHandler(
     return onPressCreateFilter;
   }
 
+  if (actionId === 'feedback') {
+    return onPressMakeupFeedback;
+  }
+
   if (actionId === 'recommendation') {
     return onPressProductRecommendations;
   }
@@ -290,12 +306,14 @@ function QuickActionSection({
   onPressARFilter,
   onPressCreateFilter,
   onPressFaceDiagnosis,
+  onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
     onPressARFilter,
     onPressCreateFilter,
     onPressFaceDiagnosis,
+    onPressMakeupFeedback,
     onPressProductRecommendations,
   };
 
@@ -311,7 +329,7 @@ function QuickActionSection({
           <View style={styles.quickActionCircle}>
             {action.icon(colors.textPrimary)}
           </View>
-          <Text numberOfLines={1} style={styles.quickActionLabel}>
+          <Text numberOfLines={2} style={styles.quickActionLabel}>
             {action.label}
           </Text>
         </Pressable>
@@ -623,13 +641,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 72,
+    height: 64,
     justifyContent: 'center',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    width: 72,
+    width: 64,
   },
   quickActionItem: {
     alignItems: 'center',
@@ -641,12 +659,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
+    minHeight: typography.lineHeight.xs * 2,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
   quickActionList: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
     justifyContent: 'space-between',
   },
   section: {

@@ -263,7 +263,8 @@ export function AppRoot() {
           headerVariant="default"
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
           onProfilePress={goToMyPage}
-          onTabPress={handleFooterTabPress}>
+          onTabPress={handleFooterTabPress}
+          wrapContentInScreen={false}>
           <MyPageScreen
             onPressImageAnalysisReport={(reportId) =>
               goToImageAnalysisReportDetail(reportId)
@@ -474,6 +475,7 @@ export function AppRoot() {
           onARFilterPress={() => setActiveScreen('arMakeupFilter')}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
           onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
+          onMakeupFeedbackPress={() => setActiveScreen('feedbackEntry')}
           onProductRecommendationsPress={() => setActiveScreen('custom')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
@@ -487,6 +489,7 @@ export function AppRoot() {
         onARFilterPress={() => setActiveScreen('arMakeupFilter')}
         onCreateFilterPress={() => setActiveScreen('filterUpload')}
         onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
+        onMakeupFeedbackPress={() => setActiveScreen('feedbackEntry')}
         onProfilePress={goToMyPage}
         onTabPress={handleFooterTabPress}
       />
@@ -518,9 +521,11 @@ function AppShell({
   onARFilterPress,
   onCreateFilterPress,
   onFaceDiagnosisPress,
+  onMakeupFeedbackPress,
   onProductRecommendationsPress,
   onProfilePress,
   onTabPress,
+  wrapContentInScreen = true,
 }: {
   activeTab?: ShellTab;
   children?: React.ReactNode;
@@ -528,9 +533,11 @@ function AppShell({
   onARFilterPress?: () => void;
   onCreateFilterPress?: () => void;
   onFaceDiagnosisPress?: () => void;
+  onMakeupFeedbackPress?: () => void;
   onProductRecommendationsPress?: () => void;
   onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
+  wrapContentInScreen?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const resolvedHeaderVariant = headerVariant ?? activeTab ?? 'default';
@@ -543,6 +550,7 @@ function AppShell({
         onPressARFilter={onARFilterPress}
         onPressCreateFilter={onCreateFilterPress}
         onPressFaceDiagnosis={onFaceDiagnosisPress}
+        onPressMakeupFeedback={onMakeupFeedbackPress}
         onPressProductRecommendations={onProductRecommendationsPress}
       />
     ) : activeTab === 'custom' ? (
@@ -559,9 +567,13 @@ function AppShell({
         onProfilePress={onProfilePress}
       />
       <YStack style={styles.body}>
-        <AppScreen contentGap={contentGap} topPadding="belowShellHeader">
-          {shellContent}
-        </AppScreen>
+        {wrapContentInScreen ? (
+          <AppScreen contentGap={contentGap} topPadding="belowShellHeader">
+            {shellContent}
+          </AppScreen>
+        ) : (
+          shellContent
+        )}
       </YStack>
       <AppFooter
         activeTab={activeTab}

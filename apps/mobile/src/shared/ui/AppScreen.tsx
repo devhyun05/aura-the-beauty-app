@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScrollView, View } from 'tamagui';
+import { View } from 'tamagui';
 
 import { colors, spacing } from '../theme';
 
@@ -24,36 +24,46 @@ export function getAppScreenTopPadding(
 }
 
 type AppScreenProps = {
+  backgroundColor?: string;
   children: ReactNode;
+  bottomPadding?: number;
   scroll?: boolean;
   contentGap?: number;
+  horizontalPadding?: number;
   topPadding?: AppScreenTopPadding;
 };
 
 export function AppScreen({
+  backgroundColor = colors.background,
   children,
+  bottomPadding,
   scroll = true,
   contentGap = spacing.sectionGap,
+  horizontalPadding = spacing.screenX,
   topPadding = 'standalone',
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
   const contentStyle = {
     flexGrow: 1,
     gap: contentGap,
-    paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl,
-    paddingHorizontal: spacing.screenX,
+    paddingBottom: bottomPadding ?? Math.max(insets.bottom, spacing.xl) + spacing.xxl,
+    paddingHorizontal: horizontalPadding,
     paddingTop: getAppScreenTopPadding(topPadding, insets.top),
   };
-
   if (!scroll) {
-    return <View style={[styles.screen, contentStyle]}>{children}</View>;
+    return <View style={[styles.screen, {backgroundColor}, contentStyle]}>{children}</View>;
   }
 
   return (
     <ScrollView
+      automaticallyAdjustContentInsets={false}
+      automaticallyAdjustsScrollIndicatorInsets={false}
       contentContainerStyle={contentStyle}
+      contentInset={{bottom: 0, left: 0, right: 0, top: 0}}
+      contentInsetAdjustmentBehavior="never"
       showsVerticalScrollIndicator={false}
-      style={styles.screen}
+      scrollIndicatorInsets={{bottom: 0, left: 0, right: 0, top: 0}}
+      style={[styles.screen, {backgroundColor}]}
     >
       {children}
     </ScrollView>

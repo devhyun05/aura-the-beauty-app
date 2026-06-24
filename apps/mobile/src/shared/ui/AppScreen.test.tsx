@@ -25,3 +25,12 @@ expectEqual(
 expectEqual(getAppScreenTopPadding('none', 47), 0, 'none app screen top padding');
 
 <AppScreen topPadding="belowShellHeader">content</AppScreen>;
+<AppScreen
+  backgroundColor="transparent"
+  bottomPadding={0}
+  contentGap={0}
+  horizontalPadding={0}
+  topPadding="none"
+>
+  content
+</AppScreen>;

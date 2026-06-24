@@ -407,109 +407,111 @@ export function ProfileEditScreen({onBack, onLogout}: ProfileEditScreenProps) {
   };
 
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="none">
+    <View style={styles.screen}>
       <AppHeader onBack={onBack} title="프로필 수정" />
 
-      <View style={styles.profileArea}>
-        <View style={styles.avatarFrame}>
-          <ImagePlaceholder
-            borderRadius={radius.pill}
-            resizeMode="cover"
-            source={profile?.avatarSource}
-          />
+      <AppScreen contentGap={spacing.xl} topPadding="none">
+        <View style={styles.profileArea}>
+          <View style={styles.avatarFrame}>
+            <ImagePlaceholder
+              borderRadius={radius.pill}
+              resizeMode="cover"
+              source={profile?.avatarSource}
+            />
+          </View>
+          <Pressable
+            accessibilityLabel="사진 업로드"
+            accessibilityRole="button"
+            onPress={() => setNotice('사진 업로드는 프론트엔드 UI만 준비되어 있어요.')}
+            style={styles.uploadButton}
+          >
+            <Text style={styles.uploadText}>사진 업로드</Text>
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityLabel="사진 업로드"
-          accessibilityRole="button"
-          onPress={() => setNotice('사진 업로드는 프론트엔드 UI만 준비되어 있어요.')}
-          style={styles.uploadButton}
-        >
-          <Text style={styles.uploadText}>사진 업로드</Text>
-        </Pressable>
-      </View>
 
-      <AppCard style={styles.infoCard}>
-        {fields.map((field) => {
-          const editableFieldId = isEditableProfileFieldId(field.id)
-            ? field.id
-            : null;
-          const displayField =
-            profile && editableFieldId
-              ? {...field, value: getProfileFieldValue(profile, editableFieldId)}
-              : field;
-          const isEditing = editingFieldId === editableFieldId;
+        <AppCard style={styles.infoCard}>
+          {fields.map((field) => {
+            const editableFieldId = isEditableProfileFieldId(field.id)
+              ? field.id
+              : null;
+            const displayField =
+              profile && editableFieldId
+                ? {...field, value: getProfileFieldValue(profile, editableFieldId)}
+                : field;
+            const isEditing = editingFieldId === editableFieldId;
 
-          return (
-            <View key={field.id} style={styles.fieldBlock}>
-              <ProfileEditRow
-                field={displayField}
-                isEditing={isEditing}
-                onPressEdit={
-                  field.editable && editableFieldId
-                    ? () => startEditing(displayField)
-                    : undefined
-                }
-              />
+            return (
+              <View key={field.id} style={styles.fieldBlock}>
+                <ProfileEditRow
+                  field={displayField}
+                  isEditing={isEditing}
+                  onPressEdit={
+                    field.editable && editableFieldId
+                      ? () => startEditing(displayField)
+                      : undefined
+                  }
+                />
 
-              {isEditing && editableFieldId ? (
-                <View style={styles.editorPanel}>
-                  {renderEditor(editableFieldId)}
-                  {validationMessage ? (
-                    <Text style={styles.errorText}>{validationMessage}</Text>
-                  ) : null}
-                  <View style={styles.editorActionRow}>
-                    <Pressable
-                      accessibilityLabel="수정 취소"
-                      accessibilityRole="button"
-                      onPress={cancelEditing}
-                      style={styles.cancelButton}
-                    >
-                      <Text style={styles.cancelButtonText}>취소</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityLabel="수정 완료"
-                      accessibilityRole="button"
-                      disabled={!canSave}
-                      onPress={saveEditing}
-                      style={[
-                        styles.saveButton,
-                        !canSave ? styles.saveButtonDisabled : null,
-                      ]}
-                    >
-                      <Text style={styles.saveButtonText}>완료</Text>
-                    </Pressable>
+                {isEditing && editableFieldId ? (
+                  <View style={styles.editorPanel}>
+                    {renderEditor(editableFieldId)}
+                    {validationMessage ? (
+                      <Text style={styles.errorText}>{validationMessage}</Text>
+                    ) : null}
+                    <View style={styles.editorActionRow}>
+                      <Pressable
+                        accessibilityLabel="수정 취소"
+                        accessibilityRole="button"
+                        onPress={cancelEditing}
+                        style={styles.cancelButton}
+                      >
+                        <Text style={styles.cancelButtonText}>취소</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel="수정 완료"
+                        accessibilityRole="button"
+                        disabled={!canSave}
+                        onPress={saveEditing}
+                        style={[
+                          styles.saveButton,
+                          !canSave ? styles.saveButtonDisabled : null,
+                        ]}
+                      >
+                        <Text style={styles.saveButtonText}>완료</Text>
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
-              ) : null}
-            </View>
-          );
-        })}
+                ) : null}
+              </View>
+            );
+          })}
 
-        <View style={styles.actionRow}>
-          <Pressable
-            accessibilityLabel="로그아웃"
-            accessibilityRole="button"
-            onPress={() => {
-              setNotice('');
-              onLogout?.();
-            }}
-            style={styles.textButton}
-          >
-            <Text style={styles.actionText}>로그아웃</Text>
-          </Pressable>
-          <Pressable
-            accessibilityLabel="회원 탈퇴"
-            accessibilityRole="button"
-            onPress={() => setNotice('회원 탈퇴는 아직 연결되지 않았어요.')}
-            style={styles.textButton}
-          >
-            <Text style={styles.actionText}>회원 탈퇴</Text>
-          </Pressable>
-        </View>
-      </AppCard>
+          <View style={styles.actionRow}>
+            <Pressable
+              accessibilityLabel="로그아웃"
+              accessibilityRole="button"
+              onPress={() => {
+                setNotice('');
+                onLogout?.();
+              }}
+              style={styles.textButton}
+            >
+              <Text style={styles.actionText}>로그아웃</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="회원 탈퇴"
+              accessibilityRole="button"
+              onPress={() => setNotice('회원 탈퇴는 아직 연결되지 않았어요.')}
+              style={styles.textButton}
+            >
+              <Text style={styles.actionText}>회원 탈퇴</Text>
+            </Pressable>
+          </View>
+        </AppCard>
 
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-    </AppScreen>
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+      </AppScreen>
+    </View>
   );
 }
 
@@ -837,6 +839,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
+  },
+  screen: {
+    backgroundColor: colors.background,
+    flex: 1,
   },
   segment: {
     alignItems: 'center',

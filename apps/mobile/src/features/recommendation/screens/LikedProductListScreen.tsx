@@ -46,47 +46,49 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
   }, []);
 
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="none">
+    <View style={styles.screen}>
       <AppHeader onBack={onBack} title="좋아요 목록" />
 
-      <PagedGrid
-        data={products}
-        keyExtractor={(product) => product.id}
-        pageSize={10}
-        pageStyle={[styles.grid, {columnGap: gap, rowGap: spacing.xxl}]}
-        pageWidth={contentWidth}
-        renderItem={(product) => (
-          <View style={[styles.card, {width: cardWidth}]}>
-            <View style={styles.imageArea}>
-              <ImagePlaceholder
-                borderRadius={radius.md}
-                resizeMode="contain"
-                source={product.imageSource}
-              />
-              <View style={styles.heartBadge}>
-                <Image
+      <AppScreen contentGap={spacing.xl} topPadding="none">
+        <PagedGrid
+          data={products}
+          keyExtractor={(product) => product.id}
+          pageSize={10}
+          pageStyle={[styles.grid, {columnGap: gap, rowGap: spacing.xxl}]}
+          pageWidth={contentWidth}
+          renderItem={(product) => (
+            <View style={[styles.card, {width: cardWidth}]}>
+              <View style={styles.imageArea}>
+                <ImagePlaceholder
+                  borderRadius={radius.md}
                   resizeMode="contain"
-                  source={heartFilledIcon}
-                  style={styles.heartIcon}
+                  source={product.imageSource}
                 />
+                <View style={styles.heartBadge}>
+                  <Image
+                    resizeMode="contain"
+                    source={heartFilledIcon}
+                    style={styles.heartIcon}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.textArea}>
+                <Text numberOfLines={1} style={styles.brand}>
+                  {product.brandName}
+                </Text>
+                <Text numberOfLines={2} style={styles.name}>
+                  {product.productName}
+                </Text>
+                <Text numberOfLines={1} style={styles.price}>
+                  {formatPrice(product.price)}
+                </Text>
               </View>
             </View>
-
-            <View style={styles.textArea}>
-              <Text numberOfLines={1} style={styles.brand}>
-                {product.brandName}
-              </Text>
-              <Text numberOfLines={2} style={styles.name}>
-                {product.productName}
-              </Text>
-              <Text numberOfLines={1} style={styles.price}>
-                {formatPrice(product.price)}
-              </Text>
-            </View>
-          </View>
-        )}
-      />
-    </AppScreen>
+          )}
+        />
+      </AppScreen>
+    </View>
   );
 }
 
@@ -145,6 +147,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
+  },
+  screen: {
+    backgroundColor: colors.background,
+    flex: 1,
   },
   textArea: {
     gap: spacing.xs,

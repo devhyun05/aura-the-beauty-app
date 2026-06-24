@@ -87,7 +87,7 @@ expectEqual(
   'filter store category chip text font family',
 );
 
-let selectedQuickAction: 'ar' | null = null;
+let selectedQuickAction: 'ar' | 'feedback' | null = null;
 
 const arPressHandler = getHomeQuickActionPressHandler('ar', {
   onPressARFilter: () => {
@@ -102,3 +102,17 @@ if (!arPressHandler) {
 arPressHandler();
 
 expectEqual(selectedQuickAction, 'ar', 'real-time AR quick action target');
+
+const feedbackPressHandler = getHomeQuickActionPressHandler('feedback', {
+  onPressMakeupFeedback: () => {
+    selectedQuickAction = 'feedback';
+  },
+});
+
+if (!feedbackPressHandler) {
+  throw new Error('makeup feedback quick action should have a press handler');
+}
+
+feedbackPressHandler();
+
+expectEqual(selectedQuickAction, 'feedback', 'makeup feedback quick action target');
