@@ -47,9 +47,9 @@ import {
   MakeupStyleListScreen,
   ProductRecommendationScreen,
 } from '../features/recommendation';
-import {colors, typography} from '../shared/theme';
+import {colors, spacing, typography} from '../shared/theme';
 import type {MakeupStylePreview} from '../shared/types/myPage';
-import {AppFooter, AppHeader, AuraLogo, type FooterTabKey} from '../shared/ui';
+import {AppFooter, AppHeader, AppScreen, AuraLogo, type FooterTabKey} from '../shared/ui';
 import {
   getARMakeupFilterInitialGuideMode,
   getAppShellHeaderCopy,
@@ -535,6 +535,19 @@ function AppShell({
   const insets = useSafeAreaInsets();
   const resolvedHeaderVariant = headerVariant ?? activeTab ?? 'default';
   const headerCopy = getAppShellHeaderCopy(resolvedHeaderVariant);
+  const contentGap = resolvedHeaderVariant === 'home' ? spacing.xxl : spacing.xl;
+  const shellContent =
+    children ??
+    (activeTab === 'home' ? (
+      <HomeScreen
+        onPressARFilter={onARFilterPress}
+        onPressCreateFilter={onCreateFilterPress}
+        onPressFaceDiagnosis={onFaceDiagnosisPress}
+        onPressProductRecommendations={onProductRecommendationsPress}
+      />
+    ) : activeTab === 'custom' ? (
+      <ProductRecommendationScreen />
+    ) : null);
 
   return (
     <YStack style={styles.screen}>
@@ -546,16 +559,9 @@ function AppShell({
         onProfilePress={onProfilePress}
       />
       <YStack style={styles.body}>
-        {children ??
-          (activeTab === 'home' ? (
-            <HomeScreen
-              onPressARFilter={onARFilterPress}
-              onPressCreateFilter={onCreateFilterPress}
-              onPressFaceDiagnosis={onFaceDiagnosisPress}
-              onPressProductRecommendations={onProductRecommendationsPress}
-            />
-          ) : null)}
-        {!children && activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
+        <AppScreen contentGap={contentGap} topPadding="belowShellHeader">
+          {shellContent}
+        </AppScreen>
       </YStack>
       <AppFooter
         activeTab={activeTab}

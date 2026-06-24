@@ -13,15 +13,15 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  getAppScreenTopPadding('safe', 47),
+  getAppScreenTopPadding('standalone', 47),
   63,
-  'safe app screen top padding',
+  'standalone app screen top padding',
 );
 expectEqual(
-  getAppScreenTopPadding('content', 47),
+  getAppScreenTopPadding('belowShellHeader', 47),
   APP_SCREEN_CONTENT_TOP_PADDING,
-  'content app screen top padding',
+  'below shell header app screen top padding',
 );
 expectEqual(getAppScreenTopPadding('none', 47), 0, 'none app screen top padding');
 
-<AppScreen topPadding="content">content</AppScreen>;
+<AppScreen topPadding="belowShellHeader">content</AppScreen>;

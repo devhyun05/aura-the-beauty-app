@@ -65,10 +65,7 @@ export function HomeScreen({
   }
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      style={styles.scrollView}
-      contentContainerStyle={styles.content}>
+    <>
       <HeroBannerCarousel
         cardWidth={heroCardWidth}
         fallbackImageSource={homeData.hero.imageSource}
@@ -83,7 +80,7 @@ export function HomeScreen({
       />
       <FilterStoreSection items={homeData.filterStore} />
       <RecommendedLooksSection looks={homeData.recommendedLooks} />
-    </ScrollView>
+    </>
   );
 }
 
@@ -431,12 +428,6 @@ function SectionHeader({actionLabel, title}: SectionHeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: spacing.xxl,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-  },
   heroBackgroundImage: {
     bottom: 0,
     height: '100%',
@@ -657,10 +648,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     justifyContent: 'space-between',
-  },
-  scrollView: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   section: {
     gap: spacing.md,

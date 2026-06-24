@@ -67,10 +67,7 @@ export function ProductRecommendationScreen() {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      style={styles.scrollView}>
+    <>
       <LookSummaryCard look={data.look} />
 
       <CategoryTabs
@@ -120,7 +117,7 @@ export function ProductRecommendationScreen() {
       <Pressable accessibilityRole="button" style={styles.ctaButton}>
         <Text style={styles.ctaText}>추천 조합 담기</Text>
       </Pressable>
-    </ScrollView>
+    </>
   );
 }
 
@@ -303,12 +300,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  content: {
-    gap: spacing.xl,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
   },
   ctaButton: {
     alignItems: 'center',
@@ -575,10 +566,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.xs,
     minWidth: 0,
-  },
-  scrollView: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   sectionTitle: {
     color: colors.textPrimary,

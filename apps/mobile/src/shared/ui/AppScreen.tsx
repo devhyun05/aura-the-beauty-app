@@ -5,7 +5,7 @@ import { ScrollView, View } from 'tamagui';
 
 import { colors, spacing } from '../theme';
 
-export type AppScreenTopPadding = 'safe' | 'content' | 'none';
+export type AppScreenTopPadding = 'standalone' | 'belowShellHeader' | 'none';
 export const APP_SCREEN_CONTENT_TOP_PADDING = spacing.lg;
 
 export function getAppScreenTopPadding(
@@ -16,7 +16,7 @@ export function getAppScreenTopPadding(
     return 0;
   }
 
-  if (topPadding === 'content') {
+  if (topPadding === 'belowShellHeader') {
     return APP_SCREEN_CONTENT_TOP_PADDING;
   }
 
@@ -34,10 +34,11 @@ export function AppScreen({
   children,
   scroll = true,
   contentGap = spacing.sectionGap,
-  topPadding = 'safe',
+  topPadding = 'standalone',
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
   const contentStyle = {
+    flexGrow: 1,
     gap: contentGap,
     paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl,
     paddingHorizontal: spacing.screenX,
