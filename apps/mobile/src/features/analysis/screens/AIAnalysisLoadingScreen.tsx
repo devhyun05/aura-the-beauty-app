@@ -99,7 +99,6 @@ export function AIAnalysisLoadingScreen({
               style={styles.previewImage}
             />
             <View style={styles.previewDim} />
-            <View style={styles.scanLine} />
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
               <Text style={styles.previewBadgeText}>얼굴 진단 중</Text>
@@ -292,15 +291,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
-  },
-  scanLine: {
-    backgroundColor: colors.white,
-    height: 2,
-    left: spacing.xl,
-    opacity: 0.82,
-    position: 'absolute',
-    right: spacing.xl,
-    top: 116,
   },
   previewBadge: {
     alignItems: 'center',

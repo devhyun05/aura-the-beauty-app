@@ -1,13 +1,14 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Image, ScrollView, StyleSheet} from 'react-native';
-import {Text, View} from 'tamagui';
+import {WandSparkles} from 'lucide-react-native';
+import {Button, Text, View} from 'tamagui';
 
 import {
   getAnalysisResultById,
   getLatestAnalysisResult,
 } from '../../../shared/services/analysisService';
 import {getUserProfile} from '../../../shared/services/userService';
-import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   AnalysisFacePointGuide,
   AnalysisMakeupCard,
@@ -19,6 +20,7 @@ import {AppHeader, AppScreen, XIcon} from '../../../shared/ui';
 type AnalysisReportDetailScreenProps = {
   resultId?: string | null;
   onBack?: () => void;
+  onCreateARFilter?: () => void;
 };
 
 type GuideItem = {
@@ -50,6 +52,7 @@ const formatReportDate = (dateText: string, name?: string) => {
 export function AnalysisReportDetailScreen({
   resultId,
   onBack,
+  onCreateARFilter,
 }: AnalysisReportDetailScreenProps) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -158,6 +161,18 @@ export function AnalysisReportDetailScreen({
       <Text style={styles.notice}>
         분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
       </Text>
+
+      <Button
+        accessibilityLabel="AR 필터 만들기"
+        accessibilityRole="button"
+        onPress={onCreateARFilter}
+        pressStyle={{scale: 0.98}}
+        style={styles.createFilterButton}
+        unstyled
+      >
+        <WandSparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
+        <Text style={styles.createFilterButtonText}>AR 필터 만들기</Text>
+      </Button>
     </AppScreen>
   );
 }
@@ -274,6 +289,23 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
     textAlign: 'center',
+  },
+  createFilterButton: {
+    alignItems: 'center',
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    height: 56,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    width: '100%',
+  },
+  createFilterButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.md,
   },
   guideDescription: {
     color: colors.textSecondary,

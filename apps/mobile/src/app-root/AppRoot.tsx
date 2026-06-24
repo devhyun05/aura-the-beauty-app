@@ -13,7 +13,6 @@ import {
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {ARFilterCustomLocationScreen} from '../features/ar/screens/ARFilterCustomLocationScreen';
 import {ARFilterCustomStyleScreen} from '../features/ar/screens/ARFilterCustomStyleScreen';
-import {FacialAnalysisResultScreen} from '../features/analysis/screens/FacialAnalysisResultScreen';
 import {ARMakeupFilterScreen} from '../features/ar/screens/ARMakeupFilterScreen';
 import {LoginScreen} from '../features/auth';
 import {FaceCaptureScreen} from '../features/face-capture/screens/FaceCaptureScreen';
@@ -50,7 +49,13 @@ import {
 } from '../features/recommendation';
 import {colors, typography} from '../shared/theme';
 import type {MakeupStylePreview} from '../shared/types/userPage';
-import {AppFooter, AppHeader, type FooterTabKey} from '../shared/ui';
+import {AppFooter, AppHeader, AuraLogo, type FooterTabKey} from '../shared/ui';
+import {
+  getAnalysisLoadingCompleteTargetScreen,
+  getAnalysisReportCreateFilterTargetScreen,
+  getARMakeupFilterInitialGuideMode,
+  getFooterTabTargetScreen,
+} from './navigation';
 
 type AppScreen =
   | 'login'
@@ -58,7 +63,6 @@ type AppScreen =
   | 'home'
   | 'faceCapture'
   | 'analysisLoading'
-  | 'facialAnalysisResult'
   | 'arMakeupFilter'
   | 'arFilterLocation'
   | 'arFilterStyle'
@@ -104,9 +108,11 @@ export function AppRoot() {
     useState<string | null>(null);
   const [analysisDetailBackScreen, setAnalysisDetailBackScreen] =
     useState<AppScreen>('myPage');
+  const [arFilterAdjustBackScreen, setArFilterAdjustBackScreen] =
+    useState<AppScreen>('arMakeupFilter');
 
   const [fontsLoaded] = useFonts({
-    'NixieOne-Regular': require('../assets/fonts/NixieOne-Regular.ttf'),
+    [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
     [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
     [typography.fontFamily.semibold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
@@ -153,12 +159,7 @@ export function AppRoot() {
   }
 
   const handleFooterTabPress = (tab: FooterTabKey) => {
-    if (tab === 'capture') {
-      setActiveScreen('faceCapture');
-      return;
-    }
-
-    setActiveScreen(tab);
+    setActiveScreen(getFooterTabTargetScreen(tab));
   };
 
   const goToMyPage = () => {
@@ -172,6 +173,27 @@ export function AppRoot() {
     setSelectedAnalysisResultId(resultId);
     setAnalysisDetailBackScreen(backScreen);
     setActiveScreen('analysisReportDetail');
+  };
+
+  const goToLatestAnalysisReportDetail = (backScreen: AppScreen) => {
+    setSelectedAnalysisResultId(null);
+    setAnalysisDetailBackScreen(backScreen);
+    setActiveScreen(getAnalysisLoadingCompleteTargetScreen());
+  };
+
+  const goToARFilterLocation = (backScreen: AppScreen = 'arMakeupFilter') => {
+    setArFilterAdjustBackScreen(backScreen);
+    setActiveScreen('arFilterLocation');
+  };
+
+  const goToARFilterStyle = (backScreen: AppScreen = 'arMakeupFilter') => {
+    setArFilterAdjustBackScreen(backScreen);
+    setActiveScreen('arFilterStyle');
+  };
+
+  const goToAnalysisReportCreateFilter = () => {
+    setArFilterAdjustBackScreen('analysisReportDetail');
+    setActiveScreen(getAnalysisReportCreateFilterTargetScreen());
   };
 
   const renderScreen = () => {
@@ -196,16 +218,7 @@ export function AppRoot() {
       return (
         <AIAnalysisLoadingScreen
           onBack={() => setActiveScreen('faceCapture')}
-          onComplete={() => setActiveScreen('facialAnalysisResult')}
-        />
-      );
-    }
-
-    if (activeScreen === 'facialAnalysisResult') {
-      return (
-        <FacialAnalysisResultScreen
-          onBack={() => setActiveScreen('analysisLoading')}
-          onStartARGuide={() => setActiveScreen('arMakeupFilter')}
+          onComplete={() => goToLatestAnalysisReportDetail('analysisLoading')}
         />
       );
     }
@@ -213,11 +226,11 @@ export function AppRoot() {
     if (activeScreen === 'arMakeupFilter') {
       return (
         <ARMakeupFilterScreen
-          initialGuideMode="half"
+          initialGuideMode={getARMakeupFilterInitialGuideMode()}
           onBack={() => setActiveScreen('home')}
           onComplete={() => setActiveScreen('home')}
-          onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
-          onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
+          onOpenLocationAdjust={() => goToARFilterLocation()}
+          onOpenStyleAdjust={() => goToARFilterStyle()}
         />
       );
     }
@@ -225,7 +238,7 @@ export function AppRoot() {
     if (activeScreen === 'arFilterLocation') {
       return (
         <ARFilterCustomLocationScreen
-          onBack={() => setActiveScreen('arMakeupFilter')}
+          onBack={() => setActiveScreen(arFilterAdjustBackScreen)}
           onOpenStyleAdjust={() => setActiveScreen('arFilterStyle')}
           onSave={() => setActiveScreen('arMakeupFilter')}
         />
@@ -235,7 +248,7 @@ export function AppRoot() {
     if (activeScreen === 'arFilterStyle') {
       return (
         <ARFilterCustomStyleScreen
-          onBack={() => setActiveScreen('arMakeupFilter')}
+          onBack={() => setActiveScreen(arFilterAdjustBackScreen)}
           onOpenLocationAdjust={() => setActiveScreen('arFilterLocation')}
           onSave={() => setActiveScreen('arMakeupFilter')}
         />
@@ -306,6 +319,7 @@ export function AppRoot() {
       return (
         <AnalysisReportDetailScreen
           onBack={() => setActiveScreen(analysisDetailBackScreen)}
+          onCreateARFilter={goToAnalysisReportCreateFilter}
           resultId={selectedAnalysisResultId}
         />
       );
@@ -470,7 +484,9 @@ export function AppRoot() {
       return (
         <AppShell
           activeTab={activeScreen}
+          onARFilterPress={() => setActiveScreen('arMakeupFilter')}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
+          onFaceDiagnosisPress={() => setActiveScreen('faceCapture')}
           onProductRecommendationsPress={() => setActiveScreen('custom')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
@@ -481,7 +497,9 @@ export function AppRoot() {
     return (
       <AppShell
         activeTab="home"
+        onARFilterPress={() => setActiveScreen('arMakeupFilter')}
         onCreateFilterPress={() => setActiveScreen('filterUpload')}
+        onFaceDiagnosisPress={() => setActiveScreen('faceCapture')}
         onProfilePress={goToMyPage}
         onTabPress={handleFooterTabPress}
       />
@@ -509,14 +527,18 @@ export function AppRoot() {
 function AppShell({
   activeTab,
   children,
+  onARFilterPress,
   onCreateFilterPress,
+  onFaceDiagnosisPress,
   onProductRecommendationsPress,
   onProfilePress,
   onTabPress,
 }: {
   activeTab?: ShellTab;
   children?: React.ReactNode;
+  onARFilterPress?: () => void;
   onCreateFilterPress?: () => void;
+  onFaceDiagnosisPress?: () => void;
   onProductRecommendationsPress?: () => void;
   onProfilePress: () => void;
   onTabPress: (tab: FooterTabKey) => void;
@@ -528,6 +550,7 @@ function AppShell({
       <AppHeader
         subtitle={activeTab === 'custom' ? 'AI PRODUCT MATCH' : 'MAKEUP GUIDE'}
         title={activeTab === 'custom' ? '추천 제품' : 'AI AR Makeup'}
+        titleSlot={activeTab === 'home' ? <AuraLogo variant="header" /> : undefined}
         topInset={insets.top}
         onProfilePress={onProfilePress}
       />
@@ -535,13 +558,20 @@ function AppShell({
         {children ??
           (activeTab === 'home' ? (
             <HomeScreen
+              onPressARFilter={onARFilterPress}
               onPressCreateFilter={onCreateFilterPress}
+              onPressFaceDiagnosis={onFaceDiagnosisPress}
               onPressProductRecommendations={onProductRecommendationsPress}
             />
           ) : null)}
         {!children && activeTab === 'custom' ? <ProductRecommendationScreen /> : null}
       </YStack>
-      <AppFooter activeTab={activeTab} bottomInset={insets.bottom} onTabPress={onTabPress} />
+      <AppFooter
+        activeTab={activeTab}
+        bottomInset={insets.bottom}
+        floating
+        onTabPress={onTabPress}
+      />
     </YStack>
   );
 }
@@ -550,6 +580,7 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
   },
   body: {
     flex: 1,
