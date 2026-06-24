@@ -37,7 +37,7 @@ export function ImageAnalysisReportsListScreen({
   }, []);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <AppHeader onBack={onBack} title="이미지 분석 결과" />
 
       <PagedGrid

@@ -17,7 +17,7 @@ export function RoutePlaceholder({
   onBack,
 }: RoutePlaceholderProps) {
   return (
-    <AppScreen scroll={false}>
+    <AppScreen scroll={false} topPadding="none">
       <AppHeader onBack={onBack} title={title} />
       <View style={styles.body}>
         <Text style={styles.title}>{title}</Text>

@@ -86,7 +86,7 @@ export function MyPageScreen({
 
   if (!data) {
     return (
-      <AppScreen scroll={false}>
+      <AppScreen scroll={false} topPadding="content">
         <View style={styles.loading}>
           <Text style={styles.loadingText}>마이페이지를 불러오는 중이에요.</Text>
         </View>
@@ -104,7 +104,7 @@ export function MyPageScreen({
   const previewMakeupLooks = makeupLooks.slice(0, 3);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="content">
       <ProfileSummaryCard
         onPressSettings={onPressProfileEdit}
         profile={data.profile}

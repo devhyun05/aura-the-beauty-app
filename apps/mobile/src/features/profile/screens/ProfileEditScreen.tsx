@@ -407,7 +407,7 @@ export function ProfileEditScreen({onBack, onLogout}: ProfileEditScreenProps) {
   };
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <AppHeader onBack={onBack} title="프로필 수정" />
 
       <View style={styles.profileArea}>

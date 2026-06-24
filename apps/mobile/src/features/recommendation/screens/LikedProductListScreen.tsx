@@ -46,7 +46,7 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
   }, []);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <AppHeader onBack={onBack} title="좋아요 목록" />
 
       <PagedGrid

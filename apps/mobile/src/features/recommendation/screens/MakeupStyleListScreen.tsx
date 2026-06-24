@@ -38,7 +38,7 @@ export function MakeupStyleListScreen({onBack}: MakeupStyleListScreenProps) {
   }, []);
 
   return (
-    <AppScreen contentGap={spacing.xl}>
+    <AppScreen contentGap={spacing.xl} topPadding="none">
       <AppHeader onBack={onBack} title="메이크업 룩" />
 
       <PagedGrid
