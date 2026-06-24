@@ -1,5 +1,13 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Image, ScrollView, Share, StyleSheet} from 'react-native';
+import {
+  Image,
+  ScrollView,
+  Share,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Share2, WandSparkles} from 'lucide-react-native';
 import {Button, Text, View, XStack} from 'tamagui';
 
@@ -8,14 +16,14 @@ import {
   getLatestAnalysisResult,
 } from '../../../shared/services/analysisService';
 import {getUserProfile} from '../../../shared/services/userService';
-import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {
   AnalysisFacePointGuide,
   AnalysisMakeupCard,
   AnalysisResult,
 } from '../../../shared/types/analysis';
 import type {UserProfile} from '../../../shared/types/userPage';
-import {AppHeader, AppScreen, XIcon} from '../../../shared/ui';
+import {AppHeader, XIcon} from '../../../shared/ui';
 
 type AnalysisReportDetailScreenProps = {
   resultId?: string | null;
@@ -63,6 +71,11 @@ const analysisReportSubtitleTextStyle = {
   fontSize: typography.fontSize.md,
   lineHeight: typography.lineHeight.md,
 } as const;
+const analysisReportScreenFramePresentation = {
+  contentTopPadding: spacing.xl,
+  headerPlacement: 'fixed',
+  headerUsesTopInset: true,
+} as const;
 
 export function getAnalysisReportCreateFilterButtonPlacements() {
   return createFilterButtonPlacements;
@@ -74,6 +87,10 @@ export function getAnalysisReportHeaderActions() {
 
 export function getAnalysisReportSubtitleTextStyle() {
   return analysisReportSubtitleTextStyle;
+}
+
+export function getAnalysisReportScreenFramePresentation() {
+  return analysisReportScreenFramePresentation;
 }
 
 const formatReportDate = (dateText: string, name?: string) => {
@@ -130,34 +147,31 @@ export function AnalysisReportDetailScreen({
 
   if (!result) {
     return (
-      <AppScreen scroll={false}>
-        <AnalysisReportHeader
-          onClose={onBack}
-          onShare={onShare}
-          profileName={profile?.name}
-          result={result}
-        />
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>
-            {isLoaded ? '분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
-          </Text>
-          <Text style={styles.emptyDescription}>
-            목록에서 분석 결과를 다시 선택해 주세요.
-          </Text>
-        </View>
-      </AppScreen>
-    );
-  }
-
-  return (
-    <AppScreen contentGap={spacing.xl}>
-      <AnalysisReportHeader
+      <AnalysisReportScaffold
+        contentStyle={styles.empty}
         onClose={onBack}
         onShare={onShare}
         profileName={profile?.name}
         result={result}
-      />
+        scroll={false}
+      >
+        <Text style={styles.emptyTitle}>
+          {isLoaded ? '분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
+        </Text>
+        <Text style={styles.emptyDescription}>
+          목록에서 분석 결과를 다시 선택해 주세요.
+        </Text>
+      </AnalysisReportScaffold>
+    );
+  }
 
+  return (
+    <AnalysisReportScaffold
+      onClose={onBack}
+      onShare={onShare}
+      profileName={profile?.name}
+      result={result}
+    >
       <Text style={styles.subtitle}>
         {formatReportDate(result.analyzedAt, profile?.name)}
       </Text>
@@ -221,7 +235,7 @@ export function AnalysisReportDetailScreen({
         onPress={onCreateARFilter}
         placement="report-bottom"
       />
-    </AppScreen>
+    </AnalysisReportScaffold>
   );
 }
 
@@ -230,11 +244,13 @@ function AnalysisReportHeader({
   onShare,
   profileName,
   result,
+  topInset,
 }: {
   onClose?: () => void;
   onShare?: (result: AnalysisResult) => void;
   profileName?: string;
   result: AnalysisResult | null;
+  topInset: number;
 }) {
   const handleSharePress = () => {
     if (!result) {
@@ -277,7 +293,56 @@ function AnalysisReportHeader({
           맞춤 분석 보고서
         </Text>
       }
+      topInset={topInset}
     />
+  );
+}
+
+function AnalysisReportScaffold({
+  children,
+  contentStyle,
+  onClose,
+  onShare,
+  profileName,
+  result,
+  scroll = true,
+}: {
+  children: React.ReactNode;
+  contentStyle?: StyleProp<ViewStyle>;
+  onClose?: () => void;
+  onShare?: (result: AnalysisResult) => void;
+  profileName?: string;
+  result: AnalysisResult | null;
+  scroll?: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const contentContainerStyle = [
+    styles.reportContent,
+    {paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl},
+    contentStyle,
+  ];
+
+  return (
+    <View style={styles.screen}>
+      <AnalysisReportHeader
+        onClose={onClose}
+        onShare={onShare}
+        profileName={profileName}
+        result={result}
+        topInset={insets.top}
+      />
+      {scroll ? (
+        <ScrollView
+          contentContainerStyle={contentContainerStyle}
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollBody}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[styles.staticBody, contentContainerStyle]}>{children}</View>
+      )}
+    </View>
   );
 }
 
@@ -535,6 +600,10 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     padding: 0,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: shadows.soft.shadowOpacity,
+    shadowRadius: shadows.soft.shadowRadius,
     width: 42,
   },
   headerActions: {
@@ -544,9 +613,10 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.lg,
+    fontFamily: typography.title.fontFamily,
+    fontSize: typography.title.fontSize,
+    fontWeight: typography.title.fontWeight,
+    lineHeight: typography.title.lineHeight,
   },
   makeupBody: {
     gap: 4,
@@ -609,6 +679,19 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingRight: spacing.screenX,
   },
+  reportContent: {
+    gap: spacing.xl,
+    paddingHorizontal: spacing.screenX,
+    paddingTop: analysisReportScreenFramePresentation.contentTopPadding,
+  },
+  screen: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  scrollBody: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
   section: {
     borderTopColor: colors.divider,
     borderTopWidth: 1,
@@ -620,6 +703,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
+  },
+  staticBody: {
+    backgroundColor: colors.background,
+    flex: 1,
   },
   subtitle: {
     color: colors.textSecondary,

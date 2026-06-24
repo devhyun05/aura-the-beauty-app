@@ -4,9 +4,10 @@ import {
   AnalysisReportDetailScreen,
   getAnalysisReportCreateFilterButtonPlacements,
   getAnalysisReportHeaderActions,
+  getAnalysisReportScreenFramePresentation,
   getAnalysisReportSubtitleTextStyle,
 } from './AnalysisReportDetailScreen';
-import {typography} from '../../../shared/theme';
+import {spacing, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -17,6 +18,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 const createFilterButtonPlacements =
   getAnalysisReportCreateFilterButtonPlacements();
 const headerActions: readonly string[] = getAnalysisReportHeaderActions();
+const screenFramePresentation = getAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getAnalysisReportSubtitleTextStyle();
 
 expectEqual(
@@ -48,6 +50,21 @@ expectEqual(
   headerActions[1],
   'close',
   'analysis report header close action',
+);
+expectEqual(
+  screenFramePresentation.headerPlacement,
+  'fixed',
+  'analysis report header placement',
+);
+expectEqual(
+  screenFramePresentation.headerUsesTopInset,
+  true,
+  'analysis report header safe area',
+);
+expectEqual(
+  screenFramePresentation.contentTopPadding,
+  spacing.xl,
+  'analysis report content starts below fixed header',
 );
 expectEqual(
   subtitleTextStyle.fontSize,
