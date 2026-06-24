@@ -43,6 +43,7 @@ type PhotoCaptureGuideStep = {
 };
 
 export const PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO = 448 / 362;
+const PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE = 1.08;
 export const PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL = '좌우로 넘겨 주세요.';
 
 const photoCaptureGuideSteps = [
@@ -97,6 +98,8 @@ const photoCaptureGuideVisualPresentation = {
   finalActionWidth: 'compact',
   finalPrivacyPlacement: 'below-pagination-above-action',
   headerDismissControl: 'close-to-home',
+  imageFillMode: 'zoomed-cover',
+  imageFillScale: PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
   swipeNavigationPlacement: 'fixed-above-swipe-hint',
@@ -391,8 +394,12 @@ const styles = StyleSheet.create({
     width: iconSize.xl + spacing.md,
   },
   guideImage: {
-    height: '100%',
-    width: '100%',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    transform: [{scale: PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE}],
   },
   guideCarousel: {
     flexGrow: 0,
@@ -473,6 +480,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
+    position: 'relative',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: shadows.soft.shadowOpacity,

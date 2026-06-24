@@ -38,6 +38,16 @@ expectEqual(
 );
 expectEqual(visualPresentation.showsImageChip, false, 'photo capture image chip');
 expectEqual(visualPresentation.usesImageScrim, false, 'photo capture image scrim');
+expectEqual(
+  visualPresentation.imageFillMode,
+  'zoomed-cover',
+  'photo capture image fill mode',
+);
+expectEqual(
+  visualPresentation.imageFillScale,
+  1.08,
+  'photo capture image fill scale',
+);
 expectEqual(visualPresentation.finalActionWidth, 'compact', 'photo capture final action width');
 expectEqual(
   visualPresentation.finalPrivacyPlacement,
