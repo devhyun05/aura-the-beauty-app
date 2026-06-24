@@ -336,14 +336,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   heroBackgroundImage: {
-    bottom: 0,
-    height: '100%',
-    left: 0,
+    height: '116%',
+    left: '-8%',
     position: 'absolute',
-    right: 0,
-    top: 0,
-    transform: [{scale: 1.04}],
-    width: '100%',
+    top: '-8%',
+    width: '116%',
   },
   heroBadge: {
     alignItems: 'center',
