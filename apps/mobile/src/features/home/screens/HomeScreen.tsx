@@ -139,7 +139,7 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
       accessibilityLabel={`${headline} 룩 보러가기`}
       style={({pressed}) => [
         styles.heroBanner,
-        {width: cardWidth},
+        {height: cardWidth, width: cardWidth},
         pressed && styles.pressed,
       ]}>
       <Image resizeMode="cover" source={imageSource} style={styles.heroBackgroundImage} />
@@ -337,10 +337,12 @@ const styles = StyleSheet.create({
   },
   heroBackgroundImage: {
     bottom: 0,
+    height: '100%',
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
+    width: '100%',
   },
   heroBadge: {
     alignItems: 'center',
@@ -421,7 +423,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    height: 330,
     overflow: 'hidden',
     position: 'relative',
   },
