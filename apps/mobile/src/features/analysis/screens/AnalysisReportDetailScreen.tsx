@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Image, ScrollView, StyleSheet} from 'react-native';
-import {WandSparkles} from 'lucide-react-native';
-import {Button, Text, View} from 'tamagui';
+import {Image, ScrollView, Share, StyleSheet} from 'react-native';
+import {Share2, WandSparkles} from 'lucide-react-native';
+import {Button, Text, View, XStack} from 'tamagui';
 
 import {
   getAnalysisResultById,
@@ -21,6 +21,7 @@ type AnalysisReportDetailScreenProps = {
   resultId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
+  onShare?: (result: AnalysisResult) => void;
 };
 
 type GuideItem = {
@@ -30,6 +31,9 @@ type GuideItem = {
   detail: string;
 };
 
+type CreateFilterButtonPlacement = 'photo' | 'report-bottom';
+type AnalysisReportHeaderAction = 'share' | 'close';
+
 const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
   {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
@@ -38,6 +42,39 @@ const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
   {key: 'eyeliner', label: '아이라이너', point: '점막 채우기'},
   {key: 'blush', label: '블러셔', point: '뉴트럴 핑크'},
 ];
+
+const createFilterButtonPlacements = [
+  'photo',
+  'report-bottom',
+] as const satisfies readonly CreateFilterButtonPlacement[];
+
+const createFilterButtonAccessibilityLabels: Record<
+  CreateFilterButtonPlacement,
+  string
+> = {
+  photo: '사진 아래 AR 필터 만들기',
+  'report-bottom': 'AR 필터 만들기',
+};
+const analysisReportHeaderActions = [
+  'share',
+  'close',
+] as const satisfies readonly AnalysisReportHeaderAction[];
+const analysisReportSubtitleTextStyle = {
+  fontSize: typography.fontSize.md,
+  lineHeight: typography.lineHeight.md,
+} as const;
+
+export function getAnalysisReportCreateFilterButtonPlacements() {
+  return createFilterButtonPlacements;
+}
+
+export function getAnalysisReportHeaderActions() {
+  return analysisReportHeaderActions;
+}
+
+export function getAnalysisReportSubtitleTextStyle() {
+  return analysisReportSubtitleTextStyle;
+}
 
 const formatReportDate = (dateText: string, name?: string) => {
   const date = new Date(dateText);
@@ -53,6 +90,7 @@ export function AnalysisReportDetailScreen({
   resultId,
   onBack,
   onCreateARFilter,
+  onShare,
 }: AnalysisReportDetailScreenProps) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -93,7 +131,12 @@ export function AnalysisReportDetailScreen({
   if (!result) {
     return (
       <AppScreen scroll={false}>
-        <AppHeader onBack={onBack} title="맞춤 분석 보고서" />
+        <AnalysisReportHeader
+          onClose={onBack}
+          onShare={onShare}
+          profileName={profile?.name}
+          result={result}
+        />
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>
             {isLoaded ? '분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
@@ -108,14 +151,25 @@ export function AnalysisReportDetailScreen({
 
   return (
     <AppScreen contentGap={spacing.xl}>
-      <AppHeader onBack={onBack} title="맞춤 분석 보고서" />
+      <AnalysisReportHeader
+        onClose={onBack}
+        onShare={onShare}
+        profileName={profile?.name}
+        result={result}
+      />
 
       <Text style={styles.subtitle}>
         {formatReportDate(result.analyzedAt, profile?.name)}
       </Text>
 
-      <View style={styles.heroCard}>
-        <Image resizeMode="cover" source={result.imageSource} style={styles.heroImage} />
+      <View style={styles.heroSection}>
+        <View style={styles.heroCard}>
+          <Image resizeMode="cover" source={result.imageSource} style={styles.heroImage} />
+        </View>
+        <CreateFilterButton
+          onPress={onCreateARFilter}
+          placement="photo"
+        />
       </View>
 
       <View style={styles.summaryGrid}>
@@ -162,18 +216,124 @@ export function AnalysisReportDetailScreen({
         분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
       </Text>
 
-      <Button
-        accessibilityLabel="AR 필터 만들기"
-        accessibilityRole="button"
+      <CreateFilterButton
+        hasTopMargin
         onPress={onCreateARFilter}
-        pressStyle={{scale: 0.98}}
-        style={styles.createFilterButton}
-        unstyled
-      >
-        <WandSparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
-        <Text style={styles.createFilterButtonText}>AR 필터 만들기</Text>
-      </Button>
+        placement="report-bottom"
+      />
     </AppScreen>
+  );
+}
+
+function AnalysisReportHeader({
+  onClose,
+  onShare,
+  profileName,
+  result,
+}: {
+  onClose?: () => void;
+  onShare?: (result: AnalysisResult) => void;
+  profileName?: string;
+  result: AnalysisResult | null;
+}) {
+  const handleSharePress = () => {
+    if (!result) {
+      return;
+    }
+
+    if (onShare) {
+      onShare(result);
+      return;
+    }
+
+    void Share.share({
+      message: [
+        formatReportDate(result.analyzedAt, profileName),
+        `퍼스널 컬러: ${result.personalColor}`,
+        `추천 무드: ${result.recommendedMood}`,
+      ].join('\n'),
+      title: '맞춤 분석 보고서',
+    });
+  };
+
+  return (
+    <AppHeader
+      rightSlot={
+        <XStack style={styles.headerActions}>
+          <HeaderActionButton
+            accessibilityLabel="공유하기"
+            disabled={!result}
+            onPress={handleSharePress}
+          >
+            <Share2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+          </HeaderActionButton>
+          <HeaderActionButton accessibilityLabel="닫기" onPress={onClose}>
+            <XIcon color={colors.textPrimary} size={iconSize.sm} />
+          </HeaderActionButton>
+        </XStack>
+      }
+      titleSlot={
+        <Text numberOfLines={1} style={styles.headerTitle}>
+          맞춤 분석 보고서
+        </Text>
+      }
+    />
+  );
+}
+
+function HeaderActionButton({
+  accessibilityLabel,
+  children,
+  disabled,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Button
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{disabled: Boolean(disabled)}}
+      disabled={disabled}
+      disabledStyle={{opacity: 0.42}}
+      hitSlop={8}
+      onPress={onPress}
+      pressStyle={{scale: 0.97}}
+      style={styles.headerActionButton}
+      unstyled
+    >
+      {children}
+    </Button>
+  );
+}
+
+function CreateFilterButton({
+  hasTopMargin,
+  onPress,
+  placement,
+}: {
+  hasTopMargin?: boolean;
+  onPress?: () => void;
+  placement: CreateFilterButtonPlacement;
+}) {
+  return (
+    <Button
+      accessibilityLabel={createFilterButtonAccessibilityLabels[placement]}
+      accessibilityRole="button"
+      onPress={onPress}
+      pressStyle={{scale: 0.98}}
+      style={[
+        styles.createFilterButton,
+        hasTopMargin ? styles.createFilterButtonWithTopMargin : null,
+      ]}
+      unstyled
+    >
+      <WandSparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
+      <Text style={styles.createFilterButtonText}>AR 필터 만들기</Text>
+    </Button>
   );
 }
 
@@ -298,8 +458,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     height: 56,
     justifyContent: 'center',
-    marginTop: spacing.sm,
     width: '100%',
+  },
+  createFilterButtonWithTopMargin: {
+    marginTop: spacing.sm,
   },
   createFilterButtonText: {
     color: colors.white,
@@ -360,6 +522,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     height: 360,
     width: '100%',
+  },
+  heroSection: {
+    gap: spacing.md,
+  },
+  headerActionButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    padding: 0,
+    width: 42,
+  },
+  headerActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  headerTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
   },
   makeupBody: {
     gap: 4,
@@ -436,9 +623,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: typography.fontSize.sm,
+    fontSize: analysisReportSubtitleTextStyle.fontSize,
     fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: analysisReportSubtitleTextStyle.lineHeight,
     textAlign: 'center',
   },
   summaryGrid: {
