@@ -55,6 +55,7 @@ import {
   getAnalysisReportCreateFilterTargetScreen,
   getARMakeupFilterInitialGuideMode,
   getFooterTabTargetScreen,
+  getHomeFaceDiagnosisTargetScreen,
 } from './navigation';
 
 type AppScreen =
@@ -202,7 +203,12 @@ export function AppRoot() {
     }
 
     if (activeScreen === 'tutorial') {
-      return <TutorialIntroScreen onStartCapture={() => setActiveScreen('faceCapture')} />;
+      return (
+        <TutorialIntroScreen
+          onCloseToHome={() => setActiveScreen('home')}
+          onStartCapture={() => setActiveScreen('faceCapture')}
+        />
+      );
     }
 
     if (activeScreen === 'faceCapture') {
@@ -486,7 +492,7 @@ export function AppRoot() {
           activeTab={activeScreen}
           onARFilterPress={() => setActiveScreen('arMakeupFilter')}
           onCreateFilterPress={() => setActiveScreen('filterUpload')}
-          onFaceDiagnosisPress={() => setActiveScreen('faceCapture')}
+          onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
           onProductRecommendationsPress={() => setActiveScreen('custom')}
           onProfilePress={goToMyPage}
           onTabPress={handleFooterTabPress}
@@ -499,7 +505,7 @@ export function AppRoot() {
         activeTab="home"
         onARFilterPress={() => setActiveScreen('arMakeupFilter')}
         onCreateFilterPress={() => setActiveScreen('filterUpload')}
-        onFaceDiagnosisPress={() => setActiveScreen('faceCapture')}
+        onFaceDiagnosisPress={() => setActiveScreen(getHomeFaceDiagnosisTargetScreen())}
         onProfilePress={goToMyPage}
         onTabPress={handleFooterTabPress}
       />

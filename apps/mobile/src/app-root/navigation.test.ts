@@ -3,6 +3,7 @@ import {
   getAnalysisReportCreateFilterTargetScreen,
   getARMakeupFilterInitialGuideMode,
   getFooterTabTargetScreen,
+  getHomeFaceDiagnosisTargetScreen,
 } from './navigation';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -32,4 +33,9 @@ expectEqual(
   getAnalysisLoadingCompleteTargetScreen(),
   'analysisReportDetail',
   'analysis loading complete target',
+);
+expectEqual(
+  getHomeFaceDiagnosisTargetScreen(),
+  'tutorial',
+  'home face diagnosis target',
 );

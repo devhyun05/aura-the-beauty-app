@@ -1,51 +1,48 @@
 import {useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
-import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Button, Image, Text, View, YStack} from 'tamagui';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Button, Text, View, YStack} from 'tamagui';
 
-import {typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AuraLogo} from '../../../shared/ui';
 import {PhotoCaptureGuideScreen} from './PhotoCaptureGuideScreen';
 
 type TutorialIntroScreenProps = {
+  onCloseToHome?: () => void;
   onStartDiagnosis?: () => void;
   onStartCapture?: () => void;
 };
 
-const makeupImageSource = require('../../../assets/images/tutorial-makeup-strokes.png');
-const makeupImageRatio = 562 / 416;
-const logoLineHeight = typography.logoIntro.lineHeight;
+type TutorialIntroHeroContent = {
+  brand: 'AURA';
+  title: string;
+  subtitle: string;
+  primaryActionLabel: string;
+};
+
+const tutorialIntroHeroContent = {
+  brand: 'AURA',
+  title: '이미지 진단을 시작합니다.',
+  subtitle: '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 스타일로 자연스럽게 완성해보세요.',
+  primaryActionLabel: '진단 시작',
+} as const satisfies TutorialIntroHeroContent;
+
+export function getTutorialIntroHeroContent() {
+  return tutorialIntroHeroContent;
+}
 
 export function TutorialIntroScreen({
+  onCloseToHome,
   onStartCapture,
   onStartDiagnosis,
 }: TutorialIntroScreenProps) {
   const [isPhotoGuideVisible, setIsPhotoGuideVisible] = useState(false);
-  const {height, width} = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const {height} = useWindowDimensions();
   const isCompactHeight = height < 760;
-  const contentHeight = height - insets.top - insets.bottom;
-  const logoTopMargin = isCompactHeight ? 24 : Math.min(56, height * 0.07);
-  const imageTopMargin = isCompactHeight ? 12 : 18;
-  const copyTopMargin = isCompactHeight ? 12 : 16;
-  const buttonHeight = isCompactHeight ? 58 : 64;
-  const bottomPadding = isCompactHeight ? 30 : 38;
-  const footerMinHeight = isCompactHeight ? 8 : 12;
-  const reservedHeight =
-    logoTopMargin +
-    logoLineHeight +
-    imageTopMargin +
-    copyTopMargin +
-    94 +
-    footerMinHeight +
-    buttonHeight +
-    bottomPadding;
-  const availableImageHeight = Math.max(180, contentHeight - reservedHeight);
-  const imageWidth = Math.min(
-    width - 88,
-    isCompactHeight ? 250 : 280,
-    availableImageHeight / makeupImageRatio,
-  );
+  const content = getTutorialIntroHeroContent();
+  const screenPaddingTop = isCompactHeight ? spacing.xxl : 72;
+  const screenPaddingBottom = isCompactHeight ? spacing.xl : 44;
+
   const handleStartDiagnosis = () => {
     onStartDiagnosis?.();
     setIsPhotoGuideVisible(true);
@@ -55,138 +52,108 @@ export function TutorialIntroScreen({
     return (
       <PhotoCaptureGuideScreen
         onBackToIntro={() => setIsPhotoGuideVisible(false)}
+        onCloseToHome={onCloseToHome}
         onStartCapture={onStartCapture}
       />
     );
   }
 
   return (
-    <SafeAreaView style={{backgroundColor: '#FFFFFF', flex: 1}}>
+    <SafeAreaView style={styles.safeArea}>
       <YStack
         style={[
           styles.screen,
           {
-            paddingBottom: bottomPadding,
+            paddingBottom: screenPaddingBottom,
+            paddingTop: screenPaddingTop,
           },
-        ]}
-      >
-        <AuraLogo variant="intro" style={{marginTop: logoTopMargin}} />
+        ]}>
+        <View style={styles.heroSpacer} />
 
-        <View style={{marginTop: imageTopMargin}}>
-          <Image
-            accessibilityIgnoresInvertColors
-            height={imageWidth * makeupImageRatio}
-            resizeMode="contain"
-            src={makeupImageSource}
-            width={imageWidth}
-          />
-        </View>
-
-        <YStack style={[styles.copyArea, {marginTop: copyTopMargin}]}>
-          <Text style={styles.title}>
-            AI/AR 기반 맞춤 메이크업 가이드
-          </Text>
-          <Text style={styles.description}>
-            내 얼굴에 맞는 메이크업을 추천하고,{'\n'}
-            나만의 스타일로 자연스럽게 완성해보세요.
-          </Text>
+        <YStack style={styles.copyArea}>
+          <AuraLogo variant="intro" />
+          <Text style={styles.title}>{content.title}</Text>
+          <Text style={styles.subtitle}>{content.subtitle}</Text>
         </YStack>
 
-        <View style={[styles.footerSpacer, {minHeight: footerMinHeight}]} />
+        <View style={styles.footerSpacer} />
 
-        <View style={[styles.startButtonPanel, {height: buttonHeight}]}>
-          <View style={styles.startButtonHighlight} />
+        <YStack style={styles.actionArea}>
           <Button
-            accessibilityLabel="진단 시작"
+            accessibilityLabel={content.primaryActionLabel}
             accessibilityRole="button"
             onPress={handleStartDiagnosis}
-            pressStyle={{opacity: 0.72}}
-            style={styles.startButton}
-            unstyled
-          >
-            <Text style={styles.startButtonText}>진단 시작</Text>
+            pressStyle={{opacity: 0.78}}
+            style={styles.primaryButton}
+            unstyled>
+            <Text style={styles.primaryButtonText}>{content.primaryActionLabel}</Text>
           </Button>
-        </View>
+        </YStack>
       </YStack>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  copyArea: {
-    alignItems: 'center',
+  actionArea: {
+    gap: spacing.md,
     width: '100%',
   },
-  description: {
-    color: '#242121',
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
-    lineHeight: 24,
-    marginTop: 14,
-    textAlign: 'center',
+  copyArea: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    width: '100%',
   },
   footerSpacer: {
     flex: 1,
   },
+  heroSpacer: {
+    flex: 0.42,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    height: iconSize.xl + spacing.xxl,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    width: '100%',
+  },
+  primaryButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.md,
+  },
+  safeArea: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
   screen: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
-    paddingHorizontal: 22,
+    paddingHorizontal: spacing.xl,
   },
-  startButtonPanel: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderColor: 'rgba(36, 33, 33, 0.18)',
-    borderRadius: 18,
-    borderWidth: 1,
-    elevation: 5,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 10,
-      width: 0,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    width: '100%',
-  },
-  startButton: {
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    height: '100%',
-    justifyContent: 'center',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    width: '100%',
-  },
-  startButtonHighlight: {
-    backgroundColor: 'rgba(255, 255, 255, 0.52)',
-    borderBottomColor: 'rgba(255, 255, 255, 0.74)',
-    borderBottomWidth: 1,
-    height: '48%',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  startButtonText: {
-    color: '#111111',
-    fontSize: 22,
-    fontWeight: '400',
+  subtitle: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
     letterSpacing: 0,
-    lineHeight: 28,
+    lineHeight: typography.lineHeight.md,
     textAlign: 'center',
   },
   title: {
-    color: '#000000',
-    fontSize: 19,
-    fontWeight: '800',
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: 20,
+    lineHeight: typography.lineHeight.lg,
     textAlign: 'center',
   },
 });
