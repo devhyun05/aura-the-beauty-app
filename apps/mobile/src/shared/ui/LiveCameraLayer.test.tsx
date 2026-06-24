@@ -1,6 +1,7 @@
 import React from 'react';
 
 import {
+  getLiveCameraPermissionAction,
   getLiveCameraPermissionCopy,
   shouldMirrorLiveCamera,
   LiveCameraLayer,
@@ -31,6 +32,21 @@ expectEqual(
   getLiveCameraPermissionCopy('mountError').title,
   '카메라를 사용할 수 없어요',
   'camera mount error title',
+);
+expectEqual(
+  getLiveCameraPermissionAction({granted: false, canAskAgain: true}),
+  'request',
+  'camera permission action when permission can be requested',
+);
+expectEqual(
+  getLiveCameraPermissionAction({granted: false, canAskAgain: false}),
+  'settings',
+  'camera permission action when permission is permanently denied',
+);
+expectEqual(
+  getLiveCameraPermissionAction({granted: true, canAskAgain: false}, true),
+  null,
+  'camera permission action is hidden for mount errors',
 );
 
 <LiveCameraLayer facing="front" />;

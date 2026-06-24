@@ -9,6 +9,25 @@ export {
   CameraCaptureButtonSurface,
 } from './CameraCaptureButton';
 export {BrushFooterIcon, CameraFooterIcon, HomeFooterIcon} from './FooterIcons';
+export {
+  BottomOverlayPanel,
+  CameraCaptureControlRow,
+  CameraModeSwitch,
+  CameraUtilityButton,
+  FULLSCREEN_OVERLAY_ICON_BUTTON_SIZE,
+  FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_BACKGROUND,
+  FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
+  FloatingOverlayIconButton,
+  FullscreenOverlayLayer,
+  FullscreenOverlayScreen,
+  OverlayAdjustmentTabs,
+  OverlayChipButton,
+  OverlayIconButton,
+  OverlayPanelSection,
+  OverlaySaveButton,
+  OverlaySegmentButton,
+  OverlayTopBar,
+} from './FullscreenOverlay';
 export {IconButton} from './IconButton';
 export {ImagePlaceholder} from './ImagePlaceholder';
 export {LiveCameraLayer} from './LiveCameraLayer';

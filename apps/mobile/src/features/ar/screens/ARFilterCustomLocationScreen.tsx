@@ -8,9 +8,21 @@ import {
   getDefaultMakeupFilter,
   getMockARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
-import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {FacePartId} from '../../../shared/types/makeupGuide';
-import {LiveCameraLayer} from '../../../shared/ui';
+import {
+  BottomOverlayPanel,
+  FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
+  FullscreenOverlayLayer,
+  FullscreenOverlayScreen,
+  LiveCameraLayer,
+  OverlayAdjustmentTabs,
+  OverlayChipButton,
+  OverlayIconButton,
+  OverlayPanelSection,
+  OverlaySaveButton,
+  OverlayTopBar,
+} from '../../../shared/ui';
 import {
   getMockFilterLocationState,
   updateFilterLocationAdjustment,
@@ -31,8 +43,7 @@ const ADJUSTMENT_KEYS: readonly FilterLocationAdjustmentKey[] = [
   'scale',
   'rotation',
 ];
-const SELECTED_TAB_BACKGROUND_OPACITY = 0.62;
-const SELECTED_TAB_BACKGROUND_COLOR = `rgba(255, 255, 255, ${SELECTED_TAB_BACKGROUND_OPACITY})`;
+const SELECTED_TAB_BACKGROUND_OPACITY = FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY;
 
 type LocationPreviewColorOverlayLayer = {
   id: string;
@@ -96,8 +107,8 @@ export function ARFilterCustomLocationScreen({
   };
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.cameraLayer}>
+    <FullscreenOverlayScreen>
+      <FullscreenOverlayLayer>
         <LiveCameraLayer />
         <View style={styles.previewDim} />
         <View
@@ -132,59 +143,32 @@ export function ARFilterCustomLocationScreen({
               />
             ))
           : null}
-      </View>
+      </FullscreenOverlayLayer>
 
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
-        <XStack style={styles.header}>
-          <Button
-            accessibilityLabel="AR 필터 화면으로 돌아가기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={onBack}
-            pressStyle={{scale: 0.97}}
-            style={styles.iconButton}
-            unstyled>
-            <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
-          </Button>
+        <OverlayTopBar
+          eyebrow="FILTER CUSTOM"
+          leftSlot={
+            <OverlayIconButton
+              accessibilityLabel="AR 필터 화면으로 돌아가기"
+              onPress={onBack}>
+              <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
+            </OverlayIconButton>
+          }
+          rightSlot={
+            <OverlayIconButton
+              accessibilityLabel="현재 위치 저장"
+              onPress={onSave}>
+              <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
+            </OverlayIconButton>
+          }
+          title="위치 조정"
+        />
 
-          <YStack style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>FILTER CUSTOM</Text>
-            <Text numberOfLines={1} style={styles.headerTitle}>
-              위치 조정
-            </Text>
-          </YStack>
-
-          <Button
-            accessibilityLabel="현재 위치 저장"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={onSave}
-            pressStyle={{scale: 0.97}}
-            style={styles.iconButton}
-            unstyled>
-            <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
-          </Button>
-        </XStack>
-
-        <XStack style={styles.segmentedControl}>
-          <Button
-            accessibilityRole="button"
-            accessibilityState={{selected: true}}
-            pressStyle={{scale: 0.98}}
-            style={[styles.segmentButton, styles.segmentButtonActive]}
-            unstyled>
-            <Text style={[styles.segmentText, styles.segmentTextActive]}>위치 조정</Text>
-          </Button>
-          <Button
-            accessibilityRole="button"
-            accessibilityState={{selected: false}}
-            onPress={onOpenStyleAdjust}
-            pressStyle={{scale: 0.98}}
-            style={styles.segmentButton}
-            unstyled>
-            <Text style={styles.segmentText}>스타일 조정</Text>
-          </Button>
-        </XStack>
+        <OverlayAdjustmentTabs
+          activeTab="location"
+          onPressStyle={onOpenStyleAdjust}
+        />
 
         <XStack style={styles.quickActions}>
           <ActionPill
@@ -206,39 +190,21 @@ export function ARFilterCustomLocationScreen({
         </XStack>
       </YStack>
 
-      <YStack style={[styles.controlPanel, {paddingBottom: insets.bottom + spacing.lg}]}>
-        <YStack style={styles.panelSection}>
-          <Text style={styles.panelLabel}>얼굴 부위</Text>
+      <BottomOverlayPanel style={{paddingBottom: insets.bottom + spacing.lg}}>
+        <OverlayPanelSection label="얼굴 부위">
           <XStack style={styles.facePartList}>
             {arGuideData.faceParts.map(facePart => (
-              <Button
+              <OverlayChipButton
                 key={facePart.id}
-                accessibilityRole="button"
-                accessibilityState={{
-                  selected: facePart.id === locationState.selectedFacePartId,
-                }}
+                height={34}
+                isActive={facePart.id === locationState.selectedFacePartId}
+                label={facePart.label}
                 onPress={() => handleFacePartPress(facePart.id)}
-                pressStyle={{scale: 0.97}}
-                style={[
-                  styles.facePartChip,
-                  facePart.id === locationState.selectedFacePartId
-                    ? styles.facePartChipActive
-                    : undefined,
-                ]}
-                unstyled>
-                <Text
-                  style={[
-                    styles.facePartText,
-                    facePart.id === locationState.selectedFacePartId
-                      ? styles.facePartTextActive
-                      : undefined,
-                  ]}>
-                  {facePart.label}
-                </Text>
-              </Button>
+                paddingHorizontal={spacing.md}
+              />
             ))}
           </XStack>
-        </YStack>
+        </OverlayPanelSection>
 
         <YStack style={styles.adjustmentList}>
           {ADJUSTMENT_KEYS.map(key => (
@@ -251,17 +217,12 @@ export function ARFilterCustomLocationScreen({
           ))}
         </YStack>
 
-        <Button
+        <OverlaySaveButton
           accessibilityLabel="현재 필터 위치 저장"
-          accessibilityRole="button"
           onPress={onSave}
-          pressStyle={{scale: 0.98}}
-          style={styles.saveButton}
-          unstyled>
-          <Text style={styles.saveButtonText}>현재 필터 저장</Text>
-        </Button>
-      </YStack>
-    </View>
+        />
+      </BottomOverlayPanel>
+    </FullscreenOverlayScreen>
   );
 }
 
@@ -335,89 +296,11 @@ function AdjustmentRow({adjustment, onDecrease, onIncrease}: AdjustmentRowProps)
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.black,
-    flex: 1,
-    overflow: 'hidden',
-  },
-  cameraLayer: {
-    backgroundColor: colors.black,
-    bottom: 0,
-    left: 0,
-    overflow: 'hidden',
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
   headerArea: {
     gap: spacing.md,
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
     zIndex: 3,
-  },
-  header: {
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  iconButton: {
-    alignItems: 'center',
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.xl + spacing.md,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.md,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  eyebrow: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 1.2,
-    lineHeight: typography.lineHeight.xs,
-  },
-  headerTitle: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
-  segmentedControl: {
-    backgroundColor: colors.glassSurface,
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    padding: spacing.xs,
-  },
-  segmentButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flex: 1,
-    height: 38,
-    justifyContent: 'center',
-  },
-  segmentButtonActive: {
-    backgroundColor: SELECTED_TAB_BACKGROUND_COLOR,
-  },
-  segmentText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  segmentTextActive: {
-    color: colors.black,
   },
   previewDim: {
     backgroundColor: colors.black,
@@ -498,63 +381,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
   },
-  controlPanel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    bottom: spacing.md,
-    gap: spacing.lg,
-    left: spacing.md,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    position: 'absolute',
-    right: spacing.md,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: {width: 0, height: -6},
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
-    zIndex: 4,
-  },
-  panelSection: {
-    gap: spacing.sm,
-  },
-  panelLabel: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
   facePartList: {
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  facePartChip: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  facePartChipActive: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
-  },
-  facePartText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  facePartTextActive: {
-    color: colors.white,
   },
   adjustmentList: {
     gap: spacing.md,
@@ -608,20 +437,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.black,
     borderRadius: radius.pill,
     height: '100%',
-  },
-  saveButton: {
-    alignItems: 'center',
-    backgroundColor: colors.black,
-    borderRadius: radius.pill,
-    height: 52,
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
   },
 });

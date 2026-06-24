@@ -8,10 +8,13 @@ import {
   getARMakeupFilterComparisonTabs,
   getARMakeupFilterModeTabHeight,
   getARMakeupFilterSelectedTabOpacity,
+  getARMakeupFilterInitialColorId,
+  getARMakeupFilterSelectedColor,
   getMakeupPreviewBadgeContent,
   getMakeupPreviewColorOverlayLayers,
   shouldShowARMakeupFilterHeaderCopy,
 } from './ARMakeupFilterScreen';
+import {colors} from '../../../shared/theme';
 import {CAMERA_CAPTURE_BUTTON_METRICS} from '../../../shared/ui';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -73,6 +76,21 @@ expectEqual(
   getARMakeupFilterCaptureButtonMetrics().innerScale,
   CAMERA_CAPTURE_BUTTON_METRICS.innerScale,
   'AR makeup filter capture button inner scale',
+);
+expectEqual(
+  getARMakeupFilterSelectedColor([], 'missing').hex,
+  colors.white,
+  'AR makeup filter selected color fallback hex',
+);
+expectEqual(
+  getARMakeupFilterSelectedColor([], 'missing').label,
+  '기본',
+  'AR makeup filter selected color fallback label',
+);
+expectEqual(
+  getARMakeupFilterInitialColorId([]),
+  '',
+  'AR makeup filter initial color id fallback',
 );
 
 <ARMakeupFilterScreen

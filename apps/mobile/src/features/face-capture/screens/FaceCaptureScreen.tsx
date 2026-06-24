@@ -1,10 +1,8 @@
 import React, {useMemo, useState} from 'react';
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,
-  type GestureResponderEvent,
   useWindowDimensions,
 } from 'react-native';
 import {StatusBar} from 'expo-status-bar';
@@ -12,7 +10,14 @@ import {Image as ImageIcon, RefreshCw, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {CameraCaptureButton, LiveCameraLayer} from '../../../shared/ui';
+import {
+  CameraCaptureControlRow,
+  CameraCaptureButton,
+  CameraUtilityButton,
+  FloatingOverlayIconButton,
+  FullscreenOverlayScreen,
+  LiveCameraLayer,
+} from '../../../shared/ui';
 import {mockReadyFaceCaptureChecks} from '../mocks/faceCapture.mock';
 import {
   evaluateFaceCaptureGuidance,
@@ -27,12 +32,6 @@ type FaceCaptureScreenProps = {
   onClose?: () => void;
   onPickImage?: () => void;
   onToggleCamera?: (direction: CameraDirection) => void;
-};
-
-type ControlButtonProps = {
-  accessibilityLabel: string;
-  children: React.ReactNode;
-  onPress?: (event: GestureResponderEvent) => void;
 };
 
 export function getFaceCaptureCameraMode(): 'live-camera' {
@@ -66,18 +65,15 @@ export function FaceCaptureScreen({
   };
 
   return (
-    <View style={styles.screen}>
+    <FullscreenOverlayScreen>
       <StatusBar style="light" />
       <LiveCameraLayer facing={cameraDirection} />
 
-      <Pressable
+      <FloatingOverlayIconButton
         accessibilityLabel="촬영 화면 닫기"
-        accessibilityRole="button"
-        hitSlop={12}
-        onPress={onClose}
-        style={[styles.closeButton, {top: insets.top + 18}]}>
+        onPress={onClose}>
         <X color={guidance.tintColor} size={iconSize.xl} strokeWidth={1.8} />
-      </Pressable>
+      </FloatingOverlayIconButton>
 
       {guidance.message ? (
         <View pointerEvents="none" style={[styles.errorBubbleHost, {top: errorTop}]}>
@@ -110,65 +106,36 @@ export function FaceCaptureScreen({
         ]}
       />
 
-      <View
-        style={[
-          styles.controls,
-          {
-            bottom: controlsBottom,
-          },
-        ]}>
-        <ControlButton accessibilityLabel="앨범에서 사진 가져오기" onPress={onPickImage}>
-          <ImageIcon color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
-        </ControlButton>
-
-        <CameraCaptureButton
-          accessibilityLabel="사진 촬영"
-          disabled={!guidance.isCaptureEnabled}
-          onPress={onCapture}
-        />
-
-        <ControlButton
-          accessibilityLabel={`${cameraDirection === 'front' ? '후면' : '전면'} 카메라로 전환`}
-          onPress={handleToggleCamera}>
-          <RefreshCw color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
-        </ControlButton>
-      </View>
-    </View>
-  );
-}
-
-function ControlButton({accessibilityLabel, children, onPress}: ControlButtonProps) {
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      hitSlop={12}
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.controlButton,
-        {
-          opacity: pressed ? 0.72 : 1,
-        },
-      ]}>
-      {children}
-    </Pressable>
+      <CameraCaptureControlRow
+        bottom={controlsBottom}
+        centerSlot={
+          <CameraCaptureButton
+            accessibilityLabel="사진 촬영"
+            disabled={!guidance.isCaptureEnabled}
+            onPress={onCapture}
+          />
+        }
+        horizontalPadding={spacing.xxl * 2 + spacing.xs}
+        leftSlot={
+          <CameraUtilityButton
+            accessibilityLabel="앨범에서 사진 가져오기"
+            onPress={onPickImage}>
+            <ImageIcon color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
+          </CameraUtilityButton>
+        }
+        rightSlot={
+          <CameraUtilityButton
+            accessibilityLabel={`${cameraDirection === 'front' ? '후면' : '전면'} 카메라로 전환`}
+            onPress={handleToggleCamera}>
+            <RefreshCw color={guidance.tintColor} size={iconSize.lg} strokeWidth={2.1} />
+          </CameraUtilityButton>
+        }
+      />
+    </FullscreenOverlayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.black,
-    flex: 1,
-    overflow: 'hidden',
-  },
-  closeButton: {
-    alignItems: 'center',
-    height: 48,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 22,
-    width: 48,
-  },
   errorBubble: {
     borderRadius: radius.lg,
     maxWidth: 310,
@@ -206,20 +173,5 @@ const styles = StyleSheet.create({
     shadowOffset: shadows.guideGlow.shadowOffset,
     shadowOpacity: shadows.guideGlow.shadowOpacity,
     shadowRadius: shadows.guideGlow.shadowRadius,
-  },
-  controls: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xxl * 2 + spacing.xs,
-    position: 'absolute',
-    width: '100%',
-  },
-  controlButton: {
-    alignItems: 'center',
-    height: iconSize.xl + spacing.xxl,
-    justifyContent: 'center',
-    width: iconSize.xl + spacing.xxl,
   },
 });

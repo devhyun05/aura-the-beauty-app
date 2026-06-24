@@ -13,7 +13,14 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {CameraCaptureButton} from '../../../shared/ui';
+import {
+  CameraCaptureControlRow,
+  CameraCaptureButton,
+  CameraModeSwitch,
+  CameraUtilityButton,
+  FloatingOverlayIconButton,
+  FullscreenOverlayScreen,
+} from '../../../shared/ui';
 import type {FeedbackPhotoSelection} from '../types';
 
 type FeedbackCaptureScreenProps = {
@@ -111,7 +118,7 @@ export function FeedbackCaptureScreen({onClose, onSelectPhoto}: FeedbackCaptureS
   const shouldShowCamera = permission?.granted === true;
 
   return (
-    <View style={styles.screen}>
+    <FullscreenOverlayScreen>
       {shouldShowCamera ? (
         <CameraView
           active
@@ -158,76 +165,44 @@ export function FeedbackCaptureScreen({onClose, onSelectPhoto}: FeedbackCaptureS
         </View>
       ) : null}
 
-      <Pressable
+      <FloatingOverlayIconButton
         accessibilityLabel="AI 피드백 촬영 닫기"
-        accessibilityRole="button"
-        hitSlop={12}
-        onPress={onClose}
-        style={[styles.closeButton, {top: insets.top + spacing.xxl * 3}]}>
+        onPress={onClose}>
         <X color={colors.white} size={iconSize.xl} strokeWidth={1.9} />
-      </Pressable>
+      </FloatingOverlayIconButton>
 
-      <View style={[styles.captureControls, {bottom: insets.bottom + 112}]}>
-        <CameraCaptureButton
-          accessibilityLabel="메이크업 사진 촬영"
-          disabled={isTakingPhoto}
-          onPress={handleCapture}
-        />
+      <CameraCaptureControlRow
+        bottom={insets.bottom + 112}
+        centerSlot={
+          <CameraCaptureButton
+            accessibilityLabel="메이크업 사진 촬영"
+            disabled={isTakingPhoto}
+            onPress={handleCapture}
+          />
+        }
+        horizontalPadding={spacing.xxl + spacing.sm}
+        rightSlot={
+          <CameraUtilityButton
+            accessibilityLabel={`${cameraFacing === 'front' ? '후면' : '전면'} 카메라로 전환`}
+            onPress={handleToggleCamera}
+            size={iconSize.xl + spacing.xl}>
+            <RefreshCw color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
+          </CameraUtilityButton>
+        }
+        sideSlotSize={iconSize.xl + spacing.xl}
+      />
 
-        <Pressable
-          accessibilityLabel={`${cameraFacing === 'front' ? '후면' : '전면'} 카메라로 전환`}
-          accessibilityRole="button"
-          onPress={handleToggleCamera}
-          style={({pressed}) => [
-            styles.switchControl,
-            {
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}>
-          <RefreshCw color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
-        </Pressable>
-      </View>
-
-      <View style={[styles.modeSwitch, {bottom: insets.bottom + spacing.xxl}]}>
-        <Pressable accessibilityRole="button" style={styles.activeMode}>
-          <Text style={styles.activeModeText}>사진</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="갤러리에서 사진 선택"
-          accessibilityRole="button"
-          accessibilityState={{disabled: isPickingImage}}
-          disabled={isPickingImage}
-          onPress={handlePickImage}
-          style={({pressed}) => [
-            styles.inactiveMode,
-            {
-              opacity: pressed || isPickingImage ? 0.7 : 1,
-            },
-          ]}>
-          <Text style={styles.inactiveModeText}>갤러리</Text>
-        </Pressable>
-      </View>
-    </View>
+      <CameraModeSwitch
+        bottom={insets.bottom + spacing.xxl}
+        galleryAccessibilityLabel="갤러리에서 사진 선택"
+        isGalleryDisabled={isPickingImage}
+        onPressGallery={handlePickImage}
+      />
+    </FullscreenOverlayScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  activeMode: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radius.pill,
-    flex: 1,
-    height: 36,
-    justifyContent: 'center',
-  },
-  activeModeText: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
   cameraFallback: {
     backgroundColor: colors.black,
     bottom: 0,
@@ -235,48 +210,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
-  },
-  captureControls: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    left: spacing.xxl + spacing.sm,
-    position: 'absolute',
-    right: spacing.xxl + spacing.sm,
-  },
-  closeButton: {
-    alignItems: 'center',
-    height: 48,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: spacing.xxl,
-    width: 48,
-    zIndex: 20,
-  },
-  inactiveMode: {
-    alignItems: 'center',
-    flex: 1,
-    height: 36,
-    justifyContent: 'center',
-  },
-  inactiveModeText: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  modeSwitch: {
-    alignItems: 'center',
-    backgroundColor: feedbackColors.overlayStrong,
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    height: 44,
-    left: spacing.xl,
-    padding: spacing.xs,
-    position: 'absolute',
-    right: spacing.xl,
   },
   permissionButton: {
     backgroundColor: colors.white,
@@ -323,17 +256,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
     textAlign: 'center',
-  },
-  screen: {
-    backgroundColor: colors.black,
-    flex: 1,
-  },
-  switchControl: {
-    alignItems: 'center',
-    height: iconSize.xl + spacing.xl,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 0,
-    width: iconSize.xl + spacing.xl,
   },
 });

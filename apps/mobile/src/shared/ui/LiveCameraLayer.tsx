@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -19,6 +20,13 @@ type LiveCameraPermissionCopy = {
   description: string;
 };
 
+type LiveCameraPermissionAction = 'request' | 'settings';
+
+type LiveCameraPermissionState = {
+  canAskAgain: boolean;
+  granted: boolean;
+};
+
 type LiveCameraLayerProps = {
   active?: boolean;
   facing?: CameraType;
@@ -28,6 +36,17 @@ type LiveCameraLayerProps = {
 
 export function shouldMirrorLiveCamera(facing: CameraType): boolean {
   return facing === 'front';
+}
+
+export function getLiveCameraPermissionAction(
+  permission: LiveCameraPermissionState | null | undefined,
+  hasMountError = false,
+): LiveCameraPermissionAction | null {
+  if (!permission || permission.granted || hasMountError) {
+    return null;
+  }
+
+  return permission.canAskAgain ? 'request' : 'settings';
 }
 
 export function getLiveCameraPermissionCopy(
@@ -60,6 +79,7 @@ export function LiveCameraLayer({
     mountError ? 'mountError' : 'permission',
     mountError,
   );
+  const permissionAction = getLiveCameraPermissionAction(permission, Boolean(mountError));
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -73,6 +93,10 @@ export function LiveCameraLayer({
     if (nextPermission.granted) {
       setMountError(null);
     }
+  };
+
+  const handleOpenSettings = () => {
+    void Linking.openSettings();
   };
 
   return (
@@ -102,13 +126,19 @@ export function LiveCameraLayer({
             <>
               <Text style={styles.permissionTitle}>{permissionCopy.title}</Text>
               <Text style={styles.permissionDescription}>{permissionCopy.description}</Text>
-              {permission?.canAskAgain ? (
+              {permissionAction ? (
                 <Pressable
-                  accessibilityLabel="카메라 권한 허용"
+                  accessibilityLabel={
+                    permissionAction === 'settings'
+                      ? '카메라 권한 설정으로 이동'
+                      : '카메라 권한 허용'
+                  }
                   accessibilityRole="button"
-                  onPress={handleRequestPermission}
+                  onPress={permissionAction === 'settings' ? handleOpenSettings : handleRequestPermission}
                   style={styles.permissionButton}>
-                  <Text style={styles.permissionButtonText}>권한 허용</Text>
+                  <Text style={styles.permissionButtonText}>
+                    {permissionAction === 'settings' ? '설정으로 이동' : '권한 허용'}
+                  </Text>
                 </Pressable>
               ) : null}
             </>

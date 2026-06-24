@@ -12,7 +12,12 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {
+  BottomOverlayPanel,
+  FullscreenOverlayScreen,
+  OverlaySegmentButton,
+} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {
   FilterAdjustmentTab,
@@ -64,7 +69,7 @@ export function FilterTryOnAdjustScreen({
     result.palette.find((palette) => palette.id === selectedColorId) ?? result.palette[0];
 
   return (
-    <View style={styles.screen}>
+    <FullscreenOverlayScreen variant="surface">
       <View style={[styles.closeButtonWrap, {top: insets.top + spacing.sm}]}>
         <Pressable accessibilityLabel="결과 화면으로 닫기" accessibilityRole="button" onPress={onClose}>
           <X color={colors.textSecondary} size={iconSize.lg} strokeWidth={2} />
@@ -73,15 +78,19 @@ export function FilterTryOnAdjustScreen({
 
       <YStack style={[styles.content, {paddingTop: insets.top + spacing.xl}]}>
         <XStack style={styles.topSegment}>
-          <SegmentButton
+          <OverlaySegmentButton
             isActive={adjustmentTab === 'position'}
             label="위치 조정"
+            minHeight={46}
             onPress={() => setAdjustmentTab('position')}
+            tone="solid"
           />
-          <SegmentButton
+          <OverlaySegmentButton
             isActive={adjustmentTab === 'style'}
             label="스타일 조정"
+            minHeight={46}
             onPress={() => setAdjustmentTab('style')}
+            tone="solid"
           />
         </XStack>
 
@@ -119,14 +128,18 @@ export function FilterTryOnAdjustScreen({
         </XStack>
       </YStack>
 
-      <YStack style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.lg}]}>
+      <BottomOverlayPanel
+        style={{paddingBottom: insets.bottom + spacing.lg}}
+        variant="sheet">
         <XStack style={styles.styleGroupTabs}>
           {styleGroups.map((group) => (
-            <PillButton
+            <OverlaySegmentButton
               isActive={styleGroup === group.id}
               key={group.id}
               label={group.label}
+              minHeight={42}
               onPress={() => setStyleGroup(group.id)}
+              tone="solid"
             />
           ))}
         </XStack>
@@ -159,10 +172,11 @@ export function FilterTryOnAdjustScreen({
                 styleGroup === 'type' ? option === selectedType : option === selectedTexture;
 
               return (
-                <PillButton
+                <OverlaySegmentButton
                   isActive={isActive}
                   key={option}
                   label={option}
+                  minHeight={42}
                   onPress={() => {
                     if (styleGroup === 'type') {
                       setSelectedType(option);
@@ -171,6 +185,7 @@ export function FilterTryOnAdjustScreen({
 
                     setSelectedTexture(option);
                   }}
+                  tone="solid"
                 />
               );
             })}
@@ -179,11 +194,13 @@ export function FilterTryOnAdjustScreen({
 
         <XStack style={styles.faceAreaTabs}>
           {faceAreas.map((area) => (
-            <PillButton
+            <OverlaySegmentButton
               isActive={selectedFaceArea === area.id}
               key={area.id}
               label={area.label}
+              minHeight={42}
               onPress={() => setSelectedFaceArea(area.id)}
+              tone="solid"
             />
           ))}
         </XStack>
@@ -207,48 +224,8 @@ export function FilterTryOnAdjustScreen({
             <Text style={styles.recipeButtonText}>현재 메이크업 레시피 생성하기</Text>
           </Pressable>
         </YStack>
-      </YStack>
-    </View>
-  );
-}
-
-function SegmentButton({
-  isActive,
-  label,
-  onPress,
-}: {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{selected: isActive}}
-      onPress={onPress}
-      style={[styles.segmentButton, isActive ? styles.segmentButtonActive : undefined]}>
-      <Text style={isActive ? styles.segmentTextActive : styles.segmentText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function PillButton({
-  isActive,
-  label,
-  onPress,
-}: {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{selected: isActive}}
-      onPress={onPress}
-      style={[styles.pillButton, isActive ? styles.pillButtonActive : undefined]}>
-      <Text style={isActive ? styles.pillTextActive : styles.pillText}>{label}</Text>
-    </Pressable>
+      </BottomOverlayPanel>
+    </FullscreenOverlayScreen>
   );
 }
 
@@ -337,18 +314,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
   },
-  controlsPanel: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: {width: 0, height: -6},
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-  },
   eyeOverlay: {
     borderRadius: 999,
     height: 32,
@@ -402,29 +367,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-  },
-  pillButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: spacing.md,
-  },
-  pillButtonActive: {
-    backgroundColor: colors.textPrimary,
-  },
-  pillText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  pillTextActive: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
   },
   pressed: {
     opacity: 0.78,
@@ -487,32 +429,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
-  segmentButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 46,
-  },
-  segmentButtonActive: {
-    backgroundColor: colors.textPrimary,
-  },
-  segmentText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  segmentTextActive: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
   },
   styleGroupTabs: {
     backgroundColor: colors.surfaceMuted,
