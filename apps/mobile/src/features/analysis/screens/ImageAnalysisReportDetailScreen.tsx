@@ -22,8 +22,11 @@ import type {
   ImageAnalysisMakeupCard,
   ImageAnalysisReport,
 } from '../../../shared/types/imageAnalysis';
-import type {UserProfile} from '../../../shared/types/myPage';
-import {AppHeader, XIcon} from '../../../shared/ui';
+import {AppHeader, AppScreen, XIcon} from '../../../shared/ui';
+import {
+  type ImageAnalysisReportDetailLoadState,
+  resolveImageAnalysisReportDetailLoadState,
+} from '../services/imageAnalysisReportDetailLoadState';
 
 type ImageAnalysisReportDetailScreenProps = {
   reportId?: string | null;
@@ -39,7 +42,7 @@ type GuideItem = {
   detail: string;
 };
 
-type CreateFilterButtonPlacement = 'photo' | 'report-bottom';
+type CreateFilterButtonPlacement = 'floating-bottom';
 type ImageAnalysisReportHeaderAction = 'share' | 'close';
 type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
 type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
@@ -54,16 +57,14 @@ const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
 ];
 
 const createFilterButtonPlacements = [
-  'photo',
-  'report-bottom',
+  'floating-bottom',
 ] as const satisfies readonly CreateFilterButtonPlacement[];
 
 const createFilterButtonAccessibilityLabels: Record<
   CreateFilterButtonPlacement,
   string
 > = {
-  photo: '사진 아래 AR 필터 만들기',
-  'report-bottom': 'AR 필터 만들기',
+  'floating-bottom': 'AR 필터 만들기',
 };
 const imageAnalysisReportHeaderActions = [
   'share',
@@ -76,7 +77,7 @@ const imageAnalysisReportSubtitleTextStyle = {
 const imageAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
   headerPlacement: 'fixed',
-  headerUsesTopInset: true,
+  headerUsesTopInset: false,
 } as const;
 const imageAnalysisReportLiquidGlassSurfaceStyle = {
   backgroundColor: colors.liquidGlassSurface,
@@ -144,25 +145,29 @@ export function ImageAnalysisReportDetailScreen({
   onCreateARFilter,
   onShare,
 }: ImageAnalysisReportDetailScreenProps) {
-  const [report, setReport] = useState<ImageAnalysisReport | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [loadState, setLoadState] =
+    useState<ImageAnalysisReportDetailLoadState>({status: 'loading'});
 
   useEffect(() => {
     let isMounted = true;
 
-    setIsLoaded(false);
+    setLoadState({status: 'loading'});
 
-    Promise.all([
-      reportId
-        ? getImageAnalysisReportById(reportId)
-        : getLatestImageAnalysisReport(),
-      getUserProfile(),
-    ]).then(([nextReport, nextProfile]) => {
+    resolveImageAnalysisReportDetailLoadState(async () => {
+      const [nextReport, nextProfile] = await Promise.all([
+        reportId
+          ? getImageAnalysisReportById(reportId)
+          : getLatestImageAnalysisReport(),
+        getUserProfile(),
+      ]);
+
+      return {
+        report: nextReport,
+        profile: nextProfile,
+      };
+    }).then((nextState) => {
       if (isMounted) {
-        setReport(nextReport);
-        setProfile(nextProfile);
-        setIsLoaded(true);
+        setLoadState(nextState);
       }
     });
 
@@ -170,6 +175,21 @@ export function ImageAnalysisReportDetailScreen({
       isMounted = false;
     };
   }, [reportId]);
+
+  const report = loadState.status === 'success' ? loadState.report : null;
+  const profile = loadState.status === 'success' ? loadState.profile : null;
+  const emptyTitle =
+    loadState.status === 'loading'
+      ? '보고서를 불러오는 중이에요'
+      : loadState.status === 'error'
+        ? loadState.message
+        : '이미지 분석 결과를 찾을 수 없어요';
+  const emptyDescription =
+    loadState.status === 'loading'
+      ? '잠시만 기다려 주세요.'
+      : loadState.status === 'error'
+        ? loadState.description
+        : '목록에서 이미지 분석 결과를 다시 선택해 주세요.';
 
   const guideItems = useMemo<GuideItem[]>(() => {
     if (!report) {
@@ -192,11 +212,11 @@ export function ImageAnalysisReportDetailScreen({
         report={report}
         scroll={false}
       >
-        <Text style={styles.emptyTitle}>
-          {isLoaded ? '이미지 분석 결과를 찾을 수 없어요' : '보고서를 불러오는 중이에요'}
+        <Text accessibilityLiveRegion="polite" style={styles.emptyTitle}>
+          {emptyTitle}
         </Text>
         <Text style={styles.emptyDescription}>
-          목록에서 이미지 분석 결과를 다시 선택해 주세요.
+          {emptyDescription}
         </Text>
       </ImageAnalysisReportScaffold>
     );
@@ -204,6 +224,12 @@ export function ImageAnalysisReportDetailScreen({
 
   return (
     <ImageAnalysisReportScaffold
+      floatingAction={
+        <CreateFilterButton
+          onPress={onCreateARFilter}
+          placement="floating-bottom"
+        />
+      }
       onClose={onBack}
       onShare={onShare}
       profileName={profile?.name}
@@ -213,14 +239,8 @@ export function ImageAnalysisReportDetailScreen({
         {formatReportDate(report.analyzedAt, profile?.name)}
       </Text>
 
-      <View style={styles.heroSection}>
-        <View style={styles.heroCard}>
-          <Image resizeMode="cover" source={report.imageSource} style={styles.heroImage} />
-        </View>
-        <CreateFilterButton
-          onPress={onCreateARFilter}
-          placement="photo"
-        />
+      <View style={styles.heroCard}>
+        <Image resizeMode="cover" source={report.imageSource} style={styles.heroImage} />
       </View>
 
       <View style={styles.summaryGrid}>
@@ -266,12 +286,6 @@ export function ImageAnalysisReportDetailScreen({
       <Text style={styles.notice}>
         분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
       </Text>
-
-      <CreateFilterButton
-        hasTopMargin
-        onPress={onCreateARFilter}
-        placement="report-bottom"
-      />
     </ImageAnalysisReportScaffold>
   );
 }
@@ -281,13 +295,11 @@ function ImageAnalysisReportHeader({
   onShare,
   profileName,
   report,
-  topInset,
 }: {
   onClose?: () => void;
   onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
   report: ImageAnalysisReport | null;
-  topInset: number;
 }) {
   const handleSharePress = () => {
     if (!report) {
@@ -330,7 +342,6 @@ function ImageAnalysisReportHeader({
           맞춤 분석 보고서
         </Text>
       }
-      topInset={topInset}
     />
   );
 }
@@ -338,6 +349,7 @@ function ImageAnalysisReportHeader({
 function ImageAnalysisReportScaffold({
   children,
   contentStyle,
+  floatingAction,
   onClose,
   onShare,
   profileName,
@@ -346,6 +358,7 @@ function ImageAnalysisReportScaffold({
 }: {
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  floatingAction?: React.ReactNode;
   onClose?: () => void;
   onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
@@ -355,18 +368,29 @@ function ImageAnalysisReportScaffold({
   const insets = useSafeAreaInsets();
   const contentContainerStyle = [
     styles.reportContent,
-    {paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl},
+    {
+      paddingBottom:
+        Math.max(insets.bottom, spacing.xl) +
+        CREATE_FILTER_BUTTON_HEIGHT +
+        spacing.xxl,
+    },
     contentStyle,
   ];
 
   return (
-    <View style={styles.screen}>
+    <AppScreen
+      backgroundColor={colors.surfaceMuted}
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
       <ImageAnalysisReportHeader
         onClose={onClose}
         onShare={onShare}
         profileName={profileName}
         report={report}
-        topInset={insets.top}
       />
       {scroll ? (
         <ScrollView
@@ -379,7 +403,18 @@ function ImageAnalysisReportScaffold({
       ) : (
         <View style={[styles.staticBody, contentContainerStyle]}>{children}</View>
       )}
-    </View>
+      {floatingAction ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.floatingCreateFilterArea,
+            {paddingBottom: Math.max(insets.bottom, spacing.md)},
+          ]}
+        >
+          {floatingAction}
+        </View>
+      ) : null}
+    </AppScreen>
   );
 }
 
@@ -413,11 +448,9 @@ function HeaderActionButton({
 }
 
 function CreateFilterButton({
-  hasTopMargin,
   onPress,
   placement,
 }: {
-  hasTopMargin?: boolean;
   onPress?: () => void;
   placement: CreateFilterButtonPlacement;
 }) {
@@ -427,10 +460,7 @@ function CreateFilterButton({
       accessibilityRole="button"
       onPress={onPress}
       pressStyle={{scale: 0.98}}
-      style={[
-        styles.createFilterButton,
-        hasTopMargin ? styles.createFilterButtonWithTopMargin : null,
-      ]}
+      style={styles.createFilterButton}
       unstyled
     >
       <WandSparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
@@ -714,10 +744,6 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
     paddingHorizontal: spacing.screenX,
     paddingTop: imageAnalysisReportScreenFramePresentation.contentTopPadding,
-  },
-  screen: {
-    backgroundColor: colors.surfaceMuted,
-    flex: 1,
   },
   scrollBody: {
     backgroundColor: colors.surfaceMuted,

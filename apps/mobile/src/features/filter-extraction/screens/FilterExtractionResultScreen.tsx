@@ -1,10 +1,9 @@
 import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
 import {ChevronRight, Sparkles} from 'lucide-react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
+import {AppHeader, AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -21,12 +20,17 @@ export function FilterExtractionResultScreen({
   onBack,
   onRetake,
 }: FilterExtractionResultScreenProps) {
-  const insets = useSafeAreaInsets();
   const {result} = getFilterExtractionDataSync();
 
   return (
-    <View style={styles.screen}>
-      <AppHeader onBack={onBack} title="분석 결과" topInset={insets.top} />
+    <AppScreen
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
+      <AppHeader onBack={onBack} title="분석 결과" />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -121,7 +125,7 @@ export function FilterExtractionResultScreen({
           </Pressable>
         </XStack>
       </ScrollView>
-    </View>
+    </AppScreen>
   );
 }
 
@@ -331,10 +335,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xl,
     lineHeight: typography.lineHeight.xl,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   scrollView: {
     backgroundColor: colors.background,

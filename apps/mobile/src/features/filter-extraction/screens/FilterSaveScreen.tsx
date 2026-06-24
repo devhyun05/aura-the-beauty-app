@@ -5,7 +5,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
+import {AppHeader, AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -24,7 +24,13 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   return (
-    <View style={styles.screen}>
+    <AppScreen
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
       <AppHeader
         onBack={onBack}
         rightSlot={
@@ -37,7 +43,6 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
           </Pressable>
         }
         title="필터 저장"
-        topInset={insets.top}
       />
 
       <YStack style={styles.content}>
@@ -143,7 +148,7 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
           <Text style={styles.saveButtonText}>저장하기</Text>
         </Pressable>
       </YStack>
-    </View>
+    </AppScreen>
   );
 }
 
@@ -223,10 +228,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   summaryCopy: {
     flex: 1,

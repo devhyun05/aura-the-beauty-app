@@ -16,6 +16,14 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
+type TypeEquals<Actual, Expected> =
+  (<Value>() => Value extends Actual ? 1 : 2) extends
+  (<Value>() => Value extends Expected ? 1 : 2)
+    ? true
+    : false;
+
+type ExpectType<Condition extends true> = Condition;
+
 const createFilterButtonPlacements =
   getImageAnalysisReportCreateFilterButtonPlacements();
 const headerActions: readonly string[] = getImageAnalysisReportHeaderActions();
@@ -23,20 +31,19 @@ const liquidGlassPresentation = getImageAnalysisReportLiquidGlassPresentation();
 const screenFramePresentation = getImageAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getImageAnalysisReportSubtitleTextStyle();
 
+type CreateFilterButtonPlacementsContract = ExpectType<
+  TypeEquals<typeof createFilterButtonPlacements, readonly ['floating-bottom']>
+>;
+
 expectEqual(
   createFilterButtonPlacements.length,
-  2,
+  1,
   'image analysis report create filter button count',
 );
 expectEqual(
   createFilterButtonPlacements[0],
-  'photo',
-  'image analysis report photo create filter button placement',
-);
-expectEqual(
-  createFilterButtonPlacements[1],
-  'report-bottom',
-  'image analysis report bottom create filter button placement',
+  'floating-bottom',
+  'image analysis report floating bottom create filter button placement',
 );
 expectEqual(
   headerActions.includes('back'),
@@ -60,7 +67,7 @@ expectEqual(
 );
 expectEqual(
   screenFramePresentation.headerUsesTopInset,
-  true,
+  false,
   'image analysis report header safe area',
 );
 expectEqual(

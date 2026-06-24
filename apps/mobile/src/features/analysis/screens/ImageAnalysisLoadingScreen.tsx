@@ -3,10 +3,9 @@ import {Image, StyleSheet} from 'react-native';
 import {CheckCircle2, Circle} from 'lucide-react-native';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
 import {Text, View, XStack, YStack} from 'tamagui';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
+import {AppHeader, AppScreen} from '../../../shared/ui';
 import {
   IMAGE_ANALYSIS_LOADING_TOTAL_MS,
   getImageAnalysisProgressState,
@@ -30,7 +29,6 @@ export function ImageAnalysisLoadingScreen({
   onBack,
   onComplete,
 }: ImageAnalysisLoadingScreenProps) {
-  const insets = useSafeAreaInsets();
   const [elapsedMs, setElapsedMs] = useState(0);
   const progressState = useMemo(
     () => getImageAnalysisProgressState(elapsedMs),
@@ -67,8 +65,14 @@ export function ImageAnalysisLoadingScreen({
   }, [onComplete, progressState.isComplete]);
 
   return (
-    <View style={styles.screen}>
-      <AppHeader onBack={onBack} title="얼굴 분석" topInset={insets.top} />
+    <AppScreen
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
+      <AppHeader onBack={onBack} title="얼굴 분석" />
 
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
@@ -139,7 +143,7 @@ export function ImageAnalysisLoadingScreen({
           <Text style={styles.tipText}>{imageAnalysisLoadingTip}</Text>
         </YStack>
       </YStack>
-    </View>
+    </AppScreen>
   );
 }
 
@@ -182,10 +186,6 @@ function ProgressRing({label, progress}: ProgressRingProps) {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
-  },
   content: {
     flex: 1,
     gap: spacing.xxl,

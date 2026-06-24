@@ -5,7 +5,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
+import {AppHeader, AppScreen} from '../../../shared/ui';
 import {getFilterExtractionData} from '../services/filterExtractionService';
 import type {
   FilterExtractionData,
@@ -57,14 +57,28 @@ export function FilterImageUploadScreen({
 
   if (!data || !selectedPhoto) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>업로드 화면을 불러오는 중이에요.</Text>
-      </View>
+      <AppScreen
+        bottomPadding={0}
+        contentGap={0}
+        horizontalPadding={0}
+        scroll={false}
+        topPadding="none"
+      >
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>업로드 화면을 불러오는 중이에요.</Text>
+        </View>
+      </AppScreen>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <AppScreen
+      bottomPadding={0}
+      contentGap={0}
+      horizontalPadding={0}
+      scroll={false}
+      topPadding="none"
+    >
       <YStack style={styles.header}>
         <AppHeader
           containerProps={{style: styles.headerAppBar}}
@@ -79,7 +93,6 @@ export function FilterImageUploadScreen({
             </Pressable>
           }
           title="메이크업 추출"
-          topInset={insets.top}
         />
 
         <XStack style={styles.tabRow}>
@@ -168,7 +181,7 @@ export function FilterImageUploadScreen({
           <Text style={styles.primaryButtonText}>분석 시작하기</Text>
         </Pressable>
       </YStack>
-    </View>
+    </AppScreen>
   );
 }
 
@@ -246,10 +259,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
   },
   scrollView: {
     backgroundColor: colors.background,
