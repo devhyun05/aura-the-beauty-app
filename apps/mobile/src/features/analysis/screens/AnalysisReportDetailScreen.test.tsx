@@ -4,10 +4,11 @@ import {
   AnalysisReportDetailScreen,
   getAnalysisReportCreateFilterButtonPlacements,
   getAnalysisReportHeaderActions,
+  getAnalysisReportLiquidGlassPresentation,
   getAnalysisReportScreenFramePresentation,
   getAnalysisReportSubtitleTextStyle,
 } from './AnalysisReportDetailScreen';
-import {spacing, typography} from '../../../shared/theme';
+import {colors, shadows, spacing, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -18,6 +19,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 const createFilterButtonPlacements =
   getAnalysisReportCreateFilterButtonPlacements();
 const headerActions: readonly string[] = getAnalysisReportHeaderActions();
+const liquidGlassPresentation = getAnalysisReportLiquidGlassPresentation();
 const screenFramePresentation = getAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getAnalysisReportSubtitleTextStyle();
 
@@ -65,6 +67,36 @@ expectEqual(
   screenFramePresentation.contentTopPadding,
   spacing.xl,
   'analysis report content starts below fixed header',
+);
+expectEqual(
+  liquidGlassPresentation.cardTargets.includes('summary'),
+  true,
+  'analysis report summary cards use liquid glass',
+);
+expectEqual(
+  liquidGlassPresentation.cardTargets.includes('makeup'),
+  true,
+  'analysis report makeup cards use liquid glass',
+);
+expectEqual(
+  liquidGlassPresentation.buttonTargets.includes('create-filter'),
+  true,
+  'analysis report create filter buttons use liquid glass',
+);
+expectEqual(
+  liquidGlassPresentation.buttonTargets.includes('header-action'),
+  true,
+  'analysis report header action buttons use liquid glass',
+);
+expectEqual(
+  liquidGlassPresentation.shadowRadius,
+  shadows.liquidGlassGlow.shadowRadius,
+  'analysis report liquid glass shadow radius',
+);
+expectEqual(
+  liquidGlassPresentation.surfaceColor,
+  colors.liquidGlassSurface,
+  'analysis report liquid glass surface token',
 );
 expectEqual(
   subtitleTextStyle.fontSize,

@@ -41,6 +41,8 @@ type GuideItem = {
 
 type CreateFilterButtonPlacement = 'photo' | 'report-bottom';
 type AnalysisReportHeaderAction = 'share' | 'close';
+type AnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
+type AnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
@@ -76,6 +78,35 @@ const analysisReportScreenFramePresentation = {
   headerPlacement: 'fixed',
   headerUsesTopInset: true,
 } as const;
+const analysisReportLiquidGlassSurfaceStyle = {
+  backgroundColor: colors.liquidGlassSurface,
+  borderColor: colors.liquidGlassBorder,
+  borderWidth: 1,
+  elevation: 4,
+  shadowColor: colors.black,
+  shadowOffset: {width: 0, height: 10},
+  shadowOpacity: 0.1,
+  shadowRadius: shadows.liquidGlassGlow.shadowRadius,
+} satisfies ViewStyle;
+const analysisReportLiquidGlassButtonStyle = {
+  ...analysisReportLiquidGlassSurfaceStyle,
+  elevation: 5,
+  shadowOffset: {width: 0, height: 8},
+  shadowOpacity: 0.12,
+} satisfies ViewStyle;
+const analysisReportLiquidGlassPresentation = {
+  buttonTargets: [
+    'create-filter',
+    'header-action',
+  ] as const satisfies readonly AnalysisReportLiquidGlassButtonTarget[],
+  cardTargets: [
+    'hero',
+    'summary',
+    'makeup',
+  ] as const satisfies readonly AnalysisReportLiquidGlassCardTarget[],
+  shadowRadius: analysisReportLiquidGlassSurfaceStyle.shadowRadius,
+  surfaceColor: colors.liquidGlassSurface,
+} as const;
 
 export function getAnalysisReportCreateFilterButtonPlacements() {
   return createFilterButtonPlacements;
@@ -91,6 +122,10 @@ export function getAnalysisReportSubtitleTextStyle() {
 
 export function getAnalysisReportScreenFramePresentation() {
   return analysisReportScreenFramePresentation;
+}
+
+export function getAnalysisReportLiquidGlassPresentation() {
+  return analysisReportLiquidGlassPresentation;
 }
 
 const formatReportDate = (dateText: string, name?: string) => {
@@ -396,7 +431,7 @@ function CreateFilterButton({
       ]}
       unstyled
     >
-      <WandSparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
+      <WandSparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
       <Text style={styles.createFilterButtonText}>AR 필터 만들기</Text>
     </Button>
   );
@@ -516,8 +551,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   createFilterButton: {
+    ...analysisReportLiquidGlassButtonStyle,
     alignItems: 'center',
-    backgroundColor: colors.black,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.xs,
@@ -529,7 +564,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   createFilterButtonText: {
-    color: colors.white,
+    color: colors.textPrimary,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.md,
@@ -577,14 +612,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    ...analysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    overflow: 'hidden',
+    padding: spacing.xs,
   },
   heroImage: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     height: 360,
     width: '100%',
   },
@@ -592,18 +626,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   headerActionButton: {
+    ...analysisReportLiquidGlassButtonStyle,
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
     borderRadius: radius.pill,
-    borderWidth: 1,
     height: 42,
     justifyContent: 'center',
     padding: 0,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
     width: 42,
   },
   headerActions: {
@@ -623,11 +651,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   makeupCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    ...analysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
+    padding: spacing.xs,
     width: 170,
   },
   makeupDescription: {
@@ -642,6 +668,9 @@ const styles = StyleSheet.create({
   },
   makeupImageWrap: {
     backgroundColor: colors.surfaceMuted,
+    borderTopLeftRadius: radius.sm,
+    borderTopRightRadius: radius.sm,
+    overflow: 'hidden',
     position: 'relative',
   },
   makeupSubtitle: {
@@ -685,11 +714,11 @@ const styles = StyleSheet.create({
     paddingTop: analysisReportScreenFramePresentation.contentTopPadding,
   },
   screen: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceMuted,
     flex: 1,
   },
   scrollBody: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceMuted,
     flex: 1,
   },
   section: {
@@ -705,7 +734,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   staticBody: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceMuted,
     flex: 1,
   },
   subtitle: {
@@ -721,10 +750,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   summaryItem: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    ...analysisReportLiquidGlassSurfaceStyle,
     borderRadius: radius.md,
-    borderWidth: 1,
     flexGrow: 1,
     gap: spacing.xs,
     minHeight: 72,

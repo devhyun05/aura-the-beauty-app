@@ -36,11 +36,16 @@ const reportRecommendFruityJuice =
 const reportRecommendCleanLine =
   require('../../assets/images/analysis-detail/look-clean-line.png') as ImageSourcePropType;
 const reportAvoidHeavySmoky =
-  require('../../assets/images/analysis-detail/avoid-heavy-matte.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/report-avoid-heavy-smoky.png') as ImageSourcePropType;
 const reportAvoidStrongContour =
-  require('../../assets/images/analysis-detail/avoid-muddy-shadow.png') as ImageSourcePropType;
+  require('../../assets/images/analysis-detail/report-avoid-strong-contour.png') as ImageSourcePropType;
 const reportAvoidHighSaturationLip =
   require('../../assets/images/analysis-detail/avoid-over-lip.png') as ImageSourcePropType;
+
+const analysisAvoidedMakeupImageAssetNames = {
+  '너무 진한 스모키': 'report-avoid-heavy-smoky.png',
+  '과한 컨투어링': 'report-avoid-strong-contour.png',
+} as const;
 
 type AnalysisMockSeed = {
   id: string;
@@ -113,6 +118,10 @@ const createAvoidedMakeups = (resultId: string): AnalysisMakeupCard[] => [
     tags: ['고채도', '오버립'],
   },
 ];
+
+export function getAnalysisAvoidedMakeupImageAssetNames() {
+  return analysisAvoidedMakeupImageAssetNames;
+}
 
 const facePointGuide = {
   brow: '자연스러운 아치형으로 결을 살리고 애쉬 브라운을 추천해요.',
