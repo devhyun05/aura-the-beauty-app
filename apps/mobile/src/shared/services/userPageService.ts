@@ -4,22 +4,23 @@ import type {
   UserPageData,
   UserProfile,
 } from '../types/userPage';
-import { getRecentAnalysisResults } from './analysisResultService';
+import { getAnalysisResults } from './analysisService';
 import { getMakeupLooks } from './makeupService';
 import { getLikedProductPreview } from './productService';
 import { getUserProfile as getUserProfileFromService } from './userService';
 
 export const getUserPageData = async (): Promise<UserPageData> => {
-  const [profile, reports, makeupStyles, favoriteProducts] = await Promise.all([
-    getUserProfileFromService(),
-    getRecentAnalysisResults(3),
-    getMakeupLooks(),
-    getLikedProductPreview(3),
-  ]);
+  const [profile, analysisResults, makeupStyles, favoriteProducts] =
+    await Promise.all([
+      getUserProfileFromService(),
+      getAnalysisResults(),
+      getMakeupLooks(),
+      getLikedProductPreview(3),
+    ]);
 
   return {
     profile,
-    reports,
+    reports: analysisResults.slice(0, 3),
     makeupStyles,
     favoriteProducts,
   };

@@ -9,7 +9,6 @@ import {tamaguiConfig} from '../../tamagui.config';
 import {
   AnalysisReportDetailScreen,
   AnalysisResultListScreen,
-  AnalysisResultsScreen,
 } from '../features/analysis';
 import {AIAnalysisLoadingScreen} from '../features/analysis/screens/AIAnalysisLoadingScreen';
 import {ARFilterCustomLocationScreen} from '../features/ar/screens/ARFilterCustomLocationScreen';
@@ -68,9 +67,7 @@ type AppScreen =
   | 'myPage'
   | 'profileEdit'
   | 'analysisResultList'
-  | 'analysisResults'
   | 'analysisReportDetail'
-  | 'analysisResultDetail'
   | 'makeupStyleList'
   | 'makeupLooks'
   | 'favoriteProducts'
@@ -305,21 +302,7 @@ export function AppRoot() {
       );
     }
 
-    if (activeScreen === 'analysisResults') {
-      return (
-        <AnalysisResultsScreen
-          onBack={() => setActiveScreen('userPage')}
-          onPressResult={(resultId) =>
-            goToAnalysisReportDetail(resultId, 'analysisResults')
-          }
-        />
-      );
-    }
-
-    if (
-      activeScreen === 'analysisReportDetail' ||
-      activeScreen === 'analysisResultDetail'
-    ) {
+    if (activeScreen === 'analysisReportDetail') {
       return (
         <AnalysisReportDetailScreen
           onBack={() => setActiveScreen(analysisDetailBackScreen)}
