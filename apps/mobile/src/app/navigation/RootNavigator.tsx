@@ -4,8 +4,8 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import type {RootStackParamList} from './routeTypes';
 import {MainTabNavigator} from './MainTabNavigator';
 import {
-  ARFilterLocationAdjustRouteScreen,
-  ARFilterStyleAdjustRouteScreen,
+  ARFilterShapeAdjustRouteScreen,
+  MakeupFilterEditRouteScreen,
   ARFilterRouteScreen,
   FaceCaptureRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
@@ -15,20 +15,20 @@ import {
   MakeupFeedbackResultRouteScreen,
   MakeupCorrectionTipRouteScreen,
   ReferenceMakeupExtractionLoadingRouteScreen,
-  ExtractedMakeupStyleRecipeDetailRouteScreen,
+  ExtractedMakeupLookRecipeDetailRouteScreen,
   ReferenceMakeupExtractionResultRouteScreen,
-  ExtractedMakeupStyleSaveCompleteRouteScreen,
-  ExtractedMakeupStyleSaveFormRouteScreen,
-  ExtractedMakeupStyleAdjustRouteScreen,
+  MakeupFilterSaveCompleteRouteScreen,
+  MakeupFilterSaveFormRouteScreen,
+  ExtractedMakeupLookAdjustRouteScreen,
   ReferenceMakeupExtractionUploadRouteScreen,
-  ImageAnalysisLoadingRouteScreen,
-  ImageAnalysisReportDetailRouteScreen,
-  ImageAnalysisReportsListRouteScreen,
+  FaceAnalysisLoadingRouteScreen,
+  FaceAnalysisReportDetailRouteScreen,
+  FaceAnalysisReportsListRouteScreen,
   LikedProductListRouteScreen,
   LoginRouteScreen,
-  MakeupStyleListRouteScreen,
+  MakeupLookListRouteScreen,
   ProfileEditRouteScreen,
-  ExtractedMakeupStyleRecipeSaveCompleteRouteScreen,
+  ExtractedMakeupLookRecipeSaveCompleteRouteScreen,
   TutorialRouteScreen,
 } from './navigationAdapters';
 
@@ -43,21 +43,21 @@ export function RootNavigator() {
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
-      <Stack.Screen name="ImageAnalysisLoading" component={ImageAnalysisLoadingRouteScreen} />
+      <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
       <Stack.Screen
-        name="ImageAnalysisReportsList"
-        component={ImageAnalysisReportsListRouteScreen}
+        name="FaceAnalysisReportsList"
+        component={FaceAnalysisReportsListRouteScreen}
       />
       <Stack.Screen
-        name="ImageAnalysisReportDetail"
-        component={ImageAnalysisReportDetailRouteScreen}
+        name="FaceAnalysisReportDetail"
+        component={FaceAnalysisReportDetailRouteScreen}
       />
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
-      <Stack.Screen name="MakeupStyleList" component={MakeupStyleListRouteScreen} />
+      <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />
-      <Stack.Screen name="ARFilterLocationAdjust" component={ARFilterLocationAdjustRouteScreen} />
-      <Stack.Screen name="ARFilterStyleAdjust" component={ARFilterStyleAdjustRouteScreen} />
+      <Stack.Screen name="ARFilterShapeAdjust" component={ARFilterShapeAdjustRouteScreen} />
+      <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
       <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
@@ -67,11 +67,11 @@ export function RootNavigator() {
       <Stack.Screen name="ReferenceMakeupExtractionUpload" component={ReferenceMakeupExtractionUploadRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionLoading" component={ReferenceMakeupExtractionLoadingRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionResult" component={ReferenceMakeupExtractionResultRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupStyleAdjust" component={ExtractedMakeupStyleAdjustRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupStyleSaveForm" component={ExtractedMakeupStyleSaveFormRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupStyleSaveComplete" component={ExtractedMakeupStyleSaveCompleteRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupStyleRecipeDetail" component={ExtractedMakeupStyleRecipeDetailRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupStyleRecipeSaveComplete" component={ExtractedMakeupStyleRecipeSaveCompleteRouteScreen} />
+      <Stack.Screen name="ExtractedMakeupLookAdjust" component={ExtractedMakeupLookAdjustRouteScreen} />
+      <Stack.Screen name="MakeupFilterSaveForm" component={MakeupFilterSaveFormRouteScreen} />
+      <Stack.Screen name="MakeupFilterSaveComplete" component={MakeupFilterSaveCompleteRouteScreen} />
+      <Stack.Screen name="ExtractedMakeupLookRecipeDetail" component={ExtractedMakeupLookRecipeDetailRouteScreen} />
+      <Stack.Screen name="ExtractedMakeupLookRecipeSaveComplete" component={ExtractedMakeupLookRecipeSaveCompleteRouteScreen} />
     </Stack.Navigator>
   );
 }

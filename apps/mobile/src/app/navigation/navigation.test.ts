@@ -24,7 +24,7 @@ expectEqual(getRouteChrome('MakeupFeedbackLoading').category, 'progress', 'makeu
 expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
 expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
-  getDetailRouteTitle('ImageAnalysisReportDetail'),
+  getDetailRouteTitle('FaceAnalysisReportDetail'),
   '맞춤 분석 보고서',
   'detail route title',
 );
@@ -33,7 +33,7 @@ expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target')
 expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
-  'ExtractedMakeupStyleSaveComplete,ExtractedMakeupStyleRecipeSaveComplete',
+  'MakeupFilterSaveComplete,ExtractedMakeupLookRecipeSaveComplete',
   'terminal route order',
 );
 expectEqual(

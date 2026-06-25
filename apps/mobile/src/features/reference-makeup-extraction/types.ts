@@ -1,11 +1,13 @@
 import type {ImageSourcePropType} from 'react-native';
 
-export type ReferenceMakeupSource = 'album' | 'camera';
+import type {MakeupArea} from '../../shared/types/makeupGuide';
+
+export type ReferenceMakeupPhotoSource = 'album' | 'camera';
 
 export type ReferenceMakeupPhoto = {
   id: string;
   title: string;
-  source: ReferenceMakeupSource;
+  referenceSource: ReferenceMakeupPhotoSource;
   imageSource: ImageSourcePropType;
 };
 
@@ -17,37 +19,36 @@ export type MakeupExtractionStep = {
   status: MakeupExtractionStepStatus;
 };
 
-export type MakeupStylePalette = {
+export type MakeupLookPalette = {
   id: string;
   label: string;
   hex: string;
   description: string;
 };
 
-export type MakeupStylePoint = {
+export type MakeupLookPoint = {
   id: string;
   title: string;
   description: string;
 };
 
-export type MakeupExtractionResult = {
+export type ReferenceMakeupExtractionResult = {
   id: string;
   title: string;
   subtitle: string;
   imageSource: ImageSourcePropType;
   tags: string[];
-  palette: MakeupStylePalette[];
-  points: MakeupStylePoint[];
+  palette: MakeupLookPalette[];
+  points: MakeupLookPoint[];
   accuracy: number;
 };
 
-export type MakeupStyleAdjustmentTab = 'position' | 'style';
-export type MakeupStyleAttributeGroup = 'color' | 'type' | 'texture';
-export type MakeupStyleFaceArea = 'all' | 'base' | 'eye' | 'lip' | 'contour';
-export type MakeupStyleRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
+export type MakeupLookAdjustmentTab = 'shape' | 'look';
+export type MakeupLookAttributeGroup = 'color' | 'type' | 'texture';
+export type MakeupLookRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
 
 export type ReferenceMakeupExtractionData = {
   photos: ReferenceMakeupPhoto[];
   loadingSteps: MakeupExtractionStep[];
-  extractedMakeupStyle: MakeupExtractionResult;
+  extractedMakeupLook: ReferenceMakeupExtractionResult;
 };

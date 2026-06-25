@@ -2,11 +2,11 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {HomeData} from '../types';
 
-const styleOjiGirl =
+const lookOjiGirl =
   require('../../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
-const styleMoriGirl =
+const lookMoriGirl =
   require('../../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
-const styleCleanSmoky =
+const lookCleanSmoky =
   require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
 const productCoralTint =
   require('../../../assets/images/products/product-coral-tint.png') as ImageSourcePropType;
@@ -20,12 +20,12 @@ export const homeMock: HomeData = {
     eyebrow: '이번 주 메이크업 가이드',
     title: '데모 추천 메이크업 무드',
     description: '클린한 인물 컷으로 카드마다 다른 메이크업 무드를 넘겨볼 수 있게 구성했어요.',
-    imageSource: styleOjiGirl,
+    imageSource: lookOjiGirl,
     notices: [
       {
         id: 'notice-weekly-trend',
         title: '공지',
-        description: '이번 주 추천 스타일이 클린 오피스 무드로 업데이트되었어요.',
+        description: '이번 주 추천 룩이 클린 오피스 무드로 업데이트되었어요.',
       },
     ],
     trends: [
@@ -33,19 +33,19 @@ export const homeMock: HomeData = {
         id: 'trend-clean-office',
         title: '클린 오피스',
         tone: '뉴트럴 브라운',
-        imageSource: styleOjiGirl,
+        imageSource: lookOjiGirl,
       },
       {
         id: 'trend-soft-mori',
         title: '소프트 모리',
         tone: '피치 베이지',
-        imageSource: styleMoriGirl,
+        imageSource: lookMoriGirl,
       },
       {
         id: 'trend-clean-smoky',
         title: '클린 스모키',
         tone: '쿨 브라운',
-        imageSource: styleCleanSmoky,
+        imageSource: lookCleanSmoky,
       },
     ],
   },
@@ -72,27 +72,27 @@ export const homeMock: HomeData = {
       imageSource: productMoodCheek,
     },
   ],
-  recommendedStyles: [
+  recommendedLooks: [
     {
-      id: 'style-oji-girl',
+      id: 'look-oji-girl',
       title: '클린 오피스',
       description: '블랙 재킷에 어울리는 뉴트럴 브라운 음영',
       date: '2026.06.23',
-      imageSource: styleOjiGirl,
+      imageSource: lookOjiGirl,
     },
     {
-      id: 'style-mori-girl',
+      id: 'look-mori-girl',
       title: '소프트 모리',
-      description: '피치 베이지와 부드러운 음영의 자연스러운 스타일',
+      description: '피치 베이지와 부드러운 음영의 자연스러운 룩',
       date: '2026.06.21',
-      imageSource: styleMoriGirl,
+      imageSource: lookMoriGirl,
     },
     {
-      id: 'style-clean-smoky',
+      id: 'look-clean-smoky',
       title: '클린 스모키',
       description: '깨끗한 피부에 라이트 브라운 라인 포인트',
       date: '2026.06.18',
-      imageSource: styleCleanSmoky,
+      imageSource: lookCleanSmoky,
     },
   ],
 };

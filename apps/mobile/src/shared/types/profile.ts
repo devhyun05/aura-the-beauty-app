@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import type { ImageAnalysisReport } from './imageAnalysis';
+import type { FaceAnalysisReport } from './faceAnalysis';
 
 export interface UserProfile {
   id: string;
@@ -18,7 +18,7 @@ export interface UserProfile {
   tags: string[];
 }
 
-export interface MakeupStyle {
+export interface MakeupLook {
   id: string;
   title: string;
   moodLabel: string;
@@ -27,7 +27,7 @@ export interface MakeupStyle {
   isSaved: boolean;
 }
 
-export type MakeupStylePreview = MakeupStyle;
+export type MakeupLookPreview = MakeupLook;
 
 export interface Product {
   id: string;
@@ -49,7 +49,7 @@ export interface ProfileEditField {
 
 export interface ProfileData {
   profile: UserProfile;
-  imageAnalysisReports: ImageAnalysisReport[];
-  makeupStyles: MakeupStyle[];
+  faceAnalysisReports: FaceAnalysisReport[];
+  makeupLooks: MakeupLook[];
   likedProducts: Product[];
 }

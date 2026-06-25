@@ -3,7 +3,7 @@ import type {ImageSourcePropType} from 'react-native';
 import {userProfileMock} from '../../../shared/mocks/user.mock';
 import type {ProductRecommendationData} from '../types';
 
-const makeupStyleImage =
+const makeupLookImage =
   require('../../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
 
 const velureLipstickRoseWood =
@@ -29,10 +29,10 @@ const velureGlowCushionNeutral =
 
 export const productRecommendationMock: ProductRecommendationData = {
   userNickname: userProfileMock.nickname,
-  makeupStyle: {
-    title: '내추럴 뮤트 로즈 스타일',
+  makeupLook: {
+    title: '내추럴 뮤트 로즈 룩',
     description: '분석된 로즈 톤과 어울리는 실제 컬러 제품만 골라 추천해드려요.',
-    imageSource: makeupStyleImage,
+    imageSource: makeupLookImage,
     tags: ['로즈 립', '피치 블러셔', '브라운 음영', '뉴트럴 베이스'],
     palette: ['#C96F72', '#E49C90', '#A77A69', '#5A3D34'],
   },
@@ -56,7 +56,7 @@ export const productRecommendationMock: ProductRecommendationData = {
       tags: ['로즈우드', '세미매트', 'MLBB'],
       imageSource: velureLipstickRoseWood,
       palette: ['#B95F62', '#D48A85'],
-      reason: '입술 본연의 색과 비슷한 로즈 우드 톤이라 차분한 데일리 스타일에 잘 맞아요.',
+      reason: '입술 본연의 색과 비슷한 로즈 우드 톤이라 차분한 데일리 룩에 잘 맞아요.',
     },
     {
       id: 'laurelle-gloss-rose-veil',
@@ -180,7 +180,7 @@ export const productRecommendationMock: ProductRecommendationData = {
     {
       id: 'daily-rose-set',
       title: '데일리 로즈 조합',
-      description: '로즈 우드 립, 피치 블러쉬, 로즈 헤이즈 팔레트로 차분한 데일리 스타일',
+      description: '로즈 우드 립, 피치 블러쉬, 로즈 헤이즈 팔레트로 차분한 데일리 룩',
       productIds: [
         'velure-lipstick-rose-wood',
         'lunera-liquid-blush-peach-dusk',
@@ -190,7 +190,7 @@ export const productRecommendationMock: ProductRecommendationData = {
     {
       id: 'clear-glow-set',
       title: '클리어 글로우 조합',
-      description: '글로스 틴트와 뉴트럴 쿠션으로 맑고 깨끗한 로즈 글로우 스타일',
+      description: '글로스 틴트와 뉴트럴 쿠션으로 맑고 깨끗한 로즈 글로우 룩',
       productIds: [
         'laurelle-gloss-rose-veil',
         'velure-blush-rose-compact',

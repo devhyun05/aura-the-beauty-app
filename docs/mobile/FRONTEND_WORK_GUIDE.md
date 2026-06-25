@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바탕으로 개인 맞춤 메이크업 스타일을 추천하고, AR 가이드를 통해 실제 메이크업 적용을 도와주는 모바일 앱입니다.
+AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바탕으로 개인 맞춤 메이크업 룩을 추천하고, AR 가이드를 통해 실제 메이크업 적용을 도와주는 모바일 앱입니다.
 
 이 프로젝트의 핵심 가치는 단순한 메이크업 필터가 아니라, 추천 → AR 적용 → 사용자 편집 → 피드백 → 재추천으로 이어지는 개인화 메이크업 가이드 경험을 제공하는 것입니다.
 
@@ -36,10 +36,10 @@ AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바�
 3. Onboarding Screen
 4. Home Screen
 5. Face Capture Screen
-6. AI Analysis Loading Screen
-7. AI Facial Analysis Result Screen
+6. Face Analysis Loading Screen
+7. Face Analysis Result Screen
 8. AR Makeup Guide Screen
-9. Saved Styles Screen
+9. Saved Looks Screen
 10. My Page Screen
 11. Profile Edit Screen
 
@@ -88,7 +88,7 @@ apps/mobile/src/
     auth/
     face-capture/
     home/
-    image-analysis/
+    face-analysis/
     makeup-feedback/
     onboarding/
     preference/
@@ -161,18 +161,19 @@ shared/mocks/makeup.mock.ts
 - hook은 `use`로 시작합니다.
   - 예: `useAuthForm.ts`
 - type/interface는 의미가 드러나게 작성합니다.
-  - 예: `UserProfile`, `MakeupStyle`, `SkinToneResult`
+  - 예: `UserProfile`, `MakeupLook`, `FaceAnalysisReport`
 - mock 데이터 파일은 `*.mock.ts` 또는 명확한 mock 이름을 사용합니다.
   - 예: `makeup.mock.ts`, `user.mock.ts`
 
 ## 도메인 네이밍 규칙
 
-- 사용자가 저장, 추천, 추출 결과로 인식하는 메이크업 단위는 `Style/스타일`을 기본으로 사용합니다.
-  - 예: `MakeupStyle`, `MakeupStylePreview`, `makeupStylesMock`, `savedMakeupStyle`
+- 사용자가 저장, 추천, 추출 결과로 인식하는 메이크업 단위는 `Look/룩`을 기본으로 사용합니다.
+  - 예: `MakeupLook`, `MakeupLookPreview`, `makeupLooksMock`, `savedMakeupLook`
+- React Native의 `style`, `StyleSheet`, `styles`는 UI 스타일링 용어이므로 `Look`으로 바꾸지 않습니다.
 - 레퍼런스 이미지에서 메이크업 정보를 분석해 추출하는 현재 플로우는 `ReferenceMakeupExtraction`을 사용합니다.
   - 예: `ReferenceMakeupExtractionUploadScreen`, `ReferenceMakeupExtractionResultScreen`
-- 여러 추출 플로우에서 재사용할 수 있는 hook/service/type에는 `MakeupExtraction`을 사용합니다.
-  - 예: `makeupExtractionService`, `MakeupExtractionResult`
+- 레퍼런스 추출의 결과 타입은 `ReferenceMakeupExtractionResult`를 사용합니다.
+  - 예: `makeupExtractionService`, `ReferenceMakeupExtractionResult`
 - 메이크업 피드백 플로우는 단독 `Feedback` 대신 `MakeupFeedback`을 사용합니다.
   - 예: `MakeupFeedbackEntryScreen`, `MakeupFeedbackResult`, `analyzeMakeupForFeedback`
 - `Correction`은 수정 포인트, 수정팁, 수정 가이드처럼 실제 보정 방법을 다루는 이름에만 사용합니다.

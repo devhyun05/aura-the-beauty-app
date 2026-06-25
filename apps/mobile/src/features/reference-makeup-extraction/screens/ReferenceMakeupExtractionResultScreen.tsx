@@ -10,17 +10,17 @@ import type {ReferenceMakeupPhoto} from '../types';
 type ReferenceMakeupExtractionResultScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
-  onPreviewMakeupStyle: () => void;
+  onPreviewMakeupLook: () => void;
   onBack?: () => void;
   onRetake: () => void;
 };
 
 export function ReferenceMakeupExtractionResultScreen({
   photo,
-  onPreviewMakeupStyle,
+  onPreviewMakeupLook,
   onRetake,
 }: ReferenceMakeupExtractionResultScreenProps) {
-  const {extractedMakeupStyle} = getReferenceMakeupExtractionDataSync();
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return (
     <AppScreen
@@ -51,11 +51,11 @@ export function ReferenceMakeupExtractionResultScreen({
             <Text style={styles.eyebrowText}>EXTRACTED MAKEUP STYLE</Text>
           </XStack>
 
-          <Text style={styles.resultTitle}>{extractedMakeupStyle.title}</Text>
-          <Text style={styles.resultDescription}>{extractedMakeupStyle.subtitle}</Text>
+          <Text style={styles.resultTitle}>{extractedMakeupLook.title}</Text>
+          <Text style={styles.resultDescription}>{extractedMakeupLook.subtitle}</Text>
 
           <XStack style={styles.tagList}>
-            {extractedMakeupStyle.tags.map((tag) => (
+            {extractedMakeupLook.tags.map((tag) => (
               <View key={tag} style={styles.tagPill}>
                 <Text style={styles.tagText}>{tag}</Text>
               </View>
@@ -66,7 +66,7 @@ export function ReferenceMakeupExtractionResultScreen({
 
           <YStack style={styles.paletteSection}>
             <Text style={styles.sectionTitle}>추출된 컬러 밸런스</Text>
-            {extractedMakeupStyle.palette.map((palette) => (
+            {extractedMakeupLook.palette.map((palette) => (
               <XStack key={palette.id} style={styles.paletteRow}>
                 <View style={[styles.paletteDot, {backgroundColor: palette.hex}]} />
                 <YStack style={styles.paletteCopy}>
@@ -82,20 +82,20 @@ export function ReferenceMakeupExtractionResultScreen({
           <YStack style={styles.accuracySection}>
             <XStack style={styles.accuracyHeader}>
               <Text style={styles.sectionTitle}>분석 정확도</Text>
-              <Text style={styles.accuracyValue}>{extractedMakeupStyle.accuracy}%</Text>
+              <Text style={styles.accuracyValue}>{extractedMakeupLook.accuracy}%</Text>
             </XStack>
             <View style={styles.accuracyTrack}>
-              <View style={[styles.accuracyFill, {width: `${extractedMakeupStyle.accuracy}%`}]} />
+              <View style={[styles.accuracyFill, {width: `${extractedMakeupLook.accuracy}%`}]} />
             </View>
           </YStack>
         </YStack>
 
         <YStack style={styles.pointSection}>
-          <Text style={styles.sectionTitle}>메이크업 스타일에 반영될 포인트</Text>
-          {extractedMakeupStyle.points.map((point) => (
+          <Text style={styles.sectionTitle}>메이크업 룩에 반영될 포인트</Text>
+          {extractedMakeupLook.points.map((point) => (
             <XStack key={point.id} style={styles.pointCard}>
               <View style={styles.pointIndex}>
-                <Text style={styles.pointIndexText}>{extractedMakeupStyle.points.indexOf(point) + 1}</Text>
+                <Text style={styles.pointIndexText}>{extractedMakeupLook.points.indexOf(point) + 1}</Text>
               </View>
               <YStack style={styles.pointCopy}>
                 <Text style={styles.pointTitle}>{point.title}</Text>
@@ -114,11 +114,11 @@ export function ReferenceMakeupExtractionResultScreen({
             <Text style={styles.secondaryButtonText}>다시 선택</Text>
           </Pressable>
           <Pressable
-            accessibilityLabel="추출한 메이크업 스타일 미리 조정하기"
+            accessibilityLabel="추출한 메이크업 룩 미리 조정하기"
             accessibilityRole="button"
-            onPress={onPreviewMakeupStyle}
+            onPress={onPreviewMakeupLook}
             style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>스타일 조정해보기</Text>
+            <Text style={styles.primaryButtonText}>룩 조정해보기</Text>
             <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
           </Pressable>
         </XStack>

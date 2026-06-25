@@ -25,7 +25,7 @@ import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
   HomeFilterStoreItem,
-  HomeMakeupStyle,
+  HomeMakeupLook,
   HomeTrendItem,
 } from '../types';
 
@@ -86,7 +86,7 @@ export function HomeScreen({
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection items={homeData.filterStore} />
-      <RecommendedStylesSection makeupStyles={homeData.recommendedStyles} />
+      <RecommendedLooksSection makeupLooks={homeData.recommendedLooks} />
     </>
   );
 }
@@ -484,7 +484,7 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   );
 }
 
-function RecommendedStylesSection({makeupStyles}: {makeupStyles: HomeMakeupStyle[]}) {
+function RecommendedLooksSection({makeupLooks}: {makeupLooks: HomeMakeupLook[]}) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
@@ -495,31 +495,31 @@ function RecommendedStylesSection({makeupStyles}: {makeupStyles: HomeMakeupStyle
       <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.makeupStyleList}>
-        {makeupStyles.map((makeupStyle) => (
-          <RecommendedStyleCard key={makeupStyle.id} makeupStyle={makeupStyle} />
+        contentContainerStyle={styles.makeupLookList}>
+        {makeupLooks.map((makeupLook) => (
+          <RecommendedLookCard key={makeupLook.id} makeupLook={makeupLook} />
         ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function RecommendedStyleCard({makeupStyle}: {makeupStyle: HomeMakeupStyle}) {
+function RecommendedLookCard({makeupLook}: {makeupLook: HomeMakeupLook}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${makeupStyle.title} ${makeupStyle.description}`}
-      style={({pressed}) => [styles.makeupStyleCard, pressed && styles.pressed]}>
-      <View style={styles.makeupStyleImageFrame}>
-        <Image resizeMode="cover" source={makeupStyle.imageSource} style={styles.makeupStyleImage} />
+      accessibilityLabel={`${makeupLook.title} ${makeupLook.description}`}
+      style={({pressed}) => [styles.makeupLookCard, pressed && styles.pressed]}>
+      <View style={styles.makeupLookImageFrame}>
+        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
       </View>
 
-      <YStack style={styles.makeupStyleTextGroup}>
-        <Text numberOfLines={1} style={styles.makeupStyleTitle}>
-          {makeupStyle.title}
+      <YStack style={styles.makeupLookTextGroup}>
+        <Text numberOfLines={1} style={styles.makeupLookTitle}>
+          {makeupLook.title}
         </Text>
-        <Text numberOfLines={2} style={styles.makeupStyleDescription}>
-          {makeupStyle.description}
+        <Text numberOfLines={2} style={styles.makeupLookDescription}>
+          {makeupLook.description}
         </Text>
       </YStack>
     </Pressable>
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  makeupStyleCard: {
+  makeupLookCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -702,17 +702,17 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     width: 138,
   },
-  makeupStyleDescription: {
+  makeupLookDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  makeupStyleImage: {
+  makeupLookImage: {
     height: '100%',
     width: '100%',
   },
-  makeupStyleImageFrame: {
+  makeupLookImageFrame: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.md,
@@ -720,14 +720,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  makeupStyleList: {
+  makeupLookList: {
     gap: spacing.md,
     paddingRight: spacing.lg,
   },
-  makeupStyleTextGroup: {
+  makeupLookTextGroup: {
     gap: 2,
   },
-  makeupStyleTitle: {
+  makeupLookTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,

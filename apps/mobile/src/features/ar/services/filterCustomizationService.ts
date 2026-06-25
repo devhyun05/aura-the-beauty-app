@@ -1,16 +1,16 @@
-import type {FacePartId, StyleOptionGroupId} from '../../../shared/types/makeupGuide';
+import type {MakeupArea, MakeupOptionGroupId} from '../../../shared/types/makeupGuide';
 import {
-  mockFilterLocationState,
-  mockFilterStyleState,
+  mockFilterShapeState,
+  mockMakeupFilterOptionState,
 } from '../mocks/filterCustomization.mock';
 
-export type FilterLocationAdjustmentKey =
+export type FilterShapeAdjustmentKey =
   | 'horizontal'
   | 'vertical'
   | 'scale'
   | 'rotation';
 
-export type FilterLocationAdjustment = {
+export type FilterShapeAdjustment = {
   label: string;
   min: number;
   max: number;
@@ -19,40 +19,40 @@ export type FilterLocationAdjustment = {
   value: number;
 };
 
-export type FilterLandmarkPoint = {
+export type FilterShapePoint = {
   id: string;
   x: number;
   y: number;
 };
 
-export type FilterLocationState = {
-  selectedFacePartId: FacePartId;
+export type FilterShapeState = {
+  selectedMakeupArea: MakeupArea;
   isOverlayVisible: boolean;
-  landmarks: readonly FilterLandmarkPoint[];
-  adjustments: Record<FilterLocationAdjustmentKey, FilterLocationAdjustment>;
+  shapePoints: readonly FilterShapePoint[];
+  adjustments: Record<FilterShapeAdjustmentKey, FilterShapeAdjustment>;
 };
 
-export type FilterStyleState = {
-  selectedFacePartId: FacePartId;
-  selectedOptionGroup: StyleOptionGroupId;
+export type MakeupFilterOptionState = {
+  selectedMakeupArea: MakeupArea;
+  selectedOptionGroup: MakeupOptionGroupId;
   selectedColorId: string;
   selectedTypeId: string;
   selectedTextureId: string;
 };
 
-function clampValue(adjustment: FilterLocationAdjustment, nextValue: number) {
+function clampValue(adjustment: FilterShapeAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
 }
 
-export function getFilterLocationState(): FilterLocationState {
-  return mockFilterLocationState;
+export function getFilterShapeState(): FilterShapeState {
+  return mockFilterShapeState;
 }
 
-export function updateFilterLocationAdjustment(
-  state: FilterLocationState,
-  key: FilterLocationAdjustmentKey,
+export function updateFilterShapeAdjustment(
+  state: FilterShapeState,
+  key: FilterShapeAdjustmentKey,
   nextValue: number,
-): FilterLocationState {
+): FilterShapeState {
   const currentAdjustment = state.adjustments[key];
 
   return {
@@ -67,15 +67,15 @@ export function updateFilterLocationAdjustment(
   };
 }
 
-export function getFilterStyleState(): FilterStyleState {
-  return mockFilterStyleState;
+export function getMakeupFilterOptionState(): MakeupFilterOptionState {
+  return mockMakeupFilterOptionState;
 }
 
-export function updateFilterStyleSelection(
-  state: FilterStyleState,
-  optionGroup: StyleOptionGroupId,
+export function updateMakeupFilterOptionSelection(
+  state: MakeupFilterOptionState,
+  optionGroup: MakeupOptionGroupId,
   optionId: string,
-): FilterStyleState {
+): MakeupFilterOptionState {
   if (optionGroup === 'color') {
     return {
       ...state,

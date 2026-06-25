@@ -78,21 +78,21 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ImageAnalysisLoading: {
+  FaceAnalysisLoading: {
     category: 'progress',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '얼굴 분석',
   },
-  ImageAnalysisReportsList: {
+  FaceAnalysisReportsList: {
     category: 'list',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '이미지 분석 결과',
+    title: '얼굴 분석 결과',
   },
-  ImageAnalysisReportDetail: {
+  FaceAnalysisReportDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
@@ -107,12 +107,12 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '프로필 수정',
   },
-  MakeupStyleList: {
+  MakeupLookList: {
     category: 'list',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '메이크업 스타일',
+    title: '메이크업 룩',
   },
   LikedProductList: {
     category: 'list',
@@ -127,13 +127,13 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ARFilterLocationAdjust: {
+  ARFilterShapeAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ARFilterStyleAdjust: {
+  MakeupFilterEdit: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
@@ -202,34 +202,34 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '분석 결과',
   },
-  ExtractedMakeupStyleAdjust: {
+  ExtractedMakeupLookAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ExtractedMakeupStyleSaveForm: {
+  MakeupFilterSaveForm: {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['done'],
     statusBarStyle: 'dark',
-    title: '메이크업 스타일 저장',
+    title: '메이크업 필터 저장',
   },
-  ExtractedMakeupStyleSaveComplete: {
+  MakeupFilterSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ExtractedMakeupStyleRecipeDetail: {
+  ExtractedMakeupLookRecipeDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
-  ExtractedMakeupStyleRecipeSaveComplete: {
+  ExtractedMakeupLookRecipeSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',

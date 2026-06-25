@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Latest naming note (2026-06-26):** This document preserves route names from the navigation refactor period. For new work, use `docs/mobile/NAMING_DECISIONS.md` and `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md` as the naming source of truth. In particular, makeup-domain `Style` names should move to `Look`, AR edit/save surfaces should move to `MakeupFilterEditScreen`/`MakeupFilterSaveScreen`, `Location` options should move to `Shape`/`shapePoint`, face analysis should move from `ImageAnalysis*` to `FaceAnalysis*`, and recommended product items should use `RecommendedProduct`.
+> **Latest naming note (2026-06-26):** The current code has applied the naming refactor from `docs/mobile/NAMING_DECISIONS.md` and `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md`: makeup-domain `Style` names use `Look`, AR edit/save surfaces use `MakeupFilterEditScreen`/`MakeupFilterSave*`, `Location` adjustment uses `Shape`/`shapePoint`, face analysis uses `FaceAnalysis*`, and recommendation items use `RecommendedProduct`. Older names may appear only when this document describes the original navigation-refactor history.
 
 **Goal:** Replace the current `activeScreen` state router with React Navigation and make header/footer behavior consistent across the mobile app.
 
@@ -48,8 +48,8 @@ Depth describes where the screen sits in the user journey and how much shared ap
 | `entry` | before the user enters the app or during initial entry | none or bespoke onboarding header | hidden | `Login`, `Tutorial` |
 | `main` | top-level app tab surface | brand header | visible | `HomeTab`, `CustomTab`, `ProfileTab` |
 | `sub` | one step inside a main surface: detail, list, or form | detail header | hidden | `ProfileEdit`, `LikedProductList`, `MakeupFeedbackResult` |
-| `immersive` | focused experience where normal header/footer would get in the way | local overlay controls only | hidden | `FaceCapture`, `ARFilter`, `ARFilterLocationAdjust` |
-| `terminal` | end-of-flow confirmation or completion screen | no app header, bottom actions | hidden | `ExtractedMakeupStyleSaveComplete`, `ExtractedMakeupStyleRecipeSaveComplete` |
+| `immersive` | focused experience where normal header/footer would get in the way | local overlay controls only | hidden | `FaceCapture`, `ARFilter`, `ARFilterShapeAdjust` |
+| `terminal` | end-of-flow confirmation or completion screen | no app header, bottom actions | hidden | `MakeupFilterSaveComplete`, `ExtractedMakeupLookRecipeSaveComplete` |
 
 ### Functional Categories
 
@@ -85,15 +85,15 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `CustomTab` | `main` | `main-recommendation` | brand header + footer | Product recommendation copy, active footer `custom`. |
 | `ProfileTab` | `main` | `main-profile` | brand header + footer | Footer visible with no active footer item. |
 | `FaceCapture` | `immersive` | `capture-runtime` | fullscreen | Camera-like close/capture overlay only. |
-| `ImageAnalysisLoading` | `sub` | `progress` | detail header | Route-level detail header title `얼굴 분석`. |
-| `ImageAnalysisReportsList` | `sub` | `list` | detail header | Grid/list index screen. |
-| `ImageAnalysisReportDetail` | `sub` | `detail-report` | detail header with actions | Preserve share and close actions. |
+| `FaceAnalysisLoading` | `sub` | `progress` | detail header | Route-level detail header title `얼굴 분석`. |
+| `FaceAnalysisReportsList` | `sub` | `list` | detail header | Grid/list index screen. |
+| `FaceAnalysisReportDetail` | `sub` | `detail-report` | detail header with actions | Preserve share and close actions. |
 | `ProfileEdit` | `sub` | `form-edit` | detail header | Profile form; logout remains screen content action. |
-| `MakeupStyleList` | `sub` | `list` | detail header | Saved makeup styles grid. |
+| `MakeupLookList` | `sub` | `list` | detail header | Saved makeup looks grid. |
 | `LikedProductList` | `sub` | `list` | detail header | Liked product grid. |
 | `ARFilter` | `immersive` | `ar-runtime` | fullscreen | AR/camera runtime. |
-| `ARFilterLocationAdjust` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
-| `ARFilterStyleAdjust` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
+| `ARFilterShapeAdjust` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
+| `MakeupFilterEdit` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
 | `MakeupFeedbackEntry` | `sub` | `feature-entry` | detail header with close action | Route-level close header title `메이크업 피드백`. |
 | `MakeupFeedbackCapture` | `immersive` | `capture-runtime` | fullscreen | Camera/gallery acquisition. |
 | `MakeupFeedbackLoading` | `sub` | `progress` | detail header | Route-level detail header title `메이크업 피드백`. |
@@ -103,11 +103,11 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `ReferenceMakeupExtractionUpload` | `sub` | `feature-entry` | detail header with close action | Current code title is `메이크업 추출`; tab row stays in screen content. |
 | `ReferenceMakeupExtractionLoading` | `immersive` | `progress` | fullscreen | Current code uses local compact back affordance. |
 | `ReferenceMakeupExtractionResult` | `sub` | `detail-report` | detail header | Extracted makeup analysis. |
-| `ExtractedMakeupStyleAdjust` | `immersive` | `ar-runtime` | fullscreen | Extracted makeup style try-on/editor runtime. |
-| `ExtractedMakeupStyleSaveForm` | `sub` | `form-edit` | detail header with save action | Preserve right `완료` action. |
-| `ExtractedMakeupStyleSaveComplete` | `terminal` | `completion` | fullscreen | Saved confirmation with bottom actions. |
-| `ExtractedMakeupStyleRecipeDetail` | `sub` | `detail-report` | detail header | Route-level title is `상세 분석`; tab row stays in content. |
-| `ExtractedMakeupStyleRecipeSaveComplete` | `terminal` | `completion` | fullscreen | Recipe saved confirmation with bottom actions. |
+| `ExtractedMakeupLookAdjust` | `immersive` | `ar-runtime` | fullscreen | Extracted makeup look try-on/editor runtime. |
+| `MakeupFilterSaveForm` | `sub` | `form-edit` | detail header with save action | Preserve right `완료` action. |
+| `MakeupFilterSaveComplete` | `terminal` | `completion` | fullscreen | Saved confirmation with bottom actions. |
+| `ExtractedMakeupLookRecipeDetail` | `sub` | `detail-report` | detail header | Route-level title is `상세 분석`; tab row stays in content. |
+| `ExtractedMakeupLookRecipeSaveComplete` | `terminal` | `completion` | fullscreen | Recipe saved confirmation with bottom actions. |
 
 ### 현재 앱 화면별 상태
 
@@ -122,15 +122,15 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `CustomTab` | `main` | `main-recommendation` | 추천 탭. brand/product header와 footer를 보여주고 footer `custom`이 active다. |
 | `ProfileTab` | `main` | `main-profile` | 마이페이지 탭. brand header와 footer를 보여주지만 active footer item은 없다. |
 | `FaceCapture` | `immersive` | `capture-runtime` | 얼굴 촬영 화면. 일반 header/footer 없이 카메라형 overlay control만 사용한다. |
-| `ImageAnalysisLoading` | `sub` | `progress` | 얼굴 분석 진행 화면. route-level detail header title은 `얼굴 분석`이다. |
-| `ImageAnalysisReportsList` | `sub` | `list` | 이미지 분석 결과 목록. route-level detail header title은 `이미지 분석 결과`다. |
-| `ImageAnalysisReportDetail` | `sub` | `detail-report` | 맞춤 분석 보고서 상세. route-level detail header title은 `맞춤 분석 보고서`, 오른쪽 action은 `share`, `close`다. |
+| `FaceAnalysisLoading` | `sub` | `progress` | 얼굴 분석 진행 화면. route-level detail header title은 `얼굴 분석`이다. |
+| `FaceAnalysisReportsList` | `sub` | `list` | 얼굴 분석 결과 목록. route-level detail header title은 `얼굴 분석 결과`다. |
+| `FaceAnalysisReportDetail` | `sub` | `detail-report` | 맞춤 분석 보고서 상세. route-level detail header title은 `맞춤 분석 보고서`, 오른쪽 action은 `share`, `close`다. |
 | `ProfileEdit` | `sub` | `form-edit` | 프로필 수정 폼. route-level detail header title은 `프로필 수정`이고 로그아웃은 화면 콘텐츠 action이다. |
-| `MakeupStyleList` | `sub` | `list` | 저장된 메이크업 스타일 목록. route-level detail header title은 `메이크업 스타일`이다. |
+| `MakeupLookList` | `sub` | `list` | 저장된 메이크업 룩 목록. route-level detail header title은 `메이크업 룩`이다. |
 | `LikedProductList` | `sub` | `list` | 좋아요 상품 목록. route-level detail header title은 `좋아요 목록`이다. |
 | `ARFilter` | `immersive` | `ar-runtime` | AR 메이크업 필터 런타임. 일반 header/footer 없이 fullscreen overlay UI를 사용한다. |
-| `ARFilterLocationAdjust` | `immersive` | `ar-runtime` | AR 필터 위치 조정 화면. fullscreen이며 local overlay controls를 사용한다. |
-| `ARFilterStyleAdjust` | `immersive` | `ar-runtime` | AR 필터 스타일 조정 화면. fullscreen이며 local overlay controls를 사용한다. |
+| `ARFilterShapeAdjust` | `immersive` | `ar-runtime` | AR 필터 형태 수정 화면. fullscreen이며 local overlay controls를 사용한다. |
+| `MakeupFilterEdit` | `immersive` | `ar-runtime` | AR 필터 필터 수정 화면. fullscreen이며 local overlay controls를 사용한다. |
 | `MakeupFeedbackEntry` | `sub` | `feature-entry` | 메이크업 피드백 시작 화면. route-level title은 `메이크업 피드백`, 오른쪽 action은 `close`다. |
 | `MakeupFeedbackCapture` | `immersive` | `capture-runtime` | 메이크업 피드백 사진 촬영/선택 화면. 일반 header/footer 없이 capture UI를 사용한다. |
 | `MakeupFeedbackLoading` | `sub` | `progress` | 메이크업 피드백 분석 진행 화면. route-level detail header title은 `메이크업 피드백`이다. |
@@ -140,11 +140,11 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `ReferenceMakeupExtractionUpload` | `sub` | `feature-entry` | 레퍼런스 이미지 기반 메이크업 추출 시작/사진 선택 화면. route-level title은 `메이크업 추출`, 오른쪽 action은 `close`다. |
 | `ReferenceMakeupExtractionLoading` | `immersive` | `progress` | 레퍼런스 메이크업 추출 진행 화면. fullscreen이며 진행 화면 안의 compact back affordance를 사용한다. |
 | `ReferenceMakeupExtractionResult` | `sub` | `detail-report` | 추출된 메이크업 분석 결과. route-level detail header title은 `분석 결과`다. |
-| `ExtractedMakeupStyleAdjust` | `immersive` | `ar-runtime` | 추출된 메이크업 스타일 try-on 조정 화면. 일반 header/footer 없이 fullscreen runtime UI를 사용한다. |
-| `ExtractedMakeupStyleSaveForm` | `sub` | `form-edit` | 추출된 메이크업 스타일 저장 폼. route-level detail header title은 `메이크업 스타일 저장`, 오른쪽 action은 `done`이다. |
-| `ExtractedMakeupStyleSaveComplete` | `terminal` | `completion` | 메이크업 스타일 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
-| `ExtractedMakeupStyleRecipeDetail` | `sub` | `detail-report` | 메이크업 레시피 상세 분석. route-level title은 `상세 분석`, 내부 tab row는 화면 콘텐츠로 유지한다. |
-| `ExtractedMakeupStyleRecipeSaveComplete` | `terminal` | `completion` | 레시피 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
+| `ExtractedMakeupLookAdjust` | `immersive` | `ar-runtime` | 추출된 메이크업 룩 try-on 조정 화면. 일반 header/footer 없이 fullscreen runtime UI를 사용한다. |
+| `MakeupFilterSaveForm` | `sub` | `form-edit` | 추출된 메이크업 룩 저장 폼. route-level detail header title은 `메이크업 룩 저장`, 오른쪽 action은 `done`이다. |
+| `MakeupFilterSaveComplete` | `terminal` | `completion` | 메이크업 룩 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
+| `ExtractedMakeupLookRecipeDetail` | `sub` | `detail-report` | 메이크업 레시피 상세 분석. route-level title은 `상세 분석`, 내부 tab row는 화면 콘텐츠로 유지한다. |
+| `ExtractedMakeupLookRecipeSaveComplete` | `terminal` | `completion` | 레시피 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
 
 ### Design Contract By Classification
 
@@ -240,22 +240,22 @@ import type {NavigatorScreenParams} from '@react-navigation/native';
 
 export type ARFilterBackRouteName =
   | 'ARFilter'
-  | 'ImageAnalysisReportDetail';
+  | 'FaceAnalysisReportDetail';
 
 export type RootStackParamList = {
   Login: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
-  ImageAnalysisLoading: undefined;
-  ImageAnalysisReportsList: undefined;
-  ImageAnalysisReportDetail: {reportId?: string} | undefined;
+  FaceAnalysisLoading: undefined;
+  FaceAnalysisReportsList: undefined;
+  FaceAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;
-  MakeupStyleList: undefined;
+  MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter: undefined;
-  ARFilterLocationAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  ARFilterStyleAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
+  ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
+  MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
   MakeupFeedbackLoading: undefined;
@@ -265,11 +265,11 @@ export type RootStackParamList = {
   ReferenceMakeupExtractionUpload: undefined;
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
-  ExtractedMakeupStyleAdjust: undefined;
-  ExtractedMakeupStyleSaveForm: undefined;
-  ExtractedMakeupStyleSaveComplete: undefined;
-  ExtractedMakeupStyleRecipeDetail: undefined;
-  ExtractedMakeupStyleRecipeSaveComplete: undefined;
+  ExtractedMakeupLookAdjust: undefined;
+  MakeupFilterSaveForm: undefined;
+  MakeupFilterSaveComplete: undefined;
+  ExtractedMakeupLookRecipeDetail: undefined;
+  ExtractedMakeupLookRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
@@ -377,11 +377,11 @@ The footer can still render the camera button visually, but the current tab rema
 
 | Route | Header Title | Source Screen |
 | --- | --- | --- |
-| `ImageAnalysisLoading` | `얼굴 분석` | `ImageAnalysisLoadingScreen` |
+| `FaceAnalysisLoading` | `얼굴 분석` | `FaceAnalysisLoadingScreen` |
 | `ProfileEdit` | `프로필 수정` | `ProfileEditScreen` |
-| `ImageAnalysisReportsList` | `이미지 분석 결과` | `ImageAnalysisReportsListScreen` |
-| `ImageAnalysisReportDetail` | `맞춤 분석 보고서` with share/close actions | `ImageAnalysisReportDetailScreen` |
-| `MakeupStyleList` | `메이크업 스타일` | `MakeupStyleListScreen` |
+| `FaceAnalysisReportsList` | `얼굴 분석 결과` | `FaceAnalysisReportsListScreen` |
+| `FaceAnalysisReportDetail` | `맞춤 분석 보고서` with share/close actions | `FaceAnalysisReportDetailScreen` |
+| `MakeupLookList` | `메이크업 룩` | `MakeupLookListScreen` |
 | `LikedProductList` | `좋아요 목록` | `LikedProductListScreen` |
 | `MakeupFeedbackEntry` | `메이크업 피드백` with close action | `MakeupFeedbackEntryScreen` |
 | `MakeupFeedbackLoading` | `메이크업 피드백` | `MakeupFeedbackLoadingScreen` |
@@ -390,8 +390,8 @@ The footer can still render the camera button visually, but the current tab rema
 | `MakeupCorrectionGuide` | `가이드 오버레이` | `MakeupCorrectionGuideOverlayScreen` |
 | `ReferenceMakeupExtractionUpload` | `메이크업 추출` with close action | `ReferenceMakeupExtractionUploadScreen` |
 | `ReferenceMakeupExtractionResult` | `분석 결과` | `ReferenceMakeupExtractionResultScreen` |
-| `ExtractedMakeupStyleSaveForm` | `메이크업 스타일 저장` with save action | `ExtractedMakeupStyleSaveFormScreen` |
-| `ExtractedMakeupStyleRecipeDetail` | `상세 분석` | `ExtractedMakeupStyleRecipeDetailScreen` |
+| `MakeupFilterSaveForm` | `메이크업 룩 저장` with save action | `MakeupFilterSaveFormScreen` |
+| `ExtractedMakeupLookRecipeDetail` | `상세 분석` | `ExtractedMakeupLookRecipeDetailScreen` |
 
 ### Fullscreen Routes
 
@@ -401,13 +401,13 @@ The footer can still render the camera button visually, but the current tab rema
 | `Tutorial` | onboarding surface |
 | `FaceCapture` | camera-like capture experience |
 | `ARFilter` | AR/camera surface |
-| `ARFilterLocationAdjust` | AR adjustment surface |
-| `ARFilterStyleAdjust` | AR adjustment surface |
+| `ARFilterShapeAdjust` | AR adjustment surface |
+| `MakeupFilterEdit` | AR adjustment surface |
 | `MakeupFeedbackCapture` | camera/photo picker surface |
 | `ReferenceMakeupExtractionLoading` | focused progress screen |
-| `ExtractedMakeupStyleAdjust` | try-on surface |
-| `ExtractedMakeupStyleSaveComplete` | completion surface |
-| `ExtractedMakeupStyleRecipeSaveComplete` | completion surface |
+| `ExtractedMakeupLookAdjust` | try-on surface |
+| `MakeupFilterSaveComplete` | completion surface |
+| `ExtractedMakeupLookRecipeSaveComplete` | completion surface |
 
 ## Header Design Standard
 
@@ -445,7 +445,7 @@ Examples:
 - `ProfileEdit`
 - `LikedProductList`
 - `MakeupCorrectionTip`
-- `ExtractedMakeupStyleSaveForm`
+- `MakeupFilterSaveForm`
 
 ### Fullscreen Header
 
@@ -488,7 +488,7 @@ It should hold only values that cannot safely be route params:
 type NavigationFlowState = {
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
-  savedMakeupStyle: MakeupStylePreview | null;
+  savedMakeupLook: MakeupLookPreview | null;
   makeupFeedbackResult: MakeupFeedbackResult | null;
 };
 ```
@@ -591,7 +591,7 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ImageAnalysisLoading: {
+  FaceAnalysisLoading: {
     category: 'progress',
     depth: 'sub',
     kind: 'detail',
@@ -819,15 +819,15 @@ git commit -m "refactor: 모바일 화면 전환을 React Navigation으로 변�
 **Files:**
 
 - Modify: `apps/mobile/src/features/profile/screens/ProfileEditScreen.tsx`
-- Modify: `apps/mobile/src/features/image-analysis/screens/ImageAnalysisLoadingScreen.tsx`
-- Modify: `apps/mobile/src/features/image-analysis/screens/ImageAnalysisReportsListScreen.tsx`
-- Modify: `apps/mobile/src/features/image-analysis/screens/ImageAnalysisReportDetailScreen.tsx`
-- Modify: `apps/mobile/src/features/recommendation/screens/MakeupStyleListScreen.tsx`
+- Modify: `apps/mobile/src/features/face-analysis/screens/FaceAnalysisLoadingScreen.tsx`
+- Modify: `apps/mobile/src/features/face-analysis/screens/FaceAnalysisReportsListScreen.tsx`
+- Modify: `apps/mobile/src/features/face-analysis/screens/FaceAnalysisReportDetailScreen.tsx`
+- Modify: `apps/mobile/src/features/recommendation/screens/MakeupLookListScreen.tsx`
 - Modify: `apps/mobile/src/features/recommendation/screens/LikedProductListScreen.tsx`
 - Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ReferenceMakeupExtractionUploadScreen.tsx`
 - Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ReferenceMakeupExtractionResultScreen.tsx`
-- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ExtractedMakeupStyleSaveFormScreen.tsx`
-- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ExtractedMakeupStyleRecipeDetailScreen.tsx`
+- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/MakeupFilterSaveFormScreen.tsx`
+- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ExtractedMakeupLookRecipeDetailScreen.tsx`
 - Modify: `apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackEntryScreen.tsx`
 - Modify: `apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackLoadingScreen.tsx`
 - Modify: `apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackResultScreen.tsx`
@@ -856,7 +856,7 @@ If a detail screen already owns scroll behavior, use `scroll={false}` and keep t
 
 - [ ] **Step 4: Preserve special actions**
 
-`ImageAnalysisReportDetailScreen` currently has share and close actions. Move those actions into route-level `rightSlot` config or a route-specific chrome adapter. Do not remove the actions.
+`FaceAnalysisReportDetailScreen` currently has share and close actions. Move those actions into route-level `rightSlot` config or a route-specific chrome adapter. Do not remove the actions.
 
 - [ ] **Step 5: Commit**
 
@@ -872,10 +872,10 @@ git commit -m "refactor: 상세 화면 헤더를 라우트 chrome으로 이동"
 - Modify: `apps/mobile/src/app/navigation/routeChrome.ts`
 - Modify: `apps/mobile/src/features/face-capture/screens/FaceCaptureScreen.tsx`
 - Modify: `apps/mobile/src/features/ar/screens/ARFilterScreen.tsx`
-- Modify: `apps/mobile/src/features/ar/screens/ARFilterLocationAdjustScreen.tsx`
-- Modify: `apps/mobile/src/features/ar/screens/ARFilterStyleAdjustScreen.tsx`
+- Modify: `apps/mobile/src/features/ar/screens/ARFilterShapeAdjustScreen.tsx`
+- Modify: `apps/mobile/src/features/ar/screens/MakeupFilterEditScreen.tsx`
 - Modify: `apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackCaptureScreen.tsx`
-- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ExtractedMakeupStyleAdjustScreen.tsx`
+- Modify: `apps/mobile/src/features/reference-makeup-extraction/screens/ExtractedMakeupLookAdjustScreen.tsx`
 
 - [x] **Step 1: Verify fullscreen routes**
 
@@ -955,12 +955,12 @@ Login
 → Tutorial
 → HomeTab
 → FaceCapture or ARFilter
-→ ImageAnalysisLoading
-→ ImageAnalysisReportDetail
+→ FaceAnalysisLoading
+→ FaceAnalysisReportDetail
 → ReferenceMakeupExtractionUpload
 → ReferenceMakeupExtractionResult
-→ ExtractedMakeupStyleAdjust
-→ ExtractedMakeupStyleSaveComplete
+→ ExtractedMakeupLookAdjust
+→ MakeupFilterSaveComplete
 → ProfileTab
 → ProfileEdit
 ```

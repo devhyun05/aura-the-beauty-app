@@ -67,7 +67,7 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
       setIsTakingPhoto(false);
       onSelectPhoto({
         imageUri: capturedImageUri,
-        source: 'camera',
+        photoSource: 'camera',
       });
     }
   };
@@ -107,7 +107,7 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
       if (!pickerResult.canceled && pickerResult.assets.length > 0) {
         onSelectPhoto({
           imageUri: pickerResult.assets[0]?.uri,
-          source: 'gallery',
+          photoSource: 'gallery',
         });
       }
     } finally {

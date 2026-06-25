@@ -30,12 +30,12 @@ expectEqual(
   'reference makeup extraction upload route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('ExtractedMakeupStyleSaveForm').join(','),
+  getDetailHeaderRightActions('MakeupFilterSaveForm').join(','),
   'done',
-  'extracted makeup style save route header actions',
+  'makeup filter save route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('ImageAnalysisReportDetail').join(','),
+  getDetailHeaderRightActions('FaceAnalysisReportDetail').join(','),
   'share,close',
-  'image analysis report route header actions',
+  'face analysis report route header actions',
 );

@@ -37,10 +37,10 @@ type MakeupCorrectionGuideOverlayScreenProps = {
   onBack?: () => void;
 };
 
-type GuideCategory = 'all' | 'eye' | 'brow' | 'lip' | 'cheek' | 'base';
+type MakeupGuidelineCategory = 'all' | 'eye' | 'brow' | 'lip' | 'cheek' | 'base';
 
 type GuideSection = {
-  id: Exclude<GuideCategory, 'all'>;
+  id: Exclude<MakeupGuidelineCategory, 'all'>;
   title: string;
   subtitle: string;
   items: Array<{
@@ -49,7 +49,7 @@ type GuideSection = {
   }>;
 };
 
-const GUIDE_TABS: Array<{id: GuideCategory; label: string}> = [
+const GUIDE_TABS: Array<{id: MakeupGuidelineCategory; label: string}> = [
   {id: 'all', label: '전체'},
   {id: 'eye', label: '눈'},
   {id: 'brow', label: '눈썹'},
@@ -115,7 +115,7 @@ export function MakeupCorrectionGuideOverlayScreen({
   result,
 }: MakeupCorrectionGuideOverlayScreenProps) {
   const {width} = useWindowDimensions();
-  const [activeCategory, setActiveCategory] = useState<GuideCategory>('all');
+  const [activeCategory, setActiveCategory] = useState<MakeupGuidelineCategory>('all');
   const photoWidth = width;
   const photoHeight = Math.round(photoWidth * 1.14);
   const visibleSections = useMemo(
@@ -172,7 +172,7 @@ export function MakeupCorrectionGuideOverlayScreen({
               <Sparkles color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
             </View>
             <View style={styles.summaryCopy}>
-              <Text style={styles.summaryTitle}>사진 위 랜드마크를 기준으로 수정해요</Text>
+              <Text style={styles.summaryTitle}>사진 위 형태점를 기준으로 수정해요</Text>
               <Text style={styles.summaryText}>
                 탭을 누르면 같은 사진 안에서 해당 부위의 가이드 라인만 강조돼요.
               </Text>
@@ -219,8 +219,8 @@ function GuideSectionCard({section}: {section: GuideSection}) {
   );
 }
 
-function GuideOverlay({activeCategory}: {activeCategory: GuideCategory}) {
-  const show = (category: GuideCategory) =>
+function GuideOverlay({activeCategory}: {activeCategory: MakeupGuidelineCategory}) {
+  const show = (category: MakeupGuidelineCategory) =>
     activeCategory === 'all' || activeCategory === category;
   const mutedOpacity = activeCategory === 'all' ? 0.84 : 1;
 

@@ -10,7 +10,7 @@ import {getReferenceMakeupExtractionData} from '../services/makeupExtractionServ
 import type {
   ReferenceMakeupExtractionData,
   ReferenceMakeupPhoto,
-  ReferenceMakeupSource,
+  ReferenceMakeupPhotoSource,
 } from '../types';
 
 type ReferenceMakeupExtractionUploadScreenProps = {
@@ -19,7 +19,7 @@ type ReferenceMakeupExtractionUploadScreenProps = {
   onStartAnalysis: (photo: ReferenceMakeupPhoto) => void;
 };
 
-const sourceTabs: {id: ReferenceMakeupSource; label: string}[] = [
+const referenceSourceTabs: {id: ReferenceMakeupPhotoSource; label: string}[] = [
   {id: 'album', label: '앨범에서 선택'},
   {id: 'camera', label: '카메라로 촬영'},
 ];
@@ -29,7 +29,7 @@ export function ReferenceMakeupExtractionUploadScreen({
 }: ReferenceMakeupExtractionUploadScreenProps) {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<ReferenceMakeupExtractionData | null>(null);
-  const [activeSource, setActiveSource] = useState<ReferenceMakeupSource>('album');
+  const [activeReferenceSource, setActiveReferenceSource] = useState<ReferenceMakeupPhotoSource>('album');
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,15 +81,15 @@ export function ReferenceMakeupExtractionUploadScreen({
     >
       <YStack style={styles.header}>
         <XStack style={styles.tabRow}>
-          {sourceTabs.map((tab) => {
-            const isActive = tab.id === activeSource;
+          {referenceSourceTabs.map((tab) => {
+            const isActive = tab.id === activeReferenceSource;
 
             return (
               <Pressable
                 accessibilityRole="tab"
                 accessibilityState={{selected: isActive}}
                 key={tab.id}
-                onPress={() => setActiveSource(tab.id)}
+                onPress={() => setActiveReferenceSource(tab.id)}
                 style={styles.tabButton}>
                 <Text style={isActive ? styles.tabTextActive : styles.tabText}>
                   {tab.label}
@@ -107,12 +107,12 @@ export function ReferenceMakeupExtractionUploadScreen({
         style={styles.scrollView}>
         <Pressable
           accessibilityLabel={
-            activeSource === 'album' ? '사진 업로드하기' : '카메라로 촬영하기'
+            activeReferenceSource === 'album' ? '사진 업로드하기' : '카메라로 촬영하기'
           }
           accessibilityRole="button"
           style={({pressed}) => [styles.uploadHero, pressed && styles.pressed]}>
           <View style={styles.uploadIcon}>
-            {activeSource === 'album' ? (
+            {activeReferenceSource === 'album' ? (
               <ImagePlus color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
             ) : (
               <Camera color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
@@ -120,7 +120,7 @@ export function ReferenceMakeupExtractionUploadScreen({
           </View>
           <YStack style={styles.uploadCopy}>
             <Text style={styles.uploadTitle}>
-              {activeSource === 'album' ? '참고할 메이크업 사진 선택' : '새 사진 촬영'}
+              {activeReferenceSource === 'album' ? '참고할 메이크업 사진 선택' : '새 사진 촬영'}
             </Text>
             <Text style={styles.uploadDescription}>
               얼굴이 정면에 가깝고 메이크업 색감이 잘 보이는 사진을 추천해요.
@@ -159,7 +159,7 @@ export function ReferenceMakeupExtractionUploadScreen({
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.md}]}>
         <Text style={styles.selectedText}>1장 선택됨 · {selectedPhoto.title}</Text>
         <Pressable
-          accessibilityLabel="메이크업 스타일 분석 시작하기"
+          accessibilityLabel="메이크업 룩 분석 시작하기"
           accessibilityRole="button"
           onPress={() => onStartAnalysis(selectedPhoto)}
           style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>

@@ -22,7 +22,7 @@ type TutorialIntroHeroContent = {
 const tutorialIntroHeroContent = {
   brand: 'AURA',
   title: '이미지 진단을 시작합니다.',
-  subtitle: '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 스타일로 자연스럽게 완성해보세요.',
+  subtitle: '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 룩로 자연스럽게 완성해보세요.',
   primaryActionLabel: '진단 시작',
 } as const satisfies TutorialIntroHeroContent;
 

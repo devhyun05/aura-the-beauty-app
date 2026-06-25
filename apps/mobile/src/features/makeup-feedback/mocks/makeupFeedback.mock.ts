@@ -7,10 +7,10 @@ const sampleFeedbackImage = require('../../../assets/images/analysis/report-reta
 export const createMockMakeupFeedback = (
   selection: MakeupFeedbackPhotoSelection,
 ): MakeupFeedbackResult => ({
-  id: `mock-feedback-${selection.source}`,
+  id: `mock-feedback-${selection.photoSource}`,
   uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
-  source: selection.source,
-  sourceLabel: selection.source === 'camera' ? '촬영한 사진' : '갤러리 사진',
+  photoSource: selection.photoSource,
+  photoSourceLabel: selection.photoSource === 'camera' ? '촬영한 사진' : '갤러리 사진',
   score: 82,
   summaryBadges: [
     {

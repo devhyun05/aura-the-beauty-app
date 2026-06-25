@@ -1,12 +1,12 @@
-import { makeupStylesMock } from '../mocks/makeupStyles.mock';
-import type { MakeupStyle } from '../types/profile';
+import { makeupLooksMock } from '../mocks/makeupLooks.mock';
+import type { MakeupLook } from '../types/profile';
 
-export const getMakeupStyles = async (): Promise<MakeupStyle[]> => {
-  return Promise.resolve(makeupStylesMock);
+export const getMakeupLooks = async (): Promise<MakeupLook[]> => {
+  return Promise.resolve(makeupLooksMock);
 };
 
-export const getMakeupStylePreviews = async (
+export const getMakeupLookPreviews = async (
   limit = 3,
-): Promise<MakeupStyle[]> => {
-  return Promise.resolve(makeupStylesMock.slice(0, limit));
+): Promise<MakeupLook[]> => {
+  return Promise.resolve(makeupLooksMock.slice(0, limit));
 };

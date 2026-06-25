@@ -1,6 +1,6 @@
-import type {ImageAnalysisReport} from '../../../shared/types/imageAnalysis';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {
-  MakeupStyle,
+  MakeupLook,
   Product,
   UserProfile,
 } from '../../../shared/types/profile';
@@ -13,8 +13,8 @@ export const PROFILE_LOAD_RETRY_LABEL = '다시 시도' as const;
 
 export type ProfileScreenData = {
   profile: UserProfile;
-  imageAnalysisReport: ImageAnalysisReport | null;
-  makeupStyles: MakeupStyle[];
+  faceAnalysisReport: FaceAnalysisReport | null;
+  makeupLooks: MakeupLook[];
   likedProducts: Product[];
 };
 

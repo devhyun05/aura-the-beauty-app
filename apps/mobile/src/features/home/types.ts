@@ -21,7 +21,7 @@ export type HomeFilterStoreItem = {
   imageSource: ImageSourcePropType;
 };
 
-export type HomeMakeupStyle = {
+export type HomeMakeupLook = {
   id: string;
   title: string;
   description: string;
@@ -39,5 +39,5 @@ export type HomeData = {
     trends: HomeTrendItem[];
   };
   filterStore: HomeFilterStoreItem[];
-  recommendedStyles: HomeMakeupStyle[];
+  recommendedLooks: HomeMakeupLook[];
 };

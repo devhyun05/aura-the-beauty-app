@@ -11,6 +11,22 @@
 - 아직 답변을 받지 않은 항목은 `대기` 상태로 둔다.
 - 실제 코드 rename은 별도 작업으로 분리하고, 이 문서는 먼저 용어와 방향을 확정한다.
 
+## 2026-06-26 코드 적용 현황
+
+이 문서는 결정 히스토리를 보존하기 때문에 `MakeupStyle`, `ExtractedMakeupStyle`, `ImageAnalysis`, `ProductRecommendationItem`, `FacePartId` 같은 이전 이름을 결정 질문과 근거 안에 그대로 남긴다. 단, 현재 앱 코드와 화면 상세 문서는 다음 rename을 적용한 상태다.
+
+- 룩 도메인의 `Style` 계열은 `Look` 계열로 정리했다.
+- 얼굴 분석 화면/파일/서비스/mock/type은 `FaceAnalysis` 계열로 정리했다.
+- AR 형태 수정 화면은 `ARFilterShapeAdjust` 계열로 정리했다.
+- AR 필터 옵션 편집 화면은 `MakeupFilterEdit` 계열로 정리했다.
+- 필터 저장 화면은 `MakeupFilterSaveForm`/`MakeupFilterSaveComplete` 계열로 정리했다.
+- 레퍼런스 추출 결과 편집 화면은 `ExtractedMakeupLook` 계열로 정리했다.
+- 추천 제품 항목은 `RecommendedProduct`, 추천 룩 요약은 `ProductRecommendationLook`으로 정리했다.
+- 메이크업 적용/저장/편집 범위의 기준 타입은 `MakeupArea`로 정리했다.
+- 사용자가 옮기는 형태 조정점은 `shapePoint`/`FilterShapePoint`로 정리했다.
+
+아직 일부 후속 후보는 남아 있다. 예를 들어 얼굴 분석 내부의 `FaceAnalysisFacePointGuide`를 `FaceAnalysisMakeupGuideline`으로 더 구체화할지, `MakeupLookRecipeTab`을 `MakeupRecipeTab`으로 축약할지는 별도 리팩터링에서 결정한다.
+
 ## 결정 현황
 
 | 항목 | 주제 | 상태 | 결정 |
@@ -54,7 +70,7 @@
 
 - 사용자-facing 용어에서 `스타일`을 제거하고 `룩`을 최종 용어로 사용하기로 했다.
 - 코드명도 새 작업부터 `Look` 계열을 우선 사용하면 화면 용어와 도메인 코드 용어가 같은 방향을 바라본다.
-- 기존 `MakeupStyle`, `ExtractedMakeupStyle*`, `ProductRecommendationStyle` 등은 한 번에 바꾸기보다 추후 rename 대상으로 관리한다.
+- 기존 `MakeupStyle`, `ExtractedMakeupStyle*`, `ProductRecommendationStyle` 등은 2026-06-26 rename 작업에서 `Look` 계열로 반영했다.
 
 문서/코드 반영 방향:
 
@@ -399,7 +415,7 @@
   - `MakeupStyleCard` → `MakeupLookCard`
   - `selectedStyleId` → `selectedLookId`
   - `selectedMakeupStyleCardId` → `selectedMakeupLookId`
-- 이미 5.1에서 정한 `ExtractedMakeupStyle*` 계열도 추후 `ExtractedMakeupLook*` 계열 rename 대상으로 관리한다.
+- 이미 5.1에서 정한 `ExtractedMakeupStyle*` 계열도 2026-06-26 rename 작업에서 `ExtractedMakeupLook*` 계열로 반영했다.
 - React Native `style` prop, `StyleSheet`, `styles.container` 같은 스타일링 코드는 변경하지 않는다.
 
 ### 5.12 AR 필터 저장이 `ExtractedMakeupStyleSaveForm`으로 이동함
@@ -434,7 +450,7 @@ AR 필터 저장 화면이 `ExtractedMakeupStyleSaveForm` 이름을 쓰는 것�
   - `applyMakeupFilter`
 - 저장 화면 내부에서 저장 대상 룩의 종류는 `TotalMakeupLook` 또는 `PointMakeupLook`으로 구분한다.
 - 룩 보고서 저장 기능이 생기면 `MakeupLookReportSaveScreen`처럼 산출물 성격을 포함한 이름을 사용한다.
-- 기존 `ExtractedMakeupStyleSaveForm`은 추후 `MakeupFilterSaveForm`으로 rename한다.
+- 기존 `ExtractedMakeupStyleSaveForm`은 2026-06-26 rename 작업에서 `MakeupFilterSaveForm`으로 반영했다.
 
 ### 5.13 `FacePartId`, `MakeupStyleFaceArea`, `GuideCategory` 부위 타입 분산
 
@@ -471,4 +487,4 @@ AR 필터 저장 화면이 `ExtractedMakeupStyleSaveForm` 이름을 쓰는 것�
   - `contour`
 - 얼굴 인식 모델의 물리적 얼굴 부위나 랜드마크 그룹은 `FacePart` 또는 `FaceLandmarkGroup`처럼 별도 타입으로 둘 수 있다.
 - 가이드/튜토리얼 분류는 `GuideCategory` 대신 목적에 따라 `TutorialCategory`, `MakeupRecipeCategory`, `MakeupGuidelineCategory`처럼 분리한다.
-- 기존 `MakeupStyleFaceArea`는 추후 `MakeupArea`로 rename한다.
+- 기존 `MakeupStyleFaceArea`는 2026-06-26 rename 작업에서 `MakeupArea`로 반영했다.

@@ -2,12 +2,12 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {ReferenceMakeupExtractionData} from '../types';
 
-const styleOjiGirl =
-  require('../../../assets/images/looks/style-oji-girl.png') as ImageSourcePropType;
-const styleMoriGirl =
-  require('../../../assets/images/looks/style-mori-girl.png') as ImageSourcePropType;
-const styleCleanSmoky =
-  require('../../../assets/images/looks/style-clean-smoky.png') as ImageSourcePropType;
+const lookOjiGirl =
+  require('../../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
+const lookMoriGirl =
+  require('../../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
+const lookCleanSmoky =
+  require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
 const reportBareFace =
   require('../../../assets/images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
 const reportRetake =
@@ -23,50 +23,50 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
   photos: [
     {
       id: 'influencer-muted-rose',
-      title: '뮤트 로즈 인플루언서 스타일',
-      source: 'album',
-      imageSource: styleOjiGirl,
+      title: '뮤트 로즈 인플루언서 룩',
+      referenceSource: 'album',
+      imageSource: lookOjiGirl,
     },
     {
       id: 'trend-soft-mori',
-      title: '소프트 모리 트렌드 스타일',
-      source: 'album',
-      imageSource: styleMoriGirl,
+      title: '소프트 모리 트렌드 룩',
+      referenceSource: 'album',
+      imageSource: lookMoriGirl,
     },
     {
       id: 'clean-smoky',
-      title: '클린 스모키 화보 스타일',
-      source: 'album',
-      imageSource: styleCleanSmoky,
+      title: '클린 스모키 화보 룩',
+      referenceSource: 'album',
+      imageSource: lookCleanSmoky,
     },
     {
       id: 'bright-portrait',
-      title: '밝은 피부 로즈 스타일',
-      source: 'album',
+      title: '밝은 피부 로즈 룩',
+      referenceSource: 'album',
       imageSource: reportBareFace,
     },
     {
-      id: 'daily-style',
-      title: '데일리 스타일 샘플',
-      source: 'album',
+      id: 'daily-look',
+      title: '데일리 룩 샘플',
+      referenceSource: 'album',
       imageSource: reportRetake,
     },
     {
       id: 'studio-cool-rose',
       title: '스튜디오 쿨 로즈',
-      source: 'album',
+      referenceSource: 'album',
       imageSource: analysisStudio,
     },
     {
       id: 'window-glow',
-      title: '윈도우 글로우 스타일',
-      source: 'album',
+      title: '윈도우 글로우 룩',
+      referenceSource: 'album',
       imageSource: analysisWindow,
     },
     {
       id: 'soft-light',
-      title: '소프트 라이트 스타일',
-      source: 'album',
+      title: '소프트 라이트 룩',
+      referenceSource: 'album',
       imageSource: analysisSoftLight,
     },
   ],
@@ -87,16 +87,16 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
       status: 'active',
     },
     {
-      id: 'style-map',
-      label: '메이크업 스타일 맵 생성',
+      id: 'look-map',
+      label: '메이크업 룩 맵 생성',
       status: 'waiting',
     },
   ],
-  extractedMakeupStyle: {
-    id: 'muted-pink-daily-style',
-    title: '어리어리 핑크 데일리 스타일',
-    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 스타일이에요.',
-    imageSource: styleOjiGirl,
+  extractedMakeupLook: {
+    id: 'muted-pink-daily-look',
+    title: '어리어리 핑크 데일리 룩',
+    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 룩이에요.',
+    imageSource: lookOjiGirl,
     tags: ['#데일리', '#뮤트톤', '#로즈베이지', '#은은한음영'],
     accuracy: 92,
     palette: [

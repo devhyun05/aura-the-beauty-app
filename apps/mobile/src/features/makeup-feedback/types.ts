@@ -3,7 +3,7 @@ import type {ImageSourcePropType} from 'react-native';
 export type MakeupFeedbackPhotoSource = 'camera' | 'gallery';
 
 export type MakeupFeedbackPhotoSelection = {
-  source: MakeupFeedbackPhotoSource;
+  photoSource: MakeupFeedbackPhotoSource;
   imageUri?: string;
 };
 
@@ -43,8 +43,8 @@ export type MakeupFeedbackStrength = {
 export type MakeupFeedbackResult = {
   id: string;
   uploadedImage: ImageSourcePropType;
-  source: MakeupFeedbackPhotoSource;
-  sourceLabel: string;
+  photoSource: MakeupFeedbackPhotoSource;
+  photoSourceLabel: string;
   score: number;
   summaryBadges: MakeupFeedbackSummaryBadge[];
   annotations: MakeupFeedbackAnnotation[];

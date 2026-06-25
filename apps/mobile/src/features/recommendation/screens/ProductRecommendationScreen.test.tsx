@@ -24,7 +24,7 @@ expectEqual(
 );
 expectEqual(
   getRecommendationSetSectionTitle('여두치'),
-  '여두치 님의 스타일과 잘 맞는 추천 조합',
+  '여두치 님의 룩과 잘 맞는 추천 조합',
   'nickname recommendation set section title',
 );
 

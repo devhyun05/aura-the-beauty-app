@@ -6,17 +6,17 @@ export type ComparisonMode = 'full' | 'left' | 'right';
 
 export type FilterCategoryId = 'recommended' | 'trend' | 'personalColor' | 'popular';
 
-export type FacePartId = 'all' | 'base' | 'eye' | 'lip' | 'contour';
+export type MakeupArea = 'all' | 'base' | 'eye' | 'lip' | 'contour';
 
-export type StyleOptionGroupId = 'color' | 'type' | 'texture';
+export type MakeupOptionGroupId = 'color' | 'type' | 'texture';
 
 export type FilterCategory = {
   id: FilterCategoryId;
   label: string;
 };
 
-export type FacePart = {
-  id: FacePartId;
+export type MakeupAreaOption = {
+  id: MakeupArea;
   label: string;
 };
 
@@ -44,7 +44,7 @@ export type MakeupFilter = {
   title: string;
   subtitle: string;
   intensityLabel: string;
-  facePartIds: readonly FacePartId[];
+  makeupAreas: readonly MakeupArea[];
   colorOptions: readonly FilterColorOption[];
   typeOptions: readonly FilterTextOption[];
   textureOptions: readonly FilterTextOption[];
@@ -53,6 +53,6 @@ export type MakeupFilter = {
 export type ARMakeupGuideData = {
   categories: readonly FilterCategory[];
   comparisonModes: readonly ComparisonModeOption[];
-  faceParts: readonly FacePart[];
+  makeupAreas: readonly MakeupAreaOption[];
   filters: readonly MakeupFilter[];
 };

@@ -1,33 +1,33 @@
 import type {
   LikedProductPreview,
-  MakeupStylePreview,
+  MakeupLookPreview,
   ProfileData,
   UserProfile,
 } from '../types/profile';
-import { getImageAnalysisReports } from './imageAnalysisService';
-import { getMakeupStyles as getAllMakeupStyles } from './makeupService';
+import { getFaceAnalysisReports } from './faceAnalysisService';
+import { getMakeupLooks as getAllMakeupLooks } from './makeupService';
 import { getLikedProductPreviews } from './productService';
 import { getUserProfile as getUserProfileFromService } from './userService';
 
 export const getProfileData = async (): Promise<ProfileData> => {
-  const [profile, imageAnalysisReports, makeupStyles, likedProducts] =
+  const [profile, faceAnalysisReports, makeupLooks, likedProducts] =
     await Promise.all([
       getUserProfileFromService(),
-      getImageAnalysisReports(),
-      getAllMakeupStyles(),
+      getFaceAnalysisReports(),
+      getAllMakeupLooks(),
       getLikedProductPreviews(3),
     ]);
 
   return {
     profile,
-    imageAnalysisReports: imageAnalysisReports.slice(0, 3),
-    makeupStyles,
+    faceAnalysisReports: faceAnalysisReports.slice(0, 3),
+    makeupLooks,
     likedProducts,
   };
 };
 
-export const getProfileMakeupStyles = async (): Promise<MakeupStylePreview[]> => {
-  return getAllMakeupStyles();
+export const getProfileMakeupLooks = async (): Promise<MakeupLookPreview[]> => {
+  return getAllMakeupLooks();
 };
 
 export const getProfileLikedProducts = async (): Promise<
