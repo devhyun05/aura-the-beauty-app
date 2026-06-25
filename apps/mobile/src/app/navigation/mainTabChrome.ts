@@ -4,23 +4,25 @@ import {getFooterTargetRoute, getRouteChrome} from './routeChrome';
 import type {MainTabRouteName} from './routeTypes';
 
 export type MainHeaderCopy = {
-  subtitle: 'MAKEUP GUIDE' | 'AI PRODUCT MATCH';
-  title: 'AI AR Makeup' | '추천 제품';
+  showTitle: boolean;
+  subtitle?: 'MAKEUP GUIDE';
+  title?: 'AI AR Makeup';
   usesBrandLogo: boolean;
 };
 
 const mainHeaderCopyByVariant = {
   custom: {
-    subtitle: 'AI PRODUCT MATCH',
-    title: '추천 제품',
+    showTitle: false,
     usesBrandLogo: false,
   },
   default: {
+    showTitle: true,
     subtitle: 'MAKEUP GUIDE',
     title: 'AI AR Makeup',
     usesBrandLogo: false,
   },
   home: {
+    showTitle: true,
     subtitle: 'MAKEUP GUIDE',
     title: 'AI AR Makeup',
     usesBrandLogo: true,

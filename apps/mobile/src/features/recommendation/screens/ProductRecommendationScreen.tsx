@@ -9,9 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Heart,
-  PackagePlus,
   Plus,
-  Sparkles,
 } from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -27,6 +25,19 @@ import type {
 } from '../types';
 
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
+
+type ProductRecommendationHeaderCopy = {
+  productSectionEyebrow?: undefined;
+  productSectionTitle: 'AI가 추천하는 유사 제품';
+  setSectionEyebrow?: undefined;
+};
+
+export const productRecommendationHeaderCopy: ProductRecommendationHeaderCopy = {
+  productSectionTitle: 'AI가 추천하는 유사 제품',
+};
+
+export const getRecommendationSetSectionTitle = (userNickname: string) =>
+  `${userNickname} 님의 스타일과 잘 맞는 추천 조합`;
 
 export function ProductRecommendationScreen() {
   const [data, setData] = useState<ProductRecommendationData | null>(null);
@@ -78,11 +89,9 @@ export function ProductRecommendationScreen() {
 
       <View style={styles.productHeader}>
         <View style={styles.productTitleGroup}>
-          <XStack style={styles.eyebrowRow}>
-            <Sparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-            <Text style={styles.eyebrowText}>AI PRODUCT MATCH</Text>
-          </XStack>
-          <Text style={styles.sectionTitle}>AI가 추천하는 유사 제품</Text>
+          <Text style={styles.sectionTitle}>
+            {productRecommendationHeaderCopy.productSectionTitle}
+          </Text>
         </View>
         <Pressable accessibilityRole="button" style={styles.sortButton}>
           <Text style={styles.sortText}>유사도 높은 순</Text>
@@ -98,11 +107,9 @@ export function ProductRecommendationScreen() {
 
       <YStack style={styles.setSection}>
         <View style={styles.productTitleGroup}>
-          <XStack style={styles.eyebrowRow}>
-            <PackagePlus color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-            <Text style={styles.eyebrowText}>RECOMMENDED SET</Text>
-          </XStack>
-          <Text style={styles.sectionTitle}>이 룩과 잘 맞는 추천 조합</Text>
+          <Text style={styles.sectionTitle}>
+            {getRecommendationSetSectionTitle(data.userNickname)}
+          </Text>
         </View>
 
         {data.sets.map((set) => (
@@ -313,18 +320,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-  },
-  eyebrowRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  eyebrowText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    letterSpacing: 0.8,
-    lineHeight: typography.lineHeight.xs,
   },
   heartButton: {
     alignItems: 'center',

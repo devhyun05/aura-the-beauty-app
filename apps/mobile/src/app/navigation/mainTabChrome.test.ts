@@ -15,13 +15,15 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 function expectMainHeader(
   routeName: MainTabRouteName,
   expected: {
-    subtitle: string;
-    title: string;
+    showTitle: boolean;
+    subtitle?: string;
+    title?: string;
     usesBrandLogo: boolean;
   },
 ) {
   const actual = getMainHeaderCopy(routeName);
 
+  expectEqual(actual.showTitle, expected.showTitle, `${routeName} show title`);
   expectEqual(actual.subtitle, expected.subtitle, `${routeName} subtitle`);
   expectEqual(actual.title, expected.title, `${routeName} title`);
   expectEqual(actual.usesBrandLogo, expected.usesBrandLogo, `${routeName} logo`);
@@ -32,16 +34,17 @@ expectEqual(getMainTabFooterState('CustomTab'), 'custom', 'custom tab footer sta
 expectEqual(getMainTabFooterState('MyPageTab'), undefined, 'profile tab footer state');
 
 expectMainHeader('HomeTab', {
+  showTitle: true,
   subtitle: 'MAKEUP GUIDE',
   title: 'AI AR Makeup',
   usesBrandLogo: true,
 });
 expectMainHeader('CustomTab', {
-  subtitle: 'AI PRODUCT MATCH',
-  title: '추천 제품',
+  showTitle: false,
   usesBrandLogo: false,
 });
 expectMainHeader('MyPageTab', {
+  showTitle: true,
   subtitle: 'MAKEUP GUIDE',
   title: 'AI AR Makeup',
   usesBrandLogo: false,

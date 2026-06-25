@@ -120,6 +120,7 @@ function MainTabChrome({
   return (
     <YStack style={styles.screen}>
       <AppHeader
+        showTitle={headerCopy.showTitle}
         subtitle={headerCopy.subtitle}
         title={headerCopy.title}
         titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}

@@ -43,6 +43,7 @@ export type ProductRecommendationSet = {
 };
 
 export type ProductRecommendationData = {
+  userNickname: string;
   look: ProductRecommendationLook;
   tabs: ProductRecommendationTab[];
   products: ProductRecommendationItem[];
