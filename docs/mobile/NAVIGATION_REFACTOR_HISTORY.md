@@ -4,7 +4,7 @@
 
 이 문서는 모바일 앱의 화면 구조, React Navigation 전환, 헤더/푸터 chrome 정리, 데모용 딥링크 상태 구성 과정을 커밋 히스토리 기준으로 정리한 기록이다. 과거 내역은 이전 커밋 메시지와 변경 파일 범위를 기준으로 작성했다.
 
-> 후속 네이밍 정리 참고: 2026-06-25 이후 현재 코드에서는 과거 `Feedback*` route가 `MakeupFeedback*`/`MakeupCorrection*`으로, 과거 `Filter*` 추출 route가 `ReferenceMakeupExtraction*`/`ExtractedMakeupStyle*`로 정리되었다. 사용자에게 보이는 메이크업 저장/추천/추출 결과 단위도 `Look/룩` 대신 `Style/스타일`을 기본으로 사용한다. 이 문서 본문에 남아 있는 옛 이름은 당시 navigation refactor 히스토리를 설명하기 위한 과거 명칭이다.
+> 후속 네이밍 정리 참고: 2026-06-25 이후 현재 코드에서는 과거 `Feedback*` route가 `MakeupFeedback*`/`MakeupCorrection*`으로, 과거 `Filter*` 추출 route가 `ReferenceMakeupExtraction*`/`ExtractedMakeupStyle*`로 정리되었다. 2026-06-26 네이밍 결정에서는 사용자-facing 메이크업 저장/추천/추출 결과 단위를 `스타일`이 아니라 `룩/Look`으로 통일하고, AR 편집/저장은 `MakeupFilterEditScreen`/`MakeupFilterSaveScreen` 축으로 정리하기로 했다. 이 문서 본문에 남아 있는 옛 이름은 당시 navigation refactor 히스토리를 설명하기 위한 과거 명칭이다.
 
 ## 현재 브랜치
 
@@ -25,6 +25,31 @@
 이번 리팩터링의 핵심은 화면 전환 책임을 React Navigation으로 옮기고, 헤더/푸터 정책을 `routeChrome.ts` 중심으로 모으는 것이다.
 
 ## 최근 작업 상세
+
+### 후속 정리: 모바일 도메인 네이밍 결정 문서화
+
+2026-06-26 후속 기획 정리에서 화면/route 이름과 도메인 용어가 섞여 있던 지점을 별도 문서로 분리했다.
+
+추가된 문서:
+
+- `docs/mobile/NAMING_DECISIONS.md`
+- `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md`
+
+확정한 주요 기준은 다음과 같다.
+
+- `스타일/Style`은 룩 도메인에서는 레거시 이름으로 보고 `룩/Look` 계열로 통일한다.
+- `MakeupFilter`는 저장/적용 가능한 메이크업 효과 전체, `MakeupLook`은 사용자가 인식하는 룩 단위로 구분한다.
+- `TotalMakeupLook`은 얼굴 전체 룩, `PointMakeupLook`은 립/아이/치크 등 특정 부위 룩이다.
+- AR 필터 편집 화면은 `LookEdit`이 아니라 현재 필터 조합 전체를 편집하는 `MakeupFilterEditScreen`으로 정리한다.
+- AR 필터 저장 화면은 `MakeupLookSaveScreen`이 아니라 `MakeupFilterSaveScreen`으로 정리한다.
+- `위치/Location` 옵션은 `형태/Shape`로 정리하고, 사용자가 옮기는 형태 조정점은 `shapePoint`로 부른다.
+- `shapePoint.position`은 좌표, `shapePoint.offset`은 기준점 대비 이동량이다.
+- 얼굴 분석은 `FaceAnalysis`, 메이크업 피드백은 `MakeupFeedback`, 레퍼런스 추출은 `ReferenceMakeupExtraction`으로 분리한다.
+- `Guide`는 AR 반반가이드 같은 기준 UI에 남기고, 사용법 안내는 `Tutorial`, 메이크업 구성/절차는 `MakeupRecipe`, 적용 기준선/규칙은 `Guideline`으로 분리한다.
+- 실제 제품은 `Product`, 추천 결과 항목은 `RecommendedProduct`, 추천 기능/플로우는 `ProductRecommendation`으로 구분한다.
+- 계정 기본 정보는 `UserProfile`, 마이페이지 표시용 요약은 `MyPageProfileSummary`, 추천/분석에 쓰는 뷰티 특성은 `BeautyProfile`으로 분리한다.
+
+현재 navigation route에는 아직 `ImageAnalysis*`, `ARFilterLocationAdjust`, `ARFilterStyleAdjust`, `ExtractedMakeupStyle*`, `MakeupStyleList` 같은 레거시 이름이 남아 있다. 이 이름들은 과거 route 계약을 설명하기 위해 히스토리 문서에서는 유지하되, 새 작업에서는 `NAMING_REFACTOR_WORK_PLAN.md`의 rename 순서를 따른다.
 
 ### `feat: 모바일 딥링크와 데모 상태 추가`
 
