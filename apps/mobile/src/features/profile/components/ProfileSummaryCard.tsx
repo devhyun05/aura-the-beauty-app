@@ -8,14 +8,16 @@ import {
   IconButton,
   ImagePlaceholder,
 } from '../../../shared/ui';
-import type { UserProfile } from '../../../shared/types/profile';
+import type { BeautyProfile, UserProfile } from '../../../shared/types/profile';
 
 type ProfileSummaryCardProps = {
   profile: UserProfile;
+  beautyProfile: BeautyProfile;
   onPressSettings?: () => void;
 };
 
 export function ProfileSummaryCard({
+  beautyProfile,
   profile,
   onPressSettings,
 }: ProfileSummaryCardProps) {
@@ -35,7 +37,7 @@ export function ProfileSummaryCard({
           </Text>
 
           <View style={styles.tags}>
-            {profile.tags.slice(0, 2).map((tag) => (
+            {beautyProfile.tags.slice(0, 2).map((tag) => (
               <Text key={tag} style={styles.tag}>
                 {tag}
               </Text>

@@ -18,7 +18,7 @@ type MakeupLookListScreenProps = {
 
 export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
   const {width} = useWindowDimensions();
-  const [looks, setLooks] = useState<MakeupLook[]>([]);
+  const [makeupLooks, setMakeupLooks] = useState<MakeupLook[]>([]);
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
   const cardWidth = Math.floor((contentWidth - gap) / 2);
@@ -26,9 +26,9 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
   useEffect(() => {
     let isMounted = true;
 
-    getMakeupLooks().then((nextLooks) => {
+    getMakeupLooks().then((nextMakeupLooks) => {
       if (isMounted) {
-        setLooks(nextLooks);
+        setMakeupLooks(nextMakeupLooks);
       }
     });
 
@@ -40,22 +40,22 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
       <PagedGrid
-        data={looks}
-        keyExtractor={(look) => look.id}
+        data={makeupLooks}
+        keyExtractor={(makeupLook) => makeupLook.id}
         pageSize={10}
         pageStyle={[styles.grid, {gap}]}
         pageWidth={contentWidth}
-        renderItem={(look) => (
+        renderItem={(makeupLook) => (
           <View style={[styles.card, {width: cardWidth}]}>
             <View style={styles.imageArea}>
               <ImagePlaceholder
                 borderRadius={radius.md}
                 resizeMode="cover"
-                source={look.imageSource}
+                source={makeupLook.imageSource}
               />
             </View>
             <Text numberOfLines={1} style={styles.title}>
-              {look.title}
+              {makeupLook.title}
             </Text>
           </View>
         )}

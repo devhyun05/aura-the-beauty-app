@@ -31,7 +31,7 @@ import type {
 
 type HomeScreenProps = {
   onPressARFilter?: () => void;
-  onPressCreateFilter?: () => void;
+  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
@@ -39,7 +39,7 @@ type HomeScreenProps = {
 
 export function HomeScreen({
   onPressARFilter,
-  onPressCreateFilter,
+  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
@@ -80,13 +80,13 @@ export function HomeScreen({
 
       <QuickActionSection
         onPressARFilter={onPressARFilter}
-        onPressCreateFilter={onPressCreateFilter}
+        onPressReferenceMakeupExtraction={onPressReferenceMakeupExtraction}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
         onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection items={homeData.filterStore} />
-      <RecommendedLooksSection looks={homeData.recommendedLooks} />
+      <RecommendedLooksSection makeupLooks={homeData.recommendedLooks} />
     </>
   );
 }
@@ -345,7 +345,7 @@ const quickActions = [
     icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
-    id: 'feedback',
+    id: 'makeup-feedback',
     label: '메이크업 피드백',
     accessibilityLabel: '메이크업 피드백 시작',
     icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
@@ -364,7 +364,7 @@ type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
   onPressARFilter?: () => void;
-  onPressCreateFilter?: () => void;
+  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
@@ -374,7 +374,7 @@ export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
     onPressARFilter,
-    onPressCreateFilter,
+    onPressReferenceMakeupExtraction,
     onPressFaceDiagnosis,
     onPressMakeupFeedback,
     onPressProductRecommendations,
@@ -389,10 +389,10 @@ export function getHomeQuickActionPressHandler(
   }
 
   if (actionId === 'extract') {
-    return onPressCreateFilter;
+    return onPressReferenceMakeupExtraction;
   }
 
-  if (actionId === 'feedback') {
+  if (actionId === 'makeup-feedback') {
     return onPressMakeupFeedback;
   }
 
@@ -405,14 +405,14 @@ export function getHomeQuickActionPressHandler(
 
 function QuickActionSection({
   onPressARFilter,
-  onPressCreateFilter,
+  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
     onPressARFilter,
-    onPressCreateFilter,
+    onPressReferenceMakeupExtraction,
     onPressFaceDiagnosis,
     onPressMakeupFeedback,
     onPressProductRecommendations,
@@ -484,7 +484,7 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   );
 }
 
-function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
+function RecommendedLooksSection({makeupLooks}: {makeupLooks: HomeMakeupLook[]}) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
@@ -495,31 +495,31 @@ function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
       <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.lookList}>
-        {looks.map((look) => (
-          <RecommendedLookCard key={look.id} look={look} />
+        contentContainerStyle={styles.makeupLookList}>
+        {makeupLooks.map((makeupLook) => (
+          <RecommendedLookCard key={makeupLook.id} makeupLook={makeupLook} />
         ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
+function RecommendedLookCard({makeupLook}: {makeupLook: HomeMakeupLook}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${look.title} ${look.description}`}
-      style={({pressed}) => [styles.lookCard, pressed && styles.pressed]}>
-      <View style={styles.lookImageFrame}>
-        <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
+      accessibilityLabel={`${makeupLook.title} ${makeupLook.description}`}
+      style={({pressed}) => [styles.makeupLookCard, pressed && styles.pressed]}>
+      <View style={styles.makeupLookImageFrame}>
+        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
       </View>
 
-      <YStack style={styles.lookTextGroup}>
-        <Text numberOfLines={1} style={styles.lookTitle}>
-          {look.title}
+      <YStack style={styles.makeupLookTextGroup}>
+        <Text numberOfLines={1} style={styles.makeupLookTitle}>
+          {makeupLook.title}
         </Text>
-        <Text numberOfLines={2} style={styles.lookDescription}>
-          {look.description}
+        <Text numberOfLines={2} style={styles.makeupLookDescription}>
+          {makeupLook.description}
         </Text>
       </YStack>
     </Pressable>
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  lookCard: {
+  makeupLookCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -702,17 +702,17 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     width: 138,
   },
-  lookDescription: {
+  makeupLookDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookImage: {
+  makeupLookImage: {
     height: '100%',
     width: '100%',
   },
-  lookImageFrame: {
+  makeupLookImageFrame: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.md,
@@ -720,14 +720,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  lookList: {
+  makeupLookList: {
     gap: spacing.md,
     paddingRight: spacing.lg,
   },
-  lookTextGroup: {
+  makeupLookTextGroup: {
     gap: 2,
   },
-  lookTitle: {
+  makeupLookTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,

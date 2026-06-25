@@ -6,20 +6,20 @@ import { AppCard, ImagePlaceholder } from '../../../shared/ui';
 import type { MakeupLook } from '../../../shared/types/profile';
 
 type MakeupLookCardProps = {
-  look: MakeupLook;
+  makeupLook: MakeupLook;
   style?: StyleProp<ViewStyle>;
 };
 
-export function MakeupLookCard({ look, style }: MakeupLookCardProps) {
+export function MakeupLookCard({ makeupLook, style }: MakeupLookCardProps) {
   return (
     <AppCard padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>
-        <ImagePlaceholder borderRadius={radius.md} source={look.imageSource} />
+        <ImagePlaceholder borderRadius={radius.md} source={makeupLook.imageSource} />
       </View>
 
       <View style={styles.titleArea}>
         <Text numberOfLines={1} style={styles.title}>
-          {look.title}
+          {makeupLook.title}
         </Text>
       </View>
     </AppCard>

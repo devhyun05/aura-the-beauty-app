@@ -17,51 +17,51 @@ expectEqual(
 );
 
 expectEqual(
-  getInitialNavigationFlowState().selectedFeedbackPhoto.source,
+  getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
-  'initial feedback photo source',
+  'initial makeup feedback photoSource',
 );
 
 expectEqual(
-  getInitialNavigationFlowState().feedbackResult,
+  getInitialNavigationFlowState().makeupFeedbackResult,
   null,
-  'initial feedback result',
+  'initial makeup feedback result',
 );
 
 expectEqual(
   getInitialNavigationFlowState().savedMakeupLook,
   null,
-  'initial saved makeup style',
+  'initial saved makeup look',
 );
 
 expectEqual(
-  getInitialNavigationFlowState().selectedFilterPhoto,
+  getInitialNavigationFlowState().selectedReferenceMakeupPhoto,
   null,
-  'initial selected filter photo',
+  'initial selected reference makeup photo',
 );
 
 const demoState = getDemoNavigationFlowState();
 
 expectEqual(
-  demoState.selectedFeedbackPhoto.source,
+  demoState.selectedMakeupFeedbackPhoto.photoSource,
   'camera',
-  'demo feedback photo source',
+  'demo makeup feedback photoSource',
 );
 
-if (!demoState.feedbackResult) {
-  throw new Error('demo feedback result: expected seeded result');
+if (!demoState.makeupFeedbackResult) {
+  throw new Error('demo makeup feedback result: expected seeded result');
 }
 
-if (!demoState.selectedFilterPhoto) {
-  throw new Error('demo selected filter photo: expected seeded photo');
+if (!demoState.selectedReferenceMakeupPhoto) {
+  throw new Error('demo selected reference makeup photo: expected seeded photo');
 }
 
 if (!demoState.savedMakeupLook) {
-  throw new Error('demo saved makeup style: expected seeded style');
+  throw new Error('demo saved makeup look: expected seeded look');
 }
 
 expectEqual(
   demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
-  'demo saved makeup style id',
+  'demo saved makeup look id',
 );

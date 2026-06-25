@@ -13,7 +13,7 @@ import {
   getARFilterSelectedTabOpacity,
   getARFilterShapeEditButtonLabel,
   getARFilterShapeOptionLabels,
-  getARFilterMakeupStyleCardIdAfterOptionEdit,
+  getARFilterMakeupLookCardIdAfterOptionEdit,
   getARFilterInitialColorId,
   getARFilterSelectedColor,
   isARFilterSaveEnabled,
@@ -76,7 +76,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterOptionGroupLabels('all').join(','),
-  '스타일,형태',
+  '룩,형태',
   'AR filter all face option groups',
 );
 expectEqual(
@@ -105,8 +105,8 @@ expectEqual(
   'AR filter shape edit button label',
 );
 expectEqual(
-  getARFilterMakeupStyleCardIdAfterOptionEdit({
-    selectedMakeupStyleCardId: 'daily-glow',
+  getARFilterMakeupLookCardIdAfterOptionEdit({
+    selectedMakeupLookCardId: 'daily-glow',
   }),
   null,
   'AR filter clears all style after option edit',

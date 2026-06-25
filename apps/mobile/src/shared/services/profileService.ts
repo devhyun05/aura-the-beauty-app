@@ -1,26 +1,30 @@
 import type {
   LikedProductPreview,
   MakeupLookPreview,
-  ProfileData,
-  UserProfile,
+  MyPageProfileSummary,
 } from '../types/profile';
-import { getImageAnalysisReports } from './imageAnalysisService';
+import { getLatestFaceAnalysisReport } from './faceAnalysisService';
 import { getMakeupLooks as getAllMakeupLooks } from './makeupService';
 import { getLikedProductPreviews } from './productService';
-import { getUserProfile as getUserProfileFromService } from './userService';
+import {
+  getBeautyProfile,
+  getUserProfile as getUserProfileFromService,
+} from './userService';
 
-export const getProfileData = async (): Promise<ProfileData> => {
-  const [profile, imageAnalysisReports, makeupLooks, likedProducts] =
+export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> => {
+  const [profile, beautyProfile, faceAnalysisReport, makeupLooks, likedProducts] =
     await Promise.all([
       getUserProfileFromService(),
-      getImageAnalysisReports(),
+      getBeautyProfile(),
+      getLatestFaceAnalysisReport(),
       getAllMakeupLooks(),
       getLikedProductPreviews(3),
     ]);
 
   return {
     profile,
-    imageAnalysisReports: imageAnalysisReports.slice(0, 3),
+    beautyProfile,
+    faceAnalysisReport,
     makeupLooks,
     likedProducts,
   };
@@ -34,8 +38,4 @@ export const getProfileLikedProducts = async (): Promise<
   LikedProductPreview[]
 > => {
   return getLikedProductPreviews(99);
-};
-
-export const getUserProfile = async (): Promise<UserProfile> => {
-  return getUserProfileFromService();
 };

@@ -12,7 +12,7 @@ import {
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   ComparisonMode,
-  FacePartId,
+  MakeupArea,
   FilterColorOption,
   FilterCategoryId,
   GuideMode,
@@ -32,7 +32,7 @@ import {
 } from '../../../shared/ui';
 
 type CaptureMode = 'photo' | 'video';
-type ARMakeupOptionGroupId = 'makeupStyle' | 'makeupPreset' | 'color' | 'type' | 'texture' | 'shape';
+type ARMakeupOptionGroupId = 'makeupLook' | 'makeupPreset' | 'color' | 'type' | 'texture' | 'shape';
 type ARMakeupOptionGroup = {
   id: ARMakeupOptionGroupId;
   label: string;
@@ -63,11 +63,11 @@ const MAKEUP_PART_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
 ];
 
 const ALL_MAKEUP_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
-  {id: 'makeupStyle', label: '스타일'},
+  {id: 'makeupLook', label: '룩'},
   {id: 'shape', label: '형태'},
 ];
 
-const SHAPE_OPTIONS_BY_FACE_PART: Record<FacePartId, readonly ShapeOption[]> = {
+const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> = {
   all: [
     {id: 'balanced', label: '기본 밸런스'},
     {id: 'soft-focus', label: '소프트 확장'},
@@ -87,6 +87,11 @@ const SHAPE_OPTIONS_BY_FACE_PART: Record<FacePartId, readonly ShapeOption[]> = {
     {id: 'lip-default', label: '기본 립'},
     {id: 'lip-over', label: '오버 립'},
     {id: 'lip-gradient', label: '그라데이션'},
+  ],
+  cheek: [
+    {id: 'cheek-default', label: '기본 치크'},
+    {id: 'cheek-diagonal', label: '사선 치크'},
+    {id: 'cheek-round', label: '라운드 치크'},
   ],
   contour: [
     {id: 'contour-default', label: '기본 윤곽'},
@@ -148,21 +153,21 @@ export function getARFilterComparisonTabs(): readonly string[] {
 }
 
 function getARFilterOptionGroups(
-  selectedFacePartId: FacePartId,
+  selectedMakeupArea: MakeupArea,
 ): readonly ARMakeupOptionGroup[] {
-  return selectedFacePartId === 'all' ? ALL_MAKEUP_OPTION_GROUPS : MAKEUP_PART_OPTION_GROUPS;
+  return selectedMakeupArea === 'all' ? ALL_MAKEUP_OPTION_GROUPS : MAKEUP_PART_OPTION_GROUPS;
 }
 
 function getARFilterShapeOptions(
-  selectedFacePartId: FacePartId,
+  selectedMakeupArea: MakeupArea,
 ): readonly ShapeOption[] {
-  return SHAPE_OPTIONS_BY_FACE_PART[selectedFacePartId];
+  return SHAPE_OPTIONS_BY_MAKEUP_AREA[selectedMakeupArea];
 }
 
 export function getARFilterOptionGroupLabels(
-  selectedFacePartId: FacePartId,
+  selectedMakeupArea: MakeupArea,
 ): readonly string[] {
-  return getARFilterOptionGroups(selectedFacePartId).map(group => group.label);
+  return getARFilterOptionGroups(selectedMakeupArea).map(group => group.label);
 }
 
 export function getARFilterOriginalCardLabel(): string {
@@ -170,9 +175,9 @@ export function getARFilterOriginalCardLabel(): string {
 }
 
 export function getARFilterShapeOptionLabels(
-  selectedFacePartId: FacePartId,
+  selectedMakeupArea: MakeupArea,
 ): readonly string[] {
-  return getARFilterShapeOptions(selectedFacePartId).map(option => option.label);
+  return getARFilterShapeOptions(selectedMakeupArea).map(option => option.label);
 }
 
 export function getARFilterSaveButtonLabel(): string {
@@ -183,16 +188,16 @@ export function getARFilterShapeEditButtonLabel(): string {
   return '형태 수정';
 }
 
-export function getARFilterMakeupStyleCardIdAfterOptionEdit({
-  selectedMakeupStyleCardId,
+export function getARFilterMakeupLookCardIdAfterOptionEdit({
+  selectedMakeupLookCardId,
 }: {
-  selectedMakeupStyleCardId: string | null;
+  selectedMakeupLookCardId: string | null;
 }): string | null {
-  if (selectedMakeupStyleCardId) {
+  if (selectedMakeupLookCardId) {
     return null;
   }
 
-  return selectedMakeupStyleCardId;
+  return selectedMakeupLookCardId;
 }
 
 export function isARFilterSaveEnabled({
@@ -203,19 +208,19 @@ export function isARFilterSaveEnabled({
   return hasUnsavedChanges;
 }
 
-function getMakeupFiltersForFacePart(
+function getMakeupFiltersForMakeupArea(
   makeupFilters: readonly MakeupFilter[],
-  selectedFacePartId: FacePartId,
+  selectedMakeupArea: MakeupArea,
 ): readonly MakeupFilter[] {
-  if (selectedFacePartId === 'all') {
+  if (selectedMakeupArea === 'all') {
     return makeupFilters;
   }
 
-  const partMakeupFilters = makeupFilters.filter(makeupFilter =>
-    makeupFilter.facePartIds.includes(selectedFacePartId),
+  const areaMakeupFilters = makeupFilters.filter(makeupFilter =>
+    makeupFilter.makeupAreas.includes(selectedMakeupArea),
   );
 
-  return partMakeupFilters.length > 0 ? partMakeupFilters : makeupFilters;
+  return areaMakeupFilters.length > 0 ? areaMakeupFilters : makeupFilters;
 }
 
 export function getARFilterCaptureButtonMetrics(): typeof CAPTURE_BUTTON_METRICS {
@@ -257,13 +262,13 @@ export function ARFilterScreen({
   const [selectedCategoryId, setSelectedCategoryId] = useState<FilterCategoryId>(
     arGuideData.categories[0].id,
   );
-  const [selectedMakeupStyleCardId, setSelectedMakeupStyleCardId] =
+  const [selectedMakeupLookCardId, setSelectedMakeupLookCardId] =
     useState<string | null>(defaultFilter.id);
   const [selectedMakeupPresetCardId, setSelectedMakeupPresetCardId] =
     useState(defaultFilter.id);
-  const [selectedFacePartId, setSelectedFacePartId] = useState<FacePartId>('all');
+  const [selectedMakeupArea, setSelectedMakeupArea] = useState<MakeupArea>('all');
   const [selectedMakeupOptionGroup, setSelectedMakeupOptionGroup] =
-    useState<ARMakeupOptionGroupId>('makeupStyle');
+    useState<ARMakeupOptionGroupId>('makeupLook');
   const [selectedColorId, setSelectedColorId] = useState(
     getARFilterInitialColorId(defaultFilter.colorOptions),
   );
@@ -278,22 +283,22 @@ export function ARFilterScreen({
   const selectedMakeupFilter =
     arGuideData.filters.find(makeupFilter =>
       makeupFilter.id ===
-      (selectedFacePartId === 'all'
-        ? selectedMakeupStyleCardId
+      (selectedMakeupArea === 'all'
+        ? selectedMakeupLookCardId
         : selectedMakeupPresetCardId),
     ) ?? defaultFilter;
   const categoryMakeupFilters = getFiltersByCategory(selectedCategoryId, arGuideData);
-  const availableMakeupFilters = getMakeupFiltersForFacePart(
+  const availableMakeupFilters = getMakeupFiltersForMakeupArea(
     categoryMakeupFilters,
-    selectedFacePartId,
+    selectedMakeupArea,
   );
-  const availableOptionGroups = getARFilterOptionGroups(selectedFacePartId);
-  const shapeOptions = getARFilterShapeOptions(selectedFacePartId);
+  const availableOptionGroups = getARFilterOptionGroups(selectedMakeupArea);
+  const shapeOptions = getARFilterShapeOptions(selectedMakeupArea);
 
-  const handleFacePartPress = (facePartId: FacePartId) => {
-    const nextOptionGroups = getARFilterOptionGroups(facePartId);
+  const handleMakeupAreaOptionPress = (makeupAreaId: MakeupArea) => {
+    const nextOptionGroups = getARFilterOptionGroups(makeupAreaId);
 
-    setSelectedFacePartId(facePartId);
+    setSelectedMakeupArea(makeupAreaId);
 
     if (!nextOptionGroups.some(group => group.id === selectedMakeupOptionGroup)) {
       setSelectedMakeupOptionGroup(nextOptionGroups[0].id);
@@ -303,7 +308,7 @@ export function ARFilterScreen({
   const handleCategoryPress = (categoryId: FilterCategoryId) => {
     const nextCategoryMakeupFilters = getFiltersByCategory(categoryId, arGuideData);
     const nextMakeupFilter =
-      getMakeupFiltersForFacePart(nextCategoryMakeupFilters, selectedFacePartId)[0] ??
+      getMakeupFiltersForMakeupArea(nextCategoryMakeupFilters, selectedMakeupArea)[0] ??
       defaultFilter;
 
     setSelectedCategoryId(categoryId);
@@ -311,13 +316,13 @@ export function ARFilterScreen({
   };
 
   const handleMakeupFilterPress = (makeupFilter: MakeupFilter) => {
-    if (selectedFacePartId === 'all') {
-      setSelectedMakeupStyleCardId(makeupFilter.id);
+    if (selectedMakeupArea === 'all') {
+      setSelectedMakeupLookCardId(makeupFilter.id);
       setHasUnsavedMakeupChanges(false);
     } else {
       setSelectedMakeupPresetCardId(makeupFilter.id);
       setHasUnsavedMakeupChanges(true);
-      setSelectedMakeupStyleCardId(null);
+      setSelectedMakeupLookCardId(null);
     }
 
     setSelectedColorId(getARFilterInitialColorId(makeupFilter.colorOptions));
@@ -326,17 +331,17 @@ export function ARFilterScreen({
   };
 
   const markMakeupOptionEdited = () => {
-    setSelectedMakeupStyleCardId(currentMakeupStyleCardId =>
-      getARFilterMakeupStyleCardIdAfterOptionEdit({
-        selectedMakeupStyleCardId: currentMakeupStyleCardId,
+    setSelectedMakeupLookCardId(currentMakeupLookCardId =>
+      getARFilterMakeupLookCardIdAfterOptionEdit({
+        selectedMakeupLookCardId: currentMakeupLookCardId,
       }),
     );
     setHasUnsavedMakeupChanges(true);
   };
 
   const handleOriginalOptionPress = () => {
-    if (selectedMakeupOptionGroup === 'makeupStyle') {
-      setSelectedMakeupStyleCardId(ORIGINAL_OPTION_CARD_ID);
+    if (selectedMakeupOptionGroup === 'makeupLook') {
+      setSelectedMakeupLookCardId(ORIGINAL_OPTION_CARD_ID);
       setHasUnsavedMakeupChanges(false);
       return;
     }
@@ -480,12 +485,12 @@ export function ARFilterScreen({
           horizontal={false}
           showsVerticalScrollIndicator={false}>
           <HorizontalSection>
-            {arGuideData.faceParts.map(facePart => (
+            {arGuideData.makeupAreas.map(makeupArea => (
               <OverlayChipButton
-                key={facePart.id}
-                isActive={facePart.id === selectedFacePartId}
-                label={facePart.label}
-                onPress={() => handleFacePartPress(facePart.id)}
+                key={makeupArea.id}
+                isActive={makeupArea.id === selectedMakeupArea}
+                label={makeupArea.label}
+                onPress={() => handleMakeupAreaOptionPress(makeupArea.id)}
               />
             ))}
           </HorizontalSection>
@@ -501,10 +506,10 @@ export function ARFilterScreen({
             ))}
           </HorizontalSection>
 
-          {selectedMakeupOptionGroup === 'makeupStyle' ||
+          {selectedMakeupOptionGroup === 'makeupLook' ||
           selectedMakeupOptionGroup === 'makeupPreset' ? (
             <>
-              {selectedMakeupOptionGroup === 'makeupStyle' ? (
+              {selectedMakeupOptionGroup === 'makeupLook' ? (
                 <HorizontalSection label={getARFilterCategoryTitle()}>
                   {arGuideData.categories.map(category => (
                     <OverlayChipButton
@@ -522,10 +527,10 @@ export function ARFilterScreen({
                 horizontal
                 showsHorizontalScrollIndicator={false}>
                 <OptionCard
-                  accessibilityLabel="원본 스타일 선택"
+                  accessibilityLabel="원본 룩 선택"
                   isActive={
-                    selectedMakeupOptionGroup === 'makeupStyle'
-                      ? selectedMakeupStyleCardId === ORIGINAL_OPTION_CARD_ID
+                    selectedMakeupOptionGroup === 'makeupLook'
+                      ? selectedMakeupLookCardId === ORIGINAL_OPTION_CARD_ID
                       : selectedMakeupPresetCardId === ORIGINAL_OPTION_CARD_ID
                   }
                   label={ORIGINAL_OPTION_CARD_LABEL}
@@ -536,12 +541,12 @@ export function ARFilterScreen({
                   <OptionCard
                     key={makeupFilter.id}
                     accessibilityLabel={`${makeupFilter.title} ${
-                      selectedMakeupOptionGroup === 'makeupStyle' ? '스타일' : '프리셋'
+                      selectedMakeupOptionGroup === 'makeupLook' ? '룩' : '프리셋'
                     } 선택`}
                     imageSource={makeupFilter.imageSource}
                     isActive={
-                      selectedMakeupOptionGroup === 'makeupStyle'
-                        ? makeupFilter.id === selectedMakeupStyleCardId
+                      selectedMakeupOptionGroup === 'makeupLook'
+                        ? makeupFilter.id === selectedMakeupLookCardId
                         : makeupFilter.id === selectedMakeupPresetCardId
                     }
                     label={makeupFilter.title}

@@ -1,18 +1,18 @@
 import type {
-  FilterLocationState,
-  FilterStyleState,
+  FilterShapeState,
+  MakeupFilterOptionState,
 } from '../services/filterCustomizationService';
 
-export const mockFilterLocationState: FilterLocationState = {
-  selectedFacePartId: 'all',
+export const mockFilterShapeState: FilterShapeState = {
+  selectedMakeupArea: 'all',
   isOverlayVisible: true,
-  landmarks: [
-    {id: 'left-brow', x: 38, y: 31},
-    {id: 'right-brow', x: 62, y: 31},
-    {id: 'left-cheek', x: 34, y: 54},
-    {id: 'right-cheek', x: 66, y: 54},
-    {id: 'lip-top', x: 50, y: 68},
-    {id: 'chin', x: 50, y: 82},
+  shapePoints: [
+    {id: 'left-brow', position: {x: 38, y: 31}, offset: {x: 0, y: 0}},
+    {id: 'right-brow', position: {x: 62, y: 31}, offset: {x: 0, y: 0}},
+    {id: 'left-cheek', position: {x: 34, y: 54}, offset: {x: 0, y: 0}},
+    {id: 'right-cheek', position: {x: 66, y: 54}, offset: {x: 0, y: 0}},
+    {id: 'lip-top', position: {x: 50, y: 68}, offset: {x: 0, y: 0}},
+    {id: 'chin', position: {x: 50, y: 82}, offset: {x: 0, y: 0}},
   ],
   adjustments: {
     horizontal: {
@@ -50,8 +50,8 @@ export const mockFilterLocationState: FilterLocationState = {
   },
 };
 
-export const mockFilterStyleState: FilterStyleState = {
-  selectedFacePartId: 'all',
+export const mockMakeupFilterOptionState: MakeupFilterOptionState = {
+  selectedMakeupArea: 'all',
   selectedOptionGroup: 'color',
   selectedColorId: 'rose',
   selectedTypeId: 'lipstick',

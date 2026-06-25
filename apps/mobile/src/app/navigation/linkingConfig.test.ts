@@ -23,26 +23,29 @@ type TypeEquals<Actual, Expected> =
 
 type ExpectType<Condition extends true> = Condition;
 
-type ImageAnalysisReportDetailPathContract = ExpectType<
+type FaceAnalysisReportDetailPathContract = ExpectType<
   TypeEquals<
-    typeof rootStackLinkingScreens.ImageAnalysisReportDetail,
-    'image-analysis-report/:reportId?'
+    typeof rootStackLinkingScreens.FaceAnalysisReportDetail,
+    'face-analysis-report/:reportId?'
   >
 >;
-type FeedbackTipPathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.FeedbackTip, 'feedback-tip/:pointId'>
+type MakeupCorrectionTipPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.MakeupCorrectionTip, 'makeup-correction-tip/:pointId'>
 >;
 type MakeupLookListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
 >;
-type FilterExtractionUploadPathContract = ExpectType<
+type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
-    typeof rootStackLinkingScreens.FilterExtractionUpload,
-    'filter-extraction-upload'
+    typeof rootStackLinkingScreens.ReferenceMakeupExtractionUpload,
+    'reference-makeup-extraction-upload'
   >
 >;
-type FilterSaveCompletePathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.FilterSaveComplete, 'filter-save-complete'>
+type MakeupFilterSaveCompletePathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupFilterSaveComplete,
+    'makeup-filter-save-complete'
+  >
 >;
 
 expectEqual(
@@ -81,14 +84,14 @@ expectEqual(
   'linking config has no unknown main tab routes',
 );
 expectEqual(
-  navigationLinking.config?.screens?.ImageAnalysisReportDetail,
-  'image-analysis-report/:reportId?',
-  'image analysis report detail path preserves optional report id',
+  navigationLinking.config?.screens?.FaceAnalysisReportDetail,
+  'face-analysis-report/:reportId?',
+  'face analysis report detail path preserves optional report id',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FeedbackTip,
-  'feedback-tip/:pointId',
-  'feedback tip path preserves required point id',
+  navigationLinking.config?.screens?.MakeupCorrectionTip,
+  'makeup-correction-tip/:pointId',
+  'makeup correction tip path preserves required point id',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupLookList,
@@ -96,12 +99,12 @@ expectEqual(
   'makeup look list path uses look naming',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FilterExtractionUpload,
-  'filter-extraction-upload',
-  'filter extraction upload path uses extraction naming',
+  navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,
+  'reference-makeup-extraction-upload',
+  'reference makeup extraction upload path uses extraction naming',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FilterSaveComplete,
-  'filter-save-complete',
-  'filter save complete path distinguishes completion route',
+  navigationLinking.config?.screens?.MakeupFilterSaveComplete,
+  'makeup-filter-save-complete',
+  'makeup filter save complete path distinguishes completion route',
 );

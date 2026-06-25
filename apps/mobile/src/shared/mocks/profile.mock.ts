@@ -1,12 +1,13 @@
-import { imageAnalysisReportsMock } from './imageAnalysis.mock';
+import { faceAnalysisReportsMock } from './faceAnalysis.mock';
 import { makeupLooksMock } from './makeupLooks.mock';
 import { productsMock } from './products.mock';
-import { userProfileMock } from './user.mock';
-import type {ProfileData} from '../types/profile';
+import { beautyProfileMock, userProfileMock } from './user.mock';
+import type {MyPageProfileSummary} from '../types/profile';
 
-export const profileMock: ProfileData = {
+export const myPageProfileSummaryMock: MyPageProfileSummary = {
   profile: userProfileMock,
-  imageAnalysisReports: imageAnalysisReportsMock.slice(0, 3),
+  beautyProfile: beautyProfileMock,
+  faceAnalysisReport: faceAnalysisReportsMock[0] ?? null,
   makeupLooks: makeupLooksMock,
   likedProducts: productsMock,
 };

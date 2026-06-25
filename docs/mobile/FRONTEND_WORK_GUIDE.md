@@ -36,8 +36,8 @@ AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바�
 3. Onboarding Screen
 4. Home Screen
 5. Face Capture Screen
-6. AI Analysis Loading Screen
-7. AI Facial Analysis Result Screen
+6. Face Analysis Loading Screen
+7. Face Analysis Result Screen
 8. AR Makeup Guide Screen
 9. Saved Looks Screen
 10. My Page Screen
@@ -84,15 +84,18 @@ apps/mobile/src/
     fonts/
   config/
   features/
-    analysis/
     ar/
+    auth/
     face-capture/
-    feedback/
+    home/
+    face-analysis/
+    makeup-feedback/
     onboarding/
     preference/
     profile/
     recipe/
     recommendation/
+    reference-makeup-extraction/
   shared/
     api/
     hooks/
@@ -158,9 +161,28 @@ shared/mocks/makeup.mock.ts
 - hook은 `use`로 시작합니다.
   - 예: `useAuthForm.ts`
 - type/interface는 의미가 드러나게 작성합니다.
-  - 예: `UserProfile`, `MakeupLook`, `SkinToneResult`
+  - 예: `UserProfile`, `MakeupLook`, `FaceAnalysisReport`
 - mock 데이터 파일은 `*.mock.ts` 또는 명확한 mock 이름을 사용합니다.
   - 예: `makeup.mock.ts`, `user.mock.ts`
+
+## 도메인 네이밍 규칙
+
+- 사용자가 저장, 추천, 추출 결과로 인식하는 메이크업 단위는 `Look/룩`을 기본으로 사용합니다.
+  - 예: `MakeupLook`, `MakeupLookPreview`, `makeupLooksMock`, `savedMakeupLook`
+- React Native의 `style`, `StyleSheet`, `styles`는 UI 스타일링 용어이므로 `Look`으로 바꾸지 않습니다.
+- 레퍼런스 이미지에서 메이크업 정보를 분석해 추출하는 현재 플로우는 `ReferenceMakeupExtraction`을 사용합니다.
+  - 예: `ReferenceMakeupExtractionUploadScreen`, `ReferenceMakeupExtractionResultScreen`
+- 레퍼런스 추출의 결과 타입은 `ReferenceMakeupExtractionResult`를 사용합니다.
+  - 예: `makeupExtractionService`, `ReferenceMakeupExtractionResult`
+- 메이크업 피드백 플로우는 단독 `Feedback` 대신 `MakeupFeedback`을 사용합니다.
+  - 예: `MakeupFeedbackEntryScreen`, `MakeupFeedbackResult`, `analyzeMakeupForFeedback`
+- `Correction`은 수정 포인트, 수정팁, 수정 가이드처럼 실제 보정 방법을 다루는 이름에만 사용합니다.
+  - 예: `MakeupCorrectionTipScreen`, `MakeupCorrectionGuideOverlayScreen`
+- `Filter`는 실제 AR 필터, 필터 적용, 필터 생성, 필터 프리셋 의미일 때만 사용합니다.
+  - 예: `ARFilter`, `MakeupFilterGeneration`, `MakeupFilterPreset`
+- React Native의 `style` prop, `StyleSheet`의 `styles` 객체, 영어 동사 `look` 의미의 이름은 도메인 네이밍 정리 대상이 아닙니다.
+  - 예: `styles.container`, `isLookingForward`
+- 기존 이미지 asset의 `look-*.png` 파일명은 import 영향이 크므로 별도 asset 정리 작업이 있을 때만 변경합니다.
 
 ## 하지 말아야 할 것
 

@@ -78,21 +78,21 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ImageAnalysisLoading: {
+  FaceAnalysisLoading: {
     category: 'progress',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '얼굴 분석',
   },
-  ImageAnalysisReportsList: {
+  FaceAnalysisReportsList: {
     category: 'list',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '이미지 분석 결과',
+    title: '얼굴 분석 결과',
   },
-  ImageAnalysisReportDetail: {
+  FaceAnalysisReportDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
@@ -127,19 +127,19 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ARFilterLocationAdjust: {
+  ARFilterShapeAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ARFilterStyleAdjust: {
+  MakeupFilterEdit: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FeedbackEntry: {
+  MakeupFeedbackEntry: {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
@@ -147,41 +147,41 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackCapture: {
+  MakeupFeedbackCapture: {
     category: 'capture-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  FeedbackLoading: {
+  MakeupFeedbackLoading: {
     category: 'progress',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackResult: {
+  MakeupFeedbackResult: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackGuide: {
+  MakeupCorrectionGuide: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '가이드 오버레이',
   },
-  FeedbackTip: {
+  MakeupCorrectionTip: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '수정팁',
   },
-  FilterExtractionUpload: {
+  ReferenceMakeupExtractionUpload: {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
@@ -189,47 +189,47 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '메이크업 추출',
   },
-  FilterExtractionLoading: {
+  ReferenceMakeupExtractionLoading: {
     category: 'progress',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FilterExtractionResult: {
+  ReferenceMakeupExtractionResult: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '분석 결과',
   },
-  FilterTryOnAdjust: {
+  ExtractedMakeupLookAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FilterSaveForm: {
+  MakeupFilterSaveForm: {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['done'],
     statusBarStyle: 'dark',
-    title: '필터 저장',
+    title: '메이크업 필터 저장',
   },
-  FilterSaveComplete: {
+  MakeupFilterSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FilterRecipeDetail: {
+  ExtractedMakeupLookRecipeDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
-  FilterRecipeSaveComplete: {
+  ExtractedMakeupLookRecipeSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',

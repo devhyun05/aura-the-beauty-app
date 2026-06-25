@@ -240,29 +240,29 @@ export function OverlayTopBar({
 }
 
 type OverlayAdjustmentTabsProps = {
-  activeTab: 'location' | 'style';
-  onPressLocation?: () => void;
-  onPressStyle?: () => void;
+  activeTab: 'shape' | 'filterEdit';
+  onPressShape?: () => void;
+  onPressFilterEdit?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
 export function OverlayAdjustmentTabs({
   activeTab,
-  onPressLocation,
-  onPressStyle,
+  onPressShape,
+  onPressFilterEdit,
   style,
 }: OverlayAdjustmentTabsProps) {
   return (
     <XStack style={[styles.adjustmentTabs, style]}>
       <OverlaySegmentButton
-        isActive={activeTab === 'location'}
+        isActive={activeTab === 'shape'}
         label="형태 수정"
-        onPress={onPressLocation}
+        onPress={onPressShape}
       />
       <OverlaySegmentButton
-        isActive={activeTab === 'style'}
-        label="프리셋 수정"
-        onPress={onPressStyle}
+        isActive={activeTab === 'filterEdit'}
+        label="필터 수정"
+        onPress={onPressFilterEdit}
       />
     </XStack>
   );

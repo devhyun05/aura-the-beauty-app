@@ -102,18 +102,41 @@ AI 에이전트에게 이 작업을 맡길 때는 다음 원칙을 반드시 함
 
 ## 7. 단계별 작업 계획
 
+### 7.0 2026-06-26 코드 적용 현황
+
+- 적용 완료:
+  - `ImageAnalysis*` route/file/type/service/mock -> `FaceAnalysis*`
+  - `MakeupStyle*`, `makeupStyle*`, `makeupStylesMock`, `savedMakeupStyle` -> `MakeupLook*`, `makeupLook*`, `makeupLooksMock`, `savedMakeupLook`
+  - `ARFilterStyleAdjustScreen` -> `MakeupFilterEditScreen`
+  - `ARFilterLocationAdjustScreen` -> `ARFilterShapeAdjustScreen`
+  - `ExtractedMakeupStyleAdjust` -> `ExtractedMakeupLookAdjust`
+  - `ExtractedMakeupStyleSaveForm`/`SaveComplete` -> `MakeupFilterSaveForm`/`MakeupFilterSaveComplete`
+  - `ExtractedMakeupStyleRecipe*` -> `ExtractedMakeupLookRecipe*`
+  - `FacePartId`/`FacePart` 기준 타입 -> `MakeupArea`/`MakeupAreaOption`
+  - 사용자가 옮기는 조정점 이름 -> `shapePoint`
+  - `ProductRecommendationItem` -> `RecommendedProduct`
+  - `MakeupFeedbackPhotoSelection.source` -> `photoSource`
+  - `ReferenceMakeupPhoto.source` -> `referenceSource`
+  - `ProfileData` -> `MyPageProfileSummary`
+  - `MakeupLookRecipeTab` -> `MakeupRecipeTab`
+  - `PhotoCaptureGuideScreen` -> `FaceCaptureTutorialScreen`
+- 의도적 예외:
+  - React Native `style` prop, `StyleSheet`, `styles`, `TextStyle`, `ViewStyle`
+  - React Native `Image`/`ImagePlaceholder`의 `source` prop
+  - UI 레이아웃 CSS성 `position`
+
 ### 7.1 문서 동기화
 
-- [ ] `APP_SCREEN_FLOW_FEATURE_SPEC.md`의 용어 사전을 최종 결정 기준으로 갱신한다.
-- [ ] `AR_FILTER_SCREEN_FEATURE_SPEC.md`의 AR 필터 화면 용어를 `MakeupFilter`, `MakeupLook`, `Shape`, `MakeupArea` 기준으로 갱신한다.
-- [ ] `스타일`을 사용자-facing 용어에서 제거하고 `룩`으로 통일한다.
-- [ ] `위치` 옵션을 `형태` 옵션으로 정리하고, `shapePoint`, `position`, `offset` 정의를 추가한다.
+- [x] `APP_SCREEN_FLOW_FEATURE_SPEC.md`의 용어 사전을 최종 결정 기준으로 갱신한다.
+- [x] `AR_FILTER_SCREEN_FEATURE_SPEC.md`의 AR 필터 화면 용어를 `MakeupFilter`, `MakeupLook`, `Shape`, `MakeupArea` 기준으로 갱신한다.
+- [x] `스타일`을 사용자-facing 용어에서 제거하고 `룩`으로 통일한다.
+- [x] `위치` 옵션을 `형태` 옵션으로 정리하고, `shapePoint`, `position`, `offset` 정의를 추가한다.
 - [ ] `메이크업 가이드`로 적힌 기능 중 레시피 성격이면 `메이크업 레시피`로 바꾼다.
 
 ### 7.2 공통 도메인 타입 정리
 
-- [ ] `MakeupFilter` 상위 타입을 정의한다.
-- [ ] `TotalMakeupLook`과 `PointMakeupLook` 타입을 분리한다.
+- [x] `MakeupFilter` 상위 타입을 정의한다.
+- [x] `TotalMakeupLook`과 `PointMakeupLook` 타입을 분리한다.
 - [ ] 포인트메이크업룩 하위 타입 또는 scope를 정리한다.
   - `LipMakeupLook`
   - `EyeMakeupLook`
@@ -125,79 +148,79 @@ AI 에이전트에게 이 작업을 맡길 때는 다음 원칙을 반드시 함
   - `CheekMakeupLook`
   - `EyebrowMakeupLook`
   - `ContourMakeupLook`
-- [ ] `MakeupArea` 기준 타입을 만들고 기존 부위 타입을 연결한다.
+- [x] `MakeupArea` 기준 타입을 만들고 기존 부위 타입을 연결한다.
 - [ ] `FacePart` 또는 `FaceLandmarkGroup`은 얼굴 인식 모델의 물리적 부위/랜드마크 그룹에만 사용한다.
-- [ ] `Preset` 또는 `makeupPresetValues`를 룩 내부 설정값 묶음으로 제한한다.
+- [x] `Preset` 또는 `makeupPresetValues`를 룩 내부 설정값 묶음으로 제한한다.
 
 ### 7.3 AR 필터 화면 rename
 
-- [ ] `ARFilterStyleAdjustScreen`을 `MakeupFilterEditScreen` 계열로 rename한다.
-- [ ] `StyleAdjust` 관련 상태/핸들러를 `MakeupFilterEdit` 계열로 rename한다.
+- [x] `ARFilterStyleAdjustScreen`을 `MakeupFilterEditScreen` 계열로 rename한다.
+- [x] `StyleAdjust` 관련 상태/핸들러를 `MakeupFilterEdit` 계열로 rename한다.
   - `styleAdjustState` -> `makeupFilterEditState`
   - `openStyleAdjust` -> `openMakeupFilterEdit`
-- [ ] 필터 저장 화면/폼은 `MakeupFilterSave` 계열로 rename한다.
+- [x] 필터 저장 화면/폼은 `MakeupFilterSave` 계열로 rename한다.
   - `ExtractedMakeupStyleSaveForm` -> `MakeupFilterSaveForm`
   - `makeupFilterSaveState`
   - `submitMakeupFilterSave`
-- [ ] 화면 내부 탭은 `룩`, `컬러`, `타입`, `질감`, `형태` 순서와 노출 조건을 확인한다.
-- [ ] 전체 선택 상태에서는 `룩`, `형태`만 노출하는 규칙을 반영한다.
-- [ ] 개별 부위 선택 상태에서는 `룩`, `컬러`, `타입`, `질감`, `형태`를 사용할 수 있게 정리한다.
-- [ ] 선택 카드의 첫 항목은 항상 `원본` 카드로 둔다.
+- [x] 화면 내부 탭은 `룩`, `컬러`, `타입`, `질감`, `형태` 순서와 노출 조건을 확인한다.
+- [x] 전체 선택 상태에서는 `룩`, `형태`만 노출하는 규칙을 반영한다.
+- [x] 개별 부위 선택 상태에서는 `룩`, `컬러`, `타입`, `질감`, `형태`를 사용할 수 있게 정리한다.
+- [x] 선택 카드의 첫 항목은 항상 `원본` 카드로 둔다.
 
 ### 7.4 형태 편집 모델 정리
 
-- [ ] `locationOption`, `selectedLocationId`, `makeupLocation` 계열을 `shapeOption`, `selectedMakeupShapeId`, `makeupShape` 계열로 rename한다.
-- [ ] 사용자가 옮기는 조정점은 `shapePoint`로 명명한다.
-- [ ] 얼굴 인식 원본 기준점에만 `landmark` 계열 이름을 사용한다.
-- [ ] `shapePoint.position`은 기준/현재 좌표로 사용한다.
-- [ ] `shapePoint.offset`은 기준점 대비 이동량으로 사용한다.
+- [x] `locationOption`, `selectedLocationId`, `makeupLocation` 계열을 `shapeOption`, `selectedMakeupShapeId`, `makeupShape` 계열로 rename한다.
+- [x] 사용자가 옮기는 조정점은 `shapePoint`로 명명한다.
+- [x] 얼굴 인식 원본 기준점에만 `landmark` 계열 이름을 사용한다.
+- [x] `shapePoint.position`은 기준/현재 좌표로 사용한다.
+- [x] `shapePoint.offset`은 기준점 대비 이동량으로 사용한다.
 - [ ] 형태 저장값이 룩/필터 저장값과 어떻게 조합되는지 타입으로 명확히 표현한다.
 
 ### 7.5 룩/스타일 레거시 rename
 
-- [ ] 룩 도메인의 `Style` 타입/컴포넌트/변수명을 `Look` 계열로 rename한다.
+- [x] 룩 도메인의 `Style` 타입/컴포넌트/변수명을 `Look` 계열로 rename한다.
   - `MakeupStyle` -> `MakeupLook`
   - `MakeupStyleCard` -> `MakeupLookCard`
   - `MakeupStylePreview` -> `MakeupLookPreview`
   - `selectedStyleId` -> `selectedLookId`
   - `selectedMakeupStyleCardId` -> `selectedMakeupLookId`
-- [ ] asset/mock data 이름을 `Look` 계열로 rename한다.
+- [x] asset/mock data 이름을 `Look` 계열로 rename한다.
   - `makeupStyleImages` -> `makeupLookImages`
   - `styleCardImage` -> `lookCardImage`
   - `makeupStyleCards` -> `makeupLookCards`
-- [ ] `ExtractedMakeupStyle*` 계열은 `ExtractedMakeupLook*` 계열로 rename한다.
-- [ ] UI 스타일링 의미의 `style`, `StyleSheet`, `styles`는 변경하지 않는다.
+- [x] `ExtractedMakeupStyle*` 계열은 `ExtractedMakeupLook*` 계열로 rename한다.
+- [x] UI 스타일링 의미의 `style`, `StyleSheet`, `styles`는 변경하지 않는다.
 
 ### 7.6 분석/추출/피드백 도메인 정리
 
-- [ ] 얼굴 분석 기능은 `FaceAnalysis` 계열로 정리한다.
+- [x] 얼굴 분석 기능은 `FaceAnalysis` 계열로 정리한다.
   - `FaceAnalysis`
   - `FaceAnalysisResult`
   - `FaceAnalysisReport`
-- [ ] 메이크업 피드백은 `MakeupFeedback` 계열로 분리한다.
+- [x] 메이크업 피드백은 `MakeupFeedback` 계열로 분리한다.
   - `MakeupFeedback`
   - `MakeupFeedbackResult`
-- [ ] 레퍼런스 메이크업 추출은 `ReferenceMakeupExtraction` 계열로 정리한다.
+- [x] 레퍼런스 메이크업 추출은 `ReferenceMakeupExtraction` 계열로 정리한다.
   - `ReferenceMakeupExtraction`
   - `ReferenceMakeupExtractionResult`
   - `ReferenceMakeupExtractionReport`
-- [ ] 화면 문구에서 `분석 결과`를 뭉뚱그려 쓰지 않고 `추출 결과`, `얼굴 분석 결과`, `보고서`로 나눈다.
-- [ ] `ImageAnalysis`는 향후 전체 이미지/전체 인상 분석 상위 도메인명으로만 예약한다.
+- [x] 화면 문구에서 `분석 결과`를 뭉뚱그려 쓰지 않고 `추출 결과`, `얼굴 분석 결과`, `보고서`로 나눈다.
+- [x] `ImageAnalysis`는 향후 전체 이미지/전체 인상 분석 상위 도메인명으로만 예약한다.
 
 ### 7.7 안내/레시피/가이드 정리
 
-- [ ] 사용법 안내는 `Tutorial` 계열로 정리한다.
+- [x] 사용법 안내는 `Tutorial` 계열로 정리한다.
   - `Tutorial`
   - `OnboardingTutorial`
   - `FaceCaptureTutorial`
-- [ ] 룩을 따라 만들기 위한 구성/절차/조합은 `MakeupRecipe` 계열로 정리한다.
-- [ ] AR 비교 기준 UI는 `Guide` 계열로 유지할 수 있다.
+- [x] 룩을 따라 만들기 위한 구성/절차/조합은 `MakeupRecipe` 계열로 정리한다.
+- [x] AR 비교 기준 UI는 `Guide` 계열로 유지할 수 있다.
   - `ARHalfGuide`
   - `ARComparisonGuide`
-- [ ] 메이크업 적용 기준선/규칙은 `Guideline` 계열로 분리한다.
+- [x] 메이크업 적용 기준선/규칙은 `Guideline` 계열로 분리한다.
   - `MakeupGuideline`
   - `MakeupApplicationGuideline`
-- [ ] 기존 `GuideCategory`는 목적에 따라 `TutorialCategory`, `MakeupRecipeCategory`, `MakeupGuidelineCategory`로 분리한다.
+- [x] 기존 `GuideCategory`는 목적에 따라 `TutorialCategory`, `MakeupRecipeCategory`, `MakeupGuidelineCategory`로 분리한다.
 
 ### 7.8 제품 추천 도메인 정리
 
@@ -205,7 +228,7 @@ AI 에이전트에게 이 작업을 맡길 때는 다음 원칙을 반드시 함
   - `Product`
   - `ProductDetail`
   - `ProductCategory`
-- [ ] 추천 결과 항목은 `RecommendedProduct` 계열로 rename한다.
+- [x] 추천 결과 항목은 `RecommendedProduct` 계열로 rename한다.
   - `ProductRecommendationItem` -> `RecommendedProduct`
   - `RecommendedProductCard`
   - `recommendedProducts`
@@ -217,27 +240,27 @@ AI 에이전트에게 이 작업을 맡길 때는 다음 원칙을 반드시 함
 
 ### 7.9 프로필 도메인 정리
 
-- [ ] 계정/회원 기본 정보는 `UserProfile` 계열로 유지한다.
+- [x] 계정/회원 기본 정보는 `UserProfile` 계열로 유지한다.
   - `UserProfile`
   - `getUserProfile`
   - `updateUserProfile`
-- [ ] 마이페이지 표시용 요약은 `MyPageProfileSummary` 계열로 분리한다.
+- [x] 마이페이지 표시용 요약은 `MyPageProfileSummary` 계열로 분리한다.
   - `MyPageProfileSummary`
   - `getMyPageProfileSummary`
-- [ ] 얼굴 분석/추천에 활용되는 뷰티 특성 데이터는 `BeautyProfile` 계열로 분리한다.
+- [x] 얼굴 분석/추천에 활용되는 뷰티 특성 데이터는 `BeautyProfile` 계열로 분리한다.
   - `BeautyProfile`
   - `getBeautyProfile`
   - `updateBeautyProfile`
-- [ ] `FaceAnalysisResult`는 분석 실행 결과, `BeautyProfile`은 계속 저장해 개인화에 쓰는 특성 데이터로 구분한다.
+- [x] `FaceAnalysisResult`는 분석 실행 결과, `BeautyProfile`은 계속 저장해 개인화에 쓰는 특성 데이터로 구분한다.
 
 ### 7.10 `source` 필드 구체화
 
-- [ ] 단독 `source`가 공유 타입, 화면 파라미터, API 응답에 남아 있는지 검색한다.
-- [ ] 이미지 경로/asset 출처는 `imageSource` 계열로 바꾼다.
+- [x] 단독 `source`가 공유 타입, 화면 파라미터, API 응답에 남아 있는지 검색한다.
+- [x] 이미지 경로/asset 출처는 `imageSource` 계열로 바꾼다.
   - `profileImageSource`
   - `referenceImageSource`
   - `productImageSource`
-- [ ] 레퍼런스 입력 출처는 `referenceSource` 계열로 바꾼다.
+- [x] 레퍼런스 입력 출처는 `referenceSource` 계열로 바꾼다.
 - [ ] 추천 근거/채널은 `recommendationSource` 계열로 바꾼다.
 - [ ] 화면 진입점은 `navigationSource`, `entryPoint`, `openedFrom` 중 맥락에 맞게 사용한다.
 - [ ] 원본/가공 데이터 계보는 `rawSource`, `originalSource`, `derivedFrom`으로 표현한다.
@@ -285,16 +308,23 @@ position
 
 ## 10. 검증 기준
 
-- [ ] 앱 화면 문구에 `스타일`이 룩 의미로 남아 있지 않다.
-- [ ] 룩 도메인 코드에 신규 `Style` 이름이 추가되지 않는다.
-- [ ] AR 필터 편집/저장 플로우가 `MakeupFilterEdit`/`MakeupFilterSave` 축으로 정리되어 있다.
-- [ ] `Shape`, `shapePoint`, `position`, `offset`, `landmark`의 의미가 타입과 변수명에서 구분된다.
-- [ ] `MakeupArea`가 메이크업 적용/저장/편집 범위의 기준 타입으로 쓰인다.
+2026-06-26 적용 검증:
+
+- `rg` 기준 앱 코드에는 `MakeupStyle`, `ExtractedMakeupStyle`, `ARFilterLocationAdjust`, `ARFilterStyleAdjust`, `FacePartId`, `ImageAnalysis`, `ProductRecommendationItem`, `GuideCategory` 레거시 식별자가 남아 있지 않다.
+- 단독 `source`는 React Native 이미지 prop 또는 `ImagePlaceholder`의 프레임워크 호환 prop으로만 남아 있다.
+- `npm --prefix apps/mobile run typecheck` 통과.
+
+- [x] 앱 화면 문구에 `스타일`이 룩 의미로 남아 있지 않다.
+- [x] 룩 도메인 코드에 신규 `Style` 이름이 추가되지 않는다.
+- [x] AR 필터 편집/저장 플로우가 `MakeupFilterEdit`/`MakeupFilterSave` 축으로 정리되어 있다.
+- [x] `Shape`, `shapePoint`, `position`, `offset`, `landmark`의 의미가 타입과 변수명에서 구분된다.
+- [x] `MakeupArea`가 메이크업 적용/저장/편집 범위의 기준 타입으로 쓰인다.
 - [ ] 분석/추출/피드백 결과와 보고서가 `Result`/`Report`로 구분된다.
-- [ ] `Product`와 `RecommendedProduct`가 분리되어 있다.
-- [ ] `UserProfile`, `MyPageProfileSummary`, `BeautyProfile`이 서로 다른 데이터로 분리되어 있다.
-- [ ] 공유 타입과 화면 이동 파라미터에 단독 `source`가 새로 추가되지 않는다.
-- [ ] TypeScript 타입 체크, lint, 관련 화면 빌드/실행 검증을 통과한다.
+- [x] `Product`와 `RecommendedProduct`가 분리되어 있다.
+- [x] `UserProfile`, `MyPageProfileSummary`, `BeautyProfile`이 서로 다른 데이터로 분리되어 있다.
+- [x] 공유 타입과 화면 이동 파라미터에 단독 `source`가 새로 추가되지 않는다.
+- [x] TypeScript 타입 체크를 통과한다.
+- [ ] lint와 관련 화면 빌드/시뮬레이터 실행 검증은 별도 실행 시점에 기록한다.
 
 ## 11. 커밋 분리 제안
 

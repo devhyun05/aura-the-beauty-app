@@ -1,6 +1,7 @@
-import type { ImageSourcePropType } from 'react-native';
+import type {ImageSourcePropType} from 'react-native';
 
-import type { ImageAnalysisReport } from './imageAnalysis';
+import type { FaceAnalysisReport } from './faceAnalysis';
+import type {MakeupArea} from './makeupGuide';
 
 export interface UserProfile {
   id: string;
@@ -12,20 +13,45 @@ export interface UserProfile {
   gender: string;
   interest: string;
   avatarSource: ImageSourcePropType;
+}
+
+export interface BeautyProfile {
   personalColor: string;
   skinType: string;
   skinTone: string;
   tags: string[];
 }
 
-export interface MakeupLook {
+export type MakeupFilterScope = 'totalMakeup' | 'pointMakeup';
+
+export type MakeupPresetValues = {
+  colorId?: string;
+  typeId?: string;
+  textureId?: string;
+  shapeId?: string;
+};
+
+interface MakeupLookBase {
   id: string;
   title: string;
   moodLabel: string;
   shortDescription: string;
   imageSource: ImageSourcePropType;
   isSaved: boolean;
+  makeupPresetValues: MakeupPresetValues;
 }
+
+export interface TotalMakeupLook extends MakeupLookBase {
+  scope: 'totalMakeup';
+  makeupArea: 'all';
+}
+
+export interface PointMakeupLook extends MakeupLookBase {
+  scope: 'pointMakeup';
+  makeupArea: Exclude<MakeupArea, 'all'>;
+}
+
+export type MakeupLook = TotalMakeupLook | PointMakeupLook;
 
 export type MakeupLookPreview = MakeupLook;
 
@@ -47,9 +73,10 @@ export interface ProfileEditField {
   editable: boolean;
 }
 
-export interface ProfileData {
+export interface MyPageProfileSummary {
   profile: UserProfile;
-  imageAnalysisReports: ImageAnalysisReport[];
+  beautyProfile: BeautyProfile;
+  faceAnalysisReport: FaceAnalysisReport | null;
   makeupLooks: MakeupLook[];
   likedProducts: Product[];
 }

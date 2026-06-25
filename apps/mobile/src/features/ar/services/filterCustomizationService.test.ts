@@ -1,8 +1,8 @@
 import {
-  getFilterLocationState,
-  getFilterStyleState,
-  updateFilterStyleSelection,
-  updateFilterLocationAdjustment,
+  getFilterShapeState,
+  getMakeupFilterOptionState,
+  updateMakeupFilterOptionSelection,
+  updateFilterShapeAdjustment,
 } from './filterCustomizationService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -11,16 +11,18 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const initialState = getFilterLocationState();
-const movedState = updateFilterLocationAdjustment(initialState, 'horizontal', 12);
+const initialState = getFilterShapeState();
+const movedState = updateFilterShapeAdjustment(initialState, 'horizontal', 12);
 
 expectEqual(initialState.adjustments.horizontal.value, 0, 'initial horizontal adjustment');
 expectEqual(movedState.adjustments.horizontal.value, 12, 'updated horizontal adjustment');
-expectEqual(initialState.landmarks.length, 6, 'mock landmark count');
+expectEqual(initialState.shapePoints.length, 6, 'mock shape point count');
+expectEqual(initialState.shapePoints[0]?.position.x, 38, 'mock shape point position x');
+expectEqual(initialState.shapePoints[0]?.offset.x, 0, 'mock shape point offset x');
 
-const initialStyleState = getFilterStyleState();
-const updatedStyleState = updateFilterStyleSelection(initialStyleState, 'color', 'nude');
+const initialOptionState = getMakeupFilterOptionState();
+const updatedOptionState = updateMakeupFilterOptionSelection(initialOptionState, 'color', 'nude');
 
-expectEqual(initialStyleState.selectedColorId, 'rose', 'initial selected color');
-expectEqual(updatedStyleState.selectedColorId, 'nude', 'updated selected color');
-expectEqual(updatedStyleState.selectedOptionGroup, 'color', 'updated option group');
+expectEqual(initialOptionState.selectedColorId, 'rose', 'initial selected color');
+expectEqual(updatedOptionState.selectedColorId, 'nude', 'updated selected color');
+expectEqual(updatedOptionState.selectedOptionGroup, 'color', 'updated option group');

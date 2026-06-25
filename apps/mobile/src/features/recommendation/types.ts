@@ -13,7 +13,7 @@ export type ProductRecommendationTab = {
   label: string;
 };
 
-export type ProductRecommendationItem = {
+export type RecommendedProduct = {
   id: string;
   brandName: string;
   productName: string;
@@ -44,8 +44,8 @@ export type ProductRecommendationSet = {
 
 export type ProductRecommendationData = {
   userNickname: string;
-  look: ProductRecommendationLook;
+  makeupLook: ProductRecommendationLook;
   tabs: ProductRecommendationTab[];
-  products: ProductRecommendationItem[];
+  products: RecommendedProduct[];
   sets: ProductRecommendationSet[];
 };

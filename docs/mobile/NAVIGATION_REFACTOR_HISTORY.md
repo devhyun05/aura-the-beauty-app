@@ -4,7 +4,7 @@
 
 이 문서는 모바일 앱의 화면 구조, React Navigation 전환, 헤더/푸터 chrome 정리, 데모용 딥링크 상태 구성 과정을 커밋 히스토리 기준으로 정리한 기록이다. 과거 내역은 이전 커밋 메시지와 변경 파일 범위를 기준으로 작성했다.
 
-> 후속 네이밍 정리 참고: 2026-06-25 이후 현재 코드에서는 과거 `Feedback*` route가 `MakeupFeedback*`/`MakeupCorrection*`으로, 과거 `Filter*` 추출 route가 `ReferenceMakeupExtraction*`/`ExtractedMakeupStyle*`로 정리되었다. 2026-06-26 네이밍 결정에서는 사용자-facing 메이크업 저장/추천/추출 결과 단위를 `스타일`이 아니라 `룩/Look`으로 통일하고, AR 편집/저장은 `MakeupFilterEditScreen`/`MakeupFilterSaveScreen` 축으로 정리하기로 했다. 이 문서 본문에 남아 있는 옛 이름은 당시 navigation refactor 히스토리를 설명하기 위한 과거 명칭이다.
+> 후속 네이밍 정리 참고: 2026-06-26 현재 코드에는 네이밍 리팩터링이 반영되어 `FaceAnalysis*`, `MakeupLook*`, `ARFilterShapeAdjust`, `MakeupFilterEdit`, `MakeupFilterSave*`, `ExtractedMakeupLook*`, `RecommendedProduct`, `photoSource`, `referenceSource`를 사용한다. 이 문서 본문에 남아 있는 옛 이름은 당시 navigation refactor 히스토리를 설명하기 위한 과거 명칭이다.
 
 ## 현재 브랜치
 
@@ -49,7 +49,7 @@
 - 실제 제품은 `Product`, 추천 결과 항목은 `RecommendedProduct`, 추천 기능/플로우는 `ProductRecommendation`으로 구분한다.
 - 계정 기본 정보는 `UserProfile`, 마이페이지 표시용 요약은 `MyPageProfileSummary`, 추천/분석에 쓰는 뷰티 특성은 `BeautyProfile`으로 분리한다.
 
-현재 navigation route에는 아직 `ImageAnalysis*`, `ARFilterLocationAdjust`, `ARFilterStyleAdjust`, `ExtractedMakeupStyle*`, `MakeupStyleList` 같은 레거시 이름이 남아 있다. 이 이름들은 과거 route 계약을 설명하기 위해 히스토리 문서에서는 유지하되, 새 작업에서는 `NAMING_REFACTOR_WORK_PLAN.md`의 rename 순서를 따른다.
+현재 navigation route는 `FaceAnalysis*`, `ARFilterShapeAdjust`, `MakeupFilterEdit`, `MakeupFilterSave*`, `ExtractedMakeupLook*`, `MakeupLookList` 기준으로 정리되어 있다. 본문에 남아 있는 더 오래된 이름은 과거 route 계약을 설명하기 위한 히스토리 명칭이다.
 
 ### `feat: 모바일 딥링크와 데모 상태 추가`
 
@@ -63,11 +63,11 @@
 - `aiarmakeup://tabs/home`
 - `aiarmakeup://tabs/custom`
 - `aiarmakeup://tabs/my-page`
-- `aiarmakeup://image-analysis-report/:reportId?`
+- `aiarmakeup://face-analysis-report/:reportId?`
 - `aiarmakeup://feedback-tip/:pointId`
 - `aiarmakeup://filter-recipe-detail`
 
-`flowState.tsx`에는 데모와 화면 캡처를 위한 초기 상태를 넣었다. 이전에는 feedback result, selected filter photo, saved makeup style이 `null`일 수 있어서 딥링크로 결과/상세 화면에 바로 들어가면 placeholder로 빠질 수 있었다. 현재는 mock feedback result, 기본 filter photo, 저장된 makeup style preview를 초기값으로 갖게 해서 직접 진입 화면도 확인 가능하게 했다.
+`flowState.tsx`에는 데모와 화면 캡처를 위한 초기 상태를 넣었다. 이전에는 feedback result, selected filter photo, saved makeup look이 `null`일 수 있어서 딥링크로 결과/상세 화면에 바로 들어가면 placeholder로 빠질 수 있었다. 현재는 mock feedback result, 기본 filter photo, 저장된 makeup look preview를 초기값으로 갖게 해서 직접 진입 화면도 확인 가능하게 했다.
 
 검증:
 
@@ -97,7 +97,7 @@
   - `rootStackRoutes`의 모든 route가 linking screen config에 존재하는지 확인한다.
   - `mainTabRoutes`의 모든 tab route가 `MainTabs` nested linking config에 존재하는지 확인한다.
   - 반대로 linking config에 routeTypes에 없는 알 수 없는 route 이름이 들어가지 않았는지도 확인한다.
-  - `ImageAnalysisReportDetail`의 optional `reportId`, `FeedbackTip`의 required `pointId`처럼 param path가 필요한 route의 path 형식도 확인한다.
+  - `FaceAnalysisReportDetail`의 optional `reportId`, `FeedbackTip`의 required `pointId`처럼 param path가 필요한 route의 path 형식도 확인한다.
 
 이 테스트가 막아주는 문제는 단순한 오타 이상이다. 새 화면을 `routeTypes.ts`와 `RootNavigator.tsx`에는 추가했지만 딥링크 path를 빠뜨리면, 앱 내부 버튼 이동은 되는데 외부 URL 직접 진입은 실패할 수 있다. 반대로 path config에 오래된 route 이름이 남으면 실제 navigator에는 없는 주소가 문서나 QA 시나리오에 남을 수 있다. 그래서 route 목록과 linking map을 같은 계약으로 묶어두는 것이 중요하다.
 
@@ -116,7 +116,7 @@
 
 - `feedbackResult`: `createMockMakeupFeedback(...)`로 만든 mock feedback 결과
 - `selectedFilterPhoto`: `getFilterExtractionDataSync().photos[0]`
-- `savedMakeupStyle`: 캡처용 저장룩 preview
+- `savedMakeupLook`: 캡처용 저장룩 preview
 
 이 방식은 딥링크로 `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`, `FilterResult`, `FilterRecipeDetail` 같은 화면에 바로 들어가 캡처하기에는 편했다. 하지만 일반 앱 시작 상태에서도 결과/저장룩이 이미 존재하는 것처럼 보일 수 있어 production 기본값으로는 부적절했다.
 
@@ -124,13 +124,13 @@
 
 - `flowState.tsx`
   - 일반 앱 기본 상태만 제공한다.
-  - `feedbackResult`, `savedMakeupStyle`, `selectedFilterPhoto`는 `null`로 시작한다.
+  - `feedbackResult`, `savedMakeupLook`, `selectedFilterPhoto`는 `null`로 시작한다.
   - `selectedFeedbackPhoto`만 기존처럼 `{source: 'camera'}`를 기본 선택값으로 둔다.
   - `NavigationFlowStateProvider`는 `initialState` prop을 받을 수 있어 외부에서 명시적으로 seed를 주입할 수 있다.
 
 - `demoFlowState.ts`
   - 데모/캡처 전용 seed를 제공한다.
-  - `getDemoNavigationFlowState()`가 mock feedback result, 기본 filter photo, 캡처용 saved makeup style을 만든다.
+  - `getDemoNavigationFlowState()`가 mock feedback result, 기본 filter photo, 캡처용 saved makeup look을 만든다.
   - mock import와 filter extraction mock 접근은 이 파일에만 남긴다.
 
 이제 일반 앱은 `NavigationFlowStateProvider`를 prop 없이 사용해 깨끗한 상태로 시작하고, 화면 캡처나 딥링크 검토처럼 seed가 필요한 경우에만 `getDemoNavigationFlowState()`를 명시적으로 주입하면 된다. 이 정리는 데모 편의성과 일반 앱 초기 상태를 분리하기 위한 조치다.
@@ -170,11 +170,11 @@ import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
   - close-only 화면은 왼쪽 빈 슬롯을 예약해 center title 정렬을 유지한다.
 
 - `navigationAdapters.tsx`
-  - `ImageAnalysisLoading`, `ImageAnalysisReportsList`, `ImageAnalysisReportDetail`, `ProfileEdit`, `MakeupStyleList`, `LikedProductList`, `FeedbackEntry`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`, `FilterUpload`, `FilterResult`, `FilterSave`, `FilterRecipeDetail`을 `DetailRouteChrome`으로 감싼다.
+  - `FaceAnalysisLoading`, `FaceAnalysisReportsList`, `FaceAnalysisReportDetail`, `ProfileEdit`, `MakeupLookList`, `LikedProductList`, `FeedbackEntry`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`, `FilterUpload`, `FilterResult`, `FilterSave`, `FilterRecipeDetail`을 `DetailRouteChrome`으로 감싼다.
   - `FeedbackCapture`, `FaceCapture`, `ARMakeupFilter`, `FilterLoading`, `FilterTryOn`, terminal saved screens처럼 immersive/terminal로 분류된 화면은 local overlay나 bottom action을 유지한다.
   - fallback `RoutePlaceholder`는 `showHeader={false}`로 route-level detail header 아래에 중복 헤더 없이 표시한다.
 
-- `ImageAnalysisReportDetailScreen`
+- `FaceAnalysisReportDetailScreen`
   - 내부 `AppHeader`, share/close header button, header 전용 liquid glass target을 제거했다.
   - 공유 메시지는 report/profile 데이터가 필요하므로 화면이 `onHeaderShareActionChange`로 현재 공유 함수를 route adapter에 등록한다.
   - adapter의 공유 액션 등록 callback은 `useCallback`으로 고정해 effect cleanup/register가 불필요하게 반복되지 않도록 했다.
@@ -187,7 +187,7 @@ import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
 테스트도 새 계약에 맞춰 조정했다.
 
 - `detailHeaderChrome.test.ts`
-  - route title과 `FeedbackEntry`, `FilterUpload`, `FilterSave`, `ImageAnalysisReportDetail`의 rightActions를 검증한다.
+  - route title과 `FeedbackEntry`, `FilterUpload`, `FilterSave`, `FaceAnalysisReportDetail`의 rightActions를 검증한다.
 - feedback screen tests
   - 더 이상 각 screen이 `AppHeader` presentation을 export한다고 가정하지 않는다.
   - 화면 JSX props 계약만 유지하고, 헤더 정책은 route-level 테스트로 이동했다.
@@ -196,7 +196,7 @@ import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
 
 검증:
 
-- `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module esnext --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true apps/mobile/src/app/navigation/detailHeaderChrome.test.ts apps/mobile/src/app/navigation/detailHeaderChrome.tsx apps/mobile/src/app/navigation/routeChrome.ts apps/mobile/src/app/navigation/navigationAdapters.tsx apps/mobile/src/shared/ui/RoutePlaceholder.tsx apps/mobile/src/features/analysis/screens/ImageAnalysisReportDetailScreen.tsx apps/mobile/src/features/analysis/screens/ImageAnalysisReportDetailScreen.test.tsx`
+- `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module esnext --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true apps/mobile/src/app/navigation/detailHeaderChrome.test.ts apps/mobile/src/app/navigation/detailHeaderChrome.tsx apps/mobile/src/app/navigation/routeChrome.ts apps/mobile/src/app/navigation/navigationAdapters.tsx apps/mobile/src/shared/ui/RoutePlaceholder.tsx apps/mobile/src/features/analysis/screens/FaceAnalysisReportDetailScreen.tsx apps/mobile/src/features/analysis/screens/FaceAnalysisReportDetailScreen.test.tsx`
 - `npm --prefix apps/mobile run typecheck`
 
 ### `refactor: 모바일 화면 전환을 React Navigation으로 변경`
@@ -256,7 +256,7 @@ import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
 | `0807081` | `refactor` | 피드백 화면 헤더 기준을 정리했다. 별도 `FeedbackDetailHeader`를 제거하고 각 피드백 화면이 `AppHeader` 기준을 따르도록 맞췄다. |
 | `1116a2c` | `chore` | React Navigation 의존성을 추가했다. `@react-navigation/native`, native stack, bottom tabs, `react-native-screens`를 설치하고 `react-dom` 버전을 React와 맞췄다. |
 | `dbbbc24` | `refactor` | `routeTypes.ts`, `routeChrome.ts`, `navigation.test.ts`를 추가했다. route 이름, route params, depth/category/chrome policy, footer target helper를 typed config로 고정했다. |
-| `aaea9f2` | `refactor` | `NavigationFlowStateProvider`를 추가했다. feedback result, selected feedback photo, selected filter photo, saved makeup style을 route param 대신 flow state로 옮겼다. |
+| `aaea9f2` | `refactor` | `NavigationFlowStateProvider`를 추가했다. feedback result, selected feedback photo, selected filter photo, saved makeup look을 route param 대신 flow state로 옮겼다. |
 | `f7cb613` | `refactor` | 실제 화면 전환을 React Navigation으로 변경했다. root stack, main tabs, adapters, status bar sync를 추가하고 old activeScreen router를 삭제했다. |
 | `8922b24` | `docs` | 계획 문서를 실제 구현 상태에 맞게 갱신했다. 완료된 작업과 후속 작업을 분리했다. |
 | `ea9563c` | `feat` | 딥링크 path mapping과 데모용 초기 flow state를 추가했다. URL 직접 진입 및 화면 캡처용 흐름이 쉬워졌다. |
@@ -350,9 +350,9 @@ commitlint 설정은 루트 `commitlint.config.js` 기준으로 `feat`, `fix`, `
 
 - Entry: `Login`, `Tutorial`
 - Main tabs: `HomeTab`, `CustomTab`, `MyPageTab`
-- Analysis: `FaceCapture`, `ImageAnalysisLoading`, `ImageAnalysisReportsList`, `ImageAnalysisReportDetail`
-- Profile/recommendation: `ProfileEdit`, `MakeupStyleList`, `LikedProductList`
-- AR: `ARMakeupFilter`, `ARFilterLocation`, `ARFilterStyle`
+- Analysis: `FaceCapture`, `FaceAnalysisLoading`, `FaceAnalysisReportsList`, `FaceAnalysisReportDetail`
+- Profile/recommendation: `ProfileEdit`, `MakeupLookList`, `LikedProductList`
+- AR: `ARMakeupFilter`, `ARFilterShapeAdjust`, `MakeupFilterEdit`
 - Feedback: `FeedbackEntry`, `FeedbackCapture`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`
 - Filter extraction: `FilterUpload`, `FilterLoading`, `FilterResult`, `FilterTryOn`, `FilterSave`, `FilterSaved`, `FilterRecipeDetail`, `RecipeSaved`
 

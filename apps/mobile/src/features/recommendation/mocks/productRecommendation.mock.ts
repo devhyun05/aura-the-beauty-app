@@ -3,7 +3,7 @@ import type {ImageSourcePropType} from 'react-native';
 import {userProfileMock} from '../../../shared/mocks/user.mock';
 import type {ProductRecommendationData} from '../types';
 
-const lookImage =
+const makeupLookImage =
   require('../../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
 
 const velureLipstickRoseWood =
@@ -29,10 +29,10 @@ const velureGlowCushionNeutral =
 
 export const productRecommendationMock: ProductRecommendationData = {
   userNickname: userProfileMock.nickname,
-  look: {
+  makeupLook: {
     title: '내추럴 뮤트 로즈 룩',
     description: '분석된 로즈 톤과 어울리는 실제 컬러 제품만 골라 추천해드려요.',
-    imageSource: lookImage,
+    imageSource: makeupLookImage,
     tags: ['로즈 립', '피치 블러셔', '브라운 음영', '뉴트럴 베이스'],
     palette: ['#C96F72', '#E49C90', '#A77A69', '#5A3D34'],
   },
