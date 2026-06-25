@@ -3,7 +3,7 @@ import type {ReactNode} from 'react';
 import {feedbackColors} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 
-const feedbackScreenScaffoldProps = {
+const makeupFeedbackScreenScaffoldProps = {
   backgroundColor: feedbackColors.background,
   bottomPadding: 'safeArea',
   contentGap: 0,
@@ -12,21 +12,21 @@ const feedbackScreenScaffoldProps = {
   topPadding: 'safeArea',
 } as const;
 
-export function getFeedbackScreenScaffoldProps() {
-  return feedbackScreenScaffoldProps;
+export function getMakeupFeedbackScreenScaffoldProps() {
+  return makeupFeedbackScreenScaffoldProps;
 }
 
-type FeedbackScreenScaffoldProps = {
+type MakeupFeedbackScreenScaffoldProps = {
   children: ReactNode;
   topPadding?: 'safeArea' | 'none';
 };
 
-export function FeedbackScreenScaffold({
+export function MakeupFeedbackScreenScaffold({
   children,
-  topPadding = feedbackScreenScaffoldProps.topPadding,
-}: FeedbackScreenScaffoldProps) {
+  topPadding = makeupFeedbackScreenScaffoldProps.topPadding,
+}: MakeupFeedbackScreenScaffoldProps) {
   return (
-    <AppScreen {...feedbackScreenScaffoldProps} topPadding={topPadding}>
+    <AppScreen {...makeupFeedbackScreenScaffoldProps} topPadding={topPadding}>
       {children}
     </AppScreen>
   );

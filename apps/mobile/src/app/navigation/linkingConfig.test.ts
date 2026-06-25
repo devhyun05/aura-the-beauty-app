@@ -29,8 +29,8 @@ type ImageAnalysisReportDetailPathContract = ExpectType<
     'image-analysis-report/:reportId?'
   >
 >;
-type FeedbackTipPathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.FeedbackTip, 'feedback-tip/:pointId'>
+type MakeupCorrectionTipPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.MakeupCorrectionTip, 'makeup-correction-tip/:pointId'>
 >;
 type MakeupLookListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
@@ -86,9 +86,9 @@ expectEqual(
   'image analysis report detail path preserves optional report id',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FeedbackTip,
-  'feedback-tip/:pointId',
-  'feedback tip path preserves required point id',
+  navigationLinking.config?.screens?.MakeupCorrectionTip,
+  'makeup-correction-tip/:pointId',
+  'makeup correction tip path preserves required point id',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupLookList,

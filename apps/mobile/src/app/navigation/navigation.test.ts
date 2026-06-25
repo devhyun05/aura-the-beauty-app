@@ -19,8 +19,8 @@ expectEqual(getRouteChrome('HomeTab').kind, 'mainTab', 'home tab chrome');
 expectEqual(getRouteChrome('HomeTab').depth, 'main', 'home tab depth');
 expectEqual(getRouteChrome('ProfileEdit').kind, 'detail', 'profile edit chrome');
 expectEqual(getRouteChrome('ProfileEdit').category, 'form-edit', 'profile edit category');
-expectEqual(getRouteChrome('FeedbackLoading').kind, 'detail', 'feedback loading chrome');
-expectEqual(getRouteChrome('FeedbackLoading').category, 'progress', 'feedback loading category');
+expectEqual(getRouteChrome('MakeupFeedbackLoading').kind, 'detail', 'makeup feedback loading chrome');
+expectEqual(getRouteChrome('MakeupFeedbackLoading').category, 'progress', 'makeup feedback loading category');
 expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
 expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
@@ -55,7 +55,7 @@ expectEqual(
 expectEqual(
   getStatusBarStyleForNavigationState({
     index: 0,
-    routes: [{name: 'FeedbackCapture'}],
+    routes: [{name: 'MakeupFeedbackCapture'}],
   }),
   'light',
   'immersive status bar style',

@@ -20,9 +20,9 @@ expectEqual(
   'profile edit route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FeedbackEntry').join(','),
+  getDetailHeaderRightActions('MakeupFeedbackEntry').join(','),
   'close',
-  'feedback entry route header actions',
+  'makeup feedback entry route header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('ReferenceMakeupExtractionUpload').join(','),

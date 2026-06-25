@@ -1,11 +1,11 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
+import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
 const sampleFeedbackImage = require('../../../assets/images/analysis/report-retake-20260608.png') as ImageSourcePropType;
 
 export const createMockMakeupFeedback = (
-  selection: FeedbackPhotoSelection,
+  selection: MakeupFeedbackPhotoSelection,
 ): MakeupFeedbackResult => ({
   id: `mock-feedback-${selection.source}`,
   uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
@@ -22,7 +22,7 @@ export const createMockMakeupFeedback = (
       label: '립 컬러 잘 어울림',
     },
   ],
-  callouts: [
+  annotations: [
     {
       id: 'eyeline',
       label: '아이라인 좌우 각도 차이',

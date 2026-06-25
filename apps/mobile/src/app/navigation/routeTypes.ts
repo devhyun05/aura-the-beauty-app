@@ -16,12 +16,12 @@ export type RootStackParamList = {
   ARFilter: undefined;
   ARFilterLocationAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
   ARFilterStyleAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  FeedbackEntry: undefined;
-  FeedbackCapture: undefined;
-  FeedbackLoading: undefined;
-  FeedbackResult: undefined;
-  FeedbackGuide: undefined;
-  FeedbackTip: {pointId: string};
+  MakeupFeedbackEntry: undefined;
+  MakeupFeedbackCapture: undefined;
+  MakeupFeedbackLoading: undefined;
+  MakeupFeedbackResult: undefined;
+  MakeupCorrectionGuide: undefined;
+  MakeupCorrectionTip: {pointId: string};
   ReferenceMakeupExtractionUpload: undefined;
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
@@ -56,12 +56,12 @@ export const rootStackRoutes = [
   'ARFilter',
   'ARFilterLocationAdjust',
   'ARFilterStyleAdjust',
-  'FeedbackEntry',
-  'FeedbackCapture',
-  'FeedbackLoading',
-  'FeedbackResult',
-  'FeedbackGuide',
-  'FeedbackTip',
+  'MakeupFeedbackEntry',
+  'MakeupFeedbackCapture',
+  'MakeupFeedbackLoading',
+  'MakeupFeedbackResult',
+  'MakeupCorrectionGuide',
+  'MakeupCorrectionTip',
   'ReferenceMakeupExtractionUpload',
   'ReferenceMakeupExtractionLoading',
   'ReferenceMakeupExtractionResult',

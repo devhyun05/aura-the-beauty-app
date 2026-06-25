@@ -20,15 +20,15 @@ import {ARFilterScreen} from '../../features/ar/screens/ARFilterScreen';
 import {LoginScreen} from '../../features/auth';
 import {FaceCaptureScreen} from '../../features/face-capture/screens/FaceCaptureScreen';
 import {
-  FeedbackCaptureScreen,
-  FeedbackEntryScreen,
-  FeedbackGuideOverlayScreen,
-  FeedbackLoadingScreen,
-  FeedbackTipScreen,
-  MakeupFeedbackScreen,
-  type FeedbackPhotoSelection,
+  MakeupFeedbackCaptureScreen,
+  MakeupFeedbackEntryScreen,
+  MakeupCorrectionGuideOverlayScreen,
+  MakeupFeedbackLoadingScreen,
+  MakeupCorrectionTipScreen,
+  MakeupFeedbackResultScreen,
+  type MakeupFeedbackPhotoSelection,
   type MakeupFeedbackResult,
-} from '../../features/feedback';
+} from '../../features/makeup-feedback';
 import {
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
@@ -166,7 +166,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
         onPressARFilter={() => rootNavigation?.navigate('ARFilter')}
         onPressReferenceMakeupExtraction={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
-        onPressMakeupFeedback={() => rootNavigation?.navigate('FeedbackEntry')}
+        onPressMakeupFeedback={() => rootNavigation?.navigate('MakeupFeedbackEntry')}
         onPressProductRecommendations={() => navigation.navigate('CustomTab')}
       />
     </MainTabChrome>
@@ -352,66 +352,66 @@ export function LikedProductListRouteScreen({
   );
 }
 
-export function FeedbackEntryRouteScreen({navigation}: RootScreenProps<'FeedbackEntry'>) {
+export function MakeupFeedbackEntryRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackEntry'>) {
   return (
     <DetailRouteChrome
-      routeName="FeedbackEntry"
+      routeName="MakeupFeedbackEntry"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FeedbackEntryScreen
-        onPressAiFeedback={() => navigation.navigate('FeedbackCapture')}
+      <MakeupFeedbackEntryScreen
+        onPressAiFeedback={() => navigation.navigate('MakeupFeedbackCapture')}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FeedbackCaptureRouteScreen({
+export function MakeupFeedbackCaptureRouteScreen({
   navigation,
-}: RootScreenProps<'FeedbackCapture'>) {
-  const {setSelectedFeedbackPhoto} = useNavigationFlowState();
+}: RootScreenProps<'MakeupFeedbackCapture'>) {
+  const {setSelectedMakeupFeedbackPhoto} = useNavigationFlowState();
 
-  const handleSelectPhoto = (selection: FeedbackPhotoSelection) => {
-    setSelectedFeedbackPhoto(selection);
-    navigation.navigate('FeedbackLoading');
+  const handleSelectPhoto = (selection: MakeupFeedbackPhotoSelection) => {
+    setSelectedMakeupFeedbackPhoto(selection);
+    navigation.navigate('MakeupFeedbackLoading');
   };
 
   return (
-    <FeedbackCaptureScreen
-      onClose={() => navigation.navigate('FeedbackEntry')}
+    <MakeupFeedbackCaptureScreen
+      onClose={() => navigation.navigate('MakeupFeedbackEntry')}
       onSelectPhoto={handleSelectPhoto}
     />
   );
 }
 
-export function FeedbackLoadingRouteScreen({
+export function MakeupFeedbackLoadingRouteScreen({
   navigation,
-}: RootScreenProps<'FeedbackLoading'>) {
-  const {selectedFeedbackPhoto, setFeedbackResult} = useNavigationFlowState();
+}: RootScreenProps<'MakeupFeedbackLoading'>) {
+  const {selectedMakeupFeedbackPhoto, setMakeupFeedbackResult} = useNavigationFlowState();
 
   const handleComplete = (result: MakeupFeedbackResult) => {
-    setFeedbackResult(result);
-    navigation.navigate('FeedbackResult');
+    setMakeupFeedbackResult(result);
+    navigation.navigate('MakeupFeedbackResult');
   };
 
   return (
     <DetailRouteChrome
-      routeName="FeedbackLoading"
-      onBack={() => navigation.navigate('FeedbackCapture')}>
-      <FeedbackLoadingScreen
+      routeName="MakeupFeedbackLoading"
+      onBack={() => navigation.navigate('MakeupFeedbackCapture')}>
+      <MakeupFeedbackLoadingScreen
         onComplete={handleComplete}
-        selection={selectedFeedbackPhoto}
+        selection={selectedMakeupFeedbackPhoto}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FeedbackResultRouteScreen({navigation}: RootScreenProps<'FeedbackResult'>) {
-  const {feedbackResult} = useNavigationFlowState();
+export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackResult'>) {
+  const {makeupFeedbackResult} = useNavigationFlowState();
 
-  if (!feedbackResult) {
+  if (!makeupFeedbackResult) {
     return (
       <DetailRouteChrome
-        routeName="FeedbackResult"
-        onBack={() => navigation.navigate('FeedbackEntry')}>
+        routeName="MakeupFeedbackResult"
+        onBack={() => navigation.navigate('MakeupFeedbackEntry')}>
         <RoutePlaceholder
           description="피드백 분석을 먼저 완료해 주세요."
           showHeader={false}
@@ -423,27 +423,27 @@ export function FeedbackResultRouteScreen({navigation}: RootScreenProps<'Feedbac
 
   return (
     <DetailRouteChrome
-      routeName="FeedbackResult"
-      onBack={() => navigation.navigate('FeedbackEntry')}>
-      <MakeupFeedbackScreen
-        onOpenGuide={() => navigation.navigate('FeedbackGuide')}
-        onOpenTip={point => navigation.navigate('FeedbackTip', {pointId: point.id})}
-        onRetake={() => navigation.navigate('FeedbackCapture')}
-        onUploadAgain={() => navigation.navigate('FeedbackCapture')}
-        result={feedbackResult}
+      routeName="MakeupFeedbackResult"
+      onBack={() => navigation.navigate('MakeupFeedbackEntry')}>
+      <MakeupFeedbackResultScreen
+        onOpenGuide={() => navigation.navigate('MakeupCorrectionGuide')}
+        onOpenTip={point => navigation.navigate('MakeupCorrectionTip', {pointId: point.id})}
+        onRetake={() => navigation.navigate('MakeupFeedbackCapture')}
+        onUploadAgain={() => navigation.navigate('MakeupFeedbackCapture')}
+        result={makeupFeedbackResult}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FeedbackGuideRouteScreen({navigation}: RootScreenProps<'FeedbackGuide'>) {
-  const {feedbackResult} = useNavigationFlowState();
+export function MakeupCorrectionGuideRouteScreen({navigation}: RootScreenProps<'MakeupCorrectionGuide'>) {
+  const {makeupFeedbackResult} = useNavigationFlowState();
 
-  if (!feedbackResult) {
+  if (!makeupFeedbackResult) {
     return (
       <DetailRouteChrome
-        routeName="FeedbackGuide"
-        onBack={() => navigation.navigate('FeedbackResult')}>
+        routeName="MakeupCorrectionGuide"
+        onBack={() => navigation.navigate('MakeupFeedbackResult')}>
         <RoutePlaceholder
           description="가이드를 보려면 피드백 결과가 필요해요."
           showHeader={false}
@@ -455,25 +455,25 @@ export function FeedbackGuideRouteScreen({navigation}: RootScreenProps<'Feedback
 
   return (
     <DetailRouteChrome
-      routeName="FeedbackGuide"
-      onBack={() => navigation.navigate('FeedbackResult')}>
-      <FeedbackGuideOverlayScreen result={feedbackResult} />
+      routeName="MakeupCorrectionGuide"
+      onBack={() => navigation.navigate('MakeupFeedbackResult')}>
+      <MakeupCorrectionGuideOverlayScreen result={makeupFeedbackResult} />
     </DetailRouteChrome>
   );
 }
 
-export function FeedbackTipRouteScreen({
+export function MakeupCorrectionTipRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'FeedbackTip'>) {
-  const {feedbackResult} = useNavigationFlowState();
-  const point = feedbackResult?.points.find(item => item.id === route.params.pointId);
+}: RootScreenProps<'MakeupCorrectionTip'>) {
+  const {makeupFeedbackResult} = useNavigationFlowState();
+  const point = makeupFeedbackResult?.points.find(item => item.id === route.params.pointId);
 
   if (!point) {
     return (
       <DetailRouteChrome
-        routeName="FeedbackTip"
-        onBack={() => navigation.navigate('FeedbackResult')}>
+        routeName="MakeupCorrectionTip"
+        onBack={() => navigation.navigate('MakeupFeedbackResult')}>
         <RoutePlaceholder
           description="선택한 수정팁을 찾을 수 없어요."
           showHeader={false}
@@ -485,10 +485,10 @@ export function FeedbackTipRouteScreen({
 
   return (
     <DetailRouteChrome
-      routeName="FeedbackTip"
-      onBack={() => navigation.navigate('FeedbackResult')}>
-      <FeedbackTipScreen
-        onBack={() => navigation.navigate('FeedbackResult')}
+      routeName="MakeupCorrectionTip"
+      onBack={() => navigation.navigate('MakeupFeedbackResult')}>
+      <MakeupCorrectionTipScreen
+        onBack={() => navigation.navigate('MakeupFeedbackResult')}
         point={point}
       />
     </DetailRouteChrome>

@@ -12,25 +12,25 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
-import {requestMakeupFeedback} from '../services/makeupFeedbackService';
-import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
+import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
+import {analyzeMakeupForFeedback} from '../services/makeupFeedbackService';
+import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
-type FeedbackLoadingScreenProps = {
+type MakeupFeedbackLoadingScreenProps = {
   headerTitle?: string;
-  selection: FeedbackPhotoSelection;
+  selection: MakeupFeedbackPhotoSelection;
   onBack?: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
 };
 
-export function FeedbackLoadingScreen({
+export function MakeupFeedbackLoadingScreen({
   selection,
   onComplete,
-}: FeedbackLoadingScreenProps) {
+}: MakeupFeedbackLoadingScreenProps) {
   useEffect(() => {
     let isMounted = true;
 
-    requestMakeupFeedback(selection).then((result) => {
+    analyzeMakeupForFeedback(selection).then((result) => {
       if (isMounted) {
         onComplete(result);
       }
@@ -42,7 +42,7 @@ export function FeedbackLoadingScreen({
   }, [onComplete, selection]);
 
   return (
-    <FeedbackScreenScaffold topPadding="none">
+    <MakeupFeedbackScreenScaffold topPadding="none">
       <YStack style={styles.screen}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>
@@ -53,7 +53,7 @@ export function FeedbackLoadingScreen({
           <ActivityIndicator color={colors.black} size="large" style={styles.loader} />
         </View>
       </YStack>
-    </FeedbackScreenScaffold>
+    </MakeupFeedbackScreenScaffold>
   );
 }
 

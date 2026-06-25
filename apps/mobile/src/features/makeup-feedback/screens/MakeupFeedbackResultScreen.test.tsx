@@ -1,11 +1,11 @@
 import React from 'react';
 
 import {createMockMakeupFeedback} from '../mocks/makeupFeedback.mock';
-import {MakeupFeedbackScreen} from './MakeupFeedbackScreen';
+import {MakeupFeedbackResultScreen} from './MakeupFeedbackResultScreen';
 
 const result = createMockMakeupFeedback({source: 'camera'});
 
-<MakeupFeedbackScreen
+<MakeupFeedbackResultScreen
   onBack={() => undefined}
   onOpenGuide={() => undefined}
   onOpenTip={() => undefined}

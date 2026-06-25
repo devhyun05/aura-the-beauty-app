@@ -28,10 +28,10 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
+import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
-type FeedbackGuideOverlayScreenProps = {
+type MakeupCorrectionGuideOverlayScreenProps = {
   headerTitle?: string;
   result: MakeupFeedbackResult;
   onBack?: () => void;
@@ -111,9 +111,9 @@ const GUIDE_SECTIONS: GuideSection[] = [
   },
 ];
 
-export function FeedbackGuideOverlayScreen({
+export function MakeupCorrectionGuideOverlayScreen({
   result,
-}: FeedbackGuideOverlayScreenProps) {
+}: MakeupCorrectionGuideOverlayScreenProps) {
   const {width} = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<GuideCategory>('all');
   const photoWidth = width;
@@ -127,7 +127,7 @@ export function FeedbackGuideOverlayScreen({
   );
 
   return (
-    <FeedbackScreenScaffold topPadding="none">
+    <MakeupFeedbackScreenScaffold topPadding="none">
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -186,7 +186,7 @@ export function FeedbackGuideOverlayScreen({
           </View>
         </ScrollView>
       </View>
-    </FeedbackScreenScaffold>
+    </MakeupFeedbackScreenScaffold>
   );
 }
 

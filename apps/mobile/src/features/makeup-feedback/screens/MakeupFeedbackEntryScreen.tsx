@@ -14,19 +14,19 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
+import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 
-type FeedbackEntryScreenProps = {
+type MakeupFeedbackEntryScreenProps = {
   headerTitle?: string;
   onClose?: () => void;
   onPressAiFeedback: () => void;
 };
 
-export function FeedbackEntryScreen({
+export function MakeupFeedbackEntryScreen({
   onPressAiFeedback,
-}: FeedbackEntryScreenProps) {
+}: MakeupFeedbackEntryScreenProps) {
   return (
-    <FeedbackScreenScaffold topPadding="none">
+    <MakeupFeedbackScreenScaffold topPadding="none">
       <YStack style={styles.screen}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
@@ -53,7 +53,7 @@ export function FeedbackEntryScreen({
           <ChevronRight color={colors.white} size={iconSize.md} strokeWidth={2.2} />
         </Pressable>
       </YStack>
-    </FeedbackScreenScaffold>
+    </MakeupFeedbackScreenScaffold>
   );
 }
 

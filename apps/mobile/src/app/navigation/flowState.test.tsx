@@ -17,15 +17,15 @@ expectEqual(
 );
 
 expectEqual(
-  getInitialNavigationFlowState().selectedFeedbackPhoto.source,
+  getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.source,
   'camera',
-  'initial feedback photo source',
+  'initial makeup feedback photo source',
 );
 
 expectEqual(
-  getInitialNavigationFlowState().feedbackResult,
+  getInitialNavigationFlowState().makeupFeedbackResult,
   null,
-  'initial feedback result',
+  'initial makeup feedback result',
 );
 
 expectEqual(
@@ -43,13 +43,13 @@ expectEqual(
 const demoState = getDemoNavigationFlowState();
 
 expectEqual(
-  demoState.selectedFeedbackPhoto.source,
+  demoState.selectedMakeupFeedbackPhoto.source,
   'camera',
-  'demo feedback photo source',
+  'demo makeup feedback photo source',
 );
 
-if (!demoState.feedbackResult) {
-  throw new Error('demo feedback result: expected seeded result');
+if (!demoState.makeupFeedbackResult) {
+  throw new Error('demo makeup feedback result: expected seeded result');
 }
 
 if (!demoState.selectedReferenceMakeupPhoto) {

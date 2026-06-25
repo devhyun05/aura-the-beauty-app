@@ -22,12 +22,12 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
-import type {FeedbackPoint, FeedbackPointKind} from '../types';
+import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
+import type {MakeupFeedbackCorrectionPoint, MakeupFeedbackCorrectionPointKind} from '../types';
 
-type FeedbackTipScreenProps = {
+type MakeupCorrectionTipScreenProps = {
   headerTitle?: string;
-  point: FeedbackPoint;
+  point: MakeupFeedbackCorrectionPoint;
   onBack: () => void;
 };
 
@@ -41,7 +41,7 @@ type TipContent = {
   finish: string;
 };
 
-const TIP_CONTENT: Record<FeedbackPointKind, TipContent> = {
+const TIP_CONTENT: Record<MakeupFeedbackCorrectionPointKind, TipContent> = {
   eye: {
     title: '아이라인 균형 맞추기',
     eyebrow: 'EYE LINE GUIDE',
@@ -95,15 +95,15 @@ const TIP_CONTENT: Record<FeedbackPointKind, TipContent> = {
   },
 };
 
-export function FeedbackTipScreen({
+export function MakeupCorrectionTipScreen({
   point,
   onBack,
-}: FeedbackTipScreenProps) {
+}: MakeupCorrectionTipScreenProps) {
   const content = TIP_CONTENT[point.kind];
   const PointIcon = getPointIcon(point.kind);
 
   return (
-    <FeedbackScreenScaffold topPadding="none">
+    <MakeupFeedbackScreenScaffold topPadding="none">
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -181,11 +181,11 @@ export function FeedbackTipScreen({
           </Pressable>
         </ScrollView>
       </View>
-    </FeedbackScreenScaffold>
+    </MakeupFeedbackScreenScaffold>
   );
 }
 
-function getPointIcon(kind: FeedbackPointKind) {
+function getPointIcon(kind: MakeupFeedbackCorrectionPointKind) {
   if (kind === 'eye') {
     return Eye;
   }

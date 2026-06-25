@@ -139,7 +139,7 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FeedbackEntry: {
+  MakeupFeedbackEntry: {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
@@ -147,34 +147,34 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackCapture: {
+  MakeupFeedbackCapture: {
     category: 'capture-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  FeedbackLoading: {
+  MakeupFeedbackLoading: {
     category: 'progress',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackResult: {
+  MakeupFeedbackResult: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  FeedbackGuide: {
+  MakeupCorrectionGuide: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '가이드 오버레이',
   },
-  FeedbackTip: {
+  MakeupCorrectionTip: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',

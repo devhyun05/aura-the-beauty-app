@@ -21,14 +21,14 @@ import {
   FloatingOverlayIconButton,
   FullscreenOverlayScreen,
 } from '../../../shared/ui';
-import type {FeedbackPhotoSelection} from '../types';
+import type {MakeupFeedbackPhotoSelection} from '../types';
 
-type FeedbackCaptureScreenProps = {
+type MakeupFeedbackCaptureScreenProps = {
   onClose: () => void;
-  onSelectPhoto: (selection: FeedbackPhotoSelection) => void;
+  onSelectPhoto: (selection: MakeupFeedbackPhotoSelection) => void;
 };
 
-export function FeedbackCaptureScreen({onClose, onSelectPhoto}: FeedbackCaptureScreenProps) {
+export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeedbackCaptureScreenProps) {
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();

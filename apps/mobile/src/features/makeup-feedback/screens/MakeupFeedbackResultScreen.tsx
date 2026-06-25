@@ -28,19 +28,19 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
+import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 import type {
-  FeedbackPoint,
-  FeedbackStrength,
+  MakeupFeedbackCorrectionPoint,
+  MakeupFeedbackStrength,
   MakeupFeedbackResult,
 } from '../types';
 
-type MakeupFeedbackScreenProps = {
+type MakeupFeedbackResultScreenProps = {
   headerTitle?: string;
   result: MakeupFeedbackResult;
   onBack?: () => void;
   onOpenGuide: () => void;
-  onOpenTip: (point: FeedbackPoint) => void;
+  onOpenTip: (point: MakeupFeedbackCorrectionPoint) => void;
   onRetake: () => void;
   onUploadAgain: () => void;
 };
@@ -53,13 +53,13 @@ type FooterButtonProps = {
 
 const BASE_PHOTO_WIDTH = 360;
 
-export function MakeupFeedbackScreen({
+export function MakeupFeedbackResultScreen({
   result,
   onOpenGuide,
   onOpenTip,
   onRetake,
   onUploadAgain,
-}: MakeupFeedbackScreenProps) {
+}: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
   const [openStrengthId, setOpenStrengthId] = useState<string | null>(null);
   const photoWidth = width;
@@ -67,7 +67,7 @@ export function MakeupFeedbackScreen({
   const photoScale = photoWidth / BASE_PHOTO_WIDTH;
 
   return (
-    <FeedbackScreenScaffold topPadding="none">
+    <MakeupFeedbackScreenScaffold topPadding="none">
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -76,15 +76,15 @@ export function MakeupFeedbackScreen({
           <View style={[styles.resultCard, {width: photoWidth}]}>
             <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
               <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
-              {result.callouts.map((callout) => (
+              {result.annotations.map((annotation) => (
                 <View
-                  accessibilityLabel={callout.label}
-                  key={callout.id}
+                  accessibilityLabel={annotation.label}
+                  key={annotation.id}
                   style={[
                     styles.faceMarker,
                     {
-                      left: callout.lineLeft * photoScale,
-                      top: callout.lineTop * photoScale,
+                      left: annotation.lineLeft * photoScale,
+                      top: annotation.lineTop * photoScale,
                     },
                   ]}
                 />
@@ -122,7 +122,7 @@ export function MakeupFeedbackScreen({
 
           <View style={styles.pointList}>
             {result.points.map((point) => (
-              <FeedbackPointCard key={point.id} onOpenTip={onOpenTip} point={point} />
+              <MakeupFeedbackCorrectionPointCard key={point.id} onOpenTip={onOpenTip} point={point} />
             ))}
           </View>
 
@@ -168,16 +168,16 @@ export function MakeupFeedbackScreen({
           </View>
         </ScrollView>
       </View>
-    </FeedbackScreenScaffold>
+    </MakeupFeedbackScreenScaffold>
   );
 }
 
-function FeedbackPointCard({
+function MakeupFeedbackCorrectionPointCard({
   onOpenTip,
   point,
 }: {
-  onOpenTip: (point: FeedbackPoint) => void;
-  point: FeedbackPoint;
+  onOpenTip: (point: MakeupFeedbackCorrectionPoint) => void;
+  point: MakeupFeedbackCorrectionPoint;
 }) {
   const Icon = point.kind === 'eye' ? Eye : point.kind === 'cheek' ? Sparkles : Heart;
 
@@ -210,7 +210,7 @@ function StrengthAccordionItem({
 }: {
   isOpen: boolean;
   onPress: () => void;
-  strength: FeedbackStrength;
+  strength: MakeupFeedbackStrength;
 }) {
   const Icon = strength.icon === 'sparkle' ? Sparkles : Heart;
   const ToggleIcon = isOpen ? ChevronUp : ChevronDown;

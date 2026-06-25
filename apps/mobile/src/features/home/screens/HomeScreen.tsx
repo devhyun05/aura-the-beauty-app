@@ -345,7 +345,7 @@ const quickActions = [
     icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
-    id: 'feedback',
+    id: 'makeup-feedback',
     label: '메이크업 피드백',
     accessibilityLabel: '메이크업 피드백 시작',
     icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
@@ -392,7 +392,7 @@ export function getHomeQuickActionPressHandler(
     return onPressReferenceMakeupExtraction;
   }
 
-  if (actionId === 'feedback') {
+  if (actionId === 'makeup-feedback') {
     return onPressMakeupFeedback;
   }
 
