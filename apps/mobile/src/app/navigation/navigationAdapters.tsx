@@ -280,8 +280,8 @@ export function ARFilterRouteScreen({navigation}: RootScreenProps<'ARFilter'>) {
       initialGuideMode={DEFAULT_AR_GUIDE_MODE}
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
-      onOpenLocationAdjust={() => navigation.navigate('ARFilterLocationAdjust')}
-      onOpenStyleAdjust={() => navigation.navigate('ARFilterStyleAdjust')}
+      onOpenShapeAdjust={() => navigation.navigate('ARFilterLocationAdjust')}
+      onSave={() => navigation.navigate('ExtractedMakeupStyleSaveForm')}
     />
   );
 }
@@ -293,9 +293,6 @@ export function ARFilterLocationAdjustRouteScreen({
   return (
     <ARFilterLocationAdjustScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
-      onOpenStyleAdjust={() =>
-        navigation.navigate('ARFilterStyleAdjust', {backRoute: route.params?.backRoute})
-      }
       onSave={() => navigation.navigate('ARFilter')}
     />
   );
@@ -308,9 +305,6 @@ export function ARFilterStyleAdjustRouteScreen({
   return (
     <ARFilterStyleAdjustScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
-      onOpenLocationAdjust={() =>
-        navigation.navigate('ARFilterLocationAdjust', {backRoute: route.params?.backRoute})
-      }
       onSave={() => navigation.navigate('ARFilter')}
     />
   );

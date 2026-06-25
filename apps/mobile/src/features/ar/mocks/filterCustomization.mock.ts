@@ -16,7 +16,7 @@ export const mockFilterLocationState: FilterLocationState = {
   ],
   adjustments: {
     horizontal: {
-      label: '좌우 위치',
+      label: '좌우 이동',
       min: -24,
       max: 24,
       step: 2,
@@ -24,7 +24,7 @@ export const mockFilterLocationState: FilterLocationState = {
       value: 0,
     },
     vertical: {
-      label: '상하 위치',
+      label: '상하 이동',
       min: -24,
       max: 24,
       step: 2,

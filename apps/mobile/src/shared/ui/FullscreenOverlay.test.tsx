@@ -43,10 +43,10 @@ expectEqual(
   <OverlayTopBar
     leftSlot={<OverlayIconButton accessibilityLabel="뒤로가기">{null}</OverlayIconButton>}
     rightSlot={<OverlayIconButton accessibilityLabel="저장">{null}</OverlayIconButton>}
-    title="위치 조정"
+    title="형태 수정"
   />
   <OverlayAdjustmentTabs activeTab="location" />
-  <OverlaySegmentButton isActive label="위치 조정" />
+  <OverlaySegmentButton isActive label="형태 수정" />
   <OverlayChipButton isActive label="립" onPress={() => undefined} />
   <BottomOverlayPanel>
     <OverlayPanelSection label="얼굴 부위">panel</OverlayPanelSection>

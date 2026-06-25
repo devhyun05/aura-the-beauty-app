@@ -1,6 +1,6 @@
-import React, {useMemo, useState} from 'react';
+import React, {useState} from 'react';
 import {Image, ScrollView, StyleSheet, type ViewStyle} from 'react-native';
-import {Camera, ChevronLeft, SlidersHorizontal, Video} from 'lucide-react-native';
+import {Camera, ChevronLeft, Video} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -17,7 +17,6 @@ import type {
   FilterCategoryId,
   GuideMode,
   MakeupFilter,
-  StyleOptionGroupId,
 } from '../../../shared/types/makeupGuide';
 import {
   BottomOverlayPanel,
@@ -33,23 +32,71 @@ import {
 } from '../../../shared/ui';
 
 type CaptureMode = 'photo' | 'video';
+type ARMakeupOptionGroupId = 'makeupStyle' | 'makeupPreset' | 'color' | 'type' | 'texture' | 'shape';
+type ARMakeupOptionGroup = {
+  id: ARMakeupOptionGroupId;
+  label: string;
+};
+type ShapeOption = {
+  id: string;
+  label: string;
+};
 
 type ARFilterScreenProps = {
   initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
   onBack?: () => void;
   onComplete?: () => void;
-  onOpenLocationAdjust?: () => void;
-  onOpenStyleAdjust?: () => void;
+  onOpenShapeAdjust?: () => void;
+  onSave?: () => void;
 };
 
-const STYLE_OPTION_GROUPS: readonly {id: StyleOptionGroupId; label: string}[] = [
+const ORIGINAL_OPTION_CARD_ID = 'original';
+const ORIGINAL_OPTION_CARD_LABEL = '원본';
+
+const MAKEUP_PART_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
+  {id: 'makeupPreset', label: '프리셋'},
   {id: 'color', label: '컬러'},
   {id: 'type', label: '타입'},
   {id: 'texture', label: '질감'},
+  {id: 'shape', label: '형태'},
 ];
 
-const MODE_TAB_HEIGHT = 32;
+const ALL_MAKEUP_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
+  {id: 'makeupStyle', label: '스타일'},
+  {id: 'shape', label: '형태'},
+];
+
+const SHAPE_OPTIONS_BY_FACE_PART: Record<FacePartId, readonly ShapeOption[]> = {
+  all: [
+    {id: 'balanced', label: '기본 밸런스'},
+    {id: 'soft-focus', label: '소프트 확장'},
+    {id: 'defined', label: '윤곽 강조'},
+  ],
+  base: [
+    {id: 'base-default', label: '기본 베이스'},
+    {id: 'base-center', label: '중앙 집중'},
+    {id: 'base-wide', label: '광대 확장'},
+  ],
+  eye: [
+    {id: 'eye-default', label: '기본 아이'},
+    {id: 'eye-tail', label: '눈꼬리 확장'},
+    {id: 'eye-under', label: '언더 포인트'},
+  ],
+  lip: [
+    {id: 'lip-default', label: '기본 립'},
+    {id: 'lip-over', label: '오버 립'},
+    {id: 'lip-gradient', label: '그라데이션'},
+  ],
+  contour: [
+    {id: 'contour-default', label: '기본 윤곽'},
+    {id: 'contour-jaw', label: '턱선 강조'},
+    {id: 'contour-nose', label: '코 쉐딩'},
+  ],
+};
+
+const MODE_TAB_HEIGHT = 24;
+const MODE_TAB_CONTAINER_PADDING = spacing.xs / 2;
 const SELECTED_TAB_BACKGROUND_OPACITY = FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY;
 const CAPTURE_BUTTON_METRICS = {
   outerSize: CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
@@ -100,6 +147,77 @@ export function getARFilterComparisonTabs(): readonly string[] {
   return getARMakeupGuideData().comparisonModes.map(mode => mode.label);
 }
 
+function getARFilterOptionGroups(
+  selectedFacePartId: FacePartId,
+): readonly ARMakeupOptionGroup[] {
+  return selectedFacePartId === 'all' ? ALL_MAKEUP_OPTION_GROUPS : MAKEUP_PART_OPTION_GROUPS;
+}
+
+function getARFilterShapeOptions(
+  selectedFacePartId: FacePartId,
+): readonly ShapeOption[] {
+  return SHAPE_OPTIONS_BY_FACE_PART[selectedFacePartId];
+}
+
+export function getARFilterOptionGroupLabels(
+  selectedFacePartId: FacePartId,
+): readonly string[] {
+  return getARFilterOptionGroups(selectedFacePartId).map(group => group.label);
+}
+
+export function getARFilterOriginalCardLabel(): string {
+  return ORIGINAL_OPTION_CARD_LABEL;
+}
+
+export function getARFilterShapeOptionLabels(
+  selectedFacePartId: FacePartId,
+): readonly string[] {
+  return getARFilterShapeOptions(selectedFacePartId).map(option => option.label);
+}
+
+export function getARFilterSaveButtonLabel(): string {
+  return '저장';
+}
+
+export function getARFilterShapeEditButtonLabel(): string {
+  return '형태 수정';
+}
+
+export function getARFilterMakeupStyleCardIdAfterOptionEdit({
+  selectedMakeupStyleCardId,
+}: {
+  selectedMakeupStyleCardId: string | null;
+}): string | null {
+  if (selectedMakeupStyleCardId) {
+    return null;
+  }
+
+  return selectedMakeupStyleCardId;
+}
+
+export function isARFilterSaveEnabled({
+  hasUnsavedChanges,
+}: {
+  hasUnsavedChanges: boolean;
+}): boolean {
+  return hasUnsavedChanges;
+}
+
+function getMakeupFiltersForFacePart(
+  makeupFilters: readonly MakeupFilter[],
+  selectedFacePartId: FacePartId,
+): readonly MakeupFilter[] {
+  if (selectedFacePartId === 'all') {
+    return makeupFilters;
+  }
+
+  const partMakeupFilters = makeupFilters.filter(makeupFilter =>
+    makeupFilter.facePartIds.includes(selectedFacePartId),
+  );
+
+  return partMakeupFilters.length > 0 ? partMakeupFilters : makeupFilters;
+}
+
 export function getARFilterCaptureButtonMetrics(): typeof CAPTURE_BUTTON_METRICS {
   return CAPTURE_BUTTON_METRICS;
 }
@@ -126,8 +244,8 @@ export function ARFilterScreen({
   initialGuideMode = 'basic',
   onBack,
   onComplete,
-  onOpenLocationAdjust,
-  onOpenStyleAdjust,
+  onOpenShapeAdjust,
+  onSave,
 }: ARFilterScreenProps) {
   const insets = useSafeAreaInsets();
   const arGuideData = getARMakeupGuideData();
@@ -139,10 +257,13 @@ export function ARFilterScreen({
   const [selectedCategoryId, setSelectedCategoryId] = useState<FilterCategoryId>(
     arGuideData.categories[0].id,
   );
-  const [selectedFilterId, setSelectedFilterId] = useState(defaultFilter.id);
+  const [selectedMakeupStyleCardId, setSelectedMakeupStyleCardId] =
+    useState<string | null>(defaultFilter.id);
+  const [selectedMakeupPresetCardId, setSelectedMakeupPresetCardId] =
+    useState(defaultFilter.id);
   const [selectedFacePartId, setSelectedFacePartId] = useState<FacePartId>('all');
-  const [selectedOptionGroup, setSelectedOptionGroup] =
-    useState<StyleOptionGroupId>('color');
+  const [selectedMakeupOptionGroup, setSelectedMakeupOptionGroup] =
+    useState<ARMakeupOptionGroupId>('makeupStyle');
   const [selectedColorId, setSelectedColorId] = useState(
     getARFilterInitialColorId(defaultFilter.colorOptions),
   );
@@ -150,33 +271,108 @@ export function ARFilterScreen({
   const [selectedTextureId, setSelectedTextureId] = useState(
     defaultFilter.textureOptions[0]?.id ?? '',
   );
+  const [selectedShapeId, setSelectedShapeId] = useState(ORIGINAL_OPTION_CARD_ID);
+  const [hasUnsavedMakeupChanges, setHasUnsavedMakeupChanges] = useState(false);
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
 
-  const categoryFilters = useMemo(
-    () => getFiltersByCategory(selectedCategoryId, arGuideData),
-    [arGuideData, selectedCategoryId],
+  const selectedMakeupFilter =
+    arGuideData.filters.find(makeupFilter =>
+      makeupFilter.id ===
+      (selectedFacePartId === 'all'
+        ? selectedMakeupStyleCardId
+        : selectedMakeupPresetCardId),
+    ) ?? defaultFilter;
+  const categoryMakeupFilters = getFiltersByCategory(selectedCategoryId, arGuideData);
+  const availableMakeupFilters = getMakeupFiltersForFacePart(
+    categoryMakeupFilters,
+    selectedFacePartId,
   );
-  const selectedFilter =
-    arGuideData.filters.find(filter => filter.id === selectedFilterId) ?? defaultFilter;
+  const availableOptionGroups = getARFilterOptionGroups(selectedFacePartId);
+  const shapeOptions = getARFilterShapeOptions(selectedFacePartId);
+
+  const handleFacePartPress = (facePartId: FacePartId) => {
+    const nextOptionGroups = getARFilterOptionGroups(facePartId);
+
+    setSelectedFacePartId(facePartId);
+
+    if (!nextOptionGroups.some(group => group.id === selectedMakeupOptionGroup)) {
+      setSelectedMakeupOptionGroup(nextOptionGroups[0].id);
+    }
+  };
 
   const handleCategoryPress = (categoryId: FilterCategoryId) => {
-    const nextFilter = getFiltersByCategory(categoryId, arGuideData)[0] ?? defaultFilter;
+    const nextCategoryMakeupFilters = getFiltersByCategory(categoryId, arGuideData);
+    const nextMakeupFilter =
+      getMakeupFiltersForFacePart(nextCategoryMakeupFilters, selectedFacePartId)[0] ??
+      defaultFilter;
 
     setSelectedCategoryId(categoryId);
-    handleFilterPress(nextFilter);
+    handleMakeupFilterPress(nextMakeupFilter);
   };
 
-  const handleFilterPress = (filter: MakeupFilter) => {
-    setSelectedFilterId(filter.id);
-    setSelectedColorId(getARFilterInitialColorId(filter.colorOptions));
-    setSelectedTypeId(filter.typeOptions[0]?.id ?? '');
-    setSelectedTextureId(filter.textureOptions[0]?.id ?? '');
+  const handleMakeupFilterPress = (makeupFilter: MakeupFilter) => {
+    if (selectedFacePartId === 'all') {
+      setSelectedMakeupStyleCardId(makeupFilter.id);
+      setHasUnsavedMakeupChanges(false);
+    } else {
+      setSelectedMakeupPresetCardId(makeupFilter.id);
+      setHasUnsavedMakeupChanges(true);
+      setSelectedMakeupStyleCardId(null);
+    }
+
+    setSelectedColorId(getARFilterInitialColorId(makeupFilter.colorOptions));
+    setSelectedTypeId(makeupFilter.typeOptions[0]?.id ?? '');
+    setSelectedTextureId(makeupFilter.textureOptions[0]?.id ?? '');
   };
 
-  const selectedColor = getARFilterSelectedColor(
-    selectedFilter.colorOptions,
-    selectedColorId,
-  );
+  const markMakeupOptionEdited = () => {
+    setSelectedMakeupStyleCardId(currentMakeupStyleCardId =>
+      getARFilterMakeupStyleCardIdAfterOptionEdit({
+        selectedMakeupStyleCardId: currentMakeupStyleCardId,
+      }),
+    );
+    setHasUnsavedMakeupChanges(true);
+  };
+
+  const handleOriginalOptionPress = () => {
+    if (selectedMakeupOptionGroup === 'makeupStyle') {
+      setSelectedMakeupStyleCardId(ORIGINAL_OPTION_CARD_ID);
+      setHasUnsavedMakeupChanges(false);
+      return;
+    }
+
+    if (selectedMakeupOptionGroup === 'makeupPreset') {
+      setSelectedMakeupPresetCardId(ORIGINAL_OPTION_CARD_ID);
+      markMakeupOptionEdited();
+      return;
+    }
+
+    if (selectedMakeupOptionGroup === 'color') {
+      setSelectedColorId(ORIGINAL_OPTION_CARD_ID);
+      markMakeupOptionEdited();
+      return;
+    }
+
+    if (selectedMakeupOptionGroup === 'type') {
+      setSelectedTypeId(ORIGINAL_OPTION_CARD_ID);
+      markMakeupOptionEdited();
+      return;
+    }
+
+    if (selectedMakeupOptionGroup === 'texture') {
+      setSelectedTextureId(ORIGINAL_OPTION_CARD_ID);
+      markMakeupOptionEdited();
+      return;
+    }
+
+    setSelectedShapeId(ORIGINAL_OPTION_CARD_ID);
+    markMakeupOptionEdited();
+  };
+
+  const selectedColor =
+    selectedColorId === ORIGINAL_OPTION_CARD_ID
+      ? AR_FILTER_FALLBACK_COLOR
+      : getARFilterSelectedColor(selectedMakeupFilter.colorOptions, selectedColorId);
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldShowLeftCheekOverlay =
     guideMode !== 'half' || selectedComparisonMode !== 'right';
@@ -239,13 +435,6 @@ export function ARFilterScreen({
           >
             <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
           </OverlayIconButton>
-
-          <OverlayIconButton
-            accessibilityLabel="필터 위치 조정"
-            onPress={onOpenLocationAdjust}
-          >
-            <SlidersHorizontal color={colors.white} size={iconSize.sm} strokeWidth={2} />
-          </OverlayIconButton>
         </XStack>
 
         <XStack style={styles.segmentedControl}>
@@ -253,13 +442,17 @@ export function ARFilterScreen({
             height={MODE_TAB_HEIGHT}
             isActive={guideMode === 'basic'}
             label="기본"
+            minHeight={MODE_TAB_HEIGHT}
             onPress={() => setGuideMode('basic')}
+            textStyle={styles.modeTabText}
           />
           <OverlaySegmentButton
             height={MODE_TAB_HEIGHT}
             isActive={guideMode === 'half'}
             label="반반 가이드"
+            minHeight={MODE_TAB_HEIGHT}
             onPress={() => setGuideMode('half')}
+            textStyle={styles.modeTabText}
           />
         </XStack>
 
@@ -271,6 +464,7 @@ export function ARFilterScreen({
                 height={MODE_TAB_HEIGHT}
                 isActive={mode.id === selectedComparisonMode}
                 label={mode.label}
+                minHeight={MODE_TAB_HEIGHT}
                 onPress={() => setSelectedComparisonMode(mode.id)}
                 style={styles.comparisonButton}
                 textStyle={styles.comparisonButtonText}
@@ -285,125 +479,219 @@ export function ARFilterScreen({
           contentContainerStyle={styles.panelContent}
           horizontal={false}
           showsVerticalScrollIndicator={false}>
-          <HorizontalSection label={getARFilterCategoryTitle()}>
-            {arGuideData.categories.map(category => (
-              <OverlayChipButton
-                key={category.id}
-                isActive={category.id === selectedCategoryId}
-                label={category.label}
-                onPress={() => handleCategoryPress(category.id)}
-              />
-            ))}
-          </HorizontalSection>
-
-          <ScrollView
-            contentContainerStyle={styles.filterList}
-            horizontal
-            showsHorizontalScrollIndicator={false}>
-            {categoryFilters.map(filter => (
-              <FilterCard
-                key={filter.id}
-                filter={filter}
-                isActive={filter.id === selectedFilter.id}
-                onPress={() => handleFilterPress(filter)}
-              />
-            ))}
-          </ScrollView>
-
-          <XStack style={styles.adjustRow}>
-            <Button
-              accessibilityLabel="필터 위치 조정 열기"
-              accessibilityRole="button"
-              onPress={onOpenLocationAdjust}
-              pressStyle={{scale: 0.98}}
-              style={styles.secondaryAction}
-              unstyled>
-              <Text style={styles.secondaryActionText}>위치 조정</Text>
-            </Button>
-            <Button
-              accessibilityLabel="필터 스타일 조정 열기"
-              accessibilityRole="button"
-              onPress={onOpenStyleAdjust}
-              pressStyle={{scale: 0.98}}
-              style={styles.secondaryAction}
-              unstyled>
-              <Text style={styles.secondaryActionText}>스타일 조정</Text>
-            </Button>
-          </XStack>
-
-          <HorizontalSection label="얼굴 부위">
+          <HorizontalSection>
             {arGuideData.faceParts.map(facePart => (
               <OverlayChipButton
                 key={facePart.id}
                 isActive={facePart.id === selectedFacePartId}
                 label={facePart.label}
-                onPress={() => setSelectedFacePartId(facePart.id)}
+                onPress={() => handleFacePartPress(facePart.id)}
               />
             ))}
           </HorizontalSection>
 
-          <HorizontalSection label="스타일 옵션">
-            {STYLE_OPTION_GROUPS.map(group => (
+          <HorizontalSection>
+            {availableOptionGroups.map(group => (
               <OverlayChipButton
                 key={group.id}
-                isActive={group.id === selectedOptionGroup}
+                isActive={group.id === selectedMakeupOptionGroup}
                 label={group.label}
-                onPress={() => setSelectedOptionGroup(group.id)}
+                onPress={() => setSelectedMakeupOptionGroup(group.id)}
               />
             ))}
           </HorizontalSection>
 
-          {selectedOptionGroup === 'color' ? (
-            <XStack style={styles.optionList}>
-              {selectedFilter.colorOptions.map(option => (
-                <Button
+          {selectedMakeupOptionGroup === 'makeupStyle' ||
+          selectedMakeupOptionGroup === 'makeupPreset' ? (
+            <>
+              {selectedMakeupOptionGroup === 'makeupStyle' ? (
+                <HorizontalSection label={getARFilterCategoryTitle()}>
+                  {arGuideData.categories.map(category => (
+                    <OverlayChipButton
+                      key={category.id}
+                      isActive={category.id === selectedCategoryId}
+                      label={category.label}
+                      onPress={() => handleCategoryPress(category.id)}
+                    />
+                  ))}
+                </HorizontalSection>
+              ) : null}
+
+              <ScrollView
+                contentContainerStyle={styles.optionPickerList}
+                horizontal
+                showsHorizontalScrollIndicator={false}>
+                <OptionCard
+                  accessibilityLabel="원본 스타일 선택"
+                  isActive={
+                    selectedMakeupOptionGroup === 'makeupStyle'
+                      ? selectedMakeupStyleCardId === ORIGINAL_OPTION_CARD_ID
+                      : selectedMakeupPresetCardId === ORIGINAL_OPTION_CARD_ID
+                  }
+                  label={ORIGINAL_OPTION_CARD_LABEL}
+                  onPress={handleOriginalOptionPress}>
+                  <OriginalOptionPreview />
+                </OptionCard>
+                {availableMakeupFilters.map(makeupFilter => (
+                  <OptionCard
+                    key={makeupFilter.id}
+                    accessibilityLabel={`${makeupFilter.title} ${
+                      selectedMakeupOptionGroup === 'makeupStyle' ? '스타일' : '프리셋'
+                    } 선택`}
+                    imageSource={makeupFilter.imageSource}
+                    isActive={
+                      selectedMakeupOptionGroup === 'makeupStyle'
+                        ? makeupFilter.id === selectedMakeupStyleCardId
+                        : makeupFilter.id === selectedMakeupPresetCardId
+                    }
+                    label={makeupFilter.title}
+                    onPress={() => handleMakeupFilterPress(makeupFilter)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          ) : selectedMakeupOptionGroup === 'color' ? (
+            <ScrollView
+              contentContainerStyle={styles.optionPickerList}
+              horizontal
+              showsHorizontalScrollIndicator={false}>
+              <OptionCard
+                accessibilityLabel="원본 컬러 선택"
+                isActive={selectedColorId === ORIGINAL_OPTION_CARD_ID}
+                label={ORIGINAL_OPTION_CARD_LABEL}
+                onPress={handleOriginalOptionPress}>
+                <OriginalOptionPreview />
+              </OptionCard>
+              {selectedMakeupFilter.colorOptions.map(option => (
+                <OptionCard
                   key={option.id}
                   accessibilityLabel={`${option.label} 컬러 선택`}
-                  accessibilityRole="button"
-                  onPress={() => setSelectedColorId(option.id)}
-                  pressStyle={{scale: 0.96}}
-                  style={[
-                    styles.colorOption,
-                    {
-                      backgroundColor: option.hex,
-                      borderColor:
-                        option.id === selectedColorId ? colors.white : colors.borderStrong,
-                    },
-                  ]}
-                  unstyled>
-                  <View style={styles.colorOptionInner} />
-                </Button>
+                  isActive={option.id === selectedColorId}
+                  label={option.label}
+                  onPress={() => {
+                    setSelectedColorId(option.id);
+                    markMakeupOptionEdited();
+                  }}
+                >
+                  <ColorOptionPreview color={option.hex} />
+                </OptionCard>
               ))}
-            </XStack>
+            </ScrollView>
+          ) : selectedMakeupOptionGroup === 'type' ? (
+            <ScrollView
+              contentContainerStyle={styles.optionPickerList}
+              horizontal
+              showsHorizontalScrollIndicator={false}>
+              <OptionCard
+                accessibilityLabel="원본 타입 선택"
+                isActive={selectedTypeId === ORIGINAL_OPTION_CARD_ID}
+                label={ORIGINAL_OPTION_CARD_LABEL}
+                onPress={handleOriginalOptionPress}>
+                <OriginalOptionPreview />
+              </OptionCard>
+              {selectedMakeupFilter.typeOptions.map(option => (
+                <OptionCard
+                  key={option.id}
+                  accessibilityLabel={`${option.label} 타입 선택`}
+                  isActive={option.id === selectedTypeId}
+                  label={option.label}
+                  onPress={() => {
+                    setSelectedTypeId(option.id);
+                    markMakeupOptionEdited();
+                  }}>
+                  <TypeOptionPreview />
+                </OptionCard>
+              ))}
+            </ScrollView>
+          ) : selectedMakeupOptionGroup === 'texture' ? (
+            <ScrollView
+              contentContainerStyle={styles.optionPickerList}
+              horizontal
+              showsHorizontalScrollIndicator={false}>
+              <OptionCard
+                accessibilityLabel="원본 질감 선택"
+                isActive={selectedTextureId === ORIGINAL_OPTION_CARD_ID}
+                label={ORIGINAL_OPTION_CARD_LABEL}
+                onPress={handleOriginalOptionPress}>
+                <OriginalOptionPreview />
+              </OptionCard>
+              {selectedMakeupFilter.textureOptions.map(option => (
+                <OptionCard
+                  key={option.id}
+                  accessibilityLabel={`${option.label} 질감 선택`}
+                  isActive={option.id === selectedTextureId}
+                  label={option.label}
+                  onPress={() => {
+                    setSelectedTextureId(option.id);
+                    markMakeupOptionEdited();
+                  }}>
+                  <TextureOptionPreview />
+                </OptionCard>
+              ))}
+            </ScrollView>
           ) : (
-            <XStack style={styles.optionList}>
-              {(selectedOptionGroup === 'type'
-                ? selectedFilter.typeOptions
-                : selectedFilter.textureOptions
-              ).map(option => {
-                const isActive =
-                  selectedOptionGroup === 'type'
-                    ? option.id === selectedTypeId
-                    : option.id === selectedTextureId;
-
-                return (
-                  <OverlayChipButton
-                    key={option.id}
-                    isActive={isActive}
-                    label={option.label}
-                    onPress={() => {
-                      if (selectedOptionGroup === 'type') {
-                        setSelectedTypeId(option.id);
-                        return;
-                      }
-
-                      setSelectedTextureId(option.id);
-                    }}
-                  />
-                );
-              })}
-            </XStack>
+            <ScrollView
+              contentContainerStyle={styles.optionPickerList}
+              horizontal
+              showsHorizontalScrollIndicator={false}>
+              <OptionCard
+                accessibilityLabel="원본 형태 선택"
+                isActive={selectedShapeId === ORIGINAL_OPTION_CARD_ID}
+                label={ORIGINAL_OPTION_CARD_LABEL}
+                onPress={handleOriginalOptionPress}>
+                <OriginalOptionPreview />
+              </OptionCard>
+              {shapeOptions.map(option => (
+                <OptionCard
+                  key={option.id}
+                  accessibilityLabel={`${option.label} 형태 선택`}
+                  isActive={option.id === selectedShapeId}
+                  label={option.label}
+                  onPress={() => {
+                    setSelectedShapeId(option.id);
+                    markMakeupOptionEdited();
+                  }}>
+                  <ShapeOptionPreview />
+                </OptionCard>
+              ))}
+            </ScrollView>
           )}
+
+          <XStack style={styles.makeupActionRow}>
+            <Button
+              accessibilityLabel="메이크업 형태 수정 화면 열기"
+              accessibilityRole="button"
+              onPress={onOpenShapeAdjust}
+              pressStyle={{scale: 0.98}}
+              style={styles.shapeEditButton}
+              unstyled>
+              <Text style={styles.shapeEditButtonText}>{getARFilterShapeEditButtonLabel()}</Text>
+            </Button>
+            <Button
+              accessibilityLabel="현재 메이크업 필터 저장하기"
+              accessibilityRole="button"
+              accessibilityState={{disabled: !isARFilterSaveEnabled({hasUnsavedChanges: hasUnsavedMakeupChanges})}}
+              disabled={!isARFilterSaveEnabled({hasUnsavedChanges: hasUnsavedMakeupChanges})}
+              onPress={onSave}
+              pressStyle={{scale: 0.98}}
+              style={[
+                styles.saveMakeupButton,
+                !isARFilterSaveEnabled({hasUnsavedChanges: hasUnsavedMakeupChanges})
+                  ? styles.saveMakeupButtonDisabled
+                  : undefined,
+              ]}
+              unstyled>
+              <Text
+                style={[
+                  styles.saveMakeupButtonText,
+                  !isARFilterSaveEnabled({hasUnsavedChanges: hasUnsavedMakeupChanges})
+                    ? styles.saveMakeupButtonTextDisabled
+                    : undefined,
+                ]}>
+                {getARFilterSaveButtonLabel()}
+              </Text>
+            </Button>
+          </XStack>
         </ScrollView>
 
         <XStack style={styles.captureRow}>
@@ -451,36 +739,86 @@ function HorizontalSection({children, label}: HorizontalSectionProps) {
   );
 }
 
-
-type FilterCardProps = {
-  filter: MakeupFilter;
+type OptionCardProps = {
+  accessibilityLabel: string;
+  children?: React.ReactNode;
+  imageSource?: MakeupFilter['imageSource'];
   isActive: boolean;
+  label: string;
   onPress: () => void;
 };
 
-function FilterCard({filter, isActive, onPress}: FilterCardProps) {
+function OptionCard({
+  accessibilityLabel,
+  children,
+  imageSource,
+  isActive,
+  label,
+  onPress,
+}: OptionCardProps) {
   return (
     <Button
-      accessibilityLabel={`${filter.title} 필터 선택`}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       accessibilityState={{selected: isActive}}
       onPress={onPress}
       pressStyle={{scale: 0.98}}
-      style={[styles.filterCard, isActive ? styles.filterCardActive : undefined]}
+      style={[styles.optionCard, isActive ? styles.optionCardActive : undefined]}
       unstyled>
-      <Image resizeMode="cover" source={filter.imageSource} style={styles.filterImage} />
-      <YStack style={styles.filterCopy}>
-        <Text numberOfLines={1} style={[styles.filterTitle, isActive ? styles.filterTitleActive : undefined]}>
-          {filter.title}
-        </Text>
-        <Text numberOfLines={1} style={[styles.filterSubtitle, isActive ? styles.filterSubtitleActive : undefined]}>
-          {filter.subtitle}
-        </Text>
-        <Text style={[styles.filterMeta, isActive ? styles.filterMetaActive : undefined]}>
-          {filter.intensityLabel}
-        </Text>
-      </YStack>
+      <View style={styles.optionCardPreview}>
+        {imageSource ? (
+          <Image resizeMode="cover" source={imageSource} style={styles.optionCardImage} />
+        ) : (
+          children
+        )}
+      </View>
+      <Text numberOfLines={1} style={[styles.optionCardTitle, isActive ? styles.optionCardTitleActive : undefined]}>
+        {label}
+      </Text>
     </Button>
+  );
+}
+
+function OriginalOptionPreview() {
+  return (
+    <View style={styles.originalPreview}>
+      <View style={styles.originalPreviewLine} />
+    </View>
+  );
+}
+
+function ColorOptionPreview({color}: {color: string}) {
+  return <View style={[styles.colorPreview, {backgroundColor: color}]} />;
+}
+
+function TypeOptionPreview() {
+  return (
+    <YStack style={styles.textualPreview}>
+      <View style={styles.typePreviewLineStrong} />
+      <View style={styles.typePreviewLine} />
+      <View style={styles.typePreviewLineShort} />
+    </YStack>
+  );
+}
+
+function TextureOptionPreview() {
+  return (
+    <XStack style={styles.texturePreview}>
+      <View style={styles.texturePreviewDot} />
+      <View style={styles.texturePreviewDotLarge} />
+      <View style={styles.texturePreviewDot} />
+    </XStack>
+  );
+}
+
+function ShapeOptionPreview() {
+  return (
+    <View style={styles.shapePreview}>
+      <View style={[styles.shapePreviewPoint, styles.shapePreviewPointTop]} />
+      <View style={[styles.shapePreviewPoint, styles.shapePreviewPointLeft]} />
+      <View style={[styles.shapePreviewPoint, styles.shapePreviewPointRight]} />
+      <View style={styles.shapePreviewCurve} />
+    </View>
   );
 }
 
@@ -523,7 +861,7 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 1,
-    padding: spacing.xs,
+    padding: MODE_TAB_CONTAINER_PADDING,
   },
   comparisonBar: {
     backgroundColor: colors.glassSurface,
@@ -531,7 +869,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     gap: spacing.xs,
-    padding: spacing.xs,
+    padding: MODE_TAB_CONTAINER_PADDING,
+  },
+  modeTabText: {
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   comparisonButton: {
     alignItems: 'center',
@@ -665,76 +1007,58 @@ const styles = StyleSheet.create({
   chipList: {
     gap: spacing.sm,
   },
-  filterList: {
+  optionPickerList: {
+    alignItems: 'center',
     gap: spacing.md,
+    minHeight: 136,
     paddingRight: spacing.xl,
   },
-  filterCard: {
+  optionCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'flex-start',
-    minHeight: 92,
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 136,
     overflow: 'hidden',
     padding: spacing.sm,
-    width: 226,
+    width: 104,
   },
-  filterCardActive: {
+  optionCardActive: {
     backgroundColor: colors.black,
     borderColor: colors.black,
   },
-  filterTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  filterTitleActive: {
-    color: colors.white,
-  },
-  filterSubtitle: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
-  filterSubtitleActive: {
-    color: colors.borderStrong,
-  },
-  filterMeta: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
-  filterMetaActive: {
-    color: colors.white,
-  },
-  filterImage: {
+  optionCardPreview: {
+    alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.md,
-    height: 74,
-    width: 58,
+    height: 92,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 84,
   },
-  filterCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
+  optionCardImage: {
+    height: '100%',
+    width: '100%',
   },
-  adjustRow: {
+  optionCardTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
+  },
+  optionCardTitleActive: {
+    color: colors.white,
+  },
+  makeupActionRow: {
     gap: spacing.md,
   },
-  secondaryAction: {
+  shapeEditButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
@@ -744,7 +1068,7 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
   },
-  secondaryActionText: {
+  shapeEditButtonText: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
@@ -752,26 +1076,129 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  optionList: {
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  colorOption: {
+  saveMakeupButton: {
     alignItems: 'center',
-    borderRadius: radius.pill,
-    borderWidth: 3,
-    height: iconSize.xl + spacing.sm,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.sm,
-  },
-  colorOptionInner: {
+    backgroundColor: colors.black,
     borderColor: colors.black,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    height: 44,
+    justifyContent: 'center',
+  },
+  saveMakeupButtonDisabled: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+  },
+  saveMakeupButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  saveMakeupButtonTextDisabled: {
+    color: colors.textTertiary,
+  },
+  originalPreview: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: iconSize.sm,
-    opacity: 0.18,
-    width: iconSize.sm,
+    height: iconSize.xl,
+    justifyContent: 'center',
+    width: iconSize.xl,
+  },
+  originalPreviewLine: {
+    backgroundColor: colors.textSecondary,
+    height: 1,
+    opacity: 0.8,
+    transform: [{rotate: '-28deg'}],
+    width: iconSize.lg,
+  },
+  colorPreview: {
+    borderColor: colors.white,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    height: iconSize.xl,
+    width: iconSize.xl,
+  },
+  textualPreview: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  typePreviewLineStrong: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: 8,
+    width: 54,
+  },
+  typePreviewLine: {
+    backgroundColor: colors.textSecondary,
+    borderRadius: radius.pill,
+    height: 6,
+    opacity: 0.7,
+    width: 44,
+  },
+  typePreviewLineShort: {
+    backgroundColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    height: 6,
+    width: 30,
+  },
+  texturePreview: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    justifyContent: 'center',
+  },
+  texturePreviewDot: {
+    backgroundColor: colors.textSecondary,
+    borderRadius: radius.pill,
+    height: spacing.md,
+    opacity: 0.75,
+    width: spacing.md,
+  },
+  texturePreviewDotLarge: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: iconSize.xs,
+    width: iconSize.xs,
+  },
+  shapePreview: {
+    height: 54,
+    position: 'relative',
+    width: 64,
+  },
+  shapePreviewCurve: {
+    borderBottomColor: colors.textPrimary,
+    borderBottomWidth: 2,
+    borderRadius: radius.pill,
+    bottom: 8,
+    height: 28,
+    left: 8,
+    position: 'absolute',
+    right: 8,
+  },
+  shapePreviewPoint: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: spacing.sm,
+    position: 'absolute',
+    width: spacing.sm,
+  },
+  shapePreviewPointTop: {
+    left: 28,
+    top: 4,
+  },
+  shapePreviewPointLeft: {
+    bottom: 12,
+    left: 6,
+  },
+  shapePreviewPointRight: {
+    bottom: 12,
+    right: 6,
   },
   captureRow: {
     alignItems: 'center',
