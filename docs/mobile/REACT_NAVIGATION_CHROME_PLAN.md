@@ -114,7 +114,7 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
   - syncs `StatusBar` style from `routeChrome`
 
 - `apps/mobile/src/app/navigation/*`
-  - owns typed routes, route chrome policy, React Navigation stack/tabs, flow state, and route adapters
+  - owns typed routes, deep link mapping, route chrome policy, React Navigation stack/tabs, flow state, and route adapters
   - replaces the legacy `activeScreen` router and old `app-root/navigation.ts`
 
 ### Migration Note
@@ -146,6 +146,7 @@ apps/mobile/src/
       RootNavigator.tsx
       MainTabNavigator.tsx
       routeTypes.ts
+      linkingConfig.ts
       routeChrome.ts
       mainTabChrome.ts
       detailHeaderChrome.tsx
@@ -169,6 +170,7 @@ apps/mobile/src/
 | `RootNavigator.tsx` | Root stack routes: auth, onboarding, main tabs, detail routes, fullscreen routes. |
 | `MainTabNavigator.tsx` | Bottom tab routes: home, product recommendation, hidden my page route, and footer capture action. |
 | `routeTypes.ts` | Typed route names and route params. |
+| `linkingConfig.ts` | App deep link scheme, URL prefixes, route path mapping, and route coverage helpers. |
 | `routeChrome.ts` | Single source of truth for header/footer/fullscreen policy and header copy. |
 | `mainTabChrome.ts` | Main tab header copy and footer target helpers. |
 | `detailHeaderChrome.tsx` | Detail route `AppHeader` renderer and route-level share/close/done action slots. |

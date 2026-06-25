@@ -46,6 +46,41 @@
 
 - `npm --prefix apps/mobile run typecheck`
 
+### 후속 정리: 딥링크 설정 검증과 route path 누락 방지
+
+이번 작업은 이미 들어가 있던 딥링크 설정이 앱 설정까지 실제로 이어져 있는지 확인하고, 앞으로 route가 늘어날 때 URL path 매핑을 빠뜨리지 않도록 테스트를 보강한 것이다.
+
+딥링크는 두 겹의 설정이 함께 맞아야 동작한다.
+
+첫 번째는 앱을 여는 문이다. Expo app config의 `scheme` 값이 여기에 해당한다. 현재 `apps/mobile/app.json`에는 `expo.scheme`이 `aiarmakeup`으로 등록되어 있다. 이 값이 있어야 iOS가 `aiarmakeup://...` 형태의 URL을 이 앱으로 전달할 수 있다. 이 설정이 빠지거나 Navigation 설정과 다르면, React Navigation 쪽 path 매핑이 아무리 맞아도 앱 자체가 URL을 받지 못한다.
+
+두 번째는 앱 안에서 어느 화면으로 갈지 정하는 지도다. React Navigation의 `NavigationContainer`에 들어가는 `linking` 설정이 이 역할을 한다. 예를 들어 `aiarmakeup://feedback-tip/eyeline-point`가 들어오면 앱은 먼저 `aiarmakeup` 스킴으로 열리고, 그 다음 `feedback-tip/:pointId` path를 해석해 `FeedbackTip` route와 `pointId` param으로 연결한다.
+
+이번 정리에서는 이 두 설정을 다음처럼 다뤘다.
+
+- `linkingConfig.ts`
+  - `APP_DEEP_LINK_SCHEME`을 `aiarmakeup`으로 고정했다.
+  - native app URL prefix인 `aiarmakeup://`와 Expo 개발용 prefix인 `exp://127.0.0.1:8082/--/`, `exp://localhost:8082/--/`를 한 곳에 모았다.
+  - root stack route와 main tab route의 path mapping을 `rootStackLinkingScreens`, `mainTabLinkingScreens`로 분리했다.
+  - `navigationLinking`을 export해 `AppRoot.tsx`의 `NavigationContainer`가 같은 설정 객체를 사용하게 했다.
+
+- `linkingConfig.test.ts`
+  - `apps/mobile/app.json`의 `expo.scheme`과 `APP_DEEP_LINK_SCHEME`이 같은지 검증한다.
+  - `NavigationContainer` prefix에 `aiarmakeup://`와 Expo 개발 URL이 들어 있는지 검증한다.
+  - `rootStackRoutes`의 모든 route가 linking screen config에 존재하는지 확인한다.
+  - `mainTabRoutes`의 모든 tab route가 `MainTabs` nested linking config에 존재하는지 확인한다.
+  - 반대로 linking config에 routeTypes에 없는 알 수 없는 route 이름이 들어가지 않았는지도 확인한다.
+  - `ImageAnalysisReportDetail`의 optional `reportId`, `FeedbackTip`의 required `pointId`처럼 param path가 필요한 route의 path 형식도 확인한다.
+
+이 테스트가 막아주는 문제는 단순한 오타 이상이다. 새 화면을 `routeTypes.ts`와 `RootNavigator.tsx`에는 추가했지만 딥링크 path를 빠뜨리면, 앱 내부 버튼 이동은 되는데 외부 URL 직접 진입은 실패할 수 있다. 반대로 path config에 오래된 route 이름이 남으면 실제 navigator에는 없는 주소가 문서나 QA 시나리오에 남을 수 있다. 그래서 route 목록과 linking map을 같은 계약으로 묶어두는 것이 중요하다.
+
+검증:
+
+- RED: `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module preserve --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true --resolveJsonModule true apps/mobile/src/app/navigation/linkingConfig.test.ts` 실행 시 `Cannot find module './linkingConfig'`로 실패하는 것을 확인했다.
+- GREEN: `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module preserve --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true --resolveJsonModule true apps/mobile/src/app/navigation/linkingConfig.test.ts apps/mobile/src/app/navigation/linkingConfig.ts apps/mobile/src/app/navigation/routeTypes.ts apps/mobile/src/app-root/AppRoot.tsx`
+- app config scheme 확인: `node -e "const config=require('./apps/mobile/app.json'); if (config.expo.scheme !== 'aiarmakeup') { console.error('scheme mismatch:', config.expo.scheme); process.exit(1); } console.log(config.expo.scheme);"`
+- 전체 타입체크: `npm --prefix apps/mobile run typecheck`
+
 ### 후속 정리: 데모 초기 상태 분리
 
 이후 후속 작업으로 `flowState.tsx`에 직접 들어가 있던 데모 seed를 기본 앱 상태에서 분리했다.
@@ -210,6 +245,7 @@ apps/mobile/src/
       RootNavigator.tsx
       MainTabNavigator.tsx
       routeTypes.ts
+      linkingConfig.ts
       routeChrome.ts
       mainTabChrome.ts
       detailHeaderChrome.tsx
@@ -222,6 +258,7 @@ apps/mobile/src/
 현재 기준은 다음과 같다.
 
 - route 이름과 params는 `routeTypes.ts`가 관리한다.
+- 딥링크 scheme, URL prefix, route path mapping은 `linkingConfig.ts`가 관리한다.
 - 화면 depth/category/chrome/status bar/title은 `routeChrome.ts`가 관리한다.
 - 메인 탭의 header copy와 footer active state는 `mainTabChrome.ts`가 관리한다.
 - 상세 헤더 렌더링과 route-level 오른쪽 액션은 `detailHeaderChrome.tsx`가 관리한다.
