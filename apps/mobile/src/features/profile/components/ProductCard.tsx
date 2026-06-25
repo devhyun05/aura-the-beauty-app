@@ -7,7 +7,7 @@ import {Text, View} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, HeartIcon, ImagePlaceholder} from '../../../shared/ui';
-import type {Product} from '../../../shared/types/myPage';
+import type {Product} from '../../../shared/types/profile';
 
 type ProductCardProps = {
   product: Product;

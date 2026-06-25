@@ -21,8 +21,8 @@ expectEqual(getRouteChrome('ProfileEdit').kind, 'detail', 'profile edit chrome')
 expectEqual(getRouteChrome('ProfileEdit').category, 'form-edit', 'profile edit category');
 expectEqual(getRouteChrome('FeedbackLoading').kind, 'detail', 'feedback loading chrome');
 expectEqual(getRouteChrome('FeedbackLoading').category, 'progress', 'feedback loading category');
-expectEqual(getRouteChrome('ARMakeupFilter').kind, 'fullscreen', 'AR chrome');
-expectEqual(getRouteChrome('ARMakeupFilter').depth, 'immersive', 'AR depth');
+expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
+expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
   getDetailRouteTitle('ImageAnalysisReportDetail'),
   '맞춤 분석 보고서',
@@ -30,10 +30,10 @@ expectEqual(
 );
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target');
-expectEqual(getFooterTargetRoute('capture'), 'ARMakeupFilter', 'capture footer action');
+expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
-  'FilterSaved,RecipeSaved',
+  'FilterSaveComplete,FilterRecipeSaveComplete',
   'terminal route order',
 );
 expectEqual(
@@ -44,7 +44,7 @@ expectEqual(
         name: 'MainTabs',
         state: {
           index: 1,
-          routes: [{name: 'HomeTab'}, {name: 'CustomTab'}, {name: 'MyPageTab'}],
+          routes: [{name: 'HomeTab'}, {name: 'CustomTab'}, {name: 'ProfileTab'}],
         },
       },
     ],

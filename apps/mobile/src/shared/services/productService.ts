@@ -1,5 +1,5 @@
 import { productsMock } from '../mocks/products.mock';
-import type { Product } from '../types/myPage';
+import type { Product } from '../types/profile';
 
 export const getProducts = async (): Promise<Product[]> => {
   return Promise.resolve(productsMock);
@@ -9,7 +9,7 @@ export const getLikedProducts = async (): Promise<Product[]> => {
   return Promise.resolve(productsMock.filter((product) => product.isLiked));
 };
 
-export const getLikedProductPreview = async (
+export const getLikedProductPreviews = async (
   limit = 3,
 ): Promise<Product[]> => {
   return Promise.resolve(

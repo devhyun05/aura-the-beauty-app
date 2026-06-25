@@ -3,11 +3,11 @@ import type {ImageSourcePropType} from 'react-native';
 import type {ARMakeupGuideData} from '../types/makeupGuide';
 
 const styleOjiGirl =
-  require('../../assets/images/user-page/style-oji-girl.png') as ImageSourcePropType;
+  require('../../assets/images/looks/style-oji-girl.png') as ImageSourcePropType;
 const styleMoriGirl =
-  require('../../assets/images/user-page/style-mori-girl.png') as ImageSourcePropType;
+  require('../../assets/images/looks/style-mori-girl.png') as ImageSourcePropType;
 const styleCleanSmoky =
-  require('../../assets/images/user-page/style-clean-smoky.png') as ImageSourcePropType;
+  require('../../assets/images/looks/style-clean-smoky.png') as ImageSourcePropType;
 
 export const mockARMakeupGuideData: ARMakeupGuideData = {
   categories: [

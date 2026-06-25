@@ -1,2 +1,2 @@
-export { MyPageScreen } from './screens/MyPageScreen';
+export { ProfileScreen } from './screens/ProfileScreen';
 export { ProfileEditScreen } from './screens/ProfileEditScreen';

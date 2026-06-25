@@ -35,7 +35,7 @@ type MainTabLinkingScreenConfig = NonNullable<
 export const mainTabLinkingScreens = {
   HomeTab: 'home',
   CustomTab: 'custom',
-  MyPageTab: 'my-page',
+  ProfileTab: 'profile',
 } as const satisfies Record<MainTabRouteName, MainTabLinkingScreenConfig>;
 
 export const rootStackLinkingScreens = {
@@ -50,25 +50,25 @@ export const rootStackLinkingScreens = {
   ImageAnalysisReportsList: 'image-analysis-reports',
   ImageAnalysisReportDetail: 'image-analysis-report/:reportId?',
   ProfileEdit: 'profile-edit',
-  MakeupStyleList: 'makeup-style-list',
+  MakeupLookList: 'makeup-look-list',
   LikedProductList: 'liked-product-list',
-  ARMakeupFilter: 'ar-makeup-filter',
-  ARFilterLocation: 'ar-filter-location',
-  ARFilterStyle: 'ar-filter-style',
+  ARFilter: 'ar-filter',
+  ARFilterLocationAdjust: 'ar-filter-location-adjust',
+  ARFilterStyleAdjust: 'ar-filter-style-adjust',
   FeedbackEntry: 'feedback-entry',
   FeedbackCapture: 'feedback-capture',
   FeedbackLoading: 'feedback-loading',
   FeedbackResult: 'feedback-result',
   FeedbackGuide: 'feedback-guide',
   FeedbackTip: 'feedback-tip/:pointId',
-  FilterUpload: 'filter-upload',
-  FilterLoading: 'filter-loading',
-  FilterResult: 'filter-result',
-  FilterTryOn: 'filter-try-on',
-  FilterSave: 'filter-save',
-  FilterSaved: 'filter-saved',
+  FilterExtractionUpload: 'filter-extraction-upload',
+  FilterExtractionLoading: 'filter-extraction-loading',
+  FilterExtractionResult: 'filter-extraction-result',
+  FilterTryOnAdjust: 'filter-try-on-adjust',
+  FilterSaveForm: 'filter-save-form',
+  FilterSaveComplete: 'filter-save-complete',
   FilterRecipeDetail: 'filter-recipe-detail',
-  RecipeSaved: 'recipe-saved',
+  FilterRecipeSaveComplete: 'filter-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;
 
 export const navigationLinking: LinkingOptions<RootStackParamList> = {

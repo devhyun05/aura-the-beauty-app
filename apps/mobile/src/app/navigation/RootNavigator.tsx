@@ -4,9 +4,9 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import type {RootStackParamList} from './routeTypes';
 import {MainTabNavigator} from './MainTabNavigator';
 import {
-  ARFilterLocationRouteScreen,
-  ARFilterStyleRouteScreen,
-  ARMakeupFilterRouteScreen,
+  ARFilterLocationAdjustRouteScreen,
+  ARFilterStyleAdjustRouteScreen,
+  ARFilterRouteScreen,
   FaceCaptureRouteScreen,
   FeedbackCaptureRouteScreen,
   FeedbackEntryRouteScreen,
@@ -14,21 +14,21 @@ import {
   FeedbackLoadingRouteScreen,
   FeedbackResultRouteScreen,
   FeedbackTipRouteScreen,
-  FilterLoadingRouteScreen,
+  FilterExtractionLoadingRouteScreen,
   FilterRecipeDetailRouteScreen,
-  FilterResultRouteScreen,
-  FilterSavedRouteScreen,
-  FilterSaveRouteScreen,
-  FilterTryOnRouteScreen,
-  FilterUploadRouteScreen,
+  FilterExtractionResultRouteScreen,
+  FilterSaveCompleteRouteScreen,
+  FilterSaveFormRouteScreen,
+  FilterTryOnAdjustRouteScreen,
+  FilterExtractionUploadRouteScreen,
   ImageAnalysisLoadingRouteScreen,
   ImageAnalysisReportDetailRouteScreen,
   ImageAnalysisReportsListRouteScreen,
   LikedProductListRouteScreen,
   LoginRouteScreen,
-  MakeupStyleListRouteScreen,
+  MakeupLookListRouteScreen,
   ProfileEditRouteScreen,
-  RecipeSavedRouteScreen,
+  FilterRecipeSaveCompleteRouteScreen,
   TutorialRouteScreen,
 } from './navigationAdapters';
 
@@ -53,25 +53,25 @@ export function RootNavigator() {
         component={ImageAnalysisReportDetailRouteScreen}
       />
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
-      <Stack.Screen name="MakeupStyleList" component={MakeupStyleListRouteScreen} />
+      <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
-      <Stack.Screen name="ARMakeupFilter" component={ARMakeupFilterRouteScreen} />
-      <Stack.Screen name="ARFilterLocation" component={ARFilterLocationRouteScreen} />
-      <Stack.Screen name="ARFilterStyle" component={ARFilterStyleRouteScreen} />
+      <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />
+      <Stack.Screen name="ARFilterLocationAdjust" component={ARFilterLocationAdjustRouteScreen} />
+      <Stack.Screen name="ARFilterStyleAdjust" component={ARFilterStyleAdjustRouteScreen} />
       <Stack.Screen name="FeedbackEntry" component={FeedbackEntryRouteScreen} />
       <Stack.Screen name="FeedbackCapture" component={FeedbackCaptureRouteScreen} />
       <Stack.Screen name="FeedbackLoading" component={FeedbackLoadingRouteScreen} />
       <Stack.Screen name="FeedbackResult" component={FeedbackResultRouteScreen} />
       <Stack.Screen name="FeedbackGuide" component={FeedbackGuideRouteScreen} />
       <Stack.Screen name="FeedbackTip" component={FeedbackTipRouteScreen} />
-      <Stack.Screen name="FilterUpload" component={FilterUploadRouteScreen} />
-      <Stack.Screen name="FilterLoading" component={FilterLoadingRouteScreen} />
-      <Stack.Screen name="FilterResult" component={FilterResultRouteScreen} />
-      <Stack.Screen name="FilterTryOn" component={FilterTryOnRouteScreen} />
-      <Stack.Screen name="FilterSave" component={FilterSaveRouteScreen} />
-      <Stack.Screen name="FilterSaved" component={FilterSavedRouteScreen} />
+      <Stack.Screen name="FilterExtractionUpload" component={FilterExtractionUploadRouteScreen} />
+      <Stack.Screen name="FilterExtractionLoading" component={FilterExtractionLoadingRouteScreen} />
+      <Stack.Screen name="FilterExtractionResult" component={FilterExtractionResultRouteScreen} />
+      <Stack.Screen name="FilterTryOnAdjust" component={FilterTryOnAdjustRouteScreen} />
+      <Stack.Screen name="FilterSaveForm" component={FilterSaveFormRouteScreen} />
+      <Stack.Screen name="FilterSaveComplete" component={FilterSaveCompleteRouteScreen} />
       <Stack.Screen name="FilterRecipeDetail" component={FilterRecipeDetailRouteScreen} />
-      <Stack.Screen name="RecipeSaved" component={RecipeSavedRouteScreen} />
+      <Stack.Screen name="FilterRecipeSaveComplete" component={FilterRecipeSaveCompleteRouteScreen} />
     </Stack.Navigator>
   );
 }

@@ -3,15 +3,15 @@ import type {ImageSourcePropType} from 'react-native';
 import type {FilterExtractionData} from '../types';
 
 const styleOjiGirl =
-  require('../../../assets/images/user-page/style-oji-girl.png') as ImageSourcePropType;
+  require('../../../assets/images/looks/style-oji-girl.png') as ImageSourcePropType;
 const styleMoriGirl =
-  require('../../../assets/images/user-page/style-mori-girl.png') as ImageSourcePropType;
+  require('../../../assets/images/looks/style-mori-girl.png') as ImageSourcePropType;
 const styleCleanSmoky =
-  require('../../../assets/images/user-page/style-clean-smoky.png') as ImageSourcePropType;
+  require('../../../assets/images/looks/style-clean-smoky.png') as ImageSourcePropType;
 const reportBareFace =
-  require('../../../assets/images/user-page/report-bare-face-20260622.png') as ImageSourcePropType;
+  require('../../../assets/images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
 const reportRetake =
-  require('../../../assets/images/user-page/report-retake-20260608.png') as ImageSourcePropType;
+  require('../../../assets/images/analysis/report-retake-20260608.png') as ImageSourcePropType;
 const analysisStudio =
   require('../../../assets/images/analysis/analysis-studio.png') as ImageSourcePropType;
 const analysisWindow =

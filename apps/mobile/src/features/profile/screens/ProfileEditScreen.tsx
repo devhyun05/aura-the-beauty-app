@@ -7,7 +7,7 @@ import {
   getUserProfile,
 } from '../../../shared/services/userService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {ProfileEditField, UserProfile} from '../../../shared/types/myPage';
+import type {ProfileEditField, UserProfile} from '../../../shared/types/profile';
 import {
   AppCard,
   AppScreen,

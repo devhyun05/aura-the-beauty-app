@@ -11,7 +11,7 @@ import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './rou
 import {
   CustomRouteScreen,
   HomeRouteScreen,
-  MyPageRouteScreen,
+  ProfileRouteScreen,
 } from './navigationAdapters';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 
@@ -25,7 +25,7 @@ export function MainTabNavigator() {
       tabBar={props => <MainTabBar {...props} />}>
       <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
       <Tab.Screen name="CustomTab" component={CustomRouteScreen} />
-      <Tab.Screen name="MyPageTab" component={MyPageRouteScreen} />
+      <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
     </Tab.Navigator>
   );
 }
@@ -39,10 +39,10 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
     (tab: FooterTabKey) => {
       const targetRoute = getRootRouteForFooterTab(tab);
 
-      if (targetRoute === 'ARMakeupFilter') {
+      if (targetRoute === 'ARFilter') {
         navigation
           .getParent<NavigationProp<RootStackParamList>>()
-          ?.navigate('ARMakeupFilter');
+          ?.navigate('ARFilter');
         return;
       }
 

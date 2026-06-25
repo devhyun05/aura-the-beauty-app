@@ -2,7 +2,7 @@ import {
   getDefaultComparisonMode,
   getDefaultMakeupFilter,
   getFiltersByCategory,
-  getMockARMakeupGuideData,
+  getARMakeupGuideData,
 } from './makeupGuideService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -11,7 +11,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const arGuideData = getMockARMakeupGuideData();
+const arGuideData = getARMakeupGuideData();
 const defaultFilter = getDefaultMakeupFilter(arGuideData);
 const defaultComparisonMode = getDefaultComparisonMode(arGuideData);
 const recommendationFilters = getFiltersByCategory('recommended', arGuideData);

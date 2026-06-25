@@ -25,12 +25,12 @@ expectEqual(
   'feedback entry route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterUpload').join(','),
+  getDetailHeaderRightActions('FilterExtractionUpload').join(','),
   'close',
   'filter upload route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterSave').join(','),
+  getDetailHeaderRightActions('FilterSaveForm').join(','),
   'done',
   'filter save route header actions',
 );
