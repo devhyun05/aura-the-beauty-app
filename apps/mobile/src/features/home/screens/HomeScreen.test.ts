@@ -4,6 +4,7 @@ import {
   getHeroCarouselInitialOffset,
   getHeroCarouselLoopResetOffset,
   getHeroCarouselRenderItems,
+  createHeroCarouselLoopResetHandlers,
   getFilterStoreCategoryChipLabel,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
@@ -48,6 +49,9 @@ const heroCarouselItems = [
 ] as const;
 const loopedHeroCarouselItems = getHeroCarouselRenderItems(heroCarouselItems);
 const heroCarouselSnapInterval = 320;
+const heroCarouselScrollEndHandler = () => undefined;
+const heroCarouselLoopResetHandlers =
+  createHeroCarouselLoopResetHandlers(heroCarouselScrollEndHandler);
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -140,6 +144,16 @@ expectEqual(
   }),
   null,
   'single hero carousel card does not loop',
+);
+expectEqual(
+  heroCarouselLoopResetHandlers.onMomentumScrollEnd,
+  heroCarouselScrollEndHandler,
+  'hero carousel momentum end reset handler',
+);
+expectEqual(
+  heroCarouselLoopResetHandlers.onScrollEndDrag,
+  heroCarouselScrollEndHandler,
+  'hero carousel drag end reset handler',
 );
 
 let selectedQuickAction: 'ar' | 'feedback' | null = null;
