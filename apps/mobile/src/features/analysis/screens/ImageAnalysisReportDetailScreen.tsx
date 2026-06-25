@@ -37,10 +37,21 @@ type ImageAnalysisReportDetailScreenProps = {
 };
 
 type GuideItem = {
-  key: keyof ImageAnalysisFacePointGuide;
+  key: keyof ImageAnalysisFacePointGuide | 'base';
   label: string;
   point: string;
   detail: string;
+};
+
+type FacePointGuideLabel = {
+  key: keyof ImageAnalysisFacePointGuide;
+  label: string;
+  point: string;
+};
+
+type SummaryItemData = {
+  label: string;
+  value: string;
 };
 
 type CreateFilterButtonPlacement = 'floating-bottom';
@@ -50,7 +61,7 @@ type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
 
-const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
+const guideLabels: FacePointGuideLabel[] = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
   {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
   {key: 'lip', label: '립', point: 'MLBB 계열'},
@@ -73,6 +84,10 @@ const imageAnalysisReportHeaderActions = [
   'share',
   'close',
 ] as const satisfies readonly ImageAnalysisReportHeaderAction[];
+const imageAnalysisReportAvoidedMakeupRailPresentation = {
+  showsCornerBadge: false,
+  title: '비추천 메이크업',
+} as const;
 const imageAnalysisReportSubtitleTextStyle = {
   fontSize: typography.fontSize.md,
   lineHeight: typography.lineHeight.md,
@@ -120,6 +135,10 @@ export function getImageAnalysisReportHeaderActions() {
   return imageAnalysisReportHeaderActions;
 }
 
+export function getImageAnalysisReportAvoidedMakeupRailPresentation() {
+  return imageAnalysisReportAvoidedMakeupRailPresentation;
+}
+
 export function getImageAnalysisReportSubtitleTextStyle() {
   return imageAnalysisReportSubtitleTextStyle;
 }
@@ -130,6 +149,34 @@ export function getImageAnalysisReportScreenFramePresentation() {
 
 export function getImageAnalysisReportLiquidGlassPresentation() {
   return imageAnalysisReportLiquidGlassPresentation;
+}
+
+export function getImageAnalysisReportSummaryItems(
+  report: ImageAnalysisReport,
+): SummaryItemData[] {
+  return [
+    {label: '퍼스널 컬러', value: report.personalColor},
+    {label: '얼굴형', value: report.faceShape},
+    {label: '톤 요약', value: report.toneSummary},
+    {label: '추천 무드', value: report.recommendedMood},
+  ];
+}
+
+export function getImageAnalysisReportPointGuideItems(
+  report: ImageAnalysisReport,
+): GuideItem[] {
+  return [
+    {
+      key: 'base',
+      label: '베이스',
+      point: '피부 표현',
+      detail: report.baseMakeupGuide,
+    },
+    ...guideLabels.map((guide) => ({
+      ...guide,
+      detail: report.facePointGuide[guide.key],
+    })),
+  ];
 }
 
 const formatReportDate = (dateText: string, name?: string) => {
@@ -195,16 +242,14 @@ export function ImageAnalysisReportDetailScreen({
         ? loadState.description
         : '목록에서 이미지 분석 결과를 다시 선택해 주세요.';
 
-  const guideItems = useMemo<GuideItem[]>(() => {
-    if (!report) {
-      return [];
-    }
-
-    return guideLabels.map((guide) => ({
-      ...guide,
-      detail: report.facePointGuide[guide.key],
-    }));
-  }, [report]);
+  const guideItems = useMemo(
+    () => (report ? getImageAnalysisReportPointGuideItems(report) : []),
+    [report],
+  );
+  const summaryItems = useMemo(
+    () => (report ? getImageAnalysisReportSummaryItems(report) : []),
+    [report],
+  );
 
   if (!report) {
     return (
@@ -250,10 +295,9 @@ export function ImageAnalysisReportDetailScreen({
       </View>
 
       <View style={styles.summaryGrid}>
-        <SummaryItem label="퍼스널 컬러" value={report.personalColor} />
-        <SummaryItem label="피부 타입" value={report.skinType} />
-        <SummaryItem label="톤 요약" value={report.toneSummary} />
-        <SummaryItem label="추천 무드" value={report.recommendedMood} />
+        {summaryItems.map((item) => (
+          <SummaryItem key={item.label} label={item.label} value={item.value} />
+        ))}
       </View>
 
       <ReportSection title="분석 요약">
@@ -277,15 +321,10 @@ export function ImageAnalysisReportDetailScreen({
         </View>
       </ReportSection>
 
-      <ReportSection title="베이스 가이드">
-        <Text style={styles.paragraph}>{report.baseMakeupGuide}</Text>
-      </ReportSection>
-
       <MakeupCardRail title="추천 메이크업" items={report.recommendedMakeups} />
 
       <MakeupCardRail
-        isAvoided
-        title="비추천 메이크업 적용법"
+        title={imageAnalysisReportAvoidedMakeupRailPresentation.title}
         items={report.avoidedMakeups}
       />
 
@@ -507,11 +546,9 @@ function ReportSection({
 }
 
 function MakeupCardRail({
-  isAvoided,
   items,
   title,
 }: {
-  isAvoided?: boolean;
   items: ImageAnalysisMakeupCard[];
   title: string;
 }) {
@@ -530,11 +567,6 @@ function MakeupCardRail({
                 source={item.imageSource}
                 style={styles.makeupImage}
               />
-              {isAvoided ? (
-                <View style={styles.avoidBadge}>
-                  <XIcon color={colors.white} size={15} />
-                </View>
-              ) : null}
             </View>
             <View style={styles.makeupBody}>
               <Text numberOfLines={1} style={styles.makeupTitle}>
@@ -562,17 +594,6 @@ function MakeupCardRail({
 }
 
 const styles = StyleSheet.create({
-  avoidBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.black,
-    borderRadius: 12,
-    height: 24,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    width: 24,
-  },
   empty: {
     alignItems: 'center',
     flex: 1,

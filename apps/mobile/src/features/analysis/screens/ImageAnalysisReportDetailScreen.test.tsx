@@ -3,11 +3,15 @@ import React from 'react';
 import {
   ImageAnalysisReportDetailScreen,
   getImageAnalysisReportCreateFilterButtonPlacements,
+  getImageAnalysisReportAvoidedMakeupRailPresentation,
   getImageAnalysisReportHeaderActions,
   getImageAnalysisReportLiquidGlassPresentation,
+  getImageAnalysisReportPointGuideItems,
   getImageAnalysisReportScreenFramePresentation,
   getImageAnalysisReportSubtitleTextStyle,
+  getImageAnalysisReportSummaryItems,
 } from './ImageAnalysisReportDetailScreen';
+import {imageAnalysisReportsMock} from '../../../shared/mocks/imageAnalysis.mock';
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -30,6 +34,10 @@ const headerActions: readonly string[] = getImageAnalysisReportHeaderActions();
 const liquidGlassPresentation = getImageAnalysisReportLiquidGlassPresentation();
 const screenFramePresentation = getImageAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getImageAnalysisReportSubtitleTextStyle();
+const report = imageAnalysisReportsMock[0];
+const summaryItems = getImageAnalysisReportSummaryItems(report);
+const pointGuideItems = getImageAnalysisReportPointGuideItems(report);
+const avoidedRailPresentation = getImageAnalysisReportAvoidedMakeupRailPresentation();
 
 type CreateFilterButtonPlacementsContract = ExpectType<
   TypeEquals<typeof createFilterButtonPlacements, readonly ['floating-bottom']>
@@ -114,6 +122,42 @@ expectEqual(
   subtitleTextStyle.lineHeight,
   typography.lineHeight.md,
   'image analysis report date label line height',
+);
+expectEqual(summaryItems.length, 4, 'image analysis report summary item count');
+expectEqual(
+  summaryItems.some((item) => item.label === '얼굴형'),
+  true,
+  'image analysis report summary includes face shape',
+);
+expectEqual(
+  summaryItems.some((item) => item.label === '피부 타입'),
+  false,
+  'image analysis report summary excludes skin type',
+);
+expectEqual(
+  pointGuideItems[0].label,
+  '베이스',
+  'image analysis report point guide starts with base row',
+);
+expectEqual(
+  pointGuideItems[0].detail,
+  report.baseMakeupGuide,
+  'image analysis report base guide is inline point guide detail',
+);
+expectEqual(
+  pointGuideItems[1].label,
+  '눈썹',
+  'image analysis report brow guide follows base row',
+);
+expectEqual(
+  avoidedRailPresentation.title,
+  '비추천 메이크업',
+  'image analysis report avoided makeup rail title',
+);
+expectEqual(
+  avoidedRailPresentation.showsCornerBadge,
+  false,
+  'image analysis report avoided makeup rail corner x hidden',
 );
 
 <ImageAnalysisReportDetailScreen

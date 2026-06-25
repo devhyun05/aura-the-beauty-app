@@ -53,6 +53,7 @@ type ImageAnalysisMockSeed = {
   imageSource: ImageSourcePropType;
   environmentLabel: string;
   personalColor: string;
+  faceShape?: string;
   skinType: string;
   toneSummary: string;
   recommendedMood: string;
@@ -134,6 +135,7 @@ const facePointGuide = {
 
 const buildImageAnalysisReport = (seed: ImageAnalysisMockSeed): ImageAnalysisReport => ({
   ...seed,
+  faceShape: seed.faceShape ?? '부드러운 계란형',
   title: `${seed.personalColor}, ${seed.skinType}`,
   reportTitle: '맞춤 분석 보고서',
   shortSummary: seed.summary,
