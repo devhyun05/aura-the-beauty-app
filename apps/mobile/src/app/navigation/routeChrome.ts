@@ -1,0 +1,281 @@
+import type {FooterTabKey} from '../../shared/ui';
+import type {
+  MainTabRouteName,
+  RouteName,
+  RootStackRouteName,
+} from './routeTypes';
+import {routes} from './routeTypes';
+
+export type ScreenDepth = 'entry' | 'main' | 'sub' | 'immersive' | 'terminal';
+
+export type ScreenCategory =
+  | 'auth'
+  | 'onboarding'
+  | 'main-home'
+  | 'main-recommendation'
+  | 'main-profile'
+  | 'feature-entry'
+  | 'list'
+  | 'detail-report'
+  | 'form-edit'
+  | 'progress'
+  | 'capture-runtime'
+  | 'ar-runtime'
+  | 'completion'
+  | 'navigation-host';
+
+export type RouteChromeKind = 'mainTab' | 'detail' | 'fullscreen';
+export type MainHeaderVariant = 'home' | 'custom' | 'default';
+export type DetailHeaderRightAction = 'close' | 'profile' | 'custom';
+
+type RouteChromeBase = {
+  category: ScreenCategory;
+  depth: ScreenDepth;
+};
+
+export type RouteChrome =
+  | (RouteChromeBase & {
+      footerTab?: Extract<FooterTabKey, 'home' | 'custom'>;
+      headerVariant: MainHeaderVariant;
+      kind: 'mainTab';
+      statusBarStyle: 'dark';
+    })
+  | (RouteChromeBase & {
+      kind: 'detail';
+      rightAction?: DetailHeaderRightAction;
+      statusBarStyle: 'dark';
+      title: string;
+    })
+  | (RouteChromeBase & {
+      kind: 'fullscreen';
+      statusBarStyle: 'dark' | 'light';
+    });
+
+export type FooterTargetRoute = MainTabRouteName | Extract<RootStackRouteName, 'ARMakeupFilter'>;
+
+export const routeChromeByRoute = {
+  Login: {
+    category: 'auth',
+    depth: 'entry',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  Tutorial: {
+    category: 'onboarding',
+    depth: 'entry',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  MainTabs: {
+    category: 'navigation-host',
+    depth: 'main',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  FaceCapture: {
+    category: 'capture-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
+  ImageAnalysisLoading: {
+    category: 'progress',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '얼굴 분석',
+  },
+  ImageAnalysisReportsList: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '이미지 분석 결과',
+  },
+  ImageAnalysisReportDetail: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    rightAction: 'custom',
+    statusBarStyle: 'dark',
+    title: '맞춤 분석 보고서',
+  },
+  ProfileEdit: {
+    category: 'form-edit',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '프로필 수정',
+  },
+  MakeupStyleList: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 룩',
+  },
+  LikedProductList: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '좋아요 목록',
+  },
+  ARMakeupFilter: {
+    category: 'ar-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
+  ARFilterLocation: {
+    category: 'ar-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  ARFilterStyle: {
+    category: 'ar-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  FeedbackEntry: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightAction: 'close',
+    statusBarStyle: 'dark',
+    title: '메이크업 피드백',
+  },
+  FeedbackCapture: {
+    category: 'capture-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
+  FeedbackLoading: {
+    category: 'progress',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 피드백',
+  },
+  FeedbackResult: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 피드백',
+  },
+  FeedbackGuide: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '가이드 오버레이',
+  },
+  FeedbackTip: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '수정팁',
+  },
+  FilterUpload: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightAction: 'close',
+    statusBarStyle: 'dark',
+    title: '메이크업 추출',
+  },
+  FilterLoading: {
+    category: 'progress',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  FilterResult: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '분석 결과',
+  },
+  FilterTryOn: {
+    category: 'ar-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  FilterSave: {
+    category: 'form-edit',
+    depth: 'sub',
+    kind: 'detail',
+    rightAction: 'custom',
+    statusBarStyle: 'dark',
+    title: '필터 저장',
+  },
+  FilterSaved: {
+    category: 'completion',
+    depth: 'terminal',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  FilterRecipeDetail: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '상세 분석',
+  },
+  RecipeSaved: {
+    category: 'completion',
+    depth: 'terminal',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  HomeTab: {
+    category: 'main-home',
+    depth: 'main',
+    footerTab: 'home',
+    headerVariant: 'home',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  CustomTab: {
+    category: 'main-recommendation',
+    depth: 'main',
+    footerTab: 'custom',
+    headerVariant: 'custom',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  MyPageTab: {
+    category: 'main-profile',
+    depth: 'main',
+    headerVariant: 'default',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+} as const satisfies Record<RouteName, RouteChrome>;
+
+export function getRouteChrome(route: RouteName): RouteChrome {
+  return routeChromeByRoute[route];
+}
+
+export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
+  if (tab === 'capture') {
+    return 'ARMakeupFilter';
+  }
+
+  if (tab === 'custom') {
+    return 'CustomTab';
+  }
+
+  return 'HomeTab';
+}
+
+export function getRoutesByDepth(depth: ScreenDepth): RouteName[] {
+  return routes.filter((route) => routeChromeByRoute[route].depth === depth);
+}
