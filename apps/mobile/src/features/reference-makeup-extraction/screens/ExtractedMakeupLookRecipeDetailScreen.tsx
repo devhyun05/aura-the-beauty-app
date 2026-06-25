@@ -7,7 +7,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
-import type {ReferenceMakeupPhoto, MakeupLookRecipeTab} from '../types';
+import type {ReferenceMakeupPhoto, MakeupRecipeTab} from '../types';
 
 type ExtractedMakeupLookRecipeDetailScreenProps = {
   headerTitle?: string;
@@ -16,7 +16,7 @@ type ExtractedMakeupLookRecipeDetailScreenProps = {
   onSaveRecipe: () => void;
 };
 
-const mainTabs: {id: MakeupLookRecipeTab; label: string}[] = [
+const mainTabs: {id: MakeupRecipeTab; label: string}[] = [
   {id: 'all', label: '전체'},
   {id: 'eye', label: '눈'},
   {id: 'lip', label: '입술'},
@@ -91,7 +91,7 @@ export function ExtractedMakeupLookRecipeDetailScreen({
 }: ExtractedMakeupLookRecipeDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
-  const [activeTab, setActiveTab] = useState<MakeupLookRecipeTab>('eye');
+  const [activeTab, setActiveTab] = useState<MakeupRecipeTab>('eye');
   const [activeSubTab, setActiveSubTab] = useState(subTabs[0]);
 
   const visibleItems = useMemo(() => {

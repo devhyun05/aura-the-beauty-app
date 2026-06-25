@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-import type {ProfileEditField, UserProfile} from '../types/profile';
+import type {BeautyProfile, ProfileEditField, UserProfile} from '../types/profile';
 
 const profileSeojinAvatar =
   require('../../assets/images/profiles/profile-seojin-avatar.png') as ImageSourcePropType;
@@ -15,6 +15,9 @@ export const userProfileMock: UserProfile = {
   gender: '여성',
   interest: '데일리',
   avatarSource: profileSeojinAvatar,
+};
+
+export const beautyProfileMock: BeautyProfile = {
   personalColor: '봄웜 라이트',
   skinType: '건성 피부',
   skinTone: '밝은 아이보리',

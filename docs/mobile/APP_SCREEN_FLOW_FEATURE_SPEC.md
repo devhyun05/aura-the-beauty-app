@@ -58,7 +58,7 @@
 | Route | 화면 파일 | 기능 분류 | Chrome |
 | --- | --- | --- | --- |
 | `Login` | `LoginScreen.tsx` | 인증 진입 | fullscreen |
-| `Tutorial` | `TutorialIntroScreen.tsx`, `PhotoCaptureGuideScreen.tsx` | 온보딩/얼굴 촬영 튜토리얼 | fullscreen |
+| `Tutorial` | `TutorialIntroScreen.tsx`, `FaceCaptureTutorialScreen.tsx` | 온보딩/얼굴 촬영 튜토리얼 | fullscreen |
 | `MainTabs` | `MainTabNavigator.tsx` | 탭 호스트 | fullscreen |
 | `FaceCapture` | `FaceCaptureScreen.tsx` | 얼굴 진단 촬영 | fullscreen |
 | `FaceAnalysisLoading` | `FaceAnalysisLoadingScreen.tsx` | 얼굴 분석 진행 | detail |
@@ -207,7 +207,7 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 `메이크업 레시피`
 
-추출된 메이크업 룩을 실제 적용 순서와 부위별 단계로 풀어낸 구성/절차/조합이다. 현재 화면은 `ExtractedMakeupLookRecipeDetailScreen` 계열을 사용한다. 탭 타입 `MakeupLookRecipeTab`은 추후 `MakeupRecipeTab`으로 축약할 수 있는 후보로 남긴다.
+추출된 메이크업 룩을 실제 적용 순서와 부위별 단계로 풀어낸 구성/절차/조합이다. 현재 화면은 `ExtractedMakeupLookRecipeDetailScreen` 계열을 사용하고, 탭 타입은 `MakeupRecipeTab`을 사용한다.
 
 `추천 제품`
 
@@ -300,25 +300,25 @@ AR 반반가이드처럼 화면 위에 겹쳐지는 기준 UI에 사용한다. �
 
 이동:
 
-- `진단 시작` 선택 시 같은 route 안에서 `PhotoCaptureGuideScreen`을 보여준다.
+- `진단 시작` 선택 시 같은 route 안에서 `FaceCaptureTutorialScreen`을 보여준다.
 - 촬영 가이드 완료 시 `FaceCapture`로 이동한다.
 
 파일:
 
 - `apps/mobile/src/features/onboarding/screens/TutorialIntroScreen.tsx`
-- `apps/mobile/src/features/onboarding/screens/PhotoCaptureGuideScreen.tsx`
+- `apps/mobile/src/features/onboarding/screens/FaceCaptureTutorialScreen.tsx`
 
 주요 변수/타입:
 
 - `TutorialIntroHeroContent`
 - `tutorialIntroHeroContent`
-- `isPhotoGuideVisible`
-- `PhotoCaptureGuideStep`
-- `photoCaptureGuideSteps`
+- `isFaceCaptureTutorialVisible`
+- `FaceCaptureTutorialStep`
+- `faceCaptureTutorialSteps`
 - `currentStepIndex`
 - `hasAgreedToPrivacy`
 
-#### PhotoCaptureGuide
+#### FaceCaptureTutorial
 
 역할:
 
@@ -333,16 +333,16 @@ AR 반반가이드처럼 화면 위에 겹쳐지는 기준 UI에 사용한다. �
 
 파일:
 
-- `PhotoCaptureGuideScreen.tsx`
+- `FaceCaptureTutorialScreen.tsx`
 
 주요 변수/타입:
 
-- `PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO`
-- `PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL`
-- `PhotoCaptureGuideIconKey`
-- `PhotoCaptureGuideStep`
-- `photoCaptureGuideNavigationMode`
-- `photoCaptureGuideVisualPresentation`
+- `FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO`
+- `FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL`
+- `FaceCaptureTutorialIconKey`
+- `FaceCaptureTutorialStep`
+- `faceCaptureTutorialNavigationMode`
+- `faceCaptureTutorialVisualPresentation`
 
 ### 3.3 홈/기능 허브 플로우
 
@@ -1079,7 +1079,7 @@ AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 �
 
 주요 변수/타입:
 
-- `MakeupLookRecipeTab` 현재 코드명, 권장 이름 `MakeupRecipeTab`
+- `MakeupRecipeTab`
 - `mainTabs`
 - `subTabs`
 - `recipeItems`
@@ -1148,7 +1148,6 @@ AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 �
 
 주요 변수/타입:
 
-- `ProfileData`
 - `UserProfile`
 - `MyPageProfileSummary`
 - `BeautyProfile`
@@ -1313,13 +1312,13 @@ AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 �
 파일명:
 
 - `TutorialIntroScreen.tsx`
-- `PhotoCaptureGuideScreen.tsx` 현재 파일명, 권장 이름 `FaceCaptureTutorialScreen.tsx`
+- `FaceCaptureTutorialScreen.tsx`
 
 주요 변수명:
 
 - `tutorialIntroHeroContent`
-- `isPhotoGuideVisible`
-- `photoCaptureGuideSteps`
+- `isFaceCaptureTutorialVisible`
+- `faceCaptureTutorialSteps`
 - `currentStepIndex`
 - `hasAgreedToPrivacy`
 
@@ -1429,7 +1428,7 @@ AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 �
 - `MakeupLookAdjustmentTab`
 - `MakeupLookAttributeGroup`
 - `MakeupArea`
-- `MakeupLookRecipeTab` 현재 코드명, 권장 이름 `MakeupRecipeTab`
+- `MakeupRecipeTab`
 - `extractedMakeupLook` 현재 코드명, 권장 이름 `extractedMakeupLook`
 
 ### 4.7 마이페이지/프로필
@@ -1454,7 +1453,6 @@ AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 �
 - `UserProfile`
 - `MyPageProfileSummary`
 - `BeautyProfile`
-- `ProfileData`
 - `ProfileEditField`
 - `MakeupLook` 현재 코드명, 권장 이름 `MakeupLook`
 - `MakeupLookPreview` 현재 코드명, 권장 이름 `MakeupLookPreview`
@@ -1597,8 +1595,8 @@ MakeupFilter
 
 대표 rename 타깃:
 
-- `PhotoCaptureGuideScreen` -> `FaceCaptureTutorialScreen`
-- `MakeupLookRecipeTab` -> `MakeupRecipeTab`
+- `PhotoCaptureGuideScreen` -> `FaceCaptureTutorialScreen` 완료
+- `MakeupLookRecipeTab` -> `MakeupRecipeTab` 완료
 - `GuideCategory` -> 목적에 따라 `TutorialCategory`, `MakeupRecipeCategory`, `MakeupGuidelineCategory`
 
 ### 5.8 `Product`와 `RecommendedProduct`
@@ -1627,8 +1625,8 @@ MakeupFilter
 
 예:
 
-- `MakeupFeedbackPhotoSelection.source` -> `makeupFeedbackPhotoSource`
-- `ReferenceMakeupPhoto.source` -> `referenceImageSource` 또는 `referenceSource`
+- `MakeupFeedbackPhotoSelection.source` -> `photoSource`
+- `ReferenceMakeupPhoto.source` -> `referenceSource`
 
 ### 5.10 프로필 도메인 분리
 
@@ -1641,7 +1639,7 @@ MakeupFilter
 
 대표 rename 타깃:
 
-- `profileService.getUserProfile` wrapper -> `getMyPageProfileSummary` 또는 `loadProfileScreenData`
+- `profileService.getUserProfile` wrapper -> `getMyPageProfileSummary`
 - 뷰티 특성 조회/저장은 `getBeautyProfile`, `updateBeautyProfile`
 
 ### 5.11 asset 파일명과 `Style` 코드명

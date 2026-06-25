@@ -88,6 +88,11 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'lip-over', label: '오버 립'},
     {id: 'lip-gradient', label: '그라데이션'},
   ],
+  cheek: [
+    {id: 'cheek-default', label: '기본 치크'},
+    {id: 'cheek-diagonal', label: '사선 치크'},
+    {id: 'cheek-round', label: '라운드 치크'},
+  ],
   contour: [
     {id: 'contour-default', label: '기본 윤곽'},
     {id: 'contour-jaw', label: '턱선 강조'},

@@ -14,8 +14,13 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     id: 'capture-demo-saved-makeup-look',
     imageSource: selectedReferenceMakeupPhoto.imageSource,
     isSaved: true,
+    makeupArea: 'all',
+    makeupPresetValues: {
+      shapeId: 'balanced',
+    },
     moodLabel: '데모 저장 룩',
     shortDescription: '화면 캡처용으로 준비된 저장 메이크업 룩입니다.',
+    scope: 'totalMakeup',
     title: '캡처 데모 룩',
   };
 

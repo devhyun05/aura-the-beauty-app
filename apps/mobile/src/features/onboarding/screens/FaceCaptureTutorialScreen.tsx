@@ -30,31 +30,31 @@ const hairGuideImageSource = require('../../../assets/images/photo-capture-hair-
 const accessoryGuideImageSource = require('../../../assets/images/photo-capture-accessory-guide.png');
 const framingGuideImageSource = require('../../../assets/images/photo-capture-framing-guide.png');
 
-type PhotoCaptureGuideIconKey = 'face' | 'hair' | 'accessory' | 'framing';
+type FaceCaptureTutorialIconKey = 'face' | 'hair' | 'accessory' | 'framing';
 
-type PhotoCaptureGuideStep = {
+type FaceCaptureTutorialStep = {
   buttonLabel: string | null;
   description: string;
   heading: string;
-  iconKey: PhotoCaptureGuideIconKey;
+  iconKey: FaceCaptureTutorialIconKey;
   imageSource: ImageSourcePropType;
   requiresPrivacyAgreement: boolean;
   stepLabel: string;
   tip: string;
 };
 
-export const PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO = 448 / 362;
-const PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE = 1;
-export const PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL = '좌우로 넘겨 주세요.';
+export const FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO = 448 / 362;
+const FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE = 1;
+export const FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL = '좌우로 넘겨 주세요.';
 
-const photoCaptureGuideIconNames = {
+const faceCaptureTutorialIconNames = {
   accessory: 'glasses',
   face: 'scan-face',
   framing: 'camera',
   hair: 'wand-sparkles',
-} as const satisfies Record<PhotoCaptureGuideIconKey, string>;
+} as const satisfies Record<FaceCaptureTutorialIconKey, string>;
 
-const photoCaptureGuideSteps = [
+const faceCaptureTutorialSteps = [
   {
     buttonLabel: null,
     description: '눈썹과 입가에 힘을 빼고 정면을 바라보면 얼굴 균형을 더 정확히 읽을 수 있어요.',
@@ -95,71 +95,71 @@ const photoCaptureGuideSteps = [
     stepLabel: '4/4',
     tip: '역광보다 정면의 부드러운 조명이 좋아요.',
   },
-] as const satisfies readonly PhotoCaptureGuideStep[];
+] as const satisfies readonly FaceCaptureTutorialStep[];
 
-const photoCaptureGuideNavigationMode = {
+const faceCaptureTutorialNavigationMode = {
   showsStepAdvanceButton: false,
   stepAdvance: 'swipe',
 } as const;
 
-const photoCaptureGuideVisualPresentation = {
+const faceCaptureTutorialVisualPresentation = {
   finalActionWidth: 'compact',
   finalPrivacyPlacement: 'below-pagination-above-action',
   headerDismissControl: 'close-to-home',
   imageFillMode: 'fit-image',
-  imageFillScale: PHOTO_CAPTURE_GUIDE_IMAGE_FILL_SCALE,
+  imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
   swipeNavigationPlacement: 'fixed-above-swipe-hint',
   usesImageScrim: false,
 } as const;
 
-type PhotoCaptureGuideScreenProps = {
+type FaceCaptureTutorialScreenProps = {
   onBackToIntro?: () => void;
   onCloseToHome?: () => void;
   onStartCapture?: () => void;
 };
 
-export function getPhotoCaptureGuideSteps() {
-  return photoCaptureGuideSteps;
+export function getFaceCaptureTutorialSteps() {
+  return faceCaptureTutorialSteps;
 }
 
-export function getPhotoCaptureGuideNavigationMode() {
-  return photoCaptureGuideNavigationMode;
+export function getFaceCaptureTutorialNavigationMode() {
+  return faceCaptureTutorialNavigationMode;
 }
 
-export function getPhotoCaptureGuideIconNames() {
-  return photoCaptureGuideIconNames;
+export function getFaceCaptureTutorialIconNames() {
+  return faceCaptureTutorialIconNames;
 }
 
-export function getPhotoCaptureGuideVisualPresentation() {
-  return photoCaptureGuideVisualPresentation;
+export function getFaceCaptureTutorialVisualPresentation() {
+  return faceCaptureTutorialVisualPresentation;
 }
 
-export function PhotoCaptureGuideScreen({
+export function FaceCaptureTutorialScreen({
   onBackToIntro,
   onCloseToHome,
   onStartCapture,
-}: PhotoCaptureGuideScreenProps) {
+}: FaceCaptureTutorialScreenProps) {
   const guideScrollViewRef = useRef<ScrollView>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [hasAgreedToPrivacy, setHasAgreedToPrivacy] = useState(false);
   const {height, width} = useWindowDimensions();
-  const currentStep = photoCaptureGuideSteps[currentStepIndex] ?? photoCaptureGuideSteps[0];
+  const currentStep = faceCaptureTutorialSteps[currentStepIndex] ?? faceCaptureTutorialSteps[0];
   const isCompactHeight = height < 760;
   const maxGuideImageWidth = Math.min(width - spacing.xl * 2, 362);
   const contentGap = isCompactHeight ? spacing.md : spacing.lg;
 
-  const getGuideImageSize = (step: PhotoCaptureGuideStep) => {
+  const getGuideImageSize = (step: FaceCaptureTutorialStep) => {
     const shouldReduceForPrivacy = isCompactHeight && step.requiresPrivacyAgreement;
     const maxGuideImageHeight = shouldReduceForPrivacy ? 190 : isCompactHeight ? 216 : 292;
     const imageWidth = Math.min(
       maxGuideImageWidth,
-      maxGuideImageHeight * PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO,
+      maxGuideImageHeight * FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
     );
 
     return {
-      height: imageWidth / PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO,
+      height: imageWidth / FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
       width: imageWidth,
     };
   };
@@ -178,7 +178,7 @@ export function PhotoCaptureGuideScreen({
     const nextStepIndex = Math.round(event.nativeEvent.contentOffset.x / width);
 
     setCurrentStepIndex(
-      Math.max(0, Math.min(nextStepIndex, photoCaptureGuideSteps.length - 1)),
+      Math.max(0, Math.min(nextStepIndex, faceCaptureTutorialSteps.length - 1)),
     );
   };
 
@@ -207,7 +207,7 @@ export function PhotoCaptureGuideScreen({
   };
 
   const isNextDisabled = currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy;
-  const isFinalStep = currentStepIndex === photoCaptureGuideSteps.length - 1;
+  const isFinalStep = currentStepIndex === faceCaptureTutorialSteps.length - 1;
   const actionButtonLabel = currentStep.buttonLabel ?? '촬영하기';
 
   return (
@@ -249,7 +249,7 @@ export function PhotoCaptureGuideScreen({
         <YStack style={styles.content}>
           <ScrollView
             ref={guideScrollViewRef}
-            accessibilityLabel={PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL}
+            accessibilityLabel={FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL}
             decelerationRate="fast"
             horizontal
             onMomentumScrollEnd={handleGuideMomentumScrollEnd}
@@ -257,7 +257,7 @@ export function PhotoCaptureGuideScreen({
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
             style={styles.guideCarousel}>
-            {photoCaptureGuideSteps.map((step) => (
+            {faceCaptureTutorialSteps.map((step) => (
               <YStack key={step.stepLabel} style={[styles.guidePage, {gap: contentGap, width}]}>
                 <View
                   style={[
@@ -298,10 +298,10 @@ export function PhotoCaptureGuideScreen({
             ]}>
             <PaginationDots
               activeIndex={currentStepIndex}
-              count={photoCaptureGuideSteps.length}
+              count={faceCaptureTutorialSteps.length}
             />
             {isFinalStep ? null : (
-              <Text style={styles.swipeHint}>{PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL}</Text>
+              <Text style={styles.swipeHint}>{FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL}</Text>
             )}
           </YStack>
 
@@ -354,11 +354,11 @@ export function PhotoCaptureGuideScreen({
 }
 
 function renderGuideIcon(
-  iconKey: PhotoCaptureGuideIconKey,
+  iconKey: FaceCaptureTutorialIconKey,
   color: string,
   size: number,
 ) {
-  const iconName = photoCaptureGuideIconNames[iconKey];
+  const iconName = faceCaptureTutorialIconNames[iconKey];
 
   if (iconName === 'scan-face') {
     return <ScanFace color={color} size={size} strokeWidth={1.9} />;

@@ -33,6 +33,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     {id: 'base', label: '베이스'},
     {id: 'eye', label: '아이'},
     {id: 'lip', label: '립'},
+    {id: 'cheek', label: '치크'},
     {id: 'contour', label: '컨투어'},
   ],
   filters: [

@@ -352,7 +352,7 @@ commitlint 설정은 루트 `commitlint.config.js` 기준으로 `feat`, `fix`, `
 - Main tabs: `HomeTab`, `CustomTab`, `MyPageTab`
 - Analysis: `FaceCapture`, `FaceAnalysisLoading`, `FaceAnalysisReportsList`, `FaceAnalysisReportDetail`
 - Profile/recommendation: `ProfileEdit`, `MakeupLookList`, `LikedProductList`
-- AR: `ARMakeupFilter`, `ARFilterLocation`, `ARFilterStyle`
+- AR: `ARMakeupFilter`, `ARFilterShapeAdjust`, `MakeupFilterEdit`
 - Feedback: `FeedbackEntry`, `FeedbackCapture`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`
 - Filter extraction: `FilterUpload`, `FilterLoading`, `FilterResult`, `FilterTryOn`, `FilterSave`, `FilterSaved`, `FilterRecipeDetail`, `RecipeSaved`
 

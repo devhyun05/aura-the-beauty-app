@@ -138,8 +138,8 @@ export function ARFilterShapeAdjustScreen({
                 style={[
                   styles.shapePointDot,
                   {
-                    left: `${point.x}%`,
-                    top: `${point.y}%`,
+                    left: `${point.position.x + point.offset.x}%`,
+                    top: `${point.position.y + point.offset.y}%`,
                   },
                 ]}
               />

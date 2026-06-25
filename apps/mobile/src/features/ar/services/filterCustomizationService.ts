@@ -21,8 +21,14 @@ export type FilterShapeAdjustment = {
 
 export type FilterShapePoint = {
   id: string;
-  x: number;
-  y: number;
+  position: {
+    x: number;
+    y: number;
+  };
+  offset: {
+    x: number;
+    y: number;
+  };
 };
 
 export type FilterShapeState = {

@@ -120,6 +120,7 @@ export function ProfileScreen({
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
       <ProfileSummaryCard
+        beautyProfile={data.beautyProfile}
         onPressSettings={onPressProfileEdit}
         profile={data.profile}
       />

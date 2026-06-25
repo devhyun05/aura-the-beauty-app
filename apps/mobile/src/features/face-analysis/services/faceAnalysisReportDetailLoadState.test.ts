@@ -22,10 +22,6 @@ const mockProfile: UserProfile = {
   gender: 'female',
   interest: 'K-beauty',
   avatarSource: 1,
-  personalColor: '여름 쿨',
-  skinType: '복합성',
-  skinTone: '밝은 뉴트럴',
-  tags: ['MLBB'],
 };
 
 async function expectResolvedLoadKeepsNullReport() {

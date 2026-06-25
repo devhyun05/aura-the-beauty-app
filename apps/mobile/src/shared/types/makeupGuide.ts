@@ -6,7 +6,7 @@ export type ComparisonMode = 'full' | 'left' | 'right';
 
 export type FilterCategoryId = 'recommended' | 'trend' | 'personalColor' | 'popular';
 
-export type MakeupArea = 'all' | 'base' | 'eye' | 'lip' | 'contour';
+export type MakeupArea = 'all' | 'base' | 'eye' | 'lip' | 'cheek' | 'contour';
 
 export type MakeupOptionGroupId = 'color' | 'type' | 'texture';
 

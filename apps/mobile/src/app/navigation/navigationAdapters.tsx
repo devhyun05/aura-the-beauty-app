@@ -8,6 +8,7 @@ import {YStack} from 'tamagui';
 
 import {colors, spacing} from '../../shared/theme';
 import type {GuideMode} from '../../shared/types/makeupGuide';
+import type {MakeupLookPreview} from '../../shared/types/profile';
 import {AppHeader, AppScreen, AuraLogo, RoutePlaceholder} from '../../shared/ui';
 import {
   FaceAnalysisReportDetailScreen,
@@ -98,15 +99,21 @@ function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): Re
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
 
-function buildSavedMakeupLook(photo: ReferenceMakeupPhoto) {
+function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return {
     id: 'saved-extracted-makeup-look',
     imageSource: photo.imageSource,
     isSaved: true,
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: extractedMakeupLook.palette[0]?.id,
+      shapeId: 'extracted-default',
+    },
     moodLabel: extractedMakeupLook.tags.slice(0, 2).join(' '),
     shortDescription: extractedMakeupLook.subtitle,
+    scope: 'totalMakeup',
     title: extractedMakeupLook.title,
   };
 }

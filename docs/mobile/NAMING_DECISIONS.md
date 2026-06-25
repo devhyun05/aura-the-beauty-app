@@ -24,8 +24,11 @@
 - 추천 제품 항목은 `RecommendedProduct`, 추천 룩 요약은 `ProductRecommendationLook`으로 정리했다.
 - 메이크업 적용/저장/편집 범위의 기준 타입은 `MakeupArea`로 정리했다.
 - 사용자가 옮기는 형태 조정점은 `shapePoint`/`FilterShapePoint`로 정리했다.
+- 마이페이지 요약은 `MyPageProfileSummary`, 개인화 특성 데이터는 `BeautyProfile`로 분리했다.
+- 얼굴 촬영법 안내 화면은 `FaceCaptureTutorialScreen` 계열로 정리했다.
+- 메이크업 레시피 탭 타입은 `MakeupRecipeTab`으로 정리했다.
 
-아직 일부 후속 후보는 남아 있다. 예를 들어 얼굴 분석 내부의 `FaceAnalysisFacePointGuide`를 `FaceAnalysisMakeupGuideline`으로 더 구체화할지, `MakeupLookRecipeTab`을 `MakeupRecipeTab`으로 축약할지는 별도 리팩터링에서 결정한다.
+아직 일부 후속 후보는 남아 있다. 예를 들어 얼굴 분석 내부의 `FaceAnalysisFacePointGuide`를 `FaceAnalysisMakeupGuideline`으로 더 구체화할지는 별도 리팩터링에서 결정한다.
 
 ## 결정 현황
 
@@ -325,7 +328,7 @@
   - `ProductRecommendationScreen`
   - `ProductRecommendationResult`
   - `productRecommendationService`
-- 기존 `ProductRecommendationItem`은 추후 `RecommendedProduct`로 rename한다.
+- 기존 `ProductRecommendationItem`은 2026-06-26 rename 작업에서 `RecommendedProduct`로 반영했다.
 
 ### 5.9 `source` 필드가 서로 다른 의미로 쓰임
 
@@ -360,6 +363,8 @@
   - `entryPoint`
   - `openedFrom`
 - 원본 데이터와 가공 데이터를 비교해야 할 때는 `rawSource`, `originalSource`, `derivedFrom`처럼 데이터 계보가 드러나는 이름을 사용한다.
+- 기존 `MakeupFeedbackPhotoSelection.source`는 2026-06-26 rename 작업에서 `photoSource`로 반영했다.
+- 기존 `ReferenceMakeupPhoto.source`는 2026-06-26 rename 작업에서 `referenceSource`로 반영했다.
 
 ### 5.10 `getUserProfile` 서비스 중복
 

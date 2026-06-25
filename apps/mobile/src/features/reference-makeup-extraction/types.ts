@@ -45,7 +45,7 @@ export type ReferenceMakeupExtractionResult = {
 
 export type MakeupLookAdjustmentTab = 'shape' | 'look';
 export type MakeupLookAttributeGroup = 'color' | 'type' | 'texture';
-export type MakeupLookRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
+export type MakeupRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
 
 export type ReferenceMakeupExtractionData = {
   photos: ReferenceMakeupPhoto[];
