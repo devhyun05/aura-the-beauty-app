@@ -51,8 +51,8 @@ import {
 } from '../../features/recommendation';
 import type {ARFilterBackRouteName, MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {useNavigationFlowState} from './flowState';
+import {DetailRouteChrome} from './detailHeaderChrome';
 import {getMainHeaderCopy} from './mainTabChrome';
-import {getDetailRouteTitle} from './routeChrome';
 
 type RootScreenProps<RouteName extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, RouteName>;
@@ -215,11 +215,13 @@ export function ImageAnalysisLoadingRouteScreen({
   navigation,
 }: RootScreenProps<'ImageAnalysisLoading'>) {
   return (
-    <ImageAnalysisLoadingScreen
-      headerTitle={getDetailRouteTitle('ImageAnalysisLoading')}
-      onBack={() => navigation.navigate('FaceCapture')}
-      onComplete={() => navigation.navigate('ImageAnalysisReportDetail')}
-    />
+    <DetailRouteChrome
+      routeName="ImageAnalysisLoading"
+      onBack={() => navigation.navigate('FaceCapture')}>
+      <ImageAnalysisLoadingScreen
+        onComplete={() => navigation.navigate('ImageAnalysisReportDetail')}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -227,13 +229,15 @@ export function ImageAnalysisReportsListRouteScreen({
   navigation,
 }: RootScreenProps<'ImageAnalysisReportsList'>) {
   return (
-    <ImageAnalysisReportsListScreen
-      headerTitle={getDetailRouteTitle('ImageAnalysisReportsList')}
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}
-      onPressReport={reportId =>
-        navigation.navigate('ImageAnalysisReportDetail', {reportId})
-      }
-    />
+    <DetailRouteChrome
+      routeName="ImageAnalysisReportsList"
+      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      <ImageAnalysisReportsListScreen
+        onPressReport={reportId =>
+          navigation.navigate('ImageAnalysisReportDetail', {reportId})
+        }
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -241,15 +245,28 @@ export function ImageAnalysisReportDetailRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ImageAnalysisReportDetail'>) {
+  const [shareAction, setShareAction] = React.useState<(() => void) | null>(null);
+  const handleHeaderShareActionChange = React.useCallback(
+    (nextShareAction: (() => void) | null) => {
+      setShareAction(() => nextShareAction);
+    },
+    [],
+  );
+
   return (
-    <ImageAnalysisReportDetailScreen
-      headerTitle={getDetailRouteTitle('ImageAnalysisReportDetail')}
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}
-      onCreateARFilter={() =>
-        navigation.navigate('ARFilterStyle', {backRoute: 'ImageAnalysisReportDetail'})
-      }
-      reportId={route.params?.reportId ?? null}
-    />
+    <DetailRouteChrome
+      routeName="ImageAnalysisReportDetail"
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}
+      onShare={shareAction ?? undefined}
+      shareDisabled={!shareAction}>
+      <ImageAnalysisReportDetailScreen
+        onCreateARFilter={() =>
+          navigation.navigate('ARFilterStyle', {backRoute: 'ImageAnalysisReportDetail'})
+        }
+        onHeaderShareActionChange={handleHeaderShareActionChange}
+        reportId={route.params?.reportId ?? null}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -297,11 +314,13 @@ export function ARFilterStyleRouteScreen({
 
 export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdit'>) {
   return (
-    <ProfileEditScreen
-      headerTitle={getDetailRouteTitle('ProfileEdit')}
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}
-      onLogout={() => navigation.reset({index: 0, routes: [{name: 'Login'}]})}
-    />
+    <DetailRouteChrome
+      routeName="ProfileEdit"
+      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      <ProfileEditScreen
+        onLogout={() => navigation.reset({index: 0, routes: [{name: 'Login'}]})}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -309,10 +328,11 @@ export function MakeupStyleListRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupStyleList'>) {
   return (
-    <MakeupStyleListScreen
-      headerTitle={getDetailRouteTitle('MakeupStyleList')}
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}
-    />
+    <DetailRouteChrome
+      routeName="MakeupStyleList"
+      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      <MakeupStyleListScreen />
+    </DetailRouteChrome>
   );
 }
 
@@ -320,20 +340,23 @@ export function LikedProductListRouteScreen({
   navigation,
 }: RootScreenProps<'LikedProductList'>) {
   return (
-    <LikedProductListScreen
-      headerTitle={getDetailRouteTitle('LikedProductList')}
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}
-    />
+    <DetailRouteChrome
+      routeName="LikedProductList"
+      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      <LikedProductListScreen />
+    </DetailRouteChrome>
   );
 }
 
 export function FeedbackEntryRouteScreen({navigation}: RootScreenProps<'FeedbackEntry'>) {
   return (
-    <FeedbackEntryScreen
-      headerTitle={getDetailRouteTitle('FeedbackEntry')}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
-      onPressAiFeedback={() => navigation.navigate('FeedbackCapture')}
-    />
+    <DetailRouteChrome
+      routeName="FeedbackEntry"
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      <FeedbackEntryScreen
+        onPressAiFeedback={() => navigation.navigate('FeedbackCapture')}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -366,12 +389,14 @@ export function FeedbackLoadingRouteScreen({
   };
 
   return (
-    <FeedbackLoadingScreen
-      headerTitle={getDetailRouteTitle('FeedbackLoading')}
-      onBack={() => navigation.navigate('FeedbackCapture')}
-      onComplete={handleComplete}
-      selection={selectedFeedbackPhoto}
-    />
+    <DetailRouteChrome
+      routeName="FeedbackLoading"
+      onBack={() => navigation.navigate('FeedbackCapture')}>
+      <FeedbackLoadingScreen
+        onComplete={handleComplete}
+        selection={selectedFeedbackPhoto}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -380,24 +405,30 @@ export function FeedbackResultRouteScreen({navigation}: RootScreenProps<'Feedbac
 
   if (!feedbackResult) {
     return (
-      <RoutePlaceholder
-        description="피드백 분석을 먼저 완료해 주세요."
-        onBack={() => navigation.navigate('FeedbackEntry')}
-        title="메이크업 피드백"
-      />
+      <DetailRouteChrome
+        routeName="FeedbackResult"
+        onBack={() => navigation.navigate('FeedbackEntry')}>
+        <RoutePlaceholder
+          description="피드백 분석을 먼저 완료해 주세요."
+          showHeader={false}
+          title="메이크업 피드백"
+        />
+      </DetailRouteChrome>
     );
   }
 
   return (
-    <MakeupFeedbackScreen
-      headerTitle={getDetailRouteTitle('FeedbackResult')}
-      onBack={() => navigation.navigate('FeedbackEntry')}
-      onOpenGuide={() => navigation.navigate('FeedbackGuide')}
-      onOpenTip={point => navigation.navigate('FeedbackTip', {pointId: point.id})}
-      onRetake={() => navigation.navigate('FeedbackCapture')}
-      onUploadAgain={() => navigation.navigate('FeedbackCapture')}
-      result={feedbackResult}
-    />
+    <DetailRouteChrome
+      routeName="FeedbackResult"
+      onBack={() => navigation.navigate('FeedbackEntry')}>
+      <MakeupFeedbackScreen
+        onOpenGuide={() => navigation.navigate('FeedbackGuide')}
+        onOpenTip={point => navigation.navigate('FeedbackTip', {pointId: point.id})}
+        onRetake={() => navigation.navigate('FeedbackCapture')}
+        onUploadAgain={() => navigation.navigate('FeedbackCapture')}
+        result={feedbackResult}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -406,20 +437,24 @@ export function FeedbackGuideRouteScreen({navigation}: RootScreenProps<'Feedback
 
   if (!feedbackResult) {
     return (
-      <RoutePlaceholder
-        description="가이드를 보려면 피드백 결과가 필요해요."
-        onBack={() => navigation.navigate('FeedbackResult')}
-        title="가이드 오버레이"
-      />
+      <DetailRouteChrome
+        routeName="FeedbackGuide"
+        onBack={() => navigation.navigate('FeedbackResult')}>
+        <RoutePlaceholder
+          description="가이드를 보려면 피드백 결과가 필요해요."
+          showHeader={false}
+          title="가이드 오버레이"
+        />
+      </DetailRouteChrome>
     );
   }
 
   return (
-    <FeedbackGuideOverlayScreen
-      headerTitle={getDetailRouteTitle('FeedbackGuide')}
-      onBack={() => navigation.navigate('FeedbackResult')}
-      result={feedbackResult}
-    />
+    <DetailRouteChrome
+      routeName="FeedbackGuide"
+      onBack={() => navigation.navigate('FeedbackResult')}>
+      <FeedbackGuideOverlayScreen result={feedbackResult} />
+    </DetailRouteChrome>
   );
 }
 
@@ -432,20 +467,27 @@ export function FeedbackTipRouteScreen({
 
   if (!point) {
     return (
-      <RoutePlaceholder
-        description="선택한 수정팁을 찾을 수 없어요."
-        onBack={() => navigation.navigate('FeedbackResult')}
-        title="수정팁"
-      />
+      <DetailRouteChrome
+        routeName="FeedbackTip"
+        onBack={() => navigation.navigate('FeedbackResult')}>
+        <RoutePlaceholder
+          description="선택한 수정팁을 찾을 수 없어요."
+          showHeader={false}
+          title="수정팁"
+        />
+      </DetailRouteChrome>
     );
   }
 
   return (
-    <FeedbackTipScreen
-      headerTitle={getDetailRouteTitle('FeedbackTip')}
-      onBack={() => navigation.navigate('FeedbackResult')}
-      point={point}
-    />
+    <DetailRouteChrome
+      routeName="FeedbackTip"
+      onBack={() => navigation.navigate('FeedbackResult')}>
+      <FeedbackTipScreen
+        onBack={() => navigation.navigate('FeedbackResult')}
+        point={point}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -458,11 +500,11 @@ export function FilterUploadRouteScreen({navigation}: RootScreenProps<'FilterUpl
   };
 
   return (
-    <FilterImageUploadScreen
-      headerTitle={getDetailRouteTitle('FilterUpload')}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
-      onStartAnalysis={handleStartAnalysis}
-    />
+    <DetailRouteChrome
+      routeName="FilterUpload"
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      <FilterImageUploadScreen onStartAnalysis={handleStartAnalysis} />
+    </DetailRouteChrome>
   );
 }
 
@@ -484,13 +526,15 @@ export function FilterResultRouteScreen({navigation}: RootScreenProps<'FilterRes
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   return (
-    <FilterExtractionResultScreen
-      headerTitle={getDetailRouteTitle('FilterResult')}
-      onApplyFilter={() => navigation.navigate('FilterTryOn')}
-      onBack={() => navigation.navigate('FilterUpload')}
-      onRetake={() => navigation.navigate('FilterUpload')}
-      photo={photo}
-    />
+    <DetailRouteChrome
+      routeName="FilterResult"
+      onBack={() => navigation.navigate('FilterUpload')}>
+      <FilterExtractionResultScreen
+        onApplyFilter={() => navigation.navigate('FilterTryOn')}
+        onRetake={() => navigation.navigate('FilterUpload')}
+        photo={photo}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -518,12 +562,15 @@ export function FilterSaveRouteScreen({navigation}: RootScreenProps<'FilterSave'
   };
 
   return (
-    <FilterSaveScreen
-      headerTitle={getDetailRouteTitle('FilterSave')}
+    <DetailRouteChrome
+      routeName="FilterSave"
       onBack={() => navigation.navigate('FilterTryOn')}
-      onSave={handleSave}
-      photo={photo}
-    />
+      onDone={handleSave}>
+      <FilterSaveScreen
+        onSave={handleSave}
+        photo={photo}
+      />
+    </DetailRouteChrome>
   );
 }
 
@@ -543,12 +590,14 @@ export function FilterRecipeDetailRouteScreen({
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   return (
-    <FilterRecipeDetailScreen
-      headerTitle={getDetailRouteTitle('FilterRecipeDetail')}
-      onBack={() => navigation.navigate('FilterTryOn')}
-      onSaveRecipe={() => navigation.navigate('RecipeSaved')}
-      photo={photo}
-    />
+    <DetailRouteChrome
+      routeName="FilterRecipeDetail"
+      onBack={() => navigation.navigate('FilterTryOn')}>
+      <FilterRecipeDetailScreen
+        onSaveRecipe={() => navigation.navigate('RecipeSaved')}
+        photo={photo}
+      />
+    </DetailRouteChrome>
   );
 }
 

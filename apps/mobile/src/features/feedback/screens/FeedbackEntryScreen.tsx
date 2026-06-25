@@ -1,6 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet} from 'react-native';
-import {Camera, ChevronRight, X} from 'lucide-react-native';
+import {Camera, ChevronRight} from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
 import {
@@ -14,45 +14,19 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 
 type FeedbackEntryScreenProps = {
   headerTitle?: string;
-  onClose: () => void;
+  onClose?: () => void;
   onPressAiFeedback: () => void;
 };
 
-const feedbackEntryHeaderPresentation = {
-  component: 'AppHeader',
-  rightAction: 'close',
-  title: '메이크업 피드백',
-} as const;
-
-export function getFeedbackEntryHeaderPresentation() {
-  return feedbackEntryHeaderPresentation;
-}
-
 export function FeedbackEntryScreen({
-  headerTitle = feedbackEntryHeaderPresentation.title,
-  onClose,
   onPressAiFeedback,
 }: FeedbackEntryScreenProps) {
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader
-        leftSlot={<View />}
-        rightSlot={
-          <Pressable
-            accessibilityLabel="닫기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={onClose}>
-            <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-          </Pressable>
-        }
-        title={headerTitle}
-      />
       <YStack style={styles.screen}>
         <View style={styles.hero}>
           <View style={styles.heroIcon}>

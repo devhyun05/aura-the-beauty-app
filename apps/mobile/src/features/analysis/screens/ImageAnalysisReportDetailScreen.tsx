@@ -8,8 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Share2, WandSparkles} from 'lucide-react-native';
-import {Button, Text, View, XStack} from 'tamagui';
+import {WandSparkles} from 'lucide-react-native';
+import {Button, Text, View} from 'tamagui';
 
 import {
   getImageAnalysisReportById,
@@ -22,7 +22,7 @@ import type {
   ImageAnalysisMakeupCard,
   ImageAnalysisReport,
 } from '../../../shared/types/imageAnalysis';
-import {AppHeader, AppScreen, XIcon} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {
   type ImageAnalysisReportDetailLoadState,
   resolveImageAnalysisReportDetailLoadState,
@@ -33,6 +33,7 @@ type ImageAnalysisReportDetailScreenProps = {
   reportId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
+  onHeaderShareActionChange?: (action: ImageAnalysisReportShareAction | null) => void;
   onShare?: (report: ImageAnalysisReport) => void;
 };
 
@@ -54,9 +55,9 @@ type SummaryItemData = {
   value: string;
 };
 
+type ImageAnalysisReportShareAction = () => void;
 type CreateFilterButtonPlacement = 'floating-bottom';
-type ImageAnalysisReportHeaderAction = 'share' | 'close';
-type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
+type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter';
 type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
@@ -80,10 +81,6 @@ const createFilterButtonAccessibilityLabels: Record<
 > = {
   'floating-bottom': 'AR 필터 만들기',
 };
-const imageAnalysisReportHeaderActions = [
-  'share',
-  'close',
-] as const satisfies readonly ImageAnalysisReportHeaderAction[];
 const imageAnalysisReportAvoidedMakeupRailPresentation = {
   showsCornerBadge: false,
   title: '비추천 메이크업',
@@ -94,8 +91,8 @@ const imageAnalysisReportSubtitleTextStyle = {
 } as const;
 const imageAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
-  headerPlacement: 'fixed',
-  headerUsesTopInset: false,
+  headerPlacement: 'route-level',
+  headerUsesTopInset: true,
 } as const;
 const imageAnalysisReportLiquidGlassSurfaceStyle = {
   backgroundColor: colors.liquidGlassSurface,
@@ -116,7 +113,6 @@ const imageAnalysisReportLiquidGlassButtonStyle = {
 const imageAnalysisReportLiquidGlassPresentation = {
   buttonTargets: [
     'create-filter',
-    'header-action',
   ] as const satisfies readonly ImageAnalysisReportLiquidGlassButtonTarget[],
   cardTargets: [
     'hero',
@@ -129,10 +125,6 @@ const imageAnalysisReportLiquidGlassPresentation = {
 
 export function getImageAnalysisReportCreateFilterButtonPlacements() {
   return createFilterButtonPlacements;
-}
-
-export function getImageAnalysisReportHeaderActions() {
-  return imageAnalysisReportHeaderActions;
 }
 
 export function getImageAnalysisReportAvoidedMakeupRailPresentation() {
@@ -192,8 +184,8 @@ const formatReportDate = (dateText: string, name?: string) => {
 export function ImageAnalysisReportDetailScreen({
   headerTitle = '맞춤 분석 보고서',
   reportId,
-  onBack,
   onCreateARFilter,
+  onHeaderShareActionChange,
   onShare,
 }: ImageAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
@@ -251,15 +243,39 @@ export function ImageAnalysisReportDetailScreen({
     [report],
   );
 
+  useEffect(() => {
+    if (!report) {
+      onHeaderShareActionChange?.(null);
+      return;
+    }
+
+    const shareAction = () => {
+      if (onShare) {
+        onShare(report);
+        return;
+      }
+
+      void Share.share({
+        message: [
+          formatReportDate(report.analyzedAt, profile?.name),
+          `퍼스널 컬러: ${report.personalColor}`,
+          `추천 무드: ${report.recommendedMood}`,
+        ].join('\n'),
+        title: headerTitle,
+      });
+    };
+
+    onHeaderShareActionChange?.(shareAction);
+
+    return () => {
+      onHeaderShareActionChange?.(null);
+    };
+  }, [headerTitle, onHeaderShareActionChange, onShare, profile?.name, report]);
+
   if (!report) {
     return (
       <ImageAnalysisReportScaffold
         contentStyle={styles.empty}
-        headerTitle={headerTitle}
-        onClose={onBack}
-        onShare={onShare}
-        profileName={profile?.name}
-        report={report}
         scroll={false}
       >
         <Text accessibilityLiveRegion="polite" style={styles.emptyTitle}>
@@ -280,11 +296,6 @@ export function ImageAnalysisReportDetailScreen({
           placement="floating-bottom"
         />
       }
-      headerTitle={headerTitle}
-      onClose={onBack}
-      onShare={onShare}
-      profileName={profile?.name}
-      report={report}
     >
       <Text style={styles.subtitle}>
         {formatReportDate(report.analyzedAt, profile?.name)}
@@ -335,83 +346,15 @@ export function ImageAnalysisReportDetailScreen({
   );
 }
 
-function ImageAnalysisReportHeader({
-  headerTitle,
-  onClose,
-  onShare,
-  profileName,
-  report,
-}: {
-  headerTitle: string;
-  onClose?: () => void;
-  onShare?: (report: ImageAnalysisReport) => void;
-  profileName?: string;
-  report: ImageAnalysisReport | null;
-}) {
-  const handleSharePress = () => {
-    if (!report) {
-      return;
-    }
-
-    if (onShare) {
-      onShare(report);
-      return;
-    }
-
-    void Share.share({
-      message: [
-        formatReportDate(report.analyzedAt, profileName),
-        `퍼스널 컬러: ${report.personalColor}`,
-        `추천 무드: ${report.recommendedMood}`,
-      ].join('\n'),
-      title: headerTitle,
-    });
-  };
-
-  return (
-    <AppHeader
-      rightSlot={
-        <XStack style={styles.headerActions}>
-          <HeaderActionButton
-            accessibilityLabel="공유하기"
-            disabled={!report}
-            onPress={handleSharePress}
-          >
-            <Share2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-          </HeaderActionButton>
-          <HeaderActionButton accessibilityLabel="닫기" onPress={onClose}>
-            <XIcon color={colors.textPrimary} size={iconSize.sm} />
-          </HeaderActionButton>
-        </XStack>
-      }
-      titleSlot={
-        <Text numberOfLines={1} style={styles.headerTitle}>
-          {headerTitle}
-        </Text>
-      }
-    />
-  );
-}
-
 function ImageAnalysisReportScaffold({
   children,
   contentStyle,
   floatingAction,
-  headerTitle,
-  onClose,
-  onShare,
-  profileName,
-  report,
   scroll = true,
 }: {
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   floatingAction?: React.ReactNode;
-  headerTitle: string;
-  onClose?: () => void;
-  onShare?: (report: ImageAnalysisReport) => void;
-  profileName?: string;
-  report: ImageAnalysisReport | null;
   scroll?: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -435,13 +378,6 @@ function ImageAnalysisReportScaffold({
       scroll={false}
       topPadding="none"
     >
-      <ImageAnalysisReportHeader
-        headerTitle={headerTitle}
-        onClose={onClose}
-        onShare={onShare}
-        profileName={profileName}
-        report={report}
-      />
       {scroll ? (
         <ScrollView
           contentContainerStyle={contentContainerStyle}
@@ -465,35 +401,6 @@ function ImageAnalysisReportScaffold({
         </View>
       ) : null}
     </AppScreen>
-  );
-}
-
-function HeaderActionButton({
-  accessibilityLabel,
-  children,
-  disabled,
-  onPress,
-}: {
-  accessibilityLabel: string;
-  children: React.ReactNode;
-  disabled?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <Button
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={{disabled: Boolean(disabled)}}
-      disabled={disabled}
-      disabledStyle={{opacity: 0.42}}
-      hitSlop={8}
-      onPress={onPress}
-      pressStyle={{scale: 0.97}}
-      style={styles.headerActionButton}
-      unstyled
-    >
-      {children}
-    </Button>
   );
 }
 
@@ -691,27 +598,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     height: 360,
     width: '100%',
-  },
-  headerActionButton: {
-    ...imageAnalysisReportLiquidGlassButtonStyle,
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 42,
-    justifyContent: 'center',
-    padding: 0,
-    width: 42,
-  },
-  headerActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.title.fontFamily,
-    fontSize: typography.title.fontSize,
-    fontWeight: typography.title.fontWeight,
-    lineHeight: typography.title.lineHeight,
   },
   makeupBody: {
     gap: 4,

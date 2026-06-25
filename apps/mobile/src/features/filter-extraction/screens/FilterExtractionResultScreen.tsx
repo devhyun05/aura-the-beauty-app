@@ -3,7 +3,7 @@ import {ChevronRight, Sparkles} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader, AppScreen} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
@@ -11,15 +11,13 @@ type FilterExtractionResultScreenProps = {
   headerTitle?: string;
   photo: FilterExtractionPhoto;
   onApplyFilter: () => void;
-  onBack: () => void;
+  onBack?: () => void;
   onRetake: () => void;
 };
 
 export function FilterExtractionResultScreen({
-  headerTitle = '분석 결과',
   photo,
   onApplyFilter,
-  onBack,
   onRetake,
 }: FilterExtractionResultScreenProps) {
   const {result} = getFilterExtractionDataSync();
@@ -32,8 +30,6 @@ export function FilterExtractionResultScreen({
       scroll={false}
       topPadding="none"
     >
-      <AppHeader onBack={onBack} title={headerTitle} />
-
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}

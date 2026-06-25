@@ -89,6 +89,54 @@ import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
 
 - `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module esnext --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true apps/mobile/src/app/navigation/flowState.test.tsx apps/mobile/src/app/navigation/flowState.tsx apps/mobile/src/app/navigation/demoFlowState.ts`
 
+### 후속 정리: 상세 헤더 route chrome 완전 통합
+
+이번 작업에서는 `sub` depth 화면의 normal detail header를 feature screen 내부에서 완전히 제거하고, route adapter가 공통 `DetailRouteChrome`으로 한 번만 렌더하도록 통합했다.
+
+핵심 방향은 다음과 같다.
+
+- `routeChrome.ts`
+  - 상세 화면 title의 단일 출처 역할을 유지한다.
+  - 기존 `rightAction: 'custom'` 같은 임시 표현을 `rightActions: ['share', 'close']`, `['done']`, `['close']`처럼 실제 UI 액션 이름으로 바꿨다.
+  - 현재 route-level 상세 액션은 `share`, `close`, `done` 세 가지다.
+
+- `detailHeaderChrome.tsx`
+  - 새 route-level detail header renderer다.
+  - `getDetailHeaderPresentation(routeName)`이 `routeChrome.ts`의 title/rightActions를 읽어 헤더 표시 계약을 만든다.
+  - `DetailRouteChrome`은 `AppHeader`를 한 번 렌더하고, 그 아래에 feature screen content를 배치한다.
+  - `onBack`, `onClose`, `onShare`, `onDone` callback을 route adapter에서 받아 route별 동작으로 연결한다.
+  - close-only 화면은 왼쪽 빈 슬롯을 예약해 center title 정렬을 유지한다.
+
+- `navigationAdapters.tsx`
+  - `ImageAnalysisLoading`, `ImageAnalysisReportsList`, `ImageAnalysisReportDetail`, `ProfileEdit`, `MakeupStyleList`, `LikedProductList`, `FeedbackEntry`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`, `FilterUpload`, `FilterResult`, `FilterSave`, `FilterRecipeDetail`을 `DetailRouteChrome`으로 감싼다.
+  - `FeedbackCapture`, `FaceCapture`, `ARMakeupFilter`, `FilterLoading`, `FilterTryOn`, terminal saved screens처럼 immersive/terminal로 분류된 화면은 local overlay나 bottom action을 유지한다.
+  - fallback `RoutePlaceholder`는 `showHeader={false}`로 route-level detail header 아래에 중복 헤더 없이 표시한다.
+
+- `ImageAnalysisReportDetailScreen`
+  - 내부 `AppHeader`, share/close header button, header 전용 liquid glass target을 제거했다.
+  - 공유 메시지는 report/profile 데이터가 필요하므로 화면이 `onHeaderShareActionChange`로 현재 공유 함수를 route adapter에 등록한다.
+  - adapter의 공유 액션 등록 callback은 `useCallback`으로 고정해 effect cleanup/register가 불필요하게 반복되지 않도록 했다.
+  - route header의 share 버튼은 report가 로드되기 전에는 disabled 상태가 되고, 로드 후 등록된 공유 함수를 실행한다.
+
+- feature screen 정리 범위
+  - 제거한 screen-local normal `AppHeader` 대상: analysis detail/list/loading, profile edit, recommendation lists, feedback detail/progress/tip/guide/entry, filter upload/result/save/recipe detail.
+  - 남긴 local controls 대상: camera/AR/try-on/progress/terminal 성격의 fullscreen 화면. 이 버튼들은 앱 상세 헤더가 아니라 촬영/AR 런타임의 일부로 본다.
+
+테스트도 새 계약에 맞춰 조정했다.
+
+- `detailHeaderChrome.test.ts`
+  - route title과 `FeedbackEntry`, `FilterUpload`, `FilterSave`, `ImageAnalysisReportDetail`의 rightActions를 검증한다.
+- feedback screen tests
+  - 더 이상 각 screen이 `AppHeader` presentation을 export한다고 가정하지 않는다.
+  - 화면 JSX props 계약만 유지하고, 헤더 정책은 route-level 테스트로 이동했다.
+- image analysis report detail test
+  - `headerPlacement`를 `route-level`로 바꾸고, header action button liquid glass target이 screen 책임이 아님을 확인한다.
+
+검증:
+
+- `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module esnext --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true apps/mobile/src/app/navigation/detailHeaderChrome.test.ts apps/mobile/src/app/navigation/detailHeaderChrome.tsx apps/mobile/src/app/navigation/routeChrome.ts apps/mobile/src/app/navigation/navigationAdapters.tsx apps/mobile/src/shared/ui/RoutePlaceholder.tsx apps/mobile/src/features/analysis/screens/ImageAnalysisReportDetailScreen.tsx apps/mobile/src/features/analysis/screens/ImageAnalysisReportDetailScreen.test.tsx`
+- `npm --prefix apps/mobile run typecheck`
+
 ### `refactor: 모바일 화면 전환을 React Navigation으로 변경`
 
 커밋: `f7cb613`
@@ -164,6 +212,7 @@ apps/mobile/src/
       routeTypes.ts
       routeChrome.ts
       mainTabChrome.ts
+      detailHeaderChrome.tsx
       navigationState.ts
       flowState.tsx
       demoFlowState.ts
@@ -175,9 +224,10 @@ apps/mobile/src/
 - route 이름과 params는 `routeTypes.ts`가 관리한다.
 - 화면 depth/category/chrome/status bar/title은 `routeChrome.ts`가 관리한다.
 - 메인 탭의 header copy와 footer active state는 `mainTabChrome.ts`가 관리한다.
+- 상세 헤더 렌더링과 route-level 오른쪽 액션은 `detailHeaderChrome.tsx`가 관리한다.
 - route-local이 아닌 임시 UI 상태는 `flowState.tsx`가 관리한다.
 - 데모/캡처용 초기 flow seed는 `demoFlowState.ts`가 별도로 관리한다.
-- feature screen은 아직 대부분 자체 화면 UI를 유지하고, adapter가 navigation callback과 route chrome title을 주입한다.
+- feature screen은 자체 콘텐츠 UI를 유지하고, adapter가 navigation callback과 route-level chrome을 연결한다.
 
 ## 헤더와 푸터 정리 상태
 
@@ -186,14 +236,15 @@ apps/mobile/src/
 - 메인 shell header/footer는 `MainTabNavigator`와 `MainTabChrome`으로 모였다.
 - `HomeTab`, `CustomTab`, `MyPageTab`은 feature screen 내부에서 `AppFooter`를 직접 다루지 않는다.
 - footer의 `capture`는 tab route가 아니라 root stack의 `ARMakeupFilter` action으로 연결된다.
-- 상세 화면 title은 production route 진입 시 `getDetailRouteTitle(routeName)`에서 주입된다.
+- 상세 화면 title과 share/close/done action은 route-level `DetailRouteChrome`에서 렌더된다.
+- `sub` depth feature screen은 normal `AppHeader`를 직접 렌더하지 않는다.
 - fullscreen 화면의 status bar style은 route chrome 기반으로 동기화된다.
 
 후속 정리:
 
-- 일부 상세 화면은 share, close, done 같은 screen-specific action 때문에 아직 screen 내부에서 visual `AppHeader`를 렌더한다.
-- 이 visual header까지 완전히 route-level chrome으로 올리려면 action slot 설계가 먼저 필요하다.
-- `ImageAnalysisReportDetail`, `FilterSave`, `FilterRecipeDetail`, `FeedbackEntry`, `FilterUpload`처럼 특수 액션이 있는 화면을 우선 대상으로 삼는 것이 좋다.
+- 새로 추가되는 `sub` route는 `navigationAdapters.tsx`에서 반드시 `DetailRouteChrome`으로 감싸고, feature screen 내부에 normal `AppHeader`를 추가하지 않는다.
+- share처럼 화면 데이터가 필요한 header action은 route param으로 callback을 넘기지 말고, 현재처럼 flow/local state 또는 registration callback으로 adapter에 연결한다.
+- immersive 화면의 overlay button과 terminal 화면의 bottom action은 detail header와 다른 UX이므로 계속 별도 관리한다.
 
 ## 검증 기록
 

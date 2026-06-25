@@ -28,14 +28,13 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
 type FeedbackGuideOverlayScreenProps = {
   headerTitle?: string;
   result: MakeupFeedbackResult;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 type GuideCategory = 'all' | 'eye' | 'brow' | 'lip' | 'cheek' | 'base';
@@ -112,20 +111,8 @@ const GUIDE_SECTIONS: GuideSection[] = [
   },
 ];
 
-const feedbackGuideOverlayHeaderPresentation = {
-  component: 'AppHeader',
-  leftAction: 'back',
-  title: '가이드 오버레이',
-} as const;
-
-export function getFeedbackGuideOverlayHeaderPresentation() {
-  return feedbackGuideOverlayHeaderPresentation;
-}
-
 export function FeedbackGuideOverlayScreen({
-  headerTitle = feedbackGuideOverlayHeaderPresentation.title,
   result,
-  onBack,
 }: FeedbackGuideOverlayScreenProps) {
   const {width} = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<GuideCategory>('all');
@@ -141,7 +128,6 @@ export function FeedbackGuideOverlayScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={headerTitle} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}

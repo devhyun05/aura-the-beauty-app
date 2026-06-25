@@ -5,7 +5,7 @@ import Svg, {Circle as SvgCircle} from 'react-native-svg';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader, AppScreen} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {
   IMAGE_ANALYSIS_LOADING_TOTAL_MS,
   getImageAnalysisProgressState,
@@ -27,8 +27,6 @@ const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function ImageAnalysisLoadingScreen({
-  headerTitle = '얼굴 분석',
-  onBack,
   onComplete,
 }: ImageAnalysisLoadingScreenProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -74,8 +72,6 @@ export function ImageAnalysisLoadingScreen({
       scroll={false}
       topPadding="none"
     >
-      <AppHeader onBack={onBack} title={headerTitle} />
-
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
           <Text style={styles.heroTitle}>AI가 얼굴을 분석하고 있어요</Text>

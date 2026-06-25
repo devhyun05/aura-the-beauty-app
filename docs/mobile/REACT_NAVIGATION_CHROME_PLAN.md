@@ -119,7 +119,7 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 
 ### Migration Note
 
-The main shell header/footer is route-level now. Detail screen titles are also supplied from `routeChrome` through route adapters. Some detail screens still render the visual `AppHeader` internally when they own screen-specific actions such as share, close, or done. Lifting those visual headers fully into navigator chrome is a follow-up cleanup, not a prerequisite for the React Navigation migration.
+The main shell header/footer is route-level now. Detail screen titles and detail header actions are also route-level through `routeChrome`, `detailHeaderChrome.tsx`, and `navigationAdapters.tsx`. Feature screens in `sub` depth should render content only and should not render their own normal `AppHeader`.
 
 ### Existing Shared Chrome Components
 
@@ -148,6 +148,7 @@ apps/mobile/src/
       routeTypes.ts
       routeChrome.ts
       mainTabChrome.ts
+      detailHeaderChrome.tsx
       navigationState.ts
       flowState.tsx
       navigationAdapters.tsx
@@ -170,6 +171,7 @@ apps/mobile/src/
 | `routeTypes.ts` | Typed route names and route params. |
 | `routeChrome.ts` | Single source of truth for header/footer/fullscreen policy and header copy. |
 | `mainTabChrome.ts` | Main tab header copy and footer target helpers. |
+| `detailHeaderChrome.tsx` | Detail route `AppHeader` renderer and route-level share/close/done action slots. |
 | `navigationState.ts` | Active nested route and status bar style helpers. |
 | `flowState.tsx` | Temporary flow state that should not be passed through navigation params. |
 | `navigationAdapters.tsx` | Thin adapters that pass navigation callbacks into existing screen components during migration. |
@@ -271,6 +273,7 @@ export type ScreenCategory =
   | 'navigation-host';
 
 export type RouteChromeKind = 'mainTab' | 'detail' | 'fullscreen';
+export type DetailHeaderRightAction = 'share' | 'close' | 'done';
 
 type RouteChromeBase = {
   category: ScreenCategory;
@@ -287,7 +290,7 @@ export type RouteChrome =
   | (RouteChromeBase & {
       kind: 'detail';
       title: string;
-      rightAction?: 'close' | 'profile' | 'custom';
+      rightActions?: readonly DetailHeaderRightAction[];
       statusBarStyle: 'dark';
     })
   | (RouteChromeBase & {
@@ -323,7 +326,7 @@ The footer can still render the camera button visually, but the current tab rema
 | `ImageAnalysisLoading` | `얼굴 분석` | `ImageAnalysisLoadingScreen` |
 | `ProfileEdit` | `프로필 수정` | `ProfileEditScreen` |
 | `ImageAnalysisReportsList` | `이미지 분석 결과` | `ImageAnalysisReportsListScreen` |
-| `ImageAnalysisReportDetail` | screen-level action header with share/close actions | `ImageAnalysisReportDetailScreen` |
+| `ImageAnalysisReportDetail` | `맞춤 분석 보고서` with share/close actions | `ImageAnalysisReportDetailScreen` |
 | `MakeupStyleList` | `메이크업 룩` | `MakeupStyleListScreen` |
 | `LikedProductList` | `좋아요 목록` | `LikedProductListScreen` |
 | `FeedbackEntry` | `메이크업 피드백` with close action | `FeedbackEntryScreen` |
@@ -379,7 +382,7 @@ Required:
 
 - left side: back button by default
 - center: one-line route title
-- right side: empty balancing slot unless route config defines `rightAction`
+- right side: empty balancing slot unless route config defines `rightActions`
 - close-only routes may use an empty left balancing slot and a right close button
 - no feature-local duplicate header
 
@@ -552,7 +555,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     title: '메이크업 피드백',
-    rightAction: 'close',
+    rightActions: ['close'],
     statusBarStyle: 'dark',
   },
   FeedbackLoading: {

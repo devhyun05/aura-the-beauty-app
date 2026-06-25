@@ -26,7 +26,7 @@ export type ScreenCategory =
 
 export type RouteChromeKind = 'mainTab' | 'detail' | 'fullscreen';
 export type MainHeaderVariant = 'home' | 'custom' | 'default';
-export type DetailHeaderRightAction = 'close' | 'profile' | 'custom';
+export type DetailHeaderRightAction = 'share' | 'close' | 'done';
 
 type RouteChromeBase = {
   category: ScreenCategory;
@@ -42,7 +42,7 @@ export type RouteChrome =
     })
   | (RouteChromeBase & {
       kind: 'detail';
-      rightAction?: DetailHeaderRightAction;
+      rightActions?: readonly DetailHeaderRightAction[];
       statusBarStyle: 'dark';
       title: string;
     })
@@ -96,7 +96,7 @@ export const routeChromeByRoute = {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
-    rightAction: 'custom',
+    rightActions: ['share', 'close'],
     statusBarStyle: 'dark',
     title: '맞춤 분석 보고서',
   },
@@ -143,7 +143,7 @@ export const routeChromeByRoute = {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
-    rightAction: 'close',
+    rightActions: ['close'],
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
@@ -185,7 +185,7 @@ export const routeChromeByRoute = {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
-    rightAction: 'close',
+    rightActions: ['close'],
     statusBarStyle: 'dark',
     title: '메이크업 추출',
   },
@@ -212,7 +212,7 @@ export const routeChromeByRoute = {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
-    rightAction: 'custom',
+    rightActions: ['done'],
     statusBarStyle: 'dark',
     title: '필터 저장',
   },

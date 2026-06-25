@@ -9,16 +9,18 @@ type RoutePlaceholderProps = {
   title: string;
   description: string;
   onBack?: () => void;
+  showHeader?: boolean;
 };
 
 export function RoutePlaceholder({
   title,
   description,
   onBack,
+  showHeader = true,
 }: RoutePlaceholderProps) {
   return (
     <AppScreen scroll={false} topPadding="none">
-      <AppHeader onBack={onBack} title={title} />
+      {showHeader ? <AppHeader onBack={onBack} title={title} /> : null}
       <View style={styles.body}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.description}>{description}</Text>

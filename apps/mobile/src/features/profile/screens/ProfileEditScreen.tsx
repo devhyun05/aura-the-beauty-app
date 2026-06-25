@@ -10,7 +10,6 @@ import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ProfileEditField, UserProfile} from '../../../shared/types/myPage';
 import {
   AppCard,
-  AppHeader,
   AppScreen,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -56,8 +55,6 @@ const editableFieldIds: EditableProfileFieldId[] = [
 const weekLabels = ['일', '월', '화', '수', '목', '금', '토'];
 
 export function ProfileEditScreen({
-  headerTitle = '프로필 수정',
-  onBack,
   onLogout,
 }: ProfileEditScreenProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -413,8 +410,6 @@ export function ProfileEditScreen({
 
   return (
     <View style={styles.screen}>
-      <AppHeader onBack={onBack} title={headerTitle} />
-
       <AppScreen contentGap={spacing.xl} topPadding="none">
         <View style={styles.profileArea}>
           <View style={styles.avatarFrame}>

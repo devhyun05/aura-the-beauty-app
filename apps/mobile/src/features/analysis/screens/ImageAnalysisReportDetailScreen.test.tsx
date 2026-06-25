@@ -4,7 +4,6 @@ import {
   ImageAnalysisReportDetailScreen,
   getImageAnalysisReportCreateFilterButtonPlacements,
   getImageAnalysisReportAvoidedMakeupRailPresentation,
-  getImageAnalysisReportHeaderActions,
   getImageAnalysisReportLiquidGlassPresentation,
   getImageAnalysisReportPointGuideItems,
   getImageAnalysisReportScreenFramePresentation,
@@ -30,7 +29,6 @@ type ExpectType<Condition extends true> = Condition;
 
 const createFilterButtonPlacements =
   getImageAnalysisReportCreateFilterButtonPlacements();
-const headerActions: readonly string[] = getImageAnalysisReportHeaderActions();
 const liquidGlassPresentation = getImageAnalysisReportLiquidGlassPresentation();
 const screenFramePresentation = getImageAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getImageAnalysisReportSubtitleTextStyle();
@@ -54,28 +52,13 @@ expectEqual(
   'image analysis report floating bottom create filter button placement',
 );
 expectEqual(
-  headerActions.includes('back'),
-  false,
-  'image analysis report header back action hidden',
-);
-expectEqual(
-  headerActions[0],
-  'share',
-  'image analysis report header share action',
-);
-expectEqual(
-  headerActions[1],
-  'close',
-  'image analysis report header close action',
-);
-expectEqual(
   screenFramePresentation.headerPlacement,
-  'fixed',
+  'route-level',
   'image analysis report header placement',
 );
 expectEqual(
   screenFramePresentation.headerUsesTopInset,
-  false,
+  true,
   'image analysis report header safe area',
 );
 expectEqual(
@@ -99,9 +82,9 @@ expectEqual(
   'image analysis report create filter buttons use liquid glass',
 );
 expectEqual(
-  liquidGlassPresentation.buttonTargets.includes('header-action'),
-  true,
-  'image analysis report header action buttons use liquid glass',
+  (liquidGlassPresentation.buttonTargets as readonly string[]).includes('header-action'),
+  false,
+  'image analysis report header actions are route chrome owned',
 );
 expectEqual(
   liquidGlassPresentation.shadowRadius,

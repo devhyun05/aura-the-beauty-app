@@ -12,7 +12,6 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import {requestMakeupFeedback} from '../services/makeupFeedbackService';
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
@@ -20,24 +19,12 @@ import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 type FeedbackLoadingScreenProps = {
   headerTitle?: string;
   selection: FeedbackPhotoSelection;
-  onBack: () => void;
+  onBack?: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
 };
 
-const feedbackLoadingHeaderPresentation = {
-  component: 'AppHeader',
-  leftAction: 'back',
-  title: '메이크업 피드백',
-} as const;
-
-export function getFeedbackLoadingHeaderPresentation() {
-  return feedbackLoadingHeaderPresentation;
-}
-
 export function FeedbackLoadingScreen({
-  headerTitle = feedbackLoadingHeaderPresentation.title,
   selection,
-  onBack,
   onComplete,
 }: FeedbackLoadingScreenProps) {
   useEffect(() => {
@@ -56,7 +43,6 @@ export function FeedbackLoadingScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={headerTitle} />
       <YStack style={styles.screen}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>

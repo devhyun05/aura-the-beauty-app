@@ -6,7 +6,6 @@ import {getMakeupLooks} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupLook} from '../../../shared/types/myPage';
 import {
-  AppHeader,
   AppScreen,
   ImagePlaceholder,
   PagedGrid,
@@ -17,10 +16,7 @@ type MakeupStyleListScreenProps = {
   onBack?: () => void;
 };
 
-export function MakeupStyleListScreen({
-  headerTitle = '메이크업 룩',
-  onBack,
-}: MakeupStyleListScreenProps) {
+export function MakeupStyleListScreen(_props: MakeupStyleListScreenProps = {}) {
   const {width} = useWindowDimensions();
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const gap = spacing.md;
@@ -43,8 +39,6 @@ export function MakeupStyleListScreen({
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <AppHeader onBack={onBack} title={headerTitle} />
-
       <PagedGrid
         data={looks}
         keyExtractor={(look) => look.id}

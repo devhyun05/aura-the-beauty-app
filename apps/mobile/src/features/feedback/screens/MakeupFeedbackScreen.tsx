@@ -28,7 +28,6 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {
   FeedbackPoint,
@@ -39,7 +38,7 @@ import type {
 type MakeupFeedbackScreenProps = {
   headerTitle?: string;
   result: MakeupFeedbackResult;
-  onBack: () => void;
+  onBack?: () => void;
   onOpenGuide: () => void;
   onOpenTip: (point: FeedbackPoint) => void;
   onRetake: () => void;
@@ -54,20 +53,8 @@ type FooterButtonProps = {
 
 const BASE_PHOTO_WIDTH = 360;
 
-const makeupFeedbackHeaderPresentation = {
-  component: 'AppHeader',
-  leftAction: 'back',
-  title: '메이크업 피드백',
-} as const;
-
-export function getMakeupFeedbackHeaderPresentation() {
-  return makeupFeedbackHeaderPresentation;
-}
-
 export function MakeupFeedbackScreen({
-  headerTitle = makeupFeedbackHeaderPresentation.title,
   result,
-  onBack,
   onOpenGuide,
   onOpenTip,
   onRetake,
@@ -81,7 +68,6 @@ export function MakeupFeedbackScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={headerTitle} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
