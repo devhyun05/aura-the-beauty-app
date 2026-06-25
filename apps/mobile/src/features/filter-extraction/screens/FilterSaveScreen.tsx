@@ -5,19 +5,23 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {AppHeader, AppScreen} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
 type FilterSaveScreenProps = {
+  headerTitle?: string;
   photo: FilterExtractionPhoto;
-  onBack: () => void;
+  onBack?: () => void;
   onSave: () => void;
 };
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
-export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps) {
+export function FilterSaveScreen({
+  photo,
+  onSave,
+}: FilterSaveScreenProps) {
   const insets = useSafeAreaInsets();
   const {result} = getFilterExtractionDataSync();
   const [filterName, setFilterName] = useState(result.title);
@@ -31,20 +35,6 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
       scroll={false}
       topPadding="none"
     >
-      <AppHeader
-        onBack={onBack}
-        rightSlot={
-          <Pressable
-            accessibilityLabel="저장 완료"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={onSave}>
-            <Text style={styles.doneText}>완료</Text>
-          </Pressable>
-        }
-        title="필터 저장"
-      />
-
       <YStack style={styles.content}>
         <XStack style={styles.summaryRow}>
           <View style={styles.thumbFrame}>
@@ -172,12 +162,6 @@ const styles = StyleSheet.create({
   countText: {
     color: colors.textTertiary,
     fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  doneText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },

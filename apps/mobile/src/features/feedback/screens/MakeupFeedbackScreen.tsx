@@ -7,7 +7,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
-  ArrowLeft,
   Camera,
   ChevronDown,
   ChevronRight,
@@ -37,8 +36,9 @@ import type {
 } from '../types';
 
 type MakeupFeedbackScreenProps = {
+  headerTitle?: string;
   result: MakeupFeedbackResult;
-  onBack: () => void;
+  onBack?: () => void;
   onOpenGuide: () => void;
   onOpenTip: (point: FeedbackPoint) => void;
   onRetake: () => void;
@@ -55,7 +55,6 @@ const BASE_PHOTO_WIDTH = 360;
 
 export function MakeupFeedbackScreen({
   result,
-  onBack,
   onOpenGuide,
   onOpenTip,
   onRetake,
@@ -68,25 +67,12 @@ export function MakeupFeedbackScreen({
   const photoScale = photoWidth / BASE_PHOTO_WIDTH;
 
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <View style={styles.header}>
-            <Pressable
-              accessibilityLabel="이전 화면"
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={onBack}
-              style={styles.iconButton}>
-              <ArrowLeft color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />
-            </Pressable>
-            <Text style={styles.headerTitle}>메이크업 피드백</Text>
-            <View style={styles.iconButton} />
-          </View>
-
           <View style={[styles.resultCard, {width: photoWidth}]}>
             <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
               <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
@@ -365,26 +351,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  headerTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
-  iconButton: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
   },
   moreText: {
     color: feedbackColors.textSoft,

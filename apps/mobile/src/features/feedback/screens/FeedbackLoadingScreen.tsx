@@ -17,11 +17,16 @@ import {requestMakeupFeedback} from '../services/makeupFeedbackService';
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
 type FeedbackLoadingScreenProps = {
+  headerTitle?: string;
   selection: FeedbackPhotoSelection;
+  onBack?: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
 };
 
-export function FeedbackLoadingScreen({selection, onComplete}: FeedbackLoadingScreenProps) {
+export function FeedbackLoadingScreen({
+  selection,
+  onComplete,
+}: FeedbackLoadingScreenProps) {
   useEffect(() => {
     let isMounted = true;
 
@@ -37,7 +42,7 @@ export function FeedbackLoadingScreen({selection, onComplete}: FeedbackLoadingSc
   }, [onComplete, selection]);
 
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
       <YStack style={styles.screen}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>

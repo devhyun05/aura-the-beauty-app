@@ -1,9 +1,12 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   Image,
   Pressable,
+  ScrollView as NativeScrollView,
   StyleSheet,
   type ImageSourcePropType,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
 import {
@@ -15,7 +18,7 @@ import {
   Sparkles,
   WandSparkles,
 } from 'lucide-react-native';
-import {ScrollView, Text, View, XStack, YStack} from 'tamagui';
+import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {getHomeData} from '../services/homeService';
@@ -127,6 +130,56 @@ export const heroTrendTitleMainTextStyle = {
 
 export const heroCtaLabel = '보러가기' as const;
 
+type HeroCarouselItemBase = {
+  id: string;
+};
+
+export function getHeroCarouselRenderItems<const TItem extends HeroCarouselItemBase>(
+  items: readonly TItem[],
+): TItem[] {
+  if (items.length <= 1) {
+    return [...items];
+  }
+
+  return [items[items.length - 1], ...items, items[0]];
+}
+
+export function getHeroCarouselInitialOffset({
+  itemCount,
+  snapInterval,
+}: {
+  itemCount: number;
+  snapInterval: number;
+}): number {
+  return itemCount > 1 ? snapInterval : 0;
+}
+
+export function getHeroCarouselLoopResetOffset({
+  itemCount,
+  scrollOffsetX,
+  snapInterval,
+}: {
+  itemCount: number;
+  scrollOffsetX: number;
+  snapInterval: number;
+}): number | null {
+  if (itemCount <= 1) {
+    return null;
+  }
+
+  const snapIndex = Math.round(scrollOffsetX / snapInterval);
+
+  if (snapIndex <= 0) {
+    return snapInterval * itemCount;
+  }
+
+  if (snapIndex >= itemCount + 1) {
+    return snapInterval;
+  }
+
+  return null;
+}
+
 export function getFilterStoreCategoryChipLabel<const TCategory extends string>(
   category: TCategory,
 ): TCategory {
@@ -155,6 +208,8 @@ function HeroBannerCarousel({
   fallbackImageSource,
   trends,
 }: HeroBannerCarouselProps) {
+  const heroCarouselRef = useRef<NativeScrollView>(null);
+  const snapInterval = cardWidth + spacing.md;
   const heroItems =
     trends.length > 0
       ? trends.slice(0, 3)
@@ -166,25 +221,59 @@ function HeroBannerCarousel({
             tone: '맑은 로즈 베이지',
           },
         ];
+  const heroRenderItems = getHeroCarouselRenderItems(heroItems);
+  const initialScrollOffsetX = getHeroCarouselInitialOffset({
+    itemCount: heroItems.length,
+    snapInterval,
+  });
+
+  useEffect(() => {
+    heroCarouselRef.current?.scrollTo({
+      animated: false,
+      x: initialScrollOffsetX,
+    });
+  }, [initialScrollOffsetX]);
+
+  const handleHeroCarouselMomentumEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const loopResetOffsetX = getHeroCarouselLoopResetOffset({
+      itemCount: heroItems.length,
+      scrollOffsetX: event.nativeEvent.contentOffset.x,
+      snapInterval,
+    });
+
+    if (loopResetOffsetX === null) {
+      return;
+    }
+
+    heroCarouselRef.current?.scrollTo({
+      animated: false,
+      x: loopResetOffsetX,
+    });
+  };
 
   return (
-    <ScrollView
+    <NativeScrollView
+      ref={heroCarouselRef}
       horizontal
+      contentOffset={{x: initialScrollOffsetX, y: 0}}
       decelerationRate="fast"
+      onMomentumScrollEnd={handleHeroCarouselMomentumEnd}
       snapToAlignment="start"
-      snapToInterval={cardWidth + spacing.md}
+      snapToInterval={snapInterval}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.heroCarousel}>
-      {heroItems.map(item => (
+      {heroRenderItems.map((item, index) => (
         <HeroBannerCard
           cardWidth={cardWidth}
           imageSource={item.imageSource}
-          key={item.id}
+          key={`${item.id}-${index}`}
           title={item.title}
           tone={item.tone}
         />
       ))}
-    </ScrollView>
+    </NativeScrollView>
   );
 }
 
@@ -346,14 +435,14 @@ function FilterStoreSection({items}: {items: HomeFilterStoreItem[]}) {
         title="필터 스토어"
       />
 
-      <ScrollView
+      <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterList}>
         {items.map((item) => (
           <FilterStoreCard item={item} key={item.id} />
         ))}
-      </ScrollView>
+      </TamaguiScrollView>
     </YStack>
   );
 }
@@ -391,14 +480,14 @@ function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
         title="추천 메이크업 리스트"
       />
 
-      <ScrollView
+      <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.lookList}>
         {looks.map((look) => (
           <RecommendedLookCard key={look.id} look={look} />
         ))}
-      </ScrollView>
+      </TamaguiScrollView>
     </YStack>
   );
 }

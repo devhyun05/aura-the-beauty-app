@@ -8,8 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Share2, WandSparkles} from 'lucide-react-native';
-import {Button, Text, View, XStack} from 'tamagui';
+import {WandSparkles} from 'lucide-react-native';
+import {Button, Text, View} from 'tamagui';
 
 import {
   getImageAnalysisReportById,
@@ -22,34 +22,47 @@ import type {
   ImageAnalysisMakeupCard,
   ImageAnalysisReport,
 } from '../../../shared/types/imageAnalysis';
-import {AppHeader, AppScreen, XIcon} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {
   type ImageAnalysisReportDetailLoadState,
   resolveImageAnalysisReportDetailLoadState,
 } from '../services/imageAnalysisReportDetailLoadState';
 
 type ImageAnalysisReportDetailScreenProps = {
+  headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
+  onHeaderShareActionChange?: (action: ImageAnalysisReportShareAction | null) => void;
   onShare?: (report: ImageAnalysisReport) => void;
 };
 
 type GuideItem = {
-  key: keyof ImageAnalysisFacePointGuide;
+  key: keyof ImageAnalysisFacePointGuide | 'base';
   label: string;
   point: string;
   detail: string;
 };
 
+type FacePointGuideLabel = {
+  key: keyof ImageAnalysisFacePointGuide;
+  label: string;
+  point: string;
+};
+
+type SummaryItemData = {
+  label: string;
+  value: string;
+};
+
+type ImageAnalysisReportShareAction = () => void;
 type CreateFilterButtonPlacement = 'floating-bottom';
-type ImageAnalysisReportHeaderAction = 'share' | 'close';
-type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter' | 'header-action';
+type ImageAnalysisReportLiquidGlassButtonTarget = 'create-filter';
 type ImageAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
 
-const guideLabels: Array<Pick<GuideItem, 'key' | 'label' | 'point'>> = [
+const guideLabels: FacePointGuideLabel[] = [
   {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
   {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
   {key: 'lip', label: '립', point: 'MLBB 계열'},
@@ -68,18 +81,18 @@ const createFilterButtonAccessibilityLabels: Record<
 > = {
   'floating-bottom': 'AR 필터 만들기',
 };
-const imageAnalysisReportHeaderActions = [
-  'share',
-  'close',
-] as const satisfies readonly ImageAnalysisReportHeaderAction[];
+const imageAnalysisReportAvoidedMakeupRailPresentation = {
+  showsCornerBadge: false,
+  title: '비추천 메이크업',
+} as const;
 const imageAnalysisReportSubtitleTextStyle = {
   fontSize: typography.fontSize.md,
   lineHeight: typography.lineHeight.md,
 } as const;
 const imageAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
-  headerPlacement: 'fixed',
-  headerUsesTopInset: false,
+  headerPlacement: 'route-level',
+  headerUsesTopInset: true,
 } as const;
 const imageAnalysisReportLiquidGlassSurfaceStyle = {
   backgroundColor: colors.liquidGlassSurface,
@@ -100,7 +113,6 @@ const imageAnalysisReportLiquidGlassButtonStyle = {
 const imageAnalysisReportLiquidGlassPresentation = {
   buttonTargets: [
     'create-filter',
-    'header-action',
   ] as const satisfies readonly ImageAnalysisReportLiquidGlassButtonTarget[],
   cardTargets: [
     'hero',
@@ -115,8 +127,8 @@ export function getImageAnalysisReportCreateFilterButtonPlacements() {
   return createFilterButtonPlacements;
 }
 
-export function getImageAnalysisReportHeaderActions() {
-  return imageAnalysisReportHeaderActions;
+export function getImageAnalysisReportAvoidedMakeupRailPresentation() {
+  return imageAnalysisReportAvoidedMakeupRailPresentation;
 }
 
 export function getImageAnalysisReportSubtitleTextStyle() {
@@ -131,6 +143,34 @@ export function getImageAnalysisReportLiquidGlassPresentation() {
   return imageAnalysisReportLiquidGlassPresentation;
 }
 
+export function getImageAnalysisReportSummaryItems(
+  report: ImageAnalysisReport,
+): SummaryItemData[] {
+  return [
+    {label: '퍼스널 컬러', value: report.personalColor},
+    {label: '얼굴형', value: report.faceShape},
+    {label: '톤 요약', value: report.toneSummary},
+    {label: '추천 무드', value: report.recommendedMood},
+  ];
+}
+
+export function getImageAnalysisReportPointGuideItems(
+  report: ImageAnalysisReport,
+): GuideItem[] {
+  return [
+    {
+      key: 'base',
+      label: '베이스',
+      point: '피부 표현',
+      detail: report.baseMakeupGuide,
+    },
+    ...guideLabels.map((guide) => ({
+      ...guide,
+      detail: report.facePointGuide[guide.key],
+    })),
+  ];
+}
+
 const formatReportDate = (dateText: string, name?: string) => {
   const date = new Date(dateText);
   const year = String(date.getFullYear()).slice(2);
@@ -142,9 +182,10 @@ const formatReportDate = (dateText: string, name?: string) => {
 };
 
 export function ImageAnalysisReportDetailScreen({
+  headerTitle = '맞춤 분석 보고서',
   reportId,
-  onBack,
   onCreateARFilter,
+  onHeaderShareActionChange,
   onShare,
 }: ImageAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
@@ -193,25 +234,48 @@ export function ImageAnalysisReportDetailScreen({
         ? loadState.description
         : '목록에서 이미지 분석 결과를 다시 선택해 주세요.';
 
-  const guideItems = useMemo<GuideItem[]>(() => {
+  const guideItems = useMemo(
+    () => (report ? getImageAnalysisReportPointGuideItems(report) : []),
+    [report],
+  );
+  const summaryItems = useMemo(
+    () => (report ? getImageAnalysisReportSummaryItems(report) : []),
+    [report],
+  );
+
+  useEffect(() => {
     if (!report) {
-      return [];
+      onHeaderShareActionChange?.(null);
+      return;
     }
 
-    return guideLabels.map((guide) => ({
-      ...guide,
-      detail: report.facePointGuide[guide.key],
-    }));
-  }, [report]);
+    const shareAction = () => {
+      if (onShare) {
+        onShare(report);
+        return;
+      }
+
+      void Share.share({
+        message: [
+          formatReportDate(report.analyzedAt, profile?.name),
+          `퍼스널 컬러: ${report.personalColor}`,
+          `추천 무드: ${report.recommendedMood}`,
+        ].join('\n'),
+        title: headerTitle,
+      });
+    };
+
+    onHeaderShareActionChange?.(shareAction);
+
+    return () => {
+      onHeaderShareActionChange?.(null);
+    };
+  }, [headerTitle, onHeaderShareActionChange, onShare, profile?.name, report]);
 
   if (!report) {
     return (
       <ImageAnalysisReportScaffold
         contentStyle={styles.empty}
-        onClose={onBack}
-        onShare={onShare}
-        profileName={profile?.name}
-        report={report}
         scroll={false}
       >
         <Text accessibilityLiveRegion="polite" style={styles.emptyTitle}>
@@ -232,10 +296,6 @@ export function ImageAnalysisReportDetailScreen({
           placement="floating-bottom"
         />
       }
-      onClose={onBack}
-      onShare={onShare}
-      profileName={profile?.name}
-      report={report}
     >
       <Text style={styles.subtitle}>
         {formatReportDate(report.analyzedAt, profile?.name)}
@@ -246,10 +306,9 @@ export function ImageAnalysisReportDetailScreen({
       </View>
 
       <View style={styles.summaryGrid}>
-        <SummaryItem label="퍼스널 컬러" value={report.personalColor} />
-        <SummaryItem label="피부 타입" value={report.skinType} />
-        <SummaryItem label="톤 요약" value={report.toneSummary} />
-        <SummaryItem label="추천 무드" value={report.recommendedMood} />
+        {summaryItems.map((item) => (
+          <SummaryItem key={item.label} label={item.label} value={item.value} />
+        ))}
       </View>
 
       <ReportSection title="분석 요약">
@@ -273,15 +332,10 @@ export function ImageAnalysisReportDetailScreen({
         </View>
       </ReportSection>
 
-      <ReportSection title="베이스 가이드">
-        <Text style={styles.paragraph}>{report.baseMakeupGuide}</Text>
-      </ReportSection>
-
       <MakeupCardRail title="추천 메이크업" items={report.recommendedMakeups} />
 
       <MakeupCardRail
-        isAvoided
-        title="비추천 메이크업 적용법"
+        title={imageAnalysisReportAvoidedMakeupRailPresentation.title}
         items={report.avoidedMakeups}
       />
 
@@ -292,79 +346,15 @@ export function ImageAnalysisReportDetailScreen({
   );
 }
 
-function ImageAnalysisReportHeader({
-  onClose,
-  onShare,
-  profileName,
-  report,
-}: {
-  onClose?: () => void;
-  onShare?: (report: ImageAnalysisReport) => void;
-  profileName?: string;
-  report: ImageAnalysisReport | null;
-}) {
-  const handleSharePress = () => {
-    if (!report) {
-      return;
-    }
-
-    if (onShare) {
-      onShare(report);
-      return;
-    }
-
-    void Share.share({
-      message: [
-        formatReportDate(report.analyzedAt, profileName),
-        `퍼스널 컬러: ${report.personalColor}`,
-        `추천 무드: ${report.recommendedMood}`,
-      ].join('\n'),
-      title: '맞춤 분석 보고서',
-    });
-  };
-
-  return (
-    <AppHeader
-      rightSlot={
-        <XStack style={styles.headerActions}>
-          <HeaderActionButton
-            accessibilityLabel="공유하기"
-            disabled={!report}
-            onPress={handleSharePress}
-          >
-            <Share2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-          </HeaderActionButton>
-          <HeaderActionButton accessibilityLabel="닫기" onPress={onClose}>
-            <XIcon color={colors.textPrimary} size={iconSize.sm} />
-          </HeaderActionButton>
-        </XStack>
-      }
-      titleSlot={
-        <Text numberOfLines={1} style={styles.headerTitle}>
-          맞춤 분석 보고서
-        </Text>
-      }
-    />
-  );
-}
-
 function ImageAnalysisReportScaffold({
   children,
   contentStyle,
   floatingAction,
-  onClose,
-  onShare,
-  profileName,
-  report,
   scroll = true,
 }: {
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   floatingAction?: React.ReactNode;
-  onClose?: () => void;
-  onShare?: (report: ImageAnalysisReport) => void;
-  profileName?: string;
-  report: ImageAnalysisReport | null;
   scroll?: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -388,12 +378,6 @@ function ImageAnalysisReportScaffold({
       scroll={false}
       topPadding="none"
     >
-      <ImageAnalysisReportHeader
-        onClose={onClose}
-        onShare={onShare}
-        profileName={profileName}
-        report={report}
-      />
       {scroll ? (
         <ScrollView
           contentContainerStyle={contentContainerStyle}
@@ -417,35 +401,6 @@ function ImageAnalysisReportScaffold({
         </View>
       ) : null}
     </AppScreen>
-  );
-}
-
-function HeaderActionButton({
-  accessibilityLabel,
-  children,
-  disabled,
-  onPress,
-}: {
-  accessibilityLabel: string;
-  children: React.ReactNode;
-  disabled?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <Button
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={{disabled: Boolean(disabled)}}
-      disabled={disabled}
-      disabledStyle={{opacity: 0.42}}
-      hitSlop={8}
-      onPress={onPress}
-      pressStyle={{scale: 0.97}}
-      style={styles.headerActionButton}
-      unstyled
-    >
-      {children}
-    </Button>
   );
 }
 
@@ -498,11 +453,9 @@ function ReportSection({
 }
 
 function MakeupCardRail({
-  isAvoided,
   items,
   title,
 }: {
-  isAvoided?: boolean;
   items: ImageAnalysisMakeupCard[];
   title: string;
 }) {
@@ -521,11 +474,6 @@ function MakeupCardRail({
                 source={item.imageSource}
                 style={styles.makeupImage}
               />
-              {isAvoided ? (
-                <View style={styles.avoidBadge}>
-                  <XIcon color={colors.white} size={15} />
-                </View>
-              ) : null}
             </View>
             <View style={styles.makeupBody}>
               <Text numberOfLines={1} style={styles.makeupTitle}>
@@ -553,17 +501,6 @@ function MakeupCardRail({
 }
 
 const styles = StyleSheet.create({
-  avoidBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.black,
-    borderRadius: 12,
-    height: 24,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    width: 24,
-  },
   empty: {
     alignItems: 'center',
     flex: 1,
@@ -661,27 +598,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     height: 360,
     width: '100%',
-  },
-  headerActionButton: {
-    ...imageAnalysisReportLiquidGlassButtonStyle,
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 42,
-    justifyContent: 'center',
-    padding: 0,
-    width: 42,
-  },
-  headerActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.title.fontFamily,
-    fontSize: typography.title.fontSize,
-    fontWeight: typography.title.fontWeight,
-    lineHeight: typography.title.lineHeight,
   },
   makeupBody: {
     gap: 4,

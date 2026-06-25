@@ -1,11 +1,11 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
-import {Camera, Check, ImagePlus, X} from 'lucide-react-native';
+import {Camera, Check, ImagePlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader, AppScreen} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {getFilterExtractionData} from '../services/filterExtractionService';
 import type {
   FilterExtractionData,
@@ -14,7 +14,8 @@ import type {
 } from '../types';
 
 type FilterImageUploadScreenProps = {
-  onClose: () => void;
+  headerTitle?: string;
+  onClose?: () => void;
   onStartAnalysis: (photo: FilterExtractionPhoto) => void;
 };
 
@@ -24,7 +25,6 @@ const sourceTabs: {id: FilterExtractionSource; label: string}[] = [
 ];
 
 export function FilterImageUploadScreen({
-  onClose,
   onStartAnalysis,
 }: FilterImageUploadScreenProps) {
   const insets = useSafeAreaInsets();
@@ -80,21 +80,6 @@ export function FilterImageUploadScreen({
       topPadding="none"
     >
       <YStack style={styles.header}>
-        <AppHeader
-          containerProps={{style: styles.headerAppBar}}
-          leftSlot={<View />}
-          rightSlot={
-            <Pressable
-              accessibilityLabel="닫기"
-              accessibilityRole="button"
-              hitSlop={8}
-              onPress={onClose}>
-              <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
-            </Pressable>
-          }
-          title="메이크업 추출"
-        />
-
         <XStack style={styles.tabRow}>
           {sourceTabs.map((tab) => {
             const isActive = tab.id === activeSource;
@@ -210,10 +195,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
     gap: spacing.lg,
-  },
-  headerAppBar: {
-    borderBottomWidth: 0,
-    paddingHorizontal: spacing.lg,
   },
   loadingContainer: {
     alignItems: 'center',

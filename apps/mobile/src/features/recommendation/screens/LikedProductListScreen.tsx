@@ -9,7 +9,6 @@ import {getLikedProducts} from '../../../shared/services/productService';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {Product} from '../../../shared/types/myPage';
 import {
-  AppHeader,
   AppScreen,
   HeartIcon,
   ImagePlaceholder,
@@ -19,12 +18,13 @@ import {
 export const LIKED_PRODUCT_LIST_FAVORITE_ICON_NAME = 'Heart';
 
 type LikedProductListScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
 };
 
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
 
-export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
+export function LikedProductListScreen(_props: LikedProductListScreenProps = {}) {
   const {width} = useWindowDimensions();
   const [products, setProducts] = useState<Product[]>([]);
   const gap = spacing.lg;
@@ -47,8 +47,6 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
 
   return (
     <View style={styles.screen}>
-      <AppHeader onBack={onBack} title="좋아요 목록" />
-
       <AppScreen contentGap={spacing.xl} topPadding="none">
         <PagedGrid
           data={products}

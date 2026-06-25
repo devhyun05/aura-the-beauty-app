@@ -5,13 +5,14 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppHeader, AppScreen} from '../../../shared/ui';
+import {AppScreen} from '../../../shared/ui';
 import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto, FilterRecipeTab} from '../types';
 
 type FilterRecipeDetailScreenProps = {
+  headerTitle?: string;
   photo: FilterExtractionPhoto;
-  onBack: () => void;
+  onBack?: () => void;
   onSaveRecipe: () => void;
 };
 
@@ -86,7 +87,6 @@ const recipeItems = [
 
 export function FilterRecipeDetailScreen({
   photo,
-  onBack,
   onSaveRecipe,
 }: FilterRecipeDetailScreenProps) {
   const insets = useSafeAreaInsets();
@@ -111,12 +111,6 @@ export function FilterRecipeDetailScreen({
       topPadding="none"
     >
       <YStack style={styles.header}>
-        <AppHeader
-          containerProps={{style: styles.headerAppBar}}
-          onBack={onBack}
-          title="상세 분석"
-        />
-
         <XStack style={styles.mainTabs}>
           {mainTabs.map((tab) => {
             const isActive = activeTab === tab.id;
@@ -296,10 +290,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     borderBottomWidth: 1,
     gap: spacing.md,
-  },
-  headerAppBar: {
-    borderBottomWidth: 0,
-    paddingHorizontal: spacing.lg,
   },
   imageDim: {
     ...StyleSheet.absoluteFill,

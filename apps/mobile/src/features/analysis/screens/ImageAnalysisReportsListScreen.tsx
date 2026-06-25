@@ -4,16 +4,16 @@ import {StyleSheet, useWindowDimensions} from 'react-native';
 import {getImageAnalysisReports} from '../../../shared/services/imageAnalysisService';
 import {spacing} from '../../../shared/theme';
 import type {ImageAnalysisReport} from '../../../shared/types/imageAnalysis';
-import {AppHeader, AppScreen, PagedGrid} from '../../../shared/ui';
+import {AppScreen, PagedGrid} from '../../../shared/ui';
 import {ImageAnalysisReportCard} from '../components/ImageAnalysisReportCard';
 
 type ImageAnalysisReportsListScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
   onPressReport?: (reportId: string) => void;
 };
 
 export function ImageAnalysisReportsListScreen({
-  onBack,
   onPressReport,
 }: ImageAnalysisReportsListScreenProps) {
   const {width} = useWindowDimensions();
@@ -38,8 +38,6 @@ export function ImageAnalysisReportsListScreen({
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <AppHeader onBack={onBack} title="이미지 분석 결과" />
-
       <PagedGrid
         data={reports}
         keyExtractor={(report) => report.id}

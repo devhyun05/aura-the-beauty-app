@@ -3,11 +3,14 @@ import React from 'react';
 import {
   ImageAnalysisReportDetailScreen,
   getImageAnalysisReportCreateFilterButtonPlacements,
-  getImageAnalysisReportHeaderActions,
+  getImageAnalysisReportAvoidedMakeupRailPresentation,
   getImageAnalysisReportLiquidGlassPresentation,
+  getImageAnalysisReportPointGuideItems,
   getImageAnalysisReportScreenFramePresentation,
   getImageAnalysisReportSubtitleTextStyle,
+  getImageAnalysisReportSummaryItems,
 } from './ImageAnalysisReportDetailScreen';
+import {imageAnalysisReportsMock} from '../../../shared/mocks/imageAnalysis.mock';
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -26,10 +29,13 @@ type ExpectType<Condition extends true> = Condition;
 
 const createFilterButtonPlacements =
   getImageAnalysisReportCreateFilterButtonPlacements();
-const headerActions: readonly string[] = getImageAnalysisReportHeaderActions();
 const liquidGlassPresentation = getImageAnalysisReportLiquidGlassPresentation();
 const screenFramePresentation = getImageAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getImageAnalysisReportSubtitleTextStyle();
+const report = imageAnalysisReportsMock[0];
+const summaryItems = getImageAnalysisReportSummaryItems(report);
+const pointGuideItems = getImageAnalysisReportPointGuideItems(report);
+const avoidedRailPresentation = getImageAnalysisReportAvoidedMakeupRailPresentation();
 
 type CreateFilterButtonPlacementsContract = ExpectType<
   TypeEquals<typeof createFilterButtonPlacements, readonly ['floating-bottom']>
@@ -46,28 +52,13 @@ expectEqual(
   'image analysis report floating bottom create filter button placement',
 );
 expectEqual(
-  headerActions.includes('back'),
-  false,
-  'image analysis report header back action hidden',
-);
-expectEqual(
-  headerActions[0],
-  'share',
-  'image analysis report header share action',
-);
-expectEqual(
-  headerActions[1],
-  'close',
-  'image analysis report header close action',
-);
-expectEqual(
   screenFramePresentation.headerPlacement,
-  'fixed',
+  'route-level',
   'image analysis report header placement',
 );
 expectEqual(
   screenFramePresentation.headerUsesTopInset,
-  false,
+  true,
   'image analysis report header safe area',
 );
 expectEqual(
@@ -91,9 +82,9 @@ expectEqual(
   'image analysis report create filter buttons use liquid glass',
 );
 expectEqual(
-  liquidGlassPresentation.buttonTargets.includes('header-action'),
-  true,
-  'image analysis report header action buttons use liquid glass',
+  (liquidGlassPresentation.buttonTargets as readonly string[]).includes('header-action'),
+  false,
+  'image analysis report header actions are route chrome owned',
 );
 expectEqual(
   liquidGlassPresentation.shadowRadius,
@@ -114,6 +105,42 @@ expectEqual(
   subtitleTextStyle.lineHeight,
   typography.lineHeight.md,
   'image analysis report date label line height',
+);
+expectEqual(summaryItems.length, 4, 'image analysis report summary item count');
+expectEqual(
+  summaryItems.some((item) => item.label === '얼굴형'),
+  true,
+  'image analysis report summary includes face shape',
+);
+expectEqual(
+  summaryItems.some((item) => item.label === '피부 타입'),
+  false,
+  'image analysis report summary excludes skin type',
+);
+expectEqual(
+  pointGuideItems[0].label,
+  '베이스',
+  'image analysis report point guide starts with base row',
+);
+expectEqual(
+  pointGuideItems[0].detail,
+  report.baseMakeupGuide,
+  'image analysis report base guide is inline point guide detail',
+);
+expectEqual(
+  pointGuideItems[1].label,
+  '눈썹',
+  'image analysis report brow guide follows base row',
+);
+expectEqual(
+  avoidedRailPresentation.title,
+  '비추천 메이크업',
+  'image analysis report avoided makeup rail title',
+);
+expectEqual(
+  avoidedRailPresentation.showsCornerBadge,
+  false,
+  'image analysis report avoided makeup rail corner x hidden',
 );
 
 <ImageAnalysisReportDetailScreen

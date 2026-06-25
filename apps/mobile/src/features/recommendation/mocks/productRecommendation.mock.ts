@@ -1,5 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
+import {userProfileMock} from '../../../shared/mocks/user.mock';
 import type {ProductRecommendationData} from '../types';
 
 const lookImage =
@@ -27,6 +28,7 @@ const velureGlowCushionNeutral =
   require('../../../assets/images/recommendation/velure-glow-cushion-neutral.png') as ImageSourcePropType;
 
 export const productRecommendationMock: ProductRecommendationData = {
+  userNickname: userProfileMock.nickname,
   look: {
     title: '내추럴 뮤트 로즈 룩',
     description: '분석된 로즈 톤과 어울리는 실제 컬러 제품만 골라 추천해드려요.',

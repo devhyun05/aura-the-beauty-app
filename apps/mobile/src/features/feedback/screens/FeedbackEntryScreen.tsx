@@ -1,6 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet} from 'react-native';
-import {Camera, ChevronRight, Sparkles} from 'lucide-react-native';
+import {Camera, ChevronRight} from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
 import {
@@ -17,20 +17,17 @@ import {
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 
 type FeedbackEntryScreenProps = {
+  headerTitle?: string;
+  onClose?: () => void;
   onPressAiFeedback: () => void;
 };
 
-export function FeedbackEntryScreen({onPressAiFeedback}: FeedbackEntryScreenProps) {
+export function FeedbackEntryScreen({
+  onPressAiFeedback,
+}: FeedbackEntryScreenProps) {
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
       <YStack style={styles.screen}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>AURA</Text>
-          <View style={styles.headerIcon}>
-            <Sparkles color={feedbackColors.accent} size={iconSize.sm} strokeWidth={2} />
-          </View>
-        </View>
-
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <Camera color={colors.white} size={iconSize.xl} strokeWidth={1.9} />
@@ -75,14 +72,6 @@ const styles = StyleSheet.create({
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
   },
-  brand: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xl,
-  },
   buttonCaption: {
     color: colors.white,
     fontFamily: typography.fontFamily.medium,
@@ -103,26 +92,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  headerIcon: {
-    alignItems: 'center',
-    backgroundColor: feedbackColors.accentSoft,
-    borderRadius: radius.pill,
-    height: iconSize.xl + spacing.sm,
-    justifyContent: 'center',
-    width: iconSize.xl + spacing.sm,
-  },
   hero: {
     backgroundColor: feedbackColors.surface,
     borderColor: feedbackColors.borderSoft,
     borderRadius: feedbackRadius.sheet,
     borderWidth: 1,
     gap: spacing.md,
-    marginTop: spacing.xxl * 3,
+    marginTop: spacing.xxl,
     padding: spacing.xxl,
     shadowColor: feedbackColors.shadow,
     shadowOffset: shadows.soft.shadowOffset,

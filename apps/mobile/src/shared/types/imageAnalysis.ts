@@ -26,6 +26,7 @@ export interface ImageAnalysisReport {
   imageSource: ImageSourcePropType;
   environmentLabel: string;
   personalColor: string;
+  faceShape: string;
   skinType: string;
   toneSummary: string;
   recommendedMood: string;

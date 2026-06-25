@@ -1,6 +1,9 @@
 import {
   filterStoreCategoryChipContainerStyle,
   filterStoreCategoryChipTextStyle,
+  getHeroCarouselInitialOffset,
+  getHeroCarouselLoopResetOffset,
+  getHeroCarouselRenderItems,
   getFilterStoreCategoryChipLabel,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
@@ -38,6 +41,13 @@ const expectedFilterStoreCategoryChipBorderColor: typeof colors.border =
   filterStoreCategoryChipContainerStyle.borderColor;
 const expectedFilterStoreCategoryChipTextFontFamily: typeof typography.fontFamily.semibold =
   filterStoreCategoryChipTextStyle.fontFamily;
+const heroCarouselItems = [
+  {id: 'first', title: '첫 카드'},
+  {id: 'second', title: '두번째 카드'},
+  {id: 'third', title: '마지막 카드'},
+] as const;
+const loopedHeroCarouselItems = getHeroCarouselRenderItems(heroCarouselItems);
+const heroCarouselSnapInterval = 320;
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -85,6 +95,51 @@ expectEqual(
   filterStoreCategoryChipTextStyle.fontFamily,
   expectedFilterStoreCategoryChipTextFontFamily,
   'filter store category chip text font family',
+);
+expectEqual(
+  loopedHeroCarouselItems[0].id,
+  'third',
+  'hero carousel leading loop card',
+);
+expectEqual(
+  loopedHeroCarouselItems[loopedHeroCarouselItems.length - 1].id,
+  'first',
+  'hero carousel trailing loop card',
+);
+expectEqual(
+  getHeroCarouselInitialOffset({
+    itemCount: heroCarouselItems.length,
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  heroCarouselSnapInterval,
+  'hero carousel initial offset',
+);
+expectEqual(
+  getHeroCarouselLoopResetOffset({
+    itemCount: heroCarouselItems.length,
+    scrollOffsetX: 0,
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  heroCarouselSnapInterval * heroCarouselItems.length,
+  'hero carousel first-to-last loop offset',
+);
+expectEqual(
+  getHeroCarouselLoopResetOffset({
+    itemCount: heroCarouselItems.length,
+    scrollOffsetX: heroCarouselSnapInterval * (heroCarouselItems.length + 1),
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  heroCarouselSnapInterval,
+  'hero carousel last-to-first loop offset',
+);
+expectEqual(
+  getHeroCarouselLoopResetOffset({
+    itemCount: 1,
+    scrollOffsetX: 0,
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  null,
+  'single hero carousel card does not loop',
 );
 
 let selectedQuickAction: 'ar' | 'feedback' | null = null;

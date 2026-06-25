@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import Svg, {Circle, Ellipse, G, Line, Path, Text as SvgText} from 'react-native-svg';
 import {
-  ArrowLeft,
   Brush,
   CheckCircle2,
   Eye,
@@ -33,8 +32,9 @@ import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
 type FeedbackGuideOverlayScreenProps = {
+  headerTitle?: string;
   result: MakeupFeedbackResult;
-  onBack: () => void;
+  onBack?: () => void;
 };
 
 type GuideCategory = 'all' | 'eye' | 'brow' | 'lip' | 'cheek' | 'base';
@@ -113,7 +113,6 @@ const GUIDE_SECTIONS: GuideSection[] = [
 
 export function FeedbackGuideOverlayScreen({
   result,
-  onBack,
 }: FeedbackGuideOverlayScreenProps) {
   const {width} = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<GuideCategory>('all');
@@ -128,25 +127,12 @@ export function FeedbackGuideOverlayScreen({
   );
 
   return (
-    <FeedbackScreenScaffold>
+    <FeedbackScreenScaffold topPadding="none">
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <View style={styles.header}>
-            <Pressable
-              accessibilityLabel="피드백 결과로 돌아가기"
-              accessibilityRole="button"
-              hitSlop={10}
-              onPress={onBack}
-              style={styles.iconButton}>
-              <ArrowLeft color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />
-            </Pressable>
-            <Text style={styles.headerTitle}>가이드 오버레이</Text>
-            <View style={styles.iconButton} />
-          </View>
-
           <View style={[styles.photoStage, {height: photoHeight, width: photoWidth}]}>
             <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
             <View pointerEvents="none" style={styles.photoScrim} />
@@ -469,27 +455,6 @@ const styles = StyleSheet.create({
   guideTitleWrap: {
     flex: 1,
     gap: spacing.xs,
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-    paddingHorizontal: feedbackSpacing.screenX,
-  },
-  headerTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
-  },
-  iconButton: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
   },
   overlaySvg: {
     bottom: 0,
