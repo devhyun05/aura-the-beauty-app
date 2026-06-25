@@ -4,6 +4,8 @@
 
 이 문서는 모바일 앱의 화면 구조, React Navigation 전환, 헤더/푸터 chrome 정리, 데모용 딥링크 상태 구성 과정을 커밋 히스토리 기준으로 정리한 기록이다. 과거 내역은 이전 커밋 메시지와 변경 파일 범위를 기준으로 작성했다.
 
+> 후속 네이밍 정리 참고: 2026-06-25 이후 현재 코드에서는 과거 `Feedback*` route가 `MakeupFeedback*`/`MakeupCorrection*`으로, 과거 `Filter*` 추출 route가 `ReferenceMakeupExtraction*`/`ExtractedMakeupStyle*`로 정리되었다. 사용자에게 보이는 메이크업 저장/추천/추출 결과 단위도 `Look/룩` 대신 `Style/스타일`을 기본으로 사용한다. 이 문서 본문에 남아 있는 옛 이름은 당시 navigation refactor 히스토리를 설명하기 위한 과거 명칭이다.
+
 ## 현재 브랜치
 
 - 이전 브랜치: `codex/mobile-linking-demo-flow-state`
