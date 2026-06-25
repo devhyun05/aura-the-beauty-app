@@ -51,6 +51,5 @@ expectEqual(
 
 <ARFilterStyleAdjustScreen
   onBack={() => undefined}
-  onOpenLocationAdjust={() => undefined}
   onSave={() => undefined}
 />;

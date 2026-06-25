@@ -3,6 +3,7 @@ import React from 'react';
 import {
   ARFilterLocationAdjustScreen,
   getARFilterLocationAdjustCameraMode,
+  getARFilterLocationAdjustTitle,
   getARFilterLocationAdjustSelectedTabOpacity,
   getLocationPreviewColorOverlayLayers,
 } from './ARFilterLocationAdjustScreen';
@@ -28,9 +29,13 @@ expectEqual(
   0.62,
   'AR location selected tab opacity',
 );
+expectEqual(
+  getARFilterLocationAdjustTitle(),
+  '형태 수정',
+  'AR location adjust title',
+);
 
 <ARFilterLocationAdjustScreen
   onBack={() => undefined}
-  onOpenStyleAdjust={() => undefined}
   onSave={() => undefined}
 />;

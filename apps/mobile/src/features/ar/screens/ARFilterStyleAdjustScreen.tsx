@@ -20,7 +20,6 @@ import {
   FullscreenOverlayLayer,
   FullscreenOverlayScreen,
   LiveCameraLayer,
-  OverlayAdjustmentTabs,
   OverlayChipButton,
   OverlayIconButton,
   OverlayPanelSection,
@@ -35,7 +34,6 @@ import {
 
 type ARFilterStyleAdjustScreenProps = {
   onBack?: () => void;
-  onOpenLocationAdjust?: () => void;
   onSave?: () => void;
 };
 
@@ -87,7 +85,6 @@ export function getARFilterStyleAdjustSelectedColor(
 
 export function ARFilterStyleAdjustScreen({
   onBack,
-  onOpenLocationAdjust,
   onSave,
 }: ARFilterStyleAdjustScreenProps) {
   const insets = useSafeAreaInsets();
@@ -142,17 +139,12 @@ export function ARFilterStyleAdjustScreen({
           }
           rightSlot={
             <OverlayIconButton
-              accessibilityLabel="현재 스타일 저장"
+              accessibilityLabel="현재 프리셋 저장"
               onPress={onSave}>
               <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
             </OverlayIconButton>
           }
-          title="스타일 조정"
-        />
-
-        <OverlayAdjustmentTabs
-          activeTab="style"
-          onPressLocation={onOpenLocationAdjust}
+          title="프리셋 수정"
         />
       </YStack>
 
@@ -173,7 +165,7 @@ export function ARFilterStyleAdjustScreen({
           </ScrollView>
         </OverlayPanelSection>
 
-        <OverlayPanelSection label="스타일 옵션">
+        <OverlayPanelSection label="프리셋 옵션">
           <XStack style={styles.optionGroupList}>
             {STYLE_GROUPS.map(group => (
               <OverlayChipButton
