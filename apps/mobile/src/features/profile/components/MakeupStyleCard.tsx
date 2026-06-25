@@ -3,23 +3,23 @@ import { Text, View } from 'tamagui';
 
 import { colors, radius, spacing, typography } from '../../../shared/theme';
 import { AppCard, ImagePlaceholder } from '../../../shared/ui';
-import type { MakeupLook } from '../../../shared/types/profile';
+import type { MakeupStyle } from '../../../shared/types/profile';
 
-type MakeupLookCardProps = {
-  look: MakeupLook;
+type MakeupStyleCardProps = {
+  makeupStyle: MakeupStyle;
   style?: StyleProp<ViewStyle>;
 };
 
-export function MakeupLookCard({ look, style }: MakeupLookCardProps) {
+export function MakeupStyleCard({ makeupStyle, style }: MakeupStyleCardProps) {
   return (
     <AppCard padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>
-        <ImagePlaceholder borderRadius={radius.md} source={look.imageSource} />
+        <ImagePlaceholder borderRadius={radius.md} source={makeupStyle.imageSource} />
       </View>
 
       <View style={styles.titleArea}>
         <Text numberOfLines={1} style={styles.title}>
-          {look.title}
+          {makeupStyle.title}
         </Text>
       </View>
     </AppCard>

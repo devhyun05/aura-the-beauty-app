@@ -159,7 +159,7 @@ export function ReferenceMakeupExtractionUploadScreen({
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.md}]}>
         <Text style={styles.selectedText}>1장 선택됨 · {selectedPhoto.title}</Text>
         <Pressable
-          accessibilityLabel="메이크업 룩 분석 시작하기"
+          accessibilityLabel="메이크업 스타일 분석 시작하기"
           accessibilityRole="button"
           onPress={() => onStartAnalysis(selectedPhoto)}
           style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>

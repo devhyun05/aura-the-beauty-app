@@ -11,7 +11,7 @@ export type RootStackParamList = {
   ImageAnalysisReportsList: undefined;
   ImageAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;
-  MakeupLookList: undefined;
+  MakeupStyleList: undefined;
   LikedProductList: undefined;
   ARFilter: undefined;
   ARFilterLocationAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
@@ -25,11 +25,11 @@ export type RootStackParamList = {
   ReferenceMakeupExtractionUpload: undefined;
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
-  ExtractedMakeupLookAdjust: undefined;
-  ExtractedMakeupLookSaveForm: undefined;
-  ExtractedMakeupLookSaveComplete: undefined;
-  ExtractedMakeupLookRecipeDetail: undefined;
-  ExtractedMakeupLookRecipeSaveComplete: undefined;
+  ExtractedMakeupStyleAdjust: undefined;
+  ExtractedMakeupStyleSaveForm: undefined;
+  ExtractedMakeupStyleSaveComplete: undefined;
+  ExtractedMakeupStyleRecipeDetail: undefined;
+  ExtractedMakeupStyleRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
@@ -51,7 +51,7 @@ export const rootStackRoutes = [
   'ImageAnalysisReportsList',
   'ImageAnalysisReportDetail',
   'ProfileEdit',
-  'MakeupLookList',
+  'MakeupStyleList',
   'LikedProductList',
   'ARFilter',
   'ARFilterLocationAdjust',
@@ -65,11 +65,11 @@ export const rootStackRoutes = [
   'ReferenceMakeupExtractionUpload',
   'ReferenceMakeupExtractionLoading',
   'ReferenceMakeupExtractionResult',
-  'ExtractedMakeupLookAdjust',
-  'ExtractedMakeupLookSaveForm',
-  'ExtractedMakeupLookSaveComplete',
-  'ExtractedMakeupLookRecipeDetail',
-  'ExtractedMakeupLookRecipeSaveComplete',
+  'ExtractedMakeupStyleAdjust',
+  'ExtractedMakeupStyleSaveForm',
+  'ExtractedMakeupStyleSaveComplete',
+  'ExtractedMakeupStyleRecipeDetail',
+  'ExtractedMakeupStyleRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [

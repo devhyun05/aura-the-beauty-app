@@ -107,12 +107,12 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '프로필 수정',
   },
-  MakeupLookList: {
+  MakeupStyleList: {
     category: 'list',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '메이크업 룩',
+    title: '메이크업 스타일',
   },
   LikedProductList: {
     category: 'list',
@@ -202,34 +202,34 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '분석 결과',
   },
-  ExtractedMakeupLookAdjust: {
+  ExtractedMakeupStyleAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ExtractedMakeupLookSaveForm: {
+  ExtractedMakeupStyleSaveForm: {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['done'],
     statusBarStyle: 'dark',
-    title: '메이크업 룩 저장',
+    title: '메이크업 스타일 저장',
   },
-  ExtractedMakeupLookSaveComplete: {
+  ExtractedMakeupStyleSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ExtractedMakeupLookRecipeDetail: {
+  ExtractedMakeupStyleRecipeDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
-  ExtractedMakeupLookRecipeSaveComplete: {
+  ExtractedMakeupStyleRecipeSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',

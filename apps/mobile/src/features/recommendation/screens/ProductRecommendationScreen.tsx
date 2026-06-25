@@ -19,7 +19,7 @@ import type {
   ProductRecommendationCategory,
   ProductRecommendationData,
   ProductRecommendationItem,
-  ProductRecommendationLook,
+  ProductRecommendationStyle,
   ProductRecommendationSet,
   ProductRecommendationTab,
 } from '../types';
@@ -79,7 +79,7 @@ export function ProductRecommendationScreen() {
 
   return (
     <>
-      <LookSummaryCard look={data.look} />
+      <StyleSummaryCard makeupStyle={data.makeupStyle} />
 
       <CategoryTabs
         activeCategory={activeCategory}
@@ -128,32 +128,32 @@ export function ProductRecommendationScreen() {
   );
 }
 
-function LookSummaryCard({look}: {look: ProductRecommendationLook}) {
+function StyleSummaryCard({makeupStyle}: {makeupStyle: ProductRecommendationStyle}) {
   return (
-    <View style={styles.lookCard}>
-      <View style={styles.lookImageFrame}>
-        <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
-        <View style={styles.lookCheck}>
+    <View style={styles.makeupStyleCard}>
+      <View style={styles.makeupStyleImageFrame}>
+        <Image resizeMode="cover" source={makeupStyle.imageSource} style={styles.makeupStyleImage} />
+        <View style={styles.makeupStyleCheck}>
           <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
         </View>
       </View>
 
-      <YStack style={styles.lookCopy}>
-        <Text style={styles.lookCaption}>저장한 메이크업 룩</Text>
-        <Text style={styles.lookTitle}>{look.title}</Text>
+      <YStack style={styles.makeupStyleCopy}>
+        <Text style={styles.makeupStyleCaption}>저장한 메이크업 스타일</Text>
+        <Text style={styles.makeupStyleTitle}>{makeupStyle.title}</Text>
 
-        <XStack style={styles.lookTags}>
-          {look.tags.slice(0, 3).map((tag) => (
+        <XStack style={styles.makeupStyleTags}>
+          {makeupStyle.tags.slice(0, 3).map((tag) => (
             <View key={tag} style={styles.tagPill}>
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ))}
         </XStack>
 
-        <Text style={styles.lookDescription}>{look.description}</Text>
+        <Text style={styles.makeupStyleDescription}>{makeupStyle.description}</Text>
 
         <XStack style={styles.paletteRow}>
-          {look.palette.map((color) => (
+          {makeupStyle.palette.map((color) => (
             <View key={color} style={[styles.paletteSwatch, {backgroundColor: color}]} />
           ))}
         </XStack>
@@ -346,13 +346,13 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  lookCaption: {
+  makeupStyleCaption: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookCard: {
+  makeupStyleCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     ...sharedCardShadow,
   },
-  lookCheck: {
+  makeupStyleCheck: {
     alignItems: 'center',
     backgroundColor: colors.textPrimary,
     borderColor: colors.white,
@@ -375,34 +375,34 @@ const styles = StyleSheet.create({
     right: spacing.xs,
     width: 24,
   },
-  lookCopy: {
+  makeupStyleCopy: {
     flex: 1,
     gap: spacing.sm,
     minWidth: 0,
   },
-  lookDescription: {
+  makeupStyleDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookImage: {
+  makeupStyleImage: {
     height: '100%',
     width: '100%',
   },
-  lookImageFrame: {
+  makeupStyleImageFrame: {
     borderRadius: radius.md,
     height: 126,
     overflow: 'hidden',
     position: 'relative',
     width: 104,
   },
-  lookTags: {
+  makeupStyleTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
   },
-  lookTitle: {
+  makeupStyleTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,

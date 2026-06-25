@@ -7,16 +7,16 @@ import {Text, View, XStack, YStack} from 'tamagui';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
-import type {ReferenceMakeupPhoto, MakeupLookRecipeTab} from '../types';
+import type {ReferenceMakeupPhoto, MakeupStyleRecipeTab} from '../types';
 
-type ExtractedMakeupLookRecipeDetailScreenProps = {
+type ExtractedMakeupStyleRecipeDetailScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
   onSaveRecipe: () => void;
 };
 
-const mainTabs: {id: MakeupLookRecipeTab; label: string}[] = [
+const mainTabs: {id: MakeupStyleRecipeTab; label: string}[] = [
   {id: 'all', label: '전체'},
   {id: 'eye', label: '눈'},
   {id: 'lip', label: '입술'},
@@ -85,13 +85,13 @@ const recipeItems = [
   },
 ];
 
-export function ExtractedMakeupLookRecipeDetailScreen({
+export function ExtractedMakeupStyleRecipeDetailScreen({
   photo,
   onSaveRecipe,
-}: ExtractedMakeupLookRecipeDetailScreenProps) {
+}: ExtractedMakeupStyleRecipeDetailScreenProps) {
   const insets = useSafeAreaInsets();
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
-  const [activeTab, setActiveTab] = useState<MakeupLookRecipeTab>('eye');
+  const {extractedMakeupStyle} = getReferenceMakeupExtractionDataSync();
+  const [activeTab, setActiveTab] = useState<MakeupStyleRecipeTab>('eye');
   const [activeSubTab, setActiveSubTab] = useState(subTabs[0]);
 
   const visibleItems = useMemo(() => {
@@ -165,7 +165,7 @@ export function ExtractedMakeupLookRecipeDetailScreen({
         </ScrollView>
 
         <YStack style={styles.recipeCard}>
-          <Text style={styles.recipeTitle}>{extractedMakeupLook.title}</Text>
+          <Text style={styles.recipeTitle}>{extractedMakeupStyle.title}</Text>
           <Text style={styles.recipeDescription}>
             사진에서 추출한 색상과 위치를 실제 메이크업 순서로 정리했어요.
           </Text>

@@ -87,7 +87,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       imageSource: styleCleanSmoky,
       categoryId: 'trend',
       title: '모노 시크 필터',
-      subtitle: '무채색 대비를 살린 촬영용 룩',
+      subtitle: '무채색 대비를 살린 촬영용 스타일',
       intensityLabel: '선명하게',
       facePartIds: ['all', 'eye', 'lip'],
       colorOptions: [

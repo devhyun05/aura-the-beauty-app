@@ -9,7 +9,7 @@ import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 import type {ReferenceMakeupPhoto} from '../types';
 
-type ExtractedMakeupLookSaveFormScreenProps = {
+type ExtractedMakeupStyleSaveFormScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
@@ -18,13 +18,13 @@ type ExtractedMakeupLookSaveFormScreenProps = {
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
-export function ExtractedMakeupLookSaveFormScreen({
+export function ExtractedMakeupStyleSaveFormScreen({
   photo,
   onSave,
-}: ExtractedMakeupLookSaveFormScreenProps) {
+}: ExtractedMakeupStyleSaveFormScreenProps) {
   const insets = useSafeAreaInsets();
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
-  const [makeupLookName, setMakeupLookName] = useState(extractedMakeupLook.title);
+  const {extractedMakeupStyle} = getReferenceMakeupExtractionDataSync();
+  const [makeupStyleName, setMakeupStyleName] = useState(extractedMakeupStyle.title);
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   return (
@@ -41,7 +41,7 @@ export function ExtractedMakeupLookSaveFormScreen({
             <Image resizeMode="cover" source={photo.imageSource} style={styles.thumbImage} />
           </View>
           <YStack style={styles.summaryCopy}>
-            <Text style={styles.summaryTitle}>추출된 메이크업 룩</Text>
+            <Text style={styles.summaryTitle}>추출된 메이크업 스타일</Text>
             <Text style={styles.summaryDescription}>
               AR 적용값과 색감 조정값이 함께 저장돼요.
             </Text>
@@ -49,17 +49,17 @@ export function ExtractedMakeupLookSaveFormScreen({
         </XStack>
 
         <YStack style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>메이크업 룩 이름</Text>
+          <Text style={styles.fieldLabel}>메이크업 스타일 이름</Text>
           <XStack style={styles.inputFrame}>
             <TextInput
               maxLength={20}
-              onChangeText={setMakeupLookName}
-              placeholder="메이크업 룩 이름을 입력하세요"
+              onChangeText={setMakeupStyleName}
+              placeholder="메이크업 스타일 이름을 입력하세요"
               placeholderTextColor={colors.textTertiary}
               style={styles.input}
-              value={makeupLookName}
+              value={makeupStyleName}
             />
-            <Text style={styles.countText}>{makeupLookName.length}/20</Text>
+            <Text style={styles.countText}>{makeupStyleName.length}/20</Text>
           </XStack>
         </YStack>
 
@@ -131,7 +131,7 @@ export function ExtractedMakeupLookSaveFormScreen({
 
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.lg}]}>
         <Pressable
-          accessibilityLabel="메이크업 룩 저장하기"
+          accessibilityLabel="메이크업 스타일 저장하기"
           accessibilityRole="button"
           onPress={onSave}
           style={({pressed}) => [styles.saveButton, pressed && styles.pressed]}>

@@ -25,7 +25,7 @@ import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
   HomeFilterStoreItem,
-  HomeMakeupLook,
+  HomeMakeupStyle,
   HomeTrendItem,
 } from '../types';
 
@@ -86,7 +86,7 @@ export function HomeScreen({
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection items={homeData.filterStore} />
-      <RecommendedLooksSection looks={homeData.recommendedLooks} />
+      <RecommendedStylesSection makeupStyles={homeData.recommendedStyles} />
     </>
   );
 }
@@ -484,7 +484,7 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   );
 }
 
-function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
+function RecommendedStylesSection({makeupStyles}: {makeupStyles: HomeMakeupStyle[]}) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
@@ -495,31 +495,31 @@ function RecommendedLooksSection({looks}: {looks: HomeMakeupLook[]}) {
       <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.lookList}>
-        {looks.map((look) => (
-          <RecommendedLookCard key={look.id} look={look} />
+        contentContainerStyle={styles.makeupStyleList}>
+        {makeupStyles.map((makeupStyle) => (
+          <RecommendedStyleCard key={makeupStyle.id} makeupStyle={makeupStyle} />
         ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function RecommendedLookCard({look}: {look: HomeMakeupLook}) {
+function RecommendedStyleCard({makeupStyle}: {makeupStyle: HomeMakeupStyle}) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${look.title} ${look.description}`}
-      style={({pressed}) => [styles.lookCard, pressed && styles.pressed]}>
-      <View style={styles.lookImageFrame}>
-        <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
+      accessibilityLabel={`${makeupStyle.title} ${makeupStyle.description}`}
+      style={({pressed}) => [styles.makeupStyleCard, pressed && styles.pressed]}>
+      <View style={styles.makeupStyleImageFrame}>
+        <Image resizeMode="cover" source={makeupStyle.imageSource} style={styles.makeupStyleImage} />
       </View>
 
-      <YStack style={styles.lookTextGroup}>
-        <Text numberOfLines={1} style={styles.lookTitle}>
-          {look.title}
+      <YStack style={styles.makeupStyleTextGroup}>
+        <Text numberOfLines={1} style={styles.makeupStyleTitle}>
+          {makeupStyle.title}
         </Text>
-        <Text numberOfLines={2} style={styles.lookDescription}>
-          {look.description}
+        <Text numberOfLines={2} style={styles.makeupStyleDescription}>
+          {makeupStyle.description}
         </Text>
       </YStack>
     </Pressable>
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  lookCard: {
+  makeupStyleCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -702,17 +702,17 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     width: 138,
   },
-  lookDescription: {
+  makeupStyleDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookImage: {
+  makeupStyleImage: {
     height: '100%',
     width: '100%',
   },
-  lookImageFrame: {
+  makeupStyleImageFrame: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.md,
@@ -720,14 +720,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  lookList: {
+  makeupStyleList: {
     gap: spacing.md,
     paddingRight: spacing.lg,
   },
-  lookTextGroup: {
+  makeupStyleTextGroup: {
     gap: 2,
   },
-  lookTitle: {
+  makeupStyleTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,

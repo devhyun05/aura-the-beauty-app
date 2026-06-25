@@ -2,7 +2,7 @@
 
 ## Scope
 
-These files are local mock assets for the profile, analysis, look, and product preview UI:
+These files are local mock assets for the profile, analysis, style, and product preview UI:
 
 - `profile-seojin-avatar.png`
 - `report-bare-face-20260622.png`

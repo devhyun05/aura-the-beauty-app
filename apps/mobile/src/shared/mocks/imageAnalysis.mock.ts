@@ -169,7 +169,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '여름 쿨',
     skinType: '복합성 피부',
     toneSummary: '맑은 쿨 아이보리 톤',
-    recommendedMood: '뮤트 로즈 데일리 룩',
+    recommendedMood: '뮤트 로즈 데일리 스타일',
     tags: ['쿨톤', '로즈', '데일리'],
     summary: '낮은 채도의 로즈 컬러가 피부를 깨끗하게 보여줘요',
     skinAnalysisSummary:
@@ -185,7 +185,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '가을 웜',
     skinType: '건성 피부',
     toneSummary: '차분한 웜 아이보리 톤',
-    recommendedMood: '브릭 코랄 무드 룩',
+    recommendedMood: '브릭 코랄 무드 스타일',
     tags: ['웜톤', '브릭', '무드'],
     summary: '브릭 코랄과 베이지 조합이 차분하게 어울려요',
     skinAnalysisSummary:
@@ -201,7 +201,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '겨울 쿨 딥',
     skinType: '중성 피부',
     toneSummary: '선명한 쿨 베이스 톤',
-    recommendedMood: '플럼 모브 포인트 룩',
+    recommendedMood: '플럼 모브 포인트 스타일',
     tags: ['쿨딥', '플럼', '포인트'],
     summary: '모브 컬러를 포인트로 쓰면 얼굴 윤곽이 또렷해져요',
     skinAnalysisSummary:
@@ -217,7 +217,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '여름 쿨 라이트',
     skinType: '복합성 피부',
     toneSummary: '투명한 핑크 아이보리 톤',
-    recommendedMood: '라벤더 핑크 데일리 룩',
+    recommendedMood: '라벤더 핑크 데일리 스타일',
     tags: ['라이트', '핑크', '라벤더'],
     summary: '은은한 라벤더 핑크가 얼굴을 화사하게 밝혀줘요',
     skinAnalysisSummary:
@@ -233,7 +233,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '봄웜 브라이트',
     skinType: '건성 피부',
     toneSummary: '맑고 생기 있는 웜 톤',
-    recommendedMood: '피치 코랄 생기 룩',
+    recommendedMood: '피치 코랄 생기 스타일',
     tags: ['피치', '브라이트', '생기'],
     summary: '피치 코랄을 얇게 올리면 표정이 밝아 보여요',
     skinAnalysisSummary:
@@ -249,7 +249,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',
     toneSummary: '밝은 웜 아이보리 톤',
-    recommendedMood: '코랄 베이지 내추럴 룩',
+    recommendedMood: '코랄 베이지 내추럴 스타일',
     tags: ['베이지', '코랄', '내추럴'],
     summary: '코랄 베이지가 자연스럽고 편안한 인상을 만들어요',
     skinAnalysisSummary:
@@ -265,7 +265,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '봄웜 라이트',
     skinType: '건성 피부',
     toneSummary: '맑은 아이보리 톤',
-    recommendedMood: '클린 코랄 데일리 룩',
+    recommendedMood: '클린 코랄 데일리 스타일',
     tags: ['클린', '코랄', '데일리'],
     summary: '가벼운 코랄 포인트가 자연광에서 가장 안정적이에요',
     skinAnalysisSummary:
@@ -281,7 +281,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '가을 웜 뮤트',
     skinType: '중성 피부',
     toneSummary: '차분한 베이지 톤',
-    recommendedMood: '소프트 브라운 무드 룩',
+    recommendedMood: '소프트 브라운 무드 스타일',
     tags: ['브라운', '뮤트', '소프트'],
     summary: '부드러운 브라운 음영이 차분한 분위기와 잘 맞아요',
     skinAnalysisSummary:
@@ -297,7 +297,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '여름 쿨 뮤트',
     skinType: '복합성 피부',
     toneSummary: '낮은 채도의 쿨 톤',
-    recommendedMood: '뮤트 로지 나이트 룩',
+    recommendedMood: '뮤트 로지 나이트 스타일',
     tags: ['뮤트', '로지', '나이트'],
     summary: '낮은 채도의 로지 컬러가 밤 조명에서도 부드럽게 보여요',
     skinAnalysisSummary:
@@ -313,7 +313,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '가을 웜 라이트',
     skinType: '건성 피부',
     toneSummary: '부드러운 웜 베이지 톤',
-    recommendedMood: '웜 베이지 내추럴 룩',
+    recommendedMood: '웜 베이지 내추럴 스타일',
     tags: ['웜베이지', '내추럴', '소프트'],
     summary: '웜 베이지와 누디 코랄이 편안한 인상을 만들어줘요',
     skinAnalysisSummary:
@@ -329,7 +329,7 @@ export const imageAnalysisReportsMock: ImageAnalysisReport[] = [
     personalColor: '겨울 쿨 브라이트',
     skinType: '중성 피부',
     toneSummary: '선명한 쿨 핑크 톤',
-    recommendedMood: '클리어 로즈 포인트 룩',
+    recommendedMood: '클리어 로즈 포인트 스타일',
     tags: ['쿨톤', '브라이트', '로즈'],
     summary: '선명한 로즈 포인트가 또렷한 인상을 만들어줘요',
     skinAnalysisSummary:

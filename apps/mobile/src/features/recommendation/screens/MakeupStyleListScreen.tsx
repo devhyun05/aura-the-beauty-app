@@ -2,23 +2,23 @@ import {useEffect, useState} from 'react';
 import {StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {getMakeupLooks} from '../../../shared/services/makeupService';
+import {getMakeupStyles} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLook} from '../../../shared/types/profile';
+import type {MakeupStyle} from '../../../shared/types/profile';
 import {
   AppScreen,
   ImagePlaceholder,
   PagedGrid,
 } from '../../../shared/ui';
 
-type MakeupLookListScreenProps = {
+type MakeupStyleListScreenProps = {
   headerTitle?: string;
   onBack?: () => void;
 };
 
-export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
+export function MakeupStyleListScreen(_props: MakeupStyleListScreenProps = {}) {
   const {width} = useWindowDimensions();
-  const [looks, setLooks] = useState<MakeupLook[]>([]);
+  const [makeupStyles, setMakeupStyles] = useState<MakeupStyle[]>([]);
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
   const cardWidth = Math.floor((contentWidth - gap) / 2);
@@ -26,9 +26,9 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
   useEffect(() => {
     let isMounted = true;
 
-    getMakeupLooks().then((nextLooks) => {
+    getMakeupStyles().then((nextMakeupStyles) => {
       if (isMounted) {
-        setLooks(nextLooks);
+        setMakeupStyles(nextMakeupStyles);
       }
     });
 
@@ -40,22 +40,22 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
       <PagedGrid
-        data={looks}
-        keyExtractor={(look) => look.id}
+        data={makeupStyles}
+        keyExtractor={(makeupStyle) => makeupStyle.id}
         pageSize={10}
         pageStyle={[styles.grid, {gap}]}
         pageWidth={contentWidth}
-        renderItem={(look) => (
+        renderItem={(makeupStyle) => (
           <View style={[styles.card, {width: cardWidth}]}>
             <View style={styles.imageArea}>
               <ImagePlaceholder
                 borderRadius={radius.md}
                 resizeMode="cover"
-                source={look.imageSource}
+                source={makeupStyle.imageSource}
               />
             </View>
             <Text numberOfLines={1} style={styles.title}>
-              {look.title}
+              {makeupStyle.title}
             </Text>
           </View>
         )}

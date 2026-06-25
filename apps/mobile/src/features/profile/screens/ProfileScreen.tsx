@@ -3,10 +3,10 @@ import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLookPreview} from '../../../shared/types/profile';
+import type {MakeupStylePreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {ImageAnalysisSummaryCard} from '../components/ImageAnalysisSummaryCard';
-import {MakeupLookCard} from '../components/MakeupLookCard';
+import {MakeupStyleCard} from '../components/MakeupStyleCard';
 import {ProductCard} from '../components/ProductCard';
 import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
 import {
@@ -21,18 +21,18 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressImageAnalysisReport?: (reportId: string) => void;
   onPressImageAnalysisReportsList?: () => void;
-  onPressMakeupLookList?: () => void;
+  onPressMakeupStyleList?: () => void;
   onPressLikedProductList?: () => void;
-  savedMakeupLook?: MakeupLookPreview | null;
+  savedMakeupStyle?: MakeupStylePreview | null;
 };
 
 export function ProfileScreen({
   onPressProfileEdit,
   onPressImageAnalysisReport,
   onPressImageAnalysisReportsList,
-  onPressMakeupLookList,
+  onPressMakeupStyleList,
   onPressLikedProductList,
-  savedMakeupLook,
+  savedMakeupStyle,
 }: ProfileScreenProps) {
   const {width} = useWindowDimensions();
   const isMountedRef = useRef(false);
@@ -40,12 +40,12 @@ export function ProfileScreen({
     status: 'loading',
   });
   const contentWidth = width - spacing.screenX * 2;
-  const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
+  const makeupStyleCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
-  const lookCardStyle = {
-    flexBasis: lookCardWidth,
-    maxWidth: lookCardWidth,
-    width: lookCardWidth,
+  const makeupStyleCardLayout = {
+    flexBasis: makeupStyleCardWidth,
+    maxWidth: makeupStyleCardWidth,
+    width: makeupStyleCardWidth,
   };
   const productCardStyle = {
     flexBasis: productCardWidth,
@@ -109,13 +109,13 @@ export function ProfileScreen({
 
   const data = loadState.data;
   const imageAnalysisReport = data.imageAnalysisReport;
-  const makeupLooks = savedMakeupLook
+  const makeupStyles = savedMakeupStyle
     ? [
-        savedMakeupLook,
-        ...data.makeupLooks.filter((look) => look.id !== savedMakeupLook.id),
+        savedMakeupStyle,
+        ...data.makeupStyles.filter((makeupStyle) => makeupStyle.id !== savedMakeupStyle.id),
       ]
-    : data.makeupLooks;
-  const previewMakeupLooks = makeupLooks.slice(0, 3);
+    : data.makeupStyles;
+  const previewMakeupStyles = makeupStyles.slice(0, 3);
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
@@ -143,15 +143,15 @@ export function ProfileScreen({
       <View style={styles.section}>
         <SectionHeader
           actionLabel="전체 보기"
-          onPressAction={onPressMakeupLookList}
+          onPressAction={onPressMakeupStyleList}
           title="메이크업 스타일"
         />
-        <View style={styles.lookGrid}>
-          {previewMakeupLooks.map((look) => (
-            <MakeupLookCard
-              key={look.id}
-              look={look}
-              style={lookCardStyle}
+        <View style={styles.makeupStyleGrid}>
+          {previewMakeupStyles.map((makeupStyle) => (
+            <MakeupStyleCard
+              key={makeupStyle.id}
+              makeupStyle={makeupStyle}
+              style={makeupStyleCardLayout}
             />
           ))}
         </View>
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
-  lookGrid: {
+  makeupStyleGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
   },

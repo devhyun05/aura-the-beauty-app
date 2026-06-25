@@ -23,31 +23,31 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
   photos: [
     {
       id: 'influencer-muted-rose',
-      title: '뮤트 로즈 인플루언서 룩',
+      title: '뮤트 로즈 인플루언서 스타일',
       source: 'album',
       imageSource: styleOjiGirl,
     },
     {
       id: 'trend-soft-mori',
-      title: '소프트 모리 트렌드 룩',
+      title: '소프트 모리 트렌드 스타일',
       source: 'album',
       imageSource: styleMoriGirl,
     },
     {
       id: 'clean-smoky',
-      title: '클린 스모키 화보 룩',
+      title: '클린 스모키 화보 스타일',
       source: 'album',
       imageSource: styleCleanSmoky,
     },
     {
       id: 'bright-portrait',
-      title: '밝은 피부 로즈 룩',
+      title: '밝은 피부 로즈 스타일',
       source: 'album',
       imageSource: reportBareFace,
     },
     {
-      id: 'daily-look',
-      title: '데일리 룩 샘플',
+      id: 'daily-style',
+      title: '데일리 스타일 샘플',
       source: 'album',
       imageSource: reportRetake,
     },
@@ -59,13 +59,13 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
     },
     {
       id: 'window-glow',
-      title: '윈도우 글로우 룩',
+      title: '윈도우 글로우 스타일',
       source: 'album',
       imageSource: analysisWindow,
     },
     {
       id: 'soft-light',
-      title: '소프트 라이트 룩',
+      title: '소프트 라이트 스타일',
       source: 'album',
       imageSource: analysisSoftLight,
     },
@@ -88,14 +88,14 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
     },
     {
       id: 'style-map',
-      label: '메이크업 룩 스타일 맵 생성',
+      label: '메이크업 스타일 맵 생성',
       status: 'waiting',
     },
   ],
-  extractedMakeupLook: {
-    id: 'muted-pink-daily-look',
-    title: '어리어리 핑크 데일리 룩',
-    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 룩이에요.',
+  extractedMakeupStyle: {
+    id: 'muted-pink-daily-style',
+    title: '어리어리 핑크 데일리 스타일',
+    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 스타일이에요.',
     imageSource: styleOjiGirl,
     tags: ['#데일리', '#뮤트톤', '#로즈베이지', '#은은한음영'],
     accuracy: 92,

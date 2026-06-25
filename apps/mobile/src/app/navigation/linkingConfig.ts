@@ -50,7 +50,7 @@ export const rootStackLinkingScreens = {
   ImageAnalysisReportsList: 'image-analysis-reports',
   ImageAnalysisReportDetail: 'image-analysis-report/:reportId?',
   ProfileEdit: 'profile-edit',
-  MakeupLookList: 'makeup-look-list',
+  MakeupStyleList: 'makeup-style-list',
   LikedProductList: 'liked-product-list',
   ARFilter: 'ar-filter',
   ARFilterLocationAdjust: 'ar-filter-location-adjust',
@@ -64,11 +64,11 @@ export const rootStackLinkingScreens = {
   ReferenceMakeupExtractionUpload: 'reference-makeup-extraction-upload',
   ReferenceMakeupExtractionLoading: 'reference-makeup-extraction-loading',
   ReferenceMakeupExtractionResult: 'reference-makeup-extraction-result',
-  ExtractedMakeupLookAdjust: 'extracted-makeup-look-adjust',
-  ExtractedMakeupLookSaveForm: 'extracted-makeup-look-save-form',
-  ExtractedMakeupLookSaveComplete: 'extracted-makeup-look-save-complete',
-  ExtractedMakeupLookRecipeDetail: 'extracted-makeup-look-recipe-detail',
-  ExtractedMakeupLookRecipeSaveComplete: 'extracted-makeup-look-recipe-save-complete',
+  ExtractedMakeupStyleAdjust: 'extracted-makeup-style-adjust',
+  ExtractedMakeupStyleSaveForm: 'extracted-makeup-style-save-form',
+  ExtractedMakeupStyleSaveComplete: 'extracted-makeup-style-save-complete',
+  ExtractedMakeupStyleRecipeDetail: 'extracted-makeup-style-recipe-detail',
+  ExtractedMakeupStyleRecipeSaveComplete: 'extracted-makeup-style-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;
 
 export const navigationLinking: LinkingOptions<RootStackParamList> = {

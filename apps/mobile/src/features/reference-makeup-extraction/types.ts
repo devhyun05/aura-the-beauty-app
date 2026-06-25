@@ -17,14 +17,14 @@ export type MakeupExtractionStep = {
   status: MakeupExtractionStepStatus;
 };
 
-export type MakeupLookPalette = {
+export type MakeupStylePalette = {
   id: string;
   label: string;
   hex: string;
   description: string;
 };
 
-export type MakeupLookPoint = {
+export type MakeupStylePoint = {
   id: string;
   title: string;
   description: string;
@@ -36,18 +36,18 @@ export type MakeupExtractionResult = {
   subtitle: string;
   imageSource: ImageSourcePropType;
   tags: string[];
-  palette: MakeupLookPalette[];
-  points: MakeupLookPoint[];
+  palette: MakeupStylePalette[];
+  points: MakeupStylePoint[];
   accuracy: number;
 };
 
-export type MakeupLookAdjustmentTab = 'position' | 'style';
-export type MakeupLookStyleGroup = 'color' | 'type' | 'texture';
-export type MakeupLookFaceArea = 'all' | 'base' | 'eye' | 'lip' | 'contour';
-export type MakeupLookRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
+export type MakeupStyleAdjustmentTab = 'position' | 'style';
+export type MakeupStyleAttributeGroup = 'color' | 'type' | 'texture';
+export type MakeupStyleFaceArea = 'all' | 'base' | 'eye' | 'lip' | 'contour';
+export type MakeupStyleRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
 
 export type ReferenceMakeupExtractionData = {
   photos: ReferenceMakeupPhoto[];
   loadingSteps: MakeupExtractionStep[];
-  extractedMakeupLook: MakeupExtractionResult;
+  extractedMakeupStyle: MakeupExtractionResult;
 };

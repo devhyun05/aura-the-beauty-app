@@ -18,7 +18,7 @@ export interface UserProfile {
   tags: string[];
 }
 
-export interface MakeupLook {
+export interface MakeupStyle {
   id: string;
   title: string;
   moodLabel: string;
@@ -27,7 +27,7 @@ export interface MakeupLook {
   isSaved: boolean;
 }
 
-export type MakeupLookPreview = MakeupLook;
+export type MakeupStylePreview = MakeupStyle;
 
 export interface Product {
   id: string;
@@ -50,6 +50,6 @@ export interface ProfileEditField {
 export interface ProfileData {
   profile: UserProfile;
   imageAnalysisReports: ImageAnalysisReport[];
-  makeupLooks: MakeupLook[];
+  makeupStyles: MakeupStyle[];
   likedProducts: Product[];
 }

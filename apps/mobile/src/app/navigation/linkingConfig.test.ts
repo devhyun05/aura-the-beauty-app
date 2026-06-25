@@ -32,8 +32,8 @@ type ImageAnalysisReportDetailPathContract = ExpectType<
 type MakeupCorrectionTipPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.MakeupCorrectionTip, 'makeup-correction-tip/:pointId'>
 >;
-type MakeupLookListPathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
+type MakeupStyleListPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.MakeupStyleList, 'makeup-style-list'>
 >;
 type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
@@ -41,8 +41,11 @@ type ReferenceMakeupExtractionUploadPathContract = ExpectType<
     'reference-makeup-extraction-upload'
   >
 >;
-type ExtractedMakeupLookSaveCompletePathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.ExtractedMakeupLookSaveComplete, 'extracted-makeup-look-save-complete'>
+type ExtractedMakeupStyleSaveCompletePathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.ExtractedMakeupStyleSaveComplete,
+    'extracted-makeup-style-save-complete'
+  >
 >;
 
 expectEqual(
@@ -91,9 +94,9 @@ expectEqual(
   'makeup correction tip path preserves required point id',
 );
 expectEqual(
-  navigationLinking.config?.screens?.MakeupLookList,
-  'makeup-look-list',
-  'makeup look list path uses look naming',
+  navigationLinking.config?.screens?.MakeupStyleList,
+  'makeup-style-list',
+  'makeup style list path uses style naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,
@@ -101,7 +104,7 @@ expectEqual(
   'reference makeup extraction upload path uses extraction naming',
 );
 expectEqual(
-  navigationLinking.config?.screens?.ExtractedMakeupLookSaveComplete,
-  'extracted-makeup-look-save-complete',
-  'extracted makeup look save complete path distinguishes completion route',
+  navigationLinking.config?.screens?.ExtractedMakeupStyleSaveComplete,
+  'extracted-makeup-style-save-complete',
+  'extracted makeup style save complete path distinguishes completion route',
 );

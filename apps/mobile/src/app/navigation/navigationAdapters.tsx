@@ -33,11 +33,11 @@ import {
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   ReferenceMakeupExtractionUploadScreen,
-  ExtractedMakeupLookRecipeDetailScreen,
-  ExtractedMakeupLookSaveCompleteScreen,
-  ExtractedMakeupLookSaveFormScreen,
-  ExtractedMakeupLookAdjustScreen,
-  ExtractedMakeupLookRecipeSaveCompleteScreen,
+  ExtractedMakeupStyleRecipeDetailScreen,
+  ExtractedMakeupStyleSaveCompleteScreen,
+  ExtractedMakeupStyleSaveFormScreen,
+  ExtractedMakeupStyleAdjustScreen,
+  ExtractedMakeupStyleRecipeSaveCompleteScreen,
   type ReferenceMakeupPhoto,
 } from '../../features/reference-makeup-extraction';
 import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
@@ -46,7 +46,7 @@ import {TutorialIntroScreen} from '../../features/onboarding';
 import {ProfileScreen, ProfileEditScreen} from '../../features/profile';
 import {
   LikedProductListScreen,
-  MakeupLookListScreen,
+  MakeupStyleListScreen,
   ProductRecommendationScreen,
 } from '../../features/recommendation';
 import type {ARFilterBackRouteName, MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
@@ -98,16 +98,16 @@ function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): Re
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
 
-function buildSavedMakeupLook(photo: ReferenceMakeupPhoto) {
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
+function buildSavedMakeupStyle(photo: ReferenceMakeupPhoto) {
+  const {extractedMakeupStyle} = getReferenceMakeupExtractionDataSync();
 
   return {
-    id: 'saved-extracted-makeup-look',
+    id: 'saved-extracted-makeup-style',
     imageSource: photo.imageSource,
     isSaved: true,
-    moodLabel: extractedMakeupLook.tags.slice(0, 2).join(' '),
-    shortDescription: extractedMakeupLook.subtitle,
-    title: extractedMakeupLook.title,
+    moodLabel: extractedMakeupStyle.tags.slice(0, 2).join(' '),
+    shortDescription: extractedMakeupStyle.subtitle,
+    title: extractedMakeupStyle.title,
   };
 }
 
@@ -183,7 +183,7 @@ export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>)
 
 export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
-  const {savedMakeupLook} = useNavigationFlowState();
+  const {savedMakeupStyle} = useNavigationFlowState();
 
   return (
     <MainTabChrome
@@ -198,9 +198,9 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
           rootNavigation?.navigate('ImageAnalysisReportsList')
         }
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
-        onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
+        onPressMakeupStyleList={() => rootNavigation?.navigate('MakeupStyleList')}
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
-        savedMakeupLook={savedMakeupLook}
+        savedMakeupStyle={savedMakeupStyle}
       />
     </MainTabChrome>
   );
@@ -328,14 +328,14 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
   );
 }
 
-export function MakeupLookListRouteScreen({
+export function MakeupStyleListRouteScreen({
   navigation,
-}: RootScreenProps<'MakeupLookList'>) {
+}: RootScreenProps<'MakeupStyleList'>) {
   return (
     <DetailRouteChrome
-      routeName="MakeupLookList"
+      routeName="MakeupStyleList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <MakeupLookListScreen />
+      <MakeupStyleListScreen />
     </DetailRouteChrome>
   );
 }
@@ -534,7 +534,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({navigation}: RootScr
       routeName="ReferenceMakeupExtractionResult"
       onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}>
       <ReferenceMakeupExtractionResultScreen
-        onPreviewMakeupLook={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+        onPreviewMakeupStyle={() => navigation.navigate('ExtractedMakeupStyleAdjust')}
         onRetake={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
         photo={photo}
       />
@@ -542,35 +542,35 @@ export function ReferenceMakeupExtractionResultRouteScreen({navigation}: RootScr
   );
 }
 
-export function ExtractedMakeupLookAdjustRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupLookAdjust'>) {
+export function ExtractedMakeupStyleAdjustRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupStyleAdjust'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
-    <ExtractedMakeupLookAdjustScreen
+    <ExtractedMakeupStyleAdjustScreen
       onClose={() => navigation.navigate('ReferenceMakeupExtractionResult')}
-      onCreateRecipe={() => navigation.navigate('ExtractedMakeupLookRecipeDetail')}
-      onSave={() => navigation.navigate('ExtractedMakeupLookSaveForm')}
+      onCreateRecipe={() => navigation.navigate('ExtractedMakeupStyleRecipeDetail')}
+      onSave={() => navigation.navigate('ExtractedMakeupStyleSaveForm')}
       photo={photo}
     />
   );
 }
 
-export function ExtractedMakeupLookSaveFormRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupLookSaveForm'>) {
-  const {selectedReferenceMakeupPhoto, setSavedMakeupLook} = useNavigationFlowState();
+export function ExtractedMakeupStyleSaveFormRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupStyleSaveForm'>) {
+  const {selectedReferenceMakeupPhoto, setSavedMakeupStyle} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   const handleSave = () => {
-    setSavedMakeupLook(buildSavedMakeupLook(photo));
-    navigation.navigate('ExtractedMakeupLookSaveComplete');
+    setSavedMakeupStyle(buildSavedMakeupStyle(photo));
+    navigation.navigate('ExtractedMakeupStyleSaveComplete');
   };
 
   return (
     <DetailRouteChrome
-      routeName="ExtractedMakeupLookSaveForm"
-      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+      routeName="ExtractedMakeupStyleSaveForm"
+      onBack={() => navigation.navigate('ExtractedMakeupStyleAdjust')}
       onDone={handleSave}>
-      <ExtractedMakeupLookSaveFormScreen
+      <ExtractedMakeupStyleSaveFormScreen
         onSave={handleSave}
         photo={photo}
       />
@@ -578,37 +578,37 @@ export function ExtractedMakeupLookSaveFormRouteScreen({navigation}: RootScreenP
   );
 }
 
-export function ExtractedMakeupLookSaveCompleteRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupLookSaveComplete'>) {
+export function ExtractedMakeupStyleSaveCompleteRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupStyleSaveComplete'>) {
   return (
-    <ExtractedMakeupLookSaveCompleteScreen
-      onApplyNow={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+    <ExtractedMakeupStyleSaveCompleteScreen
+      onApplyNow={() => navigation.navigate('ExtractedMakeupStyleAdjust')}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );
 }
 
-export function ExtractedMakeupLookRecipeDetailRouteScreen({
+export function ExtractedMakeupStyleRecipeDetailRouteScreen({
   navigation,
-}: RootScreenProps<'ExtractedMakeupLookRecipeDetail'>) {
+}: RootScreenProps<'ExtractedMakeupStyleRecipeDetail'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
     <DetailRouteChrome
-      routeName="ExtractedMakeupLookRecipeDetail"
-      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}>
-      <ExtractedMakeupLookRecipeDetailScreen
-        onSaveRecipe={() => navigation.navigate('ExtractedMakeupLookRecipeSaveComplete')}
+      routeName="ExtractedMakeupStyleRecipeDetail"
+      onBack={() => navigation.navigate('ExtractedMakeupStyleAdjust')}>
+      <ExtractedMakeupStyleRecipeDetailScreen
+        onSaveRecipe={() => navigation.navigate('ExtractedMakeupStyleRecipeSaveComplete')}
         photo={photo}
       />
     </DetailRouteChrome>
   );
 }
 
-export function ExtractedMakeupLookRecipeSaveCompleteRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupLookRecipeSaveComplete'>) {
+export function ExtractedMakeupStyleRecipeSaveCompleteRouteScreen({navigation}: RootScreenProps<'ExtractedMakeupStyleRecipeSaveComplete'>) {
   return (
-    <ExtractedMakeupLookRecipeSaveCompleteScreen
-      onBackToDetail={() => navigation.navigate('ExtractedMakeupLookRecipeDetail')}
+    <ExtractedMakeupStyleRecipeSaveCompleteScreen
+      onBackToDetail={() => navigation.navigate('ExtractedMakeupStyleRecipeDetail')}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );

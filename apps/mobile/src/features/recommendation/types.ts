@@ -27,7 +27,7 @@ export type ProductRecommendationItem = {
   reason: string;
 };
 
-export type ProductRecommendationLook = {
+export type ProductRecommendationStyle = {
   title: string;
   description: string;
   imageSource: ImageSourcePropType;
@@ -44,7 +44,7 @@ export type ProductRecommendationSet = {
 
 export type ProductRecommendationData = {
   userNickname: string;
-  look: ProductRecommendationLook;
+  makeupStyle: ProductRecommendationStyle;
   tabs: ProductRecommendationTab[];
   products: ProductRecommendationItem[];
   sets: ProductRecommendationSet[];
