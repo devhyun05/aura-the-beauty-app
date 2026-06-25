@@ -2,6 +2,7 @@ import {
   getInitialNavigationFlowState,
   getNavigationFlowStateProviderErrorMessage,
 } from './flowState';
+import {getDemoNavigationFlowState} from './demoFlowState';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -22,7 +23,45 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().feedbackResult,
+  null,
+  'initial feedback result',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().savedMakeupStyle,
+  null,
+  'initial saved makeup style',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedFilterPhoto,
   null,
   'initial selected filter photo',
+);
+
+const demoState = getDemoNavigationFlowState();
+
+expectEqual(
+  demoState.selectedFeedbackPhoto.source,
+  'camera',
+  'demo feedback photo source',
+);
+
+if (!demoState.feedbackResult) {
+  throw new Error('demo feedback result: expected seeded result');
+}
+
+if (!demoState.selectedFilterPhoto) {
+  throw new Error('demo selected filter photo: expected seeded photo');
+}
+
+if (!demoState.savedMakeupStyle) {
+  throw new Error('demo saved makeup style: expected seeded style');
+}
+
+expectEqual(
+  demoState.savedMakeupStyle.id,
+  'capture-demo-saved-makeup-look',
+  'demo saved makeup style id',
 );

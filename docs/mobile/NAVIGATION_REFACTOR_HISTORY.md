@@ -46,6 +46,49 @@
 
 - `npm --prefix apps/mobile run typecheck`
 
+### 후속 정리: 데모 초기 상태 분리
+
+이후 후속 작업으로 `flowState.tsx`에 직접 들어가 있던 데모 seed를 기본 앱 상태에서 분리했다.
+
+분리 전에는 `NavigationFlowStateProvider`의 기본 초기값이 다음 데모 데이터를 바로 포함했다.
+
+- `feedbackResult`: `createMockMakeupFeedback(...)`로 만든 mock feedback 결과
+- `selectedFilterPhoto`: `getFilterExtractionDataSync().photos[0]`
+- `savedMakeupStyle`: 캡처용 저장룩 preview
+
+이 방식은 딥링크로 `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`, `FilterResult`, `FilterRecipeDetail` 같은 화면에 바로 들어가 캡처하기에는 편했다. 하지만 일반 앱 시작 상태에서도 결과/저장룩이 이미 존재하는 것처럼 보일 수 있어 production 기본값으로는 부적절했다.
+
+분리 후 책임은 다음과 같다.
+
+- `flowState.tsx`
+  - 일반 앱 기본 상태만 제공한다.
+  - `feedbackResult`, `savedMakeupStyle`, `selectedFilterPhoto`는 `null`로 시작한다.
+  - `selectedFeedbackPhoto`만 기존처럼 `{source: 'camera'}`를 기본 선택값으로 둔다.
+  - `NavigationFlowStateProvider`는 `initialState` prop을 받을 수 있어 외부에서 명시적으로 seed를 주입할 수 있다.
+
+- `demoFlowState.ts`
+  - 데모/캡처 전용 seed를 제공한다.
+  - `getDemoNavigationFlowState()`가 mock feedback result, 기본 filter photo, 캡처용 saved makeup style을 만든다.
+  - mock import와 filter extraction mock 접근은 이 파일에만 남긴다.
+
+이제 일반 앱은 `NavigationFlowStateProvider`를 prop 없이 사용해 깨끗한 상태로 시작하고, 화면 캡처나 딥링크 검토처럼 seed가 필요한 경우에만 `getDemoNavigationFlowState()`를 명시적으로 주입하면 된다. 이 정리는 데모 편의성과 일반 앱 초기 상태를 분리하기 위한 조치다.
+
+데모 seed 사용 예시는 다음과 같다.
+
+```tsx
+import {getDemoNavigationFlowState} from '../app/navigation/demoFlowState';
+
+<NavigationFlowStateProvider initialState={getDemoNavigationFlowState()}>
+  <NavigationContainer>{/* ... */}</NavigationContainer>
+</NavigationFlowStateProvider>
+```
+
+현재 `AppRoot.tsx`는 이 prop을 넘기지 않으므로 일반 앱 실행은 빈 flow state에서 시작한다.
+
+검증:
+
+- `apps/mobile/node_modules/.bin/tsc --ignoreConfig --noEmit --pretty false --skipLibCheck true --target es2020 --module esnext --moduleResolution bundler --jsx react-jsx --allowSyntheticDefaultImports true --esModuleInterop true apps/mobile/src/app/navigation/flowState.test.tsx apps/mobile/src/app/navigation/flowState.tsx apps/mobile/src/app/navigation/demoFlowState.ts`
+
 ### `refactor: 모바일 화면 전환을 React Navigation으로 변경`
 
 커밋: `f7cb613`
@@ -123,6 +166,7 @@ apps/mobile/src/
       mainTabChrome.ts
       navigationState.ts
       flowState.tsx
+      demoFlowState.ts
       navigationAdapters.tsx
 ```
 
@@ -132,6 +176,7 @@ apps/mobile/src/
 - 화면 depth/category/chrome/status bar/title은 `routeChrome.ts`가 관리한다.
 - 메인 탭의 header copy와 footer active state는 `mainTabChrome.ts`가 관리한다.
 - route-local이 아닌 임시 UI 상태는 `flowState.tsx`가 관리한다.
+- 데모/캡처용 초기 flow seed는 `demoFlowState.ts`가 별도로 관리한다.
 - feature screen은 아직 대부분 자체 화면 UI를 유지하고, adapter가 navigation callback과 route chrome title을 주입한다.
 
 ## 헤더와 푸터 정리 상태
