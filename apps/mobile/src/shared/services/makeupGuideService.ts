@@ -6,7 +6,7 @@ import type {
   MakeupFilter,
 } from '../types/makeupGuide';
 
-export function getMockARMakeupGuideData(): ARMakeupGuideData {
+export function getARMakeupGuideData(): ARMakeupGuideData {
   return mockARMakeupGuideData;
 }
 

@@ -7,25 +7,25 @@ const lookImage =
   require('../../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
 
 const velureLipstickRoseWood =
-  require('../../../assets/images/recommendation/velure-lipstick-rose-wood.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-lipstick-rose-wood.png') as ImageSourcePropType;
 const laurelleGlossRoseVeil =
-  require('../../../assets/images/recommendation/laurelle-gloss-rose-veil.png') as ImageSourcePropType;
+  require('../../../assets/images/products/laurelle-gloss-rose-veil.png') as ImageSourcePropType;
 const luneraAiryTintRoseMist =
-  require('../../../assets/images/recommendation/lunera-airy-tint-rose-mist.png') as ImageSourcePropType;
+  require('../../../assets/images/products/lunera-airy-tint-rose-mist.png') as ImageSourcePropType;
 const luneraLiquidBlushPeachDusk =
-  require('../../../assets/images/recommendation/lunera-liquid-blush-peach-dusk.png') as ImageSourcePropType;
+  require('../../../assets/images/products/lunera-liquid-blush-peach-dusk.png') as ImageSourcePropType;
 const velureBlushRoseCompact =
-  require('../../../assets/images/recommendation/velure-blush-rose-compact.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-blush-rose-compact.png') as ImageSourcePropType;
 const velureEyePaletteRoseHaze =
-  require('../../../assets/images/recommendation/velure-eye-palette-rose-haze.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-eye-palette-rose-haze.png') as ImageSourcePropType;
 const velureEyePaletteRoseNeutral =
-  require('../../../assets/images/recommendation/velure-eye-palette-rose-neutral.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-eye-palette-rose-neutral.png') as ImageSourcePropType;
 const velureLiquidLinerDeepCocoa =
-  require('../../../assets/images/recommendation/velure-liquid-liner-deep-cocoa.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-liquid-liner-deep-cocoa.png') as ImageSourcePropType;
 const velureBrowFlickTaupe =
-  require('../../../assets/images/recommendation/velure-brow-flick-taupe.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-brow-flick-taupe.png') as ImageSourcePropType;
 const velureGlowCushionNeutral =
-  require('../../../assets/images/recommendation/velure-glow-cushion-neutral.png') as ImageSourcePropType;
+  require('../../../assets/images/products/velure-glow-cushion-neutral.png') as ImageSourcePropType;
 
 export const productRecommendationMock: ProductRecommendationData = {
   userNickname: userProfileMock.nickname,

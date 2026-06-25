@@ -7,7 +7,7 @@ import {Text, View} from 'tamagui';
 
 import {getLikedProducts} from '../../../shared/services/productService';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import type {Product} from '../../../shared/types/myPage';
+import type {Product} from '../../../shared/types/profile';
 import {
   AppScreen,
   HeartIcon,

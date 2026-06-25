@@ -2,7 +2,7 @@ import {Pressable, StyleSheet} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, spacing, typography} from '../../../shared/theme';
-import type {ProfileEditField} from '../../../shared/types/myPage';
+import type {ProfileEditField} from '../../../shared/types/profile';
 import {PencilIcon} from '../../../shared/ui';
 
 type ProfileEditRowProps = {

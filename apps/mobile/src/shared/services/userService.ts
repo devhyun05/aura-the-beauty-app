@@ -1,5 +1,5 @@
 import {profileEditFieldsMock, userProfileMock} from '../mocks/user.mock';
-import type {ProfileEditField, UserProfile} from '../types/myPage';
+import type {ProfileEditField, UserProfile} from '../types/profile';
 
 export const getUserProfile = async (): Promise<UserProfile> => {
   return Promise.resolve(userProfileMock);
