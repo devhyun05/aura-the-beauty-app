@@ -4,16 +4,16 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {getFilterExtractionDataSync} from '../services/filterExtractionService';
+import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 
-type FilterRecipeSaveCompleteScreenProps = {
+type ExtractedMakeupLookRecipeSaveCompleteScreenProps = {
   onBackToDetail: () => void;
   onGoToProfile: () => void;
 };
 
-export function FilterRecipeSaveCompleteScreen({onBackToDetail, onGoToProfile}: FilterRecipeSaveCompleteScreenProps) {
+export function ExtractedMakeupLookRecipeSaveCompleteScreen({onBackToDetail, onGoToProfile}: ExtractedMakeupLookRecipeSaveCompleteScreenProps) {
   const insets = useSafeAreaInsets();
-  const {result} = getFilterExtractionDataSync();
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return (
     <View style={styles.screen}>
@@ -25,7 +25,7 @@ export function FilterRecipeSaveCompleteScreen({onBackToDetail, onGoToProfile}: 
         <YStack style={styles.copy}>
           <Text style={styles.title}>메이크업 레시피가 저장되었어요!</Text>
           <Text style={styles.description}>
-            `{result.title}`의 컬러, 위치, 질감 분석을 레시피로 저장했습니다.
+            `{extractedMakeupLook.title}`의 컬러, 위치, 질감 분석을 레시피로 저장했습니다.
           </Text>
         </YStack>
 

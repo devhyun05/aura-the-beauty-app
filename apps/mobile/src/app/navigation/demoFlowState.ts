@@ -1,6 +1,6 @@
 import type {FeedbackPhotoSelection} from '../../features/feedback';
 import {createMockMakeupFeedback} from '../../features/feedback/mocks/makeupFeedback.mock';
-import {getFilterExtractionDataSync} from '../../features/filter-extraction/services/filterExtractionService';
+import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../shared/types/profile';
 import type {NavigationFlowState} from './flowState';
 
@@ -9,10 +9,10 @@ const demoSelectedFeedbackPhoto: FeedbackPhotoSelection = {
 };
 
 export function getDemoNavigationFlowState(): NavigationFlowState {
-  const selectedFilterPhoto = getFilterExtractionDataSync().photos[0];
+  const selectedReferenceMakeupPhoto = getReferenceMakeupExtractionDataSync().photos[0];
   const savedMakeupLook: MakeupLookPreview = {
     id: 'capture-demo-saved-makeup-look',
-    imageSource: selectedFilterPhoto.imageSource,
+    imageSource: selectedReferenceMakeupPhoto.imageSource,
     isSaved: true,
     moodLabel: '데모 저장룩',
     shortDescription: '화면 캡처용으로 준비된 저장 메이크업 룩입니다.',
@@ -23,6 +23,6 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     feedbackResult: createMockMakeupFeedback(demoSelectedFeedbackPhoto),
     savedMakeupLook,
     selectedFeedbackPhoto: demoSelectedFeedbackPhoto,
-    selectedFilterPhoto,
+    selectedReferenceMakeupPhoto,
   };
 }

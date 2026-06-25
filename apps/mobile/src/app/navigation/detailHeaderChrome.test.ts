@@ -25,14 +25,14 @@ expectEqual(
   'feedback entry route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterExtractionUpload').join(','),
+  getDetailHeaderRightActions('ReferenceMakeupExtractionUpload').join(','),
   'close',
-  'filter upload route header actions',
+  'reference makeup extraction upload route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterSaveForm').join(','),
+  getDetailHeaderRightActions('ExtractedMakeupLookSaveForm').join(','),
   'done',
-  'filter save route header actions',
+  'extracted makeup look save route header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('ImageAnalysisReportDetail').join(','),

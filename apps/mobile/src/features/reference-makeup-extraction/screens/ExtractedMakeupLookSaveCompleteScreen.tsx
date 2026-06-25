@@ -4,16 +4,16 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {getFilterExtractionDataSync} from '../services/filterExtractionService';
+import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 
-type FilterSaveCompleteScreenProps = {
+type ExtractedMakeupLookSaveCompleteScreenProps = {
   onApplyNow: () => void;
   onGoToProfile: () => void;
 };
 
-export function FilterSaveCompleteScreen({onApplyNow, onGoToProfile}: FilterSaveCompleteScreenProps) {
+export function ExtractedMakeupLookSaveCompleteScreen({onApplyNow, onGoToProfile}: ExtractedMakeupLookSaveCompleteScreenProps) {
   const insets = useSafeAreaInsets();
-  const {result} = getFilterExtractionDataSync();
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return (
     <View style={styles.screen}>
@@ -23,9 +23,9 @@ export function FilterSaveCompleteScreen({onApplyNow, onGoToProfile}: FilterSave
         </View>
 
         <YStack style={styles.copy}>
-          <Text style={styles.title}>메이크업 필터가 저장되었어요!</Text>
+          <Text style={styles.title}>메이크업 룩이 저장되었어요!</Text>
           <Text style={styles.description}>
-            `{result.title}`이 내 메이크업 스타일에 저장되었습니다.
+            `{extractedMakeupLook.title}`이 내 메이크업 스타일에 저장되었습니다.
           </Text>
         </YStack>
 
@@ -39,7 +39,7 @@ export function FilterSaveCompleteScreen({onApplyNow, onGoToProfile}: FilterSave
 
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.lg}]}>
         <Pressable
-          accessibilityLabel="저장된 필터 지금 적용하기"
+          accessibilityLabel="저장된 메이크업 룩 지금 적용하기"
           accessibilityRole="button"
           onPress={onApplyNow}
           style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>

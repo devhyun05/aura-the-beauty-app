@@ -6,25 +6,25 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
-import {getFilterExtractionDataSync} from '../services/filterExtractionService';
-import type {FilterExtractionPhoto} from '../types';
+import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
+import type {ReferenceMakeupPhoto} from '../types';
 
-type FilterSaveFormScreenProps = {
+type ExtractedMakeupLookSaveFormScreenProps = {
   headerTitle?: string;
-  photo: FilterExtractionPhoto;
+  photo: ReferenceMakeupPhoto;
   onBack?: () => void;
   onSave: () => void;
 };
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
-export function FilterSaveFormScreen({
+export function ExtractedMakeupLookSaveFormScreen({
   photo,
   onSave,
-}: FilterSaveFormScreenProps) {
+}: ExtractedMakeupLookSaveFormScreenProps) {
   const insets = useSafeAreaInsets();
-  const {result} = getFilterExtractionDataSync();
-  const [filterName, setFilterName] = useState(result.title);
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
+  const [makeupLookName, setMakeupLookName] = useState(extractedMakeupLook.title);
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   return (
@@ -41,7 +41,7 @@ export function FilterSaveFormScreen({
             <Image resizeMode="cover" source={photo.imageSource} style={styles.thumbImage} />
           </View>
           <YStack style={styles.summaryCopy}>
-            <Text style={styles.summaryTitle}>생성된 필터</Text>
+            <Text style={styles.summaryTitle}>추출된 메이크업 룩</Text>
             <Text style={styles.summaryDescription}>
               AR 적용값과 색감 조정값이 함께 저장돼요.
             </Text>
@@ -49,17 +49,17 @@ export function FilterSaveFormScreen({
         </XStack>
 
         <YStack style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>필터 이름</Text>
+          <Text style={styles.fieldLabel}>메이크업 룩 이름</Text>
           <XStack style={styles.inputFrame}>
             <TextInput
               maxLength={20}
-              onChangeText={setFilterName}
-              placeholder="필터 이름을 입력하세요"
+              onChangeText={setMakeupLookName}
+              placeholder="메이크업 룩 이름을 입력하세요"
               placeholderTextColor={colors.textTertiary}
               style={styles.input}
-              value={filterName}
+              value={makeupLookName}
             />
-            <Text style={styles.countText}>{filterName.length}/20</Text>
+            <Text style={styles.countText}>{makeupLookName.length}/20</Text>
           </XStack>
         </YStack>
 
@@ -131,7 +131,7 @@ export function FilterSaveFormScreen({
 
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.lg}]}>
         <Pressable
-          accessibilityLabel="필터 저장하기"
+          accessibilityLabel="메이크업 룩 저장하기"
           accessibilityRole="button"
           onPress={onSave}
           style={({pressed}) => [styles.saveButton, pressed && styles.pressed]}>

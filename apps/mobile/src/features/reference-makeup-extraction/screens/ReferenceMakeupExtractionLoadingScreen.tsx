@@ -5,22 +5,22 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {getFilterExtractionDataSync} from '../services/filterExtractionService';
-import type {FilterExtractionPhoto, FilterExtractionStepStatus} from '../types';
+import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
+import type {ReferenceMakeupPhoto, MakeupExtractionStepStatus} from '../types';
 
-type FilterExtractionLoadingScreenProps = {
-  photo: FilterExtractionPhoto;
+type ReferenceMakeupExtractionLoadingScreenProps = {
+  photo: ReferenceMakeupPhoto;
   onBack: () => void;
   onComplete: () => void;
 };
 
-export function FilterExtractionLoadingScreen({
+export function ReferenceMakeupExtractionLoadingScreen({
   photo,
   onBack,
   onComplete,
-}: FilterExtractionLoadingScreenProps) {
+}: ReferenceMakeupExtractionLoadingScreenProps) {
   const insets = useSafeAreaInsets();
-  const data = getFilterExtractionDataSync();
+  const data = getReferenceMakeupExtractionDataSync();
 
   useEffect(() => {
     const timer = setTimeout(onComplete, 1600);
@@ -50,7 +50,7 @@ export function FilterExtractionLoadingScreen({
 
           <Text style={styles.title}>메이크업 분석 중...</Text>
           <Text style={styles.description}>
-            이미지의 색감, 위치, 질감을 분리해서 나만의 필터로 바꾸고 있어요.
+            이미지의 색감, 위치, 질감을 분리해서 메이크업 룩으로 정리하고 있어요.
           </Text>
         </YStack>
 
@@ -85,7 +85,7 @@ export function FilterExtractionLoadingScreen({
   );
 }
 
-function StepStatusIcon({status}: {status: FilterExtractionStepStatus}) {
+function StepStatusIcon({status}: {status: MakeupExtractionStepStatus}) {
   if (status === 'done') {
     return (
       <View style={styles.stepIconDone}>

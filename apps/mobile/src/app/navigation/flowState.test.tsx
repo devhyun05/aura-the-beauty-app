@@ -35,9 +35,9 @@ expectEqual(
 );
 
 expectEqual(
-  getInitialNavigationFlowState().selectedFilterPhoto,
+  getInitialNavigationFlowState().selectedReferenceMakeupPhoto,
   null,
-  'initial selected filter photo',
+  'initial selected reference makeup photo',
 );
 
 const demoState = getDemoNavigationFlowState();
@@ -52,8 +52,8 @@ if (!demoState.feedbackResult) {
   throw new Error('demo feedback result: expected seeded result');
 }
 
-if (!demoState.selectedFilterPhoto) {
-  throw new Error('demo selected filter photo: expected seeded photo');
+if (!demoState.selectedReferenceMakeupPhoto) {
+  throw new Error('demo selected reference makeup photo: expected seeded photo');
 }
 
 if (!demoState.savedMakeupLook) {

@@ -33,7 +33,7 @@ expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target')
 expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
-  'FilterSaveComplete,FilterRecipeSaveComplete',
+  'ExtractedMakeupLookSaveComplete,ExtractedMakeupLookRecipeSaveComplete',
   'terminal route order',
 );
 expectEqual(

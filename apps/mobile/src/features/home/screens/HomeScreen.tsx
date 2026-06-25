@@ -31,7 +31,7 @@ import type {
 
 type HomeScreenProps = {
   onPressARFilter?: () => void;
-  onPressCreateFilter?: () => void;
+  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
@@ -39,7 +39,7 @@ type HomeScreenProps = {
 
 export function HomeScreen({
   onPressARFilter,
-  onPressCreateFilter,
+  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
@@ -80,7 +80,7 @@ export function HomeScreen({
 
       <QuickActionSection
         onPressARFilter={onPressARFilter}
-        onPressCreateFilter={onPressCreateFilter}
+        onPressReferenceMakeupExtraction={onPressReferenceMakeupExtraction}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
         onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
@@ -364,7 +364,7 @@ type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
   onPressARFilter?: () => void;
-  onPressCreateFilter?: () => void;
+  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
@@ -374,7 +374,7 @@ export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
     onPressARFilter,
-    onPressCreateFilter,
+    onPressReferenceMakeupExtraction,
     onPressFaceDiagnosis,
     onPressMakeupFeedback,
     onPressProductRecommendations,
@@ -389,7 +389,7 @@ export function getHomeQuickActionPressHandler(
   }
 
   if (actionId === 'extract') {
-    return onPressCreateFilter;
+    return onPressReferenceMakeupExtraction;
   }
 
   if (actionId === 'feedback') {
@@ -405,14 +405,14 @@ export function getHomeQuickActionPressHandler(
 
 function QuickActionSection({
   onPressARFilter,
-  onPressCreateFilter,
+  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
     onPressARFilter,
-    onPressCreateFilter,
+    onPressReferenceMakeupExtraction,
     onPressFaceDiagnosis,
     onPressMakeupFeedback,
     onPressProductRecommendations,

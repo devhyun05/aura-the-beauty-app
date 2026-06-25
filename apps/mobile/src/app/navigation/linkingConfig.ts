@@ -61,14 +61,14 @@ export const rootStackLinkingScreens = {
   FeedbackResult: 'feedback-result',
   FeedbackGuide: 'feedback-guide',
   FeedbackTip: 'feedback-tip/:pointId',
-  FilterExtractionUpload: 'filter-extraction-upload',
-  FilterExtractionLoading: 'filter-extraction-loading',
-  FilterExtractionResult: 'filter-extraction-result',
-  FilterTryOnAdjust: 'filter-try-on-adjust',
-  FilterSaveForm: 'filter-save-form',
-  FilterSaveComplete: 'filter-save-complete',
-  FilterRecipeDetail: 'filter-recipe-detail',
-  FilterRecipeSaveComplete: 'filter-recipe-save-complete',
+  ReferenceMakeupExtractionUpload: 'reference-makeup-extraction-upload',
+  ReferenceMakeupExtractionLoading: 'reference-makeup-extraction-loading',
+  ReferenceMakeupExtractionResult: 'reference-makeup-extraction-result',
+  ExtractedMakeupLookAdjust: 'extracted-makeup-look-adjust',
+  ExtractedMakeupLookSaveForm: 'extracted-makeup-look-save-form',
+  ExtractedMakeupLookSaveComplete: 'extracted-makeup-look-save-complete',
+  ExtractedMakeupLookRecipeDetail: 'extracted-makeup-look-recipe-detail',
+  ExtractedMakeupLookRecipeSaveComplete: 'extracted-makeup-look-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;
 
 export const navigationLinking: LinkingOptions<RootStackParamList> = {

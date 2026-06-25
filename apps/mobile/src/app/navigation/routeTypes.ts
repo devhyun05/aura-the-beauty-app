@@ -22,14 +22,14 @@ export type RootStackParamList = {
   FeedbackResult: undefined;
   FeedbackGuide: undefined;
   FeedbackTip: {pointId: string};
-  FilterExtractionUpload: undefined;
-  FilterExtractionLoading: undefined;
-  FilterExtractionResult: undefined;
-  FilterTryOnAdjust: undefined;
-  FilterSaveForm: undefined;
-  FilterSaveComplete: undefined;
-  FilterRecipeDetail: undefined;
-  FilterRecipeSaveComplete: undefined;
+  ReferenceMakeupExtractionUpload: undefined;
+  ReferenceMakeupExtractionLoading: undefined;
+  ReferenceMakeupExtractionResult: undefined;
+  ExtractedMakeupLookAdjust: undefined;
+  ExtractedMakeupLookSaveForm: undefined;
+  ExtractedMakeupLookSaveComplete: undefined;
+  ExtractedMakeupLookRecipeDetail: undefined;
+  ExtractedMakeupLookRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
@@ -62,14 +62,14 @@ export const rootStackRoutes = [
   'FeedbackResult',
   'FeedbackGuide',
   'FeedbackTip',
-  'FilterExtractionUpload',
-  'FilterExtractionLoading',
-  'FilterExtractionResult',
-  'FilterTryOnAdjust',
-  'FilterSaveForm',
-  'FilterSaveComplete',
-  'FilterRecipeDetail',
-  'FilterRecipeSaveComplete',
+  'ReferenceMakeupExtractionUpload',
+  'ReferenceMakeupExtractionLoading',
+  'ReferenceMakeupExtractionResult',
+  'ExtractedMakeupLookAdjust',
+  'ExtractedMakeupLookSaveForm',
+  'ExtractedMakeupLookSaveComplete',
+  'ExtractedMakeupLookRecipeDetail',
+  'ExtractedMakeupLookRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [

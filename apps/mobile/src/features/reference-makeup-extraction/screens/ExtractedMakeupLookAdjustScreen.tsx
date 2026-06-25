@@ -18,28 +18,28 @@ import {
   FullscreenOverlayScreen,
   OverlaySegmentButton,
 } from '../../../shared/ui';
-import {getFilterExtractionDataSync} from '../services/filterExtractionService';
+import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 import type {
-  FilterAdjustmentTab,
-  FilterExtractionPhoto,
-  FilterFaceArea,
-  FilterStyleGroup,
+  MakeupLookAdjustmentTab,
+  ReferenceMakeupPhoto,
+  MakeupLookFaceArea,
+  MakeupLookStyleGroup,
 } from '../types';
 
-type FilterTryOnAdjustScreenProps = {
-  photo: FilterExtractionPhoto;
+type ExtractedMakeupLookAdjustScreenProps = {
+  photo: ReferenceMakeupPhoto;
   onClose: () => void;
   onCreateRecipe: () => void;
   onSave: () => void;
 };
 
-const styleGroups: {id: FilterStyleGroup; label: string}[] = [
+const styleGroups: {id: MakeupLookStyleGroup; label: string}[] = [
   {id: 'color', label: '컬러'},
   {id: 'type', label: '타입'},
   {id: 'texture', label: '질감'},
 ];
 
-const faceAreas: {id: FilterFaceArea; label: string}[] = [
+const faceAreas: {id: MakeupLookFaceArea; label: string}[] = [
   {id: 'all', label: '전체'},
   {id: 'base', label: '페이스'},
   {id: 'eye', label: '아이'},
@@ -50,23 +50,23 @@ const faceAreas: {id: FilterFaceArea; label: string}[] = [
 const typeOptions = ['소프트', '또렷함', '글로우', '내추럴'];
 const textureOptions = ['벨벳', '쉬머', '새틴', '글로시'];
 
-export function FilterTryOnAdjustScreen({
+export function ExtractedMakeupLookAdjustScreen({
   photo,
   onClose,
   onCreateRecipe,
   onSave,
-}: FilterTryOnAdjustScreenProps) {
+}: ExtractedMakeupLookAdjustScreenProps) {
   const insets = useSafeAreaInsets();
-  const {result} = getFilterExtractionDataSync();
-  const [adjustmentTab, setAdjustmentTab] = useState<FilterAdjustmentTab>('style');
-  const [styleGroup, setStyleGroup] = useState<FilterStyleGroup>('color');
-  const [selectedColorId, setSelectedColorId] = useState(result.palette[3].id);
-  const [selectedFaceArea, setSelectedFaceArea] = useState<FilterFaceArea>('lip');
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
+  const [adjustmentTab, setAdjustmentTab] = useState<MakeupLookAdjustmentTab>('style');
+  const [styleGroup, setStyleGroup] = useState<MakeupLookStyleGroup>('color');
+  const [selectedColorId, setSelectedColorId] = useState(extractedMakeupLook.palette[3].id);
+  const [selectedFaceArea, setSelectedFaceArea] = useState<MakeupLookFaceArea>('lip');
   const [selectedType, setSelectedType] = useState(typeOptions[0]);
   const [selectedTexture, setSelectedTexture] = useState(textureOptions[2]);
 
   const selectedColor =
-    result.palette.find((palette) => palette.id === selectedColorId) ?? result.palette[0];
+    extractedMakeupLook.palette.find((palette) => palette.id === selectedColorId) ?? extractedMakeupLook.palette[0];
 
   return (
     <FullscreenOverlayScreen variant="surface">
@@ -97,8 +97,8 @@ export function FilterTryOnAdjustScreen({
         <View style={styles.previewFrame}>
           <Image resizeMode="cover" source={photo.imageSource} style={styles.previewImage} />
           <View style={[styles.eyeOverlay, {backgroundColor: selectedColor.hex}]} />
-          <View style={[styles.cheekOverlayLeft, {backgroundColor: result.palette[2].hex}]} />
-          <View style={[styles.cheekOverlayRight, {backgroundColor: result.palette[2].hex}]} />
+          <View style={[styles.cheekOverlayLeft, {backgroundColor: extractedMakeupLook.palette[2].hex}]} />
+          <View style={[styles.cheekOverlayRight, {backgroundColor: extractedMakeupLook.palette[2].hex}]} />
           <View style={[styles.lipOverlay, {backgroundColor: selectedColor.hex}]} />
 
           <XStack style={styles.adjustHint}>
@@ -149,7 +149,7 @@ export function FilterTryOnAdjustScreen({
             contentContainerStyle={styles.colorList}
             horizontal
             showsHorizontalScrollIndicator={false}>
-            {result.palette.map((palette) => (
+            {extractedMakeupLook.palette.map((palette) => (
               <Pressable
                 accessibilityLabel={`${palette.label} 컬러 선택`}
                 accessibilityRole="button"
@@ -207,12 +207,12 @@ export function FilterTryOnAdjustScreen({
 
         <YStack style={styles.actionStack}>
           <Pressable
-            accessibilityLabel="현재 필터 저장하기"
+            accessibilityLabel="현재 메이크업 룩 저장하기"
             accessibilityRole="button"
             onPress={onSave}
             style={({pressed}) => [styles.saveButton, pressed && styles.pressed]}>
             <Save color={colors.white} size={iconSize.sm} strokeWidth={2.1} />
-            <Text style={styles.saveButtonText}>현재 필터를 저장하기</Text>
+            <Text style={styles.saveButtonText}>현재 룩을 저장하기</Text>
           </Pressable>
 
           <Pressable

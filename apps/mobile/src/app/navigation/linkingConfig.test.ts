@@ -35,14 +35,14 @@ type FeedbackTipPathContract = ExpectType<
 type MakeupLookListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
 >;
-type FilterExtractionUploadPathContract = ExpectType<
+type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
-    typeof rootStackLinkingScreens.FilterExtractionUpload,
-    'filter-extraction-upload'
+    typeof rootStackLinkingScreens.ReferenceMakeupExtractionUpload,
+    'reference-makeup-extraction-upload'
   >
 >;
-type FilterSaveCompletePathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.FilterSaveComplete, 'filter-save-complete'>
+type ExtractedMakeupLookSaveCompletePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.ExtractedMakeupLookSaveComplete, 'extracted-makeup-look-save-complete'>
 >;
 
 expectEqual(
@@ -96,12 +96,12 @@ expectEqual(
   'makeup look list path uses look naming',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FilterExtractionUpload,
-  'filter-extraction-upload',
-  'filter extraction upload path uses extraction naming',
+  navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,
+  'reference-makeup-extraction-upload',
+  'reference makeup extraction upload path uses extraction naming',
 );
 expectEqual(
-  navigationLinking.config?.screens?.FilterSaveComplete,
-  'filter-save-complete',
-  'filter save complete path distinguishes completion route',
+  navigationLinking.config?.screens?.ExtractedMakeupLookSaveComplete,
+  'extracted-makeup-look-save-complete',
+  'extracted makeup look save complete path distinguishes completion route',
 );

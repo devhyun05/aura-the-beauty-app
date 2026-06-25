@@ -6,36 +6,36 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
-import {getFilterExtractionData} from '../services/filterExtractionService';
+import {getReferenceMakeupExtractionData} from '../services/makeupExtractionService';
 import type {
-  FilterExtractionData,
-  FilterExtractionPhoto,
-  FilterExtractionSource,
+  ReferenceMakeupExtractionData,
+  ReferenceMakeupPhoto,
+  ReferenceMakeupSource,
 } from '../types';
 
-type FilterExtractionUploadScreenProps = {
+type ReferenceMakeupExtractionUploadScreenProps = {
   headerTitle?: string;
   onClose?: () => void;
-  onStartAnalysis: (photo: FilterExtractionPhoto) => void;
+  onStartAnalysis: (photo: ReferenceMakeupPhoto) => void;
 };
 
-const sourceTabs: {id: FilterExtractionSource; label: string}[] = [
+const sourceTabs: {id: ReferenceMakeupSource; label: string}[] = [
   {id: 'album', label: '앨범에서 선택'},
   {id: 'camera', label: '카메라로 촬영'},
 ];
 
-export function FilterExtractionUploadScreen({
+export function ReferenceMakeupExtractionUploadScreen({
   onStartAnalysis,
-}: FilterExtractionUploadScreenProps) {
+}: ReferenceMakeupExtractionUploadScreenProps) {
   const insets = useSafeAreaInsets();
-  const [data, setData] = useState<FilterExtractionData | null>(null);
-  const [activeSource, setActiveSource] = useState<FilterExtractionSource>('album');
+  const [data, setData] = useState<ReferenceMakeupExtractionData | null>(null);
+  const [activeSource, setActiveSource] = useState<ReferenceMakeupSource>('album');
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    getFilterExtractionData().then((nextData) => {
+    getReferenceMakeupExtractionData().then((nextData) => {
       if (isMounted) {
         setData(nextData);
         setSelectedPhotoId(nextData.photos[0]?.id ?? null);

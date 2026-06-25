@@ -1,6 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {FilterExtractionData} from '../types';
+import type {ReferenceMakeupExtractionData} from '../types';
 
 const styleOjiGirl =
   require('../../../assets/images/looks/style-oji-girl.png') as ImageSourcePropType;
@@ -19,7 +19,7 @@ const analysisWindow =
 const analysisSoftLight =
   require('../../../assets/images/analysis/analysis-soft-light.png') as ImageSourcePropType;
 
-export const filterExtractionMock: FilterExtractionData = {
+export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
   photos: [
     {
       id: 'influencer-muted-rose',
@@ -46,8 +46,8 @@ export const filterExtractionMock: FilterExtractionData = {
       imageSource: reportBareFace,
     },
     {
-      id: 'daily-filter',
-      title: '데일리 필터 샘플',
+      id: 'daily-look',
+      title: '데일리 룩 샘플',
       source: 'album',
       imageSource: reportRetake,
     },
@@ -88,14 +88,14 @@ export const filterExtractionMock: FilterExtractionData = {
     },
     {
       id: 'style-map',
-      label: '필터 스타일 맵 생성',
+      label: '메이크업 룩 스타일 맵 생성',
       status: 'waiting',
     },
   ],
-  result: {
-    id: 'muted-pink-daily-filter',
+  extractedMakeupLook: {
+    id: 'muted-pink-daily-look',
     title: '어리어리 핑크 데일리 룩',
-    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 필터예요.',
+    subtitle: '차분한 로즈 베이지 톤에 눈매 음영과 맑은 립을 더한 룩이에요.',
     imageSource: styleOjiGirl,
     tags: ['#데일리', '#뮤트톤', '#로즈베이지', '#은은한음영'],
     accuracy: 92,
