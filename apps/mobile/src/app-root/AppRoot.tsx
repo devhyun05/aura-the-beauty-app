@@ -6,6 +6,7 @@ import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-contex
 import {TamaguiProvider, YStack} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
+import {NavigationFlowStateProvider} from '../app/navigation/flowState';
 import {
   ImageAnalysisReportDetailScreen,
   ImageAnalysisReportsListScreen,
@@ -480,7 +481,9 @@ export function AppRoot() {
               : 'dark'
           }
         />
-        {renderScreen()}
+        <NavigationFlowStateProvider>
+          {renderScreen()}
+        </NavigationFlowStateProvider>
       </SafeAreaProvider>
     </TamaguiProvider>
   );
