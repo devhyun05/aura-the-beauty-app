@@ -1,0 +1,565 @@
+Project ai_ar_makeup_guide {
+  database_type: 'PostgreSQL'
+  Note: 'Backend integration v1 schema based on latest dev screens. Flexible AI/AR sections are stored as jsonb payloads.'
+}
+
+Enum auth_provider {
+  google
+  kakao
+  naver
+  apple
+}
+
+Enum gender_type {
+  female
+  male
+  other
+  unknown
+}
+
+Enum media_source_type {
+  camera
+  gallery
+  seed
+  generated
+}
+
+Enum capture_type {
+  face_analysis
+  makeup_feedback
+  filter_extraction
+  ar_try_on
+}
+
+Enum job_status {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+Enum makeup_style_type {
+  look
+  filter
+  recipe
+}
+
+Enum product_category {
+  lip
+  cheek
+  shadow
+  liner
+  base
+}
+
+Enum filter_category {
+  recommended
+  trend
+  personal_color
+  popular
+}
+
+Enum face_part {
+  all
+  base
+  eye
+  lip
+  contour
+}
+
+Enum consent_type {
+  privacy_policy
+  camera_analysis
+  ai_processing
+  third_party_ai
+  marketing
+}
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  auth_provider auth_provider
+  oauth_sub text
+  email citext
+  name text
+  nickname text [not null]
+  phone text
+  birth_date date
+  gender gender_type [not null, default: 'unknown']
+  interest text
+  personal_color text
+  skin_type text
+  skin_tone text
+  tags text[]
+  avatar_media_id uuid
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (auth_provider, oauth_sub) [unique]
+    (email)
+  }
+
+  Note: 'Login, MyPage, ProfileEdit. Beauty profile fields are kept here for v1 API simplicity.'
+}
+
+Table media_assets {
+  id uuid [pk, default: `gen_random_uuid()`]
+  owner_user_id uuid
+  media_kind text [not null]
+  source media_source_type [not null]
+  bucket text
+  object_key text
+  cdn_url text
+  content_type text
+  byte_size bigint
+  width integer
+  height integer
+  checksum_sha256 text
+  original_filename text
+  is_original boolean [not null, default: true]
+  status text [not null, default: 'active']
+  created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (bucket, object_key) [unique]
+    (owner_user_id, created_at)
+  }
+
+  Note: 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.'
+}
+
+Table photo_captures {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  media_id uuid [not null]
+  capture_type capture_type [not null]
+  source media_source_type [not null]
+  status job_status [not null, default: 'pending']
+  captured_at timestamptz [not null, default: `now()`]
+  device_payload jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, capture_type, created_at)
+  }
+
+  Note: 'A single uploaded/captured image can feed analysis, feedback, filter extraction, or AR try-on.'
+}
+
+Table analysis_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  photo_capture_id uuid
+  source_media_id uuid
+  preview_media_id uuid
+  status job_status [not null, default: 'completed']
+  ai_provider text
+  ai_model text
+  request_id text
+  error_message text
+  analyzed_at timestamptz
+  title text [not null]
+  report_title text [not null]
+  environment_label text
+  personal_color text
+  face_shape text
+  skin_type text
+  tone_summary text
+  recommended_mood text
+  summary text
+  short_summary text
+  skin_analysis_summary text
+  base_makeup_guide text
+  tags text[]
+  detail_payload jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, analyzed_at)
+  }
+
+  Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
+}
+
+Table saved_makeup_styles {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  style_type makeup_style_type [not null, default: 'look']
+  source_analysis_report_id uuid
+  source_filter_extraction_id uuid
+  source_media_id uuid
+  thumbnail_media_id uuid
+  title text [not null]
+  mood_label text
+  short_description text
+  tags text[]
+  visibility text [not null, default: 'private']
+  style_payload jsonb [not null, default: '{}']
+  saved_at timestamptz [not null, default: `now()`]
+  archived_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, saved_at)
+    (source_analysis_report_id)
+    (source_filter_extraction_id)
+  }
+
+  Note: 'MakeupStyleList plus saved filters and saved recipes from the filter extraction flow.'
+}
+
+Table products {
+  id uuid [pk, default: `gen_random_uuid()`]
+  external_key text [unique]
+  brand_name text [not null]
+  product_name text [not null]
+  shade_name text
+  category product_category [not null]
+  price_krw integer [not null, default: 0]
+  image_media_id uuid
+  tags text[]
+  palette text[]
+  product_payload jsonb [not null, default: '{}']
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category, is_active)
+  }
+
+  Note: 'ProductRecommendation and LikedProductList product catalog.'
+}
+
+Table user_product_likes {
+  user_id uuid [not null]
+  product_id uuid [not null]
+  liked_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, product_id) [pk]
+    (user_id, liked_at)
+  }
+
+  Note: 'LikedProductList and product heart state.'
+}
+
+Table product_recommendation_runs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  source_analysis_report_id uuid
+  user_nickname text
+  look_title text
+  look_description text
+  look_media_id uuid
+  product_ids uuid[]
+  recommendation_payload jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+    (source_analysis_report_id)
+  }
+
+  Note: 'ProductRecommendationData. tabs, products, sets, matchRate, reason are kept in recommendation_payload for v1 API flexibility.'
+}
+
+Table ar_filters {
+  id uuid [pk, default: `gen_random_uuid()`]
+  external_key text [unique]
+  category filter_category [not null]
+  title text [not null]
+  subtitle text
+  intensity_label text
+  preview_media_id uuid
+  source_analysis_report_id uuid
+  source_filter_extraction_id uuid
+  filter_payload jsonb [not null, default: '{}']
+  is_public boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category, is_public)
+  }
+
+  Note: 'ARMakeupGuideData. facePartIds, colorOptions, typeOptions, textureOptions are stored in filter_payload.'
+}
+
+Table user_ar_filter_states {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  filter_id uuid [not null]
+  selected_face_part face_part
+  selected_color_id text
+  selected_type_id text
+  selected_texture_id text
+  guide_mode text
+  comparison_mode text
+  is_overlay_visible boolean [not null, default: true]
+  landmarks jsonb [not null, default: '[]']
+  adjustments jsonb [not null, default: '{}']
+  saved_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+  }
+
+  Note: 'ARFilterLocation and ARFilterStyle current/saved customization state.'
+}
+
+Table filter_extraction_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  photo_capture_id uuid
+  result_media_id uuid
+  status job_status [not null, default: 'completed']
+  title text [not null]
+  subtitle text
+  tags text[]
+  accuracy integer
+  model_version text
+  result_payload jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+
+  indexes {
+    (user_id, created_at)
+  }
+
+  Note: 'FilterUpload/Loading/Result/TryOn/Save/RecipeDetail. palette, points, loadingSteps, recipeItems live in result_payload.'
+}
+
+Table makeup_feedback_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  photo_capture_id uuid
+  uploaded_media_id uuid
+  source media_source_type [not null]
+  source_label text
+  score integer
+  status job_status [not null, default: 'completed']
+  model_version text
+  feedback_payload jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+
+  indexes {
+    (user_id, created_at)
+  }
+
+  Note: 'FeedbackResult/Guide/Tip. summaryBadges, callouts, points, strengths live in feedback_payload.'
+}
+
+Table home_hero_banners {
+  id uuid [pk, default: `gen_random_uuid()`]
+  eyebrow text
+  title text [not null]
+  description text
+  image_media_id uuid
+  cta_label text
+  cta_target text
+  is_active boolean [not null, default: true]
+  sort_order integer [not null, default: 0]
+  starts_at timestamptz
+  ends_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (is_active, sort_order)
+  }
+
+  Note: 'HomeData.hero. Controls the main carousel headline, copy, CTA, and fallback image.'
+}
+
+Table home_notices {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hero_banner_id uuid
+  title text [not null]
+  description text [not null]
+  is_active boolean [not null, default: true]
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (hero_banner_id, sort_order)
+    (is_active, sort_order)
+  }
+
+  Note: 'HomeData.hero.notices. Announcement rows attached to the home hero.'
+}
+
+Table home_trend_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  hero_banner_id uuid
+  target_style_id uuid
+  title text [not null]
+  tone text
+  image_media_id uuid
+  target_payload jsonb [not null, default: '{}']
+  is_active boolean [not null, default: true]
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (hero_banner_id, sort_order)
+    (is_active, sort_order)
+  }
+
+  Note: 'HomeData.hero.trends. Weekly trend carousel cards.'
+}
+
+Table home_filter_store_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  title text [not null]
+  description text [not null]
+  category text [not null]
+  image_media_id uuid
+  product_id uuid
+  ar_filter_id uuid
+  target_payload jsonb [not null, default: '{}']
+  is_active boolean [not null, default: true]
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (category, is_active)
+    (is_active, sort_order)
+  }
+
+  Note: 'HomeData.filterStore. Home filter store cards can point to product catalog or AR filter catalog.'
+}
+
+Table home_recommended_looks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  saved_makeup_style_id uuid
+  title text [not null]
+  description text [not null]
+  display_date date
+  image_media_id uuid
+  target_payload jsonb [not null, default: '{}']
+  is_active boolean [not null, default: true]
+  sort_order integer [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (is_active, sort_order)
+    (display_date)
+  }
+
+  Note: 'HomeData.recommendedLooks. Home recommended makeup look cards.'
+}
+Table user_consents {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  consent_type consent_type [not null]
+  version text [not null]
+  accepted boolean [not null]
+  accepted_at timestamptz
+  revoked_at timestamptz
+  metadata jsonb [not null, default: '{}']
+
+  indexes {
+    (user_id, consent_type, version)
+  }
+
+  Note: 'Privacy, camera analysis, AI processing, third-party AI, marketing consent history.'
+}
+
+Table data_deletion_requests {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  target_type text [not null]
+  target_id uuid
+  status job_status [not null, default: 'pending']
+  requested_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+  reason text
+
+  indexes {
+    (user_id, requested_at)
+  }
+
+  Note: 'Account/photo/report/feedback/filter deletion request tracking.'
+}
+
+Table audit_logs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  actor_user_id uuid
+  action text [not null]
+  entity_type text [not null]
+  entity_id uuid
+  metadata jsonb [not null, default: '{}']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (entity_type, entity_id)
+    (actor_user_id, created_at)
+  }
+
+  Note: 'Operational audit trail for sensitive media and AI analysis data.'
+}
+
+Ref: users.avatar_media_id > media_assets.id
+Ref: media_assets.owner_user_id > users.id
+
+Ref: photo_captures.user_id > users.id
+Ref: photo_captures.media_id > media_assets.id
+
+Ref: analysis_reports.user_id > users.id
+Ref: analysis_reports.photo_capture_id > photo_captures.id
+Ref: analysis_reports.source_media_id > media_assets.id
+Ref: analysis_reports.preview_media_id > media_assets.id
+
+Ref: saved_makeup_styles.user_id > users.id
+Ref: saved_makeup_styles.source_analysis_report_id > analysis_reports.id
+Ref: saved_makeup_styles.source_filter_extraction_id > filter_extraction_reports.id
+Ref: saved_makeup_styles.source_media_id > media_assets.id
+Ref: saved_makeup_styles.thumbnail_media_id > media_assets.id
+
+Ref: products.image_media_id > media_assets.id
+Ref: user_product_likes.user_id > users.id
+Ref: user_product_likes.product_id > products.id
+
+Ref: product_recommendation_runs.user_id > users.id
+Ref: product_recommendation_runs.source_analysis_report_id > analysis_reports.id
+Ref: product_recommendation_runs.look_media_id > media_assets.id
+
+Ref: ar_filters.preview_media_id > media_assets.id
+Ref: ar_filters.source_analysis_report_id > analysis_reports.id
+Ref: ar_filters.source_filter_extraction_id > filter_extraction_reports.id
+Ref: user_ar_filter_states.user_id > users.id
+Ref: user_ar_filter_states.filter_id > ar_filters.id
+
+Ref: filter_extraction_reports.user_id > users.id
+Ref: filter_extraction_reports.photo_capture_id > photo_captures.id
+Ref: filter_extraction_reports.result_media_id > media_assets.id
+
+Ref: makeup_feedback_reports.user_id > users.id
+Ref: makeup_feedback_reports.photo_capture_id > photo_captures.id
+Ref: makeup_feedback_reports.uploaded_media_id > media_assets.id
+
+Ref: home_hero_banners.image_media_id > media_assets.id
+Ref: home_notices.hero_banner_id > home_hero_banners.id
+Ref: home_trend_items.hero_banner_id > home_hero_banners.id
+Ref: home_trend_items.target_style_id > saved_makeup_styles.id
+Ref: home_trend_items.image_media_id > media_assets.id
+Ref: home_filter_store_items.image_media_id > media_assets.id
+Ref: home_filter_store_items.product_id > products.id
+Ref: home_filter_store_items.ar_filter_id > ar_filters.id
+Ref: home_recommended_looks.saved_makeup_style_id > saved_makeup_styles.id
+Ref: home_recommended_looks.image_media_id > media_assets.id
+Ref: user_consents.user_id > users.id
+Ref: data_deletion_requests.user_id > users.id
+Ref: audit_logs.actor_user_id > users.id
