@@ -160,6 +160,28 @@ npm --prefix apps/mobile run typecheck
 
 commitlint 설정은 루트 `commitlint.config.js` 기준으로 `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`만 허용한다. 이번 히스토리 문서 커밋도 이 규칙에 맞춰 `docs` 타입으로 남긴다.
 
-## 제외한 항목
+## 화면 캡처 산출물
 
-현재 작업트리에 `apps/mobile/screenshots/` 아래 화면 캡처 산출물이 untracked로 남아 있다. 이 문서 작업과 브랜치 rename 범위에는 포함하지 않는다.
+이번 브랜치에는 React Navigation 전환 이후 전체 화면 상태를 검토할 수 있는 캡처 산출물을 포함한다.
+
+포함 경로:
+
+- `apps/mobile/screenshots/all-screens-20260625-142436/`
+- `apps/mobile/screenshots/all-screens-20260625-142436.zip`
+
+주요 파일:
+
+- `00_contact_sheet.jpg`: 29개 화면을 한 장에 모은 검토용 contact sheet
+- `01_Login.png`부터 `29_RecipeSaved.png`: route별 개별 화면 캡처
+
+캡처 대상 route:
+
+- Entry: `Login`, `Tutorial`
+- Main tabs: `HomeTab`, `CustomTab`, `MyPageTab`
+- Analysis: `FaceCapture`, `ImageAnalysisLoading`, `ImageAnalysisReportsList`, `ImageAnalysisReportDetail`
+- Profile/recommendation: `ProfileEdit`, `MakeupStyleList`, `LikedProductList`
+- AR: `ARMakeupFilter`, `ARFilterLocation`, `ARFilterStyle`
+- Feedback: `FeedbackEntry`, `FeedbackCapture`, `FeedbackLoading`, `FeedbackResult`, `FeedbackGuide`, `FeedbackTip`
+- Filter extraction: `FilterUpload`, `FilterLoading`, `FilterResult`, `FilterTryOn`, `FilterSave`, `FilterSaved`, `FilterRecipeDetail`, `RecipeSaved`
+
+이 산출물은 PR 리뷰에서 화면 분류와 chrome 정책이 실제 렌더링에 어떻게 반영됐는지 확인하기 위한 자료다. 특히 메인 탭 shell, 상세 헤더, 풀스크린 AR/촬영 화면, terminal 저장 완료 화면을 한 번에 비교할 수 있다.
