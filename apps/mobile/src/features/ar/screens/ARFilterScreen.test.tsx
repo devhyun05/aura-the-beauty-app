@@ -7,9 +7,16 @@ import {
   getARFilterCategoryTitle,
   getARFilterComparisonTabs,
   getARFilterModeTabHeight,
+  getARFilterOptionGroupLabels,
+  getARFilterOriginalCardLabel,
+  getARFilterSaveButtonLabel,
   getARFilterSelectedTabOpacity,
+  getARFilterShapeEditButtonLabel,
+  getARFilterShapeOptionLabels,
+  getARFilterMakeupStyleCardIdAfterOptionEdit,
   getARFilterInitialColorId,
   getARFilterSelectedColor,
+  isARFilterSaveEnabled,
   getMakeupPreviewBadgeContent,
   getMakeupPreviewColorOverlayLayers,
   shouldShowARFilterHeaderCopy,
@@ -49,7 +56,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterModeTabHeight(),
-  32,
+  24,
   'AR filter mode tab height',
 );
 expectEqual(
@@ -66,6 +73,53 @@ expectEqual(
   getARFilterComparisonTabs().join(','),
   '왼쪽,오른쪽',
   'AR filter comparison tabs',
+);
+expectEqual(
+  getARFilterOptionGroupLabels('all').join(','),
+  '스타일,형태',
+  'AR filter all face option groups',
+);
+expectEqual(
+  getARFilterOptionGroupLabels('lip').join(','),
+  '프리셋,컬러,타입,질감,형태',
+  'AR filter part option groups',
+);
+expectEqual(
+  getARFilterOriginalCardLabel(),
+  '원본',
+  'AR filter original option card label',
+);
+expectEqual(
+  getARFilterShapeOptionLabels('lip')[0],
+  '기본 립',
+  'AR filter shape option label',
+);
+expectEqual(
+  getARFilterSaveButtonLabel(),
+  '저장',
+  'AR filter save button label',
+);
+expectEqual(
+  getARFilterShapeEditButtonLabel(),
+  '형태 수정',
+  'AR filter shape edit button label',
+);
+expectEqual(
+  getARFilterMakeupStyleCardIdAfterOptionEdit({
+    selectedMakeupStyleCardId: 'daily-glow',
+  }),
+  null,
+  'AR filter clears all style after option edit',
+);
+expectEqual(
+  isARFilterSaveEnabled({hasUnsavedChanges: false}),
+  false,
+  'AR filter save disabled before custom edits',
+);
+expectEqual(
+  isARFilterSaveEnabled({hasUnsavedChanges: true}),
+  true,
+  'AR filter save enabled after custom edits',
 );
 expectEqual(
   getARFilterCaptureButtonMetrics().outerSize,
@@ -96,8 +150,8 @@ expectEqual(
 <ARFilterScreen
   initialGuideMode="basic"
   onBack={() => undefined}
-  onOpenLocationAdjust={() => undefined}
-  onOpenStyleAdjust={() => undefined}
+  onOpenShapeAdjust={() => undefined}
+  onSave={() => undefined}
 />;
 
 <ARFilterScreen initialComparisonMode="left" initialGuideMode="half" />;

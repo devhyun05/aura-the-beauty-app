@@ -16,7 +16,6 @@ import {
   FullscreenOverlayLayer,
   FullscreenOverlayScreen,
   LiveCameraLayer,
-  OverlayAdjustmentTabs,
   OverlayChipButton,
   OverlayIconButton,
   OverlayPanelSection,
@@ -33,7 +32,6 @@ import {
 
 type ARFilterLocationAdjustScreenProps = {
   onBack?: () => void;
-  onOpenStyleAdjust?: () => void;
   onSave?: () => void;
 };
 
@@ -44,6 +42,7 @@ const ADJUSTMENT_KEYS: readonly FilterLocationAdjustmentKey[] = [
   'rotation',
 ];
 const SELECTED_TAB_BACKGROUND_OPACITY = FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY;
+const LOCATION_ADJUST_TITLE = '형태 수정';
 
 type LocationPreviewColorOverlayLayer = {
   id: string;
@@ -62,9 +61,12 @@ export function getARFilterLocationAdjustSelectedTabOpacity(): number {
   return SELECTED_TAB_BACKGROUND_OPACITY;
 }
 
+export function getARFilterLocationAdjustTitle(): string {
+  return LOCATION_ADJUST_TITLE;
+}
+
 export function ARFilterLocationAdjustScreen({
   onBack,
-  onOpenStyleAdjust,
   onSave,
 }: ARFilterLocationAdjustScreenProps) {
   const insets = useSafeAreaInsets();
@@ -157,17 +159,12 @@ export function ARFilterLocationAdjustScreen({
           }
           rightSlot={
             <OverlayIconButton
-              accessibilityLabel="현재 위치 저장"
+              accessibilityLabel="현재 형태 저장"
               onPress={onSave}>
               <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
             </OverlayIconButton>
           }
-          title="위치 조정"
-        />
-
-        <OverlayAdjustmentTabs
-          activeTab="location"
-          onPressStyle={onOpenStyleAdjust}
+          title={LOCATION_ADJUST_TITLE}
         />
 
         <XStack style={styles.quickActions}>
@@ -218,7 +215,7 @@ export function ARFilterLocationAdjustScreen({
         </YStack>
 
         <OverlaySaveButton
-          accessibilityLabel="현재 필터 위치 저장"
+          accessibilityLabel="현재 필터 형태 저장"
           onPress={onSave}
         />
       </BottomOverlayPanel>

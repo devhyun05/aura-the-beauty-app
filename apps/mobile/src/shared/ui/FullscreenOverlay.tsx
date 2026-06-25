@@ -256,12 +256,12 @@ export function OverlayAdjustmentTabs({
     <XStack style={[styles.adjustmentTabs, style]}>
       <OverlaySegmentButton
         isActive={activeTab === 'location'}
-        label="위치 조정"
+        label="형태 수정"
         onPress={onPressLocation}
       />
       <OverlaySegmentButton
         isActive={activeTab === 'style'}
-        label="스타일 조정"
+        label="프리셋 수정"
         onPress={onPressStyle}
       />
     </XStack>
