@@ -2,7 +2,7 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
-const sampleFeedbackImage = require('../../../assets/images/user-page/report-retake-20260608.png') as ImageSourcePropType;
+const sampleFeedbackImage = require('../../../assets/images/analysis/report-retake-20260608.png') as ImageSourcePropType;
 
 export const createMockMakeupFeedback = (
   selection: FeedbackPhotoSelection,

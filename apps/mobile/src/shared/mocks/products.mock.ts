@@ -1,21 +1,21 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {Product} from '../types/myPage';
+import type {Product} from '../types/profile';
 
 const productSatinCushion =
-  require('../../assets/images/product-like/product-satin-cushion.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-satin-cushion.png') as ImageSourcePropType;
 const productRoseLacquer =
-  require('../../assets/images/product-like/product-rose-lacquer.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-rose-lacquer.png') as ImageSourcePropType;
 const productSheerPowder =
-  require('../../assets/images/product-like/product-sheer-powder.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-sheer-powder.png') as ImageSourcePropType;
 const productNeutralPalette =
-  require('../../assets/images/product-like/product-neutral-palette.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-neutral-palette.png') as ImageSourcePropType;
 const productLilacCheek =
-  require('../../assets/images/product-like/product-lilac-cheek.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-lilac-cheek.png') as ImageSourcePropType;
 const productClearGloss =
-  require('../../assets/images/product-like/product-clear-gloss.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-clear-gloss.png') as ImageSourcePropType;
 const productVelvetTint =
-  require('../../assets/images/product-like/product-velvet-tint.png') as ImageSourcePropType;
+  require('../../assets/images/products/product-velvet-tint.png') as ImageSourcePropType;
 
 export const productsMock: Product[] = [
   {

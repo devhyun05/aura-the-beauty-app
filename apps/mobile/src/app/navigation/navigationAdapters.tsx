@@ -12,11 +12,11 @@ import {AppHeader, AppScreen, AuraLogo, RoutePlaceholder} from '../../shared/ui'
 import {
   ImageAnalysisReportDetailScreen,
   ImageAnalysisReportsListScreen,
-} from '../../features/analysis';
-import {ImageAnalysisLoadingScreen} from '../../features/analysis/screens/ImageAnalysisLoadingScreen';
-import {ARFilterCustomLocationScreen} from '../../features/ar/screens/ARFilterCustomLocationScreen';
-import {ARFilterCustomStyleScreen} from '../../features/ar/screens/ARFilterCustomStyleScreen';
-import {ARMakeupFilterScreen} from '../../features/ar/screens/ARMakeupFilterScreen';
+} from '../../features/image-analysis';
+import {ImageAnalysisLoadingScreen} from '../../features/image-analysis/screens/ImageAnalysisLoadingScreen';
+import {ARFilterLocationAdjustScreen} from '../../features/ar/screens/ARFilterLocationAdjustScreen';
+import {ARFilterStyleAdjustScreen} from '../../features/ar/screens/ARFilterStyleAdjustScreen';
+import {ARFilterScreen} from '../../features/ar/screens/ARFilterScreen';
 import {LoginScreen} from '../../features/auth';
 import {FaceCaptureScreen} from '../../features/face-capture/screens/FaceCaptureScreen';
 import {
@@ -32,21 +32,21 @@ import {
 import {
   FilterExtractionLoadingScreen,
   FilterExtractionResultScreen,
-  FilterImageUploadScreen,
+  FilterExtractionUploadScreen,
   FilterRecipeDetailScreen,
-  FilterSavedScreen,
-  FilterSaveScreen,
+  FilterSaveCompleteScreen,
+  FilterSaveFormScreen,
   FilterTryOnAdjustScreen,
-  RecipeSavedScreen,
+  FilterRecipeSaveCompleteScreen,
   type FilterExtractionPhoto,
 } from '../../features/filter-extraction';
 import {getFilterExtractionDataSync} from '../../features/filter-extraction/services/filterExtractionService';
 import {HomeScreen} from '../../features/home';
 import {TutorialIntroScreen} from '../../features/onboarding';
-import {MyPageScreen, ProfileEditScreen} from '../../features/profile';
+import {ProfileScreen, ProfileEditScreen} from '../../features/profile';
 import {
   LikedProductListScreen,
-  MakeupStyleListScreen,
+  MakeupLookListScreen,
   ProductRecommendationScreen,
 } from '../../features/recommendation';
 import type {ARFilterBackRouteName, MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
@@ -64,6 +64,10 @@ type MainTabScreenProps<RouteName extends keyof MainTabParamList> =
   >;
 
 type RootNavigation = NavigationProp<RootStackParamList>;
+
+type HeaderShareAction = {
+  cb: () => void;
+};
 
 type MainTabChromeProps = {
   children: React.ReactNode;
@@ -87,14 +91,14 @@ function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterBackRout
     return;
   }
 
-  navigation.navigate('ARMakeupFilter');
+  navigation.navigate('ARFilter');
 }
 
 function getSelectedFilterPhoto(photo: FilterExtractionPhoto | null): FilterExtractionPhoto {
   return photo ?? getFilterExtractionDataSync().photos[0];
 }
 
-function buildSavedMakeupStyle(photo: FilterExtractionPhoto) {
+function buildSavedMakeupLook(photo: FilterExtractionPhoto) {
   const {result} = getFilterExtractionDataSync();
 
   return {
@@ -125,7 +129,7 @@ function MainTabChrome({
         title={headerCopy.title}
         titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
         topInset={insets.top}
-        onProfilePress={() => navigation.navigate('MyPageTab')}
+        onProfilePress={() => navigation.navigate('ProfileTab')}
       />
       <YStack style={styles.body}>
         {wrapContentInScreen ? (
@@ -159,8 +163,8 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   return (
     <MainTabChrome navigation={navigation} routeName="HomeTab">
       <HomeScreen
-        onPressARFilter={() => rootNavigation?.navigate('ARMakeupFilter')}
-        onPressCreateFilter={() => rootNavigation?.navigate('FilterUpload')}
+        onPressARFilter={() => rootNavigation?.navigate('ARFilter')}
+        onPressCreateFilter={() => rootNavigation?.navigate('FilterExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
         onPressMakeupFeedback={() => rootNavigation?.navigate('FeedbackEntry')}
         onPressProductRecommendations={() => navigation.navigate('CustomTab')}
@@ -177,16 +181,16 @@ export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>)
   );
 }
 
-export function MyPageRouteScreen({navigation}: MainTabScreenProps<'MyPageTab'>) {
+export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
-  const {savedMakeupStyle} = useNavigationFlowState();
+  const {savedMakeupLook} = useNavigationFlowState();
 
   return (
     <MainTabChrome
       navigation={navigation}
-      routeName="MyPageTab"
+      routeName="ProfileTab"
       wrapContentInScreen={false}>
-      <MyPageScreen
+      <ProfileScreen
         onPressImageAnalysisReport={reportId =>
           rootNavigation?.navigate('ImageAnalysisReportDetail', {reportId})
         }
@@ -194,9 +198,9 @@ export function MyPageRouteScreen({navigation}: MainTabScreenProps<'MyPageTab'>)
           rootNavigation?.navigate('ImageAnalysisReportsList')
         }
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
-        onPressMakeupStyleList={() => rootNavigation?.navigate('MakeupStyleList')}
+        onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
-        savedMakeupStyle={savedMakeupStyle}
+        savedMakeupLook={savedMakeupLook}
       />
     </MainTabChrome>
   );
@@ -231,7 +235,7 @@ export function ImageAnalysisReportsListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ImageAnalysisReportsList"
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <ImageAnalysisReportsListScreen
         onPressReport={reportId =>
           navigation.navigate('ImageAnalysisReportDetail', {reportId})
@@ -245,10 +249,10 @@ export function ImageAnalysisReportDetailRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ImageAnalysisReportDetail'>) {
-  const [shareAction, setShareAction] = React.useState<(() => void) | null>(null);
+  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
-      setShareAction(() => nextShareAction);
+      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
     },
     [],
   );
@@ -257,11 +261,11 @@ export function ImageAnalysisReportDetailRouteScreen({
     <DetailRouteChrome
       routeName="ImageAnalysisReportDetail"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
-      onShare={shareAction ?? undefined}
+      onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <ImageAnalysisReportDetailScreen
         onCreateARFilter={() =>
-          navigation.navigate('ARFilterStyle', {backRoute: 'ImageAnalysisReportDetail'})
+          navigation.navigate('ARFilterStyleAdjust', {backRoute: 'ImageAnalysisReportDetail'})
         }
         onHeaderShareActionChange={handleHeaderShareActionChange}
         reportId={route.params?.reportId ?? null}
@@ -270,44 +274,44 @@ export function ImageAnalysisReportDetailRouteScreen({
   );
 }
 
-export function ARMakeupFilterRouteScreen({navigation}: RootScreenProps<'ARMakeupFilter'>) {
+export function ARFilterRouteScreen({navigation}: RootScreenProps<'ARFilter'>) {
   return (
-    <ARMakeupFilterScreen
+    <ARFilterScreen
       initialGuideMode={DEFAULT_AR_GUIDE_MODE}
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
-      onOpenLocationAdjust={() => navigation.navigate('ARFilterLocation')}
-      onOpenStyleAdjust={() => navigation.navigate('ARFilterStyle')}
+      onOpenLocationAdjust={() => navigation.navigate('ARFilterLocationAdjust')}
+      onOpenStyleAdjust={() => navigation.navigate('ARFilterStyleAdjust')}
     />
   );
 }
 
-export function ARFilterLocationRouteScreen({
+export function ARFilterLocationAdjustRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ARFilterLocation'>) {
+}: RootScreenProps<'ARFilterLocationAdjust'>) {
   return (
-    <ARFilterCustomLocationScreen
+    <ARFilterLocationAdjustScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
       onOpenStyleAdjust={() =>
-        navigation.navigate('ARFilterStyle', {backRoute: route.params?.backRoute})
+        navigation.navigate('ARFilterStyleAdjust', {backRoute: route.params?.backRoute})
       }
-      onSave={() => navigation.navigate('ARMakeupFilter')}
+      onSave={() => navigation.navigate('ARFilter')}
     />
   );
 }
 
-export function ARFilterStyleRouteScreen({
+export function ARFilterStyleAdjustRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ARFilterStyle'>) {
+}: RootScreenProps<'ARFilterStyleAdjust'>) {
   return (
-    <ARFilterCustomStyleScreen
+    <ARFilterStyleAdjustScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
       onOpenLocationAdjust={() =>
-        navigation.navigate('ARFilterLocation', {backRoute: route.params?.backRoute})
+        navigation.navigate('ARFilterLocationAdjust', {backRoute: route.params?.backRoute})
       }
-      onSave={() => navigation.navigate('ARMakeupFilter')}
+      onSave={() => navigation.navigate('ARFilter')}
     />
   );
 }
@@ -316,7 +320,7 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
   return (
     <DetailRouteChrome
       routeName="ProfileEdit"
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <ProfileEditScreen
         onLogout={() => navigation.reset({index: 0, routes: [{name: 'Login'}]})}
       />
@@ -324,14 +328,14 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
   );
 }
 
-export function MakeupStyleListRouteScreen({
+export function MakeupLookListRouteScreen({
   navigation,
-}: RootScreenProps<'MakeupStyleList'>) {
+}: RootScreenProps<'MakeupLookList'>) {
   return (
     <DetailRouteChrome
-      routeName="MakeupStyleList"
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
-      <MakeupStyleListScreen />
+      routeName="MakeupLookList"
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      <MakeupLookListScreen />
     </DetailRouteChrome>
   );
 }
@@ -342,7 +346,7 @@ export function LikedProductListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="LikedProductList"
-      onBack={() => navigateMainTab(navigation, 'MyPageTab')}>
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <LikedProductListScreen />
     </DetailRouteChrome>
   );
@@ -491,82 +495,82 @@ export function FeedbackTipRouteScreen({
   );
 }
 
-export function FilterUploadRouteScreen({navigation}: RootScreenProps<'FilterUpload'>) {
+export function FilterExtractionUploadRouteScreen({navigation}: RootScreenProps<'FilterExtractionUpload'>) {
   const {setSelectedFilterPhoto} = useNavigationFlowState();
 
   const handleStartAnalysis = (photo: FilterExtractionPhoto) => {
     setSelectedFilterPhoto(photo);
-    navigation.navigate('FilterLoading');
+    navigation.navigate('FilterExtractionLoading');
   };
 
   return (
     <DetailRouteChrome
-      routeName="FilterUpload"
+      routeName="FilterExtractionUpload"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FilterImageUploadScreen onStartAnalysis={handleStartAnalysis} />
+      <FilterExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
 }
 
-export function FilterLoadingRouteScreen({navigation}: RootScreenProps<'FilterLoading'>) {
+export function FilterExtractionLoadingRouteScreen({navigation}: RootScreenProps<'FilterExtractionLoading'>) {
   const {selectedFilterPhoto} = useNavigationFlowState();
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   return (
     <FilterExtractionLoadingScreen
-      onBack={() => navigation.navigate('FilterUpload')}
-      onComplete={() => navigation.navigate('FilterResult')}
+      onBack={() => navigation.navigate('FilterExtractionUpload')}
+      onComplete={() => navigation.navigate('FilterExtractionResult')}
       photo={photo}
     />
   );
 }
 
-export function FilterResultRouteScreen({navigation}: RootScreenProps<'FilterResult'>) {
+export function FilterExtractionResultRouteScreen({navigation}: RootScreenProps<'FilterExtractionResult'>) {
   const {selectedFilterPhoto} = useNavigationFlowState();
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   return (
     <DetailRouteChrome
-      routeName="FilterResult"
-      onBack={() => navigation.navigate('FilterUpload')}>
+      routeName="FilterExtractionResult"
+      onBack={() => navigation.navigate('FilterExtractionUpload')}>
       <FilterExtractionResultScreen
-        onApplyFilter={() => navigation.navigate('FilterTryOn')}
-        onRetake={() => navigation.navigate('FilterUpload')}
+        onApplyFilter={() => navigation.navigate('FilterTryOnAdjust')}
+        onRetake={() => navigation.navigate('FilterExtractionUpload')}
         photo={photo}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FilterTryOnRouteScreen({navigation}: RootScreenProps<'FilterTryOn'>) {
+export function FilterTryOnAdjustRouteScreen({navigation}: RootScreenProps<'FilterTryOnAdjust'>) {
   const {selectedFilterPhoto} = useNavigationFlowState();
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   return (
     <FilterTryOnAdjustScreen
-      onClose={() => navigation.navigate('FilterResult')}
+      onClose={() => navigation.navigate('FilterExtractionResult')}
       onCreateRecipe={() => navigation.navigate('FilterRecipeDetail')}
-      onSave={() => navigation.navigate('FilterSave')}
+      onSave={() => navigation.navigate('FilterSaveForm')}
       photo={photo}
     />
   );
 }
 
-export function FilterSaveRouteScreen({navigation}: RootScreenProps<'FilterSave'>) {
-  const {selectedFilterPhoto, setSavedMakeupStyle} = useNavigationFlowState();
+export function FilterSaveFormRouteScreen({navigation}: RootScreenProps<'FilterSaveForm'>) {
+  const {selectedFilterPhoto, setSavedMakeupLook} = useNavigationFlowState();
   const photo = getSelectedFilterPhoto(selectedFilterPhoto);
 
   const handleSave = () => {
-    setSavedMakeupStyle(buildSavedMakeupStyle(photo));
-    navigation.navigate('FilterSaved');
+    setSavedMakeupLook(buildSavedMakeupLook(photo));
+    navigation.navigate('FilterSaveComplete');
   };
 
   return (
     <DetailRouteChrome
-      routeName="FilterSave"
-      onBack={() => navigation.navigate('FilterTryOn')}
+      routeName="FilterSaveForm"
+      onBack={() => navigation.navigate('FilterTryOnAdjust')}
       onDone={handleSave}>
-      <FilterSaveScreen
+      <FilterSaveFormScreen
         onSave={handleSave}
         photo={photo}
       />
@@ -574,11 +578,11 @@ export function FilterSaveRouteScreen({navigation}: RootScreenProps<'FilterSave'
   );
 }
 
-export function FilterSavedRouteScreen({navigation}: RootScreenProps<'FilterSaved'>) {
+export function FilterSaveCompleteRouteScreen({navigation}: RootScreenProps<'FilterSaveComplete'>) {
   return (
-    <FilterSavedScreen
-      onApplyNow={() => navigation.navigate('FilterTryOn')}
-      onGoToMyPage={() => navigateMainTab(navigation, 'MyPageTab')}
+    <FilterSaveCompleteScreen
+      onApplyNow={() => navigation.navigate('FilterTryOnAdjust')}
+      onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );
 }
@@ -592,20 +596,20 @@ export function FilterRecipeDetailRouteScreen({
   return (
     <DetailRouteChrome
       routeName="FilterRecipeDetail"
-      onBack={() => navigation.navigate('FilterTryOn')}>
+      onBack={() => navigation.navigate('FilterTryOnAdjust')}>
       <FilterRecipeDetailScreen
-        onSaveRecipe={() => navigation.navigate('RecipeSaved')}
+        onSaveRecipe={() => navigation.navigate('FilterRecipeSaveComplete')}
         photo={photo}
       />
     </DetailRouteChrome>
   );
 }
 
-export function RecipeSavedRouteScreen({navigation}: RootScreenProps<'RecipeSaved'>) {
+export function FilterRecipeSaveCompleteRouteScreen({navigation}: RootScreenProps<'FilterRecipeSaveComplete'>) {
   return (
-    <RecipeSavedScreen
+    <FilterRecipeSaveCompleteScreen
       onBackToDetail={() => navigation.navigate('FilterRecipeDetail')}
-      onGoToMyPage={() => navigateMainTab(navigation, 'MyPageTab')}
+      onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );
 }

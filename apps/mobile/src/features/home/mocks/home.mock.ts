@@ -9,11 +9,11 @@ const lookMoriGirl =
 const lookCleanSmoky =
   require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
 const productCoralTint =
-  require('../../../assets/images/user-page/product-coral-tint.png') as ImageSourcePropType;
+  require('../../../assets/images/products/product-coral-tint.png') as ImageSourcePropType;
 const productGlowCushion =
-  require('../../../assets/images/user-page/product-glow-cushion.png') as ImageSourcePropType;
+  require('../../../assets/images/products/product-glow-cushion.png') as ImageSourcePropType;
 const productMoodCheek =
-  require('../../../assets/images/user-page/product-mood-cheek.png') as ImageSourcePropType;
+  require('../../../assets/images/products/product-mood-cheek.png') as ImageSourcePropType;
 
 export const homeMock: HomeData = {
   hero: {

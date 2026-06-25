@@ -7,6 +7,11 @@
     "platforms": ["ios"],
     "scheme": "aiarmakeup",
     "userInterfaceStyle": "light",
+    "extra": {
+      "router": {
+        "root": "app"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aiarmakeupguide.mobile"

@@ -180,6 +180,15 @@ export function getHeroCarouselLoopResetOffset({
   return null;
 }
 
+export function createHeroCarouselLoopResetHandlers(
+  handler: (event: NativeSyntheticEvent<NativeScrollEvent>) => void,
+) {
+  return {
+    onMomentumScrollEnd: handler,
+    onScrollEndDrag: handler,
+  };
+}
+
 export function getFilterStoreCategoryChipLabel<const TCategory extends string>(
   category: TCategory,
 ): TCategory {
@@ -234,7 +243,7 @@ function HeroBannerCarousel({
     });
   }, [initialScrollOffsetX]);
 
-  const handleHeroCarouselMomentumEnd = (
+  const handleHeroCarouselScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
     const loopResetOffsetX = getHeroCarouselLoopResetOffset({
@@ -252,6 +261,8 @@ function HeroBannerCarousel({
       x: loopResetOffsetX,
     });
   };
+  const heroCarouselLoopResetHandlers =
+    createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd);
 
   return (
     <NativeScrollView
@@ -259,7 +270,8 @@ function HeroBannerCarousel({
       horizontal
       contentOffset={{x: initialScrollOffsetX, y: 0}}
       decelerationRate="fast"
-      onMomentumScrollEnd={handleHeroCarouselMomentumEnd}
+      onMomentumScrollEnd={heroCarouselLoopResetHandlers.onMomentumScrollEnd}
+      onScrollEndDrag={heroCarouselLoopResetHandlers.onScrollEndDrag}
       snapToAlignment="start"
       snapToInterval={snapInterval}
       showsHorizontalScrollIndicator={false}

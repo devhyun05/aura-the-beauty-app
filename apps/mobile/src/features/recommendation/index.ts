@@ -1,3 +1,3 @@
 export {LikedProductListScreen} from './screens/LikedProductListScreen';
-export {MakeupStyleListScreen} from './screens/MakeupStyleListScreen';
+export {MakeupLookListScreen} from './screens/MakeupLookListScreen';
 export {ProductRecommendationScreen} from './screens/ProductRecommendationScreen';

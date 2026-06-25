@@ -1,7 +1,7 @@
 import type {FeedbackPhotoSelection} from '../../features/feedback';
 import {createMockMakeupFeedback} from '../../features/feedback/mocks/makeupFeedback.mock';
 import {getFilterExtractionDataSync} from '../../features/filter-extraction/services/filterExtractionService';
-import type {MakeupStylePreview} from '../../shared/types/myPage';
+import type {MakeupLookPreview} from '../../shared/types/profile';
 import type {NavigationFlowState} from './flowState';
 
 const demoSelectedFeedbackPhoto: FeedbackPhotoSelection = {
@@ -10,7 +10,7 @@ const demoSelectedFeedbackPhoto: FeedbackPhotoSelection = {
 
 export function getDemoNavigationFlowState(): NavigationFlowState {
   const selectedFilterPhoto = getFilterExtractionDataSync().photos[0];
-  const savedMakeupStyle: MakeupStylePreview = {
+  const savedMakeupLook: MakeupLookPreview = {
     id: 'capture-demo-saved-makeup-look',
     imageSource: selectedFilterPhoto.imageSource,
     isSaved: true,
@@ -21,7 +21,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
 
   return {
     feedbackResult: createMockMakeupFeedback(demoSelectedFeedbackPhoto),
-    savedMakeupStyle,
+    savedMakeupLook,
     selectedFeedbackPhoto: demoSelectedFeedbackPhoto,
     selectedFilterPhoto,
   };

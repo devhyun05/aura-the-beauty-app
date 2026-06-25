@@ -44,7 +44,7 @@ function clampValue(adjustment: FilterLocationAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
 }
 
-export function getMockFilterLocationState(): FilterLocationState {
+export function getFilterLocationState(): FilterLocationState {
   return mockFilterLocationState;
 }
 
@@ -67,7 +67,7 @@ export function updateFilterLocationAdjustment(
   };
 }
 
-export function getMockFilterStyleState(): FilterStyleState {
+export function getFilterStyleState(): FilterStyleState {
   return mockFilterStyleState;
 }
 

@@ -32,6 +32,18 @@ type ImageAnalysisReportDetailPathContract = ExpectType<
 type FeedbackTipPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.FeedbackTip, 'feedback-tip/:pointId'>
 >;
+type MakeupLookListPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
+>;
+type FilterExtractionUploadPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.FilterExtractionUpload,
+    'filter-extraction-upload'
+  >
+>;
+type FilterSaveCompletePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.FilterSaveComplete, 'filter-save-complete'>
+>;
 
 expectEqual(
   appConfig.expo.scheme,
@@ -77,4 +89,19 @@ expectEqual(
   navigationLinking.config?.screens?.FeedbackTip,
   'feedback-tip/:pointId',
   'feedback tip path preserves required point id',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupLookList,
+  'makeup-look-list',
+  'makeup look list path uses look naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.FilterExtractionUpload,
+  'filter-extraction-upload',
+  'filter extraction upload path uses extraction naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.FilterSaveComplete,
+  'filter-save-complete',
+  'filter save complete path distinguishes completion route',
 );

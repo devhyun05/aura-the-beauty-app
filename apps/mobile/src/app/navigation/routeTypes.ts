@@ -1,6 +1,6 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
 
-export type ARFilterBackRouteName = 'ARMakeupFilter' | 'ImageAnalysisReportDetail';
+export type ARFilterBackRouteName = 'ARFilter' | 'ImageAnalysisReportDetail';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -11,31 +11,31 @@ export type RootStackParamList = {
   ImageAnalysisReportsList: undefined;
   ImageAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;
-  MakeupStyleList: undefined;
+  MakeupLookList: undefined;
   LikedProductList: undefined;
-  ARMakeupFilter: undefined;
-  ARFilterLocation: {backRoute?: ARFilterBackRouteName} | undefined;
-  ARFilterStyle: {backRoute?: ARFilterBackRouteName} | undefined;
+  ARFilter: undefined;
+  ARFilterLocationAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
+  ARFilterStyleAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
   FeedbackEntry: undefined;
   FeedbackCapture: undefined;
   FeedbackLoading: undefined;
   FeedbackResult: undefined;
   FeedbackGuide: undefined;
   FeedbackTip: {pointId: string};
-  FilterUpload: undefined;
-  FilterLoading: undefined;
-  FilterResult: undefined;
-  FilterTryOn: undefined;
-  FilterSave: undefined;
-  FilterSaved: undefined;
+  FilterExtractionUpload: undefined;
+  FilterExtractionLoading: undefined;
+  FilterExtractionResult: undefined;
+  FilterTryOnAdjust: undefined;
+  FilterSaveForm: undefined;
+  FilterSaveComplete: undefined;
   FilterRecipeDetail: undefined;
-  RecipeSaved: undefined;
+  FilterRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
   HomeTab: undefined;
   CustomTab: undefined;
-  MyPageTab: undefined;
+  ProfileTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -51,31 +51,31 @@ export const rootStackRoutes = [
   'ImageAnalysisReportsList',
   'ImageAnalysisReportDetail',
   'ProfileEdit',
-  'MakeupStyleList',
+  'MakeupLookList',
   'LikedProductList',
-  'ARMakeupFilter',
-  'ARFilterLocation',
-  'ARFilterStyle',
+  'ARFilter',
+  'ARFilterLocationAdjust',
+  'ARFilterStyleAdjust',
   'FeedbackEntry',
   'FeedbackCapture',
   'FeedbackLoading',
   'FeedbackResult',
   'FeedbackGuide',
   'FeedbackTip',
-  'FilterUpload',
-  'FilterLoading',
-  'FilterResult',
-  'FilterTryOn',
-  'FilterSave',
-  'FilterSaved',
+  'FilterExtractionUpload',
+  'FilterExtractionLoading',
+  'FilterExtractionResult',
+  'FilterTryOnAdjust',
+  'FilterSaveForm',
+  'FilterSaveComplete',
   'FilterRecipeDetail',
-  'RecipeSaved',
+  'FilterRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [
   'HomeTab',
   'CustomTab',
-  'MyPageTab',
+  'ProfileTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

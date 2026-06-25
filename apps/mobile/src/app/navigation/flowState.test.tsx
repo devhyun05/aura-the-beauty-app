@@ -29,7 +29,7 @@ expectEqual(
 );
 
 expectEqual(
-  getInitialNavigationFlowState().savedMakeupStyle,
+  getInitialNavigationFlowState().savedMakeupLook,
   null,
   'initial saved makeup style',
 );
@@ -56,12 +56,12 @@ if (!demoState.selectedFilterPhoto) {
   throw new Error('demo selected filter photo: expected seeded photo');
 }
 
-if (!demoState.savedMakeupStyle) {
+if (!demoState.savedMakeupLook) {
   throw new Error('demo saved makeup style: expected seeded style');
 }
 
 expectEqual(
-  demoState.savedMakeupStyle.id,
+  demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
   'demo saved makeup style id',
 );

@@ -51,7 +51,7 @@ export type RouteChrome =
       statusBarStyle: 'dark' | 'light';
     });
 
-export type FooterTargetRoute = MainTabRouteName | Extract<RootStackRouteName, 'ARMakeupFilter'>;
+export type FooterTargetRoute = MainTabRouteName | Extract<RootStackRouteName, 'ARFilter'>;
 
 export const routeChromeByRoute = {
   Login: {
@@ -107,7 +107,7 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '프로필 수정',
   },
-  MakeupStyleList: {
+  MakeupLookList: {
     category: 'list',
     depth: 'sub',
     kind: 'detail',
@@ -121,19 +121,19 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '좋아요 목록',
   },
-  ARMakeupFilter: {
+  ARFilter: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ARFilterLocation: {
+  ARFilterLocationAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ARFilterStyle: {
+  ARFilterStyleAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
@@ -181,7 +181,7 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '수정팁',
   },
-  FilterUpload: {
+  FilterExtractionUpload: {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
@@ -189,26 +189,26 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '메이크업 추출',
   },
-  FilterLoading: {
+  FilterExtractionLoading: {
     category: 'progress',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FilterResult: {
+  FilterExtractionResult: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '분석 결과',
   },
-  FilterTryOn: {
+  FilterTryOnAdjust: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  FilterSave: {
+  FilterSaveForm: {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
@@ -216,7 +216,7 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '필터 저장',
   },
-  FilterSaved: {
+  FilterSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',
@@ -229,7 +229,7 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
-  RecipeSaved: {
+  FilterRecipeSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',
@@ -251,7 +251,7 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
-  MyPageTab: {
+  ProfileTab: {
     category: 'main-profile',
     depth: 'main',
     headerVariant: 'default',
@@ -276,7 +276,7 @@ export function getDetailRouteTitle(route: RouteName): string {
 
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
   if (tab === 'capture') {
-    return 'ARMakeupFilter';
+    return 'ARFilter';
   }
 
   if (tab === 'custom') {
