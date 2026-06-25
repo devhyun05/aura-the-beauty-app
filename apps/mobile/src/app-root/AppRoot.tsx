@@ -383,7 +383,10 @@ export function AppRoot() {
 
     if (activeScreen === 'feedbackEntry') {
       return (
-        <FeedbackEntryScreen onPressAiFeedback={() => setActiveScreen('feedbackCapture')} />
+        <FeedbackEntryScreen
+          onClose={() => setActiveScreen('home')}
+          onPressAiFeedback={() => setActiveScreen('feedbackCapture')}
+        />
       );
     }
 
@@ -399,6 +402,7 @@ export function AppRoot() {
     if (activeScreen === 'feedbackLoading') {
       return (
         <FeedbackLoadingScreen
+          onBack={() => setActiveScreen('feedbackCapture')}
           onComplete={handleFeedbackComplete}
           selection={selectedPhoto}
         />

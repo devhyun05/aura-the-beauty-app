@@ -22,7 +22,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackDetailHeader} from '../components/FeedbackDetailHeader';
+import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {FeedbackPoint, FeedbackPointKind} from '../types';
 
@@ -95,13 +95,23 @@ const TIP_CONTENT: Record<FeedbackPointKind, TipContent> = {
   },
 };
 
+const feedbackTipHeaderPresentation = {
+  component: 'AppHeader',
+  leftAction: 'back',
+  title: '수정팁',
+} as const;
+
+export function getFeedbackTipHeaderPresentation() {
+  return feedbackTipHeaderPresentation;
+}
+
 export function FeedbackTipScreen({point, onBack}: FeedbackTipScreenProps) {
   const content = TIP_CONTENT[point.kind];
   const PointIcon = getPointIcon(point.kind);
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <FeedbackDetailHeader onBack={onBack} variant="tip" />
+      <AppHeader onBack={onBack} title={feedbackTipHeaderPresentation.title} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}

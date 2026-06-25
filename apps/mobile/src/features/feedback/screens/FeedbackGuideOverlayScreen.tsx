@@ -28,7 +28,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {FeedbackDetailHeader} from '../components/FeedbackDetailHeader';
+import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
@@ -111,6 +111,16 @@ const GUIDE_SECTIONS: GuideSection[] = [
   },
 ];
 
+const feedbackGuideOverlayHeaderPresentation = {
+  component: 'AppHeader',
+  leftAction: 'back',
+  title: '가이드 오버레이',
+} as const;
+
+export function getFeedbackGuideOverlayHeaderPresentation() {
+  return feedbackGuideOverlayHeaderPresentation;
+}
+
 export function FeedbackGuideOverlayScreen({
   result,
   onBack,
@@ -129,7 +139,7 @@ export function FeedbackGuideOverlayScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <FeedbackDetailHeader onBack={onBack} variant="guide" />
+      <AppHeader onBack={onBack} title={feedbackGuideOverlayHeaderPresentation.title} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}
