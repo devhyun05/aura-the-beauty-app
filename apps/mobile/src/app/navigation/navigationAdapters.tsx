@@ -65,6 +65,10 @@ type MainTabScreenProps<RouteName extends keyof MainTabParamList> =
 
 type RootNavigation = NavigationProp<RootStackParamList>;
 
+type HeaderShareAction = {
+  cb: () => void;
+};
+
 type MainTabChromeProps = {
   children: React.ReactNode;
   navigation: BottomTabScreenProps<MainTabParamList>['navigation'];
@@ -245,10 +249,10 @@ export function ImageAnalysisReportDetailRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ImageAnalysisReportDetail'>) {
-  const [shareAction, setShareAction] = React.useState<(() => void) | null>(null);
+  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
-      setShareAction(() => nextShareAction);
+      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
     },
     [],
   );
@@ -257,7 +261,7 @@ export function ImageAnalysisReportDetailRouteScreen({
     <DetailRouteChrome
       routeName="ImageAnalysisReportDetail"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
-      onShare={shareAction ?? undefined}
+      onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <ImageAnalysisReportDetailScreen
         onCreateARFilter={() =>
