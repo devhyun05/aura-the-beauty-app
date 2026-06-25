@@ -28,34 +28,47 @@ This migration moves those decisions into navigation and chrome config files ins
 
 Before choosing a header, footer, or layout wrapper, classify each screen by depth and function. This classification is the design contract for the app.
 
+`routeChrome.ts` is intentionally broader than a simple header/footer lookup table. It is the central screen classification map: each route declares its depth, functional category, visible chrome type, status bar policy, and detail header copy/actions in one place. This keeps screen structure decisions out of feature screens and makes new routes easier to review.
+
+Use this distinction when discussing screens:
+
+- **Screen content** is the feature UI itself: makeup results, cards, lists, photos, forms, CTA buttons, guide overlays, and other user-facing content inside the screen.
+- **Screen chrome** is the shared frame around that content: app header, footer, status bar style, route-level detail header, fullscreen mode, and common layout shell.
+
+Feature teams should mostly own screen content. Navigation/chrome files own whether that content is shown inside a main tab shell, a detail page, an immersive runtime, or a completion surface.
+
 ### Depth Levels
+
+Depth describes where the screen sits in the user journey and how much shared app frame it should show.
 
 | Depth | Meaning | Header | Footer | Examples |
 | --- | --- | --- | --- | --- |
-| `entry` | outside the signed-in app frame | none or bespoke onboarding header | hidden | `Login`, `Tutorial` |
-| `main` | top-level app surface | brand header | visible | `HomeTab`, `CustomTab`, `MyPageTab` |
-| `sub` | one step below a main surface | detail header | hidden | `ProfileEdit`, `LikedProductList`, `FeedbackResult` |
-| `immersive` | camera, AR, try-on, or capture runtime | local overlay controls only | hidden | `FaceCapture`, `ARMakeupFilter`, `FeedbackCapture` |
-| `terminal` | completion/confirmation result | no app header, bottom actions | hidden | `FilterSaved`, `RecipeSaved` |
+| `entry` | before the user enters the app or during initial entry | none or bespoke onboarding header | hidden | `Login`, `Tutorial` |
+| `main` | top-level app tab surface | brand header | visible | `HomeTab`, `CustomTab`, `MyPageTab` |
+| `sub` | one step inside a main surface: detail, list, or form | detail header | hidden | `ProfileEdit`, `LikedProductList`, `FeedbackResult` |
+| `immersive` | focused experience where normal header/footer would get in the way | local overlay controls only | hidden | `FaceCapture`, `ARMakeupFilter`, `ARFilterLocation` |
+| `terminal` | end-of-flow confirmation or completion screen | no app header, bottom actions | hidden | `FilterSaved`, `RecipeSaved` |
 
 ### Functional Categories
 
+Category describes what the screen does within its depth. Two screens can both be `sub`, but one may be a `list` and another may be a `form-edit`, so their content and right-side header actions can differ.
+
 | Category | Purpose | Layout Rules |
 | --- | --- | --- |
-| `auth` | login or account entry | centered brand/content, no app footer |
-| `onboarding` | first-run education | immersive copy, primary CTA, no app footer |
-| `main-home` | home dashboard | brand header, footer, section stacks |
+| `auth` | login or account entry before the main app | centered brand/content, no app footer |
+| `onboarding` | first-run education or setup guidance | immersive copy, primary CTA, no app footer |
+| `main-home` | home dashboard and primary recommendations entry | brand header, footer, section stacks |
 | `main-recommendation` | product recommendation hub | brand/product header, footer, reusable content sections |
-| `main-profile` | user hub | brand header, footer visible with no active footer item |
-| `feature-entry` | starts a feature flow | detail header or close header, one primary action |
-| `list` | saved/list/index screen | detail header, grid/list, empty state if needed |
-| `detail-report` | analysis/report/read-only result | detail header, scroll content, route-level actions if needed |
-| `form-edit` | user editing or save form | detail header, right save/done action when needed |
-| `progress` | loading/analysis progress | detail header if user can go back, fullscreen only for immersive flows |
-| `capture-runtime` | camera/photo acquisition | fullscreen, overlay close/back controls |
-| `ar-runtime` | AR or try-on runtime | fullscreen, overlay controls |
-| `completion` | saved/done confirmation | centered icon/title/copy, bottom actions |
-| `navigation-host` | navigator container route | no visible UI of its own |
+| `main-profile` | user hub and saved activity entry points | brand header, footer visible with no active footer item |
+| `feature-entry` | starts a feature flow from a main surface | detail header or close header, one primary action |
+| `list` | saved/list/index screen for browsing existing items | detail header, grid/list, empty state if needed |
+| `detail-report` | analysis/report/read-only result screen | detail header, scroll content, route-level actions if needed |
+| `form-edit` | user editing, naming, saving, or settings form | detail header, right save/done action when needed |
+| `progress` | loading, analysis, extraction, or waiting state | detail header if user can go back, fullscreen only for immersive flows |
+| `capture-runtime` | camera/photo acquisition surface | fullscreen, overlay close/back controls |
+| `ar-runtime` | AR, try-on, or filter adjustment runtime | fullscreen, overlay controls |
+| `completion` | saved/done confirmation at the end of a flow | centered icon/title/copy, bottom actions |
+| `navigation-host` | navigator container route that only hosts child routes | no visible UI of its own |
 
 ### Current Screen Inventory
 
@@ -70,7 +83,7 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `CustomTab` | `main` | `main-recommendation` | brand header + footer | Product recommendation copy, active footer `custom`. |
 | `MyPageTab` | `main` | `main-profile` | brand header + footer | Footer visible with no active footer item. |
 | `FaceCapture` | `immersive` | `capture-runtime` | fullscreen | Camera-like close/capture overlay only. |
-| `ImageAnalysisLoading` | `sub` | `progress` | detail header | Current code uses `AppHeader` title `얼굴 분석`. |
+| `ImageAnalysisLoading` | `sub` | `progress` | detail header | Route-level detail header title `얼굴 분석`. |
 | `ImageAnalysisReportsList` | `sub` | `list` | detail header | Grid/list index screen. |
 | `ImageAnalysisReportDetail` | `sub` | `detail-report` | detail header with actions | Preserve share and close actions. |
 | `ProfileEdit` | `sub` | `form-edit` | detail header | Profile form; logout remains screen content action. |
@@ -79,9 +92,9 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `ARMakeupFilter` | `immersive` | `ar-runtime` | fullscreen | AR/camera runtime. |
 | `ARFilterLocation` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
 | `ARFilterStyle` | `immersive` | `ar-runtime` | fullscreen | AR adjustment runtime. |
-| `FeedbackEntry` | `sub` | `feature-entry` | detail header with close action | Current code uses `AppHeader` title `메이크업 피드백`. |
+| `FeedbackEntry` | `sub` | `feature-entry` | detail header with close action | Route-level close header title `메이크업 피드백`. |
 | `FeedbackCapture` | `immersive` | `capture-runtime` | fullscreen | Camera/gallery acquisition. |
-| `FeedbackLoading` | `sub` | `progress` | detail header | Current code uses `AppHeader` title `메이크업 피드백`. |
+| `FeedbackLoading` | `sub` | `progress` | detail header | Route-level detail header title `메이크업 피드백`. |
 | `FeedbackResult` | `sub` | `detail-report` | detail header | Feedback report result. |
 | `FeedbackGuide` | `sub` | `detail-report` | detail header | Feedback guide overlay explanation. |
 | `FeedbackTip` | `sub` | `detail-report` | detail header | One selected feedback point. |
@@ -91,8 +104,45 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 | `FilterTryOn` | `immersive` | `ar-runtime` | fullscreen | Try-on editor/runtime. |
 | `FilterSave` | `sub` | `form-edit` | detail header with save action | Preserve right `완료` action. |
 | `FilterSaved` | `terminal` | `completion` | fullscreen | Saved confirmation with bottom actions. |
-| `FilterRecipeDetail` | `sub` | `detail-report` | detail header | Current code title is `상세 분석`; tab row stays in content. |
+| `FilterRecipeDetail` | `sub` | `detail-report` | detail header | Route-level title is `상세 분석`; tab row stays in content. |
 | `RecipeSaved` | `terminal` | `completion` | fullscreen | Recipe saved confirmation with bottom actions. |
+
+### 현재 앱 화면별 상태
+
+현재 앱의 화면 상태는 `routeChrome.ts`, `RootNavigator.tsx`, `MainTabNavigator.tsx`, `DetailRouteChrome` 기준으로 다음처럼 정리된다. 팀원이 새 화면을 추가하거나 기존 화면을 수정할 때는 이 표에서 같은 성격의 화면을 먼저 찾고, 같은 depth/category/chrome 규칙을 따르는 것이 기본이다.
+
+| 화면/Route | 현재 depth | category | 현재 chrome 상태 |
+| --- | --- | --- | --- |
+| `Login` | `entry` | `auth` | 로그인 진입 화면. 앱 공통 헤더/푸터 없이 fullscreen으로 표시한다. |
+| `Tutorial` | `entry` | `onboarding` | 온보딩/촬영 안내 진입 화면. 앱 공통 푸터 없이 자체 온보딩 UI를 사용한다. |
+| `MainTabs` | `main` | `navigation-host` | 실제 화면을 그리지 않는 탭 navigator host다. |
+| `HomeTab` | `main` | `main-home` | 메인 홈 탭. brand header와 footer를 보여주고 footer `home`이 active다. |
+| `CustomTab` | `main` | `main-recommendation` | 추천 탭. brand/product header와 footer를 보여주고 footer `custom`이 active다. |
+| `MyPageTab` | `main` | `main-profile` | 마이페이지 탭. brand header와 footer를 보여주지만 active footer item은 없다. |
+| `FaceCapture` | `immersive` | `capture-runtime` | 얼굴 촬영 화면. 일반 header/footer 없이 카메라형 overlay control만 사용한다. |
+| `ImageAnalysisLoading` | `sub` | `progress` | 얼굴 분석 진행 화면. route-level detail header title은 `얼굴 분석`이다. |
+| `ImageAnalysisReportsList` | `sub` | `list` | 이미지 분석 결과 목록. route-level detail header title은 `이미지 분석 결과`다. |
+| `ImageAnalysisReportDetail` | `sub` | `detail-report` | 맞춤 분석 보고서 상세. route-level detail header title은 `맞춤 분석 보고서`, 오른쪽 action은 `share`, `close`다. |
+| `ProfileEdit` | `sub` | `form-edit` | 프로필 수정 폼. route-level detail header title은 `프로필 수정`이고 로그아웃은 화면 콘텐츠 action이다. |
+| `MakeupStyleList` | `sub` | `list` | 저장된 메이크업 룩 목록. route-level detail header title은 `메이크업 룩`이다. |
+| `LikedProductList` | `sub` | `list` | 좋아요 상품 목록. route-level detail header title은 `좋아요 목록`이다. |
+| `ARMakeupFilter` | `immersive` | `ar-runtime` | AR 메이크업 필터 런타임. 일반 header/footer 없이 fullscreen overlay UI를 사용한다. |
+| `ARFilterLocation` | `immersive` | `ar-runtime` | AR 필터 위치 조정 화면. fullscreen이며 local overlay controls를 사용한다. |
+| `ARFilterStyle` | `immersive` | `ar-runtime` | AR 필터 스타일 조정 화면. fullscreen이며 local overlay controls를 사용한다. |
+| `FeedbackEntry` | `sub` | `feature-entry` | 메이크업 피드백 시작 화면. route-level title은 `메이크업 피드백`, 오른쪽 action은 `close`다. |
+| `FeedbackCapture` | `immersive` | `capture-runtime` | 피드백 사진 촬영/선택 화면. 일반 header/footer 없이 capture UI를 사용한다. |
+| `FeedbackLoading` | `sub` | `progress` | 피드백 분석 진행 화면. route-level detail header title은 `메이크업 피드백`이다. |
+| `FeedbackResult` | `sub` | `detail-report` | 피드백 결과 보고서. route-level detail header title은 `메이크업 피드백`이다. |
+| `FeedbackGuide` | `sub` | `detail-report` | 피드백 가이드 오버레이 설명 화면. route-level detail header title은 `가이드 오버레이`다. |
+| `FeedbackTip` | `sub` | `detail-report` | 선택된 피드백 포인트 수정팁. route-level detail header title은 `수정팁`이다. |
+| `FilterUpload` | `sub` | `feature-entry` | 메이크업 추출 시작/사진 선택 화면. route-level title은 `메이크업 추출`, 오른쪽 action은 `close`다. |
+| `FilterLoading` | `immersive` | `progress` | 필터 추출 진행 화면. fullscreen이며 진행 화면 안의 compact back affordance를 사용한다. |
+| `FilterResult` | `sub` | `detail-report` | 추출된 메이크업 분석 결과. route-level detail header title은 `분석 결과`다. |
+| `FilterTryOn` | `immersive` | `ar-runtime` | 추출 필터 try-on 조정 화면. 일반 header/footer 없이 fullscreen runtime UI를 사용한다. |
+| `FilterSave` | `sub` | `form-edit` | 필터 저장 폼. route-level detail header title은 `필터 저장`, 오른쪽 action은 `done`이다. |
+| `FilterSaved` | `terminal` | `completion` | 필터 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
+| `FilterRecipeDetail` | `sub` | `detail-report` | 메이크업 레시피 상세 분석. route-level title은 `상세 분석`, 내부 tab row는 화면 콘텐츠로 유지한다. |
+| `RecipeSaved` | `terminal` | `completion` | 레시피 저장 완료 화면. header/footer 없이 완료 메시지와 하단 action을 보여준다. |
 
 ### Design Contract By Classification
 

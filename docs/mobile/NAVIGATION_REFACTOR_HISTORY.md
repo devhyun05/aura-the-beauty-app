@@ -297,6 +297,18 @@ commitlint 설정은 루트 `commitlint.config.js` 기준으로 `feat`, `fix`, `
 
 이번 브랜치에는 React Navigation 전환 이후 전체 화면 상태를 검토할 수 있는 캡처 산출물을 포함한다.
 
+최신 캡처본:
+
+- `apps/mobile/screenshots/all-screens-20260625-160028/`
+- `apps/mobile/screenshots/all-screens-20260625-160028.zip`
+
+이번 최신 캡처는 iPhone 17 Pro iOS Simulator에서 Expo Go를 실행한 뒤, React Navigation deep link path로 route를 하나씩 열어 저장했다. 결과 화면처럼 flow state가 필요한 화면은 실제 loading route를 먼저 통과시켜 mock result state가 채워진 상태에서 캡처했다. 캡처 중 entry 화면과 filter extraction 계열은 `exp://localhost:8082/--/` prefix가 가장 안정적으로 동작해 해당 prefix로 재캡처했다.
+
+최신 캡처 파일 구성:
+
+- `00_contact_sheet.jpg`: 29개 화면을 한 장에 모은 검토용 contact sheet
+- `01_Login.png`부터 `29_RecipeSaved.png`: route별 개별 화면 캡처
+
 포함 경로:
 
 - `apps/mobile/screenshots/all-screens-20260625-142436/`
