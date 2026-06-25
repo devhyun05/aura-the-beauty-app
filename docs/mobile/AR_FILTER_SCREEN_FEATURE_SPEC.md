@@ -4,6 +4,11 @@
 
 이 문서는 AR 필터 적용 화면에 대해 대화에서 결정한 기능, 용어, UI 구조, 상태 동작을 정리한 상세 기획서다. 현재 단계의 구현 범위는 모바일 프론트엔드 UI/UX와 mock 상태 처리이며, 실제 Unity AR, ARKit/ARCore, AI 추천 로직, 백엔드 API 연동은 포함하지 않는다.
 
+네이밍 최종 결정과 실제 rename 작업 순서는 다음 문서를 기준으로 한다.
+
+- `docs/mobile/NAMING_DECISIONS.md`
+- `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md`
+
 ## 1. 배경과 목표
 
 AR 필터 화면은 사용자가 추천 또는 저장된 메이크업 필터를 얼굴에 실시간으로 적용해 보고, 토탈메이크업 또는 포인트메이크업 단위로 필터 값을 조정한 뒤 저장할 수 있는 화면이다.
@@ -42,6 +47,11 @@ AR 필터 화면은 사용자가 추천 또는 저장된 메이크업 필터를 
 17. 최종적으로 `스타일`은 사용자-facing 용어에서 제거하고, 메이크업에서 자연스럽게 쓰이는 `룩`을 사용하기로 했다.
 18. 얼굴 전체는 `토탈메이크업/토탈메이크업룩`, 개별 부위는 `포인트메이크업/포인트메이크업룩`으로 구분한다.
 19. 코드 변수와 타입에는 `makeup`을 넣어 도메인 의미를 명확히 하기로 했다.
+20. 이후 네이밍 결정에서 편집 화면은 `LookEdit`이 아니라 현재 적용될 필터 조합 전체를 편집하는 `MakeupFilterEditScreen` 계열로 정리했다.
+21. 저장 화면은 `MakeupLookSaveScreen`이 아니라 저장/적용 가능한 효과 단위인 `MakeupFilterSaveScreen` 계열로 정리했다.
+22. 형태 조정에서 사용자가 옮기는 점은 실제 얼굴 인식 랜드마크가 아니므로 `landmarkPoint`가 아니라 `shapePoint`로 정의했다.
+23. `shapePoint`의 좌표는 `position`, 기준점 대비 이동량은 `offset`으로 구분한다.
+24. 메이크업 적용/저장/편집 범위의 기준 타입은 `MakeupArea`로 통합한다.
 
 ## 2. 최종 용어 정의
 
@@ -89,7 +99,23 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 
 `형태`
 
-메이크업 레이어가 얼굴 랜드마크에 맞춰 적용되는 모양과 배치 패턴이다. 초기에 `위치`라는 표현을 검토했지만, 단순 좌표 이동보다 랜드마크 기반 적용 모양을 다루는 개념이므로 최종 용어는 `형태`로 결정했다.
+메이크업 레이어가 얼굴 기준점에 맞춰 적용되는 모양, 범위, 변형 패턴이다. 초기에 `위치`라는 표현을 검토했지만, 단순 좌표 이동보다 기준점 기반 적용 모양을 다루는 개념이므로 최종 용어는 `형태`로 결정했다.
+
+`shapePoint`
+
+사용자가 손가락으로 옮기는 메이크업 형태 조정점이다. 실제 얼굴 인식 모델의 랜드마크를 옮기는 것이 아니므로 `landmarkPoint`라고 부르지 않는다.
+
+`position`
+
+`shapePoint`의 기준 좌표 또는 현재 좌표다. 좌표 데이터에는 사용할 수 있지만, 사용자-facing 옵션명으로는 쓰지 않는다.
+
+`offset`
+
+`shapePoint`가 기준점에서 좌우/상하로 얼마나 이동했는지 나타내는 이동값이다.
+
+`MakeupArea`
+
+메이크업 적용, 저장, 편집 범위의 기준 타입이다. 전체, 립, 아이, 치크, 아이브로우, 컨투어 등 메이크업 부위 자체를 뜻한다. 특정 동작의 적용 대상일 때만 변수명에서 `targetMakeupArea`처럼 `target`을 붙인다.
 
 `원본`
 
@@ -139,7 +165,15 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 - `selectedMakeupOptionGroup`
 - `hasUnsavedMakeupChanges`
 - `MakeupShapeOption`
+- `shapePoint`
+- `shapePoint.position`
+- `shapePoint.offset`
+- `selectedMakeupArea`
+- `targetMakeupArea`
+- `makeupAreaScope`
 - `MakeupFilter`
+- `MakeupFilterEditScreen`
+- `MakeupFilterSaveScreen`
 - `TotalMakeupLook`
 - `PointMakeupLook`
 
@@ -322,12 +356,14 @@ AR 필터 화면에 처음 진입하면 기본 토탈메이크업룩이 선택�
 
 형태 수정 화면의 목적은 다음과 같다.
 
-- 메이크업 레이어가 얼굴 랜드마크에 붙는 기준을 조정한다.
-- 좌우 이동, 상하 이동, 크기, 각도 같은 값을 조정할 수 있다.
+- 메이크업 레이어가 얼굴 기준점에 붙는 형태를 조정한다.
+- 사용자는 얼굴 위 형태 조정점인 `shapePoint`를 손가락으로 직접 옮긴다.
+- `shapePoint.position`은 기준/현재 좌표, `shapePoint.offset`은 기준점 대비 좌우/상하 이동값으로 저장한다.
+- 필요하면 크기, 각도 같은 파생 값을 함께 조정할 수 있다.
 - 사용자는 조정한 형태를 저장하고 이후 형태 옵션으로 재사용할 수 있다.
 - 형태는 컬러, 타입, 질감과 같은 조합 가능한 옵션으로 취급한다.
 
-형태 수정은 `위치 조정`이라는 이름을 사용하지 않는다. 화면 문구는 `형태 수정`을 사용하고, 세부 조정 항목은 필요한 경우 `좌우 이동`, `상하 이동`, `크기`, `각도`처럼 조작 단위로 표현한다.
+형태 수정은 `위치 조정`이라는 이름을 사용하지 않는다. 화면 문구는 `형태 수정`을 사용하고, 세부 데이터 이름은 `shapePoint`, `position`, `offset`으로 구분한다. 실제 얼굴 인식 랜드마크 기준점은 `landmark` 계열 이름을 사용할 수 있지만, 사용자가 옮기는 점에는 `landmarkPoint`를 사용하지 않는다.
 
 ## 9. 저장 기능
 
@@ -339,7 +375,7 @@ AR 필터 화면에 처음 진입하면 기본 토탈메이크업룩이 선택�
 - 립, 아이, 칙, 베이스, 윤곽 등 특정 부위 상태를 저장하면 `포인트메이크업룩`으로 저장한다.
 - 저장된 포인트메이크업룩은 이후 토탈메이크업룩을 구성하는 재료로 사용할 수 있다.
 
-현재 모바일 앱의 기존 저장 화면 흐름에서는 `ExtractedMakeupStyleSaveForm` route를 재사용할 수 있다. 이후 실제 제품 구조가 정리되면 AR 필터 전용 저장 화면 또는 공통 메이크업 룩 저장 화면으로 분리할 수 있다.
+저장 버튼은 최종 네이밍 기준으로 `MakeupFilterSaveScreen`으로 이동한다. 현재 코드에 남아 있는 `ExtractedMakeupStyleSaveForm` route와 화면은 레거시 이름이며, 추후 `MakeupFilterSaveForm`/`MakeupFilterSaveScreen` 계열로 rename한다.
 
 저장 화면으로 넘겨야 하는 데이터는 다음과 같다.
 
@@ -377,11 +413,37 @@ type ARMakeupOptionGroupId =
   | 'type'
   | 'texture'
   | 'shape';
+
+type MakeupArea =
+  | 'total'
+  | 'lip'
+  | 'eye'
+  | 'eyeShadow'
+  | 'eyeLine'
+  | 'eyelash'
+  | 'contactLens'
+  | 'aegyosal'
+  | 'cheek'
+  | 'eyebrow'
+  | 'contour';
+
+type ShapePoint = {
+  id: string;
+  position: {
+    x: number;
+    y: number;
+  };
+  offset: {
+    x: number;
+    y: number;
+  };
+};
 ```
 
 주요 상태 예시는 다음과 같다.
 
-- `selectedFacePartId`: 현재 선택된 전체 또는 개별 부위
+- `selectedMakeupArea`: 현재 선택된 전체 또는 개별 메이크업 부위
+- `targetMakeupArea`: 현재 필터 편집/저장의 적용 대상 부위
 - `makeupFilterScope`: 저장 또는 편집 대상이 토탈메이크업인지 포인트메이크업인지 구분하는 값
 - `selectedMakeupOptionGroup`: 현재 선택된 옵션 그룹
 - `selectedTotalMakeupLookId`: 토탈메이크업룩 카드 선택값
@@ -398,9 +460,10 @@ type ARMakeupOptionGroupId =
 - 형태 ID
 - 표시 이름
 - 적용 부위
-- 기준 랜드마크 세트
-- 좌우 이동값
-- 상하 이동값
+- 원본 얼굴 인식 기준점 참조
+- `shapePoint` 목록
+- `shapePoint.position`
+- `shapePoint.offset`
 - 크기 조정값
 - 회전값
 - 프리뷰 이미지 또는 프리뷰 생성 정보
@@ -449,9 +512,12 @@ type ARMakeupOptionGroupId =
 - 개별 옵션 수정 후 저장 버튼이 활성화된다.
 - 새 토탈메이크업룩을 선택하면 해당 룩 선택 상태로 전환되고 저장 버튼은 비활성화된다.
 - `형태 수정` 버튼이 제공되고 형태 수정 화면으로 이동한다.
-- 저장 버튼을 누르면 필터 저장 화면으로 이동한다.
+- 저장 버튼을 누르면 `MakeupFilterSaveScreen` 계열의 필터 저장 화면으로 이동한다.
 - 사용자-facing 문구에서 `위치` 대신 `형태`를 사용한다.
 - 사용자-facing 문구에서 `스타일` 대신 `룩`을 사용한다.
+- 형태 조정점은 `shapePoint`로 정의하고, 실제 얼굴 인식 랜드마크에는 `landmarkPoint`를 쓰지 않는다.
+- 점의 좌표와 이동량은 `position`, `offset`으로 구분한다.
+- 메이크업 부위 기준 타입은 `MakeupArea`를 사용한다.
 - 메이크업 필터는 토탈메이크업룩과 포인트메이크업룩을 모두 저장할 수 있다.
 - 코드 변수와 타입에서 메이크업 도메인 상태는 `makeup`을 포함해 의미를 분명히 한다.
 
@@ -463,6 +529,7 @@ type ARMakeupOptionGroupId =
 - 형태 수정 화면에서 사용자가 직접 만든 형태를 카드 목록에 즉시 추가할지 여부
 - 토탈메이크업룩 선택 시 기존 개별 수정 상태를 완전히 폐기할지, 히스토리로 보관할지 여부
 - `원본` 선택 상태를 저장 가능한 사용자 커스텀으로 볼지 여부
-- AR 필터 전용 저장 화면을 만들지, 기존 메이크업 룩 저장 화면을 공통으로 사용할지 여부
+- `ExtractedMakeupStyleSaveForm` 레거시 route를 `MakeupFilterSaveScreen`으로 rename하는 실제 적용 범위
+- `ARFilterStyleAdjustScreen` 레거시 route를 `MakeupFilterEditScreen`으로 rename하는 실제 적용 범위
 - 포인트메이크업룩을 토탈메이크업룩으로 조합할 때 충돌하는 부위/형태 값을 어떻게 병합할지 여부
 - 실제 Unity 또는 네이티브 AR 모듈과 프론트엔드 mock 상태를 연결하는 인터페이스

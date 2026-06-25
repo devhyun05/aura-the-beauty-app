@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Latest naming note (2026-06-26):** This document preserves route names from the navigation refactor period. For new work, use `docs/mobile/NAMING_DECISIONS.md` and `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md` as the naming source of truth. In particular, makeup-domain `Style` names should move to `Look`, AR edit/save surfaces should move to `MakeupFilterEditScreen`/`MakeupFilterSaveScreen`, `Location` options should move to `Shape`/`shapePoint`, face analysis should move from `ImageAnalysis*` to `FaceAnalysis*`, and recommended product items should use `RecommendedProduct`.
+
 **Goal:** Replace the current `activeScreen` state router with React Navigation and make header/footer behavior consistent across the mobile app.
 
 **Architecture:** React Navigation owns route state, back behavior, and tab selection. Existing visual components (`AppHeader`, `AppFooter`, `AppScreen`) remain the design system surfaces, while a central route chrome config decides whether each route shows a main tab shell, a detail header, or a fullscreen layout.
