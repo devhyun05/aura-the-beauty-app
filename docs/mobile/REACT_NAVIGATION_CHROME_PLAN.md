@@ -103,22 +103,23 @@ Use this table as the starting point for `routeChrome.ts`. If a screen is added 
 - `progress` screens are not automatically fullscreen. If the user should be able to back out through normal navigation, use a detail header.
 - If a new screen does not fit one of these categories, add the category to this document before implementing the screen.
 
-## Current State
+## Implementation State
 
-### Existing Router
+### Current Router
 
 - `apps/mobile/src/app-root/AppRoot.tsx`
   - owns app providers
-  - owns screen state with `activeScreen`
-  - owns transient flow state such as selected feedback photo, selected filter photo, feedback result, selected report id, and AR adjustment back target
-  - renders screens with a long `renderScreen()` branch
-  - contains a local `AppShell` that currently means "main tab shell"
+  - loads shared fonts
+  - hosts `NavigationContainer`
+  - syncs `StatusBar` style from `routeChrome`
 
-- `apps/mobile/src/app-root/navigation.ts`
-  - owns pure routing helpers
-  - owns `appScreens`
-  - owns `screenChromeByScreen`
-  - currently transitional; classify screens from actual screen structure and the inventory above, not from this map alone
+- `apps/mobile/src/app/navigation/*`
+  - owns typed routes, route chrome policy, React Navigation stack/tabs, flow state, and route adapters
+  - replaces the legacy `activeScreen` router and old `app-root/navigation.ts`
+
+### Migration Note
+
+The main shell header/footer is route-level now. Detail screen titles are also supplied from `routeChrome` through route adapters. Some detail screens still render the visual `AppHeader` internally when they own screen-specific actions such as share, close, or done. Lifting those visual headers fully into navigator chrome is a follow-up cleanup, not a prerequisite for the React Navigation migration.
 
 ### Existing Shared Chrome Components
 
@@ -146,9 +147,12 @@ apps/mobile/src/
       MainTabNavigator.tsx
       routeTypes.ts
       routeChrome.ts
+      mainTabChrome.ts
+      navigationState.ts
       flowState.tsx
       navigationAdapters.tsx
       navigation.test.ts
+      mainTabChrome.test.ts
   shared/
     ui/
       AppHeader.tsx
@@ -165,19 +169,27 @@ apps/mobile/src/
 | `MainTabNavigator.tsx` | Bottom tab routes: home, product recommendation, hidden my page route, and footer capture action. |
 | `routeTypes.ts` | Typed route names and route params. |
 | `routeChrome.ts` | Single source of truth for header/footer/fullscreen policy and header copy. |
+| `mainTabChrome.ts` | Main tab header copy and footer target helpers. |
+| `navigationState.ts` | Active nested route and status bar style helpers. |
 | `flowState.tsx` | Temporary flow state that should not be passed through navigation params. |
 | `navigationAdapters.tsx` | Thin adapters that pass navigation callbacks into existing screen components during migration. |
-| `navigation.test.ts` | Pure tests for route mapping, chrome policy, header copy, and footer tab mapping. |
+| `navigation.test.ts` | Pure tests for route mapping, chrome policy, status bar policy, and footer tab mapping. |
 
 ## Route Model
 
 Use typed route names instead of string screen state.
 
 ```ts
+import type {NavigatorScreenParams} from '@react-navigation/native';
+
+export type ARFilterBackRouteName =
+  | 'ARMakeupFilter'
+  | 'ImageAnalysisReportDetail';
+
 export type RootStackParamList = {
   Login: undefined;
   Tutorial: undefined;
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
   ImageAnalysisLoading: undefined;
   ImageAnalysisReportsList: undefined;
@@ -186,8 +198,8 @@ export type RootStackParamList = {
   MakeupStyleList: undefined;
   LikedProductList: undefined;
   ARMakeupFilter: undefined;
-  ARFilterLocation: {backRoute?: RootStackRouteName} | undefined;
-  ARFilterStyle: {backRoute?: RootStackRouteName} | undefined;
+  ARFilterLocation: {backRoute?: ARFilterBackRouteName} | undefined;
+  ARFilterStyle: {backRoute?: ARFilterBackRouteName} | undefined;
   FeedbackEntry: undefined;
   FeedbackCapture: undefined;
   FeedbackLoading: undefined;
@@ -441,7 +453,7 @@ Keep business logic inside feature services. This provider only carries cross-ro
 - Modify: `apps/mobile/package.json`
 - Modify: `apps/mobile/package-lock.json`
 
-- [ ] **Step 1: Install navigation packages**
+- [x] **Step 1: Install navigation packages**
 
 Run:
 
@@ -458,7 +470,7 @@ Expected:
 - Do not add `react-native-gesture-handler` unless a later navigator requires it.
 - `react-native-safe-area-context` is already installed and should not be duplicated manually.
 
-- [ ] **Step 2: Verify dependency tree**
+- [x] **Step 2: Verify dependency tree**
 
 Run:
 
@@ -471,7 +483,7 @@ Expected:
 - Command exits `0`.
 - Installed versions are printed.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/mobile/package.json apps/mobile/package-lock.json
@@ -485,13 +497,12 @@ git commit -m "chore: React Navigation 의존성 추가"
 - Create: `apps/mobile/src/app/navigation/routeTypes.ts`
 - Create: `apps/mobile/src/app/navigation/routeChrome.ts`
 - Create: `apps/mobile/src/app/navigation/navigation.test.ts`
-- Modify: `apps/mobile/src/app-root/navigation.ts`
 
-- [ ] **Step 1: Move route names into `routeTypes.ts`**
+- [x] **Step 1: Move route names into `routeTypes.ts`**
 
-Create route types matching the route model above. Keep old `AppScreenKey` exports in `app-root/navigation.ts` temporarily by re-exporting compatible values if existing tests still import them.
+Create route types matching the route model above.
 
-- [ ] **Step 2: Add route chrome config**
+- [x] **Step 2: Add route chrome config**
 
 Create `routeChromeByRoute` with one entry for every `RootStackRouteName` and every `MainTabRouteName`.
 
@@ -579,7 +590,7 @@ export const routeChromeByRoute = {
 
 Complete every missing route explicitly. The TypeScript `satisfies Record<RouteName, RouteChrome>` check should fail until all route names are covered.
 
-- [ ] **Step 3: Add pure tests**
+- [x] **Step 3: Add pure tests**
 
 `navigation.test.ts` should assert:
 
@@ -595,7 +606,7 @@ expectEqual(getRouteChrome('ARMakeupFilter').depth, 'immersive', 'AR depth');
 expectEqual(getFooterTargetRoute('capture'), 'ARMakeupFilter', 'capture footer action');
 ```
 
-- [ ] **Step 4: Run scoped typecheck**
+- [x] **Step 4: Run scoped typecheck**
 
 Run:
 
@@ -607,10 +618,10 @@ Expected:
 
 - Command exits `0`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add apps/mobile/src/app/navigation/routeTypes.ts apps/mobile/src/app/navigation/routeChrome.ts apps/mobile/src/app/navigation/navigation.test.ts apps/mobile/src/app-root/navigation.ts
+git add apps/mobile/src/app/navigation/routeTypes.ts apps/mobile/src/app/navigation/routeChrome.ts apps/mobile/src/app/navigation/navigation.test.ts
 git commit -m "refactor: 모바일 라우트 chrome 설정 추가"
 ```
 
@@ -622,7 +633,7 @@ git commit -m "refactor: 모바일 라우트 chrome 설정 추가"
 - Create: `apps/mobile/src/app/navigation/flowState.test.tsx`
 - Modify: `apps/mobile/src/app-root/AppRoot.tsx`
 
-- [ ] **Step 1: Create provider**
+- [x] **Step 1: Create provider**
 
 `flowState.tsx` should export:
 
@@ -644,11 +655,11 @@ export function useNavigationFlowState() {
 
 The value should include the current flow values and setter functions currently owned by `AppRoot.tsx`.
 
-- [ ] **Step 2: Wrap the app root**
+- [x] **Step 2: Wrap the app root**
 
 In `AppRoot.tsx`, wrap the navigator area with `NavigationFlowStateProvider` after fonts are loaded.
 
-- [ ] **Step 3: Add provider guard test**
+- [x] **Step 3: Add provider guard test**
 
 `flowState.test.tsx` should validate the hook error message string through an exported pure helper:
 
@@ -660,7 +671,7 @@ expectEqual(
 );
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/mobile/src/app/navigation/flowState.tsx apps/mobile/src/app/navigation/flowState.test.tsx apps/mobile/src/app-root/AppRoot.tsx
@@ -676,7 +687,7 @@ git commit -m "refactor: 모바일 내비게이션 흐름 상태 분리"
 - Create: `apps/mobile/src/app/navigation/navigationAdapters.tsx`
 - Modify: `apps/mobile/src/app-root/AppRoot.tsx`
 
-- [ ] **Step 1: Create `RootNavigator`**
+- [x] **Step 1: Create `RootNavigator`**
 
 `RootNavigator` should use:
 
@@ -686,7 +697,7 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 All root stack screens should set `headerShown: false` at the navigator level. Visual headers come from route chrome wrappers, not React Navigation default headers.
 
-- [ ] **Step 2: Create `MainTabNavigator`**
+- [x] **Step 2: Create `MainTabNavigator`**
 
 `MainTabNavigator` should use:
 
@@ -703,7 +714,7 @@ Rules:
 - `MyPageTab` is a hidden tab route reached from the header profile button; render the footer with no active tab.
 - Footer item `capture` calls `navigation.getParent()?.navigate('ARMakeupFilter')` and does not correspond to a tab route.
 
-- [ ] **Step 3: Add adapters for existing screens**
+- [x] **Step 3: Add adapters for existing screens**
 
 Create thin adapter components that keep feature screens mostly unchanged during migration.
 
@@ -725,16 +736,16 @@ function HomeRouteScreen({navigation}: HomeRouteScreenProps) {
 }
 ```
 
-- [ ] **Step 4: Replace `activeScreen` routing**
+- [x] **Step 4: Replace `activeScreen` routing**
 
 `AppRoot.tsx` should render:
 
 ```tsx
-<NavigationContainer>
-  <NavigationFlowStateProvider>
+<NavigationFlowStateProvider>
+  <NavigationContainer>
     <RootNavigator />
-  </NavigationFlowStateProvider>
-</NavigationContainer>
+  </NavigationContainer>
+</NavigationFlowStateProvider>
 ```
 
 The old `activeScreen`, `renderScreen()`, and local `AppShell` should be removed after all route adapters are connected.
@@ -746,7 +757,7 @@ git add apps/mobile/src/app/navigation/RootNavigator.tsx apps/mobile/src/app/nav
 git commit -m "refactor: 모바일 화면 전환을 React Navigation으로 변경"
 ```
 
-### Task 5: Move Detail Headers Out Of Feature Screens
+### Task 5: Centralize Detail Header Policy
 
 **Files:**
 
@@ -768,11 +779,15 @@ git commit -m "refactor: 모바일 화면 전환을 React Navigation으로 변�
 - Delete: `apps/mobile/src/features/feedback/components/FeedbackDetailHeader.tsx`
 - Delete: `apps/mobile/src/features/feedback/components/FeedbackDetailHeader.test.tsx`
 
-- [ ] **Step 1: Remove screen-local `AppHeader` imports**
+- [x] **Step 1: Inject detail titles from `routeChrome`**
 
-Each detail screen should become content-only. Route adapters should provide the visual header.
+Route adapters should pass `getDetailRouteTitle(routeName)` into detail screens so production header titles come from `routeChrome`.
 
-- [ ] **Step 2: Normalize `AppScreen` padding**
+- [ ] **Step 2: Remove screen-local `AppHeader` imports**
+
+Each detail screen can later become content-only. Route adapters or navigator options should provide the visual header.
+
+- [ ] **Step 3: Normalize `AppScreen` padding**
 
 Detail route content should use:
 
@@ -784,11 +799,11 @@ Detail route content should use:
 
 If a detail screen already owns scroll behavior, use `scroll={false}` and keep the inner scroll view.
 
-- [ ] **Step 3: Preserve special actions**
+- [ ] **Step 4: Preserve special actions**
 
 `ImageAnalysisReportDetailScreen` currently has share and close actions. Move those actions into route-level `rightSlot` config or a route-specific chrome adapter. Do not remove the actions.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/mobile/src/features apps/mobile/src/app/navigation
@@ -807,15 +822,15 @@ git commit -m "refactor: 상세 화면 헤더를 라우트 chrome으로 이동"
 - Modify: `apps/mobile/src/features/feedback/screens/FeedbackCaptureScreen.tsx`
 - Modify: `apps/mobile/src/features/filter-extraction/screens/FilterTryOnAdjustScreen.tsx`
 
-- [ ] **Step 1: Verify fullscreen routes**
+- [x] **Step 1: Verify fullscreen routes**
 
 Every fullscreen route should have `kind: 'fullscreen'` in `routeChrome.ts`.
 
-- [ ] **Step 2: Preserve overlay controls**
+- [x] **Step 2: Preserve overlay controls**
 
 Keep local close/back controls only where they are part of camera, AR, loading, or completion UI.
 
-- [ ] **Step 3: Normalize status bar style**
+- [x] **Step 3: Normalize status bar style**
 
 Use route chrome status bar values:
 
@@ -837,18 +852,18 @@ git commit -m "refactor: 풀스크린 화면 chrome 정책 정리"
 **Files:**
 
 - Modify: `apps/mobile/src/app-root/AppRoot.tsx`
-- Modify: `apps/mobile/src/app-root/navigation.ts`
-- Modify: `apps/mobile/src/app-root/navigation.test.ts`
+- Delete: `apps/mobile/src/app-root/navigation.ts`
+- Delete: `apps/mobile/src/app-root/navigation.test.ts`
 
-- [ ] **Step 1: Delete obsolete state router helpers**
+- [x] **Step 1: Delete obsolete state router helpers**
 
 Remove helpers that only existed for the old `activeScreen` router after every route uses React Navigation.
 
-- [ ] **Step 2: Keep or move pure constants**
+- [x] **Step 2: Keep or move pure constants**
 
 If a helper is still useful, move it to `apps/mobile/src/app/navigation/routeChrome.ts` or `apps/mobile/src/app/navigation/navigationAdapters.tsx`.
 
-- [ ] **Step 3: Delete obsolete tests**
+- [x] **Step 3: Delete obsolete tests**
 
 Remove tests that validate old `AppScreenKey` behavior. Keep route chrome tests.
 
