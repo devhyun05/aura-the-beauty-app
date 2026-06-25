@@ -18,6 +18,7 @@ import {AppHeader} from '../../../shared/ui';
 import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 
 type FeedbackEntryScreenProps = {
+  headerTitle?: string;
   onClose: () => void;
   onPressAiFeedback: () => void;
 };
@@ -33,6 +34,7 @@ export function getFeedbackEntryHeaderPresentation() {
 }
 
 export function FeedbackEntryScreen({
+  headerTitle = feedbackEntryHeaderPresentation.title,
   onClose,
   onPressAiFeedback,
 }: FeedbackEntryScreenProps) {
@@ -49,7 +51,7 @@ export function FeedbackEntryScreen({
             <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
           </Pressable>
         }
-        title={feedbackEntryHeaderPresentation.title}
+        title={headerTitle}
       />
       <YStack style={styles.screen}>
         <View style={styles.hero}>

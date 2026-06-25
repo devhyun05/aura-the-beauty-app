@@ -10,6 +10,7 @@ import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto, FilterRecipeTab} from '../types';
 
 type FilterRecipeDetailScreenProps = {
+  headerTitle?: string;
   photo: FilterExtractionPhoto;
   onBack: () => void;
   onSaveRecipe: () => void;
@@ -85,6 +86,7 @@ const recipeItems = [
 ];
 
 export function FilterRecipeDetailScreen({
+  headerTitle = '상세 분석',
   photo,
   onBack,
   onSaveRecipe,
@@ -114,7 +116,7 @@ export function FilterRecipeDetailScreen({
         <AppHeader
           containerProps={{style: styles.headerAppBar}}
           onBack={onBack}
-          title="상세 분석"
+          title={headerTitle}
         />
 
         <XStack style={styles.mainTabs}>

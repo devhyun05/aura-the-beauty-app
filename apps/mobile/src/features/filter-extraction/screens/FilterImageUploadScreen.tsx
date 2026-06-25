@@ -14,6 +14,7 @@ import type {
 } from '../types';
 
 type FilterImageUploadScreenProps = {
+  headerTitle?: string;
   onClose: () => void;
   onStartAnalysis: (photo: FilterExtractionPhoto) => void;
 };
@@ -24,6 +25,7 @@ const sourceTabs: {id: FilterExtractionSource; label: string}[] = [
 ];
 
 export function FilterImageUploadScreen({
+  headerTitle = '메이크업 추출',
   onClose,
   onStartAnalysis,
 }: FilterImageUploadScreenProps) {
@@ -92,7 +94,7 @@ export function FilterImageUploadScreen({
               <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={2} />
             </Pressable>
           }
-          title="메이크업 추출"
+          title={headerTitle}
         />
 
         <XStack style={styles.tabRow}>

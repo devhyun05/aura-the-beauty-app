@@ -19,12 +19,16 @@ import {
 export const LIKED_PRODUCT_LIST_FAVORITE_ICON_NAME = 'Heart';
 
 type LikedProductListScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
 };
 
 const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
 
-export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
+export function LikedProductListScreen({
+  headerTitle = '좋아요 목록',
+  onBack,
+}: LikedProductListScreenProps) {
   const {width} = useWindowDimensions();
   const [products, setProducts] = useState<Product[]>([]);
   const gap = spacing.lg;
@@ -47,7 +51,7 @@ export function LikedProductListScreen({onBack}: LikedProductListScreenProps) {
 
   return (
     <View style={styles.screen}>
-      <AppHeader onBack={onBack} title="좋아요 목록" />
+      <AppHeader onBack={onBack} title={headerTitle} />
 
       <AppScreen contentGap={spacing.xl} topPadding="none">
         <PagedGrid

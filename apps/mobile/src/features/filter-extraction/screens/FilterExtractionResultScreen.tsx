@@ -8,6 +8,7 @@ import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
 type FilterExtractionResultScreenProps = {
+  headerTitle?: string;
   photo: FilterExtractionPhoto;
   onApplyFilter: () => void;
   onBack: () => void;
@@ -15,6 +16,7 @@ type FilterExtractionResultScreenProps = {
 };
 
 export function FilterExtractionResultScreen({
+  headerTitle = '분석 결과',
   photo,
   onApplyFilter,
   onBack,
@@ -30,7 +32,7 @@ export function FilterExtractionResultScreen({
       scroll={false}
       topPadding="none"
     >
-      <AppHeader onBack={onBack} title="분석 결과" />
+      <AppHeader onBack={onBack} title={headerTitle} />
 
       <ScrollView
         contentContainerStyle={styles.content}

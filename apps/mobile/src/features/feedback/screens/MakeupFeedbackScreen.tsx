@@ -37,6 +37,7 @@ import type {
 } from '../types';
 
 type MakeupFeedbackScreenProps = {
+  headerTitle?: string;
   result: MakeupFeedbackResult;
   onBack: () => void;
   onOpenGuide: () => void;
@@ -64,6 +65,7 @@ export function getMakeupFeedbackHeaderPresentation() {
 }
 
 export function MakeupFeedbackScreen({
+  headerTitle = makeupFeedbackHeaderPresentation.title,
   result,
   onBack,
   onOpenGuide,
@@ -79,7 +81,7 @@ export function MakeupFeedbackScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={makeupFeedbackHeaderPresentation.title} />
+      <AppHeader onBack={onBack} title={headerTitle} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}

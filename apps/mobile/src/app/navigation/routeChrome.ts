@@ -264,6 +264,16 @@ export function getRouteChrome(route: RouteName): RouteChrome {
   return routeChromeByRoute[route];
 }
 
+export function getDetailRouteTitle(route: RouteName): string {
+  const chrome = getRouteChrome(route);
+
+  if (chrome.kind !== 'detail') {
+    throw new Error(`${route} is not a detail route`);
+  }
+
+  return chrome.title;
+}
+
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
   if (tab === 'capture') {
     return 'ARMakeupFilter';

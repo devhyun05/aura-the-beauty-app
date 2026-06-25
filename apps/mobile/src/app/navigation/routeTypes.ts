@@ -1,7 +1,11 @@
+import type {NavigatorScreenParams} from '@react-navigation/native';
+
+export type ARFilterBackRouteName = 'ARMakeupFilter' | 'ImageAnalysisReportDetail';
+
 export type RootStackParamList = {
   Login: undefined;
   Tutorial: undefined;
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
   ImageAnalysisLoading: undefined;
   ImageAnalysisReportsList: undefined;
@@ -10,8 +14,8 @@ export type RootStackParamList = {
   MakeupStyleList: undefined;
   LikedProductList: undefined;
   ARMakeupFilter: undefined;
-  ARFilterLocation: {backRoute?: RootStackRouteName} | undefined;
-  ARFilterStyle: {backRoute?: RootStackRouteName} | undefined;
+  ARFilterLocation: {backRoute?: ARFilterBackRouteName} | undefined;
+  ARFilterStyle: {backRoute?: ARFilterBackRouteName} | undefined;
   FeedbackEntry: undefined;
   FeedbackCapture: undefined;
   FeedbackLoading: undefined;

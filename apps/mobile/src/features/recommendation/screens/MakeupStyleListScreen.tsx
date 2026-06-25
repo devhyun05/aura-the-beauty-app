@@ -13,10 +13,14 @@ import {
 } from '../../../shared/ui';
 
 type MakeupStyleListScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
 };
 
-export function MakeupStyleListScreen({onBack}: MakeupStyleListScreenProps) {
+export function MakeupStyleListScreen({
+  headerTitle = '메이크업 룩',
+  onBack,
+}: MakeupStyleListScreenProps) {
   const {width} = useWindowDimensions();
   const [looks, setLooks] = useState<MakeupLook[]>([]);
   const gap = spacing.md;
@@ -39,7 +43,7 @@ export function MakeupStyleListScreen({onBack}: MakeupStyleListScreenProps) {
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <AppHeader onBack={onBack} title="메이크업 룩" />
+      <AppHeader onBack={onBack} title={headerTitle} />
 
       <PagedGrid
         data={looks}

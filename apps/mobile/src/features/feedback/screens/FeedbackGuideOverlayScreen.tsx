@@ -33,6 +33,7 @@ import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {MakeupFeedbackResult} from '../types';
 
 type FeedbackGuideOverlayScreenProps = {
+  headerTitle?: string;
   result: MakeupFeedbackResult;
   onBack: () => void;
 };
@@ -122,6 +123,7 @@ export function getFeedbackGuideOverlayHeaderPresentation() {
 }
 
 export function FeedbackGuideOverlayScreen({
+  headerTitle = feedbackGuideOverlayHeaderPresentation.title,
   result,
   onBack,
 }: FeedbackGuideOverlayScreenProps) {
@@ -139,7 +141,7 @@ export function FeedbackGuideOverlayScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={feedbackGuideOverlayHeaderPresentation.title} />
+      <AppHeader onBack={onBack} title={headerTitle} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}

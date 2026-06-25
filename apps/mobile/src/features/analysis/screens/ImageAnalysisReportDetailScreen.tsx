@@ -29,6 +29,7 @@ import {
 } from '../services/imageAnalysisReportDetailLoadState';
 
 type ImageAnalysisReportDetailScreenProps = {
+  headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
@@ -142,6 +143,7 @@ const formatReportDate = (dateText: string, name?: string) => {
 };
 
 export function ImageAnalysisReportDetailScreen({
+  headerTitle = '맞춤 분석 보고서',
   reportId,
   onBack,
   onCreateARFilter,
@@ -208,6 +210,7 @@ export function ImageAnalysisReportDetailScreen({
     return (
       <ImageAnalysisReportScaffold
         contentStyle={styles.empty}
+        headerTitle={headerTitle}
         onClose={onBack}
         onShare={onShare}
         profileName={profile?.name}
@@ -232,6 +235,7 @@ export function ImageAnalysisReportDetailScreen({
           placement="floating-bottom"
         />
       }
+      headerTitle={headerTitle}
       onClose={onBack}
       onShare={onShare}
       profileName={profile?.name}
@@ -293,11 +297,13 @@ export function ImageAnalysisReportDetailScreen({
 }
 
 function ImageAnalysisReportHeader({
+  headerTitle,
   onClose,
   onShare,
   profileName,
   report,
 }: {
+  headerTitle: string;
   onClose?: () => void;
   onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
@@ -319,7 +325,7 @@ function ImageAnalysisReportHeader({
         `퍼스널 컬러: ${report.personalColor}`,
         `추천 무드: ${report.recommendedMood}`,
       ].join('\n'),
-      title: '맞춤 분석 보고서',
+      title: headerTitle,
     });
   };
 
@@ -341,7 +347,7 @@ function ImageAnalysisReportHeader({
       }
       titleSlot={
         <Text numberOfLines={1} style={styles.headerTitle}>
-          맞춤 분석 보고서
+          {headerTitle}
         </Text>
       }
     />
@@ -352,6 +358,7 @@ function ImageAnalysisReportScaffold({
   children,
   contentStyle,
   floatingAction,
+  headerTitle,
   onClose,
   onShare,
   profileName,
@@ -361,6 +368,7 @@ function ImageAnalysisReportScaffold({
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   floatingAction?: React.ReactNode;
+  headerTitle: string;
   onClose?: () => void;
   onShare?: (report: ImageAnalysisReport) => void;
   profileName?: string;
@@ -389,6 +397,7 @@ function ImageAnalysisReportScaffold({
       topPadding="none"
     >
       <ImageAnalysisReportHeader
+        headerTitle={headerTitle}
         onClose={onClose}
         onShare={onShare}
         profileName={profileName}

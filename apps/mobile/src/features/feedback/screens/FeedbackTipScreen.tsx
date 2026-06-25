@@ -27,6 +27,7 @@ import {FeedbackScreenScaffold} from '../components/FeedbackScreenScaffold';
 import type {FeedbackPoint, FeedbackPointKind} from '../types';
 
 type FeedbackTipScreenProps = {
+  headerTitle?: string;
   point: FeedbackPoint;
   onBack: () => void;
 };
@@ -105,13 +106,17 @@ export function getFeedbackTipHeaderPresentation() {
   return feedbackTipHeaderPresentation;
 }
 
-export function FeedbackTipScreen({point, onBack}: FeedbackTipScreenProps) {
+export function FeedbackTipScreen({
+  headerTitle = feedbackTipHeaderPresentation.title,
+  point,
+  onBack,
+}: FeedbackTipScreenProps) {
   const content = TIP_CONTENT[point.kind];
   const PointIcon = getPointIcon(point.kind);
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={feedbackTipHeaderPresentation.title} />
+      <AppHeader onBack={onBack} title={headerTitle} />
       <View style={styles.screen}>
         <ScrollView
           contentContainerStyle={styles.content}

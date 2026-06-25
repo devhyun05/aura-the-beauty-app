@@ -15,6 +15,7 @@ import {
 } from '../services/imageAnalysisLoadingService';
 
 type ImageAnalysisLoadingScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
   onComplete?: () => void;
 };
@@ -26,6 +27,7 @@ const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function ImageAnalysisLoadingScreen({
+  headerTitle = '얼굴 분석',
   onBack,
   onComplete,
 }: ImageAnalysisLoadingScreenProps) {
@@ -72,7 +74,7 @@ export function ImageAnalysisLoadingScreen({
       scroll={false}
       topPadding="none"
     >
-      <AppHeader onBack={onBack} title="얼굴 분석" />
+      <AppHeader onBack={onBack} title={headerTitle} />
 
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>

@@ -10,6 +10,7 @@ import {getFilterExtractionDataSync} from '../services/filterExtractionService';
 import type {FilterExtractionPhoto} from '../types';
 
 type FilterSaveScreenProps = {
+  headerTitle?: string;
   photo: FilterExtractionPhoto;
   onBack: () => void;
   onSave: () => void;
@@ -17,7 +18,12 @@ type FilterSaveScreenProps = {
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
-export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps) {
+export function FilterSaveScreen({
+  headerTitle = '필터 저장',
+  photo,
+  onBack,
+  onSave,
+}: FilterSaveScreenProps) {
   const insets = useSafeAreaInsets();
   const {result} = getFilterExtractionDataSync();
   const [filterName, setFilterName] = useState(result.title);
@@ -42,7 +48,7 @@ export function FilterSaveScreen({photo, onBack, onSave}: FilterSaveScreenProps)
             <Text style={styles.doneText}>완료</Text>
           </Pressable>
         }
-        title="필터 저장"
+        title={headerTitle}
       />
 
       <YStack style={styles.content}>

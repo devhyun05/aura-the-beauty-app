@@ -8,11 +8,13 @@ import {AppHeader, AppScreen, PagedGrid} from '../../../shared/ui';
 import {ImageAnalysisReportCard} from '../components/ImageAnalysisReportCard';
 
 type ImageAnalysisReportsListScreenProps = {
+  headerTitle?: string;
   onBack?: () => void;
   onPressReport?: (reportId: string) => void;
 };
 
 export function ImageAnalysisReportsListScreen({
+  headerTitle = '이미지 분석 결과',
   onBack,
   onPressReport,
 }: ImageAnalysisReportsListScreenProps) {
@@ -38,7 +40,7 @@ export function ImageAnalysisReportsListScreen({
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <AppHeader onBack={onBack} title="이미지 분석 결과" />
+      <AppHeader onBack={onBack} title={headerTitle} />
 
       <PagedGrid
         data={reports}

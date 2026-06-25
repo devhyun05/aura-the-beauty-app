@@ -18,6 +18,7 @@ import {requestMakeupFeedback} from '../services/makeupFeedbackService';
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
 
 type FeedbackLoadingScreenProps = {
+  headerTitle?: string;
   selection: FeedbackPhotoSelection;
   onBack: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
@@ -34,6 +35,7 @@ export function getFeedbackLoadingHeaderPresentation() {
 }
 
 export function FeedbackLoadingScreen({
+  headerTitle = feedbackLoadingHeaderPresentation.title,
   selection,
   onBack,
   onComplete,
@@ -54,7 +56,7 @@ export function FeedbackLoadingScreen({
 
   return (
     <FeedbackScreenScaffold topPadding="none">
-      <AppHeader onBack={onBack} title={feedbackLoadingHeaderPresentation.title} />
+      <AppHeader onBack={onBack} title={headerTitle} />
       <YStack style={styles.screen}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>
