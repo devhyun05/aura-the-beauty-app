@@ -35,6 +35,7 @@ async def test_verify_cognito_token_maps_google_id_token_claims(monkeypatch: pyt
 
   def fake_decode(*args, **kwargs) -> dict:
     assert kwargs["issuer"] == "https://cognito-idp.ap-northeast-2.amazonaws.com/ap-northeast-2_pool"
+    assert kwargs["options"] == {"verify_at_hash": False, "verify_aud": False}
     return {
       "aud": "client-id",
       "email": "jun@example.com",

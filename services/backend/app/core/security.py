@@ -135,7 +135,7 @@ async def verify_cognito_token(token: str, settings: Settings) -> AuthContext:
       key,
       algorithms=["RS256"],
       issuer=issuer,
-      options={"verify_aud": False},
+      options={"verify_at_hash": False, "verify_aud": False},
     )
   except JWTError as exc:
     raise AppError(401, "INVALID_TOKEN", "JWT verification failed.") from exc

@@ -333,12 +333,19 @@ export function ARFilterStyleAdjustRouteScreen({
 }
 
 export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdit'>) {
+  const {clearSession} = useAuthSession();
+  const handleLogout = React.useCallback(() => {
+    void clearSession().finally(() => {
+      navigation.reset({index: 0, routes: [{name: 'Login'}]});
+    });
+  }, [clearSession, navigation]);
+
   return (
     <DetailRouteChrome
       routeName="ProfileEdit"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <ProfileEditScreen
-        onLogout={() => navigation.reset({index: 0, routes: [{name: 'Login'}]})}
+        onLogout={handleLogout}
       />
     </DetailRouteChrome>
   );
@@ -640,3 +647,4 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 });
+
