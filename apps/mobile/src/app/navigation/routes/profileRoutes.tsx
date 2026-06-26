@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 import {useAuthSession} from '../../../features/auth';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
@@ -22,11 +22,11 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
       routeName="ProfileTab"
       wrapContentInScreen={false}>
       <ProfileScreen
-        onPressImageAnalysisReport={reportId =>
-          rootNavigation?.navigate('ImageAnalysisReportDetail', {reportId})
+        onPressFaceAnalysisReport={reportId =>
+          rootNavigation?.navigate('FaceAnalysisReportDetail', {reportId})
         }
-        onPressImageAnalysisReportsList={() =>
-          rootNavigation?.navigate('ImageAnalysisReportsList')
+        onPressFaceAnalysisReportsList={() =>
+          rootNavigation?.navigate('FaceAnalysisReportsList')
         }
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
         onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}

@@ -1,35 +1,35 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
 
-export type ARFilterBackRouteName = 'ARFilter' | 'ImageAnalysisReportDetail';
+export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 
 export type RootStackParamList = {
   Login: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
-  ImageAnalysisLoading: undefined;
-  ImageAnalysisReportsList: undefined;
-  ImageAnalysisReportDetail: {reportId?: string} | undefined;
+  FaceAnalysisLoading: undefined;
+  FaceAnalysisReportsList: undefined;
+  FaceAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter: undefined;
-  ARFilterLocationAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  ARFilterStyleAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  FeedbackEntry: undefined;
-  FeedbackCapture: undefined;
-  FeedbackLoading: undefined;
-  FeedbackResult: undefined;
-  FeedbackGuide: undefined;
-  FeedbackTip: {pointId: string};
-  FilterExtractionUpload: undefined;
-  FilterExtractionLoading: undefined;
-  FilterExtractionResult: undefined;
-  FilterTryOnAdjust: undefined;
-  FilterSaveForm: undefined;
-  FilterSaveComplete: undefined;
-  FilterRecipeDetail: undefined;
-  FilterRecipeSaveComplete: undefined;
+  ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
+  MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
+  MakeupFeedbackEntry: undefined;
+  MakeupFeedbackCapture: undefined;
+  MakeupFeedbackLoading: undefined;
+  MakeupFeedbackResult: undefined;
+  MakeupCorrectionGuide: undefined;
+  MakeupCorrectionTip: {pointId: string};
+  ReferenceMakeupExtractionUpload: undefined;
+  ReferenceMakeupExtractionLoading: undefined;
+  ReferenceMakeupExtractionResult: undefined;
+  ExtractedMakeupLookAdjust: undefined;
+  MakeupFilterSave: undefined;
+  MakeupFilterSaveComplete: undefined;
+  MakeupRecipeDetail: undefined;
+  MakeupRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
@@ -47,29 +47,29 @@ export const rootStackRoutes = [
   'Tutorial',
   'MainTabs',
   'FaceCapture',
-  'ImageAnalysisLoading',
-  'ImageAnalysisReportsList',
-  'ImageAnalysisReportDetail',
+  'FaceAnalysisLoading',
+  'FaceAnalysisReportsList',
+  'FaceAnalysisReportDetail',
   'ProfileEdit',
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',
-  'ARFilterLocationAdjust',
-  'ARFilterStyleAdjust',
-  'FeedbackEntry',
-  'FeedbackCapture',
-  'FeedbackLoading',
-  'FeedbackResult',
-  'FeedbackGuide',
-  'FeedbackTip',
-  'FilterExtractionUpload',
-  'FilterExtractionLoading',
-  'FilterExtractionResult',
-  'FilterTryOnAdjust',
-  'FilterSaveForm',
-  'FilterSaveComplete',
-  'FilterRecipeDetail',
-  'FilterRecipeSaveComplete',
+  'ARFilterShapeAdjust',
+  'MakeupFilterEdit',
+  'MakeupFeedbackEntry',
+  'MakeupFeedbackCapture',
+  'MakeupFeedbackLoading',
+  'MakeupFeedbackResult',
+  'MakeupCorrectionGuide',
+  'MakeupCorrectionTip',
+  'ReferenceMakeupExtractionUpload',
+  'ReferenceMakeupExtractionLoading',
+  'ReferenceMakeupExtractionResult',
+  'ExtractedMakeupLookAdjust',
+  'MakeupFilterSave',
+  'MakeupFilterSaveComplete',
+  'MakeupRecipeDetail',
+  'MakeupRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [

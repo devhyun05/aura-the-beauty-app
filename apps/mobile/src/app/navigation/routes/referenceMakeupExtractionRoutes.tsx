@@ -1,121 +1,129 @@
 import React from 'react';
 
 import {
-  FilterExtractionLoadingScreen,
-  FilterExtractionResultScreen,
-  FilterExtractionUploadScreen,
-  FilterRecipeDetailScreen,
-  FilterRecipeSaveCompleteScreen,
-  FilterSaveCompleteScreen,
-  FilterSaveFormScreen,
-  FilterTryOnAdjustScreen,
-  type FilterExtractionPhoto,
-} from '../../../features/filter-extraction';
-import {getFilterExtractionDataSync} from '../../../features/filter-extraction/services/filterExtractionService';
+  ExtractedMakeupLookAdjustScreen,
+  MakeupFilterSaveCompleteScreen,
+  MakeupFilterSaveScreen,
+  MakeupRecipeDetailScreen,
+  MakeupRecipeSaveCompleteScreen,
+  ReferenceMakeupExtractionLoadingScreen,
+  ReferenceMakeupExtractionResultScreen,
+  ReferenceMakeupExtractionUploadScreen,
+  type ReferenceMakeupPhoto,
+} from '../../../features/reference-makeup-extraction';
+import {getReferenceMakeupExtractionDataSync} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
-function getSelectedFilterPhoto(photo: FilterExtractionPhoto | null): FilterExtractionPhoto {
-  return photo ?? getFilterExtractionDataSync().photos[0];
+function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
+  return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
 
-function buildSavedMakeupLook(photo: FilterExtractionPhoto): MakeupLookPreview {
-  const {result} = getFilterExtractionDataSync();
+function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
+  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return {
     id: 'saved-extracted-makeup-look',
     imageSource: photo.imageSource,
     isSaved: true,
-    moodLabel: result.tags.slice(0, 2).join(' '),
-    shortDescription: result.subtitle,
-    title: result.title,
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: extractedMakeupLook.palette[0]?.id,
+      shapeId: 'extracted-default',
+    },
+    moodLabel: extractedMakeupLook.tags.slice(0, 2).join(' '),
+    shortDescription: extractedMakeupLook.subtitle,
+    scope: 'totalMakeup',
+    title: extractedMakeupLook.title,
   };
 }
 
-export function FilterExtractionUploadRouteScreen({
+export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
-}: RootScreenProps<'FilterExtractionUpload'>) {
-  const {setSelectedFilterPhoto} = useNavigationFlowState();
+}: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
+  const {setSelectedReferenceMakeupPhoto} = useNavigationFlowState();
 
-  const handleStartAnalysis = (photo: FilterExtractionPhoto) => {
-    setSelectedFilterPhoto(photo);
-    navigation.navigate('FilterExtractionLoading');
+  const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
+    setSelectedReferenceMakeupPhoto(photo);
+    navigation.navigate('ReferenceMakeupExtractionLoading');
   };
 
   return (
     <DetailRouteChrome
-      routeName="FilterExtractionUpload"
+      routeName="ReferenceMakeupExtractionUpload"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FilterExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
+      <ReferenceMakeupExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
 }
 
-export function FilterExtractionLoadingRouteScreen({
+export function ReferenceMakeupExtractionLoadingRouteScreen({
   navigation,
-}: RootScreenProps<'FilterExtractionLoading'>) {
-  const {selectedFilterPhoto} = useNavigationFlowState();
-  const photo = getSelectedFilterPhoto(selectedFilterPhoto);
+}: RootScreenProps<'ReferenceMakeupExtractionLoading'>) {
+  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
-    <FilterExtractionLoadingScreen
-      onBack={() => navigation.navigate('FilterExtractionUpload')}
-      onComplete={() => navigation.navigate('FilterExtractionResult')}
+    <ReferenceMakeupExtractionLoadingScreen
+      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
+      onComplete={() => navigation.navigate('ReferenceMakeupExtractionResult')}
       photo={photo}
     />
   );
 }
 
-export function FilterExtractionResultRouteScreen({
+export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
-}: RootScreenProps<'FilterExtractionResult'>) {
-  const {selectedFilterPhoto} = useNavigationFlowState();
-  const photo = getSelectedFilterPhoto(selectedFilterPhoto);
+}: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
+  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
     <DetailRouteChrome
-      routeName="FilterExtractionResult"
-      onBack={() => navigation.navigate('FilterExtractionUpload')}>
-      <FilterExtractionResultScreen
-        onApplyFilter={() => navigation.navigate('FilterTryOnAdjust')}
-        onRetake={() => navigation.navigate('FilterExtractionUpload')}
+      routeName="ReferenceMakeupExtractionResult"
+      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}>
+      <ReferenceMakeupExtractionResultScreen
+        onPreviewMakeupLook={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+        onRetake={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
         photo={photo}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FilterTryOnAdjustRouteScreen({navigation}: RootScreenProps<'FilterTryOnAdjust'>) {
-  const {selectedFilterPhoto} = useNavigationFlowState();
-  const photo = getSelectedFilterPhoto(selectedFilterPhoto);
+export function ExtractedMakeupLookAdjustRouteScreen({
+  navigation,
+}: RootScreenProps<'ExtractedMakeupLookAdjust'>) {
+  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
-    <FilterTryOnAdjustScreen
-      onClose={() => navigation.navigate('FilterExtractionResult')}
-      onCreateRecipe={() => navigation.navigate('FilterRecipeDetail')}
-      onSave={() => navigation.navigate('FilterSaveForm')}
+    <ExtractedMakeupLookAdjustScreen
+      onClose={() => navigation.navigate('ReferenceMakeupExtractionResult')}
+      onCreateRecipe={() => navigation.navigate('MakeupRecipeDetail')}
+      onSave={() => navigation.navigate('MakeupFilterSave')}
       photo={photo}
     />
   );
 }
 
-export function FilterSaveFormRouteScreen({navigation}: RootScreenProps<'FilterSaveForm'>) {
-  const {selectedFilterPhoto, setSavedMakeupLook} = useNavigationFlowState();
-  const photo = getSelectedFilterPhoto(selectedFilterPhoto);
+export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'MakeupFilterSave'>) {
+  const {selectedReferenceMakeupPhoto, setSavedMakeupLook} = useNavigationFlowState();
+  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   const handleSave = () => {
     setSavedMakeupLook(buildSavedMakeupLook(photo));
-    navigation.navigate('FilterSaveComplete');
+    navigation.navigate('MakeupFilterSaveComplete');
   };
 
   return (
     <DetailRouteChrome
-      routeName="FilterSaveForm"
-      onBack={() => navigation.navigate('FilterTryOnAdjust')}
+      routeName="MakeupFilterSave"
+      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}
       onDone={handleSave}>
-      <FilterSaveFormScreen
+      <MakeupFilterSaveScreen
         onSave={handleSave}
         photo={photo}
       />
@@ -123,41 +131,41 @@ export function FilterSaveFormRouteScreen({navigation}: RootScreenProps<'FilterS
   );
 }
 
-export function FilterSaveCompleteRouteScreen({
+export function MakeupFilterSaveCompleteRouteScreen({
   navigation,
-}: RootScreenProps<'FilterSaveComplete'>) {
+}: RootScreenProps<'MakeupFilterSaveComplete'>) {
   return (
-    <FilterSaveCompleteScreen
-      onApplyNow={() => navigation.navigate('FilterTryOnAdjust')}
+    <MakeupFilterSaveCompleteScreen
+      onApplyNow={() => navigation.navigate('ExtractedMakeupLookAdjust')}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );
 }
 
-export function FilterRecipeDetailRouteScreen({
+export function MakeupRecipeDetailRouteScreen({
   navigation,
-}: RootScreenProps<'FilterRecipeDetail'>) {
-  const {selectedFilterPhoto} = useNavigationFlowState();
-  const photo = getSelectedFilterPhoto(selectedFilterPhoto);
+}: RootScreenProps<'MakeupRecipeDetail'>) {
+  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   return (
     <DetailRouteChrome
-      routeName="FilterRecipeDetail"
-      onBack={() => navigation.navigate('FilterTryOnAdjust')}>
-      <FilterRecipeDetailScreen
-        onSaveRecipe={() => navigation.navigate('FilterRecipeSaveComplete')}
+      routeName="MakeupRecipeDetail"
+      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}>
+      <MakeupRecipeDetailScreen
+        onSaveRecipe={() => navigation.navigate('MakeupRecipeSaveComplete')}
         photo={photo}
       />
     </DetailRouteChrome>
   );
 }
 
-export function FilterRecipeSaveCompleteRouteScreen({
+export function MakeupRecipeSaveCompleteRouteScreen({
   navigation,
-}: RootScreenProps<'FilterRecipeSaveComplete'>) {
+}: RootScreenProps<'MakeupRecipeSaveComplete'>) {
   return (
-    <FilterRecipeSaveCompleteScreen
-      onBackToDetail={() => navigation.navigate('FilterRecipeDetail')}
+    <MakeupRecipeSaveCompleteScreen
+      onBackToDetail={() => navigation.navigate('MakeupRecipeDetail')}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
     />
   );

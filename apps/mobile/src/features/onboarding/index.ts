@@ -1,2 +1,2 @@
-export * from './screens/PhotoCaptureGuideScreen';
+export * from './screens/FaceCaptureTutorialScreen';
 export * from './screens/TutorialIntroScreen';

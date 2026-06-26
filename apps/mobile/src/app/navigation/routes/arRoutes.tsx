@@ -1,8 +1,8 @@
 import React from 'react';
 
-import {ARFilterLocationAdjustScreen} from '../../../features/ar/screens/ARFilterLocationAdjustScreen';
 import {ARFilterScreen} from '../../../features/ar/screens/ARFilterScreen';
-import {ARFilterStyleAdjustScreen} from '../../../features/ar/screens/ARFilterStyleAdjustScreen';
+import {ARFilterShapeAdjustScreen} from '../../../features/ar/screens/ARFilterShapeAdjustScreen';
+import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterEditScreen';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {navigateARBack, navigateMainTab, type RootScreenProps} from './routeUtils';
 
@@ -14,30 +14,30 @@ export function ARFilterRouteScreen({navigation}: RootScreenProps<'ARFilter'>) {
       initialGuideMode={DEFAULT_AR_GUIDE_MODE}
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
-      onOpenShapeAdjust={() => navigation.navigate('ARFilterLocationAdjust')}
-      onSave={() => navigation.navigate('FilterSaveForm')}
+      onOpenShapeAdjust={() => navigation.navigate('ARFilterShapeAdjust')}
+      onSave={() => navigation.navigate('MakeupFilterSave')}
     />
   );
 }
 
-export function ARFilterLocationAdjustRouteScreen({
+export function ARFilterShapeAdjustRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ARFilterLocationAdjust'>) {
+}: RootScreenProps<'ARFilterShapeAdjust'>) {
   return (
-    <ARFilterLocationAdjustScreen
+    <ARFilterShapeAdjustScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
       onSave={() => navigation.navigate('ARFilter')}
     />
   );
 }
 
-export function ARFilterStyleAdjustRouteScreen({
+export function MakeupFilterEditRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ARFilterStyleAdjust'>) {
+}: RootScreenProps<'MakeupFilterEdit'>) {
   return (
-    <ARFilterStyleAdjustScreen
+    <MakeupFilterEditScreen
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
       onSave={() => navigation.navigate('ARFilter')}
     />

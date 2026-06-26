@@ -5,7 +5,7 @@ import {Text, View} from 'tamagui';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
-import {ImageAnalysisSummaryCard} from '../components/ImageAnalysisSummaryCard';
+import {FaceAnalysisSummaryCard} from '../components/FaceAnalysisSummaryCard';
 import {MakeupLookCard} from '../components/MakeupLookCard';
 import {ProductCard} from '../components/ProductCard';
 import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
@@ -19,8 +19,8 @@ import {loadProfileScreenData} from '../services/profileScreenData';
 
 type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
-  onPressImageAnalysisReport?: (reportId: string) => void;
-  onPressImageAnalysisReportsList?: () => void;
+  onPressFaceAnalysisReport?: (reportId: string) => void;
+  onPressFaceAnalysisReportsList?: () => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
   savedMakeupLook?: MakeupLookPreview | null;
@@ -28,8 +28,8 @@ type ProfileScreenProps = {
 
 export function ProfileScreen({
   onPressProfileEdit,
-  onPressImageAnalysisReport,
-  onPressImageAnalysisReportsList,
+  onPressFaceAnalysisReport,
+  onPressFaceAnalysisReportsList,
   onPressMakeupLookList,
   onPressLikedProductList,
   savedMakeupLook,
@@ -40,12 +40,12 @@ export function ProfileScreen({
     status: 'loading',
   });
   const contentWidth = width - spacing.screenX * 2;
-  const lookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
+  const makeupLookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
-  const lookCardStyle = {
-    flexBasis: lookCardWidth,
-    maxWidth: lookCardWidth,
-    width: lookCardWidth,
+  const makeupLookCardLayout = {
+    flexBasis: makeupLookCardWidth,
+    maxWidth: makeupLookCardWidth,
+    width: makeupLookCardWidth,
   };
   const productCardStyle = {
     flexBasis: productCardWidth,
@@ -108,11 +108,11 @@ export function ProfileScreen({
   }
 
   const data = loadState.data;
-  const imageAnalysisReport = data.imageAnalysisReport;
+  const faceAnalysisReport = data.faceAnalysisReport;
   const makeupLooks = savedMakeupLook
     ? [
         savedMakeupLook,
-        ...data.makeupLooks.filter((look) => look.id !== savedMakeupLook.id),
+        ...data.makeupLooks.filter((makeupLook) => makeupLook.id !== savedMakeupLook.id),
       ]
     : data.makeupLooks;
   const previewMakeupLooks = makeupLooks.slice(0, 3);
@@ -120,6 +120,7 @@ export function ProfileScreen({
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
       <ProfileSummaryCard
+        beautyProfile={data.beautyProfile}
         onPressSettings={onPressProfileEdit}
         profile={data.profile}
       />
@@ -127,16 +128,16 @@ export function ProfileScreen({
       <View style={styles.section}>
         <SectionHeader
           actionLabel="전체 보기"
-          onPressAction={onPressImageAnalysisReportsList}
-          title="이미지 분석 결과"
+          onPressAction={onPressFaceAnalysisReportsList}
+          title="얼굴 분석 결과"
         />
-        {imageAnalysisReport ? (
-          <ImageAnalysisSummaryCard
-            onPress={() => onPressImageAnalysisReport?.(imageAnalysisReport.id)}
-            report={imageAnalysisReport}
+        {faceAnalysisReport ? (
+          <FaceAnalysisSummaryCard
+            onPress={() => onPressFaceAnalysisReport?.(faceAnalysisReport.id)}
+            report={faceAnalysisReport}
           />
         ) : (
-          <EmptySection label="저장된 이미지 분석 결과가 없어요." />
+          <EmptySection label="저장된 얼굴 분석 결과가 없어요." />
         )}
       </View>
 
@@ -144,14 +145,14 @@ export function ProfileScreen({
         <SectionHeader
           actionLabel="전체 보기"
           onPressAction={onPressMakeupLookList}
-          title="메이크업 스타일"
+          title="메이크업 룩"
         />
-        <View style={styles.lookGrid}>
-          {previewMakeupLooks.map((look) => (
+        <View style={styles.makeupLookGrid}>
+          {previewMakeupLooks.map((makeupLook) => (
             <MakeupLookCard
-              key={look.id}
-              look={look}
-              style={lookCardStyle}
+              key={makeupLook.id}
+              makeupLook={makeupLook}
+              style={makeupLookCardLayout}
             />
           ))}
         </View>
@@ -231,7 +232,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
-  lookGrid: {
+  makeupLookGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
   },

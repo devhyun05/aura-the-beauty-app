@@ -20,22 +20,22 @@ expectEqual(
   'profile edit route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FeedbackEntry').join(','),
+  getDetailHeaderRightActions('MakeupFeedbackEntry').join(','),
   'close',
-  'feedback entry route header actions',
+  'makeup feedback entry route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterExtractionUpload').join(','),
+  getDetailHeaderRightActions('ReferenceMakeupExtractionUpload').join(','),
   'close',
-  'filter upload route header actions',
+  'reference makeup extraction upload route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FilterSaveForm').join(','),
+  getDetailHeaderRightActions('MakeupFilterSave').join(','),
   'done',
-  'filter save route header actions',
+  'makeup filter save route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('ImageAnalysisReportDetail').join(','),
+  getDetailHeaderRightActions('FaceAnalysisReportDetail').join(','),
   'share,close',
-  'image analysis report route header actions',
+  'face analysis report route header actions',
 );

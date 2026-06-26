@@ -10,9 +10,9 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     <MainTabChrome navigation={navigation} routeName="HomeTab">
       <HomeScreen
         onPressARFilter={() => rootNavigation?.navigate('ARFilter')}
-        onPressCreateFilter={() => rootNavigation?.navigate('FilterExtractionUpload')}
+        onPressReferenceMakeupExtraction={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
-        onPressMakeupFeedback={() => rootNavigation?.navigate('FeedbackEntry')}
+        onPressMakeupFeedback={() => rootNavigation?.navigate('MakeupFeedbackEntry')}
         onPressProductRecommendations={() => navigation.navigate('CustomTab')}
       />
     </MainTabChrome>

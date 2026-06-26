@@ -35,6 +35,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '차분한 브라운 음영과 정돈된 라인으로 완성한 데일리 룩',
     imageSource: lookOjiGirl,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'neutral-brown',
+      typeId: 'daily',
+      textureId: 'soft-matte',
+      shapeId: 'balanced',
+    },
   },
   {
     id: 'look-morigirl',
@@ -43,6 +51,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '피치 베이지와 자연스러운 혈색을 살린 부드러운 룩',
     imageSource: lookMoriGirl,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'peach-beige',
+      typeId: 'natural',
+      textureId: 'soft-glow',
+      shapeId: 'rounded',
+    },
   },
   {
     id: 'look-clean-smoky',
@@ -51,6 +67,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '깨끗한 피부 위에 브라운 라인으로 선명도를 더한 룩',
     imageSource: lookCleanSmoky,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'clean-brown',
+      typeId: 'smoky',
+      textureId: 'satin',
+      shapeId: 'defined-eye',
+    },
   },
   {
     id: 'look-mute-rosy-daily',
@@ -59,6 +83,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '낮은 채도의 로즈 컬러로 차분하게 정돈한 데일리 룩',
     imageSource: lookMuteRosy,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'mute-rose',
+      typeId: 'daily',
+      textureId: 'semi-glow',
+      shapeId: 'soft-balance',
+    },
   },
   {
     id: 'look-royal-brown',
@@ -67,6 +99,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '깊이 있는 브라운 음영과 차분한 립을 조합한 무드 룩',
     imageSource: lookRoyalBrown,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'royal-brown',
+      typeId: 'mood',
+      textureId: 'velvet',
+      shapeId: 'deep-contour',
+    },
   },
   {
     id: 'look-warm-beige-natural',
@@ -75,6 +115,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '베이지 톤으로 부드럽게 정돈한 자연스러운 메이크업 룩',
     imageSource: lookWarmBeige,
     isSaved: true,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'warm-beige',
+      typeId: 'natural',
+      textureId: 'skin-like',
+      shapeId: 'natural-fit',
+    },
   },
   {
     id: 'look-cherry-blossom-pink',
@@ -83,6 +131,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '맑은 핑크 혈색과 은은한 광을 살린 화사한 룩',
     imageSource: lookCherryBlossom,
     isSaved: false,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'cherry-pink',
+      typeId: 'fresh',
+      textureId: 'glow',
+      shapeId: 'bright-center',
+    },
   },
   {
     id: 'look-peach-coral',
@@ -91,6 +147,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '봄웜 톤에 어울리는 피치빛 글로우 메이크업 룩',
     imageSource: lookPeachCoral,
     isSaved: false,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'peach-coral',
+      typeId: 'fresh',
+      textureId: 'glow',
+      shapeId: 'warm-lift',
+    },
   },
   {
     id: 'look-cool-rose',
@@ -99,6 +163,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '차가운 로즈 톤을 맑게 얹은 쿨톤 데일리 룩',
     imageSource: lookCoolRose,
     isSaved: false,
+    scope: 'totalMakeup',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      colorId: 'cool-rose',
+      typeId: 'daily',
+      textureId: 'clear',
+      shapeId: 'cool-balance',
+    },
   },
   {
     id: 'look-berry-plum',
@@ -107,6 +179,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '선명한 베리 컬러로 입체감을 더한 포인트 룩',
     imageSource: lookBerryPlum,
     isSaved: false,
+    scope: 'pointMakeup',
+    makeupArea: 'lip',
+    makeupPresetValues: {
+      colorId: 'berry-plum',
+      typeId: 'tint',
+      textureId: 'gloss',
+      shapeId: 'over-lip-soft',
+    },
   },
   {
     id: 'look-dry-rose',
@@ -115,6 +195,14 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '말린 장미빛 컬러로 성숙하게 정돈한 로즈 룩',
     imageSource: lookDryRose,
     isSaved: false,
+    scope: 'pointMakeup',
+    makeupArea: 'lip',
+    makeupPresetValues: {
+      colorId: 'dry-rose',
+      typeId: 'lipstick',
+      textureId: 'matte',
+      shapeId: 'blurred-edge',
+    },
   },
   {
     id: 'look-terracotta',
@@ -123,5 +211,13 @@ export const makeupLooksMock: MakeupLook[] = [
     shortDescription: '따뜻한 테라코타 톤으로 선명한 분위기를 만든 룩',
     imageSource: lookTerracotta,
     isSaved: false,
+    scope: 'pointMakeup',
+    makeupArea: 'cheek',
+    makeupPresetValues: {
+      colorId: 'terracotta',
+      typeId: 'blush',
+      textureId: 'powder',
+      shapeId: 'diagonal-cheek',
+    },
   },
 ];

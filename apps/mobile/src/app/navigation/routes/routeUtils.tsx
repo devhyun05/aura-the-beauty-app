@@ -42,8 +42,8 @@ export function navigateMainTab(
 }
 
 export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterBackRouteName) {
-  if (backRoute === 'ImageAnalysisReportDetail') {
-    navigation.navigate('ImageAnalysisReportDetail');
+  if (backRoute === 'FaceAnalysisReportDetail') {
+    navigation.navigate('FaceAnalysisReportDetail');
     return;
   }
 

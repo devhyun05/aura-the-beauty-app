@@ -1,10 +1,10 @@
-import React from 'react';
+﻿import React from 'react';
 
 import {
-  ImageAnalysisReportDetailScreen,
-  ImageAnalysisReportsListScreen,
-} from '../../../features/image-analysis';
-import {ImageAnalysisLoadingScreen} from '../../../features/image-analysis/screens/ImageAnalysisLoadingScreen';
+  FaceAnalysisReportDetailScreen,
+  FaceAnalysisReportsListScreen,
+} from '../../../features/face-analysis';
+import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -24,47 +24,47 @@ export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCaptur
           setSelectedFaceCapture(result);
         }
 
-        navigation.navigate('ImageAnalysisLoading');
+        navigation.navigate('FaceAnalysisLoading');
       }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );
 }
 
-export function ImageAnalysisLoadingRouteScreen({
+export function FaceAnalysisLoadingRouteScreen({
   navigation,
-}: RootScreenProps<'ImageAnalysisLoading'>) {
+}: RootScreenProps<'FaceAnalysisLoading'>) {
   return (
     <DetailRouteChrome
-      routeName="ImageAnalysisLoading"
+      routeName="FaceAnalysisLoading"
       onBack={() => navigation.navigate('FaceCapture')}>
-      <ImageAnalysisLoadingScreen
-        onComplete={() => navigation.navigate('ImageAnalysisReportDetail')}
+      <FaceAnalysisLoadingScreen
+        onComplete={() => navigation.navigate('FaceAnalysisReportDetail')}
       />
     </DetailRouteChrome>
   );
 }
 
-export function ImageAnalysisReportsListRouteScreen({
+export function FaceAnalysisReportsListRouteScreen({
   navigation,
-}: RootScreenProps<'ImageAnalysisReportsList'>) {
+}: RootScreenProps<'FaceAnalysisReportsList'>) {
   return (
     <DetailRouteChrome
-      routeName="ImageAnalysisReportsList"
+      routeName="FaceAnalysisReportsList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <ImageAnalysisReportsListScreen
+      <FaceAnalysisReportsListScreen
         onPressReport={reportId =>
-          navigation.navigate('ImageAnalysisReportDetail', {reportId})
+          navigation.navigate('FaceAnalysisReportDetail', {reportId})
         }
       />
     </DetailRouteChrome>
   );
 }
 
-export function ImageAnalysisReportDetailRouteScreen({
+export function FaceAnalysisReportDetailRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ImageAnalysisReportDetail'>) {
+}: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
@@ -75,13 +75,13 @@ export function ImageAnalysisReportDetailRouteScreen({
 
   return (
     <DetailRouteChrome
-      routeName="ImageAnalysisReportDetail"
+      routeName="FaceAnalysisReportDetail"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
-      <ImageAnalysisReportDetailScreen
+      <FaceAnalysisReportDetailScreen
         onCreateARFilter={() =>
-          navigation.navigate('ARFilterStyleAdjust', {backRoute: 'ImageAnalysisReportDetail'})
+          navigation.navigate('MakeupFilterEdit', {backRoute: 'FaceAnalysisReportDetail'})
         }
         onHeaderShareActionChange={handleHeaderShareActionChange}
         reportId={route.params?.reportId ?? null}

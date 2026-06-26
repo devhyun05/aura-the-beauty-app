@@ -156,7 +156,7 @@ expectEqual(
   'hero carousel drag end reset handler',
 );
 
-let selectedQuickAction: 'ar' | 'feedback' | null = null;
+let selectedQuickAction: 'ar' | 'makeup-feedback' | null = null;
 
 const arPressHandler = getHomeQuickActionPressHandler('ar', {
   onPressARFilter: () => {
@@ -172,16 +172,16 @@ arPressHandler();
 
 expectEqual(selectedQuickAction, 'ar', 'real-time AR quick action target');
 
-const feedbackPressHandler = getHomeQuickActionPressHandler('feedback', {
+const makeupFeedbackPressHandler = getHomeQuickActionPressHandler('makeup-feedback', {
   onPressMakeupFeedback: () => {
-    selectedQuickAction = 'feedback';
+    selectedQuickAction = 'makeup-feedback';
   },
 });
 
-if (!feedbackPressHandler) {
+if (!makeupFeedbackPressHandler) {
   throw new Error('makeup feedback quick action should have a press handler');
 }
 
-feedbackPressHandler();
+makeupFeedbackPressHandler();
 
-expectEqual(selectedQuickAction, 'feedback', 'makeup feedback quick action target');
+expectEqual(selectedQuickAction, 'makeup-feedback', 'makeup feedback quick action target');

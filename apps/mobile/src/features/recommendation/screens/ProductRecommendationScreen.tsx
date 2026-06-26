@@ -18,7 +18,7 @@ import {getProductRecommendations} from '../services/productRecommendationServic
 import type {
   ProductRecommendationCategory,
   ProductRecommendationData,
-  ProductRecommendationItem,
+  RecommendedProduct,
   ProductRecommendationLook,
   ProductRecommendationSet,
   ProductRecommendationTab,
@@ -37,7 +37,7 @@ export const productRecommendationHeaderCopy: ProductRecommendationHeaderCopy = 
 };
 
 export const getRecommendationSetSectionTitle = (userNickname: string) =>
-  `${userNickname} 님의 스타일과 잘 맞는 추천 조합`;
+  `${userNickname} 님의 룩과 잘 맞는 추천 조합`;
 
 export function ProductRecommendationScreen() {
   const [data, setData] = useState<ProductRecommendationData | null>(null);
@@ -79,7 +79,7 @@ export function ProductRecommendationScreen() {
 
   return (
     <>
-      <LookSummaryCard look={data.look} />
+      <LookSummaryCard makeupLook={data.makeupLook} />
 
       <CategoryTabs
         activeCategory={activeCategory}
@@ -128,32 +128,32 @@ export function ProductRecommendationScreen() {
   );
 }
 
-function LookSummaryCard({look}: {look: ProductRecommendationLook}) {
+function LookSummaryCard({makeupLook}: {makeupLook: ProductRecommendationLook}) {
   return (
-    <View style={styles.lookCard}>
-      <View style={styles.lookImageFrame}>
-        <Image resizeMode="cover" source={look.imageSource} style={styles.lookImage} />
-        <View style={styles.lookCheck}>
+    <View style={styles.makeupLookCard}>
+      <View style={styles.makeupLookImageFrame}>
+        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
+        <View style={styles.makeupLookCheck}>
           <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
         </View>
       </View>
 
-      <YStack style={styles.lookCopy}>
-        <Text style={styles.lookCaption}>저장한 메이크업 룩</Text>
-        <Text style={styles.lookTitle}>{look.title}</Text>
+      <YStack style={styles.makeupLookCopy}>
+        <Text style={styles.makeupLookCaption}>저장한 메이크업 룩</Text>
+        <Text style={styles.makeupLookTitle}>{makeupLook.title}</Text>
 
-        <XStack style={styles.lookTags}>
-          {look.tags.slice(0, 3).map((tag) => (
+        <XStack style={styles.makeupLookTags}>
+          {makeupLook.tags.slice(0, 3).map((tag) => (
             <View key={tag} style={styles.tagPill}>
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ))}
         </XStack>
 
-        <Text style={styles.lookDescription}>{look.description}</Text>
+        <Text style={styles.makeupLookDescription}>{makeupLook.description}</Text>
 
         <XStack style={styles.paletteRow}>
-          {look.palette.map((color) => (
+          {makeupLook.palette.map((color) => (
             <View key={color} style={[styles.paletteSwatch, {backgroundColor: color}]} />
           ))}
         </XStack>
@@ -196,7 +196,7 @@ function CategoryTabs({
   );
 }
 
-function ProductCard({product}: {product: ProductRecommendationItem}) {
+function ProductCard({product}: {product: RecommendedProduct}) {
   return (
     <Pressable
       accessibilityLabel={`${product.brandName} ${product.productName} ${product.shadeName}`}
@@ -235,12 +235,12 @@ function RecommendationSetCard({
   products,
   recommendationSet,
 }: {
-  products: ProductRecommendationItem[];
+  products: RecommendedProduct[];
   recommendationSet: ProductRecommendationSet;
 }) {
   const setProducts = recommendationSet.productIds
     .map((productId) => products.find((product) => product.id === productId))
-    .filter((product): product is ProductRecommendationItem => Boolean(product));
+    .filter((product): product is RecommendedProduct => Boolean(product));
 
   return (
     <View style={styles.setBlock}>
@@ -269,7 +269,7 @@ function RecommendationSetCard({
   );
 }
 
-function MiniProductCard({product}: {product: ProductRecommendationItem}) {
+function MiniProductCard({product}: {product: RecommendedProduct}) {
   return (
     <Pressable
       accessibilityLabel={`${product.brandName} ${product.productName} 조합에 담기`}
@@ -346,13 +346,13 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  lookCaption: {
+  makeupLookCaption: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookCard: {
+  makeupLookCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.lg,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     ...sharedCardShadow,
   },
-  lookCheck: {
+  makeupLookCheck: {
     alignItems: 'center',
     backgroundColor: colors.textPrimary,
     borderColor: colors.white,
@@ -375,34 +375,34 @@ const styles = StyleSheet.create({
     right: spacing.xs,
     width: 24,
   },
-  lookCopy: {
+  makeupLookCopy: {
     flex: 1,
     gap: spacing.sm,
     minWidth: 0,
   },
-  lookDescription: {
+  makeupLookDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  lookImage: {
+  makeupLookImage: {
     height: '100%',
     width: '100%',
   },
-  lookImageFrame: {
+  makeupLookImageFrame: {
     borderRadius: radius.md,
     height: 126,
     overflow: 'hidden',
     position: 'relative',
     width: 104,
   },
-  lookTags: {
+  makeupLookTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
   },
-  lookTitle: {
+  makeupLookTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
