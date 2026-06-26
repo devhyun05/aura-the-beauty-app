@@ -4,7 +4,9 @@
     "slug": "ai-ar-makeup-guide",
     "version": "0.1.0",
     "orientation": "portrait",
-    "platforms": ["ios"],
+    "platforms": [
+      "ios"
+    ],
     "scheme": "aiarmakeup",
     "userInterfaceStyle": "light",
     "extra": {
@@ -29,7 +31,8 @@
         {
           "photosPermission": "메이크업 피드백 사진 업로드를 위해 사진 보관함 접근 권한이 필요합니다."
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }
