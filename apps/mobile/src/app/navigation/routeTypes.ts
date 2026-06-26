@@ -26,10 +26,10 @@ export type RootStackParamList = {
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
   ExtractedMakeupLookAdjust: undefined;
-  MakeupFilterSaveForm: undefined;
+  MakeupFilterSave: undefined;
   MakeupFilterSaveComplete: undefined;
-  ExtractedMakeupLookRecipeDetail: undefined;
-  ExtractedMakeupLookRecipeSaveComplete: undefined;
+  MakeupRecipeDetail: undefined;
+  MakeupRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
@@ -66,10 +66,10 @@ export const rootStackRoutes = [
   'ReferenceMakeupExtractionLoading',
   'ReferenceMakeupExtractionResult',
   'ExtractedMakeupLookAdjust',
-  'MakeupFilterSaveForm',
+  'MakeupFilterSave',
   'MakeupFilterSaveComplete',
-  'ExtractedMakeupLookRecipeDetail',
-  'ExtractedMakeupLookRecipeSaveComplete',
+  'MakeupRecipeDetail',
+  'MakeupRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [

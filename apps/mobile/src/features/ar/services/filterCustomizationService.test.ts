@@ -1,5 +1,7 @@
 import {
+  createMakeupFilterShapePresetSaveValue,
   createShapePresetFromState,
+  getShapePointOffsetFromDrag,
   getFilterShapeState,
   getResolvedShapePointPosition,
   getMakeupFilterOptionState,
@@ -82,6 +84,38 @@ expectEqual(
   shapePreset.shapePoints[0]?.position.x,
   38,
   'shape preset keeps shape point coordinate',
+);
+
+const dragOffset = getShapePointOffsetFromDrag({
+  shapePoint: initialState.shapePoints[0],
+  translation: {x: 20, y: -10},
+  previewSize: {width: 200, height: 100},
+});
+
+expectEqual(dragOffset.x, 10, 'drag x converts pixels to preview percentage');
+expectEqual(dragOffset.y, -10, 'drag y converts pixels to preview percentage');
+
+const clampedDragOffset = getShapePointOffsetFromDrag({
+  shapePoint: initialState.shapePoints[0],
+  translation: {x: -1000, y: 1000},
+  previewSize: {width: 200, height: 100},
+});
+
+expectEqual(clampedDragOffset.x, -38, 'drag x clamps resolved shape point to left edge');
+expectEqual(clampedDragOffset.y, 69, 'drag y clamps resolved shape point to bottom edge');
+
+const shapePresetSaveValue = createMakeupFilterShapePresetSaveValue({
+  state: offsetState,
+  makeupFilterId: 'filter-rose',
+  makeupLookId: 'look-daily-rose',
+});
+
+expectEqual(shapePresetSaveValue.makeupFilterId, 'filter-rose', 'shape preset save filter id');
+expectEqual(shapePresetSaveValue.makeupLookId, 'look-daily-rose', 'shape preset save look id');
+expectEqual(
+  shapePresetSaveValue.shapePreset.shapePoints[0]?.resolvedPosition.x,
+  42,
+  'shape preset save keeps resolved position',
 );
 
 const initialOptionState = getMakeupFilterOptionState();

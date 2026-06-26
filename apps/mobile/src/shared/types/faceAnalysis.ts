@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-export interface FaceAnalysisFacePointGuide {
+export interface FaceAnalysisMakeupGuideline {
   brow: string;
   blush: string;
   highlight: string;
@@ -35,7 +35,7 @@ export interface FaceAnalysisReport {
   shortSummary: string;
   skinAnalysisSummary: string;
   baseMakeupGuide: string;
-  facePointGuide: FaceAnalysisFacePointGuide;
+  makeupGuideline: FaceAnalysisMakeupGuideline;
   recommendedMakeups: FaceAnalysisMakeupCard[];
   avoidedMakeups: FaceAnalysisMakeupCard[];
 }

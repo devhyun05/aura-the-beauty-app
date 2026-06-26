@@ -41,10 +41,28 @@ type ReferenceMakeupExtractionUploadPathContract = ExpectType<
     'reference-makeup-extraction-upload'
   >
 >;
+type MakeupFilterSavePathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupFilterSave,
+    'makeup-filter-save'
+  >
+>;
 type MakeupFilterSaveCompletePathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.MakeupFilterSaveComplete,
     'makeup-filter-save-complete'
+  >
+>;
+type MakeupRecipeDetailPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupRecipeDetail,
+    'makeup-recipe-detail'
+  >
+>;
+type MakeupRecipeSaveCompletePathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupRecipeSaveComplete,
+    'makeup-recipe-save-complete'
   >
 >;
 
@@ -104,7 +122,22 @@ expectEqual(
   'reference makeup extraction upload path uses extraction naming',
 );
 expectEqual(
+  navigationLinking.config?.screens?.MakeupFilterSave,
+  'makeup-filter-save',
+  'makeup filter save path uses screen-level route naming',
+);
+expectEqual(
   navigationLinking.config?.screens?.MakeupFilterSaveComplete,
   'makeup-filter-save-complete',
   'makeup filter save complete path distinguishes completion route',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupRecipeDetail,
+  'makeup-recipe-detail',
+  'makeup recipe detail path uses reusable recipe naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupRecipeSaveComplete,
+  'makeup-recipe-save-complete',
+  'makeup recipe save complete path uses reusable recipe naming',
 );

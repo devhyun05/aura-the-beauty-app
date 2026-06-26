@@ -8,11 +8,9 @@ import {YStack} from 'tamagui';
 import {spacing} from '../../shared/theme';
 import {AppFooter, type FooterTabKey} from '../../shared/ui';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
-import {
-  CustomRouteScreen,
-  HomeRouteScreen,
-  ProfileRouteScreen,
-} from './navigationAdapters';
+import {HomeRouteScreen} from './routes/homeRoutes';
+import {ProfileRouteScreen} from './routes/profileRoutes';
+import {CustomRouteScreen} from './routes/recommendationRoutes';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();

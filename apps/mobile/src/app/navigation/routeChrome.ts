@@ -208,7 +208,7 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  MakeupFilterSaveForm: {
+  MakeupFilterSave: {
     category: 'form-edit',
     depth: 'sub',
     kind: 'detail',
@@ -222,14 +222,14 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  ExtractedMakeupLookRecipeDetail: {
+  MakeupRecipeDetail: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
-  ExtractedMakeupLookRecipeSaveComplete: {
+  MakeupRecipeSaveComplete: {
     category: 'completion',
     depth: 'terminal',
     kind: 'fullscreen',

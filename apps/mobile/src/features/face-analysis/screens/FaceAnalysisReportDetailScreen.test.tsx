@@ -2,6 +2,8 @@ import React from 'react';
 
 import {
   FaceAnalysisReportDetailScreen,
+} from './FaceAnalysisReportDetailScreen';
+import {
   getFaceAnalysisReportCreateFilterButtonPlacements,
   getFaceAnalysisReportAvoidedMakeupRailPresentation,
   getFaceAnalysisReportLiquidGlassPresentation,
@@ -9,7 +11,7 @@ import {
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSubtitleTextStyle,
   getFaceAnalysisReportSummaryItems,
-} from './FaceAnalysisReportDetailScreen';
+} from '../services/faceAnalysisReportDetailModel';
 import {faceAnalysisReportsMock} from '../../../shared/mocks/faceAnalysis.mock';
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 

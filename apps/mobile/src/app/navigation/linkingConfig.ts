@@ -65,10 +65,10 @@ export const rootStackLinkingScreens = {
   ReferenceMakeupExtractionLoading: 'reference-makeup-extraction-loading',
   ReferenceMakeupExtractionResult: 'reference-makeup-extraction-result',
   ExtractedMakeupLookAdjust: 'extracted-makeup-look-adjust',
-  MakeupFilterSaveForm: 'makeup-filter-save-form',
+  MakeupFilterSave: 'makeup-filter-save',
   MakeupFilterSaveComplete: 'makeup-filter-save-complete',
-  ExtractedMakeupLookRecipeDetail: 'extracted-makeup-look-recipe-detail',
-  ExtractedMakeupLookRecipeSaveComplete: 'extracted-makeup-look-recipe-save-complete',
+  MakeupRecipeDetail: 'makeup-recipe-detail',
+  MakeupRecipeSaveComplete: 'makeup-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;
 
 export const navigationLinking: LinkingOptions<RootStackParamList> = {
