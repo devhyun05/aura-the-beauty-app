@@ -1,0 +1,125 @@
+# AI AR Makeup Backend
+
+FastAPI backend for the mobile app. The backend is designed to sit behind
+CloudFront `/api/*` and API Gateway or ALB, then connect to RDS PostgreSQL, S3,
+and Bedrock.
+
+## Local setup
+
+```powershell
+cd services/backend
+python -m venv .venv
+.\\.venv\\Scripts\\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Health checks:
+
+```text
+GET http://localhost:8000/health
+GET http://localhost:8000/api/health
+GET http://localhost:8000/api/health/db
+```
+
+## Setup status
+
+Before running the server, check which backend values are still missing:
+
+```powershell
+python -m app.ops.setup_status --profile local
+python -m app.ops.setup_status --profile aws
+```
+
+The command prints readiness flags only. It does not print secret values. It exits non-zero while required values are missing.
+
+For a one-page implementation and setup summary, see `docs/backend/BACKEND_STATUS.md`.
+
+## Apply DB schema
+
+Set `DATABASE_URL` in `.env`, then run:
+
+```powershell
+python -m app.db.init_db
+python -m app.db.seed_db
+python -m app.db.check_schema --require-seed
+```
+
+The schema source is `docs/backend/schema.sql`. This is the bootstrap path.
+The init command records `schema.sql:v1` in `schema_migrations`, so repeated
+runs are skipped by default. The seed command records `seed.sql:v1` the same way.
+Use `--force` only for a disposable local database.
+Production migration management can be added with Alembic after the schema is
+stable.
+
+## Auth mode
+
+Local development defaults to `AUTH_REQUIRED=false`, which injects a local dev
+user. For real API testing and deployment, set:
+
+```env
+AUTH_REQUIRED=true
+COGNITO_USER_POOL_ID=
+COGNITO_APP_CLIENT_ID=
+```
+
+The mobile app should send `Authorization: Bearer <Cognito JWT>` to protected
+endpoints.
+
+## Local PostgreSQL with Docker
+
+From `services/backend`:
+
+```powershell
+docker compose up -d postgres
+```
+
+Use this local `DATABASE_URL`:
+
+```env
+DATABASE_URL=postgresql://aura:aura@localhost:5432/aura_backend
+```
+
+Then apply the schema:
+
+```powershell
+python -m app.db.init_db
+python -m app.db.seed_db
+python -m app.db.check_schema --require-seed
+```
+
+Build the backend image from the repository root:
+
+```powershell
+docker build -f services/backend/Dockerfile -t aura-backend-api .
+```
+
+
+## API contract export
+
+Generate a JSON OpenAPI contract for mobile/backend review:
+
+```powershell
+python -m app.ops.export_openapi --output docs/backend/openapi.json
+```
+
+## API smoke check
+
+After the server is running, check the local or deployed API:
+
+```powershell
+python -m app.ops.smoke_api --base-url http://localhost:8000
+python -m app.ops.smoke_api --base-url http://localhost:8000 --require-db
+```
+
+For CloudFront, pass the distribution or custom domain root:
+
+```powershell
+python -m app.ops.smoke_api --base-url https://<cloudfront-domain> --require-db
+```
+
+## Deployment checklist
+
+Use `docs/backend/AWS_DEPLOYMENT_CHECKLIST.md` before wiring ECS, API Gateway or
+ALB, CloudFront, S3 CDN, Secrets Manager, and CloudWatch.
