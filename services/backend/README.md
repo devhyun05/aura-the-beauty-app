@@ -96,6 +96,27 @@ docker build -f services/backend/Dockerfile -t aura-backend-api .
 ```
 
 
+## Deployment runtime defaults
+
+For ECS/Fargate deployment, use Cognito auth and IAM task roles instead of local access keys:
+
+```env
+AUTH_REQUIRED=true
+AWS_USE_IAM_ROLE=true
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+```
+
+Store secrets such as `DATABASE_URL` in AWS Secrets Manager and inject them into the ECS task definition. Keep non-secret values such as `AWS_REGION`, `S3_BUCKET_NAME`, `COGNITO_USER_POOL_ID`, and `COGNITO_APP_CLIENT_ID` in task environment variables or the same managed secret depending on team preference.
+
+Build from the repository root:
+
+```powershell
+docker build -f services/backend/Dockerfile -t aura-backend-api .
+```
+
+The image listens on port `8000`, runs as a non-root user, and exposes `/health` for container and ALB health checks.
+
 ## API contract export
 
 Generate a JSON OpenAPI contract for mobile/backend review:

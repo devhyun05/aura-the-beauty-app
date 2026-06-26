@@ -17,7 +17,7 @@ import {ImageAnalysisLoadingScreen} from '../../features/image-analysis/screens/
 import {ARFilterLocationAdjustScreen} from '../../features/ar/screens/ARFilterLocationAdjustScreen';
 import {ARFilterStyleAdjustScreen} from '../../features/ar/screens/ARFilterStyleAdjustScreen';
 import {ARFilterScreen} from '../../features/ar/screens/ARFilterScreen';
-import {LoginScreen} from '../../features/auth';
+import {LoginScreen, type AuthSession, useAuthSession} from '../../features/auth';
 import {FaceCaptureScreen} from '../../features/face-capture/screens/FaceCaptureScreen';
 import {
   FeedbackCaptureScreen,
@@ -98,6 +98,7 @@ function getSelectedFilterPhoto(photo: FilterExtractionPhoto | null): FilterExtr
   return photo ?? getFilterExtractionDataSync().photos[0];
 }
 
+
 function buildSavedMakeupLook(photo: FilterExtractionPhoto) {
   const {result} = getFilterExtractionDataSync();
 
@@ -145,7 +146,20 @@ function MainTabChrome({
 }
 
 export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
-  return <LoginScreen onLoginSuccess={() => navigation.replace('Tutorial')} />;
+  const {isRestoringSession, session, setSession} = useAuthSession();
+
+  React.useEffect(() => {
+    if (!isRestoringSession && session) {
+      navigation.replace('Tutorial');
+    }
+  }, [isRestoringSession, navigation, session]);
+
+  const handleLoginSuccess = (nextSession: AuthSession) => {
+    void setSession(nextSession);
+    navigation.replace('Tutorial');
+  };
+
+  return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
 }
 
 export function TutorialRouteScreen({navigation}: RootScreenProps<'Tutorial'>) {
@@ -207,9 +221,17 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
 }
 
 export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCapture'>) {
+  const {setSelectedFaceCapture} = useNavigationFlowState();
+
   return (
     <FaceCaptureScreen
-      onCapture={() => navigation.navigate('ImageAnalysisLoading')}
+      onCapture={result => {
+        if (result) {
+          setSelectedFaceCapture(result);
+        }
+
+        navigation.navigate('ImageAnalysisLoading');
+      }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );
@@ -281,7 +303,7 @@ export function ARFilterRouteScreen({navigation}: RootScreenProps<'ARFilter'>) {
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
       onOpenShapeAdjust={() => navigation.navigate('ARFilterLocationAdjust')}
-      onSave={() => navigation.navigate('ExtractedMakeupStyleSaveForm')}
+      onSave={() => navigation.navigate('FilterSaveForm')}
     />
   );
 }
@@ -407,9 +429,9 @@ export function FeedbackResultRouteScreen({navigation}: RootScreenProps<'Feedbac
         routeName="FeedbackResult"
         onBack={() => navigation.navigate('FeedbackEntry')}>
         <RoutePlaceholder
-          description="피드백 분석을 먼저 완료해 주세요."
+          description="Analysis result is required."
           showHeader={false}
-          title="메이크업 피드백"
+          title="Makeup Feedback"
         />
       </DetailRouteChrome>
     );
@@ -439,9 +461,9 @@ export function FeedbackGuideRouteScreen({navigation}: RootScreenProps<'Feedback
         routeName="FeedbackGuide"
         onBack={() => navigation.navigate('FeedbackResult')}>
         <RoutePlaceholder
-          description="가이드를 보려면 피드백 결과가 필요해요."
+          description="Feedback result is required to view the guide."
           showHeader={false}
-          title="가이드 오버레이"
+          title="Feedback Guide"
         />
       </DetailRouteChrome>
     );
@@ -469,9 +491,9 @@ export function FeedbackTipRouteScreen({
         routeName="FeedbackTip"
         onBack={() => navigation.navigate('FeedbackResult')}>
         <RoutePlaceholder
-          description="선택한 수정팁을 찾을 수 없어요."
+          description="Selected feedback point was not found."
           showHeader={false}
-          title="수정팁"
+          title="Feedback Tip"
         />
       </DetailRouteChrome>
     );

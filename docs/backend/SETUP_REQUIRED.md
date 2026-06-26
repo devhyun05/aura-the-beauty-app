@@ -22,6 +22,19 @@ For current implementation status, use docs/backend/BACKEND_STATUS.md.
 11. Use GET /api/health/config to confirm which setup categories are still missing. The endpoint returns booleans only, not secret values.
 12. After the API server is running, use `python -m app.ops.smoke_api --base-url <url> --require-db` for local or CloudFront smoke verification.
 
+## Deployment Defaults
+
+For deployed ECS/Fargate environments, start from these values:
+
+```env
+ENVIRONMENT=dev
+AUTH_REQUIRED=true
+AWS_REGION=ap-northeast-2
+AWS_USE_IAM_ROLE=true
+```
+
+Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS task role with the least permissions needed for S3 and Bedrock. Keep `DATABASE_URL` and other sensitive values in Secrets Manager. For mobile deployment, set `EXPO_PUBLIC_API_BASE_URL=https://<cloudfront-domain>/api`.
+
 ## Required Values
 
 - Name: `AUTH_REQUIRED`

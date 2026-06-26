@@ -1,10 +1,11 @@
 from fastapi.testclient import TestClient
 
+from app.core.settings import Settings
 from app.main import create_app
 
 
 def test_users_me_returns_database_not_configured_without_database() -> None:
-  client = TestClient(create_app())
+  client = TestClient(create_app(Settings()))
 
   response = client.get("/api/users/me")
 
@@ -15,7 +16,7 @@ def test_users_me_returns_database_not_configured_without_database() -> None:
 
 
 def test_presigned_upload_returns_s3_not_configured_without_bucket() -> None:
-  client = TestClient(create_app())
+  client = TestClient(create_app(Settings()))
 
   response = client.post(
     "/api/media/presigned-upload",

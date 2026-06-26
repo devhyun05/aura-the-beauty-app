@@ -85,3 +85,48 @@ def test_public_config_status_accepts_access_key_pair_for_aws_credentials() -> N
   assert status["items"]["awsCredentialsOrRole"]["configured"] is True
   assert status["items"]["awsCredentialsOrRole"]["source"] == "access_key"
   assert "awsCredentialsOrRole" not in status["missing"]
+
+def test_s3_client_uses_explicit_access_key_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured = {}
+
+  def fake_boto3_client(service_name: str, **kwargs):
+    captured["service_name"] = service_name
+    captured["kwargs"] = kwargs
+    return object()
+
+  monkeypatch.setattr("app.services.s3.boto3.client", fake_boto3_client)
+
+  S3Service(
+    Settings(
+      aws_access_key_id="AKIAEXAMPLE",
+      aws_secret_access_key="secret",
+      aws_region="ap-northeast-2",
+    ),
+  )._client()
+
+  assert captured["service_name"] == "s3"
+  assert captured["kwargs"]["aws_access_key_id"] == "AKIAEXAMPLE"
+  assert captured["kwargs"]["aws_secret_access_key"] == "secret"
+  assert captured["kwargs"]["region_name"] == "ap-northeast-2"
+  assert captured["kwargs"]["endpoint_url"] == "https://s3.ap-northeast-2.amazonaws.com"
+  assert captured["kwargs"]["config"].signature_version == "s3v4"
+
+
+def test_s3_client_omits_credentials_for_iam_role_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured = {}
+
+  def fake_boto3_client(service_name: str, **kwargs):
+    captured["service_name"] = service_name
+    captured["kwargs"] = kwargs
+    return object()
+
+  monkeypatch.setattr("app.services.s3.boto3.client", fake_boto3_client)
+
+  S3Service(Settings(aws_region="ap-northeast-2", aws_use_iam_role=True))._client()
+
+  assert captured["service_name"] == "s3"
+  assert captured["kwargs"]["region_name"] == "ap-northeast-2"
+  assert captured["kwargs"]["endpoint_url"] == "https://s3.ap-northeast-2.amazonaws.com"
+  assert "aws_access_key_id" not in captured["kwargs"]
+  assert "aws_secret_access_key" not in captured["kwargs"]
+  assert captured["kwargs"]["config"].signature_version == "s3v4"

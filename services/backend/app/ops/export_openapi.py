@@ -3,14 +3,15 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.core.settings import Settings
 from app.main import create_app
 
 
 DEFAULT_OUTPUT = Path("docs/backend/openapi.json")
 
 
-def build_openapi_schema() -> dict[str, Any]:
-  app = create_app()
+def build_openapi_schema(settings: Settings | None = None) -> dict[str, Any]:
+  app = create_app(settings)
 
   return app.openapi()
 

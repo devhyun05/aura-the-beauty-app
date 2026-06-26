@@ -15,7 +15,7 @@ from app.core.settings import Settings, get_settings
 bearer_scheme = HTTPBearer(auto_error=False)
 
 JWKS_CACHE_TTL_SECONDS = 600
-_jwks_cache: dict[str, Any] = {"expires_at": 0, "keys": []}
+_jwks_cache: dict[str, dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -48,19 +48,34 @@ async def _get_jwks(settings: Settings) -> list[dict[str, Any]]:
     )
 
   now = time.time()
+  cache_entry = _jwks_cache.get(jwks_url)
 
-  if _jwks_cache["keys"] and _jwks_cache["expires_at"] > now:
-    return _jwks_cache["keys"]
+  if cache_entry and cache_entry["expires_at"] > now:
+    return cache_entry["keys"]
 
-  async with httpx.AsyncClient(timeout=10) as client:
-    response = await client.get(jwks_url)
-    response.raise_for_status()
-    payload = response.json()
+  try:
+    async with httpx.AsyncClient(timeout=10) as client:
+      response = await client.get(jwks_url)
+      response.raise_for_status()
+      payload = response.json()
+  except httpx.HTTPError as exc:
+    raise AppError(
+      status_code=503,
+      code="COGNITO_JWKS_UNAVAILABLE",
+      message="Unable to fetch Cognito signing keys.",
+    ) from exc
 
-  _jwks_cache["keys"] = payload.get("keys", [])
-  _jwks_cache["expires_at"] = now + JWKS_CACHE_TTL_SECONDS
+  keys = payload.get("keys", [])
 
-  return _jwks_cache["keys"]
+  if not isinstance(keys, list):
+    keys = []
+
+  _jwks_cache[jwks_url] = {
+    "keys": keys,
+    "expires_at": now + JWKS_CACHE_TTL_SECONDS,
+  }
+
+  return keys
 
 
 def _parse_provider(claims: dict[str, Any]) -> str:
@@ -124,6 +139,11 @@ async def verify_cognito_token(token: str, settings: Settings) -> AuthContext:
     )
   except JWTError as exc:
     raise AppError(401, "INVALID_TOKEN", "JWT verification failed.") from exc
+
+  token_use = claims.get("token_use")
+
+  if token_use not in {"id", "access"}:
+    raise AppError(401, "INVALID_TOKEN", "JWT token_use must be id or access.")
 
   token_client_id = claims.get("aud") or claims.get("client_id")
 

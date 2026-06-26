@@ -9,6 +9,7 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 
 import {getCognitoAuthConfig} from './cognitoConfig';
+import {syncAuthSessionWithBackend} from './backendAuthService';
 import type {AuthSession, AuthUser, SocialLoginProvider} from '../types';
 
 type SocialLoginOptions = {
@@ -151,7 +152,7 @@ export async function loginWithSocialProvider(
     },
   );
 
-  return {
+  const session: AuthSession = {
     accessToken: tokenResponse.accessToken,
     expiresIn: tokenResponse.expiresIn,
     idToken: tokenResponse.idToken,
@@ -160,4 +161,6 @@ export async function loginWithSocialProvider(
     tokenType: tokenResponse.tokenType,
     user: await getCognitoUser(tokenResponse),
   };
+
+  return syncAuthSessionWithBackend(session);
 }

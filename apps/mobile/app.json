@@ -1,38 +1,39 @@
-{
-  "expo": {
-    "name": "AI AR Makeup Guide",
-    "slug": "ai-ar-makeup-guide",
-    "version": "0.1.0",
-    "orientation": "portrait",
-    "platforms": [
-      "ios"
-    ],
-    "scheme": "aiarmakeup",
-    "userInterfaceStyle": "light",
-    "extra": {
-      "router": {
-        "root": "app"
-      }
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.aiarmakeupguide.mobile"
-    },
-    "plugins": [
-      "expo-status-bar",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "메이크업 피드백 사진 촬영을 위해 카메라 접근 권한이 필요합니다."
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "메이크업 피드백 사진 업로드를 위해 사진 보관함 접근 권한이 필요합니다."
-        }
-      ],
-      "expo-web-browser"
-    ]
-  }
+﻿{
+    "expo":  {
+                 "name":  "AURA",
+                 "slug":  "ai-ar-makeup-guide",
+                 "version":  "0.1.0",
+                 "orientation":  "portrait",
+                 "platforms":  [
+                                   "ios"
+                               ],
+                 "scheme":  "aiarmakeup",
+                 "userInterfaceStyle":  "light",
+                 "extra":  {
+                               "router":  {
+                                              "root":  "app"
+                                          }
+                           },
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "com.aiarmakeupguide.mobile"
+                         },
+                 "plugins":  [
+                                 "expo-status-bar",
+                                 [
+                                     "expo-camera",
+                                     {
+                                         "cameraPermission":  "AURA 얼굴 촬영과 AR 메이크업 기능을 위해 카메라 접근 권한이 필요합니다."
+                                     }
+                                 ],
+                                 [
+                                     "expo-image-picker",
+                                     {
+                                         "photosPermission":  "AURA 사진 업로드와 분석 기능을 위해 사진 보관함 접근 권한이 필요합니다."
+                                     }
+                                 ],
+                                 "expo-web-browser",
+                                 "expo-secure-store"
+                             ]
+             }
 }

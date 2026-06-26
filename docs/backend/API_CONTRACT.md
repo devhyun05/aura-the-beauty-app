@@ -41,6 +41,10 @@ Protected endpoints expect:
 Authorization: Bearer <Cognito JWT>
 ```
 
+The mobile app should send the Cognito `idToken` first because it carries stable
+user profile claims such as `email` and `name`. The backend can also accept a
+Cognito access token by validating its `client_id` claim.
+
 Local development can set `AUTH_REQUIRED=false`, which injects a development
 Google-like user. Production must set `AUTH_REQUIRED=true`.
 

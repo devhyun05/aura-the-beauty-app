@@ -1,10 +1,11 @@
 import json
 
+from app.core.settings import Settings
 from app.ops.export_openapi import build_openapi_schema, write_openapi_schema
 
 
 def test_build_openapi_schema_contains_core_backend_paths() -> None:
-  schema = build_openapi_schema()
+  schema = build_openapi_schema(Settings())
 
   assert schema["info"]["title"] == "AI AR Makeup Backend"
   assert "/health" in schema["paths"]

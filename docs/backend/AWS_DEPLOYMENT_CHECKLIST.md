@@ -11,6 +11,28 @@ CloudFront must not contain API business logic. Business logic belongs in
 FastAPI. CloudFront is only for HTTPS entry, `/api/*` routing, header forwarding,
 cache policy, and S3/CDN delivery.
 
+## 0. Deployment Defaults
+
+Use these defaults for AWS deployment:
+
+```env
+ENVIRONMENT=dev
+AUTH_REQUIRED=true
+AWS_REGION=ap-northeast-2
+AWS_USE_IAM_ROLE=true
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+```
+
+Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3 and Bedrock. Secrets such as `DATABASE_URL` belong in Secrets Manager and are injected into the task definition.
+
+Mobile deployment should point to CloudFront, not a local LAN IP:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=https://<cloudfront-domain>/api
+```
+
+Mobile Cognito tokens are stored through `expo-secure-store` in `AuthSessionProvider`; do not store JWTs in navigation state.
 ## 1. RDS/PostgreSQL
 
 - Create or confirm the PostgreSQL database.
@@ -97,6 +119,15 @@ Build from repository root:
 docker build -f services/backend/Dockerfile -t aura-backend-api .
 ```
 
+
+ECR push example:
+
+```powershell
+aws ecr create-repository --repository-name aura-backend-api --region ap-northeast-2
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com
+docker tag aura-backend-api:latest <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
+docker push <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
+```
 ECS task requirements:
 
 - Container port: `8000`

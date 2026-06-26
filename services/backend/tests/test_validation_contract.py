@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.settings import Settings
 from app.db.session import require_database
 from app.main import create_app
 
@@ -16,7 +17,7 @@ class ValidationOnlyDatabase:
 
 
 def make_validation_client() -> TestClient:
-  app = create_app()
+  app = create_app(Settings())
   app.dependency_overrides[require_database] = lambda: ValidationOnlyDatabase()
 
   return TestClient(app)
@@ -34,7 +35,7 @@ def test_invalid_uuid_path_returns_validation_error() -> None:
 
 
 def test_presigned_upload_rejects_unsafe_media_kind() -> None:
-  client = TestClient(create_app())
+  client = TestClient(create_app(Settings()))
 
   response = client.post(
     "/api/media/presigned-upload",

@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   createContext,
   useContext,
   useMemo,
@@ -8,6 +8,7 @@ import React, {
   type SetStateAction,
 } from 'react';
 
+import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
 import type {FeedbackPhotoSelection, MakeupFeedbackResult} from '../../features/feedback';
 import type {FilterExtractionPhoto} from '../../features/filter-extraction';
 import type {MakeupLookPreview} from '../../shared/types/profile';
@@ -18,6 +19,7 @@ export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
 export type NavigationFlowState = {
   feedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
+  selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedFeedbackPhoto: FeedbackPhotoSelection;
   selectedFilterPhoto: FilterExtractionPhoto | null;
 };
@@ -25,6 +27,7 @@ export type NavigationFlowState = {
 export type NavigationFlowStateContextValue = NavigationFlowState & {
   setFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
+  setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFeedbackPhoto: Dispatch<SetStateAction<FeedbackPhotoSelection>>;
   setSelectedFilterPhoto: Dispatch<SetStateAction<FilterExtractionPhoto | null>>;
 };
@@ -36,6 +39,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
     feedbackResult: null,
     savedMakeupLook: null,
+    selectedFaceCapture: null,
     selectedFeedbackPhoto: {
       source: 'camera',
     },
@@ -56,6 +60,8 @@ export function NavigationFlowStateProvider({
   children,
   initialState = getInitialNavigationFlowState(),
 }: NavigationFlowStateProviderProps) {
+  const [selectedFaceCapture, setSelectedFaceCapture] =
+    useState<FaceCaptureUploadResult | null>(initialState.selectedFaceCapture);
   const [selectedFeedbackPhoto, setSelectedFeedbackPhoto] =
     useState<FeedbackPhotoSelection>(initialState.selectedFeedbackPhoto);
   const [selectedFilterPhoto, setSelectedFilterPhoto] =
@@ -69,14 +75,16 @@ export function NavigationFlowStateProvider({
     () => ({
       feedbackResult,
       savedMakeupLook,
+      selectedFaceCapture,
       selectedFeedbackPhoto,
       selectedFilterPhoto,
       setFeedbackResult,
       setSavedMakeupLook,
+      setSelectedFaceCapture,
       setSelectedFeedbackPhoto,
       setSelectedFilterPhoto,
     }),
-    [feedbackResult, savedMakeupLook, selectedFeedbackPhoto, selectedFilterPhoto],
+    [feedbackResult, savedMakeupLook, selectedFaceCapture, selectedFeedbackPhoto, selectedFilterPhoto],
   );
 
   return (

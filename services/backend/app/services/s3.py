@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import boto3
+from botocore.config import Config
 
 from app.core.errors import AppError
 from app.core.settings import Settings
@@ -11,7 +12,22 @@ class S3Service:
     self.settings = settings
 
   def _client(self):
-    return boto3.client("s3", region_name=self.settings.aws_region)
+    region = self.settings.aws_region
+    client_kwargs = {
+      "config": Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+      "endpoint_url": f"https://s3.{region}.amazonaws.com",
+      "region_name": region,
+    }
+
+    if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
+      client_kwargs.update(
+        {
+          "aws_access_key_id": self.settings.aws_access_key_id,
+          "aws_secret_access_key": self.settings.aws_secret_access_key,
+        },
+      )
+
+    return boto3.client("s3", **client_kwargs)
 
   def create_presigned_upload(
     self,

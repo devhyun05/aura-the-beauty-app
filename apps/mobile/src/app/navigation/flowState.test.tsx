@@ -16,6 +16,13 @@ expectEqual(
   'flow state provider guard message',
 );
 
+
+
+expectEqual(
+  getInitialNavigationFlowState().selectedFaceCapture,
+  null,
+  'initial selected face capture',
+);
 expectEqual(
   getInitialNavigationFlowState().selectedFeedbackPhoto.source,
   'camera',
@@ -42,6 +49,11 @@ expectEqual(
 
 const demoState = getDemoNavigationFlowState();
 
+expectEqual(
+  demoState.selectedFaceCapture,
+  null,
+  'demo selected face capture',
+);
 expectEqual(
   demoState.selectedFeedbackPhoto.source,
   'camera',

@@ -14,14 +14,15 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     id: 'capture-demo-saved-makeup-look',
     imageSource: selectedFilterPhoto.imageSource,
     isSaved: true,
-    moodLabel: '데모 저장룩',
-    shortDescription: '화면 캡처용으로 준비된 저장 메이크업 룩입니다.',
+    moodLabel: '캡처 데모',
+    shortDescription: '캡처 화면에서 이어지는 데모 메이크업 룩입니다.',
     title: '캡처 데모 룩',
   };
 
   return {
     feedbackResult: createMockMakeupFeedback(demoSelectedFeedbackPhoto),
     savedMakeupLook,
+    selectedFaceCapture: null,
     selectedFeedbackPhoto: demoSelectedFeedbackPhoto,
     selectedFilterPhoto,
   };
