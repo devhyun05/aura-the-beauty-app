@@ -2,12 +2,12 @@ import type {ImageSourcePropType} from 'react-native';
 
 import type {ARMakeupGuideData} from '../types/makeupGuide';
 
-const styleOjiGirl =
-  require('../../assets/images/looks/style-oji-girl.png') as ImageSourcePropType;
-const styleMoriGirl =
-  require('../../assets/images/looks/style-mori-girl.png') as ImageSourcePropType;
-const styleCleanSmoky =
-  require('../../assets/images/looks/style-clean-smoky.png') as ImageSourcePropType;
+const lookOjiGirl =
+  require('../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
+const lookMoriGirl =
+  require('../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
+const lookCleanSmoky =
+  require('../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
 
 export const mockARMakeupGuideData: ARMakeupGuideData = {
   categories: [
@@ -28,22 +28,23 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       description: '오른쪽 얼굴 영역에만 필터가 적용된 상태를 mock으로 표현해요.',
     },
   ],
-  faceParts: [
+  makeupAreas: [
     {id: 'all', label: '전체'},
     {id: 'base', label: '베이스'},
     {id: 'eye', label: '아이'},
     {id: 'lip', label: '립'},
+    {id: 'cheek', label: '치크'},
     {id: 'contour', label: '컨투어'},
   ],
   filters: [
     {
       id: 'neutral-rose-guide',
-      imageSource: styleOjiGirl,
+      imageSource: lookOjiGirl,
       categoryId: 'recommended',
       title: '뉴트럴 로즈',
       subtitle: '세미 글로우 베이스와 로즈 립',
       intensityLabel: '자연스럽게',
-      facePartIds: ['all', 'base', 'eye', 'lip'],
+      makeupAreas: ['all', 'base', 'eye', 'lip'],
       colorOptions: [
         {id: 'rose', label: '로즈', hex: '#C9827D'},
         {id: 'nude', label: '누드', hex: '#D9B8A8'},
@@ -62,12 +63,12 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     },
     {
       id: 'clean-brown-eye',
-      imageSource: styleMoriGirl,
+      imageSource: lookMoriGirl,
       categoryId: 'recommended',
       title: '클린 브라운 아이',
       subtitle: '눈매 중심의 얇은 음영',
       intensityLabel: '가볍게',
-      facePartIds: ['eye', 'contour'],
+      makeupAreas: ['eye', 'contour'],
       colorOptions: [
         {id: 'ash-brown', label: '애쉬 브라운', hex: '#8A756E'},
         {id: 'taupe', label: '토프', hex: '#B8AAA2'},
@@ -84,12 +85,12 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     },
     {
       id: 'mono-chic-filter',
-      imageSource: styleCleanSmoky,
+      imageSource: lookCleanSmoky,
       categoryId: 'trend',
       title: '모노 시크 필터',
       subtitle: '무채색 대비를 살린 촬영용 룩',
       intensityLabel: '선명하게',
-      facePartIds: ['all', 'eye', 'lip'],
+      makeupAreas: ['all', 'eye', 'lip'],
       colorOptions: [
         {id: 'mono', label: '모노', hex: '#262626'},
         {id: 'cool-gray', label: '쿨 그레이', hex: '#9A9A9A'},
@@ -106,12 +107,12 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     },
     {
       id: 'personal-muted-rose',
-      imageSource: styleMoriGirl,
+      imageSource: lookMoriGirl,
       categoryId: 'personalColor',
       title: '뮤트 로즈 퍼스널',
       subtitle: '뉴트럴 톤에 맞춘 저채도 컬러',
       intensityLabel: '차분하게',
-      facePartIds: ['base', 'lip'],
+      makeupAreas: ['base', 'lip'],
       colorOptions: [
         {id: 'muted-rose', label: '뮤트 로즈', hex: '#B87570'},
         {id: 'beige', label: '베이지', hex: '#E7D8CF'},
@@ -128,12 +129,12 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     },
     {
       id: 'popular-glow-lip',
-      imageSource: styleOjiGirl,
+      imageSource: lookOjiGirl,
       categoryId: 'popular',
       title: '글로우 립 포커스',
       subtitle: '촬영에서 입술 존재감을 살리는 필터',
       intensityLabel: '촉촉하게',
-      facePartIds: ['lip'],
+      makeupAreas: ['lip'],
       colorOptions: [
         {id: 'glow-rose', label: '글로우 로즈', hex: '#C76F75'},
         {id: 'clear-red', label: '클리어 레드', hex: '#B94B50'},

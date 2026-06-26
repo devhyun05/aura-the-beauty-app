@@ -13,7 +13,7 @@ import {
   getARFilterSelectedTabOpacity,
   getARFilterShapeEditButtonLabel,
   getARFilterShapeOptionLabels,
-  getARFilterMakeupStyleCardIdAfterOptionEdit,
+  getARFilterTotalMakeupLookIdAfterOptionEdit,
   getARFilterInitialColorId,
   getARFilterSelectedColor,
   isARFilterSaveEnabled,
@@ -76,12 +76,12 @@ expectEqual(
 );
 expectEqual(
   getARFilterOptionGroupLabels('all').join(','),
-  '스타일,형태',
+  '룩,형태',
   'AR filter all face option groups',
 );
 expectEqual(
   getARFilterOptionGroupLabels('lip').join(','),
-  '프리셋,컬러,타입,질감,형태',
+  '룩,컬러,타입,질감,형태',
   'AR filter part option groups',
 );
 expectEqual(
@@ -105,8 +105,8 @@ expectEqual(
   'AR filter shape edit button label',
 );
 expectEqual(
-  getARFilterMakeupStyleCardIdAfterOptionEdit({
-    selectedMakeupStyleCardId: 'daily-glow',
+  getARFilterTotalMakeupLookIdAfterOptionEdit({
+    selectedTotalMakeupLookId: 'daily-glow',
   }),
   null,
   'AR filter clears all style after option edit',

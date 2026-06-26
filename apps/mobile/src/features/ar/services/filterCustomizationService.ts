@@ -1,16 +1,16 @@
-import type {FacePartId, StyleOptionGroupId} from '../../../shared/types/makeupGuide';
+import type {MakeupArea, MakeupOptionGroupId} from '../../../shared/types/makeupGuide';
 import {
-  mockFilterLocationState,
-  mockFilterStyleState,
+  mockFilterShapeState,
+  mockMakeupFilterOptionState,
 } from '../mocks/filterCustomization.mock';
 
-export type FilterLocationAdjustmentKey =
+export type FilterShapeAdjustmentKey =
   | 'horizontal'
   | 'vertical'
   | 'scale'
   | 'rotation';
 
-export type FilterLocationAdjustment = {
+export type FilterShapeAdjustment = {
   label: string;
   min: number;
   max: number;
@@ -19,40 +19,58 @@ export type FilterLocationAdjustment = {
   value: number;
 };
 
-export type FilterLandmarkPoint = {
+export type FilterShapePoint = {
   id: string;
-  x: number;
-  y: number;
+  position: {
+    x: number;
+    y: number;
+  };
+  offset: {
+    x: number;
+    y: number;
+  };
 };
 
-export type FilterLocationState = {
-  selectedFacePartId: FacePartId;
+export type FilterShapePointCoordinate = FilterShapePoint['position'];
+
+export type FilterShapePresetPoint = FilterShapePoint & {
+  resolvedPosition: FilterShapePointCoordinate;
+};
+
+export type FilterShapePreset = {
+  selectedMakeupArea: MakeupArea;
+  shapePoints: readonly FilterShapePresetPoint[];
+  adjustments: FilterShapeState['adjustments'];
+};
+
+export type FilterShapeState = {
+  selectedMakeupArea: MakeupArea;
   isOverlayVisible: boolean;
-  landmarks: readonly FilterLandmarkPoint[];
-  adjustments: Record<FilterLocationAdjustmentKey, FilterLocationAdjustment>;
+  shapePoints: readonly FilterShapePoint[];
+  adjustments: Record<FilterShapeAdjustmentKey, FilterShapeAdjustment>;
 };
 
-export type FilterStyleState = {
-  selectedFacePartId: FacePartId;
-  selectedOptionGroup: StyleOptionGroupId;
+export type MakeupFilterOptionState = {
+  selectedMakeupArea: MakeupArea;
+  selectedOptionGroup: MakeupOptionGroupId;
   selectedColorId: string;
   selectedTypeId: string;
   selectedTextureId: string;
 };
 
-function clampValue(adjustment: FilterLocationAdjustment, nextValue: number) {
+function clampValue(adjustment: FilterShapeAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
 }
 
-export function getFilterLocationState(): FilterLocationState {
-  return mockFilterLocationState;
+export function getFilterShapeState(): FilterShapeState {
+  return mockFilterShapeState;
 }
 
-export function updateFilterLocationAdjustment(
-  state: FilterLocationState,
-  key: FilterLocationAdjustmentKey,
+export function updateFilterShapeAdjustment(
+  state: FilterShapeState,
+  key: FilterShapeAdjustmentKey,
   nextValue: number,
-): FilterLocationState {
+): FilterShapeState {
   const currentAdjustment = state.adjustments[key];
 
   return {
@@ -67,15 +85,74 @@ export function updateFilterLocationAdjustment(
   };
 }
 
-export function getFilterStyleState(): FilterStyleState {
-  return mockFilterStyleState;
+export function updateFilterShapePointOffset(
+  state: FilterShapeState,
+  shapePointId: string,
+  offset: FilterShapePointCoordinate,
+): FilterShapeState {
+  return {
+    ...state,
+    shapePoints: state.shapePoints.map(shapePoint =>
+      shapePoint.id === shapePointId
+        ? {
+            ...shapePoint,
+            offset,
+          }
+        : shapePoint,
+    ),
+  };
 }
 
-export function updateFilterStyleSelection(
-  state: FilterStyleState,
-  optionGroup: StyleOptionGroupId,
+export function resetFilterShapePointOffset(
+  state: FilterShapeState,
+  shapePointId: string,
+): FilterShapeState {
+  return updateFilterShapePointOffset(state, shapePointId, {x: 0, y: 0});
+}
+
+export function resetFilterShapePoints(state: FilterShapeState): FilterShapeState {
+  return {
+    ...state,
+    shapePoints: state.shapePoints.map(shapePoint => ({
+      ...shapePoint,
+      offset: {x: 0, y: 0},
+    })),
+  };
+}
+
+export function getResolvedShapePointPosition(
+  shapePoint: FilterShapePoint,
+): FilterShapePointCoordinate {
+  return {
+    x: shapePoint.position.x + shapePoint.offset.x,
+    y: shapePoint.position.y + shapePoint.offset.y,
+  };
+}
+
+export function createShapePresetFromState(
+  state: FilterShapeState,
+): FilterShapePreset {
+  return {
+    selectedMakeupArea: state.selectedMakeupArea,
+    shapePoints: state.shapePoints.map(shapePoint => ({
+      ...shapePoint,
+      offset: {...shapePoint.offset},
+      position: {...shapePoint.position},
+      resolvedPosition: getResolvedShapePointPosition(shapePoint),
+    })),
+    adjustments: state.adjustments,
+  };
+}
+
+export function getMakeupFilterOptionState(): MakeupFilterOptionState {
+  return mockMakeupFilterOptionState;
+}
+
+export function updateMakeupFilterOptionSelection(
+  state: MakeupFilterOptionState,
+  optionGroup: MakeupOptionGroupId,
   optionId: string,
-): FilterStyleState {
+): MakeupFilterOptionState {
   if (optionGroup === 'color') {
     return {
       ...state,

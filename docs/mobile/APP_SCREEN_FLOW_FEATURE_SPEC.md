@@ -6,6 +6,11 @@
 
 현재 모바일 앱은 실제 백엔드, Unity AR, ARKit/ARCore, AI 모델을 붙인 상태가 아니라 프론트엔드 UI와 mock 데이터 중심으로 구현되어 있다.
 
+네이밍 최종 결정과 실제 rename 작업 순서는 다음 문서를 기준으로 한다.
+
+- `docs/mobile/NAMING_DECISIONS.md`
+- `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md`
+
 ## 1. 전체 화면 분류
 
 ### 1.1 앱 Shell과 Navigation
@@ -43,7 +48,7 @@
 - `NavigationFlowState`
 - `selectedMakeupFeedbackPhoto`
 - `selectedReferenceMakeupPhoto`
-- `savedMakeupStyle` 현재 코드명, 권장 이름 `savedMakeupLook`
+- `savedMakeupLook` 현재 코드명, 권장 이름 `savedMakeupLook`
 - `makeupFeedbackResult`
 
 ### 1.2 Root Stack 화면 목록
@@ -53,32 +58,32 @@
 | Route | 화면 파일 | 기능 분류 | Chrome |
 | --- | --- | --- | --- |
 | `Login` | `LoginScreen.tsx` | 인증 진입 | fullscreen |
-| `Tutorial` | `TutorialIntroScreen.tsx`, `PhotoCaptureGuideScreen.tsx` | 온보딩/촬영 가이드 | fullscreen |
+| `Tutorial` | `TutorialIntroScreen.tsx`, `FaceCaptureTutorialScreen.tsx` | 온보딩/얼굴 촬영 튜토리얼 | fullscreen |
 | `MainTabs` | `MainTabNavigator.tsx` | 탭 호스트 | fullscreen |
 | `FaceCapture` | `FaceCaptureScreen.tsx` | 얼굴 진단 촬영 | fullscreen |
-| `ImageAnalysisLoading` | `ImageAnalysisLoadingScreen.tsx` | 얼굴 분석 진행 | detail |
-| `ImageAnalysisReportsList` | `ImageAnalysisReportsListScreen.tsx` | 분석 결과 목록 | detail |
-| `ImageAnalysisReportDetail` | `ImageAnalysisReportDetailScreen.tsx` | 맞춤 분석 보고서 | detail |
+| `FaceAnalysisLoading` | `FaceAnalysisLoadingScreen.tsx` | 얼굴 분석 진행 | detail |
+| `FaceAnalysisReportsList` | `FaceAnalysisReportsListScreen.tsx` | 얼굴 분석 보고서 목록 | detail |
+| `FaceAnalysisReportDetail` | `FaceAnalysisReportDetailScreen.tsx` | 얼굴 분석 보고서 상세 | detail |
 | `ProfileEdit` | `ProfileEditScreen.tsx` | 프로필 수정 | detail |
-| `MakeupStyleList` | `MakeupStyleListScreen.tsx` | 저장 메이크업 룩 목록 | detail |
+| `MakeupLookList` | `MakeupLookListScreen.tsx` | 저장 메이크업 룩 목록 | detail |
 | `LikedProductList` | `LikedProductListScreen.tsx` | 좋아요 제품 목록 | detail |
 | `ARFilter` | `ARFilterScreen.tsx` | AR 필터 적용 | fullscreen |
-| `ARFilterLocationAdjust` | `ARFilterLocationAdjustScreen.tsx` | AR 필터 형태 수정 | fullscreen |
-| `ARFilterStyleAdjust` | `ARFilterStyleAdjustScreen.tsx` | AR 필터 룩/옵션 수정 | fullscreen |
+| `ARFilterShapeAdjust` | `ARFilterShapeAdjustScreen.tsx` | AR 필터 형태 수정 | fullscreen |
+| `MakeupFilterEdit` | `MakeupFilterEditScreen.tsx` | 메이크업 필터 편집 | fullscreen |
 | `MakeupFeedbackEntry` | `MakeupFeedbackEntryScreen.tsx` | 메이크업 피드백 시작 | detail |
 | `MakeupFeedbackCapture` | `MakeupFeedbackCaptureScreen.tsx` | 피드백 사진 촬영/선택 | fullscreen |
 | `MakeupFeedbackLoading` | `MakeupFeedbackLoadingScreen.tsx` | 피드백 분석 진행 | detail |
 | `MakeupFeedbackResult` | `MakeupFeedbackResultScreen.tsx` | 피드백 결과 | detail |
-| `MakeupCorrectionGuide` | `MakeupCorrectionGuideOverlayScreen.tsx` | 수정 가이드 오버레이 | detail |
+| `MakeupCorrectionGuide` | `MakeupCorrectionGuideOverlayScreen.tsx` | 메이크업 수정 가이드/가이드라인 오버레이 | detail |
 | `MakeupCorrectionTip` | `MakeupCorrectionTipScreen.tsx` | 수정팁 상세 | detail |
 | `ReferenceMakeupExtractionUpload` | `ReferenceMakeupExtractionUploadScreen.tsx` | 레퍼런스 메이크업 사진 선택 | detail |
 | `ReferenceMakeupExtractionLoading` | `ReferenceMakeupExtractionLoadingScreen.tsx` | 메이크업 추출 진행 | fullscreen |
-| `ReferenceMakeupExtractionResult` | `ReferenceMakeupExtractionResultScreen.tsx` | 추출 결과 | detail |
-| `ExtractedMakeupStyleAdjust` | `ExtractedMakeupStyleAdjustScreen.tsx` | 추출 룩 조정 | fullscreen |
-| `ExtractedMakeupStyleSaveForm` | `ExtractedMakeupStyleSaveFormScreen.tsx` | 메이크업 룩 저장 폼 | detail |
-| `ExtractedMakeupStyleSaveComplete` | `ExtractedMakeupStyleSaveCompleteScreen.tsx` | 룩 저장 완료 | fullscreen |
-| `ExtractedMakeupStyleRecipeDetail` | `ExtractedMakeupStyleRecipeDetailScreen.tsx` | 메이크업 레시피 상세 | detail |
-| `ExtractedMakeupStyleRecipeSaveComplete` | `ExtractedMakeupStyleRecipeSaveCompleteScreen.tsx` | 레시피 저장 완료 | fullscreen |
+| `ReferenceMakeupExtractionResult` | `ReferenceMakeupExtractionResultScreen.tsx` | 레퍼런스 메이크업 추출 결과 | detail |
+| `ExtractedMakeupLookAdjust` | `ExtractedMakeupLookAdjustScreen.tsx` | 추출 룩 편집 | fullscreen |
+| `MakeupFilterSaveForm` | `MakeupFilterSaveFormScreen.tsx` | 메이크업 필터 저장 폼 | detail |
+| `MakeupFilterSaveComplete` | `MakeupFilterSaveCompleteScreen.tsx` | 메이크업 필터 저장 완료 | fullscreen |
+| `ExtractedMakeupLookRecipeDetail` | `ExtractedMakeupLookRecipeDetailScreen.tsx` | 메이크업 레시피 상세 | detail |
+| `ExtractedMakeupLookRecipeSaveComplete` | `ExtractedMakeupLookRecipeSaveCompleteScreen.tsx` | 메이크업 레시피 저장 완료 | fullscreen |
 
 ### 1.3 Main Tab 화면 목록
 
@@ -102,7 +107,7 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 
 `룩`
 
-사용자가 카드, 저장 목록, 추천 기준에서 인식하는 메이크업 필터의 이름 단위다. 기존 문서와 화면에서 `스타일`이라고 부르던 사용자-facing 개념은 모두 `룩`으로 바꾼다.
+사용자가 카드, 저장 목록, 추천 기준에서 인식하는 메이크업 필터의 이름 단위다. 기존 문서와 화면에서 `스타일/Style`이라고 부르던 사용자-facing 개념은 모두 `룩/Look`으로 바꾼다.
 
 `토탈메이크업`
 
@@ -124,9 +129,9 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 
 필터가 가진 설정값 묶음이다. 하나의 메이크업 필터는 그 자체로 프리셋이거나 프리셋값을 가진 데이터로 볼 수 있다. 다만 사용자-facing 카드와 저장 목록의 주 용어는 `프리셋`보다 `룩`을 우선 사용한다.
 
-`스타일`
+`룩`
 
-기존 화면, 파일명, 타입명에서 저장 가능한 메이크업 단위를 부르던 레거시 용어다. 사용자-facing 용어로는 더 이상 사용하지 않고 `룩`으로 대체한다. React Native `style` prop과 `StyleSheet`의 `styles` 객체는 플랫폼 용어이므로 이 정리 대상이 아니다.
+사용자가 카드, 저장 목록, 추천 기준에서 인식하는 메이크업 필터의 이름 단위다. 기존 화면, 파일명, 타입명에서 `스타일/Style`이라고 부르던 사용자-facing 개념은 `룩/Look`으로 통일한다. React Native `style` prop과 `StyleSheet`의 `styles` 객체는 플랫폼 용어이므로 이 정리 대상이 아니다.
 
 `컬러`
 
@@ -134,7 +139,7 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 
 `타입`
 
-메이크업 표현 방식 또는 제품/적용 카테고리를 뜻한다. AR 필터 옵션에서는 `typeOptions`, 레퍼런스 룩 조정에서는 현재 코드상 `MakeupStyleAttributeGroup = 'type'`로 사용한다.
+메이크업 표현 방식 또는 제품/적용 카테고리를 뜻한다. AR 필터 옵션에서는 `typeOptions`, 레퍼런스 룩 조정에서는 현재 코드상 `MakeupLookAttributeGroup = 'type'`로 사용한다.
 
 `질감`
 
@@ -142,19 +147,31 @@ AR 카메라 위에 적용하고 저장할 수 있는 메이크업 효과 단위
 
 `형태`
 
-AR 필터에서 메이크업 레이어가 얼굴 랜드마크에 붙는 모양과 배치 패턴이다. 단순 좌표 이동보다 넓은 개념이므로 `위치` 대신 사용하는 최종 용어다.
+AR 필터에서 메이크업 레이어가 얼굴 기준점에 붙는 모양, 적용 범위, 변형 패턴이다. 단순 좌표 이동보다 넓은 개념이므로 `위치` 대신 사용하는 최종 용어다. 사용자가 손가락으로 옮기는 형태 조정점은 `shapePoint`, 점의 기준/현재 좌표는 `position`, 기준점 대비 이동량은 `offset`으로 구분한다.
+
+`메이크업 부위`
+
+메이크업 적용, 저장, 편집 범위의 기준 타입이다. 코드에서는 `MakeupArea`를 기준 타입으로 사용한다. 특정 동작의 적용 대상일 때만 변수명에서 `targetMakeupArea`처럼 `target`을 붙인다.
 
 `원본`
 
-AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적용을 끄거나 형태를 기본 랜드마크 상태로 되돌린다.
+AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적용을 끄거나 형태를 기본 형태 상태로 되돌린다.
 
 `얼굴 진단`
 
-사용자 얼굴 촬영 후 AI가 퍼스널 컬러, 얼굴형, 피부 타입, 추천 무드, 포인트 가이드를 분석하는 플로우다. `FaceCapture` → `ImageAnalysisLoading` → `ImageAnalysisReportDetail`로 이어진다.
+사용자 얼굴 촬영 후 AI가 퍼스널 컬러, 얼굴형, 피부 타입, 추천 무드, 포인트 가이드를 분석하는 플로우다. 코드 최종 용어는 `FaceAnalysis` 계열이다. 현재 route는 `FaceCapture` → `FaceAnalysisLoading` → `FaceAnalysisReportDetail`로 이어진다.
 
-`이미지 분석 결과`
+`얼굴 분석 결과`
 
-얼굴 진단 결과 보고서 목록과 상세를 뜻한다. 마이페이지에서 진입한다.
+얼굴 진단 실행 후 앱이 들고 있는 구조화 결과 데이터다. 코드명은 `FaceAnalysisResult`를 사용한다.
+
+`얼굴 분석 보고서`
+
+사용자가 읽는 설명형 문서, 요약, 진단서 형태의 산출물이다. 코드명은 `FaceAnalysisReport`를 사용한다.
+
+`얼굴 분석`
+
+현재 얼굴 진단이나 메이크업 피드백의 이름으로 사용하지 않는다. 향후 얼굴, 메이크업, 헤어, 의상, 분위기처럼 사진 전체 또는 전체 인상을 함께 분석하는 상위 기능이 생기면 `ImageAnalysis`를 상위 도메인명으로 사용할 수 있다.
 
 `메이크업 피드백`
 
@@ -176,21 +193,53 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 참고할 메이크업 사진에서 색감, 포인트, 룩을 추출하는 플로우다. 코드에서는 `ReferenceMakeupExtraction*`를 사용한다.
 
+`레퍼런스 메이크업 추출 결과`
+
+레퍼런스 사진에서 추출된 구조화 결과 데이터다. 코드명은 `ReferenceMakeupExtractionResult`를 사용한다.
+
+`레퍼런스 메이크업 추출 보고서`
+
+사용자가 읽는 설명형 보고서 형태의 산출물이다. 코드명은 `ReferenceMakeupExtractionReport`를 사용한다.
+
 `추출된 메이크업 룩`
 
-레퍼런스 사진에서 분석되어 저장 또는 조정 가능한 형태로 변환된 메이크업 룩이다. 현재 코드에서는 `MakeupExtractionResult`, `extractedMakeupStyle`, `ExtractedMakeupStyle*`처럼 `Style` 이름이 남아 있다.
+레퍼런스 사진에서 분석되어 저장 또는 조정 가능한 형태로 변환된 메이크업 룩이다. 현재 코드에서는 구조화 결과 데이터는 `ReferenceMakeupExtractionResult`, 화면/route는 `ExtractedMakeupLook*`, 상태값은 `extractedMakeupLook` 계열을 사용한다.
 
 `메이크업 레시피`
 
-추출된 메이크업 룩을 실제 적용 순서와 부위별 단계로 풀어낸 상세 가이드다. 코드에서는 `ExtractedMakeupStyleRecipeDetailScreen`과 `MakeupStyleRecipeTab`을 사용한다.
+추출된 메이크업 룩을 실제 적용 순서와 부위별 단계로 풀어낸 구성/절차/조합이다. 현재 화면은 `ExtractedMakeupLookRecipeDetailScreen` 계열을 사용하고, 탭 타입은 `MakeupRecipeTab`을 사용한다.
 
 `추천 제품`
 
-저장한 메이크업 룩과 어울리는 제품 추천이다. 코드에서는 `ProductRecommendation*` 계열 타입을 사용한다.
+저장한 메이크업 룩과 어울리는 제품 추천이다. 실제 제품 엔티티는 `Product`, 추천 결과 항목은 `RecommendedProduct`, 추천 행위/플로우/서비스는 `ProductRecommendation` 계열로 구분한다.
 
 `좋아요 제품`
 
 사용자가 좋아요한 제품 목록이다. 마이페이지 요약과 전체 목록에서 사용한다. 코드에서는 `Product`, `LikedProductPreview`, `getLikedProducts`를 사용한다.
+
+`튜토리얼`
+
+사용자가 기능을 따라 하며 익히는 사용법 안내다. 온보딩 안내는 `OnboardingTutorial`, 얼굴 사진 촬영법 안내는 `FaceCaptureTutorial` 계열로 정리한다.
+
+`가이드`
+
+AR 반반가이드처럼 화면 위에 겹쳐지는 기준 UI에 사용한다. 사용법 안내에는 `Tutorial`, 메이크업 구성/절차에는 `Recipe`, 적용 기준선/규칙에는 `Guideline`을 우선 사용한다.
+
+`가이드라인`
+
+메이크업 적용 기준선, 규칙, 판단 기준을 뜻한다. 코드에서는 `MakeupGuideline`, `MakeupApplicationGuideline` 계열을 사용한다.
+
+`사용자 프로필`
+
+닉네임, 이메일, 프로필 사진 등 계정/회원 기본 정보다. 코드명은 `UserProfile`을 사용한다.
+
+`마이페이지 프로필 요약`
+
+마이페이지 화면에 보여주기 위해 가공한 요약 데이터다. 코드명은 `MyPageProfileSummary`를 사용한다.
+
+`뷰티 프로필`
+
+얼굴형, 피부톤, 퍼스널 컬러, 민감도처럼 얼굴 분석과 메이크업 추천에 계속 활용되는 사용자 특성 데이터다. 코드명은 `BeautyProfile`을 사용한다.
 
 `필터 스토어`
 
@@ -251,25 +300,25 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 이동:
 
-- `진단 시작` 선택 시 같은 route 안에서 `PhotoCaptureGuideScreen`을 보여준다.
+- `진단 시작` 선택 시 같은 route 안에서 `FaceCaptureTutorialScreen`을 보여준다.
 - 촬영 가이드 완료 시 `FaceCapture`로 이동한다.
 
 파일:
 
 - `apps/mobile/src/features/onboarding/screens/TutorialIntroScreen.tsx`
-- `apps/mobile/src/features/onboarding/screens/PhotoCaptureGuideScreen.tsx`
+- `apps/mobile/src/features/onboarding/screens/FaceCaptureTutorialScreen.tsx`
 
 주요 변수/타입:
 
 - `TutorialIntroHeroContent`
 - `tutorialIntroHeroContent`
-- `isPhotoGuideVisible`
-- `PhotoCaptureGuideStep`
-- `photoCaptureGuideSteps`
+- `isFaceCaptureTutorialVisible`
+- `FaceCaptureTutorialStep`
+- `faceCaptureTutorialSteps`
 - `currentStepIndex`
 - `hasAgreedToPrivacy`
 
-#### PhotoCaptureGuide
+#### FaceCaptureTutorial
 
 역할:
 
@@ -284,16 +333,16 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 파일:
 
-- `PhotoCaptureGuideScreen.tsx`
+- `FaceCaptureTutorialScreen.tsx`
 
 주요 변수/타입:
 
-- `PHOTO_CAPTURE_GUIDE_IMAGE_ASPECT_RATIO`
-- `PHOTO_CAPTURE_GUIDE_SWIPE_HINT_LABEL`
-- `PhotoCaptureGuideIconKey`
-- `PhotoCaptureGuideStep`
-- `photoCaptureGuideNavigationMode`
-- `photoCaptureGuideVisualPresentation`
+- `FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO`
+- `FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL`
+- `FaceCaptureTutorialIconKey`
+- `FaceCaptureTutorialStep`
+- `faceCaptureTutorialNavigationMode`
+- `faceCaptureTutorialVisualPresentation`
 
 ### 3.3 홈/기능 허브 플로우
 
@@ -330,14 +379,21 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 - `HomeData`
 - `HomeTrendItem`
 - `HomeFilterStoreItem`
-- `HomeMakeupStyle` 현재 코드명, 권장 이름 `HomeMakeupLook`
+- `HomeMakeupLook` 현재 코드명, 권장 이름 `HomeMakeupLook`
 - `quickActions`
 - `HomeQuickActionId`
 - `getHomeQuickActionPressHandler`
 - `homeData`
 - `active hero carousel offset` 관련 `getHeroCarousel*` 헬퍼
 
-### 3.4 얼굴 진단/이미지 분석 플로우
+### 3.4 얼굴 진단/얼굴 분석 플로우
+
+최신 네이밍 기준:
+
+- 얼굴 자체 분석 기능은 `FaceAnalysis` 계열로 정리한다.
+- 이전 코드의 `ImageAnalysis*` route, 파일, 타입은 `FaceAnalysis*`로 rename되었다.
+- 향후 `ImageAnalysis`는 사진 전체 또는 전체 인상 분석 상위 도메인명으로만 사용한다.
+- 얼굴 분석 결과 데이터는 `FaceAnalysisResult`, 사용자가 읽는 보고서는 `FaceAnalysisReport`로 구분한다.
 
 #### FaceCapture
 
@@ -356,7 +412,8 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 이동:
 
-- 촬영 시 `ImageAnalysisLoading`으로 이동한다.
+- 촬영 시 현재 route 기준 `FaceAnalysisLoading`으로 이동한다.
+- 최종 네이밍 기준에서는 `FaceAnalysisLoading` 계열로 rename한다.
 
 파일:
 
@@ -376,11 +433,11 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 - `cameraDirection`
 - `evaluateFaceCaptureGuidance`
 
-#### ImageAnalysisLoading
+#### FaceAnalysisLoading / 권장 이름 FaceAnalysisLoading
 
 역할:
 
-촬영 이미지를 AI가 분석하는 진행 화면이다.
+촬영 이미지를 바탕으로 얼굴 분석을 진행하는 화면이다. 현재 route/file 이름은 `FaceAnalysis` 계열이다.
 
 화면 내용:
 
@@ -392,26 +449,26 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 이동:
 
-- mock 진행 완료 후 `ImageAnalysisReportDetail`로 이동한다.
+- mock 진행 완료 후 `FaceAnalysisReportDetail`로 이동한다.
 
 파일:
 
-- 화면: `apps/mobile/src/features/image-analysis/screens/ImageAnalysisLoadingScreen.tsx`
-- service: `apps/mobile/src/features/image-analysis/services/imageAnalysisLoadingService.ts`
+- 화면: `apps/mobile/src/features/face-analysis/screens/FaceAnalysisLoadingScreen.tsx`
+- service: `apps/mobile/src/features/face-analysis/services/faceAnalysisLoadingService.ts`
 
 주요 변수/타입:
 
-- `IMAGE_ANALYSIS_LOADING_TOTAL_MS`
-- `imageAnalysisLoadingSteps`
-- `getImageAnalysisProgressState`
+- `FACE_ANALYSIS_LOADING_TOTAL_MS`
+- `faceAnalysisLoadingSteps`
+- `getFaceAnalysisProgressState`
 - `elapsedMs`
 - `progressState`
 
-#### ImageAnalysisReportsList
+#### FaceAnalysisReportsList / 권장 이름 FaceAnalysisReportsList
 
 역할:
 
-사용자의 과거 이미지 분석 결과 목록이다.
+사용자의 과거 얼굴 분석 보고서 목록이다. 현재 route/file 이름은 `FaceAnalysisReportsList` 계열이다.
 
 화면 내용:
 
@@ -421,28 +478,28 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 이동:
 
-- 카드 선택 시 `ImageAnalysisReportDetail`로 이동한다.
+- 카드 선택 시 `FaceAnalysisReportDetail`로 이동한다.
 
 파일:
 
-- 화면: `ImageAnalysisReportsListScreen.tsx`
-- 컴포넌트: `ImageAnalysisReportCard.tsx`
-- service: `shared/services/imageAnalysisService.ts`
-- mock: `shared/mocks/imageAnalysis.mock.ts`
-- type: `shared/types/imageAnalysis.ts`
+- 화면: `FaceAnalysisReportsListScreen.tsx`
+- 컴포넌트: `FaceAnalysisReportCard.tsx`
+- service: `shared/services/faceAnalysisService.ts`
+- mock: `shared/mocks/faceAnalysis.mock.ts`
+- type: `shared/types/faceAnalysis.ts`
 
 주요 변수/타입:
 
-- `ImageAnalysisReport`
-- `ImageAnalysisReportCard`
+- `FaceAnalysisReport`
+- `FaceAnalysisReportCard`
 - `reports`
-- `getImageAnalysisReports`
+- `getFaceAnalysisReports`
 
-#### ImageAnalysisReportDetail
+#### FaceAnalysisReportDetail / 권장 이름 FaceAnalysisReportDetail
 
 역할:
 
-얼굴 분석 결과 상세 보고서다.
+얼굴 분석 결과 상세 보고서다. 구조화 데이터는 `FaceAnalysisResult`, 사용자가 읽는 보고서형 산출물은 `FaceAnalysisReport`로 구분한다.
 
 화면 내용:
 
@@ -458,21 +515,22 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 
 이동:
 
-- `AR 필터 만들기` 선택 시 `ARFilterStyleAdjust`로 이동한다.
+- `AR 필터 만들기` 선택 시 현재 코드에서는 `MakeupFilterEdit`로 이동한다.
+- 최종 네이밍 기준에서는 `MakeupFilterEditScreen`으로 이동한다.
 - 공유 버튼은 route-level header action으로 연결된다.
 
 파일:
 
-- 화면: `ImageAnalysisReportDetailScreen.tsx`
-- service: `imageAnalysisReportDetailLoadState.ts`, `shared/services/imageAnalysisService.ts`, `shared/services/userService.ts`
-- type: `ImageAnalysisReport`, `ImageAnalysisFacePointGuide`, `ImageAnalysisMakeupCard`
+- 화면: `FaceAnalysisReportDetailScreen.tsx`
+- service: `faceAnalysisReportDetailLoadState.ts`, `shared/services/faceAnalysisService.ts`, `shared/services/userService.ts`
+- type: `FaceAnalysisReport`, `FaceAnalysisFacePointGuide`, `FaceAnalysisMakeupCard`
 
 주요 변수/타입:
 
-- `ImageAnalysisReportDetailLoadState`
+- `FaceAnalysisReportDetailLoadState`
 - `guideLabels`
-- `getImageAnalysisReportSummaryItems`
-- `getImageAnalysisReportPointGuideItems`
+- `getFaceAnalysisReportSummaryItems`
+- `getFaceAnalysisReportPointGuideItems`
 - `onHeaderShareActionChange`
 - `onCreateARFilter`
 - `loadState`
@@ -484,6 +542,13 @@ AR 필터 옵션 카드의 첫 번째 항목이다. 해당 부위의 필터 적�
 AR 필터 화면의 상세 기획은 별도 문서도 함께 유지한다.
 
 - `docs/mobile/AR_FILTER_SCREEN_FEATURE_SPEC.md`
+
+최신 네이밍 기준:
+
+- 현재 AR에 적용될 필터 조합을 편집하는 화면은 `MakeupFilterEditScreen`이다.
+- 현재 조합된 필터를 저장하는 화면은 `MakeupFilterSaveScreen`이다.
+- 형태 선택/저장 옵션은 `Shape`, 사용자가 옮기는 조정점은 `shapePoint`다.
+- 메이크업 적용/저장/편집 범위 기준 타입은 `MakeupArea`다.
 
 #### ARFilter
 
@@ -512,8 +577,9 @@ AR 필터 화면의 상세 기획은 별도 문서도 함께 유지한다.
 이동:
 
 - 뒤로가기 → `HomeTab`
-- 형태 수정 → `ARFilterLocationAdjust`
-- 저장 → 현재 코드상 `ExtractedMakeupStyleSaveForm`
+- 형태 수정 → 현재 route 기준 `ARFilterShapeAdjust`
+- 필터 편집 → 현재 route 기준 `MakeupFilterEdit`
+- 저장 → 현재 route 기준 `MakeupFilterSaveForm`
 - 촬영 완료 → `HomeTab`
 
 파일:
@@ -526,33 +592,34 @@ AR 필터 화면의 상세 기획은 별도 문서도 함께 유지한다.
 주요 변수/타입:
 
 - `ARMakeupOptionGroupId`
-- `selectedMakeupStyleCardId` 현재 코드명, 권장 이름 `selectedTotalMakeupLookId`
+- `selectedMakeupLookCardId` 현재 코드명, 권장 이름 `selectedTotalMakeupLookId`
 - `selectedMakeupPresetCardId` 현재 코드명, 권장 이름 `selectedPointMakeupLookId`
 - `selectedMakeupOptionGroup`
-- `selectedFacePartId`
+- `selectedMakeupArea` 현재 코드명, 권장 이름 `selectedMakeupArea`
 - `selectedColorId`
 - `selectedTypeId`
 - `selectedTextureId`
 - `selectedShapeId`
 - `hasUnsavedMakeupChanges`
 - `getARFilterOptionGroupLabels`
-- `getARFilterMakeupStyleCardIdAfterOptionEdit` 현재 코드명, 권장 이름 `getARFilterMakeupLookIdAfterOptionEdit`
+- `getARFilterMakeupLookCardIdAfterOptionEdit` 현재 코드명, 권장 이름 `getARFilterMakeupLookIdAfterOptionEdit`
 - `isARFilterSaveEnabled`
 
-#### ARFilterLocationAdjust
+#### ARFilterShapeAdjust / 권장 이름 ARFilterShapeAdjust
 
 역할:
 
-AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하는 화면이다. 화면 문구는 `형태 수정`을 사용하지만 파일명과 타입은 아직 `Location`을 사용한다.
+AR 필터의 형태를 얼굴 기준점 기반으로 세밀하게 조정하는 화면이다. 화면 문구와 파일명은 `형태/Shape` 계열을 사용한다. 사용자가 직접 옮기는 조정점은 `shapePoint`로 부르고, 원본 얼굴 인식 기준점에만 `landmark` 계열 이름을 사용한다.
 
 화면 내용:
 
 - 라이브 카메라 프리뷰
 - 메이크업 레이어 오버레이
-- 랜드마크 점 표시/숨김
+- 형태 조정점 표시/숨김
 - 되돌리기
 - 부위 선택
-- 좌우 이동, 상하 이동, 크기, 각도 조정
+- 손가락으로 `shapePoint` 이동
+- `position`, `offset`, 크기, 각도 값 조정
 - 현재 형태 저장
 
 이동:
@@ -561,50 +628,50 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 파일:
 
-- 화면: `ARFilterLocationAdjustScreen.tsx`
+- 화면: `ARFilterShapeAdjustScreen.tsx`
 - service: `filterCustomizationService.ts`
 - mock: `filterCustomization.mock.ts`
 
 주요 변수/타입:
 
-- `FilterLocationState`
-- `FilterLocationAdjustment`
-- `FilterLocationAdjustmentKey`
-- `FilterLandmarkPoint`
-- `mockFilterLocationState`
-- `locationState`
-- `updateFilterLocationAdjustment`
-- `LOCATION_ADJUST_TITLE`
+- `FilterShapeState`
+- `FilterShapeAdjustment`
+- `FilterShapeAdjustmentKey`
+- `FilterShapePoint`
+- `mockFilterShapeState`
+- `shapeState`
+- `updateFilterShapeAdjustment`
+- `SHAPE_ADJUST_TITLE`
 
-#### ARFilterStyleAdjust
+#### MakeupFilterEdit / 권장 이름 MakeupFilterEdit
 
 역할:
 
-현재 코드상 AR 필터의 컬러/타입/질감 옵션을 조정하는 별도 화면이다. 최신 용어 기준으로는 룩/옵션 수정에 가까우며, 파일명과 타입에는 아직 `Style`이 남아 있다.
+현재 AR에 적용될 메이크업 필터 구성을 편집하는 화면이다. 컬러/타입/질감 옵션을 조정하며, 화면 문구와 파일명은 `MakeupFilterEdit` 계열을 사용한다.
 
 화면 내용:
 
 - 라이브 카메라 프리뷰
 - 부위 선택
-- 룩 옵션: 컬러, 타입, 질감
+- 옵션 그룹: 룩, 컬러, 타입, 질감, 형태
 - 컬러 스와치 또는 텍스트 칩
-- 현재 필터 저장
+- 현재 필터 저장 화면으로 이동
 
 파일:
 
-- 화면: `ARFilterStyleAdjustScreen.tsx`
+- 화면: `MakeupFilterEditScreen.tsx`
 - service: `filterCustomizationService.ts`
 - mock: `filterCustomization.mock.ts`
 
 주요 변수/타입:
 
-- `FilterStyleState` 현재 코드명, 권장 이름 `FilterLookState`
-- `StyleOptionGroupId` 현재 코드명, 권장 이름 `LookOptionGroupId`
-- `STYLE_GROUPS`
-- `styleState` 현재 코드명, 권장 이름 `lookState`
+- `MakeupFilterOptionState`
+- `MakeupOptionGroupId`
+- `OPTION_GROUPS`
+- `optionState`
 - `selectedColor`
-- `getFilterStyleState`
-- `updateFilterStyleSelection` 현재 코드명, 권장 이름 `updateFilterLookSelection`
+- `getMakeupFilterOptionState`
+- `updateMakeupFilterOptionSelection`
 
 ### 3.6 메이크업 피드백 플로우
 
@@ -740,7 +807,7 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 역할:
 
-피드백 결과 사진 위에 부위별 수정 가이드를 오버레이로 보여준다.
+피드백 결과 사진 위에 부위별 수정 기준선과 가이드를 오버레이로 보여준다. `Guide`는 화면 위 기준 UI 의미로 유지할 수 있고, 적용 규칙/기준선 성격이 강한 데이터는 추후 `MakeupGuideline` 계열로 분리한다.
 
 화면 내용:
 
@@ -754,7 +821,7 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 주요 변수/타입:
 
-- `GuideCategory`
+- `MakeupGuidelineCategory`
 - `GuideSection`
 - `GUIDE_TABS`
 - `GUIDE_SECTIONS`
@@ -812,14 +879,14 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 - 화면: `ReferenceMakeupExtractionUploadScreen.tsx`
 - service: `makeupExtractionService.ts`
 - mock: `referenceMakeupExtraction.mock.ts`
-- type: `ReferenceMakeupPhoto`, `ReferenceMakeupSource`
+- type: `ReferenceMakeupPhoto`, `ReferenceMakeupPhotoSource`
 
 주요 변수/타입:
 
 - `ReferenceMakeupExtractionData`
 - `ReferenceMakeupPhoto`
-- `ReferenceMakeupSource`
-- `activeSource`
+- `ReferenceMakeupPhotoSource`
+- `activeReferenceSource`
 - `selectedPhotoId`
 - `selectedPhoto`
 
@@ -856,11 +923,11 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 역할:
 
-레퍼런스 사진에서 추출된 메이크업 룩의 요약 결과를 보여준다.
+레퍼런스 사진에서 추출된 메이크업 룩의 요약 결과를 보여준다. 구조화 결과 데이터는 `ReferenceMakeupExtractionResult`, 보고서형 산출물은 `ReferenceMakeupExtractionReport`로 구분한다.
 
 화면 내용:
 
-- 원본 source image
+- 원본 레퍼런스 이미지
 - 추출된 메이크업 룩 제목/설명/tags
 - 추출된 컬러 밸런스
 - 분석 정확도
@@ -871,30 +938,30 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 이동:
 
 - 다시 선택 → `ReferenceMakeupExtractionUpload`
-- 룩 조정해보기 → `ExtractedMakeupStyleAdjust`
+- 룩 조정해보기 → 현재 route 기준 `ExtractedMakeupLookAdjust`
 
 파일:
 
 - 화면: `ReferenceMakeupExtractionResultScreen.tsx`
-- type: `MakeupExtractionResult`, `MakeupStylePalette` 현재 코드명, 권장 이름 `MakeupLookPalette`, `MakeupStylePoint` 현재 코드명, 권장 이름 `MakeupLookPoint`
+- type: `ReferenceMakeupExtractionResult`, `MakeupLookPalette`, `MakeupLookPoint`
 
 주요 변수/타입:
 
-- `extractedMakeupStyle` 현재 코드명, 권장 이름 `extractedMakeupLook`
+- `extractedMakeupLook`
 - `palette`
 - `points`
 - `accuracy`
 
-#### ExtractedMakeupStyleAdjust
+#### ExtractedMakeupLookAdjust
 
 역할:
 
-추출된 메이크업 룩을 AR처럼 미리 적용해 보고 컬러/타입/질감을 조정하거나 저장/레시피 생성으로 이어지는 화면이다.
+추출된 메이크업 룩을 AR처럼 미리 적용해 보고 컬러/타입/질감/형태를 조정하거나 저장/레시피 생성으로 이어지는 화면이다. 현재 코드명은 `ExtractedMakeupLookAdjust`다.
 
 화면 내용:
 
 - 닫기 버튼
-- `위치 조정`, `스타일 조정` 상단 탭 현재 문구, 권장 문구 `형태 조정`, `룩 조정`
+- `형태 조정`, `룩 조정` 상단 탭 현재 문구, 권장 문구 `형태 조정`, `룩 조정`
 - 사진 프리뷰와 메이크업 overlay
 - 강도 slider mock
 - 컬러/타입/질감 옵션
@@ -905,34 +972,34 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 이동:
 
 - 닫기 → `ReferenceMakeupExtractionResult`
-- 저장 → `ExtractedMakeupStyleSaveForm`
-- 레시피 생성 → `ExtractedMakeupStyleRecipeDetail`
+- 저장 → 현재 route 기준 `MakeupFilterSaveForm`
+- 레시피 생성 → `ExtractedMakeupLookRecipeDetail`
 
 파일:
 
-- 화면: `ExtractedMakeupStyleAdjustScreen.tsx`
+- 화면: `ExtractedMakeupLookAdjustScreen.tsx`
 
 주요 변수/타입:
 
-- `MakeupStyleAdjustmentTab` 현재 코드명, 권장 이름 `MakeupLookAdjustmentTab`
-- `MakeupStyleAttributeGroup` 현재 코드명, 권장 이름 `MakeupLookAttributeGroup`
-- `MakeupStyleFaceArea` 현재 코드명, 권장 이름 `MakeupLookFaceArea`
+- `MakeupLookAdjustmentTab`
+- `MakeupLookAttributeGroup`
+- `MakeupArea`
 - `adjustmentTab`
-- `styleGroup` 현재 코드명, 권장 이름 `lookGroup`
+- `attributeGroup`
 - `selectedColorId`
-- `selectedFaceArea`
+- `selectedMakeupArea`
 - `selectedType`
 - `selectedTexture`
 
 주의:
 
-이 화면은 아직 `위치 조정`, `스타일 조정`, `position`, `style` 용어를 사용한다. 새 용어 체계에 맞춰 `형태`, `룩` 기준으로 정리할지 검토가 필요하다.
+이 화면은 사용자-facing 문구는 `형태`, `룩`을 사용하고, 코드명은 `Shape`, `Look`, `MakeupArea` 기준으로 정리한다. React Native의 `style` prop과 이미지 `source` prop은 프레임워크 용어이므로 예외다.
 
-#### ExtractedMakeupStyleSaveForm
+#### MakeupFilterSaveForm / 권장 이름 MakeupFilterSave
 
 역할:
 
-추출된 메이크업 룩을 이름, 태그, 공개 설정과 함께 저장하는 폼이다.
+추출된 메이크업 룩 또는 AR에서 조합한 메이크업 필터를 이름, 태그, 공개 설정과 함께 저장하는 폼이다. 현재 route/file 이름은 `MakeupFilterSaveForm` 계열이다.
 
 화면 내용:
 
@@ -944,20 +1011,22 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 이동:
 
-- 저장 완료 → `ExtractedMakeupStyleSaveComplete`
+- 저장 완료 → `MakeupFilterSaveComplete`
 
 파일:
 
-- 화면: `ExtractedMakeupStyleSaveFormScreen.tsx`
+- 화면: `MakeupFilterSaveFormScreen.tsx`
 
 주요 변수/타입:
 
-- `makeupStyleName` 현재 코드명, 권장 이름 `makeupLookName`
+- `makeupLookName` 현재 코드명, 권장 이름 `makeupLookName`
+- `makeupFilterSaveState`
+- `submitMakeupFilterSave`
 - `visibility`
 - `defaultTags`
 - `onSave`
 
-#### ExtractedMakeupStyleSaveComplete
+#### MakeupFilterSaveComplete
 
 역할:
 
@@ -972,20 +1041,20 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 이동:
 
-- 지금 적용해보기 → `ExtractedMakeupStyleAdjust`
+- 지금 적용해보기 → `ExtractedMakeupLookAdjust`
 - 마이페이지로 이동 → `ProfileTab`
 
 파일:
 
-- 화면: `ExtractedMakeupStyleSaveCompleteScreen.tsx`
+- 화면: `MakeupFilterSaveCompleteScreen.tsx`
 
 주요 변수/타입:
 
-- `extractedMakeupStyle` 현재 코드명, 권장 이름 `extractedMakeupLook`
+- `extractedMakeupLook` 현재 코드명, 권장 이름 `extractedMakeupLook`
 - `onApplyNow`
 - `onGoToProfile`
 
-#### ExtractedMakeupStyleRecipeDetail
+#### ExtractedMakeupLookRecipeDetail
 
 역할:
 
@@ -1002,15 +1071,15 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 이동:
 
-- 저장 → `ExtractedMakeupStyleRecipeSaveComplete`
+- 저장 → `ExtractedMakeupLookRecipeSaveComplete`
 
 파일:
 
-- 화면: `ExtractedMakeupStyleRecipeDetailScreen.tsx`
+- 화면: `ExtractedMakeupLookRecipeDetailScreen.tsx`
 
 주요 변수/타입:
 
-- `MakeupStyleRecipeTab` 현재 코드명, 권장 이름 `MakeupLookRecipeTab`
+- `MakeupRecipeTab`
 - `mainTabs`
 - `subTabs`
 - `recipeItems`
@@ -1018,7 +1087,7 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 - `activeSubTab`
 - `visibleItems`
 
-#### ExtractedMakeupStyleRecipeSaveComplete
+#### ExtractedMakeupLookRecipeSaveComplete
 
 역할:
 
@@ -1034,15 +1103,15 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 이동:
 
 - 마이페이지로 이동 → `ProfileTab`
-- 상세 분석 다시 보기 → `ExtractedMakeupStyleRecipeDetail`
+- 상세 분석 다시 보기 → `ExtractedMakeupLookRecipeDetail`
 
 파일:
 
-- 화면: `ExtractedMakeupStyleRecipeSaveCompleteScreen.tsx`
+- 화면: `ExtractedMakeupLookRecipeSaveCompleteScreen.tsx`
 
 주요 변수/타입:
 
-- `extractedMakeupStyle` 현재 코드명, 권장 이름 `extractedMakeupLook`
+- `extractedMakeupLook` 현재 코드명, 권장 이름 `extractedMakeupLook`
 - `onBackToDetail`
 - `onGoToProfile`
 
@@ -1052,42 +1121,43 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 역할:
 
-사용자 프로필, 최근 이미지 분석 결과, 저장 메이크업 룩, 좋아요 제품을 요약해서 보여주는 화면이다.
+사용자 프로필, 최근 얼굴 분석 보고서, 저장 메이크업 룩, 좋아요 제품을 요약해서 보여주는 화면이다. 화면 표시용 데이터는 `MyPageProfileSummary`, 계정 기본 정보는 `UserProfile`, 추천/분석에 계속 쓰는 뷰티 특성은 `BeautyProfile`로 구분한다.
 
 화면 내용:
 
 - 프로필 요약 카드
-- 이미지 분석 결과 요약과 전체 보기
+- 얼굴 분석 결과 요약과 전체 보기
 - 메이크업 룩 3개 preview와 전체 보기
 - 좋아요한 제품 목록 3개 preview와 전체 보기
 
 이동:
 
 - 설정 버튼 → `ProfileEdit`
-- 이미지 분석 결과 전체 보기 → `ImageAnalysisReportsList`
-- 이미지 분석 카드 선택 → `ImageAnalysisReportDetail`
-- 메이크업 룩 전체 보기 → `MakeupStyleList`
+- 얼굴 분석 보고서 전체 보기 → 현재 route 기준 `FaceAnalysisReportsList`
+- 얼굴 분석 보고서 카드 선택 → 현재 route 기준 `FaceAnalysisReportDetail`
+- 메이크업 룩 전체 보기 → `MakeupLookList`
 - 좋아요한 제품목록 전체 보기 → `LikedProductList`
 
 파일:
 
 - 화면: `ProfileScreen.tsx`
-- components: `ProfileSummaryCard.tsx`, `ImageAnalysisSummaryCard.tsx`, `MakeupStyleCard.tsx`, `ProductCard.tsx`
+- components: `ProfileSummaryCard.tsx`, `FaceAnalysisSummaryCard.tsx`, `MakeupLookCard.tsx`, `ProductCard.tsx`
 - service: `profileScreenData.ts`, `profileLoadState.ts`
 - shared service: `profileService.ts`, `userService.ts`, `makeupService.ts`, `productService.ts`
 - type: `shared/types/profile.ts`
 
 주요 변수/타입:
 
-- `ProfileData`
 - `UserProfile`
-- `MakeupStylePreview` 현재 코드명, 권장 이름 `MakeupLookPreview`
+- `MyPageProfileSummary`
+- `BeautyProfile`
+- `MakeupLookPreview` 현재 코드명, 권장 이름 `MakeupLookPreview`
 - `LikedProductPreview`
 - `ProfileLoadState`
 - `loadProfileScreenData`
-- `savedMakeupStyle` 현재 코드명, 권장 이름 `savedMakeupLook`
-- `makeupStyles` 현재 코드명, 권장 이름 `makeupLooks`
-- `previewMakeupStyles` 현재 코드명, 권장 이름 `previewMakeupLooks`
+- `savedMakeupLook` 현재 코드명, 권장 이름 `savedMakeupLook`
+- `makeupLooks` 현재 코드명, 권장 이름 `makeupLooks`
+- `previewMakeupLooks` 현재 코드명, 권장 이름 `previewMakeupLooks`
 - `likedProducts`
 
 #### ProfileEdit
@@ -1130,11 +1200,11 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 ### 3.9 저장 룩/좋아요 제품 목록 플로우
 
-#### MakeupStyleList
+#### MakeupLookList
 
 역할:
 
-마이페이지의 메이크업 룩 전체 보기 화면이다.
+마이페이지의 메이크업 룩 전체 보기 화면이다. 현재 route/file 이름은 `MakeupLookList` 계열이다.
 
 화면 내용:
 
@@ -1144,16 +1214,16 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 파일:
 
-- 화면: `apps/mobile/src/features/recommendation/screens/MakeupStyleListScreen.tsx`
+- 화면: `apps/mobile/src/features/recommendation/screens/MakeupLookListScreen.tsx`
 - service: `shared/services/makeupService.ts`
-- mock: `shared/mocks/makeupStyles.mock.ts`
-- type: `MakeupStyle` 현재 코드명, 권장 이름 `MakeupLook`
+- mock: `shared/mocks/makeupLooks.mock.ts`
+- type: `MakeupLook` 현재 코드명, 권장 이름 `MakeupLook`
 
 주요 변수/타입:
 
-- `MakeupStyle` 현재 코드명, 권장 이름 `MakeupLook`
-- `makeupStyles` 현재 코드명, 권장 이름 `makeupLooks`
-- `getMakeupStyles` 현재 코드명, 권장 이름 `getMakeupLooks`
+- `MakeupLook` 현재 코드명, 권장 이름 `MakeupLook`
+- `makeupLooks` 현재 코드명, 권장 이름 `makeupLooks`
+- `getMakeupLooks` 현재 코드명, 권장 이름 `getMakeupLooks`
 - `PagedGrid`
 
 #### LikedProductList
@@ -1188,7 +1258,7 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 역할:
 
-저장한 메이크업 룩과 잘 맞는 제품을 추천하는 화면이다.
+저장한 메이크업 룩과 잘 맞는 제품을 추천하는 화면이다. 실제 제품 엔티티는 `Product`, 추천 결과 항목은 `RecommendedProduct`, 추천 기능/플로우는 `ProductRecommendation` 계열로 구분한다.
 
 화면 내용:
 
@@ -1209,8 +1279,8 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 주요 변수/타입:
 
 - `ProductRecommendationData`
-- `ProductRecommendationItem`
-- `ProductRecommendationStyle` 현재 코드명, 권장 이름 `ProductRecommendationLook`
+- `RecommendedProduct` 현재 코드명, 권장 이름 `RecommendedProduct`
+- `ProductRecommendationLook`
 - `ProductRecommendationSet`
 - `ProductRecommendationCategory`
 - `activeCategory`
@@ -1242,48 +1312,48 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 파일명:
 
 - `TutorialIntroScreen.tsx`
-- `PhotoCaptureGuideScreen.tsx`
+- `FaceCaptureTutorialScreen.tsx`
 
 주요 변수명:
 
 - `tutorialIntroHeroContent`
-- `isPhotoGuideVisible`
-- `photoCaptureGuideSteps`
+- `isFaceCaptureTutorialVisible`
+- `faceCaptureTutorialSteps`
 - `currentStepIndex`
 - `hasAgreedToPrivacy`
 
-### 4.3 얼굴 진단/이미지 분석
+### 4.3 얼굴 진단/얼굴 분석
 
 파일명:
 
 - `FaceCaptureScreen.tsx`
 - `faceCaptureValidation.ts`
-- `ImageAnalysisLoadingScreen.tsx`
-- `ImageAnalysisReportsListScreen.tsx`
-- `ImageAnalysisReportDetailScreen.tsx`
-- `imageAnalysisService.ts`
-- `imageAnalysis.mock.ts`
-- `imageAnalysis.ts`
+- `FaceAnalysisLoadingScreen.tsx` 현재 파일명, 권장 이름 `FaceAnalysisLoadingScreen.tsx`
+- `FaceAnalysisReportsListScreen.tsx` 현재 파일명, 권장 이름 `FaceAnalysisReportsListScreen.tsx`
+- `FaceAnalysisReportDetailScreen.tsx` 현재 파일명, 권장 이름 `FaceAnalysisReportDetailScreen.tsx`
+- `faceAnalysisService.ts`
+- `faceAnalysis.mock.ts`
+- `faceAnalysis.ts`
 
 주요 변수명:
 
 - `FaceCaptureCheckState`
 - `FaceCaptureGuidance`
 - `evaluateFaceCaptureGuidance`
-- `ImageAnalysisReport`
-- `ImageAnalysisFacePointGuide`
-- `ImageAnalysisMakeupCard`
-- `getImageAnalysisReports`
-- `getLatestImageAnalysisReport`
-- `getImageAnalysisReportSummaryItems`
+- `FaceAnalysisReport` 현재 코드명, 권장 이름 `FaceAnalysisReport`
+- `FaceAnalysisFacePointGuide` 현재 코드명, 권장 이름 `FaceAnalysisMakeupGuideline`
+- `FaceAnalysisMakeupCard` 현재 코드명, 권장 이름 `FaceAnalysisMakeupCard`
+- `getFaceAnalysisReports` 현재 코드명, 권장 이름 `getFaceAnalysisReports`
+- `getLatestFaceAnalysisReport` 현재 코드명, 권장 이름 `getLatestFaceAnalysisReport`
+- `getFaceAnalysisReportSummaryItems` 현재 코드명, 권장 이름 `getFaceAnalysisReportSummaryItems`
 
 ### 4.4 AR 필터
 
 파일명:
 
 - `ARFilterScreen.tsx`
-- `ARFilterLocationAdjustScreen.tsx`
-- `ARFilterStyleAdjustScreen.tsx`
+- `ARFilterShapeAdjustScreen.tsx` 현재 파일명, 권장 이름 `ARFilterShapeAdjustScreen.tsx`
+- `MakeupFilterEditScreen.tsx` 현재 파일명, 권장 이름 `MakeupFilterEditScreen.tsx`
 - `filterCustomizationService.ts`
 - `filterCustomization.mock.ts`
 - `makeupGuideService.ts`
@@ -1295,13 +1365,16 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 - `MakeupFilter`
 - `ARMakeupGuideData`
 - `ARMakeupOptionGroupId`
-- `selectedMakeupStyleCardId` 현재 코드명, 권장 이름 `selectedTotalMakeupLookId`
+- `selectedMakeupLookCardId` 현재 코드명, 권장 이름 `selectedTotalMakeupLookId`
 - `selectedMakeupPresetCardId` 현재 코드명, 권장 이름 `selectedPointMakeupLookId`
 - `selectedMakeupOptionGroup`
+- `selectedMakeupArea` 현재 코드명, 권장 이름 `selectedMakeupArea`
 - `hasUnsavedMakeupChanges`
-- `FilterLocationState`
-- `FilterStyleState` 현재 코드명, 권장 이름 `FilterLookState`
-- `StyleOptionGroupId` 현재 코드명, 권장 이름 `LookOptionGroupId`
+- `FilterShapeState`
+- `MakeupFilterOptionState`
+- `MakeupOptionGroupId`
+- `ShapePoint`
+- `MakeupArea`
 
 ### 4.5 메이크업 피드백
 
@@ -1335,11 +1408,11 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 - `ReferenceMakeupExtractionUploadScreen.tsx`
 - `ReferenceMakeupExtractionLoadingScreen.tsx`
 - `ReferenceMakeupExtractionResultScreen.tsx`
-- `ExtractedMakeupStyleAdjustScreen.tsx`
-- `ExtractedMakeupStyleSaveFormScreen.tsx`
-- `ExtractedMakeupStyleSaveCompleteScreen.tsx`
-- `ExtractedMakeupStyleRecipeDetailScreen.tsx`
-- `ExtractedMakeupStyleRecipeSaveCompleteScreen.tsx`
+- `ExtractedMakeupLookAdjustScreen.tsx`
+- `MakeupFilterSaveFormScreen.tsx` 현재 파일명, 권장 이름 `MakeupFilterSaveScreen.tsx`
+- `MakeupFilterSaveCompleteScreen.tsx` 현재 파일명, 권장 이름 `MakeupFilterSaveCompleteScreen.tsx`
+- `ExtractedMakeupLookRecipeDetailScreen.tsx` 현재 파일명, 권장 이름 `MakeupRecipeDetailScreen.tsx`
+- `ExtractedMakeupLookRecipeSaveCompleteScreen.tsx` 현재 파일명, 권장 이름 `MakeupRecipeSaveCompleteScreen.tsx`
 - `makeupExtractionService.ts`
 - `referenceMakeupExtraction.mock.ts`
 - `types.ts`
@@ -1348,15 +1421,15 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 
 - `ReferenceMakeupExtractionData`
 - `ReferenceMakeupPhoto`
-- `ReferenceMakeupSource`
-- `MakeupExtractionResult`
-- `MakeupStylePalette` 현재 코드명, 권장 이름 `MakeupLookPalette`
-- `MakeupStylePoint` 현재 코드명, 권장 이름 `MakeupLookPoint`
-- `MakeupStyleAdjustmentTab` 현재 코드명, 권장 이름 `MakeupLookAdjustmentTab`
-- `MakeupStyleAttributeGroup` 현재 코드명, 권장 이름 `MakeupLookAttributeGroup`
-- `MakeupStyleFaceArea` 현재 코드명, 권장 이름 `MakeupLookFaceArea`
-- `MakeupStyleRecipeTab` 현재 코드명, 권장 이름 `MakeupLookRecipeTab`
-- `extractedMakeupStyle` 현재 코드명, 권장 이름 `extractedMakeupLook`
+- `ReferenceMakeupPhotoSource`
+- `ReferenceMakeupExtractionResult`
+- `MakeupLookPalette`
+- `MakeupLookPoint`
+- `MakeupLookAdjustmentTab`
+- `MakeupLookAttributeGroup`
+- `MakeupArea`
+- `MakeupRecipeTab`
+- `extractedMakeupLook` 현재 코드명, 권장 이름 `extractedMakeupLook`
 
 ### 4.7 마이페이지/프로필
 
@@ -1365,8 +1438,8 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 - `ProfileScreen.tsx`
 - `ProfileEditScreen.tsx`
 - `ProfileSummaryCard.tsx`
-- `ImageAnalysisSummaryCard.tsx`
-- `MakeupStyleCard.tsx`
+- `FaceAnalysisSummaryCard.tsx`
+- `MakeupLookCard.tsx`
 - `ProductCard.tsx`
 - `ProfileEditRow.tsx`
 - `profileScreenData.ts`
@@ -1378,13 +1451,14 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 주요 변수명:
 
 - `UserProfile`
-- `ProfileData`
+- `MyPageProfileSummary`
+- `BeautyProfile`
 - `ProfileEditField`
-- `MakeupStyle` 현재 코드명, 권장 이름 `MakeupLook`
-- `MakeupStylePreview` 현재 코드명, 권장 이름 `MakeupLookPreview`
+- `MakeupLook` 현재 코드명, 권장 이름 `MakeupLook`
+- `MakeupLookPreview` 현재 코드명, 권장 이름 `MakeupLookPreview`
 - `Product`
 - `LikedProductPreview`
-- `savedMakeupStyle` 현재 코드명, 권장 이름 `savedMakeupLook`
+- `savedMakeupLook` 현재 코드명, 권장 이름 `savedMakeupLook`
 - `loadProfileScreenData`
 
 ### 4.8 추천 제품
@@ -1399,242 +1473,232 @@ AR 필터의 형태를 얼굴 랜드마크 기준으로 세밀하게 조정하�
 주요 변수명:
 
 - `ProductRecommendationData`
-- `ProductRecommendationItem`
-- `ProductRecommendationStyle` 현재 코드명, 권장 이름 `ProductRecommendationLook`
+- `RecommendedProduct` 현재 코드명, 권장 이름 `RecommendedProduct`
+- `ProductRecommendationLook`
 - `ProductRecommendationSet`
 - `ProductRecommendationCategory`
 - `activeCategory`
 - `productRecommendationMock`
 
-## 5. 비슷하지만 다른 개념과 네이밍 충돌 후보
+## 5. 최종 네이밍 결정 및 rename 타깃
+
+이 섹션은 과거 `비슷하지만 다른 개념과 네이밍 충돌 후보`였던 내용을 확정 결정 기준으로 갱신한 것이다. 자세한 결정 이유와 작업 순서는 `docs/mobile/NAMING_DECISIONS.md`, `docs/mobile/NAMING_REFACTOR_WORK_PLAN.md`를 따른다.
 
 ### 5.1 `스타일` 레거시 이름과 `룩` 최종 용어
 
-현재 코드와 문서 일부에는 `스타일/Style`이 아래 의미로 남아 있다.
+확정 기준:
 
-1. 저장 가능한 메이크업 룩: `MakeupStyle`, `MakeupStylePreview`, `makeupStylesMock`
-2. 레퍼런스 사진에서 추출된 룩: `ExtractedMakeupStyle*`, `extractedMakeupStyle`, `MakeupExtractionResult`
-3. 추천 제품 기준 룩: `ProductRecommendationStyle`
-4. AR 필터의 토탈메이크업룩 선택값: `makeupStyle`, `selectedMakeupStyleCardId`
-5. React Native `style` prop 및 `StyleSheet`의 `styles`
+- 사용자-facing 용어는 `스타일`을 사용하지 않고 `룩`으로 통일한다.
+- 코드에서도 새 작업은 `Look` 계열을 우선 사용한다.
+- React Native `style` prop, `StyleSheet`, `styles`는 플랫폼 용어이므로 변경하지 않는다.
 
-정리 제안:
+대표 rename 타깃:
 
-- 사용자-facing 용어는 `스타일`을 사용하지 않고 `룩`으로 통일
-- 저장 가능한 전체 얼굴 단위는 `TotalMakeupLook`
-- 저장 가능한 부위 단위는 `PointMakeupLook`
-- 기존 `MakeupStyle` 계열 코드는 추후 `MakeupLook` 계열로 rename 검토
-- AR 필터 전체 조합은 `selectedTotalMakeupLookId`, 부위 조합은 `selectedPointMakeupLookId`처럼 구분
-- React Native `style/styles`는 플랫폼 용어이므로 변경하지 않음
+- `MakeupStyle` -> `MakeupLook`
+- `MakeupStylePreview` -> `MakeupLookPreview`
+- `MakeupStyleCard` -> `MakeupLookCard`
+- `ExtractedMakeupStyle*` -> `ExtractedMakeupLook*`
+- `ProductRecommendationStyle` -> `ProductRecommendationLook`
+- `selectedMakeupStyleCardId` -> `selectedTotalMakeupLookId`
 
 ### 5.2 `메이크업 필터`, `룩`, `프리셋`의 계층
 
-새 기능 정의에서는 메이크업 필터, 룩, 프리셋을 다음처럼 구분한다.
+확정 기준:
 
-현재 상태:
+- `MakeupFilter`는 저장/적용 가능한 메이크업 효과 전체를 포괄한다.
+- 사용자가 카드나 저장 목록에서 인식하는 단위는 `MakeupLook`이다.
+- 얼굴 전체 룩은 `TotalMakeupLook`, 특정 부위 룩은 `PointMakeupLook`으로 구분한다.
+- `Preset`은 사용자-facing 카드명이 아니라 룩이 가진 설정값 묶음이다.
 
-- `MakeupFilter`: AR 필터 카드 데이터 또는 효과 데이터
-- `selectedMakeupStyleCardId`: 토탈메이크업룩 선택값으로 쓰이는 레거시 이름
-- `selectedMakeupPresetCardId`: 포인트메이크업룩 선택값으로 쓰이는 레거시 이름
-- 화면 문구: `룩`
+권장 데이터 관계:
 
-정리 제안:
-
-- `MakeupFilter`는 저장/적용 가능한 상위 필터 단위로 유지
-- `TotalMakeupLook`과 `PointMakeupLook`은 필터의 scope를 구분하는 하위 타입 또는 discriminated union으로 설계
-- `Preset`은 카드 UI 용어가 아니라 필터가 가진 값 묶음, 예: `makeupPresetValues`
-- 여러 `PointMakeupLook`을 조합해 하나의 `TotalMakeupLook`을 만들 수 있도록 데이터 관계를 설계
+```text
+MakeupFilter
+├─ TotalMakeupLook
+└─ PointMakeupLook
+   ├─ LipMakeupLook
+   ├─ EyeMakeupLook
+   ├─ CheekMakeupLook
+   ├─ EyebrowMakeupLook
+   └─ ContourMakeupLook
+```
 
 ### 5.3 `위치`, `Location`, `Position`, `형태` 혼재
 
-AR 필터 적용 화면에서는 `위치` 대신 `형태`로 최종 결정했다.
+확정 기준:
 
-현재 남아 있는 이름:
+- 사용자-facing 옵션명은 `위치`가 아니라 `형태`를 사용한다.
+- 저장/선택 가능한 옵션은 `Shape` 계열을 사용한다.
+- 사용자가 옮기는 조정점은 `shapePoint`라고 부른다.
+- 실제 얼굴 인식 모델이 제공하는 원본 기준점에만 `landmark` 계열 이름을 사용한다.
+- `position`은 점의 기준/현재 좌표, `offset`은 기준점 대비 이동량에 사용한다.
 
-- `ARFilterLocationAdjust`
-- `ARFilterLocationAdjustScreen`
-- `FilterLocationState`
-- `FilterLocationAdjustment`
-- `mockFilterLocationState`
-- `MakeupStyleAdjustmentTab = 'position' | 'style'` 현재 코드명, 권장 이름 `MakeupLookAdjustmentTab = 'shape' | 'look'`
-- `ExtractedMakeupStyleAdjustScreen`의 `위치 조정` 문구
-- 레퍼런스 추출 문구의 `색감, 위치, 질감`
+대표 rename 타깃:
 
-정리 제안:
+- `ARFilterLocationAdjust` -> `ARFilterShapeAdjust`
+- `ARFilterLocationAdjustScreen` -> `ARFilterShapeAdjustScreen`
+- `FilterLocationState` -> `FilterShapeState`
+- `FilterLocationAdjustment` -> `FilterShapeAdjustment`
+- `locationOption` -> `shapeOption`
+- `selectedLocationId` -> `selectedMakeupShapeId`
 
-- AR 필터 쪽은 파일/route/type을 추후 `Shape` 기반으로 rename 검토
-  - `ARFilterLocationAdjust` → `ARFilterShapeAdjust`
-  - `FilterLocationState` → `FilterShapeState`
-  - `FilterLocationAdjustment` → `FilterShapeAdjustment`
-- 레퍼런스 추출 쪽의 `위치`가 실제 형태 개념이면 `형태`로 통일
-- 단순 좌표 이동만 뜻하는 곳은 `좌우 이동`, `상하 이동`처럼 조작 단위로 표현
+### 5.4 `StyleAdjust` 화면과 메이크업 필터 편집 화면
 
-### 5.4 `StyleAdjust` 화면과 `룩/옵션 수정` 문구 불일치
+확정 기준:
 
-`ARFilterStyleAdjustScreen`은 최신 용어 기준으로 룩/옵션 수정 화면에 가까우나 파일명과 route는 여전히 `StyleAdjust`다.
+- `MakeupFilterEditScreen`은 `LookEdit`이 아니라 `MakeupFilterEditScreen` 계열로 정리한다.
+- 이 화면은 룩 엔티티 자체만 편집하는 것이 아니라, 현재 AR에 적용될 메이크업 필터 구성 전체를 편집하는 화면이다.
+- 저장 화면은 `MakeupFilterSaveScreen`으로 맞춘다.
 
-현재 상태:
+대표 rename 타깃:
 
-- route: `ARFilterStyleAdjust`
-- file: `ARFilterStyleAdjustScreen.tsx`
-- visible title: 현재 `프리셋 수정`, 권장 문구 `룩 수정` 또는 `옵션 수정`
-- state: `FilterStyleState`
+- `ARFilterStyleAdjustScreen` -> `MakeupFilterEditScreen`
+- `StyleAdjust` -> `MakeupFilterEdit`
+- `styleAdjustState` -> `makeupFilterEditState`
+- `openStyleAdjust` -> `openMakeupFilterEdit`
 
-정리 제안:
+### 5.5 얼굴 진단, 메이크업 피드백, ImageAnalysis 예약어
 
-- 이 화면을 계속 유지한다면 `ARFilterLookAdjustScreen` 또는 `ARFilterOptionAdjustScreen`으로 rename 검토
-- 다만 현재 AR 필터 적용 화면 안에서 룩/컬러/타입/질감/형태 카드를 직접 고르는 구조가 생겼으므로, 이 별도 화면이 계속 필요한지 먼저 검토 필요
+확정 기준:
 
-### 5.5 얼굴 진단 `ImageAnalysis`와 메이크업 피드백 `MakeupFeedback`
+- 얼굴 자체 분석은 `FaceAnalysis` 계열을 사용한다.
+- 얼굴 분석 결과 데이터는 `FaceAnalysisResult`, 사용자가 읽는 보고서는 `FaceAnalysisReport`다.
+- 메이크업 적용 결과 평가와 개선 의견은 `MakeupFeedback` 계열을 사용한다.
+- `ImageAnalysis`는 현재 얼굴 분석이나 메이크업 피드백 화면명으로 쓰지 않는다.
+- `ImageAnalysis`는 향후 얼굴, 메이크업, 헤어, 의상, 분위기를 포함한 전체 이미지/전체 인상 분석 상위 도메인명으로 예약한다.
 
-둘 다 AI 분석처럼 보이지만 목적이 다르다.
+대표 rename 타깃:
 
-- `ImageAnalysis`: 사용자의 얼굴/톤/피부/무드 분석. 추천 메이크업과 AR 필터 생성의 근거.
-- `MakeupFeedback`: 이미 한 메이크업 사진의 완성도 평가와 수정 제안.
+- `FaceAnalysisLoading` -> `FaceAnalysisLoading`
+- `FaceAnalysisReportsList` -> `FaceAnalysisReportsList`
+- `FaceAnalysisReportDetail` -> `FaceAnalysisReportDetail`
+- `FaceAnalysisReport` -> `FaceAnalysisReport`
 
-충돌 가능 지점:
+### 5.6 레퍼런스 메이크업 추출 결과와 보고서
 
-- 둘 다 `Loading`, `Result`, `Guide`, `Tip` 구조를 가진다.
-- 결과 화면 모두 분석/가이드 문구를 사용한다.
+확정 기준:
 
-정리 제안:
+- 레퍼런스 사진에서 메이크업을 뽑는 기능은 `ReferenceMakeupExtraction`이다.
+- 추출 결과 데이터는 `ReferenceMakeupExtractionResult`다.
+- 사용자가 읽는 보고서형 산출물은 `ReferenceMakeupExtractionReport`다.
+- 화면 문구에서 `분석 결과`를 뭉뚱그려 쓰지 않고 `추출 결과`, `얼굴 분석 결과`, `보고서`로 구분한다.
 
-- 얼굴 자체 분석은 `ImageAnalysis` 또는 `FaceAnalysis`
-- 현재 메이크업 평가/수정은 `MakeupFeedback`과 `MakeupCorrection`
-- 문구에서도 `얼굴 진단 결과`와 `메이크업 피드백 결과`를 구분
+### 5.7 `Guide`, `Tutorial`, `Recipe`, `Guideline`
 
-### 5.6 레퍼런스 메이크업 추출과 얼굴 진단의 `분석 결과`
+확정 기준:
 
-`분석 결과`라는 route title은 여러 플로우에서 쓰일 수 있다.
+- 사용법 안내는 `Tutorial` 계열을 사용한다.
+- 온보딩 안내는 `OnboardingTutorial`, 얼굴 사진 촬영법 안내는 `FaceCaptureTutorial` 계열을 사용한다.
+- 특정 메이크업 룩을 재현하기 위한 구성/절차/조합은 `MakeupRecipe` 계열을 사용한다.
+- AR 반반가이드처럼 화면 위 기준 UI는 `Guide` 계열을 사용할 수 있다.
+- 메이크업 적용 기준선/규칙은 `Guideline` 계열을 사용한다.
 
-현재 상태:
+대표 rename 타깃:
 
-- `ImageAnalysisReportDetail`: 맞춤 분석 보고서
-- `ReferenceMakeupExtractionResult`: 분석 결과
-- `ExtractedMakeupStyleRecipeDetail`: 상세 분석
+- `PhotoCaptureGuideScreen` -> `FaceCaptureTutorialScreen` 완료
+- `MakeupLookRecipeTab` -> `MakeupRecipeTab` 완료
+- `GuideCategory` -> 목적에 따라 `TutorialCategory`, `MakeupRecipeCategory`, `MakeupGuidelineCategory`
 
-정리 제안:
+### 5.8 `Product`와 `RecommendedProduct`
 
-- 레퍼런스 추출 결과는 `메이크업 추출 결과`
-- 얼굴 진단 보고서는 `얼굴 분석 보고서` 또는 `맞춤 분석 보고서`
-- 레시피 상세는 `메이크업 레시피 상세` 또는 `추출 상세 분석`
+확정 기준:
 
-### 5.7 `Guide` 용어가 여러 기능에 걸쳐 쓰임
+- 실제 제품 엔티티는 `Product`다.
+- 추천 결과 리스트에 노출되는 제품 항목은 `RecommendedProduct`다.
+- 추천 행위/플로우/서비스 자체에는 `ProductRecommendation` 계열을 사용할 수 있다.
 
-현재 `Guide`는 다음 의미로 쓰인다.
+대표 rename 타깃:
 
-- `PhotoCaptureGuideScreen`: 촬영 전 안내
-- `ARMakeupGuideData`: AR 필터 적용 guide/mock 데이터
-- `MakeupCorrectionGuideOverlayScreen`: 피드백 수정 가이드
-- `ImageAnalysisFacePointGuide`: 분석 보고서의 부위별 메이크업 가이드
+- `RecommendedProduct` -> `RecommendedProduct`
+- `RecommendedProductCard` -> `RecommendedProductCard`
+- `ProductRecommendationStyle` -> `ProductRecommendationLook`
 
-정리 제안:
+### 5.9 `source` 필드 구체화
 
-- 촬영 전 안내: `CaptureGuide`
-- AR 필터 데이터: `ARMakeupGuide`
-- 피드백 수정: `CorrectionGuide`
-- 분석 보고서 부위별 추천: `FacePointGuide`
+확정 기준:
 
-### 5.8 `Product`와 `ProductRecommendationItem`
-
-마이페이지 좋아요 제품과 추천 제품은 둘 다 제품이지만 데이터 의미가 다르다.
-
-- `Product`: 좋아요/프로필에서 쓰는 기본 제품 preview
-- `ProductRecommendationItem`: 추천 플로우에서 matchRate, shadeName, palette, reason을 포함한 추천 제품
-
-정리 제안:
-
-- 공통 제품 기본값을 만들려면 `ProductBase` 검토
-- 추천 전용 확장 타입은 `RecommendedProduct` 또는 현재 `ProductRecommendationItem` 유지
-
-### 5.9 `source` 필드가 서로 다른 의미로 쓰임
-
-현재 `source`는 아래 타입에서 쓰인다.
-
-- `MakeupFeedbackPhotoSelection.source`: `camera` 또는 `gallery`
-- `ReferenceMakeupPhoto.source`: `album` 또는 `camera`
-
-정리 제안:
-
-- 피드백 사진은 `MakeupFeedbackPhotoSource`
-- 레퍼런스 사진은 `ReferenceMakeupSource`
-- 문서와 API에서 `gallery`와 `album` 중 하나로 통일할지 검토
-
-### 5.10 `getUserProfile` 서비스 중복
-
-현재 같은 함수명이 두 곳에 있다.
-
-- `shared/services/userService.ts`의 `getUserProfile`
-- `shared/services/profileService.ts`의 `getUserProfile`
-
-`profileService.ts`는 내부에서 `userService`의 함수를 re-export처럼 감싸고 있다.
-
-정리 제안:
-
-- 사용자 단일 정보 조회는 `userService.getUserProfile`로 고정
-- 프로필 화면 집계 데이터는 `profileService.getProfileData` 또는 `profileScreenData.loadProfileScreenData`로 구분
-- 같은 이름 wrapper는 제거하거나 `getProfileUser`처럼 명확히 변경 검토
-
-### 5.11 `Look` asset 파일명과 `Style` 코드명
-
-도메인 용어를 `룩`으로 정리하면서 기존 `look-*.png` asset 파일명은 새 사용자-facing 용어와 자연스럽게 맞아졌다. 반대로 코드의 `Style` 계열 이름은 레거시 이름으로 남는다.
+- 공유 타입, 화면 이동 파라미터, API 응답에 단독 `source`를 새로 만들지 않는다.
+- 이미지 파일/URI/asset 출처는 `imageSource` 계열을 사용한다.
+- 레퍼런스 입력 출처는 `referenceSource` 계열을 사용한다.
+- 추천 근거/채널은 `recommendationSource` 계열을 사용한다.
+- 화면 진입점은 `navigationSource`, `entryPoint`, `openedFrom` 중 맥락에 맞게 사용한다.
 
 예:
 
-- `look-ojigirl.png`
-- `look-morigirl.png`
-- `look-clean-smoky.png`
-- `look-mute-rosy-daily.png`
+- `MakeupFeedbackPhotoSelection.source` -> `photoSource`
+- `ReferenceMakeupPhoto.source` -> `referenceSource`
 
-정리 기준:
+### 5.10 프로필 도메인 분리
 
-- 현재 가이드에 따라 기존 asset 파일명은 import 영향이 크므로 바로 변경하지 않는다.
-- 새 사용자-facing 문구에서는 `룩`을 사용한다.
-- 새 도메인 코드/타입에서는 `Look`을 우선 검토한다.
-- 기존 `Style` 코드명 rename은 별도 정리 작업으로 분리한다.
+확정 기준:
 
-### 5.12 AR 필터 저장이 `ExtractedMakeupStyleSaveForm`으로 이동함
+- 계정/회원 기본 정보는 `UserProfile`이다.
+- 마이페이지 표시용 요약 데이터는 `MyPageProfileSummary`다.
+- 얼굴 분석/추천에 활용되는 뷰티 특성 데이터는 `BeautyProfile`이다.
+- `FaceAnalysisResult`는 분석 실행 결과이고, `BeautyProfile`은 계속 저장해 추천/개인화에 쓰는 사용자 특성 데이터다.
 
-현재 `ARFilterScreen`의 저장 버튼은 `ExtractedMakeupStyleSaveForm`으로 이동한다.
+대표 rename 타깃:
 
-충돌 가능성:
+- `profileService.getUserProfile` wrapper -> `getMyPageProfileSummary`
+- 뷰티 특성 조회/저장은 `getBeautyProfile`, `updateBeautyProfile`
 
-- AR 필터에서 직접 만든 토탈메이크업룩 저장
-- AR 필터에서 직접 만든 포인트메이크업룩 저장
-- 레퍼런스 추출 룩 저장
+### 5.11 asset 파일명과 `Style` 코드명
 
-두 플로우 모두 저장 화면을 공유할 수 있지만, 데이터 출처와 필드가 다르다.
+확정 기준:
 
-정리 제안:
+- 룩 도메인의 asset/mock data/type/component/state 이름은 `Look` 계열로 정리한다.
+- 기존 `look-*.png`처럼 이미 룩 의미가 드러나는 asset 파일명은 유지할 수 있다.
+- `Style`이 UI 스타일링이 아니라 메이크업 룩을 뜻한다면 rename 대상이다.
 
-- 공통 저장 화면으로 유지하려면 `MakeupLookSaveForm` 또는 `MakeupFilterSaveForm` 같은 중립 이름 검토
-- 플로우별로 다르면 `ARMakeupFilterSaveForm`과 `ExtractedMakeupLookSaveForm` 분리 검토
-- 저장 폼에는 저장 범위가 토탈메이크업룩인지 포인트메이크업룩인지 구분하는 필드가 필요하다.
+### 5.12 AR 필터 저장 화면
 
-### 5.13 `FacePartId`, `MakeupStyleFaceArea`, `GuideCategory` 부위 타입 분산
+확정 기준:
 
-유사한 부위 개념이 여러 타입으로 나뉘어 있다.
+- AR 필터 저장 화면은 `MakeupFilterSaveScreen` 계열로 정리한다.
+- `MakeupLookSaveScreen`은 룩 보고서 저장 등 다른 저장 플로우와 충돌할 수 있으므로 사용하지 않는다.
+- `MakeupLookFilterScreen`은 룩 목록을 필터링하는 화면처럼 읽힐 수 있으므로 사용하지 않는다.
+- 저장 화면 내부에서 저장 대상이 `TotalMakeupLook`인지 `PointMakeupLook`인지 구분한다.
 
-- `FacePartId = 'all' | 'base' | 'eye' | 'lip' | 'contour'`
-- `MakeupStyleFaceArea = 'all' | 'base' | 'eye' | 'lip' | 'contour'` 현재 코드명, 권장 이름 `MakeupLookFaceArea`
-- `MakeupStyleRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base'` 현재 코드명, 권장 이름 `MakeupLookRecipeTab`
-- `GuideCategory = 'all' | 'eye' | 'brow' | 'lip' | 'cheek' | 'base'`
-- `ProductRecommendationCategory = 'all' | 'lip' | 'cheek' | 'shadow' | 'liner' | 'base'`
+대표 rename 타깃:
 
-정리 제안:
+- `MakeupFilterSaveForm` -> `MakeupFilterSaveForm`
+- `MakeupFilterSaveFormScreen` -> `MakeupFilterSaveScreen`
+- `makeupLookName` -> `makeupLookName`
 
-- 공통 얼굴 부위는 `MakeupFaceArea` 같은 shared 타입으로 승격 검토
-- 제품 카테고리는 얼굴 부위가 아니라 제품 분류이므로 별도 유지
-- `contour`, `cheek`, `brow`, `shadow`, `liner`처럼 범주 수준이 다른 값은 문서화 필요
+### 5.13 메이크업 부위 기준 타입
+
+확정 기준:
+
+- 메이크업 적용/저장/편집 범위의 기준 타입은 `MakeupArea`다.
+- 특정 동작의 적용 대상은 변수명에서 `targetMakeupArea`처럼 표현한다.
+- 얼굴 인식 모델의 물리적 얼굴 부위나 랜드마크 그룹은 `FacePart` 또는 `FaceLandmarkGroup`으로 분리한다.
+- 제품 카테고리는 얼굴 부위가 아니라 제품 분류이므로 별도 유지한다.
+
+권장 `MakeupArea` 값:
+
+```text
+total
+lip
+eye
+eyeShadow
+eyeLine
+eyelash
+contactLens
+aegyosal
+cheek
+eyebrow
+contour
+```
 
 ## 6. 우선 정리 권장 순서
 
-1. 사용자-facing `스타일` 문구를 `룩`으로 바꾸고, 코드의 `Style` 계열 이름을 `Look` 계열로 rename할 범위를 정한다.
-2. AR 필터 저장 모델을 토탈메이크업룩/포인트메이크업룩으로 분리한다.
-3. AR 필터 관련 `Location/Position` 이름을 `Shape/형태` 기준으로 정리할지 결정한다.
-4. `ARFilterStyleAdjust` 화면을 유지할지, 적용 화면 내부 옵션 카드 체계로 흡수할지 결정한다.
-5. 레퍼런스 추출 플로우의 `위치 조정`, `스타일 조정` 문구를 새 용어 체계에 맞출지 결정한다.
-6. 저장 화면을 공통 `MakeupLookSaveForm` 또는 `MakeupFilterSaveForm`으로 추상화할지, 플로우별 저장 화면으로 분리할지 결정한다.
-7. `ImageAnalysis`, `MakeupFeedback`, `ReferenceMakeupExtraction`의 `분석 결과` 문구를 더 구체적으로 분리한다.
-8. `getUserProfile` 서비스 중복 wrapper를 정리한다.
-9. 얼굴 부위/제품 카테고리 타입을 공통화할 범위와 분리 유지할 범위를 정한다.
+1. 문서 용어 사전과 화면 기획서를 최신 결정 기준으로 동기화한다.
+2. 공통 타입 `MakeupFilter`, `TotalMakeupLook`, `PointMakeupLook`, `MakeupArea`를 정리한다.
+3. AR 필터 편집/저장 화면을 `MakeupFilterEditScreen`, `MakeupFilterSaveScreen` 축으로 rename한다.
+4. 형태 관련 `Location`/`Position` 혼재를 `Shape`, `shapePoint`, `position`, `offset` 기준으로 정리한다.
+5. 룩 도메인의 `Style` 계열 이름을 `Look` 계열로 rename한다.
+6. 얼굴 분석, 레퍼런스 추출, 메이크업 피드백 도메인을 `FaceAnalysis`, `ReferenceMakeupExtraction`, `MakeupFeedback` 기준으로 분리한다.
+7. `Tutorial`, `MakeupRecipe`, `Guide`, `Guideline` 용어를 역할별로 정리한다.
+8. `Product`, `RecommendedProduct`, `ProductRecommendation`을 구분한다.
+9. `UserProfile`, `MyPageProfileSummary`, `BeautyProfile`을 구분한다.
+10. 공유 타입과 화면 이동 파라미터의 단독 `source`를 구체 이름으로 바꾼다.

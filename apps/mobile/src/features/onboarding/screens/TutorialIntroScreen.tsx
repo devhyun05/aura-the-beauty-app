@@ -4,7 +4,7 @@ import {Button, Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen, AuraLogo} from '../../../shared/ui';
-import {PhotoCaptureGuideScreen} from './PhotoCaptureGuideScreen';
+import {FaceCaptureTutorialScreen} from './FaceCaptureTutorialScreen';
 
 type TutorialIntroScreenProps = {
   onCloseToHome?: () => void;
@@ -21,8 +21,8 @@ type TutorialIntroHeroContent = {
 
 const tutorialIntroHeroContent = {
   brand: 'AURA',
-  title: '이미지 진단을 시작합니다.',
-  subtitle: '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 스타일로 자연스럽게 완성해보세요.',
+  title: '얼굴 진단을 시작합니다.',
+  subtitle: '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 룩으로 자연스럽게 완성해보세요.',
   primaryActionLabel: '진단 시작',
 } as const satisfies TutorialIntroHeroContent;
 
@@ -35,7 +35,7 @@ export function TutorialIntroScreen({
   onStartCapture,
   onStartDiagnosis,
 }: TutorialIntroScreenProps) {
-  const [isPhotoGuideVisible, setIsPhotoGuideVisible] = useState(false);
+  const [isFaceCaptureTutorialVisible, setIsFaceCaptureTutorialVisible] = useState(false);
   const {height} = useWindowDimensions();
   const isCompactHeight = height < 760;
   const content = getTutorialIntroHeroContent();
@@ -44,13 +44,13 @@ export function TutorialIntroScreen({
 
   const handleStartDiagnosis = () => {
     onStartDiagnosis?.();
-    setIsPhotoGuideVisible(true);
+    setIsFaceCaptureTutorialVisible(true);
   };
 
-  if (isPhotoGuideVisible) {
+  if (isFaceCaptureTutorialVisible) {
     return (
-      <PhotoCaptureGuideScreen
-        onBackToIntro={() => setIsPhotoGuideVisible(false)}
+      <FaceCaptureTutorialScreen
+        onBackToIntro={() => setIsFaceCaptureTutorialVisible(false)}
         onCloseToHome={onCloseToHome}
         onStartCapture={onStartCapture}
       />

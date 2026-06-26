@@ -1,28 +1,33 @@
-import type {FeedbackPhotoSelection} from '../../features/feedback';
-import {createMockMakeupFeedback} from '../../features/feedback/mocks/makeupFeedback.mock';
-import {getFilterExtractionDataSync} from '../../features/filter-extraction/services/filterExtractionService';
+import type {MakeupFeedbackPhotoSelection} from '../../features/makeup-feedback';
+import {createMockMakeupFeedback} from '../../features/makeup-feedback/mocks/makeupFeedback.mock';
+import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../shared/types/profile';
 import type {NavigationFlowState} from './flowState';
 
-const demoSelectedFeedbackPhoto: FeedbackPhotoSelection = {
-  source: 'camera',
+const demoSelectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection = {
+  photoSource: 'camera',
 };
 
 export function getDemoNavigationFlowState(): NavigationFlowState {
-  const selectedFilterPhoto = getFilterExtractionDataSync().photos[0];
+  const selectedReferenceMakeupPhoto = getReferenceMakeupExtractionDataSync().photos[0];
   const savedMakeupLook: MakeupLookPreview = {
     id: 'capture-demo-saved-makeup-look',
-    imageSource: selectedFilterPhoto.imageSource,
+    imageSource: selectedReferenceMakeupPhoto.imageSource,
     isSaved: true,
-    moodLabel: '데모 저장룩',
+    makeupArea: 'all',
+    makeupPresetValues: {
+      shapeId: 'balanced',
+    },
+    moodLabel: '데모 저장 룩',
     shortDescription: '화면 캡처용으로 준비된 저장 메이크업 룩입니다.',
+    scope: 'totalMakeup',
     title: '캡처 데모 룩',
   };
 
   return {
-    feedbackResult: createMockMakeupFeedback(demoSelectedFeedbackPhoto),
+    makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
-    selectedFeedbackPhoto: demoSelectedFeedbackPhoto,
-    selectedFilterPhoto,
+    selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
+    selectedReferenceMakeupPhoto,
   };
 }
