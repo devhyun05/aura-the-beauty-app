@@ -45,11 +45,11 @@ expectEqual(
     rightSlot={<OverlayIconButton accessibilityLabel="저장">{null}</OverlayIconButton>}
     title="형태 수정"
   />
-  <OverlayAdjustmentTabs activeTab="shape" />
+  <OverlayAdjustmentTabs activeTab="location" />
   <OverlaySegmentButton isActive label="형태 수정" />
   <OverlayChipButton isActive label="립" onPress={() => undefined} />
   <BottomOverlayPanel>
-    <OverlayPanelSection label="메이크업 영역">panel</OverlayPanelSection>
+    <OverlayPanelSection label="얼굴 부위">panel</OverlayPanelSection>
     <OverlaySaveButton accessibilityLabel="현재 필터 저장" />
   </BottomOverlayPanel>
   <CameraCaptureControlRow

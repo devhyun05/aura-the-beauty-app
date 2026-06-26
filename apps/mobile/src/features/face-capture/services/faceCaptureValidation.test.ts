@@ -1,6 +1,7 @@
 import {
   FACE_CAPTURE_ERROR_COLOR,
   FACE_CAPTURE_READY_COLOR,
+  evaluateFaceCaptureChecksFromLandmarks,
   evaluateFaceCaptureGuidance,
 } from './faceCaptureValidation';
 
@@ -16,30 +17,47 @@ function expectArrayIncludes<T>(actual: readonly T[], expected: T, label: string
   }
 }
 
-const readyGuidance = evaluateFaceCaptureGuidance({
-  isFaceCentered: true,
-  isLookingForward: true,
-  isFaceUncovered: true,
-  isHairClear: true,
-  isLightingEven: true,
+const readyChecks = evaluateFaceCaptureChecksFromLandmarks({
+  confidence: 0.92,
+  faceCount: 1,
+  landmarks: {
+    chin: {x: 0.5, y: 0.74},
+    forehead: {x: 0.5, y: 0.26},
+    leftCheek: {x: 0.36, y: 0.52},
+    leftEye: {x: 0.42, y: 0.42},
+    leftJaw: {x: 0.4, y: 0.66},
+    mouthLeft: {x: 0.45, y: 0.62},
+    mouthRight: {x: 0.55, y: 0.62},
+    noseBase: {x: 0.5, y: 0.54},
+    rightCheek: {x: 0.64, y: 0.52},
+    rightEye: {x: 0.58, y: 0.421},
+    rightJaw: {x: 0.6, y: 0.66},
+  },
 });
+
+const readyGuidance = evaluateFaceCaptureGuidance(readyChecks);
 
 expectEqual(readyGuidance.status, 'ready', 'ready status');
 expectEqual(readyGuidance.isCaptureEnabled, true, 'ready capture enabled');
 expectEqual(readyGuidance.tintColor, FACE_CAPTURE_READY_COLOR, 'ready tint color');
 expectEqual(readyGuidance.message, null, 'ready message');
 
-const blockedGuidance = evaluateFaceCaptureGuidance({
-  isFaceCentered: true,
-  isLookingForward: false,
-  isFaceUncovered: false,
-  isHairClear: true,
-  isLightingEven: true,
+const blockedChecks = evaluateFaceCaptureChecksFromLandmarks({
+  confidence: 0.7,
+  faceCount: 1,
+  landmarks: {
+    leftEye: {x: 0.3, y: 0.4},
+    mouthLeft: {x: 0.42, y: 0.62},
+    mouthRight: {x: 0.58, y: 0.62},
+    noseBase: {x: 0.58, y: 0.54},
+    rightEye: {x: 0.62, y: 0.5},
+  },
 });
+const blockedGuidance = evaluateFaceCaptureGuidance(blockedChecks);
 
 expectEqual(blockedGuidance.status, 'blocked', 'blocked status');
 expectEqual(blockedGuidance.isCaptureEnabled, false, 'blocked capture disabled');
 expectEqual(blockedGuidance.tintColor, FACE_CAPTURE_ERROR_COLOR, 'blocked tint color');
-expectEqual(blockedGuidance.message, '정면을 바라봐 주세요', 'blocked first message');
+expectEqual(blockedGuidance.message, 'Face contour landmarks are not detected yet.', 'blocked first message');
 expectArrayIncludes(blockedGuidance.failedChecks, 'isLookingForward', 'blocked looking-forward check');
-expectArrayIncludes(blockedGuidance.failedChecks, 'isFaceUncovered', 'blocked uncovered-face check');
+expectArrayIncludes(blockedGuidance.failedChecks, 'isFaceShapeDetected', 'blocked face-shape check');

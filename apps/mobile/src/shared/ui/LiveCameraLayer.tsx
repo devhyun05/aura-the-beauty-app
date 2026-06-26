@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+﻿import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -31,6 +31,8 @@ type LiveCameraLayerProps = {
   active?: boolean;
   facing?: CameraType;
   fallback?: React.ReactNode;
+  onCameraReady?: () => void;
+  onMountError?: (message: string) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -55,99 +57,113 @@ export function getLiveCameraPermissionCopy(
 ): LiveCameraPermissionCopy {
   if (reason === 'mountError') {
     return {
-      title: '카메라를 사용할 수 없어요',
-      description: mountError ?? '기기 또는 시뮬레이터의 카메라 상태를 확인해 주세요.',
+      title: 'Camera is unavailable',
+      description: mountError ?? 'Check the device or simulator camera state.',
     };
   }
 
   return {
-    title: '카메라 권한이 필요해요',
-    description: 'AR 필터와 얼굴 촬영을 위해 카메라 접근을 허용해 주세요.',
+    title: 'Camera permission is required',
+    description: 'Allow camera access to capture a face photo.',
   };
 }
 
-export function LiveCameraLayer({
-  active = true,
-  facing = 'front',
-  fallback,
-  style,
-}: LiveCameraLayerProps) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [mountError, setMountError] = useState<string | null>(null);
-  const shouldShowCamera = permission?.granted === true && !mountError;
-  const permissionCopy = getLiveCameraPermissionCopy(
-    mountError ? 'mountError' : 'permission',
-    mountError,
-  );
-  const permissionAction = getLiveCameraPermissionAction(permission, Boolean(mountError));
+export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps>(
+  function LiveCameraLayer(
+    {
+      active = true,
+      facing = 'front',
+      fallback,
+      onCameraReady,
+      onMountError,
+      style,
+    },
+    ref,
+  ) {
+    const [permission, requestPermission] = useCameraPermissions();
+    const [mountError, setMountError] = useState<string | null>(null);
+    const shouldShowCamera = permission?.granted === true && !mountError;
+    const permissionCopy = getLiveCameraPermissionCopy(
+      mountError ? 'mountError' : 'permission',
+      mountError,
+    );
+    const permissionAction = getLiveCameraPermissionAction(permission, Boolean(mountError));
 
-  useEffect(() => {
-    if (permission && !permission.granted && permission.canAskAgain) {
-      void requestPermission();
-    }
-  }, [permission, requestPermission]);
+    useEffect(() => {
+      if (permission && !permission.granted && permission.canAskAgain) {
+        void requestPermission();
+      }
+    }, [permission, requestPermission]);
 
-  const handleRequestPermission = async () => {
-    const nextPermission = await requestPermission();
+    const handleRequestPermission = async () => {
+      const nextPermission = await requestPermission();
 
-    if (nextPermission.granted) {
-      setMountError(null);
-    }
-  };
+      if (nextPermission.granted) {
+        setMountError(null);
+      }
+    };
 
-  const handleOpenSettings = () => {
-    void Linking.openSettings();
-  };
+    const handleOpenSettings = () => {
+      void Linking.openSettings();
+    };
 
-  return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.layer, !shouldShowCamera ? styles.permissionHost : undefined, style]}>
-      {shouldShowCamera ? (
-        <CameraView
-          active={active}
-          facing={facing}
-          flash="off"
-          mirror={shouldMirrorLiveCamera(facing)}
-          mode="picture"
-          onCameraReady={() => setMountError(null)}
-          onMountError={error => setMountError(error.message)}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : (
-        <View style={styles.fallbackLayer}>{fallback}</View>
-      )}
+    return (
+      <View
+        pointerEvents="box-none"
+        style={[styles.layer, !shouldShowCamera ? styles.permissionHost : undefined, style]}>
+        {shouldShowCamera ? (
+          <CameraView
+            active={active}
+            facing={facing}
+            flash="off"
+            mirror={shouldMirrorLiveCamera(facing)}
+            mode="picture"
+            onCameraReady={() => {
+              setMountError(null);
+              onCameraReady?.();
+            }}
+            onMountError={error => {
+              setMountError(error.message);
+              onMountError?.(error.message);
+            }}
+            ref={ref}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : (
+          <View style={styles.fallbackLayer}>{fallback}</View>
+        )}
 
-      {!shouldShowCamera ? (
-        <View style={styles.permissionLayer}>
-          {permission === null && !mountError ? (
-            <ActivityIndicator color={colors.white} size="large" />
-          ) : (
-            <>
-              <Text style={styles.permissionTitle}>{permissionCopy.title}</Text>
-              <Text style={styles.permissionDescription}>{permissionCopy.description}</Text>
-              {permissionAction ? (
-                <Pressable
-                  accessibilityLabel={
-                    permissionAction === 'settings'
-                      ? '카메라 권한 설정으로 이동'
-                      : '카메라 권한 허용'
-                  }
-                  accessibilityRole="button"
-                  onPress={permissionAction === 'settings' ? handleOpenSettings : handleRequestPermission}
-                  style={styles.permissionButton}>
-                  <Text style={styles.permissionButtonText}>
-                    {permissionAction === 'settings' ? '설정으로 이동' : '권한 허용'}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </>
-          )}
-        </View>
-      ) : null}
-    </View>
-  );
-}
+        {!shouldShowCamera ? (
+          <View style={styles.permissionLayer}>
+            {permission === null && !mountError ? (
+              <ActivityIndicator color={colors.white} size="large" />
+            ) : (
+              <>
+                <Text style={styles.permissionTitle}>{permissionCopy.title}</Text>
+                <Text style={styles.permissionDescription}>{permissionCopy.description}</Text>
+                {permissionAction ? (
+                  <Pressable
+                    accessibilityLabel={
+                      permissionAction === 'settings'
+                        ? 'Open camera permission settings'
+                        : 'Allow camera permission'
+                    }
+                    accessibilityRole="button"
+                    onPress={permissionAction === 'settings' ? handleOpenSettings : handleRequestPermission}
+                    style={styles.permissionButton}>
+                    <Text style={styles.permissionButtonText}>
+                      {permissionAction === 'settings' ? 'Open settings' : 'Allow camera'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
+          </View>
+        ) : null}
+      </View>
+    );
+  },
+);
 
 const styles = StyleSheet.create({
   fallbackLayer: {

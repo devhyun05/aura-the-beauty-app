@@ -1,5 +1,6 @@
-import React from 'react';
+﻿import React from 'react';
 
+import {useAuthSession} from '../../../features/auth';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -37,13 +38,18 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
 }
 
 export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdit'>) {
+  const {clearSession} = useAuthSession();
+  const handleLogout = React.useCallback(() => {
+    void clearSession().finally(() => {
+      navigation.reset({index: 0, routes: [{name: 'Login'}]});
+    });
+  }, [clearSession, navigation]);
+
   return (
     <DetailRouteChrome
       routeName="ProfileEdit"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <ProfileEditScreen
-        onLogout={() => navigation.reset({index: 0, routes: [{name: 'Login'}]})}
-      />
+      <ProfileEditScreen onLogout={handleLogout} />
     </DetailRouteChrome>
   );
 }

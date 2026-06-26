@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 import {
   FaceAnalysisReportDetailScreen,
@@ -7,6 +7,7 @@ import {
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
 import {DetailRouteChrome} from '../detailHeaderChrome';
+import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
 type HeaderShareAction = {
@@ -14,9 +15,17 @@ type HeaderShareAction = {
 };
 
 export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCapture'>) {
+  const {setSelectedFaceCapture} = useNavigationFlowState();
+
   return (
     <FaceCaptureScreen
-      onCapture={() => navigation.navigate('FaceAnalysisLoading')}
+      onCapture={result => {
+        if (result) {
+          setSelectedFaceCapture(result);
+        }
+
+        navigation.navigate('FaceAnalysisLoading');
+      }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );

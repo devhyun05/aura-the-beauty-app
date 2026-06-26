@@ -1,4 +1,4 @@
-import type {MakeupFeedbackPhotoSelection} from '../../features/makeup-feedback';
+﻿import type {MakeupFeedbackPhotoSelection} from '../../features/makeup-feedback';
 import {createMockMakeupFeedback} from '../../features/makeup-feedback/mocks/makeupFeedback.mock';
 import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../shared/types/profile';
@@ -27,6 +27,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   return {
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
+    selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
     selectedReferenceMakeupPhoto,
   };
