@@ -24,6 +24,7 @@ import {
 } from '../../../shared/ui';
 import {
   getFilterShapeState,
+  getResolvedShapePointPosition,
   updateFilterShapeAdjustment,
   type FilterShapeAdjustment,
   type FilterShapeAdjustmentKey,
@@ -131,19 +132,23 @@ export function ARFilterShapeAdjustScreen({
         </View>
 
         {shapeState.isOverlayVisible
-          ? shapeState.shapePoints.map(point => (
-              <View
-                key={point.id}
-                accessibilityLabel={`${point.id} 형태점`}
-                style={[
-                  styles.shapePointDot,
-                  {
-                    left: `${point.position.x + point.offset.x}%`,
-                    top: `${point.position.y + point.offset.y}%`,
-                  },
-                ]}
-              />
-            ))
+          ? shapeState.shapePoints.map(point => {
+              const resolvedPosition = getResolvedShapePointPosition(point);
+
+              return (
+                <View
+                  key={point.id}
+                  accessibilityLabel={`${point.id} 형태점`}
+                  style={[
+                    styles.shapePointDot,
+                    {
+                      left: `${resolvedPosition.x}%`,
+                      top: `${resolvedPosition.y}%`,
+                    },
+                  ]}
+                />
+              );
+            })
           : null}
       </FullscreenOverlayLayer>
 
