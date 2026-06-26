@@ -31,6 +31,18 @@ export type FilterShapePoint = {
   };
 };
 
+export type FilterShapePointCoordinate = FilterShapePoint['position'];
+
+export type FilterShapePresetPoint = FilterShapePoint & {
+  resolvedPosition: FilterShapePointCoordinate;
+};
+
+export type FilterShapePreset = {
+  selectedMakeupArea: MakeupArea;
+  shapePoints: readonly FilterShapePresetPoint[];
+  adjustments: FilterShapeState['adjustments'];
+};
+
 export type FilterShapeState = {
   selectedMakeupArea: MakeupArea;
   isOverlayVisible: boolean;
@@ -70,6 +82,65 @@ export function updateFilterShapeAdjustment(
         value: clampValue(currentAdjustment, nextValue),
       },
     },
+  };
+}
+
+export function updateFilterShapePointOffset(
+  state: FilterShapeState,
+  shapePointId: string,
+  offset: FilterShapePointCoordinate,
+): FilterShapeState {
+  return {
+    ...state,
+    shapePoints: state.shapePoints.map(shapePoint =>
+      shapePoint.id === shapePointId
+        ? {
+            ...shapePoint,
+            offset,
+          }
+        : shapePoint,
+    ),
+  };
+}
+
+export function resetFilterShapePointOffset(
+  state: FilterShapeState,
+  shapePointId: string,
+): FilterShapeState {
+  return updateFilterShapePointOffset(state, shapePointId, {x: 0, y: 0});
+}
+
+export function resetFilterShapePoints(state: FilterShapeState): FilterShapeState {
+  return {
+    ...state,
+    shapePoints: state.shapePoints.map(shapePoint => ({
+      ...shapePoint,
+      offset: {x: 0, y: 0},
+    })),
+  };
+}
+
+export function getResolvedShapePointPosition(
+  shapePoint: FilterShapePoint,
+): FilterShapePointCoordinate {
+  return {
+    x: shapePoint.position.x + shapePoint.offset.x,
+    y: shapePoint.position.y + shapePoint.offset.y,
+  };
+}
+
+export function createShapePresetFromState(
+  state: FilterShapeState,
+): FilterShapePreset {
+  return {
+    selectedMakeupArea: state.selectedMakeupArea,
+    shapePoints: state.shapePoints.map(shapePoint => ({
+      ...shapePoint,
+      offset: {...shapePoint.offset},
+      position: {...shapePoint.position},
+      resolvedPosition: getResolvedShapePointPosition(shapePoint),
+    })),
+    adjustments: state.adjustments,
   };
 }
 
