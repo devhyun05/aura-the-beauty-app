@@ -1,0 +1,55 @@
+import React from 'react';
+
+import {useAuthSession} from '../../../features/auth';
+import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
+import {DetailRouteChrome} from '../detailHeaderChrome';
+import {useNavigationFlowState} from '../flowState';
+import {
+  MainTabChrome,
+  navigateMainTab,
+  type MainTabScreenProps,
+  type RootNavigation,
+  type RootScreenProps,
+} from './routeUtils';
+
+export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'>) {
+  const rootNavigation = navigation.getParent<RootNavigation>();
+  const {savedMakeupLook} = useNavigationFlowState();
+
+  return (
+    <MainTabChrome
+      navigation={navigation}
+      routeName="ProfileTab"
+      wrapContentInScreen={false}>
+      <ProfileScreen
+        onPressImageAnalysisReport={reportId =>
+          rootNavigation?.navigate('ImageAnalysisReportDetail', {reportId})
+        }
+        onPressImageAnalysisReportsList={() =>
+          rootNavigation?.navigate('ImageAnalysisReportsList')
+        }
+        onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
+        onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
+        onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
+        savedMakeupLook={savedMakeupLook}
+      />
+    </MainTabChrome>
+  );
+}
+
+export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdit'>) {
+  const {clearSession} = useAuthSession();
+  const handleLogout = React.useCallback(() => {
+    void clearSession().finally(() => {
+      navigation.reset({index: 0, routes: [{name: 'Login'}]});
+    });
+  }, [clearSession, navigation]);
+
+  return (
+    <DetailRouteChrome
+      routeName="ProfileEdit"
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      <ProfileEditScreen onLogout={handleLogout} />
+    </DetailRouteChrome>
+  );
+}

@@ -3,34 +3,41 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import type {RootStackParamList} from './routeTypes';
 import {MainTabNavigator} from './MainTabNavigator';
+import {LoginRouteScreen, TutorialRouteScreen} from './routes/authRoutes';
 import {
   ARFilterLocationAdjustRouteScreen,
   ARFilterStyleAdjustRouteScreen,
   ARFilterRouteScreen,
+} from './routes/arRoutes';
+import {
   FaceCaptureRouteScreen,
+  ImageAnalysisLoadingRouteScreen,
+  ImageAnalysisReportDetailRouteScreen,
+  ImageAnalysisReportsListRouteScreen,
+} from './routes/faceAnalysisRoutes';
+import {
   FeedbackCaptureRouteScreen,
   FeedbackEntryRouteScreen,
   FeedbackGuideRouteScreen,
   FeedbackLoadingRouteScreen,
   FeedbackResultRouteScreen,
   FeedbackTipRouteScreen,
+} from './routes/makeupFeedbackRoutes';
+import {
+  LikedProductListRouteScreen,
+  MakeupLookListRouteScreen,
+} from './routes/recommendationRoutes';
+import {
   FilterExtractionLoadingRouteScreen,
-  FilterRecipeDetailRouteScreen,
   FilterExtractionResultRouteScreen,
+  FilterExtractionUploadRouteScreen,
+  FilterRecipeDetailRouteScreen,
+  FilterRecipeSaveCompleteRouteScreen,
   FilterSaveCompleteRouteScreen,
   FilterSaveFormRouteScreen,
   FilterTryOnAdjustRouteScreen,
-  FilterExtractionUploadRouteScreen,
-  ImageAnalysisLoadingRouteScreen,
-  ImageAnalysisReportDetailRouteScreen,
-  ImageAnalysisReportsListRouteScreen,
-  LikedProductListRouteScreen,
-  LoginRouteScreen,
-  MakeupLookListRouteScreen,
-  ProfileEditRouteScreen,
-  FilterRecipeSaveCompleteRouteScreen,
-  TutorialRouteScreen,
-} from './navigationAdapters';
+} from './routes/referenceMakeupExtractionRoutes';
+import {ProfileEditRouteScreen} from './routes/profileRoutes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
