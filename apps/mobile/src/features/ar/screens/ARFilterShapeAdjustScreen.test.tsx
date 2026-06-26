@@ -3,6 +3,7 @@ import React from 'react';
 import {
   ARFilterShapeAdjustScreen,
   getARFilterShapeAdjustCameraMode,
+  getARFilterShapeAdjustInteractionMode,
   getARFilterShapeAdjustTitle,
   getARFilterShapeAdjustSelectedTabOpacity,
   getShapePreviewColorOverlayLayers,
@@ -33,6 +34,11 @@ expectEqual(
   getARFilterShapeAdjustTitle(),
   '형태 수정',
   'AR location adjust title',
+);
+expectEqual(
+  getARFilterShapeAdjustInteractionMode(),
+  'drag-shape-point',
+  'AR shape adjust uses draggable shape points',
 );
 
 <ARFilterShapeAdjustScreen

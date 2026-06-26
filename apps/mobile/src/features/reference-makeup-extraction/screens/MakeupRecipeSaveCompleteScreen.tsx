@@ -6,12 +6,12 @@ import {Text, View, YStack} from 'tamagui';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 
-type ExtractedMakeupLookRecipeSaveCompleteScreenProps = {
+type MakeupRecipeSaveCompleteScreenProps = {
   onBackToDetail: () => void;
   onGoToProfile: () => void;
 };
 
-export function ExtractedMakeupLookRecipeSaveCompleteScreen({onBackToDetail, onGoToProfile}: ExtractedMakeupLookRecipeSaveCompleteScreenProps) {
+export function MakeupRecipeSaveCompleteScreen({onBackToDetail, onGoToProfile}: MakeupRecipeSaveCompleteScreenProps) {
   const insets = useSafeAreaInsets();
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 

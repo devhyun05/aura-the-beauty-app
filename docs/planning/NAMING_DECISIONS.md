@@ -2,14 +2,14 @@
 
 작성일: 2026-06-26
 
-이 문서는 `docs/mobile/APP_SCREEN_FLOW_FEATURE_SPEC.md`의 `5. 비슷하지만 다른 개념과 네이밍 충돌 후보` 섹션에 있는 항목을 하나씩 검토하며 확정한 결정사항을 기록한다.
+이 문서는 모바일 앱의 사용자-facing 용어와 코드 도메인 이름을 정리한 결정 문서다. 완료된 실행 체크리스트는 별도 플랜 문서로 남기지 않고 이 문서에는 결정 이유와 현재 적용 상태만 남긴다.
 
-## 진행 방식
+## 문서 기준
 
-- 각 항목은 사용자에게 하나씩 질문해 결정한다.
-- 결정된 항목은 `결정`, `이유`, `문서/코드 반영 방향`을 기록한다.
-- 아직 답변을 받지 않은 항목은 `대기` 상태로 둔다.
-- 실제 코드 rename은 별도 작업으로 분리하고, 이 문서는 먼저 용어와 방향을 확정한다.
+- 새 화면/타입/변수 이름은 이 문서의 최종 용어를 우선 사용한다.
+- 이미 확정된 용어와 같은 개념에 다른 이름을 새로 붙이지 않는다.
+- React Native 플랫폼 용어인 `style`, `StyleSheet`, `styles`, 이미지 `source` prop은 도메인 rename 대상이 아니다.
+- 구조 리팩터링 적용 상태는 화면/플로우 기획서와 코드 구조를 기준으로 확인한다.
 
 ## 2026-06-26 코드 적용 현황
 
@@ -19,7 +19,7 @@
 - 얼굴 분석 화면/파일/서비스/mock/type은 `FaceAnalysis` 계열로 정리했다.
 - AR 형태 수정 화면은 `ARFilterShapeAdjust` 계열로 정리했다.
 - AR 필터 옵션 편집 화면은 `MakeupFilterEdit` 계열로 정리했다.
-- 필터 저장 화면은 `MakeupFilterSaveForm`/`MakeupFilterSaveComplete` 계열로 정리했다.
+- 필터 저장 화면은 `MakeupFilterSave`/`MakeupFilterSaveComplete` 계열로 정리했다.
 - 레퍼런스 추출 결과 편집 화면은 `ExtractedMakeupLook` 계열로 정리했다.
 - 추천 제품 항목은 `RecommendedProduct`, 추천 룩 요약은 `ProductRecommendationLook`으로 정리했다.
 - 메이크업 적용/저장/편집 범위의 기준 타입은 `MakeupArea`로 정리했다.
@@ -27,8 +27,29 @@
 - 마이페이지 요약은 `MyPageProfileSummary`, 개인화 특성 데이터는 `BeautyProfile`로 분리했다.
 - 얼굴 촬영법 안내 화면은 `FaceCaptureTutorialScreen` 계열로 정리했다.
 - 메이크업 레시피 탭 타입은 `MakeupRecipeTab`으로 정리했다.
+- 저장 route는 `MakeupFilterSave`, 레시피 route는 `MakeupRecipeDetail`/`MakeupRecipeSaveComplete`로 최종화했다.
+- 얼굴 분석 보고서 내부의 메이크업 적용 기준은 `FaceAnalysisMakeupGuideline`과 `makeupGuideline`으로 정리했다.
 
-아직 일부 후속 후보는 남아 있다. 예를 들어 얼굴 분석 내부의 `FaceAnalysisFacePointGuide`를 `FaceAnalysisMakeupGuideline`으로 더 구체화할지는 별도 리팩터링에서 결정한다.
+## 적용 요약
+
+완료:
+
+- `MakeupStyle`, `ExtractedMakeupStyle*`, `ProductRecommendationStyle` 계열을 `Look` 계열로 정리했다.
+- `ImageAnalysis*` 화면/파일/서비스/mock/type을 현재 얼굴 분석 의미의 `FaceAnalysis*`로 정리했다.
+- `ARFilterLocationAdjust` 계열을 `ARFilterShapeAdjust` 계열로 정리했다.
+- `ARFilterStyleAdjust` 계열을 `MakeupFilterEdit` 계열로 정리했다.
+- `ExtractedMakeupStyleSaveForm` 계열을 `MakeupFilterSave`/`MakeupFilterSaveComplete` 계열로 정리했다.
+- `ProductRecommendationItem`을 `RecommendedProduct`로 정리했다.
+- `FacePartId`, `MakeupStyleFaceArea`, `GuideCategory`처럼 분산된 부위 타입은 `MakeupArea` 기준으로 정리했다.
+- `PhotoCaptureGuideScreen`은 `FaceCaptureTutorialScreen`, `MakeupLookRecipeTab`은 `MakeupRecipeTab`으로 정리했다.
+- `MakeupFilterSave`와 `MakeupRecipe*` route 이름을 최종화했다.
+- `FaceAnalysisMakeupGuideline`과 `makeupGuideline`으로 얼굴 분석 보고서의 메이크업 기준 데이터를 구체화했다.
+
+새 기능에서 계속 지킬 기준:
+
+- `Result`는 구조화 데이터, `Report`는 사용자가 읽는 설명형 산출물에 사용한다.
+- `Guide`는 화면 위 안내 UI, `Guideline`은 적용 기준이나 규칙에 사용한다.
+- 단독 `source` 대신 `imageSource`, `photoSource`, `referenceSource`, `recommendationSource`, `navigationSource`, `entryPoint`, `rawSource`, `originalSource`, `derivedFrom`처럼 용도별 이름을 사용한다.
 
 ## 결정 현황
 
@@ -443,7 +464,7 @@ AR 필터 저장 화면이 `ExtractedMakeupStyleSaveForm` 이름을 쓰는 것�
 
 - 필터 저장 화면/폼은 `MakeupFilterSave` 계열을 사용한다.
   - `MakeupFilterSaveScreen`
-  - `MakeupFilterSaveForm`
+  - `MakeupFilterSave`
   - `makeupFilterSaveState`
   - `submitMakeupFilterSave`
 - 저장 대상 범위는 룩 타입으로 구분한다.
@@ -455,7 +476,8 @@ AR 필터 저장 화면이 `ExtractedMakeupStyleSaveForm` 이름을 쓰는 것�
   - `applyMakeupFilter`
 - 저장 화면 내부에서 저장 대상 룩의 종류는 `TotalMakeupLook` 또는 `PointMakeupLook`으로 구분한다.
 - 룩 보고서 저장 기능이 생기면 `MakeupLookReportSaveScreen`처럼 산출물 성격을 포함한 이름을 사용한다.
-- 기존 `ExtractedMakeupStyleSaveForm`은 2026-06-26 rename 작업에서 `MakeupFilterSaveForm`으로 반영했다.
+- 기존 `ExtractedMakeupStyleSaveForm`은 2026-06-26 rename 작업에서 `MakeupFilterSave`로 반영했다.
+- route 화면명과 화면 컴포넌트는 `MakeupFilterSave` 계열을 사용한다. 내부 폼 컴포넌트를 별도로 만들 때만 `MakeupFilterSaveForm`처럼 `Form`을 붙인다.
 
 ### 5.13 `FacePartId`, `MakeupStyleFaceArea`, `GuideCategory` 부위 타입 분산
 

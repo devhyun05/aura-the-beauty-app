@@ -33,6 +33,11 @@ export type FilterShapePoint = {
 
 export type FilterShapePointCoordinate = FilterShapePoint['position'];
 
+export type FilterShapePreviewSize = {
+  width: number;
+  height: number;
+};
+
 export type FilterShapePresetPoint = FilterShapePoint & {
   resolvedPosition: FilterShapePointCoordinate;
 };
@@ -41,6 +46,12 @@ export type FilterShapePreset = {
   selectedMakeupArea: MakeupArea;
   shapePoints: readonly FilterShapePresetPoint[];
   adjustments: FilterShapeState['adjustments'];
+};
+
+export type MakeupFilterShapePresetSaveValue = {
+  makeupFilterId: string;
+  makeupLookId?: string;
+  shapePreset: FilterShapePreset;
 };
 
 export type FilterShapeState = {
@@ -60,6 +71,10 @@ export type MakeupFilterOptionState = {
 
 function clampValue(adjustment: FilterShapeAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
+}
+
+function clampCoordinate(value: number) {
+  return Math.min(Math.max(value, 0), 100);
 }
 
 export function getFilterShapeState(): FilterShapeState {
@@ -129,6 +144,34 @@ export function getResolvedShapePointPosition(
   };
 }
 
+export function getShapePointOffsetFromDrag({
+  shapePoint,
+  translation,
+  previewSize,
+}: {
+  shapePoint: FilterShapePoint;
+  translation: FilterShapePointCoordinate;
+  previewSize: FilterShapePreviewSize;
+}): FilterShapePointCoordinate {
+  if (previewSize.width <= 0 || previewSize.height <= 0) {
+    return shapePoint.offset;
+  }
+
+  const nextResolvedPosition = {
+    x: clampCoordinate(
+      shapePoint.position.x + shapePoint.offset.x + (translation.x / previewSize.width) * 100,
+    ),
+    y: clampCoordinate(
+      shapePoint.position.y + shapePoint.offset.y + (translation.y / previewSize.height) * 100,
+    ),
+  };
+
+  return {
+    x: nextResolvedPosition.x - shapePoint.position.x,
+    y: nextResolvedPosition.y - shapePoint.position.y,
+  };
+}
+
 export function createShapePresetFromState(
   state: FilterShapeState,
 ): FilterShapePreset {
@@ -141,6 +184,22 @@ export function createShapePresetFromState(
       resolvedPosition: getResolvedShapePointPosition(shapePoint),
     })),
     adjustments: state.adjustments,
+  };
+}
+
+export function createMakeupFilterShapePresetSaveValue({
+  state,
+  makeupFilterId,
+  makeupLookId,
+}: {
+  state: FilterShapeState;
+  makeupFilterId: string;
+  makeupLookId?: string;
+}): MakeupFilterShapePresetSaveValue {
+  return {
+    makeupFilterId,
+    makeupLookId,
+    shapePreset: createShapePresetFromState(state),
   };
 }
 

@@ -1,5 +1,11 @@
-import React, {useState} from 'react';
-import {StyleSheet, type ViewStyle} from 'react-native';
+import React, {useMemo, useRef, useState} from 'react';
+import {
+  PanResponder,
+  StyleSheet,
+  View as NativeView,
+  type LayoutChangeEvent,
+  type ViewStyle,
+} from 'react-native';
 import {ChevronLeft, Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -23,17 +29,25 @@ import {
   OverlayTopBar,
 } from '../../../shared/ui';
 import {
+  createMakeupFilterShapePresetSaveValue,
   getFilterShapeState,
   getResolvedShapePointPosition,
+  getShapePointOffsetFromDrag,
+  resetFilterShapePointOffset,
+  resetFilterShapePoints,
   updateFilterShapeAdjustment,
+  updateFilterShapePointOffset,
   type FilterShapeAdjustment,
   type FilterShapeAdjustmentKey,
+  type FilterShapePointCoordinate,
+  type FilterShapePreviewSize,
   type FilterShapeState,
+  type MakeupFilterShapePresetSaveValue,
 } from '../services/filterCustomizationService';
 
 type ARFilterShapeAdjustScreenProps = {
   onBack?: () => void;
-  onSave?: () => void;
+  onSave?: (shapePresetSaveValue: MakeupFilterShapePresetSaveValue) => void;
 };
 
 const ADJUSTMENT_KEYS: readonly FilterShapeAdjustmentKey[] = [
@@ -44,6 +58,9 @@ const ADJUSTMENT_KEYS: readonly FilterShapeAdjustmentKey[] = [
 ];
 const SELECTED_TAB_BACKGROUND_OPACITY = FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY;
 const SHAPE_ADJUST_TITLE = '형태 수정';
+const SHAPE_ADJUST_INTERACTION_MODE = 'drag-shape-point';
+const SHAPE_PRESET_FILTER_ID = 'ar-filter-shape-preview';
+const SHAPE_PRESET_LOOK_ID = 'current-makeup-look';
 
 type ShapePreviewColorOverlayLayer = {
   id: string;
@@ -66,6 +83,10 @@ export function getARFilterShapeAdjustTitle(): string {
   return SHAPE_ADJUST_TITLE;
 }
 
+export function getARFilterShapeAdjustInteractionMode(): 'drag-shape-point' {
+  return SHAPE_ADJUST_INTERACTION_MODE;
+}
+
 export function ARFilterShapeAdjustScreen({
   onBack,
   onSave,
@@ -77,6 +98,82 @@ export function ARFilterShapeAdjustScreen({
   const [shapeState, setShapeState] = useState<FilterShapeState>(
     getFilterShapeState(),
   );
+  const [selectedShapePointId, setSelectedShapePointId] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState<FilterShapePreviewSize>({
+    height: 0,
+    width: 0,
+  });
+  const dragStartOffsetsRef = useRef<Record<string, FilterShapePointCoordinate>>({});
+  const previewSizeRef = useRef(previewSize);
+  const shapeStateRef = useRef(shapeState);
+  const shapePointIds = shapeState.shapePoints.map(point => point.id).join(',');
+
+  previewSizeRef.current = previewSize;
+  shapeStateRef.current = shapeState;
+
+  const shapePointPanResponders = useMemo(() => {
+    const responders: Record<string, ReturnType<typeof PanResponder.create>> = {};
+
+    shapeState.shapePoints.forEach(point => {
+      responders[point.id] = PanResponder.create({
+        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          const currentPoint = shapeStateRef.current.shapePoints.find(
+            shapePoint => shapePoint.id === point.id,
+          );
+
+          if (!currentPoint) {
+            return;
+          }
+
+          setSelectedShapePointId(point.id);
+          dragStartOffsetsRef.current[point.id] = currentPoint.offset;
+        },
+        onPanResponderMove: (_event, gestureState) => {
+          const startOffset = dragStartOffsetsRef.current[point.id];
+
+          setShapeState(currentState => {
+            const currentPoint = currentState.shapePoints.find(
+              shapePoint => shapePoint.id === point.id,
+            );
+
+            if (!currentPoint || !startOffset) {
+              return currentState;
+            }
+
+            const nextOffset = getShapePointOffsetFromDrag({
+              shapePoint: {
+                ...currentPoint,
+                offset: startOffset,
+              },
+              translation: {
+                x: gestureState.dx,
+                y: gestureState.dy,
+              },
+              previewSize: previewSizeRef.current,
+            });
+
+            return updateFilterShapePointOffset(currentState, point.id, nextOffset);
+          });
+        },
+        onPanResponderRelease: () => {
+          delete dragStartOffsetsRef.current[point.id];
+        },
+        onPanResponderTerminate: () => {
+          delete dragStartOffsetsRef.current[point.id];
+        },
+      });
+    });
+
+    return responders;
+  }, [shapePointIds, shapeState.shapePoints]);
+
+  const handlePreviewLayout = ({nativeEvent}: LayoutChangeEvent) => {
+    const {height, width} = nativeEvent.layout;
+
+    setPreviewSize({height, width});
+  };
 
   const handleMakeupAreaOptionPress = (makeupAreaId: MakeupArea) => {
     setShapeState(currentState => ({
@@ -98,8 +195,28 @@ export function ARFilterShapeAdjustScreen({
     });
   };
 
-  const handleReset = () => {
-    setShapeState(getFilterShapeState());
+  const handleResetAllShapePoints = () => {
+    setShapeState(currentState => resetFilterShapePoints(currentState));
+  };
+
+  const handleResetSelectedShapePoint = () => {
+    if (!selectedShapePointId) {
+      return;
+    }
+
+    setShapeState(currentState =>
+      resetFilterShapePointOffset(currentState, selectedShapePointId),
+    );
+  };
+
+  const handleSave = () => {
+    onSave?.(
+      createMakeupFilterShapePresetSaveValue({
+        state: shapeState,
+        makeupFilterId: SHAPE_PRESET_FILTER_ID,
+        makeupLookId: SHAPE_PRESET_LOOK_ID,
+      }),
+    );
   };
 
   const toggleOverlay = () => {
@@ -112,44 +229,52 @@ export function ARFilterShapeAdjustScreen({
   return (
     <FullscreenOverlayScreen>
       <FullscreenOverlayLayer>
-        <LiveCameraLayer />
-        <View style={styles.previewDim} />
-        <View
-          style={[
-            styles.filterLayer,
-            {
-              transform: [
-                {translateX: shapeState.adjustments.horizontal.value},
-                {translateY: shapeState.adjustments.vertical.value},
-                {scale: 1 + shapeState.adjustments.scale.value / 100},
-                {rotate: `${shapeState.adjustments.rotation.value}deg`},
-              ],
-            },
-          ]}>
-          <View style={[styles.filterEyeLayer, {backgroundColor: shapeFilterColor}]} />
-          <View style={[styles.filterCheekLayer, {backgroundColor: shapeFilterColor}]} />
-          <View style={[styles.filterLipLayer, {backgroundColor: shapeFilterColor}]} />
-        </View>
+        <NativeView
+          onLayout={handlePreviewLayout}
+          style={styles.previewGestureLayer}>
+          <LiveCameraLayer />
+          <View style={styles.previewDim} />
+          <View
+            style={[
+              styles.filterLayer,
+              {
+                transform: [
+                  {translateX: shapeState.adjustments.horizontal.value},
+                  {translateY: shapeState.adjustments.vertical.value},
+                  {scale: 1 + shapeState.adjustments.scale.value / 100},
+                  {rotate: `${shapeState.adjustments.rotation.value}deg`},
+                ],
+              },
+            ]}>
+            <View style={[styles.filterEyeLayer, {backgroundColor: shapeFilterColor}]} />
+            <View style={[styles.filterCheekLayer, {backgroundColor: shapeFilterColor}]} />
+            <View style={[styles.filterLipLayer, {backgroundColor: shapeFilterColor}]} />
+          </View>
 
-        {shapeState.isOverlayVisible
-          ? shapeState.shapePoints.map(point => {
-              const resolvedPosition = getResolvedShapePointPosition(point);
+          {shapeState.isOverlayVisible
+            ? shapeState.shapePoints.map(point => {
+                const resolvedPosition = getResolvedShapePointPosition(point);
 
-              return (
-                <View
-                  key={point.id}
-                  accessibilityLabel={`${point.id} 형태점`}
-                  style={[
-                    styles.shapePointDot,
-                    {
-                      left: `${resolvedPosition.x}%`,
-                      top: `${resolvedPosition.y}%`,
-                    },
-                  ]}
-                />
-              );
-            })
-          : null}
+                return (
+                  <NativeView
+                    {...shapePointPanResponders[point.id]?.panHandlers}
+                    accessibilityHint="손가락으로 끌어 메이크업 형태점을 옮겨요."
+                    accessibilityLabel={`${point.id} 형태점`}
+                    accessibilityRole="adjustable"
+                    key={point.id}
+                    style={[
+                      styles.shapePointDot,
+                      selectedShapePointId === point.id ? styles.shapePointDotActive : undefined,
+                      {
+                        left: `${resolvedPosition.x}%`,
+                        top: `${resolvedPosition.y}%`,
+                      },
+                    ]}
+                  />
+                );
+              })
+            : null}
+        </NativeView>
       </FullscreenOverlayLayer>
 
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
@@ -165,7 +290,7 @@ export function ARFilterShapeAdjustScreen({
           rightSlot={
             <OverlayIconButton
               accessibilityLabel="현재 형태 저장"
-              onPress={onSave}>
+              onPress={handleSave}>
               <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
             </OverlayIconButton>
           }
@@ -175,8 +300,14 @@ export function ARFilterShapeAdjustScreen({
         <XStack style={styles.quickActions}>
           <ActionPill
             icon={<RotateCcw color={colors.white} size={iconSize.xs} strokeWidth={2} />}
-            label="되돌리기"
-            onPress={handleReset}
+            label="전체 점 초기화"
+            onPress={handleResetAllShapePoints}
+          />
+          <ActionPill
+            icon={<RotateCcw color={colors.white} size={iconSize.xs} strokeWidth={2} />}
+            isDisabled={!selectedShapePointId}
+            label="선택점 초기화"
+            onPress={handleResetSelectedShapePoint}
           />
           <ActionPill
             icon={
@@ -221,7 +352,7 @@ export function ARFilterShapeAdjustScreen({
 
         <OverlaySaveButton
           accessibilityLabel="현재 필터 형태 저장"
-          onPress={onSave}
+          onPress={handleSave}
         />
       </BottomOverlayPanel>
     </FullscreenOverlayScreen>
@@ -230,17 +361,20 @@ export function ARFilterShapeAdjustScreen({
 
 type ActionPillProps = {
   icon: React.ReactNode;
+  isDisabled?: boolean;
   label: string;
   onPress: () => void;
 };
 
-function ActionPill({icon, label, onPress}: ActionPillProps) {
+function ActionPill({icon, isDisabled = false, label, onPress}: ActionPillProps) {
   return (
     <Button
+      accessibilityState={{disabled: isDisabled}}
       accessibilityRole="button"
-      onPress={onPress}
+      disabled={isDisabled}
+      onPress={isDisabled ? undefined : onPress}
       pressStyle={{scale: 0.97}}
-      style={styles.actionPill}
+      style={[styles.actionPill, isDisabled ? styles.actionPillDisabled : undefined]}
       unstyled>
       {icon}
       <Text style={styles.actionPillText}>{label}</Text>
@@ -304,6 +438,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     zIndex: 3,
   },
+  previewGestureLayer: {
+    ...StyleSheet.absoluteFill,
+  },
   previewDim: {
     backgroundColor: colors.black,
     bottom: 0,
@@ -359,6 +496,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: spacing.md,
   },
+  shapePointDotActive: {
+    backgroundColor: colors.black,
+    borderColor: colors.white,
+    transform: [{scale: 1.18}],
+  },
   quickActions: {
     gap: spacing.sm,
     justifyContent: 'flex-end',
@@ -374,6 +516,9 @@ const styles = StyleSheet.create({
     height: 38,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
+  },
+  actionPillDisabled: {
+    opacity: 0.42,
   },
   actionPillText: {
     color: colors.white,

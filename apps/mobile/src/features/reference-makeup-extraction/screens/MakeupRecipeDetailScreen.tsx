@@ -9,7 +9,7 @@ import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 import type {ReferenceMakeupPhoto, MakeupRecipeTab} from '../types';
 
-type ExtractedMakeupLookRecipeDetailScreenProps = {
+type MakeupRecipeDetailScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
@@ -85,10 +85,10 @@ const recipeItems = [
   },
 ];
 
-export function ExtractedMakeupLookRecipeDetailScreen({
+export function MakeupRecipeDetailScreen({
   photo,
   onSaveRecipe,
-}: ExtractedMakeupLookRecipeDetailScreenProps) {
+}: MakeupRecipeDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
   const [activeTab, setActiveTab] = useState<MakeupRecipeTab>('eye');

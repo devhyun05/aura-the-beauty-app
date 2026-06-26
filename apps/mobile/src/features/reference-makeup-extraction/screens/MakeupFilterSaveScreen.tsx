@@ -9,7 +9,7 @@ import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 import type {ReferenceMakeupPhoto} from '../types';
 
-type MakeupFilterSaveFormScreenProps = {
+type MakeupFilterSaveScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
@@ -18,10 +18,10 @@ type MakeupFilterSaveFormScreenProps = {
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
-export function MakeupFilterSaveFormScreen({
+export function MakeupFilterSaveScreen({
   photo,
   onSave,
-}: MakeupFilterSaveFormScreenProps) {
+}: MakeupFilterSaveScreenProps) {
   const insets = useSafeAreaInsets();
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
   const [makeupLookName, setMakeupLookName] = useState(extractedMakeupLook.title);

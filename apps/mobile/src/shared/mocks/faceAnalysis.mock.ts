@@ -124,7 +124,7 @@ export function getFaceAnalysisAvoidedMakeupImageAssetNames() {
   return faceAnalysisAvoidedMakeupImageAssetNames;
 }
 
-const facePointGuide = {
+const makeupGuideline = {
   brow: '자연스러운 아치형으로 결을 살리고 애쉬 브라운을 추천해요.',
   blush: '뉴트럴 핑크를 광대 위에 넓고 얇게 연결해요.',
   highlight: 'T존과 눈밑 삼각존에 은은한 광채만 더해요.',
@@ -139,7 +139,7 @@ const buildFaceAnalysisReport = (seed: FaceAnalysisMockSeed): FaceAnalysisReport
   title: `${seed.personalColor}, ${seed.skinType}`,
   reportTitle: '맞춤 분석 보고서',
   shortSummary: seed.summary,
-  facePointGuide,
+  makeupGuideline,
   recommendedMakeups: createRecommendedMakeups(seed.id, seed.recommendedMood),
   avoidedMakeups: createAvoidedMakeups(seed.id),
 });

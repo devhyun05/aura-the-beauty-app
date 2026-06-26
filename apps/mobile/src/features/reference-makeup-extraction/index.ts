@@ -1,9 +1,9 @@
 export {ReferenceMakeupExtractionLoadingScreen} from './screens/ReferenceMakeupExtractionLoadingScreen';
 export {ReferenceMakeupExtractionResultScreen} from './screens/ReferenceMakeupExtractionResultScreen';
 export {ReferenceMakeupExtractionUploadScreen} from './screens/ReferenceMakeupExtractionUploadScreen';
-export {ExtractedMakeupLookRecipeDetailScreen} from './screens/ExtractedMakeupLookRecipeDetailScreen';
+export {MakeupRecipeDetailScreen} from './screens/MakeupRecipeDetailScreen';
 export {MakeupFilterSaveCompleteScreen} from './screens/MakeupFilterSaveCompleteScreen';
-export {MakeupFilterSaveFormScreen} from './screens/MakeupFilterSaveFormScreen';
+export {MakeupFilterSaveScreen} from './screens/MakeupFilterSaveScreen';
 export {ExtractedMakeupLookAdjustScreen} from './screens/ExtractedMakeupLookAdjustScreen';
-export {ExtractedMakeupLookRecipeSaveCompleteScreen} from './screens/ExtractedMakeupLookRecipeSaveCompleteScreen';
+export {MakeupRecipeSaveCompleteScreen} from './screens/MakeupRecipeSaveCompleteScreen';
 export type {ReferenceMakeupPhoto} from './types';

@@ -16,13 +16,23 @@ import {
   getLatestFaceAnalysisReport,
 } from '../../../shared/services/faceAnalysisService';
 import {getUserProfile} from '../../../shared/services/userService';
-import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
-  FaceAnalysisFacePointGuide,
   FaceAnalysisMakeupCard,
   FaceAnalysisReport,
 } from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
+import {
+  faceAnalysisReportCreateFilterButtonAccessibilityLabels,
+  faceAnalysisReportLiquidGlassButtonStyle,
+  faceAnalysisReportLiquidGlassSurfaceStyle,
+  getFaceAnalysisReportAvoidedMakeupRailPresentation,
+  getFaceAnalysisReportPointGuideItems,
+  getFaceAnalysisReportScreenFramePresentation,
+  getFaceAnalysisReportSubtitleTextStyle,
+  getFaceAnalysisReportSummaryItems,
+  type FaceAnalysisReportCreateFilterButtonPlacement,
+} from '../services/faceAnalysisReportDetailModel';
 import {
   type FaceAnalysisReportDetailLoadState,
   resolveFaceAnalysisReportDetailLoadState,
@@ -37,139 +47,15 @@ type FaceAnalysisReportDetailScreenProps = {
   onShare?: (report: FaceAnalysisReport) => void;
 };
 
-type GuideItem = {
-  key: keyof FaceAnalysisFacePointGuide | 'base';
-  label: string;
-  point: string;
-  detail: string;
-};
-
-type FacePointGuideLabel = {
-  key: keyof FaceAnalysisFacePointGuide;
-  label: string;
-  point: string;
-};
-
-type SummaryItemData = {
-  label: string;
-  value: string;
-};
-
 type FaceAnalysisReportShareAction = () => void;
-type CreateFilterButtonPlacement = 'floating-bottom';
-type FaceAnalysisReportLiquidGlassButtonTarget = 'create-filter';
-type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
-
-const guideLabels: FacePointGuideLabel[] = [
-  {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
-  {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
-  {key: 'lip', label: '립', point: 'MLBB 계열'},
-  {key: 'highlight', label: '하이라이트', point: 'T존, 눈밑 삼각존'},
-  {key: 'eyeliner', label: '아이라이너', point: '점막 채우기'},
-  {key: 'blush', label: '블러셔', point: '뉴트럴 핑크'},
-];
-
-const createFilterButtonPlacements = [
-  'floating-bottom',
-] as const satisfies readonly CreateFilterButtonPlacement[];
-
-const createFilterButtonAccessibilityLabels: Record<
-  CreateFilterButtonPlacement,
-  string
-> = {
-  'floating-bottom': 'AR 필터 만들기',
-};
-const faceAnalysisReportAvoidedMakeupRailPresentation = {
-  showsCornerBadge: false,
-  title: '비추천 메이크업',
-} as const;
-const faceAnalysisReportSubtitleTextStyle = {
-  fontSize: typography.fontSize.md,
-  lineHeight: typography.lineHeight.md,
-} as const;
-const faceAnalysisReportScreenFramePresentation = {
-  contentTopPadding: spacing.xl,
-  headerPlacement: 'route-level',
-  headerUsesTopInset: true,
-} as const;
-const faceAnalysisReportLiquidGlassSurfaceStyle = {
-  backgroundColor: colors.liquidGlassSurface,
-  borderColor: colors.liquidGlassBorder,
-  borderWidth: 1,
-  elevation: 4,
-  shadowColor: colors.black,
-  shadowOffset: {width: 0, height: 10},
-  shadowOpacity: 0.1,
-  shadowRadius: shadows.liquidGlassGlow.shadowRadius,
-} satisfies ViewStyle;
-const faceAnalysisReportLiquidGlassButtonStyle = {
-  ...faceAnalysisReportLiquidGlassSurfaceStyle,
-  elevation: 5,
-  shadowOffset: {width: 0, height: 8},
-  shadowOpacity: 0.12,
-} satisfies ViewStyle;
-const faceAnalysisReportLiquidGlassPresentation = {
-  buttonTargets: [
-    'create-filter',
-  ] as const satisfies readonly FaceAnalysisReportLiquidGlassButtonTarget[],
-  cardTargets: [
-    'hero',
-    'summary',
-    'makeup',
-  ] as const satisfies readonly FaceAnalysisReportLiquidGlassCardTarget[],
-  shadowRadius: faceAnalysisReportLiquidGlassSurfaceStyle.shadowRadius,
-  surfaceColor: colors.liquidGlassSurface,
-} as const;
-
-export function getFaceAnalysisReportCreateFilterButtonPlacements() {
-  return createFilterButtonPlacements;
-}
-
-export function getFaceAnalysisReportAvoidedMakeupRailPresentation() {
-  return faceAnalysisReportAvoidedMakeupRailPresentation;
-}
-
-export function getFaceAnalysisReportSubtitleTextStyle() {
-  return faceAnalysisReportSubtitleTextStyle;
-}
-
-export function getFaceAnalysisReportScreenFramePresentation() {
-  return faceAnalysisReportScreenFramePresentation;
-}
-
-export function getFaceAnalysisReportLiquidGlassPresentation() {
-  return faceAnalysisReportLiquidGlassPresentation;
-}
-
-export function getFaceAnalysisReportSummaryItems(
-  report: FaceAnalysisReport,
-): SummaryItemData[] {
-  return [
-    {label: '퍼스널 컬러', value: report.personalColor},
-    {label: '얼굴형', value: report.faceShape},
-    {label: '톤 요약', value: report.toneSummary},
-    {label: '추천 무드', value: report.recommendedMood},
-  ];
-}
-
-export function getFaceAnalysisReportPointGuideItems(
-  report: FaceAnalysisReport,
-): GuideItem[] {
-  return [
-    {
-      key: 'base',
-      label: '베이스',
-      point: '피부 표현',
-      detail: report.baseMakeupGuide,
-    },
-    ...guideLabels.map((guide) => ({
-      ...guide,
-      detail: report.facePointGuide[guide.key],
-    })),
-  ];
-}
+const faceAnalysisReportAvoidedMakeupRailPresentation =
+  getFaceAnalysisReportAvoidedMakeupRailPresentation();
+const faceAnalysisReportScreenFramePresentation =
+  getFaceAnalysisReportScreenFramePresentation();
+const faceAnalysisReportSubtitleTextStyle =
+  getFaceAnalysisReportSubtitleTextStyle();
 
 const formatReportDate = (dateText: string, name?: string) => {
   const date = new Date(dateText);
@@ -409,11 +295,11 @@ function CreateFilterButton({
   placement,
 }: {
   onPress?: () => void;
-  placement: CreateFilterButtonPlacement;
+  placement: FaceAnalysisReportCreateFilterButtonPlacement;
 }) {
   return (
     <Button
-      accessibilityLabel={createFilterButtonAccessibilityLabels[placement]}
+      accessibilityLabel={faceAnalysisReportCreateFilterButtonAccessibilityLabels[placement]}
       accessibilityRole="button"
       onPress={onPress}
       pressStyle={{scale: 0.98}}
