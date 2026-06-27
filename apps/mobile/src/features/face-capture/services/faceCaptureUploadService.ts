@@ -83,7 +83,40 @@ export function getFaceCaptureFilename(uri: string, fallback?: string | null): s
   return filename?.includes('.') ? filename : `face-capture-${Date.now()}.jpg`;
 }
 
+function readImageBlobWithXhr(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+
+    request.open('GET', uri);
+    request.responseType = 'blob';
+    request.onload = () => {
+      const isLocalFileRead = request.status === 0;
+      const isHttpSuccess = request.status >= 200 && request.status < 300;
+
+      if (!isLocalFileRead && !isHttpSuccess) {
+        reject(new Error(`Failed to read image file with HTTP ${request.status}.`));
+        return;
+      }
+
+      if (!(request.response instanceof Blob)) {
+        reject(new Error('Failed to read image file as a blob.'));
+        return;
+      }
+
+      resolve(request.response);
+    };
+    request.onerror = () => reject(new Error('Failed to read image file from the device.'));
+    request.send();
+  });
+}
+
 async function readImageBlob(uri: string): Promise<Blob> {
+  const isDeviceFileUri = uri.startsWith('file:') || uri.startsWith('content:');
+
+  if (isDeviceFileUri) {
+    return readImageBlobWithXhr(uri);
+  }
+
   const response = await fetch(uri);
 
   if (!response.ok) {
