@@ -31,7 +31,7 @@ class Settings(BaseSettings):
   openai_api_key: str | None = None
   openai_analysis_model_id: str = "gpt-5.5"
   openai_image_model_id: str = "gpt-image-2"
-  openai_image_quality: str = "high"
+  openai_image_quality: str = "medium"
   openai_image_size: str = "1024x1024"
 
   cors_enabled: bool = False
