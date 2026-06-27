@@ -21,7 +21,7 @@ import {
   FullscreenOverlayScreen,
   LiveCameraLayer,
 } from '../../../shared/ui';
-import {mockPendingFaceCaptureChecks} from '../mocks/faceCapture.mock';
+import {mockReadyFaceCaptureChecks} from '../mocks/faceCapture.mock';
 import {
   evaluateFaceCaptureGuidance,
   type FaceCaptureCheckState,
@@ -46,7 +46,7 @@ export function getFaceCaptureCameraMode(): 'live-camera' {
 }
 
 export function FaceCaptureScreen({
-  checks = mockPendingFaceCaptureChecks,
+  checks = mockReadyFaceCaptureChecks,
   onCapture,
   onClose,
   onPickImage,
