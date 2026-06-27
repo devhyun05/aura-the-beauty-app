@@ -26,7 +26,6 @@ import {
   faceAnalysisReportCreateFilterButtonAccessibilityLabels,
   faceAnalysisReportLiquidGlassButtonStyle,
   faceAnalysisReportLiquidGlassSurfaceStyle,
-  getFaceAnalysisReportAvoidedMakeupRailPresentation,
   getFaceAnalysisReportPointGuideItems,
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSubtitleTextStyle,
@@ -39,6 +38,8 @@ import {
 } from '../services/faceAnalysisReportDetailLoadState';
 
 type FaceAnalysisReportDetailScreenProps = {
+  analysisReport?: FaceAnalysisReport | null;
+  capturedPhotoUri?: string;
   headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
@@ -50,12 +51,17 @@ type FaceAnalysisReportDetailScreenProps = {
 type FaceAnalysisReportShareAction = () => void;
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
-const faceAnalysisReportAvoidedMakeupRailPresentation =
-  getFaceAnalysisReportAvoidedMakeupRailPresentation();
 const faceAnalysisReportScreenFramePresentation =
   getFaceAnalysisReportScreenFramePresentation();
 const faceAnalysisReportSubtitleTextStyle =
   getFaceAnalysisReportSubtitleTextStyle();
+
+export function resolveFaceAnalysisReportHeroImageSource(
+  capturedPhotoUri?: string,
+  report?: FaceAnalysisReport | null,
+) {
+  return capturedPhotoUri ? {uri: capturedPhotoUri} : report?.imageSource;
+}
 
 const formatReportDate = (dateText: string, name?: string) => {
   const date = new Date(dateText);
@@ -68,6 +74,8 @@ const formatReportDate = (dateText: string, name?: string) => {
 };
 
 export function FaceAnalysisReportDetailScreen({
+  analysisReport,
+  capturedPhotoUri,
   headerTitle = '맞춤 분석 보고서',
   reportId,
   onCreateARFilter,
@@ -83,8 +91,11 @@ export function FaceAnalysisReportDetailScreen({
     setLoadState({status: 'loading'});
 
     resolveFaceAnalysisReportDetailLoadState(async () => {
+      const providedReport = reportId ? null : analysisReport;
       const [nextReport, nextProfile] = await Promise.all([
-        reportId
+        providedReport
+          ? Promise.resolve(providedReport)
+          : reportId
           ? getFaceAnalysisReportById(reportId)
           : getLatestFaceAnalysisReport(),
         getUserProfile(),
@@ -103,7 +114,7 @@ export function FaceAnalysisReportDetailScreen({
     return () => {
       isMounted = false;
     };
-  }, [reportId]);
+  }, [analysisReport, reportId]);
 
   const report = loadState.status === 'success' ? loadState.report : null;
   const profile = loadState.status === 'success' ? loadState.profile : null;
@@ -128,6 +139,7 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportSummaryItems(report) : []),
     [report],
   );
+  const heroImageSource = resolveFaceAnalysisReportHeroImageSource(capturedPhotoUri, report);
 
   useEffect(() => {
     if (!report) {
@@ -188,7 +200,12 @@ export function FaceAnalysisReportDetailScreen({
       </Text>
 
       <View style={styles.heroCard}>
-        <Image resizeMode="cover" source={report.imageSource} style={styles.heroImage} />
+        <Image
+          resizeMode="cover"
+          source={heroImageSource}
+          style={styles.heroImage}
+          testID="face-analysis-report-hero-image"
+        />
       </View>
 
       <View style={styles.summaryGrid}>
@@ -198,8 +215,9 @@ export function FaceAnalysisReportDetailScreen({
       </View>
 
       <ReportSection title="분석 요약">
-        <Text style={styles.paragraph}>{report.skinAnalysisSummary}</Text>
-        <Text style={styles.paragraphMuted}>{report.shortSummary}</Text>
+        <Text numberOfLines={2} style={styles.paragraph}>
+          {report.skinAnalysisSummary || report.shortSummary}
+        </Text>
       </ReportSection>
 
       <ReportSection title="포인트 가이드">
@@ -210,8 +228,10 @@ export function FaceAnalysisReportDetailScreen({
               <View style={styles.guideLine} />
               <View style={styles.guideText}>
                 <Text style={styles.guideLabel}>{guide.label}</Text>
-                <Text style={styles.guidePoint}>{guide.point}</Text>
-                <Text style={styles.guideDescription}>{guide.detail}</Text>
+                <Text numberOfLines={1} style={styles.guidePoint}>{guide.point}</Text>
+                <Text numberOfLines={2} style={styles.guideDescription}>
+                  {guide.detail}
+                </Text>
               </View>
             </View>
           ))}
@@ -219,11 +239,6 @@ export function FaceAnalysisReportDetailScreen({
       </ReportSection>
 
       <MakeupCardRail title="추천 메이크업" items={report.recommendedMakeups} />
-
-      <MakeupCardRail
-        title={faceAnalysisReportAvoidedMakeupRailPresentation.title}
-        items={report.avoidedMakeups}
-      />
 
       <Text style={styles.notice}>
         분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
@@ -486,43 +501,44 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   makeupBody: {
-    gap: 4,
-    padding: spacing.md,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   makeupCard: {
     ...faceAnalysisReportLiquidGlassSurfaceStyle,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.xs,
-    width: 170,
+    width: 260,
   },
   makeupDescription: {
     color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.xs,
+    lineHeight: typography.lineHeight.sm,
   },
   makeupImage: {
-    height: 104,
+    height: 168,
     width: '100%',
   },
   makeupImageWrap: {
     backgroundColor: colors.surfaceMuted,
-    borderTopLeftRadius: radius.sm,
-    borderTopRightRadius: radius.sm,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
     overflow: 'hidden',
     position: 'relative',
   },
   makeupSubtitle: {
     color: colors.textTertiary,
-    fontSize: typography.fontSize.xs,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
+    lineHeight: typography.lineHeight.sm,
   },
   makeupTitle: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.lg,
   },
   notice: {
     color: colors.textTertiary,
@@ -609,11 +625,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.pill,
     color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    lineHeight: typography.lineHeight.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
   tagRow: {
     flexDirection: 'row',

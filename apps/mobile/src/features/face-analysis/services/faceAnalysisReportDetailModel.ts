@@ -23,16 +23,15 @@ type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
 type FaceAnalysisReportGuideLabel = {
   key: keyof FaceAnalysisMakeupGuideline;
   label: string;
-  point: string;
 };
 
 const guideLabels: FaceAnalysisReportGuideLabel[] = [
-  {key: 'brow', label: '눈썹', point: '자연스러운 아치형'},
-  {key: 'eyeshadow', label: '아이섀도우', point: '뉴트럴 베이지 톤'},
-  {key: 'lip', label: '립', point: 'MLBB 계열'},
-  {key: 'highlight', label: '하이라이트', point: 'T존, 눈밑 삼각존'},
-  {key: 'eyeliner', label: '아이라이너', point: '점막 채우기'},
-  {key: 'blush', label: '블러셔', point: '뉴트럴 핑크'},
+  {key: 'brow', label: '눈썹'},
+  {key: 'eyeshadow', label: '아이섀도우'},
+  {key: 'lip', label: '립'},
+  {key: 'highlight', label: '하이라이트'},
+  {key: 'eyeliner', label: '아이라이너'},
+  {key: 'blush', label: '블러셔'},
 ];
 
 const createFilterButtonPlacements = [
@@ -124,6 +123,23 @@ export function getFaceAnalysisReportSummaryItems(
   ];
 }
 
+function getGuidePoint(detail: string, fallback: string) {
+  const normalized = detail.trim();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  const [firstClause] = normalized.split(/[,.，。]/);
+  const point = firstClause.trim();
+
+  if (!point) {
+    return fallback;
+  }
+
+  return point.length > 16 ? `${point.slice(0, 16)}...` : point;
+}
+
 export function getFaceAnalysisReportPointGuideItems(
   report: FaceAnalysisReport,
 ): FaceAnalysisReportGuideItem[] {
@@ -131,12 +147,17 @@ export function getFaceAnalysisReportPointGuideItems(
     {
       key: 'base',
       label: '베이스',
-      point: '피부 표현',
+      point: getGuidePoint(report.baseMakeupGuide, '피부 표현'),
       detail: report.baseMakeupGuide,
     },
-    ...guideLabels.map((guide) => ({
-      ...guide,
-      detail: report.makeupGuideline[guide.key],
-    })),
+    ...guideLabels.map((guide) => {
+      const detail = report.makeupGuideline[guide.key];
+
+      return {
+        ...guide,
+        point: getGuidePoint(detail, guide.label),
+        detail,
+      };
+    }),
   ];
 }

@@ -35,7 +35,7 @@ export async function syncAuthSessionWithBackend(session: AuthSession): Promise<
     return session;
   }
 
-  const token = session.idToken ?? session.accessToken;
+  const token = session.accessToken ?? session.idToken;
 
   if (!token) {
     throw new Error('Missing Cognito token for backend user sync.');

@@ -2,7 +2,7 @@
 
 FastAPI backend for the mobile app. The backend is designed to sit behind
 CloudFront `/api/*` and API Gateway or ALB, then connect to RDS PostgreSQL, S3,
-and Bedrock.
+and the OpenAI API.
 
 ## Local setup
 

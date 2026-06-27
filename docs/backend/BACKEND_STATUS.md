@@ -13,7 +13,7 @@ This page is the quick answer source for "what is implemented?" and
 - RDS/PostgreSQL connection layer.
 - Schema apply, seed apply, and schema readiness checks.
 - S3 presigned upload flow and media metadata APIs.
-- Analysis job/report APIs with Bedrock invocation boundary.
+- Analysis job/report APIs with OpenAI invocation boundary.
 - Product recommendations, likes, saved makeup styles, feedback, filter extraction, and AR filter state API skeletons.
 - Dockerfile and local PostgreSQL compose file.
 - OpenAPI contract export.
@@ -51,7 +51,9 @@ values are:
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `S3_BUCKET_NAME`
 - `CLOUDFRONT_DOMAIN` or `CDN_BASE_URL`
-- `BEDROCK_MODEL_ID`
+- `OPENAI_API_KEY`
+- `OPENAI_ANALYSIS_MODEL_ID`
+- `OPENAI_IMAGE_MODEL_ID`
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for local AWS SDK calls, or `AWS_USE_IAM_ROLE=true` for ECS task role usage
 - `API_GATEWAY_URL` or `ALB_DNS`
 - `EXPO_PUBLIC_API_BASE_URL` in the mobile app after CloudFront/API origin is ready

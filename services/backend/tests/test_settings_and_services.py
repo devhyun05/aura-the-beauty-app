@@ -2,7 +2,7 @@ import pytest
 
 from app.core.errors import AppError
 from app.core.settings import Settings
-from app.services.bedrock import BedrockService
+from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.s3 import S3Service
 
 
@@ -60,11 +60,11 @@ def test_s3_presigned_upload_requires_bucket() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bedrock_requires_model_id() -> None:
+async def test_openai_analysis_requires_source_image() -> None:
   with pytest.raises(AppError) as exc_info:
-    await BedrockService(Settings()).analyze_image({})
+    await OpenAIAnalysisService(Settings()).analyze_image({})
 
-  assert exc_info.value.code == "BEDROCK_NOT_CONFIGURED"
+  assert exc_info.value.code == "SOURCE_IMAGE_REQUIRED"
 
 
 def test_public_config_status_accepts_iam_role_for_aws_credentials() -> None:

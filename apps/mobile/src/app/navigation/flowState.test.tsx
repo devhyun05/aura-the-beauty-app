@@ -35,6 +35,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().selectedFaceAnalysisReport,
+  null,
+  'initial selected face analysis report',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedReferenceMakeupPhoto,
   null,
   'initial selected reference makeup photo',

@@ -17,7 +17,7 @@ For current implementation status, use docs/backend/BACKEND_STATUS.md.
 6. Apply `docs/backend/seed.sql` with `python -m app.db.seed_db`.
 7. Verify DB readiness with `python -m app.db.check_schema --require-seed`.
 8. Fill Cognito values before enabling `AUTH_REQUIRED=true`.
-9. Fill S3 and Bedrock values before testing uploads or analysis execution.
+9. Fill S3 and OpenAI values before testing uploads or analysis execution.
 10. Use `python -m app.ops.setup_status --profile aws` before AWS deployment.
 11. Use GET /api/health/config to confirm which setup categories are still missing. The endpoint returns booleans only, not secret values.
 12. After the API server is running, use `python -m app.ops.smoke_api --base-url <url> --require-db` for local or CloudFront smoke verification.
@@ -33,7 +33,7 @@ AWS_REGION=ap-northeast-2
 AWS_USE_IAM_ROLE=true
 ```
 
-Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS task role with the least permissions needed for S3 and Bedrock. Keep `DATABASE_URL` and other sensitive values in Secrets Manager. For mobile deployment, set `EXPO_PUBLIC_API_BASE_URL=https://<cloudfront-domain>/api`.
+Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS task role with the least permissions needed for S3. Keep `DATABASE_URL`, `OPENAI_API_KEY`, and other sensitive values in Secrets Manager. For mobile deployment, set `EXPO_PUBLIC_API_BASE_URL=https://<cloudfront-domain>/api`.
 
 ## Required Values
 
@@ -73,7 +73,7 @@ Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS 
 - Current behavior when missing: API starts, but DB-backed endpoints return `DATABASE_NOT_CONFIGURED`.
 
 - Name: `AWS_REGION`
-- Why it is needed: Build Cognito, S3, and Bedrock clients in the correct region.
+- Why it is needed: Build Cognito and S3 clients in the correct region.
 - Where to get it: AWS console region selector.
 - Example format: `ap-northeast-2`
 - Connected code/env name: `AWS_REGION`
@@ -114,19 +114,33 @@ Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in ECS. Attach an ECS 
 - Connected code/env name: `CLOUDFRONT_DOMAIN`, `CDN_BASE_URL`
 - Current behavior when missing: Upload flow still works, but `cdnUrl` is blank until configured.
 
-- Name: `BEDROCK_MODEL_ID`
-- Why it is needed: Invoke the chosen Bedrock model for image/face analysis.
-- Where to get it: AWS Bedrock model access/model catalog.
-- Example format: `anthropic.claude-3-5-sonnet-20240620-v1:0`
-- Connected code/env name: `BEDROCK_MODEL_ID`
-- Current behavior when missing: Analysis jobs can be created as `pending`; immediate Bedrock execution returns `BEDROCK_NOT_CONFIGURED`.
+- Name: `OPENAI_API_KEY`
+- Why it is needed: Invoke OpenAI analysis and image generation from the backend.
+- Where to get it: OpenAI Platform project API keys.
+- Example format: `sk-...`
+- Connected code/env name: `OPENAI_API_KEY`
+- Current behavior when missing: Analysis jobs can be created as `pending`; immediate execution returns `OPENAI_NOT_CONFIGURED`.
+
+- Name: `OPENAI_ANALYSIS_MODEL_ID`
+- Why it is needed: Choose the OpenAI vision-capable model used for face/makeup report generation.
+- Where to get it: OpenAI model documentation or the project model list.
+- Example format: `gpt-5.5`
+- Connected code/env name: `OPENAI_ANALYSIS_MODEL_ID`
+- Current behavior when missing: Defaults to the backend setting value.
+
+- Name: `OPENAI_IMAGE_MODEL_ID`
+- Why it is needed: Choose the OpenAI image model used for recommended makeup image generation.
+- Where to get it: OpenAI image generation documentation or the project model list.
+- Example format: `gpt-image-2`
+- Connected code/env name: `OPENAI_IMAGE_MODEL_ID`
+- Current behavior when missing: Defaults to the backend setting value.
 
 - Name: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` or `AWS_USE_IAM_ROLE`
-- Why it is needed: Allow AWS SDK calls for S3 and Bedrock. Local dev can use access keys; ECS should prefer task roles.
+- Why it is needed: Allow AWS SDK calls for S3. Local dev can use access keys; ECS should prefer task roles.
 - Where to get it: IAM user access key for local dev, or ECS task role from the ECS task definition.
 - Example format: access key pair, or `AWS_USE_IAM_ROLE=true` when the ECS task role is attached.
 - Connected code/env name: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_USE_IAM_ROLE`, ECS task role.
-- Current behavior when missing: `/api/health/config` reports `awsCredentialsOrRole` as missing; S3/Bedrock SDK calls fail unless another AWS credential provider exists.
+- Current behavior when missing: `/api/health/config` reports `awsCredentialsOrRole` as missing; S3 SDK calls fail unless another AWS credential provider exists.
 
 - Name: `API_GATEWAY_URL` or `ALB_DNS`
 - Why it is needed: CloudFront `/api/*` origin target.

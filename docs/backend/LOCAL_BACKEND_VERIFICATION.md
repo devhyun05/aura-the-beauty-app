@@ -122,4 +122,4 @@ Do these only after setting the required values in `docs/backend/SETUP_REQUIRED.
 
 - `AUTH_REQUIRED=true` with Cognito values.
 - `/api/media/presigned-upload` with `S3_BUCKET_NAME`.
-- `/api/analysis/jobs` with `BEDROCK_MODEL_ID` and AWS credentials or IAM role.
+- `/api/analysis/jobs` with `OPENAI_API_KEY` and S3 access through AWS credentials or IAM role.

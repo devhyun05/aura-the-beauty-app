@@ -41,7 +41,7 @@ def test_aws_setup_status_accepts_iam_role_and_cloudfront_domain() -> None:
       google_oauth_client_id="google-client-id.apps.googleusercontent.com",
       s3_bucket_name="aura-media",
       cloudfront_domain="d123.cloudfront.net",
-      bedrock_model_id="anthropic.example",
+      openai_api_key="sk-test",
       aws_use_iam_role=True,
     ),
     profile="aws",

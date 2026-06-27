@@ -28,7 +28,11 @@ class Settings(BaseSettings):
   s3_bucket_name: str | None = None
   cdn_base_url: str | None = None
   cloudfront_domain: str | None = None
-  bedrock_model_id: str | None = None
+  openai_api_key: str | None = None
+  openai_analysis_model_id: str = "gpt-5.5"
+  openai_image_model_id: str = "gpt-image-2"
+  openai_image_quality: str = "high"
+  openai_image_size: str = "1024x1024"
 
   cors_enabled: bool = False
   cors_allow_origins: str = ""
@@ -106,9 +110,17 @@ class Settings(BaseSettings):
         "configured": bool(self.effective_cdn_base_url),
         "requiredWhen": "CDN URLs should be returned for uploaded media.",
       },
-      "bedrockModelId": {
-        "configured": bool(self.bedrock_model_id),
-        "requiredWhen": "Immediate Bedrock analysis execution is used.",
+      "openAIApiKey": {
+        "configured": bool(self.openai_api_key),
+        "requiredWhen": "Official OpenAI analysis or image generation is used.",
+      },
+      "openAIAnalysisModelId": {
+        "configured": bool(self.openai_analysis_model_id),
+        "requiredWhen": "Official OpenAI image analysis is used.",
+      },
+      "openAIImageModelId": {
+        "configured": bool(self.openai_image_model_id),
+        "requiredWhen": "Official OpenAI recommendation image generation is used.",
       },
       "awsCredentialsOrRole": {
         "configured": self.aws_credentials_configured,
@@ -122,6 +134,7 @@ class Settings(BaseSettings):
       "environment": self.environment,
       "authRequired": self.auth_required,
       "awsRegion": self.aws_region,
+      "aiProvider": "openai",
       "items": items,
       "missing": missing,
     }

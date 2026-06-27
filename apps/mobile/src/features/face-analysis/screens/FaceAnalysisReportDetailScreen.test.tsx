@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   FaceAnalysisReportDetailScreen,
+  resolveFaceAnalysisReportHeroImageSource,
 } from './FaceAnalysisReportDetailScreen';
 import {
   getFaceAnalysisReportCreateFilterButtonPlacements,
@@ -38,6 +39,10 @@ const report = faceAnalysisReportsMock[0];
 const summaryItems = getFaceAnalysisReportSummaryItems(report);
 const pointGuideItems = getFaceAnalysisReportPointGuideItems(report);
 const avoidedRailPresentation = getFaceAnalysisReportAvoidedMakeupRailPresentation();
+const capturedPhotoUri = 'file:///tmp/captured-face.jpg';
+const heroImageSource = resolveFaceAnalysisReportHeroImageSource(capturedPhotoUri, report) as {
+  uri?: string;
+};
 
 type CreateFilterButtonPlacementsContract = ExpectType<
   TypeEquals<typeof createFilterButtonPlacements, readonly ['floating-bottom']>
@@ -143,6 +148,11 @@ expectEqual(
   avoidedRailPresentation.showsCornerBadge,
   false,
   'image analysis report avoided makeup rail corner x hidden',
+);
+expectEqual(
+  heroImageSource.uri,
+  capturedPhotoUri,
+  'image analysis report detail uses captured photo before report image',
 );
 
 <FaceAnalysisReportDetailScreen

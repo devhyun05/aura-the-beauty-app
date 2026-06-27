@@ -17,7 +17,9 @@ PROFILE_ITEMS = {
     "googleOauthClientId",
     "s3BucketName",
     "cdnBaseUrl",
-    "bedrockModelId",
+    "openAIApiKey",
+    "openAIAnalysisModelId",
+    "openAIImageModelId",
     "awsCredentialsOrRole",
   ),
   "all": (
@@ -28,7 +30,9 @@ PROFILE_ITEMS = {
     "googleOauthClientId",
     "s3BucketName",
     "cdnBaseUrl",
-    "bedrockModelId",
+    "openAIApiKey",
+    "openAIAnalysisModelId",
+    "openAIImageModelId",
     "awsCredentialsOrRole",
   ),
 }

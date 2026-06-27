@@ -14,6 +14,7 @@ export type FaceCaptureImageInput = {
 export type FaceCaptureUploadResult = {
   bucket: string;
   cdnUrl?: string | null;
+  contentType?: string | null;
   imageUri: string;
   mediaId: string;
   objectKey: string;
@@ -134,10 +135,25 @@ export async function uploadFaceCaptureImage({
   uri,
   width,
 }: FaceCaptureImageInput): Promise<FaceCaptureUploadResult> {
+  const startedAt = Date.now();
   const contentType = inferFaceCaptureContentType(uri, providedContentType);
   const originalFilename = getFaceCaptureFilename(uri, fileName);
+
+  console.info('[aura:capture-upload] start', {
+    contentType,
+    hasLocalUri: Boolean(uri),
+    source,
+  });
+
+  const readStartedAt = Date.now();
   const imageBlob = await readImageBlob(uri);
 
+  console.info('[aura:capture-upload] image-read:success', {
+    byteSize: imageBlob.size,
+    durationMs: Date.now() - readStartedAt,
+  });
+
+  console.info('[aura:capture-upload] presigned-upload:start');
   const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
     body: {
       contentType,
@@ -150,6 +166,13 @@ export async function uploadFaceCaptureImage({
     method: 'POST',
   });
 
+  console.info('[aura:capture-upload] presigned-upload:success', {
+    expiresIn: upload.expiresIn,
+    hasCdnUrl: Boolean(upload.cdnUrl),
+  });
+
+  const s3StartedAt = Date.now();
+  console.info('[aura:capture-upload] s3-put:start');
   const uploadResponse = await fetch(upload.uploadUrl, {
     body: imageBlob,
     headers: {
@@ -159,10 +182,21 @@ export async function uploadFaceCaptureImage({
   });
 
   if (!uploadResponse.ok) {
+    console.info('[aura:capture-upload] s3-put:fail', {
+      durationMs: Date.now() - s3StartedAt,
+      status: uploadResponse.status,
+    });
+
     throw new Error(`S3 upload failed with HTTP ${uploadResponse.status}.`);
   }
 
+  console.info('[aura:capture-upload] s3-put:success', {
+    durationMs: Date.now() - s3StartedAt,
+    status: uploadResponse.status,
+  });
+
   const byteSize = imageBlob.size;
+  console.info('[aura:capture-upload] media-complete:start');
   const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
     body: {
       bucket: upload.bucket,
@@ -179,6 +213,12 @@ export async function uploadFaceCaptureImage({
     method: 'POST',
   });
 
+  console.info('[aura:capture-upload] media-complete:success', {
+    hasCdnUrl: Boolean(media.cdnUrl),
+    mediaId: media.id,
+  });
+
+  console.info('[aura:capture-upload] photo-capture:start');
   const {photoCapture} = await requestBackendJson<PhotoCaptureResponse>('/photo-captures', {
     body: {
       captureType: 'face_analysis',
@@ -194,9 +234,16 @@ export async function uploadFaceCaptureImage({
     method: 'POST',
   });
 
+  console.info('[aura:capture-upload] photo-capture:success', {
+    durationMs: Date.now() - startedAt,
+    mediaId: media.id,
+    photoCaptureId: photoCapture.id,
+  });
+
   return {
     bucket: media.bucket,
     cdnUrl: media.cdnUrl ?? null,
+    contentType,
     imageUri: uri,
     mediaId: media.id,
     objectKey: media.objectKey,

@@ -13,7 +13,7 @@ export type FaceAnalysisProgressState = {
   isComplete: boolean;
 };
 
-export const FACE_ANALYSIS_LOADING_TOTAL_MS = 3200;
+export const FACE_ANALYSIS_LOADING_TOTAL_MS = 30000;
 
 export const faceAnalysisLoadingPreviewSource =
   require('../../../assets/images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
@@ -31,8 +31,8 @@ export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
   },
   {
     id: 'mood',
-    title: '맞춤 필터 조건을 설계해요',
-    description: '데모 데이터로 어울리는 베이스, 아이, 립 조합을 준비합니다.',
+    title: '추천 메이크업을 생성하고 있어요',
+    description: '촬영 사진 기준으로 보고서와 추천 룩 3개를 준비합니다.',
   },
 ];
 
