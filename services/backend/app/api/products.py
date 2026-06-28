@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends
 
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
-from app.db.session import Database, require_database
+from app.core.settings import Settings, get_settings
+from app.db.session import Database, get_database, require_database
+from app.services.shopping_products import build_product_recommendation_data
 from app.services.users import ensure_user
 
 
@@ -14,31 +16,12 @@ router = APIRouter(prefix="/products", tags=["products"])
 @router.get("/recommendations")
 async def get_product_recommendations(
   category: str | None = None,
-  db: Database = Depends(require_database),
+  db: Database = Depends(get_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
-  if category:
-    products = await db.fetch(
-      """
-      select *
-      from products
-      where is_active = true and category = $1
-      order by created_at desc
-      limit 50
-      """,
-      category,
-    )
-  else:
-    products = await db.fetch(
-      """
-      select *
-      from products
-      where is_active = true
-      order by created_at desc
-      limit 50
-      """,
-    )
+  data, source = await build_product_recommendation_data(db, settings, category)
 
-  return success({"products": products})
+  return success(data, {"source": source})
 
 
 @router.get("/liked")

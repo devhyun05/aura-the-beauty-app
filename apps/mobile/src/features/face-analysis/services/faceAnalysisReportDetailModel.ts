@@ -137,7 +137,7 @@ function getGuidePoint(detail: string, fallback: string) {
     return fallback;
   }
 
-  return point.length > 16 ? `${point.slice(0, 16)}...` : point;
+  return point;
 }
 
 export function getFaceAnalysisReportPointGuideItems(

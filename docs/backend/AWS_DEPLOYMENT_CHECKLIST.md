@@ -131,6 +131,33 @@ aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS
 docker tag aura-backend-api:latest <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
 docker push <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
 ```
+
+GitHub Actions deploys the backend to ECS on pushes to `main` through
+`.github/workflows/deploy-backend-ecs.yml`. Configure these repository
+Variables before enabling the workflow:
+
+```text
+AWS_REGION=ap-northeast-2
+ECR_REPOSITORY=aura-backend-api
+ECS_CLUSTER=<ecs-cluster-name>
+ECS_SERVICE=<ecs-service-name>
+ECS_TASK_DEFINITION=<task-definition-family-or-arn>
+ECS_CONTAINER_NAME=aura-backend-api
+```
+
+For AWS authentication, prefer an OIDC role and set this repository Secret:
+
+```text
+AWS_ROLE_TO_ASSUME=<github-actions-deploy-role-arn>
+```
+
+If OIDC is not ready yet, the workflow can also use these repository Secrets:
+
+```text
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
 ECS task requirements:
 
 - Container port: `8000`

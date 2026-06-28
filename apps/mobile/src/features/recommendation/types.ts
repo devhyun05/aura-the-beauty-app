@@ -23,6 +23,7 @@ export type RecommendedProduct = {
   price: number;
   tags: string[];
   imageSource: ImageSourcePropType;
+  purchaseUrl?: string;
   palette: string[];
   reason: string;
 };

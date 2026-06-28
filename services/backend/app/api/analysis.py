@@ -166,10 +166,11 @@ async def create_analysis_job(
       result = await OpenAIAnalysisService(settings).analyze_image(payload.request_payload)
       require_complete_makeup_recommendations(result)
       logger.info(
-        "[aura:analysis-api] openai:success reportId=%s generatedImageCount=%s durationMs=%s",
+        "[aura:analysis-api] openai:success reportId=%s generatedImageCount=%s durationMs=%s timing=%s",
         report["id"],
         count_generated_makeup_images(result),
         round((time.monotonic() - started_at) * 1000),
+        result.get("timing") if isinstance(result, dict) else None,
       )
     except AppError as exc:
       logger.warning(

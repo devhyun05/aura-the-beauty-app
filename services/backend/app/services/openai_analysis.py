@@ -432,31 +432,36 @@ class OpenAIAnalysisService:
     recommended_mood = str(analysis_result.get("recommendedMood") or "")
 
     prompt = (
-      "Perform a realistic photo edit on the uploaded image. Keep the exact same person from the input photo. "
-      "Do not create a new portrait, do not create a different model, and do not reinterpret the face. "
-      "The output must look like the original photo after a professional makeup artist applied makeup directly onto the same user's face. "
-      "Preserve identity-critical details: face shape, jawline, cheek volume, eye shape, nose shape, lip shape, skin tone, age, gender presentation, hairstyle, hairline, glasses if present, clothing, camera angle, crop, background, and lighting direction. "
-      "Do not slim the face, enlarge the eyes, change the nose, change the mouth, feminize or masculinize the person, remove glasses, change hair, change clothes, change pose, or replace the background. "
-      "Preserve the user's gender presentation exactly. If the user appears male, apply men's grooming makeup: subtle skin tone correction, oil control, natural brow grooming, light shadow correction, muted lip balm or natural lip tone, and very subtle contour only. Do not add feminine glam, heavy blush, long lashes, glossy colored lips, or dramatic eyeshadow to a male-presenting user. "
-      "If the user appears female, apply natural wearable makeup appropriate to the report, while still preserving the same identity and facial structure. "
-      "Retouch only what a real makeup application would change: base finish, eyebrow grooming, subtle eye definition, blush or healthy complexion where appropriate, highlight control, and lip tone. "
-      "Keep skin texture realistic and preserve natural facial asymmetry; avoid plastic skin, AI glamour, stock-photo beauty, illustration, or K-pop idol transformation. "
-      "Make the makeup believable in the original photo: low-to-medium intensity, realistic edges, natural blending, and no distortion. "
-      "Act like a professional makeup consultant creating a visual recommendation from the analysis report. "
-      "Use the user's personal color, contrast, face shape, natural hair color direction, and overall beauty style direction from the report. "
+      "Realistically edit the uploaded photo. Generate exactly one final makeup-applied photo only: the same original photo with makeup applied directly to the face. "
+      "The app displays the source photo separately, so do not include any comparison, duplicate, or extra version inside this output. "
+      "Forbidden: split-screen, side-by-side comparison, collage, duplicated face, inset image, frame, UI mockup, comparison layout, labels, captions, arrows, dividers, text, logos, or watermarks. "
+      "Preserve the exact same canvas, camera distance, face size, head position, crop, framing, angle, perspective, background, clothing, hairstyle, glasses, and lighting. "
+      "Do not zoom in, zoom out, crop tighter, pan, rotate, upscale or shift the face, change pose, replace background, or change composition. "
+      "Preserve identity: face shape, jawline, cheek volume, eyes, nose, mouth, lip shape, skin tone, age, natural asymmetry, and gender presentation. "
+      "Use a polished K-beauty idol makeup direction, not a bare-face retouch. Apply at least three visible makeup changes across complexion finish, eye definition, cheek color, and lip color with realistic blending. "
+      "Male-presenting user: male idol grooming only: tone-up base, oil-control, brows, soft contour, subtle eyes, natural tinted lip; no glam lashes, heavy blush, glossy colored lips, or dramatic shadow. "
+      "Female-presenting user: idol makeup with tone-up base, brows, blended shadow, clean liner, curled lashes, blush, and gradient/glossy lip. "
+      "Do not slim the face, enlarge eyes, reshape features, change gender or age, plastic-smooth skin, celebrity-look, or studio model style. "
       f"Apply a makeup look named '{title}'. "
       f"Makeup mood: {subtitle}. Details: {description}. Tags: {tag_text}. "
       f"Personal color: {personal_color}. Face shape: {face_shape}. Tone summary: {tone_summary}. "
       f"Recommended mood: {recommended_mood}. "
-      "The generated image must visibly reflect these report details and the selected recommendation card, including suitable colors, textures, and emphasis points. "
-      "The final image should look like the same user's own photo, not a studio model photo, with professionally chosen makeup colors and placement. "
-      "Apply makeup directly onto this user's face in a gender-appropriate way: polished complexion, natural brows, suitable eye definition, realistic cheek tone if appropriate, controlled highlight, and suitable lip tone. "
-      "Do not over-transform the face. The result should feel like the same person after a realistic makeup/grooming session, not a different gender, different age, or different model. "
-      "Do not leave the face looking bare, no-makeup, only lightly retouched, or visually unchanged from the input photo. "
-      "Do not add text, logos, watermarks, extra people, accessories, or distorted facial features."
+      "Reflect these colors, textures, and placement while staying the same user's own photo. "
+      "Do not leave the face bare, no-makeup, lightly retouched, or visually unchanged. No extra people, accessories, or distorted facial features."
     )
 
     return " ".join(prompt.split())[:2200]
+
+  def _resolve_makeup_image_size(self) -> str:
+    configured_size = (self.settings.openai_image_size or "auto").strip()
+
+    if configured_size != "auto":
+      logger.info(
+        "[aura:openai] image-generation:size-override configured=%s effective=auto reason=preserve_source_composition",
+        configured_size,
+      )
+
+    return "auto"
 
   def _upload_generated_image(self, image_bytes: bytes, index: int) -> dict[str, str]:
     if not self.settings.s3_bucket_name:
@@ -491,12 +496,14 @@ class OpenAIAnalysisService:
   ) -> dict[str, Any]:
     started_at = time.monotonic()
     prompt = self._build_makeup_image_prompt(analysis_result, card)
+    edit_size = self._resolve_makeup_image_size()
     suffix = self._source_file_suffix(source_content_type)
     logger.info(
-      "[aura:openai] image-generation:item-start index=%s title=%s model=%s",
+      "[aura:openai] image-generation:item-start index=%s title=%s model=%s size=%s",
       index + 1,
       card.get("title"),
       self.settings.openai_image_model_id,
+      edit_size,
     )
 
     temp_path: str | None = None
@@ -511,8 +518,11 @@ class OpenAIAnalysisService:
           model=self.settings.openai_image_model_id,
           image=image_file,
           prompt=prompt,
+          background="opaque",
+          input_fidelity="high",
+          n=1,
           quality=self.settings.openai_image_quality,
-          size=self.settings.openai_image_size,
+          size=edit_size,
         )
     finally:
       if temp_path:
@@ -529,11 +539,12 @@ class OpenAIAnalysisService:
 
     generated_image_bytes = base64.b64decode(image_base64)
     upload = self._upload_generated_image(generated_image_bytes, index + 1)
+    duration_ms = round((time.monotonic() - started_at) * 1000)
     logger.info(
       "[aura:openai] image-generation:item-success index=%s bytes=%s durationMs=%s imageUrl=%s",
       index + 1,
       len(generated_image_bytes),
-      round((time.monotonic() - started_at) * 1000),
+      duration_ms,
       upload["imageUrl"],
     )
 
@@ -542,6 +553,7 @@ class OpenAIAnalysisService:
       "imageUrl": upload["imageUrl"],
       "imageBucket": upload["bucket"],
       "imageObjectKey": upload["objectKey"],
+      "_imageGenerationDurationMs": duration_ms,
     }
 
   def _generate_recommended_makeup_images_sync(
@@ -612,15 +624,33 @@ class OpenAIAnalysisService:
         details={"missingIndexes": missing_image_indexes},
       )
 
+    image_generation_batch_ms = round((time.monotonic() - started_at) * 1000)
     logger.info(
       "[aura:openai] image-generation:batch-success count=%s durationMs=%s",
       len(generated_cards),
-      round((time.monotonic() - started_at) * 1000),
+      image_generation_batch_ms,
     )
+    image_generation_items = [
+      {
+        "index": index + 1,
+        "durationMs": card.pop("_imageGenerationDurationMs", None),
+      }
+      for index, card in enumerate(generated_cards)
+      if isinstance(card, dict)
+    ]
 
     return {
       **analysis_result,
       "recommendedMakeups": generated_cards,
+      "timing": {
+        **(
+          analysis_result.get("timing")
+          if isinstance(analysis_result.get("timing"), dict)
+          else {}
+        ),
+        "imageGenerationBatchMs": image_generation_batch_ms,
+        "imageGenerationItems": image_generation_items,
+      },
     }
 
   def _validate_completed_analysis_result(self, result: dict[str, Any]) -> None:
@@ -652,12 +682,27 @@ class OpenAIAnalysisService:
 
   async def analyze_image(self, payload: dict[str, Any]) -> dict[str, Any]:
     try:
+      total_started_at = time.monotonic()
+      source_read_started_at = time.monotonic()
       source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
+      source_image_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
+
+      text_analysis_started_at = time.monotonic()
       analysis_result = await asyncio.to_thread(
         self._analyze_image_sync,
         payload,
         source_image_bytes,
       )
+      text_analysis_ms = round((time.monotonic() - text_analysis_started_at) * 1000)
+      analysis_result["timing"] = {
+        **(
+          analysis_result.get("timing")
+          if isinstance(analysis_result.get("timing"), dict)
+          else {}
+        ),
+        "sourceImageReadMs": source_image_read_ms,
+        "textAnalysisMs": text_analysis_ms,
+      }
 
       result = await asyncio.to_thread(
         self._generate_recommended_makeup_images_sync,
@@ -665,6 +710,10 @@ class OpenAIAnalysisService:
         source_image_bytes,
         analysis_result,
       )
+      result["timing"] = {
+        **(result.get("timing") if isinstance(result.get("timing"), dict) else {}),
+        "totalMs": round((time.monotonic() - total_started_at) * 1000),
+      }
       self._validate_completed_analysis_result(result)
 
       return result

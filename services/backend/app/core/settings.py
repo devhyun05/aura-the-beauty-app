@@ -32,7 +32,10 @@ class Settings(BaseSettings):
   openai_analysis_model_id: str = "gpt-5.5"
   openai_image_model_id: str = "gpt-image-2"
   openai_image_quality: str = "medium"
-  openai_image_size: str = "1024x1024"
+  openai_image_size: str = "auto"
+
+  naver_shopping_client_id: str | None = None
+  naver_shopping_client_secret: str | None = None
 
   cors_enabled: bool = False
   cors_allow_origins: str = ""
@@ -121,6 +124,10 @@ class Settings(BaseSettings):
       "openAIImageModelId": {
         "configured": bool(self.openai_image_model_id),
         "requiredWhen": "Official OpenAI recommendation image generation is used.",
+      },
+      "naverShoppingApi": {
+        "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
+        "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
       },
       "awsCredentialsOrRole": {
         "configured": self.aws_credentials_configured,

@@ -4,6 +4,7 @@ from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.s3 import S3Service
+from app.services.shopping_products import _map_naver_item
 
 
 class FakeS3Client:
@@ -65,6 +66,40 @@ async def test_openai_analysis_requires_source_image() -> None:
     await OpenAIAnalysisService(Settings()).analyze_image({})
 
   assert exc_info.value.code == "SOURCE_IMAGE_REQUIRED"
+
+
+def test_makeup_image_prompt_requests_visible_idol_makeup() -> None:
+  prompt = OpenAIAnalysisService(Settings())._build_makeup_image_prompt(
+    {
+      "personalColor": "spring warm",
+      "faceShape": "oval",
+      "toneSummary": "clear and warm",
+      "recommendedMood": "fresh idol glow",
+    },
+    {
+      "title": "Clear Idol Glow",
+      "subtitle": "fresh K-beauty",
+      "description": "tone-up base, clear eye definition, peach blush, and glossy lip",
+      "tags": ["idol", "glow"],
+    },
+  )
+
+  assert len(prompt) <= 2200
+  assert "K-beauty idol makeup" in prompt
+  assert "Generate exactly one final makeup-applied photo only" in prompt
+  assert "Forbidden: split-screen" in prompt
+  assert "Preserve the exact same canvas, camera distance, face size" in prompt
+  assert "Do not zoom in, zoom out, crop tighter" in prompt
+  assert "at least three visible makeup changes" in prompt
+  assert "Recommended mood: fresh idol glow" in prompt
+  assert "Before" not in prompt
+  assert "After" not in prompt
+
+
+def test_makeup_image_size_uses_auto_to_preserve_source_composition() -> None:
+  service = OpenAIAnalysisService(Settings(openai_image_size="1024x1024"))
+
+  assert service._resolve_makeup_image_size() == "auto"
 
 
 def test_public_config_status_accepts_iam_role_for_aws_credentials() -> None:
@@ -130,3 +165,26 @@ def test_s3_client_omits_credentials_for_iam_role_chain(monkeypatch: pytest.Monk
   assert "aws_access_key_id" not in captured["kwargs"]
   assert "aws_secret_access_key" not in captured["kwargs"]
   assert captured["kwargs"]["config"].signature_version == "s3v4"
+
+
+def test_naver_shopping_item_uses_product_detail_link_and_korean_title() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "3CE",
+      "category2": "화장품/미용",
+      "category3": "립메이크업",
+      "image": "https://example.com/lip.jpg",
+      "link": "https://openapi.naver.com/l?where=shop&query=lip&u=detail",
+      "lprice": "17000",
+      "mallName": "공식스토어",
+      "productId": "1234",
+      "title": "<b>3CE</b> Velvet Lip Tint",
+    },
+    "lip",
+    0,
+  )
+
+  assert product is not None
+  assert product["productName"] == "립 추천 상품"
+  assert product["shadeName"] == ""
+  assert product["purchaseUrl"] == "https://openapi.naver.com/l?where=shop&query=lip&u=detail"

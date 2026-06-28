@@ -46,6 +46,13 @@ type BackendAnalysisResult = {
   skinType?: string | null;
   summary?: string | null;
   tags?: string[] | null;
+  timing?: {
+    imageGenerationBatchMs?: number | null;
+    imageGenerationItems?: {durationMs?: number | null; index?: number | null}[] | null;
+    sourceImageReadMs?: number | null;
+    textAnalysisMs?: number | null;
+    totalMs?: number | null;
+  } | null;
   toneSummary?: string | null;
 };
 
@@ -444,6 +451,7 @@ export async function createFaceAnalysisReportFromCapture(
       ? job.detailPayload.result.recommendedMakeups.length
       : 0,
     status: job.status ?? null,
+    timing: job.detailPayload?.result?.timing ?? null,
   });
 
   const report = mapBackendJobToFaceAnalysisReport(job, capture);

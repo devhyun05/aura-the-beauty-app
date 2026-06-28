@@ -215,7 +215,7 @@ export function FaceAnalysisReportDetailScreen({
       </View>
 
       <ReportSection title="분석 요약">
-        <Text numberOfLines={2} style={styles.paragraph}>
+        <Text numberOfLines={3} style={styles.paragraph}>
           {report.skinAnalysisSummary || report.shortSummary}
         </Text>
       </ReportSection>
@@ -228,8 +228,7 @@ export function FaceAnalysisReportDetailScreen({
               <View style={styles.guideLine} />
               <View style={styles.guideText}>
                 <Text style={styles.guideLabel}>{guide.label}</Text>
-                <Text numberOfLines={1} style={styles.guidePoint}>{guide.point}</Text>
-                <Text numberOfLines={2} style={styles.guideDescription}>
+                <Text style={styles.guideDescription}>
                   {guide.detail}
                 </Text>
               </View>
@@ -383,7 +382,7 @@ function MakeupCardRail({
               <Text numberOfLines={1} style={styles.makeupSubtitle}>
                 {item.subtitle}
               </Text>
-              <Text numberOfLines={3} style={styles.makeupDescription}>
+              <Text style={styles.makeupDescription}>
                 {item.description}
               </Text>
               <View style={styles.tagRow}>
@@ -454,7 +453,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   guideItem: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
   },
   guideLabel: {
@@ -466,6 +465,7 @@ const styles = StyleSheet.create({
   guideLine: {
     backgroundColor: colors.borderStrong,
     height: 1,
+    marginTop: 13,
     marginRight: spacing.md,
     width: 34,
   },
@@ -476,6 +476,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textPrimary,
     borderRadius: 4,
     height: 8,
+    marginTop: 9,
     width: 8,
   },
   guidePoint: {
@@ -507,9 +508,10 @@ const styles = StyleSheet.create({
   },
   makeupCard: {
     ...faceAnalysisReportLiquidGlassSurfaceStyle,
+    alignSelf: 'flex-start',
     borderRadius: radius.lg,
     padding: spacing.xs,
-    width: 260,
+    width: 240,
   },
   makeupDescription: {
     color: colors.textSecondary,
@@ -518,13 +520,14 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   makeupImage: {
-    height: 168,
+    height: '100%',
     width: '100%',
   },
   makeupImageWrap: {
     backgroundColor: colors.surfaceMuted,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
+    height: 270,
     overflow: 'hidden',
     position: 'relative',
   },
