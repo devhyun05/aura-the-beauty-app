@@ -1,7 +1,8 @@
 import {colors} from '../../../shared/theme';
 
-export const FACE_CAPTURE_READY_COLOR = colors.successMuted;
+export const FACE_CAPTURE_READY_COLOR = colors.guideReady;
 export const FACE_CAPTURE_ERROR_COLOR = colors.danger;
+export const FACE_CAPTURE_ALIGNMENT_MESSAGE = '원형 가이드 위의 점에 얼굴을 맞춰주세요';
 
 export type FaceCaptureCheckKey =
   | 'hasSingleFace'
@@ -79,31 +80,31 @@ type FaceCaptureRule = {
 const FACE_CAPTURE_RULES: readonly FaceCaptureRule[] = [
   {
     key: 'hasSingleFace',
-    message: 'Keep exactly one face visible in the guide.',
+    message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
   {
     key: 'isFaceShapeDetected',
-    message: 'Face contour landmarks are not detected yet.',
+    message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
   {
     key: 'isFaceCentered',
-    message: 'Center your face inside the guide.',
+    message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
   {
     key: 'isLookingForward',
-    message: 'Look straight at the camera.',
+    message: '정면을 바라봐 주세요',
   },
   {
     key: 'isFaceUncovered',
-    message: 'Keep your eyes, nose, and mouth uncovered.',
+    message: '눈, 코, 입이 잘 보이게 맞춰주세요',
   },
   {
     key: 'isHairClear',
-    message: 'Keep hair away from your forehead and jawline.',
+    message: '머리카락이 얼굴을 가리지 않게 해주세요',
   },
   {
     key: 'isLightingEven',
-    message: 'Move to brighter, even lighting.',
+    message: '밝은 곳에서 얼굴을 비춰주세요',
   },
 ];
 

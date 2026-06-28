@@ -66,3 +66,16 @@ def test_home_returns_empty_contract_without_database() -> None:
     "recommendedLooks": [],
   }
   assert body["meta"]["source"] == "empty_not_configured"
+
+
+def test_products_recommendations_returns_mobile_contract_without_database() -> None:
+  client = TestClient(create_app())
+
+  response = client.get("/api/products/recommendations")
+
+  assert response.status_code == 200
+  body = response.json()
+  assert body["data"]["userNickname"] == "고객"
+  assert body["data"]["tabs"][0] == {"id": "all", "label": "전체"}
+  assert body["data"]["products"] == []
+  assert body["meta"]["source"] == "fallback"

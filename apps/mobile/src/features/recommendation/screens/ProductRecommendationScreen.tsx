@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import {
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +9,7 @@ import {
 import {
   CheckCircle2,
   ChevronDown,
+  ExternalLink,
   Heart,
   Plus,
 } from 'lucide-react-native';
@@ -24,7 +26,8 @@ import type {
   ProductRecommendationTab,
 } from '../types';
 
-const formatPrice = (price: number) => `${price.toLocaleString('ko-KR')}원`;
+const formatPrice = (price: number) =>
+  price > 0 ? `${price.toLocaleString('ko-KR')}원` : '가격 확인';
 
 type ProductRecommendationHeaderCopy = {
   productSectionEyebrow?: undefined;
@@ -38,6 +41,37 @@ export const productRecommendationHeaderCopy: ProductRecommendationHeaderCopy = 
 
 export const getRecommendationSetSectionTitle = (userNickname: string) =>
   `${userNickname} 님의 룩과 잘 맞는 추천 조합`;
+
+export async function openProductPurchaseUrl(product: RecommendedProduct): Promise<boolean> {
+  const purchaseUrl = product.purchaseUrl?.trim();
+
+  if (!purchaseUrl) {
+    console.info('[aura:products] purchase:missing-url', {
+      productId: product.id,
+      productName: product.productName,
+    });
+
+    return false;
+  }
+
+  try {
+    await Linking.openURL(purchaseUrl);
+  } catch (error) {
+    console.info('[aura:products] purchase:open-failed', {
+      message: error instanceof Error ? error.message : String(error),
+      productId: product.id,
+      purchaseUrl,
+    });
+
+    return false;
+  }
+
+  return true;
+}
+
+function getProductDisplayName(product: RecommendedProduct): string {
+  return [product.productName, product.shadeName].filter((value) => value.trim()).join(' ');
+}
 
 export function ProductRecommendationScreen() {
   const [data, setData] = useState<ProductRecommendationData | null>(null);
@@ -100,9 +134,17 @@ export function ProductRecommendationScreen() {
       </View>
 
       <View style={styles.productGrid}>
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
+        {products.length > 0 ? (
+          products.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))
+        ) : (
+          <View style={styles.emptyProductState}>
+            <Text style={styles.emptyProductText}>
+              네이버 쇼핑 상품을 불러오려면 백엔드에 쇼핑 API 키가 필요해요.
+            </Text>
+          </View>
+        )}
       </View>
 
       <YStack style={styles.setSection}>
@@ -197,10 +239,16 @@ function CategoryTabs({
 }
 
 function ProductCard({product}: {product: RecommendedProduct}) {
+  const productDisplayName = getProductDisplayName(product);
+
   return (
     <Pressable
-      accessibilityLabel={`${product.brandName} ${product.productName} ${product.shadeName}`}
+      accessibilityHint={product.purchaseUrl ? '상품 구매 페이지를 엽니다.' : undefined}
+      accessibilityLabel={`${product.brandName} ${productDisplayName}`}
       accessibilityRole="button"
+      onPress={() => {
+        void openProductPurchaseUrl(product);
+      }}
       style={({pressed}) => [styles.productCard, pressed && styles.pressed]}>
       <View style={styles.productImageFrame}>
         <Image resizeMode="contain" source={product.imageSource} style={styles.productImage} />
@@ -217,9 +265,14 @@ function ProductCard({product}: {product: RecommendedProduct}) {
           {product.brandName}
         </Text>
         <Text numberOfLines={2} style={styles.productName}>
-          {product.productName} {product.shadeName}
+          {productDisplayName}
         </Text>
-        <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+        <XStack style={styles.productPurchaseRow}>
+          <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
+          {product.purchaseUrl ? (
+            <ExternalLink color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
+          ) : null}
+        </XStack>
 
         <XStack style={styles.productPalette}>
           {product.palette.map((color) => (
@@ -270,10 +323,15 @@ function RecommendationSetCard({
 }
 
 function MiniProductCard({product}: {product: RecommendedProduct}) {
+  const productDisplayName = getProductDisplayName(product);
+
   return (
     <Pressable
-      accessibilityLabel={`${product.brandName} ${product.productName} 조합에 담기`}
+      accessibilityLabel={`${product.brandName} ${productDisplayName} 조합에 담기`}
       accessibilityRole="button"
+      onPress={() => {
+        void openProductPurchaseUrl(product);
+      }}
       style={({pressed}) => [styles.miniCard, pressed && styles.pressed]}>
       <View style={styles.miniImageFrame}>
         <Image resizeMode="contain" source={product.imageSource} style={styles.miniImage} />
@@ -283,9 +341,14 @@ function MiniProductCard({product}: {product: RecommendedProduct}) {
           {product.brandName}
         </Text>
         <Text numberOfLines={2} style={styles.miniName}>
-          {product.productName} {product.shadeName}
+          {productDisplayName}
         </Text>
-        <Text style={styles.miniPrice}>{formatPrice(product.price)}</Text>
+        <XStack style={styles.miniPurchaseRow}>
+          <Text style={styles.miniPrice}>{formatPrice(product.price)}</Text>
+          {product.purchaseUrl ? (
+            <ExternalLink color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
+          ) : null}
+        </XStack>
       </View>
       <View style={styles.plusButton}>
         <Plus color={colors.white} size={iconSize.xs} strokeWidth={2.3} />
@@ -333,6 +396,22 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     top: spacing.sm,
     width: 34,
+  },
+  emptyProductState: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.lg,
+    width: '100%',
+  },
+  emptyProductText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -471,6 +550,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
+  miniPurchaseRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
   paletteRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -549,6 +633,11 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  productPurchaseRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   productSwatch: {
     borderColor: colors.border,

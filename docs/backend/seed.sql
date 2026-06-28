@@ -15,34 +15,34 @@ insert into products (
 values
   (
     'seed-lip-rose-veil',
-    'AURA Lab',
-    'Rose Veil Tint',
-    'Rose Veil',
+    '오라랩',
+    '로즈 베일 틴트',
+    '로즈 베일',
     'lip',
     18000,
-    array['daily', 'rose', 'glow'],
+    array['데일리', '로즈', '글로우'],
     array['#C96E7B', '#E8A3AE'],
     '{"finish":"glow","matchRate":92}'::jsonb
   ),
   (
     'seed-cheek-peach-dusk',
-    'AURA Lab',
-    'Peach Dusk Blush',
-    'Peach Dusk',
+    '오라랩',
+    '피치 더스크 블러셔',
+    '피치 더스크',
     'cheek',
     22000,
-    array['peach', 'soft', 'warm'],
+    array['피치', '소프트', '웜톤'],
     array['#E99A83', '#F3B7A5'],
     '{"finish":"sheer","matchRate":88}'::jsonb
   ),
   (
     'seed-shadow-rose-neutral',
-    'AURA Lab',
-    'Rose Neutral Eye Palette',
-    'Rose Neutral',
+    '오라랩',
+    '로즈 뉴트럴 아이 팔레트',
+    '로즈 뉴트럴',
     'shadow',
     32000,
-    array['neutral', 'rose', 'palette'],
+    array['뉴트럴', '로즈', '팔레트'],
     array['#8B5E57', '#C08A82', '#E7C1B8'],
     '{"finish":"satin","matchRate":90}'::jsonb
   )
@@ -68,18 +68,18 @@ values
   (
     'seed-filter-clear-rose',
     'recommended',
-    'Clear Rose Balance',
-    'Soft rose lip and cheek guide for daily makeup.',
-    'Soft',
-    '{"facePartIds":["lip","cheek"],"colorOptions":[{"id":"rose","label":"Rose","hex":"#C96E7B"}]}'::jsonb
+    '맑은 로즈 밸런스',
+    '데일리 메이크업에 맞춘 부드러운 로즈 립·치크 가이드',
+    '은은함',
+    '{"facePartIds":["lip","cheek"],"colorOptions":[{"id":"rose","label":"로즈","hex":"#C96E7B"}]}'::jsonb
   ),
   (
     'seed-filter-peach-clean',
     'trend',
-    'Peach Clean Glow',
-    'Warm peach base with clean eye accents.',
-    'Medium',
-    '{"facePartIds":["base","eye","cheek"],"colorOptions":[{"id":"peach","label":"Peach","hex":"#E99A83"}]}'::jsonb
+    '피치 클린 글로우',
+    '따뜻한 피치 베이스와 깔끔한 눈매 포인트',
+    '보통',
+    '{"facePartIds":["base","eye","cheek"],"colorOptions":[{"id":"peach","label":"피치","hex":"#E99A83"}]}'::jsonb
   )
 on conflict (external_key) do update
 set category = excluded.category,
@@ -98,15 +98,15 @@ insert into home_hero_banners (
   sort_order
 )
 select
-  'Find your daily makeup balance',
-  'AI AR Makeup Guide',
-  'Upload or capture a face photo and keep analysis, filters, and recommendations in one flow.',
-  'Start analysis',
+  '오늘의 메이크업 밸런스 찾기',
+  'AI AR 메이크업 가이드',
+  '얼굴 사진을 촬영하거나 업로드하면 분석, 필터, 추천 제품을 한 흐름에서 확인할 수 있어요.',
+  '분석 시작',
   'FaceCapture',
   true,
   0
 where not exists (
-  select 1 from home_hero_banners where title = 'Find your daily makeup balance'
+  select 1 from home_hero_banners where title = '오늘의 메이크업 밸런스 찾기'
 );
 
 insert into home_notices (
@@ -118,16 +118,16 @@ insert into home_notices (
 )
 select
   h.id,
-  'Google login enabled',
-  'Use Cognito Google login first; Kakao and Naver remain extension targets.',
+  '구글 로그인을 사용할 수 있어요',
+  '현재 Cognito 구글 로그인을 먼저 연결했고, 카카오와 네이버 로그인은 확장 예정이에요.',
   true,
   0
 from home_hero_banners h
-where h.title = 'Find your daily makeup balance'
+where h.title = '오늘의 메이크업 밸런스 찾기'
   and not exists (
     select 1 from home_notices n
     where n.hero_banner_id = h.id
-      and n.title = 'Google login enabled'
+      and n.title = '구글 로그인을 사용할 수 있어요'
   );
 
 insert into home_filter_store_items (
@@ -163,12 +163,12 @@ insert into home_recommended_looks (
   sort_order
 )
 select
-  'Rose neutral daily look',
-  'A soft rose balance matched with the seeded product and AR filter catalog.',
+  '로즈 뉴트럴 데일리 룩',
+  '추천 상품과 AR 필터 카탈로그에 맞춘 부드러운 로즈 밸런스 룩',
   current_date,
   '{"route":"MakeupLookList"}'::jsonb,
   true,
   0
 where not exists (
-  select 1 from home_recommended_looks where title = 'Rose neutral daily look'
+  select 1 from home_recommended_looks where title = '로즈 뉴트럴 데일리 룩'
 );

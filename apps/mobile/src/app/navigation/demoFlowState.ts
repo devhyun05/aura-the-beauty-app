@@ -27,6 +27,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   return {
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
+    selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
     selectedReferenceMakeupPhoto,

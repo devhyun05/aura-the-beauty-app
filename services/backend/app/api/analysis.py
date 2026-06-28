@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -9,11 +11,82 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.analysis import AnalysisJobCreate
-from app.services.bedrock import BedrockService
+from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
+logger = logging.getLogger(__name__)
+
+
+def decode_json_object(value: object) -> dict:
+  if isinstance(value, dict):
+    return value
+
+  if isinstance(value, str) and value.strip():
+    try:
+      decoded = json.loads(value)
+    except json.JSONDecodeError:
+      return {}
+
+    return decoded if isinstance(decoded, dict) else {}
+
+  return {}
+
+
+def normalize_analysis_report_row(row: dict | None) -> dict | None:
+  if row is None:
+    return None
+
+  normalized = dict(row)
+  normalized["detail_payload"] = decode_json_object(normalized.get("detail_payload"))
+
+  return normalized
+
+
+def normalize_analysis_report_rows(rows: list[dict]) -> list[dict]:
+  return [
+    normalized
+    for row in rows
+    if (normalized := normalize_analysis_report_row(row)) is not None
+  ]
+
+
+def count_generated_makeup_images(result: dict | None) -> int:
+  if not isinstance(result, dict):
+    return 0
+
+  recommended_makeups = result.get("recommendedMakeups")
+
+  if not isinstance(recommended_makeups, list):
+    return 0
+
+  return sum(
+    1
+    for card in recommended_makeups
+    if isinstance(card, dict)
+    and any(
+      isinstance(card.get(key), str) and card.get(key, "").strip()
+      for key in ("imageUrl", "cdnUrl", "previewUrl")
+    )
+  )
+
+
+def require_complete_makeup_recommendations(result: dict | None) -> None:
+  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
+  recommended_count = len(recommended_makeups) if isinstance(recommended_makeups, list) else 0
+  generated_image_count = count_generated_makeup_images(result)
+
+  if recommended_count != 3 or generated_image_count != 3:
+    raise AppError(
+      502,
+      "RECOMMENDED_MAKEUP_IMAGES_REQUIRED",
+      "Analysis cannot be completed until exactly 3 recommended makeup images are generated.",
+      details={
+        "recommendedCount": recommended_count,
+        "generatedImageCount": generated_image_count,
+      },
+    )
 
 
 async def mark_analysis_failed(
@@ -21,6 +94,7 @@ async def mark_analysis_failed(
   report_id: UUID,
   message: str,
   payload: AnalysisJobCreate,
+  details: dict | None = None,
 ) -> None:
   await db.execute(
     """
@@ -35,7 +109,7 @@ async def mark_analysis_failed(
     json.dumps(
       {
         "request": payload.request_payload,
-        "error": {"message": message},
+        "error": {"message": message, "details": details or {}},
       },
     ),
   )
@@ -48,7 +122,13 @@ async def create_analysis_job(
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
+  started_at = time.monotonic()
   user = await ensure_user(db, auth)
+  logger.info(
+    "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s",
+    auth.subject,
+    payload.run_immediately,
+  )
   report = await db.fetchrow(
     """
     insert into analysis_reports (
@@ -82,41 +162,74 @@ async def create_analysis_job(
     )
 
     try:
-      result = await BedrockService(settings).analyze_image(payload.request_payload)
+      logger.info("[aura:analysis-api] openai:start reportId=%s", report["id"])
+      result = await OpenAIAnalysisService(settings).analyze_image(payload.request_payload)
+      require_complete_makeup_recommendations(result)
+      logger.info(
+        "[aura:analysis-api] openai:success reportId=%s generatedImageCount=%s durationMs=%s timing=%s",
+        report["id"],
+        count_generated_makeup_images(result),
+        round((time.monotonic() - started_at) * 1000),
+        result.get("timing") if isinstance(result, dict) else None,
+      )
     except AppError as exc:
-      await mark_analysis_failed(db, report["id"], exc.message, payload)
+      logger.warning(
+        "[aura:analysis-api] openai:app-error reportId=%s code=%s details=%s",
+        report["id"],
+        exc.code,
+        exc.details,
+      )
+      await mark_analysis_failed(db, report["id"], exc.message, payload, exc.details)
       raise
     except Exception as exc:
-      message = "Bedrock analysis invocation failed."
-      await mark_analysis_failed(db, report["id"], message, payload)
+      message = "OpenAI analysis invocation failed."
+      details = {"reason": exc.__class__.__name__}
+      logger.exception("[aura:analysis-api] openai:failed reportId=%s", report["id"])
+      await mark_analysis_failed(db, report["id"], message, payload, details)
       raise AppError(
         status_code=502,
-        code="BEDROCK_INVOCATION_FAILED",
+        code="OPENAI_INVOCATION_FAILED",
         message=message,
-        details={"reason": exc.__class__.__name__},
+        details=details,
       ) from exc
 
     report = await db.fetchrow(
       """
       update analysis_reports
       set status = 'completed',
-          ai_provider = 'bedrock',
+          ai_provider = 'openai',
           ai_model = $2,
           analyzed_at = now(),
-          summary = coalesce($3, summary),
-          short_summary = coalesce($4, short_summary),
-          detail_payload = $5::jsonb
+          personal_color = coalesce($3, personal_color),
+          face_shape = coalesce($4, face_shape),
+          skin_type = coalesce($5, skin_type),
+          tone_summary = coalesce($6, tone_summary),
+          recommended_mood = coalesce($7, recommended_mood),
+          summary = coalesce($8, summary),
+          short_summary = coalesce($9, short_summary),
+          skin_analysis_summary = coalesce($10, skin_analysis_summary),
+          base_makeup_guide = coalesce($11, base_makeup_guide),
+          tags = coalesce($12, tags),
+          detail_payload = $13::jsonb
       where id = $1
       returning *
       """,
       report["id"],
-      settings.bedrock_model_id,
+      settings.openai_analysis_model_id,
+      result.get("personalColor") if isinstance(result, dict) else None,
+      result.get("faceShape") if isinstance(result, dict) else None,
+      result.get("skinType") if isinstance(result, dict) else None,
+      result.get("toneSummary") if isinstance(result, dict) else None,
+      result.get("recommendedMood") if isinstance(result, dict) else None,
       result.get("summary") if isinstance(result, dict) else None,
-      result.get("short_summary") if isinstance(result, dict) else None,
+      result.get("shortSummary") if isinstance(result, dict) else None,
+      result.get("skinAnalysisSummary") if isinstance(result, dict) else None,
+      result.get("baseMakeupGuide") if isinstance(result, dict) else None,
+      result.get("tags") if isinstance(result, dict) else None,
       json.dumps({"request": payload.request_payload, "result": result}),
     )
 
-  return success({"job": report})
+  return success({"job": normalize_analysis_report_row(report)})
 
 
 @router.get("/jobs/{job_id}")
@@ -139,7 +252,7 @@ async def get_analysis_job(
   if not job:
     raise AppError(404, "ANALYSIS_JOB_NOT_FOUND", "Analysis job was not found.")
 
-  return success({"job": job})
+  return success({"job": normalize_analysis_report_row(job)})
 
 
 @router.get("/reports")
@@ -158,7 +271,7 @@ async def list_analysis_reports(
     user["id"],
   )
 
-  return success({"reports": reports})
+  return success({"reports": normalize_analysis_report_rows(reports)})
 
 
 @router.get("/reports/{report_id}")
@@ -181,4 +294,4 @@ async def get_analysis_report(
   if not report:
     raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
 
-  return success({"report": report})
+  return success({"report": normalize_analysis_report_row(report)})

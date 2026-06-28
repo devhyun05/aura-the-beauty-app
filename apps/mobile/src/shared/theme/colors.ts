@@ -12,6 +12,7 @@ export const colors = {
   brandMuted: '#8FA59A',
   successMuted: '#6F877A',
   danger: '#FF5A4D',
+  guideReady: '#31D06F',
   glassSurface: 'rgba(255, 255, 255, 0.13)',
   liquidGlassBorder: 'rgba(255, 255, 255, 0.92)',
   liquidGlassSurface: 'rgba(255, 255, 255, 0.74)',

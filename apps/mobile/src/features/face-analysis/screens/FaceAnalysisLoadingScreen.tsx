@@ -15,7 +15,9 @@ import {
 } from '../services/faceAnalysisLoadingService';
 
 type FaceAnalysisLoadingScreenProps = {
+  capturedPhotoUri?: string;
   headerTitle?: string;
+  isAnalysisReady?: boolean;
   onBack?: () => void;
   onComplete?: () => void;
 };
@@ -26,7 +28,13 @@ const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+export function resolveFaceAnalysisLoadingPreviewSource(capturedPhotoUri?: string) {
+  return capturedPhotoUri ? {uri: capturedPhotoUri} : faceAnalysisLoadingPreviewSource;
+}
+
 export function FaceAnalysisLoadingScreen({
+  capturedPhotoUri,
+  isAnalysisReady = true,
   onComplete,
 }: FaceAnalysisLoadingScreenProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -34,8 +42,30 @@ export function FaceAnalysisLoadingScreen({
     () => getFaceAnalysisProgressState(elapsedMs),
     [elapsedMs],
   );
+  const displayedProgressState = useMemo(() => {
+    if (isAnalysisReady) {
+      return {
+        ...progressState,
+        activeStep: faceAnalysisLoadingSteps[faceAnalysisLoadingSteps.length - 1],
+        progress: 1,
+        progressLabel: '100%',
+        isComplete: true,
+      };
+    }
+
+    if (progressState.progress < 0.95) {
+      return progressState;
+    }
+
+    return {
+      ...progressState,
+      progress: 0.95,
+      progressLabel: '95%',
+      isComplete: false,
+    };
+  }, [isAnalysisReady, progressState]);
   const activeStepIndex = faceAnalysisLoadingSteps.findIndex(
-    step => step.id === progressState.activeStep.id,
+    step => step.id === displayedProgressState.activeStep.id,
   );
 
   useEffect(() => {
@@ -51,7 +81,7 @@ export function FaceAnalysisLoadingScreen({
   }, []);
 
   useEffect(() => {
-    if (!progressState.isComplete) {
+    if (!displayedProgressState.isComplete) {
       return;
     }
 
@@ -62,7 +92,7 @@ export function FaceAnalysisLoadingScreen({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [onComplete, progressState.isComplete]);
+  }, [displayedProgressState.isComplete, onComplete]);
 
   return (
     <AppScreen
@@ -84,8 +114,9 @@ export function FaceAnalysisLoadingScreen({
           <View style={styles.previewFrame}>
             <Image
               resizeMode="cover"
-              source={faceAnalysisLoadingPreviewSource}
+              source={resolveFaceAnalysisLoadingPreviewSource(capturedPhotoUri)}
               style={styles.previewImage}
+              testID="face-analysis-loading-preview-image"
             />
             <View style={styles.previewDim} />
             <XStack style={styles.previewBadge}>
@@ -96,14 +127,15 @@ export function FaceAnalysisLoadingScreen({
 
           <XStack style={styles.progressBlock}>
             <ProgressRing
-              label={progressState.progressLabel}
-              progress={progressState.progress}
+              label={displayedProgressState.progressLabel}
+              progress={displayedProgressState.progress}
             />
 
             <YStack style={styles.stepList}>
               {faceAnalysisLoadingSteps.map((step, stepIndex) => {
-                const isDone = progressState.isComplete || stepIndex < activeStepIndex;
-                const isActive = stepIndex === activeStepIndex && !progressState.isComplete;
+                const isDone = displayedProgressState.isComplete || stepIndex < activeStepIndex;
+                const isActive =
+                  stepIndex === activeStepIndex && !displayedProgressState.isComplete;
 
                 return (
                   <XStack key={step.id} style={styles.stepRow}>

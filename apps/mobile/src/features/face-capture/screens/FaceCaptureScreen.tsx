@@ -13,6 +13,7 @@ import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {getBackendApiBaseUrl} from '../../../shared/services/backendApi';
 import {
   CameraCaptureControlRow,
   CameraCaptureButton,
@@ -23,12 +24,14 @@ import {
 } from '../../../shared/ui';
 import {mockReadyFaceCaptureChecks} from '../mocks/faceCapture.mock';
 import {
+  FACE_CAPTURE_ALIGNMENT_MESSAGE,
   evaluateFaceCaptureGuidance,
   type FaceCaptureCheckState,
 } from '../services/faceCaptureValidation';
 import {
   uploadFaceCaptureImage,
   type FaceCaptureUploadResult,
+  type FaceCaptureImageInput,
 } from '../services/faceCaptureUploadService';
 
 type CameraDirection = 'front' | 'back';
@@ -43,6 +46,27 @@ type FaceCaptureScreenProps = {
 
 export function getFaceCaptureCameraMode(): 'live-camera' {
   return 'live-camera';
+}
+
+function createLocalFaceCaptureResult({
+  contentType,
+  height,
+  source,
+  uri,
+  width,
+}: FaceCaptureImageInput): FaceCaptureUploadResult {
+  const localId = `local-${Date.now()}`;
+
+  return {
+    bucket: 'local',
+    cdnUrl: null,
+    contentType: contentType ?? 'image/jpeg',
+    imageUri: uri,
+    mediaId: localId,
+    objectKey: uri,
+    photoCaptureId: localId,
+    source,
+  };
 }
 
 export function FaceCaptureScreen({
@@ -67,11 +91,13 @@ export function FaceCaptureScreen({
   const guideScaleY = guideHeight / guideWidth;
   const guideCenterY = Math.max(insets.top + guideHeight / 2 + 130, height * 0.48);
   const guideTop = guideCenterY - guideWidth / 2;
+  const guideVisualTop = guideCenterY - guideHeight / 2;
   const controlsBottom = Math.max(insets.bottom + 64, height * 0.1);
-  const errorTop = Math.max(insets.top + 82, guideCenterY - guideHeight / 2 - 74);
+  const errorBottom = controlsBottom + 98;
   const captureMessage = uploadError ?? (isUploading ? 'Uploading photo...' : guidance.message);
   const captureTintColor = uploadError ? colors.danger : guidance.tintColor;
-  const isCaptureDisabled = !guidance.isCaptureEnabled || !isCameraReady || isUploading;
+  const isCaptureDisabled = isUploading;
+  const shouldUseBackendUpload = Boolean(getBackendApiBaseUrl());
 
   const handleToggleCamera = () => {
     const nextDirection = cameraDirection === 'front' ? 'back' : 'front';
@@ -99,12 +125,29 @@ export function FaceCaptureScreen({
         throw new Error('Camera did not return an image file.');
       }
 
-      const result = await uploadFaceCaptureImage({
+      const imageInput: FaceCaptureImageInput = {
         height: picture.height,
         source: 'camera',
         uri: picture.uri,
         width: picture.width,
-      });
+      };
+      let result: FaceCaptureUploadResult;
+
+      try {
+        result = await uploadFaceCaptureImage(imageInput);
+      } catch (error) {
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : '사진 업로드에 실패했어요. 네트워크를 확인한 뒤 다시 촬영해 주세요.',
+        );
+
+        if (shouldUseBackendUpload) {
+          return;
+        }
+
+        result = createLocalFaceCaptureResult(imageInput);
+      }
 
       onCapture?.(result);
     } catch (error) {
@@ -146,14 +189,31 @@ export function FaceCaptureScreen({
 
       setIsUploading(true);
       const asset = pickerResult.assets[0];
-      const result = await uploadFaceCaptureImage({
+      const imageInput: FaceCaptureImageInput = {
         contentType: asset.mimeType,
         fileName: asset.fileName,
         height: asset.height,
         source: 'gallery',
         uri: asset.uri,
         width: asset.width,
-      });
+      };
+      let result: FaceCaptureUploadResult;
+
+      try {
+        result = await uploadFaceCaptureImage(imageInput);
+      } catch (error) {
+        setUploadError(
+          error instanceof Error
+            ? error.message
+            : '사진 업로드에 실패했어요. 네트워크를 확인한 뒤 다시 선택해 주세요.',
+        );
+
+        if (shouldUseBackendUpload) {
+          return;
+        }
+
+        result = createLocalFaceCaptureResult(imageInput);
+      }
 
       onCapture?.(result);
     } catch (error) {
@@ -177,23 +237,20 @@ export function FaceCaptureScreen({
       <FloatingOverlayIconButton
         accessibilityLabel="Close capture screen"
         onPress={onClose}>
-        <X color={captureTintColor} size={iconSize.xl} strokeWidth={1.8} />
+        <X color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
       </FloatingOverlayIconButton>
 
-      {captureMessage ? (
-        <View pointerEvents="none" style={[styles.errorBubbleHost, {top: errorTop}]}>
-          <View
-            accessibilityLiveRegion="polite"
-            style={[
-              styles.errorBubble,
-              {
-                backgroundColor: captureTintColor,
-              },
-            ]}>
-            <Text style={styles.errorText}>{captureMessage}</Text>
-          </View>
-        </View>
-      ) : null}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.guideAnchorDot,
+          {
+            backgroundColor: captureTintColor,
+            left: width / 2 - 6,
+            top: guideVisualTop - 24,
+          },
+        ]}
+      />
 
       <View
         pointerEvents="none"
@@ -211,12 +268,20 @@ export function FaceCaptureScreen({
         ]}
       />
 
+      {guidance.status === 'blocked' || uploadError ? (
+        <View pointerEvents="none" style={[styles.errorBar, {bottom: errorBottom}]}>
+          <Text style={styles.errorText}>
+            {captureMessage ?? FACE_CAPTURE_ALIGNMENT_MESSAGE}
+          </Text>
+        </View>
+      ) : null}
+
       <CameraCaptureControlRow
         bottom={controlsBottom}
         centerSlot={
           <CameraCaptureButton
             accessibilityLabel={
-              isCaptureDisabled ? 'Capture disabled until face landmarks pass' : 'Capture photo'
+              isCaptureDisabled ? '촬영 처리 중' : '사진 촬영'
             }
             disabled={isCaptureDisabled}
             innerColor={captureTintColor}
@@ -231,7 +296,7 @@ export function FaceCaptureScreen({
             accessibilityLabel="Pick photo from album"
             disabled={isPickingImage || isUploading}
             onPress={handlePickImage}>
-            <ImageIcon color={captureTintColor} size={iconSize.lg} strokeWidth={2.1} />
+            <ImageIcon color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
           </CameraUtilityButton>
         }
         rightSlot={
@@ -239,7 +304,7 @@ export function FaceCaptureScreen({
             accessibilityLabel={`Switch to ${cameraDirection === 'front' ? 'back' : 'front'} camera`}
             disabled={isUploading}
             onPress={handleToggleCamera}>
-            <RefreshCw color={captureTintColor} size={iconSize.lg} strokeWidth={2.1} />
+            <RefreshCw color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
           </CameraUtilityButton>
         }
       />
@@ -248,42 +313,44 @@ export function FaceCaptureScreen({
 }
 
 const styles = StyleSheet.create({
-  errorBubble: {
-    borderRadius: radius.lg,
-    maxWidth: 310,
-    minHeight: 42,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    position: 'absolute',
-    shadowColor: shadows.errorBubble.shadowColor,
-    shadowOffset: shadows.errorBubble.shadowOffset,
-    shadowOpacity: shadows.errorBubble.shadowOpacity,
-    shadowRadius: shadows.errorBubble.shadowRadius,
-  },
-  errorBubbleHost: {
+  errorBar: {
     alignItems: 'center',
-    left: spacing.xxl,
+    alignSelf: 'center',
+    backgroundColor: colors.danger,
+    justifyContent: 'center',
+    minHeight: 66,
+    paddingHorizontal: spacing.xxl,
     position: 'absolute',
-    right: spacing.xxl,
+    width: '100%',
   },
   errorText: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.md,
     textAlign: 'center',
   },
   faceGuide: {
     alignItems: 'center',
     backgroundColor: colors.guideSurface,
-    borderWidth: 3,
+    borderWidth: 5,
     justifyContent: 'center',
     position: 'absolute',
     shadowColor: shadows.guideGlow.shadowColor,
     shadowOffset: shadows.guideGlow.shadowOffset,
     shadowOpacity: shadows.guideGlow.shadowOpacity,
     shadowRadius: shadows.guideGlow.shadowRadius,
+  },
+  guideAnchorDot: {
+    borderRadius: radius.pill,
+    height: 12,
+    position: 'absolute',
+    shadowColor: colors.black,
+    shadowOffset: {height: 2, width: 0},
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    width: 12,
   },
 });

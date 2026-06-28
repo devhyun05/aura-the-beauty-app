@@ -69,27 +69,27 @@ const createRecommendedMakeups = (
 ): FaceAnalysisMakeupCard[] => [
   {
     id: `${reportId}-clear-gloss`,
-    title: '클리어 & 글로시',
+    title: '분석 룩 1',
     subtitle: mood,
-    description: '얇은 윤광 베이스와 투명한 립 표현으로 얼굴을 맑게 보여줘요.',
+    description: '얼굴 분위기에 맞춘 개인화 추천 후보예요.',
     imageSource: reportRecommendClearGloss,
-    tags: ['윤광', '맑은 립'],
+    tags: ['추천', '룩1'],
   },
   {
     id: `${reportId}-fruity-juice`,
-    title: '과즙상',
-    subtitle: '생기 포인트',
-    description: '볼과 입술에 같은 계열 색을 낮게 얹어 자연스러운 생기를 더해요.',
+    title: '분석 룩 2',
+    subtitle: '추천 후보',
+    description: '얼굴 분위기에 맞춘 개인화 추천 후보예요.',
     imageSource: reportRecommendFruityJuice,
-    tags: ['생기', '톤온톤'],
+    tags: ['추천', '룩2'],
   },
   {
     id: `${reportId}-clean-line`,
-    title: '깔끔한 또렷함',
-    subtitle: '브라운 라인',
-    description: '눈매는 얇게 정돈하고 컬러 포인트는 입술과 볼에 집중해요.',
+    title: '분석 룩 3',
+    subtitle: '추천 후보',
+    description: '얼굴 분위기에 맞춘 개인화 추천 후보예요.',
     imageSource: reportRecommendCleanLine,
-    tags: ['브라운', '정돈감'],
+    tags: ['추천', '룩3'],
   },
 ];
 

@@ -2,6 +2,7 @@
   data?: T | null;
   error?: {
     code?: string;
+    details?: Record<string, unknown>;
     message?: string;
   } | null;
   meta?: unknown;
@@ -10,6 +11,25 @@
 type AuthTokenProvider = () => string | null;
 
 let authTokenProvider: AuthTokenProvider | null = null;
+
+export class BackendApiError extends Error {
+  code?: string;
+  details?: Record<string, unknown>;
+  status: number;
+
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'BackendApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
 
 export function setBackendAuthTokenProvider(provider: AuthTokenProvider | null): void {
   authTokenProvider = provider;
@@ -55,7 +75,17 @@ export async function requestBackendJson<T>(
 ): Promise<T> {
   const {authToken, body, headers, ...requestInit} = init;
   const resolvedAuthToken = resolveAuthToken(authToken);
-  const response = await fetch(buildBackendApiUrl(path), {
+  const startedAt = Date.now();
+  const method = requestInit.method ?? 'GET';
+  const url = buildBackendApiUrl(path);
+
+  console.info('[aura:api] request:start', {
+    hasAuthToken: Boolean(resolvedAuthToken),
+    method,
+    path,
+  });
+
+  const response = await fetch(url, {
     ...requestInit,
     body: body === undefined ? undefined : JSON.stringify(body),
     headers: {
@@ -75,12 +105,40 @@ export async function requestBackendJson<T>(
   }
 
   if (!response.ok) {
-    throw new Error(envelope?.error?.message ?? `Backend request failed with HTTP ${response.status}.`);
+    console.info('[aura:api] request:fail', {
+      code: envelope?.error?.code,
+      details: envelope?.error?.details,
+      durationMs: Date.now() - startedAt,
+      method,
+      path,
+      status: response.status,
+    });
+
+    throw new BackendApiError(
+      envelope?.error?.message ?? `Backend request failed with HTTP ${response.status}.`,
+      response.status,
+      envelope?.error?.code,
+      envelope?.error?.details,
+    );
   }
 
   if (envelope?.data === undefined || envelope.data === null) {
+    console.info('[aura:api] request:empty', {
+      durationMs: Date.now() - startedAt,
+      method,
+      path,
+      status: response.status,
+    });
+
     throw new Error('Backend response did not include data.');
   }
+
+  console.info('[aura:api] request:success', {
+    durationMs: Date.now() - startedAt,
+    method,
+    path,
+    status: response.status,
+  });
 
   return envelope.data;
 }

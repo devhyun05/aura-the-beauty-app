@@ -4,7 +4,7 @@ This checklist is for wiring the FastAPI backend into the project architecture:
 For the current implementation summary, see `docs/backend/BACKEND_STATUS.md`.
 
 ```text
-Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> RDS/S3/Bedrock
+Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> RDS/S3/OpenAI API
 ```
 
 CloudFront must not contain API business logic. Business logic belongs in
@@ -24,7 +24,7 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 ```
 
-Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3 and Bedrock. Secrets such as `DATABASE_URL` belong in Secrets Manager and are injected into the task definition.
+Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3. Secrets such as `DATABASE_URL` and `OPENAI_API_KEY` belong in Secrets Manager and are injected into the task definition.
 
 Mobile deployment should point to CloudFront, not a local LAN IP:
 
@@ -96,15 +96,18 @@ mobile PUT to S3
 POST /api/media/complete-upload
 ```
 
-## 4. Bedrock
+## 4. OpenAI API
 
-- Enable model access in the AWS account.
-- Give the ECS task role permission to call Bedrock runtime.
+- Create or confirm the OpenAI project API key used by the backend.
+- Store the API key in Secrets Manager or the deployment secret store.
 - Set:
 
 ```env
-BEDROCK_MODEL_ID=
-AWS_REGION=ap-northeast-2
+OPENAI_API_KEY=
+OPENAI_ANALYSIS_MODEL_ID=gpt-5.5
+OPENAI_IMAGE_MODEL_ID=gpt-image-1
+OPENAI_IMAGE_QUALITY=low
+OPENAI_IMAGE_SIZE=1024x1024
 ```
 
 - Development path can use `runImmediately=true` on `POST /api/analysis/jobs`.
@@ -128,6 +131,33 @@ aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS
 docker tag aura-backend-api:latest <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
 docker push <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/aura-backend-api:latest
 ```
+
+GitHub Actions deploys the backend to ECS on pushes to `main` through
+`.github/workflows/deploy-backend-ecs.yml`. Configure these repository
+Variables before enabling the workflow:
+
+```text
+AWS_REGION=ap-northeast-2
+ECR_REPOSITORY=aura-backend-api
+ECS_CLUSTER=<ecs-cluster-name>
+ECS_SERVICE=<ecs-service-name>
+ECS_TASK_DEFINITION=<task-definition-family-or-arn>
+ECS_CONTAINER_NAME=aura-backend-api
+```
+
+For AWS authentication, prefer an OIDC role and set this repository Secret:
+
+```text
+AWS_ROLE_TO_ASSUME=<github-actions-deploy-role-arn>
+```
+
+If OIDC is not ready yet, the workflow can also use these repository Secrets:
+
+```text
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
 ECS task requirements:
 
 - Container port: `8000`
@@ -140,7 +170,7 @@ ECS task requirements:
 
 - Create or confirm ECS cluster.
 - Create task definition for the backend image.
-- Attach task role with S3/Bedrock permissions.
+- Attach task role with S3 permissions.
 - Attach execution role for pulling image and writing logs.
 - Configure service desired count.
 - Put ECS behind ALB or API Gateway integration.

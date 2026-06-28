@@ -102,11 +102,11 @@ CloudFront must not contain API business logic. See docs/backend/AWS_DEPLOYMENT_
 
 `POST /api/analysis/jobs` creates an `analysis_reports` row with `pending` status.
 If `runImmediately=true`, the API switches the row to `processing` and calls
-Bedrock synchronously for the current development path.
+OpenAI synchronously for the current development path.
 
-- Success: row becomes `completed` and stores Bedrock result in `detailPayload`.
-- Bedrock configuration missing: row becomes `failed`; API returns `BEDROCK_NOT_CONFIGURED`.
-- Bedrock invocation error: row becomes `failed`; API returns `BEDROCK_INVOCATION_FAILED`.
+- Success: row becomes `completed` and stores OpenAI result in `detailPayload`.
+- OpenAI configuration missing: row becomes `failed`; API returns `OPENAI_NOT_CONFIGURED`.
+- OpenAI invocation error: row becomes `failed`; API returns `OPENAI_INVOCATION_FAILED`.
 
 For production, this can move to an ECS worker/SQS flow without changing the
 mobile-facing job status contract.
@@ -115,7 +115,7 @@ mobile-facing job status contract.
 
 - Missing `DATABASE_URL`: DB-backed endpoints return `DATABASE_NOT_CONFIGURED`.
 - Missing `S3_BUCKET_NAME`: `/api/media/presigned-upload` returns `S3_NOT_CONFIGURED`.
-- Missing `BEDROCK_MODEL_ID`: immediate analysis execution returns `BEDROCK_NOT_CONFIGURED`.
+- Missing `OPENAI_API_KEY`: immediate analysis execution returns `OPENAI_NOT_CONFIGURED`.
 
 ## Validation Policy
 

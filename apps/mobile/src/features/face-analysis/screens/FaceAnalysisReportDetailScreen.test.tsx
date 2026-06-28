@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   FaceAnalysisReportDetailScreen,
+  resolveFaceAnalysisReportHeroImageSource,
 } from './FaceAnalysisReportDetailScreen';
 import {
   getFaceAnalysisReportCreateFilterButtonPlacements,
@@ -37,7 +38,16 @@ const subtitleTextStyle = getFaceAnalysisReportSubtitleTextStyle();
 const report = faceAnalysisReportsMock[0];
 const summaryItems = getFaceAnalysisReportSummaryItems(report);
 const pointGuideItems = getFaceAnalysisReportPointGuideItems(report);
+const longPointGuideItems = getFaceAnalysisReportPointGuideItems({
+  ...report,
+  baseMakeupGuide:
+    '피부 결은 얇은 세미글로우 베이스로 정돈하고, 볼 중앙은 복숭아빛 생기를 넓게 연결해요.',
+});
 const avoidedRailPresentation = getFaceAnalysisReportAvoidedMakeupRailPresentation();
+const capturedPhotoUri = 'file:///tmp/captured-face.jpg';
+const heroImageSource = resolveFaceAnalysisReportHeroImageSource(capturedPhotoUri, report) as {
+  uri?: string;
+};
 
 type CreateFilterButtonPlacementsContract = ExpectType<
   TypeEquals<typeof createFilterButtonPlacements, readonly ['floating-bottom']>
@@ -130,6 +140,16 @@ expectEqual(
   'image analysis report base guide is inline point guide detail',
 );
 expectEqual(
+  longPointGuideItems[0].point,
+  '피부 결은 얇은 세미글로우 베이스로 정돈하고',
+  'image analysis report point guide keeps long first clause without ellipsis',
+);
+expectEqual(
+  longPointGuideItems[0].point.includes('...'),
+  false,
+  'image analysis report point guide does not inject ellipsis',
+);
+expectEqual(
   pointGuideItems[1].label,
   '눈썹',
   'image analysis report brow guide follows base row',
@@ -143,6 +163,11 @@ expectEqual(
   avoidedRailPresentation.showsCornerBadge,
   false,
   'image analysis report avoided makeup rail corner x hidden',
+);
+expectEqual(
+  heroImageSource.uri,
+  capturedPhotoUri,
+  'image analysis report detail uses captured photo before report image',
 );
 
 <FaceAnalysisReportDetailScreen
