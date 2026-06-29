@@ -1,4 +1,6 @@
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {getFaceAnalysisReports} from '../../../shared/services/faceAnalysisService';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {homeMock} from '../mocks/home.mock';
 import type {
   HomeData,
@@ -127,6 +129,40 @@ function mapRecommendedLook(
   };
 }
 
+function formatSavedMakeupDate(analyzedAt: string): string {
+  const date = new Date(analyzedAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return analyzedAt;
+  }
+
+  return date.toLocaleDateString('ko-KR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+export function mapFaceAnalysisReportsToHomeSavedMakeupLooks(
+  reports: readonly FaceAnalysisReport[],
+): HomeMakeupLook[] {
+  return reports.flatMap((report) => {
+    const recommendedMakeups = report.recommendedMakeups.slice(0, 3);
+
+    if (recommendedMakeups.length === 0) {
+      return [];
+    }
+
+    return recommendedMakeups.map((makeup, index) => ({
+      id: `${report.id}-${makeup.id}-${index}`,
+      title: makeup.title,
+      description: makeup.subtitle || makeup.description || report.recommendedMood,
+      date: formatSavedMakeupDate(report.analyzedAt),
+      imageSource: makeup.imageSource,
+    }));
+  });
+}
+
 function mapHomeData(response: BackendHomeData): HomeData {
   if (!response.hero) {
     return homeMock;
@@ -183,4 +219,13 @@ export const getHomeData = async (): Promise<HomeData> => {
 
     return homeMock;
   }
+};
+
+export const getSavedRecommendedMakeupLooks = async (): Promise<HomeMakeupLook[]> => {
+  const reports = await getFaceAnalysisReports({
+    limit: 40,
+    withRecommendedMakeups: true,
+  });
+
+  return mapFaceAnalysisReportsToHomeSavedMakeupLooks(reports);
 };

@@ -48,7 +48,10 @@ export function HomeFilterStoreRouteScreen({
 export function SavedMakeupListRouteScreen({
   navigation,
 }: RootScreenProps<'SavedMakeupList'>) {
-  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const {
+    selectedFaceAnalysisReport,
+    setSelectedFaceAnalysisReport,
+  } = useNavigationFlowState();
 
   return (
     <DetailRouteChrome
@@ -56,7 +59,10 @@ export function SavedMakeupListRouteScreen({
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <SavedMakeupListScreen
         latestAnalysisReport={selectedFaceAnalysisReport}
-        onApplyMakeup={() => navigation.navigate('ARFilter')}
+        onPressMakeup={savedMakeup => {
+          setSelectedFaceAnalysisReport(savedMakeup.report);
+          navigation.navigate('FaceAnalysisReportDetail');
+        }}
       />
     </DetailRouteChrome>
   );

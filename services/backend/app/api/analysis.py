@@ -3,7 +3,7 @@ import logging
 import time
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -257,18 +257,37 @@ async def get_analysis_job(
 
 @router.get("/reports")
 async def list_analysis_reports(
+  with_recommended_makeups: bool = Query(False, alias="withRecommendedMakeups"),
+  limit: int | None = Query(None, ge=1, le=200),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  reports = await db.fetch(
-    """
+  filters = ["user_id = $1"]
+  values: list[object] = [user["id"]]
+
+  if with_recommended_makeups:
+    filters.append(
+      """
+      jsonb_typeof(detail_payload->'result'->'recommendedMakeups') = 'array'
+      and jsonb_array_length(detail_payload->'result'->'recommendedMakeups') > 0
+      """,
+    )
+
+  query = f"""
     select *
     from analysis_reports
-    where user_id = $1
+    where {' and '.join(filters)}
     order by created_at desc
-    """,
-    user["id"],
+  """
+
+  if limit is not None:
+    values.append(limit)
+    query += f" limit ${len(values)}"
+
+  reports = await db.fetch(
+    query,
+    *values,
   )
 
   return success({"reports": normalize_analysis_report_rows(reports)})
@@ -295,3 +314,66 @@ async def get_analysis_report(
     raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
 
   return success({"report": normalize_analysis_report_row(report)})
+
+
+@router.delete("/reports/{report_id}/recommended-makeups/{makeup_index}")
+async def delete_analysis_report_recommended_makeup(
+  report_id: UUID,
+  makeup_index: int,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  if makeup_index < 0:
+    raise AppError(
+      400,
+      "INVALID_RECOMMENDED_MAKEUP_INDEX",
+      "Recommended makeup index must be zero or greater.",
+    )
+
+  user = await ensure_user(db, auth)
+  report = await db.fetchrow(
+    """
+    select detail_payload
+    from analysis_reports
+    where id = $1 and user_id = $2
+    """,
+    report_id,
+    user["id"],
+  )
+
+  if not report:
+    raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+
+  detail_payload = decode_json_object(report.get("detail_payload"))
+  result = detail_payload.get("result")
+  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
+
+  if not isinstance(recommended_makeups, list) or makeup_index >= len(recommended_makeups):
+    raise AppError(
+      404,
+      "RECOMMENDED_MAKEUP_NOT_FOUND",
+      "Recommended makeup was not found.",
+      details={"makeupIndex": makeup_index},
+    )
+
+  updated_makeups = [
+    makeup
+    for index, makeup in enumerate(recommended_makeups)
+    if index != makeup_index
+  ]
+  result["recommendedMakeups"] = updated_makeups
+  detail_payload["result"] = result
+
+  updated_report = await db.fetchrow(
+    """
+    update analysis_reports
+    set detail_payload = $3::jsonb
+    where id = $1 and user_id = $2
+    returning *
+    """,
+    report_id,
+    user["id"],
+    json.dumps(detail_payload),
+  )
+
+  return success({"report": normalize_analysis_report_row(updated_report)})

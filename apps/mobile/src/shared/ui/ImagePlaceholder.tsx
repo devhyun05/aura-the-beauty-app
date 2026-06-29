@@ -20,6 +20,8 @@ export function ImagePlaceholder({
 
   return (
     <Image
+      fadeDuration={0}
+      progressiveRenderingEnabled
       resizeMode={resizeMode}
       source={source}
       style={[styles.image, { borderRadius }]}
