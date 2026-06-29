@@ -90,6 +90,11 @@ type ListAnalysisReportsResponse = {
   reports: BackendAnalysisJob[];
 };
 
+type GetFaceAnalysisReportsOptions = {
+  limit?: number;
+  withRecommendedMakeups?: boolean;
+};
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -283,7 +288,6 @@ function mapBackendJobToFaceAnalysisReport(
 ): FaceAnalysisReport {
   const fallback = buildFallbackReportFromCapture(capture);
   const result = job.detailPayload?.result ?? {};
-  const hasBackendResult = Boolean(job.detailPayload?.result) || job.status === 'completed';
   const reportId = firstText(job.id, fallback.id) ?? fallback.id;
   const personalColor =
     firstText(result.personalColor, job.personalColor, fallback.personalColor) ??
@@ -313,7 +317,7 @@ function mapBackendJobToFaceAnalysisReport(
       reportId,
       result.recommendedMakeups,
       fallback.recommendedMakeups,
-      !hasBackendResult,
+      false,
     ),
     recommendedMood,
     avoidedMakeups: [],
@@ -341,12 +345,35 @@ function mapBackendJobToFaceAnalysisReport(
   };
 }
 
-export const getFaceAnalysisReports = async (): Promise<FaceAnalysisReport[]> => {
+function buildAnalysisReportsPath({
+  limit,
+  withRecommendedMakeups,
+}: GetFaceAnalysisReportsOptions = {}): string {
+  const params = new URLSearchParams();
+
+  if (withRecommendedMakeups) {
+    params.set('withRecommendedMakeups', 'true');
+  }
+
+  if (limit) {
+    params.set('limit', String(limit));
+  }
+
+  const query = params.toString();
+
+  return query ? `/analysis/reports?${query}` : '/analysis/reports';
+}
+
+export const getFaceAnalysisReports = async (
+  options: GetFaceAnalysisReportsOptions = {},
+): Promise<FaceAnalysisReport[]> => {
   if (!getBackendApiBaseUrl()) {
     return Promise.resolve(faceAnalysisReportsMock);
   }
 
-  const {reports} = await requestBackendJson<ListAnalysisReportsResponse>('/analysis/reports');
+  const {reports} = await requestBackendJson<ListAnalysisReportsResponse>(
+    buildAnalysisReportsPath(options),
+  );
 
   return reports.map((report) => mapBackendJobToFaceAnalysisReport(report));
 };
@@ -373,6 +400,25 @@ export const getFaceAnalysisReportById = async (
 
   const {report} = await requestBackendJson<GetAnalysisReportResponse>(
     `/analysis/reports/${reportId}`,
+  );
+
+  return mapBackendJobToFaceAnalysisReport(report);
+};
+
+export const deleteFaceAnalysisRecommendedMakeup = async ({
+  makeupIndex,
+  reportId,
+}: {
+  makeupIndex: number;
+  reportId: string;
+}): Promise<FaceAnalysisReport | null> => {
+  if (!getBackendApiBaseUrl()) {
+    return null;
+  }
+
+  const {report} = await requestBackendJson<GetAnalysisReportResponse>(
+    `/analysis/reports/${reportId}/recommended-makeups/${makeupIndex}`,
+    {method: 'DELETE'},
   );
 
   return mapBackendJobToFaceAnalysisReport(report);

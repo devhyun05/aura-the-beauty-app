@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -9,6 +9,7 @@ import {
   type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   ArrowRight,
   Camera,
@@ -21,7 +22,7 @@ import {
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {getHomeData} from '../services/homeService';
+import {getHomeData, getSavedRecommendedMakeupLooks} from '../services/homeService';
 import type {
   HomeData,
   HomeFilterStoreItem,
@@ -49,6 +50,7 @@ export function HomeScreen({
   onPressSavedMakeups,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [savedMakeupLooks, setSavedMakeupLooks] = useState<HomeMakeupLook[]>([]);
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
 
@@ -65,6 +67,32 @@ export function HomeScreen({
       isMounted = false;
     };
   }, []);
+
+  const loadSavedMakeupLooks = useCallback(() => {
+    let isMounted = true;
+
+    getSavedRecommendedMakeupLooks()
+      .then((nextSavedMakeupLooks) => {
+        if (isMounted) {
+          setSavedMakeupLooks(nextSavedMakeupLooks);
+        }
+      })
+      .catch((error) => {
+        console.info('[aura:home] saved-makeup:fallback-empty', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        if (isMounted) {
+          setSavedMakeupLooks([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useFocusEffect(loadSavedMakeupLooks);
 
   if (!homeData) {
     return (
@@ -94,7 +122,7 @@ export function HomeScreen({
         onPressFilterStore={onPressFilterStore}
       />
       <RecommendedLooksSection
-        makeupLooks={homeData.recommendedLooks}
+        makeupLooks={savedMakeupLooks}
         onPressSavedMakeups={onPressSavedMakeups}
       />
     </>
@@ -531,13 +559,17 @@ function RecommendedLooksSection({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.makeupLookList}>
-        {makeupLooks.map((makeupLook) => (
-          <RecommendedLookCard
-            key={makeupLook.id}
-            makeupLook={makeupLook}
-            onPress={onPressSavedMakeups}
-          />
-        ))}
+        {makeupLooks.length > 0 ? (
+          makeupLooks.map((makeupLook) => (
+            <RecommendedLookCard
+              key={makeupLook.id}
+              makeupLook={makeupLook}
+              onPress={onPressSavedMakeups}
+            />
+          ))
+        ) : (
+          <EmptySavedMakeupCard onPress={onPressSavedMakeups} />
+        )}
       </TamaguiScrollView>
     </YStack>
   );
@@ -566,6 +598,29 @@ function RecommendedLookCard({
         </Text>
         <Text numberOfLines={2} style={styles.makeupLookDescription}>
           {makeupLook.description}
+        </Text>
+        <Text numberOfLines={1} style={styles.makeupLookDate}>
+          {makeupLook.date}
+        </Text>
+      </YStack>
+    </Pressable>
+  );
+}
+
+function EmptySavedMakeupCard({onPress}: {onPress?: () => void}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="저장된 추천 메이크업 없음"
+      onPress={onPress}
+      style={({pressed}) => [styles.emptySavedMakeupCard, pressed && styles.pressed]}>
+      <View style={styles.emptySavedMakeupIcon}>
+        <Sparkles color={colors.textSecondary} size={iconSize.md} strokeWidth={1.8} />
+      </View>
+      <YStack style={styles.makeupLookTextGroup}>
+        <Text style={styles.makeupLookTitle}>아직 저장된 추천이 없어요</Text>
+        <Text style={styles.makeupLookDescription}>
+          얼굴 진단을 완료하면 추천 메이크업 3장이 여기에 쌓여요.
         </Text>
       </YStack>
     </Pressable>
@@ -751,6 +806,29 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.sm,
     width: 138,
+  },
+  emptySavedMakeupCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    minHeight: 238,
+    padding: spacing.md,
+    width: 220,
+  },
+  emptySavedMakeupIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    height: 150,
+    justifyContent: 'center',
+  },
+  makeupLookDate: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   makeupLookDescription: {
     color: colors.textSecondary,
