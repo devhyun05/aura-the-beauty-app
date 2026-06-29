@@ -16,7 +16,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(
   FOOTER_RECOMMENDATION_ICON_NAME,
-  'WandSparkles',
+  'Sparkles',
   'footer recommendation icon name',
 );
 

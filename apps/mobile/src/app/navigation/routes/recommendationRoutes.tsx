@@ -1,7 +1,7 @@
 import React from 'react';
 
-import {MakeupToolsScreen} from '../../../features/home';
 import {
+  AuradinSearchScreen,
   LikedProductListScreen,
   MakeupLookListScreen,
   ProductRecommendationScreen,
@@ -12,19 +12,13 @@ import {
   MainTabChrome,
   navigateMainTab,
   type MainTabScreenProps,
-  type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
 
 export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>) {
-  const rootNavigation = navigation.getParent<RootNavigation>();
-
   return (
-    <MainTabChrome navigation={navigation} routeName="CustomTab" wrapContentInScreen={false}>
-      <MakeupToolsScreen
-        onPressAlbumPick={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
-        onPressCameraCapture={() => rootNavigation?.navigate('MakeupFeedbackCapture')}
-      />
+    <MainTabChrome navigation={navigation} routeName="CustomTab">
+      <AuradinSearchScreen />
     </MainTabChrome>
   );
 }
