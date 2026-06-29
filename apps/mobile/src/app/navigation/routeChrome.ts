@@ -303,7 +303,7 @@ export const routeChromeByRoute = {
   ProfileTab: {
     category: 'main-profile',
     depth: 'main',
-    headerVariant: 'default',
+    headerVariant: 'home',
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },

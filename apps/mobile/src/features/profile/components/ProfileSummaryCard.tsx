@@ -43,10 +43,6 @@ export function ProfileSummaryCard({
               </Text>
             ))}
           </View>
-
-          <Text numberOfLines={1} style={styles.email}>
-            {profile.email}
-          </Text>
         </View>
 
         <IconButton
@@ -73,12 +69,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 16,
-  },
-  email: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.md,
   },
   info: {
     flex: 1,
