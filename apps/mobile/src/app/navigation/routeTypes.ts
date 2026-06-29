@@ -4,6 +4,7 @@ export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 
 export type RootStackParamList = {
   Login: undefined;
+  ProfileSetup: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
@@ -50,6 +51,7 @@ export type RouteName = RootStackRouteName | MainTabRouteName;
 
 export const rootStackRoutes = [
   'Login',
+  'ProfileSetup',
   'Tutorial',
   'MainTabs',
   'FaceCapture',

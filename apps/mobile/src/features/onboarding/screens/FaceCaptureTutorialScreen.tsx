@@ -45,7 +45,8 @@ type FaceCaptureTutorialStep = {
 
 export const FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO = 448 / 362;
 const FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE = 1;
-export const FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL = '좌우로 넘겨 주세요.';
+const FACE_CAPTURE_TUTORIAL_PAGE_INDICATOR_THRESHOLD = 0.38;
+export const FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL = '사진 촬영 가이드';
 
 const faceCaptureTutorialIconNames = {
   accessory: 'glasses',
@@ -110,7 +111,7 @@ const faceCaptureTutorialVisualPresentation = {
   imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
-  swipeNavigationPlacement: 'fixed-above-swipe-hint',
+  swipeNavigationPlacement: 'fixed-footer-pagination',
   usesImageScrim: false,
 } as const;
 
@@ -172,14 +173,47 @@ export function FaceCaptureTutorialScreen({
     onStartCapture?.();
   };
 
-  const handleGuideMomentumScrollEnd = (
+  const clampStepIndex = (stepIndex: number) =>
+    Math.max(0, Math.min(stepIndex, faceCaptureTutorialSteps.length - 1));
+
+  const updateCurrentStepIndex = (nextStepIndex: number) => {
+    const clampedStepIndex = clampStepIndex(nextStepIndex);
+
+    setCurrentStepIndex((prevStepIndex) =>
+      prevStepIndex === clampedStepIndex ? prevStepIndex : clampedStepIndex,
+    );
+  };
+
+  const getLiveStepIndexFromScrollOffset = (offsetX: number) => {
+    const scrollProgress = offsetX / Math.max(width, 1);
+    const baseStepIndex = Math.floor(scrollProgress);
+    const pageProgress = scrollProgress - baseStepIndex;
+    const nextStepIndex =
+      pageProgress >= FACE_CAPTURE_TUTORIAL_PAGE_INDICATOR_THRESHOLD
+        ? baseStepIndex + 1
+        : baseStepIndex;
+
+    return clampStepIndex(nextStepIndex);
+  };
+
+  const syncStepIndexFromScrollOffset = (offsetX: number) => {
+    updateCurrentStepIndex(getLiveStepIndexFromScrollOffset(offsetX));
+  };
+
+  const settleStepIndexFromScrollOffset = (offsetX: number) => {
+    updateCurrentStepIndex(Math.round(offsetX / Math.max(width, 1)));
+  };
+
+  const handleGuideScroll = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
-    const nextStepIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+    syncStepIndexFromScrollOffset(event.nativeEvent.contentOffset.x);
+  };
 
-    setCurrentStepIndex(
-      Math.max(0, Math.min(nextStepIndex, faceCaptureTutorialSteps.length - 1)),
-    );
+  const handleGuideScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    settleStepIndexFromScrollOffset(event.nativeEvent.contentOffset.x);
   };
 
   const handlePrivacyPress = () => {
@@ -203,7 +237,7 @@ export function FaceCaptureTutorialScreen({
       x: previousStepIndex * width,
       y: 0,
     });
-    setCurrentStepIndex(previousStepIndex);
+    updateCurrentStepIndex(previousStepIndex);
   };
 
   const isNextDisabled = currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy;
@@ -249,10 +283,12 @@ export function FaceCaptureTutorialScreen({
         <YStack style={styles.content}>
           <ScrollView
             ref={guideScrollViewRef}
-            accessibilityLabel={FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL}
+            accessibilityLabel={FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL}
             decelerationRate="fast"
             horizontal
-            onMomentumScrollEnd={handleGuideMomentumScrollEnd}
+            onMomentumScrollEnd={handleGuideScrollEnd}
+            onScroll={handleGuideScroll}
+            onScrollEndDrag={handleGuideScrollEnd}
             pagingEnabled
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
@@ -294,15 +330,12 @@ export function FaceCaptureTutorialScreen({
           <YStack
             style={[
               styles.swipeNavigationArea,
-              isFinalStep ? styles.swipeNavigationAreaWithAction : undefined,
+              styles.swipeNavigationAreaWithAction,
             ]}>
             <PaginationDots
               activeIndex={currentStepIndex}
               count={faceCaptureTutorialSteps.length}
             />
-            {isFinalStep ? null : (
-              <Text style={styles.swipeHint}>{FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL}</Text>
-            )}
           </YStack>
 
           {isFinalStep ? (
@@ -326,7 +359,9 @@ export function FaceCaptureTutorialScreen({
               <Text style={styles.privacyLink}>자세히 보기</Text>
               <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
             </Button>
-          ) : null}
+          ) : (
+            <View style={styles.privacyNoticePlaceholder} />
+          )}
 
           {isFinalStep ? (
             <Button
@@ -346,7 +381,9 @@ export function FaceCaptureTutorialScreen({
                 {actionButtonLabel}
               </Text>
             </Button>
-          ) : null}
+          ) : (
+            <View style={styles.nextButtonPlaceholder} />
+          )}
         </YStack>
       </YStack>
     </SafeAreaView>
@@ -431,6 +468,7 @@ const styles = StyleSheet.create({
   guidePage: {
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
   },
   header: {
     alignItems: 'center',
@@ -514,6 +552,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: 1,
   },
+  nextButtonPlaceholder: {
+    alignSelf: 'center',
+    height: iconSize.xl + spacing.xxl,
+    maxWidth: 280,
+    minWidth: 220,
+    width: '72%',
+  },
   nextButtonText: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
@@ -549,6 +594,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     width: '100%',
   },
+  privacyNoticePlaceholder: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+    maxWidth: 362,
+    minHeight: iconSize.xl + spacing.lg,
+    width: '100%',
+  },
   privacyNoticeSelected: {
     borderColor: colors.textPrimary,
   },
@@ -567,16 +619,6 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
-  },
-  swipeHint: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-    width: '100%',
   },
   swipeNavigationArea: {
     alignItems: 'center',
