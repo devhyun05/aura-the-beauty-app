@@ -13,9 +13,14 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
   APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-  'camera capture button default size matches home capture button',
+  62,
+  'footer capture button size is larger than the default camera button',
+);
+expectEqual(
+  APP_FOOTER_CAPTURE_BUBBLE_SIZE,
+  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 12,
+  'footer capture button size offset',
 );
 expectEqual(
   CAMERA_CAPTURE_BUTTON_METRICS.borderWidth,

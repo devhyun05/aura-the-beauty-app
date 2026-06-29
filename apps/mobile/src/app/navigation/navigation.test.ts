@@ -38,6 +38,21 @@ expectEqual(
   '저장된 메이크업',
   'saved makeup list detail route title',
 );
+expectEqual(
+  getDetailRouteTitle('ProductRecommendation'),
+  '추천 제품',
+  'product recommendation detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('Community'),
+  '커뮤니티',
+  'community detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('Consulting'),
+  '메이크업 컨설팅',
+  'consulting detail route title',
+);
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target');
 expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');

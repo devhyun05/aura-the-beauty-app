@@ -55,7 +55,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
       style={[
         styles.tabBarHost,
         {
-          height: 76 + Math.max(insets.bottom, spacing.md),
+          height: 102 + Math.max(insets.bottom, spacing.md),
         },
       ]}>
       <AppFooter

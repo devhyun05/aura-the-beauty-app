@@ -14,6 +14,9 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   HomeFilterStore: undefined;
   SavedMakeupList: undefined;
+  ProductRecommendation: undefined;
+  Community: undefined;
+  Consulting: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter: undefined;
@@ -57,6 +60,9 @@ export const rootStackRoutes = [
   'ProfileEdit',
   'HomeFilterStore',
   'SavedMakeupList',
+  'ProductRecommendation',
+  'Community',
+  'Consulting',
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',
