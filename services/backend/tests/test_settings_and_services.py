@@ -108,6 +108,8 @@ def test_gpt_image_2_edit_params_omit_input_fidelity() -> None:
   params = service._build_image_edit_params(object(), "apply makeup", "auto")
 
   assert params["model"] == "gpt-image-2"
+  assert params["output_format"] == "jpeg"
+  assert params["output_compression"] == 80
   assert "input_fidelity" not in params
 
 
@@ -117,6 +119,40 @@ def test_gpt_image_1_edit_params_keep_high_input_fidelity() -> None:
   params = service._build_image_edit_params(object(), "apply makeup", "auto")
 
   assert params["input_fidelity"] == "high"
+
+
+def test_makeup_image_upload_uses_jpeg_output_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured = {}
+  service = OpenAIAnalysisService(
+    Settings(s3_bucket_name="aura-dev-bucket", cdn_base_url="https://cdn.example.com"),
+  )
+
+  class FakeGeneratedImageS3Client:
+    def put_object(self, **kwargs):
+      captured.update(kwargs)
+
+  monkeypatch.setattr(service, "_s3_client", lambda: FakeGeneratedImageS3Client())
+
+  upload = service._upload_generated_image(b"image-bytes", 1)
+
+  assert captured["Bucket"] == "aura-dev-bucket"
+  assert captured["Body"] == b"image-bytes"
+  assert captured["ContentType"] == "image/jpeg"
+  assert captured["Key"].startswith("uploads/generated-makeup/")
+  assert captured["Key"].endswith("-1.jpg")
+  assert upload["objectKey"] == captured["Key"]
+  assert upload["imageUrl"] == f"https://cdn.example.com/{captured['Key']}"
+
+
+def test_makeup_image_output_format_can_use_webp() -> None:
+  service = OpenAIAnalysisService(
+    Settings(openai_image_output_format="webp", openai_image_output_compression=70),
+  )
+
+  params = service._build_image_edit_params(object(), "apply makeup", "auto")
+
+  assert params["output_format"] == "webp"
+  assert params["output_compression"] == 70
 
 
 def test_public_config_status_accepts_iam_role_for_aws_credentials() -> None:

@@ -12,12 +12,12 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {
   ArrowRight,
-  Camera,
   ChevronRight,
+  MessageCircle,
   PackageSearch,
   ScanFace,
   Sparkles,
-  WandSparkles,
+  UserRoundCheck,
 } from 'lucide-react-native';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
@@ -31,21 +31,19 @@ import type {
 } from '../types';
 
 type HomeScreenProps = {
-  onPressARFilter?: () => void;
+  onPressConsulting?: () => void;
+  onPressCommunity?: () => void;
   onPressFilterStore?: () => void;
-  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
   onPressSavedMakeups?: () => void;
 };
 
 export function HomeScreen({
-  onPressARFilter,
+  onPressConsulting,
+  onPressCommunity,
   onPressFilterStore,
-  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
-  onPressMakeupFeedback,
   onPressProductRecommendations,
   onPressSavedMakeups,
 }: HomeScreenProps) {
@@ -111,10 +109,9 @@ export function HomeScreen({
       />
 
       <QuickActionSection
-        onPressARFilter={onPressARFilter}
-        onPressReferenceMakeupExtraction={onPressReferenceMakeupExtraction}
+        onPressConsulting={onPressConsulting}
+        onPressCommunity={onPressCommunity}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
-        onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection
@@ -365,28 +362,10 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
 
 const quickActions = [
   {
-    id: 'ar',
-    label: '실시간 AR',
-    accessibilityLabel: '실시간 AR 시작',
-    icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
     id: 'diagnosis',
     label: '얼굴 진단',
     accessibilityLabel: '얼굴 진단 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'extract',
-    label: '메이크업 추출',
-    accessibilityLabel: '메이크업 추출',
-    icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'makeup-feedback',
-    label: '메이크업 피드백',
-    accessibilityLabel: '메이크업 피드백 시작',
-    icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
     id: 'recommendation',
@@ -396,63 +375,71 @@ const quickActions = [
       <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
+  {
+    id: 'community',
+    label: '커뮤니티',
+    accessibilityLabel: '커뮤니티 보기',
+    icon: (color: string) => (
+      <MessageCircle color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'consulting',
+    label: '컨설팅',
+    accessibilityLabel: '메이크업 컨설팅 받기',
+    icon: (color: string) => (
+      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
 ] as const;
 
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
-  onPressARFilter?: () => void;
-  onPressReferenceMakeupExtraction?: () => void;
+  onPressConsulting?: () => void;
+  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
-    onPressARFilter,
-    onPressReferenceMakeupExtraction,
+    onPressConsulting,
+    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupFeedback,
     onPressProductRecommendations,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
-  if (actionId === 'ar') {
-    return onPressARFilter;
-  }
-
   if (actionId === 'diagnosis') {
     return onPressFaceDiagnosis;
-  }
-
-  if (actionId === 'extract') {
-    return onPressReferenceMakeupExtraction;
-  }
-
-  if (actionId === 'makeup-feedback') {
-    return onPressMakeupFeedback;
   }
 
   if (actionId === 'recommendation') {
     return onPressProductRecommendations;
   }
 
+  if (actionId === 'community') {
+    return onPressCommunity;
+  }
+
+  if (actionId === 'consulting') {
+    return onPressConsulting;
+  }
+
   return undefined;
 }
 
 function QuickActionSection({
-  onPressARFilter,
-  onPressReferenceMakeupExtraction,
+  onPressConsulting,
+  onPressCommunity,
   onPressFaceDiagnosis,
-  onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
-    onPressARFilter,
-    onPressReferenceMakeupExtraction,
+    onPressConsulting,
+    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupFeedback,
     onPressProductRecommendations,
   };
 

@@ -158,35 +158,49 @@ expectEqual(
   'hero carousel drag end reset handler',
 );
 
-let selectedQuickAction: 'ar' | 'makeup-feedback' | null = null;
+let selectedQuickAction: 'community' | 'consulting' | 'recommendation' | null = null;
 
-const arPressHandler = getHomeQuickActionPressHandler('ar', {
-  onPressARFilter: () => {
-    selectedQuickAction = 'ar';
+const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
+  onPressProductRecommendations: () => {
+    selectedQuickAction = 'recommendation';
   },
 });
 
-if (!arPressHandler) {
-  throw new Error('real-time AR quick action should have a press handler');
+if (!recommendationPressHandler) {
+  throw new Error('product recommendation quick action should have a press handler');
 }
 
-arPressHandler();
+recommendationPressHandler();
 
-expectEqual(selectedQuickAction, 'ar', 'real-time AR quick action target');
+expectEqual(selectedQuickAction, 'recommendation', 'product recommendation quick action target');
 
-const makeupFeedbackPressHandler = getHomeQuickActionPressHandler('makeup-feedback', {
-  onPressMakeupFeedback: () => {
-    selectedQuickAction = 'makeup-feedback';
+const communityPressHandler = getHomeQuickActionPressHandler('community', {
+  onPressCommunity: () => {
+    selectedQuickAction = 'community';
   },
 });
 
-if (!makeupFeedbackPressHandler) {
-  throw new Error('makeup feedback quick action should have a press handler');
+if (!communityPressHandler) {
+  throw new Error('community quick action should have a press handler');
 }
 
-makeupFeedbackPressHandler();
+communityPressHandler();
 
-expectEqual(selectedQuickAction, 'makeup-feedback', 'makeup feedback quick action target');
+expectEqual(selectedQuickAction, 'community', 'community quick action target');
+
+const consultingPressHandler = getHomeQuickActionPressHandler('consulting', {
+  onPressConsulting: () => {
+    selectedQuickAction = 'consulting';
+  },
+});
+
+if (!consultingPressHandler) {
+  throw new Error('consulting quick action should have a press handler');
+}
+
+consultingPressHandler();
+
+expectEqual(selectedQuickAction, 'consulting', 'consulting quick action target');
 
 const completeReport: FaceAnalysisReport = {
   analyzedAt: '2026-06-29T07:00:00.000Z',

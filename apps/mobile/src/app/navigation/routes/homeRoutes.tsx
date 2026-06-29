@@ -5,6 +5,7 @@ import {
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
@@ -21,12 +22,11 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   return (
     <MainTabChrome navigation={navigation} routeName="HomeTab">
       <HomeScreen
-        onPressARFilter={() => rootNavigation?.navigate('ARFilter')}
+        onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+        onPressCommunity={() => rootNavigation?.navigate('Community')}
         onPressFilterStore={() => rootNavigation?.navigate('HomeFilterStore')}
-        onPressReferenceMakeupExtraction={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
-        onPressMakeupFeedback={() => rootNavigation?.navigate('MakeupFeedbackEntry')}
-        onPressProductRecommendations={() => navigation.navigate('CustomTab')}
+        onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
         onPressSavedMakeups={() => rootNavigation?.navigate('SavedMakeupList')}
       />
     </MainTabChrome>
@@ -63,6 +63,34 @@ export function SavedMakeupListRouteScreen({
           setSelectedFaceAnalysisReport(savedMakeup.report);
           navigation.navigate('FaceAnalysisReportDetail');
         }}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>) {
+  return (
+    <DetailRouteChrome
+      routeName="Community"
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      <RoutePlaceholder
+        description="커뮤니티 기능을 준비 중이에요."
+        showHeader={false}
+        title="커뮤니티"
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'>) {
+  return (
+    <DetailRouteChrome
+      routeName="Consulting"
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      <RoutePlaceholder
+        description="전문가에게 메이크업 컨설팅을 받을 수 있는 기능을 준비 중이에요."
+        showHeader={false}
+        title="메이크업 컨설팅"
       />
     </DetailRouteChrome>
   );
