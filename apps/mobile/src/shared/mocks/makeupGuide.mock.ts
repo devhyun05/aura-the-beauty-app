@@ -29,12 +29,9 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     },
   ],
   makeupAreas: [
-    {id: 'all', label: '전체'},
-    {id: 'base', label: '베이스'},
-    {id: 'eye', label: '아이'},
     {id: 'lip', label: '립'},
+    {id: 'brow', label: '눈썹'},
     {id: 'cheek', label: '치크'},
-    {id: 'contour', label: '컨투어'},
   ],
   filters: [
     {
@@ -44,7 +41,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       title: '뉴트럴 로즈',
       subtitle: '세미 글로우 베이스와 로즈 립',
       intensityLabel: '자연스럽게',
-      makeupAreas: ['all', 'base', 'eye', 'lip'],
+      makeupAreas: ['lip', 'brow', 'cheek'],
       colorOptions: [
         {id: 'rose', label: '로즈', hex: '#C9827D'},
         {id: 'nude', label: '누드', hex: '#D9B8A8'},
@@ -65,10 +62,10 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       id: 'clean-brown-eye',
       imageSource: lookMoriGirl,
       categoryId: 'recommended',
-      title: '클린 브라운 아이',
-      subtitle: '눈매 중심의 얇은 음영',
+      title: '클린 브라운 브로우',
+      subtitle: '눈썹 중심의 얇은 음영',
       intensityLabel: '가볍게',
-      makeupAreas: ['eye', 'contour'],
+      makeupAreas: ['brow'],
       colorOptions: [
         {id: 'ash-brown', label: '애쉬 브라운', hex: '#8A756E'},
         {id: 'taupe', label: '토프', hex: '#B8AAA2'},
@@ -90,7 +87,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       title: '모노 시크 필터',
       subtitle: '무채색 대비를 살린 촬영용 룩',
       intensityLabel: '선명하게',
-      makeupAreas: ['all', 'eye', 'lip'],
+      makeupAreas: ['lip', 'brow'],
       colorOptions: [
         {id: 'mono', label: '모노', hex: '#262626'},
         {id: 'cool-gray', label: '쿨 그레이', hex: '#9A9A9A'},
@@ -112,7 +109,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
       title: '뮤트 로즈 퍼스널',
       subtitle: '뉴트럴 톤에 맞춘 저채도 컬러',
       intensityLabel: '차분하게',
-      makeupAreas: ['base', 'lip'],
+      makeupAreas: ['lip', 'cheek'],
       colorOptions: [
         {id: 'muted-rose', label: '뮤트 로즈', hex: '#B87570'},
         {id: 'beige', label: '베이지', hex: '#E7D8CF'},

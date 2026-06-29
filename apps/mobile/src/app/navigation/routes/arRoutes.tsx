@@ -3,6 +3,7 @@ import React from 'react';
 import {ARFilterScreen} from '../../../features/ar/screens/ARFilterScreen';
 import {ARFilterShapeAdjustScreen} from '../../../features/ar/screens/ARFilterShapeAdjustScreen';
 import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterEditScreen';
+import {UnityMakeupCaptureScreen} from '../../../features/ar/screens/UnityMakeupCaptureScreen';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {navigateARBack, navigateMainTab, type RootScreenProps} from './routeUtils';
 
@@ -16,6 +17,17 @@ export function ARFilterRouteScreen({navigation}: RootScreenProps<'ARFilter'>) {
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
       onOpenShapeAdjust={() => navigation.navigate('ARFilterShapeAdjust')}
       onSave={() => navigation.navigate('MakeupFilterSave')}
+    />
+  );
+}
+
+export function UnityMakeupCaptureRouteScreen({
+  navigation,
+}: RootScreenProps<'UnityMakeupCapture'>) {
+  return (
+    <UnityMakeupCaptureScreen
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}
+      onComplete={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );
 }

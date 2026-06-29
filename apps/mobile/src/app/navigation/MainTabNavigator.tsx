@@ -40,7 +40,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
       if (targetRoute === 'ARFilter') {
         navigation
           .getParent<NavigationProp<RootStackParamList>>()
-          ?.navigate('ARFilter');
+          ?.navigate(targetRoute);
         return;
       }
 

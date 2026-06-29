@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -47,6 +47,7 @@ import {
   getARFilterOptionGroupLabels,
   getARFilterOriginalCardLabel,
   getARFilterSelectedColor as getARFilterSelectedColorFromRules,
+  getARFilterSelectedMakeupFilter,
   getARFilterShapeOptionLabels,
   getARFilterTotalMakeupLookIdAfterOptionEdit,
   isARFilterSaveEnabled,
@@ -55,6 +56,11 @@ import {
   getARFilterSaveButtonLabel,
   getARFilterShapeEditButtonLabel,
 } from '../components/ARFilterBottomActions';
+import {
+  createUnityMakeupRecipeBatchFromARFilterSelections,
+  hideUnityMakeupView,
+  postUnityMakeupRecipe,
+} from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
   initialComparisonMode?: ComparisonMode;
@@ -127,6 +133,56 @@ export function ARFilterScreen({
     arFilterSelectionState.selectedColorId,
   );
 
+  useEffect(() => () => hideUnityMakeupView(), []);
+
+  const handleBack = () => {
+    hideUnityMakeupView();
+    onBack?.();
+  };
+
+  const handleComplete = () => {
+    hideUnityMakeupView();
+    onComplete?.();
+  };
+
+  useEffect(() => {
+    const unitySelections = arGuideData.makeupAreas.map(makeupArea => {
+      const selectionState =
+        arFilterSelectionState.getSelectionStateForMakeupArea(makeupArea.id);
+      const selectedMakeupFilter = getARFilterSelectedMakeupFilter({
+        defaultFilter,
+        makeupFilters: arGuideData.filters,
+        selectedMakeupArea: makeupArea.id,
+        selectedPointMakeupLookId: selectionState.selectedPointMakeupLookId,
+        selectedTotalMakeupLookId: selectionState.selectedTotalMakeupLookId,
+      });
+
+      return {
+        selectedColor: getARFilterSelectedColor(
+          selectedMakeupFilter.colorOptions,
+          selectionState.selectedColorId,
+        ),
+        selectedColorId: selectionState.selectedColorId,
+        selectedMakeupArea: makeupArea.id,
+        selectedMakeupFilter,
+        selectedPointMakeupLookId: selectionState.selectedPointMakeupLookId,
+        selectedShapeId: selectionState.selectedShapeId,
+        selectedTextureId: selectionState.selectedTextureId,
+        selectedTotalMakeupLookId: selectionState.selectedTotalMakeupLookId,
+        selectedTypeId: selectionState.selectedTypeId,
+      };
+    });
+    const recipeBatch =
+      createUnityMakeupRecipeBatchFromARFilterSelections(unitySelections);
+
+    postUnityMakeupRecipe(recipeBatch);
+  }, [
+    arFilterSelectionState.selectionStatesByArea,
+    arGuideData.filters,
+    arGuideData.makeupAreas,
+    defaultFilter,
+  ]);
+
   return (
     <FullscreenOverlayScreen>
       <ARFilterCameraPreview
@@ -138,7 +194,7 @@ export function ARFilterScreen({
       <ARFilterModeTabs
         arGuideData={arGuideData}
         guideMode={arFilterSelectionState.guideMode}
-        onBack={onBack}
+        onBack={handleBack}
         onComparisonModeChange={arFilterSelectionState.setSelectedComparisonMode}
         onGuideModeChange={arFilterSelectionState.setGuideMode}
         selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
@@ -195,7 +251,7 @@ export function ARFilterScreen({
         <ARFilterCaptureControls
           captureMode={captureMode}
           onCaptureModeChange={setCaptureMode}
-          onComplete={onComplete}
+          onComplete={handleComplete}
         />
       </BottomOverlayPanel>
     </FullscreenOverlayScreen>
@@ -204,14 +260,14 @@ export function ARFilterScreen({
 
 const styles = StyleSheet.create({
   controlsPanel: {
-    gap: spacing.md,
-    maxHeight: 392,
+    gap: spacing.sm,
+    maxHeight: 304,
     paddingHorizontal: 0,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
   },
   panelContent: {
-    gap: spacing.md,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
 });

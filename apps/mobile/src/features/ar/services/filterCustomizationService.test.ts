@@ -74,7 +74,7 @@ expectEqual(
 
 const shapePreset = createShapePresetFromState(offsetState);
 
-expectEqual(shapePreset.selectedMakeupArea, 'all', 'shape preset makeup area');
+expectEqual(shapePreset.selectedMakeupArea, 'lip', 'shape preset makeup area');
 expectEqual(
   shapePreset.shapePoints[0]?.resolvedPosition.x,
   42,

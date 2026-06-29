@@ -28,6 +28,16 @@ expectEqual(
   '맞춤 분석 보고서',
   'detail route title',
 );
+expectEqual(
+  getDetailRouteTitle('HomeFilterStore'),
+  '필터 스토어',
+  'home filter store detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('SavedMakeupList'),
+  '저장된 메이크업',
+  'saved makeup list detail route title',
+);
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target');
 expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');

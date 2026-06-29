@@ -19,7 +19,9 @@ type BackendRecommendedProduct = {
   matchRate?: number | null;
   palette?: string[] | null;
   price?: number | null;
+  priceKrw?: number | null;
   productName?: string | null;
+  productInfo?: RecommendedProduct['productInfo'] | null;
   purchaseUrl?: string | null;
   reason?: string | null;
   shadeName?: string | null;
@@ -99,13 +101,23 @@ function mapProduct(product: BackendRecommendedProduct, index: number): Recommen
     category,
     matchRate:
       typeof product.matchRate === 'number' ? product.matchRate : fallbackProduct.matchRate,
-    price: typeof product.price === 'number' ? product.price : fallbackProduct.price,
+    price:
+      typeof product.price === 'number'
+        ? product.price
+        : typeof product.priceKrw === 'number'
+          ? product.priceKrw
+          : fallbackProduct.price,
     tags: normalizeTextArray(product.tags, fallbackProduct.tags),
     imageSource: imageUrl ? {uri: imageUrl} : fallbackProduct.imageSource,
     purchaseUrl: firstText(product.purchaseUrl, fallbackProduct.purchaseUrl),
     palette: normalizeTextArray(product.palette, fallbackProduct.palette),
+    productInfo: product.productInfo ?? fallbackProduct.productInfo,
     reason: firstText(product.reason) ?? fallbackProduct.reason,
   };
+}
+
+function isPurchasableBackendProduct(product: BackendRecommendedProduct): boolean {
+  return Boolean(firstText(product.imageUrl) && firstText(product.purchaseUrl));
 }
 
 function mapMakeupLook(
@@ -145,8 +157,8 @@ function mapProductRecommendationData(
   response: BackendProductRecommendationData,
 ): ProductRecommendationData {
   const products = Array.isArray(response.products)
-    ? response.products.map(mapProduct)
-    : productRecommendationMock.products;
+    ? response.products.filter(isPurchasableBackendProduct).map(mapProduct)
+    : [];
 
   return {
     userNickname: firstText(response.userNickname) ?? productRecommendationMock.userNickname,
@@ -163,22 +175,47 @@ function mapProductRecommendationData(
   };
 }
 
-export const getProductRecommendations = async (): Promise<ProductRecommendationData> => {
+function buildEmptyApiRecommendationData(): ProductRecommendationData {
+  return {
+    userNickname: productRecommendationMock.userNickname,
+    makeupLook: productRecommendationMock.makeupLook,
+    tabs: productRecommendationMock.tabs,
+    products: [],
+    sets: [],
+  };
+}
+
+type ProductRecommendationRequest = {
+  reportId?: string | null;
+};
+
+export const getProductRecommendations = async ({
+  reportId,
+}: ProductRecommendationRequest = {}): Promise<ProductRecommendationData> => {
   if (!getBackendApiBaseUrl()) {
     return productRecommendationMock;
   }
 
   try {
+    const query = reportId ? `?report_id=${encodeURIComponent(reportId)}` : '';
     const response = await requestBackendJson<BackendProductRecommendationData>(
-      '/products/recommendations',
+      `/products/recommendations${query}`,
     );
 
-    return mapProductRecommendationData(response);
+    const recommendations = mapProductRecommendationData(response);
+
+    console.info('[aura:products] recommendations:loaded', {
+      backendProducts: Array.isArray(response.products) ? response.products.length : 0,
+      mappedProducts: recommendations.products.length,
+      reportLinked: Boolean(reportId),
+    });
+
+    return recommendations;
   } catch (error) {
     console.info('[aura:products] recommendations:fallback', {
       message: error instanceof Error ? error.message : String(error),
     });
 
-    return productRecommendationMock;
+    return buildEmptyApiRecommendationData();
   }
 };

@@ -1,0 +1,69 @@
+{
+  "full.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "min": 0,
+    "max": 255,
+    "pixelsGt0": 3797,
+    "pixelsGt8": 3210,
+    "pixelsGt32": 2703,
+    "pixelsGt128": 1206
+  },
+  "overlip.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "min": 0,
+    "max": 255,
+    "pixelsGt0": 5227,
+    "pixelsGt8": 4320,
+    "pixelsGt32": 3500,
+    "pixelsGt128": 1276
+  },
+  "gradient-density.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "min": 0,
+    "max": 255,
+    "pixelsGt0": 3210,
+    "pixelsGt8": 2354,
+    "pixelsGt32": 1648,
+    "pixelsGt128": 567
+  },
+  "glossy-highlight.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "min": 0,
+    "max": 184,
+    "pixelsGt0": 87,
+    "pixelsGt8": 69,
+    "pixelsGt32": 34,
+    "pixelsGt128": 12
+  },
+  "gradient-density-pronounced.png": {
+    "mode": "L",
+    "size": [
+      512,
+      512
+    ],
+    "min": 0,
+    "max": 255,
+    "pixelsGt0": 2028,
+    "pixelsGt8": 1314,
+    "pixelsGt32": 830,
+    "pixelsGt128": 366,
+    "source": "gradient-density.png",
+    "curve": "quantile-normalize p8..p99.2, pow 1.55, faint full floor 4.5%, soft boundary clamp"
+  }
+}

@@ -6,6 +6,7 @@ import {
   ProductRecommendationScreen,
 } from '../../../features/recommendation';
 import {DetailRouteChrome} from '../detailHeaderChrome';
+import {useNavigationFlowState} from '../flowState';
 import {
   MainTabChrome,
   navigateMainTab,
@@ -14,9 +15,11 @@ import {
 } from './routeUtils';
 
 export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>) {
+  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+
   return (
     <MainTabChrome navigation={navigation} routeName="CustomTab">
-      <ProductRecommendationScreen />
+      <ProductRecommendationScreen sourceReportId={selectedFaceAnalysisReport?.id} />
     </MainTabChrome>
   );
 }

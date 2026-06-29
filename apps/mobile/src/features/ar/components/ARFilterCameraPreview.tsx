@@ -5,6 +5,10 @@ import {Text, View} from 'tamagui';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ComparisonMode, GuideMode} from '../../../shared/types/makeupGuide';
 import {FullscreenOverlayLayer, LiveCameraLayer} from '../../../shared/ui';
+import {
+  useUnityMakeupNativeViewReady,
+  UnityMakeupNativeView,
+} from './UnityMakeupNativeView';
 
 type MakeupPreviewColorOverlayLayer = {
   id: string;
@@ -39,6 +43,7 @@ export function ARFilterCameraPreview({
   selectedComparisonMode,
 }: ARFilterCameraPreviewProps) {
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
+  const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
   const shouldShowLeftCheekOverlay =
     guideMode !== 'half' || selectedComparisonMode !== 'right';
   const shouldShowRightCheekOverlay =
@@ -48,26 +53,38 @@ export function ARFilterCameraPreview({
 
   return (
     <FullscreenOverlayLayer>
-      <LiveCameraLayer />
-      <View style={styles.previewDim} />
-      <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
-      {shouldShowLeftCheekOverlay ? (
-        <View
-          style={[styles.cheekPreviewOverlayLeft, {backgroundColor: previewColorHex}]}
-        />
-      ) : null}
-      {shouldShowRightCheekOverlay ? (
-        <View
-          style={[styles.cheekPreviewOverlayRight, {backgroundColor: previewColorHex}]}
-        />
-      ) : null}
-      <View style={[styles.lipPreviewOverlay, {backgroundColor: previewColorHex}]} />
-      {previewColorOverlayLayers.map(layer => (
-        <View
-          key={layer.id}
-          style={[layer.style, {backgroundColor: previewColorHex}]}
-        />
-      ))}
+      {shouldUseUnityPreview ? (
+        <UnityMakeupNativeView />
+      ) : (
+        <>
+          <LiveCameraLayer />
+          <View style={styles.previewDim} />
+          <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
+          {shouldShowLeftCheekOverlay ? (
+            <View
+              style={[
+                styles.cheekPreviewOverlayLeft,
+                {backgroundColor: previewColorHex},
+              ]}
+            />
+          ) : null}
+          {shouldShowRightCheekOverlay ? (
+            <View
+              style={[
+                styles.cheekPreviewOverlayRight,
+                {backgroundColor: previewColorHex},
+              ]}
+            />
+          ) : null}
+          <View style={[styles.lipPreviewOverlay, {backgroundColor: previewColorHex}]} />
+          {previewColorOverlayLayers.map(layer => (
+            <View
+              key={layer.id}
+              style={[layer.style, {backgroundColor: previewColorHex}]}
+            />
+          ))}
+        </>
+      )}
       {guideMode === 'half' ? (
         <>
           {selectedComparisonMode !== 'full' ? (

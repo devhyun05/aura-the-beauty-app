@@ -35,6 +35,12 @@ type MakeupCorrectionTipPathContract = ExpectType<
 type MakeupLookListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.MakeupLookList, 'makeup-look-list'>
 >;
+type HomeFilterStorePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.HomeFilterStore, 'filter-store'>
+>;
+type SavedMakeupListPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
+>;
 type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.ReferenceMakeupExtractionUpload,
@@ -115,6 +121,16 @@ expectEqual(
   navigationLinking.config?.screens?.MakeupLookList,
   'makeup-look-list',
   'makeup look list path uses look naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.HomeFilterStore,
+  'filter-store',
+  'filter store path uses home store naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.SavedMakeupList,
+  'saved-makeup-list',
+  'saved makeup list path uses saved makeup naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,

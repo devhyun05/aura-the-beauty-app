@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.settings import Settings
 from app.main import create_app
 
 
@@ -69,7 +70,15 @@ def test_home_returns_empty_contract_without_database() -> None:
 
 
 def test_products_recommendations_returns_mobile_contract_without_database() -> None:
-  client = TestClient(create_app())
+  client = TestClient(
+    create_app(
+      Settings(
+        database_url=None,
+        naver_shopping_client_id=None,
+        naver_shopping_client_secret=None,
+      ),
+    ),
+  )
 
   response = client.get("/api/products/recommendations")
 

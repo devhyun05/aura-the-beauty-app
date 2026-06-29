@@ -1,0 +1,601 @@
+#import <Foundation/Foundation.h>
+#import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
+#import <React/RCTViewManager.h>
+#import <TargetConditionals.h>
+#import <UIKit/UIKit.h>
+#import <mach-o/dyld.h>
+#import <objc/message.h>
+
+static NSString *const UnityMakeupEventName = @"UnityMakeupEvent";
+static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNotification";
+
+@interface UnityMakeupNativeCalls : NSObject
+
+- (void)sendMessageToMobileApp:(NSString *)message;
+
+@end
+
+@interface UnityMakeupRuntime : NSObject
+
++ (instancetype)sharedRuntime;
+- (BOOL)isFrameworkAvailable;
+- (BOOL)isReady;
+- (BOOL)isRunning;
+- (BOOL)prepareFramework;
+- (BOOL)ensureRunning;
+- (void)prepareHidden;
+- (void)handleUnityMessage:(NSString *)message;
+- (UIView *)unityView;
+- (void)detachUnityView;
+- (void)sendMessageToGameObject:(NSString *)gameObject
+                         method:(NSString *)method
+                        payload:(NSString *)payload;
+
+@end
+
+@implementation UnityMakeupRuntime {
+  NSBundle *_unityBundle;
+  id _unityFramework;
+  UnityMakeupNativeCalls *_nativeCalls;
+  __weak UIWindow *_reactWindow;
+  __weak UIViewController *_reactRootViewController;
+  BOOL _isReady;
+  BOOL _isRunning;
+  BOOL _isPresentingUnityView;
+  int _unityArgc;
+  char **_unityArgv;
+}
+
++ (instancetype)sharedRuntime
+{
+  static UnityMakeupRuntime *runtime = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    runtime = [UnityMakeupRuntime new];
+  });
+  return runtime;
+}
+
+- (BOOL)isFrameworkAvailable
+{
+#if TARGET_OS_SIMULATOR
+  return NO;
+#else
+  return [[NSFileManager defaultManager] fileExistsAtPath:[self unityFrameworkPath]];
+#endif
+}
+
+- (BOOL)isReady
+{
+  return _isReady;
+}
+
+- (BOOL)isRunning
+{
+  return _isRunning && [self unityAppController] != nil;
+}
+
+- (BOOL)prepareFramework
+{
+  if (![self isFrameworkAvailable]) {
+    return NO;
+  }
+
+  return [self loadUnityFrameworkIfNeeded];
+}
+
+- (BOOL)ensureRunning
+{
+  if (![self isFrameworkAvailable]) {
+    return NO;
+  }
+
+  if (![self loadUnityFrameworkIfNeeded]) {
+    return NO;
+  }
+
+  if ([self unityAppController] != nil) {
+    _isRunning = YES;
+    if (!_isPresentingUnityView) {
+      [self scheduleConcealUnityView];
+    }
+    return YES;
+  }
+
+  [self rememberReactWindowIfNeeded];
+
+  SEL runSelector = NSSelectorFromString(@"runEmbeddedWithArgc:argv:appLaunchOpts:");
+  if (![_unityFramework respondsToSelector:runSelector]) {
+    return NO;
+  }
+
+  int argc = 0;
+  char **argv = [self processArgumentsWithArgc:&argc];
+  ((void (*)(id, SEL, int, char **, NSDictionary *))objc_msgSend)(
+      _unityFramework, runSelector, argc, argv, nil);
+  _isRunning = YES;
+
+  if (!_isPresentingUnityView) {
+    [self concealUnityView];
+    [self scheduleConcealUnityView];
+  }
+
+  return YES;
+}
+
+- (void)prepareHidden
+{
+  BOOL previousPresentationState = _isPresentingUnityView;
+  _isPresentingUnityView = NO;
+  [self ensureRunning];
+  _isPresentingUnityView = previousPresentationState;
+
+  if (!_isPresentingUnityView) {
+    [self concealUnityView];
+    [self scheduleConcealUnityView];
+  }
+}
+
+- (void)handleUnityMessage:(NSString *)message
+{
+  NSString *safeMessage = message ?: @"";
+  BOOL didInitialize = [safeMessage containsString:@"\"type\":\"unity_initialized\""] ||
+      [safeMessage containsString:@"unity_initialized"];
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (didInitialize) {
+      self->_isReady = YES;
+    }
+
+    if (!self->_isPresentingUnityView) {
+      [self concealUnityView];
+      [self scheduleConcealUnityView];
+    }
+
+    [[NSNotificationCenter defaultCenter] postNotificationName:UnityMakeupEventNotification
+                                                        object:self
+                                                      userInfo:@{@"message": safeMessage}];
+  });
+}
+
+- (UIView *)unityView
+{
+  _isPresentingUnityView = YES;
+  if (![self ensureRunning]) {
+    _isPresentingUnityView = NO;
+    return nil;
+  }
+
+  UIView *rootView = [self currentUnityRootView];
+  if (!rootView) {
+    _isPresentingUnityView = NO;
+    return nil;
+  }
+
+  rootView.hidden = NO;
+  rootView.userInteractionEnabled = YES;
+  [self restoreReactWindowIfNeeded];
+
+  return rootView;
+}
+
+- (void)detachUnityView
+{
+  _isPresentingUnityView = NO;
+  [self concealUnityView];
+  [self scheduleConcealUnityView];
+}
+
+- (void)sendMessageToGameObject:(NSString *)gameObject
+                         method:(NSString *)method
+                        payload:(NSString *)payload
+{
+  if (![self ensureRunning]) {
+    return;
+  }
+
+  SEL sendSelector = NSSelectorFromString(@"sendMessageToGOWithName:functionName:message:");
+  if (![_unityFramework respondsToSelector:sendSelector]) {
+    return;
+  }
+
+  ((void (*)(id, SEL, const char *, const char *, const char *))objc_msgSend)(
+      _unityFramework,
+      sendSelector,
+      gameObject.UTF8String,
+      method.UTF8String,
+      payload.UTF8String);
+}
+
+- (NSString *)unityFrameworkPath
+{
+  NSString *privateFrameworksPath = NSBundle.mainBundle.privateFrameworksPath;
+  return [privateFrameworksPath stringByAppendingPathComponent:@"UnityFramework.framework"];
+}
+
+- (BOOL)loadUnityFrameworkIfNeeded
+{
+  if (_unityFramework != nil) {
+    return YES;
+  }
+
+  _unityBundle = [NSBundle bundleWithPath:[self unityFrameworkPath]];
+  if (!_unityBundle) {
+    return NO;
+  }
+
+  NSError *loadError = nil;
+  if (![_unityBundle loadAndReturnError:&loadError]) {
+    NSLog(@"[aura:unity] Failed to load UnityFramework: %@", loadError);
+    return NO;
+  }
+
+  Class unityFrameworkClass = NSClassFromString(@"UnityFramework");
+  SEL getInstanceSelector = NSSelectorFromString(@"getInstance");
+  if (!unityFrameworkClass || ![unityFrameworkClass respondsToSelector:getInstanceSelector]) {
+    NSLog(@"[aura:unity] UnityFramework class is not available after bundle load.");
+    return NO;
+  }
+
+  _unityFramework = ((id (*)(id, SEL))objc_msgSend)(
+      unityFrameworkClass, getInstanceSelector);
+  if (!_unityFramework) {
+    return NO;
+  }
+
+  [self configureUnityFramework];
+  return YES;
+}
+
+- (void)configureUnityFramework
+{
+  SEL setExecuteHeaderSelector = NSSelectorFromString(@"setExecuteHeader:");
+  if ([_unityFramework respondsToSelector:setExecuteHeaderSelector]) {
+    const struct mach_header *executeHeader = _dyld_get_image_header(0);
+    ((void (*)(id, SEL, const struct mach_header *))objc_msgSend)(
+        _unityFramework, setExecuteHeaderSelector, executeHeader);
+  }
+
+  SEL setDataBundleSelector = NSSelectorFromString(@"setDataBundleId:");
+  if ([_unityFramework respondsToSelector:setDataBundleSelector]) {
+    ((void (*)(id, SEL, const char *))objc_msgSend)(
+        _unityFramework, setDataBundleSelector, "com.unity3d.framework");
+  }
+
+  Class nativeCallsClass = NSClassFromString(@"FrameworkLibAPI");
+  SEL registerNativeCallsSelector = NSSelectorFromString(@"registerAPIforNativeCalls:");
+  if (nativeCallsClass && [nativeCallsClass respondsToSelector:registerNativeCallsSelector]) {
+    if (!_nativeCalls) {
+      _nativeCalls = [UnityMakeupNativeCalls new];
+    }
+
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        nativeCallsClass, registerNativeCallsSelector, _nativeCalls);
+  }
+}
+
+- (id)unityAppController
+{
+  if (!_unityFramework) {
+    return nil;
+  }
+
+  SEL appControllerSelector = NSSelectorFromString(@"appController");
+  if (![_unityFramework respondsToSelector:appControllerSelector]) {
+    return nil;
+  }
+
+  return ((id (*)(id, SEL))objc_msgSend)(_unityFramework, appControllerSelector);
+}
+
+- (UIView *)currentUnityRootView
+{
+  id appController = [self unityAppController];
+  if (!appController) {
+    return nil;
+  }
+
+  SEL rootViewSelector = NSSelectorFromString(@"rootView");
+  if (![appController respondsToSelector:rootViewSelector]) {
+    return nil;
+  }
+
+  return ((UIView *(*)(id, SEL))objc_msgSend)(appController, rootViewSelector);
+}
+
+- (UIWindow *)unityWindow
+{
+  id appController = [self unityAppController];
+  if (!appController) {
+    return nil;
+  }
+
+  SEL windowSelector = NSSelectorFromString(@"window");
+  if (![appController respondsToSelector:windowSelector]) {
+    return nil;
+  }
+
+  return ((UIWindow *(*)(id, SEL))objc_msgSend)(appController, windowSelector);
+}
+
+- (UIWindow *)currentAppWindow
+{
+  for (UIWindow *window in UIApplication.sharedApplication.windows) {
+    if (window.isKeyWindow) {
+      return window;
+    }
+  }
+
+  return UIApplication.sharedApplication.windows.firstObject;
+}
+
+- (void)rememberReactWindowIfNeeded
+{
+  UIWindow *currentWindow = [self currentAppWindow];
+  UIWindow *unityWindow = [self unityWindow];
+
+  if (currentWindow && currentWindow != unityWindow) {
+    _reactWindow = currentWindow;
+    _reactRootViewController = currentWindow.rootViewController;
+  }
+}
+
+- (void)restoreReactWindowIfNeeded
+{
+  UIWindow *reactWindow = _reactWindow;
+  if (!reactWindow) {
+    [self rememberReactWindowIfNeeded];
+    reactWindow = _reactWindow;
+  }
+
+  UIViewController *reactRootViewController = _reactRootViewController;
+  if (reactWindow && reactRootViewController &&
+      reactWindow.rootViewController != reactRootViewController) {
+    reactWindow.rootViewController = reactRootViewController;
+  }
+
+  if (reactWindow) {
+    reactWindow.hidden = NO;
+    [reactWindow makeKeyAndVisible];
+  }
+
+  UIWindow *unityWindow = [self unityWindow];
+  if (unityWindow && unityWindow != reactWindow && !_isPresentingUnityView) {
+    unityWindow.hidden = YES;
+  }
+}
+
+- (void)concealUnityView
+{
+  if (_isPresentingUnityView) {
+    return;
+  }
+
+  UIView *rootView = [self currentUnityRootView];
+  if (rootView) {
+    rootView.hidden = YES;
+    rootView.userInteractionEnabled = NO;
+    [rootView removeFromSuperview];
+  }
+
+  [self restoreReactWindowIfNeeded];
+}
+
+- (void)scheduleConcealUnityView
+{
+  NSArray<NSNumber *> *delays = @[@0.0, @0.05, @0.2, @0.5, @1.0, @2.0];
+
+  for (NSNumber *delay in delays) {
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+          if (!self->_isPresentingUnityView) {
+            [self concealUnityView];
+          }
+        });
+  }
+}
+
+- (char **)processArgumentsWithArgc:(int *)argc
+{
+  if (_unityArgv != NULL) {
+    *argc = _unityArgc;
+    return _unityArgv;
+  }
+
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  _unityArgc = (int)arguments.count;
+  _unityArgv = calloc((size_t)_unityArgc + 1, sizeof(char *));
+
+  for (NSUInteger index = 0; index < arguments.count; index += 1) {
+    _unityArgv[index] = strdup(arguments[index].UTF8String);
+  }
+
+  *argc = _unityArgc;
+  return _unityArgv;
+}
+
+@end
+
+@implementation UnityMakeupNativeCalls
+
+- (void)sendMessageToMobileApp:(NSString *)message
+{
+  [[UnityMakeupRuntime sharedRuntime] handleUnityMessage:message];
+}
+
+@end
+
+@interface UnityMakeupBridge : RCTEventEmitter <RCTBridgeModule>
+@end
+
+@implementation UnityMakeupBridge
+
+RCT_EXPORT_MODULE();
+
++ (BOOL)requiresMainQueueSetup
+{
+  return YES;
+}
+
+RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isFrameworkAvailable)
+{
+  return @([[UnityMakeupRuntime sharedRuntime] isFrameworkAvailable]);
+}
+
+RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isReady)
+{
+  return @([[UnityMakeupRuntime sharedRuntime] isReady]);
+}
+
+RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isRuntimeAvailable)
+{
+  return @([[UnityMakeupRuntime sharedRuntime] isRunning]);
+}
+
+RCT_EXPORT_METHOD(prepareFramework)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] prepareFramework];
+  });
+}
+
+RCT_EXPORT_METHOD(prepareRuntime)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] prepareHidden];
+  });
+}
+
+RCT_EXPORT_METHOD(hideView)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] detachUnityView];
+  });
+}
+
+RCT_EXPORT_METHOD(postMessage:(NSString *)gameObject
+                  method:(NSString *)method
+                  payload:(NSString *)payload)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] sendMessageToGameObject:gameObject
+                                                         method:method
+                                                        payload:payload];
+  });
+}
+
+- (NSArray<NSString *> *)supportedEvents
+{
+  return @[UnityMakeupEventName];
+}
+
+- (void)startObserving
+{
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleUnityEvent:)
+                                               name:UnityMakeupEventNotification
+                                             object:nil];
+}
+
+- (void)stopObserving
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                  name:UnityMakeupEventNotification
+                                                object:nil];
+}
+
+- (void)handleUnityEvent:(NSNotification *)notification
+{
+  NSString *message = notification.userInfo[@"message"] ?: @"";
+  [self sendEventWithName:UnityMakeupEventName body:@{@"message": message}];
+}
+
+@end
+
+@interface UnityMakeupContainerView : UIView
+@end
+
+@implementation UnityMakeupContainerView {
+  UIView *_unityView;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.backgroundColor = UIColor.blackColor;
+    self.clipsToBounds = YES;
+  }
+  return self;
+}
+
+- (void)didMoveToWindow
+{
+  [super didMoveToWindow];
+  if (self.window != nil) {
+    [self mountUnityViewIfNeeded];
+  } else {
+    [self unmountUnityView];
+  }
+}
+
+- (void)layoutSubviews
+{
+  [super layoutSubviews];
+  _unityView.frame = self.bounds;
+}
+
+- (void)mountUnityViewIfNeeded
+{
+  UIView *unityView = [[UnityMakeupRuntime sharedRuntime] unityView];
+  if (!unityView) {
+    return;
+  }
+
+  _unityView = unityView;
+  if (_unityView.superview != self) {
+    [_unityView removeFromSuperview];
+    _unityView.frame = self.bounds;
+    _unityView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self addSubview:_unityView];
+  }
+}
+
+- (void)unmountUnityView
+{
+  if (_unityView.superview == self) {
+    [_unityView removeFromSuperview];
+  }
+
+  _unityView = nil;
+  [[UnityMakeupRuntime sharedRuntime] detachUnityView];
+}
+
+- (void)removeFromSuperview
+{
+  [self unmountUnityView];
+  [super removeFromSuperview];
+}
+
+@end
+
+@interface UnityMakeupViewManager : RCTViewManager
+@end
+
+@implementation UnityMakeupViewManager
+
+RCT_EXPORT_MODULE(AURAUnityMakeupView);
+
++ (BOOL)requiresMainQueueSetup
+{
+  return YES;
+}
+
+- (UIView *)view
+{
+  return [UnityMakeupContainerView new];
+}
+
+@end

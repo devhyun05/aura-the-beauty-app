@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useCallback, useMemo, useState} from 'react';
 import {
   Image,
   Linking,
@@ -13,6 +13,7 @@ import {
   Heart,
   Plus,
 } from 'lucide-react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
@@ -73,14 +74,20 @@ function getProductDisplayName(product: RecommendedProduct): string {
   return [product.productName, product.shadeName].filter((value) => value.trim()).join(' ');
 }
 
-export function ProductRecommendationScreen() {
+type ProductRecommendationScreenProps = {
+  sourceReportId?: string | null;
+};
+
+export function ProductRecommendationScreen({
+  sourceReportId,
+}: ProductRecommendationScreenProps = {}) {
   const [data, setData] = useState<ProductRecommendationData | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
 
-  useEffect(() => {
+  const loadRecommendations = useCallback(() => {
     let isMounted = true;
 
-    getProductRecommendations().then((recommendations) => {
+    getProductRecommendations({reportId: sourceReportId}).then((recommendations) => {
       if (isMounted) {
         setData(recommendations);
       }
@@ -89,7 +96,9 @@ export function ProductRecommendationScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [sourceReportId]);
+
+  useFocusEffect(loadRecommendations);
 
   const products = useMemo(() => {
     if (!data) {
@@ -141,8 +150,17 @@ export function ProductRecommendationScreen() {
         ) : (
           <View style={styles.emptyProductState}>
             <Text style={styles.emptyProductText}>
-              네이버 쇼핑 상품을 불러오려면 백엔드에 쇼핑 API 키가 필요해요.
+              네이버 스토어 상품을 불러오지 못했어요. 백엔드 배포와 쇼핑 API 설정을 확인해 주세요.
             </Text>
+            <Pressable
+              accessibilityLabel="추천 제품 다시 불러오기"
+              accessibilityRole="button"
+              onPress={() => {
+                getProductRecommendations({reportId: sourceReportId}).then(setData);
+              }}
+              style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>다시 불러오기</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -279,6 +297,20 @@ function ProductCard({product}: {product: RecommendedProduct}) {
             <View key={color} style={[styles.productSwatch, {backgroundColor: color}]} />
           ))}
         </XStack>
+
+        <XStack style={styles.productTagRow}>
+          {product.tags.slice(0, 3).map((tag) => (
+            <View key={tag} style={styles.productTag}>
+              <Text numberOfLines={1} style={styles.productTagText}>
+                {tag}
+              </Text>
+            </View>
+          ))}
+        </XStack>
+
+        <Text numberOfLines={3} style={styles.productReason}>
+          {product.reason}
+        </Text>
       </YStack>
     </Pressable>
   );
@@ -634,6 +666,12 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  productReason: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
   productPurchaseRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -646,10 +684,43 @@ const styles = StyleSheet.create({
     height: 14,
     width: 22,
   },
+  productTag: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    maxWidth: '100%',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  productTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  productTagText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
   productTitleGroup: {
     flex: 1,
     gap: spacing.xs,
     minWidth: 0,
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    marginTop: spacing.md,
+    minHeight: 38,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
   },
   sectionTitle: {
     color: colors.textPrimary,
