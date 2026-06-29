@@ -4,7 +4,7 @@ import type {
 } from '../services/filterCustomizationService';
 
 export const mockFilterShapeState: FilterShapeState = {
-  selectedMakeupArea: 'all',
+  selectedMakeupArea: 'lip',
   isOverlayVisible: true,
   shapePoints: [
     {id: 'left-brow', position: {x: 38, y: 31}, offset: {x: 0, y: 0}},
@@ -51,7 +51,7 @@ export const mockFilterShapeState: FilterShapeState = {
 };
 
 export const mockMakeupFilterOptionState: MakeupFilterOptionState = {
-  selectedMakeupArea: 'all',
+  selectedMakeupArea: 'lip',
   selectedOptionGroup: 'color',
   selectedColorId: 'rose',
   selectedTypeId: 'lipstick',

@@ -31,18 +31,22 @@ import type {
 
 type HomeScreenProps = {
   onPressARFilter?: () => void;
+  onPressFilterStore?: () => void;
   onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
+  onPressSavedMakeups?: () => void;
 };
 
 export function HomeScreen({
   onPressARFilter,
+  onPressFilterStore,
   onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
+  onPressSavedMakeups,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const {width} = useWindowDimensions();
@@ -85,8 +89,14 @@ export function HomeScreen({
         onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
-      <FilterStoreSection items={homeData.filterStore} />
-      <RecommendedLooksSection makeupLooks={homeData.recommendedLooks} />
+      <FilterStoreSection
+        items={homeData.filterStore}
+        onPressFilterStore={onPressFilterStore}
+      />
+      <RecommendedLooksSection
+        makeupLooks={homeData.recommendedLooks}
+        onPressSavedMakeups={onPressSavedMakeups}
+      />
     </>
   );
 }
@@ -439,11 +449,18 @@ function QuickActionSection({
   );
 }
 
-function FilterStoreSection({items}: {items: HomeFilterStoreItem[]}) {
+function FilterStoreSection({
+  items,
+  onPressFilterStore,
+}: {
+  items: HomeFilterStoreItem[];
+  onPressFilterStore?: () => void;
+}) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
         actionLabel="스토어 보기"
+        onPressAction={onPressFilterStore}
         title="필터 스토어"
       />
 
@@ -452,18 +469,29 @@ function FilterStoreSection({items}: {items: HomeFilterStoreItem[]}) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterList}>
         {items.map((item) => (
-          <FilterStoreCard item={item} key={item.id} />
+          <FilterStoreCard
+            item={item}
+            key={item.id}
+            onPress={onPressFilterStore}
+          />
         ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
+function FilterStoreCard({
+  item,
+  onPress,
+}: {
+  item: HomeFilterStoreItem;
+  onPress?: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${item.title} ${item.description} ${item.category}`}
+      onPress={onPress}
       style={({pressed}) => [styles.filterCard, pressed && styles.pressed]}>
       <View style={styles.filterImageFrame}>
         <Image resizeMode="contain" source={item.imageSource} style={styles.filterImage} />
@@ -484,12 +512,19 @@ function FilterStoreCard({item}: {item: HomeFilterStoreItem}) {
   );
 }
 
-function RecommendedLooksSection({makeupLooks}: {makeupLooks: HomeMakeupLook[]}) {
+function RecommendedLooksSection({
+  makeupLooks,
+  onPressSavedMakeups,
+}: {
+  makeupLooks: HomeMakeupLook[];
+  onPressSavedMakeups?: () => void;
+}) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
         actionLabel="전체 보기"
-        title="추천 메이크업 리스트"
+        onPressAction={onPressSavedMakeups}
+        title="저장된 메이크업"
       />
 
       <TamaguiScrollView
@@ -497,18 +532,29 @@ function RecommendedLooksSection({makeupLooks}: {makeupLooks: HomeMakeupLook[]})
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.makeupLookList}>
         {makeupLooks.map((makeupLook) => (
-          <RecommendedLookCard key={makeupLook.id} makeupLook={makeupLook} />
+          <RecommendedLookCard
+            key={makeupLook.id}
+            makeupLook={makeupLook}
+            onPress={onPressSavedMakeups}
+          />
         ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function RecommendedLookCard({makeupLook}: {makeupLook: HomeMakeupLook}) {
+function RecommendedLookCard({
+  makeupLook,
+  onPress,
+}: {
+  makeupLook: HomeMakeupLook;
+  onPress?: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${makeupLook.title} ${makeupLook.description}`}
+      onPress={onPress}
       style={({pressed}) => [styles.makeupLookCard, pressed && styles.pressed]}>
       <View style={styles.makeupLookImageFrame}>
         <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
@@ -528,17 +574,21 @@ function RecommendedLookCard({makeupLook}: {makeupLook: HomeMakeupLook}) {
 
 type SectionHeaderProps = {
   actionLabel: string;
+  onPressAction?: () => void;
   title: string;
 };
 
-function SectionHeader({actionLabel, title}: SectionHeaderProps) {
+function SectionHeader({actionLabel, onPressAction, title}: SectionHeaderProps) {
   return (
     <XStack style={styles.sectionHeader}>
       <YStack style={styles.sectionTitleGroup}>
         <Text style={styles.sectionTitle}>{title}</Text>
       </YStack>
 
-      <Pressable accessibilityRole="button" style={styles.sectionAction}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPressAction}
+        style={({pressed}) => [styles.sectionAction, pressed && styles.pressed]}>
         <Text style={styles.sectionActionText}>{actionLabel}</Text>
         <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
       </Pressable>

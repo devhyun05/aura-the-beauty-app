@@ -1,4 +1,5 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
+import {InteractionManager} from 'react-native';
 import {
   NavigationContainer,
   useNavigationContainerRef,
@@ -18,6 +19,7 @@ import {
 } from '../app/navigation/navigationState';
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
+import {prepareUnityMakeupFramework} from '../features/ar/services/unityMakeupBridge';
 import {typography} from '../shared/theme';
 
 export function AppRoot() {
@@ -38,6 +40,27 @@ export function AppRoot() {
     [],
   );
 
+  useEffect(() => {
+    if (!fontsLoaded) {
+      return undefined;
+    }
+
+    let preloadTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const preloadAfterInitialRender = InteractionManager.runAfterInteractions(() => {
+      preloadTimer = setTimeout(() => {
+        prepareUnityMakeupFramework();
+      }, 1000);
+    });
+
+    return () => {
+      preloadAfterInitialRender.cancel();
+      if (preloadTimer) {
+        clearTimeout(preloadTimer);
+      }
+    };
+  }, [fontsLoaded]);
+
   if (!fontsLoaded) {
     return null;
   }
@@ -48,13 +71,13 @@ export function AppRoot() {
         <StatusBar style={statusBarStyle} />
         <AuthSessionProvider>
           <NavigationFlowStateProvider>
-          <NavigationContainer
-            linking={navigationLinking}
-            ref={navigationRef}
-            onReady={() => syncStatusBarStyle(navigationRef.getRootState())}
-            onStateChange={state => syncStatusBarStyle(state)}>
-            <RootNavigator />
-          </NavigationContainer>
+            <NavigationContainer
+              linking={navigationLinking}
+              ref={navigationRef}
+              onReady={() => syncStatusBarStyle(navigationRef.getRootState())}
+              onStateChange={state => syncStatusBarStyle(state)}>
+              <RootNavigator />
+            </NavigationContainer>
           </NavigationFlowStateProvider>
         </AuthSessionProvider>
       </SafeAreaProvider>

@@ -16,10 +16,19 @@ router = APIRouter(prefix="/products", tags=["products"])
 @router.get("/recommendations")
 async def get_product_recommendations(
   category: str | None = None,
+  report_id: str | None = None,
+  auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(get_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  data, source = await build_product_recommendation_data(db, settings, category)
+  data, source = await build_product_recommendation_data(
+    db,
+    settings,
+    category,
+    auth_provider=auth.provider,
+    oauth_sub=auth.subject,
+    report_id=report_id,
+  )
 
   return success(data, {"source": source})
 

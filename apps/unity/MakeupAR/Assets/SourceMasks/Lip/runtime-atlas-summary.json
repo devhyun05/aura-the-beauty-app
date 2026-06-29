@@ -1,0 +1,65 @@
+{
+  "status": "built",
+  "sourceDir": "unity/MakeupARUnityValidation/Assets/SourceMasks/Lip",
+  "runtimeDir": "unity/MakeupARUnityValidation/Assets/Resources/SmoothRegionMasks",
+  "gradientSource": "gradient-density-pronounced.png",
+  "runtimeAtlases": [
+    "lip-drawn-gradient-density-atlas-v1.png",
+    "lip-drawn-style-atlas-v1.png"
+  ],
+  "preview": "unity/MakeupARUnityValidation/Assets/SourceMasks/Lip/lip-source-masks-runtime-atlas-preview.png",
+  "channels": {
+    "full": {
+      "mode": "L",
+      "size": [
+        512,
+        512
+      ],
+      "min": 0,
+      "max": 255,
+      "pixelsGt0": 3797,
+      "pixelsGt8": 3210,
+      "pixelsGt32": 2703,
+      "pixelsGt128": 1206
+    },
+    "overlip": {
+      "mode": "L",
+      "size": [
+        512,
+        512
+      ],
+      "min": 0,
+      "max": 255,
+      "pixelsGt0": 5227,
+      "pixelsGt8": 4320,
+      "pixelsGt32": 3500,
+      "pixelsGt128": 1276
+    },
+    "gradient": {
+      "mode": "L",
+      "size": [
+        512,
+        512
+      ],
+      "min": 0,
+      "max": 255,
+      "pixelsGt0": 2028,
+      "pixelsGt8": 1314,
+      "pixelsGt32": 830,
+      "pixelsGt128": 366
+    },
+    "glossy": {
+      "mode": "L",
+      "size": [
+        512,
+        512
+      ],
+      "min": 0,
+      "max": 184,
+      "pixelsGt0": 87,
+      "pixelsGt8": 69,
+      "pixelsGt32": 34,
+      "pixelsGt128": 12
+    }
+  }
+}

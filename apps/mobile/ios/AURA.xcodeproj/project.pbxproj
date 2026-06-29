@@ -14,6 +14,7 @@
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504346C7D22F1FFCE44CAEE5 /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AURA/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "AURA-Bridging-Header.h"; path = "AURA/AURA-Bridging-Header.h"; sourceTree = "<group>"; };
+		F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = UnityMakeupBridge.m; path = AURA/UnityMakeupBridge.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +50,7 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
 				F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
@@ -147,6 +150,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				7B8CC3F2DA521AC758E2BFB4 /* [CP] Embed Pods Frameworks */,
+				F4E2A61C2F6C8B2400C7D101 /* Embed UnityFramework */,
 			);
 			buildRules = (
 			);
@@ -282,6 +286,22 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-AURA/Pods-AURA-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		F4E2A61C2F6C8B2400C7D101 /* Embed UnityFramework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed UnityFramework";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nif [ \"${PLATFORM_NAME}\" != \"iphoneos\" ]; then\n  echo \"[aura:unity] Skipping UnityFramework embed for ${PLATFORM_NAME}.\"\n  exit 0\nfi\n\nUNITY_BUILD_DIR=\"${SRCROOT}/UnityBuild\"\nUNITY_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/UnityFramework.framework\"\nUNITY_DATA_SRC=\"${UNITY_BUILD_DIR}/Data\"\nUNITY_FRAMEWORK_DST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/UnityFramework.framework\"\n\nif [ -d \"${UNITY_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding UnityFramework from ${UNITY_FRAMEWORK_SRC}\"\n  mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n  rsync -a --delete \"${UNITY_FRAMEWORK_SRC}\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/\"\n  if [ -d \"${UNITY_DATA_SRC}\" ]; then\n    rsync -a --delete \"${UNITY_DATA_SRC}/\" \"${UNITY_FRAMEWORK_DST}/Data/\"\n  else\n    echo \"[aura:unity] Data folder not found at ${UNITY_DATA_SRC}; Unity may fail to load assets.\"\n  fi\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${UNITY_FRAMEWORK_DST}\"\n  fi\nelse\n  echo \"[aura:unity] UnityFramework.framework not found at ${UNITY_FRAMEWORK_SRC}; skipping embed.\"\nfi\n";
+			showEnvVarsInLog = 0;
+		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -344,6 +364,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
 				D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

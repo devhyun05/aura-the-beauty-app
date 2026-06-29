@@ -25,6 +25,17 @@ export type RecommendedProduct = {
   imageSource: ImageSourcePropType;
   purchaseUrl?: string;
   palette: string[];
+  productInfo?: {
+    brand?: string;
+    colors?: string[];
+    effects?: string[];
+    features?: string[];
+    maker?: string;
+    origin?: string;
+    productNumber?: string;
+    skinTypes?: string[];
+    tones?: string[];
+  };
   reason: string;
 };
 

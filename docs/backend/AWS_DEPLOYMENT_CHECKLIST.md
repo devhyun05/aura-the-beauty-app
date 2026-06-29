@@ -163,6 +163,7 @@ ECS task requirements:
 - Container port: `8000`
 - Health check path: `/health`
 - Environment/secrets: use values from `docs/backend/SETUP_REQUIRED.md`
+- Product recommendations need `NAVER_SHOPPING_CLIENT_ID` and `NAVER_SHOPPING_CLIENT_SECRET`; without them `/api/products/recommendations` cannot return live NAVER Store products.
 - ECS should set `AWS_USE_IAM_ROLE=true`; local development can use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 - Logs: send stdout/stderr to CloudWatch
 

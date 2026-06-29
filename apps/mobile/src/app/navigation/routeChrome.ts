@@ -51,7 +51,9 @@ export type RouteChrome =
       statusBarStyle: 'dark' | 'light';
     });
 
-export type FooterTargetRoute = MainTabRouteName | Extract<RootStackRouteName, 'ARFilter'>;
+export type FooterTargetRoute =
+  | MainTabRouteName
+  | Extract<RootStackRouteName, 'ARFilter'>;
 
 export const routeChromeByRoute = {
   Login: {
@@ -73,6 +75,12 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
   },
   FaceCapture: {
+    category: 'capture-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
+  UnityMakeupCapture: {
     category: 'capture-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
@@ -106,6 +114,20 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '프로필 수정',
+  },
+  HomeFilterStore: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '필터 스토어',
+  },
+  SavedMakeupList: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '저장된 메이크업',
   },
   MakeupLookList: {
     category: 'list',

@@ -463,6 +463,27 @@ class OpenAIAnalysisService:
 
     return "auto"
 
+  def _supports_input_fidelity_option(self) -> bool:
+    model_id = (self.settings.openai_image_model_id or "").strip().lower()
+
+    return model_id == "gpt-image-1"
+
+  def _build_image_edit_params(self, image_file: Any, prompt: str, edit_size: str) -> dict[str, Any]:
+    params = {
+      "model": self.settings.openai_image_model_id,
+      "image": image_file,
+      "prompt": prompt,
+      "background": "opaque",
+      "n": 1,
+      "quality": self.settings.openai_image_quality,
+      "size": edit_size,
+    }
+
+    if self._supports_input_fidelity_option():
+      params["input_fidelity"] = "high"
+
+    return params
+
   def _upload_generated_image(self, image_bytes: bytes, index: int) -> dict[str, str]:
     if not self.settings.s3_bucket_name:
       raise AppError(
@@ -515,14 +536,7 @@ class OpenAIAnalysisService:
 
       with open(temp_path, "rb") as image_file:
         response = self._client().images.edit(
-          model=self.settings.openai_image_model_id,
-          image=image_file,
-          prompt=prompt,
-          background="opaque",
-          input_fidelity="high",
-          n=1,
-          quality=self.settings.openai_image_quality,
-          size=edit_size,
+          **self._build_image_edit_params(image_file, prompt, edit_size),
         )
     finally:
       if temp_path:

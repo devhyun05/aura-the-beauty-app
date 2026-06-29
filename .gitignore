@@ -13,3 +13,7 @@ __pycache__/
 .venv/
 *.log
 .pytest_cache/
+apps/mobile/ios/UnityBuild/
+apps/unity-builds/
+apps/unity/MakeupAR/Library/
+apps/unity/MakeupAR/UserSettings/

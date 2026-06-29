@@ -66,6 +66,11 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'eye-tail', label: '눈꼬리 확장'},
     {id: 'eye-under', label: '언더 포인트'},
   ],
+  brow: [
+    {id: 'brow-default', label: '기본 눈썹'},
+    {id: 'brow-soft-arch', label: '소프트 아치'},
+    {id: 'brow-straight', label: '일자 눈썹'},
+  ],
   lip: [
     {id: 'lip-default', label: '기본 립'},
     {id: 'lip-over', label: '오버 립'},
