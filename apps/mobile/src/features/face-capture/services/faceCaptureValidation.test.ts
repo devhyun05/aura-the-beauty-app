@@ -42,6 +42,18 @@ expectEqual(readyGuidance.isCaptureEnabled, true, 'ready capture enabled');
 expectEqual(readyGuidance.tintColor, FACE_CAPTURE_READY_COLOR, 'ready tint color');
 expectEqual(readyGuidance.message, null, 'ready message');
 
+const slightlyTurnedGuidance = evaluateFaceCaptureGuidance({
+  ...readyChecks,
+  isLookingForward: false,
+});
+
+expectEqual(slightlyTurnedGuidance.status, 'ready', 'slightly turned status');
+expectEqual(
+  slightlyTurnedGuidance.isCaptureEnabled,
+  true,
+  'slightly turned capture enabled',
+);
+
 const blockedChecks = evaluateFaceCaptureChecksFromLandmarks({
   confidence: 0.7,
   faceCount: 1,
@@ -58,6 +70,10 @@ const blockedGuidance = evaluateFaceCaptureGuidance(blockedChecks);
 expectEqual(blockedGuidance.status, 'blocked', 'blocked status');
 expectEqual(blockedGuidance.isCaptureEnabled, false, 'blocked capture disabled');
 expectEqual(blockedGuidance.tintColor, FACE_CAPTURE_ERROR_COLOR, 'blocked tint color');
-expectEqual(blockedGuidance.message, 'Face contour landmarks are not detected yet.', 'blocked first message');
+expectEqual(
+  blockedGuidance.message,
+  '얼굴을 가이드 라인 안에 맞춰주세요',
+  'blocked first message',
+);
 expectArrayIncludes(blockedGuidance.failedChecks, 'isLookingForward', 'blocked looking-forward check');
 expectArrayIncludes(blockedGuidance.failedChecks, 'isFaceShapeDetected', 'blocked face-shape check');
