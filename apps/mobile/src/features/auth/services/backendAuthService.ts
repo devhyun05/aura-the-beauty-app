@@ -1,4 +1,4 @@
-﻿import type {AuthSession, AuthUser} from '../types';
+import type {AuthSession, AuthUser} from '../types';
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 
 type BackendUser = {
@@ -6,6 +6,8 @@ type BackendUser = {
   id: string;
   name?: string | null;
   nickname?: string | null;
+  profileCompleted?: boolean | null;
+  profile_completed?: boolean | null;
 };
 
 type UsersMePayload = {
@@ -16,15 +18,18 @@ type UsersMePayload = {
 };
 
 function mapBackendUser(sessionUser: AuthUser, backendUser: BackendUser): AuthUser {
-  const email = backendUser.email ?? sessionUser.email;
-  const name = backendUser.name ?? sessionUser.name;
-  const nickname = backendUser.nickname ?? sessionUser.nickname ?? name ?? email ?? 'AURA User';
+  const email = sessionUser.email ?? backendUser.email;
+  const name = sessionUser.name ?? backendUser.name;
+  const nickname = sessionUser.nickname ?? backendUser.nickname ?? name ?? email ?? 'AURA User';
+  const profileCompleted =
+    sessionUser.profileCompleted ?? backendUser.profileCompleted ?? backendUser.profile_completed;
 
   return {
     email: email ?? undefined,
     id: backendUser.id,
     name: name ?? undefined,
     nickname,
+    profileCompleted: profileCompleted ?? undefined,
   };
 }
 

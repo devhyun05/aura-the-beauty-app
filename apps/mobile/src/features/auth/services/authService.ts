@@ -62,6 +62,17 @@ function getStringClaim(source: Record<string, unknown> | null, key: string): st
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+export function getAuthUserClaimsFromIdToken(idToken: string | undefined): Partial<AuthUser> {
+  const idTokenClaims = decodeBase64UrlJson<CognitoIdTokenClaims>(idToken);
+
+  return {
+    email: idTokenClaims?.email,
+    id: idTokenClaims?.sub,
+    name: idTokenClaims?.name,
+    nickname: idTokenClaims?.nickname,
+  };
+}
+
 async function getCognitoUser(tokenResponse: TokenResponse): Promise<AuthUser> {
   const idTokenClaims = decodeBase64UrlJson<CognitoIdTokenClaims>(tokenResponse.idToken);
   let userInfo: Record<string, unknown> | null = null;

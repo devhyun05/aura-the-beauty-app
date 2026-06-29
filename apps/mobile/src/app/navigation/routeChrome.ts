@@ -62,6 +62,12 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
+  ProfileSetup: {
+    category: 'auth',
+    depth: 'entry',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
   Tutorial: {
     category: 'onboarding',
     depth: 'entry',

@@ -5,6 +5,7 @@ import {Text, View} from 'tamagui';
 import {
   getProfileEditFields,
   getUserProfile,
+  updateUserProfile,
 } from '../../../shared/services/userService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ProfileEditField, UserProfile} from '../../../shared/types/profile';
@@ -115,15 +116,20 @@ export function ProfileEditScreen({
       editingFieldId === 'interest'
         ? selectedInterests.join(', ')
         : draftValue.trim();
+    const nextProfile = {...profile, [editingFieldId]: nextValue};
 
-    setProfile({...profile, [editingFieldId]: nextValue});
+    setProfile(nextProfile);
     setFields((currentFields) =>
       currentFields.map((field) =>
         field.id === editingFieldId ? {...field, value: nextValue} : field,
       ),
     );
-    setNotice('프로필 정보가 화면에 반영됐어요.');
+    setNotice('\uD504\uB85C\uD544 \uC815\uBCF4\uAC00 \uC800\uC7A5\uB418\uC5C8\uC5B4\uC694.');
     cancelEditing();
+
+    void updateUserProfile(nextProfile).catch(() => {
+      setNotice('\uD504\uB85C\uD544 \uC815\uBCF4\uB97C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.');
+    });
   };
 
   const moveCalendarMonth = (offset: number) => {

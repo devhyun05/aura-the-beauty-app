@@ -40,6 +40,7 @@ export const mainTabLinkingScreens = {
 
 export const rootStackLinkingScreens = {
   Login: 'login',
+  ProfileSetup: 'profile-setup',
   Tutorial: 'tutorial',
   MainTabs: {
     path: 'tabs',
