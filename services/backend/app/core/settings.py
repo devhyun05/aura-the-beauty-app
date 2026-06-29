@@ -44,6 +44,8 @@ class Settings(BaseSettings):
   openai_image_model_id: str = "gpt-image-2"
   openai_image_quality: str = "medium"
   openai_image_size: str = "auto"
+  openai_image_output_format: str = "jpeg"
+  openai_image_output_compression: int = 80
 
   naver_shopping_client_id: str | None = None
   naver_shopping_client_secret: str | None = None

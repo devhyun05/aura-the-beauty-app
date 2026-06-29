@@ -167,7 +167,9 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
 
       <FloatingOverlayIconButton
         accessibilityLabel="AI 피드백 촬영 닫기"
-        onPress={onClose}>
+        onPress={onClose}
+        rightOffset={spacing.xxl + spacing.sm}
+        topOffset={spacing.xxl + spacing.sm}>
         <X color={colors.white} size={iconSize.xl} strokeWidth={1.9} />
       </FloatingOverlayIconButton>
 

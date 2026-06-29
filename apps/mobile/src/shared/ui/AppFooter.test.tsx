@@ -15,14 +15,14 @@ import {
   AppFooter,
 } from './AppFooter';
 
-const footerBarHeight: 46 = APP_FOOTER_BAR_HEIGHT;
-const footerTabHeight: 36 = APP_FOOTER_TAB_HEIGHT;
+const footerBarHeight: 64 = APP_FOOTER_BAR_HEIGHT;
+const footerTabHeight: 52 = APP_FOOTER_TAB_HEIGHT;
 const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
   APP_FOOTER_ACTIVE_TAB_BACKGROUND;
-const footerCaptureBubbleSize: 50 = APP_FOOTER_CAPTURE_BUBBLE_SIZE;
+const footerCaptureBubbleSize: 62 = APP_FOOTER_CAPTURE_BUBBLE_SIZE;
 const footerHorizontalPadding: 24 = APP_FOOTER_HORIZONTAL_PADDING;
 const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;
-const footerCaptureIconSize: 24 = APP_FOOTER_CAPTURE_ICON_SIZE;
+const footerCaptureIconSize: 28 = APP_FOOTER_CAPTURE_ICON_SIZE;
 const footerBarOverflow: 'visible' = APP_FOOTER_BAR_OVERFLOW;
 const footerGlassBackground: 'rgba(255, 255, 255, 0.72)' =
   APP_FOOTER_GLASS_BACKGROUND;
@@ -34,6 +34,6 @@ const footerGlassHighlight: 'rgba(255, 255, 255, 0.42)' =
   activeTab="home"
   bottomInset={0}
   floating
-  showLabels={false}
+  showLabels
   onTabPress={() => undefined}
 />;

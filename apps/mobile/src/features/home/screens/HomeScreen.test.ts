@@ -12,6 +12,8 @@ import {
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
 } from './HomeScreen';
+import {mapFaceAnalysisReportsToHomeSavedMakeupLooks} from '../services/homeService';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {colors, radius, typography} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -156,32 +158,117 @@ expectEqual(
   'hero carousel drag end reset handler',
 );
 
-let selectedQuickAction: 'ar' | 'makeup-feedback' | null = null;
+let selectedQuickAction: 'community' | 'consulting' | 'recommendation' | null = null;
 
-const arPressHandler = getHomeQuickActionPressHandler('ar', {
-  onPressARFilter: () => {
-    selectedQuickAction = 'ar';
+const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
+  onPressProductRecommendations: () => {
+    selectedQuickAction = 'recommendation';
   },
 });
 
-if (!arPressHandler) {
-  throw new Error('real-time AR quick action should have a press handler');
+if (!recommendationPressHandler) {
+  throw new Error('product recommendation quick action should have a press handler');
 }
 
-arPressHandler();
+recommendationPressHandler();
 
-expectEqual(selectedQuickAction, 'ar', 'real-time AR quick action target');
+expectEqual(selectedQuickAction, 'recommendation', 'product recommendation quick action target');
 
-const makeupFeedbackPressHandler = getHomeQuickActionPressHandler('makeup-feedback', {
-  onPressMakeupFeedback: () => {
-    selectedQuickAction = 'makeup-feedback';
+const communityPressHandler = getHomeQuickActionPressHandler('community', {
+  onPressCommunity: () => {
+    selectedQuickAction = 'community';
   },
 });
 
-if (!makeupFeedbackPressHandler) {
-  throw new Error('makeup feedback quick action should have a press handler');
+if (!communityPressHandler) {
+  throw new Error('community quick action should have a press handler');
 }
 
-makeupFeedbackPressHandler();
+communityPressHandler();
 
-expectEqual(selectedQuickAction, 'makeup-feedback', 'makeup feedback quick action target');
+expectEqual(selectedQuickAction, 'community', 'community quick action target');
+
+const consultingPressHandler = getHomeQuickActionPressHandler('consulting', {
+  onPressConsulting: () => {
+    selectedQuickAction = 'consulting';
+  },
+});
+
+if (!consultingPressHandler) {
+  throw new Error('consulting quick action should have a press handler');
+}
+
+consultingPressHandler();
+
+expectEqual(selectedQuickAction, 'consulting', 'consulting quick action target');
+
+const completeReport: FaceAnalysisReport = {
+  analyzedAt: '2026-06-29T07:00:00.000Z',
+  avoidedMakeups: [],
+  baseMakeupGuide: '얇은 베이스',
+  environmentLabel: '촬영 이미지',
+  faceShape: '계란형',
+  id: 'analysis-complete',
+  imageSource: {uri: 'https://example.com/source.png'},
+  makeupGuideline: {
+    brow: '브라운 눈썹',
+    blush: '로지 치크',
+    highlight: '은은한 하이라이트',
+    eyeshadow: '뉴트럴 섀도우',
+    eyeliner: '브라운 라인',
+    lip: '로지 립',
+  },
+  personalColor: '봄웜',
+  recommendedMakeups: [
+    {
+      description: '첫 번째 추천',
+      id: 'look-1',
+      imageSource: {uri: 'https://example.com/look-1.png'},
+      subtitle: '맑은 코랄',
+      tags: [],
+      title: '추천 룩 1',
+    },
+    {
+      description: '두 번째 추천',
+      id: 'look-2',
+      imageSource: {uri: 'https://example.com/look-2.png'},
+      subtitle: '로지 데일리',
+      tags: [],
+      title: '추천 룩 2',
+    },
+    {
+      description: '세 번째 추천',
+      id: 'look-3',
+      imageSource: {uri: 'https://example.com/look-3.png'},
+      subtitle: '브라운 무드',
+      tags: [],
+      title: '추천 룩 3',
+    },
+  ],
+  recommendedMood: '맑은 코랄 글로우',
+  reportTitle: '맞춤 분석 보고서',
+  shortSummary: '요약',
+  skinAnalysisSummary: '피부 요약',
+  skinType: '복합성',
+  summary: '분석 요약',
+  tags: [],
+  title: '봄웜, 복합성',
+  toneSummary: '맑은 톤',
+};
+const partialReport: FaceAnalysisReport = {
+  ...completeReport,
+  id: 'analysis-partial',
+  recommendedMakeups: completeReport.recommendedMakeups.slice(0, 2),
+};
+const savedHomeMakeupLooks = mapFaceAnalysisReportsToHomeSavedMakeupLooks([
+  completeReport,
+  partialReport,
+]);
+
+expectEqual(savedHomeMakeupLooks.length, 5, 'home saved makeup keeps remaining saved cards');
+expectEqual(savedHomeMakeupLooks[0].title, '추천 룩 1', 'home saved makeup uses AI title');
+expectEqual(
+  savedHomeMakeupLooks[1].description,
+  '로지 데일리',
+  'home saved makeup uses AI subtitle',
+);

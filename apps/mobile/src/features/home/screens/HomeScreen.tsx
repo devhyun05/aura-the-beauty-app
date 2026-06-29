@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -9,19 +9,20 @@ import {
   type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   ArrowRight,
-  Camera,
   ChevronRight,
+  MessageCircle,
   PackageSearch,
   ScanFace,
   Sparkles,
-  WandSparkles,
+  UserRoundCheck,
 } from 'lucide-react-native';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {getHomeData} from '../services/homeService';
+import {getHomeData, getSavedRecommendedMakeupLooks} from '../services/homeService';
 import type {
   HomeData,
   HomeFilterStoreItem,
@@ -30,25 +31,24 @@ import type {
 } from '../types';
 
 type HomeScreenProps = {
-  onPressARFilter?: () => void;
+  onPressConsulting?: () => void;
+  onPressCommunity?: () => void;
   onPressFilterStore?: () => void;
-  onPressReferenceMakeupExtraction?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
   onPressSavedMakeups?: () => void;
 };
 
 export function HomeScreen({
-  onPressARFilter,
+  onPressConsulting,
+  onPressCommunity,
   onPressFilterStore,
-  onPressReferenceMakeupExtraction,
   onPressFaceDiagnosis,
-  onPressMakeupFeedback,
   onPressProductRecommendations,
   onPressSavedMakeups,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [savedMakeupLooks, setSavedMakeupLooks] = useState<HomeMakeupLook[]>([]);
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
 
@@ -65,6 +65,32 @@ export function HomeScreen({
       isMounted = false;
     };
   }, []);
+
+  const loadSavedMakeupLooks = useCallback(() => {
+    let isMounted = true;
+
+    getSavedRecommendedMakeupLooks()
+      .then((nextSavedMakeupLooks) => {
+        if (isMounted) {
+          setSavedMakeupLooks(nextSavedMakeupLooks);
+        }
+      })
+      .catch((error) => {
+        console.info('[aura:home] saved-makeup:fallback-empty', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        if (isMounted) {
+          setSavedMakeupLooks([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useFocusEffect(loadSavedMakeupLooks);
 
   if (!homeData) {
     return (
@@ -83,10 +109,9 @@ export function HomeScreen({
       />
 
       <QuickActionSection
-        onPressARFilter={onPressARFilter}
-        onPressReferenceMakeupExtraction={onPressReferenceMakeupExtraction}
+        onPressConsulting={onPressConsulting}
+        onPressCommunity={onPressCommunity}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
-        onPressMakeupFeedback={onPressMakeupFeedback}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <FilterStoreSection
@@ -94,7 +119,7 @@ export function HomeScreen({
         onPressFilterStore={onPressFilterStore}
       />
       <RecommendedLooksSection
-        makeupLooks={homeData.recommendedLooks}
+        makeupLooks={savedMakeupLooks}
         onPressSavedMakeups={onPressSavedMakeups}
       />
     </>
@@ -337,28 +362,10 @@ function HeroBannerCard({cardWidth, imageSource, title, tone}: HeroBannerCardPro
 
 const quickActions = [
   {
-    id: 'ar',
-    label: '실시간 AR',
-    accessibilityLabel: '실시간 AR 시작',
-    icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
     id: 'diagnosis',
     label: '얼굴 진단',
     accessibilityLabel: '얼굴 진단 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'extract',
-    label: '메이크업 추출',
-    accessibilityLabel: '메이크업 추출',
-    icon: (color: string) => <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'makeup-feedback',
-    label: '메이크업 피드백',
-    accessibilityLabel: '메이크업 피드백 시작',
-    icon: (color: string) => <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
     id: 'recommendation',
@@ -368,63 +375,71 @@ const quickActions = [
       <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
+  {
+    id: 'community',
+    label: '커뮤니티',
+    accessibilityLabel: '커뮤니티 보기',
+    icon: (color: string) => (
+      <MessageCircle color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'consulting',
+    label: '컨설팅',
+    accessibilityLabel: '메이크업 컨설팅 받기',
+    icon: (color: string) => (
+      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
 ] as const;
 
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
-  onPressARFilter?: () => void;
-  onPressReferenceMakeupExtraction?: () => void;
+  onPressConsulting?: () => void;
+  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
-    onPressARFilter,
-    onPressReferenceMakeupExtraction,
+    onPressConsulting,
+    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupFeedback,
     onPressProductRecommendations,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
-  if (actionId === 'ar') {
-    return onPressARFilter;
-  }
-
   if (actionId === 'diagnosis') {
     return onPressFaceDiagnosis;
-  }
-
-  if (actionId === 'extract') {
-    return onPressReferenceMakeupExtraction;
-  }
-
-  if (actionId === 'makeup-feedback') {
-    return onPressMakeupFeedback;
   }
 
   if (actionId === 'recommendation') {
     return onPressProductRecommendations;
   }
 
+  if (actionId === 'community') {
+    return onPressCommunity;
+  }
+
+  if (actionId === 'consulting') {
+    return onPressConsulting;
+  }
+
   return undefined;
 }
 
 function QuickActionSection({
-  onPressARFilter,
-  onPressReferenceMakeupExtraction,
+  onPressConsulting,
+  onPressCommunity,
   onPressFaceDiagnosis,
-  onPressMakeupFeedback,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
-    onPressARFilter,
-    onPressReferenceMakeupExtraction,
+    onPressConsulting,
+    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupFeedback,
     onPressProductRecommendations,
   };
 
@@ -531,13 +546,17 @@ function RecommendedLooksSection({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.makeupLookList}>
-        {makeupLooks.map((makeupLook) => (
-          <RecommendedLookCard
-            key={makeupLook.id}
-            makeupLook={makeupLook}
-            onPress={onPressSavedMakeups}
-          />
-        ))}
+        {makeupLooks.length > 0 ? (
+          makeupLooks.map((makeupLook) => (
+            <RecommendedLookCard
+              key={makeupLook.id}
+              makeupLook={makeupLook}
+              onPress={onPressSavedMakeups}
+            />
+          ))
+        ) : (
+          <EmptySavedMakeupCard onPress={onPressSavedMakeups} />
+        )}
       </TamaguiScrollView>
     </YStack>
   );
@@ -566,6 +585,29 @@ function RecommendedLookCard({
         </Text>
         <Text numberOfLines={2} style={styles.makeupLookDescription}>
           {makeupLook.description}
+        </Text>
+        <Text numberOfLines={1} style={styles.makeupLookDate}>
+          {makeupLook.date}
+        </Text>
+      </YStack>
+    </Pressable>
+  );
+}
+
+function EmptySavedMakeupCard({onPress}: {onPress?: () => void}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="저장된 추천 메이크업 없음"
+      onPress={onPress}
+      style={({pressed}) => [styles.emptySavedMakeupCard, pressed && styles.pressed]}>
+      <View style={styles.emptySavedMakeupIcon}>
+        <Sparkles color={colors.textSecondary} size={iconSize.md} strokeWidth={1.8} />
+      </View>
+      <YStack style={styles.makeupLookTextGroup}>
+        <Text style={styles.makeupLookTitle}>아직 저장된 추천이 없어요</Text>
+        <Text style={styles.makeupLookDescription}>
+          얼굴 진단을 완료하면 추천 메이크업 3장이 여기에 쌓여요.
         </Text>
       </YStack>
     </Pressable>
@@ -751,6 +793,29 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.sm,
     width: 138,
+  },
+  emptySavedMakeupCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    minHeight: 238,
+    padding: spacing.md,
+    width: 220,
+  },
+  emptySavedMakeupIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    height: 150,
+    justifyContent: 'center',
+  },
+  makeupLookDate: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   makeupLookDescription: {
     color: colors.textSecondary,

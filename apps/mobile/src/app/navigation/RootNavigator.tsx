@@ -5,6 +5,8 @@ import type {RootStackParamList} from './routeTypes';
 import {MainTabNavigator} from './MainTabNavigator';
 import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './routes/authRoutes';
 import {
+  ConsultingRouteScreen,
+  CommunityRouteScreen,
   HomeFilterStoreRouteScreen,
   SavedMakeupListRouteScreen,
 } from './routes/homeRoutes';
@@ -31,6 +33,7 @@ import {
 import {
   LikedProductListRouteScreen,
   MakeupLookListRouteScreen,
+  ProductRecommendationRouteScreen,
 } from './routes/recommendationRoutes';
 import {
   ReferenceMakeupExtractionLoadingRouteScreen,
@@ -69,6 +72,9 @@ export function RootNavigator() {
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
       <Stack.Screen name="HomeFilterStore" component={HomeFilterStoreRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
+      <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
+      <Stack.Screen name="Community" component={CommunityRouteScreen} />
+      <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
       <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />

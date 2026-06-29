@@ -1,9 +1,26 @@
-import {useEffect, useMemo, useState} from 'react';
-import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
-import {BookmarkCheck, WandSparkles} from 'lucide-react-native';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  type ImageSourcePropType,
+} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Trash2,
+  X as XIcon,
+} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {getFaceAnalysisReports} from '../../../shared/services/faceAnalysisService';
+import {
+  deleteFaceAnalysisRecommendedMakeup,
+  getFaceAnalysisReports,
+} from '../../../shared/services/faceAnalysisService';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   FaceAnalysisMakeupCard,
@@ -13,103 +30,196 @@ import {AppScreen, ImagePlaceholder} from '../../../shared/ui';
 
 type SavedMakeupListScreenProps = {
   latestAnalysisReport?: FaceAnalysisReport | null;
-  onApplyMakeup?: (makeup: SavedRecommendedMakeup) => void;
+  onPressMakeup?: (makeup: SavedRecommendedMakeup) => void;
 };
 
-type SavedRecommendedMakeup = {
+export type SavedRecommendedMakeup = {
   id: string;
   makeup: FaceAnalysisMakeupCard;
+  makeupIndex: number;
+  report: FaceAnalysisReport;
   reportAnalyzedAt: string;
   reportId: string;
   reportMood: string;
   reportTitle: string;
 };
 
-const ALL_REPORT_ID = 'all';
+const SAVED_MAKEUP_PAGE_SIZE = 4;
 
 export function SavedMakeupListScreen({
   latestAnalysisReport,
-  onApplyMakeup,
+  onPressMakeup,
 }: SavedMakeupListScreenProps) {
   const {width} = useWindowDimensions();
+  const [deletingMakeupIds, setDeletingMakeupIds] = useState<Set<string>>(() => new Set());
   const [reports, setReports] = useState<FaceAnalysisReport[]>(
     latestAnalysisReport ? [latestAnalysisReport] : [],
   );
-  const [selectedReportId, setSelectedReportId] = useState(ALL_REPORT_ID);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
   const cardWidth = Math.floor((contentWidth - gap) / 2);
 
-  useEffect(() => {
+  const loadReports = useCallback(() => {
     let isMounted = true;
 
-    getFaceAnalysisReports().then(nextReports => {
-      if (!isMounted) {
-        return;
-      }
+    getFaceAnalysisReports({
+      limit: 80,
+      withRecommendedMakeups: true,
+    })
+      .then(nextReports => {
+        if (!isMounted) {
+          return;
+        }
 
-      setReports(mergeLatestReportWithReports(latestAnalysisReport, nextReports));
-    });
+        setReports(mergeLatestReportWithReports(latestAnalysisReport, nextReports));
+      })
+      .catch(error => {
+        console.info('[aura:home] saved-makeup-list:fallback-latest', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        if (isMounted) {
+          setReports(latestAnalysisReport ? [latestAnalysisReport] : []);
+        }
+      });
 
     return () => {
       isMounted = false;
     };
   }, [latestAnalysisReport]);
 
+  useFocusEffect(loadReports);
+
   const savedMakeups = useMemo(
     () => reports.flatMap(report => mapReportToSavedMakeups(report)),
     [reports],
   );
-  const visibleMakeups = useMemo(
-    () =>
-      selectedReportId === ALL_REPORT_ID
-        ? savedMakeups
-        : savedMakeups.filter(makeup => makeup.reportId === selectedReportId),
-    [savedMakeups, selectedReportId],
+  const filteredMakeups = useMemo(
+    () => filterSavedRecommendedMakeups(savedMakeups, searchQuery),
+    [savedMakeups, searchQuery],
   );
+  const totalPages = getSavedMakeupPageCount(filteredMakeups.length);
+  const pageMakeups = useMemo(
+    () => paginateSavedRecommendedMakeups(filteredMakeups, currentPage),
+    [currentPage, filteredMakeups],
+  );
+  const resultCountLabel =
+    searchQuery.trim().length > 0
+      ? `검색 결과 ${filteredMakeups.length}개`
+      : `전체 ${filteredMakeups.length}개`;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    prefetchSavedMakeupImages(
+      filteredMakeups.slice(
+        (currentPage - 1) * SAVED_MAKEUP_PAGE_SIZE,
+        (currentPage + 1) * SAVED_MAKEUP_PAGE_SIZE,
+      ),
+    );
+  }, [currentPage, filteredMakeups]);
+
+  const handleDeleteMakeup = useCallback((savedMakeup: SavedRecommendedMakeup) => {
+    if (deletingMakeupIds.has(savedMakeup.id)) {
+      return;
+    }
+
+    setDeletingMakeupIds(currentIds => new Set(currentIds).add(savedMakeup.id));
+    setReports(currentReports => removeSavedMakeupFromReports(currentReports, savedMakeup));
+
+    deleteFaceAnalysisRecommendedMakeup({
+      makeupIndex: savedMakeup.makeupIndex,
+      reportId: savedMakeup.reportId,
+    })
+      .then(updatedReport => {
+        setReports(currentReports =>
+          updatedReport
+            ? currentReports.map(report =>
+                report.id === updatedReport.id ? updatedReport : report,
+              )
+            : removeSavedMakeupFromReports(currentReports, savedMakeup),
+        );
+      })
+      .catch(error => {
+        console.info('[aura:home] saved-makeup:delete-failed', {
+          makeupIndex: savedMakeup.makeupIndex,
+          message: error instanceof Error ? error.message : String(error),
+          reportId: savedMakeup.reportId,
+        });
+      })
+      .finally(() => {
+        setDeletingMakeupIds(currentIds => {
+          const nextIds = new Set(currentIds);
+          nextIds.delete(savedMakeup.id);
+          return nextIds;
+        });
+      });
+  }, [deletingMakeupIds]);
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <YStack style={styles.summary}>
-        <XStack style={styles.summaryHeader}>
-          <View style={styles.summaryIcon}>
-            <BookmarkCheck color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-          </View>
-          <YStack style={styles.summaryTextGroup}>
-            <Text style={styles.summaryTitle}>추천 메이크업 {savedMakeups.length}개</Text>
-            <Text style={styles.summaryDescription}>
-              내가 찍은 사진 분석에서 생성된 추천 메이크업만 모았어요.
-            </Text>
-          </YStack>
+      <YStack style={styles.searchGroup}>
+        <XStack style={styles.searchBox}>
+          <Search color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
+          <TextInput
+            accessibilityLabel="저장된 메이크업 검색"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setSearchQuery}
+            placeholder="메이크업 이름, 무드 검색"
+            placeholderTextColor={colors.textTertiary}
+            returnKeyType="search"
+            style={styles.searchInput}
+            value={searchQuery}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              accessibilityLabel="검색어 지우기"
+              accessibilityRole="button"
+              onPress={() => setSearchQuery('')}
+              style={({pressed}) => [styles.clearSearchButton, pressed && styles.pressed]}>
+              <XIcon color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
+            </Pressable>
+          ) : null}
         </XStack>
+        <Text style={styles.resultCount}>{resultCountLabel}</Text>
       </YStack>
 
-      <XStack style={styles.reportChipList}>
-        <ReportChip
-          label="전체"
-          onPress={() => setSelectedReportId(ALL_REPORT_ID)}
-          selected={selectedReportId === ALL_REPORT_ID}
-        />
-        {reports.map(report => (
-          <ReportChip
-            key={report.id}
-            label={formatReportChipLabel(report)}
-            onPress={() => setSelectedReportId(report.id)}
-            selected={selectedReportId === report.id}
-          />
-        ))}
-      </XStack>
-
       <View style={[styles.grid, {columnGap: gap, rowGap: spacing.xl}]}>
-        {visibleMakeups.map(savedMakeup => (
-          <SavedMakeupCard
-            key={savedMakeup.id}
-            savedMakeup={savedMakeup}
-            onApplyMakeup={onApplyMakeup}
-            width={cardWidth}
-          />
-        ))}
+        {pageMakeups.length > 0 ? (
+          pageMakeups.map(savedMakeup => (
+            <SavedMakeupCard
+              key={savedMakeup.id}
+              deleting={deletingMakeupIds.has(savedMakeup.id)}
+              onDeleteMakeup={handleDeleteMakeup}
+              onPressMakeup={onPressMakeup}
+              savedMakeup={savedMakeup}
+              width={cardWidth}
+            />
+          ))
+        ) : (
+          <EmptySavedMakeupState hasSearchQuery={searchQuery.trim().length > 0} />
+        )}
       </View>
+
+      {filteredMakeups.length > SAVED_MAKEUP_PAGE_SIZE ? (
+        <PaginationControls
+          currentPage={currentPage}
+          onNext={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+          onPrevious={() => setCurrentPage(page => Math.max(page - 1, 1))}
+          totalPages={totalPages}
+        />
+      ) : null}
     </AppScreen>
   );
 }
@@ -129,9 +239,11 @@ function mergeLatestReportWithReports(
 }
 
 function mapReportToSavedMakeups(report: FaceAnalysisReport): SavedRecommendedMakeup[] {
-  return report.recommendedMakeups.map((makeup, index) => ({
+  return getStoredRecommendedMakeups(report).map((makeup, index) => ({
     id: `${report.id}-${makeup.id}-${index}`,
     makeup,
+    makeupIndex: index,
+    report,
     reportAnalyzedAt: report.analyzedAt,
     reportId: report.id,
     reportMood: report.recommendedMood,
@@ -139,49 +251,178 @@ function mapReportToSavedMakeups(report: FaceAnalysisReport): SavedRecommendedMa
   }));
 }
 
-function formatReportChipLabel(report: FaceAnalysisReport): string {
-  const date = new Date(report.analyzedAt);
-
-  if (Number.isNaN(date.getTime())) {
-    return report.recommendedMood;
-  }
-
-  return `${date.getMonth() + 1}.${date.getDate()} ${report.recommendedMood}`;
+function getStoredRecommendedMakeups(
+  report: FaceAnalysisReport,
+): FaceAnalysisMakeupCard[] {
+  return report.recommendedMakeups.slice(0, 3);
 }
 
-function ReportChip({
-  label,
-  onPress,
-  selected,
-}: {
-  label: string;
-  onPress: () => void;
-  selected: boolean;
-}) {
+function normalizeSearchText(value: string): string {
+  return value.trim().toLocaleLowerCase('ko-KR');
+}
+
+export function filterSavedRecommendedMakeups(
+  makeups: readonly SavedRecommendedMakeup[],
+  query: string,
+): SavedRecommendedMakeup[] {
+  const normalizedQuery = normalizeSearchText(query);
+
+  if (!normalizedQuery) {
+    return [...makeups];
+  }
+
+  return makeups.filter(savedMakeup => {
+    const searchableText = normalizeSearchText(
+      [
+        savedMakeup.makeup.title,
+        savedMakeup.makeup.subtitle,
+        savedMakeup.makeup.description,
+        savedMakeup.makeup.tags.join(' '),
+        savedMakeup.reportMood,
+        savedMakeup.reportTitle,
+        savedMakeup.reportAnalyzedAt,
+      ].join(' '),
+    );
+
+    return searchableText.includes(normalizedQuery);
+  });
+}
+
+export function getSavedMakeupPageCount(itemCount: number): number {
+  return Math.max(1, Math.ceil(itemCount / SAVED_MAKEUP_PAGE_SIZE));
+}
+
+export function paginateSavedRecommendedMakeups(
+  makeups: readonly SavedRecommendedMakeup[],
+  page: number,
+): SavedRecommendedMakeup[] {
+  const safePage = Math.max(1, page);
+  const startIndex = (safePage - 1) * SAVED_MAKEUP_PAGE_SIZE;
+
+  return makeups.slice(startIndex, startIndex + SAVED_MAKEUP_PAGE_SIZE);
+}
+
+function getImageSourceUri(source: ImageSourcePropType): string | null {
+  if (typeof source === 'object' && source !== null && 'uri' in source) {
+    const uri = source.uri;
+
+    return typeof uri === 'string' && uri.trim() ? uri : null;
+  }
+
+  return null;
+}
+
+export function prefetchSavedMakeupImages(makeups: readonly SavedRecommendedMakeup[]): void {
+  makeups.forEach(savedMakeup => {
+    const uri = getImageSourceUri(savedMakeup.makeup.imageSource);
+
+    if (uri) {
+      void Image.prefetch(uri);
+    }
+  });
+}
+
+function removeSavedMakeupFromReports(
+  reports: readonly FaceAnalysisReport[],
+  savedMakeup: SavedRecommendedMakeup,
+): FaceAnalysisReport[] {
+  return reports.map(report => {
+    if (report.id !== savedMakeup.reportId) {
+      return report;
+    }
+
+    return {
+      ...report,
+      recommendedMakeups: report.recommendedMakeups.filter(
+        (_, index) => index !== savedMakeup.makeupIndex,
+      ),
+    };
+  });
+}
+
+function EmptySavedMakeupState({hasSearchQuery}: {hasSearchQuery: boolean}) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label} 추천 메이크업 보기`}
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.reportChip,
-        selected && styles.reportChipSelected,
-        pressed && styles.pressed,
-      ]}>
-      <Text style={[styles.reportChipText, selected && styles.reportChipTextSelected]}>
-        {label}
+    <YStack style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>
+        {hasSearchQuery ? '검색 결과가 없어요' : '저장된 추천 메이크업이 없어요'}
       </Text>
-    </Pressable>
+      <Text style={styles.emptyDescription}>
+        {hasSearchQuery
+          ? '다른 메이크업 이름이나 무드로 다시 검색해보세요.'
+          : '얼굴 진단을 완료하면 분석마다 생성된 추천 메이크업 3장이 계정에 계속 쌓여요.'}
+      </Text>
+    </YStack>
+  );
+}
+
+function PaginationControls({
+  currentPage,
+  onNext,
+  onPrevious,
+  totalPages,
+}: {
+  currentPage: number;
+  onNext: () => void;
+  onPrevious: () => void;
+  totalPages: number;
+}) {
+  const isFirstPage = currentPage <= 1;
+  const isLastPage = currentPage >= totalPages;
+
+  return (
+    <XStack style={styles.pagination}>
+      <Pressable
+        accessibilityLabel="이전 페이지"
+        accessibilityRole="button"
+        disabled={isFirstPage}
+        onPress={onPrevious}
+        style={({pressed}) => [
+          styles.pageButton,
+          isFirstPage && styles.pageButtonDisabled,
+          pressed && !isFirstPage && styles.pressed,
+        ]}>
+        <ChevronLeft
+          color={isFirstPage ? colors.textTertiary : colors.textPrimary}
+          size={iconSize.sm}
+          strokeWidth={2}
+        />
+      </Pressable>
+
+      <Text style={styles.pageIndicator}>
+        {currentPage} / {totalPages}
+      </Text>
+
+      <Pressable
+        accessibilityLabel="다음 페이지"
+        accessibilityRole="button"
+        disabled={isLastPage}
+        onPress={onNext}
+        style={({pressed}) => [
+          styles.pageButton,
+          isLastPage && styles.pageButtonDisabled,
+          pressed && !isLastPage && styles.pressed,
+        ]}>
+        <ChevronRight
+          color={isLastPage ? colors.textTertiary : colors.textPrimary}
+          size={iconSize.sm}
+          strokeWidth={2}
+        />
+      </Pressable>
+    </XStack>
   );
 }
 
 function SavedMakeupCard({
+  deleting,
+  onDeleteMakeup,
+  onPressMakeup,
   savedMakeup,
-  onApplyMakeup,
   width,
 }: {
+  deleting: boolean;
+  onDeleteMakeup: (makeup: SavedRecommendedMakeup) => void;
+  onPressMakeup?: (makeup: SavedRecommendedMakeup) => void;
   savedMakeup: SavedRecommendedMakeup;
-  onApplyMakeup?: (makeup: SavedRecommendedMakeup) => void;
   width: number;
 }) {
   return (
@@ -192,9 +433,24 @@ function SavedMakeupCard({
           resizeMode="cover"
           source={savedMakeup.makeup.imageSource}
         />
-        <XStack style={styles.savedBadge}>
-          <Text style={styles.savedBadgeText}>AI 추천</Text>
-        </XStack>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${savedMakeup.makeup.title} 분석 결과 보기`}
+          onPress={() => onPressMakeup?.(savedMakeup)}
+          style={({pressed}) => [styles.imageTapTarget, pressed && styles.pressed]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${savedMakeup.makeup.title} 삭제`}
+          disabled={deleting}
+          onPress={() => onDeleteMakeup(savedMakeup)}
+          style={({pressed}) => [
+            styles.deleteButton,
+            deleting && styles.deleteButtonDisabled,
+            pressed && !deleting && styles.pressed,
+          ]}>
+          <Trash2 color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
+        </Pressable>
       </View>
 
       <YStack style={styles.textArea}>
@@ -204,50 +460,62 @@ function SavedMakeupCard({
         <Text numberOfLines={1} style={styles.mood}>
           {savedMakeup.makeup.subtitle || savedMakeup.reportMood}
         </Text>
-        <Text numberOfLines={2} style={styles.description}>
-          {savedMakeup.makeup.description}
-        </Text>
       </YStack>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${savedMakeup.makeup.title} AR로 적용`}
-        onPress={() => onApplyMakeup?.(savedMakeup)}
-        style={({pressed}) => [styles.applyButton, pressed && styles.pressed]}>
-        <WandSparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
-        <Text style={styles.applyButtonText}>AR 적용</Text>
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  applyButton: {
-    alignItems: 'center',
-    backgroundColor: colors.black,
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    minHeight: 38,
-    paddingHorizontal: spacing.md,
-  },
-  applyButtonText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
   card: {
     gap: spacing.sm,
     minWidth: 0,
   },
-  description: {
+  clearSearchButton: {
+    alignItems: 'center',
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  deleteButton: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: spacing.sm,
+    top: spacing.sm,
+    width: 32,
+    zIndex: 2,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.5,
+  },
+  emptyDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    minHeight: typography.lineHeight.xs * 2,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.xl,
+    width: '100%',
+  },
+  emptyTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
+    textAlign: 'center',
   },
   grid: {
     flexDirection: 'row',
@@ -262,6 +530,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  imageTapTarget: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
+  },
   mood: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
@@ -271,92 +543,66 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
-  reportChip: {
+  pageButton: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
   },
-  reportChipList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  pageButtonDisabled: {
+    backgroundColor: colors.surfaceMuted,
   },
-  reportChipSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
-  },
-  reportChipText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  reportChipTextSelected: {
-    color: colors.white,
-  },
-  savedBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    left: spacing.sm,
-    minHeight: 26,
-    paddingHorizontal: spacing.sm,
-    position: 'absolute',
-    top: spacing.sm,
-  },
-  savedBadgeText: {
+  pageIndicator: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  summary: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: spacing.lg,
-  },
-  summaryDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+    minWidth: 54,
+    textAlign: 'center',
   },
-  summaryHeader: {
+  pagination: {
     alignItems: 'center',
+    alignSelf: 'center',
     flexDirection: 'row',
     gap: spacing.md,
   },
-  summaryIcon: {
+  resultCount: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  searchBox: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.sm,
   },
-  summaryTextGroup: {
-    flex: 1,
+  searchGroup: {
     gap: spacing.xs,
   },
-  summaryTitle: {
+  searchInput: {
     color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    flex: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+    minHeight: 42,
+    padding: 0,
   },
   textArea: {
     gap: spacing.xs,
-    minHeight: 92,
+    minHeight: typography.lineHeight.sm + typography.lineHeight.xs + spacing.xs,
   },
   title: {
     color: colors.textPrimary,

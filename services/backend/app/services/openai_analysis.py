@@ -585,7 +585,30 @@ class OpenAIAnalysisService:
 
     return model_id == "gpt-image-1"
 
+  def _resolve_makeup_image_output(self) -> tuple[str, int | None, str, str]:
+    output_format = (self.settings.openai_image_output_format or "jpeg").strip().lower()
+
+    if output_format == "jpg":
+      output_format = "jpeg"
+
+    if output_format not in {"jpeg", "png", "webp"}:
+      logger.warning(
+        "[aura:openai] image-generation:unsupported-output-format configured=%s effective=jpeg",
+        output_format,
+      )
+      output_format = "jpeg"
+
+    extension = ".jpg" if output_format == "jpeg" else f".{output_format}"
+    content_type = f"image/{output_format}"
+    compression = None
+
+    if output_format in {"jpeg", "webp"}:
+      compression = max(0, min(100, int(self.settings.openai_image_output_compression)))
+
+    return output_format, compression, extension, content_type
+
   def _build_image_edit_params(self, image_file: Any, prompt: str, edit_size: str) -> dict[str, Any]:
+    output_format, output_compression, _, _ = self._resolve_makeup_image_output()
     params = {
       "model": self.settings.openai_image_model_id,
       "image": image_file,
@@ -594,7 +617,11 @@ class OpenAIAnalysisService:
       "n": 1,
       "quality": self.settings.openai_image_quality,
       "size": edit_size,
+      "output_format": output_format,
     }
+
+    if output_compression is not None:
+      params["output_compression"] = output_compression
 
     if self._supports_input_fidelity_option():
       params["input_fidelity"] = "high"
@@ -609,12 +636,13 @@ class OpenAIAnalysisService:
         "S3_BUCKET_NAME is required for generated makeup images.",
       )
 
-    object_key = f"uploads/generated-makeup/{uuid4()}-{index}.png"
+    _, _, extension, content_type = self._resolve_makeup_image_output()
+    object_key = f"uploads/generated-makeup/{uuid4()}-{index}{extension}"
     self._s3_client().put_object(
       Bucket=self.settings.s3_bucket_name,
       Key=object_key,
       Body=image_bytes,
-      ContentType="image/png",
+      ContentType=content_type,
     )
     cdn_base_url = self.settings.effective_cdn_base_url
 
