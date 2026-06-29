@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
 try:
   from openai import OpenAI, OpenAIError
@@ -75,6 +76,25 @@ class OpenAIAnalysisService:
 
     return boto3.client("s3", **client_kwargs)
 
+  def _bedrock_runtime_client(self):
+    client_kwargs = {
+      "region_name": self.settings.effective_bedrock_analysis_region,
+      "config": Config(
+        connect_timeout=30,
+        read_timeout=120,
+        retries={"max_attempts": 1},
+      ),
+    }
+
+    if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
+      client_kwargs.update(
+        {
+          "aws_access_key_id": self.settings.aws_access_key_id,
+          "aws_secret_access_key": self.settings.aws_secret_access_key,
+        },
+      )
+
+    return boto3.client("bedrock-runtime", **client_kwargs)
   def _extract_remote_image_url(self, payload: dict[str, Any]) -> str | None:
     bucket = payload.get("bucket")
     object_key = payload.get("objectKey") or payload.get("object_key")
@@ -367,11 +387,108 @@ class OpenAIAnalysisService:
 
     return result
 
+  def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
+    content = response_payload.get("content")
+
+    if isinstance(content, list):
+      return "\n".join(
+        str(part.get("text") or "")
+        for part in content
+        if isinstance(part, dict) and part.get("type") == "text"
+      ).strip()
+
+    completion = response_payload.get("completion")
+
+    if isinstance(completion, str):
+      return completion.strip()
+
+    return ""
+
+  def _analyze_image_with_bedrock_sync(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+  ) -> dict[str, Any]:
+    started_at = time.monotonic()
+    model_id = self.settings.effective_analysis_model_id
+
+    if not model_id:
+      raise AppError(
+        503,
+        "BEDROCK_ANALYSIS_NOT_CONFIGURED",
+        "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
+      )
+
+    content_type = self._infer_content_type(payload)
+    source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
+    logger.info(
+      "[aura:bedrock] analysis:start model=%s region=%s",
+      model_id,
+      self.settings.effective_bedrock_analysis_region,
+    )
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(
+        {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 2400,
+          "temperature": 0.2,
+          "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {"type": "text", "text": self._build_analysis_prompt(payload)},
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": content_type,
+                    "data": source_image_base64,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ensure_ascii=False,
+      ),
+      accept="application/json",
+      contentType="application/json",
+    )
+    response_payload = json.loads(response["body"].read())
+    output_text = self._extract_bedrock_output_text(response_payload)
+
+    if not output_text:
+      raise AppError(
+        502,
+        "BEDROCK_EMPTY_OUTPUT",
+        "Bedrock Claude analysis returned an empty response.",
+      )
+
+    parsed = self._normalize_analysis_result(self._parse_json_output(output_text))
+    logger.info(
+      "[aura:bedrock] analysis:success durationMs=%s",
+      round((time.monotonic() - started_at) * 1000),
+    )
+
+    return parsed
   def _analyze_image_sync(
     self,
     payload: dict[str, Any],
     source_image_bytes: bytes,
   ) -> dict[str, Any]:
+    provider = self.settings.analysis_provider
+    if provider == "bedrock":
+      return self._analyze_image_with_bedrock_sync(payload, source_image_bytes)
+
+    if provider != "openai":
+      raise AppError(
+        503,
+        "AI_PROVIDER_UNSUPPORTED",
+        f"Unsupported AI_PROVIDER: {provider}",
+      )
+
     started_at = time.monotonic()
     content_type = self._infer_content_type(payload)
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
@@ -694,9 +811,8 @@ class OpenAIAnalysisService:
         details={"missingIndexes": missing_image_indexes},
       )
 
-  async def analyze_image(self, payload: dict[str, Any]) -> dict[str, Any]:
+  async def analyze_text(self, payload: dict[str, Any]) -> dict[str, Any]:
     try:
-      total_started_at = time.monotonic()
       source_read_started_at = time.monotonic()
       source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
       source_image_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
@@ -708,6 +824,17 @@ class OpenAIAnalysisService:
         source_image_bytes,
       )
       text_analysis_ms = round((time.monotonic() - text_analysis_started_at) * 1000)
+      analysis_result["analysisProvider"] = self.settings.analysis_provider
+      analysis_result["analysisModel"] = self.settings.effective_analysis_model_id
+      analysis_result["embeddingProvider"] = "bedrock"
+      analysis_result["embeddingModel"] = self.settings.effective_embedding_model_id
+      analysis_result["imageGenerationProvider"] = self.settings.image_generation_provider_normalized
+      analysis_result["imageGenerationModel"] = (
+        self.settings.openai_image_model_id
+        if self.settings.image_generation_provider_normalized == "openai"
+        else None
+      )
+      analysis_result["imageGenerationStatus"] = "pending"
       analysis_result["timing"] = {
         **(
           analysis_result.get("timing")
@@ -718,12 +845,167 @@ class OpenAIAnalysisService:
         "textAnalysisMs": text_analysis_ms,
       }
 
-      result = await asyncio.to_thread(
-        self._generate_recommended_makeup_images_sync,
-        payload,
-        source_image_bytes,
-        analysis_result,
+      return analysis_result
+    except AppError:
+      raise
+    except (OpenAIError, BotoCoreError, ClientError) as exc:
+      logger.exception("[aura:ai] text-analysis:failed")
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI text analysis invocation failed.",
+        details={"reason": exc.__class__.__name__, "message": str(exc)},
+      ) from exc
+    except Exception as exc:
+      logger.exception("[aura:ai] text-analysis:failed")
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI text analysis invocation failed.",
+        details={"reason": exc.__class__.__name__},
+      ) from exc
+
+  async def generate_recommended_makeup_images(
+    self,
+    payload: dict[str, Any],
+    analysis_result: dict[str, Any],
+    on_card_generated: Any | None = None,
+  ) -> dict[str, Any]:
+    if self.settings.image_generation_provider_normalized != "openai":
+      raise AppError(
+        503,
+        "IMAGE_GENERATION_PROVIDER_UNSUPPORTED",
+        "Only OpenAI image generation is currently supported.",
       )
+
+    source_read_started_at = time.monotonic()
+    source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
+    image_source_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
+    recommended_makeups = analysis_result.get("recommendedMakeups")
+
+    if not isinstance(recommended_makeups, list) or not recommended_makeups:
+      raise AppError(
+        502,
+        "RECOMMENDED_MAKEUPS_REQUIRED",
+        "AI analysis must return recommendedMakeups before image generation.",
+      )
+
+    cards = [card for card in recommended_makeups[:3] if isinstance(card, dict)]
+
+    if len(cards) < 3:
+      raise AppError(
+        502,
+        "RECOMMENDED_MAKEUPS_INCOMPLETE",
+        "AI analysis must return exactly 3 recommended makeup cards.",
+      )
+
+    started_at = time.monotonic()
+    source_content_type = self._infer_content_type(payload)
+    generated_cards: list[dict[str, Any]] = [dict(card) for card in cards]
+    image_generation_items: list[dict[str, Any]] = []
+    image_generation_errors: list[dict[str, Any]] = []
+    logger.info(
+      "[aura:openai] image-generation:background-start count=%s model=%s",
+      len(cards),
+      self.settings.openai_image_model_id,
+    )
+
+    async def generate_card(index: int, card: dict[str, Any]):
+      try:
+        generated_card = await asyncio.to_thread(
+          self._generate_single_makeup_image,
+          source_image_bytes,
+          source_content_type,
+          analysis_result,
+          card,
+          index,
+        )
+        return index, generated_card, None
+      except Exception as exc:  # noqa: BLE001 - keep other image tasks alive.
+        return index, None, exc
+
+    tasks = [asyncio.create_task(generate_card(index, card)) for index, card in enumerate(cards)]
+
+    for task in asyncio.as_completed(tasks):
+      index, generated_card, error = await task
+
+      if error is not None:
+        error_detail = {"index": index + 1, "reason": error.__class__.__name__}
+
+        if isinstance(error, AppError):
+          error_detail.update({"code": error.code, "message": error.message})
+
+        image_generation_errors.append(error_detail)
+        generated_cards[index] = {**generated_cards[index], "imageStatus": "failed"}
+        logger.warning(
+          "[aura:openai] image-generation:item-failed index=%s reason=%s",
+          index + 1,
+          error.__class__.__name__,
+        )
+        continue
+
+      if not isinstance(generated_card, dict):
+        continue
+
+      duration_ms = generated_card.pop("_imageGenerationDurationMs", None)
+      generated_cards[index] = {**generated_card, "imageStatus": "ready"}
+      image_generation_items.append({"index": index + 1, "durationMs": duration_ms})
+      partial_result = {
+        **analysis_result,
+        "recommendedMakeups": generated_cards,
+        "imageGenerationStatus": "processing",
+        "timing": {
+          **(
+            analysis_result.get("timing")
+            if isinstance(analysis_result.get("timing"), dict)
+            else {}
+          ),
+          "imageSourceReadMs": image_source_read_ms,
+          "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
+          "imageGenerationStatus": "processing",
+        },
+      }
+
+      if on_card_generated:
+        await on_card_generated(index, generated_cards[index], partial_result)
+
+    image_generation_status = "failed" if image_generation_errors else "completed"
+    image_generation_total_ms = round((time.monotonic() - started_at) * 1000)
+    result = {
+      **analysis_result,
+      "recommendedMakeups": generated_cards,
+      "imageGenerationStatus": image_generation_status,
+      "timing": {
+        **(
+          analysis_result.get("timing")
+          if isinstance(analysis_result.get("timing"), dict)
+          else {}
+        ),
+        "imageSourceReadMs": image_source_read_ms,
+        "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
+        "imageGenerationStatus": image_generation_status,
+        "imageGenerationTotalMs": image_generation_total_ms,
+      },
+    }
+
+    if image_generation_errors:
+      result["imageGenerationErrors"] = image_generation_errors
+
+    logger.info(
+      "[aura:openai] image-generation:background-finished status=%s generated=%s failed=%s durationMs=%s",
+      image_generation_status,
+      len(image_generation_items),
+      len(image_generation_errors),
+      image_generation_total_ms,
+    )
+
+    return result
+
+  async def analyze_image(self, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+      total_started_at = time.monotonic()
+      analysis_result = await self.analyze_text(payload)
+      result = await self.generate_recommended_makeup_images(payload, analysis_result)
       result["timing"] = {
         **(result.get("timing") if isinstance(result.get("timing"), dict) else {}),
         "totalMs": round((time.monotonic() - total_started_at) * 1000),
@@ -733,19 +1015,19 @@ class OpenAIAnalysisService:
       return result
     except AppError:
       raise
-    except OpenAIError as exc:
-      logger.exception("[aura:openai] invocation:failed")
+    except (OpenAIError, BotoCoreError, ClientError) as exc:
+      logger.exception("[aura:ai] invocation:failed")
       raise AppError(
         502,
-        "OPENAI_INVOCATION_FAILED",
-        "OpenAI analysis or image generation failed.",
+        "AI_INVOCATION_FAILED",
+        "AI analysis or image generation failed.",
         details={"reason": exc.__class__.__name__, "message": str(exc)},
       ) from exc
     except Exception as exc:
-      logger.exception("[aura:openai] invocation:failed")
+      logger.exception("[aura:ai] invocation:failed")
       raise AppError(
         502,
-        "OPENAI_INVOCATION_FAILED",
-        "OpenAI analysis or image generation failed.",
+        "AI_INVOCATION_FAILED",
+        "AI analysis or image generation failed.",
         details={"reason": exc.__class__.__name__},
       ) from exc
