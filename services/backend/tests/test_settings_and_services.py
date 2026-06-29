@@ -110,6 +110,7 @@ def test_gpt_image_2_edit_params_omit_input_fidelity() -> None:
   assert params["model"] == "gpt-image-2"
   assert params["output_format"] == "jpeg"
   assert params["output_compression"] == 80
+  assert params["response_format"] == "b64_json"
   assert "input_fidelity" not in params
 
 
@@ -118,6 +119,7 @@ def test_gpt_image_1_edit_params_keep_high_input_fidelity() -> None:
 
   params = service._build_image_edit_params(object(), "apply makeup", "auto")
 
+  assert params["response_format"] == "b64_json"
   assert params["input_fidelity"] == "high"
 
 

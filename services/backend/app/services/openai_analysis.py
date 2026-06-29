@@ -616,6 +616,7 @@ class OpenAIAnalysisService:
       "background": "opaque",
       "n": 1,
       "quality": self.settings.openai_image_quality,
+      "response_format": "b64_json",
       "size": edit_size,
       "output_format": output_format,
     }

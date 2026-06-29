@@ -117,6 +117,8 @@ export function ProfileEditScreen({
         ? selectedInterests.join(', ')
         : draftValue.trim();
     const nextProfile = {...profile, [editingFieldId]: nextValue};
+    const previousProfile = profile;
+    const previousFields = fields;
 
     setProfile(nextProfile);
     setFields((currentFields) =>
@@ -128,6 +130,8 @@ export function ProfileEditScreen({
     cancelEditing();
 
     void updateUserProfile(nextProfile).catch(() => {
+      setProfile(previousProfile);
+      setFields(previousFields);
       setNotice('\uD504\uB85C\uD544 \uC815\uBCF4\uB97C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.');
     });
   };
