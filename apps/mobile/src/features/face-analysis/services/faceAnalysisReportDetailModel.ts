@@ -26,12 +26,12 @@ type FaceAnalysisReportGuideLabel = {
 };
 
 const guideLabels: FaceAnalysisReportGuideLabel[] = [
-  {key: 'brow', label: '눈썹'},
-  {key: 'eyeshadow', label: '아이섀도우'},
-  {key: 'lip', label: '립'},
-  {key: 'highlight', label: '하이라이트'},
-  {key: 'eyeliner', label: '아이라이너'},
-  {key: 'blush', label: '블러셔'},
+  {key: 'brow', label: '\uB208\uC379'},
+  {key: 'eyeshadow', label: '\uC544\uC774\uC12C\uB3C4\uC6B0'},
+  {key: 'eyeliner', label: '\uC544\uC774\uB77C\uC778'},
+  {key: 'blush', label: '\uBE14\uB7EC\uC154'},
+  {key: 'highlight', label: '\uD558\uC774\uB77C\uC774\uD2B8'},
+  {key: 'lip', label: '\uB9BD'},
 ];
 
 const createFilterButtonPlacements = [
