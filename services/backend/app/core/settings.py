@@ -21,6 +21,17 @@ class Settings(BaseSettings):
   aws_secret_access_key: str | None = None
   aws_use_iam_role: bool = False
 
+  ai_provider: str = "bedrock"
+  image_generation_provider: str = "openai"
+  openai_enabled: bool = True
+  bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  bedrock_analysis_model_id: str | None = None
+  bedrock_analysis_inference_id: str | None = None
+  bedrock_analysis_region: str | None = None
+  bedrock_embedding_model_id: str | None = "amazon.titan-embed-text-v2:0"
+  bedrock_embedding_region: str | None = None
+  embedding_dimension: int = 1024
+
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None
   google_oauth_client_id: str | None = None
@@ -43,6 +54,38 @@ class Settings(BaseSettings):
   cors_allow_origins: str = ""
 
   model_config = SettingsConfigDict(extra="ignore")
+
+  @property
+  def analysis_provider(self) -> str:
+    return (self.ai_provider or "bedrock").strip().lower()
+
+  @property
+  def image_generation_provider_normalized(self) -> str:
+    return (self.image_generation_provider or "openai").strip().lower()
+
+  @property
+  def effective_bedrock_analysis_region(self) -> str:
+    return (self.bedrock_analysis_region or self.aws_region).strip()
+
+  @property
+  def effective_bedrock_embedding_region(self) -> str:
+    return (self.bedrock_embedding_region or self.aws_region).strip()
+
+  @property
+  def effective_analysis_model_id(self) -> str:
+    if self.analysis_provider == "bedrock":
+      return (
+        self.bedrock_analysis_inference_id
+        or self.bedrock_analysis_model_id
+        or self.bedrock_model_id
+        or ""
+      ).strip()
+
+    return (self.openai_analysis_model_id or "").strip()
+
+  @property
+  def effective_embedding_model_id(self) -> str:
+    return (self.bedrock_embedding_model_id or "").strip()
 
   @property
   def cognito_issuer(self) -> str | None:
@@ -90,6 +133,8 @@ class Settings(BaseSettings):
     return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
   def public_config_status(self) -> dict[str, object]:
+    analysis_provider = self.analysis_provider
+    image_generation_provider = self.image_generation_provider_normalized
     items = {
       "databaseUrl": {
         "configured": bool(self.database_url),
@@ -115,17 +160,42 @@ class Settings(BaseSettings):
         "configured": bool(self.effective_cdn_base_url),
         "requiredWhen": "CDN URLs should be returned for uploaded media.",
       },
+      "analysisProvider": {
+        "configured": analysis_provider in {"bedrock", "openai"},
+        "requiredWhen": "AI analysis jobs are run.",
+        "value": analysis_provider,
+      },
+      "bedrockAnalysisModelId": {
+        "configured": bool(self.effective_analysis_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock.",
+        "value": self.effective_analysis_model_id if analysis_provider == "bedrock" else None,
+      },
+      "bedrockEmbeddingModelId": {
+        "configured": bool(self.effective_embedding_model_id),
+        "requiredWhen": "Embedding-backed recommendations or semantic search are used.",
+        "value": self.effective_embedding_model_id,
+      },
+      "embeddingDimension": {
+        "configured": self.embedding_dimension > 0,
+        "requiredWhen": "BEDROCK_EMBEDDING_MODEL_ID is used.",
+        "value": self.embedding_dimension,
+      },
       "openAIApiKey": {
         "configured": bool(self.openai_api_key),
-        "requiredWhen": "Official OpenAI analysis or image generation is used.",
+        "requiredWhen": "IMAGE_GENERATION_PROVIDER=openai or AI_PROVIDER=openai.",
       },
       "openAIAnalysisModelId": {
-        "configured": bool(self.openai_analysis_model_id),
-        "requiredWhen": "Official OpenAI image analysis is used.",
+        "configured": bool(self.openai_analysis_model_id) if analysis_provider == "openai" else True,
+        "requiredWhen": "AI_PROVIDER=openai.",
       },
       "openAIImageModelId": {
-        "configured": bool(self.openai_image_model_id),
-        "requiredWhen": "Official OpenAI recommendation image generation is used.",
+        "configured": bool(self.openai_image_model_id) if image_generation_provider == "openai" else True,
+        "requiredWhen": "IMAGE_GENERATION_PROVIDER=openai.",
+      },
+      "imageGenerationProvider": {
+        "configured": image_generation_provider == "openai",
+        "requiredWhen": "Recommendation images should be generated.",
+        "value": image_generation_provider,
       },
       "naverShoppingApi": {
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
@@ -143,7 +213,12 @@ class Settings(BaseSettings):
       "environment": self.environment,
       "authRequired": self.auth_required,
       "awsRegion": self.aws_region,
-      "aiProvider": "openai",
+      "aiProvider": analysis_provider,
+      "analysisModel": self.effective_analysis_model_id,
+      "embeddingProvider": "bedrock",
+      "embeddingModel": self.effective_embedding_model_id,
+      "imageGenerationProvider": image_generation_provider,
+      "imageGenerationModel": self.openai_image_model_id if image_generation_provider == "openai" else None,
       "items": items,
       "missing": missing,
     }

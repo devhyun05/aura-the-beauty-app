@@ -3,7 +3,7 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import type {RootStackParamList} from './routeTypes';
 import {MainTabNavigator} from './MainTabNavigator';
-import {LoginRouteScreen, TutorialRouteScreen} from './routes/authRoutes';
+import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './routes/authRoutes';
 import {
   ConsultingRouteScreen,
   CommunityRouteScreen,
@@ -55,6 +55,7 @@ export function RootNavigator() {
       initialRouteName="Login"
       screenOptions={{headerShown: false}}>
       <Stack.Screen name="Login" component={LoginRouteScreen} />
+      <Stack.Screen name="ProfileSetup" component={ProfileSetupRouteScreen} />
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />

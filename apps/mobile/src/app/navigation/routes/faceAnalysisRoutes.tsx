@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 
 import {
   createFaceAnalysisReportFromCapture,
@@ -18,6 +18,21 @@ type HeaderShareAction = {
 };
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
+const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
+  '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
+const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
+  'ANALYSIS_JOB_FAILED',
+  'ANALYSIS_REPORT_TIMEOUT',
+  'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
+]);
+
+function shouldRetryAnalysisError(error: unknown): boolean {
+  if (!(error instanceof BackendApiError) || !error.code) {
+    return true;
+  }
+
+  return !NON_RETRYABLE_ANALYSIS_ERROR_CODES.has(error.code);
+}
 
 export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCapture'>) {
   const {setSelectedFaceCapture} = useNavigationFlowState();
@@ -56,6 +71,7 @@ export function FaceAnalysisLoadingRouteScreen({
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
+  const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
 
@@ -68,6 +84,7 @@ export function FaceAnalysisLoadingRouteScreen({
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     setIsAnalysisReady(false);
+    setAnalysisErrorMessage(null);
     setSelectedFaceAnalysisReport(null);
 
     createFaceAnalysisReportFromCapture(selectedFaceCapture)
@@ -108,14 +125,18 @@ export function FaceAnalysisLoadingRouteScreen({
         });
 
         if (
-          error instanceof BackendApiError &&
+          !shouldRetryAnalysisError(error) ||
           analysisRetryCountRef.current >= MAX_ANALYSIS_RETRY_COUNT
         ) {
           console.info('[aura:analysis] analysis-job:stop-retry', {
-            code: error.code,
-            details: error.details,
-            status: error.status,
+            code: error instanceof BackendApiError ? error.code : undefined,
+            details: error instanceof BackendApiError ? error.details : undefined,
+            message: error instanceof Error ? error.message : String(error),
+            status: error instanceof BackendApiError ? error.status : undefined,
           });
+          setAnalysisErrorMessage(
+            error instanceof Error ? error.message : FACE_ANALYSIS_LOADING_ERROR_MESSAGE,
+          );
           return;
         }
 
@@ -140,14 +161,24 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceAnalysisReport,
   ]);
 
+  const handleRetryAnalysis = React.useCallback(() => {
+    analysisRetryCountRef.current = 0;
+    setAnalysisErrorMessage(null);
+    setIsAnalysisReady(false);
+    setAnalysisRequestKey(currentKey => currentKey + 1);
+  }, []);
+
   return (
     <DetailRouteChrome
       routeName="FaceAnalysisLoading"
       onBack={() => navigation.navigate('FaceCapture')}>
       <FaceAnalysisLoadingScreen
+        analysisErrorMessage={analysisErrorMessage}
         capturedPhotoUri={selectedFaceCapture?.imageUri}
         isAnalysisReady={isAnalysisReady}
+        onBack={() => navigation.navigate('FaceCapture')}
         onComplete={() => navigation.navigate('FaceAnalysisReportDetail')}
+        onRetry={handleRetryAnalysis}
       />
     </DetailRouteChrome>
   );

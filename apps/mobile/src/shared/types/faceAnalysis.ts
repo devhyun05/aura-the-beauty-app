@@ -15,6 +15,7 @@ export interface FaceAnalysisMakeupCard {
   subtitle: string;
   description: string;
   imageSource: ImageSourcePropType;
+  imageStatus?: 'pending' | 'ready' | 'failed';
   tags: string[];
 }
 
