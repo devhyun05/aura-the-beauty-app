@@ -1,11 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
+import type {ImageSourcePropType} from 'react-native';
 
 import {beautyProfileMock, profileEditFieldsMock, userProfileMock} from '../mocks/user.mock';
 import type {BeautyProfile, ProfileEditField, UserProfile} from '../types/profile';
 
 const USER_PROFILE_STORAGE_KEY = 'aura.user.profile.v1';
+const HIDDEN_PROFILE_EDIT_FIELD_IDS = new Set(['phone', 'interest']);
 
-type StoredUserProfile = Omit<UserProfile, 'avatarSource'>;
+type StoredUserProfile = Omit<UserProfile, 'avatarSource'> & {
+  avatarUri?: string | null;
+};
 
 let currentUserProfile: UserProfile = userProfileMock;
 let currentBeautyProfile: BeautyProfile = beautyProfileMock;
@@ -32,23 +36,43 @@ function getProfileFieldValue(profile: UserProfile, fieldId: string) {
 }
 
 function getProfileEditFieldsForProfile(profile: UserProfile): ProfileEditField[] {
-  return profileEditFieldsMock.map((field) => ({
-    ...field,
-    value: getProfileFieldValue(profile, field.id) || field.value,
-  }));
+  return profileEditFieldsMock
+    .filter((field) => !HIDDEN_PROFILE_EDIT_FIELD_IDS.has(field.id))
+    .map((field) => ({
+      ...field,
+      value: getProfileFieldValue(profile, field.id) || field.value,
+    }));
+}
+
+function getAvatarUri(source: ImageSourcePropType | undefined) {
+  if (!source || typeof source === 'number') {
+    return null;
+  }
+
+  const sources = Array.isArray(source) ? source : [source];
+  const uriSource = sources.find(
+    (entry) => typeof entry.uri === 'string' && entry.uri.length > 0,
+  );
+
+  return uriSource?.uri ?? null;
 }
 
 function toStoredUserProfile(profile: UserProfile): StoredUserProfile {
-  const {avatarSource: _avatarSource, ...storedProfile} = profile;
+  const {avatarSource, ...storedProfile} = profile;
 
-  return storedProfile;
+  return {
+    ...storedProfile,
+    avatarUri: getAvatarUri(avatarSource),
+  };
 }
 
 function mergeStoredUserProfile(storedProfile: StoredUserProfile): UserProfile {
+  const {avatarUri, ...profileFields} = storedProfile;
+
   return {
     ...currentUserProfile,
-    ...storedProfile,
-    avatarSource: currentUserProfile.avatarSource,
+    ...profileFields,
+    avatarSource: avatarUri ? {uri: avatarUri} : currentUserProfile.avatarSource,
   };
 }
 

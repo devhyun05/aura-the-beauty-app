@@ -47,7 +47,7 @@ expectMainHeader('ProfileTab', {
   showTitle: true,
   subtitle: 'MAKEUP GUIDE',
   title: 'AI AR Makeup',
-  usesBrandLogo: false,
+  usesBrandLogo: true,
 });
 
 const footerExpectations: Record<FooterTabKey, ReturnType<typeof getRootRouteForFooterTab>> = {

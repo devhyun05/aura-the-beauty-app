@@ -354,6 +354,20 @@ async function waitForCompleteAnalysisReport(
       );
     }
 
+    if (currentJob.status === 'completed') {
+      throw lastError ?? new BackendApiError(
+        '추천 메이크업 이미지가 완성되지 않았어요. 잠시 후 다시 시도해 주세요.',
+        502,
+        'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
+        {
+          generatedImageCount,
+          imageGenerationStatus,
+          jobId: currentJob.id ?? null,
+          recommendedCount,
+        },
+      );
+    }
+
     if (!currentJob.id) {
       throw lastError ?? new Error('Analysis job did not return a report id.');
     }
@@ -628,17 +642,11 @@ export async function createFaceAnalysisReportFromCapture(
     status: job.status ?? null,
     timing: job.detailPayload?.result?.timing ?? null,
   });
-
-  const report = mapBackendJobToFaceAnalysisReport(job, capture);
-
-  console.info('[aura:analysis] analysis-report:text-ready', {
+  console.info('[aura:analysis] analysis-report:poll-start', {
     durationMs: Date.now() - startedAt,
-    generatedImageCount: getGeneratedMakeupImageCount(job),
-    imageGenerationStatus: getImageGenerationStatus(job),
     jobId: job.id ?? null,
-    recommendedCount: getRecommendedMakeupCount(job),
     status: job.status ?? null,
   });
 
-  return report;
+  return waitForCompleteAnalysisReport(job, capture, startedAt);
 }

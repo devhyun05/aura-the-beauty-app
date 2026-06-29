@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
@@ -70,6 +71,12 @@ export function ProfileScreen({
       isMountedRef.current = false;
     };
   }, [loadProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile]),
+  );
 
   if (loadState.status === 'loading') {
     return (
