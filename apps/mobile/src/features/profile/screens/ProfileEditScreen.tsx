@@ -1,5 +1,8 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Pressable, StyleSheet, TextInput} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import {CalendarDays} from 'lucide-react-native';
+import {Modal, Pressable, StyleSheet, TextInput} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -16,12 +19,9 @@ import {
   ChevronRightIcon,
   IconButton,
   ImagePlaceholder,
+  PencilIcon,
 } from '../../../shared/ui';
-import {
-  profileGenderOptions,
-  profileInterestOptions,
-} from '../constants/profileEditOptions';
-import {ProfileEditRow} from '../components/ProfileEditRow';
+import {profileGenderOptions} from '../constants/profileEditOptions';
 import {
   createCalendarCells,
   getProfileEditValidationMessage,
@@ -29,9 +29,6 @@ import {
   isEditableProfileFieldId,
   parseDateValue,
   profileEditWeekLabels,
-  splitEmailValue,
-  splitInterests,
-  splitPhoneNumber,
   startOfMonth,
   type EditableProfileFieldId,
 } from '../services/profileEditModel';
@@ -42,19 +39,76 @@ type ProfileEditScreenProps = {
   onLogout?: () => void;
 };
 
-export function ProfileEditScreen({
-  onLogout,
-}: ProfileEditScreenProps) {
+type VisibleEditableProfileFieldId = Exclude<
+  EditableProfileFieldId,
+  'phone' | 'interest'
+>;
+
+type VisibleProfileEditField = ProfileEditField & {
+  id: VisibleEditableProfileFieldId;
+};
+
+const PROFILE_AVATAR_DIRECTORY = 'profile-avatar';
+
+function getAvatarFileExtension(uri: string) {
+  const [pathWithoutQuery] = uri.split('?');
+  const extensionMatch = pathWithoutQuery.match(/\.([a-z0-9]+)$/i);
+  const extension = extensionMatch?.[1]?.toLowerCase();
+
+  if (extension === 'png' || extension === 'webp' || extension === 'heic') {
+    return extension;
+  }
+
+  return 'jpg';
+}
+
+async function persistAvatarImage(sourceUri: string) {
+  if (!FileSystem.documentDirectory) {
+    return sourceUri;
+  }
+
+  const directoryUri = `${FileSystem.documentDirectory}${PROFILE_AVATAR_DIRECTORY}/`;
+  const fileUri = `${directoryUri}avatar-${Date.now()}.${getAvatarFileExtension(sourceUri)}`;
+
+  await FileSystem.makeDirectoryAsync(directoryUri, {intermediates: true});
+  await FileSystem.copyAsync({from: sourceUri, to: fileUri});
+
+  return fileUri;
+}
+
+function isVisibleProfileEditField(
+  field: ProfileEditField,
+): field is VisibleProfileEditField {
+  return (
+    isEditableProfileFieldId(field.id) &&
+    field.id !== 'phone' &&
+    field.id !== 'interest'
+  );
+}
+
+function getFieldsForProfile(
+  fields: ProfileEditField[],
+  profile: UserProfile,
+): ProfileEditField[] {
+  return fields.map((field) =>
+    isEditableProfileFieldId(field.id)
+      ? {...field, value: getProfileFieldValue(profile, field.id)}
+      : field,
+  );
+}
+
+export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [fields, setFields] = useState<ProfileEditField[]>([]);
   const [notice, setNotice] = useState('');
-  const [editingFieldId, setEditingFieldId] =
-    useState<EditableProfileFieldId | null>(null);
-  const [draftValue, setDraftValue] = useState('');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftProfile, setDraftProfile] = useState<UserProfile | null>(null);
+  const [isPickingImage, setIsPickingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() =>
     startOfMonth(new Date()),
   );
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -63,7 +117,7 @@ export function ProfileEditScreen({
       ([nextProfile, nextFields]) => {
         if (isMounted) {
           setProfile(nextProfile);
-          setFields(nextFields);
+          setFields(getFieldsForProfile(nextFields, nextProfile));
         }
       },
     );
@@ -73,67 +127,148 @@ export function ProfileEditScreen({
     };
   }, []);
 
+  const editableFields = useMemo(
+    () => fields.filter(isVisibleProfileEditField),
+    [fields],
+  );
   const calendarCells = useMemo(
     () => createCalendarCells(calendarMonth),
     [calendarMonth],
   );
-  const validationMessage = editingFieldId
-    ? getProfileEditValidationMessage(editingFieldId, draftValue, selectedInterests)
-    : '';
-  const canSave = Boolean(editingFieldId) && !validationMessage;
+  const validationMessages = useMemo(() => {
+    if (!draftProfile) {
+      return [];
+    }
 
-  const startEditing = (field: ProfileEditField) => {
-    if (!profile || !isEditableProfileFieldId(field.id)) {
+    return editableFields
+      .filter((field) => field.id !== 'email')
+      .map((field) =>
+        getProfileEditValidationMessage(
+          field.id,
+          getProfileFieldValue(draftProfile, field.id),
+          [],
+        ),
+      )
+      .filter(Boolean);
+  }, [draftProfile, editableFields]);
+  const activeProfile = isEditing ? draftProfile : profile;
+  const canSave =
+    isEditing && Boolean(draftProfile) && validationMessages.length === 0 && !isSaving;
+
+  const startEditing = () => {
+    if (!profile) {
       return;
     }
 
-    const nextValue = getProfileFieldValue(profile, field.id);
-    setEditingFieldId(field.id);
-    setDraftValue(nextValue);
+    setDraftProfile(profile);
+    setCalendarMonth(startOfMonth(parseDateValue(profile.birthDate)));
+    setIsEditing(true);
     setNotice('');
-
-    if (field.id === 'interest') {
-      setSelectedInterests(splitInterests(nextValue));
-    }
-
-    if (field.id === 'birthDate') {
-      setCalendarMonth(startOfMonth(parseDateValue(nextValue)));
-    }
   };
 
   const cancelEditing = () => {
-    setEditingFieldId(null);
-    setDraftValue('');
-    setSelectedInterests([]);
+    setDraftProfile(null);
+    setIsEditing(false);
+    setIsCalendarOpen(false);
+    setNotice('');
   };
 
-  const saveEditing = () => {
-    if (!profile || !editingFieldId || validationMessage) {
+  const updateDraftProfile = (
+    updater: (currentProfile: UserProfile) => UserProfile,
+  ) => {
+    setDraftProfile((currentProfile) =>
+      currentProfile ? updater(currentProfile) : currentProfile,
+    );
+  };
+
+  const updateDraftField = (
+    fieldId: VisibleEditableProfileFieldId,
+    nextValue: string,
+  ) => {
+    updateDraftProfile((currentProfile) => ({
+      ...currentProfile,
+      [fieldId]: nextValue,
+    }));
+  };
+
+  const saveEditing = async () => {
+    if (!profile || !draftProfile || !canSave) {
       return;
     }
 
-    const nextValue =
-      editingFieldId === 'interest'
-        ? selectedInterests.join(', ')
-        : draftValue.trim();
-    const nextProfile = {...profile, [editingFieldId]: nextValue};
     const previousProfile = profile;
     const previousFields = fields;
+    const nextProfile = draftProfile;
+    const nextFields = getFieldsForProfile(fields, nextProfile);
 
+    setIsSaving(true);
     setProfile(nextProfile);
-    setFields((currentFields) =>
-      currentFields.map((field) =>
-        field.id === editingFieldId ? {...field, value: nextValue} : field,
-      ),
-    );
-    setNotice('\uD504\uB85C\uD544 \uC815\uBCF4\uAC00 \uC800\uC7A5\uB418\uC5C8\uC5B4\uC694.');
-    cancelEditing();
+    setFields(nextFields);
+    setDraftProfile(null);
+    setIsEditing(false);
+    setIsCalendarOpen(false);
 
-    void updateUserProfile(nextProfile).catch(() => {
+    try {
+      const savedProfile = await updateUserProfile(nextProfile);
+      setProfile(savedProfile);
+      setFields(getFieldsForProfile(nextFields, savedProfile));
+      setNotice('프로필 정보가 저장되었어요.');
+    } catch {
       setProfile(previousProfile);
       setFields(previousFields);
-      setNotice('\uD504\uB85C\uD544 \uC815\uBCF4\uB97C \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.');
-    });
+      setNotice('프로필 정보를 저장하지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    if (!draftProfile || isPickingImage) {
+      return;
+    }
+
+    setIsPickingImage(true);
+
+    try {
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        setNotice('사진 접근 권한이 필요해요.');
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+
+      const selectedUri = pickerResult.canceled
+        ? undefined
+        : pickerResult.assets[0]?.uri;
+
+      if (selectedUri) {
+        let avatarUri = selectedUri;
+
+        try {
+          avatarUri = await persistAvatarImage(selectedUri);
+        } catch {
+          avatarUri = selectedUri;
+        }
+
+        updateDraftProfile((currentProfile) => ({
+          ...currentProfile,
+          avatarSource: {uri: avatarUri},
+        }));
+        setNotice('');
+      }
+    } catch {
+      setNotice('사진을 불러오지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      setIsPickingImage(false);
+    }
   };
 
   const moveCalendarMonth = (offset: number) => {
@@ -157,182 +292,76 @@ export function ProfileEditScreen({
         ),
     );
   };
-  const toggleInterest = (interest: string) => {
-    setSelectedInterests((currentInterests) =>
-      currentInterests.includes(interest)
-        ? currentInterests.filter((item) => item !== interest)
-        : [...currentInterests, interest],
-    );
-  };
+  const getDisplayedFieldValue = (fieldId: VisibleEditableProfileFieldId) =>
+    activeProfile ? getProfileFieldValue(activeProfile, fieldId) : '';
 
-  const updatePhonePart = (partIndex: 0 | 1 | 2, nextText: string) => {
-    const parts = splitPhoneNumber(draftValue);
-    const maxLengths = [3, 4, 4] as const;
-    parts[partIndex] = nextText
-      .replace(/\D/g, '')
-      .slice(0, maxLengths[partIndex]);
-    setDraftValue(parts.join('-'));
-  };
-
-  const updateEmailPart = (partIndex: 0 | 1, nextText: string) => {
-    const [localPart, domainPart] = splitEmailValue(draftValue);
-    const normalizedText = nextText.replace(/@/g, '').trim();
-
-    setDraftValue(
-      partIndex === 0
-        ? `${normalizedText}@${domainPart}`
-        : `${localPart}@${normalizedText}`,
-    );
-  };
-  const renderEditor = (fieldId: EditableProfileFieldId) => {
-    if (fieldId === 'phone') {
-      const [prefix, middle, suffix] = splitPhoneNumber(draftValue);
-
-      return (
-        <View style={styles.fixedInputRow}>
-          <TextInput
-            accessibilityLabel="전화번호 앞자리"
-            keyboardType="number-pad"
-            maxLength={3}
-            onChangeText={(nextText) => updatePhonePart(0, nextText)}
-            placeholder="010"
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.input, styles.phonePrefixInput]}
-            value={prefix}
-          />
-          <Text style={styles.fixedDivider}>-</Text>
-          <TextInput
-            accessibilityLabel="전화번호 가운데 자리"
-            keyboardType="number-pad"
-            maxLength={4}
-            onChangeText={(nextText) => updatePhonePart(1, nextText)}
-            placeholder="0000"
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.input, styles.phoneInput]}
-            value={middle}
-          />
-          <Text style={styles.fixedDivider}>-</Text>
-          <TextInput
-            accessibilityLabel="전화번호 마지막 자리"
-            keyboardType="number-pad"
-            maxLength={4}
-            onChangeText={(nextText) => updatePhonePart(2, nextText)}
-            placeholder="0000"
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.input, styles.phoneInput]}
-            value={suffix}
-          />
-        </View>
-      );
+  const getValidationMessageForField = (
+    fieldId: VisibleEditableProfileFieldId,
+  ) => {
+    if (fieldId === 'email') {
+      return '';
     }
+
+    if (!isEditing || !draftProfile) {
+      return '';
+    }
+
+    return getProfileEditValidationMessage(
+      fieldId,
+      getProfileFieldValue(draftProfile, fieldId),
+      [],
+    );
+  };
+
+
+  const openBirthDateCalendar = () => {
+    if (!draftProfile) {
+      return;
+    }
+
+    setCalendarMonth(startOfMonth(parseDateValue(draftProfile.birthDate)));
+    setIsCalendarOpen(true);
+  };
+
+  const closeBirthDateCalendar = () => {
+    setIsCalendarOpen(false);
+  };
+
+  const selectBirthDate = (nextValue: string) => {
+    updateDraftField('birthDate', nextValue);
+    setIsCalendarOpen(false);
+  };
+  const renderEditor = (fieldId: VisibleEditableProfileFieldId) => {
+    const value = draftProfile ? getProfileFieldValue(draftProfile, fieldId) : '';
 
     if (fieldId === 'email') {
-      const [localPart, domainPart] = splitEmailValue(draftValue);
-
       return (
-        <View style={styles.fixedInputRow}>
-          <TextInput
-            accessibilityLabel="이메일 아이디"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onChangeText={(nextText) => updateEmailPart(0, nextText)}
-            placeholder="email"
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.input, styles.emailLocalInput]}
-            value={localPart}
-          />
-          <Text style={styles.fixedDivider}>@</Text>
-          <TextInput
-            accessibilityLabel="이메일 도메인"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onChangeText={(nextText) => updateEmailPart(1, nextText)}
-            placeholder="domain.com"
-            placeholderTextColor={colors.textTertiary}
-            style={[styles.input, styles.emailDomainInput]}
-            value={domainPart}
-          />
+        <View style={styles.fixedValueBox}>
+          <Text numberOfLines={1} style={styles.fixedValueText}>
+            {value || 'OAuth 이메일'}
+          </Text>
         </View>
       );
     }
-
     if (fieldId === 'birthDate') {
       return (
-        <View style={styles.calendarPanel}>
-          <View style={styles.calendarYearRow}>
-            <Pressable
-              accessibilityLabel="이전 해로 이동"
-              accessibilityRole="button"
-              onPress={() => moveCalendarYear(-1)}
-              style={styles.yearButton}
-            >
-              <Text style={styles.yearButtonText}>이전 해</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="다음 해로 이동"
-              accessibilityRole="button"
-              onPress={() => moveCalendarYear(1)}
-              style={styles.yearButton}
-            >
-              <Text style={styles.yearButtonText}>다음 해</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.calendarHeader}>
-            <IconButton
-              accessibilityLabel="이전 달"
-              onPress={() => moveCalendarMonth(-1)}
-              size={34}
-            >
-              <ChevronLeftIcon />
-            </IconButton>
-            <Text style={styles.calendarTitle}>
-              {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
-            </Text>
-            <IconButton
-              accessibilityLabel="다음 달"
-              onPress={() => moveCalendarMonth(1)}
-              size={34}
-            >
-              <ChevronRightIcon />
-            </IconButton>
-          </View>
-
-          <View style={styles.weekRow}>
-            {profileEditWeekLabels.map((label) => (
-              <Text key={label} style={styles.weekLabel}>
-                {label}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.dayGrid}>
-            {calendarCells.map((cell) => {
-              const selected = cell.value === draftValue;
-
-              return (
-                <Pressable
-                  accessibilityLabel={cell.day ? `${cell.value} 선택` : '빈 날짜'}
-                  accessibilityRole="button"
-                  disabled={!cell.day}
-                  key={cell.key}
-                  onPress={() => setDraftValue(cell.value)}
-                  style={[styles.dayCell, selected ? styles.dayCellSelected : null]}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      !cell.day ? styles.dayTextMuted : null,
-                      selected ? styles.dayTextSelected : null,
-                    ]}
-                  >
-                    {cell.day ?? ''}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        <Pressable
+          accessibilityLabel="생년월일 선택"
+          accessibilityRole="button"
+          onPress={openBirthDateCalendar}
+          style={styles.dateButton}
+        >
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.dateButtonText,
+              !value ? styles.dateButtonPlaceholder : null,
+            ]}
+          >
+            {value || '생년월일 선택'}
+          </Text>
+          <CalendarDays color={colors.textSecondary} size={20} strokeWidth={1.8} />
+        </Pressable>
       );
     }
 
@@ -340,14 +369,14 @@ export function ProfileEditScreen({
       return (
         <View style={styles.optionRow}>
           {profileGenderOptions.map((option) => {
-            const selected = draftValue === option;
+            const selected = value === option;
 
             return (
               <Pressable
                 accessibilityLabel={`${option} 선택`}
                 accessibilityRole="button"
                 key={option}
-                onPress={() => setDraftValue(option)}
+                onPress={() => updateDraftField(fieldId, option)}
                 style={[styles.segment, selected ? styles.segmentSelected : null]}
               >
                 <Text
@@ -365,42 +394,13 @@ export function ProfileEditScreen({
       );
     }
 
-    if (fieldId === 'interest') {
-      return (
-        <View style={styles.chipGrid}>
-          {profileInterestOptions.map((interest) => {
-            const selected = selectedInterests.includes(interest);
-
-            return (
-              <Pressable
-                accessibilityLabel={`${interest} ${selected ? '해제' : '선택'}`}
-                accessibilityRole="button"
-                key={interest}
-                onPress={() => toggleInterest(interest)}
-                style={[styles.chip, selected ? styles.chipSelected : null]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    selected ? styles.chipTextSelected : null,
-                  ]}
-                >
-                  {interest}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      );
-    }
-
     return (
       <TextInput
         autoCapitalize="sentences"
-        onChangeText={setDraftValue}
+        onChangeText={(nextText) => updateDraftField(fieldId, nextText)}
         placeholderTextColor={colors.textTertiary}
-        style={styles.input}
-        value={draftValue}
+        style={[styles.input, styles.inlineInput]}
+        value={value}
       />
     );
   };
@@ -413,75 +413,94 @@ export function ProfileEditScreen({
             <ImagePlaceholder
               borderRadius={radius.pill}
               resizeMode="cover"
-              source={profile?.avatarSource}
+              source={activeProfile?.avatarSource}
             />
           </View>
-          <Pressable
-            accessibilityLabel="사진 업로드"
-            accessibilityRole="button"
-            onPress={() => setNotice('사진 업로드는 프론트엔드 UI만 준비되어 있어요.')}
-            style={styles.uploadButton}
-          >
-            <Text style={styles.uploadText}>사진 업로드</Text>
-          </Pressable>
+          {isEditing ? (
+            <Pressable
+              accessibilityLabel="사진 업로드"
+              accessibilityRole="button"
+              disabled={isPickingImage}
+              onPress={handlePickAvatar}
+              style={[
+                styles.uploadButton,
+                isPickingImage ? styles.uploadButtonDisabled : null,
+              ]}
+            >
+              <Text style={styles.uploadText}>
+                {isPickingImage ? '불러오는 중' : '사진 업로드'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <AppCard style={styles.infoCard}>
-          {fields.map((field) => {
-            const editableFieldId = isEditableProfileFieldId(field.id)
-              ? field.id
-              : null;
-            const displayField =
-              profile && editableFieldId
-                ? {...field, value: getProfileFieldValue(profile, editableFieldId)}
-                : field;
-            const isEditing = editingFieldId === editableFieldId;
+          <View style={styles.editHeaderRow}>
+            <Text style={styles.editHeaderTitle}>프로필 수정</Text>
+            {!isEditing ? (
+              <IconButton
+                accessibilityLabel="프로필 수정"
+                onPress={startEditing}
+                size={38}
+                variant="outlined"
+              >
+                <PencilIcon />
+              </IconButton>
+            ) : null}
+          </View>
+
+          {editableFields.map((field) => {
+            const validationMessage = getValidationMessageForField(field.id);
 
             return (
               <View key={field.id} style={styles.fieldBlock}>
-                <ProfileEditRow
-                  field={displayField}
-                  isEditing={isEditing}
-                  onPressEdit={
-                    field.editable && editableFieldId
-                      ? () => startEditing(displayField)
-                      : undefined
-                  }
-                />
+                <View style={styles.fieldReadRow}>
+                  <Text numberOfLines={1} style={styles.label}>
+                    {field.label}
+                  </Text>
+                  {isEditing ? (
+                    <View style={styles.inlineEditor}>{renderEditor(field.id)}</View>
+                  ) : (
+                    <Text numberOfLines={1} style={styles.value}>
+                      {getDisplayedFieldValue(field.id)}
+                    </Text>
+                  )}
+                </View>
 
-                {isEditing && editableFieldId ? (
-                  <View style={styles.editorPanel}>
-                    {renderEditor(editableFieldId)}
-                    {validationMessage ? (
-                      <Text style={styles.errorText}>{validationMessage}</Text>
-                    ) : null}
-                    <View style={styles.editorActionRow}>
-                      <Pressable
-                        accessibilityLabel="수정 취소"
-                        accessibilityRole="button"
-                        onPress={cancelEditing}
-                        style={styles.cancelButton}
-                      >
-                        <Text style={styles.cancelButtonText}>취소</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel="수정 완료"
-                        accessibilityRole="button"
-                        disabled={!canSave}
-                        onPress={saveEditing}
-                        style={[
-                          styles.saveButton,
-                          !canSave ? styles.saveButtonDisabled : null,
-                        ]}
-                      >
-                        <Text style={styles.saveButtonText}>완료</Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                {isEditing && validationMessage ? (
+                  <Text style={styles.errorText}>{validationMessage}</Text>
                 ) : null}
               </View>
             );
           })}
+
+          {isEditing ? (
+            <View style={styles.editorActionRow}>
+              <Pressable
+                accessibilityLabel="수정 취소"
+                accessibilityRole="button"
+                disabled={isSaving}
+                onPress={cancelEditing}
+                style={styles.cancelButton}
+              >
+                <Text style={styles.cancelButtonText}>취소</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="프로필 저장"
+                accessibilityRole="button"
+                disabled={!canSave}
+                onPress={saveEditing}
+                style={[
+                  styles.saveButton,
+                  !canSave ? styles.saveButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.saveButtonText}>
+                  {isSaving ? '저장 중' : '저장'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.actionRow}>
             <Pressable
@@ -505,7 +524,105 @@ export function ProfileEditScreen({
             </Pressable>
           </View>
         </AppCard>
+        <Modal
+          animationType="fade"
+          onRequestClose={closeBirthDateCalendar}
+          transparent
+          visible={isCalendarOpen}
+        >
+          <Pressable style={styles.calendarBackdrop} onPress={closeBirthDateCalendar}>
+            <View
+              onStartShouldSetResponder={() => true}
+              style={styles.calendarModal}
+            >
+              <View style={styles.calendarModalHeader}>
+                <Text style={styles.calendarModalTitle}>생년월일 선택</Text>
+                <Pressable
+                  accessibilityLabel="생년월일 선택 닫기"
+                  accessibilityRole="button"
+                  onPress={closeBirthDateCalendar}
+                  style={styles.closeCalendarButton}
+                >
+                  <Text style={styles.closeCalendarText}>닫기</Text>
+                </Pressable>
+              </View>
 
+              <View style={styles.calendarYearRow}>
+                <Pressable
+                  accessibilityLabel="이전 연도로 이동"
+                  accessibilityRole="button"
+                  onPress={() => moveCalendarYear(-1)}
+                  style={styles.yearButton}
+                >
+                  <Text style={styles.yearButtonText}>이전 해</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="다음 연도로 이동"
+                  accessibilityRole="button"
+                  onPress={() => moveCalendarYear(1)}
+                  style={styles.yearButton}
+                >
+                  <Text style={styles.yearButtonText}>다음 해</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.calendarHeader}>
+                <IconButton
+                  accessibilityLabel="이전 달"
+                  onPress={() => moveCalendarMonth(-1)}
+                  size={34}
+                >
+                  <ChevronLeftIcon />
+                </IconButton>
+                <Text style={styles.calendarTitle}>
+                  {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
+                </Text>
+                <IconButton
+                  accessibilityLabel="다음 달"
+                  onPress={() => moveCalendarMonth(1)}
+                  size={34}
+                >
+                  <ChevronRightIcon />
+                </IconButton>
+              </View>
+
+              <View style={styles.weekRow}>
+                {profileEditWeekLabels.map((label) => (
+                  <Text key={label} style={styles.weekLabel}>
+                    {label}
+                  </Text>
+                ))}
+              </View>
+
+              <View style={styles.dayGrid}>
+                {calendarCells.map((cell) => {
+                  const selected = cell.value === (draftProfile?.birthDate ?? '');
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={cell.day ? `${cell.value} 선택` : '빈 날짜'}
+                      accessibilityRole="button"
+                      disabled={!cell.day}
+                      key={cell.key}
+                      onPress={() => selectBirthDate(cell.value)}
+                      style={[styles.dayCell, selected ? styles.dayCellSelected : null]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          !cell.day ? styles.dayTextMuted : null,
+                          selected ? styles.dayTextSelected : null,
+                        ]}
+                      >
+                        {cell.day ?? ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       </AppScreen>
     </View>
@@ -539,18 +656,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  calendarPanel: {
-    borderColor: colors.borderStrong,
+  calendarBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(17, 17, 17, 0.34)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  calendarModal: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.md,
+    gap: spacing.md,
+    maxWidth: 360,
+    padding: spacing.lg,
+    width: '100%',
+  },
+  calendarModalHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  calendarModalTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.md,
   },
   calendarTitle: {
     color: colors.textPrimary,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.md,
+  },
+  calendarYearRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   cancelButton: {
     alignItems: 'center',
@@ -566,31 +709,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
-  },
-  chip: {
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  chipGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  chipSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
-  },
-  chipText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
-  },
-  chipTextSelected: {
-    color: colors.white,
   },
   dayCell: {
     alignItems: 'center',
@@ -618,14 +736,61 @@ const styles = StyleSheet.create({
   dayTextSelected: {
     color: colors.white,
   },
+  dateButton: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+  },
+  dateButtonPlaceholder: {
+    color: colors.textTertiary,
+  },
+  dateButtonText: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.md,
+  },
+  editHeaderRow: {
+    alignItems: 'center',
+    borderBottomColor: colors.divider,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 56,
+    paddingBottom: spacing.sm,
+  },
+  editHeaderTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.md,
+  },
+  closeCalendarButton: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: spacing.md,
+  },
+  closeCalendarText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
   editorActionRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    justifyContent: 'flex-end',
-  },
-  editorPanel: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
+    justifyContent: 'space-between',
     paddingTop: spacing.md,
   },
   errorText: {
@@ -633,32 +798,50 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
+    marginLeft: 82 + spacing.md,
   },
   fieldBlock: {
     borderBottomColor: colors.divider,
     borderBottomWidth: 1,
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
   },
-  fixedDivider: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.md,
-  },
-  fixedInputRow: {
+  fieldReadRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.md,
+    minHeight: 42,
   },
-  emailDomainInput: {
-    flex: 1.2,
-  },
-  emailLocalInput: {
+  fixedValueBox: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
     flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+  },
+  fixedValueText: {
+    color: colors.textSecondary,
+    flex: 1,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.md,
   },
   infoCard: {
     borderColor: colors.border,
     gap: spacing.xs,
     padding: spacing.xl,
+  },
+  inlineEditor: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inlineInput: {
+    flex: 1,
   },
   input: {
     borderColor: colors.borderStrong,
@@ -672,6 +855,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+  label: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+    width: 82,
+  },
   notice: {
     color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
@@ -680,16 +870,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   optionRow: {
+    flex: 1,
     flexDirection: 'row',
     gap: spacing.sm,
-  },
-  phoneInput: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  phonePrefixInput: {
-    flex: 0.8,
-    textAlign: 'center',
   },
   profileArea: {
     alignItems: 'center',
@@ -753,11 +936,21 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: spacing.lg,
   },
+  uploadButtonDisabled: {
+    opacity: 0.55,
+  },
   uploadText: {
     color: colors.textPrimary,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.md,
+  },
+  value: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.sm,
   },
   weekLabel: {
     color: colors.textSecondary,
@@ -784,10 +977,5 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
-  },
-  calendarYearRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
   },
 });

@@ -7,6 +7,7 @@ import {
   type TokenResponse,
 } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import {Platform} from 'react-native';
 
 import {getCognitoAuthConfig} from './cognitoConfig';
 import {syncAuthSessionWithBackend} from './backendAuthService';
@@ -23,6 +24,12 @@ type CognitoIdTokenClaims = {
   sub?: string;
 };
 
+const TOKEN_EXCHANGE_TIMEOUT_MS = 20000;
+const USER_INFO_TIMEOUT_MS = 10000;
+const LOGIN_DELAY_MESSAGE = '로그인 응답이 지연되고 있어요. 다시 시도해 주세요.';
+const LOGIN_FAILURE_MESSAGE = '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
+const LOGIN_CANCELLED_MESSAGE = '로그인이 취소되었습니다.';
+
 WebBrowser.maybeCompleteAuthSession();
 
 function getAuthErrorMessage(errorDescription?: string, fallback?: string): string {
@@ -30,7 +37,50 @@ function getAuthErrorMessage(errorDescription?: string, fallback?: string): stri
     return decodeURIComponent(errorDescription.replace(/\+/g, ' '));
   }
 
-  return fallback ?? '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
+  return fallback ?? LOGIN_FAILURE_MESSAGE;
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
+}
+
+async function prepareAuthBrowser(authUrl: string) {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+
+  try {
+    await WebBrowser.warmUpAsync();
+    await WebBrowser.mayInitWithUrlAsync(authUrl);
+  } catch {
+    // Browser warmup is an optimization only; auth should still continue.
+  }
+}
+
+async function cleanupAuthBrowser() {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+
+  try {
+    await WebBrowser.coolDownAsync();
+  } catch {
+    // Ignore cleanup failures from browsers that do not support custom tabs services.
+  }
 }
 
 function decodeBase64UrlJson<T>(token: string | undefined): T | null {
@@ -79,9 +129,13 @@ async function getCognitoUser(tokenResponse: TokenResponse): Promise<AuthUser> {
 
   try {
     const config = getCognitoAuthConfig();
-    userInfo = await fetchUserInfoAsync(
-      {accessToken: tokenResponse.accessToken},
-      {userInfoEndpoint: config.discovery.userInfoEndpoint},
+    userInfo = await withTimeout(
+      fetchUserInfoAsync(
+        {accessToken: tokenResponse.accessToken},
+        {userInfoEndpoint: config.discovery.userInfoEndpoint},
+      ),
+      USER_INFO_TIMEOUT_MS,
+      LOGIN_DELAY_MESSAGE,
     );
   } catch {
     userInfo = null;
@@ -106,7 +160,7 @@ export async function loginWithSocialProvider(
   options: SocialLoginOptions = {},
 ): Promise<AuthSession> {
   if (options.shouldFail) {
-    throw new Error('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    throw new Error(LOGIN_FAILURE_MESSAGE);
   }
 
   const config = getCognitoAuthConfig();
@@ -128,10 +182,34 @@ export async function loginWithSocialProvider(
     usePKCE: true,
   });
 
-  const result = await request.promptAsync(config.discovery);
+  const authUrl = await request.makeAuthUrlAsync(config.discovery);
+
+  console.info('[aura:auth] login:start', {
+    provider,
+    redirectUri: config.redirectUri,
+  });
+
+  await prepareAuthBrowser(authUrl);
+
+  let result: Awaited<ReturnType<AuthRequest['promptAsync']>>;
+
+  try {
+    result = await request.promptAsync(config.discovery, {
+      createTask: false,
+      showInRecents: false,
+      url: authUrl,
+    });
+  } finally {
+    void cleanupAuthBrowser();
+  }
+
+  console.info('[aura:auth] prompt:result', {
+    provider,
+    type: result.type,
+  });
 
   if (result.type === 'cancel' || result.type === 'dismiss') {
-    throw new Error('로그인이 취소되었습니다.');
+    throw new Error(LOGIN_CANCELLED_MESSAGE);
   }
 
   if (result.type !== 'success') {
@@ -147,21 +225,29 @@ export async function loginWithSocialProvider(
     throw new Error('Cognito 인증 코드가 응답에 포함되지 않았습니다.');
   }
 
-  const tokenResponse = await exchangeCodeAsync(
-    {
-      clientId: config.clientId,
-      code: authorizationCode,
-      extraParams: request.codeVerifier
-        ? {
-            code_verifier: request.codeVerifier,
-          }
-        : undefined,
-      redirectUri: config.redirectUri,
-    },
-    {
-      tokenEndpoint: config.discovery.tokenEndpoint,
-    },
+  console.info('[aura:auth] token:exchange:start', {provider});
+
+  const tokenResponse = await withTimeout(
+    exchangeCodeAsync(
+      {
+        clientId: config.clientId,
+        code: authorizationCode,
+        extraParams: request.codeVerifier
+          ? {
+              code_verifier: request.codeVerifier,
+            }
+          : undefined,
+        redirectUri: config.redirectUri,
+      },
+      {
+        tokenEndpoint: config.discovery.tokenEndpoint,
+      },
+    ),
+    TOKEN_EXCHANGE_TIMEOUT_MS,
+    LOGIN_DELAY_MESSAGE,
   );
+
+  console.info('[aura:auth] token:exchange:success', {provider});
 
   const session: AuthSession = {
     accessToken: tokenResponse.accessToken,
@@ -173,5 +259,9 @@ export async function loginWithSocialProvider(
     user: await getCognitoUser(tokenResponse),
   };
 
-  return syncAuthSessionWithBackend(session);
+  console.info('[aura:auth] backend:sync:start', {provider});
+  const syncedSession = await syncAuthSessionWithBackend(session);
+  console.info('[aura:auth] backend:sync:success', {provider});
+
+  return syncedSession;
 }
