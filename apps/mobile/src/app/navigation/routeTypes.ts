@@ -39,6 +39,7 @@ export type RootStackParamList = {
   MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
+  MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
@@ -86,6 +87,7 @@ export const rootStackRoutes = [
   'MakeupFilterEdit',
   'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
+  'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackLoading',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',

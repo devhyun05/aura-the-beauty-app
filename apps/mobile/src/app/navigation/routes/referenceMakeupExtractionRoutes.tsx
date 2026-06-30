@@ -52,16 +52,22 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
 
+  const handleClose = () => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    navigateMainTab(navigation, 'HomeTab');
+  };
+
   const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
-    navigation.navigate('ReferenceMakeupExtractionLoading');
+    navigation.replace('ReferenceMakeupExtractionLoading');
   };
 
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionUpload"
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      onClose={handleClose}>
       <ReferenceMakeupExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
@@ -75,8 +81,8 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
   return (
     <ReferenceMakeupExtractionLoadingScreen
-      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
-      onComplete={() => navigation.navigate('ReferenceMakeupExtractionResult')}
+      onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
+      onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
       photo={photo}
     />
   );
@@ -85,16 +91,24 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
-  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const {
+    selectedReferenceMakeupPhoto,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+
+  const handleBackToUpload = () => {
+    setSelectedReferenceMakeupPhoto(null);
+    navigation.replace('ReferenceMakeupExtractionUpload');
+  };
 
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionResult"
-      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}>
+      onBack={handleBackToUpload}>
       <ReferenceMakeupExtractionResultScreen
         onPreviewMakeupLook={() => navigation.navigate('ExtractedMakeupLookAdjust')}
-        onRetake={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
+        onRetake={handleBackToUpload}
         photo={photo}
       />
     </DetailRouteChrome>

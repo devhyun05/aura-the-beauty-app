@@ -16,6 +16,7 @@ import {
   MessageCircle,
   PackageSearch,
   ScanFace,
+  ScanSearch,
   UserRoundCheck,
 } from 'lucide-react-native';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -33,6 +34,7 @@ type HomeScreenProps = {
   onPressConsulting?: () => void;
   onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressMakeupExtraction?: () => void;
   onPressProductRecommendations?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
   onPressRecommendedFilter?: (filterId: string) => void;
@@ -45,6 +47,7 @@ export function HomeScreen({
   onPressCommunity,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
+  onPressMakeupExtraction,
   onPressProductRecommendations,
   onPressRecommendedFilter,
   isMakeupFilterLiked,
@@ -95,6 +98,7 @@ export function HomeScreen({
         onPressConsulting={onPressConsulting}
         onPressCommunity={onPressCommunity}
         onPressFaceDiagnosis={onPressFaceDiagnosis}
+        onPressMakeupExtraction={onPressMakeupExtraction}
         onPressProductRecommendations={onPressProductRecommendations}
       />
       <RecommendedLooksSection
@@ -372,33 +376,41 @@ function HeroBannerCard({
 
 const quickActions = [
   {
+    id: 'consulting',
+    label: '\uCEE8\uC124\uD305',
+    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCEE8\uC124\uD305 \uBC1B\uAE30',
+    icon: (color: string) => (
+      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'makeupExtraction',
+    label: '\uBA54\uC774\uD06C\uC5C5\n\uCD94\uCD9C',
+    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCD94\uCD9C \uC2DC\uC791',
+    icon: (color: string) => (
+      <ScanSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
     id: 'diagnosis',
-    label: '얼굴 진단',
-    accessibilityLabel: '얼굴 진단 시작',
+    label: '\uC5BC\uAD74\n\uC9C4\uB2E8',
+    accessibilityLabel: '\uC5BC\uAD74 \uC9C4\uB2E8 \uC2DC\uC791',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
     id: 'recommendation',
-    label: '추천 제품',
-    accessibilityLabel: '추천 제품 보기',
+    label: '\uCD94\uCC9C\n\uC81C\uD488',
+    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
     icon: (color: string) => (
       <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
   {
     id: 'community',
-    label: '커뮤니티',
-    accessibilityLabel: '커뮤니티 보기',
+    label: '\uCEE4\uBBA4\uB2C8\uD2F0',
+    accessibilityLabel: '\uCEE4\uBBA4\uB2C8\uD2F0 \uBCF4\uAE30',
     icon: (color: string) => (
       <MessageCircle color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
-    id: 'consulting',
-    label: '컨설팅',
-    accessibilityLabel: '메이크업 컨설팅 받기',
-    icon: (color: string) => (
-      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
 ] as const;
@@ -409,6 +421,7 @@ type HomeQuickActionHandlers = {
   onPressConsulting?: () => void;
   onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressMakeupExtraction?: () => void;
   onPressProductRecommendations?: () => void;
 };
 
@@ -418,6 +431,7 @@ export function getHomeQuickActionPressHandler(
     onPressConsulting,
     onPressCommunity,
     onPressFaceDiagnosis,
+    onPressMakeupExtraction,
     onPressProductRecommendations,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
@@ -427,6 +441,10 @@ export function getHomeQuickActionPressHandler(
 
   if (actionId === 'recommendation') {
     return onPressProductRecommendations;
+  }
+
+  if (actionId === 'makeupExtraction') {
+    return onPressMakeupExtraction;
   }
 
   if (actionId === 'community') {
@@ -444,12 +462,14 @@ function QuickActionSection({
   onPressConsulting,
   onPressCommunity,
   onPressFaceDiagnosis,
+  onPressMakeupExtraction,
   onPressProductRecommendations,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
     onPressConsulting,
     onPressCommunity,
     onPressFaceDiagnosis,
+    onPressMakeupExtraction,
     onPressProductRecommendations,
   };
 
