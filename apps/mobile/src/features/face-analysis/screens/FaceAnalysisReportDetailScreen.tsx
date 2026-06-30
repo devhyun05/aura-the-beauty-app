@@ -81,7 +81,7 @@ const formatReportDate = (dateText: string, name?: string) => {
 };
 
 function countPendingRecommendedMakeupImages(report: FaceAnalysisReport | null): number {
-  return report?.recommendedMakeups.filter(item => item.imageStatus === 'pending').length ?? 0;
+  return report?.recommendedMakeups.filter(item => item.imageStatus !== 'ready').length ?? 0;
 }
 
 export function FaceAnalysisReportDetailScreen({
@@ -505,7 +505,7 @@ function MakeupCardRail({
         showsHorizontalScrollIndicator={false}
       >
         {visibleItems.map((item) => {
-          const isImagePending = item.imageStatus === 'pending';
+          const isImagePending = item.imageStatus !== 'ready';
 
           return (
             <View key={item.id} style={[styles.makeupCard, {width: cardWidth}]}>

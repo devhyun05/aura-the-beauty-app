@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -20,6 +21,7 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
+analysis_image_tasks: set[asyncio.Task] = set()
 
 
 def decode_json_object(value: object) -> dict:
@@ -98,6 +100,19 @@ def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> d
   return {"request": payload.request_payload, "result": result}
 
 
+def mark_recommended_makeup_images_failed(result: dict) -> list[dict]:
+  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
+
+  if not isinstance(recommended_makeups, list):
+    return []
+
+  return [
+    {**card, "imageStatus": "failed"}
+    for card in recommended_makeups
+    if isinstance(card, dict)
+  ]
+
+
 async def update_analysis_image_progress(
   report_id: UUID,
   payload: AnalysisJobCreate,
@@ -146,6 +161,7 @@ async def generate_analysis_images_background(
     )
     result = {
       **initial_result,
+      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
       "imageGenerationStatus": "failed",
       "imageGenerationErrors": [
         {"reason": exc.__class__.__name__, "code": exc.code, "message": exc.message}
@@ -166,6 +182,7 @@ async def generate_analysis_images_background(
     )
     result = {
       **initial_result,
+      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
       "imageGenerationStatus": "failed",
       "imageGenerationErrors": [{"reason": exc.__class__.__name__}],
       "timing": {
@@ -178,10 +195,13 @@ async def generate_analysis_images_background(
       },
     }
 
+  generated_image_count = count_generated_makeup_images(result)
+
   await database.execute(
     """
     update analysis_reports
     set status = 'completed',
+        error_message = null,
         detail_payload = $2::jsonb
     where id = $1
     """,
@@ -189,11 +209,39 @@ async def generate_analysis_images_background(
     json.dumps(build_analysis_detail_payload(payload, result)),
   )
   logger.info(
-    "[aura:analysis-api] image-generation:finalized reportId=%s status=%s generatedImageCount=%s",
+    "[aura:analysis-api] image-generation:finalized reportId=%s jobStatus=%s imageStatus=%s generatedImageCount=%s",
     report_id,
+    "completed",
     result.get("imageGenerationStatus"),
-    count_generated_makeup_images(result),
+    generated_image_count,
   )
+
+
+def schedule_analysis_images_background(
+  report_id: UUID,
+  payload: AnalysisJobCreate,
+  initial_result: dict,
+  settings: Settings,
+) -> None:
+  task = asyncio.create_task(
+    generate_analysis_images_background(report_id, payload, initial_result, settings),
+  )
+  analysis_image_tasks.add(task)
+
+  def log_unhandled_error(completed_task: asyncio.Task) -> None:
+    analysis_image_tasks.discard(completed_task)
+
+    try:
+      completed_task.result()
+    except Exception:  # noqa: BLE001 - this is the last safety net for detached work.
+      logger.exception(
+        "[aura:analysis-api] image-generation:task-crashed reportId=%s",
+        report_id,
+      )
+
+  task.add_done_callback(log_unhandled_error)
+  logger.info("[aura:analysis-api] image-generation:scheduled reportId=%s", report_id)
+
 
 async def mark_analysis_failed(
   db: Database,
@@ -278,11 +326,7 @@ async def run_analysis_job_background(
     await mark_analysis_failed(database, report_id, message, payload, details)
     return
 
-  report_status = (
-    "processing"
-    if settings.image_generation_provider_normalized == "openai"
-    else "completed"
-  )
+  report_status = "completed"
   report = await database.fetchrow(
     """
     update analysis_reports
@@ -329,7 +373,7 @@ async def run_analysis_job_background(
     return
 
   if settings.image_generation_provider_normalized == "openai":
-    await generate_analysis_images_background(
+    schedule_analysis_images_background(
       report_id,
       payload,
       result,

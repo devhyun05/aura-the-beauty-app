@@ -756,7 +756,7 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   });
 }
 
-- (void)photoOutput:(AVCapturePhotoOutput *)output
+- (void)captureOutput:(AVCapturePhotoOutput *)output
     didFinishProcessingPhoto:(AVCapturePhoto *)photo
                        error:(NSError *)error
 {
