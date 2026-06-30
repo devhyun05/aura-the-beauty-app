@@ -257,7 +257,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '분석 결과',
+    title: '메이크업 추출',
   },
   ExtractedMakeupLookAdjust: {
     category: 'ar-runtime',

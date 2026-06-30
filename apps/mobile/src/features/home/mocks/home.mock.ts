@@ -16,28 +16,28 @@ export const homeMock: HomeData = {
     eyebrow: '이번 주 메이크업 가이드',
     title: 'AI 트렌드 메이크업 무드',
     description: '지금 많이 찾는 메이크업 무드를 AI가 골라 카드로 추천해요.',
-    imageSource: filterWanghongRedGlass,
+    imageSource: filterGyaruGlow,
     notices: [
       {
         id: 'notice-weekly-trend',
         title: '공지',
-        description: '이번 주 추천 룩이 왕홍 레드 글래스 무드로 업데이트되었어요.',
+        description: '이번 주 추천 룩이 갸루 글로우 무드로 업데이트되었어요.',
       },
     ],
     trends: [
-      {
-        filterId: 'filter-wanghong-glass-pink',
-        id: 'trend-wanghong-glass-pink',
-        title: '왕홍 레드 글래스',
-        tone: '루비 레드',
-        imageSource: filterWanghongRedGlass,
-      },
       {
         filterId: 'filter-gyaru-glow',
         id: 'trend-gyaru-glow',
         title: '갸루 글로우',
         tone: '샴페인 코랄',
         imageSource: filterGyaruGlow,
+      },
+      {
+        filterId: 'filter-wanghong-glass-pink',
+        id: 'trend-wanghong-glass-pink',
+        title: '왕홍 레드 글래스',
+        tone: '루비 레드',
+        imageSource: filterWanghongRedGlass,
       },
       {
         filterId: 'filter-aura-blush-lift',
