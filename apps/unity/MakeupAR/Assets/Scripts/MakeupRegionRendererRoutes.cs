@@ -32,7 +32,7 @@ public static class MakeupRegionRendererRoutes
     public const string SmoothRegionMaskMode = "smooth-region-mask";
     public const string SmoothRegionMaskBackend = "E3RegionMaskOverlay";
 
-    public static readonly string[] Regions = { "lip", "cheek", "eye", "brow" };
+    public static readonly string[] Regions = { "lip", "blush", "brow", "eyeliner" };
 
     private static readonly Dictionary<string, MakeupRegionRendererRoute> Routes =
         new Dictionary<string, MakeupRegionRendererRoute>
@@ -48,24 +48,24 @@ public static class MakeupRegionRendererRoutes
                     "lip-style-v1")
             },
             {
-                "cheek",
+                "blush",
                 new MakeupRegionRendererRoute(
-                    "cheek",
-                    "cheek-smooth-region-mask-renderer",
+                    "blush",
+                    "blush-smooth-region-mask-renderer",
                     SmoothRegionMaskMode,
                     SmoothRegionMaskBackend,
-                    "smooth_mask_cheek",
-                    "cheek-style-v1")
+                    "smooth_mask_blush",
+                    "blush-style-v1")
             },
             {
-                "eye",
+                "eyeliner",
                 new MakeupRegionRendererRoute(
-                    "eye",
-                    "eye-smooth-region-mask-renderer",
+                    "eyeliner",
+                    "eyeliner-smooth-region-mask-renderer",
                     SmoothRegionMaskMode,
                     SmoothRegionMaskBackend,
-                    "smooth_mask_eye",
-                    "eye-style-v1")
+                    "smooth_mask_eyeliner",
+                    "eyeliner-style-v1")
             },
             {
                 "brow",
@@ -90,6 +90,16 @@ public static class MakeupRegionRendererRoutes
         region = string.IsNullOrWhiteSpace(region)
             ? string.Empty
             : region.Trim().ToLowerInvariant();
+
+        if (region == "cheek")
+        {
+            return "blush";
+        }
+
+        if (region == "eye")
+        {
+            return "eyeliner";
+        }
 
         if (Routes.ContainsKey(region))
         {

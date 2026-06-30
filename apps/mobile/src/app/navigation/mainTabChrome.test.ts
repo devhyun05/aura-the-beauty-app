@@ -51,7 +51,7 @@ expectMainHeader('ProfileTab', {
 });
 
 const footerExpectations: Record<FooterTabKey, ReturnType<typeof getRootRouteForFooterTab>> = {
-  capture: 'ARFilter',
+  capture: 'UnityMakeupCapture',
   custom: 'CustomTab',
   home: 'HomeTab',
 };

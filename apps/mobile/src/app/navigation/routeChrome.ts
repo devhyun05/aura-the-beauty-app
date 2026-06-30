@@ -53,7 +53,7 @@ export type RouteChrome =
 
 export type FooterTargetRoute =
   | MainTabRouteName
-  | Extract<RootStackRouteName, 'ARFilter'>;
+  | Extract<RootStackRouteName, 'ARFilter' | 'UnityMakeupCapture'>;
 
 export const routeChromeByRoute = {
   Login: {
@@ -325,7 +325,7 @@ export function getDetailRouteTitle(route: RouteName): string {
 
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
   if (tab === 'capture') {
-    return 'ARFilter';
+    return 'UnityMakeupCapture';
   }
 
   if (tab === 'custom') {
