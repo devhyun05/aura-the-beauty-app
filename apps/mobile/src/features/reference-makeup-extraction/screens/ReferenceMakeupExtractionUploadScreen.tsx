@@ -1,9 +1,18 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {Check, ImagePlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Text, View, YStack} from 'tamagui';
+import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
@@ -16,18 +25,139 @@ import type {
 type ReferenceMakeupExtractionUploadScreenProps = {
   headerTitle?: string;
   onClose?: () => void;
+  onSelectPhoto?: (photo: ReferenceMakeupPhoto) => void;
   onStartAnalysis: (photo: ReferenceMakeupPhoto) => void;
+  onUploadedPhotosChange?: (photos: readonly ReferenceMakeupPhoto[]) => void;
+  selectedPhoto?: ReferenceMakeupPhoto | null;
+  uploadedPhotos?: readonly ReferenceMakeupPhoto[];
 };
 
+type UploadPhotoNameModalProps = {
+  isVisible: boolean;
+  name: string;
+  onCancel: () => void;
+  onChangeName: (name: string) => void;
+  onConfirm: () => void;
+};
+
+const uploadedPhotoNameMaxLength = 24;
+
+function UploadPhotoNameModal({
+  isVisible,
+  name,
+  onCancel,
+  onChangeName,
+  onConfirm,
+}: UploadPhotoNameModalProps) {
+  const isConfirmDisabled = name.trim().length === 0;
+
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onCancel}
+      transparent
+      visible={isVisible}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.nameModalKeyboardView}
+      >
+        <Pressable
+          accessibilityLabel="사진 이름 설정 닫기"
+          accessibilityRole="button"
+          onPress={onCancel}
+          style={styles.nameModalBackdrop}
+        >
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            style={styles.nameModalSheet}
+          >
+            <Text style={styles.nameModalTitle}>사진 이름 설정</Text>
+
+            <YStack style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>이름</Text>
+              <XStack style={styles.inputFrame}>
+                <TextInput
+                  autoFocus
+                  maxLength={uploadedPhotoNameMaxLength}
+                  onChangeText={onChangeName}
+                  onSubmitEditing={() => {
+                    if (!isConfirmDisabled) {
+                      onConfirm();
+                    }
+                  }}
+                  placeholder="예: 러블리 핑크 레퍼런스"
+                  placeholderTextColor={colors.textTertiary}
+                  returnKeyType="done"
+                  style={styles.input}
+                  value={name}
+                />
+                <Text style={styles.countText}>
+                  {name.length}/{uploadedPhotoNameMaxLength}
+                </Text>
+              </XStack>
+            </YStack>
+
+            <XStack style={styles.nameModalActions}>
+              <Pressable
+                accessibilityLabel="사진 이름 설정 취소"
+                accessibilityRole="button"
+                onPress={onCancel}
+                style={({pressed}) => [styles.secondaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.secondaryButtonText}>취소</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="이 이름으로 사진 추가"
+                accessibilityRole="button"
+                accessibilityState={{disabled: isConfirmDisabled}}
+                disabled={isConfirmDisabled}
+                onPress={onConfirm}
+                style={({pressed}) => [
+                  styles.confirmButton,
+                  isConfirmDisabled && styles.confirmButtonDisabled,
+                  pressed && !isConfirmDisabled && styles.pressed,
+                ]}
+              >
+                <Text style={styles.confirmButtonText}>추가</Text>
+              </Pressable>
+            </XStack>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
 export function ReferenceMakeupExtractionUploadScreen({
+  onSelectPhoto,
   onStartAnalysis,
+  onUploadedPhotosChange,
+  selectedPhoto: controlledSelectedPhoto,
+  uploadedPhotos: controlledUploadedPhotos,
 }: ReferenceMakeupExtractionUploadScreenProps) {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<ReferenceMakeupExtractionData | null>(null);
-  const [uploadedPhotos, setUploadedPhotos] = useState<ReferenceMakeupPhoto[]>([]);
+  const [localUploadedPhotos, setLocalUploadedPhotos] = useState<ReferenceMakeupPhoto[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingPhotoName, setPendingPhotoName] = useState('');
+  const uploadedPhotos = controlledUploadedPhotos ?? localUploadedPhotos;
+
+  const updateUploadedPhotos = (nextPhotos: readonly ReferenceMakeupPhoto[]) => {
+    if (onUploadedPhotosChange) {
+      onUploadedPhotosChange(nextPhotos);
+      return;
+    }
+
+    setLocalUploadedPhotos([...nextPhotos]);
+  };
+
+  const selectPhoto = (photo: ReferenceMakeupPhoto) => {
+    setSelectedPhotoId(photo.id);
+    onSelectPhoto?.(photo);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -35,19 +165,52 @@ export function ReferenceMakeupExtractionUploadScreen({
     getReferenceMakeupExtractionData().then((nextData) => {
       if (isMounted) {
         setData(nextData);
-        setSelectedPhotoId(nextData.photos[0]?.id ?? null);
+        setSelectedPhotoId(
+          (currentPhotoId) =>
+            currentPhotoId ?? controlledSelectedPhoto?.id ?? nextData.photos[0]?.id ?? null,
+        );
       }
     });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [controlledSelectedPhoto?.id]);
+
+  useEffect(() => {
+    if (controlledSelectedPhoto?.id) {
+      setSelectedPhotoId(controlledSelectedPhoto.id);
+    }
+  }, [controlledSelectedPhoto?.id]);
 
   const photos = useMemo(
     () => (data ? [...uploadedPhotos, ...data.photos] : uploadedPhotos),
     [data, uploadedPhotos],
   );
+
+  const closeNameModal = () => {
+    setPendingPhotoUri(null);
+    setPendingPhotoName('');
+  };
+
+  const addPendingPhoto = () => {
+    const nextPhotoName = pendingPhotoName.trim();
+
+    if (!pendingPhotoUri || nextPhotoName.length === 0) {
+      return;
+    }
+
+    const uploadedPhoto: ReferenceMakeupPhoto = {
+      id: `uploaded-reference-${Date.now()}`,
+      imageSource: {uri: pendingPhotoUri},
+      referenceSource: 'album',
+      title: nextPhotoName,
+    };
+
+    updateUploadedPhotos([uploadedPhoto, ...uploadedPhotos]);
+    selectPhoto(uploadedPhoto);
+    closeNameModal();
+  };
 
   const handlePickReferencePhoto = async () => {
     if (isPickingPhoto) {
@@ -74,15 +237,8 @@ export function ReferenceMakeupExtractionUploadScreen({
         return;
       }
 
-      const uploadedPhoto: ReferenceMakeupPhoto = {
-        id: `uploaded-reference-${Date.now()}`,
-        imageSource: {uri: pickedAsset.uri},
-        referenceSource: 'album',
-        title: '\uC5C5\uB85C\uB4DC\uD55C \uC0AC\uC9C4',
-      };
-
-      setUploadedPhotos((currentPhotos) => [uploadedPhoto, ...currentPhotos]);
-      setSelectedPhotoId(uploadedPhoto.id);
+      setPendingPhotoUri(pickedAsset.uri);
+      setPendingPhotoName('');
     } finally {
       setIsPickingPhoto(false);
     }
@@ -125,7 +281,7 @@ export function ReferenceMakeupExtractionUploadScreen({
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
         <Pressable
-          accessibilityLabel="\uBA54\uC774\uD06C\uC5C5 \uCC38\uACE0 \uC0AC\uC9C4 \uC5C5\uB85C\uB4DC\uD558\uAE30"
+          accessibilityLabel="메이크업 레퍼런스 업로드"
           accessibilityRole="button"
           disabled={isPickingPhoto}
           onPress={handlePickReferencePhoto}
@@ -137,10 +293,7 @@ export function ReferenceMakeupExtractionUploadScreen({
             <ImagePlus color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
           </View>
           <YStack style={styles.uploadCopy}>
-            <Text style={styles.uploadTitle}>{'\uBA54\uC774\uD06C\uC5C5 \uCC38\uACE0 \uC0AC\uC9C4 \uC5C5\uB85C\uB4DC'}</Text>
-            <Text style={styles.uploadDescription}>
-              {'\uAC24\uB7EC\uB9AC\uC5D0\uC11C \uBD84\uC11D\uD560 \uC0AC\uC9C4\uC744 \uD558\uB098\uC529 \uCD94\uAC00\uD558\uACE0, \uC120\uD0DD\uD55C \uC0AC\uC9C4\uC73C\uB85C \uBD84\uC11D\uC744 \uC2DC\uC791\uD558\uC138\uC694.'}
-            </Text>
+            <Text style={styles.uploadTitle}>메이크업 레퍼런스 업로드</Text>
           </YStack>
         </Pressable>
 
@@ -150,11 +303,11 @@ export function ReferenceMakeupExtractionUploadScreen({
 
             return (
               <Pressable
-                accessibilityLabel={`${photo.title} \uC120\uD0DD`}
+                accessibilityLabel={`${photo.title} 선택`}
                 accessibilityRole="button"
                 accessibilityState={{selected: isSelected}}
                 key={photo.id}
-                onPress={() => setSelectedPhotoId(photo.id)}
+                onPress={() => selectPhoto(photo)}
                 style={({pressed}) => [
                   styles.photoTile,
                   isSelected && styles.photoTileSelected,
@@ -173,7 +326,7 @@ export function ReferenceMakeupExtractionUploadScreen({
       </ScrollView>
 
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.md}]}>
-        <Text style={styles.selectedText}>1장 선택됨 · {selectedPhoto.title}</Text>
+        <Text numberOfLines={1} style={styles.selectedText}>{selectedPhoto.title}</Text>
         <Pressable
           accessibilityLabel="메이크업 룩 분석 시작하기"
           accessibilityRole="button"
@@ -182,16 +335,56 @@ export function ReferenceMakeupExtractionUploadScreen({
           <Text style={styles.primaryButtonText}>분석 시작하기</Text>
         </Pressable>
       </YStack>
+
+      <UploadPhotoNameModal
+        isVisible={Boolean(pendingPhotoUri)}
+        name={pendingPhotoName}
+        onCancel={closeNameModal}
+        onChangeName={setPendingPhotoName}
+        onConfirm={addPendingPhoto}
+      />
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  confirmButton: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.42,
+  },
+  confirmButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
   content: {
     gap: spacing.lg,
-    paddingBottom: 128,
+    paddingBottom: 104,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+  },
+  countText: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  fieldGroup: {
+    gap: spacing.md,
+  },
+  fieldLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
   },
   footer: {
     backgroundColor: colors.background,
@@ -206,11 +399,23 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  header: {
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    gap: spacing.lg,
+  input: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
+    padding: 0,
+  },
+  inputFrame: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -223,6 +428,34 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  nameModalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  nameModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  nameModalKeyboardView: {
+    flex: 1,
+  },
+  nameModalSheet: {
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    gap: spacing.lg,
+    maxWidth: 420,
+    padding: spacing.lg,
+    width: '100%',
+  },
+  nameModalTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
   },
   photoImage: {
     height: '100%',
@@ -261,6 +494,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
   },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  secondaryButtonText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  selectedText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
   selectedBadge: {
     alignItems: 'center',
     backgroundColor: colors.textPrimary,
@@ -274,56 +529,9 @@ const styles = StyleSheet.create({
     top: spacing.sm,
     width: 34,
   },
-  selectedText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  tabButton: {
-    alignItems: 'center',
-    flex: 1,
-    gap: spacing.md,
-  },
-  tabIndicator: {
-    backgroundColor: 'transparent',
-    borderRadius: radius.pill,
-    height: 3,
-    width: '100%',
-  },
-  tabIndicatorActive: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 3,
-    width: '100%',
-  },
-  tabRow: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    paddingHorizontal: spacing.lg,
-  },
-  tabText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  tabTextActive: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
   uploadCopy: {
     flex: 1,
-    gap: spacing.xs,
     minWidth: 0,
-  },
-  uploadDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
   },
   uploadHero: {
     alignItems: 'center',

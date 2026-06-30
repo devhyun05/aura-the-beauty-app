@@ -1,7 +1,5 @@
 import type {ImageSourcePropType} from 'react-native';
 
-import type {MakeupArea} from '../../shared/types/makeupGuide';
-
 export type ReferenceMakeupPhotoSource = 'album' | 'camera';
 
 export type ReferenceMakeupPhoto = {
@@ -32,6 +30,65 @@ export type MakeupLookPoint = {
   description: string;
 };
 
+export type ReferenceMakeupLookDnaMetric = {
+  id: string;
+  label: string;
+  value: number;
+  color: string;
+};
+
+export type ReferenceMakeupLookDna = {
+  moodKeywords: string[];
+  difficulty: string;
+  keyAreas: string[];
+  textureBalance: ReferenceMakeupLookDnaMetric[];
+};
+
+export type ReferenceMakeupAreaId =
+  | 'skin'
+  | 'eye'
+  | 'brow'
+  | 'cheek'
+  | 'lip'
+  | 'contour';
+
+export type ReferenceMakeupProductCategory = 'base' | 'shadow' | 'liner' | 'cheek' | 'lip';
+
+export type ReferenceMakeupAreaColor = {
+  name: string;
+  hex: string;
+};
+
+export type ReferenceMakeupAreaProduct = {
+  id: string;
+  brandName: string;
+  productName: string;
+  price: number;
+  imageSource: ImageSourcePropType;
+  imageUrl?: string | null;
+  purchaseUrl?: string | null;
+};
+
+export type ReferenceMakeupAreaProductRecommendation = {
+  category: ReferenceMakeupProductCategory;
+  searchQuery: string;
+  reason: string;
+  product?: ReferenceMakeupAreaProduct;
+};
+
+export type ReferenceMakeupAreaGuide = {
+  id: ReferenceMakeupAreaId;
+  label: string;
+  title: string;
+  color: ReferenceMakeupAreaColor;
+  texture: string;
+  quickTip: string;
+  analysis: string;
+  howTo: string;
+  professionalPoint: string;
+  productRecommendation: ReferenceMakeupAreaProductRecommendation;
+};
+
 export type ReferenceMakeupExtractionResult = {
   id: string;
   title: string;
@@ -41,6 +98,8 @@ export type ReferenceMakeupExtractionResult = {
   palette: MakeupLookPalette[];
   points: MakeupLookPoint[];
   accuracy: number;
+  lookDna: ReferenceMakeupLookDna;
+  areaGuides: ReferenceMakeupAreaGuide[];
 };
 
 export type MakeupLookAdjustmentTab = 'shape' | 'look';

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 
 import {
   ExtractedMakeupLookAdjustScreen,
@@ -11,7 +11,10 @@ import {
   ReferenceMakeupExtractionUploadScreen,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
-import {getReferenceMakeupExtractionDataSync} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
+import {
+  getReferenceMakeupExtractionDataSync,
+  runReferenceMakeupExtraction,
+} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
 import {
   getRecommendedMakeupFilterById,
   mapMakeupFilterToSavedLook,
@@ -48,6 +51,9 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
+    referenceMakeupUploadedPhotos,
+    selectedReferenceMakeupPhoto,
+    setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
@@ -68,7 +74,13 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionUpload"
       onClose={handleClose}>
-      <ReferenceMakeupExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
+      <ReferenceMakeupExtractionUploadScreen
+        onSelectPhoto={setSelectedReferenceMakeupPhoto}
+        onStartAnalysis={handleStartAnalysis}
+        onUploadedPhotosChange={setReferenceMakeupUploadedPhotos}
+        selectedPhoto={selectedReferenceMakeupPhoto}
+        uploadedPhotos={referenceMakeupUploadedPhotos}
+      />
     </DetailRouteChrome>
   );
 }
@@ -78,9 +90,26 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 }: RootScreenProps<'ReferenceMakeupExtractionLoading'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const [isAnalysisReady, setIsAnalysisReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsAnalysisReady(false);
+    runReferenceMakeupExtraction(photo).finally(() => {
+      if (isMounted) {
+        setIsAnalysisReady(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [photo]);
 
   return (
     <ReferenceMakeupExtractionLoadingScreen
+      isAnalysisReady={isAnalysisReady}
       onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
       onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
       photo={photo}
@@ -91,14 +120,10 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
-  const {
-    selectedReferenceMakeupPhoto,
-    setSelectedReferenceMakeupPhoto,
-  } = useNavigationFlowState();
+  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
   const handleBackToUpload = () => {
-    setSelectedReferenceMakeupPhoto(null);
     navigation.replace('ReferenceMakeupExtractionUpload');
   };
 
@@ -107,7 +132,11 @@ export function ReferenceMakeupExtractionResultRouteScreen({
       routeName="ReferenceMakeupExtractionResult"
       onBack={handleBackToUpload}>
       <ReferenceMakeupExtractionResultScreen
-        onPreviewMakeupLook={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+        onOpenARFilter={() => navigation.navigate('ARFilter', {
+          initialGuideMode: 'half',
+          initialMakeupFilterId: 'filter-milky-strawberry-pink',
+          source: 'recommendedFilter',
+        })}
         onRetake={handleBackToUpload}
         photo={photo}
       />
@@ -239,7 +268,7 @@ export function MakeupRecipeDetailRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeDetail"
-      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}>
+      onBack={() => navigation.goBack()}>
       <MakeupRecipeDetailScreen
         onSaveRecipe={() => navigation.navigate('MakeupRecipeSaveComplete')}
         photo={photo}
