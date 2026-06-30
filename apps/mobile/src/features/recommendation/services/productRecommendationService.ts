@@ -4,6 +4,7 @@ import type {
   ProductRecommendationCategory,
   ProductRecommendationData,
   ProductRecommendationLook,
+  ProductRecommendationLookOption,
   ProductRecommendationSet,
   ProductRecommendationTab,
   RecommendedProduct,
@@ -31,13 +32,16 @@ type BackendRecommendedProduct = {
 type BackendProductRecommendationLook = {
   description?: string | null;
   imageUrl?: string | null;
+  index?: number | null;
   palette?: string[] | null;
+  subtitle?: string | null;
   tags?: string[] | null;
   title?: string | null;
 };
 
 type BackendProductRecommendationData = {
   makeupLook?: BackendProductRecommendationLook | null;
+  makeupLookOptions?: BackendProductRecommendationLook[] | null;
   products?: BackendRecommendedProduct[] | null;
   sets?: ProductRecommendationSet[] | null;
   tabs?: ProductRecommendationTab[] | null;
@@ -131,10 +135,35 @@ function mapMakeupLook(
     ...fallbackLook,
     title: firstText(makeupLook?.title) ?? fallbackLook.title,
     description: firstText(makeupLook?.description) ?? fallbackLook.description,
+    imageUrl,
     imageSource: imageUrl ? {uri: imageUrl} : fallbackLook.imageSource,
     tags: normalizeTextArray(makeupLook?.tags, fallbackLook.tags),
     palette: normalizeTextArray(makeupLook?.palette, fallbackLook.palette),
   };
+}
+
+function mapMakeupLookOption(
+  makeupLook: BackendProductRecommendationLook,
+  index: number,
+): ProductRecommendationLookOption {
+  const mappedLook = mapMakeupLook(makeupLook);
+
+  return {
+    ...mappedLook,
+    index: typeof makeupLook.index === 'number' ? makeupLook.index : index,
+    subtitle: firstText(makeupLook.subtitle),
+  };
+}
+
+function mapMakeupLookOptions(
+  response: BackendProductRecommendationData,
+  makeupLook: ProductRecommendationLook,
+): ProductRecommendationLookOption[] {
+  if (Array.isArray(response.makeupLookOptions) && response.makeupLookOptions.length > 0) {
+    return response.makeupLookOptions.map(mapMakeupLookOption);
+  }
+
+  return [{...makeupLook, index: 0}];
 }
 
 function buildFallbackSets(products: RecommendedProduct[]): ProductRecommendationSet[] {
@@ -160,10 +189,12 @@ function mapProductRecommendationData(
   const products = Array.isArray(response.products)
     ? response.products.filter(isPurchasableBackendProduct).map(mapProduct)
     : [];
+  const makeupLook = mapMakeupLook(response.makeupLook);
 
   return {
     userNickname: firstText(response.userNickname) ?? productRecommendationMock.userNickname,
-    makeupLook: mapMakeupLook(response.makeupLook),
+    makeupLook,
+    makeupLookOptions: mapMakeupLookOptions(response, makeupLook),
     tabs:
       Array.isArray(response.tabs) && response.tabs.length > 0
         ? response.tabs
@@ -180,6 +211,7 @@ function buildEmptyApiRecommendationData(): ProductRecommendationData {
   return {
     userNickname: productRecommendationMock.userNickname,
     makeupLook: productRecommendationMock.makeupLook,
+    makeupLookOptions: [{...productRecommendationMock.makeupLook, index: 0}],
     tabs: productRecommendationMock.tabs,
     products: [],
     sets: [],
@@ -187,10 +219,12 @@ function buildEmptyApiRecommendationData(): ProductRecommendationData {
 }
 
 type ProductRecommendationRequest = {
+  lookIndex?: number | null;
   reportId?: string | null;
 };
 
 export const getProductRecommendations = async ({
+  lookIndex,
   reportId,
 }: ProductRecommendationRequest = {}): Promise<ProductRecommendationData> => {
   if (!getBackendApiBaseUrl()) {
@@ -198,7 +232,17 @@ export const getProductRecommendations = async ({
   }
 
   try {
-    const query = reportId ? `?report_id=${encodeURIComponent(reportId)}` : '';
+    const searchParams = new URLSearchParams();
+
+    if (reportId) {
+      searchParams.set('report_id', reportId);
+    }
+
+    if (typeof lookIndex === 'number' && lookIndex >= 0) {
+      searchParams.set('look_index', String(lookIndex));
+    }
+
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
     const response = await requestBackendJson<BackendProductRecommendationData>(
       `/products/recommendations${query}`,
     );
@@ -207,6 +251,7 @@ export const getProductRecommendations = async ({
 
     console.info('[aura:products] recommendations:loaded', {
       backendProducts: Array.isArray(response.products) ? response.products.length : 0,
+      lookIndex,
       mappedProducts: recommendations.products.length,
       reportLinked: Boolean(reportId),
     });

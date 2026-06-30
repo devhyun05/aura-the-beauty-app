@@ -12,8 +12,8 @@ export type MainHeaderCopy = {
 
 const mainHeaderCopyByVariant = {
   custom: {
-    showTitle: false,
-    usesBrandLogo: false,
+    showTitle: true,
+    usesBrandLogo: true,
   },
   default: {
     showTitle: true,

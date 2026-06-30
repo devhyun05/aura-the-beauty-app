@@ -140,6 +140,7 @@ async def _resolve_product_id_for_unlike(db: Database, product_id: str) -> UUID 
 @router.get("/recommendations")
 async def get_product_recommendations(
   category: str | None = None,
+  look_index: int | None = None,
   report_id: str | None = None,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(get_database),
@@ -150,6 +151,7 @@ async def get_product_recommendations(
     settings,
     category,
     auth_provider=auth.provider,
+    look_index=look_index,
     oauth_sub=auth.subject,
     report_id=report_id,
   )

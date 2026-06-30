@@ -68,6 +68,7 @@ type ScreenGuideBounds = {
 };
 
 type FaceCaptureScreenProps = {
+  autoOpenGallery?: boolean;
   checks?: FaceCaptureCheckState;
   onCapture?: (result?: FaceCaptureUploadResult) => void;
   onClose?: () => void;
@@ -298,6 +299,7 @@ function createLocalFaceCaptureResult({
 }
 
 export function FaceCaptureScreen({
+  autoOpenGallery = false,
   checks,
   onCapture,
   onClose,
@@ -320,6 +322,7 @@ export function FaceCaptureScreen({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const landmarkScanInFlightRef = useRef(false);
   const lastRealtimeLogAtRef = useRef(0);
+  const hasAutoOpenedGalleryRef = useRef(false);
 
   const realtimeCaptureAvailable = useMemo(() => isRealtimeFaceCaptureAvailable(), []);
   const landmarkDetectorAvailable = useMemo(
@@ -890,6 +893,21 @@ export function FaceCaptureScreen({
       setIsUploading(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoOpenGallery || hasAutoOpenedGalleryRef.current) {
+      return;
+    }
+
+    hasAutoOpenedGalleryRef.current = true;
+    const timeoutId = setTimeout(() => {
+      void handlePickImage();
+    }, 250);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [autoOpenGallery]);
 
   return (
     <FullscreenOverlayScreen>

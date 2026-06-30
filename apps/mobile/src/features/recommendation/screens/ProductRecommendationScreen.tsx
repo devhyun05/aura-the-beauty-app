@@ -1,8 +1,10 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
+  ActivityIndicator,
   type GestureResponderEvent,
   Image,
   Linking,
+  Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
@@ -10,10 +12,12 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import {
   CheckCircle2,
   ExternalLink,
   Heart,
+  ImagePlus,
   Menu,
 } from 'lucide-react-native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -33,12 +37,14 @@ import type {
   ProductRecommendationData,
   RecommendedProduct,
   ProductRecommendationLook,
+  ProductRecommendationLookOption,
   ProductRecommendationTab,
 } from '../types';
 
 const formatPrice = (price: number) =>
   price > 0 ? `${price.toLocaleString('ko-KR')}원` : '가격 확인';
 const PRODUCT_PAGE_SIZE = 4;
+const LOOK_SELECTION_STORAGE_KEY_PREFIX = 'aura.productRecommendation.lookIndex';
 
 type ProductSortOption = 'matchDesc' | 'priceAsc' | 'priceDesc';
 
@@ -118,10 +124,14 @@ function toProductLikePayload(product: RecommendedProduct): ProductLikePayload {
 }
 
 type ProductRecommendationScreenProps = {
+  onCapturePhoto?: () => void;
+  onPickGalleryPhoto?: () => void;
   sourceReportId?: string | null;
 };
 
 export function ProductRecommendationScreen({
+  onCapturePhoto,
+  onPickGalleryPhoto,
   sourceReportId,
 }: ProductRecommendationScreenProps = {}) {
   const {height, width} = useWindowDimensions();
@@ -132,6 +142,10 @@ export function ProductRecommendationScreen({
   const [sortOption, setSortOption] = useState<ProductSortOption>('matchDesc');
   const [currentPage, setCurrentPage] = useState(1);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isLookPickerOpen, setIsLookPickerOpen] = useState(false);
+  const [isRecommendationRefreshing, setIsRecommendationRefreshing] = useState(false);
+  const [selectedLookIndex, setSelectedLookIndex] = useState(0);
+  const hasLoadedRecommendationsRef = useRef(false);
   const isVeryCompactHeight = height < 700;
   const isCompactHeight = height < 780;
   const contentWidth = width - spacing.screenX * 2;
@@ -152,26 +166,84 @@ export function ProductRecommendationScreen({
   const sortLabel =
     productSortOptions.find((option) => option.id === sortOption)?.label ??
     productSortOptions[0].label;
+  const lookSelectionStorageKey = useMemo(
+    () => `${LOOK_SELECTION_STORAGE_KEY_PREFIX}.${sourceReportId ?? 'latest'}`,
+    [sourceReportId],
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setSelectedLookIndex(0);
+
+    SecureStore.getItemAsync(lookSelectionStorageKey)
+      .then((storedValue) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const storedIndex = Number(storedValue);
+        setSelectedLookIndex(
+          Number.isInteger(storedIndex) && storedIndex >= 0 ? storedIndex : 0,
+        );
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSelectedLookIndex(0);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [lookSelectionStorageKey]);
 
   const loadRecommendations = useCallback(() => {
     let isMounted = true;
+    const shouldShowRefresh = hasLoadedRecommendationsRef.current;
 
-    Promise.all([
-      getProductRecommendations({reportId: sourceReportId}),
+    if (shouldShowRefresh) {
+      setIsRecommendationRefreshing(true);
+    }
+
+    Promise.allSettled([
+      getProductRecommendations({lookIndex: selectedLookIndex, reportId: sourceReportId}),
       getLikedProducts(),
-    ]).then(([recommendations, likedProducts]) => {
+    ]).then(([recommendationsResult, likedProductsResult]) => {
       if (!isMounted) {
         return;
       }
 
-      setData(recommendations);
-      setLikedProductIds(new Set(likedProducts.map((product) => product.id)));
+      if (recommendationsResult.status === 'fulfilled') {
+        setData(recommendationsResult.value);
+        hasLoadedRecommendationsRef.current = true;
+      } else {
+        console.info('[aura:products] recommendations:load-failed', {
+          message: recommendationsResult.reason instanceof Error
+            ? recommendationsResult.reason.message
+            : String(recommendationsResult.reason),
+        });
+      }
+
+      if (likedProductsResult.status === 'fulfilled') {
+        setLikedProductIds(new Set(likedProductsResult.value.map((product) => product.id)));
+      } else {
+        console.info('[aura:products] likes:load-failed', {
+          message: likedProductsResult.reason instanceof Error
+            ? likedProductsResult.reason.message
+            : String(likedProductsResult.reason),
+        });
+      }
+    }).finally(() => {
+      if (isMounted) {
+        setIsRecommendationRefreshing(false);
+      }
     });
 
     return () => {
       isMounted = false;
     };
-  }, [sourceReportId]);
+  }, [selectedLookIndex, sourceReportId]);
 
   useFocusEffect(loadRecommendations);
 
@@ -279,6 +351,32 @@ export function ProductRecommendationScreen({
     }
   }, [likedProductIds]);
 
+  const handleOpenLookPicker = useCallback(() => {
+    setIsLookPickerOpen(true);
+  }, []);
+
+  const handleCloseLookPicker = useCallback(() => {
+    setIsLookPickerOpen(false);
+  }, []);
+
+  const handleSelectLookOption = useCallback((option: ProductRecommendationLookOption) => {
+    setSelectedLookIndex(option.index);
+    setIsLookPickerOpen(false);
+    void SecureStore.setItemAsync(lookSelectionStorageKey, String(option.index), {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  }, [lookSelectionStorageKey]);
+
+  const handlePickGalleryPhoto = useCallback(() => {
+    setIsLookPickerOpen(false);
+    onPickGalleryPhoto?.();
+  }, [onPickGalleryPhoto]);
+
+  const handleCapturePhoto = useCallback(() => {
+    setIsLookPickerOpen(false);
+    onCapturePhoto?.();
+  }, [onCapturePhoto]);
+
   if (!data) {
     return (
       <View style={styles.loadingContainer}>
@@ -293,7 +391,21 @@ export function ProductRecommendationScreen({
       contentGap={sectionGap}
       scroll={false}
       topPadding="none">
-      <LookSummaryCard imageSize={lookImageSize} makeupLook={data.makeupLook} />
+      <LookSummaryCard
+        imageSize={lookImageSize}
+        makeupLook={data.makeupLook}
+        onChangePhoto={handleOpenLookPicker}
+      />
+
+      <LookPickerModal
+        isVisible={isLookPickerOpen}
+        onCapturePhoto={onCapturePhoto ? handleCapturePhoto : undefined}
+        onClose={handleCloseLookPicker}
+        onPickGalleryPhoto={onPickGalleryPhoto ? handlePickGalleryPhoto : undefined}
+        onSelectLookOption={handleSelectLookOption}
+        options={data.makeupLookOptions}
+        selectedLookIndex={selectedLookIndex}
+      />
 
       <View style={[styles.productSection, {gap: sectionGap}]}>
         <View style={styles.productControls}>
@@ -342,6 +454,14 @@ export function ProductRecommendationScreen({
               </View>
             ) : null}
           </View>
+          {isRecommendationRefreshing ? (
+            <XStack style={styles.refreshNotice}>
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+              <Text style={styles.refreshNoticeText}>
+                사진 기준으로 제품을 다시 찾는 중이에요.
+              </Text>
+            </XStack>
+          ) : null}
         </View>
 
         {products.length > 0 ? (
@@ -406,9 +526,11 @@ export function ProductRecommendationScreen({
 function LookSummaryCard({
   imageSize,
   makeupLook,
+  onChangePhoto,
 }: {
   imageSize: number;
   makeupLook: ProductRecommendationLook;
+  onChangePhoto?: () => void;
 }) {
   return (
     <View style={styles.makeupLookCard}>
@@ -420,7 +542,6 @@ function LookSummaryCard({
       </View>
 
       <YStack style={styles.makeupLookCopy}>
-        <Text style={styles.makeupLookCaption}>저장한 메이크업 룩</Text>
         <Text numberOfLines={1} style={styles.makeupLookTitle}>{makeupLook.title}</Text>
 
         <XStack style={styles.makeupLookTags}>
@@ -431,17 +552,120 @@ function LookSummaryCard({
           ))}
         </XStack>
 
-        <Text numberOfLines={1} style={styles.makeupLookDescription}>
-          {makeupLook.description}
-        </Text>
+        <XStack style={styles.makeupLookActionRow}>
+          <XStack style={styles.paletteRow}>
+            {makeupLook.palette.map((color) => (
+              <View key={color} style={[styles.paletteSwatch, {backgroundColor: color}]} />
+            ))}
+          </XStack>
 
-        <XStack style={styles.paletteRow}>
-          {makeupLook.palette.map((color) => (
-            <View key={color} style={[styles.paletteSwatch, {backgroundColor: color}]} />
-          ))}
+          {onChangePhoto ? (
+            <Pressable
+              accessibilityLabel="사진을 바꿔 추천 제품 다시 받기"
+              accessibilityRole="button"
+              onPress={onChangePhoto}
+              style={styles.changePhotoButton}>
+              <ImagePlus color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
+              <Text style={styles.changePhotoButtonText}>사진 변경</Text>
+            </Pressable>
+          ) : null}
         </XStack>
       </YStack>
     </View>
+  );
+}
+
+function LookPickerModal({
+  isVisible,
+  onCapturePhoto,
+  onClose,
+  onPickGalleryPhoto,
+  onSelectLookOption,
+  options,
+  selectedLookIndex,
+}: {
+  isVisible: boolean;
+  onCapturePhoto?: () => void;
+  onClose: () => void;
+  onPickGalleryPhoto?: () => void;
+  onSelectLookOption: (option: ProductRecommendationLookOption) => void;
+  options: ProductRecommendationLookOption[];
+  selectedLookIndex: number;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onClose}
+      transparent
+      visible={isVisible}>
+      <Pressable
+        accessibilityLabel="추천 기준 이미지 선택 닫기"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.lookPickerBackdrop}>
+        <Pressable
+          accessibilityRole="menu"
+          onPress={(event) => event.stopPropagation()}
+          style={styles.lookPickerSheet}>
+          <YStack style={styles.lookPickerHeader}>
+            <Text style={styles.lookPickerTitle}>추천 기준 이미지</Text>
+            <Text style={styles.lookPickerCaption}>
+              처음에는 첫 번째 생성 이미지가 기준이에요.
+            </Text>
+          </YStack>
+
+          <ScrollView
+            contentContainerStyle={styles.lookOptionList}
+            horizontal
+            showsHorizontalScrollIndicator={false}>
+            {options.map((option) => {
+              const isSelected = option.index === selectedLookIndex;
+
+              return (
+                <Pressable
+                  accessibilityLabel={`${option.title} 기준으로 추천 제품 보기`}
+                  accessibilityRole="menuitem"
+                  accessibilityState={{selected: isSelected}}
+                  key={`${option.index}-${option.title}`}
+                  onPress={() => onSelectLookOption(option)}
+                  style={isSelected ? styles.lookOptionCardActive : styles.lookOptionCard}>
+                  <Image
+                    resizeMode="cover"
+                    source={option.imageSource}
+                    style={styles.lookOptionImage}
+                  />
+                  <Text numberOfLines={1} style={styles.lookOptionTitle}>
+                    {option.title}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <XStack style={styles.lookPickerActions}>
+            {onPickGalleryPhoto ? (
+              <Pressable
+                accessibilityLabel="갤러리에서 새 사진 업로드"
+                accessibilityRole="button"
+                onPress={onPickGalleryPhoto}
+                style={styles.lookPickerActionButton}>
+                <Text style={styles.lookPickerActionText}>갤러리 업로드</Text>
+              </Pressable>
+            ) : null}
+
+            {onCapturePhoto ? (
+              <Pressable
+                accessibilityLabel="카메라로 새 사진 촬영"
+                accessibilityRole="button"
+                onPress={onCapturePhoto}
+                style={styles.lookPickerActionButton}>
+                <Text style={styles.lookPickerActionText}>다시 촬영</Text>
+              </Pressable>
+            ) : null}
+          </XStack>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -654,9 +878,100 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  makeupLookCaption: {
+  lookOptionCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.xs,
+    width: 94,
+  },
+  lookOptionCardActive: {
+    backgroundColor: colors.surface,
+    borderColor: colors.textPrimary,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    gap: spacing.xs,
+    padding: spacing.xs,
+    width: 94,
+  },
+  lookOptionImage: {
+    aspectRatio: 1,
+    borderRadius: radius.sm,
+    width: '100%',
+  },
+  lookOptionList: {
+    gap: spacing.sm,
+    paddingRight: spacing.xs,
+  },
+  lookOptionTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  lookPickerActionButton: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    flex: 1,
+    height: 38,
+    justifyContent: 'center',
+  },
+  lookPickerActionText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  lookPickerActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  lookPickerBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing.screenX,
+  },
+  lookPickerCaption: {
     color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  lookPickerHeader: {
+    gap: 2,
+  },
+  lookPickerSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    gap: spacing.md,
+    padding: spacing.md,
+    ...sharedCardShadow,
+  },
+  lookPickerTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
+  },
+  changePhotoButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    height: 30,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  changePhotoButtonText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
@@ -688,12 +1003,6 @@ const styles = StyleSheet.create({
     gap: 4,
     minWidth: 0,
   },
-  makeupLookDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
   makeupLookImage: {
     height: '100%',
     width: '100%',
@@ -709,6 +1018,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
+  },
+  makeupLookActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   makeupLookTitle: {
     color: colors.textPrimary,
@@ -733,14 +1048,15 @@ const styles = StyleSheet.create({
   },
   paletteRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexShrink: 1,
+    gap: 4,
   },
   paletteSwatch: {
     borderColor: colors.border,
     borderRadius: radius.sm,
     borderWidth: 1,
     height: 28,
-    width: 42,
+    width: 30,
   },
   pressed: {
     opacity: 0.78,
@@ -861,6 +1177,25 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  refreshNotice: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 30,
+    paddingHorizontal: spacing.sm,
+  },
+  refreshNoticeText: {
+    color: colors.textPrimary,
+    flexShrink: 1,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
   sortButton: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -943,6 +1278,7 @@ const styles = StyleSheet.create({
   },
   tabList: {
     gap: spacing.md,
+    paddingTop: 2,
     paddingRight: spacing.sm,
   },
   tabText: {
