@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {Image, StyleSheet} from 'react-native';
 import {CheckCircle2, Circle} from 'lucide-react-native';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
@@ -59,6 +59,7 @@ export function ReferenceMakeupExtractionLoadingScreen({
   const targetProgress = isAnalysisReady
     ? 1
     : Math.min(Math.max(reportedProgress, timedProgress), progressCap, 0.95);
+  const targetProgressRef = useRef(targetProgress);
   const progress = displayedProgress >= 0.995 ? 1 : displayedProgress;
   const progressLabel = `${Math.round(progress * 100)}%`;
   const reportedStepIndex = progressUpdate?.activeStepId
@@ -95,9 +96,13 @@ export function ReferenceMakeupExtractionLoadingScreen({
   }, []);
 
   useEffect(() => {
+    targetProgressRef.current = targetProgress;
+  }, [targetProgress]);
+
+  useEffect(() => {
     const intervalId = setInterval(() => {
       setDisplayedProgress((currentProgress) => {
-        const nextTarget = Math.max(0, Math.min(targetProgress, 1));
+        const nextTarget = Math.max(0, Math.min(targetProgressRef.current, 1));
 
         if (nextTarget <= currentProgress) {
           return currentProgress;
@@ -115,7 +120,7 @@ export function ReferenceMakeupExtractionLoadingScreen({
     return () => {
       clearInterval(intervalId);
     };
-  }, [targetProgress]);
+  }, []);
 
   useEffect(() => {
     if (!isComplete) {

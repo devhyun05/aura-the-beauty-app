@@ -773,7 +773,7 @@ tags는 1개에서 4개 사이로 작성한다.
       body=json.dumps(
         {
           "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 7600,
+          "max_tokens": 4096,
           "temperature": 0.2,
           "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
           "tools": [REFERENCE_MAKEUP_REPORT_TOOL],

@@ -427,7 +427,7 @@ function parseNumberedDetailSteps(text: string): ProDetailStep[] {
     return [];
   }
 
-  const matches = [...normalizedText.matchAll(/(?:^|\s)(\d{1,2})(?:[.)]|번)?\s+/g)];
+  const matches = [...normalizedText.matchAll(/^\s*(\d{1,2})[.)]\s+/gm)];
 
   if (matches.length === 0) {
     return [{id: 'plain-0', text: normalizedText}];
