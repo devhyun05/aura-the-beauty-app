@@ -3,6 +3,7 @@ import {
   getDefaultMakeupFilter,
   getFiltersByCategory,
   getARMakeupGuideData,
+  getLikedMakeupFilterLooks,
   getRecommendedMakeupFilterById,
   getRecommendedMakeupFilters,
   mapMakeupFilterToSavedLook,
@@ -22,6 +23,11 @@ const recommendationFilters = getFiltersByCategory('recommended', arGuideData);
 const recommendedMakeupFilters = getRecommendedMakeupFilters();
 const fallbackRecommendedFilter = getRecommendedMakeupFilterById('missing-filter-id');
 const mappedSavedLook = mapMakeupFilterToSavedLook(defaultFilter, 123);
+const likedMakeupLooks = getLikedMakeupFilterLooks([
+  'filter-wanghong-glass-pink',
+  'missing-filter-id',
+  'filter-gyaru-glow',
+]);
 const stableSortedFilters = sortMakeupFiltersByRecommendationScore(
   [
     {
@@ -82,4 +88,15 @@ expectEqual(
   mappedSavedLook.makeupPresetValues.sourceFilterId,
   defaultFilter.id,
   'recommended saved look source filter id',
+);
+expectEqual(likedMakeupLooks.length, 2, 'liked makeup look count');
+expectEqual(
+  likedMakeupLooks[0].id,
+  'liked-filter-wanghong-glass-pink',
+  'liked makeup look stable id',
+);
+expectEqual(
+  likedMakeupLooks[0].makeupPresetValues.sourceFilterId,
+  'filter-wanghong-glass-pink',
+  'liked makeup look source filter id',
 );

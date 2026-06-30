@@ -1,7 +1,9 @@
 ﻿import React from 'react';
 
 import {useAuthSession} from '../../../features/auth';
+import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
+import {getLikedMakeupFilterLooks} from '../../../shared/services/makeupGuideService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
@@ -14,7 +16,27 @@ import {
 
 export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
-  const {savedMakeupLook} = useNavigationFlowState();
+  const {
+    likedMakeupFilterIds,
+    setSelectedRecommendedMakeupFilterId,
+  } = useNavigationFlowState();
+  const likedMakeupLooks = React.useMemo(
+    () => getLikedMakeupFilterLooks(likedMakeupFilterIds),
+    [likedMakeupFilterIds],
+  );
+  const handleMakeupLookPress = React.useCallback(
+    (makeupLook: (typeof likedMakeupLooks)[number]) => {
+      const filterId = makeupLook.makeupPresetValues.sourceFilterId;
+
+      if (!filterId) {
+        return;
+      }
+
+      setSelectedRecommendedMakeupFilterId(filterId);
+      rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+    },
+    [rootNavigation, setSelectedRecommendedMakeupFilterId],
+  );
 
   return (
     <MainTabChrome
@@ -29,9 +51,10 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
           rootNavigation?.navigate('FaceAnalysisReportsList')
         }
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
+        onPressMakeupLook={handleMakeupLookPress}
         onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
-        savedMakeupLook={savedMakeupLook}
+        likedMakeupLooks={likedMakeupLooks}
       />
     </MainTabChrome>
   );

@@ -1,11 +1,11 @@
 import {
-  filterStoreCategoryChipContainerStyle,
-  filterStoreCategoryChipTextStyle,
+  filterRecommendedMakeupFiltersByHomeCategory,
   getHeroCarouselInitialOffset,
   getHeroCarouselLoopResetOffset,
   getHeroCarouselRenderItems,
   createHeroCarouselLoopResetHandlers,
-  getFilterStoreCategoryChipLabel,
+  getRecommendedFilterCategoryLabels,
+  getRecommendedFilterGridColumnCount,
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
   heroCtaLabel,
@@ -18,8 +18,11 @@ import {
 } from './HomeScreen';
 import {mapFaceAnalysisReportsToHomeSavedMakeupLooks} from '../services/homeService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {colors, radius, typography} from '../../../shared/theme';
-import {getRecommendedMakeupFilterById} from '../../../shared/services/makeupGuideService';
+import {typography} from '../../../shared/theme';
+import {
+  getRecommendedMakeupFilterById,
+  getRecommendedMakeupFilters,
+} from '../../../shared/services/makeupGuideService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -46,14 +49,18 @@ const expectedRecommendedFilterSectionDescription:
     recommendedFilterSectionDescription;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
-const filterStoreCategoryChipLabel = getFilterStoreCategoryChipLabel('Lip');
-const expectedFilterStoreCategoryChipLabel: 'Lip' = filterStoreCategoryChipLabel;
-const expectedFilterStoreCategoryChipRadius: typeof radius.pill =
-  filterStoreCategoryChipContainerStyle.borderRadius;
-const expectedFilterStoreCategoryChipBorderColor: typeof colors.border =
-  filterStoreCategoryChipContainerStyle.borderColor;
-const expectedFilterStoreCategoryChipTextFontFamily: typeof typography.fontFamily.semibold =
-  filterStoreCategoryChipTextStyle.fontFamily;
+const recommendedFilterCategoryLabels = getRecommendedFilterCategoryLabels();
+const recommendedFilters = getRecommendedMakeupFilters();
+const allRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
+  recommendedFilters,
+  'all',
+);
+const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
+  recommendedFilters,
+  'red',
+);
+const expectedRecommendedFilterGridColumnCount: 2 =
+  getRecommendedFilterGridColumnCount();
 const heroCarouselItems = [
   {id: 'first', title: '첫 카드'},
   {id: 'second', title: '두번째 카드'},
@@ -105,24 +112,24 @@ expectEqual(
   'weekly trend main title font family',
 );
 expectEqual(
-  filterStoreCategoryChipLabel,
-  expectedFilterStoreCategoryChipLabel,
-  'filter store category chip label',
+  recommendedFilterCategoryLabels.join(','),
+  '전체,레드,글로우,스모키,브라운,핑크,트렌드,유니크',
+  'recommended filter category labels',
 );
 expectEqual(
-  filterStoreCategoryChipContainerStyle.borderRadius,
-  expectedFilterStoreCategoryChipRadius,
-  'filter store category chip radius',
+  allRecommendedFilters.length,
+  recommendedFilters.length,
+  'recommended filter all category count',
 );
 expectEqual(
-  filterStoreCategoryChipContainerStyle.borderColor,
-  expectedFilterStoreCategoryChipBorderColor,
-  'filter store category chip border color',
+  redRecommendedFilters.some(filter => filter.id === 'filter-wanghong-glass-pink'),
+  true,
+  'recommended filter red category includes Wanghong filter',
 );
 expectEqual(
-  filterStoreCategoryChipTextStyle.fontFamily,
-  expectedFilterStoreCategoryChipTextFontFamily,
-  'filter store category chip text font family',
+  getRecommendedFilterGridColumnCount(),
+  expectedRecommendedFilterGridColumnCount,
+  'recommended filter grid column count',
 );
 expectEqual(
   loopedHeroCarouselItems[0].id,
@@ -181,7 +188,7 @@ expectEqual(
 );
 expectEqual(
   getRecommendedFilterAccessibilityLabel(cleanSmokyFilter),
-  '차가운 도시의 클린 스모키, 96퍼센트 추천, AR 적용',
+  '차가운 도시의 클린 스모키, 96퍼센트 추천',
   'recommended filter accessibility label',
 );
 expectEqual(

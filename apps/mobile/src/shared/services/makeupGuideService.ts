@@ -21,7 +21,7 @@ export type MakeupRecommendationInput =
 
 const DEFAULT_RECOMMENDATION_PROFILE = {
   embeddingVector: [0.76, 0.42, 0.62, 0.72, 0.78],
-  keywords: ['쿨', '스모키', '브라운', '핑크', '글로우', '트렌드'],
+  keywords: ['쿨', '스모키', '브라운', '레드', '글로우', '트렌드'],
 } as const;
 
 export function getARMakeupGuideData(): ARMakeupGuideData {
@@ -124,10 +124,36 @@ export function mapMakeupFilterToSavedLook(
   };
 }
 
+export function mapMakeupFilterToLikedLook(
+  filter: RecommendedMakeupFilter,
+): MakeupLookPreview {
+  return {
+    ...mapMakeupFilterToSavedLook(filter, 0),
+    id: `liked-${filter.id}`,
+  };
+}
+
+export function getLikedMakeupFilterLooks(
+  filterIds: readonly string[],
+): readonly MakeupLookPreview[] {
+  return filterIds
+    .map(filterId =>
+      mockRecommendedMakeupFilters.find(filter => filter.id === filterId),
+    )
+    .filter(isRecommendedMakeupFilter)
+    .map(mapMakeupFilterToLikedLook);
+}
+
 export function isRecommendedFilterLaunchSource(
   source: ARFilterLaunchSource | undefined,
 ): boolean {
   return source === 'recommendedFilter';
+}
+
+function isRecommendedMakeupFilter(
+  filter: RecommendedMakeupFilter | undefined,
+): filter is RecommendedMakeupFilter {
+  return Boolean(filter);
 }
 
 function normalizeRecommendationInput(input: MakeupRecommendationInput) {

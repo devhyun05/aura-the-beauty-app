@@ -18,12 +18,33 @@ import {
 
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
-  const {setSelectedRecommendedMakeupFilterId} = useNavigationFlowState();
+  const {
+    likedMakeupFilterIds,
+    setLikedMakeupFilterIds,
+    setSelectedRecommendedMakeupFilterId,
+  } = useNavigationFlowState();
 
-  const handleRecommendedFilterPress = (filterId: string) => {
+  const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
     rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
-  };
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleHeroTrendFilterPress = React.useCallback((filterId: string) => {
+    rootNavigation?.navigate('HomeFilterStore', {initialMakeupFilterId: filterId});
+  }, [rootNavigation]);
+
+  const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {
+    setLikedMakeupFilterIds(currentFilterIds =>
+      currentFilterIds.includes(filterId)
+        ? currentFilterIds.filter(currentFilterId => currentFilterId !== filterId)
+        : [filterId, ...currentFilterIds],
+    );
+  }, [setLikedMakeupFilterIds]);
+
+  const isMakeupFilterLiked = React.useCallback(
+    (filterId: string) => likedMakeupFilterIds.includes(filterId),
+    [likedMakeupFilterIds],
+  );
 
   return (
     <MainTabChrome navigation={navigation} routeName="HomeTab">
@@ -32,12 +53,14 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
           setSelectedRecommendedMakeupFilterId(null);
           rootNavigation?.navigate('ARFilter');
         }}
-        onPressFilterStore={() => rootNavigation?.navigate('HomeFilterStore')}
         onPressReferenceMakeupExtraction={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
+        onPressHeroTrendFilter={handleHeroTrendFilterPress}
         onPressMakeupFeedback={() => rootNavigation?.navigate('MakeupFeedbackEntry')}
         onPressProductRecommendations={() => navigation.navigate('CustomTab')}
         onPressRecommendedFilter={handleRecommendedFilterPress}
+        isMakeupFilterLiked={isMakeupFilterLiked}
+        onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
       />
     </MainTabChrome>
   );
@@ -45,19 +68,42 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
 export function HomeFilterStoreRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'HomeFilterStore'>) {
-  const {setSelectedRecommendedMakeupFilterId} = useNavigationFlowState();
+  const {
+    likedMakeupFilterIds,
+    setLikedMakeupFilterIds,
+    setSelectedRecommendedMakeupFilterId,
+  } = useNavigationFlowState();
 
-  const handleApplyFilter = (filterId: string) => {
+  const handleApplyFilter = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
     navigation.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
-  };
+  }, [navigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {
+    setLikedMakeupFilterIds(currentFilterIds =>
+      currentFilterIds.includes(filterId)
+        ? currentFilterIds.filter(currentFilterId => currentFilterId !== filterId)
+        : [filterId, ...currentFilterIds],
+    );
+  }, [setLikedMakeupFilterIds]);
+
+  const isMakeupFilterLiked = React.useCallback(
+    (filterId: string) => likedMakeupFilterIds.includes(filterId),
+    [likedMakeupFilterIds],
+  );
 
   return (
     <DetailRouteChrome
       routeName="HomeFilterStore"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FilterStoreScreen onApplyFilter={handleApplyFilter} />
+      <FilterStoreScreen
+        initialFilterId={route.params?.initialMakeupFilterId}
+        isFilterLiked={isMakeupFilterLiked}
+        onApplyFilter={handleApplyFilter}
+        onToggleFilterLike={handleToggleMakeupFilterLike}
+      />
     </DetailRouteChrome>
   );
 }

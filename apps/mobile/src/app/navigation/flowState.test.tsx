@@ -17,6 +17,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().likedMakeupFilterIds.length,
+  0,
+  'initial liked makeup filter count',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'initial makeup feedback photoSource',
@@ -53,6 +59,12 @@ expectEqual(
 );
 
 const demoState = getDemoNavigationFlowState();
+
+expectEqual(
+  demoState.likedMakeupFilterIds.length,
+  0,
+  'demo liked makeup filter count',
+);
 
 expectEqual(
   demoState.selectedMakeupFeedbackPhoto.photoSource,

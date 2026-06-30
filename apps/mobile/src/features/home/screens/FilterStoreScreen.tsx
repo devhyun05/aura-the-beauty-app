@@ -1,6 +1,12 @@
-import {useMemo, useState} from 'react';
-import {Image, Pressable, StyleSheet, useWindowDimensions} from 'react-native';
-import {Sparkles} from 'lucide-react-native';
+import {useEffect, useMemo, useState} from 'react';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  type GestureResponderEvent,
+  useWindowDimensions,
+} from 'react-native';
+import {Heart, Sparkles} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
@@ -9,13 +15,17 @@ import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {AppScreen} from '../../../shared/ui';
 
 type FilterStoreScreenProps = {
+  initialFilterId?: string;
+  isFilterLiked?: (filterId: string) => boolean;
   onApplyFilter?: (filterId: string) => void;
+  onToggleFilterLike?: (filterId: string) => void;
 };
 
 const filterStoreCategories = [
   {id: 'all', label: '전체'},
   {id: 'glow', label: '글로우'},
   {id: 'smoky', label: '스모키'},
+  {id: 'red', label: '레드'},
   {id: 'pink', label: '핑크'},
   {id: 'brown', label: '브라운'},
   {id: 'trend', label: '트렌드'},
@@ -23,6 +33,12 @@ const filterStoreCategories = [
 ] as const;
 
 type FilterStoreCategoryId = (typeof filterStoreCategories)[number]['id'];
+
+const filterStoreCategoryIds = filterStoreCategories.map(category => category.id);
+
+function isFilterStoreCategoryId(categoryId: string): categoryId is FilterStoreCategoryId {
+  return filterStoreCategoryIds.includes(categoryId as FilterStoreCategoryId);
+}
 
 export function filterRecommendedMakeupFiltersByCategory(
   filters: readonly RecommendedMakeupFilter[],
@@ -35,18 +51,76 @@ export function filterRecommendedMakeupFiltersByCategory(
   return filters.filter(filter => filter.categoryTags.includes(categoryId));
 }
 
+export function getFilterStoreCategoryForFilter(
+  filters: readonly RecommendedMakeupFilter[],
+  filterId?: string,
+): FilterStoreCategoryId {
+  const filter = filters.find(candidateFilter => candidateFilter.id === filterId);
+
+  return (
+    filter?.categoryTags.find(
+      (categoryTag): categoryTag is FilterStoreCategoryId =>
+        categoryTag !== 'all' && isFilterStoreCategoryId(categoryTag),
+    ) ?? 'all'
+  );
+}
+
+export function pinFilterStoreFilterToFront(
+  filters: readonly RecommendedMakeupFilter[],
+  filterId?: string,
+): readonly RecommendedMakeupFilter[] {
+  if (!filterId) {
+    return filters;
+  }
+
+  const filterIndex = filters.findIndex(filter => filter.id === filterId);
+
+  if (filterIndex <= 0) {
+    return filters;
+  }
+
+  const pinnedFilter = filters[filterIndex];
+
+  if (!pinnedFilter) {
+    return filters;
+  }
+
+  return [
+    pinnedFilter,
+    ...filters.slice(0, filterIndex),
+    ...filters.slice(filterIndex + 1),
+  ];
+}
+
 export function getFilterStoreCategoryLabels(): readonly string[] {
   return filterStoreCategories.map(category => category.label);
 }
 
-export function FilterStoreScreen({onApplyFilter}: FilterStoreScreenProps) {
+export function FilterStoreScreen({
+  initialFilterId,
+  isFilterLiked,
+  onApplyFilter,
+  onToggleFilterLike,
+}: FilterStoreScreenProps) {
   const {width} = useWindowDimensions();
+  const filters = useMemo(() => getRecommendedMakeupFilters(), []);
+  const initialCategory = useMemo(
+    () => getFilterStoreCategoryForFilter(filters, initialFilterId),
+    [filters, initialFilterId],
+  );
   const [selectedCategory, setSelectedCategory] =
-    useState<FilterStoreCategoryId>('all');
-  const filters = getRecommendedMakeupFilters();
+    useState<FilterStoreCategoryId>(initialCategory);
+
+  useEffect(() => {
+    setSelectedCategory(initialCategory);
+  }, [initialCategory]);
+
   const visibleFilters = useMemo(
-    () => filterRecommendedMakeupFiltersByCategory(filters, selectedCategory),
-    [filters, selectedCategory],
+    () => pinFilterStoreFilterToFront(
+      filterRecommendedMakeupFiltersByCategory(filters, selectedCategory),
+      initialFilterId,
+    ),
+    [filters, initialFilterId, selectedCategory],
   );
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
@@ -97,8 +171,10 @@ export function FilterStoreScreen({onApplyFilter}: FilterStoreScreenProps) {
         {visibleFilters.map(filter => (
           <FilterStoreGridCard
             filter={filter}
+            isLiked={Boolean(isFilterLiked?.(filter.id))}
             key={filter.id}
             onApplyFilter={onApplyFilter}
+            onToggleLike={onToggleFilterLike}
             width={cardWidth}
           />
         ))}
@@ -109,18 +185,26 @@ export function FilterStoreScreen({onApplyFilter}: FilterStoreScreenProps) {
 
 function FilterStoreGridCard({
   filter,
+  isLiked,
   onApplyFilter,
+  onToggleLike,
   width,
 }: {
   filter: RecommendedMakeupFilter;
+  isLiked: boolean;
   onApplyFilter?: (filterId: string) => void;
+  onToggleLike?: (filterId: string) => void;
   width: number;
 }) {
   const keywordChips = filter.keywords.slice(0, 2);
+  const handleToggleLike = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    onToggleLike?.(filter.id);
+  };
 
   return (
     <Pressable
-      accessibilityLabel={`${filter.headline} ${filter.displayTitle}, ${filter.matchScore}퍼센트 추천, AR 적용`}
+      accessibilityLabel={`${filter.headline} ${filter.displayTitle}, ${filter.matchScore}퍼센트 추천`}
       accessibilityRole="button"
       onPress={() => onApplyFilter?.(filter.id)}
       style={({pressed}) => [styles.card, {width}, pressed && styles.pressed]}>
@@ -138,6 +222,22 @@ function FilterStoreGridCard({
         <XStack style={styles.matchBadge}>
           <Text style={styles.matchBadgeText}>{filter.matchScore}% match</Text>
         </XStack>
+        <Pressable
+          accessibilityLabel={`${filter.displayTitle} 좋아요 ${isLiked ? '해제' : '추가'}`}
+          accessibilityRole="button"
+          onPress={handleToggleLike}
+          style={({pressed}) => [
+            styles.favoriteButton,
+            isLiked && styles.favoriteButtonActive,
+            pressed && styles.pressed,
+          ]}>
+          <Heart
+            color={colors.white}
+            fill={isLiked ? colors.white : 'transparent'}
+            size={iconSize.sm}
+            strokeWidth={2}
+          />
+        </Pressable>
       </View>
 
       <YStack style={styles.textArea}>
@@ -194,6 +294,21 @@ const styles = StyleSheet.create({
   },
   categoryTextSelected: {
     color: colors.white,
+  },
+  favoriteButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(17, 17, 17, 0.72)',
+    borderRadius: radius.pill,
+    height: 32,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: spacing.sm,
+    top: spacing.sm,
+    width: 32,
+    zIndex: 2,
+  },
+  favoriteButtonActive: {
+    backgroundColor: colors.textPrimary,
   },
   grid: {
     flexDirection: 'row',

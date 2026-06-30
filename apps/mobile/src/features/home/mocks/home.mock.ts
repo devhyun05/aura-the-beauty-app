@@ -10,8 +10,8 @@ const lookCleanSmoky =
   require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
 const filterWanghongRedGlass =
   require('../../../assets/images/makeup-filters/filter-wanghong-glass-pink.png') as ImageSourcePropType;
-const filterCloudBlurMatte =
-  require('../../../assets/images/makeup-filters/filter-cloud-blur-matte.png') as ImageSourcePropType;
+const filterGyaruGlow =
+  require('../../../assets/images/makeup-filters/filter-gyaru-glow.png') as ImageSourcePropType;
 const filterAuraBlushLift =
   require('../../../assets/images/makeup-filters/filter-aura-blush-lift.png') as ImageSourcePropType;
 const productCoralTint =
@@ -36,18 +36,21 @@ export const homeMock: HomeData = {
     ],
     trends: [
       {
+        filterId: 'filter-wanghong-glass-pink',
         id: 'trend-wanghong-glass-pink',
         title: '왕홍 레드 글래스',
         tone: '루비 레드',
         imageSource: filterWanghongRedGlass,
       },
       {
-        id: 'trend-cloud-blur',
-        title: '클라우드 블러',
-        tone: '소프트 매트',
-        imageSource: filterCloudBlurMatte,
+        filterId: 'filter-gyaru-glow',
+        id: 'trend-gyaru-glow',
+        title: '갸루 글로우',
+        tone: '샴페인 코랄',
+        imageSource: filterGyaruGlow,
       },
       {
+        filterId: 'filter-aura-blush-lift',
         id: 'trend-aura-blush',
         title: '아우라 블러시',
         tone: '워터 로즈',

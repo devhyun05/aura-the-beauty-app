@@ -39,7 +39,7 @@ const filterOfficeSiren =
   require('../../assets/images/makeup-filters/filter-office-siren.png') as ImageSourcePropType;
 const filterSoftGoth =
   require('../../assets/images/makeup-filters/filter-soft-goth.png') as ImageSourcePropType;
-const filterWanghongGlassPink =
+const filterWanghongRedGlass =
   require('../../assets/images/makeup-filters/filter-wanghong-glass-pink.png') as ImageSourcePropType;
 const filterCloudBlurMatte =
   require('../../assets/images/makeup-filters/filter-cloud-blur-matte.png') as ImageSourcePropType;
@@ -422,7 +422,7 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     headline: '붉게 번진',
     displayTitle: '이가리 블러시',
     description: '애프리콧 레드 치크와 촉촉한 립으로 생기를 높인 룩',
-    categoryTags: ['pink', 'glow', 'trend'],
+    categoryTags: ['red', 'glow', 'trend'],
     keywords: ['이가리', '블러시', '코랄', '애프리콧', '촉촉한립'],
     embeddingVector: [0.46, 0.74, 0.76, 0.24, 0.78],
     matchScore: 88,
@@ -639,20 +639,20 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
   }),
   createRecommendedFilter({
     id: 'filter-wanghong-glass-pink',
-    imageSource: filterWanghongGlassPink,
+    imageSource: filterWanghongRedGlass,
     categoryId: 'trend',
     headline: '렌즈광이 번지는',
-    displayTitle: '왕홍 글래스 핑크',
-    description: '핑크 펄과 유리알 피부광으로 화면 속 선명도를 높인 왕홍 무드 룩',
-    categoryTags: ['pink', 'glow', 'trend'],
-    keywords: ['왕홍', '도우인', '핑크', '글로우', '트렌드'],
+    displayTitle: '왕홍 레드 글래스',
+    description: '레드 음영과 루비 글로스 립으로 화면 속 선명도를 높인 왕홍 무드 룩',
+    categoryTags: ['red', 'glow', 'trend'],
+    keywords: ['왕홍', '도우인', '레드', '글로우', '트렌드'],
     embeddingVector: [0.74, 0.4, 0.98, 0.24, 0.98],
     matchScore: 98,
     makeupAreas: ['base', 'eye', 'cheek', 'lip'],
     colorOptions: colorOptions([
-      ['glass-pink', '글래스 핑크', '#F2A7C4'],
-      ['pearl-rose', '펄 로즈', '#F8D5E2'],
-      ['clear-gloss', '클리어 글로스', '#F5C4D2'],
+      ['ruby-red', '루비 레드', '#B7183A'],
+      ['rose-red', '로즈 레드', '#D95761'],
+      ['crystal-shine', '크리스탈 샤인', '#F2D7D4'],
     ]),
     typeOptions: textOptions([
       ['lens-pearl-eye', '렌즈광 아이'],
@@ -666,12 +666,12 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     ]),
     presetValues: {
       makeupArea: allPresetArea,
-      colorId: 'glass-pink',
+      colorId: 'ruby-red',
       typeId: 'lens-pearl-eye',
       textureId: 'glass',
       shapeId: 'defined',
       intensity: 0.78,
-      finish: 'wanghong pink glass glow',
+      finish: 'wanghong red glass glow',
     },
   }),
   createRecommendedFilter({
