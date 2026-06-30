@@ -282,6 +282,265 @@ def test_naver_lip_item_scores_against_analysis_report_terms() -> None:
   assert "코랄" in product["reason"]
 
 
+def test_naver_cheek_item_rejects_non_cosmetic_shoes() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "패션브랜드",
+      "category1": "패션잡화",
+      "category2": "신발",
+      "category3": "운동화",
+      "image": "https://example.com/shoes.jpg",
+      "link": "https://smartstore.naver.com/example/products/999",
+      "lprice": "39000",
+      "mallName": "슈즈스토어",
+      "productId": "999",
+      "title": "블러셔 컬러 데일리 운동화 신발",
+    },
+    "cheek",
+    0,
+  )
+
+  assert product is None
+
+
+def test_naver_cheek_item_rejects_fashion_color_blush() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "패션브랜드",
+      "category1": "",
+      "category2": "",
+      "category3": "",
+      "image": "https://example.com/fashion-blush.jpg",
+      "link": "https://smartstore.naver.com/example/products/998",
+      "lprice": "79000",
+      "maker": "패션브랜드",
+      "mallName": "스타일스토어",
+      "productId": "998",
+      "title": "벨라 V 블러쉬 로즈쿼츠핑크 스니커즈",
+    },
+    "cheek",
+    0,
+  )
+
+  assert product is None
+
+
+def test_naver_liner_item_rejects_fashion_liner() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "패션브랜드",
+      "category1": "",
+      "category2": "",
+      "category3": "",
+      "image": "https://example.com/fashion-liner.jpg",
+      "link": "https://smartstore.naver.com/example/products/997",
+      "lprice": "69000",
+      "maker": "패션브랜드",
+      "mallName": "스타일스토어",
+      "productId": "997",
+      "title": "밀리 버튼 라이너 베이지 재킷",
+    },
+    "liner",
+    0,
+  )
+
+  assert product is None
+
+
+def test_naver_base_item_rejects_uncategorized_living_cushion() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "리빙브랜드",
+      "category1": "",
+      "category2": "",
+      "category3": "",
+      "image": "https://example.com/living-cushion.jpg",
+      "link": "https://smartstore.naver.com/example/products/996",
+      "lprice": "19000",
+      "mallName": "홈스토어",
+      "productId": "996",
+      "title": "베이지 톤업 쿠션 커버 소파 방석",
+    },
+    "base",
+    0,
+  )
+
+  assert product is None
+
+
+def test_naver_cheek_item_accepts_cosmetic_blusher() -> None:
+  product = _map_naver_item(
+    {
+      "brand": "롬앤",
+      "category1": "화장품/미용",
+      "category2": "색조메이크업",
+      "category3": "블러셔",
+      "image": "https://example.com/blusher.jpg",
+      "link": "https://smartstore.naver.com/example/products/1000",
+      "lprice": "12000",
+      "mallName": "롬앤 공식스토어",
+      "productId": "1000",
+      "title": "롬앤 베러 댄 치크 피치 블러셔",
+    },
+    "cheek",
+    0,
+  )
+
+  assert product is not None
+  assert product["category"] == "cheek"
+  assert product["productName"] == "롬앤 베러 댄 치크 피치 블러셔"
+
+
+def test_naver_liner_query_excludes_brow_products() -> None:
+  assert "브로우" not in shopping_products.CATEGORY_CONFIG["liner"]["query"]
+  assert shopping_products.CATEGORY_GUIDE_KEYS["liner"] == ("makeupGuideline.eyeliner",)
+
+
+def test_product_makeup_look_uses_first_generated_makeup_card() -> None:
+  look = shopping_products._build_makeup_look(
+    {
+      "personalColor": "봄웜 라이트",
+      "recommendedMakeups": [
+        {
+          "description": "로즈 베이지 립과 피치 블러셔로 맑게 정돈한 룩",
+          "imageUrl": "https://cdn.example.com/generated-makeup/first.jpg",
+          "palette": ["#C96F72", "#F0AAA0"],
+          "tags": ["로즈 베이지", "피치"],
+          "title": "로즈 베이지 클린 룩",
+        },
+      ],
+      "skinAnalysisSummary": "피부는 전반적으로 균일하며 약간의 유분감이 관찰됩니다.",
+    },
+  )
+
+  assert look["title"] == "로즈 베이지 클린 룩"
+  assert look["description"] == "로즈 베이지 립과 피치 블러셔로 맑게 정돈한 룩"
+  assert look["imageUrl"] == "https://cdn.example.com/generated-makeup/first.jpg"
+  assert look["palette"] == ["#C96F72", "#F0AAA0"]
+  assert "로즈 베이지" in look["tags"]
+
+
+def test_product_makeup_look_uses_selected_generated_makeup_card() -> None:
+  look = shopping_products._build_makeup_look(
+    {
+      "recommendedMakeups": [
+        {
+          "description": "피치 립과 치크",
+          "imageUrl": "https://cdn.example.com/generated-makeup/first.jpg",
+          "tags": ["피치"],
+          "title": "피치 클린 룩",
+        },
+        {
+          "description": "브라운 라인과 로즈 립",
+          "imageUrl": "https://cdn.example.com/generated-makeup/second.jpg",
+          "tags": ["브라운", "로즈"],
+          "title": "브라운 로즈 룩",
+        },
+      ],
+      "selectedRecommendedMakeupIndex": 1,
+    },
+  )
+
+  assert look["title"] == "브라운 로즈 룩"
+  assert look["imageUrl"] == "https://cdn.example.com/generated-makeup/second.jpg"
+  assert "브라운" in look["tags"]
+  assert "#C96F72" in look["palette"]
+  assert "#8B5F55" in look["palette"]
+
+
+def test_product_makeup_look_options_include_generated_cards() -> None:
+  options = shopping_products._build_makeup_look_options(
+    {
+      "recommendedMakeups": [
+        {
+          "imageUrl": "https://cdn.example.com/generated-makeup/first.jpg",
+          "tags": ["피치"],
+          "title": "피치 클린 룩",
+        },
+        {
+          "imageUrl": "https://cdn.example.com/generated-makeup/second.jpg",
+          "tags": ["로즈"],
+          "title": "브라운 로즈 룩",
+        },
+      ],
+    },
+  )
+
+  assert [option["index"] for option in options] == [0, 1]
+  assert options[1]["title"] == "브라운 로즈 룩"
+  assert "#ED8F73" in options[0]["palette"]
+  assert "#C96F72" in options[1]["palette"]
+
+
+def test_product_profile_text_includes_generated_makeup_terms() -> None:
+  text = shopping_products._profile_text(
+    {
+      "recommendedMakeups": [
+        {
+          "description": "코랄 립과 피치 블러셔를 중심으로 한 아이돌 메이크업",
+          "tags": ["코랄", "피치"],
+          "title": "코랄 아이돌 룩",
+        },
+      ],
+    },
+    "lip",
+  )
+
+  assert "코랄 아이돌 룩" in text
+  assert "피치 블러셔" in text
+
+
+@pytest.mark.asyncio
+async def test_naver_category_fetch_uses_fallback_query_when_first_query_is_empty() -> None:
+  calls = []
+
+  class FakeResponse:
+    def __init__(self, items):
+      self._items = items
+
+    def raise_for_status(self):
+      return None
+
+    def json(self):
+      return {"items": self._items}
+
+  class FakeClient:
+    async def get(self, url, *, headers, params):
+      calls.append(params["query"])
+
+      if len(calls) == 1:
+        return FakeResponse([])
+
+      return FakeResponse(
+        [
+          {
+            "brand": "롬앤",
+            "category1": "화장품/미용",
+            "category2": "색조메이크업",
+            "category3": "블러셔",
+            "image": "https://example.com/blusher.jpg",
+            "link": "https://smartstore.naver.com/example/products/1000",
+            "lprice": "12000",
+            "mallName": "롬앤 공식스토어",
+            "productId": "1000",
+            "title": "롬앤 베러 댄 치크 피치 블러셔",
+          },
+        ],
+      )
+
+  products = await shopping_products._fetch_naver_category_products(
+    FakeClient(),
+    Settings(
+      naver_shopping_client_id="client-id",
+      naver_shopping_client_secret="client-secret",
+    ),
+    "cheek",
+  )
+
+  assert len(calls) >= 2
+  assert products[0]["productName"] == "롬앤 베러 댄 치크 피치 블러셔"
+
+
 @pytest.mark.asyncio
 async def test_semantic_product_scores_rerank_by_report_embedding(
   monkeypatch: pytest.MonkeyPatch,

@@ -35,7 +35,10 @@ function shouldRetryAnalysisError(error: unknown): boolean {
   return !NON_RETRYABLE_ANALYSIS_ERROR_CODES.has(error.code);
 }
 
-export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCapture'>) {
+export function FaceCaptureRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'FaceCapture'>) {
   const {setSelectedFaceCapture} = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
 
@@ -51,12 +54,18 @@ export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCaptur
 
   return (
     <FaceCaptureScreen
+      autoOpenGallery={route.params?.initialSource === 'gallery'}
       onCapture={result => {
         if (result) {
           setSelectedFaceCapture(result);
         }
 
-        navigation.navigate('FaceAnalysisLoading');
+        navigation.navigate(
+          'FaceAnalysisLoading',
+          route.params?.afterAnalysisRoute
+            ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+            : undefined,
+        );
       }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
@@ -65,6 +74,7 @@ export function FaceCaptureRouteScreen({navigation}: RootScreenProps<'FaceCaptur
 
 export function FaceAnalysisLoadingRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'FaceAnalysisLoading'>) {
   const {
     selectedFaceCapture,
@@ -168,6 +178,14 @@ export function FaceAnalysisLoadingRouteScreen({
     setIsAnalysisReady(false);
     setAnalysisRequestKey(currentKey => currentKey + 1);
   }, []);
+  const handleAnalysisComplete = React.useCallback(() => {
+    if (route.params?.afterAnalysisRoute === 'ProductRecommendation') {
+      navigation.navigate('ProductRecommendation');
+      return;
+    }
+
+    navigation.navigate('FaceAnalysisReportDetail');
+  }, [navigation, route.params?.afterAnalysisRoute]);
 
   return (
     <DetailRouteChrome
@@ -178,7 +196,7 @@ export function FaceAnalysisLoadingRouteScreen({
         capturedPhotoUri={selectedFaceCapture?.imageUri}
         isAnalysisReady={isAnalysisReady}
         onBack={() => navigation.navigate('FaceCapture')}
-        onComplete={() => navigation.navigate('FaceAnalysisReportDetail')}
+        onComplete={handleAnalysisComplete}
         onRetry={handleRetryAnalysis}
       />
     </DetailRouteChrome>
