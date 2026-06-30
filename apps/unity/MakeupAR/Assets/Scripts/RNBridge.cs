@@ -694,6 +694,11 @@ public sealed class RNBridge : MonoBehaviour
         SendUnityEvent(json, "[E7]");
     }
 
+    public void SendE7VisionLipBoundaryEvent(string json)
+    {
+        SendUnityEvent(json, "[E7]");
+    }
+
     public void SetE7RegionOverlayVisibleJson(string json)
     {
         try
@@ -3048,7 +3053,7 @@ public sealed class RNBridge : MonoBehaviour
                     || value == "full_lip"
                     || value == "gradient_lip"
                     || value == "overline_lip"))
-            || ((region == "cheek" || region == "blush") && value == "soft_blush")
+            || ((region == "cheek" || region == "blush") && IsCheekBlushTextureSample(value))
             || ((region == "eye" || region == "brow" || region == "eyeliner") && value == "shimmer_eye"))
         {
             return value;
@@ -3161,7 +3166,9 @@ public sealed class RNBridge : MonoBehaviour
             return value;
         }
 
-        if (region == "lip" && value.StartsWith("e7-lip-validation-", StringComparison.Ordinal))
+        if (region == "lip"
+            && (value.StartsWith("e7-lip-validation-", StringComparison.Ordinal)
+                || IsGeneratedLipMaskTextureId(value)))
         {
             return value;
         }
@@ -3232,7 +3239,7 @@ public sealed class RNBridge : MonoBehaviour
         {
             case "cheek":
             case "blush":
-                return "cheek-smooth-mask-v1";
+                return "cheek-session-mask-1-v1";
             case "eye":
             case "brow":
             case "eyeliner":
@@ -3263,6 +3270,16 @@ public sealed class RNBridge : MonoBehaviour
                     || value.StartsWith("eye-", StringComparison.Ordinal)));
     }
 
+    private static bool IsCheekBlushTextureSample(string value)
+    {
+        return value == "soft_blush"
+            || value == "blush_session_1"
+            || value == "blush_session_2"
+            || value == "blush_session_3"
+            || value == "blush_session_4"
+            || value == "blush_session_5";
+    }
+
     private static bool IsGeneratedLipMaskTextureId(string maskTextureId)
     {
         return !string.IsNullOrWhiteSpace(maskTextureId)
@@ -3278,7 +3295,9 @@ public sealed class RNBridge : MonoBehaviour
 
         string value = candidateId.Trim();
         return (region == "lip" && value.StartsWith("lip-", StringComparison.Ordinal))
-            || (region == "blush" && value.StartsWith("blush-", StringComparison.Ordinal))
+            || ((region == "blush" || region == "cheek")
+                && (value.StartsWith("blush-", StringComparison.Ordinal)
+                    || value.StartsWith("blush_", StringComparison.Ordinal)))
             || (region == "brow" && value.StartsWith("brow-", StringComparison.Ordinal))
             || (region == "eyeliner" && value.StartsWith("eyeliner-", StringComparison.Ordinal));
     }

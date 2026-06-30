@@ -64,8 +64,24 @@ export type FullFaceMakeupRecipeLayer = {
   enabled: boolean;
   color: string;
   opacity: number;
-  texture: 'matte_lip' | 'soft_blush' | 'shimmer_eye';
-  sample: 'matte_lip' | 'soft_blush' | 'shimmer_eye';
+  texture:
+    | 'matte_lip'
+    | 'soft_blush'
+    | 'blush_session_1'
+    | 'blush_session_2'
+    | 'blush_session_3'
+    | 'blush_session_4'
+    | 'blush_session_5'
+    | 'shimmer_eye';
+  sample:
+    | 'matte_lip'
+    | 'soft_blush'
+    | 'blush_session_1'
+    | 'blush_session_2'
+    | 'blush_session_3'
+    | 'blush_session_4'
+    | 'blush_session_5'
+    | 'shimmer_eye';
   textureMode: 'sample';
   intensity: number;
   feather: number;
@@ -189,8 +205,8 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   },
   blush: {
     region: 'blush',
-    candidateId: 'blush-balanced-soft-oval-v0',
-    maskTextureId: 'e7-blush-balanced-uv-v0',
+    candidateId: 'blush-session-1-v1',
+    maskTextureId: 'cheek-session-mask-1-v1',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -415,22 +431,34 @@ export const REGION_CANDIDATE_OPTIONS: Record<
   ],
   blush: [
     {
-      id: 'balanced',
-      label: '균형',
-      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
-      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
-    },
-    {
       id: 'daily',
-      label: '데일리',
-      candidateId: 'blush-daily-cheek-v1',
-      maskTextureId: 'cheek-daily-mask-v1',
+      label: 'Daily',
+      candidateId: 'blush-session-1-v1',
+      maskTextureId: 'cheek-session-mask-1-v1',
     },
     {
       id: 'lovely',
-      label: '화사하게',
-      candidateId: 'blush-lovely-cheek-v1',
-      maskTextureId: 'cheek-lovely-mask-v1',
+      label: 'Lovely',
+      candidateId: 'blush-session-2-v1',
+      maskTextureId: 'cheek-session-mask-2-v1',
+    },
+    {
+      id: 'under-eye',
+      label: 'Under',
+      candidateId: 'blush-session-3-v1',
+      maskTextureId: 'cheek-session-mask-3-v1',
+    },
+    {
+      id: 'sun-1',
+      label: 'Sun 1',
+      candidateId: 'blush-session-4-v1',
+      maskTextureId: 'cheek-session-mask-4-v1',
+    },
+    {
+      id: 'sun-2',
+      label: 'Sun 2',
+      candidateId: 'blush-session-5-v1',
+      maskTextureId: 'cheek-session-mask-5-v1',
     },
   ],
   brow: [
@@ -800,7 +828,7 @@ function buildFullFaceMakeupRecipeLayer({
 }): FullFaceMakeupRecipeLayer {
   const control = controls[region];
   const params = control.params;
-  const texture = getDefaultTextureForRegion(region);
+  const texture = getTextureForRegionControl(region, control);
   const blendMode = 'multiply';
   const materialId = `e7-full-face-${region}-material-v0`;
   const skinAdaptive = region === 'lip';
@@ -877,6 +905,30 @@ function getDefaultTextureForRegion(
   }
 
   return 'shimmer_eye';
+}
+
+function getTextureForRegionControl(
+  region: MakeupRecipeRegion,
+  control: FullFaceRegionControl,
+): FullFaceMakeupRecipeLayer['texture'] {
+  if (region !== 'blush') {
+    return getDefaultTextureForRegion(region);
+  }
+
+  switch (control.maskTextureId) {
+    case 'cheek-session-mask-1-v1':
+      return 'blush_session_1';
+    case 'cheek-session-mask-2-v1':
+      return 'blush_session_2';
+    case 'cheek-session-mask-3-v1':
+      return 'blush_session_3';
+    case 'cheek-session-mask-4-v1':
+      return 'blush_session_4';
+    case 'cheek-session-mask-5-v1':
+      return 'blush_session_5';
+    default:
+      return 'soft_blush';
+  }
 }
 
 function getDefaultMaskThreshold(region: MakeupRecipeRegion): number {

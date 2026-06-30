@@ -99,10 +99,10 @@ export const DEFAULT_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
 
 export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompanionMakeupControls = {
   blush: {
-    candidateId: 'blush-daily-cheek-v1',
+    candidateId: 'blush-session-1-v1',
     colorHex: '#E67B5F',
     intensity: 0.76,
-    maskTextureId: 'cheek-daily-mask-v1',
+    maskTextureId: 'cheek-session-mask-1-v1',
     opacity: 0.58,
   },
   brow: {

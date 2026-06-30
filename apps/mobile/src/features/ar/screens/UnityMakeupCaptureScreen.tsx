@@ -126,11 +126,11 @@ const GENERATED_MASK_FINISH_OPTIONS = [
   > & {label: string}
 >;
 const AR_BLUSH_CHEEK_REGION_OPTIONS = [
-  {label: 'Daily', candidateId: 'blush-daily-cheek-v1', maskTextureId: 'cheek-daily-mask-v1'},
-  {label: 'Lovely', candidateId: 'blush-lovely-cheek-v1', maskTextureId: 'cheek-lovely-mask-v1'},
-  {label: 'Under', candidateId: 'blush-under-eye-v1', maskTextureId: 'cheek-under-eye-mask-v1'},
-  {label: 'Sun 1', candidateId: 'blush-sunkissed-1-v1', maskTextureId: 'cheek-sunkissed-mask1-v1'},
-  {label: 'Sun 2', candidateId: 'blush-sunkissed-2-v1', maskTextureId: 'cheek-sunkissed-mask2-v1'},
+  {label: 'Daily', candidateId: 'blush-session-1-v1', maskTextureId: 'cheek-session-mask-1-v1'},
+  {label: 'Lovely', candidateId: 'blush-session-2-v1', maskTextureId: 'cheek-session-mask-2-v1'},
+  {label: 'Under', candidateId: 'blush-session-3-v1', maskTextureId: 'cheek-session-mask-3-v1'},
+  {label: 'Sun 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
+  {label: 'Sun 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
 ] as const;
 const AR_BLUSH_EYE_REGION_OPTIONS = [
   {label: 'Soft', candidateId: 'eyeliner-smooth-v1', maskTextureId: 'eye-smooth-mask-v1'},
