@@ -1456,6 +1456,7 @@ async def _fetch_report_profile(
         and u.auth_provider = $2
         and u.oauth_sub = $3
         and u.deleted_at is null
+        and r.deleted_at is null
       limit 1
       """,
       report_id,
@@ -1471,6 +1472,7 @@ async def _fetch_report_profile(
       where u.auth_provider = $1
         and u.oauth_sub = $2
         and u.deleted_at is null
+        and r.deleted_at is null
         and r.status = 'completed'
       order by coalesce(r.analyzed_at, r.created_at) desc
       limit 1

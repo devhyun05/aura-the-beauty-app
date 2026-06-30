@@ -3,7 +3,7 @@ import type {
   MakeupLookPreview,
   MyPageProfileSummary,
 } from '../types/profile';
-import { getLatestFaceAnalysisReport } from './faceAnalysisService';
+import { getFaceAnalysisReports } from './faceAnalysisService';
 import { getMakeupLooks as getAllMakeupLooks } from './makeupService';
 import { getLikedProductPreviews } from './productService';
 import {
@@ -12,18 +12,19 @@ import {
 } from './userService';
 
 export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> => {
-  const [profile, beautyProfile, faceAnalysisReport, likedProducts] =
+  const [profile, beautyProfile, faceAnalysisReports, likedProducts] =
     await Promise.all([
       getUserProfileFromService(),
       getBeautyProfile(),
-      getLatestFaceAnalysisReport(),
+      getFaceAnalysisReports({limit: 3}),
       getLikedProductPreviews(3),
     ]);
 
   return {
     profile,
     beautyProfile,
-    faceAnalysisReport,
+    faceAnalysisReport: faceAnalysisReports[0] ?? null,
+    faceAnalysisReports,
     makeupLooks: [],
     likedProducts,
   };

@@ -49,8 +49,10 @@ export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>)
 
 export function ProductRecommendationRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ProductRecommendation'>) {
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const sourceReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
 
   return (
     <DetailRouteChrome
@@ -66,7 +68,7 @@ export function ProductRecommendationRouteScreen({
             initialSource: 'gallery',
           })
         }
-        sourceReportId={selectedFaceAnalysisReport?.id}
+        sourceReportId={sourceReportId}
       />
     </DetailRouteChrome>
   );

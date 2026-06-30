@@ -1,6 +1,7 @@
 import {StyleSheet} from 'react-native';
 import {Button, Image, Spinner} from 'tamagui';
 
+import {appAssetUri} from '../../../shared/config/mediaAssets';
 import type {SocialLoginItem, SocialLoginProvider} from '../types';
 
 type SocialLoginButtonProps = {
@@ -38,7 +39,7 @@ function SocialLoginMark({item}: {item: SocialLoginItem}) {
       <Image
         height={44}
         resizeMode="contain"
-        src={require('../../../assets/icons/auth/kakao-talk.png')}
+        src={appAssetUri('icons/auth/kakao-talk.png')}
         width={44}
       />
     );
@@ -49,7 +50,7 @@ function SocialLoginMark({item}: {item: SocialLoginItem}) {
       <Image
         height={41}
         resizeMode="contain"
-        src={require('../../../assets/icons/auth/naver.png')}
+        src={appAssetUri('icons/auth/naver.png')}
         width={41}
       />
     );
@@ -59,7 +60,7 @@ function SocialLoginMark({item}: {item: SocialLoginItem}) {
     <Image
       height={36}
       resizeMode="contain"
-      src={require('../../../assets/icons/auth/google.png')}
+      src={appAssetUri('icons/auth/google.png')}
       width={36}
     />
   );

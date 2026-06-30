@@ -1,5 +1,6 @@
 import type {ImageSourcePropType} from 'react-native';
 
+import {makeupFilterAssetSource} from '../config/mediaAssets';
 import type {
   ARMakeupGuideData,
   FilterCategoryId,
@@ -9,46 +10,26 @@ import type {
   RecommendedMakeupFilter,
 } from '../types/makeupGuide';
 
-const filterCleanSmokyCity =
-  require('../../assets/images/makeup-filters/filter-clean-smoky-city.png') as ImageSourcePropType;
-const filterGyaruGlow =
-  require('../../assets/images/makeup-filters/filter-gyaru-glow.png') as ImageSourcePropType;
-const filterKuroGyaruBronze =
-  require('../../assets/images/makeup-filters/filter-kuro-gyaru-bronze.png') as ImageSourcePropType;
-const filterOneGyaruRose =
-  require('../../assets/images/makeup-filters/filter-one-gyaru-rose.png') as ImageSourcePropType;
-const filterWaterGlowClean =
-  require('../../assets/images/makeup-filters/filter-water-glow-clean.png') as ImageSourcePropType;
-const filterGlassSkinNude =
-  require('../../assets/images/makeup-filters/filter-glass-skin-nude.png') as ImageSourcePropType;
-const filterMilkyStrawberryPink =
-  require('../../assets/images/makeup-filters/filter-milky-strawberry-pink.png') as ImageSourcePropType;
-const filterMoriGirlNatural =
-  require('../../assets/images/makeup-filters/filter-mori-girl-natural.png') as ImageSourcePropType;
-const filterDollyLarme =
-  require('../../assets/images/makeup-filters/filter-dolly-larme.png') as ImageSourcePropType;
-const filterIgariBlush =
-  require('../../assets/images/makeup-filters/filter-igari-blush.png') as ImageSourcePropType;
-const filterJuiceCoral =
-  require('../../assets/images/makeup-filters/filter-juice-coral.png') as ImageSourcePropType;
-const filterDouyinPink =
-  require('../../assets/images/makeup-filters/filter-douyin-pink.png') as ImageSourcePropType;
-const filterLatteBrown =
-  require('../../assets/images/makeup-filters/filter-latte-brown.png') as ImageSourcePropType;
-const filterOfficeSiren =
-  require('../../assets/images/makeup-filters/filter-office-siren.png') as ImageSourcePropType;
-const filterSoftGoth =
-  require('../../assets/images/makeup-filters/filter-soft-goth.png') as ImageSourcePropType;
-const filterWanghongRedGlass =
-  require('../../assets/images/makeup-filters/filter-wanghong-glass-pink.png') as ImageSourcePropType;
-const filterCloudBlurMatte =
-  require('../../assets/images/makeup-filters/filter-cloud-blur-matte.png') as ImageSourcePropType;
-const filterAuraBlushLift =
-  require('../../assets/images/makeup-filters/filter-aura-blush-lift.png') as ImageSourcePropType;
-const filterPlumSyrupGloss =
-  require('../../assets/images/makeup-filters/filter-plum-syrup-gloss.png') as ImageSourcePropType;
-const filterChromePearlEye =
-  require('../../assets/images/makeup-filters/filter-chrome-pearl-eye.png') as ImageSourcePropType;
+const filterCleanSmokyCity = makeupFilterAssetSource('filter-clean-smoky-city.png');
+const filterGyaruGlow = makeupFilterAssetSource('filter-gyaru-glow.png');
+const filterKuroGyaruBronze = makeupFilterAssetSource('filter-kuro-gyaru-bronze.png');
+const filterOneGyaruRose = makeupFilterAssetSource('filter-one-gyaru-rose.png');
+const filterWaterGlowClean = makeupFilterAssetSource('filter-water-glow-clean.png');
+const filterGlassSkinNude = makeupFilterAssetSource('filter-glass-skin-nude.png');
+const filterMilkyStrawberryPink = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
+const filterMoriGirlNatural = makeupFilterAssetSource('filter-mori-girl-natural.png');
+const filterDollyLarme = makeupFilterAssetSource('filter-dolly-larme.png');
+const filterIgariBlush = makeupFilterAssetSource('filter-igari-blush.png');
+const filterJuiceCoral = makeupFilterAssetSource('filter-juice-coral.png');
+const filterDouyinPink = makeupFilterAssetSource('filter-douyin-pink.png');
+const filterLatteBrown = makeupFilterAssetSource('filter-latte-brown.png');
+const filterOfficeSiren = makeupFilterAssetSource('filter-office-siren.png');
+const filterSoftGoth = makeupFilterAssetSource('filter-soft-goth.png');
+const filterWanghongRedGlass = makeupFilterAssetSource('filter-wanghong-glass-pink.png');
+const filterCloudBlurMatte = makeupFilterAssetSource('filter-cloud-blur-matte.png');
+const filterAuraBlushLift = makeupFilterAssetSource('filter-aura-blush-lift.png');
+const filterPlumSyrupGloss = makeupFilterAssetSource('filter-plum-syrup-gloss.png');
+const filterChromePearlEye = makeupFilterAssetSource('filter-chrome-pearl-eye.png');
 
 type RecommendedFilterSeed = Omit<
   RecommendedMakeupFilter,

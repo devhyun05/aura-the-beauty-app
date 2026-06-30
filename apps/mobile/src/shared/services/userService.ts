@@ -3,6 +3,7 @@ import type {ImageSourcePropType} from 'react-native';
 
 import {beautyProfileMock, profileEditFieldsMock, userProfileMock} from '../mocks/user.mock';
 import type {BeautyProfile, ProfileEditField, UserProfile} from '../types/profile';
+import {getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
 const USER_PROFILE_STORAGE_KEY = 'aura.user.profile.v1';
 const HIDDEN_PROFILE_EDIT_FIELD_IDS = new Set(['phone', 'interest']);
@@ -11,8 +12,97 @@ type StoredUserProfile = Omit<UserProfile, 'avatarSource'> & {
   avatarUri?: string | null;
 };
 
+type BackendMediaAsset = {
+  cdnUrl?: string | null;
+  id?: string | null;
+};
+
+type BackendUser = {
+  avatarMedia?: BackendMediaAsset | null;
+  avatarMediaId?: string | null;
+  avatarUrl?: string | null;
+  avatar_media?: BackendMediaAsset | null;
+  avatar_media_id?: string | null;
+  avatar_url?: string | null;
+  birthDate?: string | null;
+  birth_date?: string | null;
+  email?: string | null;
+  gender?: string | null;
+  id?: string | null;
+  interest?: string | null;
+  name?: string | null;
+  nickname?: string | null;
+  phone?: string | null;
+};
+
+type BackendUserResponse = {
+  user?: BackendUser | null;
+};
+
 let currentUserProfile: UserProfile = userProfileMock;
 let currentBeautyProfile: BeautyProfile = beautyProfileMock;
+
+function mapBackendGenderToProfile(gender: string | null | undefined): string | undefined {
+  switch (gender) {
+    case 'female':
+      return '여성';
+    case 'male':
+      return '남성';
+    case 'other':
+    case 'unknown':
+      return '선택 안 함';
+    default:
+      return gender ?? undefined;
+  }
+}
+
+function mapProfileGenderToBackend(gender: string | null | undefined): string | null {
+  switch (gender) {
+    case '여성':
+      return 'female';
+    case '남성':
+      return 'male';
+    case '선택 안 함':
+      return 'unknown';
+    default:
+      return gender?.trim() || null;
+  }
+}
+
+function mapBackendUserToProfile(
+  backendUser: BackendUser,
+  fallbackProfile: UserProfile,
+): UserProfile {
+  const avatarMedia = backendUser.avatarMedia ?? backendUser.avatar_media;
+  const avatarUri =
+    backendUser.avatarUrl ??
+    backendUser.avatar_url ??
+    avatarMedia?.cdnUrl ??
+    null;
+  const avatarMediaId =
+    backendUser.avatarMediaId ??
+    backendUser.avatar_media_id ??
+    avatarMedia?.id ??
+    fallbackProfile.avatarMediaId ??
+    null;
+
+  return {
+    ...fallbackProfile,
+    avatarMediaId,
+    avatarSource: avatarUri ? {uri: avatarUri} : fallbackProfile.avatarSource,
+    birthDate:
+      backendUser.birthDate ??
+      backendUser.birth_date ??
+      fallbackProfile.birthDate,
+    email: backendUser.email ?? fallbackProfile.email,
+    gender: mapBackendGenderToProfile(backendUser.gender) ?? fallbackProfile.gender,
+    id: backendUser.id ?? fallbackProfile.id,
+    interest: backendUser.interest ?? fallbackProfile.interest,
+    name: backendUser.name ?? fallbackProfile.name,
+    nickname: backendUser.nickname ?? fallbackProfile.nickname,
+    phone: backendUser.phone ?? fallbackProfile.phone,
+  };
+}
 
 function getProfileFieldValue(profile: UserProfile, fieldId: string) {
   switch (fieldId) {
@@ -100,11 +190,68 @@ async function writeStoredUserProfile(profile: UserProfile): Promise<void> {
   );
 }
 
+async function fetchBackendUserProfile(
+  fallbackProfile: UserProfile,
+): Promise<UserProfile | null> {
+  if (!getBackendApiBaseUrl()) {
+    return null;
+  }
+
+  const {user} = await requestBackendJson<BackendUserResponse>('/users/me');
+
+  return user ? mapBackendUserToProfile(user, fallbackProfile) : null;
+}
+
+async function updateBackendUserProfile(
+  profile: UserProfile,
+): Promise<UserProfile | null> {
+  if (!getBackendApiBaseUrl()) {
+    return null;
+  }
+
+  const body: {
+    avatarMediaId?: string | null;
+    birthDate: string | null;
+    gender: string | null;
+    interest: string | null;
+    nickname: string | null;
+    phone: string | null;
+  } = {
+    birthDate: profile.birthDate || null,
+    gender: mapProfileGenderToBackend(profile.gender),
+    interest: profile.interest || null,
+    nickname: profile.nickname || null,
+    phone: profile.phone || null,
+  };
+
+  if (profile.avatarMediaId !== undefined) {
+    body.avatarMediaId = profile.avatarMediaId;
+  }
+
+  const {user} = await requestBackendJson<BackendUserResponse>('/users/me/profile', {
+    body,
+    method: 'PATCH',
+  });
+
+  return user ? mapBackendUserToProfile(user, profile) : null;
+}
+
 export const getUserProfile = async (): Promise<UserProfile> => {
   const storedProfile = await readStoredUserProfile();
 
   if (storedProfile) {
     currentUserProfile = storedProfile;
+  }
+
+  try {
+    const backendProfile = await fetchBackendUserProfile(currentUserProfile);
+
+    if (backendProfile) {
+      currentUserProfile = backendProfile;
+      await writeStoredUserProfile(currentUserProfile);
+    }
+  } catch {
+    // Keep the locally cached profile usable when backend auth/network is unavailable.
   }
 
   return currentUserProfile;
@@ -113,10 +260,13 @@ export const getUserProfile = async (): Promise<UserProfile> => {
 export const updateUserProfile = async (
   profile: UserProfile,
 ): Promise<UserProfile> => {
-  currentUserProfile = {
+  const nextProfile = {
     ...profile,
     avatarSource: profile.avatarSource ?? currentUserProfile.avatarSource,
   };
+  const backendProfile = await updateBackendUserProfile(nextProfile);
+
+  currentUserProfile = backendProfile ?? nextProfile;
   await writeStoredUserProfile(currentUserProfile);
 
   return currentUserProfile;
