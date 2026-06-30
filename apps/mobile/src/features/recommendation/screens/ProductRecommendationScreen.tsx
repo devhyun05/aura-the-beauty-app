@@ -1,8 +1,10 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   type GestureResponderEvent,
   Image,
   Linking,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +15,6 @@ import {
   ExternalLink,
   Heart,
   Menu,
-  Plus,
 } from 'lucide-react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Text, View, XStack, YStack} from 'tamagui';
@@ -32,7 +33,6 @@ import type {
   ProductRecommendationData,
   RecommendedProduct,
   ProductRecommendationLook,
-  ProductRecommendationSet,
   ProductRecommendationTab,
 } from '../types';
 
@@ -124,16 +124,31 @@ type ProductRecommendationScreenProps = {
 export function ProductRecommendationScreen({
   sourceReportId,
 }: ProductRecommendationScreenProps = {}) {
-  const {width} = useWindowDimensions();
+  const {height, width} = useWindowDimensions();
+  const productScrollRef = useRef<ScrollView | null>(null);
   const [data, setData] = useState<ProductRecommendationData | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
   const [sortOption, setSortOption] = useState<ProductSortOption>('matchDesc');
   const [currentPage, setCurrentPage] = useState(1);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const isVeryCompactHeight = height < 700;
+  const isCompactHeight = height < 780;
   const contentWidth = width - spacing.screenX * 2;
-  const cardGap = spacing.md;
+  const cardGap = width < 380 ? spacing.sm : spacing.md;
   const cardWidth = Math.floor((contentWidth - cardGap) / 2);
+  const lookImageSize = isVeryCompactHeight ? 54 : isCompactHeight ? 62 : 70;
+  const sectionGap = isVeryCompactHeight ? spacing.xs : spacing.sm;
+  const productRowGap = isVeryCompactHeight ? spacing.xs : spacing.sm;
+  const minCardHeight = isVeryCompactHeight ? 164 : isCompactHeight ? 178 : 192;
+  const maxCardHeight = isVeryCompactHeight ? 176 : isCompactHeight ? 194 : 212;
+  const availableProductHeight = Math.max(328, height - lookImageSize - 156);
+  const cardHeight = Math.max(
+    minCardHeight,
+    Math.min(maxCardHeight, Math.floor((availableProductHeight - productRowGap) / 2)),
+  );
+  const productImageHeight = Math.floor(cardHeight * 0.56);
+  const productCarouselHeight = cardHeight * 2 + productRowGap;
   const sortLabel =
     productSortOptions.find((option) => option.id === sortOption)?.label ??
     productSortOptions[0].label;
@@ -183,17 +198,23 @@ export function ProductRecommendationScreen({
     });
   }, [activeCategory, data, sortOption]);
 
-  const totalProductPages = Math.max(1, Math.ceil(products.length / PRODUCT_PAGE_SIZE));
+  const productPages = useMemo(() => {
+    const pages: RecommendedProduct[][] = [];
+
+    for (let index = 0; index < products.length; index += PRODUCT_PAGE_SIZE) {
+      pages.push(products.slice(index, index + PRODUCT_PAGE_SIZE));
+    }
+
+    return pages;
+  }, [products]);
+  const totalProductPages = Math.max(1, productPages.length);
   const currentProductPage = Math.min(currentPage, totalProductPages);
-  const pagedProducts = products.slice(
-    (currentProductPage - 1) * PRODUCT_PAGE_SIZE,
-    currentProductPage * PRODUCT_PAGE_SIZE,
-  );
 
   useEffect(() => {
     setCurrentPage(1);
     setIsSortMenuOpen(false);
-  }, [activeCategory, sortOption]);
+    productScrollRef.current?.scrollTo({animated: false, x: 0, y: 0});
+  }, [activeCategory, contentWidth, sortOption]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalProductPages));
@@ -210,8 +231,26 @@ export function ProductRecommendationScreen({
   const handleSelectSortOption = useCallback((option: ProductSortOption) => {
     setSortOption(option);
     setIsSortMenuOpen(false);
-    setCurrentPage(1);
   }, []);
+
+  const handleProductMomentumEnd = useCallback((
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const nextPage = Math.round(event.nativeEvent.contentOffset.x / contentWidth) + 1;
+
+    setCurrentPage(Math.min(totalProductPages, Math.max(1, nextPage)));
+  }, [contentWidth, totalProductPages]);
+
+  const handleSelectProductPage = useCallback((page: number) => {
+    const nextPage = Math.min(totalProductPages, Math.max(1, page));
+
+    setCurrentPage(nextPage);
+    productScrollRef.current?.scrollTo({
+      animated: true,
+      x: (nextPage - 1) * contentWidth,
+      y: 0,
+    });
+  }, [contentWidth, totalProductPages]);
 
   const handleToggleLike = useCallback(async (product: RecommendedProduct) => {
     const wasLiked = likedProductIds.has(product.id);
@@ -249,18 +288,20 @@ export function ProductRecommendationScreen({
   }
 
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="none">
-      <LookSummaryCard makeupLook={data.makeupLook} />
+    <AppScreen
+      bottomPadding={spacing.sm}
+      contentGap={sectionGap}
+      scroll={false}
+      topPadding="none">
+      <LookSummaryCard imageSize={lookImageSize} makeupLook={data.makeupLook} />
 
-      <CategoryTabs
-        activeCategory={activeCategory}
-        onChangeCategory={handleChangeCategory}
-        tabs={data.tabs}
-      />
-
-      <View style={styles.productSection}>
-        <View style={styles.productHeader}>
-          <View style={styles.productHeaderSpacer} />
+      <View style={[styles.productSection, {gap: sectionGap}]}>
+        <View style={styles.productControls}>
+          <CategoryTabs
+            activeCategory={activeCategory}
+            onChangeCategory={handleChangeCategory}
+            tabs={data.tabs}
+          />
           <View style={styles.sortMenuWrap}>
             <Pressable
               accessibilityLabel={`${sortLabel} 정렬 메뉴 열기`}
@@ -269,7 +310,7 @@ export function ProductRecommendationScreen({
               onPress={handleToggleSortMenu}
               style={styles.sortButton}>
               <Menu color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
-              <Text style={styles.sortText}>{sortLabel}</Text>
+              <Text numberOfLines={1} style={styles.sortText}>{sortLabel}</Text>
             </Pressable>
 
             {isSortMenuOpen ? (
@@ -283,7 +324,9 @@ export function ProductRecommendationScreen({
                       accessibilityRole="menuitem"
                       accessibilityState={{selected: isSelected}}
                       key={option.id}
-                      onPress={() => handleSelectSortOption(option.id)}
+                      onPress={() => {
+                        handleSelectSortOption(option.id);
+                      }}
                       style={isSelected ? styles.sortMenuItemActive : styles.sortMenuItem}>
                       <Text
                         style={
@@ -303,25 +346,41 @@ export function ProductRecommendationScreen({
 
         {products.length > 0 ? (
           <>
-            <View style={[styles.productGrid, {columnGap: cardGap, rowGap: spacing.lg}]}>
-              {pagedProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  isLiked={likedProductIds.has(product.id)}
-                  onToggleLike={handleToggleLike}
-                  product={product}
-                  width={cardWidth}
-                />
+            <ScrollView
+              bounces={false}
+              horizontal
+              onMomentumScrollEnd={handleProductMomentumEnd}
+              pagingEnabled
+              ref={productScrollRef}
+              scrollEventThrottle={16}
+              showsHorizontalScrollIndicator={false}
+              style={[styles.productCarousel, {height: productCarouselHeight}]}>
+              {productPages.map((productPage, pageIndex) => (
+                <View
+                  key={`products-page-${pageIndex}`}
+                  style={[styles.productPage, {width: contentWidth}]}>
+                  <View style={[styles.productGrid, {columnGap: cardGap, rowGap: productRowGap}]}>
+                    {productPage.map((product) => (
+                      <ProductCard
+                        height={cardHeight}
+                        imageHeight={productImageHeight}
+                        key={product.id}
+                        isLiked={likedProductIds.has(product.id)}
+                        onToggleLike={handleToggleLike}
+                        product={product}
+                        width={cardWidth}
+                      />
+                    ))}
+                  </View>
+                </View>
               ))}
-            </View>
+            </ScrollView>
 
-            {totalProductPages > 1 ? (
-              <ProductPagination
-                currentPage={currentProductPage}
-                onChangePage={setCurrentPage}
-                totalPages={totalProductPages}
-              />
-            ) : null}
+            <ProductPageDots
+              currentPage={currentProductPage}
+              onSelectPage={handleSelectProductPage}
+              totalPages={totalProductPages}
+            />
           </>
         ) : (
           <View style={styles.emptyProductState}>
@@ -340,34 +399,20 @@ export function ProductRecommendationScreen({
           </View>
         )}
       </View>
-
-      <YStack style={styles.setSection}>
-        <View style={styles.productTitleGroup}>
-          <Text style={styles.sectionTitle}>
-            {getRecommendationSetSectionTitle(data.userNickname)}
-          </Text>
-        </View>
-
-        {data.sets.map((set) => (
-          <RecommendationSetCard
-            key={set.id}
-            products={data.products}
-            recommendationSet={set}
-          />
-        ))}
-      </YStack>
-
-      <Pressable accessibilityRole="button" style={styles.ctaButton}>
-        <Text style={styles.ctaText}>추천 조합 담기</Text>
-      </Pressable>
     </AppScreen>
   );
 }
 
-function LookSummaryCard({makeupLook}: {makeupLook: ProductRecommendationLook}) {
+function LookSummaryCard({
+  imageSize,
+  makeupLook,
+}: {
+  imageSize: number;
+  makeupLook: ProductRecommendationLook;
+}) {
   return (
     <View style={styles.makeupLookCard}>
-      <View style={styles.makeupLookImageFrame}>
+      <View style={[styles.makeupLookImageFrame, {height: imageSize, width: imageSize}]}>
         <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
         <View style={styles.makeupLookCheck}>
           <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
@@ -376,17 +421,19 @@ function LookSummaryCard({makeupLook}: {makeupLook: ProductRecommendationLook}) 
 
       <YStack style={styles.makeupLookCopy}>
         <Text style={styles.makeupLookCaption}>저장한 메이크업 룩</Text>
-        <Text style={styles.makeupLookTitle}>{makeupLook.title}</Text>
+        <Text numberOfLines={1} style={styles.makeupLookTitle}>{makeupLook.title}</Text>
 
         <XStack style={styles.makeupLookTags}>
-          {makeupLook.tags.slice(0, 3).map((tag) => (
+          {makeupLook.tags.slice(0, 2).map((tag) => (
             <View key={tag} style={styles.tagPill}>
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ))}
         </XStack>
 
-        <Text style={styles.makeupLookDescription}>{makeupLook.description}</Text>
+        <Text numberOfLines={1} style={styles.makeupLookDescription}>
+          {makeupLook.description}
+        </Text>
 
         <XStack style={styles.paletteRow}>
           {makeupLook.palette.map((color) => (
@@ -411,7 +458,8 @@ function CategoryTabs({
     <ScrollView
       contentContainerStyle={styles.tabList}
       horizontal
-      showsHorizontalScrollIndicator={false}>
+      showsHorizontalScrollIndicator={false}
+      style={styles.tabScroller}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeCategory;
 
@@ -432,93 +480,48 @@ function CategoryTabs({
   );
 }
 
-function ProductPagination({
+function ProductPageDots({
   currentPage,
-  onChangePage,
+  onSelectPage,
   totalPages,
 }: {
   currentPage: number;
-  onChangePage: (page: number) => void;
+  onSelectPage: (page: number) => void;
   totalPages: number;
 }) {
   const pages = Array.from({length: totalPages}, (_, index) => index + 1);
-  const goToPreviousPage = () => onChangePage(Math.max(1, currentPage - 1));
-  const goToNextPage = () => onChangePage(Math.min(totalPages, currentPage + 1));
 
   return (
-    <View style={styles.pagination}>
-      <Pressable
-        accessibilityLabel="이전 추천 제품 페이지"
-        accessibilityRole="button"
-        accessibilityState={{disabled: currentPage === 1}}
-        disabled={currentPage === 1}
-        onPress={goToPreviousPage}
-        style={[
-          styles.paginationButton,
-          currentPage === 1 && styles.paginationButtonDisabled,
-        ]}>
-        <Text
-          style={[
-            styles.paginationButtonText,
-            currentPage === 1 && styles.paginationButtonTextDisabled,
-          ]}>
-          이전
-        </Text>
-      </Pressable>
-
+    <View style={styles.productPageDots}>
       {pages.map((page) => {
         const isActive = page === currentPage;
 
         return (
           <Pressable
-            accessibilityLabel={`${page}페이지 추천 제품 보기`}
+            accessibilityLabel={`${page}번째 추천 제품 페이지 보기`}
             accessibilityRole="button"
             accessibilityState={{selected: isActive}}
+            hitSlop={8}
             key={page}
-            onPress={() => onChangePage(page)}
-            style={[
-              styles.paginationButton,
-              isActive && styles.paginationButtonActive,
-            ]}>
-            <Text
-              style={[
-                styles.paginationButtonText,
-                isActive && styles.paginationButtonTextActive,
-              ]}>
-              {page}
-            </Text>
-          </Pressable>
+            onPress={() => onSelectPage(page)}
+            style={isActive ? styles.productPageDotActive : styles.productPageDot}
+          />
         );
       })}
-
-      <Pressable
-        accessibilityLabel="다음 추천 제품 페이지"
-        accessibilityRole="button"
-        accessibilityState={{disabled: currentPage === totalPages}}
-        disabled={currentPage === totalPages}
-        onPress={goToNextPage}
-        style={[
-          styles.paginationButton,
-          currentPage === totalPages && styles.paginationButtonDisabled,
-        ]}>
-        <Text
-          style={[
-            styles.paginationButtonText,
-            currentPage === totalPages && styles.paginationButtonTextDisabled,
-          ]}>
-          다음
-        </Text>
-      </Pressable>
     </View>
   );
 }
 
 function ProductCard({
+  height,
+  imageHeight,
   isLiked,
   onToggleLike,
   product,
   width,
 }: {
+  height: number;
+  imageHeight: number;
   isLiked: boolean;
   onToggleLike: (product: RecommendedProduct) => void;
   product: RecommendedProduct;
@@ -538,8 +541,8 @@ function ProductCard({
       onPress={() => {
         void openProductPurchaseUrl(product);
       }}
-      style={({pressed}) => [styles.productCard, {width}, pressed && styles.pressed]}>
-      <View style={styles.productImageFrame}>
+      style={({pressed}) => [styles.productCard, {height, width}, pressed && styles.pressed]}>
+      <View style={[styles.productImageFrame, {height: imageHeight}]}>
         <Image resizeMode="contain" source={product.imageSource} style={styles.productImage} />
         <View style={styles.matchBadge}>
           <Text style={styles.matchText}>{product.matchRate}% 매치</Text>
@@ -563,7 +566,7 @@ function ProductCard({
         <Text numberOfLines={1} style={styles.brandName}>
           {product.brandName}
         </Text>
-        <Text numberOfLines={2} style={styles.productName}>
+        <Text numberOfLines={1} style={styles.productName}>
           {productDisplayName}
         </Text>
         <XStack style={styles.productPurchaseRow}>
@@ -578,94 +581,7 @@ function ProductCard({
             <View key={color} style={[styles.productSwatch, {backgroundColor: color}]} />
           ))}
         </XStack>
-
-        <XStack style={styles.productTagRow}>
-          {product.tags.slice(0, 3).map((tag) => (
-            <View key={tag} style={styles.productTag}>
-              <Text numberOfLines={1} style={styles.productTagText}>
-                {tag}
-              </Text>
-            </View>
-          ))}
-        </XStack>
-
-        <Text numberOfLines={3} style={styles.productReason}>
-          {product.reason}
-        </Text>
       </YStack>
-    </Pressable>
-  );
-}
-
-function RecommendationSetCard({
-  products,
-  recommendationSet,
-}: {
-  products: RecommendedProduct[];
-  recommendationSet: ProductRecommendationSet;
-}) {
-  const setProducts = recommendationSet.productIds
-    .map((productId) => products.find((product) => product.id === productId))
-    .filter((product): product is RecommendedProduct => Boolean(product));
-
-  return (
-    <View style={styles.setBlock}>
-      <View style={styles.setHeader}>
-        <YStack style={styles.setTitleGroup}>
-          <Text style={styles.setTitle}>{recommendationSet.title}</Text>
-        </YStack>
-        <View style={styles.setBadge}>
-          <Text style={styles.setBadgeText}>BEST</Text>
-        </View>
-      </View>
-
-      <Text numberOfLines={2} style={styles.setDescription}>
-        {recommendationSet.description}
-      </Text>
-
-      <ScrollView
-        contentContainerStyle={styles.setProducts}
-        horizontal
-        showsHorizontalScrollIndicator={false}>
-        {setProducts.map((product) => (
-          <MiniProductCard key={product.id} product={product} />
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-function MiniProductCard({product}: {product: RecommendedProduct}) {
-  const productDisplayName = getProductDisplayName(product);
-
-  return (
-    <Pressable
-      accessibilityLabel={`${product.brandName} ${productDisplayName} 조합에 담기`}
-      accessibilityRole="button"
-      onPress={() => {
-        void openProductPurchaseUrl(product);
-      }}
-      style={({pressed}) => [styles.miniCard, pressed && styles.pressed]}>
-      <View style={styles.miniImageFrame}>
-        <Image resizeMode="contain" source={product.imageSource} style={styles.miniImage} />
-      </View>
-      <View style={styles.miniCopy}>
-        <Text numberOfLines={1} style={styles.miniBrand}>
-          {product.brandName}
-        </Text>
-        <Text numberOfLines={2} style={styles.miniName}>
-          {productDisplayName}
-        </Text>
-        <XStack style={styles.miniPurchaseRow}>
-          <Text style={styles.miniPrice}>{formatPrice(product.price)}</Text>
-          {product.purchaseUrl ? (
-            <ExternalLink color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
-          ) : null}
-        </XStack>
-      </View>
-      <View style={styles.plusButton}>
-        <Plus color={colors.white} size={iconSize.xs} strokeWidth={2.3} />
-      </View>
     </Pressable>
   );
 }
@@ -681,21 +597,8 @@ const styles = StyleSheet.create({
   brandName: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  ctaButton: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.md,
-    justifyContent: 'center',
-    minHeight: 54,
-  },
-  ctaText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
+    fontSize: 10,
+    lineHeight: 12,
   },
   heartButton: {
     alignItems: 'center',
@@ -703,12 +606,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 34,
+    height: 30,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    width: 34,
+    right: spacing.xs,
+    top: spacing.xs,
+    width: 30,
   },
   heartButtonLiked: {
     alignItems: 'center',
@@ -716,12 +619,12 @@ const styles = StyleSheet.create({
     borderColor: colors.textPrimary,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 34,
+    height: 30,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    width: 34,
+    right: spacing.xs,
+    top: spacing.xs,
+    width: 30,
   },
   emptyProductState: {
     alignItems: 'center',
@@ -760,11 +663,11 @@ const styles = StyleSheet.create({
   makeupLookCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: spacing.sm,
+    padding: spacing.sm,
     ...sharedCardShadow,
   },
   makeupLookCheck: {
@@ -782,7 +685,7 @@ const styles = StyleSheet.create({
   },
   makeupLookCopy: {
     flex: 1,
-    gap: spacing.sm,
+    gap: 4,
     minWidth: 0,
   },
   makeupLookDescription: {
@@ -796,30 +699,30 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   makeupLookImageFrame: {
-    borderRadius: radius.md,
-    height: 126,
+    borderRadius: radius.sm,
+    height: 74,
     overflow: 'hidden',
     position: 'relative',
-    width: 104,
+    width: 74,
   },
   makeupLookTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: 4,
   },
   makeupLookTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
   },
   matchBadge: {
     backgroundColor: colors.textPrimary,
     borderRadius: radius.pill,
-    bottom: spacing.sm,
-    left: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    bottom: spacing.xs,
+    left: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
     position: 'absolute',
   },
   matchText: {
@@ -827,59 +730,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  miniCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 94,
-    padding: spacing.sm,
-    position: 'relative',
-    width: 232,
-  },
-  miniBrand: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  miniCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-    paddingRight: spacing.md,
-  },
-  miniImage: {
-    height: '100%',
-    width: '100%',
-  },
-  miniImageFrame: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.sm,
-    height: 70,
-    overflow: 'hidden',
-    width: 70,
-  },
-  miniName: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  miniPrice: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  miniPurchaseRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
   },
   paletteRow: {
     flexDirection: 'row',
@@ -892,94 +742,48 @@ const styles = StyleSheet.create({
     height: 28,
     width: 42,
   },
-  pagination: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    justifyContent: 'center',
-    paddingTop: spacing.sm,
-  },
-  paginationButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 38,
-    paddingHorizontal: spacing.md,
-  },
-  paginationButtonActive: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
-  },
-  paginationButtonDisabled: {
-    opacity: 0.38,
-  },
-  paginationButtonText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  paginationButtonTextActive: {
-    color: colors.white,
-  },
-  paginationButtonTextDisabled: {
-    color: colors.textSecondary,
-  },
-  plusButton: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    bottom: spacing.xs,
-    height: 28,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: spacing.sm,
-    width: 28,
-  },
   pressed: {
     opacity: 0.78,
   },
   productCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: spacing.sm,
+    gap: 4,
+    height: 196,
     minWidth: 0,
     overflow: 'hidden',
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xs,
     ...sharedCardShadow,
   },
+  productCarousel: {
+    flexGrow: 0,
+  },
   productCopy: {
+    flex: 1,
+    gap: 2,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm,
+  },
+  productControls: {
+    alignItems: 'stretch',
     gap: spacing.xs,
-    paddingHorizontal: spacing.md,
+    zIndex: 2,
   },
   productGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  productHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    zIndex: 1,
-  },
-  productHeaderSpacer: {
-    flex: 1,
-    minWidth: 0,
   },
   productImage: {
     height: '100%',
     width: '100%',
   },
   productImageFrame: {
-    aspectRatio: 1,
     backgroundColor: colors.surfaceMuted,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    height: 104,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
@@ -987,24 +791,42 @@ const styles = StyleSheet.create({
   productName: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
+    fontSize: 12,
+    lineHeight: 15,
   },
   productPalette: {
     flexDirection: 'row',
+    gap: 4,
+  },
+  productPage: {
+    paddingRight: 0,
+  },
+  productPageDot: {
+    backgroundColor: colors.border,
+    borderRadius: radius.pill,
+    height: 7,
+    width: 7,
+  },
+  productPageDotActive: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: 7,
+    width: 22,
+  },
+  productPageDots: {
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: spacing.xs,
+    justifyContent: 'center',
+    marginTop: 'auto',
+    minHeight: 22,
+    paddingTop: 2,
   },
   productPrice: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  productReason: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    fontSize: 11,
+    lineHeight: 13,
   },
   productPurchaseRow: {
     alignItems: 'center',
@@ -1012,39 +834,17 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   productSection: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-    paddingTop: spacing.sm,
+    flex: 1,
+    gap: spacing.sm,
+    paddingBottom: 0,
+    paddingTop: 0,
   },
   productSwatch: {
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 14,
-    width: 22,
-  },
-  productTag: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.pill,
-    maxWidth: '100%',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  productTagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  productTagText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  productTitleGroup: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
+    height: 10,
+    width: 18,
   },
   retryButton: {
     alignItems: 'center',
@@ -1061,58 +861,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  sectionTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-  },
-  setBadge: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  setBadgeText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  setHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
-  setBlock: {
-    gap: spacing.sm,
-  },
-  setDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.sm,
-    marginTop: -spacing.xs,
-  },
-  setProducts: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-  },
-  setSection: {
-    gap: spacing.md,
-  },
-  setTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
-  },
-  setTitleGroup: {
-    flex: 1,
-    gap: spacing.xs,
-  },
   sortButton: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -1120,10 +868,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: 4,
+    height: 36,
     justifyContent: 'center',
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
+    maxWidth: 128,
+    paddingHorizontal: spacing.sm,
   },
   sortMenu: {
     backgroundColor: colors.surface,
@@ -1132,6 +881,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minWidth: 160,
     overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 42,
+    zIndex: 3,
     ...sharedCardShadow,
   },
   sortMenuItem: {
@@ -1158,16 +911,22 @@ const styles = StyleSheet.create({
   sortMenuWrap: {
     alignItems: 'flex-end',
     gap: spacing.xs,
+    position: 'relative',
   },
   sortText: {
     color: colors.textSecondary,
+    flexShrink: 1,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
+    maxWidth: 92,
+  },
+  tabScroller: {
+    width: '100%',
   },
   tabButton: {
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
     minWidth: 58,
   },
   tabIndicator: {
@@ -1183,8 +942,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   tabList: {
-    gap: spacing.xl,
-    paddingRight: spacing.lg,
+    gap: spacing.md,
+    paddingRight: spacing.sm,
   },
   tabText: {
     color: colors.textSecondary,
@@ -1203,8 +962,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
   },
   tagText: {
     color: colors.textPrimary,

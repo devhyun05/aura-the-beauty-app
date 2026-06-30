@@ -154,15 +154,19 @@ export function ProfileScreen({
           onPressAction={onPressMakeupLookList}
           title="메이크업 룩"
         />
-        <View style={styles.makeupLookGrid}>
-          {previewMakeupLooks.map((makeupLook) => (
-            <MakeupLookCard
-              key={makeupLook.id}
-              makeupLook={makeupLook}
-              style={makeupLookCardLayout}
-            />
-          ))}
-        </View>
+        {previewMakeupLooks.length > 0 ? (
+          <View style={styles.makeupLookGrid}>
+            {previewMakeupLooks.map((makeupLook) => (
+              <MakeupLookCard
+                key={makeupLook.id}
+                makeupLook={makeupLook}
+                style={makeupLookCardLayout}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptySection label="저장된 메이크업 룩이 없어요." />
+        )}
       </View>
 
       <View style={styles.section}>

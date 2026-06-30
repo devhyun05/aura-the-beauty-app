@@ -12,7 +12,7 @@ export interface UserProfile {
   birthDate: string;
   gender: string;
   interest: string;
-  avatarSource: ImageSourcePropType;
+  avatarSource?: ImageSourcePropType;
 }
 
 export interface BeautyProfile {
