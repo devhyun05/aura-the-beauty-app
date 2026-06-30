@@ -3,10 +3,7 @@ import {StyleSheet} from 'react-native';
 import {Button, Text, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
-import {
-  CAMERA_CAPTURE_BUTTON_METRICS,
-  CameraCaptureButtonSurface,
-} from './CameraCaptureButton';
+import {CameraCaptureButtonSurface} from './CameraCaptureButton';
 import {
   BrushFooterIcon,
   CameraFooterIcon,
@@ -16,13 +13,12 @@ import {
 export type FooterTabKey = 'home' | 'capture' | 'custom';
 
 export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xxl;
-export const APP_FOOTER_BAR_HEIGHT = 46;
-export const APP_FOOTER_TAB_HEIGHT = 36;
+export const APP_FOOTER_BAR_HEIGHT = 64;
+export const APP_FOOTER_TAB_HEIGHT = 52;
 export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
-export const APP_FOOTER_CAPTURE_BUBBLE_SIZE =
-  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize;
+export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = 62;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
-export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.md;
+export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.lg;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
 export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
 export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
@@ -53,16 +49,16 @@ const footerItems: FooterTabItem[] = [
   },
   {
     key: 'capture',
-    label: '촬영',
-    accessibilityLabel: '촬영 화면으로 이동',
+    label: '실시간 AR',
+    accessibilityLabel: '실시간 AR 화면으로 이동',
     icon: color => (
       <CameraFooterIcon color={color} size={APP_FOOTER_CAPTURE_ICON_SIZE} />
     ),
   },
   {
     key: 'custom',
-    label: '추천',
-    accessibilityLabel: '추천 제품 화면으로 이동',
+    label: '메이크업',
+    accessibilityLabel: '메이크업 도구 화면으로 이동',
     icon: color => <BrushFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
 ];
@@ -72,7 +68,7 @@ export function AppFooter({
   bottomInset = 0,
   floating = false,
   onTabPress,
-  showLabels = false,
+  showLabels = true,
 }: AppFooterProps) {
   return (
     <YStack
@@ -193,7 +189,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     justifyContent: 'center',
-    transform: [{translateY: -8}],
+    transform: [{translateY: -12}],
   },
   tabContent: {
     alignItems: 'center',
@@ -203,9 +199,9 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.xs,
   },
 });

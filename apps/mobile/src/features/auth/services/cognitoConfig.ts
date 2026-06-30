@@ -129,7 +129,7 @@ export function getCognitoAuthConfig(): CognitoAuthConfig {
       kakao: normalizeOptional(env.kakaoIdp) ?? 'Kakao',
       naver: normalizeOptional(env.naverIdp) ?? 'Naver',
     },
-    prompt: normalizeOptional(env.prompt) ?? 'select_account',
+    prompt: normalizeOptional(env.prompt),
     redirectUri: resolveRedirectUri(),
     scopes: resolveScopes(),
   };

@@ -40,6 +40,7 @@ export const mainTabLinkingScreens = {
 
 export const rootStackLinkingScreens = {
   Login: 'login',
+  ProfileSetup: 'profile-setup',
   Tutorial: 'tutorial',
   MainTabs: {
     path: 'tabs',
@@ -53,6 +54,9 @@ export const rootStackLinkingScreens = {
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
   SavedMakeupList: 'saved-makeup-list',
+  ProductRecommendation: 'product-recommendation',
+  Community: 'community',
+  Consulting: 'consulting',
   MakeupLookList: 'makeup-look-list',
   LikedProductList: 'liked-product-list',
   ARFilter: 'ar-filter',

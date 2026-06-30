@@ -1,5 +1,6 @@
 import React from 'react';
 
+import {MakeupToolsScreen} from '../../../features/home';
 import {
   LikedProductListScreen,
   MakeupLookListScreen,
@@ -13,16 +14,34 @@ import {
   MainTabChrome,
   navigateMainTab,
   type MainTabScreenProps,
+  type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
 
 export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>) {
+  const rootNavigation = navigation.getParent<RootNavigation>();
+
+  return (
+    <MainTabChrome navigation={navigation} routeName="CustomTab" wrapContentInScreen={false}>
+      <MakeupToolsScreen
+        onPressAlbumPick={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
+        onPressCameraCapture={() => rootNavigation?.navigate('MakeupFeedbackCapture')}
+      />
+    </MainTabChrome>
+  );
+}
+
+export function ProductRecommendationRouteScreen({
+  navigation,
+}: RootScreenProps<'ProductRecommendation'>) {
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
 
   return (
-    <MainTabChrome navigation={navigation} routeName="CustomTab">
+    <DetailRouteChrome
+      routeName="ProductRecommendation"
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationScreen sourceReportId={selectedFaceAnalysisReport?.id} />
-    </MainTabChrome>
+    </DetailRouteChrome>
   );
 }
 

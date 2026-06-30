@@ -2,7 +2,7 @@ import {colors} from '../../../shared/theme';
 
 export const FACE_CAPTURE_READY_COLOR = colors.guideReady;
 export const FACE_CAPTURE_ERROR_COLOR = colors.danger;
-export const FACE_CAPTURE_ALIGNMENT_MESSAGE = '원형 가이드 위의 점에 얼굴을 맞춰주세요';
+export const FACE_CAPTURE_ALIGNMENT_MESSAGE = '얼굴을 가이드 라인 안에 맞춰주세요';
 
 export type FaceCaptureCheckKey =
   | 'hasSingleFace'
@@ -73,20 +73,24 @@ export type FaceLandmarkValidationFrame = {
 };
 
 type FaceCaptureRule = {
+  blocksCapture?: boolean;
   key: FaceCaptureCheckKey;
   message: string;
 };
 
 const FACE_CAPTURE_RULES: readonly FaceCaptureRule[] = [
   {
+    blocksCapture: true,
     key: 'hasSingleFace',
     message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
   {
+    blocksCapture: true,
     key: 'isFaceShapeDetected',
     message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
   {
+    blocksCapture: true,
     key: 'isFaceCentered',
     message: FACE_CAPTURE_ALIGNMENT_MESSAGE,
   },
@@ -131,7 +135,7 @@ const DEFAULT_GUIDE_BOUNDS: FaceCaptureGuideBounds = {
   width: 0.48,
 };
 
-const MIN_CONFIDENCE = 0.55;
+const MIN_CONFIDENCE = 0.42;
 
 function getLandmark(landmarks: FaceLandmarkMap, key: FaceLandmarkKey): FaceLandmarkPoint | null {
   const point = landmarks[key];
@@ -211,12 +215,45 @@ function isCenteredInGuide(
     return false;
   }
 
-  const allowedXOffset = guide.width * 0.22;
-  const allowedYOffset = guide.height * 0.2;
+  const allowedXOffset = guide.width * 0.34;
+  const allowedYOffset = guide.height * 0.32;
 
   return (
     Math.abs(center.x - guide.centerX) <= allowedXOffset &&
     Math.abs(center.y - guide.centerY) <= allowedYOffset
+  );
+}
+
+function isPointInsideGuideEllipse(
+  point: FaceLandmarkPoint | null,
+  guide: FaceCaptureGuideBounds,
+): boolean {
+  if (!point) {
+    return false;
+  }
+
+  const radiusX = guide.width * 0.5;
+  const radiusY = guide.height * 0.5;
+
+  if (radiusX <= 0 || radiusY <= 0) {
+    return false;
+  }
+
+  const normalizedX = (point.x - guide.centerX) / radiusX;
+  const normalizedY = (point.y - guide.centerY) / radiusY;
+
+  return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
+}
+
+function isFaceAlignedInGuide(
+  center: FaceLandmarkPoint | null,
+  landmarks: FaceLandmarkMap,
+  guide: FaceCaptureGuideBounds,
+): boolean {
+  return (
+    isCenteredInGuide(center, guide) &&
+    isPointInsideGuideEllipse(getLandmark(landmarks, 'forehead'), guide) &&
+    isPointInsideGuideEllipse(getLandmark(landmarks, 'chin'), guide)
   );
 }
 
@@ -237,7 +274,7 @@ function isFacingForward(landmarks: FaceLandmarkMap): boolean {
   const mouthCenterY = (mouthLeft.y + mouthRight.y) / 2;
   const noseOffsetRatio = Math.abs(noseBase.x - eyeCenterX) / eyeDistance;
 
-  return eyeLevelDifference <= 0.045 && noseOffsetRatio <= 0.24 && mouthCenterY > noseBase.y;
+  return eyeLevelDifference <= 0.075 && noseOffsetRatio <= 0.38 && mouthCenterY > noseBase.y;
 }
 
 export function createBlockedFaceCaptureChecks(): FaceCaptureCheckState {
@@ -269,7 +306,7 @@ export function evaluateFaceCaptureChecksFromLandmarks(
 
   return {
     hasSingleFace: detection.faceCount === 1,
-    isFaceCentered: isCenteredInGuide(center, guide),
+    isFaceCentered: isFaceAlignedInGuide(center, landmarks, guide),
     isFaceShapeDetected: hasShapeLandmarks,
     isFaceUncovered: hasVisibleLandmarks,
     isHairClear:
@@ -283,8 +320,9 @@ export function evaluateFaceCaptureGuidance(
   checks: FaceCaptureCheckState,
 ): FaceCaptureGuidance {
   const failedRules = FACE_CAPTURE_RULES.filter(rule => !checks[rule.key]);
+  const blockingFailedRules = failedRules.filter(rule => rule.blocksCapture);
 
-  if (failedRules.length === 0) {
+  if (blockingFailedRules.length === 0) {
     return {
       status: 'ready',
       isCaptureEnabled: true,
@@ -298,7 +336,7 @@ export function evaluateFaceCaptureGuidance(
     status: 'blocked',
     isCaptureEnabled: false,
     tintColor: FACE_CAPTURE_ERROR_COLOR,
-    message: failedRules[0].message,
+    message: blockingFailedRules[0].message,
     failedChecks: failedRules.map(rule => rule.key),
   };
 }

@@ -22,6 +22,7 @@ type BackendMakeupCard = {
   description?: string | null;
   imageBucket?: string | null;
   imageObjectKey?: string | null;
+  imageStatus?: 'failed' | 'pending' | 'ready' | null;
   imageUrl?: string | null;
   image_url?: string | null;
   objectKey?: string | null;
@@ -39,6 +40,7 @@ type BackendAnalysisResult = {
   faceShape?: string | null;
   makeupGuideline?: BackendMakeupGuideline | null;
   personalColor?: string | null;
+  imageGenerationStatus?: string | null;
   recommendedMakeups?: BackendMakeupCard[] | null;
   recommendedMood?: string | null;
   shortSummary?: string | null;
@@ -49,6 +51,8 @@ type BackendAnalysisResult = {
   timing?: {
     imageGenerationBatchMs?: number | null;
     imageGenerationItems?: {durationMs?: number | null; index?: number | null}[] | null;
+    imageGenerationStatus?: string | null;
+    imageGenerationTotalMs?: number | null;
     sourceImageReadMs?: number | null;
     textAnalysisMs?: number | null;
     totalMs?: number | null;
@@ -63,6 +67,7 @@ type BackendAnalysisJob = {
     result?: BackendAnalysisResult | null;
   } | null;
   environmentLabel?: string | null;
+  errorMessage?: string | null;
   faceShape?: string | null;
   id?: string | null;
   personalColor?: string | null;
@@ -97,6 +102,8 @@ type GetFaceAnalysisReportsOptions = {
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ANALYSIS_REPORT_POLL_INTERVAL_MS = 5000;
+const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 
 function isUuid(value: string | null | undefined): value is string {
   return Boolean(value && uuidPattern.test(value));
@@ -189,41 +196,53 @@ function mergeMakeupGuideline(
   };
 }
 
+function resolveMakeupImageStatus(
+  card: BackendMakeupCard | null | undefined,
+  generatedImageUrl: string | undefined,
+): FaceAnalysisMakeupCard['imageStatus'] {
+  if (generatedImageUrl) {
+    return 'ready';
+  }
+
+  return card?.imageStatus === 'failed' ? 'failed' : 'pending';
+}
+
 function mergeMakeupCards(
   reportId: string,
   aiCards: BackendMakeupCard[] | null | undefined,
   fallbackCards: FaceAnalysisMakeupCard[],
   useFallback: boolean,
 ): FaceAnalysisMakeupCard[] {
-  const aiOnlyCards = Array.isArray(aiCards)
-    ? aiCards.filter(card => Boolean(card && resolveMakeupImageUrl(card)))
+  const normalizedAiCards = Array.isArray(aiCards)
+    ? aiCards.filter((card): card is BackendMakeupCard => Boolean(card))
     : [];
 
-  if (!useFallback && aiOnlyCards.length > 0) {
-    return aiOnlyCards.slice(0, 3).map((aiCard, index) => {
+  if (!useFallback) {
+    return [0, 1, 2].map((index) => {
+      const aiCard = normalizedAiCards[index];
       const fallbackCard = fallbackCards[index] ?? fallbackCards[0];
       const generatedImageUrl = resolveMakeupImageUrl(aiCard);
 
       return {
         ...fallbackCard,
         id: `${reportId}-ai-makeup-${index + 1}`,
-        title: firstText(aiCard.title) ?? `추천 룩 ${index + 1}`,
-        subtitle: firstText(aiCard.subtitle) ?? '맞춤 추천',
-        description: firstText(aiCard.description) ?? 'AI 분석 결과를 바탕으로 생성한 룩이에요.',
-        imageSource: {uri: generatedImageUrl},
-        tags: firstStringArray(aiCard.tags, []),
+        title: firstText(aiCard?.title, fallbackCard.title) ?? fallbackCard.title,
+        subtitle: firstText(aiCard?.subtitle, fallbackCard.subtitle) ?? fallbackCard.subtitle,
+        description:
+          firstText(aiCard?.description, fallbackCard.description) ?? fallbackCard.description,
+        imageSource: generatedImageUrl
+          ? {uri: generatedImageUrl}
+          : fallbackCard.imageSource,
+        imageStatus: resolveMakeupImageStatus(aiCard, generatedImageUrl),
+        tags: firstStringArray(aiCard?.tags, fallbackCard.tags),
       };
     });
-  }
-
-  if (!useFallback) {
-    return [];
   }
 
   const cards = fallbackCards.slice(0, 3);
 
   return cards.map((fallbackCard, index) => {
-    const aiCard = aiCards?.[index];
+    const aiCard = normalizedAiCards[index];
     const generatedImageUrl = resolveMakeupImageUrl(aiCard);
 
     return {
@@ -236,33 +255,142 @@ function mergeMakeupCards(
       imageSource: generatedImageUrl
         ? {uri: generatedImageUrl}
         : fallbackCard.imageSource,
+      imageStatus: generatedImageUrl ? 'ready' : fallbackCard.imageStatus,
       tags: firstStringArray(aiCard?.tags, fallbackCard.tags),
     };
   });
 }
+function getRecommendedMakeupCount(job: BackendAnalysisJob): number {
+  const recommendedMakeups = job.detailPayload?.result?.recommendedMakeups;
 
-function hasGeneratedMakeupImage(card: FaceAnalysisMakeupCard): boolean {
-  const source = card.imageSource as {uri?: unknown};
+  return Array.isArray(recommendedMakeups) ? recommendedMakeups.length : 0;
+}
 
-  return (
-    typeof source?.uri === 'string' &&
-    (source.uri.startsWith('http://') || source.uri.startsWith('https://'))
+function getGeneratedMakeupImageCount(job: BackendAnalysisJob): number {
+  const recommendedMakeups = job.detailPayload?.result?.recommendedMakeups;
+
+  if (!Array.isArray(recommendedMakeups)) {
+    return 0;
+  }
+
+  return recommendedMakeups.filter(card => Boolean(resolveMakeupImageUrl(card))).length;
+}
+
+function getImageGenerationStatus(job: BackendAnalysisJob): string | undefined {
+  return firstText(
+    job.detailPayload?.result?.imageGenerationStatus,
+    job.detailPayload?.result?.timing?.imageGenerationStatus,
   );
 }
 
-function assertCompleteRecommendedMakeups(report: FaceAnalysisReport): void {
-  const generatedCards = report.recommendedMakeups.filter(hasGeneratedMakeupImage);
+function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
+  const result = job.detailPayload?.result;
 
-  if (report.recommendedMakeups.length !== 3 || generatedCards.length !== 3) {
-    throw new BackendApiError(
-      '추천 메이크업 이미지 3개가 아직 생성되지 않았어요.',
-      502,
-      'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
-      {
-        generatedCount: generatedCards.length,
-        receivedCount: report.recommendedMakeups.length,
-      },
+  return Boolean(
+    result &&
+      getRecommendedMakeupCount(job) === 3 &&
+      firstText(
+        result.shortSummary,
+        result.summary,
+        job.shortSummary,
+        job.summary,
+      ),
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function waitForCompleteAnalysisReport(
+  initialJob: BackendAnalysisJob,
+  capture: FaceAnalysisCaptureInput | null | undefined,
+  startedAt: number,
+): Promise<FaceAnalysisReport> {
+  let currentJob = initialJob;
+
+  while (true) {
+    const report = mapBackendJobToFaceAnalysisReport(currentJob, capture);
+    const generatedImageCount = getGeneratedMakeupImageCount(currentJob);
+    const imageGenerationStatus = getImageGenerationStatus(currentJob);
+    const recommendedCount = getRecommendedMakeupCount(currentJob);
+
+    if (hasCompleteBackendReportText(currentJob)) {
+      console.info('[aura:analysis] analysis-report:ready', {
+        durationMs: Date.now() - startedAt,
+        generatedImageCount,
+        imageGenerationStatus,
+        jobId: currentJob.id ?? null,
+        recommendedCount,
+        status: currentJob.status ?? null,
+      });
+
+      return report;
+    }
+
+    if (currentJob.status === 'failed') {
+      throw new BackendApiError(
+        currentJob.errorMessage ?? '\u0041\u0049 \ubd84\uc11d \uc791\uc5c5\uc774 \uc2e4\ud328\ud588\uc5b4\uc694. \ub2e4\uc2dc \ucd2c\uc601\ud574 \uc8fc\uc138\uc694.',
+        502,
+        'ANALYSIS_JOB_FAILED',
+        {jobId: currentJob.id ?? null},
+      );
+    }
+
+    if (currentJob.status === 'completed') {
+      throw new BackendApiError(
+        '분석 보고서 내용을 아직 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        502,
+        'ANALYSIS_REPORT_TEXT_REQUIRED',
+        {
+          generatedImageCount,
+          imageGenerationStatus,
+          jobId: currentJob.id ?? null,
+          recommendedCount,
+        },
+      );
+    }
+
+    if (!currentJob.id) {
+      throw new Error('Analysis job did not return a report id.');
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+
+    if (elapsedMs >= ANALYSIS_REPORT_POLL_TIMEOUT_MS) {
+      throw new BackendApiError(
+        '\ucd94\ucc9c \uba54\uc774\ud06c\uc5c5 \uc774\ubbf8\uc9c0 \uc0dd\uc131\uc774 \uc544\uc9c1 \uc644\ub8cc\ub418\uc9c0 \uc54a\uc558\uc5b4\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574 \uc8fc\uc138\uc694.',
+        504,
+        'ANALYSIS_REPORT_TIMEOUT',
+        {
+          generatedImageCount,
+          imageGenerationStatus,
+          jobId: currentJob.id,
+          recommendedCount,
+          status: currentJob.status ?? null,
+        },
+      );
+    }
+
+    console.info('[aura:analysis] analysis-report:wait-images', {
+      elapsedMs,
+      generatedImageCount,
+      imageGenerationStatus,
+      jobId: currentJob.id,
+      nextPollMs: ANALYSIS_REPORT_POLL_INTERVAL_MS,
+      recommendedCount,
+      status: currentJob.status ?? null,
+    });
+
+    await delay(Math.min(ANALYSIS_REPORT_POLL_INTERVAL_MS, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs));
+
+    const {report: nextJob} = await requestBackendJson<GetAnalysisReportResponse>(
+      '/analysis/reports/' + currentJob.id,
     );
+
+    currentJob = nextJob;
   }
 }
 
@@ -499,10 +627,11 @@ export async function createFaceAnalysisReportFromCapture(
     status: job.status ?? null,
     timing: job.detailPayload?.result?.timing ?? null,
   });
+  console.info('[aura:analysis] analysis-report:poll-start', {
+    durationMs: Date.now() - startedAt,
+    jobId: job.id ?? null,
+    status: job.status ?? null,
+  });
 
-  const report = mapBackendJobToFaceAnalysisReport(job, capture);
-
-  assertCompleteRecommendedMakeups(report);
-
-  return report;
+  return waitForCompleteAnalysisReport(job, capture, startedAt);
 }

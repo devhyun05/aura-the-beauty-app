@@ -41,6 +41,15 @@ type HomeFilterStorePathContract = ExpectType<
 type SavedMakeupListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
 >;
+type ProductRecommendationPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.ProductRecommendation, 'product-recommendation'>
+>;
+type CommunityPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
+>;
+type ConsultingPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.Consulting, 'consulting'>
+>;
 type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.ReferenceMakeupExtractionUpload,
@@ -131,6 +140,21 @@ expectEqual(
   navigationLinking.config?.screens?.SavedMakeupList,
   'saved-makeup-list',
   'saved makeup list path uses saved makeup naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.ProductRecommendation,
+  'product-recommendation',
+  'product recommendation path uses product naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.Community,
+  'community',
+  'community path uses community naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.Consulting,
+  'consulting',
+  'consulting path uses consulting naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,

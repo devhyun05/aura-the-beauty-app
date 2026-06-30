@@ -7,6 +7,7 @@ import {
   PencilIcon,
   IconButton,
   ImagePlaceholder,
+  ProfileHeaderIcon,
 } from '../../../shared/ui';
 import type { BeautyProfile, UserProfile } from '../../../shared/types/profile';
 
@@ -25,10 +26,20 @@ export function ProfileSummaryCard({
     <AppCard style={styles.card}>
       <View style={styles.row}>
         <View style={styles.avatar}>
-          <ImagePlaceholder
-            borderRadius={radius.pill}
-            source={profile.avatarSource}
-          />
+          {profile.avatarSource ? (
+            <ImagePlaceholder
+              borderRadius={radius.pill}
+              source={profile.avatarSource}
+            />
+          ) : (
+            <View style={styles.defaultAvatar}>
+              <ProfileHeaderIcon
+                color={colors.textSecondary}
+                size={44}
+                strokeWidth={1.8}
+              />
+            </View>
+          )}
         </View>
 
         <View style={styles.info}>
@@ -43,10 +54,6 @@ export function ProfileSummaryCard({
               </Text>
             ))}
           </View>
-
-          <Text numberOfLines={1} style={styles.email}>
-            {profile.email}
-          </Text>
         </View>
 
         <IconButton
@@ -74,11 +81,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  email: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.md,
+  defaultAvatar: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    flex: 1,
+    justifyContent: 'center',
   },
   info: {
     flex: 1,

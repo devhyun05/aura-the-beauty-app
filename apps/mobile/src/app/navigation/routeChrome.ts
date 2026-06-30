@@ -12,7 +12,7 @@ export type ScreenCategory =
   | 'auth'
   | 'onboarding'
   | 'main-home'
-  | 'main-recommendation'
+  | 'main-makeup-tools'
   | 'main-profile'
   | 'feature-entry'
   | 'list'
@@ -57,6 +57,12 @@ export type FooterTargetRoute =
 
 export const routeChromeByRoute = {
   Login: {
+    category: 'auth',
+    depth: 'entry',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
+  ProfileSetup: {
     category: 'auth',
     depth: 'entry',
     kind: 'fullscreen',
@@ -128,6 +134,27 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '저장된 메이크업',
+  },
+  ProductRecommendation: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '추천 제품',
+  },
+  Community: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '커뮤니티',
+  },
+  Consulting: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 컨설팅',
   },
   MakeupLookList: {
     category: 'list',
@@ -266,7 +293,7 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
   },
   CustomTab: {
-    category: 'main-recommendation',
+    category: 'main-makeup-tools',
     depth: 'main',
     footerTab: 'custom',
     headerVariant: 'custom',
@@ -276,7 +303,7 @@ export const routeChromeByRoute = {
   ProfileTab: {
     category: 'main-profile',
     depth: 'main',
-    headerVariant: 'default',
+    headerVariant: 'home',
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },

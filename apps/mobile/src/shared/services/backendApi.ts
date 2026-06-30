@@ -1,4 +1,4 @@
-﻿export type ApiEnvelope<T> = {
+export type ApiEnvelope<T> = {
   data?: T | null;
   error?: {
     code?: string;
@@ -9,6 +9,8 @@
 };
 
 type AuthTokenProvider = () => string | null;
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 let authTokenProvider: AuthTokenProvider | null = null;
 
@@ -59,6 +61,7 @@ type BackendJsonRequestInit = Omit<RequestInit, 'body' | 'headers'> & {
   authToken?: string | null;
   body?: unknown;
   headers?: HeadersInit;
+  timeoutMs?: number;
 };
 
 function resolveAuthToken(authToken: string | null | undefined): string | null {
@@ -69,15 +72,35 @@ function resolveAuthToken(authToken: string | null | undefined): string | null {
   return authTokenProvider?.() ?? null;
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export async function requestBackendJson<T>(
   path: string,
   init: BackendJsonRequestInit = {},
 ): Promise<T> {
-  const {authToken, body, headers, ...requestInit} = init;
+  const {
+    authToken,
+    body,
+    headers,
+    signal: externalSignal,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    ...requestInit
+  } = init;
   const resolvedAuthToken = resolveAuthToken(authToken);
   const startedAt = Date.now();
   const method = requestInit.method ?? 'GET';
   const url = buildBackendApiUrl(path);
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+  const handleExternalAbort = () => abortController.abort();
+
+  if (externalSignal?.aborted) {
+    abortController.abort();
+  } else {
+    externalSignal?.addEventListener('abort', handleExternalAbort, {once: true});
+  }
 
   console.info('[aura:api] request:start', {
     hasAuthToken: Boolean(resolvedAuthToken),
@@ -85,16 +108,36 @@ export async function requestBackendJson<T>(
     path,
   });
 
-  const response = await fetch(url, {
-    ...requestInit,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    headers: {
-      Accept: 'application/json',
-      ...(body === undefined ? {} : {'Content-Type': 'application/json'}),
-      ...(resolvedAuthToken ? {Authorization: `Bearer ${resolvedAuthToken}`} : {}),
-      ...headers,
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      ...requestInit,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : {'Content-Type': 'application/json'}),
+        ...(resolvedAuthToken ? {Authorization: `Bearer ${resolvedAuthToken}`} : {}),
+        ...headers,
+      },
+      signal: abortController.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      console.info('[aura:api] request:timeout', {
+        durationMs: Date.now() - startedAt,
+        method,
+        path,
+        timeoutMs,
+      });
+      throw new Error('서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.');
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', handleExternalAbort);
+  }
 
   let envelope: ApiEnvelope<T> | null = null;
 

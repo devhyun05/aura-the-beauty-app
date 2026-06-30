@@ -1,15 +1,19 @@
+import asyncio
 import json
 import logging
 import time
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
+
+
 
 from app.core.errors import AppError
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
-from app.db.session import Database, require_database
+from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.users import ensure_user
@@ -17,6 +21,7 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
+analysis_image_tasks: set[asyncio.Task] = set()
 
 
 def decode_json_object(value: object) -> dict:
@@ -89,6 +94,155 @@ def require_complete_makeup_recommendations(result: dict | None) -> None:
     )
 
 
+
+
+def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> dict:
+  return {"request": payload.request_payload, "result": result}
+
+
+def mark_recommended_makeup_images_failed(result: dict) -> list[dict]:
+  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
+
+  if not isinstance(recommended_makeups, list):
+    return []
+
+  return [
+    {**card, "imageStatus": "failed"}
+    for card in recommended_makeups
+    if isinstance(card, dict)
+  ]
+
+
+async def update_analysis_image_progress(
+  report_id: UUID,
+  payload: AnalysisJobCreate,
+  result: dict,
+) -> None:
+  await database.execute(
+    """
+    update analysis_reports
+    set detail_payload = $2::jsonb
+    where id = $1
+    """,
+    report_id,
+    json.dumps(build_analysis_detail_payload(payload, result)),
+  )
+
+
+async def generate_analysis_images_background(
+  report_id: UUID,
+  payload: AnalysisJobCreate,
+  initial_result: dict,
+  settings: Settings,
+) -> None:
+  service = OpenAIAnalysisService(settings)
+
+  async def on_card_generated(index: int, generated_card: dict, partial_result: dict) -> None:
+    await update_analysis_image_progress(report_id, payload, partial_result)
+    logger.info(
+      "[aura:analysis-api] image-generation:progress reportId=%s index=%s generatedImageCount=%s",
+      report_id,
+      index + 1,
+      count_generated_makeup_images(partial_result),
+    )
+
+  try:
+    result = await service.generate_recommended_makeup_images(
+      payload.request_payload,
+      initial_result,
+      on_card_generated=on_card_generated,
+    )
+  except AppError as exc:
+    logger.warning(
+      "[aura:analysis-api] image-generation:app-error reportId=%s code=%s details=%s",
+      report_id,
+      exc.code,
+      exc.details,
+    )
+    result = {
+      **initial_result,
+      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
+      "imageGenerationStatus": "failed",
+      "imageGenerationErrors": [
+        {"reason": exc.__class__.__name__, "code": exc.code, "message": exc.message}
+      ],
+      "timing": {
+        **(
+          initial_result.get("timing")
+          if isinstance(initial_result.get("timing"), dict)
+          else {}
+        ),
+        "imageGenerationStatus": "failed",
+      },
+    }
+  except Exception as exc:
+    logger.exception(
+      "[aura:analysis-api] image-generation:failed reportId=%s",
+      report_id,
+    )
+    result = {
+      **initial_result,
+      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
+      "imageGenerationStatus": "failed",
+      "imageGenerationErrors": [{"reason": exc.__class__.__name__}],
+      "timing": {
+        **(
+          initial_result.get("timing")
+          if isinstance(initial_result.get("timing"), dict)
+          else {}
+        ),
+        "imageGenerationStatus": "failed",
+      },
+    }
+
+  generated_image_count = count_generated_makeup_images(result)
+
+  await database.execute(
+    """
+    update analysis_reports
+    set status = 'completed',
+        error_message = null,
+        detail_payload = $2::jsonb
+    where id = $1
+    """,
+    report_id,
+    json.dumps(build_analysis_detail_payload(payload, result)),
+  )
+  logger.info(
+    "[aura:analysis-api] image-generation:finalized reportId=%s jobStatus=%s imageStatus=%s generatedImageCount=%s",
+    report_id,
+    "completed",
+    result.get("imageGenerationStatus"),
+    generated_image_count,
+  )
+
+
+def schedule_analysis_images_background(
+  report_id: UUID,
+  payload: AnalysisJobCreate,
+  initial_result: dict,
+  settings: Settings,
+) -> None:
+  task = asyncio.create_task(
+    generate_analysis_images_background(report_id, payload, initial_result, settings),
+  )
+  analysis_image_tasks.add(task)
+
+  def log_unhandled_error(completed_task: asyncio.Task) -> None:
+    analysis_image_tasks.discard(completed_task)
+
+    try:
+      completed_task.result()
+    except Exception:  # noqa: BLE001 - this is the last safety net for detached work.
+      logger.exception(
+        "[aura:analysis-api] image-generation:task-crashed reportId=%s",
+        report_id,
+      )
+
+  task.add_done_callback(log_unhandled_error)
+  logger.info("[aura:analysis-api] image-generation:scheduled reportId=%s", report_id)
+
+
 async def mark_analysis_failed(
   db: Database,
   report_id: UUID,
@@ -115,14 +269,133 @@ async def mark_analysis_failed(
   )
 
 
+async def run_analysis_job_background(
+  report_id: UUID,
+  payload: AnalysisJobCreate,
+  settings: Settings,
+) -> None:
+  started_at = time.monotonic()
+  logger.info(
+    "[aura:analysis-api] background:start reportId=%s",
+    report_id,
+  )
+  await database.execute(
+    "update analysis_reports set status = 'processing' where id = $1",
+    report_id,
+  )
+
+  try:
+    analysis_service = OpenAIAnalysisService(settings)
+    logger.info(
+      "[aura:analysis-api] text:start reportId=%s provider=%s model=%s",
+      report_id,
+      settings.analysis_provider,
+      settings.effective_analysis_model_id,
+    )
+    result = await analysis_service.analyze_text(payload.request_payload)
+    image_generation_status = (
+      "processing"
+      if settings.image_generation_provider_normalized == "openai"
+      else "disabled"
+    )
+    result["imageGenerationStatus"] = image_generation_status
+    result["timing"] = {
+      **(result.get("timing") if isinstance(result.get("timing"), dict) else {}),
+      "imageGenerationStatus": image_generation_status,
+    }
+    logger.info(
+      "[aura:analysis-api] text:success reportId=%s provider=%s model=%s durationMs=%s",
+      report_id,
+      settings.analysis_provider,
+      settings.effective_analysis_model_id,
+      round((time.monotonic() - started_at) * 1000),
+    )
+  except AppError as exc:
+    logger.warning(
+      "[aura:analysis-api] text:app-error reportId=%s code=%s details=%s",
+      report_id,
+      exc.code,
+      exc.details,
+    )
+    await mark_analysis_failed(database, report_id, exc.message, payload, exc.details)
+    return
+  except Exception as exc:
+    message = "AI analysis invocation failed."
+    details = {"reason": exc.__class__.__name__}
+    logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
+    await mark_analysis_failed(database, report_id, message, payload, details)
+    return
+
+  report_status = "completed"
+  report = await database.fetchrow(
+    """
+    update analysis_reports
+    set status = $2::job_status,
+        ai_provider = $3,
+        ai_model = $4,
+        analyzed_at = now(),
+        personal_color = coalesce($5, personal_color),
+        face_shape = coalesce($6, face_shape),
+        skin_type = coalesce($7, skin_type),
+        tone_summary = coalesce($8, tone_summary),
+        recommended_mood = coalesce($9, recommended_mood),
+        summary = coalesce($10, summary),
+        short_summary = coalesce($11, short_summary),
+        skin_analysis_summary = coalesce($12, skin_analysis_summary),
+        base_makeup_guide = coalesce($13, base_makeup_guide),
+        tags = coalesce($14, tags),
+        detail_payload = $15::jsonb
+    where id = $1
+    returning *
+    """,
+    report_id,
+    report_status,
+    settings.analysis_provider,
+    settings.effective_analysis_model_id,
+    result.get("personalColor") if isinstance(result, dict) else None,
+    result.get("faceShape") if isinstance(result, dict) else None,
+    result.get("skinType") if isinstance(result, dict) else None,
+    result.get("toneSummary") if isinstance(result, dict) else None,
+    result.get("recommendedMood") if isinstance(result, dict) else None,
+    result.get("summary") if isinstance(result, dict) else None,
+    result.get("shortSummary") if isinstance(result, dict) else None,
+    result.get("skinAnalysisSummary") if isinstance(result, dict) else None,
+    result.get("baseMakeupGuide") if isinstance(result, dict) else None,
+    result.get("tags") if isinstance(result, dict) else None,
+    json.dumps(build_analysis_detail_payload(payload, result)),
+  )
+
+  if report is None:
+    logger.warning(
+      "[aura:analysis-api] background:missing-report reportId=%s",
+      report_id,
+    )
+    return
+
+  if settings.image_generation_provider_normalized == "openai":
+    schedule_analysis_images_background(
+      report_id,
+      payload,
+      result,
+      settings,
+    )
+    return
+
+  logger.info(
+    "[aura:analysis-api] background:completed reportId=%s durationMs=%s",
+    report_id,
+    round((time.monotonic() - started_at) * 1000),
+  )
+
+
 @router.post("/jobs")
 async def create_analysis_job(
   payload: AnalysisJobCreate,
+  background_tasks: BackgroundTasks,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  started_at = time.monotonic()
   user = await ensure_user(db, auth)
   logger.info(
     "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s",
@@ -156,81 +429,14 @@ async def create_analysis_job(
   )
 
   if payload.run_immediately:
-    await db.execute(
-      "update analysis_reports set status = 'processing' where id = $1",
+    background_tasks.add_task(
+      run_analysis_job_background,
       report["id"],
-    )
-
-    try:
-      logger.info("[aura:analysis-api] openai:start reportId=%s", report["id"])
-      result = await OpenAIAnalysisService(settings).analyze_image(payload.request_payload)
-      require_complete_makeup_recommendations(result)
-      logger.info(
-        "[aura:analysis-api] openai:success reportId=%s generatedImageCount=%s durationMs=%s timing=%s",
-        report["id"],
-        count_generated_makeup_images(result),
-        round((time.monotonic() - started_at) * 1000),
-        result.get("timing") if isinstance(result, dict) else None,
-      )
-    except AppError as exc:
-      logger.warning(
-        "[aura:analysis-api] openai:app-error reportId=%s code=%s details=%s",
-        report["id"],
-        exc.code,
-        exc.details,
-      )
-      await mark_analysis_failed(db, report["id"], exc.message, payload, exc.details)
-      raise
-    except Exception as exc:
-      message = "OpenAI analysis invocation failed."
-      details = {"reason": exc.__class__.__name__}
-      logger.exception("[aura:analysis-api] openai:failed reportId=%s", report["id"])
-      await mark_analysis_failed(db, report["id"], message, payload, details)
-      raise AppError(
-        status_code=502,
-        code="OPENAI_INVOCATION_FAILED",
-        message=message,
-        details=details,
-      ) from exc
-
-    report = await db.fetchrow(
-      """
-      update analysis_reports
-      set status = 'completed',
-          ai_provider = 'openai',
-          ai_model = $2,
-          analyzed_at = now(),
-          personal_color = coalesce($3, personal_color),
-          face_shape = coalesce($4, face_shape),
-          skin_type = coalesce($5, skin_type),
-          tone_summary = coalesce($6, tone_summary),
-          recommended_mood = coalesce($7, recommended_mood),
-          summary = coalesce($8, summary),
-          short_summary = coalesce($9, short_summary),
-          skin_analysis_summary = coalesce($10, skin_analysis_summary),
-          base_makeup_guide = coalesce($11, base_makeup_guide),
-          tags = coalesce($12, tags),
-          detail_payload = $13::jsonb
-      where id = $1
-      returning *
-      """,
-      report["id"],
-      settings.openai_analysis_model_id,
-      result.get("personalColor") if isinstance(result, dict) else None,
-      result.get("faceShape") if isinstance(result, dict) else None,
-      result.get("skinType") if isinstance(result, dict) else None,
-      result.get("toneSummary") if isinstance(result, dict) else None,
-      result.get("recommendedMood") if isinstance(result, dict) else None,
-      result.get("summary") if isinstance(result, dict) else None,
-      result.get("shortSummary") if isinstance(result, dict) else None,
-      result.get("skinAnalysisSummary") if isinstance(result, dict) else None,
-      result.get("baseMakeupGuide") if isinstance(result, dict) else None,
-      result.get("tags") if isinstance(result, dict) else None,
-      json.dumps({"request": payload.request_payload, "result": result}),
+      payload,
+      settings,
     )
 
   return success({"job": normalize_analysis_report_row(report)})
-
 
 @router.get("/jobs/{job_id}")
 async def get_analysis_job(

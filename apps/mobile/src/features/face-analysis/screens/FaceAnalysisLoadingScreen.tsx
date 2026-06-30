@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Image, StyleSheet} from 'react-native';
+import {Image, Pressable, StyleSheet} from 'react-native';
 import {CheckCircle2, Circle} from 'lucide-react-native';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
 import {Text, View, XStack, YStack} from 'tamagui';
@@ -15,11 +15,13 @@ import {
 } from '../services/faceAnalysisLoadingService';
 
 type FaceAnalysisLoadingScreenProps = {
+  analysisErrorMessage?: string | null;
   capturedPhotoUri?: string;
   headerTitle?: string;
   isAnalysisReady?: boolean;
   onBack?: () => void;
   onComplete?: () => void;
+  onRetry?: () => void;
 };
 
 const PROGRESS_TICK_MS = 320;
@@ -33,9 +35,12 @@ export function resolveFaceAnalysisLoadingPreviewSource(capturedPhotoUri?: strin
 }
 
 export function FaceAnalysisLoadingScreen({
+  analysisErrorMessage = null,
   capturedPhotoUri,
   isAnalysisReady = true,
+  onBack,
   onComplete,
+  onRetry,
 }: FaceAnalysisLoadingScreenProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const progressState = useMemo(
@@ -67,6 +72,7 @@ export function FaceAnalysisLoadingScreen({
   const activeStepIndex = faceAnalysisLoadingSteps.findIndex(
     step => step.id === displayedProgressState.activeStep.id,
   );
+  const hasAnalysisError = Boolean(analysisErrorMessage);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -121,7 +127,9 @@ export function FaceAnalysisLoadingScreen({
             <View style={styles.previewDim} />
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.previewBadgeText}>얼굴 진단 중</Text>
+              <Text style={styles.previewBadgeText}>
+                {hasAnalysisError ? '확인 필요' : '얼굴 진단 중'}
+              </Text>
             </XStack>
           </View>
 
@@ -168,10 +176,33 @@ export function FaceAnalysisLoadingScreen({
           </XStack>
         </YStack>
 
-        <YStack style={styles.tipCard}>
-          <Text style={styles.tipLabel}>TIP</Text>
-          <Text style={styles.tipText}>{faceAnalysisLoadingTip}</Text>
-        </YStack>
+        {hasAnalysisError ? (
+          <YStack style={styles.errorCard}>
+            <Text style={styles.errorTitle}>분석을 완료하지 못했어요</Text>
+            <Text style={styles.errorDescription}>{analysisErrorMessage}</Text>
+            <XStack style={styles.errorActionRow}>
+              <Pressable
+                accessibilityLabel="분석 다시 시도"
+                accessibilityRole="button"
+                onPress={onRetry}
+                style={styles.retryButton}>
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="다시 촬영"
+                accessibilityRole="button"
+                onPress={onBack}
+                style={styles.retakeButton}>
+                <Text style={styles.retakeButtonText}>다시 촬영</Text>
+              </Pressable>
+            </XStack>
+          </YStack>
+        ) : (
+          <YStack style={styles.tipCard}>
+            <Text style={styles.tipLabel}>TIP</Text>
+            <Text style={styles.tipText}>{faceAnalysisLoadingTip}</Text>
+          </YStack>
+        )}
       </YStack>
     </AppScreen>
   );
@@ -222,6 +253,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxl,
+  },
+  errorActionRow: {
+    gap: spacing.sm,
+  },
+  errorCard: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  errorDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.regular,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  errorTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
   heroCopy: {
     alignItems: 'center',
@@ -324,6 +382,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xl,
     position: 'absolute',
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  retakeButton: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  retakeButtonText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
   stepList: {
     flex: 1,

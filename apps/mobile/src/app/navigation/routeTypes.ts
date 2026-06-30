@@ -8,6 +8,7 @@ export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 
 export type RootStackParamList = {
   Login: undefined;
+  ProfileSetup: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   FaceCapture: undefined;
@@ -18,6 +19,9 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   SavedMakeupList: undefined;
+  ProductRecommendation: undefined;
+  Community: undefined;
+  Consulting: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter:
@@ -57,6 +61,7 @@ export type RouteName = RootStackRouteName | MainTabRouteName;
 
 export const rootStackRoutes = [
   'Login',
+  'ProfileSetup',
   'Tutorial',
   'MainTabs',
   'FaceCapture',
@@ -67,6 +72,9 @@ export const rootStackRoutes = [
   'ProfileEdit',
   'HomeFilterStore',
   'SavedMakeupList',
+  'ProductRecommendation',
+  'Community',
+  'Consulting',
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',

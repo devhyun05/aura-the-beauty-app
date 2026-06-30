@@ -11,6 +11,7 @@ export type AuthUser = {
   id: string;
   name?: string;
   nickname: string;
+  profileCompleted?: boolean;
 };
 
 export type AuthSession = {

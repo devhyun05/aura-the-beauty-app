@@ -2,7 +2,7 @@ import React from 'react';
 
 import {
   FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
-  FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL,
+  FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL,
   FaceCaptureTutorialScreen,
   getFaceCaptureTutorialIconNames,
   getFaceCaptureTutorialNavigationMode,
@@ -76,13 +76,13 @@ expectEqual(
 );
 expectEqual(
   visualPresentation.swipeNavigationPlacement,
-  'fixed-above-swipe-hint',
+  'fixed-footer-pagination',
   'face capture swipe navigation placement',
 );
 expectEqual(
-  FACE_CAPTURE_TUTORIAL_SWIPE_HINT_LABEL,
-  '좌우로 넘겨 주세요.',
-  'face capture swipe hint label',
+  FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL,
+  '사진 촬영 가이드',
+  'face capture tutorial accessibility label',
 );
 
 <FaceCaptureTutorialScreen
