@@ -7,21 +7,32 @@ import {Text, View, XStack, YStack} from 'tamagui';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
-import type {ReferenceMakeupPhoto} from '../types';
+import type {MakeupExtractionProgressUpdate, ReferenceMakeupPhoto} from '../types';
 
 type ReferenceMakeupExtractionLoadingScreenProps = {
   photo: ReferenceMakeupPhoto;
   isAnalysisReady?: boolean;
+  progressUpdate?: MakeupExtractionProgressUpdate | null;
   onBack: () => void;
   onComplete: () => void;
 };
 
 const PROGRESS_TICK_MS = 320;
-const TOTAL_LOADING_MS = 3200;
+const TOTAL_LOADING_MS = 26000;
 const RING_SIZE = 132;
 const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+const progressCapByPhase: Record<MakeupExtractionProgressUpdate['phase'], number> = {
+  queued: 0.08,
+  uploading: 0.22,
+  uploaded: 0.36,
+  analyzing: 0.82,
+  products: 0.96,
+  complete: 1,
+  fallback: 1,
+};
 
 const loadingStepDescriptions: Record<string, string> = {
   'reference-read': '업로드한 레퍼런스 사진과 이름을 확인해요.',
@@ -34,23 +45,42 @@ const loadingStepDescriptions: Record<string, string> = {
 
 export function ReferenceMakeupExtractionLoadingScreen({
   isAnalysisReady = true,
+  progressUpdate = null,
   photo,
   onComplete,
 }: ReferenceMakeupExtractionLoadingScreenProps) {
   const data = getReferenceMakeupExtractionDataSync();
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [displayedProgress, setDisplayedProgress] = useState(0);
   const stepCount = data.loadingSteps.length;
-  const rawProgress = Math.min(1, elapsedMs / TOTAL_LOADING_MS);
-  const progress = isAnalysisReady ? rawProgress : Math.min(rawProgress, 0.95);
+  const timedProgress = Math.min(1, elapsedMs / TOTAL_LOADING_MS);
+  const reportedProgress = progressUpdate?.progress ?? 0;
+  const progressCap = progressUpdate ? progressCapByPhase[progressUpdate.phase] : 0.95;
+  const targetProgress = isAnalysisReady
+    ? 1
+    : Math.min(Math.max(reportedProgress, timedProgress), progressCap, 0.95);
+  const progress = displayedProgress >= 0.995 ? 1 : displayedProgress;
   const progressLabel = `${Math.round(progress * 100)}%`;
+  const reportedStepIndex = progressUpdate?.activeStepId
+    ? data.loadingSteps.findIndex((step) => step.id === progressUpdate.activeStepId)
+    : -1;
   const activeStepIndex = useMemo(() => {
     if (progress >= 1) {
       return stepCount - 1;
     }
 
+    if (reportedStepIndex >= 0) {
+      return reportedStepIndex;
+    }
+
     return Math.min(stepCount - 1, Math.floor(progress * stepCount));
-  }, [progress, stepCount]);
+  }, [progress, reportedStepIndex, stepCount]);
   const isComplete = progress >= 1 && isAnalysisReady;
+
+  useEffect(() => {
+    setElapsedMs(0);
+    setDisplayedProgress(0);
+  }, [photo.id]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -63,6 +93,29 @@ export function ReferenceMakeupExtractionLoadingScreen({
       clearInterval(intervalId);
     };
   }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setDisplayedProgress((currentProgress) => {
+        const nextTarget = Math.max(0, Math.min(targetProgress, 1));
+
+        if (nextTarget <= currentProgress) {
+          return currentProgress;
+        }
+
+        const remainingProgress = nextTarget - currentProgress;
+        const maxStep = nextTarget >= 1 ? 0.065 : 0.028;
+        const easedStep = Math.max(0.006, Math.min(maxStep, remainingProgress * 0.34));
+        const nextProgress = currentProgress + Math.min(remainingProgress, easedStep);
+
+        return nextTarget >= 1 && nextProgress >= 0.995 ? 1 : nextProgress;
+      });
+    }, PROGRESS_TICK_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [targetProgress]);
 
   useEffect(() => {
     if (!isComplete) {

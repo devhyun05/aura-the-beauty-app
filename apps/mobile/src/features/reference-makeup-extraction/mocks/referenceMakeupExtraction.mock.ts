@@ -16,12 +16,14 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
       title: '뮤트 로즈 인플루언서 룩',
       referenceSource: 'album',
       imageSource: lookOjiGirl,
+      contentType: 'image/png',
     },
     {
       id: 'lovely-pink-actress',
       title: '러블리 핑크 배우상 룩',
       referenceSource: 'album',
       imageSource: filterLovelyPinkActress,
+      contentType: 'image/png',
     },
   ],
   loadingSteps: [

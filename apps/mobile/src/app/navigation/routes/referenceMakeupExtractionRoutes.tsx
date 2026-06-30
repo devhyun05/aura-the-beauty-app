@@ -9,6 +9,7 @@ import {
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   ReferenceMakeupExtractionUploadScreen,
+  type MakeupExtractionProgressUpdate,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {
@@ -91,12 +92,14 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
   const [isAnalysisReady, setIsAnalysisReady] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<MakeupExtractionProgressUpdate | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     setIsAnalysisReady(false);
-    runReferenceMakeupExtraction(photo).finally(() => {
+    setAnalysisProgress(null);
+    runReferenceMakeupExtraction(photo, setAnalysisProgress).finally(() => {
       if (isMounted) {
         setIsAnalysisReady(true);
       }
@@ -113,10 +116,10 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
       onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
       onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
       photo={photo}
+      progressUpdate={analysisProgress}
     />
   );
 }
-
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {

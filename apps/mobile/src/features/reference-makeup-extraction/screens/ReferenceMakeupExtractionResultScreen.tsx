@@ -50,15 +50,38 @@ export function ReferenceMakeupExtractionResultScreen({
   const [isProExpanded, setIsProExpanded] = useState(false);
   const {width} = useWindowDimensions();
   const areaScrollRef = useRef<ScrollView | null>(null);
+  const isProgrammaticAreaScrollRef = useRef(false);
+  const areaScrollUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const areaPageWidth = width;
+
+  useEffect(() => {
+    return () => {
+      if (areaScrollUnlockTimerRef.current) {
+        clearTimeout(areaScrollUnlockTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setIsProExpanded(false);
   }, [activeAreaIndex]);
 
   const handleSelectArea = (index: number) => {
+    if (index === activeAreaIndex) {
+      return;
+    }
+
+    isProgrammaticAreaScrollRef.current = true;
+
+    if (areaScrollUnlockTimerRef.current) {
+      clearTimeout(areaScrollUnlockTimerRef.current);
+    }
+
     setActiveAreaIndex(index);
     areaScrollRef.current?.scrollTo({animated: true, x: index * areaPageWidth, y: 0});
+    areaScrollUnlockTimerRef.current = setTimeout(() => {
+      isProgrammaticAreaScrollRef.current = false;
+    }, 520);
   };
 
   const updateActiveAreaIndexFromOffset = (offsetX: number) => {
@@ -78,10 +101,21 @@ export function ReferenceMakeupExtractionResultScreen({
   };
 
   const handleAreaScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (isProgrammaticAreaScrollRef.current) {
+      return;
+    }
+
     updateActiveAreaIndexFromOffset(event.nativeEvent.contentOffset.x);
   };
 
   const handleAreaMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    isProgrammaticAreaScrollRef.current = false;
+
+    if (areaScrollUnlockTimerRef.current) {
+      clearTimeout(areaScrollUnlockTimerRef.current);
+      areaScrollUnlockTimerRef.current = null;
+    }
+
     updateActiveAreaIndexFromOffset(event.nativeEvent.contentOffset.x);
   };
 
@@ -380,31 +414,74 @@ function AreaGuidePanel({
   );
 }
 
+type ProDetailStep = {
+  id: string;
+  number?: string;
+  text: string;
+};
+
+function parseNumberedDetailSteps(text: string): ProDetailStep[] {
+  const normalizedText = text.replace(/\r\n/g, '\n').trim();
+
+  if (!normalizedText) {
+    return [];
+  }
+
+  const matches = [...normalizedText.matchAll(/(?:^|\s)(\d{1,2})(?:[.)]|번)?\s+/g)];
+
+  if (matches.length === 0) {
+    return [{id: 'plain-0', text: normalizedText}];
+  }
+
+  return matches.map((match, index) => {
+    const startIndex = (match.index ?? 0) + match[0].length;
+    const nextMatch = matches[index + 1];
+    const endIndex = nextMatch?.index ?? normalizedText.length;
+    const textValue = normalizedText.slice(startIndex, endIndex).trim();
+
+    return {
+      id: `${match[1]}-${index}`,
+      number: match[1],
+      text: textValue,
+    };
+  }).filter((step) => step.text.length > 0);
+}
+
+function normalizeFinishDetail(text: string): string {
+  const parsedSteps = parseNumberedDetailSteps(text);
+  const hasNumberedDetail = parsedSteps.some((step) => step.number);
+
+  if (hasNumberedDetail && parsedSteps.length > 0) {
+    return parsedSteps.map((step) => step.text).join(' ');
+  }
+
+  return text.replace(/\r\n/g, '\n').trim();
+}
+
 function ProDetailSteps({guide}: {guide: ReferenceMakeupAreaGuide}) {
-  const steps = [
-    {
-      title: '위치 잡기',
-      description: guide.howTo,
-    },
-    {
-      title: '농도와 경계 마무리',
-      description: guide.professionalPoint,
-    },
-  ];
+  const guideSteps = parseNumberedDetailSteps(guide.howTo);
+  const finishDetail = normalizeFinishDetail(guide.professionalPoint);
 
   return (
     <YStack style={styles.proDetailSection}>
-      {steps.map((step, index) => (
-        <XStack key={step.title} style={styles.proStepRow}>
-          <View style={styles.proStepNumber}>
-            <Text style={styles.proStepNumberText}>{index + 1}</Text>
-          </View>
-          <YStack style={styles.proStepCopy}>
-            <Text style={styles.proStepTitle}>{step.title}</Text>
-            <Text style={styles.proStepDescription}>{step.description}</Text>
-          </YStack>
-        </XStack>
-      ))}
+      <YStack style={styles.proDetailBlock}>
+        <Text style={styles.proDetailHeading}>순서 따라가기</Text>
+        <YStack style={styles.proStepList}>
+          {guideSteps.map((step, index) => (
+            <XStack key={`${step.id}-${index}`} style={styles.proStepRow}>
+              <Text style={styles.proStepNumberText}>{`${step.number ?? index + 1}.`}</Text>
+              <Text style={styles.proStepDescription}>{step.text}</Text>
+            </XStack>
+          ))}
+        </YStack>
+      </YStack>
+
+      {finishDetail.length > 0 ? (
+        <YStack style={styles.proDetailBlock}>
+          <Text style={styles.proDetailHeading}>메이크업 마무리</Text>
+          <Text style={styles.proFinishText}>{finishDetail}</Text>
+        </YStack>
+      ) : null}
     </YStack>
   );
 }
@@ -622,44 +699,46 @@ const styles = StyleSheet.create({
   proDetailSection: {
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingTop: spacing.md,
   },
-  proStepCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
+  proDetailBlock: {
+    gap: spacing.sm,
   },
-  proStepDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  proStepNumber: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
-  proStepNumberText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  proStepRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  proStepTitle: {
+  proDetailHeading: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  proFinishText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.md,
+  },
+  proStepDescription: {
+    color: colors.textPrimary,
+    flex: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.md,
+    minWidth: 0,
+  },
+  proStepList: {
+    gap: spacing.sm,
+  },
+  proStepNumberText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.md,
+    width: 20,
+  },
+  proStepRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   proToggleButton: {
     alignItems: 'center',

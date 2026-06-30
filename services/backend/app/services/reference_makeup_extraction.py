@@ -33,6 +33,22 @@ DEFAULT_CATEGORY_BY_AREA = {
   "contour": "shadow",
 }
 
+REFERENCE_MAKEUP_REPORT_TOOL_NAME = "submit_reference_makeup_report"
+REFERENCE_MAKEUP_REPORT_TOOL = {
+  "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME,
+  "description": "Submit the complete reference makeup report as structured JSON.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "extractedMakeupLook": {
+        "type": "object",
+        "description": "Report object with title, subtitle, tags, accuracy, points, palette, and areaGuides.",
+      },
+    },
+    "required": ["extractedMakeupLook"],
+  },
+}
+
 LOADING_STEPS = [
   {"id": "reference-read", "label": "레퍼런스 사진 정보 확인", "status": "done"},
   {"id": "core-points", "label": "메이크업 핵심 포인트 정리", "status": "done"},
@@ -578,7 +594,7 @@ class ReferenceMakeupBedrockService:
 분석 목표:
 - 레퍼런스 이미지의 메이크업 무드, 색감, 질감, 부위별 표현 방식을 추출한다.
 - 초보자도 순서대로 따라 할 수 있게 설명한다.
-- 동시에 전문 메이크업 아티스트도 납득할 수 있도록 위치, 농도, 질감, 경계 처리, 제품 선택 기준을 구체적으로 쓴다.
+- 동시에 전문 메이크업 아티스트도 납득할 수 있도록 순서, 위치, 농도, 질감, 메이크업 마무리, 제품 선택 기준을 구체적으로 쓴다.
 
 금지:
 - 실존 인물 닮은꼴 판정 금지.
@@ -625,8 +641,8 @@ Top-level key는 extractedMakeupLook 하나만 둔다.
         "texture": "질감 설명",
         "quickTip": "한 줄 핵심",
         "analysis": "이미지 기준으로 보이는 표현 방식",
-        "howTo": "초보자도 따라 할 수 있는 순서 가이드. 1, 2, 3 흐름이 보이게 쓴다.",
-        "professionalPoint": "프로가 신경 쓰는 위치, 농도, 경계, 도구 사용 포인트",
+        "howTo": "1. 첫 단계 설명\\n2. 두 번째 단계 설명\\n3. 세 번째 단계 설명\\n4. 마무리 단계 설명",
+        "professionalPoint": "메이크업 마무리에서 완성도를 높이는 위치, 농도, 질감, 도구 사용 포인트",
         "productRecommendation": {{
           "category": "base",
           "searchQuery": "추천 제품 검색어",
@@ -646,7 +662,7 @@ areaGuides는 반드시 이 순서와 id로 6개를 모두 작성한다:
 6. contour / 윤곽 / category shadow
 
 각 부위의 howTo와 professionalPoint는 서로 다른 내용을 써라.
-howTo는 따라 하는 순서, professionalPoint는 완성도를 높이는 디테일이다.
+howTo는 반드시 1. 2. 3. 4. 번호가 붙은 4단계 순서 가이드로 작성한다. professionalPoint는 '메이크업 마무리' 관점에서 완성도를 높이는 디테일을 작성한다.
 메이크업 핵심 points는 정확히 3개만 작성한다.
 tags는 1개에서 4개 사이로 작성한다.
 색상 hex는 이미지에서 관찰되는 색을 근사한다.
@@ -654,6 +670,25 @@ tags는 1개에서 4개 사이로 작성한다.
 요청 메타데이터:
 {json.dumps(metadata, ensure_ascii=False)}
 """.strip()
+
+  def _extract_bedrock_tool_input(self, response_payload: dict[str, Any]) -> dict[str, Any] | None:
+    content = response_payload.get("content")
+
+    if not isinstance(content, list):
+      return None
+
+    for part in content:
+      if not isinstance(part, dict):
+        continue
+
+      if part.get("type") != "tool_use" or part.get("name") != REFERENCE_MAKEUP_REPORT_TOOL_NAME:
+        continue
+
+      tool_input = part.get("input")
+      if isinstance(tool_input, dict):
+        return tool_input
+
+    return None
 
   def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
@@ -687,10 +722,22 @@ tags는 1개에서 4개 사이로 작성한다.
     try:
       parsed = json.loads(normalized)
     except json.JSONDecodeError as exc:
+      preview = normalized[:600]
+      logger.warning(
+        "[aura:reference-bedrock] output:parse-failed length=%s error=%s preview=%s",
+        len(normalized),
+        str(exc),
+        preview,
+      )
       raise AppError(
         502,
         "REFERENCE_BEDROCK_OUTPUT_PARSE_FAILED",
         "Bedrock reference makeup extraction did not return valid JSON.",
+        {
+          "jsonError": str(exc),
+          "outputLength": len(normalized),
+          "outputPreview": preview,
+        },
       ) from exc
 
     if not isinstance(parsed, dict):
@@ -726,9 +773,11 @@ tags는 1개에서 4개 사이로 작성한다.
       body=json.dumps(
         {
           "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 3600,
+          "max_tokens": 7600,
           "temperature": 0.2,
-          "system": "You are a practical K-beauty reference makeup analyst. Return JSON only.",
+          "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
+          "tools": [REFERENCE_MAKEUP_REPORT_TOOL],
+          "tool_choice": {"type": "tool", "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME},
           "messages": [
             {
               "role": "user",
@@ -752,16 +801,25 @@ tags는 1개에서 4개 사이로 작성한다.
       contentType="application/json",
     )
     response_payload = json.loads(response["body"].read())
+    parsed = self._extract_bedrock_tool_input(response_payload)
     output_text = self._extract_bedrock_output_text(response_payload)
+    output_length = len(json.dumps(parsed, ensure_ascii=False)) if parsed else len(output_text)
+    logger.info(
+      "[aura:reference-bedrock] output:received chars=%s stopReason=%s mode=%s",
+      output_length,
+      response_payload.get("stop_reason") or response_payload.get("stopReason"),
+      "tool" if parsed else "text",
+    )
 
-    if not output_text:
-      raise AppError(
-        502,
-        "REFERENCE_BEDROCK_EMPTY_OUTPUT",
-        "Bedrock reference makeup extraction returned an empty response.",
-      )
+    if parsed is None:
+      if not output_text:
+        raise AppError(
+          502,
+          "REFERENCE_BEDROCK_EMPTY_OUTPUT",
+          "Bedrock reference makeup extraction returned an empty response.",
+        )
 
-    parsed = self._parse_json_output(output_text)
+      parsed = self._parse_json_output(output_text)
     logger.info(
       "[aura:reference-bedrock] analyze:success durationMs=%s",
       round((time.monotonic() - started_at) * 1000),
@@ -831,6 +889,101 @@ def _map_shopping_product(product: dict[str, Any]) -> dict[str, Any] | None:
   }
 
 
+def _text_list(value: Any) -> list[str]:
+  values = value if isinstance(value, list) else []
+  return [_clean_text(item) for item in values if _clean_text(item)]
+
+
+def _build_reference_product_profile(
+  extracted_look: dict[str, Any],
+  guide: dict[str, Any],
+) -> dict[str, Any]:
+  recommendation = guide.get("product_recommendation")
+  recommendation = recommendation if isinstance(recommendation, dict) else {}
+  color = guide.get("color")
+  color = color if isinstance(color, dict) else {}
+  points = extracted_look.get("points") if isinstance(extracted_look, dict) else []
+  palette = extracted_look.get("palette") if isinstance(extracted_look, dict) else []
+  point_texts = []
+
+  if isinstance(points, list):
+    for point in points:
+      if isinstance(point, dict):
+        point_texts.append(" ".join(
+          part for part in (
+            _clean_text(point.get("title")),
+            _clean_text(point.get("description")),
+          ) if part
+        ))
+
+  palette_hexes = []
+  if isinstance(palette, list):
+    for item in palette:
+      if isinstance(item, dict) and _clean_text(item.get("hex")):
+        palette_hexes.append(_clean_text(item.get("hex")))
+
+  search_query = _clean_text(
+    recommendation.get("search_query") or recommendation.get("searchQuery"),
+  )
+  guide_label = _clean_text(guide.get("label"))
+  guide_title = _clean_text(guide.get("title"))
+  color_name = _clean_text(color.get("name"))
+  texture = _clean_text(guide.get("texture"))
+  quick_tip = _clean_text(guide.get("quick_tip") or guide.get("quickTip"))
+  analysis = _clean_text(guide.get("analysis"))
+  how_to = _clean_text(guide.get("how_to") or guide.get("howTo"))
+  professional_point = _clean_text(
+    guide.get("professional_point") or guide.get("professionalPoint"),
+  )
+  reason = _clean_text(recommendation.get("reason"))
+  title = _clean_text(extracted_look.get("title"))
+  subtitle = _clean_text(extracted_look.get("subtitle"))
+  tags = _text_list(extracted_look.get("tags"))
+  profile_text = " ".join(
+    part for part in (
+      title,
+      subtitle,
+      guide_label,
+      guide_title,
+      color_name,
+      texture,
+      quick_tip,
+      analysis,
+      how_to,
+      professional_point,
+      search_query,
+      reason,
+      *point_texts,
+      *tags,
+    ) if part
+  )
+
+  return {
+    "recommendedMood": title,
+    "summary": profile_text,
+    "shortSummary": " ".join(part for part in (guide_title, quick_tip, search_query) if part),
+    "tags": [*tags, guide_label, color_name, texture, search_query],
+    "makeupGuideline": {
+      "area": guide_label,
+      "title": guide_title,
+      "color": color_name,
+      "texture": texture,
+      "howTo": how_to,
+      "professionalPoint": professional_point,
+      "productReason": reason,
+    },
+    "recommendedMakeups": [
+      {
+        "title": title,
+        "subtitle": subtitle,
+        "description": profile_text,
+        "tags": [*tags, search_query, color_name, texture],
+        "palette": palette_hexes,
+      },
+    ],
+  }
+
+
 async def enrich_reference_makeup_products(
   db: Database,
   settings: Settings,
@@ -839,41 +992,11 @@ async def enrich_reference_makeup_products(
   extracted_look = extraction_payload.get("extracted_makeup_look")
   area_guides = extracted_look.get("area_guides") if isinstance(extracted_look, dict) else None
 
-  if not isinstance(area_guides, list):
+  if not isinstance(area_guides, list) or not isinstance(extracted_look, dict):
     return extraction_payload, "fallback"
 
   product_source = "fallback"
-  products_by_category: dict[str, dict[str, Any] | None] = {}
-  categories: set[str] = set()
-
-  for guide in area_guides:
-    if not isinstance(guide, dict):
-      continue
-
-    recommendation = guide.get("product_recommendation")
-    category = recommendation.get("category") if isinstance(recommendation, dict) else None
-
-    if isinstance(category, str) and category:
-      categories.add(category)
-
-  for category in sorted(categories):
-    try:
-      recommendation_data, source = await build_product_recommendation_data(
-        db,
-        settings,
-        category,
-      )
-    except Exception:  # noqa: BLE001 - product enrichment must not fail report generation.
-      products_by_category[category] = None
-      continue
-
-    products = recommendation_data.get("products")
-    first_product = products[0] if isinstance(products, list) and products else None
-    mapped_product = _map_shopping_product(first_product or {}) if isinstance(first_product, dict) else None
-
-    products_by_category[category] = mapped_product
-    if mapped_product and source != "fallback":
-      product_source = source
+  recommendation_cache: dict[tuple[str, str], dict[str, Any] | None] = {}
 
   for guide in area_guides:
     if not isinstance(guide, dict):
@@ -883,10 +1006,45 @@ async def enrich_reference_makeup_products(
     if not isinstance(recommendation, dict):
       continue
 
-    category = recommendation.get("category")
-    product = products_by_category.get(category) if isinstance(category, str) else None
+    category = _clean_text(recommendation.get("category"))
+    search_query = _clean_text(
+      recommendation.get("search_query") or recommendation.get("searchQuery"),
+    )
 
-    if product:
-      recommendation["product"] = product
+    if not category:
+      continue
+
+    cache_key = (category, search_query)
+    mapped_product = recommendation_cache.get(cache_key)
+
+    if cache_key not in recommendation_cache:
+      try:
+        recommendation_data, source = await build_product_recommendation_data(
+          db,
+          settings,
+          category,
+          profile_override=_build_reference_product_profile(extracted_look, guide),
+          query_override=search_query,
+        )
+      except Exception as exc:  # noqa: BLE001 - product enrichment must not fail report generation.
+        logger.warning(
+          "[aura:reference-products] enrich:failed category=%s query=%s error=%s",
+          category,
+          search_query,
+          exc.__class__.__name__,
+        )
+        recommendation_cache[cache_key] = None
+        continue
+
+      products = recommendation_data.get("products")
+      first_product = products[0] if isinstance(products, list) and products else None
+      mapped_product = _map_shopping_product(first_product or {}) if isinstance(first_product, dict) else None
+      recommendation_cache[cache_key] = mapped_product
+
+      if mapped_product and source != "fallback":
+        product_source = source
+
+    if mapped_product:
+      recommendation["product"] = mapped_product
 
   return extraction_payload, product_source

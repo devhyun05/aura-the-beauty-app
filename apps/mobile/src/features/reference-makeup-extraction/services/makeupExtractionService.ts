@@ -4,6 +4,7 @@ import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUpl
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import {referenceMakeupExtractionMock} from '../mocks/referenceMakeupExtraction.mock';
 import type {
+  MakeupExtractionProgressUpdate,
   MakeupExtractionStep,
   ReferenceMakeupAreaGuide,
   ReferenceMakeupExtractionData,
@@ -11,14 +12,47 @@ import type {
   ReferenceMakeupPhoto,
 } from '../types';
 
+type BackendReferenceMakeupExtractionLook = Partial<ReferenceMakeupExtractionResult> & {
+  areaGuides?: Array<Partial<ReferenceMakeupAreaGuide>>;
+};
+
 type BackendReferenceMakeupExtractionResponse = {
-  extractedMakeupLook?: Partial<ReferenceMakeupExtractionResult> & {
-    areaGuides?: Array<Partial<ReferenceMakeupAreaGuide>>;
-  };
+  aiStatus?: string;
+  extractedMakeupLook?: BackendReferenceMakeupExtractionLook;
   loadingSteps?: MakeupExtractionStep[];
+  productSource?: string;
 };
 
 let latestReferenceMakeupExtractionData: ReferenceMakeupExtractionData = referenceMakeupExtractionMock;
+
+function isPlainBackendObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function camelizeBackendKey(key: string): string {
+  return key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+}
+
+function camelizeBackendValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => camelizeBackendValue(item));
+  }
+
+  if (!isPlainBackendObject(value)) {
+    return value;
+  }
+
+  return Object.entries(value).reduce<Record<string, unknown>>((nextValue, [key, nestedValue]) => {
+    nextValue[camelizeBackendKey(key)] = camelizeBackendValue(nestedValue);
+    return nextValue;
+  }, {});
+}
+
+function normalizeBackendExtractionResponse(
+  response: unknown,
+): BackendReferenceMakeupExtractionResponse {
+  return camelizeBackendValue(response) as BackendReferenceMakeupExtractionResponse;
+}
 
 function buildFallbackDataForPhoto(photo?: ReferenceMakeupPhoto | null): ReferenceMakeupExtractionData {
   if (!photo) {
@@ -108,6 +142,40 @@ function resolveReferencePhotoUri(photo: ReferenceMakeupPhoto): string | null {
   return resolvedSource?.uri ?? null;
 }
 
+function resolveReferencePhotoContentType(photo: ReferenceMakeupPhoto, uri: string): string | null {
+  if (photo.contentType?.trim()) {
+    return photo.contentType.trim();
+  }
+
+  const normalizedUri = uri.split('?')[0].toLowerCase();
+
+  if (normalizedUri.endsWith('.png')) {
+    return 'image/png';
+  }
+
+  if (normalizedUri.endsWith('.webp')) {
+    return 'image/webp';
+  }
+
+  if (normalizedUri.endsWith('.jpg') || normalizedUri.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+
+  return typeof photo.imageSource === 'number' ? 'image/png' : null;
+}
+
+function getReferencePhotoUploadExtension(contentType: string | null): string {
+  if (contentType === 'image/png') {
+    return 'png';
+  }
+
+  if (contentType === 'image/webp') {
+    return 'webp';
+  }
+
+  return 'jpg';
+}
+
 function shouldRunReferenceMakeupAi(): boolean {
   return process.env.EXPO_PUBLIC_REFERENCE_MAKEUP_AI_ENABLED === 'true';
 }
@@ -121,13 +189,17 @@ export const getReferenceMakeupExtractionDataSync = (): ReferenceMakeupExtractio
 
 export async function runReferenceMakeupExtraction(
   photo: ReferenceMakeupPhoto,
+  onProgress?: (update: MakeupExtractionProgressUpdate) => void,
 ): Promise<ReferenceMakeupExtractionData> {
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
   const fallbackData = buildFallbackDataForPhoto(photo);
 
+  onProgress?.({activeStepId: 'reference-read', phase: 'queued', progress: 0.03});
+
   if (!hasBackendApiBaseUrl) {
     console.info('[aura:reference-extraction] fallback:no-api-base');
     latestReferenceMakeupExtractionData = fallbackData;
+    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
     return latestReferenceMakeupExtractionData;
   }
 
@@ -136,25 +208,34 @@ export async function runReferenceMakeupExtraction(
   if (!photoUri) {
     console.info('[aura:reference-extraction] fallback:no-photo-uri', {photoId: photo.id});
     latestReferenceMakeupExtractionData = fallbackData;
+    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
     return latestReferenceMakeupExtractionData;
   }
 
   try {
+    onProgress?.({activeStepId: 'reference-read', phase: 'uploading', progress: 0.1});
+
     console.info('[aura:reference-extraction] upload:start', {
       photoId: photo.id,
       referenceSource: photo.referenceSource,
       runAi: shouldRunReferenceMakeupAi(),
     });
 
+    const referencePhotoContentType = resolveReferencePhotoContentType(photo, photoUri);
+    const referencePhotoExtension = getReferencePhotoUploadExtension(referencePhotoContentType);
     const upload = await uploadFaceCaptureImage({
       captureType: 'filter_extraction',
-      fileName: `${photo.id}.jpg`,
+      contentType: referencePhotoContentType,
+      fileName: `${photo.id}.${referencePhotoExtension}`,
       mediaKind: 'filter-extraction',
       source: photo.referenceSource === 'camera' ? 'camera' : 'gallery',
       uri: photoUri,
     });
 
-    const response = await requestBackendJson<BackendReferenceMakeupExtractionResponse>(
+    onProgress?.({activeStepId: 'core-points', phase: 'uploaded', progress: 0.24});
+    onProgress?.({activeStepId: 'area-guides', phase: 'analyzing', progress: 0.46});
+
+    const response = await requestBackendJson<unknown>(
       '/filter-extractions/analyze',
       {
         body: {
@@ -182,14 +263,22 @@ export async function runReferenceMakeupExtraction(
       },
     );
 
+    const normalizedResponse = normalizeBackendExtractionResponse(response);
+
+    onProgress?.({activeStepId: 'product-criteria', phase: 'products', progress: 0.86});
+
     latestReferenceMakeupExtractionData = {
       ...referenceMakeupExtractionMock,
-      loadingSteps: response.loadingSteps ?? referenceMakeupExtractionMock.loadingSteps,
-      extractedMakeupLook: mergeBackendExtractionLook(response.extractedMakeupLook, photo),
+      loadingSteps: normalizedResponse.loadingSteps ?? referenceMakeupExtractionMock.loadingSteps,
+      extractedMakeupLook: mergeBackendExtractionLook(normalizedResponse.extractedMakeupLook, photo),
     };
 
+    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'complete', progress: 1});
+
     console.info('[aura:reference-extraction] analyze:success', {
+      aiStatus: normalizedResponse.aiStatus,
       areaGuideCount: latestReferenceMakeupExtractionData.extractedMakeupLook.areaGuides.length,
+      productSource: normalizedResponse.productSource,
       title: latestReferenceMakeupExtractionData.extractedMakeupLook.title,
     });
 
@@ -199,6 +288,7 @@ export async function runReferenceMakeupExtraction(
       message: error instanceof Error ? error.message : String(error),
     });
     latestReferenceMakeupExtractionData = fallbackData;
+    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
     return latestReferenceMakeupExtractionData;
   }
 }

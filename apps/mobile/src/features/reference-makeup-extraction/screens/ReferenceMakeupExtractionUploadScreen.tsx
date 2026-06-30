@@ -142,6 +142,7 @@ export function ReferenceMakeupExtractionUploadScreen({
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [pendingPhotoContentType, setPendingPhotoContentType] = useState<string | null>(null);
   const [pendingPhotoName, setPendingPhotoName] = useState('');
   const uploadedPhotos = controlledUploadedPhotos ?? localUploadedPhotos;
 
@@ -190,6 +191,7 @@ export function ReferenceMakeupExtractionUploadScreen({
 
   const closeNameModal = () => {
     setPendingPhotoUri(null);
+    setPendingPhotoContentType(null);
     setPendingPhotoName('');
   };
 
@@ -203,6 +205,7 @@ export function ReferenceMakeupExtractionUploadScreen({
     const uploadedPhoto: ReferenceMakeupPhoto = {
       id: `uploaded-reference-${Date.now()}`,
       imageSource: {uri: pendingPhotoUri},
+      contentType: pendingPhotoContentType,
       referenceSource: 'album',
       title: nextPhotoName,
     };
@@ -238,6 +241,7 @@ export function ReferenceMakeupExtractionUploadScreen({
       }
 
       setPendingPhotoUri(pickedAsset.uri);
+      setPendingPhotoContentType(pickedAsset.mimeType ?? null);
       setPendingPhotoName('');
     } finally {
       setIsPickingPhoto(false);

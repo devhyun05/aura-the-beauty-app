@@ -7,6 +7,7 @@ export type ReferenceMakeupPhoto = {
   title: string;
   referenceSource: ReferenceMakeupPhotoSource;
   imageSource: ImageSourcePropType;
+  contentType?: string | null;
 };
 
 export type MakeupExtractionStepStatus = 'done' | 'active' | 'waiting';
@@ -15,6 +16,21 @@ export type MakeupExtractionStep = {
   id: string;
   label: string;
   status: MakeupExtractionStepStatus;
+};
+
+export type MakeupExtractionProgressPhase =
+  | 'queued'
+  | 'uploading'
+  | 'uploaded'
+  | 'analyzing'
+  | 'products'
+  | 'complete'
+  | 'fallback';
+
+export type MakeupExtractionProgressUpdate = {
+  activeStepId: string;
+  phase: MakeupExtractionProgressPhase;
+  progress: number;
 };
 
 export type MakeupLookPalette = {
