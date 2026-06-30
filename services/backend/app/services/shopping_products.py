@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 PRODUCT_CATEGORIES = ("lip", "cheek", "shadow", "liner", "base")
 SEMANTIC_MATCH_WEIGHT = 0.35
 MAX_EMBEDDING_TEXT_LENGTH = 6000
+COLOR_MATCH_BONUS = 10
+COLOR_MISMATCH_PENALTY = 12
 
 TABS = [
   {"id": "all", "label": "전체"},
@@ -375,7 +377,7 @@ def _score_product_match(
   score = 74
 
   for product_field, target_field, weight, limit in (
-    ("colors", "colors", 5, 15),
+    ("colors", "colors", 12, 36),
     ("effects", "finishes", 4, 12),
     ("skinTypes", "skinTypes", 4, 8),
     ("features", "features", 3, 9),
@@ -398,8 +400,15 @@ def _score_product_match(
   if "쿨톤" in product_tones and "웜톤" in target_tones:
     score -= 8
 
-  if category == "lip" and not set(specs.get("colors") or []) & set(targets.get("colors") or []):
-    score -= 4
+  product_colors = set(specs.get("colors") or [])
+  target_colors = set(targets.get("colors") or [])
+  has_color_target = bool(target_colors)
+  has_color_match = bool(product_colors & target_colors)
+
+  if has_color_match:
+    score += COLOR_MATCH_BONUS
+  elif has_color_target and category in {"lip", "cheek", "shadow", "base"}:
+    score -= COLOR_MISMATCH_PENALTY
 
   score -= min(index, 6)
 
@@ -556,6 +565,7 @@ def _combine_match_rate(rule_score: int, semantic_rate: int) -> int:
 
 def _semantic_profile_text(profile: dict[str, Any], category: str) -> str:
   targets = _target_terms(profile, category)
+  color_text = " ".join(targets["colors"])
   target_text = " ".join(
     [
       *targets["colors"],
@@ -570,6 +580,7 @@ def _semantic_profile_text(profile: dict[str, Any], category: str) -> str:
     part
     for part in [
       f"추천 카테고리: {CATEGORY_CONFIG[category]['label']}",
+      f"핵심 색상 조건: {color_text} {color_text} {color_text}",
       f"분석 보고서: {_profile_text(profile, category)}",
       f"추천 타깃 특징: {target_text}",
     ]
@@ -582,6 +593,7 @@ def _semantic_product_text(product: dict[str, Any]) -> str:
   specs = specs if isinstance(specs, dict) else {}
   category = _normalize_category(product.get("category")) or "lip"
   spec_parts: list[str] = []
+  color_parts: list[str] = []
 
   for key in (
     "colors",
@@ -596,10 +608,16 @@ def _semantic_product_text(product: dict[str, Any]) -> str:
     if isinstance(values, list):
       spec_parts.extend(_clean_text(value) for value in values if _clean_text(value))
 
+      if key == "colors":
+        color_parts.extend(_clean_text(value) for value in values if _clean_text(value))
+
+  color_text = " ".join(color_parts)
+
   return "\n".join(
     part
     for part in [
       f"상품 카테고리: {CATEGORY_CONFIG[category]['label']}",
+      f"상품 핵심 색상: {color_text} {color_text} {color_text}",
       f"브랜드: {_clean_text(product.get('brandName'))}",
       f"상품명: {_clean_text(product.get('productName'))} {_clean_text(product.get('shadeName'))}",
       f"태그: {' '.join(product.get('tags') or [])}",
@@ -625,6 +643,28 @@ def _semantic_reason(
     return semantic_copy
 
   return f"{reason} {semantic_copy}"
+
+
+def _color_match_adjustment(
+  product: dict[str, Any],
+  profile: dict[str, Any],
+) -> int:
+  category = _normalize_category(product.get("category"))
+  specs = product.get("productInfo")
+  specs = specs if isinstance(specs, dict) else {}
+  target_colors = set(_target_terms(profile, category)["colors"])
+  product_colors = set(specs.get("colors") or [])
+
+  if not target_colors:
+    return 0
+
+  if product_colors & target_colors:
+    return COLOR_MATCH_BONUS
+
+  if category in {"lip", "cheek", "shadow", "base"}:
+    return -COLOR_MISMATCH_PENALTY
+
+  return 0
 
 
 async def _embed_text(
@@ -692,7 +732,14 @@ async def _apply_semantic_product_scores(
     rule_score = rule_score if isinstance(rule_score, int) else _parse_price(rule_score)
     next_product = {
       **product,
-      "matchRate": _combine_match_rate(rule_score or 74, semantic_rate),
+      "matchRate": min(
+        99,
+        max(
+          62,
+          _combine_match_rate(rule_score or 74, semantic_rate) +
+          _color_match_adjustment(product, profile),
+        ),
+      ),
       "semanticScore": round(similarity, 4),
       "semanticMatchRate": semantic_rate,
       "reason": _semantic_reason(product, semantic_rate),

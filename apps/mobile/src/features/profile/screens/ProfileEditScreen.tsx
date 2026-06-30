@@ -20,6 +20,7 @@ import {
   IconButton,
   ImagePlaceholder,
   PencilIcon,
+  ProfileHeaderIcon,
 } from '../../../shared/ui';
 import {profileGenderOptions} from '../constants/profileEditOptions';
 import {
@@ -410,11 +411,21 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
       <AppScreen contentGap={spacing.xl} topPadding="none">
         <View style={styles.profileArea}>
           <View style={styles.avatarFrame}>
-            <ImagePlaceholder
-              borderRadius={radius.pill}
-              resizeMode="cover"
-              source={activeProfile?.avatarSource}
-            />
+            {activeProfile?.avatarSource ? (
+              <ImagePlaceholder
+                borderRadius={radius.pill}
+                resizeMode="cover"
+                source={activeProfile.avatarSource}
+              />
+            ) : (
+              <View style={styles.defaultAvatar}>
+                <ProfileHeaderIcon
+                  color={colors.textSecondary}
+                  size={56}
+                  strokeWidth={1.8}
+                />
+              </View>
+            )}
           </View>
           {isEditing ? (
             <Pressable
@@ -646,6 +657,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   avatarFrame: {
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 62,
     height: 124,
     overflow: 'hidden',
@@ -873,6 +885,11 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  defaultAvatar: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
   profileArea: {
     alignItems: 'center',

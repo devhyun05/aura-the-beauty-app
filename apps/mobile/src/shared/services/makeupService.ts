@@ -1,4 +1,3 @@
-import { makeupLooksMock } from '../mocks/makeupLooks.mock';
 import type { FaceAnalysisReport } from '../types/faceAnalysis';
 import type { MakeupLook } from '../types/profile';
 import { getFaceAnalysisReports } from './faceAnalysisService';
@@ -30,13 +29,13 @@ export const getMakeupLooks = async (): Promise<MakeupLook[]> => {
     });
     const reportMakeupLooks = mapFaceAnalysisReportsToMakeupLooks(reports);
 
-    return reportMakeupLooks.length > 0 ? reportMakeupLooks : makeupLooksMock;
+    return reportMakeupLooks;
   } catch (error) {
-    console.info('[aura:profile] makeup-looks:fallback-mock', {
+    console.info('[aura:profile] makeup-looks:empty-fallback', {
       message: error instanceof Error ? error.message : String(error),
     });
 
-    return makeupLooksMock;
+    return [];
   }
 };
 
