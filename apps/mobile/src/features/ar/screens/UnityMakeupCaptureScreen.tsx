@@ -1,5 +1,13 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet} from 'react-native';
+import {
+  type GestureResponderEvent,
+  type LayoutChangeEvent,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View as RNView,
+} from 'react-native';
 import {ChevronLeft, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
@@ -30,7 +38,6 @@ import {
 import {
   buildGeneratedMaskUnityPayload,
   buildCheekBrowRecipeAfterGeneratedLip,
-  buildInactiveMakeupRecipe,
   DEFAULT_GENERATED_MASK_CONTROLS,
   DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
   generatePersonalizedLipMakeup,
@@ -67,7 +74,6 @@ const PERSONAL_MASK_REGIONS = [
 const AR_BLUSH_HUD_REGIONS = [
   {id: 'lip', label: 'LIP'},
   {id: 'cheek', label: 'CHEEK'},
-  {id: 'eye', label: 'EYE'},
   {id: 'eyebrow', label: 'EYEBROW'},
 ] as const;
 const GENERATED_MASK_VALIDATION_COLORS = [
@@ -132,10 +138,6 @@ const AR_BLUSH_CHEEK_REGION_OPTIONS = [
   {label: 'Sun 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
   {label: 'Sun 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
 ] as const;
-const AR_BLUSH_EYE_REGION_OPTIONS = [
-  {label: 'Soft', candidateId: 'eyeliner-smooth-v1', maskTextureId: 'eye-smooth-mask-v1'},
-  {label: 'Defined', candidateId: 'eyeliner-drawn-v1', maskTextureId: 'eye-drawn-mask-v1'},
-] as const;
 const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
   {label: 'Daily', candidateId: 'brow-soft-arch-fine-hair-v1', maskTextureId: 'brow-soft-arch-fine-hair-v1'},
   {label: 'Natural', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},
@@ -143,7 +145,8 @@ const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
 ] as const;
 
 type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
-type CompanionRegionKey = keyof PersonalizedCompanionMakeupControls;
+type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
+type CompanionRegionKey = Exclude<keyof PersonalizedCompanionMakeupControls, 'eyeliner'>;
 
 export function UnityMakeupCaptureScreen({
   onBack,
@@ -234,7 +237,11 @@ export function UnityMakeupCaptureScreen({
     setHasStartedMaskFlow(true);
     setPhase('ready');
     setNotice('정면 사진을 촬영해 입술, 볼, 눈썹 기준 마스크를 만듭니다');
-    postUnityMakeupRecipe(buildInactiveMakeupRecipe());
+    postUnityMakeupRecipe(
+      buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
+        activeRegion: 'none',
+      }),
+    );
     postUnityRegionOverlayVisibility({
       guideOverlayVisible: false,
       maskOverlayVisible: false,
@@ -317,6 +324,7 @@ export function UnityMakeupCaptureScreen({
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
           DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
+          {activeRegion: 'all'},
         ),
       );
     } catch (error) {
@@ -368,7 +376,9 @@ export function UnityMakeupCaptureScreen({
         }
         postUnityGeneratedLipMaskPayload(latestGeneratedApplyPayloadRef.current);
         postUnityMakeupRecipe(
-          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls),
+          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
+            activeRegion: 'all',
+          }),
         );
       }, 800);
     }
@@ -404,7 +414,11 @@ export function UnityMakeupCaptureScreen({
     setLastGeneratedMaskId(null);
     setPhase('capturing');
     setNotice('입술, 볼, 눈썹 기준이 될 현재 프레임을 스캔하는 중입니다');
-    postUnityMakeupRecipe(buildInactiveMakeupRecipe());
+    postUnityMakeupRecipe(
+      buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
+        activeRegion: 'none',
+      }),
+    );
     postUnityRegionOverlayVisibility({
       guideOverlayVisible: false,
       maskOverlayVisible: false,
@@ -431,17 +445,7 @@ export function UnityMakeupCaptureScreen({
     });
     generatedMaskControlRevisionRef.current += 1;
     setGeneratedMaskControls(nextControls);
-    postUnityGeneratedLipMaskPayload(
-      JSON.stringify(
-        buildGeneratedMaskUnityPayload(generatedPackage, nextControls, {
-          controlRevision: generatedMaskControlRevisionRef.current,
-          includeTexture: false,
-        }),
-      ),
-    );
-    postUnityMakeupRecipe(
-      buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls),
-    );
+    postRuntimeMakeupForHudRegion(activeHudRegion, nextControls, companionMakeupControls);
   };
 
   const handleCompanionMakeupControlChange = (
@@ -457,7 +461,41 @@ export function UnityMakeupCaptureScreen({
     });
 
     setCompanionMakeupControls(nextControls);
-    postUnityMakeupRecipe(buildCheekBrowRecipeAfterGeneratedLip(Date.now(), nextControls));
+    postRuntimeMakeupForHudRegion(activeHudRegion, generatedMaskControls, nextControls);
+  };
+
+  const handleChangeActiveHudRegion = (region: ArBlushHudRegion) => {
+    setActiveHudRegion(region);
+    postRuntimeMakeupForHudRegion(region, generatedMaskControls, companionMakeupControls);
+  };
+
+  function postRuntimeMakeupForHudRegion(
+    region: ArBlushHudRegion,
+    nextGeneratedControls: GeneratedMaskControls,
+    nextCompanionControls: PersonalizedCompanionMakeupControls,
+  ) {
+    if (!generatedPackage) {
+      return;
+    }
+
+    const lipControls = {
+      ...nextGeneratedControls,
+      maskVisible: true,
+    };
+
+    postUnityGeneratedLipMaskPayload(
+      JSON.stringify(
+        buildGeneratedMaskUnityPayload(generatedPackage, lipControls, {
+          controlRevision: generatedMaskControlRevisionRef.current,
+          includeTexture: false,
+        }),
+      ),
+    );
+    postUnityMakeupRecipe(
+      buildCheekBrowRecipeAfterGeneratedLip(Date.now(), nextCompanionControls, {
+        activeRegion: 'all',
+      }),
+    );
   };
 
   const isBusy = phase === 'capturing' || phase === 'generating' || phase === 'applying';
@@ -534,7 +572,7 @@ export function UnityMakeupCaptureScreen({
           activeRegion={activeHudRegion}
           companionControls={companionMakeupControls}
           controls={generatedMaskControls}
-          onChangeActiveRegion={setActiveHudRegion}
+          onChangeActiveRegion={handleChangeActiveHudRegion}
           onChangeCompanionControls={handleCompanionMakeupControlChange}
           onChangeControls={handleGeneratedMaskControlChange}
           onReopenGenerate={() => {
@@ -726,27 +764,27 @@ function ArBlushRuntimeHud({
     });
   };
 
-  const handleIntensityChange = (delta: number) => {
+  const handleIntensityChange = (value: number) => {
     if (activeRegion === 'lip') {
-      onChangeControls({intensity: controls.intensity + delta});
+      onChangeControls({intensity: value});
       return;
     }
 
     const regionKey = getCompanionRegionKey(activeRegion);
     onChangeCompanionControls(regionKey, {
-      intensity: companionControls[regionKey].intensity + delta,
+      intensity: value,
     });
   };
 
-  const handleOpacityChange = (delta: number) => {
+  const handleOpacityChange = (value: number) => {
     if (activeRegion === 'lip') {
-      onChangeControls({opacity: controls.opacity + delta});
+      onChangeControls({opacity: value});
       return;
     }
 
     const regionKey = getCompanionRegionKey(activeRegion);
     onChangeCompanionControls(regionKey, {
-      opacity: companionControls[regionKey].opacity + delta,
+      opacity: value,
     });
   };
 
@@ -790,7 +828,7 @@ function ArBlushRuntimeHud({
         <XStack style={styles.arBlushPanelHeader}>
           <Text style={styles.arBlushPanelTitle}>CONTROLS</Text>
           <Text style={styles.arBlushPanelMeta}>
-            active=lip / focus={activeRegion}
+            active=lip,cheek,brow / focus={activeRegion}
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -853,15 +891,13 @@ function ArBlushRuntimeHud({
         <HudSliderControl
           colorHex={activeValues.colorHex}
           label="Intensity"
-          onDecrease={() => handleIntensityChange(-0.08)}
-          onIncrease={() => handleIntensityChange(0.08)}
+          onChange={handleIntensityChange}
           value={activeValues.intensity}
         />
         <HudSliderControl
           colorHex={activeValues.colorHex}
           label="Opacity"
-          onDecrease={() => handleOpacityChange(-0.08)}
-          onIncrease={() => handleOpacityChange(0.08)}
+          onChange={handleOpacityChange}
           value={activeValues.opacity}
         />
 
@@ -963,17 +999,57 @@ function HudRegionOptions({
 function HudSliderControl({
   colorHex,
   label,
-  onDecrease,
-  onIncrease,
+  onChange,
   value,
 }: {
   colorHex: string;
   label: string;
-  onDecrease: () => void;
-  onIncrease: () => void;
+  onChange: (value: number) => void;
   value: number;
 }) {
   const clampedValue = Math.max(0, Math.min(1, value));
+  const trackRef = useRef<React.ElementRef<typeof RNView>>(null);
+  const trackLeftRef = useRef(0);
+  const trackWidthRef = useRef(1);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const measureTrack = () => {
+    trackRef.current?.measureInWindow((x, _y, width) => {
+      trackLeftRef.current = x;
+      trackWidthRef.current = Math.max(1, width);
+    });
+  };
+
+  const updateValueFromEvent = (event: GestureResponderEvent) => {
+    const width = Math.max(1, trackWidthRef.current);
+    const localX =
+      trackLeftRef.current > 0
+        ? event.nativeEvent.pageX - trackLeftRef.current
+        : event.nativeEvent.locationX;
+    const nextValue = Math.max(0, Math.min(1, localX / width));
+    onChangeRef.current(Number(nextValue.toFixed(3)));
+  };
+
+  const panResponderRef = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: event => {
+        measureTrack();
+        updateValueFromEvent(event);
+      },
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onPanResponderMove: updateValueFromEvent,
+      onPanResponderTerminationRequest: () => false,
+    }),
+  );
+
+  const handleTrackLayout = (event: LayoutChangeEvent) => {
+    trackWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
+    requestAnimationFrame(measureTrack);
+  };
 
   return (
     <YStack style={styles.arBlushSliderGroup}>
@@ -981,34 +1057,27 @@ function HudSliderControl({
         <Text style={styles.arBlushSliderLabel}>{label}</Text>
         <Text style={styles.arBlushSliderValue}>{clampedValue.toFixed(2)}</Text>
       </XStack>
-      <XStack style={styles.arBlushSliderRow}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onDecrease}
-          style={styles.arBlushSliderStepButton}>
-          <Text style={styles.arBlushSliderStepText}>-</Text>
-        </Pressable>
-        <View style={styles.arBlushSliderTrack}>
-          <View
-            style={[
-              styles.arBlushSliderFill,
-              {backgroundColor: colorHex, width: `${Math.max(3, clampedValue * 100)}%`},
-            ]}
-          />
-          <View
-            style={[
-              styles.arBlushSliderThumb,
-              {left: `${Math.max(2, Math.min(94, clampedValue * 100))}%`},
-            ]}
-          />
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onIncrease}
-          style={styles.arBlushSliderStepButton}>
-          <Text style={styles.arBlushSliderStepText}>+</Text>
-        </Pressable>
-      </XStack>
+      <RNView
+        ref={trackRef}
+        accessibilityRole="adjustable"
+        onLayout={handleTrackLayout}
+        style={styles.arBlushSliderTrack}
+        {...panResponderRef.current.panHandlers}>
+        <RNView
+          pointerEvents="none"
+          style={[
+            styles.arBlushSliderFill,
+            {backgroundColor: colorHex, width: `${Math.max(3, clampedValue * 100)}%`},
+          ]}
+        />
+        <RNView
+          pointerEvents="none"
+          style={[
+            styles.arBlushSliderThumb,
+            {left: `${Math.max(2, Math.min(96, clampedValue * 100))}%`},
+          ]}
+        />
+      </RNView>
     </YStack>
   );
 }
@@ -1037,7 +1106,7 @@ function getHudRegionValues(
     intensity: regionControls.intensity,
     opacity: regionControls.opacity,
     styleLabel: getCompanionStyleLabel(activeRegion, regionControls.maskTextureId),
-    textureLabel: activeRegion === 'cheek' ? 'soft_blush' : 'shimmer_eye',
+    textureLabel: activeRegion === 'cheek' ? 'soft_blush' : 'soft_brow',
   };
 }
 
@@ -1047,31 +1116,23 @@ function getColorName(colorHex: string): string {
   );
 }
 
-function getCompanionRegionKey(region: ArBlushHudRegion): CompanionRegionKey {
+function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
   if (region === 'cheek') {
     return 'blush';
-  }
-
-  if (region === 'eye') {
-    return 'eyeliner';
   }
 
   return 'brow';
 }
 
-function getCompanionOptions(region: ArBlushHudRegion) {
+function getCompanionOptions(region: CompanionHudRegion) {
   if (region === 'cheek') {
     return AR_BLUSH_CHEEK_REGION_OPTIONS;
-  }
-
-  if (region === 'eye') {
-    return AR_BLUSH_EYE_REGION_OPTIONS;
   }
 
   return AR_BLUSH_EYEBROW_REGION_OPTIONS;
 }
 
-function getCompanionStyleLabel(region: ArBlushHudRegion, maskTextureId: string): string {
+function getCompanionStyleLabel(region: CompanionHudRegion, maskTextureId: string): string {
   const option = getCompanionOptions(region).find(candidate => candidate.maskTextureId === maskTextureId);
   return option?.label ?? 'Custom';
 }
@@ -1085,27 +1146,7 @@ function getHudOptionSectionLabel(region: ArBlushHudRegion): string {
     return 'BLUSH REGION';
   }
 
-  if (region === 'eye') {
-    return 'EYE REGION';
-  }
-
   return 'EYEBROW SHAPE';
-}
-
-function getHudRecipeRegion(region: ArBlushHudRegion): string {
-  if (region === 'cheek') {
-    return 'cheek';
-  }
-
-  if (region === 'eye') {
-    return 'eye';
-  }
-
-  if (region === 'eyebrow') {
-    return 'brow';
-  }
-
-  return 'lip';
 }
 
 function clampGeneratedMaskControls(
@@ -1403,15 +1444,16 @@ const styles = StyleSheet.create({
     height: 22,
     marginLeft: -11,
     position: 'absolute',
-    top: -4,
+    top: 0,
     width: 22,
   },
   arBlushSliderTrack: {
     backgroundColor: 'rgba(255, 255, 255, 0.20)',
     borderRadius: radius.pill,
-    flex: 1,
-    height: 14,
+    alignSelf: 'stretch',
+    height: 22,
     overflow: 'visible',
+    width: '100%',
   },
   arBlushSliderValue: {
     color: colors.white,

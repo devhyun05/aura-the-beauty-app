@@ -693,7 +693,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         result.MaskTextureId = recipe.MaskTextureId;
         bool lipStyleAtlas = IsLipStyleAtlasMask(recipe.MaskTextureId);
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
-        bool cheekBlushMask = recipe.Region == "cheek" && IsCheekBlushMask(recipe.MaskTextureId);
+        bool cheekBlushMask = (recipe.Region == "cheek" || recipe.Region == "blush")
+            && IsCheekBlushMask(recipe.MaskTextureId);
         bool lipLogicalMultilayer = lipStyleAtlas || visionLipBoundary;
         result.LipRenderLayerMode = lipLogicalMultilayer
             ? "soft_sdf_logical_multilayer"
@@ -912,7 +913,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             visionGateInfo = BuildVisionGateInfo(visionBoundary);
         }
 
-        bool cheekBlushMask = recipe.Region == "cheek" && IsCheekBlushMask(recipe.MaskTextureId);
+        bool cheekBlushMask = IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId);
         List<Vector3> vertices = new List<Vector3>(face.vertices.Length);
         List<Vector2> textureCoordinates = cheekBlushMask
             ? BuildCheekFaceLocalUvCoordinates(face)
@@ -2205,7 +2206,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         bool lipStyleAtlas = region == "lip" && IsLipStyleAtlasMask(maskTextureId);
         bool visionLipBoundary = region == "lip" && IsVisionLipBoundaryMask(maskTextureId);
         bool generatedLipMask = region == "lip" && IsGeneratedLipMaskTextureId(maskTextureId);
-        bool cheekBlushMask = region == "cheek" && IsCheekBlushMask(maskTextureId);
+        bool cheekBlushMask = (region == "cheek" || region == "blush")
+            && IsCheekBlushMask(maskTextureId);
         return new MaskDefinition
         {
             Region = region,
@@ -2251,7 +2253,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         if (recipe != null
-            && recipe.Region == "cheek"
+            && IsCheekBlushRegion(recipe.Region)
             && IsCheekBlushMask(recipe.MaskTextureId))
         {
             return Mathf.Clamp01(Mathf.Min(
@@ -2328,9 +2330,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             case "lip":
                 return LipDrawnStyleAtlasMaskId;
             case "cheek":
+            case "blush":
                 return CheekSessionMask1Id;
             case "eye":
                 return "eye-drawn-mask-v1";
+            case "brow":
+                return "psd-arcore-brow-semi-arch-v1";
+            case "eyeliner":
+                return "e7-eyeliner-minimal-safe-uv-v0";
             default:
                 throw new ArgumentException("Unsupported smooth mask region: " + region);
         }
@@ -2669,7 +2676,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         view.MeshRenderer.sharedMaterial = material;
         material.SetTexture("_MaskTex", maskTexture);
-        ApplyMaterialBlendMode(material, recipe.BlendMode, recipe.Region == "cheek" && IsCheekBlushMask(recipe.MaskTextureId));
+        ApplyMaterialBlendMode(material, recipe.BlendMode, IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId));
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
 
         if (material.HasProperty("_UseScreenSpaceMask"))
@@ -2774,7 +2781,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat("_PreserveDetail", recipe.PreserveDetail ? 1.0f : 0.0f);
         }
 
-        bool cheekBlushMask = recipe.Region == "cheek" && IsCheekBlushMask(recipe.MaskTextureId);
+        bool cheekBlushMask = IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId);
         if (cheekBlushMask)
         {
             if (material.HasProperty("_DensityPower"))
@@ -2851,10 +2858,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         {
             material.SetFloat(
                 "_CheekBlushMode",
-                recipe.Region == "cheek" && IsCheekBlushMask(recipe.MaskTextureId)
+                IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId)
                     ? 1.0f
                     : 0.0f);
         }
+    }
+
+    private static bool IsCheekBlushRegion(string region)
+    {
+        return region == "cheek" || region == "blush";
     }
 
     private static Material GetOrCreateMaskMaterial(RegionOverlayView view, string region)
@@ -3136,7 +3148,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static string NormalizeRegion(string region)
     {
         region = string.IsNullOrWhiteSpace(region) ? string.Empty : region.Trim().ToLowerInvariant();
-        if (region == "lip" || region == "cheek" || region == "eye")
+        if (region == "lip"
+            || region == "cheek"
+            || region == "blush"
+            || region == "eye"
+            || region == "brow"
+            || region == "eyeliner")
         {
             return region;
         }
@@ -3156,14 +3173,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     || textureSample == "full_lip"
                     || textureSample == "gradient_lip"
                     || textureSample == "overline_lip"))
-            || (region == "cheek"
+            || ((region == "cheek" || region == "blush")
                 && (textureSample == "soft_blush"
                     || textureSample == "blush_session_1"
                     || textureSample == "blush_session_2"
                     || textureSample == "blush_session_3"
                     || textureSample == "blush_session_4"
                     || textureSample == "blush_session_5"))
-            || (region == "eye" && textureSample == "shimmer_eye"))
+            || ((region == "eye" || region == "brow" || region == "eyeliner")
+                && textureSample == "shimmer_eye"))
         {
             return textureSample;
         }
@@ -3214,8 +3232,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 || maskTextureId == "lip-smooth-mask-v1"
                 || maskTextureId == "lip-drawn-mask-v1"
                 || IsGeneratedLipMaskTextureId(maskTextureId)))
-            || (region == "cheek" && IsCheekBlushMask(maskTextureId))
-            || (region == "eye" && maskTextureId == "eye-smooth-mask-v1"))
+            || ((region == "cheek" || region == "blush") && IsCheekBlushMask(maskTextureId))
+            || (region == "eye" && (maskTextureId == "eye-smooth-mask-v1"
+                || maskTextureId == "eye-drawn-mask-v1"))
+            || (region == "brow" && (maskTextureId.StartsWith("brow-", StringComparison.Ordinal)
+                || maskTextureId.StartsWith("psd-arcore-brow-", StringComparison.Ordinal)
+                || maskTextureId.StartsWith("e7-brow-", StringComparison.Ordinal)))
+            || (region == "eyeliner" && (maskTextureId.StartsWith("e7-eyeliner-", StringComparison.Ordinal)
+                || maskTextureId == "eye-smooth-mask-v1"
+                || maskTextureId == "eye-drawn-mask-v1")))
         {
             return maskTextureId;
         }

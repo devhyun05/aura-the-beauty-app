@@ -13,6 +13,7 @@ import {
 import {
   buildFullFaceMakeupRecipe,
   DEFAULT_FULL_FACE_REGION_CONTROLS,
+  type FullFaceMakeupRecipeLayer,
   type FullFaceMakeupRecipe,
   type FullFaceMakeupSourceInput,
   type FullFaceRegionControls,
@@ -64,6 +65,12 @@ export type PersonalizedCompanionMakeupControls = {
   brow: PersonalizedCompanionMakeupRegionControl;
   eyeliner: PersonalizedCompanionMakeupRegionControl;
 };
+
+export type PersonalizedCompanionMakeupActiveRegion =
+  | 'blush'
+  | 'brow'
+  | 'all'
+  | 'none';
 
 const DEFAULT_PROVIDER: LipMaskProvider = 'mediapipe';
 
@@ -216,14 +223,22 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   sentAtMs = Date.now(),
   companionControls: PersonalizedCompanionMakeupControls =
     DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
+  options: {
+    activeRegion?: PersonalizedCompanionMakeupActiveRegion;
+    useCheekRegionAlias?: boolean;
+  } = {},
 ): FullFaceMakeupRecipe {
+  const activeRegion = options.activeRegion ?? 'all';
+  const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
+  const isRegionEnabled = (region: 'blush' | 'brow') =>
+    activeRegion === 'all' || activeRegion === region;
   const controls: FullFaceRegionControls = {
     ...DEFAULT_FULL_FACE_REGION_CONTROLS,
     brow: {
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.brow,
       candidateId: companionControls.brow.candidateId,
       colorHex: companionControls.brow.colorHex,
-      enabled: true,
+      enabled: isRegionEnabled('brow'),
       intensity: companionControls.brow.intensity,
       maskTextureId: companionControls.brow.maskTextureId,
       opacity: companionControls.brow.opacity,
@@ -232,7 +247,7 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.blush,
       candidateId: companionControls.blush.candidateId,
       colorHex: companionControls.blush.colorHex,
-      enabled: true,
+      enabled: isRegionEnabled('blush'),
       intensity: companionControls.blush.intensity,
       maskTextureId: companionControls.blush.maskTextureId,
       opacity: companionControls.blush.opacity,
@@ -241,7 +256,7 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.eyeliner,
       candidateId: companionControls.eyeliner.candidateId,
       colorHex: companionControls.eyeliner.colorHex,
-      enabled: true,
+      enabled: false,
       intensity: companionControls.eyeliner.intensity,
       maskTextureId: companionControls.eyeliner.maskTextureId,
       opacity: companionControls.eyeliner.opacity,
@@ -257,17 +272,31 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
     recipeId: `personalized-cheek-brow-${sentAtMs}`,
     sentAtMs,
   });
-  const layers = recipe.layers.filter(
-    layer => layer.region === 'blush' || layer.region === 'brow' || layer.region === 'eyeliner',
-  );
+  const layers = recipe.layers
+    .filter(
+      layer => layer.region === 'blush' || layer.region === 'brow',
+    )
+    .map(layer =>
+      shouldUseCheekRegionAlias && layer.region === 'blush'
+        ? ({
+            ...layer,
+            activeRegions: undefined,
+            id: layer.id.replace(/^blush/, 'cheek'),
+            layer: 'cheek',
+            region: 'cheek',
+          } as unknown as FullFaceMakeupRecipeLayer)
+        : layer,
+    );
+  const enabledLayers = layers.filter(layer => layer.enabled);
+  const activeRegions = enabledLayers.map(layer => layer.region).join(',') || 'none';
 
   return {
     ...recipe,
-    activeRegions: 'blush,brow,eyeliner',
-    enabledLayerCount: layers.length,
+    activeRegions,
+    enabledLayerCount: enabledLayers.length,
     layerCount: layers.length,
     layers,
-    region: 'blush',
+    region: (enabledLayers[0]?.region ?? 'blush') as FullFaceMakeupRecipe['region'],
   } as FullFaceMakeupRecipe;
 }
 

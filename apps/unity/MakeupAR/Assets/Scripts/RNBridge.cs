@@ -522,7 +522,12 @@ public sealed class RNBridge : MonoBehaviour
                 regionMaskOverlay.ClearRecipesAndHideOverlays();
             }
 
-            Debug.LogError("[E4] recipe_parse_failed raw=" + json + " error=" + exception.Message);
+            string rawPreview = json.Length > 768 ? json.Substring(0, 768) + "..." : json;
+            Debug.LogError(
+                "[E4] recipe_parse_failed"
+                + " error=" + exception.Message
+                + " payloadBytes=" + json.Length.ToString(CultureInfo.InvariantCulture)
+                + " rawPreview=" + rawPreview);
         }
     }
 
