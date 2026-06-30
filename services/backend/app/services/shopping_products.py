@@ -36,31 +36,31 @@ TABS = [
 
 CATEGORY_CONFIG = {
   "lip": {
-    "query": "국내 립틴트 립스틱 화장품",
+    "query": "립틴트 립스틱 화장품",
     "label": "립",
     "palette": ["#C95E68", "#E79196"],
     "reason": "추천 룩의 생기와 톤을 맞추기 좋은 립 컬러 후보예요.",
   },
   "cheek": {
-    "query": "국내 블러셔 치크 화장품",
+    "query": "블러셔 치크 화장품",
     "label": "블러셔",
     "palette": ["#D77A75", "#F0AAA0"],
     "reason": "얼굴 중심에 자연스러운 혈색을 더하기 좋은 치크 후보예요.",
   },
   "shadow": {
-    "query": "국내 아이섀도우 팔레트 화장품",
+    "query": "아이섀도우 팔레트 화장품",
     "label": "아이섀도우",
     "palette": ["#D6A394", "#C98082", "#8B5F55", "#5F4039"],
     "reason": "눈매 음영과 추천 무드를 같이 살리기 좋은 아이 제품이에요.",
   },
   "liner": {
-    "query": "국내 아이라이너 브로우 화장품",
+    "query": "아이라이너 화장품",
     "label": "아이라이너",
     "palette": ["#4B3028", "#786356"],
     "reason": "눈매를 또렷하게 정리하면서 과하지 않게 맞추기 좋은 후보예요.",
   },
   "base": {
-    "query": "국내 쿠션 파운데이션 베이스 화장품",
+    "query": "쿠션 파운데이션 베이스 화장품",
     "label": "베이스",
     "palette": ["#E4C5A8", "#F4DDC8"],
     "reason": "추천 메이크업의 피부 표현을 맞추기 좋은 베이스 후보예요.",
@@ -73,6 +73,26 @@ DEFAULT_MAKEUP_LOOK = {
   "imageUrl": None,
   "tags": ["K-뷰티", "데일리", "톤 맞춤"],
   "palette": ["#C96F72", "#E49C90", "#A77A69", "#5A3D34"],
+}
+MAKEUP_LOOK_PALETTES_BY_TERM = {
+  "코랄": ["#E87564", "#F2A184", "#C95E55", "#F7C7B8"],
+  "피치": ["#ED8F73", "#F4B09A", "#D97161", "#F8CFC2"],
+  "로즈": ["#C96F72", "#E49C90", "#B56B75", "#F1B6AD"],
+  "핑크": ["#D97891", "#F2A2B5", "#C85E7A", "#F8CCD7"],
+  "브라운": ["#8B5F55", "#A77A69", "#5F4039", "#D6A394"],
+  "베이지": ["#D6A394", "#E4C5A8", "#B88B72", "#F4DDC8"],
+  "누드": ["#C98F7B", "#E1B7A5", "#A87564", "#F1D2C4"],
+  "모브": ["#A56B86", "#C78FA4", "#87556F", "#E1B8C6"],
+  "플럼": ["#8A4E63", "#B06C83", "#633749", "#D2A0AE"],
+  "레드": ["#C8424B", "#E46D72", "#9F3039", "#F2A1A4"],
+  "오렌지": ["#E6784F", "#F0A077", "#C75C3C", "#F6C4A8"],
+  "라벤더": ["#A988C9", "#C7B0E0", "#7F65A8", "#E0D3F0"],
+  "아이보리": ["#F0D7BE", "#F7E6D4", "#D8B893", "#FFF1E2"],
+  "혈색": ["#D86F70", "#F0A09A", "#BE5A64", "#F3C1B8"],
+  "글로우": ["#ECA789", "#F5C3AA", "#D58A70", "#F8DAC8"],
+  "글로시": ["#ECA789", "#F5C3AA", "#D58A70", "#F8DAC8"],
+  "윤광": ["#E9B18F", "#F5C9AE", "#D19776", "#F8DDC8"],
+  "매트": ["#B97367", "#D49887", "#875A50", "#E5B9A8"],
 }
 
 COLOR_TERMS = [
@@ -119,10 +139,98 @@ CONTAINER_TERMS = ["뚜껑형", "스틱", "튜브", "팔레트", "쿠션", "펜�
 CATEGORY_GUIDE_KEYS = {
   "base": ("baseMakeupGuide",),
   "cheek": ("makeupGuideline.blush",),
-  "liner": ("makeupGuideline.eyeliner", "makeupGuideline.brow"),
+  "liner": ("makeupGuideline.eyeliner",),
   "lip": ("makeupGuideline.lip",),
   "shadow": ("makeupGuideline.eyeshadow",),
 }
+CATEGORY_MATCH_TERMS = {
+  "base": (
+    "베이스",
+    "베이스메이크업",
+    "비비",
+    "비비크림",
+    "씨씨",
+    "씨씨크림",
+    "컨실러",
+    "쿠션",
+    "톤업",
+    "파운데이션",
+    "파우더",
+  ),
+  "cheek": ("blush", "블러셔", "블러쉬", "볼터치", "치크"),
+  "liner": ("eyeliner", "라이너", "리퀴드라이너", "아이라이너", "젤라이너", "펜라이너"),
+  "lip": ("gloss", "lip", "립", "립글로스", "립밤", "립스틱", "립틴트", "틴트"),
+  "shadow": ("eyeshadow", "섀도우", "아이섀도우", "아이팔레트", "팔레트"),
+}
+CATEGORY_STRICT_PRODUCT_TERMS = {
+  "base": (
+    "bb크림",
+    "cc크림",
+    "메이크업베이스",
+    "비비크림",
+    "씨씨크림",
+    "컨실러",
+    "쿠션 파운데이션",
+    "톤업크림",
+    "파운데이션",
+  ),
+  "cheek": ("blusher", "블러셔", "볼터치", "치크 팝", "치크팝"),
+  "liner": (
+    "eyeliner",
+    "리퀴드 아이라이너",
+    "아이라이너",
+    "오토 젤 아이라이너",
+    "젤 아이라이너",
+    "펜 아이라이너",
+  ),
+  "lip": ("lip gloss", "lip tint", "lipstick", "립글로스", "립밤", "립스틱", "립틴트"),
+  "shadow": (
+    "eye palette",
+    "eyeshadow",
+    "아이 섀도우",
+    "아이섀도",
+    "아이섀도우",
+    "아이팔레트",
+    "섀도우 팔레트",
+  ),
+}
+CATEGORY_FALLBACK_QUERIES = {
+  "base": ("쿠션 파운데이션 화장품", "베이스메이크업 파운데이션", "톤업 쿠션 화장품"),
+  "cheek": ("블러셔 화장품", "치크 블러셔", "볼터치 블러셔"),
+  "liner": ("아이라이너 화장품", "리퀴드 아이라이너", "젤 아이라이너"),
+  "lip": ("립틴트 화장품", "립스틱 화장품", "립글로스 화장품"),
+  "shadow": ("아이섀도우 화장품", "아이섀도우 팔레트", "섀도우 팔레트"),
+}
+COSMETIC_CATEGORY_TERMS = ("beauty", "뷰티", "미용", "색조", "화장품")
+NON_COSMETIC_EXCLUDE_TERMS = (
+  "가방",
+  "구두",
+  "국내매장판",
+  "남성의류",
+  "나이키",
+  "뉴발란스",
+  "목걸이",
+  "바지",
+  "반스",
+  "부츠",
+  "샌들",
+  "셔츠",
+  "슈즈",
+  "슬리퍼",
+  "신발",
+  "아디다스",
+  "여성의류",
+  "운동화",
+  "의류",
+  "잡화",
+  "주얼리",
+  "쥬얼리",
+  "컨버스",
+  "크록스",
+  "티셔츠",
+  "패션",
+  "푸마",
+)
 
 
 def _clean_text(value: Any) -> str:
@@ -189,6 +297,80 @@ def _contains_any(text: str, values: list[str]) -> list[str]:
   ]
 
 
+def _text_has_any(text: str, values: tuple[str, ...]) -> bool:
+  normalized_text = text.lower()
+
+  return any(value.lower() in normalized_text for value in values)
+
+
+def _naver_category_text(item: dict[str, Any]) -> str:
+  return _clean_text(
+    " ".join(
+      [
+        _clean_text(item.get("category1")),
+        _clean_text(item.get("category2")),
+        _clean_text(item.get("category3")),
+        _clean_text(item.get("category4")),
+      ],
+    ),
+  )
+
+
+def _naver_searchable_text(item: dict[str, Any]) -> str:
+  return _clean_text(
+    " ".join(
+      [
+        _naver_category_text(item),
+        _clean_text(item.get("title")),
+        _clean_text(item.get("brand")),
+        _clean_text(item.get("maker")),
+        _clean_text(item.get("mallName")),
+      ],
+    ),
+  )
+
+
+def _has_strict_product_term(text: str, category: str) -> bool:
+  return _text_has_any(text, CATEGORY_STRICT_PRODUCT_TERMS[category])
+
+
+def _has_category_match_term(text: str, category: str) -> bool:
+  return _text_has_any(text, CATEGORY_MATCH_TERMS[category])
+
+
+def _is_category_metadata_reliable(category_text: str) -> bool:
+  return bool(category_text) and _text_has_any(category_text, COSMETIC_CATEGORY_TERMS)
+
+
+def _is_uncategorized_cosmetic_item(text: str, category: str) -> bool:
+  # NAVER occasionally returns blank category fields. In that case, only accept
+  # unmistakable cosmetic product names; broad words such as "라이너" or
+  # "블러쉬" can also be fashion/color names.
+  return _has_strict_product_term(text, category)
+
+
+def _is_naver_cosmetic_item_for_category(
+  item: dict[str, Any],
+  category: str,
+) -> bool:
+  category_text = _naver_category_text(item)
+  searchable_text = _naver_searchable_text(item)
+
+  if _text_has_any(searchable_text, NON_COSMETIC_EXCLUDE_TERMS):
+    return False
+
+  if _is_category_metadata_reliable(category_text):
+    return (
+      _has_category_match_term(category_text, category) or
+      _has_strict_product_term(searchable_text, category)
+    )
+
+  if category_text:
+    return False
+
+  return _is_uncategorized_cosmetic_item(searchable_text, category)
+
+
 def _decode_json_object(value: Any) -> dict[str, Any]:
   if isinstance(value, dict):
     return value
@@ -216,6 +398,142 @@ def _get_nested_text(payload: dict[str, Any], path: str) -> str:
   return _clean_text(current)
 
 
+def _first_makeup_image_url(card: dict[str, Any]) -> str:
+  return _clean_text(
+    card.get("imageUrl") or
+    card.get("image_url") or
+    card.get("cdnUrl") or
+    card.get("previewUrl"),
+  )
+
+
+def _normalize_recommended_makeup_card(card: Any) -> dict[str, Any] | None:
+  if not isinstance(card, dict):
+    return None
+
+  title = _clean_text(card.get("title"))
+  image_url = _first_makeup_image_url(card)
+
+  if not title and not image_url:
+    return None
+
+  return {
+    "description": _clean_text(card.get("description")),
+    "imageUrl": image_url,
+    "palette": _as_list(card.get("palette")),
+    "subtitle": _clean_text(card.get("subtitle")),
+    "tags": _as_list(card.get("tags")),
+    "title": title,
+  }
+
+
+def _normalize_recommended_makeups(result: dict[str, Any]) -> list[dict[str, Any]]:
+  recommended_makeups = result.get("recommendedMakeups")
+
+  if not isinstance(recommended_makeups, list):
+    return []
+
+  return [
+    normalized
+    for card in recommended_makeups[:3]
+    if (normalized := _normalize_recommended_makeup_card(card)) is not None
+  ]
+
+
+def _primary_recommended_makeup(profile: dict[str, Any] | None) -> dict[str, Any] | None:
+  recommended_makeups = profile.get("recommendedMakeups") if isinstance(profile, dict) else None
+
+  if not isinstance(recommended_makeups, list):
+    return None
+
+  selected_index = profile.get("selectedRecommendedMakeupIndex") if isinstance(profile, dict) else None
+
+  if isinstance(selected_index, int) and 0 <= selected_index < len(recommended_makeups):
+    selected_card = recommended_makeups[selected_index]
+
+    if (
+      isinstance(selected_card, dict)
+      and (_clean_text(selected_card.get("title")) or _clean_text(selected_card.get("imageUrl")))
+    ):
+      return selected_card
+
+  return next(
+    (
+      card
+      for card in recommended_makeups
+      if isinstance(card, dict)
+      and (_clean_text(card.get("title")) or _clean_text(card.get("imageUrl")))
+    ),
+    None,
+  )
+
+
+def _makeup_card_text(card: dict[str, Any] | None) -> str:
+  if not isinstance(card, dict):
+    return ""
+
+  text_parts = [
+    card.get("title"),
+    card.get("subtitle"),
+    card.get("description"),
+    *_as_list(card.get("tags")),
+  ]
+
+  return " ".join(_clean_text(part) for part in text_parts if _clean_text(part))
+
+
+def _palette_for_makeup(
+  profile: dict[str, Any] | None,
+  makeup: dict[str, Any] | None,
+) -> list[str]:
+  explicit_palette = _as_list(makeup.get("palette") if isinstance(makeup, dict) else None)
+
+  if explicit_palette:
+    return explicit_palette[:4]
+
+  searchable_text = _makeup_card_text(makeup) or _profile_text(profile)
+  matched_colors: list[str] = []
+
+  for term, palette in MAKEUP_LOOK_PALETTES_BY_TERM.items():
+    if term.lower() in searchable_text.lower():
+      matched_colors.extend(palette[:2])
+
+  return (_dedupe(matched_colors) or DEFAULT_MAKEUP_LOOK["palette"])[:4]
+
+
+def _build_makeup_look_options(profile: dict[str, Any] | None) -> list[dict[str, Any]]:
+  recommended_makeups = profile.get("recommendedMakeups") if isinstance(profile, dict) else None
+
+  if not isinstance(recommended_makeups, list):
+    return []
+
+  options = []
+
+  for index, card in enumerate(recommended_makeups):
+    if not isinstance(card, dict):
+      continue
+
+    image_url = _first_makeup_image_url(card)
+    title = _clean_text(card.get("title"))
+
+    if not image_url and not title:
+      continue
+
+    options.append(
+      {
+        "description": _clean_text(card.get("description")),
+        "imageUrl": image_url,
+        "index": index,
+        "palette": _palette_for_makeup(profile, card),
+        "subtitle": _clean_text(card.get("subtitle")),
+        "tags": _as_list(card.get("tags")) or DEFAULT_MAKEUP_LOOK["tags"],
+        "title": title or f"추천 메이크업 {index + 1}",
+      },
+    )
+
+  return options
+
+
 def _normalize_report_payload(row: dict[str, Any] | None) -> dict[str, Any] | None:
   if not row:
     return None
@@ -235,6 +553,7 @@ def _normalize_report_payload(row: dict[str, Any] | None) -> dict[str, Any] | No
     ),
     "personalColor": _clean_text(row.get("personal_color") or result.get("personalColor")),
     "recommendedMood": _clean_text(row.get("recommended_mood") or result.get("recommendedMood")),
+    "recommendedMakeups": _normalize_recommended_makeups(result),
     "shortSummary": _clean_text(row.get("short_summary") or result.get("shortSummary")),
     "skinAnalysisSummary": _clean_text(
       row.get("skin_analysis_summary") or result.get("skinAnalysisSummary"),
@@ -250,7 +569,12 @@ def _profile_text(profile: dict[str, Any] | None, category: str | None = None) -
   if not profile:
     return ""
 
+  primary_makeup = _primary_recommended_makeup(profile)
   text_parts = [
+    primary_makeup.get("title") if primary_makeup else "",
+    primary_makeup.get("subtitle") if primary_makeup else "",
+    primary_makeup.get("description") if primary_makeup else "",
+    *(primary_makeup.get("tags", []) if primary_makeup else []),
     profile.get("personalColor"),
     profile.get("skinType"),
     profile.get("toneSummary"),
@@ -812,20 +1136,26 @@ def _build_makeup_look(profile: dict[str, Any] | None) -> dict[str, Any]:
   if not profile:
     return DEFAULT_MAKEUP_LOOK
 
+  primary_makeup = _primary_recommended_makeup(profile)
   targets = _target_terms(profile)
   title = (
+    _clean_text(primary_makeup.get("title") if primary_makeup else "") or
     _clean_text(profile.get("recommendedMood")) or
     _clean_text(profile.get("personalColor")) or
     DEFAULT_MAKEUP_LOOK["title"]
   )
   description = (
+    _clean_text(primary_makeup.get("description") if primary_makeup else "") or
+    _clean_text(primary_makeup.get("subtitle") if primary_makeup else "") or
     _clean_text(profile.get("skinAnalysisSummary")) or
     _clean_text(profile.get("summary")) or
     _clean_text(profile.get("shortSummary")) or
     DEFAULT_MAKEUP_LOOK["description"]
   )
+  palette = _palette_for_makeup(profile, primary_makeup)
   tags = _dedupe(
     [
+      *(_as_list(primary_makeup.get("tags") if primary_makeup else None)),
       _clean_text(profile.get("personalColor")),
       _clean_text(profile.get("skinType")),
       *targets["colors"],
@@ -836,6 +1166,12 @@ def _build_makeup_look(profile: dict[str, Any] | None) -> dict[str, Any]:
   return {
     **DEFAULT_MAKEUP_LOOK,
     "description": description,
+    "imageUrl": (
+      _first_makeup_image_url(primary_makeup)
+      if primary_makeup
+      else DEFAULT_MAKEUP_LOOK["imageUrl"]
+    ),
+    "palette": palette,
     "tags": tags or DEFAULT_MAKEUP_LOOK["tags"],
     "title": title,
   }
@@ -857,6 +1193,9 @@ def _map_naver_item(
   product_id = _clean_text(item.get("productId"))
 
   if not title or not link or not image_url or not product_id:
+    return None
+
+  if not _is_naver_cosmetic_item_for_category(item, category):
     return None
 
   config = CATEGORY_CONFIG[category]
@@ -905,31 +1244,47 @@ async def _fetch_naver_category_products(
   category: str,
   profile: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-  query = _build_category_query(category, profile)
-  response = await client.get(
-    "https://openapi.naver.com/v1/search/shop.json",
-    headers={
-      "X-Naver-Client-Id": settings.naver_shopping_client_id,
-      "X-Naver-Client-Secret": settings.naver_shopping_client_secret,
-    },
-    params={
-      "display": 20,
-      "exclude": "used:rental:cbshop",
-      "filter": "naverpay",
-      "query": query,
-      "sort": "sim",
-      "start": 1,
-    },
+  queries = _dedupe(
+    [
+      _build_category_query(category, profile),
+      CATEGORY_CONFIG[category]["query"],
+      *CATEGORY_FALLBACK_QUERIES.get(category, ()),
+    ],
   )
-  response.raise_for_status()
-  data = response.json()
-  products = []
+  products: list[dict[str, Any]] = []
+  seen_product_ids: set[str] = set()
+  headers = {
+    "X-Naver-Client-Id": settings.naver_shopping_client_id,
+    "X-Naver-Client-Secret": settings.naver_shopping_client_secret,
+  }
 
-  for item_index, item in enumerate(data.get("items", [])):
-    product = _map_naver_item(item, category, item_index, profile)
+  for query in queries:
+    response = await client.get(
+      "https://openapi.naver.com/v1/search/shop.json",
+      headers=headers,
+      params={
+        "display": 40,
+        "exclude": "used:rental:cbshop",
+        "filter": "naverpay",
+        "query": query,
+        "sort": "sim",
+        "start": 1,
+      },
+    )
+    response.raise_for_status()
+    data = response.json()
 
-    if product:
+    for item_index, item in enumerate(data.get("items", [])):
+      product = _map_naver_item(item, category, len(products) + item_index, profile)
+
+      if not product or product["id"] in seen_product_ids:
+        continue
+
+      seen_product_ids.add(product["id"])
       products.append(product)
+
+    if len(products) >= 8:
+      break
 
   return sorted(products, key=lambda product: product["matchRate"], reverse=True)[:8]
 
@@ -1132,6 +1487,7 @@ async def build_product_recommendation_data(
   settings: Settings,
   category: str | None = None,
   auth_provider: str | None = None,
+  look_index: int | None = None,
   oauth_sub: str | None = None,
   report_id: str | None = None,
 ) -> tuple[dict[str, Any], str]:
@@ -1143,6 +1499,8 @@ async def build_product_recommendation_data(
     oauth_sub=oauth_sub,
     report_id=report_id,
   )
+  if profile is not None and isinstance(look_index, int) and look_index >= 0:
+    profile["selectedRecommendedMakeupIndex"] = look_index
 
   try:
     products = await _fetch_naver_products(settings, category, profile)
@@ -1173,6 +1531,7 @@ async def build_product_recommendation_data(
     {
       "userNickname": "고객",
       "makeupLook": _build_makeup_look(profile),
+      "makeupLookOptions": _build_makeup_look_options(profile),
       "tabs": TABS,
       "products": products,
       "sets": _build_sets(products),

@@ -40,8 +40,8 @@ expectMainHeader('HomeTab', {
   usesBrandLogo: true,
 });
 expectMainHeader('CustomTab', {
-  showTitle: false,
-  usesBrandLogo: false,
+  showTitle: true,
+  usesBrandLogo: true,
 });
 expectMainHeader('ProfileTab', {
   showTitle: true,

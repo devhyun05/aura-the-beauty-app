@@ -43,9 +43,15 @@ export type RecommendedProduct = {
 export type ProductRecommendationLook = {
   title: string;
   description: string;
+  imageUrl?: string;
   imageSource: ImageSourcePropType;
   tags: string[];
   palette: string[];
+};
+
+export type ProductRecommendationLookOption = ProductRecommendationLook & {
+  index: number;
+  subtitle?: string;
 };
 
 export type ProductRecommendationSet = {
@@ -58,6 +64,7 @@ export type ProductRecommendationSet = {
 export type ProductRecommendationData = {
   userNickname: string;
   makeupLook: ProductRecommendationLook;
+  makeupLookOptions: ProductRecommendationLookOption[];
   tabs: ProductRecommendationTab[];
   products: RecommendedProduct[];
   sets: ProductRecommendationSet[];

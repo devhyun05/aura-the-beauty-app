@@ -5,15 +5,19 @@ import type {
 } from '../../shared/types/makeupGuide';
 
 export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
+export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
 
 export type RootStackParamList = {
   Login: undefined;
   ProfileSetup: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  FaceCapture: undefined;
+  FaceCapture: {
+    afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
+    initialSource?: 'gallery';
+  } | undefined;
   UnityMakeupCapture: undefined;
-  FaceAnalysisLoading: undefined;
+  FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;

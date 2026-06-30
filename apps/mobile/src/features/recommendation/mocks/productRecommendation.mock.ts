@@ -36,6 +36,16 @@ export const productRecommendationMock: ProductRecommendationData = {
     tags: ['로즈 립', '피치 블러셔', '브라운 음영', '뉴트럴 베이스'],
     palette: ['#C96F72', '#E49C90', '#A77A69', '#5A3D34'],
   },
+  makeupLookOptions: [
+    {
+      title: '내추럴 뮤트 로즈 룩',
+      description: '분석된 로즈 톤과 어울리는 실제 컬러 제품만 골라 추천해드려요.',
+      imageSource: makeupLookImage,
+      index: 0,
+      tags: ['로즈 립', '피치 블러셔', '브라운 음영', '뉴트럴 베이스'],
+      palette: ['#C96F72', '#E49C90', '#A77A69', '#5A3D34'],
+    },
+  ],
   tabs: [
     {id: 'all', label: '전체'},
     {id: 'lip', label: '립'},

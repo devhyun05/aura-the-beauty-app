@@ -40,7 +40,18 @@ export function ProductRecommendationRouteScreen({
     <DetailRouteChrome
       routeName="ProductRecommendation"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <ProductRecommendationScreen sourceReportId={selectedFaceAnalysisReport?.id} />
+      <ProductRecommendationScreen
+        onCapturePhoto={() =>
+          navigation.navigate('FaceCapture', {afterAnalysisRoute: 'ProductRecommendation'})
+        }
+        onPickGalleryPhoto={() =>
+          navigation.navigate('FaceCapture', {
+            afterAnalysisRoute: 'ProductRecommendation',
+            initialSource: 'gallery',
+          })
+        }
+        sourceReportId={selectedFaceAnalysisReport?.id}
+      />
     </DetailRouteChrome>
   );
 }
