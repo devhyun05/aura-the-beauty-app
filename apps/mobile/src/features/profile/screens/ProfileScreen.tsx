@@ -3,7 +3,9 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {Text, View} from 'tamagui';
 
+import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {FaceAnalysisSummaryCard} from '../components/FaceAnalysisSummaryCard';
@@ -22,6 +24,7 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReport?: (reportId: string) => void;
   onPressFaceAnalysisReportsList?: () => void;
+  onPressProductRecommendationForReport?: (reportId: string) => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
@@ -32,6 +35,7 @@ export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReport,
   onPressFaceAnalysisReportsList,
+  onPressProductRecommendationForReport,
   onPressMakeupLook,
   onPressMakeupLookList,
   onPressLikedProductList,
@@ -42,6 +46,9 @@ export function ProfileScreen({
   const [loadState, setLoadState] = useState<ProfileLoadState>({
     status: 'loading',
   });
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
+  const [pendingDeleteReportId, setPendingDeleteReportId] = useState<string | null>(null);
   const contentWidth = width - spacing.screenX * 2;
   const makeupLookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
   const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
@@ -57,6 +64,8 @@ export function ProfileScreen({
   };
 
   const loadProfile = useCallback(() => {
+    setDeleteErrorMessage(null);
+    setPendingDeleteReportId(null);
     setLoadState({status: 'loading'});
 
     resolveProfileLoadState(loadProfileScreenData).then((nextState) => {
@@ -65,6 +74,50 @@ export function ProfileScreen({
       }
     });
   }, []);
+
+  const handleDeleteFaceAnalysisReport = useCallback(async (reportId: string) => {
+    setDeleteErrorMessage(null);
+
+    if (pendingDeleteReportId !== reportId) {
+      setPendingDeleteReportId(reportId);
+      return;
+    }
+
+    setDeletingReportId(reportId);
+
+    try {
+      await deleteFaceAnalysisReport(reportId);
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setLoadState((currentState) => {
+        if (currentState.status !== 'success') {
+          return currentState;
+        }
+
+        return {
+          status: 'success',
+          data: removeFaceAnalysisReport(currentState.data, reportId),
+        };
+      });
+      setPendingDeleteReportId(null);
+    } catch (error) {
+      console.info('[aura:profile] analysis-report:delete-failed', {
+        message: error instanceof Error ? error.message : String(error),
+        reportId,
+      });
+
+      if (isMountedRef.current) {
+        setDeleteErrorMessage('보고서를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setDeletingReportId(null);
+      }
+    }
+  }, [pendingDeleteReportId]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -118,6 +171,12 @@ export function ProfileScreen({
 
   const data = loadState.data;
   const faceAnalysisReport = data.faceAnalysisReport;
+  const faceAnalysisReports =
+    data.faceAnalysisReports.length > 0
+      ? data.faceAnalysisReports
+      : faceAnalysisReport
+        ? [faceAnalysisReport]
+        : [];
   const previewMakeupLooks = likedMakeupLooks.slice(0, 3);
 
   return (
@@ -137,11 +196,27 @@ export function ProfileScreen({
           onPressAction={onPressFaceAnalysisReportsList}
           title="얼굴 분석 결과"
         />
-        {faceAnalysisReport ? (
-          <FaceAnalysisSummaryCard
-            onPress={() => onPressFaceAnalysisReport?.(faceAnalysisReport.id)}
-            report={faceAnalysisReport}
-          />
+        {faceAnalysisReports.length > 0 ? (
+          <View style={styles.faceAnalysisReportList}>
+            {faceAnalysisReports.map((report) => (
+              <FaceAnalysisSummaryCard
+                key={report.id}
+                isDeleteConfirming={pendingDeleteReportId === report.id}
+                isDeleting={deletingReportId === report.id}
+                onDelete={() => {
+                  void handleDeleteFaceAnalysisReport(report.id);
+                }}
+                onPress={() => onPressFaceAnalysisReport?.(report.id)}
+                onPressProducts={() => onPressProductRecommendationForReport?.(report.id)}
+                report={report}
+              />
+            ))}
+            {deleteErrorMessage ? (
+              <Text accessibilityLiveRegion="polite" style={styles.deleteErrorText}>
+                {deleteErrorMessage}
+              </Text>
+            ) : null}
+          </View>
         ) : (
           <EmptySection label="저장된 얼굴 분석 결과가 없어요." />
         )}
@@ -189,6 +264,23 @@ export function ProfileScreen({
   );
 }
 
+function removeFaceAnalysisReport<T extends {
+  faceAnalysisReport: FaceAnalysisReport | null;
+  faceAnalysisReports: FaceAnalysisReport[];
+}>(data: T, reportId: string): T {
+  const nextReports = data.faceAnalysisReports.filter((report) => report.id !== reportId);
+  const nextLatestReport =
+    data.faceAnalysisReport?.id === reportId
+      ? nextReports[0] ?? null
+      : data.faceAnalysisReport;
+
+  return {
+    ...data,
+    faceAnalysisReport: nextLatestReport,
+    faceAnalysisReports: nextReports,
+  };
+}
+
 function EmptySection({label}: {label: string}) {
   return (
     <View style={styles.empty}>
@@ -213,6 +305,13 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
+  deleteErrorText: {
+    color: colors.danger,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+    paddingHorizontal: spacing.xs,
+  },
   errorContent: {
     alignItems: 'center',
     gap: spacing.md,
@@ -231,6 +330,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.md,
     textAlign: 'center',
+  },
+  faceAnalysisReportList: {
+    gap: spacing.sm,
   },
   loading: {
     alignItems: 'center',

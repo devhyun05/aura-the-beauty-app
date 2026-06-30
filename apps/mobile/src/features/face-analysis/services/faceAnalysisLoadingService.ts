@@ -1,5 +1,7 @@
 import type {ImageSourcePropType} from 'react-native';
 
+import {appAssetSource} from '../../../shared/config/mediaAssets';
+
 export type FaceAnalysisLoadingStep = {
   id: string;
   title: string;
@@ -16,7 +18,7 @@ export type FaceAnalysisProgressState = {
 export const FACE_ANALYSIS_LOADING_TOTAL_MS = 30000;
 
 export const faceAnalysisLoadingPreviewSource =
-  require('../../../assets/images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
+  appAssetSource('images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
 
 export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
   {

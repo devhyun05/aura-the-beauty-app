@@ -19,6 +19,7 @@ EXPECTED_ROUTES = {
   ("GET", "/api/analysis/jobs/{job_id}"),
   ("GET", "/api/analysis/reports"),
   ("GET", "/api/analysis/reports/{report_id}"),
+  ("DELETE", "/api/analysis/reports/{report_id}"),
   ("DELETE", "/api/analysis/reports/{report_id}/recommended-makeups/{makeup_index}"),
   ("GET", "/api/products/recommendations"),
   ("GET", "/api/products/liked"),

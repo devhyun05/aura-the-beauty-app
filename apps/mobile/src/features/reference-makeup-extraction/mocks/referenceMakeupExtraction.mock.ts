@@ -1,23 +1,14 @@
-import type {ImageSourcePropType} from 'react-native';
-
+import {appAssetSource} from '../../../shared/config/mediaAssets';
 import type {ReferenceMakeupExtractionData} from '../types';
 
-const lookOjiGirl =
-  require('../../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
-const lookMoriGirl =
-  require('../../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
-const lookCleanSmoky =
-  require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
-const reportBareFace =
-  require('../../../assets/images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
-const reportRetake =
-  require('../../../assets/images/analysis/report-retake-20260608.png') as ImageSourcePropType;
-const analysisStudio =
-  require('../../../assets/images/analysis/analysis-studio.png') as ImageSourcePropType;
-const analysisWindow =
-  require('../../../assets/images/analysis/analysis-window.png') as ImageSourcePropType;
-const analysisSoftLight =
-  require('../../../assets/images/analysis/analysis-soft-light.png') as ImageSourcePropType;
+const lookOjiGirl = appAssetSource('images/looks/look-ojigirl.png');
+const lookMoriGirl = appAssetSource('images/looks/look-morigirl.png');
+const lookCleanSmoky = appAssetSource('images/looks/look-clean-smoky.png');
+const reportBareFace = appAssetSource('images/analysis/report-bare-face-20260622.png');
+const reportRetake = appAssetSource('images/analysis/report-retake-20260608.png');
+const analysisStudio = appAssetSource('images/analysis/analysis-studio.png');
+const analysisWindow = appAssetSource('images/analysis/analysis-window.png');
+const analysisSoftLight = appAssetSource('images/analysis/analysis-soft-light.png');
 
 export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
   photos: [

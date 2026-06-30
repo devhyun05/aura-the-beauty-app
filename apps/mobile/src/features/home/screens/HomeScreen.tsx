@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
+  FlatList,
   Image,
   Pressable,
   ScrollView as NativeScrollView,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  ChevronUp,
   Heart,
   MessageCircle,
   PackageSearch,
@@ -19,11 +21,13 @@ import {
   ScanSearch,
   UserRoundCheck,
 } from 'lucide-react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
 import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
+import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -54,14 +58,42 @@ export function HomeScreen({
   onToggleMakeupFilterLike,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [selectedCategory, setSelectedCategory] =
+    useState<RecommendedFilterCategoryId>('all');
+  const [showScrollTopButton, setShowScrollTopButton] = useState(false);
+  const listRef = useRef<FlatList<RecommendedMakeupFilter>>(null);
+  const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
   const recommendedMakeupFilters = useMemo(() => getRecommendedMakeupFilters(), []);
+  const visibleRecommendedFilters = useMemo(
+    () => filterRecommendedMakeupFiltersByHomeCategory(
+      recommendedMakeupFilters,
+      selectedCategory,
+    ),
+    [recommendedMakeupFilters, selectedCategory],
+  );
   const recommendedFilterGridGap = spacing.md;
   const recommendedFilterGridWidth = width - spacing.screenX * 2;
   const recommendedFilterCardWidth = Math.floor(
     (recommendedFilterGridWidth - recommendedFilterGridGap) / 2,
   );
+  const bottomPadding =
+    APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md);
+
+  const handleListScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const shouldShowButton = getIsHomeScrollTopButtonVisible(
+      event.nativeEvent.contentOffset.y,
+    );
+
+    setShowScrollTopButton(current => (
+      current === shouldShowButton ? current : shouldShowButton
+    ));
+  };
+
+  const handleScrollToTop = () => {
+    listRef.current?.scrollToOffset({animated: true, offset: 0});
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -86,30 +118,80 @@ export function HomeScreen({
   }
 
   return (
-    <>
-      <HeroBannerCarousel
-        cardWidth={heroCardWidth}
-        fallbackImageSource={homeData.hero.imageSource}
-        onPressFilter={onPressHeroTrendFilter}
-        trends={homeData.hero.trends}
+    <View style={styles.homeContainer}>
+      <FlatList
+        ref={listRef}
+        columnWrapperStyle={[
+          styles.recommendedFilterRow,
+          {gap: recommendedFilterGridGap},
+        ]}
+        contentContainerStyle={[
+          styles.homeListContent,
+          {paddingBottom: bottomPadding},
+        ]}
+        data={visibleRecommendedFilters}
+        extraData={isMakeupFilterLiked}
+        initialNumToRender={recommendedFilterListVirtualizationConfig.initialNumToRender}
+        ItemSeparatorComponent={RecommendedFilterRowSeparator}
+        keyExtractor={filter => filter.id}
+        ListHeaderComponent={
+          <YStack style={styles.homeListHeader}>
+            <HeroBannerCarousel
+              cardWidth={heroCardWidth}
+              fallbackImageSource={homeData.hero.imageSource}
+              onPressFilter={onPressHeroTrendFilter}
+              trends={homeData.hero.trends}
+            />
+
+            <QuickActionSection
+              onPressConsulting={onPressConsulting}
+              onPressCommunity={onPressCommunity}
+              onPressFaceDiagnosis={onPressFaceDiagnosis}
+              onPressProductRecommendations={onPressProductRecommendations}
+            />
+
+            <RecommendedFilterListHeader
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+            />
+          </YStack>
+        }
+        maxToRenderPerBatch={
+          recommendedFilterListVirtualizationConfig.maxToRenderPerBatch
+        }
+        numColumns={getRecommendedFilterGridColumnCount()}
+        onScroll={handleListScroll}
+        renderItem={({item}) => (
+          <RecommendedFilterCard
+            cardWidth={recommendedFilterCardWidth}
+            filter={item}
+            isLiked={Boolean(isMakeupFilterLiked?.(item.id))}
+            onPress={onPressRecommendedFilter}
+            onToggleLike={onToggleMakeupFilterLike}
+          />
+        )}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        updateCellsBatchingPeriod={
+          recommendedFilterListVirtualizationConfig.updateCellsBatchingPeriod
+        }
+        windowSize={recommendedFilterListVirtualizationConfig.windowSize}
       />
 
-      <QuickActionSection
-        onPressConsulting={onPressConsulting}
-        onPressCommunity={onPressCommunity}
-        onPressFaceDiagnosis={onPressFaceDiagnosis}
-        onPressMakeupExtraction={onPressMakeupExtraction}
-        onPressProductRecommendations={onPressProductRecommendations}
-      />
-      <RecommendedLooksSection
-        cardGap={recommendedFilterGridGap}
-        cardWidth={recommendedFilterCardWidth}
-        filters={recommendedMakeupFilters}
-        isFilterLiked={isMakeupFilterLiked}
-        onPressFilter={onPressRecommendedFilter}
-        onToggleFilterLike={onToggleMakeupFilterLike}
-      />
-    </>
+      {showScrollTopButton ? (
+        <Pressable
+          accessibilityLabel="맨 위로 이동"
+          accessibilityRole="button"
+          hitSlop={spacing.sm}
+          onPress={handleScrollToTop}
+          style={({pressed}) => [
+            styles.scrollTopButton,
+            pressed && styles.pressed,
+          ]}>
+          <ChevronUp color={colors.white} size={iconSize.md} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -248,6 +330,21 @@ export function getRecommendedFilterCategoryLabels(): readonly string[] {
 export function getRecommendedFilterGridColumnCount(): 2 {
   return 2;
 }
+
+export const recommendedFilterListVirtualizationConfig = {
+  initialNumToRender: 6,
+  maxToRenderPerBatch: 4,
+  updateCellsBatchingPeriod: 60,
+  windowSize: 5,
+} as const;
+
+export const HOME_SCROLL_TOP_VISIBLE_OFFSET = 360;
+
+export function getIsHomeScrollTopButtonVisible(scrollOffsetY: number): boolean {
+  return scrollOffsetY >= HOME_SCROLL_TOP_VISIBLE_OFFSET;
+}
+
+const scrollTopButtonSize = iconSize.xl + spacing.md;
 
 function HeroBannerCarousel({
   cardWidth,
@@ -494,28 +591,13 @@ function QuickActionSection({
   );
 }
 
-function RecommendedLooksSection({
-  cardGap,
-  cardWidth,
-  filters,
-  isFilterLiked,
-  onPressFilter,
-  onToggleFilterLike,
+function RecommendedFilterListHeader({
+  onSelectCategory,
+  selectedCategory,
 }: {
-  cardGap: number;
-  cardWidth: number;
-  filters: readonly RecommendedMakeupFilter[];
-  isFilterLiked?: (filterId: string) => boolean;
-  onPressFilter?: (filterId: string) => void;
-  onToggleFilterLike?: (filterId: string) => void;
+  onSelectCategory: (categoryId: RecommendedFilterCategoryId) => void;
+  selectedCategory: RecommendedFilterCategoryId;
 }) {
-  const [selectedCategory, setSelectedCategory] =
-    useState<RecommendedFilterCategoryId>('all');
-  const visibleFilters = useMemo(
-    () => filterRecommendedMakeupFiltersByHomeCategory(filters, selectedCategory),
-    [filters, selectedCategory],
-  );
-
   return (
     <YStack style={styles.section}>
       <SectionHeader
@@ -535,7 +617,7 @@ function RecommendedLooksSection({
               accessibilityLabel={`${category.label} 추천 필터 보기`}
               accessibilityRole="button"
               key={category.id}
-              onPress={() => setSelectedCategory(category.id)}
+              onPress={() => onSelectCategory(category.id)}
               style={({pressed}) => [
                 styles.recommendedFilterCategoryChip,
                 selected && styles.recommendedFilterCategoryChipSelected,
@@ -552,23 +634,6 @@ function RecommendedLooksSection({
           );
         })}
       </TamaguiScrollView>
-
-      <View
-        style={[
-          styles.recommendedFilterGrid,
-          {columnGap: cardGap, rowGap: spacing.lg},
-        ]}>
-        {visibleFilters.map(filter => (
-          <RecommendedFilterCard
-            cardWidth={cardWidth}
-            filter={filter}
-            isLiked={Boolean(isFilterLiked?.(filter.id))}
-            key={filter.id}
-            onPress={onPressFilter}
-            onToggleLike={onToggleFilterLike}
-          />
-        ))}
-      </View>
     </YStack>
   );
 }
@@ -652,6 +717,10 @@ function RecommendedFilterCard({
   );
 }
 
+function RecommendedFilterRowSeparator() {
+  return <View style={styles.recommendedFilterRowSeparator} />;
+}
+
 type SectionHeaderProps = {
   description?: string;
   title: string;
@@ -676,6 +745,18 @@ function SectionHeader({
 }
 
 const styles = StyleSheet.create({
+  homeContainer: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  homeListContent: {
+    paddingHorizontal: spacing.screenX,
+    paddingTop: spacing.lg,
+  },
+  homeListHeader: {
+    gap: spacing.xxl,
+    paddingBottom: spacing.lg,
+  },
   heroBackgroundImage: {
     bottom: 0,
     height: '100%',
@@ -829,10 +910,6 @@ const styles = StyleSheet.create({
     height: '100%',
     width: '100%',
   },
-  recommendedFilterGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
   recommendedFilterFavoriteButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(17, 17, 17, 0.70)',
@@ -882,6 +959,12 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  recommendedFilterRow: {
+    justifyContent: 'space-between',
+  },
+  recommendedFilterRowSeparator: {
+    height: spacing.lg,
+  },
   pressed: {
     opacity: 0.78,
   },
@@ -917,6 +1000,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'space-between',
+  },
+  scrollTopButton: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: scrollTopButtonSize,
+    justifyContent: 'center',
+    left: '50%',
+    marginLeft: -scrollTopButtonSize / 2,
+    position: 'absolute',
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    top: spacing.md,
+    width: scrollTopButtonSize,
+    zIndex: 20,
+    elevation: 4,
   },
   section: {
     gap: spacing.md,

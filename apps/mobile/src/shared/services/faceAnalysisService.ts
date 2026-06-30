@@ -60,10 +60,30 @@ type BackendAnalysisResult = {
   toneSummary?: string | null;
 };
 
+type BackendAnalysisRequest = {
+  bucket?: string | null;
+  cdnUrl?: string | null;
+  imageObjectKey?: string | null;
+  imageUrl?: string | null;
+  objectKey?: string | null;
+  previewUrl?: string | null;
+  sourceObjectKey?: string | null;
+  sourceUri?: string | null;
+};
+
+type BackendMediaReference = {
+  cdnUrl?: string | null;
+  imageUrl?: string | null;
+  objectKey?: string | null;
+  previewUrl?: string | null;
+  url?: string | null;
+};
+
 type BackendAnalysisJob = {
   analyzedAt?: string | null;
   baseMakeupGuide?: string | null;
   detailPayload?: {
+    request?: BackendAnalysisRequest | null;
     result?: BackendAnalysisResult | null;
   } | null;
   environmentLabel?: string | null;
@@ -76,6 +96,8 @@ type BackendAnalysisJob = {
   shortSummary?: string | null;
   skinAnalysisSummary?: string | null;
   skinType?: string | null;
+  previewMedia?: BackendMediaReference | null;
+  sourceMedia?: BackendMediaReference | null;
   status?: string | null;
   summary?: string | null;
   tags?: string[] | null;
@@ -89,6 +111,11 @@ type CreateAnalysisJobResponse = {
 
 type GetAnalysisReportResponse = {
   report: BackendAnalysisJob;
+};
+
+type DeleteAnalysisReportResponse = {
+  deleted: boolean;
+  reportId: string;
 };
 
 type ListAnalysisReportsResponse = {
@@ -146,6 +173,31 @@ function parseS3ObjectKey(value: string | null | undefined): string | undefined 
   return objectKey;
 }
 
+function isImageUri(value: string | undefined): value is string {
+  return Boolean(
+    value?.startsWith('http://') ||
+      value?.startsWith('https://') ||
+      value?.startsWith('file:') ||
+      value?.startsWith('content:') ||
+      value?.startsWith('data:image/'),
+  );
+}
+
+function resolveImageUrlFromObjectKey(
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  for (const value of values) {
+    const objectKey = firstText(parseS3ObjectKey(value), value);
+    const imageUrl = buildCdnUrlFromObjectKey(objectKey);
+
+    if (imageUrl) {
+      return imageUrl;
+    }
+  }
+
+  return undefined;
+}
+
 function resolveMakeupImageUrl(card: BackendMakeupCard | null | undefined): string | undefined {
   const directUrl = firstText(
     card?.imageUrl,
@@ -165,6 +217,54 @@ function resolveMakeupImageUrl(card: BackendMakeupCard | null | undefined): stri
   );
 
   return buildCdnUrlFromObjectKey(objectKey);
+}
+
+function resolveBackendMediaImageUrl(
+  media: BackendMediaReference | null | undefined,
+): string | undefined {
+  const directUrl = firstText(
+    media?.cdnUrl,
+    media?.imageUrl,
+    media?.previewUrl,
+    media?.url,
+  );
+
+  if (isImageUri(directUrl)) {
+    return directUrl;
+  }
+
+  return resolveImageUrlFromObjectKey(media?.objectKey, parseS3ObjectKey(directUrl));
+}
+
+export function resolveFaceAnalysisReportImageSource(
+  job: BackendAnalysisJob,
+  capture?: FaceAnalysisCaptureInput | null,
+): FaceAnalysisReport['imageSource'] | undefined {
+  const request = job.detailPayload?.request;
+  const directUrl = firstText(
+    capture?.imageUri,
+    capture?.cdnUrl,
+    request?.cdnUrl,
+    request?.imageUrl,
+    request?.previewUrl,
+    resolveBackendMediaImageUrl(job.previewMedia),
+    resolveBackendMediaImageUrl(job.sourceMedia),
+    request?.sourceUri,
+  );
+
+  if (isImageUri(directUrl)) {
+    return {uri: directUrl};
+  }
+
+  const objectKeyUrl = resolveImageUrlFromObjectKey(
+    capture?.objectKey,
+    request?.objectKey,
+    request?.imageObjectKey,
+    request?.sourceObjectKey,
+    parseS3ObjectKey(directUrl),
+  );
+
+  return objectKeyUrl ? {uri: objectKeyUrl} : undefined;
 }
 
 function firstStringArray(
@@ -417,6 +517,7 @@ function mapBackendJobToFaceAnalysisReport(
   const fallback = buildFallbackReportFromCapture(capture);
   const result = job.detailPayload?.result ?? {};
   const reportId = firstText(job.id, fallback.id) ?? fallback.id;
+  const reportImageSource = resolveFaceAnalysisReportImageSource(job, capture);
   const personalColor =
     firstText(result.personalColor, job.personalColor, fallback.personalColor) ??
     fallback.personalColor;
@@ -436,6 +537,7 @@ function mapBackendJobToFaceAnalysisReport(
       fallback.baseMakeupGuide,
     faceShape:
       firstText(result.faceShape, job.faceShape, fallback.faceShape) ?? fallback.faceShape,
+    imageSource: reportImageSource ?? fallback.imageSource,
     makeupGuideline: mergeMakeupGuideline(
       result.makeupGuideline,
       fallback.makeupGuideline,
@@ -531,6 +633,21 @@ export const getFaceAnalysisReportById = async (
   );
 
   return mapBackendJobToFaceAnalysisReport(report);
+};
+
+export const deleteFaceAnalysisReport = async (
+  reportId: string,
+): Promise<boolean> => {
+  if (!getBackendApiBaseUrl()) {
+    return true;
+  }
+
+  const response = await requestBackendJson<DeleteAnalysisReportResponse>(
+    `/analysis/reports/${reportId}`,
+    {method: 'DELETE'},
+  );
+
+  return response.deleted;
 };
 
 export const deleteFaceAnalysisRecommendedMakeup = async ({
