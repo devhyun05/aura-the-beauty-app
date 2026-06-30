@@ -8,6 +8,12 @@ const lookMoriGirl =
   require('../../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
 const lookCleanSmoky =
   require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
+const filterWanghongRedGlass =
+  require('../../../assets/images/makeup-filters/filter-wanghong-glass-pink.png') as ImageSourcePropType;
+const filterGyaruGlow =
+  require('../../../assets/images/makeup-filters/filter-gyaru-glow.png') as ImageSourcePropType;
+const filterAuraBlushLift =
+  require('../../../assets/images/makeup-filters/filter-aura-blush-lift.png') as ImageSourcePropType;
 const productCoralTint =
   require('../../../assets/images/products/product-coral-tint.png') as ImageSourcePropType;
 const productGlowCushion =
@@ -18,34 +24,37 @@ const productMoodCheek =
 export const homeMock: HomeData = {
   hero: {
     eyebrow: '이번 주 메이크업 가이드',
-    title: '데모 추천 메이크업 무드',
-    description: '클린한 인물 컷으로 카드마다 다른 메이크업 무드를 넘겨볼 수 있게 구성했어요.',
-    imageSource: lookOjiGirl,
+    title: 'AI 트렌드 메이크업 무드',
+    description: '지금 많이 찾는 메이크업 무드를 AI가 골라 카드로 추천해요.',
+    imageSource: filterWanghongRedGlass,
     notices: [
       {
         id: 'notice-weekly-trend',
         title: '공지',
-        description: '이번 주 추천 룩이 클린 오피스 무드로 업데이트되었어요.',
+        description: '이번 주 추천 룩이 왕홍 레드 글래스 무드로 업데이트되었어요.',
       },
     ],
     trends: [
       {
-        id: 'trend-clean-office',
-        title: '클린 오피스',
-        tone: '뉴트럴 브라운',
-        imageSource: lookOjiGirl,
+        filterId: 'filter-wanghong-glass-pink',
+        id: 'trend-wanghong-glass-pink',
+        title: '왕홍 레드 글래스',
+        tone: '루비 레드',
+        imageSource: filterWanghongRedGlass,
       },
       {
-        id: 'trend-soft-mori',
-        title: '소프트 모리',
-        tone: '피치 베이지',
-        imageSource: lookMoriGirl,
+        filterId: 'filter-gyaru-glow',
+        id: 'trend-gyaru-glow',
+        title: '갸루 글로우',
+        tone: '샴페인 코랄',
+        imageSource: filterGyaruGlow,
       },
       {
-        id: 'trend-clean-smoky',
-        title: '클린 스모키',
-        tone: '쿨 브라운',
-        imageSource: lookCleanSmoky,
+        filterId: 'filter-aura-blush-lift',
+        id: 'trend-aura-blush',
+        title: '아우라 블러시',
+        tone: '워터 로즈',
+        imageSource: filterAuraBlushLift,
       },
     ],
   },

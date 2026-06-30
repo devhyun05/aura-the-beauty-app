@@ -1,19 +1,60 @@
 .DS_Store
+
+# Dependencies and local package-manager caches
 node_modules/
+.pnpm-store/
+.yarn/
+
+# Expo / React Native local state
 .expo/
+.expo-shared/
+apps/mobile/.expo/
+
+# Environment files
 .env
 .env.*
 !*.env.example
 !**/.env.example
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+
+# Python local state
 __pycache__/
 *.py[cod]
 .venv/
-*.log
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# iOS generated build products
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/ios/DerivedData/
+apps/mobile/ios/**/*.xcuserdata/
+*.xcuserstate
+
+# Generated screenshots and browser test artifacts
+apps/mobile/screenshots/
+output/
+playwright-report/
+test-results/
+
+# Unity generated files and exports
 apps/mobile/ios/UnityBuild/
 apps/unity-builds/
 apps/unity/MakeupAR/Library/
+apps/unity/MakeupAR/Temp/
+apps/unity/MakeupAR/Obj/
+apps/unity/MakeupAR/Build/
+apps/unity/MakeupAR/Builds/
+apps/unity/MakeupAR/Logs/
 apps/unity/MakeupAR/UserSettings/
+apps/unity/MakeupAR/MemoryCaptures/
+apps/unity/MakeupAR/*.csproj
+apps/unity/MakeupAR/*.sln
+apps/unity/MakeupAR/*.user

@@ -4,16 +4,18 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
-
 type MakeupFilterSaveCompleteScreenProps = {
   onApplyNow: () => void;
   onGoToProfile: () => void;
+  savedMakeupLookTitle?: string;
 };
 
-export function MakeupFilterSaveCompleteScreen({onApplyNow, onGoToProfile}: MakeupFilterSaveCompleteScreenProps) {
+export function MakeupFilterSaveCompleteScreen({
+  onApplyNow,
+  onGoToProfile,
+  savedMakeupLookTitle = '추출된 메이크업 룩',
+}: MakeupFilterSaveCompleteScreenProps) {
   const insets = useSafeAreaInsets();
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
 
   return (
     <View style={styles.screen}>
@@ -25,7 +27,7 @@ export function MakeupFilterSaveCompleteScreen({onApplyNow, onGoToProfile}: Make
         <YStack style={styles.copy}>
           <Text style={styles.title}>메이크업 룩이 저장되었어요!</Text>
           <Text style={styles.description}>
-            `{extractedMakeupLook.title}`이 내 메이크업 룩에 저장되었습니다.
+            `{savedMakeupLookTitle}`이 내 메이크업 룩에 저장되었습니다.
           </Text>
         </YStack>
 

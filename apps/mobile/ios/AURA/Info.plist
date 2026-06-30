@@ -28,7 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>aiarmakeup</string>
-				<string>com.aiarmakeupguide.mobile</string>
+				<string>com.yeoduchi.aura.mobile</string>
 			</array>
 		</dict>
 	</array>

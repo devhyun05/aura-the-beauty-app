@@ -1,4 +1,4 @@
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { Text, View } from 'tamagui';
 
 import { colors, radius, spacing, typography } from '../../../shared/theme';
@@ -7,11 +7,12 @@ import type { MakeupLook } from '../../../shared/types/profile';
 
 type MakeupLookCardProps = {
   makeupLook: MakeupLook;
+  onPress?: (makeupLook: MakeupLook) => void;
   style?: StyleProp<ViewStyle>;
 };
 
-export function MakeupLookCard({ makeupLook, style }: MakeupLookCardProps) {
-  return (
+export function MakeupLookCard({ makeupLook, onPress, style }: MakeupLookCardProps) {
+  const card = (
     <AppCard padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>
         <ImagePlaceholder borderRadius={radius.md} source={makeupLook.imageSource} />
@@ -23,6 +24,20 @@ export function MakeupLookCard({ makeupLook, style }: MakeupLookCardProps) {
         </Text>
       </View>
     </AppCard>
+  );
+
+  if (!onPress) {
+    return card;
+  }
+
+  return (
+    <Pressable
+      accessibilityLabel={`${makeupLook.title} 필터 열기`}
+      accessibilityRole="button"
+      onPress={() => onPress(makeupLook)}
+      style={({pressed}) => pressed && styles.pressed}>
+      {card}
+    </Pressable>
   );
 }
 
@@ -42,6 +57,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
+  },
+  pressed: {
+    opacity: 0.78,
   },
   title: {
     color: colors.textPrimary,
