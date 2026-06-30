@@ -8,6 +8,7 @@ import {
 } from '../../../shared/services/makeupGuideService';
 import {colors, spacing} from '../../../shared/theme';
 import type {
+  ARFilterLaunchSource,
   ComparisonMode,
   FilterColorOption,
   GuideMode,
@@ -65,10 +66,12 @@ import {
 type ARFilterScreenProps = {
   initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
+  initialMakeupFilterId?: string;
+  initialSource?: ARFilterLaunchSource;
   onBack?: () => void;
   onComplete?: () => void;
-  onOpenShapeAdjust?: () => void;
-  onSave?: () => void;
+  onOpenShapeAdjust?: (selectedMakeupFilterId?: string) => void;
+  onSave?: (selectedMakeupFilterId?: string) => void;
 };
 
 const AR_FILTER_FALLBACK_COLOR = {
@@ -113,6 +116,8 @@ export function getARFilterSelectedColor(
 export function ARFilterScreen({
   initialComparisonMode = 'left',
   initialGuideMode = 'basic',
+  initialMakeupFilterId,
+  initialSource,
   onBack,
   onComplete,
   onOpenShapeAdjust,
@@ -126,6 +131,8 @@ export function ARFilterScreen({
     defaultFilter,
     initialComparisonMode,
     initialGuideMode,
+    initialMakeupFilterId,
+    initialSource,
   });
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const selectedColor = getARFilterSelectedColor(
@@ -243,8 +250,18 @@ export function ARFilterScreen({
 
           <ARFilterBottomActions
             hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}
-            onOpenShapeAdjust={onOpenShapeAdjust}
-            onSave={onSave}
+            onOpenShapeAdjust={() =>
+              onOpenShapeAdjust?.(
+                arFilterSelectionState.selectedTotalMakeupLookId ??
+                  arFilterSelectionState.selectedMakeupFilter.id,
+              )
+            }
+            onSave={() =>
+              onSave?.(
+                arFilterSelectionState.selectedTotalMakeupLookId ??
+                  arFilterSelectionState.selectedMakeupFilter.id,
+              )
+            }
           />
         </ScrollView>
 

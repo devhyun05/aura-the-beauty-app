@@ -2,63 +2,46 @@ import {useEffect, useMemo, useState} from 'react';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {getMakeupLooks} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLook} from '../../../shared/types/profile';
+import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, ImagePlaceholder} from '../../../shared/ui';
 
 type MakeupLookListScreenProps = {
-  headerTitle?: string;
-  onBack?: () => void;
+  likedMakeupLooks?: readonly MakeupLookPreview[];
+  onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
 };
 
 const MAKEUP_LOOKS_PAGE_SIZE = 4;
 
-export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
+export function MakeupLookListScreen({
+  likedMakeupLooks = [],
+  onPressMakeupLook,
+}: MakeupLookListScreenProps = {}) {
   const {width} = useWindowDimensions();
-  const [makeupLooks, setMakeupLooks] = useState<MakeupLook[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const gap = spacing.md;
   const contentWidth = width - spacing.screenX * 2;
   const cardWidth = Math.floor((contentWidth - gap) / 2);
+  const visibleMakeupLooks = useMemo(
+    () => [...likedMakeupLooks],
+    [likedMakeupLooks],
+  );
   const pages = useMemo(
-    () => chunkItems(makeupLooks, MAKEUP_LOOKS_PAGE_SIZE),
-    [makeupLooks],
+    () => chunkItems(visibleMakeupLooks, MAKEUP_LOOKS_PAGE_SIZE),
+    [visibleMakeupLooks],
   );
   const totalPages = Math.max(1, pages.length);
   const displayPage = Math.min(currentPage, totalPages);
 
   useEffect(() => {
-    let isMounted = true;
-
-    getMakeupLooks()
-      .then((nextMakeupLooks) => {
-        if (isMounted) {
-          setMakeupLooks(nextMakeupLooks);
-          setIsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setMakeupLooks([]);
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
+    setCurrentPage(page => Math.min(page, totalPages));
   }, [totalPages]);
 
   const handleMomentumScrollEnd = (
@@ -69,18 +52,10 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
     setCurrentPage(Math.min(totalPages, Math.max(1, nextPage)));
   };
 
-  if (isLoading) {
+  if (visibleMakeupLooks.length === 0) {
     return (
       <AppScreen contentGap={spacing.xl} topPadding="none">
-        <EmptyState label="메이크업 룩을 불러오는 중이에요." />
-      </AppScreen>
-    );
-  }
-
-  if (makeupLooks.length === 0) {
-    return (
-      <AppScreen contentGap={spacing.xl} topPadding="none">
-        <EmptyState label="저장된 메이크업 룩이 없어요." />
+        <EmptyState label="좋아요한 메이크업 필터가 없어요." />
       </AppScreen>
     );
   }
@@ -100,8 +75,18 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
             <View
               key={`makeup-look-page-${pageIndex}`}
               style={[styles.grid, {gap, width: contentWidth}]}>
-              {page.map((makeupLook) => (
-                <View key={makeupLook.id} style={[styles.card, {width: cardWidth}]}>
+              {page.map(makeupLook => (
+                <Pressable
+                  accessibilityLabel={`${makeupLook.title} 필터 열기`}
+                  accessibilityRole="button"
+                  disabled={!makeupLook.makeupPresetValues.sourceFilterId}
+                  key={makeupLook.id}
+                  onPress={() => onPressMakeupLook?.(makeupLook)}
+                  style={({pressed}) => [
+                    styles.card,
+                    {width: cardWidth},
+                    pressed && styles.pressed,
+                  ]}>
                   <View style={styles.imageArea}>
                     <ImagePlaceholder
                       borderRadius={radius.md}
@@ -112,7 +97,7 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
                   <Text numberOfLines={1} style={styles.title}>
                     {makeupLook.title}
                   </Text>
-                </View>
+                </Pressable>
               ))}
             </View>
           ))}
@@ -134,7 +119,7 @@ function EmptyState({label}: {label: string}) {
   );
 }
 
-function chunkItems<T>(items: T[], size: number): T[][] {
+function chunkItems<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
 
   for (let index = 0; index < items.length; index += size) {
@@ -160,8 +145,8 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
   },
@@ -183,10 +168,13 @@ const styles = StyleSheet.create({
   },
   paginationText: {
     color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
+  },
+  pressed: {
+    opacity: 0.78,
   },
   title: {
     color: colors.textPrimary,

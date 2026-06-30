@@ -5,7 +5,9 @@
   "scripts": {
     "commitlint": "commitlint --last --verbose",
     "mobile:start": "npm --prefix apps/mobile run start",
-    "mobile:ios": "npm --prefix apps/mobile run ios",
+    "mobile:pods": "npm --prefix apps/mobile run pods",
+    "mobile:ios": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios",
+    "mobile:ios:device": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios:device",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {

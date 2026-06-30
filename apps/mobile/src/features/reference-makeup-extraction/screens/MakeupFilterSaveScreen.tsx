@@ -1,30 +1,37 @@
 import {useState} from 'react';
-import {Image, Pressable, StyleSheet, TextInput} from 'react-native';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  type ImageSourcePropType,
+} from 'react-native';
 import {CheckCircle2, Plus, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
-import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
-import type {ReferenceMakeupPhoto} from '../types';
 
 type MakeupFilterSaveScreenProps = {
-  headerTitle?: string;
-  photo: ReferenceMakeupPhoto;
-  onBack?: () => void;
+  defaultName: string;
+  imageSource: ImageSourcePropType;
   onSave: () => void;
+  summaryDescription?: string;
+  summaryTitle?: string;
 };
 
 const defaultTags = ['#어리어리', '#핑크메이크업', '#데일리', '#뮤트톤'];
 
 export function MakeupFilterSaveScreen({
-  photo,
+  defaultName,
+  imageSource,
   onSave,
+  summaryDescription = 'AR 적용값과 조정값이 함께 저장돼요.',
+  summaryTitle = '저장할 메이크업 룩',
 }: MakeupFilterSaveScreenProps) {
   const insets = useSafeAreaInsets();
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
-  const [makeupLookName, setMakeupLookName] = useState(extractedMakeupLook.title);
+  const [makeupLookName, setMakeupLookName] = useState(defaultName);
   const [visibility, setVisibility] = useState<'private' | 'public'>('private');
 
   return (
@@ -38,12 +45,12 @@ export function MakeupFilterSaveScreen({
       <YStack style={styles.content}>
         <XStack style={styles.summaryRow}>
           <View style={styles.thumbFrame}>
-            <Image resizeMode="cover" source={photo.imageSource} style={styles.thumbImage} />
+            <Image resizeMode="cover" source={imageSource} style={styles.thumbImage} />
           </View>
           <YStack style={styles.summaryCopy}>
-            <Text style={styles.summaryTitle}>추출된 메이크업 룩</Text>
+            <Text style={styles.summaryTitle}>{summaryTitle}</Text>
             <Text style={styles.summaryDescription}>
-              AR 적용값과 색감 조정값이 함께 저장돼요.
+              {summaryDescription}
             </Text>
           </YStack>
         </XStack>

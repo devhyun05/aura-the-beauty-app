@@ -25,11 +25,13 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   };
 
   return {
+    likedMakeupFilterIds: [],
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
+    selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto,
   };
 }

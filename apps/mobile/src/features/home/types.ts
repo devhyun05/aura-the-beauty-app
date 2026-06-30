@@ -1,6 +1,7 @@
 import type {ImageSourcePropType} from 'react-native';
 
 export type HomeTrendItem = {
+  filterId?: string;
   id: string;
   title: string;
   tone: string;

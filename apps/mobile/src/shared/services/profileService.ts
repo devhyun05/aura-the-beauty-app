@@ -12,12 +12,11 @@ import {
 } from './userService';
 
 export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> => {
-  const [profile, beautyProfile, faceAnalysisReport, makeupLooks, likedProducts] =
+  const [profile, beautyProfile, faceAnalysisReport, likedProducts] =
     await Promise.all([
       getUserProfileFromService(),
       getBeautyProfile(),
       getLatestFaceAnalysisReport(),
-      getAllMakeupLooks(),
       getLikedProductPreviews(3),
     ]);
 
@@ -25,7 +24,7 @@ export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> =
     profile,
     beautyProfile,
     faceAnalysisReport,
-    makeupLooks,
+    makeupLooks: [],
     likedProducts,
   };
 };

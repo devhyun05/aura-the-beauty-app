@@ -22,18 +22,20 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReport?: (reportId: string) => void;
   onPressFaceAnalysisReportsList?: () => void;
+  onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
-  savedMakeupLook?: MakeupLookPreview | null;
+  likedMakeupLooks?: readonly MakeupLookPreview[];
 };
 
 export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReport,
   onPressFaceAnalysisReportsList,
+  onPressMakeupLook,
   onPressMakeupLookList,
   onPressLikedProductList,
-  savedMakeupLook,
+  likedMakeupLooks = [],
 }: ProfileScreenProps) {
   const {width} = useWindowDimensions();
   const isMountedRef = useRef(false);
@@ -116,16 +118,13 @@ export function ProfileScreen({
 
   const data = loadState.data;
   const faceAnalysisReport = data.faceAnalysisReport;
-  const makeupLooks = savedMakeupLook
-    ? [
-        savedMakeupLook,
-        ...data.makeupLooks.filter((makeupLook) => makeupLook.id !== savedMakeupLook.id),
-      ]
-    : data.makeupLooks;
-  const previewMakeupLooks = makeupLooks.slice(0, 3);
+  const previewMakeupLooks = likedMakeupLooks.slice(0, 3);
 
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="none">
+    <AppScreen
+      bottomPadding="floatingFooter"
+      contentGap={spacing.xl}
+      topPadding="none">
       <ProfileSummaryCard
         beautyProfile={data.beautyProfile}
         onPressSettings={onPressProfileEdit}
@@ -160,12 +159,13 @@ export function ProfileScreen({
               <MakeupLookCard
                 key={makeupLook.id}
                 makeupLook={makeupLook}
+                onPress={onPressMakeupLook}
                 style={makeupLookCardLayout}
               />
             ))}
           </View>
         ) : (
-          <EmptySection label="저장된 메이크업 룩이 없어요." />
+          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
         )}
       </View>
 

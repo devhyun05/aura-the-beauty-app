@@ -18,20 +18,24 @@ export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
+  selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
   setMakeupFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
+  setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
 };
 
@@ -40,6 +44,7 @@ const NavigationFlowStateContext =
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
+    likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
     savedMakeupLook: null,
     selectedFaceAnalysisReport: null,
@@ -47,6 +52,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
+    selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
   };
 }
@@ -70,8 +76,12 @@ export function NavigationFlowStateProvider({
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
+  const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
+    useState<string | null>(initialState.selectedRecommendedMakeupFilterId);
   const [selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto] =
     useState<ReferenceMakeupPhoto | null>(initialState.selectedReferenceMakeupPhoto);
+  const [likedMakeupFilterIds, setLikedMakeupFilterIds] =
+    useState<readonly string[]>(initialState.likedMakeupFilterIds);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
@@ -79,25 +89,31 @@ export function NavigationFlowStateProvider({
 
   const value = useMemo(
     () => ({
+      likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
+      setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedMakeupFeedbackPhoto,
+      setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
     }),
     [
+      likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
     ],
   );
