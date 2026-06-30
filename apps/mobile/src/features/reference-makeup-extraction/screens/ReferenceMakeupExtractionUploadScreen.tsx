@@ -1,8 +1,9 @@
 import {useEffect, useMemo, useState} from 'react';
 import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
-import {Camera, Check, ImagePlus} from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import {Check, ImagePlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Text, View, XStack, YStack} from 'tamagui';
+import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
@@ -10,7 +11,6 @@ import {getReferenceMakeupExtractionData} from '../services/makeupExtractionServ
 import type {
   ReferenceMakeupExtractionData,
   ReferenceMakeupPhoto,
-  ReferenceMakeupPhotoSource,
 } from '../types';
 
 type ReferenceMakeupExtractionUploadScreenProps = {
@@ -19,18 +19,15 @@ type ReferenceMakeupExtractionUploadScreenProps = {
   onStartAnalysis: (photo: ReferenceMakeupPhoto) => void;
 };
 
-const referenceSourceTabs: {id: ReferenceMakeupPhotoSource; label: string}[] = [
-  {id: 'album', label: '앨범에서 선택'},
-  {id: 'camera', label: '카메라로 촬영'},
-];
 
 export function ReferenceMakeupExtractionUploadScreen({
   onStartAnalysis,
 }: ReferenceMakeupExtractionUploadScreenProps) {
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<ReferenceMakeupExtractionData | null>(null);
-  const [activeReferenceSource, setActiveReferenceSource] = useState<ReferenceMakeupPhotoSource>('album');
+  const [uploadedPhotos, setUploadedPhotos] = useState<ReferenceMakeupPhoto[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [isPickingPhoto, setIsPickingPhoto] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,13 +44,57 @@ export function ReferenceMakeupExtractionUploadScreen({
     };
   }, []);
 
+  const photos = useMemo(
+    () => (data ? [...uploadedPhotos, ...data.photos] : uploadedPhotos),
+    [data, uploadedPhotos],
+  );
+
+  const handlePickReferencePhoto = async () => {
+    if (isPickingPhoto) {
+      return;
+    }
+
+    setIsPickingPhoto(true);
+
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: false,
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      const pickedAsset = pickerResult.canceled ? null : pickerResult.assets[0];
+
+      if (!pickedAsset?.uri) {
+        return;
+      }
+
+      const uploadedPhoto: ReferenceMakeupPhoto = {
+        id: `uploaded-reference-${Date.now()}`,
+        imageSource: {uri: pickedAsset.uri},
+        referenceSource: 'album',
+        title: '\uC5C5\uB85C\uB4DC\uD55C \uC0AC\uC9C4',
+      };
+
+      setUploadedPhotos((currentPhotos) => [uploadedPhoto, ...currentPhotos]);
+      setSelectedPhotoId(uploadedPhoto.id);
+    } finally {
+      setIsPickingPhoto(false);
+    }
+  };
+
   const selectedPhoto = useMemo(() => {
-    if (!data) {
+    if (photos.length === 0) {
       return null;
     }
 
-    return data.photos.find((photo) => photo.id === selectedPhotoId) ?? data.photos[0] ?? null;
-  }, [data, selectedPhotoId]);
+    return photos.find((photo) => photo.id === selectedPhotoId) ?? photos[0] ?? null;
+  }, [photos, selectedPhotoId]);
 
   if (!data || !selectedPhoto) {
     return (
@@ -79,62 +120,37 @@ export function ReferenceMakeupExtractionUploadScreen({
       scroll={false}
       topPadding="none"
     >
-      <YStack style={styles.header}>
-        <XStack style={styles.tabRow}>
-          {referenceSourceTabs.map((tab) => {
-            const isActive = tab.id === activeReferenceSource;
-
-            return (
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityState={{selected: isActive}}
-                key={tab.id}
-                onPress={() => setActiveReferenceSource(tab.id)}
-                style={styles.tabButton}>
-                <Text style={isActive ? styles.tabTextActive : styles.tabText}>
-                  {tab.label}
-                </Text>
-                <View style={isActive ? styles.tabIndicatorActive : styles.tabIndicator} />
-              </Pressable>
-            );
-          })}
-        </XStack>
-      </YStack>
-
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
         <Pressable
-          accessibilityLabel={
-            activeReferenceSource === 'album' ? '사진 업로드하기' : '카메라로 촬영하기'
-          }
+          accessibilityLabel="\uBA54\uC774\uD06C\uC5C5 \uCC38\uACE0 \uC0AC\uC9C4 \uC5C5\uB85C\uB4DC\uD558\uAE30"
           accessibilityRole="button"
-          style={({pressed}) => [styles.uploadHero, pressed && styles.pressed]}>
+          disabled={isPickingPhoto}
+          onPress={handlePickReferencePhoto}
+          style={({pressed}) => [
+            styles.uploadHero,
+            (pressed || isPickingPhoto) && styles.pressed,
+          ]}>
           <View style={styles.uploadIcon}>
-            {activeReferenceSource === 'album' ? (
-              <ImagePlus color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
-            ) : (
-              <Camera color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
-            )}
+            <ImagePlus color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.8} />
           </View>
           <YStack style={styles.uploadCopy}>
-            <Text style={styles.uploadTitle}>
-              {activeReferenceSource === 'album' ? '참고할 메이크업 사진 선택' : '새 사진 촬영'}
-            </Text>
+            <Text style={styles.uploadTitle}>{'\uBA54\uC774\uD06C\uC5C5 \uCC38\uACE0 \uC0AC\uC9C4 \uC5C5\uB85C\uB4DC'}</Text>
             <Text style={styles.uploadDescription}>
-              얼굴이 정면에 가깝고 메이크업 색감이 잘 보이는 사진을 추천해요.
+              {'\uAC24\uB7EC\uB9AC\uC5D0\uC11C \uBD84\uC11D\uD560 \uC0AC\uC9C4\uC744 \uD558\uB098\uC529 \uCD94\uAC00\uD558\uACE0, \uC120\uD0DD\uD55C \uC0AC\uC9C4\uC73C\uB85C \uBD84\uC11D\uC744 \uC2DC\uC791\uD558\uC138\uC694.'}
             </Text>
           </YStack>
         </Pressable>
 
         <View style={styles.galleryGrid}>
-          {data.photos.map((photo) => {
+          {photos.map((photo) => {
             const isSelected = photo.id === selectedPhoto.id;
 
             return (
               <Pressable
-                accessibilityLabel={`${photo.title} 선택`}
+                accessibilityLabel={`${photo.title} \uC120\uD0DD`}
                 accessibilityRole="button"
                 accessibilityState={{selected: isSelected}}
                 key={photo.id}

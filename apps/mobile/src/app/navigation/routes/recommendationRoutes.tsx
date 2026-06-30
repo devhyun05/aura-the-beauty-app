@@ -20,12 +20,28 @@ import {
 
 export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
+  const {
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  } = useNavigationFlowState();
+
+  const handlePressCameraCapture = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    setSelectedMakeupFeedbackPhoto({photoSource: 'camera'});
+    rootNavigation?.navigate('MakeupFeedbackCapture');
+  }, [rootNavigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
+
+  const handlePressAlbumPick = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
+    rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+  }, [rootNavigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
 
   return (
     <MainTabChrome navigation={navigation} routeName="CustomTab" wrapContentInScreen={false}>
       <MakeupToolsScreen
-        onPressAlbumPick={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
-        onPressCameraCapture={() => rootNavigation?.navigate('MakeupFeedbackCapture')}
+        onPressAlbumPick={handlePressAlbumPick}
+        onPressCameraCapture={handlePressCameraCapture}
       />
     </MainTabChrome>
   );

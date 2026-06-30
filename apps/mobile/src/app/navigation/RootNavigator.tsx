@@ -23,6 +23,7 @@ import {
   FaceCaptureRouteScreen,
 } from './routes/faceAnalysisRoutes';
 import {
+  MakeupFeedbackAlbumUploadRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
   MakeupFeedbackEntryRouteScreen,
   MakeupCorrectionGuideRouteScreen,
@@ -82,6 +83,7 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
       <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
+      <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
