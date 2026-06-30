@@ -108,6 +108,7 @@ function mapProduct(product: BackendRecommendedProduct, index: number): Recommen
           ? product.priceKrw
           : fallbackProduct.price,
     tags: normalizeTextArray(product.tags, fallbackProduct.tags),
+    imageUrl,
     imageSource: imageUrl ? {uri: imageUrl} : fallbackProduct.imageSource,
     purchaseUrl: firstText(product.purchaseUrl, fallbackProduct.purchaseUrl),
     palette: normalizeTextArray(product.palette, fallbackProduct.palette),

@@ -10,7 +10,7 @@ export type ApiEnvelope<T> = {
 
 type AuthTokenProvider = () => string | null;
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 let authTokenProvider: AuthTokenProvider | null = null;
 

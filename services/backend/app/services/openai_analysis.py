@@ -616,7 +616,6 @@ class OpenAIAnalysisService:
       "background": "opaque",
       "n": 1,
       "quality": self.settings.openai_image_quality,
-      "response_format": "b64_json",
       "size": edit_size,
       "output_format": output_format,
     }
@@ -959,7 +958,12 @@ class OpenAIAnalysisService:
       index, generated_card, error = await task
 
       if error is not None:
-        error_detail = {"index": index + 1, "reason": error.__class__.__name__}
+        error_message = str(error)
+        error_detail = {
+          "index": index + 1,
+          "message": error_message,
+          "reason": error.__class__.__name__,
+        }
 
         if isinstance(error, AppError):
           error_detail.update({"code": error.code, "message": error.message})
@@ -967,9 +971,10 @@ class OpenAIAnalysisService:
         image_generation_errors.append(error_detail)
         generated_cards[index] = {**generated_cards[index], "imageStatus": "failed"}
         logger.warning(
-          "[aura:openai] image-generation:item-failed index=%s reason=%s",
+          "[aura:openai] image-generation:item-failed index=%s reason=%s message=%s",
           index + 1,
           error.__class__.__name__,
+          error_message,
         )
         continue
 

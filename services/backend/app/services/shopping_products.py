@@ -2,17 +2,26 @@ import asyncio
 import hashlib
 import html
 import json
+import logging
+import math
 import re
 from typing import Any
 from uuid import UUID
 
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 import httpx
 
 from app.core.settings import Settings
 from app.db.session import Database
 
 
+logger = logging.getLogger(__name__)
+
 PRODUCT_CATEGORIES = ("lip", "cheek", "shadow", "liner", "base")
+SEMANTIC_MATCH_WEIGHT = 0.35
+MAX_EMBEDDING_TEXT_LENGTH = 6000
 
 TABS = [
   {"id": "all", "label": "전체"},
@@ -457,6 +466,248 @@ def _build_category_query(category: str, profile: dict[str, Any] | None = None) 
   return " ".join([base_query, *profile_terms])
 
 
+def _bedrock_embedding_client(settings: Settings):
+  client_kwargs = {
+    "region_name": settings.effective_bedrock_embedding_region,
+    "config": Config(
+      connect_timeout=15,
+      read_timeout=45,
+      retries={"max_attempts": 1},
+    ),
+  }
+
+  if settings.aws_access_key_id and settings.aws_secret_access_key:
+    client_kwargs.update(
+      {
+        "aws_access_key_id": settings.aws_access_key_id,
+        "aws_secret_access_key": settings.aws_secret_access_key,
+      },
+    )
+
+  return boto3.client("bedrock-runtime", **client_kwargs)
+
+
+def _invoke_bedrock_text_embedding(
+  client: Any,
+  settings: Settings,
+  text: str,
+) -> list[float]:
+  model_id = settings.effective_embedding_model_id
+  normalized_text = _clean_text(text)[:MAX_EMBEDDING_TEXT_LENGTH]
+
+  if not model_id or not normalized_text:
+    return []
+
+  body: dict[str, Any] = {"inputText": normalized_text}
+
+  if "titan-embed-text-v2" in model_id:
+    body.update(
+      {
+        "dimensions": settings.embedding_dimension,
+        "normalize": True,
+      },
+    )
+
+  response = client.invoke_model(
+    modelId=model_id,
+    body=json.dumps(body, ensure_ascii=False),
+    accept="application/json",
+    contentType="application/json",
+  )
+  payload = json.loads(response["body"].read())
+  embedding = payload.get("embedding")
+
+  if not isinstance(embedding, list):
+    return []
+
+  return [
+    float(value)
+    for value in embedding
+    if isinstance(value, int | float)
+  ]
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+  if not left or not right or len(left) != len(right):
+    return 0.0
+
+  dot = sum(left_value * right_value for left_value, right_value in zip(left, right))
+  left_norm = math.sqrt(sum(value * value for value in left))
+  right_norm = math.sqrt(sum(value * value for value in right))
+
+  if left_norm == 0 or right_norm == 0:
+    return 0.0
+
+  return dot / (left_norm * right_norm)
+
+
+def _semantic_match_rate(similarity: float) -> int:
+  return min(100, max(0, round(max(0.0, similarity) * 100)))
+
+
+def _combine_match_rate(rule_score: int, semantic_rate: int) -> int:
+  weighted_score = (
+    rule_score * (1 - SEMANTIC_MATCH_WEIGHT) +
+    semantic_rate * SEMANTIC_MATCH_WEIGHT
+  )
+
+  return min(99, max(62, round(weighted_score)))
+
+
+def _semantic_profile_text(profile: dict[str, Any], category: str) -> str:
+  targets = _target_terms(profile, category)
+  target_text = " ".join(
+    [
+      *targets["colors"],
+      *targets["finishes"],
+      *targets["skinTypes"],
+      *targets["features"],
+      *targets["tones"],
+    ],
+  )
+
+  return "\n".join(
+    part
+    for part in [
+      f"추천 카테고리: {CATEGORY_CONFIG[category]['label']}",
+      f"분석 보고서: {_profile_text(profile, category)}",
+      f"추천 타깃 특징: {target_text}",
+    ]
+    if _clean_text(part)
+  )
+
+
+def _semantic_product_text(product: dict[str, Any]) -> str:
+  specs = product.get("productInfo")
+  specs = specs if isinstance(specs, dict) else {}
+  category = _normalize_category(product.get("category")) or "lip"
+  spec_parts: list[str] = []
+
+  for key in (
+    "colors",
+    "effects",
+    "features",
+    "skinTypes",
+    "tones",
+    "containerTypes",
+  ):
+    values = specs.get(key)
+
+    if isinstance(values, list):
+      spec_parts.extend(_clean_text(value) for value in values if _clean_text(value))
+
+  return "\n".join(
+    part
+    for part in [
+      f"상품 카테고리: {CATEGORY_CONFIG[category]['label']}",
+      f"브랜드: {_clean_text(product.get('brandName'))}",
+      f"상품명: {_clean_text(product.get('productName'))} {_clean_text(product.get('shadeName'))}",
+      f"태그: {' '.join(product.get('tags') or [])}",
+      f"상품정보: {' '.join(spec_part for spec_part in spec_parts if spec_part)}",
+      f"추천 이유: {_clean_text(product.get('reason'))}",
+    ]
+    if _clean_text(part)
+  )
+
+
+def _semantic_reason(
+  product: dict[str, Any],
+  semantic_rate: int,
+) -> str:
+  reason = _clean_text(product.get("reason"))
+
+  if semantic_rate < 72:
+    return reason
+
+  semantic_copy = "보고서 특징 벡터와 상품 정보 유사도도 높게 나왔어요."
+
+  if not reason:
+    return semantic_copy
+
+  return f"{reason} {semantic_copy}"
+
+
+async def _embed_text(
+  client: Any,
+  settings: Settings,
+  text: str,
+) -> list[float]:
+  return await asyncio.to_thread(_invoke_bedrock_text_embedding, client, settings, text)
+
+
+async def _apply_semantic_product_scores(
+  products: list[dict[str, Any]],
+  settings: Settings,
+  profile: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], bool]:
+  if not products or not profile or not settings.effective_embedding_model_id:
+    return products, False
+
+  try:
+    client = _bedrock_embedding_client(settings)
+    product_categories = _dedupe(
+      [
+        category
+        for product in products
+        if (category := _normalize_category(product.get("category")))
+      ],
+    )
+    profile_embeddings = await asyncio.gather(
+      *(
+        _embed_text(client, settings, _semantic_profile_text(profile, category))
+        for category in product_categories
+      ),
+    )
+    profile_embedding_by_category = dict(zip(product_categories, profile_embeddings))
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def embed_product(product: dict[str, Any]) -> list[float]:
+      async with semaphore:
+        return await _embed_text(client, settings, _semantic_product_text(product))
+
+    product_embeddings = await asyncio.gather(*(embed_product(product) for product in products))
+  except (BotoCoreError, ClientError, ValueError, json.JSONDecodeError) as exc:
+    logger.warning(
+      "[aura:products] semantic-match:embedding-failed reason=%s",
+      exc.__class__.__name__,
+    )
+    return products, False
+
+  ranked_products: list[dict[str, Any]] = []
+  has_semantic_score = False
+
+  for product, product_embedding in zip(products, product_embeddings):
+    category = _normalize_category(product.get("category"))
+    profile_embedding = profile_embedding_by_category.get(category or "")
+
+    if not profile_embedding or not product_embedding:
+      ranked_products.append(product)
+      continue
+
+    similarity = _cosine_similarity(profile_embedding or [], product_embedding)
+    semantic_rate = _semantic_match_rate(similarity)
+    has_semantic_score = True
+    rule_score = product.get("matchRate")
+    rule_score = rule_score if isinstance(rule_score, int) else _parse_price(rule_score)
+    next_product = {
+      **product,
+      "matchRate": _combine_match_rate(rule_score or 74, semantic_rate),
+      "semanticScore": round(similarity, 4),
+      "semanticMatchRate": semantic_rate,
+      "reason": _semantic_reason(product, semantic_rate),
+    }
+    ranked_products.append(next_product)
+
+  if not has_semantic_score:
+    return products, False
+
+  return (
+    sorted(ranked_products, key=lambda product: product["matchRate"], reverse=True),
+    True,
+  )
+
+
 def _has_korean(value: str) -> bool:
   return bool(re.search(r"[가-힣]", value))
 
@@ -718,7 +969,7 @@ def _map_db_product(
   match_rate, matched_terms = _score_product_match(specs, category, index, profile)
 
   return {
-    "id": str(row.get("id") or row.get("external_key") or _stable_external_id("db", purchase_url)),
+    "id": str(row.get("external_key") or row.get("id") or _stable_external_id("db", purchase_url)),
     "brandName": brand_name,
     "productName": _localized_product_name(product_name, category),
     "shadeName": shade_name,
@@ -857,6 +1108,16 @@ async def build_product_recommendation_data(
     products = await _fetch_db_products(db, category, profile)
     if products:
       source = "database_matched" if profile else "database"
+
+  if products and profile:
+    products, semantic_applied = await _apply_semantic_product_scores(
+      products,
+      settings,
+      profile,
+    )
+
+    if semantic_applied:
+      source = f"{source}_semantic"
 
   if not products:
     products = _fallback_products(category)

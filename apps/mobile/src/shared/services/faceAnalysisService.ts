@@ -102,7 +102,7 @@ type GetFaceAnalysisReportsOptions = {
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ANALYSIS_REPORT_POLL_INTERVAL_MS = 4000;
+const ANALYSIS_REPORT_POLL_INTERVAL_MS = 5000;
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 
 function isUuid(value: string | null | undefined): value is string {
@@ -260,32 +260,6 @@ function mergeMakeupCards(
     };
   });
 }
-function hasGeneratedMakeupImage(card: FaceAnalysisMakeupCard): boolean {
-  const source = card.imageSource as {uri?: unknown};
-
-  return (
-    typeof source?.uri === 'string' &&
-    (source.uri.startsWith('http://') || source.uri.startsWith('https://'))
-  );
-}
-
-function assertCompleteRecommendedMakeups(report: FaceAnalysisReport): void {
-  const generatedCards = report.recommendedMakeups.filter(hasGeneratedMakeupImage);
-
-  if (report.recommendedMakeups.length !== 3 || generatedCards.length !== 3) {
-    throw new BackendApiError(
-      '추천 메이크업 이미지 3개가 아직 생성되지 않았어요.',
-      502,
-      'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
-      {
-        generatedCount: generatedCards.length,
-        receivedCount: report.recommendedMakeups.length,
-      },
-    );
-  }
-}
-
-
 function getRecommendedMakeupCount(job: BackendAnalysisJob): number {
   const recommendedMakeups = job.detailPayload?.result?.recommendedMakeups;
 
@@ -309,6 +283,21 @@ function getImageGenerationStatus(job: BackendAnalysisJob): string | undefined {
   );
 }
 
+function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
+  const result = job.detailPayload?.result;
+
+  return Boolean(
+    result &&
+      getRecommendedMakeupCount(job) === 3 &&
+      firstText(
+        result.shortSummary,
+        result.summary,
+        job.shortSummary,
+        job.summary,
+      ),
+  );
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => {
     setTimeout(resolve, ms);
@@ -321,7 +310,6 @@ async function waitForCompleteAnalysisReport(
   startedAt: number,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
-  let lastError: Error | null = null;
 
   while (true) {
     const report = mapBackendJobToFaceAnalysisReport(currentJob, capture);
@@ -329,8 +317,7 @@ async function waitForCompleteAnalysisReport(
     const imageGenerationStatus = getImageGenerationStatus(currentJob);
     const recommendedCount = getRecommendedMakeupCount(currentJob);
 
-    try {
-      assertCompleteRecommendedMakeups(report);
+    if (hasCompleteBackendReportText(currentJob)) {
       console.info('[aura:analysis] analysis-report:ready', {
         durationMs: Date.now() - startedAt,
         generatedImageCount,
@@ -341,8 +328,6 @@ async function waitForCompleteAnalysisReport(
       });
 
       return report;
-    } catch (error) {
-      lastError = error instanceof Error ? error : null;
     }
 
     if (currentJob.status === 'failed') {
@@ -355,10 +340,10 @@ async function waitForCompleteAnalysisReport(
     }
 
     if (currentJob.status === 'completed') {
-      throw lastError ?? new BackendApiError(
-        '추천 메이크업 이미지가 완성되지 않았어요. 잠시 후 다시 시도해 주세요.',
+      throw new BackendApiError(
+        '분석 보고서 내용을 아직 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
         502,
-        'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
+        'ANALYSIS_REPORT_TEXT_REQUIRED',
         {
           generatedImageCount,
           imageGenerationStatus,
@@ -369,7 +354,7 @@ async function waitForCompleteAnalysisReport(
     }
 
     if (!currentJob.id) {
-      throw lastError ?? new Error('Analysis job did not return a report id.');
+      throw new Error('Analysis job did not return a report id.');
     }
 
     const elapsedMs = Date.now() - startedAt;

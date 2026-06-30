@@ -4,7 +4,8 @@ from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.s3 import S3Service
-from app.services.shopping_products import _map_naver_item
+from app.services import shopping_products
+from app.services.shopping_products import _apply_semantic_product_scores, _map_naver_item
 
 
 class FakeS3Client:
@@ -110,7 +111,7 @@ def test_gpt_image_2_edit_params_omit_input_fidelity() -> None:
   assert params["model"] == "gpt-image-2"
   assert params["output_format"] == "jpeg"
   assert params["output_compression"] == 80
-  assert params["response_format"] == "b64_json"
+  assert "response_format" not in params
   assert "input_fidelity" not in params
 
 
@@ -119,7 +120,7 @@ def test_gpt_image_1_edit_params_keep_high_input_fidelity() -> None:
 
   params = service._build_image_edit_params(object(), "apply makeup", "auto")
 
-  assert params["response_format"] == "b64_json"
+  assert "response_format" not in params
   assert params["input_fidelity"] == "high"
 
 
@@ -279,3 +280,67 @@ def test_naver_lip_item_scores_against_analysis_report_terms() -> None:
   assert "매트" in product["productInfo"]["effects"]
   assert "웜톤" in product["tags"]
   assert "코랄" in product["reason"]
+
+
+@pytest.mark.asyncio
+async def test_semantic_product_scores_rerank_by_report_embedding(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  monkeypatch.setattr(
+    shopping_products,
+    "_bedrock_embedding_client",
+    lambda settings: object(),
+  )
+
+  def fake_embedding(client, settings, text: str):
+    if text.startswith("추천 카테고리"):
+      return [1.0, 0.0]
+
+    if "코랄" in text and "베이지" in text:
+      return [1.0, 0.0]
+
+    return [0.0, 1.0]
+
+  monkeypatch.setattr(
+    shopping_products,
+    "_invoke_bedrock_text_embedding",
+    fake_embedding,
+  )
+  products = [
+    {
+      "id": "rule-high",
+      "brandName": "테스트",
+      "productName": "쿨톤 플럼 립",
+      "category": "lip",
+      "matchRate": 96,
+      "tags": ["쿨톤", "플럼"],
+      "productInfo": {"colors": ["플럼"], "tones": ["쿨톤"]},
+      "reason": "규칙 점수는 높은 상품",
+    },
+    {
+      "id": "semantic-high",
+      "brandName": "테스트",
+      "productName": "코랄 베이지 립",
+      "category": "lip",
+      "matchRate": 70,
+      "tags": ["코랄", "베이지"],
+      "productInfo": {"colors": ["코랄", "베이지"], "tones": ["웜톤"]},
+      "reason": "보고서 톤과 가까운 상품",
+    },
+  ]
+
+  ranked_products, semantic_applied = await _apply_semantic_product_scores(
+    products,
+    Settings(bedrock_embedding_model_id="amazon.titan-embed-text-v2:0"),
+    {
+      "makeupGuideline": {"lip": "코랄 베이지 립을 매트하게 정돈해요."},
+      "personalColor": "봄웜 라이트",
+      "recommendedMood": "코랄 베이지 데일리 룩",
+      "toneSummary": "맑은 웜 아이보리 톤",
+    },
+  )
+
+  assert semantic_applied is True
+  assert ranked_products[0]["id"] == "semantic-high"
+  assert ranked_products[0]["semanticMatchRate"] == 100
+  assert ranked_products[0]["matchRate"] > ranked_products[1]["matchRate"]
