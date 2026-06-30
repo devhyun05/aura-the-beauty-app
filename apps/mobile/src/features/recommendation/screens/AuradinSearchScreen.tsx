@@ -284,7 +284,16 @@ function GlossOrb({size = 222}: {size?: number}) {
 }
 
 function LoaderDots() {
-  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+  const dotsRef = useRef<Animated.Value[] | null>(null);
+  if (!dotsRef.current) {
+    dotsRef.current = [
+      new Animated.Value(0),
+      new Animated.Value(0),
+      new Animated.Value(0),
+    ];
+  }
+  const dots = dotsRef.current;
+
   useEffect(() => {
     const loops = dots.map((v, i) =>
       Animated.loop(
@@ -298,8 +307,7 @@ function LoaderDots() {
     );
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dots]);
 
   return (
     <XStack style={styles.dots}>
