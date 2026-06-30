@@ -6,6 +6,7 @@ import {
   createHeroCarouselLoopResetHandlers,
   getRecommendedFilterCategoryLabels,
   getRecommendedFilterGridColumnCount,
+  getIsHomeScrollTopButtonVisible,
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
   heroCtaLabel,
@@ -13,6 +14,8 @@ import {
   getHeroTrendHeadline,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_SCROLL_TOP_VISIBLE_OFFSET,
+  recommendedFilterListVirtualizationConfig,
   recommendedFilterSectionDescription,
   recommendedFilterSectionTitle,
 } from './HomeScreen';
@@ -61,6 +64,10 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
 );
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
+const expectedInitialRecommendedFiltersToRender: 6 =
+  recommendedFilterListVirtualizationConfig.initialNumToRender;
+const expectedRecommendedFilterRenderBatchSize: 4 =
+  recommendedFilterListVirtualizationConfig.maxToRenderPerBatch;
 const heroCarouselItems = [
   {id: 'first', title: '첫 카드'},
   {id: 'second', title: '두번째 카드'},
@@ -130,6 +137,31 @@ expectEqual(
   getRecommendedFilterGridColumnCount(),
   expectedRecommendedFilterGridColumnCount,
   'recommended filter grid column count',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.initialNumToRender,
+  expectedInitialRecommendedFiltersToRender,
+  'recommended filter initial render count',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.maxToRenderPerBatch,
+  expectedRecommendedFilterRenderBatchSize,
+  'recommended filter render batch size',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.initialNumToRender < recommendedFilters.length,
+  true,
+  'recommended filter list does not initially render every card',
+);
+expectEqual(
+  getIsHomeScrollTopButtonVisible(HOME_SCROLL_TOP_VISIBLE_OFFSET - 1),
+  false,
+  'scroll top button is hidden before threshold',
+);
+expectEqual(
+  getIsHomeScrollTopButtonVisible(HOME_SCROLL_TOP_VISIBLE_OFFSET),
+  true,
+  'scroll top button is visible at threshold',
 );
 expectEqual(
   loopedHeroCarouselItems[0].id,

@@ -25,7 +25,9 @@ import {
   unlikeProduct,
   type ProductLikePayload,
 } from '../../../shared/services/productService';
+import {getFaceAnalysisReports} from '../../../shared/services/faceAnalysisService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
 import {getProductRecommendations} from '../services/productRecommendationService';
 import type {
@@ -63,6 +65,29 @@ export const productRecommendationHeaderCopy: ProductRecommendationHeaderCopy = 
 
 export const getRecommendationSetSectionTitle = (userNickname: string) =>
   `${userNickname} 님의 룩과 잘 맞는 추천 조합`;
+
+function formatRecommendationReportDate(dateText: string): string {
+  const date = new Date(dateText);
+
+  if (Number.isNaN(date.getTime())) {
+    return '최근 분석';
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${month}.${day}`;
+}
+
+export function getProductRecommendationReportLabel(
+  report: Pick<FaceAnalysisReport, 'analyzedAt' | 'personalColor'> | null | undefined,
+): string {
+  if (!report) {
+    return '최근 분석 기준';
+  }
+
+  return `${formatRecommendationReportDate(report.analyzedAt)} · ${report.personalColor}`;
+}
 
 export async function openProductPurchaseUrl(product: RecommendedProduct): Promise<boolean> {
   const purchaseUrl = product.purchaseUrl?.trim();
@@ -129,6 +154,11 @@ export function ProductRecommendationScreen({
   const [data, setData] = useState<ProductRecommendationData | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
+  const [reports, setReports] = useState<FaceAnalysisReport[]>([]);
+  const [isReportListLoaded, setIsReportListLoaded] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(
+    sourceReportId ?? null,
+  );
   const [sortOption, setSortOption] = useState<ProductSortOption>('matchDesc');
   const [currentPage, setCurrentPage] = useState(1);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -140,15 +170,27 @@ export function ProductRecommendationScreen({
   const lookImageSize = isVeryCompactHeight ? 54 : isCompactHeight ? 62 : 70;
   const sectionGap = isVeryCompactHeight ? spacing.xs : spacing.sm;
   const productRowGap = isVeryCompactHeight ? spacing.xs : spacing.sm;
+  const reportSelectorReservedHeight = reports.length > 0
+    ? isVeryCompactHeight
+      ? 96
+      : 104
+    : 0;
   const minCardHeight = isVeryCompactHeight ? 164 : isCompactHeight ? 178 : 192;
   const maxCardHeight = isVeryCompactHeight ? 176 : isCompactHeight ? 194 : 212;
-  const availableProductHeight = Math.max(328, height - lookImageSize - 156);
+  const availableProductHeight = Math.max(
+    328,
+    height - lookImageSize - reportSelectorReservedHeight - 156,
+  );
   const cardHeight = Math.max(
     minCardHeight,
     Math.min(maxCardHeight, Math.floor((availableProductHeight - productRowGap) / 2)),
   );
   const productImageHeight = Math.floor(cardHeight * 0.56);
   const productCarouselHeight = cardHeight * 2 + productRowGap;
+  const selectedReport = useMemo(
+    () => reports.find((report) => report.id === selectedReportId) ?? null,
+    [reports, selectedReportId],
+  );
   const sortLabel =
     productSortOptions.find((option) => option.id === sortOption)?.label ??
     productSortOptions[0].label;
@@ -156,8 +198,16 @@ export function ProductRecommendationScreen({
   const loadRecommendations = useCallback(() => {
     let isMounted = true;
 
+    if (!sourceReportId && !isReportListLoaded) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setData(null);
+
     Promise.all([
-      getProductRecommendations({reportId: sourceReportId}),
+      getProductRecommendations({reportId: selectedReportId}),
       getLikedProducts(),
     ]).then(([recommendations, likedProducts]) => {
       if (!isMounted) {
@@ -171,9 +221,43 @@ export function ProductRecommendationScreen({
     return () => {
       isMounted = false;
     };
-  }, [sourceReportId]);
+  }, [isReportListLoaded, selectedReportId, sourceReportId]);
 
   useFocusEffect(loadRecommendations);
+
+  useEffect(() => {
+    setSelectedReportId(sourceReportId ?? null);
+  }, [sourceReportId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getFaceAnalysisReports({limit: 20})
+      .then((nextReports) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setReports(nextReports);
+        setSelectedReportId((currentReportId) =>
+          currentReportId ?? nextReports[0]?.id ?? null,
+        );
+        setIsReportListLoaded(true);
+      })
+      .catch((error) => {
+        console.info('[aura:products] reports:load-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        if (isMounted) {
+          setIsReportListLoaded(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const products = useMemo(() => {
     if (!data) {
@@ -217,11 +301,22 @@ export function ProductRecommendationScreen({
   }, [activeCategory, contentWidth, sortOption]);
 
   useEffect(() => {
+    setActiveCategory('all');
+    setCurrentPage(1);
+    setIsSortMenuOpen(false);
+    productScrollRef.current?.scrollTo({animated: false, x: 0, y: 0});
+  }, [selectedReportId]);
+
+  useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalProductPages));
   }, [totalProductPages]);
 
   const handleChangeCategory = useCallback((category: ProductRecommendationCategory) => {
     setActiveCategory(category);
+  }, []);
+
+  const handleSelectReport = useCallback((reportId: string) => {
+    setSelectedReportId(reportId);
   }, []);
 
   const handleToggleSortMenu = useCallback(() => {
@@ -293,6 +388,13 @@ export function ProductRecommendationScreen({
       contentGap={sectionGap}
       scroll={false}
       topPadding="none">
+      <ReportSelector
+        onSelectReport={handleSelectReport}
+        reports={reports}
+        selectedReport={selectedReport}
+        selectedReportId={selectedReportId}
+      />
+
       <LookSummaryCard imageSize={lookImageSize} makeupLook={data.makeupLook} />
 
       <View style={[styles.productSection, {gap: sectionGap}]}>
@@ -391,7 +493,7 @@ export function ProductRecommendationScreen({
               accessibilityLabel="추천 제품 다시 불러오기"
               accessibilityRole="button"
               onPress={() => {
-                getProductRecommendations({reportId: sourceReportId}).then(setData);
+                getProductRecommendations({reportId: selectedReportId}).then(setData);
               }}
               style={styles.retryButton}>
               <Text style={styles.retryButtonText}>다시 불러오기</Text>
@@ -400,6 +502,77 @@ export function ProductRecommendationScreen({
         )}
       </View>
     </AppScreen>
+  );
+}
+
+function ReportSelector({
+  onSelectReport,
+  reports,
+  selectedReport,
+  selectedReportId,
+}: {
+  onSelectReport: (reportId: string) => void;
+  reports: FaceAnalysisReport[];
+  selectedReport: FaceAnalysisReport | null;
+  selectedReportId: string | null;
+}) {
+  if (reports.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.reportSelector}>
+      <View style={styles.reportSelectorHeader}>
+        <View style={styles.reportSelectorTitleBlock}>
+          <Text style={styles.reportSelectorEyebrow}>기준 보고서</Text>
+          <Text numberOfLines={1} style={styles.reportSelectorTitle}>
+            {getProductRecommendationReportLabel(selectedReport)}
+          </Text>
+        </View>
+        <Text style={styles.reportSelectorCount}>{reports.length}개</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.reportChipList}
+        horizontal
+        showsHorizontalScrollIndicator={false}>
+        {reports.map((report) => {
+          const isSelected = report.id === selectedReportId;
+
+          return (
+            <Pressable
+              accessibilityLabel={`${getProductRecommendationReportLabel(report)} 기준 추천 제품 보기`}
+              accessibilityRole="button"
+              accessibilityState={{selected: isSelected}}
+              key={report.id}
+              onPress={() => onSelectReport(report.id)}
+              style={({pressed}) => [
+                isSelected ? styles.reportChipSelected : styles.reportChip,
+                pressed ? styles.pressed : null,
+              ]}>
+              <Text style={isSelected ? styles.reportChipDateSelected : styles.reportChipDate}>
+                {formatRecommendationReportDate(report.analyzedAt)}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={isSelected ? styles.reportChipTitleSelected : styles.reportChipTitle}>
+                {report.personalColor}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={isSelected ? styles.reportChipMoodSelected : styles.reportChipMood}>
+                {report.recommendedMood}
+              </Text>
+              {isSelected ? (
+                <View style={styles.reportChipCheck}>
+                  <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -860,6 +1033,119 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  reportChip: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 1,
+    minHeight: 54,
+    minWidth: 128,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    position: 'relative',
+  },
+  reportChipCheck: {
+    position: 'absolute',
+    right: spacing.xs,
+    top: spacing.xs,
+  },
+  reportChipDate: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  reportChipDateSelected: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+    opacity: 0.84,
+  },
+  reportChipList: {
+    gap: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  reportChipMood: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 10,
+    lineHeight: 13,
+    maxWidth: 100,
+  },
+  reportChipMoodSelected: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 10,
+    lineHeight: 13,
+    maxWidth: 100,
+    opacity: 0.84,
+  },
+  reportChipSelected: {
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.textPrimary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 1,
+    minHeight: 54,
+    minWidth: 128,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    position: 'relative',
+  },
+  reportChipTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    maxWidth: 100,
+  },
+  reportChipTitleSelected: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    maxWidth: 100,
+  },
+  reportSelector: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    ...sharedCardShadow,
+  },
+  reportSelectorCount: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  reportSelectorEyebrow: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  reportSelectorHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  reportSelectorTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  reportSelectorTitleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   sortButton: {
     alignItems: 'center',

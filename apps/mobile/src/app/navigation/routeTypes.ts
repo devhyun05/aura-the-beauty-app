@@ -19,7 +19,7 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   SavedMakeupList: undefined;
-  ProductRecommendation: undefined;
+  ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
   Consulting: undefined;
   MakeupLookList: undefined;

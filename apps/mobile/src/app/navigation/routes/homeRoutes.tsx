@@ -48,7 +48,10 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   );
 
   return (
-    <MainTabChrome navigation={navigation} routeName="HomeTab">
+    <MainTabChrome
+      navigation={navigation}
+      routeName="HomeTab"
+      wrapContentInScreen={false}>
       <HomeScreen
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
         onPressCommunity={() => rootNavigation?.navigate('Community')}
