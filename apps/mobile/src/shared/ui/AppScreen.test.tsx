@@ -41,9 +41,15 @@ expectEqual(
   34,
   'safe area app screen bottom padding',
 );
+expectEqual(
+  getAppScreenBottomPadding('floatingFooter', 34),
+  110,
+  'floating footer app screen bottom padding',
+);
 expectEqual(getAppScreenBottomPadding(0, 34), 0, 'custom app screen bottom padding');
 
 const safeAreaBottomPadding: AppScreenBottomPadding = 'safeArea';
+const floatingFooterBottomPadding: AppScreenBottomPadding = 'floatingFooter';
 
 <AppScreen topPadding="belowShellHeader">content</AppScreen>;
 <AppScreen
@@ -55,3 +61,4 @@ const safeAreaBottomPadding: AppScreenBottomPadding = 'safeArea';
 >
   content
 </AppScreen>;
+<AppScreen bottomPadding={floatingFooterBottomPadding}>content</AppScreen>;

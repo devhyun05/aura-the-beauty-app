@@ -12,6 +12,10 @@ import {
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {getReferenceMakeupExtractionDataSync} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
+import {
+  getRecommendedMakeupFilterById,
+  mapMakeupFilterToSavedLook,
+} from '../../../shared/services/makeupGuideService';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -43,9 +47,13 @@ function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
 export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
-  const {setSelectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const {
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
 
   const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
+    setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
     navigation.navigate('ReferenceMakeupExtractionLoading');
   };
@@ -96,36 +104,86 @@ export function ReferenceMakeupExtractionResultRouteScreen({
 export function ExtractedMakeupLookAdjustRouteScreen({
   navigation,
 }: RootScreenProps<'ExtractedMakeupLookAdjust'>) {
-  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
+  const {
+    selectedReferenceMakeupPhoto,
+    setSelectedRecommendedMakeupFilterId,
+  } = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+
+  const handleSave = () => {
+    setSelectedRecommendedMakeupFilterId(null);
+    navigation.navigate('MakeupFilterSave');
+  };
 
   return (
     <ExtractedMakeupLookAdjustScreen
       onClose={() => navigation.navigate('ReferenceMakeupExtractionResult')}
       onCreateRecipe={() => navigation.navigate('MakeupRecipeDetail')}
-      onSave={() => navigation.navigate('MakeupFilterSave')}
+      onSave={handleSave}
       photo={photo}
     />
   );
 }
 
 export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'MakeupFilterSave'>) {
-  const {selectedReferenceMakeupPhoto, setSavedMakeupLook} = useNavigationFlowState();
+  const {
+    selectedRecommendedMakeupFilterId,
+    selectedReferenceMakeupPhoto,
+    setSavedMakeupLook,
+  } = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const recommendedFilter = selectedRecommendedMakeupFilterId
+    ? getRecommendedMakeupFilterById(selectedRecommendedMakeupFilterId)
+    : null;
+  const referenceMakeupLook =
+    getReferenceMakeupExtractionDataSync().extractedMakeupLook;
+  const saveScreenData = recommendedFilter
+    ? {
+        defaultName: recommendedFilter.displayTitle,
+        imageSource: recommendedFilter.imageSource,
+        summaryDescription: 'AR 적용값과 조정값이 함께 저장돼요.',
+        summaryTitle: '저장할 메이크업 룩',
+      }
+    : {
+        defaultName: referenceMakeupLook.title,
+        imageSource: photo.imageSource,
+        summaryDescription: 'AR 적용값과 조정값이 함께 저장돼요.',
+        summaryTitle: '저장할 메이크업 룩',
+      };
 
   const handleSave = () => {
-    setSavedMakeupLook(buildSavedMakeupLook(photo));
+    setSavedMakeupLook(
+      recommendedFilter
+        ? mapMakeupFilterToSavedLook(recommendedFilter)
+        : buildSavedMakeupLook(photo),
+    );
     navigation.navigate('MakeupFilterSaveComplete');
+  };
+
+  const handleBack = () => {
+    if (recommendedFilter) {
+      navigation.navigate('ARFilter', {
+        initialGuideMode: 'half',
+        initialMakeupFilterId: recommendedFilter.id,
+        source: 'recommendedFilter',
+      });
+      return;
+    }
+
+    navigation.navigate('ExtractedMakeupLookAdjust');
   };
 
   return (
     <DetailRouteChrome
       routeName="MakeupFilterSave"
-      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+      onBack={handleBack}
       onDone={handleSave}>
       <MakeupFilterSaveScreen
+        defaultName={saveScreenData.defaultName}
+        imageSource={saveScreenData.imageSource}
         onSave={handleSave}
-        photo={photo}
+        summaryDescription={saveScreenData.summaryDescription}
+        summaryTitle={saveScreenData.summaryTitle}
       />
     </DetailRouteChrome>
   );
@@ -134,10 +192,26 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
 export function MakeupFilterSaveCompleteRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFilterSaveComplete'>) {
+  const {savedMakeupLook, selectedRecommendedMakeupFilterId} = useNavigationFlowState();
+
+  const handleApplyNow = () => {
+    if (selectedRecommendedMakeupFilterId) {
+      navigation.navigate('ARFilter', {
+        initialGuideMode: 'half',
+        initialMakeupFilterId: selectedRecommendedMakeupFilterId,
+        source: 'recommendedFilter',
+      });
+      return;
+    }
+
+    navigation.navigate('ExtractedMakeupLookAdjust');
+  };
+
   return (
     <MakeupFilterSaveCompleteScreen
-      onApplyNow={() => navigation.navigate('ExtractedMakeupLookAdjust')}
+      onApplyNow={handleApplyNow}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
+      savedMakeupLookTitle={savedMakeupLook?.title}
     />
   );
 }

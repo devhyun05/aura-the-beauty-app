@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   FilterStoreScreen,
+  getRecommendedFilterRouteParams,
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
@@ -17,17 +18,26 @@ import {
 
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
+  const {setSelectedRecommendedMakeupFilterId} = useNavigationFlowState();
+
+  const handleRecommendedFilterPress = (filterId: string) => {
+    setSelectedRecommendedMakeupFilterId(filterId);
+    rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+  };
 
   return (
     <MainTabChrome navigation={navigation} routeName="HomeTab">
       <HomeScreen
-        onPressARFilter={() => rootNavigation?.navigate('ARFilter')}
+        onPressARFilter={() => {
+          setSelectedRecommendedMakeupFilterId(null);
+          rootNavigation?.navigate('ARFilter');
+        }}
         onPressFilterStore={() => rootNavigation?.navigate('HomeFilterStore')}
         onPressReferenceMakeupExtraction={() => rootNavigation?.navigate('ReferenceMakeupExtractionUpload')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
         onPressMakeupFeedback={() => rootNavigation?.navigate('MakeupFeedbackEntry')}
         onPressProductRecommendations={() => navigation.navigate('CustomTab')}
-        onPressSavedMakeups={() => rootNavigation?.navigate('SavedMakeupList')}
+        onPressRecommendedFilter={handleRecommendedFilterPress}
       />
     </MainTabChrome>
   );
@@ -36,11 +46,18 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 export function HomeFilterStoreRouteScreen({
   navigation,
 }: RootScreenProps<'HomeFilterStore'>) {
+  const {setSelectedRecommendedMakeupFilterId} = useNavigationFlowState();
+
+  const handleApplyFilter = (filterId: string) => {
+    setSelectedRecommendedMakeupFilterId(filterId);
+    navigation.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+  };
+
   return (
     <DetailRouteChrome
       routeName="HomeFilterStore"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FilterStoreScreen onApplyFilter={() => navigation.navigate('ARFilter')} />
+      <FilterStoreScreen onApplyFilter={handleApplyFilter} />
     </DetailRouteChrome>
   );
 }

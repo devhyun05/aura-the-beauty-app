@@ -6,15 +6,20 @@ import {
   getHeroCarouselRenderItems,
   createHeroCarouselLoopResetHandlers,
   getFilterStoreCategoryChipLabel,
+  getRecommendedFilterAccessibilityLabel,
+  getRecommendedFilterRouteParams,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
   getHeroTrendHeadline,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  recommendedFilterSectionDescription,
+  recommendedFilterSectionTitle,
 } from './HomeScreen';
 import {mapFaceAnalysisReportsToHomeSavedMakeupLooks} from '../services/homeService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {colors, radius, typography} from '../../../shared/theme';
+import {getRecommendedMakeupFilterById} from '../../../shared/services/makeupGuideService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -34,6 +39,11 @@ const expectedShadowColor: 'rgba(255, 255, 255, 0.30)' =
 const expectedShadowRadius: 8 = heroTrendTitleReadableTextStyle.textShadowRadius;
 const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffset.height;
 const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
+const expectedRecommendedFilterSectionTitle: '추천 메이크업 필터' =
+  recommendedFilterSectionTitle;
+const expectedRecommendedFilterSectionDescription:
+  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' =
+    recommendedFilterSectionDescription;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
 const filterStoreCategoryChipLabel = getFilterStoreCategoryChipLabel('Lip');
@@ -54,6 +64,8 @@ const heroCarouselSnapInterval = 320;
 const heroCarouselScrollEndHandler = () => undefined;
 const heroCarouselLoopResetHandlers =
   createHeroCarouselLoopResetHandlers(heroCarouselScrollEndHandler);
+const cleanSmokyFilter = getRecommendedMakeupFilterById('filter-clean-smoky-city');
+const cleanSmokyRouteParams = getRecommendedFilterRouteParams(cleanSmokyFilter.id);
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -77,6 +89,16 @@ expectEqual(
   'weekly trend title shadow offset',
 );
 expectEqual(heroCtaLabel, expectedHeroCtaLabel, 'hero CTA label');
+expectEqual(
+  recommendedFilterSectionTitle,
+  expectedRecommendedFilterSectionTitle,
+  'recommended filter section title',
+);
+expectEqual(
+  recommendedFilterSectionDescription,
+  expectedRecommendedFilterSectionDescription,
+  'recommended filter section description',
+);
 expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,
   expectedHeroTitleMainFontFamily,
@@ -156,6 +178,26 @@ expectEqual(
   heroCarouselLoopResetHandlers.onScrollEndDrag,
   heroCarouselScrollEndHandler,
   'hero carousel drag end reset handler',
+);
+expectEqual(
+  getRecommendedFilterAccessibilityLabel(cleanSmokyFilter),
+  '차가운 도시의 클린 스모키, 96퍼센트 추천, AR 적용',
+  'recommended filter accessibility label',
+);
+expectEqual(
+  cleanSmokyRouteParams.initialMakeupFilterId,
+  cleanSmokyFilter.id,
+  'recommended filter route id',
+);
+expectEqual(
+  cleanSmokyRouteParams.initialGuideMode,
+  'half',
+  'recommended filter route guide mode',
+);
+expectEqual(
+  cleanSmokyRouteParams.source,
+  'recommendedFilter',
+  'recommended filter route source',
 );
 
 let selectedQuickAction: 'ar' | 'makeup-feedback' | null = null;

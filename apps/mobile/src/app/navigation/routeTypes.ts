@@ -1,4 +1,8 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {
+  ARFilterLaunchSource,
+  GuideMode,
+} from '../../shared/types/makeupGuide';
 
 export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 
@@ -16,7 +20,13 @@ export type RootStackParamList = {
   SavedMakeupList: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
-  ARFilter: undefined;
+  ARFilter:
+    | {
+        initialGuideMode?: GuideMode;
+        initialMakeupFilterId?: string;
+        source?: ARFilterLaunchSource;
+      }
+    | undefined;
   ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
   MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
   MakeupFeedbackEntry: undefined;

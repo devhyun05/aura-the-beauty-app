@@ -24,6 +24,7 @@ export const APP_FOOTER_CAPTURE_BUBBLE_SIZE =
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
 export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.md;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
+export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
 export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
 export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';

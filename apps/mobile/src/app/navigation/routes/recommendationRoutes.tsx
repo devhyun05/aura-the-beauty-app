@@ -27,11 +27,13 @@ export function CustomRouteScreen({navigation}: MainTabScreenProps<'CustomTab'>)
 export function MakeupLookListRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupLookList'>) {
+  const {savedMakeupLook} = useNavigationFlowState();
+
   return (
     <DetailRouteChrome
       routeName="MakeupLookList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <MakeupLookListScreen />
+      <MakeupLookListScreen savedMakeupLook={savedMakeupLook} />
     </DetailRouteChrome>
   );
 }

@@ -4,13 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'tamagui';
 
 import { colors, spacing } from '../theme';
+import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from './AppFooter';
 
 export type AppScreenTopPadding =
   | 'standalone'
   | 'belowShellHeader'
   | 'safeArea'
   | 'none';
-export type AppScreenBottomPadding = number | 'safeArea';
+export type AppScreenBottomPadding = number | 'floatingFooter' | 'safeArea';
 export const APP_SCREEN_CONTENT_TOP_PADDING = spacing.lg;
 
 export function getAppScreenTopPadding(
@@ -42,6 +43,10 @@ export function getAppScreenBottomPadding(
 
   if (bottomPadding === 'safeArea') {
     return bottomInset;
+  }
+
+  if (bottomPadding === 'floatingFooter') {
+    return APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(bottomInset, spacing.md);
   }
 
   return Math.max(bottomInset, spacing.xl) + spacing.xxl;

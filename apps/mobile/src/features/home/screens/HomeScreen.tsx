@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   Image,
   Pressable,
@@ -9,7 +9,6 @@ import {
   type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
 import {
   ArrowRight,
   Camera,
@@ -21,12 +20,13 @@ import {
 } from 'lucide-react-native';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
+import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {getHomeData, getSavedRecommendedMakeupLooks} from '../services/homeService';
+import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
+import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
   HomeFilterStoreItem,
-  HomeMakeupLook,
   HomeTrendItem,
 } from '../types';
 
@@ -37,7 +37,7 @@ type HomeScreenProps = {
   onPressFaceDiagnosis?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressProductRecommendations?: () => void;
-  onPressSavedMakeups?: () => void;
+  onPressRecommendedFilter?: (filterId: string) => void;
 };
 
 export function HomeScreen({
@@ -47,12 +47,12 @@ export function HomeScreen({
   onPressFaceDiagnosis,
   onPressMakeupFeedback,
   onPressProductRecommendations,
-  onPressSavedMakeups,
+  onPressRecommendedFilter,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
-  const [savedMakeupLooks, setSavedMakeupLooks] = useState<HomeMakeupLook[]>([]);
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
+  const recommendedMakeupFilters = getRecommendedMakeupFilters().slice(0, 8);
 
   useEffect(() => {
     let isMounted = true;
@@ -67,32 +67,6 @@ export function HomeScreen({
       isMounted = false;
     };
   }, []);
-
-  const loadSavedMakeupLooks = useCallback(() => {
-    let isMounted = true;
-
-    getSavedRecommendedMakeupLooks()
-      .then((nextSavedMakeupLooks) => {
-        if (isMounted) {
-          setSavedMakeupLooks(nextSavedMakeupLooks);
-        }
-      })
-      .catch((error) => {
-        console.info('[aura:home] saved-makeup:fallback-empty', {
-          message: error instanceof Error ? error.message : String(error),
-        });
-
-        if (isMounted) {
-          setSavedMakeupLooks([]);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useFocusEffect(loadSavedMakeupLooks);
 
   if (!homeData) {
     return (
@@ -122,8 +96,9 @@ export function HomeScreen({
         onPressFilterStore={onPressFilterStore}
       />
       <RecommendedLooksSection
-        makeupLooks={savedMakeupLooks}
-        onPressSavedMakeups={onPressSavedMakeups}
+        filters={recommendedMakeupFilters}
+        onPressFilter={onPressRecommendedFilter}
+        onPressViewAll={onPressFilterStore}
       />
     </>
   );
@@ -167,6 +142,9 @@ export const heroTrendTitleMainTextStyle = {
 } as const;
 
 export const heroCtaLabel = '보러가기' as const;
+export const recommendedFilterSectionTitle = '추천 메이크업 필터' as const;
+export const recommendedFilterSectionDescription =
+  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' as const;
 
 type HeroCarouselItemBase = {
   id: string;
@@ -541,103 +519,110 @@ function FilterStoreCard({
 }
 
 function RecommendedLooksSection({
-  makeupLooks,
-  onPressSavedMakeups,
+  filters,
+  onPressFilter,
+  onPressViewAll,
 }: {
-  makeupLooks: HomeMakeupLook[];
-  onPressSavedMakeups?: () => void;
+  filters: readonly RecommendedMakeupFilter[];
+  onPressFilter?: (filterId: string) => void;
+  onPressViewAll?: () => void;
 }) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
         actionLabel="전체 보기"
-        onPressAction={onPressSavedMakeups}
-        title="저장된 메이크업"
+        description={recommendedFilterSectionDescription}
+        onPressAction={onPressViewAll}
+        title={recommendedFilterSectionTitle}
       />
 
       <TamaguiScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.makeupLookList}>
-        {makeupLooks.length > 0 ? (
-          makeupLooks.map((makeupLook) => (
-            <RecommendedLookCard
-              key={makeupLook.id}
-              makeupLook={makeupLook}
-              onPress={onPressSavedMakeups}
-            />
-          ))
-        ) : (
-          <EmptySavedMakeupCard onPress={onPressSavedMakeups} />
-        )}
+        contentContainerStyle={styles.recommendedFilterList}>
+        {filters.map(filter => (
+          <RecommendedFilterCard
+            filter={filter}
+            key={filter.id}
+            onPress={onPressFilter}
+          />
+        ))}
       </TamaguiScrollView>
     </YStack>
   );
 }
 
-function RecommendedLookCard({
-  makeupLook,
+export function getRecommendedFilterAccessibilityLabel(
+  filter: RecommendedMakeupFilter,
+): string {
+  return `${filter.headline} ${filter.displayTitle}, ${filter.matchScore}퍼센트 추천, AR 적용`;
+}
+
+export function getRecommendedFilterRouteParams(filterId: string) {
+  return {
+    initialGuideMode: 'half',
+    initialMakeupFilterId: filterId,
+    source: 'recommendedFilter',
+  } as const;
+}
+
+function RecommendedFilterCard({
+  filter,
   onPress,
 }: {
-  makeupLook: HomeMakeupLook;
-  onPress?: () => void;
+  filter: RecommendedMakeupFilter;
+  onPress?: (filterId: string) => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${makeupLook.title} ${makeupLook.description}`}
-      onPress={onPress}
-      style={({pressed}) => [styles.makeupLookCard, pressed && styles.pressed]}>
-      <View style={styles.makeupLookImageFrame}>
-        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
-      </View>
-
-      <YStack style={styles.makeupLookTextGroup}>
-        <Text numberOfLines={1} style={styles.makeupLookTitle}>
-          {makeupLook.title}
+      accessibilityLabel={getRecommendedFilterAccessibilityLabel(filter)}
+      onPress={() => onPress?.(filter.id)}
+      style={({pressed}) => [styles.recommendedFilterCard, pressed && styles.pressed]}>
+      <Image
+        resizeMode="cover"
+        source={filter.imageSource}
+        style={styles.recommendedFilterImage}
+      />
+      <View style={styles.recommendedFilterScrim} />
+      <YStack style={styles.recommendedFilterCopy}>
+        <Text numberOfLines={1} style={styles.recommendedFilterHeadline}>
+          {filter.headline}
         </Text>
-        <Text numberOfLines={2} style={styles.makeupLookDescription}>
-          {makeupLook.description}
-        </Text>
-        <Text numberOfLines={1} style={styles.makeupLookDate}>
-          {makeupLook.date}
-        </Text>
-      </YStack>
-    </Pressable>
-  );
-}
-
-function EmptySavedMakeupCard({onPress}: {onPress?: () => void}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="저장된 추천 메이크업 없음"
-      onPress={onPress}
-      style={({pressed}) => [styles.emptySavedMakeupCard, pressed && styles.pressed]}>
-      <View style={styles.emptySavedMakeupIcon}>
-        <Sparkles color={colors.textSecondary} size={iconSize.md} strokeWidth={1.8} />
-      </View>
-      <YStack style={styles.makeupLookTextGroup}>
-        <Text style={styles.makeupLookTitle}>아직 저장된 추천이 없어요</Text>
-        <Text style={styles.makeupLookDescription}>
-          얼굴 진단을 완료하면 추천 메이크업 3장이 여기에 쌓여요.
+        <Text numberOfLines={1} style={styles.recommendedFilterTitle}>
+          {filter.displayTitle}
         </Text>
       </YStack>
+      <XStack style={styles.recommendedFilterMetaRow}>
+        <Text style={styles.recommendedFilterPillText}>{filter.matchScore}% match</Text>
+        <Text style={styles.recommendedFilterPillText}>AR 적용</Text>
+      </XStack>
     </Pressable>
   );
 }
 
 type SectionHeaderProps = {
   actionLabel: string;
+  description?: string;
   onPressAction?: () => void;
   title: string;
 };
 
-function SectionHeader({actionLabel, onPressAction, title}: SectionHeaderProps) {
+function SectionHeader({
+  actionLabel,
+  description,
+  onPressAction,
+  title,
+}: SectionHeaderProps) {
   return (
     <XStack style={styles.sectionHeader}>
       <YStack style={styles.sectionTitleGroup}>
         <Text style={styles.sectionTitle}>{title}</Text>
+        {description ? (
+          <Text numberOfLines={1} style={styles.sectionDescription}>
+            {description}
+          </Text>
+        ) : null}
       </YStack>
 
       <Pressable
@@ -798,65 +783,68 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  makeupLookCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.sm,
-    width: 138,
-  },
-  emptySavedMakeupCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    minHeight: 238,
-    padding: spacing.md,
-    width: 220,
-  },
-  emptySavedMakeupIcon: {
-    alignItems: 'center',
+  recommendedFilterCard: {
+    aspectRatio: 0.78,
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.md,
-    height: 150,
-    justifyContent: 'center',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+    width: 156,
   },
-  makeupLookDate: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.medium,
+  recommendedFilterCopy: {
+    bottom: spacing.lg,
+    gap: 2,
+    left: spacing.md,
+    position: 'absolute',
+    right: spacing.md,
+    zIndex: 1,
+  },
+  recommendedFilterHeadline: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  makeupLookDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  makeupLookImage: {
+  recommendedFilterImage: {
     height: '100%',
     width: '100%',
   },
-  makeupLookImageFrame: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.md,
-    height: 150,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  makeupLookList: {
+  recommendedFilterList: {
     gap: spacing.md,
     paddingRight: spacing.lg,
   },
-  makeupLookTextGroup: {
-    gap: 2,
+  recommendedFilterMetaRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    left: spacing.sm,
+    position: 'absolute',
+    right: spacing.sm,
+    top: spacing.sm,
+    zIndex: 1,
   },
-  makeupLookTitle: {
-    color: colors.textPrimary,
+  recommendedFilterPillText: {
+    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    borderRadius: radius.pill,
+    color: colors.white,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  recommendedFilterScrim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.44)',
+    bottom: 0,
+    height: 96,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  recommendedFilterTitle: {
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
@@ -916,6 +904,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  sectionDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   sectionTitle: {
     color: colors.textPrimary,

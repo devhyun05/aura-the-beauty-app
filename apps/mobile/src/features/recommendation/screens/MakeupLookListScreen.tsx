@@ -4,7 +4,7 @@ import {Text, View} from 'tamagui';
 
 import {getMakeupLooks} from '../../../shared/services/makeupService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {MakeupLook} from '../../../shared/types/profile';
+import type {MakeupLook, MakeupLookPreview} from '../../../shared/types/profile';
 import {
   AppScreen,
   ImagePlaceholder,
@@ -14,9 +14,12 @@ import {
 type MakeupLookListScreenProps = {
   headerTitle?: string;
   onBack?: () => void;
+  savedMakeupLook?: MakeupLookPreview | null;
 };
 
-export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
+export function MakeupLookListScreen({
+  savedMakeupLook,
+}: MakeupLookListScreenProps = {}) {
   const {width} = useWindowDimensions();
   const [makeupLooks, setMakeupLooks] = useState<MakeupLook[]>([]);
   const gap = spacing.md;
@@ -37,10 +40,17 @@ export function MakeupLookListScreen(_props: MakeupLookListScreenProps = {}) {
     };
   }, []);
 
+  const visibleMakeupLooks = savedMakeupLook
+    ? [
+        savedMakeupLook,
+        ...makeupLooks.filter(makeupLook => makeupLook.id !== savedMakeupLook.id),
+      ]
+    : makeupLooks;
+
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
       <PagedGrid
-        data={makeupLooks}
+        data={visibleMakeupLooks}
         keyExtractor={(makeupLook) => makeupLook.id}
         pageSize={10}
         pageStyle={[styles.grid, {gap}]}

@@ -30,6 +30,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
+    selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto,
   };
 }

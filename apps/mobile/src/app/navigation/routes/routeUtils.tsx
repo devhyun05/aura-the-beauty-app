@@ -72,7 +72,10 @@ export function MainTabChrome({
       />
       <YStack style={styles.body}>
         {wrapContentInScreen ? (
-          <AppScreen contentGap={contentGap} topPadding="belowShellHeader">
+          <AppScreen
+            bottomPadding="floatingFooter"
+            contentGap={contentGap}
+            topPadding="belowShellHeader">
             {children}
           </AppScreen>
         ) : (

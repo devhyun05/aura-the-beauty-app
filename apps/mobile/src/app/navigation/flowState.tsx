@@ -23,6 +23,7 @@ export type NavigationFlowState = {
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
+  selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
 };
 
@@ -32,6 +33,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
+  setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
 };
 
@@ -47,6 +49,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
+    selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
   };
 }
@@ -70,6 +73,8 @@ export function NavigationFlowStateProvider({
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
+  const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
+    useState<string | null>(initialState.selectedRecommendedMakeupFilterId);
   const [selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto] =
     useState<ReferenceMakeupPhoto | null>(initialState.selectedReferenceMakeupPhoto);
   const [savedMakeupLook, setSavedMakeupLook] =
@@ -84,12 +89,14 @@ export function NavigationFlowStateProvider({
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedMakeupFeedbackPhoto,
+      setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
     }),
     [
@@ -98,6 +105,7 @@ export function NavigationFlowStateProvider({
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
     ],
   );

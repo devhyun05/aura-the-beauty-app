@@ -26,6 +26,10 @@ export type MakeupFilterScope = 'totalMakeup' | 'pointMakeup';
 
 export type MakeupPresetValues = {
   colorId?: string;
+  finish?: string;
+  intensity?: number;
+  makeupArea?: MakeupArea;
+  sourceFilterId?: string;
   typeId?: string;
   textureId?: string;
   shapeId?: string;

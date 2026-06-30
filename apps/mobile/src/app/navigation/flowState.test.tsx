@@ -46,6 +46,12 @@ expectEqual(
   'initial selected reference makeup photo',
 );
 
+expectEqual(
+  getInitialNavigationFlowState().selectedRecommendedMakeupFilterId,
+  null,
+  'initial selected recommended makeup filter id',
+);
+
 const demoState = getDemoNavigationFlowState();
 
 expectEqual(
@@ -70,4 +76,10 @@ expectEqual(
   demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
   'demo saved makeup look id',
+);
+
+expectEqual(
+  demoState.selectedRecommendedMakeupFilterId,
+  null,
+  'demo selected recommended makeup filter id',
 );
