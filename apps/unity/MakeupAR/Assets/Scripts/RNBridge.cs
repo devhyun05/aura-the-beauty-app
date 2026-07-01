@@ -3059,7 +3059,8 @@ public sealed class RNBridge : MonoBehaviour
                     || value == "gradient_lip"
                     || value == "overline_lip"))
             || ((region == "cheek" || region == "blush") && IsCheekBlushTextureSample(value))
-            || ((region == "eye" || region == "brow" || region == "eyeliner") && value == "shimmer_eye"))
+            || (region == "brow" && value == "natural_brow")
+            || ((region == "eye" || region == "eyeliner") && value == "shimmer_eye"))
         {
             return value;
         }

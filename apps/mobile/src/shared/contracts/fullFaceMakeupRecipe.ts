@@ -72,6 +72,7 @@ export type FullFaceMakeupRecipeLayer = {
     | 'blush_session_3'
     | 'blush_session_4'
     | 'blush_session_5'
+    | 'natural_brow'
     | 'shimmer_eye';
   sample:
     | 'matte_lip'
@@ -81,6 +82,7 @@ export type FullFaceMakeupRecipeLayer = {
     | 'blush_session_3'
     | 'blush_session_4'
     | 'blush_session_5'
+    | 'natural_brow'
     | 'shimmer_eye';
   textureMode: 'sample';
   intensity: number;
@@ -902,6 +904,10 @@ function getDefaultTextureForRegion(
 
   if (region === 'blush') {
     return 'soft_blush';
+  }
+
+  if (region === 'brow') {
+    return 'natural_brow';
   }
 
   return 'shimmer_eye';

@@ -2238,7 +2238,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (recipe != null
             && recipe.Region == "lip"
             && (IsLipStyleAtlasMask(recipe.MaskTextureId)
-                || IsVisionLipBoundaryMask(recipe.MaskTextureId)))
+                || IsVisionLipBoundaryMask(recipe.MaskTextureId)
+                || IsGeneratedLipMaskTextureId(recipe.MaskTextureId)))
         {
             if (recipe.TextureSample == "gradient_lip")
             {
@@ -2678,6 +2679,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         material.SetTexture("_MaskTex", maskTexture);
         ApplyMaterialBlendMode(material, recipe.BlendMode, IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId));
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
+        bool generatedLipMask = IsGeneratedLipMaskTextureId(recipe.MaskTextureId);
 
         if (material.HasProperty("_UseScreenSpaceMask"))
         {
@@ -2849,7 +2851,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         {
             material.SetFloat(
                 "_LipStyleMode",
-                IsLipStyleAtlasMask(recipe.MaskTextureId) || visionLipBoundary
+                IsLipStyleAtlasMask(recipe.MaskTextureId) || visionLipBoundary || generatedLipMask
                     ? ResolveLipStyleMode(recipe.TextureSample)
                     : -1.0f);
         }
@@ -2940,6 +2942,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             case "blush_session_5":
                 sampleAlphaScale = 1.0f;
                 brightnessScale = 0.98f;
+                break;
+            case "natural_brow":
+                sampleAlphaScale = Mathf.Lerp(0.48f, 0.82f, recipe.Intensity);
+                brightnessScale = Mathf.Lerp(0.82f, 0.62f, recipe.Intensity);
                 break;
             case "shimmer_eye":
                 sampleAlphaScale = Mathf.Lerp(0.3f, 0.5f, recipe.Intensity);
@@ -3181,7 +3187,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     || textureSample == "blush_session_4"
                     || textureSample == "blush_session_5"))
             || ((region == "eye" || region == "brow" || region == "eyeliner")
-                && textureSample == "shimmer_eye"))
+                && textureSample == "shimmer_eye")
+            || (region == "brow" && textureSample == "natural_brow"))
         {
             return textureSample;
         }

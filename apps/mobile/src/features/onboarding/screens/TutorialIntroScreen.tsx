@@ -10,6 +10,7 @@ type TutorialIntroScreenProps = {
   onCloseToHome?: () => void;
   onStartDiagnosis?: () => void;
   onStartCapture?: () => void;
+  onSwitchAccount?: () => void;
 };
 
 type TutorialIntroHeroContent = {
@@ -34,6 +35,7 @@ export function TutorialIntroScreen({
   onCloseToHome,
   onStartCapture,
   onStartDiagnosis,
+  onSwitchAccount,
 }: TutorialIntroScreenProps) {
   const [isFaceCaptureTutorialVisible, setIsFaceCaptureTutorialVisible] = useState(false);
   const {height} = useWindowDimensions();
@@ -93,6 +95,18 @@ export function TutorialIntroScreen({
             unstyled>
             <Text style={styles.primaryButtonText}>{content.primaryActionLabel}</Text>
           </Button>
+
+          {onSwitchAccount ? (
+            <Button
+              accessibilityLabel="다른 이메일로 로그인"
+              accessibilityRole="button"
+              onPress={onSwitchAccount}
+              pressStyle={{opacity: 0.72}}
+              style={styles.secondaryButton}
+              unstyled>
+              <Text style={styles.secondaryButtonText}>다른 이메일로 로그인</Text>
+            </Button>
+          ) : null}
         </YStack>
       </YStack>
     </AppScreen>
@@ -138,6 +152,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flex: 1,
     paddingHorizontal: spacing.xl,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    height: 42,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  secondaryButtonText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
   },
   subtitle: {
     color: colors.textSecondary,

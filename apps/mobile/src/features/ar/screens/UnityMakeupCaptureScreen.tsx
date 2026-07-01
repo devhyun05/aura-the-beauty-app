@@ -64,7 +64,7 @@ const MASK_FLOW_STEPS = [
   {id: 'start', label: '시작'},
   {id: 'capture', label: '스캔'},
   {id: 'extract', label: '마스크'},
-  {id: 'apply', label: 'AR 적용'},
+  {id: 'apply', label: '적용'},
 ] as const;
 const PERSONAL_MASK_REGIONS = [
   {id: 'lip', label: '입술', guidance: '경계 추출'},
@@ -72,24 +72,30 @@ const PERSONAL_MASK_REGIONS = [
   {id: 'brow', label: '눈썹', guidance: '브로우 기준'},
 ] as const;
 const AR_BLUSH_HUD_REGIONS = [
-  {id: 'lip', label: 'LIP'},
-  {id: 'cheek', label: 'CHEEK'},
-  {id: 'eyebrow', label: 'EYEBROW'},
+  {id: 'lip', label: '립'},
+  {id: 'cheek', label: '치크'},
+  {id: 'eyebrow', label: '눈썹'},
 ] as const;
 const GENERATED_MASK_VALIDATION_COLORS = [
-  {name: 'ROSE', color: '#D94B74', secondaryColor: '#F29BAA'},
-  {name: 'CORAL', color: '#E67B5F', secondaryColor: '#F5A18C'},
-  {name: 'NUDE', color: '#C08A72', secondaryColor: '#E0B39E'},
-  {name: 'BERRY', color: '#A83567', secondaryColor: '#D66A91'},
-  {name: 'RED', color: '#CF1838', secondaryColor: '#F05C70'},
-  {name: 'PALE PINK', color: '#F1CBD5', secondaryColor: '#F8DEE5'},
+  {name: '로즈', color: '#D94B74', secondaryColor: '#F29BAA'},
+  {name: '코랄', color: '#E67B5F', secondaryColor: '#F5A18C'},
+  {name: '누드', color: '#C08A72', secondaryColor: '#E0B39E'},
+  {name: '베리', color: '#A83567', secondaryColor: '#D66A91'},
+  {name: '레드', color: '#CF1838', secondaryColor: '#F05C70'},
+  {name: '연핑크', color: '#F1CBD5', secondaryColor: '#F8DEE5'},
 ] as const;
+const INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
+  ...DEFAULT_GENERATED_MASK_CONTROLS,
+  intensity: 0,
+  maskVisible: true,
+  opacity: 0,
+};
 const GENERATED_MASK_FINISH_OPTIONS = [
   {
     finish: 'matte',
     gradientAmount: 0.08,
     glossBoost: 0,
-    label: 'Matte',
+    label: '매트',
     roughness: 0.28,
     specular: 0.08,
     specularPower: 18,
@@ -100,7 +106,7 @@ const GENERATED_MASK_FINISH_OPTIONS = [
     finish: 'gloss',
     gradientAmount: 0.04,
     glossBoost: 0.34,
-    label: 'Glow',
+    label: '글로우',
     roughness: 0.08,
     specular: 0.34,
     specularPower: 48,
@@ -111,7 +117,7 @@ const GENERATED_MASK_FINISH_OPTIONS = [
     finish: 'gradient',
     gradientAmount: 0.82,
     glossBoost: 0.04,
-    label: 'Gradient',
+    label: '그라데이션',
     roughness: 0.22,
     specular: 0.1,
     specularPower: 20,
@@ -132,21 +138,28 @@ const GENERATED_MASK_FINISH_OPTIONS = [
   > & {label: string}
 >;
 const AR_BLUSH_CHEEK_REGION_OPTIONS = [
-  {label: 'Daily', candidateId: 'blush-session-1-v1', maskTextureId: 'cheek-session-mask-1-v1'},
-  {label: 'Lovely', candidateId: 'blush-session-2-v1', maskTextureId: 'cheek-session-mask-2-v1'},
-  {label: 'Under', candidateId: 'blush-session-3-v1', maskTextureId: 'cheek-session-mask-3-v1'},
-  {label: 'Sun 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
-  {label: 'Sun 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
+  {label: '데일리', candidateId: 'blush-session-1-v1', maskTextureId: 'cheek-session-mask-1-v1'},
+  {label: '러블리', candidateId: 'blush-session-2-v1', maskTextureId: 'cheek-session-mask-2-v1'},
+  {label: '언더', candidateId: 'blush-session-3-v1', maskTextureId: 'cheek-session-mask-3-v1'},
+  {label: '선키스 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
+  {label: '선키스 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
 ] as const;
 const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
-  {label: 'Daily', candidateId: 'brow-soft-arch-fine-hair-v1', maskTextureId: 'brow-soft-arch-fine-hair-v1'},
-  {label: 'Natural', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},
-  {label: 'Slim', candidateId: 'brow-slim-tail-fine-hair-v1', maskTextureId: 'brow-slim-tail-fine-hair-v1'},
+  {label: '데일리', candidateId: 'brow-soft-arch-fine-hair-v1', maskTextureId: 'brow-soft-arch-fine-hair-v1'},
+  {label: '내추럴', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},
+  {label: '슬림', candidateId: 'brow-slim-tail-fine-hair-v1', maskTextureId: 'brow-slim-tail-fine-hair-v1'},
 ] as const;
 
 type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
 type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
 type CompanionRegionKey = Exclude<keyof PersonalizedCompanionMakeupControls, 'eyeliner'>;
+type EnabledHudRegions = Record<ArBlushHudRegion, boolean>;
+
+const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
+  cheek: false,
+  eyebrow: false,
+  lip: false,
+};
 
 export function UnityMakeupCaptureScreen({
   onBack,
@@ -157,7 +170,6 @@ export function UnityMakeupCaptureScreen({
   const [isPreparingUnity, setIsPreparingUnity] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('ready');
   const [notice, setNotice] = useState('개인 마스크를 먼저 만든 뒤 립, 볼, 눈썹을 적용합니다');
-  const [lastGeneratedMaskId, setLastGeneratedMaskId] = useState<string | null>(null);
   const [sourceFrameMetadata, setSourceFrameMetadata] =
     useState<FullFaceMakeupSourceInput | null>(null);
   const [generatedPackage, setGeneratedPackage] =
@@ -169,6 +181,8 @@ export function UnityMakeupCaptureScreen({
       DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
     );
   const [activeHudRegion, setActiveHudRegion] = useState<ArBlushHudRegion>('lip');
+  const [enabledHudRegions, setEnabledHudRegions] =
+    useState<EnabledHudRegions>(INITIAL_ENABLED_HUD_REGIONS);
   const pendingCaptureRequestRef = useRef<UnitySynchronizedCaptureRequest | null>(null);
   const pendingGeneratedMaskIdRef = useRef<string | null>(null);
   const latestGeneratedApplyPayloadRef = useRef<string | null>(null);
@@ -256,7 +270,7 @@ export function UnityMakeupCaptureScreen({
     }
 
     setIsPreparingUnity(true);
-    setNotice('AR 카메라를 준비하는 중입니다');
+    setNotice('카메라를 준비하는 중입니다');
     prepareUnityMakeupRuntime();
 
     if (isUnityMakeupReady()) {
@@ -283,7 +297,7 @@ export function UnityMakeupCaptureScreen({
     if (!captureBundle) {
       if (event.status === 'failed') {
         setPhase('error');
-        setNotice(event.detail ?? 'Unity 프레임 저장에 실패했습니다');
+        setNotice(event.detail ?? '프레임 저장에 실패했습니다');
       }
       return;
     }
@@ -291,7 +305,7 @@ export function UnityMakeupCaptureScreen({
     const nextSourceFrameMetadata = buildFullFaceMakeupSourceInput(captureBundle);
     setSourceFrameMetadata(nextSourceFrameMetadata);
     setPhase('generating');
-    setNotice('병합용 Generate 흐름으로 개인 마스크를 만드는 중입니다');
+    setNotice('개인 마스크를 생성하는 중입니다');
 
     try {
       const result = await generatePersonalizedLipMakeup({
@@ -300,18 +314,22 @@ export function UnityMakeupCaptureScreen({
 
       pendingGeneratedMaskIdRef.current = result.generatedPackage.generatedMaskId;
       const unityApplyPayload = JSON.stringify(
-        buildGeneratedMaskUnityPayload(result.generatedPackage, DEFAULT_GENERATED_MASK_CONTROLS, {
-          includeTexture: true,
-        }),
+        buildGeneratedMaskUnityPayload(
+          result.generatedPackage,
+          INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS,
+          {
+            includeTexture: true,
+          },
+        ),
       );
       latestGeneratedApplyPayloadRef.current = unityApplyPayload;
       setGeneratedPackage(result.generatedPackage);
       setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
       setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
       setActiveHudRegion('lip');
-      setLastGeneratedMaskId(result.generatedPackage.generatedMaskId);
+      setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
       setPhase('applying');
-      setNotice('개인 마스크를 Unity AR에 적용하는 중입니다');
+      setNotice('개인 마스크를 화면에 등록하는 중입니다');
 
       postUnityRegionOverlayVisibility({
         guideOverlayVisible: false,
@@ -324,7 +342,7 @@ export function UnityMakeupCaptureScreen({
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
           DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
-          {activeRegion: 'all'},
+          {activeRegion: 'none'},
         ),
       );
     } catch (error) {
@@ -362,7 +380,7 @@ export function UnityMakeupCaptureScreen({
 
     if (isApplied) {
       setPhase('applied');
-      setNotice('개인 마스크 기반으로 립, 볼, 눈썹이 적용됐습니다');
+      setNotice('개인 마스크 준비가 완료됐습니다');
       pendingGeneratedMaskIdRef.current = null;
       return;
     }
@@ -377,7 +395,7 @@ export function UnityMakeupCaptureScreen({
         postUnityGeneratedLipMaskPayload(latestGeneratedApplyPayloadRef.current);
         postUnityMakeupRecipe(
           buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
-            activeRegion: 'all',
+            activeRegion: 'none',
           }),
         );
       }, 800);
@@ -411,7 +429,7 @@ export function UnityMakeupCaptureScreen({
     setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
     setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
     setActiveHudRegion('lip');
-    setLastGeneratedMaskId(null);
+    setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
     setPhase('capturing');
     setNotice('입술, 볼, 눈썹 기준이 될 현재 프레임을 스캔하는 중입니다');
     postUnityMakeupRecipe(
@@ -430,7 +448,7 @@ export function UnityMakeupCaptureScreen({
 
     if (!didPostCaptureRequest) {
       setPhase('error');
-      setNotice('Unity 캡처 요청을 보낼 수 없습니다');
+      setNotice('캡처 요청을 보낼 수 없습니다');
     }
   };
 
@@ -445,7 +463,12 @@ export function UnityMakeupCaptureScreen({
     });
     generatedMaskControlRevisionRef.current += 1;
     setGeneratedMaskControls(nextControls);
-    postRuntimeMakeupForHudRegion(activeHudRegion, nextControls, companionMakeupControls);
+    const nextEnabledRegions = {
+      ...enabledHudRegions,
+      lip: true,
+    };
+    setEnabledHudRegions(nextEnabledRegions);
+    postRuntimeMakeup(nextControls, companionMakeupControls, nextEnabledRegions);
   };
 
   const handleCompanionMakeupControlChange = (
@@ -461,18 +484,44 @@ export function UnityMakeupCaptureScreen({
     });
 
     setCompanionMakeupControls(nextControls);
-    postRuntimeMakeupForHudRegion(activeHudRegion, generatedMaskControls, nextControls);
+    const nextEnabledRegions = {
+      ...enabledHudRegions,
+      [getHudRegionFromCompanionRegionKey(region)]: true,
+    };
+    setEnabledHudRegions(nextEnabledRegions);
+    postRuntimeMakeup(generatedMaskControls, nextControls, nextEnabledRegions);
   };
 
   const handleChangeActiveHudRegion = (region: ArBlushHudRegion) => {
     setActiveHudRegion(region);
-    postRuntimeMakeupForHudRegion(region, generatedMaskControls, companionMakeupControls);
   };
 
-  function postRuntimeMakeupForHudRegion(
-    region: ArBlushHudRegion,
+  const handleDisableHudRegion = (region: ArBlushHudRegion) => {
+    const nextEnabledRegions = {
+      ...enabledHudRegions,
+      [region]: false,
+    };
+
+    setEnabledHudRegions(nextEnabledRegions);
+    postRuntimeMakeup(generatedMaskControls, companionMakeupControls, nextEnabledRegions);
+  };
+
+  const handleResetMakeupSelections = () => {
+    const nextGeneratedControls = DEFAULT_GENERATED_MASK_CONTROLS;
+    const nextCompanionControls = DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS;
+    const nextEnabledRegions = INITIAL_ENABLED_HUD_REGIONS;
+
+    setActiveHudRegion('lip');
+    setGeneratedMaskControls(nextGeneratedControls);
+    setCompanionMakeupControls(nextCompanionControls);
+    setEnabledHudRegions(nextEnabledRegions);
+    postRuntimeMakeup(nextGeneratedControls, nextCompanionControls, nextEnabledRegions);
+  };
+
+  function postRuntimeMakeup(
     nextGeneratedControls: GeneratedMaskControls,
     nextCompanionControls: PersonalizedCompanionMakeupControls,
+    nextEnabledRegions: EnabledHudRegions,
   ) {
     if (!generatedPackage) {
       return;
@@ -480,7 +529,7 @@ export function UnityMakeupCaptureScreen({
 
     const lipControls = {
       ...nextGeneratedControls,
-      maskVisible: true,
+      maskVisible: nextEnabledRegions.lip,
     };
 
     postUnityGeneratedLipMaskPayload(
@@ -493,7 +542,7 @@ export function UnityMakeupCaptureScreen({
     );
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), nextCompanionControls, {
-        activeRegion: 'all',
+        activeRegion: getCompanionActiveRegion(nextEnabledRegions),
       }),
     );
   };
@@ -526,7 +575,7 @@ export function UnityMakeupCaptureScreen({
         </Pressable>
 
         <YStack style={styles.headerTitleGroup}>
-          <Text style={styles.headerEyebrow}>맞춤 Generate</Text>
+          <Text style={styles.headerEyebrow}>맞춤 생성</Text>
           <Text style={styles.headerTitle}>개인 마스크 적용</Text>
         </YStack>
 
@@ -547,7 +596,7 @@ export function UnityMakeupCaptureScreen({
                 <View style={[styles.regionPreview, styles.introBrowPreviewRight, styles.regionPreviewActive]} />
               </View>
               <YStack style={styles.maskIntroCopy}>
-                <Text style={styles.maskIntroEyebrow}>CUSTOM MASK</Text>
+                <Text style={styles.maskIntroEyebrow}>개인 마스크</Text>
                 <Text style={styles.maskIntroTitle}>개인 마스크 만들기</Text>
                 <Text style={styles.maskIntroDescription}>
                   얼굴 기준 마스크를 만든 뒤 립, 볼, 눈썹을 같은 위치에 적용합니다.
@@ -572,13 +621,12 @@ export function UnityMakeupCaptureScreen({
           activeRegion={activeHudRegion}
           companionControls={companionMakeupControls}
           controls={generatedMaskControls}
+          enabledRegions={enabledHudRegions}
           onChangeActiveRegion={handleChangeActiveHudRegion}
           onChangeCompanionControls={handleCompanionMakeupControlChange}
           onChangeControls={handleGeneratedMaskControlChange}
-          onReopenGenerate={() => {
-            setPhase('ready');
-            setNotice('촬영한 프레임으로 다시 생성하거나 새로 스캔할 수 있습니다');
-          }}
+          onDisableActiveRegion={handleDisableHudRegion}
+          onResetMakeup={handleResetMakeupSelections}
         />
       ) : (
         <YStack style={styles.controlPanel}>
@@ -631,11 +679,6 @@ export function UnityMakeupCaptureScreen({
             })}
           </XStack>
 
-          {lastGeneratedMaskId ? (
-            <Text style={styles.maskIdText} numberOfLines={1}>
-              {lastGeneratedMaskId}
-            </Text>
-          ) : null}
         </YStack>
       )}
 
@@ -731,24 +774,29 @@ function ArBlushRuntimeHud({
   activeRegion,
   companionControls,
   controls,
+  enabledRegions,
   onChangeActiveRegion,
   onChangeCompanionControls,
   onChangeControls,
-  onReopenGenerate,
+  onDisableActiveRegion,
+  onResetMakeup,
 }: {
   activeRegion: ArBlushHudRegion;
   companionControls: PersonalizedCompanionMakeupControls;
   controls: GeneratedMaskControls;
+  enabledRegions: EnabledHudRegions;
   onChangeActiveRegion: (region: ArBlushHudRegion) => void;
   onChangeCompanionControls: (
     region: CompanionRegionKey,
     patch: Partial<PersonalizedCompanionMakeupControls[CompanionRegionKey]>,
   ) => void;
   onChangeControls: (patch: Partial<GeneratedMaskControls>) => void;
-  onReopenGenerate: () => void;
+  onDisableActiveRegion: (region: ArBlushHudRegion) => void;
+  onResetMakeup: () => void;
 }) {
   const [isHudHidden, setIsHudHidden] = useState(false);
   const activeValues = getHudRegionValues(activeRegion, controls, companionControls);
+  const isActiveRegionEnabled = enabledRegions[activeRegion];
 
   const handleColorPress = (color: (typeof GENERATED_MASK_VALIDATION_COLORS)[number]) => {
     if (activeRegion === 'lip') {
@@ -795,7 +843,7 @@ function ArBlushRuntimeHud({
           accessibilityRole="button"
           onPress={() => setIsHudHidden(false)}
           style={({pressed}) => [styles.arBlushShowButton, pressed && styles.pressed]}>
-          <Text style={styles.arBlushShowText}>SHOW</Text>
+          <Text style={styles.arBlushShowText}>컨트롤 열기</Text>
         </Pressable>
       </XStack>
     );
@@ -804,21 +852,24 @@ function ArBlushRuntimeHud({
   return (
     <YStack style={styles.arBlushHudShell}>
       <XStack style={styles.arBlushModeRow}>
-        {['CLEAN', 'HUD', 'DEBUG'].map(mode => (
+        {[
+          {id: 'clean', label: '초기화'},
+          {id: 'hud', label: '컨트롤'},
+        ].map(mode => (
           <Pressable
             accessibilityRole="button"
-            key={mode}
-            onPress={mode === 'CLEAN' ? onReopenGenerate : undefined}
+            key={mode.id}
+            onPress={mode.id === 'clean' ? onResetMakeup : undefined}
             style={[
               styles.arBlushModeButton,
-              mode === 'HUD' && styles.arBlushModeButtonActive,
+              mode.id === 'hud' && styles.arBlushModeButtonActive,
             ]}>
             <Text
               style={[
                 styles.arBlushModeText,
-                mode === 'HUD' && styles.arBlushModeTextActive,
+                mode.id === 'hud' && styles.arBlushModeTextActive,
               ]}>
-              {mode}
+              {mode.label}
             </Text>
           </Pressable>
         ))}
@@ -826,15 +877,12 @@ function ArBlushRuntimeHud({
 
       <YStack style={styles.arBlushControlsPanel}>
         <XStack style={styles.arBlushPanelHeader}>
-          <Text style={styles.arBlushPanelTitle}>CONTROLS</Text>
-          <Text style={styles.arBlushPanelMeta}>
-            active=lip,cheek,brow / focus={activeRegion}
-          </Text>
+          <Text style={styles.arBlushPanelTitle}>컨트롤</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => setIsHudHidden(true)}
             style={styles.arBlushHideButton}>
-            <Text style={styles.arBlushHideText}>HIDE</Text>
+            <Text style={styles.arBlushHideText}>숨기기</Text>
           </Pressable>
         </XStack>
 
@@ -860,43 +908,70 @@ function ArBlushRuntimeHud({
           ))}
         </XStack>
 
-        <XStack style={styles.arBlushColorRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.arBlushColorRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{selected: !isActiveRegionEnabled}}
+            onPress={() => onDisableActiveRegion(activeRegion)}
+            style={[
+              styles.arBlushColorButton,
+              styles.arBlushNoneButton,
+              !isActiveRegionEnabled && styles.arBlushNoneButtonActive,
+            ]}>
+            <Text
+              numberOfLines={1}
+              style={styles.arBlushNoneButtonText}>
+              선택 안함
+            </Text>
+          </Pressable>
           {GENERATED_MASK_VALIDATION_COLORS.map(color => (
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{selected: activeValues.colorHex === color.color}}
+              accessibilityState={{
+                selected: isActiveRegionEnabled && activeValues.colorHex === color.color,
+              }}
               key={color.name}
               onPress={() => handleColorPress(color)}
               style={[
                 styles.arBlushColorButton,
                 {backgroundColor: color.color},
-                activeValues.colorHex === color.color && styles.arBlushColorButtonActive,
+                isActiveRegionEnabled &&
+                  activeValues.colorHex === color.color &&
+                  styles.arBlushColorButtonActive,
               ]}>
-              <Text style={styles.arBlushColorText}>{color.name}</Text>
+              <Text numberOfLines={1} style={styles.arBlushColorText}>{color.name}</Text>
             </Pressable>
           ))}
-        </XStack>
+        </ScrollView>
 
         <Text style={styles.arBlushSectionLabel}>{getHudOptionSectionLabel(activeRegion)}</Text>
-        <XStack style={styles.arBlushOptionGrid}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.arBlushOptionGrid}>
           <HudRegionOptions
             activeRegion={activeRegion}
+            activeRegionEnabled={isActiveRegionEnabled}
             companionControls={companionControls}
             controls={controls}
             onChangeCompanionControls={onChangeCompanionControls}
             onChangeControls={onChangeControls}
+            onDisableActiveRegion={() => onDisableActiveRegion(activeRegion)}
           />
-        </XStack>
+        </ScrollView>
 
         <HudSliderControl
           colorHex={activeValues.colorHex}
-          label="Intensity"
+          label="발색"
           onChange={handleIntensityChange}
           value={activeValues.intensity}
         />
         <HudSliderControl
           colorHex={activeValues.colorHex}
-          label="Opacity"
+          label="투명도"
           onChange={handleOpacityChange}
           value={activeValues.opacity}
         />
@@ -908,12 +983,15 @@ function ArBlushRuntimeHud({
 
 function HudRegionOptions({
   activeRegion,
+  activeRegionEnabled,
   companionControls,
   controls,
   onChangeCompanionControls,
   onChangeControls,
+  onDisableActiveRegion,
 }: {
   activeRegion: ArBlushHudRegion;
+  activeRegionEnabled: boolean;
   companionControls: PersonalizedCompanionMakeupControls;
   controls: GeneratedMaskControls;
   onChangeCompanionControls: (
@@ -921,14 +999,30 @@ function HudRegionOptions({
     patch: Partial<PersonalizedCompanionMakeupControls[CompanionRegionKey]>,
   ) => void;
   onChangeControls: (patch: Partial<GeneratedMaskControls>) => void;
+  onDisableActiveRegion: () => void;
 }) {
   if (activeRegion === 'lip') {
     return (
       <>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{selected: !activeRegionEnabled}}
+          onPress={onDisableActiveRegion}
+          style={[
+            styles.arBlushOptionButton,
+            styles.arBlushNoneOptionButton,
+            !activeRegionEnabled && styles.arBlushNoneOptionButtonActive,
+          ]}>
+          <Text style={styles.arBlushNoneOptionText}>
+            선택 안함
+          </Text>
+        </Pressable>
         {GENERATED_MASK_FINISH_OPTIONS.map(option => (
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{selected: controls.finish === option.finish}}
+            accessibilityState={{
+              selected: activeRegionEnabled && controls.finish === option.finish,
+            }}
             key={option.finish}
             onPress={() =>
               onChangeControls({
@@ -944,12 +1038,16 @@ function HudRegionOptions({
             }
             style={[
               styles.arBlushOptionButton,
-              controls.finish === option.finish && styles.arBlushOptionButtonActive,
+              activeRegionEnabled &&
+                controls.finish === option.finish &&
+                styles.arBlushOptionButtonActive,
             ]}>
             <Text
               style={[
                 styles.arBlushOptionText,
-                controls.finish === option.finish && styles.arBlushOptionTextActive,
+                activeRegionEnabled &&
+                  controls.finish === option.finish &&
+                  styles.arBlushOptionTextActive,
               ]}>
               {option.label}
             </Text>
@@ -964,11 +1062,26 @@ function HudRegionOptions({
 
   return (
     <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{selected: !activeRegionEnabled}}
+        onPress={onDisableActiveRegion}
+        style={[
+          styles.arBlushOptionButton,
+          styles.arBlushNoneOptionButton,
+          !activeRegionEnabled && styles.arBlushNoneOptionButtonActive,
+        ]}>
+        <Text style={styles.arBlushNoneOptionText}>
+          선택 안함
+        </Text>
+      </Pressable>
       {options.map(option => (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{
-            selected: companionControls[regionKey].maskTextureId === option.maskTextureId,
+            selected:
+              activeRegionEnabled &&
+              companionControls[regionKey].maskTextureId === option.maskTextureId,
           }}
           key={option.maskTextureId}
           onPress={() =>
@@ -979,13 +1092,15 @@ function HudRegionOptions({
           }
           style={[
             styles.arBlushOptionButton,
-            companionControls[regionKey].maskTextureId === option.maskTextureId &&
+            activeRegionEnabled &&
+              companionControls[regionKey].maskTextureId === option.maskTextureId &&
               styles.arBlushOptionButtonActive,
           ]}>
           <Text
             style={[
               styles.arBlushOptionText,
-              companionControls[regionKey].maskTextureId === option.maskTextureId &&
+              activeRegionEnabled &&
+                companionControls[regionKey].maskTextureId === option.maskTextureId &&
                 styles.arBlushOptionTextActive,
             ]}>
             {option.label}
@@ -1043,6 +1158,7 @@ function HudSliderControl({
       onStartShouldSetPanResponderCapture: () => true,
       onPanResponderMove: updateValueFromEvent,
       onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
     }),
   );
 
@@ -1112,7 +1228,7 @@ function getHudRegionValues(
 
 function getColorName(colorHex: string): string {
   return (
-    GENERATED_MASK_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ?? 'CUSTOM'
+    GENERATED_MASK_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ?? '사용자 지정'
   );
 }
 
@@ -1122,6 +1238,32 @@ function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
   }
 
   return 'brow';
+}
+
+function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): CompanionHudRegion {
+  if (region === 'blush') {
+    return 'cheek';
+  }
+
+  return 'eyebrow';
+}
+
+function getCompanionActiveRegion(
+  enabledRegions: EnabledHudRegions,
+): 'all' | 'blush' | 'brow' | 'none' {
+  if (enabledRegions.cheek && enabledRegions.eyebrow) {
+    return 'all';
+  }
+
+  if (enabledRegions.cheek) {
+    return 'blush';
+  }
+
+  if (enabledRegions.eyebrow) {
+    return 'brow';
+  }
+
+  return 'none';
 }
 
 function getCompanionOptions(region: CompanionHudRegion) {
@@ -1134,19 +1276,19 @@ function getCompanionOptions(region: CompanionHudRegion) {
 
 function getCompanionStyleLabel(region: CompanionHudRegion, maskTextureId: string): string {
   const option = getCompanionOptions(region).find(candidate => candidate.maskTextureId === maskTextureId);
-  return option?.label ?? 'Custom';
+  return option?.label ?? '사용자 지정';
 }
 
 function getHudOptionSectionLabel(region: ArBlushHudRegion): string {
   if (region === 'lip') {
-    return 'LIP FINISH';
+    return '립 마무리';
   }
 
   if (region === 'cheek') {
-    return 'BLUSH REGION';
+    return '치크 영역';
   }
 
-  return 'EYEBROW SHAPE';
+  return '눈썹 모양';
 }
 
 function clampGeneratedMaskControls(
@@ -1233,7 +1375,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 42,
     justifyContent: 'center',
-    minWidth: 58,
+    minWidth: 74,
     paddingHorizontal: spacing.sm,
   },
   arBlushColorButtonActive: {
@@ -1242,8 +1384,8 @@ const styles = StyleSheet.create({
   },
   arBlushColorRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.sm,
+    paddingRight: spacing.sm,
   },
   arBlushColorText: {
     color: colors.white,
@@ -1309,15 +1451,44 @@ const styles = StyleSheet.create({
   arBlushModeTextActive: {
     color: colors.black,
   },
+  arBlushNoneButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  arBlushNoneButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: colors.white,
+    borderWidth: 2,
+  },
+  arBlushNoneButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  arBlushNoneOptionButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.10)',
+  },
+  arBlushNoneOptionButtonActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: colors.white,
+    borderWidth: 2,
+  },
+  arBlushNoneOptionText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
+  },
   arBlushOptionButton: {
     alignItems: 'center',
     borderColor: 'rgba(255, 255, 255, 0.24)',
     borderRadius: 12,
     borderWidth: 1,
-    flexGrow: 1,
-    minHeight: 46,
     justifyContent: 'center',
-    minWidth: '30%',
+    minHeight: 46,
+    minWidth: 112,
     paddingHorizontal: spacing.md,
   },
   arBlushOptionButtonActive: {
@@ -1327,8 +1498,8 @@ const styles = StyleSheet.create({
   },
   arBlushOptionGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.sm,
+    paddingRight: spacing.sm,
   },
   arBlushOptionText: {
     color: colors.white,
@@ -1343,6 +1514,7 @@ const styles = StyleSheet.create({
   arBlushPanelHeader: {
     alignItems: 'center',
     gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   arBlushPanelMeta: {
     color: 'rgba(255, 255, 255, 0.78)',
@@ -1354,6 +1526,7 @@ const styles = StyleSheet.create({
   },
   arBlushPanelTitle: {
     color: '#FFE978',
+    flex: 1,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     letterSpacing: 0,

@@ -59,7 +59,11 @@ export function RootNavigator() {
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
-      <Stack.Screen name="UnityMakeupCapture" component={UnityMakeupCaptureRouteScreen} />
+      <Stack.Screen
+        name="UnityMakeupCapture"
+        component={UnityMakeupCaptureRouteScreen}
+        options={{gestureEnabled: false}}
+      />
       <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
       <Stack.Screen
         name="FaceAnalysisReportsList"
