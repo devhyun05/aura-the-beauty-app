@@ -16,6 +16,9 @@
 		E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */; };
 		E5F0A1032F80111100FACE01 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F0A1022F80111100FACE01 /* Vision.framework */; };
 		E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */; };
+		E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */; };
+		E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */; };
+		E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */ = {isa = PBXBuildFile; fileRef = E7A110022F81000000E7AAA3 /* face_landmarker.task */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */; };
 /* End PBXBuildFile section */
@@ -34,6 +37,9 @@
 		E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURAFaceLandmarkDetector.m; path = AURA/AURAFaceLandmarkDetector.m; sourceTree = "<group>"; };
 		E5F0A1022F80111100FACE01 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURARealtimeFaceCaptureView.m; path = AURA/AURARealtimeFaceCaptureView.m; sourceTree = "<group>"; };
+		E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = E7NativeLipBoundaryProviders.swift; path = AURA/E7NativeLipBoundaryProviders.swift; sourceTree = "<group>"; };
+		E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = E7NativeLipBoundaryProvidersBridge.m; path = AURA/E7NativeLipBoundaryProvidersBridge.m; sourceTree = "<group>"; };
+		E7A110022F81000000E7AAA3 /* face_landmarker.task */ = {isa = PBXFileReference; lastKnownFileType = file; name = face_landmarker.task; path = AURA/E7Models/face_landmarker.task; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AURA/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "AURA-Bridging-Header.h"; path = "AURA/AURA-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -58,6 +64,9 @@
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
+				E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */,
+				E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */,
+				E7A110022F81000000E7AAA3 /* face_landmarker.task */,
 				E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */,
 				E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */,
 				F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */,
@@ -211,6 +220,7 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				0FA0A731B5B2E91D85A3C0C3 /* PrivacyInfo.xcprivacy in Resources */,
+				E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -373,6 +383,8 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
+				E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */,
+				E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */,
 				E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */,
 				E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */,
 				D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */,
@@ -392,7 +404,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5947QNM627;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -412,7 +424,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yeoduchi.aura.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -432,7 +444,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5947QNM627;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				INFOPLIST_FILE = AURA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -447,7 +459,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yeoduchi.aura.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

@@ -55,7 +55,7 @@ expectEqual(
 );
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target');
-expectEqual(getFooterTargetRoute('capture'), 'ARFilter', 'capture footer action');
+expectEqual(getFooterTargetRoute('capture'), 'UnityMakeupCapture', 'capture footer action');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
