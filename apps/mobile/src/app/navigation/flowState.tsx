@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useContext,
   useMemo,
@@ -26,6 +26,7 @@ export type NavigationFlowState = {
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
+  referenceMakeupUploadedPhotos: readonly ReferenceMakeupPhoto[];
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
@@ -37,6 +38,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
+  setReferenceMakeupUploadedPhotos: Dispatch<SetStateAction<readonly ReferenceMakeupPhoto[]>>;
 };
 
 const NavigationFlowStateContext =
@@ -54,6 +56,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     },
     selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
+    referenceMakeupUploadedPhotos: [],
   };
 }
 
@@ -80,6 +83,8 @@ export function NavigationFlowStateProvider({
     useState<string | null>(initialState.selectedRecommendedMakeupFilterId);
   const [selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto] =
     useState<ReferenceMakeupPhoto | null>(initialState.selectedReferenceMakeupPhoto);
+  const [referenceMakeupUploadedPhotos, setReferenceMakeupUploadedPhotos] =
+    useState<readonly ReferenceMakeupPhoto[]>(initialState.referenceMakeupUploadedPhotos);
   const [likedMakeupFilterIds, setLikedMakeupFilterIds] =
     useState<readonly string[]>(initialState.likedMakeupFilterIds);
   const [savedMakeupLook, setSavedMakeupLook] =
@@ -97,6 +102,7 @@ export function NavigationFlowStateProvider({
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
+      referenceMakeupUploadedPhotos,
       setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
@@ -105,6 +111,7 @@ export function NavigationFlowStateProvider({
       setSelectedMakeupFeedbackPhoto,
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
+      setReferenceMakeupUploadedPhotos,
     }),
     [
       likedMakeupFilterIds,
@@ -115,6 +122,7 @@ export function NavigationFlowStateProvider({
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
+      referenceMakeupUploadedPhotos,
     ],
   );
 

@@ -1,7 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {CameraView, useCameraPermissions, type CameraType} from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {RefreshCw, X} from 'lucide-react-native';
 
@@ -16,7 +15,6 @@ import {
 import {
   CameraCaptureControlRow,
   CameraCaptureButton,
-  CameraModeSwitch,
   CameraUtilityButton,
   FloatingOverlayIconButton,
   FullscreenOverlayScreen,
@@ -35,7 +33,6 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
   const [cameraFacing, setCameraFacing] = useState<CameraType>('front');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
-  const [isPickingImage, setIsPickingImage] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,36 +81,6 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
     setCameraFacing((currentFacing) => (currentFacing === 'front' ? 'back' : 'front'));
   };
 
-  const handlePickImage = async () => {
-    if (isPickingImage) {
-      return;
-    }
-
-    setIsPickingImage(true);
-
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permissionResult.granted) {
-        return;
-      }
-
-      const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: false,
-        mediaTypes: ['images'],
-        quality: 0.9,
-      });
-
-      if (!pickerResult.canceled && pickerResult.assets.length > 0) {
-        onSelectPhoto({
-          imageUri: pickerResult.assets[0]?.uri,
-          photoSource: 'gallery',
-        });
-      }
-    } finally {
-      setIsPickingImage(false);
-    }
-  };
 
   const shouldShowCamera = permission?.granted === true;
 
@@ -192,13 +159,6 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
           </CameraUtilityButton>
         }
         sideSlotSize={iconSize.xl + spacing.xl}
-      />
-
-      <CameraModeSwitch
-        bottom={insets.bottom + spacing.xxl}
-        galleryAccessibilityLabel="갤러리에서 사진 선택"
-        isGalleryDisabled={isPickingImage}
-        onPressGallery={handlePickImage}
       />
     </FullscreenOverlayScreen>
   );

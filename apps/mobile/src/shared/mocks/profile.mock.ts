@@ -7,6 +7,7 @@ export const myPageProfileSummaryMock: MyPageProfileSummary = {
   profile: userProfileMock,
   beautyProfile: beautyProfileMock,
   faceAnalysisReport: faceAnalysisReportsMock[0] ?? null,
+  faceAnalysisReports: faceAnalysisReportsMock.slice(0, 3),
   makeupLooks: [],
   likedProducts: productsMock,
 };

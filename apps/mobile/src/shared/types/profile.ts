@@ -12,6 +12,7 @@ export interface UserProfile {
   birthDate: string;
   gender: string;
   interest: string;
+  avatarMediaId?: string | null;
   avatarSource?: ImageSourcePropType;
 }
 
@@ -81,6 +82,7 @@ export interface MyPageProfileSummary {
   profile: UserProfile;
   beautyProfile: BeautyProfile;
   faceAnalysisReport: FaceAnalysisReport | null;
+  faceAnalysisReports: FaceAnalysisReport[];
   makeupLooks: MakeupLook[];
   likedProducts: Product[];
 }

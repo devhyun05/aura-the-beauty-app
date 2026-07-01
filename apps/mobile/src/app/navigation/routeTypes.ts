@@ -26,7 +26,7 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   SavedMakeupList: undefined;
-  ProductRecommendation: undefined;
+  ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
   Consulting: undefined;
   MakeupLookList: undefined;
@@ -47,6 +47,7 @@ export type RootStackParamList = {
   } | undefined;
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
+  MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
@@ -94,6 +95,7 @@ export const rootStackRoutes = [
   'MakeupFilterEdit',
   'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
+  'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackLoading',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',

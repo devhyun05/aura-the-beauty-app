@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 
 import {
   ExtractedMakeupLookAdjustScreen,
@@ -9,9 +9,13 @@ import {
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   ReferenceMakeupExtractionUploadScreen,
+  type MakeupExtractionProgressUpdate,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
-import {getReferenceMakeupExtractionDataSync} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
+import {
+  getReferenceMakeupExtractionDataSync,
+  runReferenceMakeupExtraction,
+} from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
 import {
   getRecommendedMakeupFilterById,
   mapMakeupFilterToSavedLook,
@@ -48,21 +52,36 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
+    referenceMakeupUploadedPhotos,
+    selectedReferenceMakeupPhoto,
+    setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
 
+  const handleClose = () => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    navigateMainTab(navigation, 'HomeTab');
+  };
+
   const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
-    navigation.navigate('ReferenceMakeupExtractionLoading');
+    navigation.replace('ReferenceMakeupExtractionLoading');
   };
 
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionUpload"
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
-      <ReferenceMakeupExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
+      onClose={handleClose}>
+      <ReferenceMakeupExtractionUploadScreen
+        onSelectPhoto={setSelectedReferenceMakeupPhoto}
+        onStartAnalysis={handleStartAnalysis}
+        onUploadedPhotosChange={setReferenceMakeupUploadedPhotos}
+        selectedPhoto={selectedReferenceMakeupPhoto}
+        uploadedPhotos={referenceMakeupUploadedPhotos}
+      />
     </DetailRouteChrome>
   );
 }
@@ -72,29 +91,56 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 }: RootScreenProps<'ReferenceMakeupExtractionLoading'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const [isAnalysisReady, setIsAnalysisReady] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<MakeupExtractionProgressUpdate | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsAnalysisReady(false);
+    setAnalysisProgress(null);
+    runReferenceMakeupExtraction(photo, setAnalysisProgress).finally(() => {
+      if (isMounted) {
+        setIsAnalysisReady(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [photo]);
 
   return (
     <ReferenceMakeupExtractionLoadingScreen
-      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
-      onComplete={() => navigation.navigate('ReferenceMakeupExtractionResult')}
+      isAnalysisReady={isAnalysisReady}
+      onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
+      onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
       photo={photo}
+      progressUpdate={analysisProgress}
     />
   );
 }
-
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
+  const handleBackToUpload = () => {
+    navigation.replace('ReferenceMakeupExtractionUpload');
+  };
+
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionResult"
-      onBack={() => navigation.navigate('ReferenceMakeupExtractionUpload')}>
+      onBack={handleBackToUpload}>
       <ReferenceMakeupExtractionResultScreen
-        onPreviewMakeupLook={() => navigation.navigate('ExtractedMakeupLookAdjust')}
-        onRetake={() => navigation.navigate('ReferenceMakeupExtractionUpload')}
+        onOpenARFilter={() => navigation.navigate('ARFilter', {
+          initialGuideMode: 'half',
+          initialMakeupFilterId: 'filter-milky-strawberry-pink',
+          source: 'recommendedFilter',
+        })}
+        onRetake={handleBackToUpload}
         photo={photo}
       />
     </DetailRouteChrome>
@@ -225,7 +271,7 @@ export function MakeupRecipeDetailRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeDetail"
-      onBack={() => navigation.navigate('ExtractedMakeupLookAdjust')}>
+      onBack={() => navigation.goBack()}>
       <MakeupRecipeDetailScreen
         onSaveRecipe={() => navigation.navigate('MakeupRecipeSaveComplete')}
         photo={photo}

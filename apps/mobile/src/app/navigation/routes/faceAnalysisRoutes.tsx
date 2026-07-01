@@ -214,6 +214,9 @@ export function FaceAnalysisReportsListRouteScreen({
         onPressReport={reportId =>
           navigation.navigate('FaceAnalysisReportDetail', {reportId})
         }
+        onPressProducts={reportId =>
+          navigation.navigate('ProductRecommendation', {reportId})
+        }
       />
     </DetailRouteChrome>
   );

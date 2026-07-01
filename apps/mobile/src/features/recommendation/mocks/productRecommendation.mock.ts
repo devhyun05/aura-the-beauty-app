@@ -1,31 +1,19 @@
-import type {ImageSourcePropType} from 'react-native';
-
+import {appAssetSource, makeupFilterAssetSource} from '../../../shared/config/mediaAssets';
 import {userProfileMock} from '../../../shared/mocks/user.mock';
 import type {ProductRecommendationData} from '../types';
 
-const makeupLookImage =
-  require('../../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
+const makeupLookImage = appAssetSource('images/looks/look-mute-rosy-daily.png');
 
-const velureLipstickRoseWood =
-  require('../../../assets/images/products/velure-lipstick-rose-wood.png') as ImageSourcePropType;
-const laurelleGlossRoseVeil =
-  require('../../../assets/images/products/laurelle-gloss-rose-veil.png') as ImageSourcePropType;
-const luneraAiryTintRoseMist =
-  require('../../../assets/images/products/lunera-airy-tint-rose-mist.png') as ImageSourcePropType;
-const luneraLiquidBlushPeachDusk =
-  require('../../../assets/images/products/lunera-liquid-blush-peach-dusk.png') as ImageSourcePropType;
-const velureBlushRoseCompact =
-  require('../../../assets/images/products/velure-blush-rose-compact.png') as ImageSourcePropType;
-const velureEyePaletteRoseHaze =
-  require('../../../assets/images/products/velure-eye-palette-rose-haze.png') as ImageSourcePropType;
-const velureEyePaletteRoseNeutral =
-  require('../../../assets/images/products/velure-eye-palette-rose-neutral.png') as ImageSourcePropType;
-const velureLiquidLinerDeepCocoa =
-  require('../../../assets/images/products/velure-liquid-liner-deep-cocoa.png') as ImageSourcePropType;
-const velureBrowFlickTaupe =
-  require('../../../assets/images/products/velure-brow-flick-taupe.png') as ImageSourcePropType;
-const velureGlowCushionNeutral =
-  require('../../../assets/images/products/velure-glow-cushion-neutral.png') as ImageSourcePropType;
+const velureLipstickRoseWood = makeupFilterAssetSource('filter-plum-syrup-gloss.png');
+const laurelleGlossRoseVeil = makeupFilterAssetSource('filter-water-glow-clean.png');
+const luneraAiryTintRoseMist = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
+const luneraLiquidBlushPeachDusk = makeupFilterAssetSource('filter-juice-coral.png');
+const velureBlushRoseCompact = makeupFilterAssetSource('filter-one-gyaru-rose.png');
+const velureEyePaletteRoseHaze = appAssetSource('images/looks/look-mute-rosy-daily.png');
+const velureEyePaletteRoseNeutral = appAssetSource('images/looks/look-royal-brown.png');
+const velureLiquidLinerDeepCocoa = makeupFilterAssetSource('filter-latte-brown.png');
+const velureBrowFlickTaupe = appAssetSource('images/looks/look-warm-beige-natural.png');
+const velureGlowCushionNeutral = makeupFilterAssetSource('filter-glass-skin-nude.png');
 
 export const productRecommendationMock: ProductRecommendationData = {
   userNickname: userProfileMock.nickname,

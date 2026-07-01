@@ -1,21 +1,13 @@
-import type {ImageSourcePropType} from 'react-native';
-
+import {appAssetSource, makeupFilterAssetSource} from '../config/mediaAssets';
 import type {Product} from '../types/profile';
 
-const productSatinCushion =
-  require('../../assets/images/products/product-satin-cushion.png') as ImageSourcePropType;
-const productRoseLacquer =
-  require('../../assets/images/products/product-rose-lacquer.png') as ImageSourcePropType;
-const productSheerPowder =
-  require('../../assets/images/products/product-sheer-powder.png') as ImageSourcePropType;
-const productNeutralPalette =
-  require('../../assets/images/products/product-neutral-palette.png') as ImageSourcePropType;
-const productLilacCheek =
-  require('../../assets/images/products/product-lilac-cheek.png') as ImageSourcePropType;
-const productClearGloss =
-  require('../../assets/images/products/product-clear-gloss.png') as ImageSourcePropType;
-const productVelvetTint =
-  require('../../assets/images/products/product-velvet-tint.png') as ImageSourcePropType;
+const productSatinCushion = makeupFilterAssetSource('filter-glass-skin-nude.png');
+const productRoseLacquer = makeupFilterAssetSource('filter-one-gyaru-rose.png');
+const productSheerPowder = appAssetSource('images/looks/look-warm-beige-natural.png');
+const productNeutralPalette = appAssetSource('images/looks/look-royal-brown.png');
+const productLilacCheek = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
+const productClearGloss = makeupFilterAssetSource('filter-water-glow-clean.png');
+const productVelvetTint = makeupFilterAssetSource('filter-plum-syrup-gloss.png');
 
 export const productsMock: Product[] = [
   {

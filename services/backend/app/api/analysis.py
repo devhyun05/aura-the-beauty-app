@@ -15,6 +15,12 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate
+from app.services.media_deletion import (
+  collect_report_media_refs,
+  enqueue_unreferenced_report_media_deletions,
+  ensure_media_deletion_schema,
+  process_media_deletion_outbox_items,
+)
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.users import ensure_user
 
@@ -449,7 +455,7 @@ async def get_analysis_job(
     """
     select *
     from analysis_reports
-    where id = $1 and user_id = $2
+    where id = $1 and user_id = $2 and deleted_at is null
     """,
     job_id,
     user["id"],
@@ -484,6 +490,7 @@ async def list_analysis_reports(
     select *
     from analysis_reports
     where {' and '.join(filters)}
+      and deleted_at is null
     order by created_at desc
   """
 
@@ -510,7 +517,7 @@ async def get_analysis_report(
     """
     select *
     from analysis_reports
-    where id = $1 and user_id = $2
+    where id = $1 and user_id = $2 and deleted_at is null
     """,
     report_id,
     user["id"],
@@ -520,6 +527,98 @@ async def get_analysis_report(
     raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
 
   return success({"report": normalize_analysis_report_row(report)})
+
+
+@router.delete("/reports/{report_id}")
+async def delete_analysis_report(
+  report_id: UUID,
+  background_tasks: BackgroundTasks,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  await ensure_media_deletion_schema(db)
+  user = await ensure_user(db, auth)
+
+  if db.pool is None:
+    raise AppError(503, "DATABASE_NOT_CONFIGURED", "Database is not connected.")
+
+  outbox_ids: list[UUID] = []
+  skipped_referenced_count = 0
+  already_deleted = False
+
+  async with db.pool.acquire() as connection:
+    async with connection.transaction():
+      report = await connection.fetchrow(
+        """
+        select
+          r.*,
+          source_media.bucket as source_media_bucket,
+          source_media.object_key as source_media_object_key,
+          preview_media.bucket as preview_media_bucket,
+          preview_media.object_key as preview_media_object_key,
+          capture_media.id as capture_media_id,
+          capture_media.bucket as capture_media_bucket,
+          capture_media.object_key as capture_media_object_key
+        from analysis_reports r
+        left join media_assets source_media on source_media.id = r.source_media_id
+        left join media_assets preview_media on preview_media.id = r.preview_media_id
+        left join photo_captures pc on pc.id = r.photo_capture_id
+        left join media_assets capture_media on capture_media.id = pc.media_id
+        where r.id = $1 and r.user_id = $2
+        for update of r
+        """,
+        report_id,
+        user["id"],
+      )
+
+      if not report:
+        raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+
+      already_deleted = report["deleted_at"] is not None
+      refs = collect_report_media_refs(
+        dict(report),
+        cdn_base_url=settings.effective_cdn_base_url,
+        default_bucket=settings.s3_bucket_name,
+      )
+
+      await connection.execute(
+        """
+        update analysis_reports
+        set deleted_at = coalesce(deleted_at, now()),
+            status = case
+              when status in ('pending', 'processing') then 'cancelled'::job_status
+              else status
+            end
+        where id = $1 and user_id = $2
+        """,
+        report_id,
+        user["id"],
+      )
+
+      outbox_ids, skipped_referenced_count = (
+        await enqueue_unreferenced_report_media_deletions(
+          connection,
+          report_id=report_id,
+          refs=refs,
+        )
+      )
+
+  if outbox_ids:
+    background_tasks.add_task(
+      process_media_deletion_outbox_items,
+      database,
+      settings,
+      outbox_ids,
+    )
+
+  return success({
+    "alreadyDeleted": already_deleted,
+    "deleted": True,
+    "outboxCount": len(outbox_ids),
+    "reportId": str(report_id),
+    "skippedReferencedCount": skipped_referenced_count,
+  })
 
 
 @router.delete("/reports/{report_id}/recommended-makeups/{makeup_index}")
@@ -541,7 +640,7 @@ async def delete_analysis_report_recommended_makeup(
     """
     select detail_payload
     from analysis_reports
-    where id = $1 and user_id = $2
+    where id = $1 and user_id = $2 and deleted_at is null
     """,
     report_id,
     user["id"],
@@ -574,7 +673,7 @@ async def delete_analysis_report_recommended_makeup(
     """
     update analysis_reports
     set detail_payload = $3::jsonb
-    where id = $1 and user_id = $2
+    where id = $1 and user_id = $2 and deleted_at is null
     returning *
     """,
     report_id,

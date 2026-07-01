@@ -1,6 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import {CalendarDays} from 'lucide-react-native';
 import {Modal, Pressable, StyleSheet, TextInput} from 'react-native';
 import {Text, View} from 'tamagui';
@@ -10,6 +9,7 @@ import {
   getUserProfile,
   updateUserProfile,
 } from '../../../shared/services/userService';
+import {uploadMediaAsset} from '../../../shared/services/mediaUploadService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ProfileEditField, UserProfile} from '../../../shared/types/profile';
 import {
@@ -48,34 +48,6 @@ type VisibleEditableProfileFieldId = Exclude<
 type VisibleProfileEditField = ProfileEditField & {
   id: VisibleEditableProfileFieldId;
 };
-
-const PROFILE_AVATAR_DIRECTORY = 'profile-avatar';
-
-function getAvatarFileExtension(uri: string) {
-  const [pathWithoutQuery] = uri.split('?');
-  const extensionMatch = pathWithoutQuery.match(/\.([a-z0-9]+)$/i);
-  const extension = extensionMatch?.[1]?.toLowerCase();
-
-  if (extension === 'png' || extension === 'webp' || extension === 'heic') {
-    return extension;
-  }
-
-  return 'jpg';
-}
-
-async function persistAvatarImage(sourceUri: string) {
-  if (!FileSystem.documentDirectory) {
-    return sourceUri;
-  }
-
-  const directoryUri = `${FileSystem.documentDirectory}${PROFILE_AVATAR_DIRECTORY}/`;
-  const fileUri = `${directoryUri}avatar-${Date.now()}.${getAvatarFileExtension(sourceUri)}`;
-
-  await FileSystem.makeDirectoryAsync(directoryUri, {intermediates: true});
-  await FileSystem.copyAsync({from: sourceUri, to: fileUri});
-
-  return fileUri;
-}
 
 function isVisibleProfileEditField(
   field: ProfileEditField,
@@ -246,24 +218,32 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
         quality: 0.9,
       });
 
-      const selectedUri = pickerResult.canceled
+      const selectedAsset = pickerResult.canceled
         ? undefined
-        : pickerResult.assets[0]?.uri;
+        : pickerResult.assets[0];
+      const selectedUri = selectedAsset?.uri;
 
       if (selectedUri) {
-        let avatarUri = selectedUri;
-
         try {
-          avatarUri = await persistAvatarImage(selectedUri);
-        } catch {
-          avatarUri = selectedUri;
-        }
+          const uploadedAvatar = await uploadMediaAsset({
+            contentType: selectedAsset.mimeType,
+            fileName: selectedAsset.fileName,
+            height: selectedAsset.height,
+            mediaKind: 'profile-avatar',
+            source: 'gallery',
+            uri: selectedUri,
+            width: selectedAsset.width,
+          });
 
-        updateDraftProfile((currentProfile) => ({
-          ...currentProfile,
-          avatarSource: {uri: avatarUri},
-        }));
-        setNotice('');
+          updateDraftProfile((currentProfile) => ({
+            ...currentProfile,
+            avatarMediaId: uploadedAvatar.id,
+            avatarSource: {uri: uploadedAvatar.cdnUrl ?? selectedUri},
+          }));
+          setNotice('');
+        } catch {
+          setNotice('프로필 사진 업로드에 실패했어요. 네트워크를 확인해 주세요.');
+        }
       }
     } catch {
       setNotice('사진을 불러오지 못했어요. 다시 시도해 주세요.');

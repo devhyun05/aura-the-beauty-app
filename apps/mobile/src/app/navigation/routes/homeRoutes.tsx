@@ -23,6 +23,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     likedMakeupFilterIds,
     setLikedMakeupFilterIds,
     setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
 
   const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
@@ -33,6 +34,12 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const handleHeroTrendFilterPress = React.useCallback((filterId: string) => {
     rootNavigation?.navigate('HomeFilterStore', {initialMakeupFilterId: filterId});
   }, [rootNavigation]);
+
+  const handleMakeupExtractionPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
 
   const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {
     setLikedMakeupFilterIds(currentFilterIds =>
@@ -48,12 +55,16 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   );
 
   return (
-    <MainTabChrome navigation={navigation} routeName="HomeTab">
+    <MainTabChrome
+      navigation={navigation}
+      routeName="HomeTab"
+      wrapContentInScreen={false}>
       <HomeScreen
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
         onPressCommunity={() => rootNavigation?.navigate('Community')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
+        onPressMakeupExtraction={handleMakeupExtractionPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
         onPressRecommendedFilter={handleRecommendedFilterPress}
         isMakeupFilterLiked={isMakeupFilterLiked}

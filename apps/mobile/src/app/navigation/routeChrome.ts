@@ -202,6 +202,14 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
+  MakeupFeedbackAlbumUpload: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['close'],
+    statusBarStyle: 'dark',
+    title: '\uBA54\uC774\uD06C\uC5C5 \uD53C\uB4DC\uBC31',
+  },
   MakeupFeedbackLoading: {
     category: 'progress',
     depth: 'sub',
@@ -249,7 +257,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '분석 결과',
+    title: '메이크업 추출',
   },
   ExtractedMakeupLookAdjust: {
     category: 'ar-runtime',

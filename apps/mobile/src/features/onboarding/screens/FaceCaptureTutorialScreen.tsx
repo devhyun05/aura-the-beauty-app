@@ -22,13 +22,14 @@ import {
 } from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
+import {appAssetSource} from '../../../shared/config/mediaAssets';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {PaginationDots} from '../../../shared/ui';
 
-const expressionGuideImageSource = require('../../../assets/images/photo-capture-expression-guide.png');
-const hairGuideImageSource = require('../../../assets/images/photo-capture-hair-guide.png');
-const accessoryGuideImageSource = require('../../../assets/images/photo-capture-accessory-guide.png');
-const framingGuideImageSource = require('../../../assets/images/photo-capture-framing-guide.png');
+const expressionGuideImageSource = appAssetSource('images/photo-capture-expression-guide.png');
+const hairGuideImageSource = appAssetSource('images/photo-capture-hair-guide.png');
+const accessoryGuideImageSource = appAssetSource('images/photo-capture-accessory-guide.png');
+const framingGuideImageSource = appAssetSource('images/photo-capture-framing-guide.png');
 
 type FaceCaptureTutorialIconKey = 'face' | 'hair' | 'accessory' | 'framing';
 

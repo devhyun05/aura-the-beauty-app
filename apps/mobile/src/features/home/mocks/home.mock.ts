@@ -1,53 +1,43 @@
-import type {ImageSourcePropType} from 'react-native';
-
+import {appAssetSource, makeupFilterAssetSource} from '../../../shared/config/mediaAssets';
 import type {HomeData} from '../types';
 
-const lookOjiGirl =
-  require('../../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
-const lookMoriGirl =
-  require('../../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
-const lookCleanSmoky =
-  require('../../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
-const filterWanghongRedGlass =
-  require('../../../assets/images/makeup-filters/filter-wanghong-glass-pink.png') as ImageSourcePropType;
-const filterGyaruGlow =
-  require('../../../assets/images/makeup-filters/filter-gyaru-glow.png') as ImageSourcePropType;
-const filterAuraBlushLift =
-  require('../../../assets/images/makeup-filters/filter-aura-blush-lift.png') as ImageSourcePropType;
-const productCoralTint =
-  require('../../../assets/images/products/product-coral-tint.png') as ImageSourcePropType;
-const productGlowCushion =
-  require('../../../assets/images/products/product-glow-cushion.png') as ImageSourcePropType;
-const productMoodCheek =
-  require('../../../assets/images/products/product-mood-cheek.png') as ImageSourcePropType;
+const lookOjiGirl = appAssetSource('images/looks/look-ojigirl.png');
+const lookMoriGirl = appAssetSource('images/looks/look-morigirl.png');
+const lookCleanSmoky = appAssetSource('images/looks/look-clean-smoky.png');
+const filterWanghongRedGlass = makeupFilterAssetSource('filter-wanghong-glass-pink.png');
+const filterGyaruGlow = makeupFilterAssetSource('filter-gyaru-glow.png');
+const filterAuraBlushLift = makeupFilterAssetSource('filter-aura-blush-lift.png');
+const filterJuiceCoral = makeupFilterAssetSource('filter-juice-coral.png');
+const filterGlassSkinNude = makeupFilterAssetSource('filter-glass-skin-nude.png');
+const filterMilkyStrawberryPink = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
 
 export const homeMock: HomeData = {
   hero: {
     eyebrow: '이번 주 메이크업 가이드',
     title: 'AI 트렌드 메이크업 무드',
     description: '지금 많이 찾는 메이크업 무드를 AI가 골라 카드로 추천해요.',
-    imageSource: filterWanghongRedGlass,
+    imageSource: filterGyaruGlow,
     notices: [
       {
         id: 'notice-weekly-trend',
         title: '공지',
-        description: '이번 주 추천 룩이 왕홍 레드 글래스 무드로 업데이트되었어요.',
+        description: '이번 주 추천 룩이 갸루 글로우 무드로 업데이트되었어요.',
       },
     ],
     trends: [
-      {
-        filterId: 'filter-wanghong-glass-pink',
-        id: 'trend-wanghong-glass-pink',
-        title: '왕홍 레드 글래스',
-        tone: '루비 레드',
-        imageSource: filterWanghongRedGlass,
-      },
       {
         filterId: 'filter-gyaru-glow',
         id: 'trend-gyaru-glow',
         title: '갸루 글로우',
         tone: '샴페인 코랄',
         imageSource: filterGyaruGlow,
+      },
+      {
+        filterId: 'filter-wanghong-glass-pink',
+        id: 'trend-wanghong-glass-pink',
+        title: '왕홍 레드 글래스',
+        tone: '루비 레드',
+        imageSource: filterWanghongRedGlass,
       },
       {
         filterId: 'filter-aura-blush-lift',
@@ -64,21 +54,21 @@ export const homeMock: HomeData = {
       title: '코랄 립 필터',
       description: '피치 코랄 립을 얼굴 위에서 바로 테스트',
       category: 'Lip',
-      imageSource: productCoralTint,
+      imageSource: filterJuiceCoral,
     },
     {
       id: 'filter-base',
       title: '글로우 베이스 필터',
       description: '맑은 피부광과 커버감을 자연스럽게 비교',
       category: 'Base',
-      imageSource: productGlowCushion,
+      imageSource: filterGlassSkinNude,
     },
     {
       id: 'filter-cheek',
       title: '로지 치크 필터',
       description: '얼굴 톤에 맞는 블러셔 위치와 농도 조절',
       category: 'Cheek',
-      imageSource: productMoodCheek,
+      imageSource: filterMilkyStrawberryPink,
     },
   ],
   recommendedLooks: [
