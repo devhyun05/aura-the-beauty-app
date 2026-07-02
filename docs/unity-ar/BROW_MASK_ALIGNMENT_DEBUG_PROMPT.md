@@ -79,12 +79,40 @@ The most important failure is **mask alignment and attachment on the eyebrow are
 - Static checks have passed after recent edits:
   - `npm run typecheck` in `apps/mobile`
   - `xcrun swiftc -parse apps/mobile/ios/AURA/E7NativeLipBoundaryProviders.swift`
+- Generated brow contract checks exist and should be run after brow mask edits:
+  - `npm run mobile:test:generated-brow` from the repo root
+  - `npm run test:generated-brow` from `apps/mobile`
+  - The test compiles and runs `apps/mobile/src/features/ar/services/browGenerateCore.test.ts`.
+  - It verifies non-empty generated brow UV mask output, raw RGBA payload shape, strand channel output, right-to-left mirrored brow polygon shape, surround anchor usage, color/opacity/strand strength boost, and disabled cleanup/neutralize values.
+- The referenced MIT web repo has been checked for its eyebrow path:
+  - `EYE_BROW_CONNECTIONS` is a simple MediaPipe eyebrow polygon ring.
+  - `fillPoly` creates the feature mask.
+  - `GaussianBlur` feathers the mask.
+  - `addWeighted` blends the colored mask onto the camera image.
+- Our app adapts that model as a sibling generated brow pipeline:
+  - MediaPipe/Vision brow and surrounding anchors build the brow envelope.
+  - The envelope is rasterized into a generated brow UV mask texture.
+  - The green channel carries the desired brow fill mask.
+  - The blue channel carries strand/hair texture detail.
+  - Unity receives the texture through `ApplyGeneratedBrowMaskJson`.
+  - `E3RegionMaskOverlay` samples it as a generated brow texture on the ARFace surface.
+- The latest UnityFramework build was successfully regenerated after the brow bridge updates:
+  - `apps/mobile/ios/UnityBuild/UnityFramework.framework`
+  - `apps/mobile/ios/UnityBuild/Data`
+  - The embedded Unity metadata contains the new brow runtime/debug strings:
+    `debugMode`, `debugShowLeftRight`, `debugExaggerate`, `rawMaskProvided`, and `texture_registration_failed`.
+- Brow-only runtime debug plumbing is available in Unity:
+  - `debugMode`, `debugShowLeftRight`, and `debugExaggerate` flow from the RN payload through `RNBridge` into `E3RegionMaskOverlay`.
+  - The default generated brow controls keep `debugMode=0`, so normal brow rendering is not forced into a debug overlay.
+  - Debug modes can be selected through `GeneratedBrowControls` and are serialized into `e7-generated-brow-mask-runtime-payload-v0`.
+  - In React Native dev builds, the eyebrow option row exposes debug controls:
+    `일반`, `마스크 확인`, and `좌우 확인`.
+  - Runtime logs and region snapshots include brow debug state.
+  - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
+  - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 
 ### Not Proven / Not Done
 
-- The latest Unity source changes are not proven inside the embedded iOS `UnityFramework.framework`.
-- Unity batch export was attempted, but Unity Licensing Client failed before a successful export/build could be proven.
-- The existing `apps/mobile/ios/UnityBuild/UnityFramework.framework` timestamp predates the newest Unity brow changes.
 - Live device runtime behavior is not verified.
 - It is not proven that the generated brow texture lands on the actual ARFace UV eyebrow area.
 - It is not proven that MediaPipe image-space brow mask coordinates match Unity ARFace UV sampling.

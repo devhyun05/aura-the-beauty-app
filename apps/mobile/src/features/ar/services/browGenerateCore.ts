@@ -14,6 +14,9 @@ export type GeneratedBrowControls = {
   cleanupStrength: number;
   colorHex: string;
   coverage: number;
+  debugExaggerate: boolean;
+  debugMode: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  debugShowLeftRight: boolean;
   enabled: boolean;
   intensity: number;
   neutralizeStrength: number;
@@ -122,18 +125,25 @@ export type BrowRuntimeApplyPayload = {
   maskVisible: boolean;
   validationVisible: boolean;
   visible: boolean;
+  debugMode?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  debugShowLeftRight?: boolean;
+  debugExaggerate?: boolean;
 };
 
 const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
+const BROW_MASK_VERTICAL_LIFT_RATIO = 0.09;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
   cleanupStrength: 0,
   colorHex: '#4A342B',
   coverage: 0.9,
+  debugExaggerate: false,
+  debugMode: 0,
+  debugShowLeftRight: false,
   enabled: false,
   intensity: 0.72,
   neutralizeStrength: 0,
@@ -294,6 +304,9 @@ export function buildGeneratedBrowMaskUnityPayload(
     validationOpacity: runtimeOpacity,
     validationVisible: controls.enabled,
     visible: controls.enabled,
+    debugMode: controls.enabled ? controls.debugMode : 0,
+    debugShowLeftRight: controls.enabled && controls.debugShowLeftRight,
+    debugExaggerate: controls.enabled && controls.debugExaggerate,
   };
 
   if (options.controlRevision !== undefined) {
@@ -364,6 +377,9 @@ function buildBrowRuntimeApplyPayload({
     maskVisible: controls.enabled,
     validationVisible: controls.enabled,
     visible: controls.enabled,
+    debugMode: controls.enabled ? controls.debugMode : 0,
+    debugShowLeftRight: controls.enabled && controls.debugShowLeftRight,
+    debugExaggerate: controls.enabled && controls.debugExaggerate,
   };
 }
 
@@ -651,7 +667,9 @@ function buildBrowEnvelopes({
     }),
   ].filter((envelope): envelope is BrowEnvelope => envelope !== null);
 
-  return mirrorScreenRightBrowShapeToScreenLeft(envelopes);
+  return mirrorScreenRightBrowShapeToScreenLeft(envelopes).map(envelope =>
+    liftBrowEnvelopeSlightly(envelope, frameHeight),
+  );
 }
 
 function mirrorScreenRightBrowShapeToScreenLeft(
@@ -706,6 +724,26 @@ function mirrorPolygonIntoTargetBounds(
       y: targetMinY + sourceV * targetHeight,
     };
   });
+}
+
+function liftBrowEnvelopeSlightly(
+  envelope: BrowEnvelope,
+  frameHeight: number,
+): BrowEnvelope {
+  const [, minY, , maxY] = envelope.fillBounds;
+  const lift = Math.max(2, (maxY - minY) * BROW_MASK_VERTICAL_LIFT_RATIO);
+  const liftPoint = (point: E7Point2D) => ({
+    x: point.x,
+    y: clamp(point.y - lift, 0, frameHeight - 1),
+  });
+  const polygon = envelope.polygon.map(liftPoint);
+
+  return {
+    ...envelope,
+    cleanupPolygon: envelope.cleanupPolygon.map(liftPoint),
+    fillBounds: bounds(polygon) ?? envelope.fillBounds,
+    polygon,
+  };
 }
 
 function buildSingleBrowEnvelope({

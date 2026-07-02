@@ -86,6 +86,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public string StabilityMode;
         public float StabilizationDeadZoneMeters;
         public float StabilizationSnapDistanceMeters;
+        public int BrowDebugMode;
+        public bool BrowDebugShowLeftRight;
+        public bool BrowDebugExaggerate;
     }
 
     private sealed class RegionRecipeState
@@ -114,6 +117,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float TextureAmount = 0.0f;
         public float GradientAmount = 0.08f;
         public bool PreserveDetail = true;
+        public int BrowDebugMode;
+        public bool BrowDebugShowLeftRight;
+        public bool BrowDebugExaggerate;
     }
 
     private sealed class FaceOverlayState
@@ -462,7 +468,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         float specularPower,
         float glossBoost,
         float gradientAmount,
-        bool preserveDetail)
+        bool preserveDetail,
+        int browDebugMode = 0,
+        bool browDebugShowLeftRight = false,
+        bool browDebugExaggerate = false)
     {
         region = NormalizeRegion(region);
         opacity = Mathf.Clamp01(opacity);
@@ -491,7 +500,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             GlossBoost = Mathf.Clamp01(glossBoost),
             TextureAmount = Mathf.Clamp01(textureAmount),
             GradientAmount = Mathf.Clamp01(gradientAmount),
-            PreserveDetail = preserveDetail
+            PreserveDetail = preserveDetail,
+            BrowDebugMode = Mathf.Clamp(browDebugMode, 0, 6),
+            BrowDebugShowLeftRight = browDebugShowLeftRight,
+            BrowDebugExaggerate = browDebugExaggerate
         };
 
         return ApplyRegionToTrackedFaces(region, true);
@@ -527,7 +539,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         float roughness,
         float specular,
         float specularPower,
-        float glossBoost)
+        float glossBoost,
+        int browDebugMode = 0,
+        bool browDebugShowLeftRight = false,
+        bool browDebugExaggerate = false)
     {
         return ApplyRegionRecipe(
             region,
@@ -552,7 +567,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             specularPower,
             glossBoost,
             gradientAmount,
-            preserveDetail);
+            preserveDetail,
+            browDebugMode,
+            browDebugShowLeftRight,
+            browDebugExaggerate);
     }
 
     private RegionApplyResult ApplyRegionToTrackedFaces(string region, bool emitLog)
@@ -808,6 +826,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             result.StabilityMode = "generated_brow_arface_uv_deadband_fast_follow";
             result.StabilizationDeadZoneMeters = GeneratedBrowVertexJitterDeadZoneMeters;
             result.StabilizationSnapDistanceMeters = GeneratedBrowVertexSnapDistanceMeters;
+            result.BrowDebugMode = recipe.BrowDebugMode;
+            result.BrowDebugShowLeftRight = recipe.BrowDebugShowLeftRight;
+            result.BrowDebugExaggerate = recipe.BrowDebugExaggerate;
         }
 
         ApplyMaskTextureDiagnostics(mask, ref result);
@@ -2823,6 +2844,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         MaskDefinition mask = ResolveMask(recipe.Region, recipe.MaskTextureId);
         Texture2D maskTexture = GetMaskTexture(mask);
         Color materialColor = BuildMaterialColor(recipe);
+        bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
+        bool generatedLipMask = IsGeneratedLipMaskTextureId(recipe.MaskTextureId);
+        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
+        materialColor = ResolveBrowDebugMaterialColor(recipe, materialColor, generatedBrowMask);
 
         if (material == null || maskTexture == null || !material.HasProperty("_MaskTex"))
         {
@@ -2834,9 +2859,6 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         view.MeshRenderer.sharedMaterial = material;
         material.SetTexture("_MaskTex", maskTexture);
         ApplyMaterialBlendMode(material, recipe.BlendMode, IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId));
-        bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
-        bool generatedLipMask = IsGeneratedLipMaskTextureId(recipe.MaskTextureId);
-        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
 
         if (material.HasProperty("_UseScreenSpaceMask"))
         {
@@ -3710,6 +3732,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " meshVertexCount=" + GetVertexCount(face).ToString(CultureInfo.InvariantCulture)
             + " meshIndexCount=" + GetIndexCount(face).ToString(CultureInfo.InvariantCulture)
             + " meshUvCount=" + GetUvCount(face).ToString(CultureInfo.InvariantCulture)
+            + " browDebugMode=" + recipe.BrowDebugMode.ToString(CultureInfo.InvariantCulture)
+            + " browDebugShowLeftRight=" + recipe.BrowDebugShowLeftRight.ToString().ToLowerInvariant()
+            + " browDebugExaggerate=" + recipe.BrowDebugExaggerate.ToString().ToLowerInvariant()
             + " topologyAuditStatus=" + BuildTopologyAuditStatus(face));
     }
 
@@ -3772,9 +3797,30 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " glossBoost=" + result.GlossBoost.ToString("0.##", CultureInfo.InvariantCulture)
             + " gradientAmount=" + result.GradientAmount.ToString("0.##", CultureInfo.InvariantCulture)
             + " topologyAuditStatus=" + result.TopologyAuditStatus
+            + " browDebugMode=" + result.BrowDebugMode.ToString(CultureInfo.InvariantCulture)
+            + " browDebugShowLeftRight=" + result.BrowDebugShowLeftRight.ToString().ToLowerInvariant()
+            + " browDebugExaggerate=" + result.BrowDebugExaggerate.ToString().ToLowerInvariant()
             + " regionDecision=smooth_mask_runtime"
             + " smoothing=soft_sdf_multilayer_mask"
-            + " regionsInScope=lip,cheek,eye");
+            + " regionsInScope=lip,cheek,eye,brow");
+    }
+
+    private static Color ResolveBrowDebugMaterialColor(
+        RegionRecipeState recipe,
+        Color materialColor,
+        bool generatedBrowMask)
+    {
+        if (!generatedBrowMask || (recipe.BrowDebugMode < 5 && !recipe.BrowDebugExaggerate))
+        {
+            return materialColor;
+        }
+
+        if (recipe.BrowDebugMode == 6 || recipe.BrowDebugShowLeftRight)
+        {
+            return new Color(0.05f, 0.82f, 1.0f, 0.92f);
+        }
+
+        return new Color(1.0f, 0.88f, 0.05f, 0.92f);
     }
 
     private static string BuildTopologyAuditStatus(ARFace face)

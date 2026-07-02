@@ -169,6 +169,16 @@ const GENERATED_BROW_SHAPE_OPTIONS = [
   label: string;
   shapeId: GeneratedBrowControls['shapeId'];
 }>;
+const GENERATED_BROW_DEBUG_OPTIONS = [
+  {debugExaggerate: false, debugMode: 0, debugShowLeftRight: false, label: '일반'},
+  {debugExaggerate: true, debugMode: 5, debugShowLeftRight: false, label: '마스크 확인'},
+  {debugExaggerate: false, debugMode: 6, debugShowLeftRight: true, label: '좌우 확인'},
+] as const satisfies ReadonlyArray<{
+  debugExaggerate: boolean;
+  debugMode: GeneratedBrowControls['debugMode'];
+  debugShowLeftRight: boolean;
+  label: string;
+}>;
 
 type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
 type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
@@ -180,6 +190,22 @@ type RuntimeMakeupSnapshot = {
   enabledHudRegions: EnabledHudRegions;
   generatedBrowControls: GeneratedBrowControls;
   generatedMaskControls: GeneratedMaskControls;
+};
+type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
+  applied?: boolean;
+  applyTrigger?: string;
+  attemptCount?: number;
+  blockedReason?: string;
+  faceCount?: number;
+  generatedMaskId?: string;
+  maskTextureId?: string;
+  maskTriangles?: number;
+  runtimeReady?: boolean;
+  stateAction?: string;
+  status?: string;
+  trackingState?: string;
+  type?: string;
+  uvAvailable?: boolean;
 };
 
 const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
@@ -219,6 +245,8 @@ export function UnityMakeupCaptureScreen({
   const pendingGeneratedBrowMaskIdRef = useRef<string | null>(null);
   const latestGeneratedApplyPayloadRef = useRef<string | null>(null);
   const latestGeneratedBrowApplyPayloadRef = useRef<string | null>(null);
+  const latestCompanionMakeupControlsRef =
+    useRef<PersonalizedCompanionMakeupControls>(companionMakeupControls);
   const generatedMaskControlRevisionRef = useRef(0);
   const generatedBrowControlRevisionRef = useRef(0);
   const captureRestoreSnapshotRef = useRef<RuntimeMakeupSnapshot | null>(null);
@@ -234,20 +262,17 @@ export function UnityMakeupCaptureScreen({
   }, []);
 
   useEffect(() => {
+    latestCompanionMakeupControlsRef.current = companionMakeupControls;
+  }, [companionMakeupControls]);
+
+  useEffect(() => {
     const subscription = addUnityMakeupEventListener(event => {
       if (!event.message) {
         return;
       }
 
       try {
-        const payload = JSON.parse(event.message) as UnitySynchronizedCaptureEvent & {
-          applied?: boolean;
-          generatedMaskId?: string;
-          maskTriangles?: number;
-          status?: string;
-          type?: string;
-          uvAvailable?: boolean;
-        };
+        const payload = JSON.parse(event.message) as UnityGeneratedMaskAppliedEvent;
 
         if (payload.type === 'e7_reference_capture') {
           handleReferenceCaptureEvent(payload);
@@ -378,7 +403,9 @@ export function UnityMakeupCaptureScreen({
         : INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS;
 
       pendingGeneratedMaskIdRef.current = result.generatedPackage.generatedMaskId;
-      pendingGeneratedBrowMaskIdRef.current = result.generatedBrowPackage.generatedMaskId;
+      pendingGeneratedBrowMaskIdRef.current = initialBrowControls.enabled
+        ? result.generatedBrowPackage.generatedMaskId
+        : null;
       const unityApplyPayload = JSON.stringify(
         buildGeneratedMaskUnityPayload(
           result.generatedPackage,
@@ -404,6 +431,7 @@ export function UnityMakeupCaptureScreen({
       setGeneratedMaskControls(nextGeneratedMaskControls);
       setGeneratedBrowControls(nextGeneratedBrowControls);
       setCompanionMakeupControls(nextCompanionMakeupControls);
+      latestCompanionMakeupControlsRef.current = nextCompanionMakeupControls;
       setActiveHudRegion(nextActiveHudRegion);
       setEnabledHudRegions(nextEnabledHudRegions);
       setPhase('applying');
@@ -438,13 +466,7 @@ export function UnityMakeupCaptureScreen({
     }
   };
 
-  const handleGeneratedLipAppliedEvent = (event: {
-    applied?: boolean;
-    generatedMaskId?: string;
-    maskTriangles?: number;
-    status?: string;
-    uvAvailable?: boolean;
-  }) => {
+  const handleGeneratedLipAppliedEvent = (event: UnityGeneratedMaskAppliedEvent) => {
     const pendingGeneratedMaskId = pendingGeneratedMaskIdRef.current;
 
     if (
@@ -480,22 +502,20 @@ export function UnityMakeupCaptureScreen({
           postUnityGeneratedBrowMaskPayload(latestGeneratedBrowApplyPayloadRef.current);
         }
         postUnityMakeupRecipe(
-          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
-            activeRegion: 'none',
-            includeBrowLayer: false,
-          }),
+          buildCheekBrowRecipeAfterGeneratedLip(
+            Date.now(),
+            latestCompanionMakeupControlsRef.current,
+            {
+              activeRegion: 'none',
+              includeBrowLayer: false,
+            },
+          ),
         );
       }, 800);
     }
   };
 
-  const handleGeneratedBrowAppliedEvent = (event: {
-    applied?: boolean;
-    generatedMaskId?: string;
-    maskTriangles?: number;
-    status?: string;
-    uvAvailable?: boolean;
-  }) => {
+  const handleGeneratedBrowAppliedEvent = (event: UnityGeneratedMaskAppliedEvent) => {
     const pendingGeneratedBrowMaskId = pendingGeneratedBrowMaskIdRef.current;
 
     if (
@@ -506,6 +526,8 @@ export function UnityMakeupCaptureScreen({
       return;
     }
 
+    logGeneratedBrowAppliedEvent(event);
+
     const isApplied =
       (event.status === 'partial' || event.status === 'ready') &&
       event.applied === true &&
@@ -514,6 +536,20 @@ export function UnityMakeupCaptureScreen({
 
     if (isApplied) {
       pendingGeneratedBrowMaskIdRef.current = null;
+      return;
+    }
+
+    if (event.status === 'disabled') {
+      pendingGeneratedBrowMaskIdRef.current = null;
+      return;
+    }
+
+    if (event.status === 'blocked' && pendingGeneratedBrowMaskId) {
+      setNotice(
+        `눈썹 마스크 적용 대기: ${formatGeneratedBrowBlockedReason(
+          event.blockedReason,
+        )}`,
+      );
     }
   };
 
@@ -651,6 +687,7 @@ export function UnityMakeupCaptureScreen({
     });
 
     setCompanionMakeupControls(nextControls);
+    latestCompanionMakeupControlsRef.current = nextControls;
     const nextEnabledRegions = {
       ...enabledHudRegions,
       [getHudRegionFromCompanionRegionKey(region)]: true,
@@ -730,6 +767,7 @@ export function UnityMakeupCaptureScreen({
     setGeneratedMaskControls(nextGeneratedControls);
     setGeneratedBrowControls(nextGeneratedBrowControls);
     setCompanionMakeupControls(nextCompanionControls);
+    latestCompanionMakeupControlsRef.current = nextCompanionControls;
     setEnabledHudRegions(nextEnabledRegions);
     generatedBrowControlRevisionRef.current += 1;
     postRuntimeMakeup(
@@ -777,6 +815,9 @@ export function UnityMakeupCaptureScreen({
           includeTexture: options.includeBrowTexture === true,
         }),
       );
+      pendingGeneratedBrowMaskIdRef.current = browControls.enabled
+        ? generatedBrowPackage.generatedMaskId
+        : null;
       latestGeneratedBrowApplyPayloadRef.current = browPayload;
       postUnityGeneratedBrowMaskPayload(browPayload);
     }
@@ -1391,6 +1432,41 @@ function HudRegionOptions({
             </Text>
           </Pressable>
         ))}
+        {__DEV__
+          ? GENERATED_BROW_DEBUG_OPTIONS.map(option => {
+              const isSelected =
+                activeRegionEnabled &&
+                browControls.debugMode === option.debugMode &&
+                browControls.debugShowLeftRight === option.debugShowLeftRight &&
+                browControls.debugExaggerate === option.debugExaggerate;
+
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{selected: isSelected}}
+                  key={`debug-${option.debugMode}`}
+                  onPress={() =>
+                    onChangeBrowControls({
+                      debugExaggerate: option.debugExaggerate,
+                      debugMode: option.debugMode,
+                      debugShowLeftRight: option.debugShowLeftRight,
+                    })
+                  }
+                  style={[
+                    styles.arBlushOptionButton,
+                    isSelected && styles.arBlushOptionButtonActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.arBlushOptionText,
+                      isSelected && styles.arBlushOptionTextActive,
+                    ]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })
+          : null}
       </>
     );
   }
@@ -1613,6 +1689,57 @@ function getCompanionActiveRegion(
   return 'none';
 }
 
+function formatGeneratedBrowBlockedReason(reason: string | undefined): string {
+  if (!reason || reason === 'none') {
+    return 'Unity 적용 상태 확인 중';
+  }
+
+  const labels: Record<string, string> = {
+    ar_face_uv_unavailable: '얼굴 UV 대기',
+    face_not_tracked: '얼굴 추적 대기',
+    generated_brow_mask_pending_apply_exception: 'Unity 적용 예외',
+    mask_texture_dimensions_invalid: '마스크 크기 오류',
+    mask_texture_missing: '마스크 텍스처 대기',
+    mask_texture_registration_failed: '마스크 등록 실패',
+    mask_triangles_empty: '눈썹 UV 영역 미검출',
+    raw_rgba_byte_count_mismatch: '마스크 바이트 수 불일치',
+    raw_rgba_payload_missing: '마스크 원본 누락',
+    texture_registration_failed: '텍스처 등록 실패',
+    uv_unavailable: 'UV 대기',
+  };
+
+  return labels[reason] ?? reason;
+}
+
+function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
+  if (typeof __DEV__ !== 'undefined' && !__DEV__) {
+    return;
+  }
+
+  const logPayload = {
+    applied: event.applied,
+    applyTrigger: event.applyTrigger,
+    attemptCount: event.attemptCount,
+    blockedReason: event.blockedReason,
+    faceCount: event.faceCount,
+    generatedMaskId: event.generatedMaskId,
+    maskTextureId: event.maskTextureId,
+    maskTriangles: event.maskTriangles,
+    runtimeReady: event.runtimeReady,
+    stateAction: event.stateAction,
+    status: event.status,
+    trackingState: event.trackingState,
+    uvAvailable: event.uvAvailable,
+  };
+
+  if (event.status === 'blocked') {
+    console.warn('[aura:brow] generated-brow-mask:blocked', logPayload);
+    return;
+  }
+
+  console.info('[aura:brow] generated-brow-mask:applied-event', logPayload);
+}
+
 function getCompanionOptions(region: CompanionHudRegion) {
   if (region === 'cheek') {
     return AR_BLUSH_CHEEK_REGION_OPTIONS;
@@ -1662,6 +1789,9 @@ function clampGeneratedBrowControls(
     ...controls,
     cleanupStrength: 0,
     coverage: Math.max(0, Math.min(1, controls.coverage)),
+    debugExaggerate: Boolean(controls.debugExaggerate),
+    debugMode: Math.max(0, Math.min(6, controls.debugMode)) as GeneratedBrowControls['debugMode'],
+    debugShowLeftRight: Boolean(controls.debugShowLeftRight),
     intensity: Math.max(0, Math.min(1, controls.intensity)),
     neutralizeStrength: 0,
     opacity: Math.max(0, Math.min(1, controls.opacity)),

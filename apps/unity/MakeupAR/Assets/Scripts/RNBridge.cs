@@ -258,6 +258,9 @@ public sealed class RNBridge : MonoBehaviour
         public bool debugBoundary;
         public bool showBoundary;
         public bool debugOverlayVisible;
+        public int debugMode;
+        public bool debugShowLeftRight;
+        public bool debugExaggerate;
         public int controlRequestId;
         public int validationControlRequestId;
         public int controlRevision;
@@ -359,6 +362,9 @@ public sealed class RNBridge : MonoBehaviour
         public string BoundaryDebugMode;
         public int ValidationControlRequestId;
         public int ValidationControlRevision;
+        public int DebugMode;
+        public bool DebugShowLeftRight;
+        public bool DebugExaggerate;
     }
 
     private sealed class RegionFeatureState
@@ -435,6 +441,9 @@ public sealed class RNBridge : MonoBehaviour
         public float ValidationOpacity;
         public bool BoundaryDebugVisible;
         public string BoundaryDebugMode = "none";
+        public int DebugMode;
+        public bool DebugShowLeftRight;
+        public bool DebugExaggerate;
         public string BlockedReason = "none";
         public long LastUpdatedMs;
     }
@@ -814,11 +823,15 @@ public sealed class RNBridge : MonoBehaviour
 
             if (hasRawMaskPayload)
             {
-                regionMaskOverlay.RegisterGeneratedBrowMaskTexture(
+                bool registered = regionMaskOverlay.RegisterGeneratedBrowMaskTexture(
                     maskTextureId,
                     payload.maskRawRgbaBase64,
                     payload.maskTextureWidth,
                     payload.maskTextureHeight);
+                if (!registered)
+                {
+                    throw new InvalidOperationException("Generated brow mask texture registration failed.");
+                }
             }
 
             ParsedRecipeLayer layer = BuildGeneratedBrowMaskLayer(payload, maskTextureId, json.Length);
@@ -848,6 +861,9 @@ public sealed class RNBridge : MonoBehaviour
                 + " validationOpacity=" + layer.ValidationOpacity.ToString("0.##", CultureInfo.InvariantCulture)
                 + " effectiveOpacity=" + layer.Opacity.ToString("0.##", CultureInfo.InvariantCulture)
                 + " strandTextureAmount=" + layer.TextureAmount.ToString("0.##", CultureInfo.InvariantCulture)
+                + " debugMode=" + payload.debugMode.ToString(CultureInfo.InvariantCulture)
+                + " debugShowLeftRight=" + payload.debugShowLeftRight.ToString().ToLowerInvariant()
+                + " debugExaggerate=" + payload.debugExaggerate.ToString().ToLowerInvariant()
                 + " queued=true");
         }
         catch (Exception exception)
@@ -1776,7 +1792,10 @@ public sealed class RNBridge : MonoBehaviour
                 : payload.validationControlRequestId,
             ValidationControlRevision = payload.controlRevision != 0
                 ? payload.controlRevision
-                : payload.validationControlRevision
+                : payload.validationControlRevision,
+            DebugMode = Mathf.Clamp(payload.debugMode, 0, 6),
+            DebugShowLeftRight = payload.debugShowLeftRight,
+            DebugExaggerate = payload.debugExaggerate
         };
     }
 
@@ -2484,6 +2503,26 @@ public sealed class RNBridge : MonoBehaviour
             return "unsupported_mask_texture_encoding";
         }
 
+        if (message.Contains("raw RGBA payload is empty", StringComparison.Ordinal))
+        {
+            return "raw_rgba_payload_missing";
+        }
+
+        if (message.Contains("texture dimensions", StringComparison.Ordinal))
+        {
+            return "mask_texture_dimensions_invalid";
+        }
+
+        if (message.Contains("byte count mismatch", StringComparison.Ordinal))
+        {
+            return "raw_rgba_byte_count_mismatch";
+        }
+
+        if (message.Contains("texture registration failed", StringComparison.Ordinal))
+        {
+            return "texture_registration_failed";
+        }
+
         if (message.Contains("Unsupported generated brow mask texture id", StringComparison.Ordinal)
             || message.Contains("Unsupported mask texture id", StringComparison.Ordinal))
         {
@@ -2535,6 +2574,10 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"generatedMaskId\":\"" + EscapeJsonString(payload.generatedMaskId) + "\""
             + ",\"captureSetId\":\"" + EscapeJsonString(NormalizeOptional(payload.captureSetId)) + "\""
             + ",\"maskTextureId\":\"" + EscapeJsonString(layer.MaskTextureId) + "\""
+            + ",\"rawMaskProvided\":" + (!string.IsNullOrWhiteSpace(payload.maskRawRgbaBase64)).ToString().ToLowerInvariant()
+            + ",\"maskTextureWidth\":" + payload.maskTextureWidth.ToString(CultureInfo.InvariantCulture)
+            + ",\"maskTextureHeight\":" + payload.maskTextureHeight.ToString(CultureInfo.InvariantCulture)
+            + ",\"maskTextureEncoding\":\"" + EscapeJsonString(NormalizeOptional(payload.maskTextureEncoding)) + "\""
             + ",\"runtimeReady\":" + hasRuntimeTexture.ToString().ToLowerInvariant()
             + ",\"applied\":" + result.Applied.ToString().ToLowerInvariant()
             + ",\"faceCount\":" + result.FaceCount.ToString(CultureInfo.InvariantCulture)
@@ -2641,6 +2684,9 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"noseBridgeAnchorPointCount\":" + payload.noseBridgeAnchorPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"faceOvalPointCount\":" + payload.faceOvalPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"eyeExclusionMode\":\"" + EscapeJsonString(NormalizeOptional(payload.eyeExclusionMode)) + "\""
+            + ",\"debugMode\":" + payload.debugMode.ToString(CultureInfo.InvariantCulture)
+            + ",\"debugShowLeftRight\":" + payload.debugShowLeftRight.ToString().ToLowerInvariant()
+            + ",\"debugExaggerate\":" + payload.debugExaggerate.ToString().ToLowerInvariant()
             + ",\"stabilizationDeadZoneMeters\":" + result.StabilizationDeadZoneMeters.ToString("0.#####", CultureInfo.InvariantCulture)
             + ",\"stabilizationSnapDistanceMeters\":" + result.StabilizationSnapDistanceMeters.ToString("0.#####", CultureInfo.InvariantCulture)
             + ",\"meshVertexCount\":" + result.MeshVertexCount.ToString(CultureInfo.InvariantCulture)
@@ -2760,7 +2806,10 @@ public sealed class RNBridge : MonoBehaviour
             layer.Roughness,
             layer.Specular,
             layer.SpecularPower,
-            layer.GlossBoost);
+            layer.GlossBoost,
+            layer.DebugMode,
+            layer.DebugShowLeftRight,
+            layer.DebugExaggerate);
     }
 
     private void RememberRegionFeatureState(
@@ -2841,6 +2890,9 @@ public sealed class RNBridge : MonoBehaviour
             ValidationOpacity = layer.ValidationOpacity,
             BoundaryDebugVisible = layer.BoundaryDebugVisible,
             BoundaryDebugMode = layer.BoundaryDebugMode,
+            DebugMode = layer.DebugMode,
+            DebugShowLeftRight = layer.DebugShowLeftRight,
+            DebugExaggerate = layer.DebugExaggerate,
             BlockedReason = BuildRegionApplyBlockedReason(layer, result),
             LastUpdatedMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         };
@@ -2894,6 +2946,9 @@ public sealed class RNBridge : MonoBehaviour
             state.StabilityMode = result.StabilityMode;
             state.StabilizationDeadZoneMeters = result.StabilizationDeadZoneMeters;
             state.StabilizationSnapDistanceMeters = result.StabilizationSnapDistanceMeters;
+            state.DebugMode = result.BrowDebugMode;
+            state.DebugShowLeftRight = result.BrowDebugShowLeftRight;
+            state.DebugExaggerate = result.BrowDebugExaggerate;
         }
     }
 
@@ -2989,6 +3044,9 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"validationOpacity\":" + state.ValidationOpacity.ToString("0.##", CultureInfo.InvariantCulture)
                 + ",\"boundaryDebugVisible\":" + state.BoundaryDebugVisible.ToString().ToLowerInvariant()
                 + ",\"boundaryDebugMode\":\"" + EscapeJsonString(state.BoundaryDebugMode) + "\""
+                + ",\"debugMode\":" + state.DebugMode.ToString(CultureInfo.InvariantCulture)
+                + ",\"debugShowLeftRight\":" + state.DebugShowLeftRight.ToString().ToLowerInvariant()
+                + ",\"debugExaggerate\":" + state.DebugExaggerate.ToString().ToLowerInvariant()
                 + ",\"blockedReason\":\"" + EscapeJsonString(state.BlockedReason) + "\""
                 + ",\"faceCount\":" + state.FaceCount.ToString(CultureInfo.InvariantCulture)
                 + ",\"meshTriangles\":" + state.MeshTriangleCount.ToString(CultureInfo.InvariantCulture)
@@ -3066,6 +3124,9 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"validationOpacity\":" + (state != null ? state.ValidationOpacity : 0.0f).ToString("0.##", CultureInfo.InvariantCulture)
                 + ",\"boundaryDebugVisible\":" + (state != null && state.BoundaryDebugVisible).ToString().ToLowerInvariant()
                 + ",\"boundaryDebugMode\":\"" + EscapeJsonString(state != null ? state.BoundaryDebugMode : "none") + "\""
+                + ",\"debugMode\":" + (state != null ? state.DebugMode : 0).ToString(CultureInfo.InvariantCulture)
+                + ",\"debugShowLeftRight\":" + (state != null && state.DebugShowLeftRight).ToString().ToLowerInvariant()
+                + ",\"debugExaggerate\":" + (state != null && state.DebugExaggerate).ToString().ToLowerInvariant()
                 + ",\"blockedReason\":\"" + EscapeJsonString(state != null ? state.BlockedReason : "none") + "\""
                 + ",\"meshTriangles\":" + (state != null ? state.MeshTriangleCount : 0).ToString(CultureInfo.InvariantCulture)
                 + ",\"appliedTriangles\":" + (state != null ? state.MaskTriangleCount : 0).ToString(CultureInfo.InvariantCulture)

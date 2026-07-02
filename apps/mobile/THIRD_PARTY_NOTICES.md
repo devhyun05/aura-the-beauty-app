@@ -39,3 +39,15 @@ Notes:
 
 - Commercial app use is allowed under the MIT license.
 - Keep the copyright and permission notice with distributions that include derived icons.
+
+## otdnnc/virtual-makeup
+
+- Source: https://github.com/otdnnc/virtual-makeup
+- License: MIT, as declared by the upstream README.
+- Usage: Reference implementation consulted for the generated eyebrow mask approach.
+
+Notes:
+
+- No upstream source file is vendored in this app.
+- The referenced eyebrow flow uses MediaPipe face landmarks, polygon mask fill, blur, and weighted color compositing.
+- This app adapts that approach into the existing React Native + Unity generated brow mask path instead of using the web canvas implementation directly.
