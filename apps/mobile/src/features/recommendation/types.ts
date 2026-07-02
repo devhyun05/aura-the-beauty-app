@@ -69,3 +69,55 @@ export type ProductRecommendationData = {
   products: RecommendedProduct[];
   sets: ProductRecommendationSet[];
 };
+
+export type AuradinQuickPrompt = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+export type AuradinSourceCard = {
+  id: string;
+  title: string;
+  description: string;
+  tone: string;
+};
+
+export type AuradinThinkingStep = {
+  id: string;
+  label: string;
+  status: 'done' | 'active' | 'pending';
+};
+
+export type AuradinQuestionOption = {
+  id: string;
+  label: string;
+  swatch?: string;
+};
+
+export type AuradinQuestion = {
+  id: string;
+  title: string;
+  options: AuradinQuestionOption[];
+};
+
+export type AuradinCandidateProduct = {
+  id: string;
+  brandName: string;
+  productName: string;
+  shadeName: string;
+  priceText: string;
+  matchSummary: string;
+  palette: string[];
+  tags: string[];
+  imageSource: ImageSourcePropType;
+};
+
+export type AuradinDraftData = {
+  conditionChips: string[];
+  quickPrompts: AuradinQuickPrompt[];
+  sourceCards: AuradinSourceCard[];
+  thinkingSteps: AuradinThinkingStep[];
+  question: AuradinQuestion;
+  candidates: AuradinCandidateProduct[];
+};

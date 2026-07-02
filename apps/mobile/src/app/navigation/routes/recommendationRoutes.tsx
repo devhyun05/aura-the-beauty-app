@@ -1,7 +1,7 @@
 import React from 'react';
 
-import {MakeupToolsScreen} from '../../../features/home';
 import {
+  AuradinSearchScreen,
   LikedProductListScreen,
   MakeupLookListScreen,
   ProductRecommendationScreen,
@@ -14,7 +14,6 @@ import {
   MainTabChrome,
   navigateMainTab,
   type MainTabScreenProps,
-  type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
 

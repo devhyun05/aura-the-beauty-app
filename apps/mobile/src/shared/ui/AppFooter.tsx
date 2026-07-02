@@ -57,8 +57,8 @@ const footerItems: FooterTabItem[] = [
   },
   {
     key: 'custom',
-    label: '메이크업',
-    accessibilityLabel: '메이크업 도구 화면으로 이동',
+    label: '아우라딘',
+    accessibilityLabel: '아우라딘 화면으로 이동',
     icon: color => <BrushFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
 ];
