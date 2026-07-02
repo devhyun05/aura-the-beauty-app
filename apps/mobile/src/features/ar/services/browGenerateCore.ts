@@ -127,6 +127,7 @@ export type BrowRuntimeApplyPayload = {
 const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
+const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -264,6 +265,11 @@ export function buildGeneratedBrowMaskUnityPayload(
     includeTexture: boolean;
   },
 ): BrowRuntimeApplyPayload & Record<string, unknown> {
+  const runtimeIntensity = boostBrowRuntimeColorStrength(controls.intensity);
+  const runtimeOpacity = boostBrowRuntimeColorStrength(controls.opacity);
+  const runtimeStrandTextureAmount = boostBrowRuntimeColorStrength(
+    controls.strandTextureAmount,
+  );
   const payload: BrowRuntimeApplyPayload & Record<string, unknown> = {
     ...generatedPackage.runtimeApplyPayload,
     cleanupStrength: 0,
@@ -272,20 +278,20 @@ export function buildGeneratedBrowMaskUnityPayload(
     coverage: clamp01(controls.coverage),
     enabled: controls.enabled,
     finish: 'hair-stroke-brow',
-    intensity: clamp01(controls.intensity),
-    maskOpacity: clamp01(controls.opacity),
+    intensity: runtimeIntensity,
+    maskOpacity: runtimeOpacity,
     maskVisible: controls.enabled,
     neutralizeStrength: 0,
-    opacity: clamp01(controls.opacity),
+    opacity: runtimeOpacity,
     preserveDetail: true,
     sample: 'natural_brow',
     shapeId: controls.shapeId,
-    strandTextureAmount: clamp01(controls.strandTextureAmount),
+    strandTextureAmount: runtimeStrandTextureAmount,
     texture: 'natural_brow',
-    textureAmount: clamp01(controls.strandTextureAmount),
+    textureAmount: runtimeStrandTextureAmount,
     validationColor: controls.colorHex,
     validationColorHex: controls.colorHex,
-    validationOpacity: clamp01(controls.opacity),
+    validationOpacity: runtimeOpacity,
     validationVisible: controls.enabled,
     visible: controls.enabled,
   };
@@ -614,7 +620,7 @@ function buildBrowEnvelopes({
   rightUpperEyelid: E7Point2D[];
   shapeId: BrowShapeId;
 }): BrowEnvelope[] {
-  return [
+  const envelopes = [
     buildSingleBrowEnvelope({
       browAnchorPoints: leftBrowAnchors.length ? leftBrowAnchors : leftBrow,
       browPoints: leftBrow,
@@ -644,6 +650,62 @@ function buildBrowEnvelopes({
       upperEyelidPoints: rightUpperEyelid,
     }),
   ].filter((envelope): envelope is BrowEnvelope => envelope !== null);
+
+  return mirrorScreenRightBrowShapeToScreenLeft(envelopes);
+}
+
+function mirrorScreenRightBrowShapeToScreenLeft(
+  envelopes: BrowEnvelope[],
+): BrowEnvelope[] {
+  if (envelopes.length !== 2) {
+    return envelopes;
+  }
+
+  const [screenLeftEnvelope, screenRightEnvelope] = [...envelopes].sort(
+    (first, second) => envelopeCenterX(first) - envelopeCenterX(second),
+  );
+  const mirroredPolygon = mirrorPolygonIntoTargetBounds(
+    screenRightEnvelope.polygon,
+    screenRightEnvelope.fillBounds,
+    screenLeftEnvelope.fillBounds,
+  );
+  const mirroredFillBounds = bounds(mirroredPolygon) ?? screenLeftEnvelope.fillBounds;
+  const nextScreenLeftEnvelope: BrowEnvelope = {
+    ...screenLeftEnvelope,
+    fillBounds: mirroredFillBounds,
+    polygon: mirroredPolygon,
+  };
+
+  return envelopes.map(envelope =>
+    envelope === screenLeftEnvelope ? nextScreenLeftEnvelope : envelope,
+  );
+}
+
+function envelopeCenterX(envelope: BrowEnvelope): number {
+  const [minX, , maxX] = envelope.fillBounds;
+  return (minX + maxX) * 0.5;
+}
+
+function mirrorPolygonIntoTargetBounds(
+  sourcePolygon: readonly E7Point2D[],
+  sourceBounds: [number, number, number, number],
+  targetBounds: [number, number, number, number],
+): E7Point2D[] {
+  const [sourceMinX, sourceMinY, sourceMaxX, sourceMaxY] = sourceBounds;
+  const [targetMinX, targetMinY, targetMaxX, targetMaxY] = targetBounds;
+  const sourceWidth = Math.max(1, sourceMaxX - sourceMinX);
+  const sourceHeight = Math.max(1, sourceMaxY - sourceMinY);
+  const targetWidth = Math.max(1, targetMaxX - targetMinX);
+  const targetHeight = Math.max(1, targetMaxY - targetMinY);
+
+  return sourcePolygon.map(point => {
+    const sourceT = clamp01((point.x - sourceMinX) / sourceWidth);
+    const sourceV = clamp01((point.y - sourceMinY) / sourceHeight);
+    return {
+      x: targetMinX + (1 - sourceT) * targetWidth,
+      y: targetMinY + sourceV * targetHeight,
+    };
+  });
 }
 
 function buildSingleBrowEnvelope({
@@ -1659,4 +1721,8 @@ function clamp(value: number, min: number, max: number): number {
 
 function clamp01(value: number): number {
   return clamp(Number.isFinite(value) ? value : 0, 0, 1);
+}
+
+function boostBrowRuntimeColorStrength(value: number): number {
+  return clamp01(value * BROW_RUNTIME_COLOR_STRENGTH_GAIN);
 }
