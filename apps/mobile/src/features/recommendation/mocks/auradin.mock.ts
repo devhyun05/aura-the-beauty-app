@@ -5,14 +5,12 @@
 
 import type {ImageSourcePropType} from 'react-native';
 
+import {appAssetSource} from '../../../shared/config/mediaAssets';
 import type {AuradinDraftData} from '../types';
 
-const roseGlossTint =
-  require('../../../assets/images/products/laurelle-gloss-rose-veil.png') as ImageSourcePropType;
-const airyTint =
-  require('../../../assets/images/products/lunera-airy-tint-rose-mist.png') as ImageSourcePropType;
-const liquidBlush =
-  require('../../../assets/images/products/lunera-liquid-blush-peach-dusk.png') as ImageSourcePropType;
+const roseGlossTint = appAssetSource('images/products/laurelle-gloss-rose-veil.png') as ImageSourcePropType;
+const airyTint = appAssetSource('images/products/lunera-airy-tint-rose-mist.png') as ImageSourcePropType;
+const liquidBlush = appAssetSource('images/products/lunera-liquid-blush-peach-dusk.png') as ImageSourcePropType;
 
 export const auradinDraftMock: AuradinDraftData = {
   conditionChips: ['쿨톤', '글로시', '2만원 이하', '덜 진하게'],

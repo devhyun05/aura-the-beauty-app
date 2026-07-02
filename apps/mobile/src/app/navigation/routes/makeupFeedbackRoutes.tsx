@@ -112,30 +112,7 @@ export function MakeupFeedbackLoadingRouteScreen({
 }
 
 export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackResult'>) {
-  const {
-    makeupFeedbackResult,
-    setMakeupFeedbackResult,
-    setSelectedMakeupFeedbackPhoto,
-  } = useNavigationFlowState();
-
-  const handleRetake = React.useCallback(() => {
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource: 'camera'});
-    navigation.replace('MakeupFeedbackCapture');
-  }, [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
-
-  const handleUploadAgain = React.useCallback(() => {
-    setMakeupFeedbackResult(null);
-
-    if (makeupFeedbackResult?.photoSource === 'gallery') {
-      setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
-      navigation.replace('MakeupFeedbackAlbumUpload');
-      return;
-    }
-
-    setSelectedMakeupFeedbackPhoto({photoSource: 'camera'});
-    navigation.replace('MakeupFeedbackCapture');
-  }, [makeupFeedbackResult?.photoSource, navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
+  const {makeupFeedbackResult} = useNavigationFlowState();
 
   if (!makeupFeedbackResult) {
     return (
@@ -155,13 +132,7 @@ export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'M
     <DetailRouteChrome
       routeName="MakeupFeedbackResult"
       onBack={() => navigateMainTab(navigation, 'CustomTab')}>
-      <MakeupFeedbackResultScreen
-        onOpenGuide={() => navigation.navigate('MakeupCorrectionGuide')}
-        onOpenTip={point => navigation.navigate('MakeupCorrectionTip', {pointId: point.id})}
-        onRetake={handleRetake}
-        onUploadAgain={handleUploadAgain}
-        result={makeupFeedbackResult}
-      />
+      <MakeupFeedbackResultScreen result={makeupFeedbackResult} />
     </DetailRouteChrome>
   );
 }
