@@ -1,7 +1,9 @@
 import {
+  UNITY_MAKEUP_BRIDGE_TARGET,
   UNITY_MAKEUP_LAYER_ORDER,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
+  getUnityGeneratedMaskBridgeRoute,
   getUnityMakeupLayerRegionsForMakeupArea,
 } from './unityMakeupBridge';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
@@ -39,6 +41,40 @@ expectEqual(
   getUnityMakeupLayerRegionsForMakeupArea('eye').join(','),
   'eyeliner',
   'eye area alias',
+);
+
+const generatedLipRoute = getUnityGeneratedMaskBridgeRoute('lip');
+const generatedBrowRoute = getUnityGeneratedMaskBridgeRoute('brow');
+
+expectEqual(
+  generatedLipRoute.method,
+  UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+  'generated lip Unity method',
+);
+expectEqual(
+  generatedLipRoute.eventName,
+  'generated_lip_mask_apply',
+  'generated lip event name',
+);
+expectEqual(
+  generatedLipRoute.retryKeyPrefix,
+  'generated-lip-mask',
+  'generated lip retry prefix',
+);
+expectEqual(
+  generatedBrowRoute.method,
+  UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedBrowMaskMethod,
+  'generated brow Unity method',
+);
+expectEqual(
+  generatedBrowRoute.eventName,
+  'generated_brow_mask_apply',
+  'generated brow event name',
+);
+expectEqual(
+  generatedBrowRoute.retryKeyPrefix,
+  'generated-brow-mask',
+  'generated brow retry prefix',
 );
 
 const singleRegionRecipe = createUnityMakeupRecipeBatch('eyeliner', 1000);

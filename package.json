@@ -9,6 +9,7 @@
     "mobile:ios": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios",
     "mobile:ios:device": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios:device",
     "mobile:test:generated-brow": "npm --prefix apps/mobile run test:generated-brow",
+    "mobile:test:unity-bridge": "npm --prefix apps/mobile run test:unity-bridge",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {

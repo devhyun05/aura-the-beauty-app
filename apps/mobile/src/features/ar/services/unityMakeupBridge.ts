@@ -51,6 +51,15 @@ export type UnityMakeupLayer = FullFaceMakeupRecipeLayer;
 
 export type UnityMakeupRecipeBatch = FullFaceMakeupRecipe;
 
+export type UnityGeneratedMaskBridgeKind = 'lip' | 'brow';
+
+export type UnityGeneratedMaskBridgeRoute = {
+  eventName: 'generated_lip_mask_apply' | 'generated_brow_mask_apply';
+  method: typeof UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedBrowMaskMethod;
+  retryKeyPrefix: 'generated-lip-mask' | 'generated-brow-mask';
+};
+
 export type UnityMakeupARFilterSelection = {
   selectedColor: Pick<FilterColorOption, 'hex' | 'label'>;
   selectedColorId: string;
@@ -511,6 +520,24 @@ function extractGeneratedBrowMaskMetadata(payload: string): {
   }
 }
 
+export function getUnityGeneratedMaskBridgeRoute(
+  kind: UnityGeneratedMaskBridgeKind,
+): UnityGeneratedMaskBridgeRoute {
+  if (kind === 'brow') {
+    return {
+      eventName: 'generated_brow_mask_apply',
+      method: UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedBrowMaskMethod,
+      retryKeyPrefix: 'generated-brow-mask',
+    };
+  }
+
+  return {
+    eventName: 'generated_lip_mask_apply',
+    method: UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+    retryKeyPrefix: 'generated-lip-mask',
+  };
+}
+
 export function serializeUnityMakeupRecipeBatch(
   recipeBatch: UnityMakeupRecipeBatch,
 ): string {
@@ -949,17 +976,18 @@ export function postUnityGeneratedLipMaskPayload(payload: string): boolean {
   const nativeBridge = getNativeUnityMakeupBridge();
   const canUseBridge = isUnityMakeupFrameworkAvailable();
   const lipMaskMetadata = extractGeneratedLipMaskMetadata(payload);
+  const lipRoute = getUnityGeneratedMaskBridgeRoute('lip');
 
   if (nativeBridge?.postMessage && canUseBridge) {
     postNativeUnityMessageWithWarmupRetries(
       nativeBridge,
       payload,
-      UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+      lipRoute.method,
       {
-        eventName: 'generated_lip_mask_apply',
+        eventName: lipRoute.eventName,
         messageId: lipMaskMetadata.messageId,
         packageId: lipMaskMetadata.packageId,
-        retryKey: `generated-lip-mask:${lipMaskMetadata.messageId}`,
+        retryKey: `${lipRoute.retryKeyPrefix}:${lipMaskMetadata.messageId}`,
       },
     );
 
@@ -972,7 +1000,7 @@ export function postUnityGeneratedLipMaskPayload(payload: string): boolean {
     payloadBytes: payload.length,
     target: {
       gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
-      method: UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+      method: lipRoute.method,
     },
   });
 
@@ -983,17 +1011,18 @@ export function postUnityGeneratedBrowMaskPayload(payload: string): boolean {
   const nativeBridge = getNativeUnityMakeupBridge();
   const canUseBridge = isUnityMakeupFrameworkAvailable();
   const browMaskMetadata = extractGeneratedBrowMaskMetadata(payload);
+  const browRoute = getUnityGeneratedMaskBridgeRoute('brow');
 
   if (nativeBridge?.postMessage && canUseBridge) {
     postNativeUnityMessageWithWarmupRetries(
       nativeBridge,
       payload,
-      UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedBrowMaskMethod,
+      browRoute.method,
       {
-        eventName: 'generated_brow_mask_apply',
+        eventName: browRoute.eventName,
         messageId: browMaskMetadata.messageId,
         packageId: browMaskMetadata.packageId,
-        retryKey: `generated-brow-mask:${browMaskMetadata.messageId}`,
+        retryKey: `${browRoute.retryKeyPrefix}:${browMaskMetadata.messageId}`,
       },
     );
 
@@ -1006,7 +1035,7 @@ export function postUnityGeneratedBrowMaskPayload(payload: string): boolean {
     payloadBytes: payload.length,
     target: {
       gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
-      method: UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedBrowMaskMethod,
+      method: browRoute.method,
     },
   });
 
