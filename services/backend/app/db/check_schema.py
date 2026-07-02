@@ -5,6 +5,7 @@ import json
 import asyncpg
 
 from app.core.settings import get_settings
+from app.db.connection_config import DatabaseConfigurationError, connect_database
 from app.db.init_db import SCHEMA_VERSION
 from app.db.seed_db import SEED_VERSION
 
@@ -82,10 +83,13 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
   settings = get_settings()
   dsn = database_url or settings.database_url
 
-  if not dsn:
-    raise RuntimeError("DATABASE_URL is required to check the schema.")
-
-  connection = await asyncpg.connect(dsn=dsn)
+  if dsn:
+    connection = await asyncpg.connect(dsn=dsn)
+  else:
+    try:
+      connection, _ = await connect_database(settings)
+    except DatabaseConfigurationError as error:
+      raise RuntimeError("DATABASE_URL or DATABASE_SECRET_ID is required to check the schema.") from error
 
   try:
     table_names = await fetch_table_names(connection)

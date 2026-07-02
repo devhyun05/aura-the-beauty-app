@@ -6,7 +6,7 @@ import {
   MakeupLookListScreen,
   ProductRecommendationScreen,
 } from '../../../features/recommendation';
-import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {getRecommendedFilterRouteParams, MakeupToolsScreen} from '../../../features/home';
 import {getLikedMakeupFilterLooks} from '../../../shared/services/makeupGuideService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -14,6 +14,7 @@ import {
   MainTabChrome,
   navigateMainTab,
   type MainTabScreenProps,
+  type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
 

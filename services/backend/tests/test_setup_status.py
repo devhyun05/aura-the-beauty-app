@@ -19,6 +19,17 @@ def test_local_setup_status_passes_with_database_url() -> None:
   assert report["missing"] == []
 
 
+def test_local_setup_status_passes_with_database_secret_id() -> None:
+  report = build_setup_report(
+    Settings(database_secret_id="rds-secret", db_host="db.example.com", db_name="postgres"),
+    profile="local",
+  )
+
+  assert report["ok"] is True
+  assert report["missing"] == []
+  assert report["items"]["databaseUrl"]["source"] == "secrets_manager"
+
+
 def test_aws_setup_status_requires_deployment_values() -> None:
   report = build_setup_report(
     Settings(database_url="postgresql://user:pass@db:5432/app"),

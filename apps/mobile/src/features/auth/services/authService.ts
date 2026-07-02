@@ -260,8 +260,17 @@ export async function loginWithSocialProvider(
   };
 
   console.info('[aura:auth] backend:sync:start', {provider});
-  const syncedSession = await syncAuthSessionWithBackend(session);
-  console.info('[aura:auth] backend:sync:success', {provider});
 
-  return syncedSession;
+  try {
+    const syncedSession = await syncAuthSessionWithBackend(session);
+    console.info('[aura:auth] backend:sync:success', {provider});
+    return syncedSession;
+  } catch (error) {
+    console.info('[aura:auth] backend:sync:failed', {
+      message: error instanceof Error ? error.message : String(error),
+      provider,
+    });
+
+    return session;
+  }
 }
