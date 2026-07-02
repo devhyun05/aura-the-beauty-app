@@ -1,0 +1,12 @@
+metric,count,rate
+rows,283,1.0000
+collected_complete,45,0.1590
+collected_partial,46,0.1625
+failed,192,0.6784
+with_product_name,283,1.0000
+with_finish,84,0.2968
+with_texture,209,0.7385
+with_shade_options,46,0.1625
+with_oliveyoung_listed,120,0.4240
+catalog_items,472,0.0000
+embedding_documents,1900,0.0000

@@ -1,0 +1,126 @@
+{
+  "responses": [
+    {
+      "query": "롬앤 립틴트",
+      "category": "lip",
+      "items": [
+        {
+          "title": "<b>롬앤</b> 글래스팅 워터 틴트 05 로즈 스플래쉬",
+          "link": "https://search.shopping.naver.com/catalog/100000001",
+          "image": "https://shopping-phinf.pstatic.net/main_100000001/100000001.jpg",
+          "productId": "100000001",
+          "lprice": "9900",
+          "brand": "롬앤",
+          "maker": "아이패밀리에스씨",
+          "mallName": "공식스토어",
+          "category1": "화장품/미용",
+          "category2": "색조메이크업",
+          "category3": "립틴트",
+          "category4": ""
+        },
+        {
+          "title": "롬앤 립틴트 05 로즈 스플래쉬 기획세트",
+          "link": "https://search.shopping.naver.com/catalog/100000001",
+          "image": "https://shopping-phinf.pstatic.net/main_100000001/100000001.jpg",
+          "productId": "100000001",
+          "lprice": "9900",
+          "brand": "rom&nd",
+          "maker": "아이패밀리에스씨",
+          "mallName": "공식스토어",
+          "category1": "화장품/미용",
+          "category2": "색조메이크업",
+          "category3": "립틴트",
+          "category4": ""
+        },
+        {
+          "title": "롬앤 로고 티셔츠",
+          "link": "https://example.com/fashion",
+          "image": "https://example.com/fashion.jpg",
+          "productId": "100000099",
+          "lprice": "19900",
+          "brand": "롬앤",
+          "maker": "",
+          "mallName": "패션몰",
+          "category1": "패션의류",
+          "category2": "여성의류",
+          "category3": "티셔츠",
+          "category4": ""
+        }
+      ]
+    },
+    {
+      "query": "데이지크 섀도우 팔레트",
+      "category": "shadow",
+      "items": [
+        {
+          "title": "데이지크 섀도우 팔레트 누드포션",
+          "link": "https://search.shopping.naver.com/catalog/100000002",
+          "image": "https://shopping-phinf.pstatic.net/main_100000002/100000002.jpg",
+          "productId": "100000002",
+          "lprice": "24000",
+          "brand": "dasique",
+          "maker": "데이지크",
+          "mallName": "브랜드공식",
+          "category1": "화장품/미용",
+          "category2": "색조메이크업",
+          "category3": "아이섀도우",
+          "category4": "팔레트"
+        },
+        {
+          "title": "미등록 브랜드 섀도우 팔레트",
+          "link": "https://search.shopping.naver.com/catalog/100000003",
+          "image": "https://shopping-phinf.pstatic.net/main_100000003/100000003.jpg",
+          "productId": "100000003",
+          "lprice": "12000",
+          "brand": "unknown",
+          "maker": "unknown",
+          "mallName": "오픈마켓",
+          "category1": "화장품/미용",
+          "category2": "색조메이크업",
+          "category3": "아이섀도우",
+          "category4": ""
+        }
+      ]
+    },
+    {
+      "query": "클리오 쿠션",
+      "category": "base",
+      "items": [
+        {
+          "title": "클리오 킬커버 메쉬 글로우 쿠션 03 리넨",
+          "link": "https://search.shopping.naver.com/catalog/100000004",
+          "image": "https://shopping-phinf.pstatic.net/main_100000004/100000004.jpg",
+          "productId": "100000004",
+          "lprice": "18900",
+          "brand": "CLIO",
+          "maker": "클리오",
+          "mallName": "네이버플러스스토어",
+          "category1": "화장품/미용",
+          "category2": "베이스메이크업",
+          "category3": "쿠션",
+          "category4": ""
+        }
+      ]
+    },
+    {
+      "query": "라카 블러셔",
+      "category": "cheek",
+      "items": [
+        {
+          "title": "라카 러브 실크 블러셔 피치",
+          "link": "https://search.shopping.naver.com/catalog/100000005",
+          "image": "https://shopping-phinf.pstatic.net/main_100000005/100000005.jpg",
+          "productId": "100000005",
+          "lprice": "16000",
+          "brand": "laka",
+          "maker": "라카",
+          "mallName": "브랜드스토어",
+          "category1": "화장품/미용",
+          "category2": "색조메이크업",
+          "category3": "블러셔",
+          "category4": ""
+        }
+      ]
+    }
+  ]
+}
