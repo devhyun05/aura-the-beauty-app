@@ -147,6 +147,7 @@ export function HomeScreen({
               onPressConsulting={onPressConsulting}
               onPressCommunity={onPressCommunity}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
+              onPressMakeupExtraction={onPressMakeupExtraction}
               onPressProductRecommendations={onPressProductRecommendations}
             />
 
