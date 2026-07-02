@@ -174,6 +174,13 @@ type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
 type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
 type CompanionRegionKey = Exclude<keyof PersonalizedCompanionMakeupControls, 'eyeliner'>;
 type EnabledHudRegions = Record<ArBlushHudRegion, boolean>;
+type RuntimeMakeupSnapshot = {
+  activeHudRegion: ArBlushHudRegion;
+  companionMakeupControls: PersonalizedCompanionMakeupControls;
+  enabledHudRegions: EnabledHudRegions;
+  generatedBrowControls: GeneratedBrowControls;
+  generatedMaskControls: GeneratedMaskControls;
+};
 
 const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
   cheek: false,
@@ -214,6 +221,7 @@ export function UnityMakeupCaptureScreen({
   const latestGeneratedBrowApplyPayloadRef = useRef<string | null>(null);
   const generatedMaskControlRevisionRef = useRef(0);
   const generatedBrowControlRevisionRef = useRef(0);
+  const captureRestoreSnapshotRef = useRef<RuntimeMakeupSnapshot | null>(null);
   const preparePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -344,13 +352,37 @@ export function UnityMakeupCaptureScreen({
       const result = await generatePersonalizedLipMakeup({
         sourceFrameMetadata: nextSourceFrameMetadata,
       });
+      const restoreSnapshot = captureRestoreSnapshotRef.current;
+      captureRestoreSnapshotRef.current = null;
+      const nextGeneratedMaskControls =
+        restoreSnapshot?.generatedMaskControls ?? DEFAULT_GENERATED_MASK_CONTROLS;
+      const nextGeneratedBrowControls =
+        restoreSnapshot?.generatedBrowControls ?? DEFAULT_GENERATED_BROW_CONTROLS;
+      const nextCompanionMakeupControls =
+        restoreSnapshot?.companionMakeupControls ??
+        DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS;
+      const nextEnabledHudRegions =
+        restoreSnapshot?.enabledHudRegions ?? INITIAL_ENABLED_HUD_REGIONS;
+      const nextActiveHudRegion = restoreSnapshot?.activeHudRegion ?? 'lip';
+      const initialLipControls = nextEnabledHudRegions.lip
+        ? clampGeneratedMaskControls({
+            ...nextGeneratedMaskControls,
+            maskVisible: true,
+          })
+        : INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS;
+      const initialBrowControls = nextEnabledHudRegions.eyebrow
+        ? clampGeneratedBrowControls({
+            ...nextGeneratedBrowControls,
+            enabled: true,
+          })
+        : INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS;
 
       pendingGeneratedMaskIdRef.current = result.generatedPackage.generatedMaskId;
       pendingGeneratedBrowMaskIdRef.current = result.generatedBrowPackage.generatedMaskId;
       const unityApplyPayload = JSON.stringify(
         buildGeneratedMaskUnityPayload(
           result.generatedPackage,
-          INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS,
+          initialLipControls,
           {
             includeTexture: true,
           },
@@ -359,7 +391,7 @@ export function UnityMakeupCaptureScreen({
       const browUnityApplyPayload = JSON.stringify(
         buildGeneratedBrowMaskUnityPayload(
           result.generatedBrowPackage,
-          INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS,
+          initialBrowControls,
           {
             includeTexture: true,
           },
@@ -369,11 +401,11 @@ export function UnityMakeupCaptureScreen({
       latestGeneratedBrowApplyPayloadRef.current = browUnityApplyPayload;
       setGeneratedPackage(result.generatedPackage);
       setGeneratedBrowPackage(result.generatedBrowPackage);
-      setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
-      setGeneratedBrowControls(DEFAULT_GENERATED_BROW_CONTROLS);
-      setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
-      setActiveHudRegion('lip');
-      setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
+      setGeneratedMaskControls(nextGeneratedMaskControls);
+      setGeneratedBrowControls(nextGeneratedBrowControls);
+      setCompanionMakeupControls(nextCompanionMakeupControls);
+      setActiveHudRegion(nextActiveHudRegion);
+      setEnabledHudRegions(nextEnabledHudRegions);
       setPhase('applying');
       setNotice('개인 마스크를 화면에 등록하는 중입니다');
 
@@ -388,11 +420,15 @@ export function UnityMakeupCaptureScreen({
       postUnityMakeupRecipe(
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
-          DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
-          {activeRegion: 'none', includeBrowLayer: false},
+          nextCompanionMakeupControls,
+          {
+            activeRegion: getCompanionActiveRegion(nextEnabledHudRegions),
+            includeBrowLayer: false,
+          },
         ),
       );
     } catch (error) {
+      captureRestoreSnapshotRef.current = null;
       setPhase('error');
       setNotice(
         error instanceof Error
@@ -500,6 +536,17 @@ export function UnityMakeupCaptureScreen({
     const captureRequest = buildUnitySynchronizedCaptureRequest({
       requestedAtMs: Date.now(),
     });
+    const shouldRestoreRuntimeMakeup =
+      phase === 'applied' || Boolean(generatedPackage) || Boolean(generatedBrowPackage);
+    captureRestoreSnapshotRef.current = shouldRestoreRuntimeMakeup
+      ? {
+          activeHudRegion,
+          companionMakeupControls,
+          enabledHudRegions,
+          generatedBrowControls,
+          generatedMaskControls,
+        }
+      : null;
 
     pendingCaptureRequestRef.current = captureRequest;
     pendingGeneratedMaskIdRef.current = null;
@@ -619,6 +666,35 @@ export function UnityMakeupCaptureScreen({
 
   const handleChangeActiveHudRegion = (region: ArBlushHudRegion) => {
     setActiveHudRegion(region);
+
+    if (region !== 'eyebrow' || !generatedBrowPackage) {
+      return;
+    }
+
+    const wasEyebrowEnabled = enabledHudRegions.eyebrow;
+    const nextGeneratedBrowControls = clampGeneratedBrowControls({
+      ...generatedBrowControls,
+      enabled: true,
+    });
+    const nextEnabledRegions = {
+      ...enabledHudRegions,
+      eyebrow: true,
+    };
+
+    if (!wasEyebrowEnabled || !generatedBrowControls.enabled) {
+      generatedBrowControlRevisionRef.current += 1;
+      setGeneratedBrowControls(nextGeneratedBrowControls);
+      setEnabledHudRegions(nextEnabledRegions);
+      postRuntimeMakeup(
+        generatedMaskControls,
+        companionMakeupControls,
+        nextGeneratedBrowControls,
+        nextEnabledRegions,
+        {
+          includeBrowTexture: true,
+        },
+      );
+    }
   };
 
   const handleDisableHudRegion = (region: ArBlushHudRegion) => {
