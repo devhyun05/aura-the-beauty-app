@@ -24,7 +24,10 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
 
-import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
+import {
+  getRecommendedMakeupFilters,
+  getRecommendedMakeupFiltersFromApi,
+} from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
@@ -65,7 +68,8 @@ export function HomeScreen({
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
-  const recommendedMakeupFilters = useMemo(() => getRecommendedMakeupFilters(), []);
+  const [recommendedMakeupFilters, setRecommendedMakeupFilters] =
+    useState<readonly RecommendedMakeupFilter[]>(() => getRecommendedMakeupFilters());
   const visibleRecommendedFilters = useMemo(
     () => filterRecommendedMakeupFiltersByHomeCategory(
       recommendedMakeupFilters,
@@ -101,6 +105,20 @@ export function HomeScreen({
     getHomeData().then((data) => {
       if (isMounted) {
         setHomeData(data);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getRecommendedMakeupFiltersFromApi().then((filters) => {
+      if (isMounted) {
+        setRecommendedMakeupFilters(filters);
       }
     });
 

@@ -89,6 +89,12 @@ const GENERATED_MASK_VALIDATION_COLORS = [
   {name: '레드', color: '#CF1838', secondaryColor: '#F05C70'},
   {name: '연핑크', color: '#F1CBD5', secondaryColor: '#F8DEE5'},
 ] as const;
+const GENERATED_BROW_VALIDATION_COLORS = [
+  {name: '블랙', color: '#17120F', secondaryColor: '#302721'},
+  {name: '브라운', color: '#4A342B', secondaryColor: '#6A4A3B'},
+  {name: '라이트브라운', color: '#8A5A3D', secondaryColor: '#B07A52'},
+  {name: '와인', color: '#5A2432', secondaryColor: '#7F3448'},
+] as const;
 const INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
   ...DEFAULT_GENERATED_MASK_CONTROLS,
   intensity: 0,
@@ -280,6 +286,7 @@ export function UnityMakeupCaptureScreen({
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
         activeRegion: 'none',
+        includeBrowLayer: false,
       }),
     );
     postUnityRegionOverlayVisibility({
@@ -382,7 +389,7 @@ export function UnityMakeupCaptureScreen({
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
           DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
-          {activeRegion: 'none'},
+          {activeRegion: 'none', includeBrowLayer: false},
         ),
       );
     } catch (error) {
@@ -439,6 +446,7 @@ export function UnityMakeupCaptureScreen({
         postUnityMakeupRecipe(
           buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
             activeRegion: 'none',
+            includeBrowLayer: false,
           }),
         );
       }, 800);
@@ -510,6 +518,7 @@ export function UnityMakeupCaptureScreen({
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
         activeRegion: 'none',
+        includeBrowLayer: false,
       }),
     );
     postUnityRegionOverlayVisibility({
@@ -573,6 +582,12 @@ export function UnityMakeupCaptureScreen({
       companionMakeupControls,
       nextControls,
       nextEnabledRegions,
+      {
+        includeBrowTexture:
+          !enabledHudRegions.eyebrow ||
+          patch.colorHex !== undefined ||
+          patch.shapeId !== undefined,
+      },
     );
   };
 
@@ -654,6 +669,9 @@ export function UnityMakeupCaptureScreen({
     nextCompanionControls: PersonalizedCompanionMakeupControls,
     nextGeneratedBrowControls: GeneratedBrowControls,
     nextEnabledRegions: EnabledHudRegions,
+    options: {
+      includeBrowTexture?: boolean;
+    } = {},
   ) {
     if (!generatedPackage) {
       return;
@@ -680,7 +698,7 @@ export function UnityMakeupCaptureScreen({
       const browPayload = JSON.stringify(
         buildGeneratedBrowMaskUnityPayload(generatedBrowPackage, browControls, {
           controlRevision: generatedBrowControlRevisionRef.current,
-          includeTexture: false,
+          includeTexture: options.includeBrowTexture === true,
         }),
       );
       latestGeneratedBrowApplyPayloadRef.current = browPayload;
@@ -689,6 +707,7 @@ export function UnityMakeupCaptureScreen({
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), nextCompanionControls, {
         activeRegion: getCompanionActiveRegion(nextEnabledRegions),
+        includeBrowLayer: false,
       }),
     );
   };
@@ -954,8 +973,16 @@ function ArBlushRuntimeHud({
     browControls,
   );
   const isActiveRegionEnabled = enabledRegions[activeRegion];
+  const colorOptions =
+    activeRegion === 'eyebrow'
+      ? GENERATED_BROW_VALIDATION_COLORS
+      : GENERATED_MASK_VALIDATION_COLORS;
 
-  const handleColorPress = (color: (typeof GENERATED_MASK_VALIDATION_COLORS)[number]) => {
+  const handleColorPress = (
+    color:
+      | (typeof GENERATED_MASK_VALIDATION_COLORS)[number]
+      | (typeof GENERATED_BROW_VALIDATION_COLORS)[number],
+  ) => {
     if (activeRegion === 'lip') {
       onChangeControls({
         colorHex: color.color,
@@ -1101,7 +1128,7 @@ function ArBlushRuntimeHud({
               선택 안함
             </Text>
           </Pressable>
-          {GENERATED_MASK_VALIDATION_COLORS.map(color => (
+          {colorOptions.map(color => (
             <Pressable
               accessibilityRole="button"
               accessibilityState={{
@@ -1158,18 +1185,6 @@ function ArBlushRuntimeHud({
               label="결"
               onChange={value => onChangeBrowControls({strandTextureAmount: value})}
               value={browControls.strandTextureAmount}
-            />
-            <HudSliderControl
-              colorHex={activeValues.colorHex}
-              label="정리"
-              onChange={value => onChangeBrowControls({cleanupStrength: value})}
-              value={browControls.cleanupStrength}
-            />
-            <HudSliderControl
-              colorHex={activeValues.colorHex}
-              label="톤 리프트"
-              onChange={value => onChangeBrowControls({neutralizeStrength: value})}
-              value={browControls.neutralizeStrength}
             />
           </>
         ) : null}
@@ -1490,7 +1505,9 @@ function getHudRegionValues(
 
 function getColorName(colorHex: string): string {
   return (
-    GENERATED_MASK_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ?? '사용자 지정'
+    GENERATED_MASK_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ??
+    GENERATED_BROW_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ??
+    '사용자 지정'
   );
 }
 
@@ -1567,10 +1584,10 @@ function clampGeneratedBrowControls(
 ): GeneratedBrowControls {
   return {
     ...controls,
-    cleanupStrength: Math.max(0, Math.min(1, controls.cleanupStrength)),
+    cleanupStrength: 0,
     coverage: Math.max(0, Math.min(1, controls.coverage)),
     intensity: Math.max(0, Math.min(1, controls.intensity)),
-    neutralizeStrength: Math.max(0, Math.min(1, controls.neutralizeStrength)),
+    neutralizeStrength: 0,
     opacity: Math.max(0, Math.min(1, controls.opacity)),
     strandTextureAmount: Math.max(0, Math.min(1, controls.strandTextureAmount)),
   };

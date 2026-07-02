@@ -1707,7 +1707,7 @@ public sealed class RNBridge : MonoBehaviour
         float effectiveOpacity = validationVisible ? validationOpacity : 0.0f;
         float strandTextureAmount = ResolveGeneratedBrowPositive01(
             payload.strandTextureAmount,
-            ResolveGeneratedBrowPositive01(payload.textureAmount, 0.58f));
+            ResolveGeneratedBrowPositive01(payload.textureAmount, 0.72f));
         string textureSample = ResolveGeneratedBrowTextureSample(payload);
         string finish = ResolveGeneratedBrowFinish(payload, textureSample);
 
@@ -1741,13 +1741,13 @@ public sealed class RNBridge : MonoBehaviour
             Coverage = ResolveGeneratedBrowPositive01(payload.coverage, 0.90f),
             Finish = finish,
             TextureAmount = strandTextureAmount,
-            GradientAmount = ResolveGeneratedBrowPositive01(payload.cleanupStrength, 0.28f),
+            GradientAmount = ResolveGeneratedBrowPositive01(payload.cleanupStrength, 0.0f),
             Roughness = ResolveGeneratedBrowPositive01(payload.roughness, 0.36f),
             Specular = ResolveGeneratedBrowPositive01(payload.specular, 0.03f),
             SpecularPower = payload.specularPower > 0.0f
                 ? Mathf.Clamp(payload.specularPower, 1.0f, 128.0f)
                 : 10.0f,
-            GlossBoost = ResolveGeneratedBrowPositive01(payload.neutralizeStrength, 0.18f),
+            GlossBoost = ResolveGeneratedBrowPositive01(payload.neutralizeStrength, 0.0f),
             Shimmer = 0.0f,
             ShimmerColor = "#FFFFFF",
             SkinAdaptive = false,
@@ -2122,11 +2122,15 @@ public sealed class RNBridge : MonoBehaviour
 
         bool ready = IsGeneratedBrowMaskRuntimeReady(result);
         string blockedReason = BuildGeneratedBrowMaskApplyBlockedReason(layer, result);
+        bool disabledByPayload = !layer.Enabled;
         float pendingAgeSeconds = nowSeconds - pendingGeneratedBrowMaskApply.ReceivedAtSeconds;
-        string status = ready
+        string status = disabledByPayload
+            ? "disabled"
+            : ready
             ? "ready"
             : (pendingAgeSeconds >= GeneratedBrowMaskBlockedAfterSeconds ? "blocked" : "queued");
         bool shouldAck = forceAck
+            || disabledByPayload
             || ready
             || pendingGeneratedBrowMaskApply.AttemptCount == 1
             || nowSeconds - pendingGeneratedBrowMaskApply.LastAckAtSeconds >= GeneratedBrowMaskAckIntervalSeconds;
@@ -2169,7 +2173,7 @@ public sealed class RNBridge : MonoBehaviour
             pendingGeneratedBrowMaskApply.AttemptCount,
             trigger);
 
-        if (ready)
+        if (ready || disabledByPayload)
         {
             pendingGeneratedBrowMaskApply = null;
         }

@@ -63,6 +63,8 @@ export type E7NativeBoundaryResult = {
 };
 
 export type E7NativeFaceLandmarkRegion = {
+  corePointCount?: number;
+  generationMethod?: string;
   imagePoints?: E7Point2D[];
   indices?: number[];
   pointCount?: number;

@@ -34,6 +34,7 @@ export type BrowEnvelope = {
   };
   cleanupPolygon: E7Point2D[];
   eyeExclusionBounds: [number, number, number, number];
+  fillBounds: [number, number, number, number];
   polygon: E7Point2D[];
   side: 'left' | 'right';
 };
@@ -125,18 +126,19 @@ export type BrowRuntimeApplyPayload = {
 
 const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
+const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
-  cleanupStrength: 0.28,
+  cleanupStrength: 0,
   colorHex: '#4A342B',
   coverage: 0.9,
   enabled: false,
   intensity: 0.72,
-  neutralizeStrength: 0.18,
+  neutralizeStrength: 0,
   opacity: 0.72,
   shapeId: 'soft-arch',
-  strandTextureAmount: 0.58,
+  strandTextureAmount: 0.72,
 };
 
 export function buildGeneratedBrowPackage({
@@ -155,13 +157,17 @@ export function buildGeneratedBrowPackage({
   const envelopes = buildBrowEnvelopes({
     frameHeight: nativeResult.frameHeight,
     frameWidth: nativeResult.frameWidth,
-    leftBrow: regions.leftBrow,
+    leftBrow: regions.leftBrowCore,
+    leftBrowAnchors: regions.leftBrow,
+    leftBrowShapeBase: regions.leftBrowShapeBase,
     leftEye: regions.leftEye,
     leftTemple: regions.leftTemple,
     leftUpperEyelid: regions.leftUpperEyelid,
     faceOval: regions.faceOval,
     noseBridge: regions.noseBridge,
-    rightBrow: regions.rightBrow,
+    rightBrow: regions.rightBrowCore,
+    rightBrowAnchors: regions.rightBrow,
+    rightBrowShapeBase: regions.rightBrowShapeBase,
     rightEye: regions.rightEye,
     rightTemple: regions.rightTemple,
     rightUpperEyelid: regions.rightUpperEyelid,
@@ -239,7 +245,7 @@ export function buildGeneratedBrowPackage({
       'brow_envelope_mask_not_follicle_segmentation',
       'eye_exclusion_zone_applied',
       'surround_anchor_eye_temple_face_direction_applied',
-      'neutralize_strength_is_runtime_metadata_for_tone_lift',
+      'generated_brow_is_color_and_hair_overlay_without_existing_brow_removal',
     ],
     createdAt: new Date().toISOString(),
     privacyFlags: {
@@ -260,7 +266,7 @@ export function buildGeneratedBrowMaskUnityPayload(
 ): BrowRuntimeApplyPayload & Record<string, unknown> {
   const payload: BrowRuntimeApplyPayload & Record<string, unknown> = {
     ...generatedPackage.runtimeApplyPayload,
-    cleanupStrength: clamp01(controls.cleanupStrength),
+    cleanupStrength: 0,
     color: controls.colorHex,
     colorHex: controls.colorHex,
     coverage: clamp01(controls.coverage),
@@ -269,7 +275,7 @@ export function buildGeneratedBrowMaskUnityPayload(
     intensity: clamp01(controls.intensity),
     maskOpacity: clamp01(controls.opacity),
     maskVisible: controls.enabled,
-    neutralizeStrength: clamp01(controls.neutralizeStrength),
+    neutralizeStrength: 0,
     opacity: clamp01(controls.opacity),
     preserveDetail: true,
     sample: 'natural_brow',
@@ -343,8 +349,8 @@ function buildBrowRuntimeApplyPayload({
     strandTextureAmount: clamp01(controls.strandTextureAmount),
     surroundAnchorPointCount: anchorSummary.surroundAnchorPointCount,
     templeAnchorPointCount: anchorSummary.templeAnchorPointCount,
-    cleanupStrength: clamp01(controls.cleanupStrength),
-    neutralizeStrength: clamp01(controls.neutralizeStrength),
+    cleanupStrength: 0,
+    neutralizeStrength: 0,
     upperEyelidAnchorPointCount: anchorSummary.upperEyelidAnchorPointCount,
     texture: 'natural_brow',
     finish: 'hair-stroke-brow',
@@ -457,8 +463,10 @@ function buildBrowUvMaskRawRgba({
 
             cleanupSamples += 1;
             if (pointInPolygon(screenPoint, envelope.polygon)) {
-              desiredSamples += 1;
-              strandSamples += browStrandDensity(screenPoint, envelope.side, controls);
+              const fillDensity = browFillDensity(screenPoint, envelope);
+              desiredSamples += fillDensity;
+              strandSamples +=
+                browStrandDensity(screenPoint, envelope, controls) * fillDensity;
             }
           }
         }
@@ -474,18 +482,15 @@ function buildBrowUvMaskRawRgba({
         const desiredAlpha = Math.round(
           (desiredSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) * 255,
         );
-        const cleanupAlpha = Math.round(
-          (cleanupSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) * 255,
-        );
         const strand = Math.round(
           clamp01(desiredSamples > 0 ? strandSamples / desiredSamples : 0) *
             255 *
             clamp01(controls.strandTextureAmount),
         );
-        raw[rawIndex] = cleanupAlpha;
+        raw[rawIndex] = 0;
         raw[rawIndex + 1] = desiredAlpha;
-        raw[rawIndex + 2] = Math.max(desiredAlpha, strand);
-        raw[rawIndex + 3] = cleanupAlpha;
+        raw[rawIndex + 2] = strand;
+        raw[rawIndex + 3] = desiredAlpha;
       }
     }
   }
@@ -530,7 +535,15 @@ function getBrowLandmarkRegions(nativeResult: E7NativeBoundaryResult) {
 
   return {
     faceOval: normalizeLandmarkRegion(regions.faceOval ?? regions.faceContour),
-    leftBrow: normalizeLandmarkRegion(regions.leftEyebrow),
+    leftBrow: normalizeLandmarkRegion(
+      regions.leftEyebrowSurroundAnchors ?? regions.leftEyebrow,
+    ),
+    leftBrowCore: normalizeLandmarkRegion(
+      regions.leftEyebrowAppearance ?? regions.leftEyebrowCore ?? regions.leftEyebrow,
+    ),
+    leftBrowShapeBase: normalizeLandmarkRegion(
+      regions.leftEyebrowCore ?? regions.leftEyebrow,
+    ),
     leftEye: normalizeLandmarkRegion(regions.leftEye),
     leftTemple: normalizeLandmarkRegion(regions.leftTemple),
     leftUpperEyelid: normalizeLandmarkRegion(
@@ -539,7 +552,15 @@ function getBrowLandmarkRegions(nativeResult: E7NativeBoundaryResult) {
     noseBridge: normalizeLandmarkRegion(
       regions.noseBridge ?? regions.noseCrest ?? regions.medianLine ?? regions.nose,
     ),
-    rightBrow: normalizeLandmarkRegion(regions.rightEyebrow),
+    rightBrow: normalizeLandmarkRegion(
+      regions.rightEyebrowSurroundAnchors ?? regions.rightEyebrow,
+    ),
+    rightBrowCore: normalizeLandmarkRegion(
+      regions.rightEyebrowAppearance ?? regions.rightEyebrowCore ?? regions.rightEyebrow,
+    ),
+    rightBrowShapeBase: normalizeLandmarkRegion(
+      regions.rightEyebrowCore ?? regions.rightEyebrow,
+    ),
     rightEye: normalizeLandmarkRegion(regions.rightEye),
     rightTemple: normalizeLandmarkRegion(regions.rightTemple),
     rightUpperEyelid: normalizeLandmarkRegion(
@@ -560,12 +581,16 @@ function buildBrowEnvelopes({
   frameHeight,
   frameWidth,
   leftBrow,
+  leftBrowAnchors,
+  leftBrowShapeBase,
   leftEye,
   leftTemple,
   leftUpperEyelid,
   faceOval,
   noseBridge,
   rightBrow,
+  rightBrowAnchors,
+  rightBrowShapeBase,
   rightEye,
   rightTemple,
   rightUpperEyelid,
@@ -575,11 +600,15 @@ function buildBrowEnvelopes({
   frameWidth: number;
   faceOval: E7Point2D[];
   leftBrow: E7Point2D[];
+  leftBrowAnchors: E7Point2D[];
+  leftBrowShapeBase: E7Point2D[];
   leftEye: E7Point2D[];
   leftTemple: E7Point2D[];
   leftUpperEyelid: E7Point2D[];
   noseBridge: E7Point2D[];
   rightBrow: E7Point2D[];
+  rightBrowAnchors: E7Point2D[];
+  rightBrowShapeBase: E7Point2D[];
   rightEye: E7Point2D[];
   rightTemple: E7Point2D[];
   rightUpperEyelid: E7Point2D[];
@@ -587,7 +616,9 @@ function buildBrowEnvelopes({
 }): BrowEnvelope[] {
   return [
     buildSingleBrowEnvelope({
+      browAnchorPoints: leftBrowAnchors.length ? leftBrowAnchors : leftBrow,
       browPoints: leftBrow,
+      browShapeBasePoints: leftBrowShapeBase,
       eyePoints: leftEye,
       faceOvalPoints: faceOval,
       frameHeight,
@@ -599,7 +630,9 @@ function buildBrowEnvelopes({
       upperEyelidPoints: leftUpperEyelid,
     }),
     buildSingleBrowEnvelope({
+      browAnchorPoints: rightBrowAnchors.length ? rightBrowAnchors : rightBrow,
       browPoints: rightBrow,
+      browShapeBasePoints: rightBrowShapeBase,
       eyePoints: rightEye,
       faceOvalPoints: faceOval,
       frameHeight,
@@ -614,7 +647,9 @@ function buildBrowEnvelopes({
 }
 
 function buildSingleBrowEnvelope({
+  browAnchorPoints,
   browPoints,
+  browShapeBasePoints,
   eyePoints,
   faceOvalPoints,
   frameHeight,
@@ -625,7 +660,9 @@ function buildSingleBrowEnvelope({
   templePoints,
   upperEyelidPoints,
 }: {
+  browAnchorPoints: E7Point2D[];
   browPoints: E7Point2D[];
+  browShapeBasePoints: E7Point2D[];
   eyePoints: E7Point2D[];
   faceOvalPoints: E7Point2D[];
   frameHeight: number;
@@ -636,7 +673,8 @@ function buildSingleBrowEnvelope({
   templePoints: E7Point2D[];
   upperEyelidPoints: E7Point2D[];
 }): BrowEnvelope | null {
-  const browBounds = bounds(browPoints);
+  const shapeBasePoints = browShapeBasePoints.length ? browShapeBasePoints : browPoints;
+  const browBounds = bounds(shapeBasePoints);
   const eyeBounds = bounds(eyePoints);
   if (!browBounds || !eyeBounds) {
     return null;
@@ -660,28 +698,37 @@ function buildSingleBrowEnvelope({
   const eyeHeight = Math.max(1, eyeMaxY - eyeMinY);
   const eyelidWidth = Math.max(1, lidMaxX - lidMinX);
   const eyelidHeight = Math.max(1, lidMaxY - lidMinY);
+  const usesImageGuidedAppearance = browPoints.length >= BROW_SHAPE_ENGINE_SAMPLE_COUNT * 2;
   const direction = side === 'left' ? 1 : -1;
   const faceDirectionSlope = estimateFaceDirectionSlope(
     noseBridgeAnchor,
     templeAnchor,
   );
-  const anchoredBrowBounds = expandBrowBoundsWithSurroundAnchors({
-    browMaxX,
-    browMinX,
-    eyeWidth,
-    faceBounds,
-    noseBridgeAnchor,
-    side,
-    templeAnchor,
-  });
+  const anchoredBrowBounds = usesImageGuidedAppearance
+    ? {maxX: browMaxX, minX: browMinX}
+    : expandBrowBoundsWithSurroundAnchors({
+        browMaxX,
+        browMinX,
+        eyeWidth,
+        faceBounds,
+        noseBridgeAnchor,
+        side,
+        templeAnchor,
+      });
   const shapeScale =
-    shapeId === 'slim-tail' ? 0.78 : shapeId === 'straight' ? 0.92 : 1;
+    shapeId === 'slim-tail' ? 0.78 : shapeId === 'straight' ? 0.92 : 0.96;
   const xPad = Math.max(
-    browWidth * (shapeId === 'slim-tail' ? 0.14 : 0.24),
-    eyelidWidth * 0.035,
+    usesImageGuidedAppearance
+      ? browWidth * (shapeId === 'slim-tail' ? 0.01 : 0.018)
+      : browWidth * (shapeId === 'slim-tail' ? 0.09 : shapeId === 'straight' ? 0.12 : 0.14),
+    eyelidWidth * (usesImageGuidedAppearance ? 0.006 : 0.025),
   );
-  const topPad = Math.max(browHeight * 0.85, eyelidHeight * 0.26);
-  const bottomPad = Math.max(browHeight * 0.58, eyelidHeight * 0.16);
+  const topPad = usesImageGuidedAppearance
+    ? Math.max(browHeight * 0.04, eyelidHeight * 0.025)
+    : Math.max(browHeight * 0.18, eyelidHeight * 0.07);
+  const bottomPad = usesImageGuidedAppearance
+    ? Math.max(browHeight * 0.025, eyelidHeight * 0.018)
+    : Math.max(browHeight * 0.1, eyelidHeight * 0.05);
   let minX = clamp(anchoredBrowBounds.minX - xPad, 0, frameWidth - 1);
   let maxX = clamp(anchoredBrowBounds.maxX + xPad, 0, frameWidth - 1);
   if (noseBridgeAnchor) {
@@ -703,49 +750,57 @@ function buildSingleBrowEnvelope({
     maxX = clamp(browMaxX + xPad * 0.6, 0, frameWidth - 1);
   }
   const topY = clamp(browMinY - topPad, 0, frameHeight - 1);
-  const eyeGuardTop = Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.22;
+  const eyeGuardTop = Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.36;
   const bottomY = clamp(
     Math.min(browMaxY + bottomPad, eyeGuardTop),
-    topY + Math.max(1, browHeight * 0.55),
+    topY + Math.max(1, browHeight * 0.42),
     frameHeight - 1,
   );
   const centerX = (minX + maxX) * 0.5;
   const width = Math.max(1, maxX - minX);
   const height = Math.max(1, bottomY - topY);
-  const archLift =
-    shapeId === 'straight' ? height * 0.04 : height * (side === 'left' ? 0.16 : 0.16);
-  const tailDrop = shapeId === 'slim-tail' ? height * 0.18 : height * 0.08;
   const innerX = centerX - direction * width * 0.5 * shapeScale;
   const outerX = centerX + direction * width * 0.5 * shapeScale;
 
   const stabilizePoint = (point: E7Point2D) =>
     stabilizePointToFaceDirection(point, centerX, height, faceDirectionSlope);
-  const polygon = [
-    {x: innerX, y: topY + height * 0.42},
-    {x: centerX - direction * width * 0.18, y: topY + height * 0.16 - archLift},
-    {x: centerX + direction * width * 0.2, y: topY + height * 0.12 - archLift * 0.6},
-    {x: outerX, y: topY + height * 0.34 + tailDrop},
-    {x: outerX, y: bottomY - height * 0.08},
-    {x: centerX, y: bottomY},
-    {x: innerX, y: bottomY - height * 0.02},
-  ].map(stabilizePoint).map(point => ({
-    x: clamp(point.x, 0, frameWidth - 1),
-    y: clamp(point.y, 0, frameHeight - 1),
-  }));
-  const cleanupPadX = Math.max(xPad * 1.18, eyelidWidth * 0.05);
+  const polygon = buildShapeCorrectedBrowFillPolygon({
+    bottomY,
+    browPoints,
+    browShapeBasePoints: shapeBasePoints,
+    direction,
+    frameHeight,
+    frameWidth,
+    innerX,
+    outerX,
+    shapeId,
+    stabilizePoint,
+    topY,
+  });
+  const cleanupPadX = Math.max(
+    xPad * (usesImageGuidedAppearance ? 1.08 : 1.18),
+    eyelidWidth * (usesImageGuidedAppearance ? 0.018 : 0.05),
+  );
   const cleanupMinX = clamp(anchoredBrowBounds.minX - cleanupPadX, 0, frameWidth - 1);
   const cleanupMaxX = clamp(anchoredBrowBounds.maxX + cleanupPadX, 0, frameWidth - 1);
   const cleanupTopY = clamp(
-    browMinY - Math.max(topPad * 0.72, eyelidHeight * 0.18),
+    browMinY -
+      (usesImageGuidedAppearance
+        ? Math.max(topPad * 0.3, eyelidHeight * 0.018)
+        : Math.max(topPad * 0.48, eyelidHeight * 0.08)),
     0,
     frameHeight - 1,
   );
   const cleanupBottomY = clamp(
     Math.min(
-      browMaxY + Math.max(bottomPad * 1.25, browHeight * 0.86),
-      Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.1,
+      browMaxY +
+        (usesImageGuidedAppearance
+          ? Math.max(bottomPad * 0.55, browHeight * 0.08)
+          : Math.max(bottomPad * 0.8, browHeight * 0.22)),
+      Math.min(eyeMinY, lidMinY) - eyelidHeight * (usesImageGuidedAppearance ? 0.32 : 0.26),
     ),
-    cleanupTopY + Math.max(1, browHeight * 0.72),
+    cleanupTopY +
+      Math.max(1, browHeight * (usesImageGuidedAppearance ? 0.18 : 0.36)),
     frameHeight - 1,
   );
   const cleanupWidth = Math.max(1, cleanupMaxX - cleanupMinX);
@@ -761,7 +816,7 @@ function buildSingleBrowEnvelope({
 
   return {
     anchorMetadata: {
-      browPointCount: browPoints.length,
+      browPointCount: browAnchorPoints.length,
       eyePointCount: eyePoints.length,
       faceDirectionSlope,
       faceOvalPointCount: faceOvalPoints.length,
@@ -776,6 +831,7 @@ function buildSingleBrowEnvelope({
       clamp(Math.max(eyeMaxX, lidMaxX) + eyeWidth * 0.18, 0, frameWidth - 1),
       clamp(eyeMaxY + eyeHeight * 0.14, 0, frameHeight - 1),
     ],
+    fillBounds: bounds(polygon) ?? [minX, topY, maxX, bottomY],
     polygon,
     side,
   };
@@ -883,6 +939,475 @@ function expandBrowBoundsWithSurroundAnchors({
   return {maxX, minX};
 }
 
+function buildShapeCorrectedBrowFillPolygon({
+  bottomY,
+  browPoints,
+  browShapeBasePoints,
+  direction,
+  frameHeight,
+  frameWidth,
+  innerX,
+  outerX,
+  shapeId,
+  stabilizePoint,
+  topY,
+}: {
+  bottomY: number;
+  browPoints: E7Point2D[];
+  browShapeBasePoints: E7Point2D[];
+  direction: number;
+  frameHeight: number;
+  frameWidth: number;
+  innerX: number;
+  outerX: number;
+  shapeId: BrowShapeId;
+  stabilizePoint: (point: E7Point2D) => E7Point2D;
+  topY: number;
+}): E7Point2D[] {
+  const height = Math.max(1, bottomY - topY);
+  const ringShape =
+    buildOrderedBrowRingShapeModel({
+      bottomY,
+      browPoints: browShapeBasePoints.length ? browShapeBasePoints : browPoints,
+      direction,
+      innerX,
+      maxThicknessRatio: 0.72,
+      minThicknessRatio: 0.18,
+      outerX,
+      topY,
+    }) ??
+    buildPersonalBrowShapeModel({
+      bottomY,
+      browPoints: browShapeBasePoints.length ? browShapeBasePoints : browPoints,
+      direction,
+      innerX,
+      maxThicknessRatio: 0.72,
+      minThicknessRatio: 0.18,
+      outerX,
+      topY,
+    });
+  const hasImageGuidedAppearance = browPoints.length >= BROW_SHAPE_ENGINE_SAMPLE_COUNT * 2;
+  const appearanceShape =
+    hasImageGuidedAppearance
+      ? buildPersonalBrowShapeModel({
+          bottomY,
+          browPoints,
+          direction,
+          innerX,
+          maxThicknessRatio: 0.56,
+          minThicknessRatio: 0.12,
+          outerX,
+          topY,
+        })
+      : null;
+
+  if (ringShape) {
+    return buildBrowRingSilhouettePolygon({
+      appearanceShape,
+      bottomY,
+      direction,
+      frameHeight,
+      frameWidth,
+      innerX,
+      outerX,
+      ringShape,
+      shapeId,
+      stabilizePoint,
+      topY,
+    });
+  }
+
+  const archAmount =
+    shapeId === 'straight' ? 0.025 : shapeId === 'slim-tail' ? 0.11 : 0.15;
+  const tailDrop =
+    shapeId === 'straight' ? 0.035 : shapeId === 'slim-tail' ? 0.16 : 0.09;
+  const baseThickness =
+    shapeId === 'straight' ? 0.24 : shapeId === 'slim-tail' ? 0.2 : 0.26;
+  const tailTaper =
+    shapeId === 'straight' ? 0.22 : shapeId === 'slim-tail' ? 0.64 : 0.48;
+  const upperCurve: E7Point2D[] = [];
+  const lowerCurve: E7Point2D[] = [];
+
+  for (let index = 0; index < BROW_SHAPE_ENGINE_SAMPLE_COUNT; index += 1) {
+    const t = index / (BROW_SHAPE_ENGINE_SAMPLE_COUNT - 1);
+    const x = lerp(innerX, outerX, remapBrowPreArchXProgress(t, shapeId));
+    const arch = Math.sin(Math.PI * t);
+    const tail = smoothstep(0.58, 1, t);
+    const innerSoftDrop = (1 - smoothstep(0, 0.18, t)) * 0.035;
+    const centerY =
+      topY +
+      height *
+        (0.54 -
+          arch * archAmount +
+            tail * tailDrop +
+          innerSoftDrop);
+    const thickness =
+      height *
+      baseThickness *
+      (1 - tail * tailTaper) *
+      (0.88 + 0.12 * Math.sin(Math.PI * t));
+    const upperBias = shapeId === 'straight' ? 0.48 : 0.56;
+    const templateUpperY = centerY - thickness * upperBias;
+    const templateLowerY = centerY + thickness * (1 - upperBias);
+    const appearanceSample = appearanceShape?.(t);
+    let upperY = templateUpperY;
+    let lowerY = templateLowerY;
+    if (appearanceSample) {
+      upperY = lerp(upperY, appearanceSample.upperY, 0.18);
+      lowerY = lerp(lowerY, appearanceSample.lowerY, 0.14);
+    }
+    upperCurve.push({
+      x,
+      y: upperY,
+    });
+    lowerCurve.push({
+      x: x - direction * thickness * 0.06 * tail,
+      y: lowerY,
+    });
+  }
+
+  const tailUpper = upperCurve[upperCurve.length - 1];
+  const tailLower = lowerCurve[lowerCurve.length - 1];
+  const tailPoint = {
+    x: outerX + direction * height * 0.02,
+    y: (tailUpper.y + tailLower.y) * 0.5 + height * 0.018,
+  };
+  const polygon = [
+    ...upperCurve.slice(0, -1),
+    tailPoint,
+    ...lowerCurve.slice(0, -1).reverse(),
+  ];
+
+  return polygon
+    .map(stabilizePoint)
+    .map(point => ({
+      x: clamp(point.x, 0, frameWidth - 1),
+      y: clamp(point.y, 0, frameHeight - 1),
+    }));
+}
+
+function buildBrowRingSilhouettePolygon({
+  appearanceShape,
+  bottomY,
+  direction,
+  frameHeight,
+  frameWidth,
+  innerX,
+  outerX,
+  ringShape,
+  shapeId,
+  stabilizePoint,
+  topY,
+}: {
+  appearanceShape: ((t: number) => {lowerY: number; upperY: number}) | null;
+  bottomY: number;
+  direction: number;
+  frameHeight: number;
+  frameWidth: number;
+  innerX: number;
+  outerX: number;
+  ringShape: (t: number) => {lowerY: number; upperY: number};
+  shapeId: BrowShapeId;
+  stabilizePoint: (point: E7Point2D) => E7Point2D;
+  topY: number;
+}): E7Point2D[] {
+  const height = Math.max(1, bottomY - topY);
+  const upperCurve: E7Point2D[] = [];
+  const lowerCurve: E7Point2D[] = [];
+  const maxBodyThickness =
+    height * (shapeId === 'slim-tail' ? 0.4 : shapeId === 'straight' ? 0.48 : 0.54);
+  const minBodyThickness =
+    height * (shapeId === 'slim-tail' ? 0.11 : shapeId === 'straight' ? 0.14 : 0.16);
+  const tailTaperStrength =
+    shapeId === 'slim-tail' ? 0.92 : shapeId === 'straight' ? 0.54 : 0.82;
+  const headTaperStrength = shapeId === 'straight' ? 0.16 : 0.24;
+  const lowerHeadY = ringShape(0).lowerY;
+  const lowerTailY = ringShape(1).lowerY;
+
+  for (let index = 0; index < BROW_SHAPE_ENGINE_SAMPLE_COUNT; index += 1) {
+    const t = index / (BROW_SHAPE_ENGINE_SAMPLE_COUNT - 1);
+    const x = lerp(innerX, outerX, remapBrowPreArchXProgress(t, shapeId));
+    const ringSample = ringShape(t);
+    const appearanceSample = appearanceShape?.(t);
+    const archLift =
+      shapeId === 'straight'
+        ? 0
+        : Math.sin(Math.PI * t) * height * (shapeId === 'slim-tail' ? 0.006 : 0.012);
+    const tail = smoothstep(0.58, 1, t);
+    const head = 1 - smoothstep(0, 0.18, t);
+    let ringUpperY = ringSample.upperY;
+    let ringLowerY = ringSample.lowerY;
+
+    if (appearanceSample) {
+      ringUpperY = lerp(ringUpperY, appearanceSample.upperY, 0.04);
+      ringLowerY = lerp(ringLowerY, appearanceSample.lowerY, 0.08);
+    }
+
+    const ringThickness = Math.max(1, ringLowerY - ringUpperY);
+    const bodyThickness = clamp(
+      ringThickness * (shapeId === 'slim-tail' ? 0.58 : shapeId === 'straight' ? 0.64 : 0.68) +
+        height * 0.016,
+      minBodyThickness,
+      maxBodyThickness,
+    );
+    const lowerAnchorLift = archLift * 0.18;
+    const tailDrop = tail * height * (shapeId === 'straight' ? 0.018 : 0.036);
+    const lowerFlowBaselineY =
+      lerp(lowerHeadY, lowerTailY, t) -
+      Math.sin(Math.PI * t) * height * (shapeId === 'straight' ? 0.01 : 0.018);
+    const lowerFlowFlatten = Math.sin(Math.PI * t) * (shapeId === 'straight' ? 0.34 : 0.46);
+    let lowerY =
+      lerp(ringLowerY, lowerFlowBaselineY, lowerFlowFlatten) -
+      lowerAnchorLift +
+      tailDrop;
+    lowerY -= height * (shapeId === 'straight' ? 0.018 : 0.032);
+
+    if (shapeId === 'straight') {
+      const straightCenter = topY + height * 0.52;
+      lowerY += (straightCenter + bodyThickness * 0.34 - lowerY) * 0.1;
+    }
+
+    const visibleThicknessScale =
+      shapeId === 'slim-tail' ? 1.24 : shapeId === 'straight' ? 1.24 : 1.28;
+    let visibleThickness =
+      bodyThickness * (1 - tail * tailTaperStrength) * visibleThicknessScale;
+    visibleThickness *= 1 - head * headTaperStrength;
+    const minVisibleThickness =
+      height * (shapeId === 'slim-tail' ? 0.045 : shapeId === 'straight' ? 0.064 : 0.072);
+    if (tail < 0.92) {
+      visibleThickness = Math.max(visibleThickness, minVisibleThickness);
+    }
+    let upperY = lowerY - visibleThickness;
+    upperY = lerp(
+      upperY,
+      Math.max(ringUpperY + height * 0.018, lowerY - maxBodyThickness),
+      shapeId === 'straight' ? 0.08 : 0.14,
+    );
+
+    if (lowerY - upperY < minVisibleThickness && tail < 0.84) {
+      upperY = lowerY - minVisibleThickness;
+    }
+
+    upperCurve.push({
+      x,
+      y: upperY,
+    });
+    lowerCurve.push({
+      x: x - direction * Math.max(0, lowerY - upperY) * 0.03 * tail,
+      y: lowerY,
+    });
+  }
+
+  const tailUpper = upperCurve[upperCurve.length - 1];
+  const tailLower = lowerCurve[lowerCurve.length - 1];
+  const tailPoint = {
+    x: outerX + direction * height * (shapeId === 'straight' ? 0.024 : 0.045),
+    y:
+      (tailUpper.y + tailLower.y) * 0.5 +
+      height * (shapeId === 'slim-tail' ? 0.09 : shapeId === 'straight' ? 0.045 : 0.078),
+  };
+  const polygon = [
+    ...upperCurve.slice(0, -1),
+    tailPoint,
+    ...lowerCurve.slice(0, -1).reverse(),
+  ];
+
+  return polygon
+    .map(stabilizePoint)
+    .map(point => ({
+      x: clamp(point.x, 0, frameWidth - 1),
+      y: clamp(point.y, 0, frameHeight - 1),
+    }));
+}
+
+function remapBrowPreArchXProgress(t: number, shapeId: BrowShapeId): number {
+  const preArchPush =
+    shapeId === 'slim-tail' ? 0.025 : shapeId === 'straight' ? 0.028 : 0.038;
+  const headGate = smoothstep(0.06, 0.24, t);
+  const archGate = 1 - smoothstep(0.62, 0.9, t);
+  return clamp01(t + preArchPush * headGate * archGate);
+}
+
+function buildOrderedBrowRingShapeModel({
+  bottomY,
+  browPoints,
+  direction,
+  innerX,
+  maxThicknessRatio,
+  minThicknessRatio,
+  outerX,
+  topY,
+}: {
+  bottomY: number;
+  browPoints: E7Point2D[];
+  direction: number;
+  innerX: number;
+  maxThicknessRatio: number;
+  minThicknessRatio: number;
+  outerX: number;
+  topY: number;
+}) {
+  if (browPoints.length < 8 || browPoints.length > 14) {
+    return null;
+  }
+
+  const midpoint = Math.floor(browPoints.length / 2);
+  const firstChain = browPoints.slice(0, midpoint);
+  const secondChain = browPoints.slice(midpoint);
+  if (firstChain.length < 3 || secondChain.length < 3) {
+    return null;
+  }
+
+  const firstAverageY =
+    firstChain.reduce((sum, point) => sum + point.y, 0) / firstChain.length;
+  const secondAverageY =
+    secondChain.reduce((sum, point) => sum + point.y, 0) / secondChain.length;
+  const lowerRaw = firstAverageY > secondAverageY ? firstChain : secondChain;
+  const upperRaw = firstAverageY > secondAverageY ? secondChain : firstChain;
+  const width = Math.max(1, Math.abs(outerX - innerX));
+  const height = Math.max(1, bottomY - topY);
+  const toChainPoint = (point: E7Point2D) => ({
+    ...point,
+    t: clamp01(((point.x - innerX) * direction) / width),
+  });
+  const upperChain = upperRaw
+    .map(toChainPoint)
+    .sort((first, second) => first.t - second.t || first.y - second.y);
+  const lowerChain = lowerRaw
+    .map(toChainPoint)
+    .sort((first, second) => first.t - second.t || second.y - first.y);
+
+  if (upperChain.length < 2 || lowerChain.length < 2) {
+    return null;
+  }
+
+  return (t: number) => {
+    const upperY = smoothChainY(upperChain, t);
+    const lowerY = smoothChainY(lowerChain, t);
+    const minThickness = height * minThicknessRatio;
+    const maxThickness = height * maxThicknessRatio;
+    const adjustedLowerY = clamp(
+      Math.max(lowerY, upperY + minThickness),
+      upperY + minThickness,
+      upperY + maxThickness,
+    );
+    return {
+      lowerY: adjustedLowerY,
+      upperY,
+    };
+  };
+}
+
+function buildPersonalBrowShapeModel({
+  bottomY,
+  browPoints,
+  direction,
+  innerX,
+  maxThicknessRatio,
+  minThicknessRatio,
+  outerX,
+  topY,
+}: {
+  bottomY: number;
+  browPoints: E7Point2D[];
+  direction: number;
+  innerX: number;
+  maxThicknessRatio: number;
+  minThicknessRatio: number;
+  outerX: number;
+  topY: number;
+}) {
+  if (browPoints.length < 6) {
+    return null;
+  }
+
+  const width = Math.max(1, Math.abs(outerX - innerX));
+  const height = Math.max(1, bottomY - topY);
+  const pointsWithT = browPoints
+    .map(point => ({
+      ...point,
+      t: clamp01(((point.x - innerX) * direction) / width),
+    }))
+    .sort((first, second) => first.t - second.t || first.y - second.y);
+  const sortedY = [...pointsWithT].sort((first, second) => first.y - second.y);
+  const splitY = sortedY[Math.floor(sortedY.length * 0.52)]?.y ?? topY + height * 0.5;
+  const upperChain = pointsWithT
+    .filter(point => point.y <= splitY)
+    .sort((first, second) => first.t - second.t || first.y - second.y);
+  const lowerChain = pointsWithT
+    .filter(point => point.y > splitY)
+    .sort((first, second) => first.t - second.t || second.y - first.y);
+
+  if (upperChain.length < 2 || lowerChain.length < 2) {
+    return null;
+  }
+
+  return (t: number) => {
+    const upperY = smoothChainY(upperChain, t);
+    const lowerY = smoothChainY(lowerChain, t);
+    const minThickness = height * minThicknessRatio;
+    const maxThickness = height * maxThicknessRatio;
+    const adjustedLowerY = clamp(
+      Math.max(lowerY, upperY + minThickness),
+      upperY + minThickness,
+      upperY + maxThickness,
+    );
+    return {
+      lowerY: adjustedLowerY,
+      upperY,
+    };
+  };
+}
+
+function smoothChainY(
+  chain: ReadonlyArray<E7Point2D & {t: number}>,
+  t: number,
+) {
+  if (chain.length <= 2) {
+    return interpolateChainY(chain, t);
+  }
+
+  const bandwidth = 0.16;
+  let weightedY = 0;
+  let weightSum = 0;
+  for (const point of chain) {
+    const distance = t - point.t;
+    const weight = Math.exp(-(distance * distance) / (2 * bandwidth * bandwidth));
+    weightedY += point.y * weight;
+    weightSum += weight;
+  }
+
+  const smoothedY = weightSum > 0 ? weightedY / weightSum : interpolateChainY(chain, t);
+  const interpolatedY = interpolateChainY(chain, t);
+  return lerp(interpolatedY, smoothedY, 0.72);
+}
+
+function interpolateChainY(
+  chain: ReadonlyArray<E7Point2D & {t: number}>,
+  t: number,
+) {
+  if (t <= chain[0].t) {
+    return chain[0].y;
+  }
+  const last = chain[chain.length - 1];
+  if (t >= last.t) {
+    return last.y;
+  }
+
+  for (let index = 1; index < chain.length; index += 1) {
+    const previous = chain[index - 1];
+    const current = chain[index];
+    if (t <= current.t) {
+      const localT = clamp01(
+        (t - previous.t) / (current.t - previous.t || Number.EPSILON),
+      );
+      return lerp(previous.y, current.y, smoothstep(0, 1, localT));
+    }
+  }
+
+  return last.y;
+}
+
 function deriveTempleAnchor(
   faceOvalPoints: E7Point2D[],
   side: BrowEnvelope['side'],
@@ -939,9 +1464,9 @@ function stabilizePointToFaceDirection(
   faceDirectionSlope: number,
 ): E7Point2D {
   const yOffset = clamp(
-    (point.x - centerX) * faceDirectionSlope * 0.46,
-    -envelopeHeight * 0.16,
-    envelopeHeight * 0.16,
+    (point.x - centerX) * faceDirectionSlope * 0.3,
+    -envelopeHeight * 0.1,
+    envelopeHeight * 0.1,
   );
   return {
     x: point.x,
@@ -969,15 +1494,55 @@ function centroid(points: E7Point2D[]): E7Point2D | null {
 
 function browStrandDensity(
   point: E7Point2D,
-  side: BrowEnvelope['side'],
+  envelope: BrowEnvelope,
   controls: GeneratedBrowControls,
 ) {
-  const direction = side === 'left' ? 1 : -1;
-  const diagonal = point.x * 0.08 * direction + point.y * 0.12;
-  const primary = Math.sin(diagonal) * 0.5 + 0.5;
-  const secondary = Math.sin(diagonal * 2.7 + 1.3) * 0.5 + 0.5;
-  const stroke = primary > 0.62 ? 1 : primary > 0.46 ? 0.5 : 0;
-  return clamp01((stroke * 0.72 + secondary * 0.28) * controls.intensity);
+  const local = browLocalCoordinates(point, envelope);
+  const {t, v} = local;
+  const arch = Math.sin(Math.PI * t);
+  const head = 1 - smoothstep(0.02, 0.28, t);
+  const tail = smoothstep(0.58, 1, t);
+  const body = smoothstep(0.05, 0.2, t) * smoothstep(0.02, 0.28, 1 - t);
+  const verticalBody =
+    smoothstep(0.1, 0.42, v) * smoothstep(0.04, 0.38, 1 - v);
+  const browCurve = arch * 0.82 - tail * 0.36 + head * 0.18;
+  const primaryPhase = fract(t * 42.0 + v * 8.4 + browCurve * 0.52);
+  const secondaryPhase = fract(t * 31.0 + v * 5.2 + browCurve * 0.37 + 0.27);
+  const finePhase = fract(t * 63.0 + v * 10.6 + browCurve * 0.24 + 0.61);
+  const primaryStroke = ridge(primaryPhase, 0.035);
+  const secondaryStroke = ridge(secondaryPhase, 0.026) * 0.54;
+  const fineStroke = ridge(finePhase, 0.018) * 0.34;
+  const headPhase = fract(t * 54.0 + v * 2.2 + 0.19);
+  const headStroke = ridge(headPhase, 0.032) * head * smoothstep(0.18, 0.82, v);
+  const tailFade = lerp(1, 0.44, tail);
+  const opacityProfile =
+    (verticalBody * (0.74 + body * 0.26) + headStroke * 0.42) * tailFade;
+  const strand =
+    (primaryStroke * 0.82 + secondaryStroke + fineStroke + headStroke * 0.72) *
+    opacityProfile;
+  return clamp01(strand * controls.intensity * 1.18);
+}
+
+function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
+  const {t, v} = browLocalCoordinates(point, envelope);
+  const headFade = lerp(0.54, 1, smoothstep(0, 0.2, t));
+  const tailFade = lerp(1, 0.22, smoothstep(0.64, 1, t));
+  const verticalCore =
+    smoothstep(0.04, 0.36, v) * smoothstep(0.04, 0.34, 1 - v);
+  const bodyBoost = lerp(0.76, 1.08, Math.sin(Math.PI * t));
+  return clamp01((0.1 + verticalCore * 0.9) * headFade * tailFade * bodyBoost);
+}
+
+function browLocalCoordinates(point: E7Point2D, envelope: BrowEnvelope) {
+  const [minX, minY, maxX, maxY] = envelope.fillBounds;
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const t =
+    envelope.side === 'left'
+      ? clamp01((point.x - minX) / width)
+      : clamp01((maxX - point.x) / width);
+  const v = clamp01((point.y - minY) / height);
+  return {t, v};
 }
 
 function barycentric(
@@ -1048,6 +1613,23 @@ function pointInRect(point: E7Point2D, rect: [number, number, number, number]) {
     point.y >= rect[1] &&
     point.y <= rect[3]
   );
+}
+
+function lerp(start: number, end: number, amount: number) {
+  return start + (end - start) * amount;
+}
+
+function fract(value: number) {
+  return value - Math.floor(value);
+}
+
+function ridge(phase: number, width: number) {
+  return 1 - smoothstep(0, width, Math.abs(phase - 0.5));
+}
+
+function smoothstep(edge0: number, edge1: number, value: number) {
+  const t = clamp01((value - edge0) / (edge1 - edge0 || Number.EPSILON));
+  return t * t * (3 - 2 * t);
 }
 
 function bounds(points: E7Point2D[]): [number, number, number, number] | null {

@@ -16,8 +16,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aiarmakeupguide.mobile",
-      "appleTeamId": "WSLFBT6QHB"
+      "bundleIdentifier": "com.aiarmakeupguide.mobile.seojin",
+      "appleTeamId": "5947QNM627"
     },
     "plugins": [
       "expo-status-bar",

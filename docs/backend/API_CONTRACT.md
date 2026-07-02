@@ -78,6 +78,14 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/ar/filter-states`
 - `PUT /api/ar/filter-states/{filterId}`
 
+### Recommended Makeup Filters
+
+`GET /api/ar/filters?kind=recommendedMakeupFilter` returns the filter-store
+cards used by the mobile home and filter store screens. The source table is
+`ar_filters`; card copy such as `headline`, `displayTitle`, `description`,
+`keywords`, `categoryTags`, and `matchScore` lives in `ar_filters.filter_payload`.
+Card images are not stored or returned by this API. The mobile app keeps using
+the existing S3/CloudFront image mapping by filter id.
 
 ## OpenAPI Export
 

@@ -422,35 +422,25 @@ Shader "MakeupAR/SmoothRegionMask"
 
                 if (_BrowGeneratedMode > 0.5)
                 {
-                    float cleanupSoft = SoftMaskAlpha(
-                        max(softMask.r, mask.r),
-                        _Threshold * 0.72,
-                        max(_Feather, 0.24));
                     float desiredSoft = SoftMaskAlpha(max(softMask.g, mask.g), _Threshold, _Feather);
                     float desiredCore = CoreMaskAlpha(mask.g, _Threshold, _Feather);
-                    float cleanupOnly = saturate(
-                        cleanupSoft
-                        - desiredSoft * lerp(0.72, 0.92, saturate(_BrowCleanupStrength)));
-                    float strandDetail = saturate(max(mask.b, softMask.b) * desiredSoft);
+                    float strandDetail = saturate(max(mask.b, softMask.b * 0.34) * desiredSoft);
                     float strandAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
+                    float tintAlpha = saturate(
+                        desiredSoft * coverage * lerp(0.09, 0.22, saturate(_BlushIntensity))
+                        + desiredCore * coverage * 0.035);
+                    float hairAlpha = saturate(
+                        pow(strandDetail, 0.68) * strandAmount * coverage * 0.82);
                     float browAlpha = saturate(
-                        desiredSoft * coverage * lerp(0.46, 0.74, saturate(_BlushIntensity))
-                        + desiredCore * coverage * 0.14
-                        + strandDetail * strandAmount * coverage * 0.34);
-                    float neutralizeAlpha = saturate(
-                        cleanupOnly
-                        * saturate(_BrowCleanupStrength)
-                        * saturate(_BrowNeutralizeStrength)
-                        * 0.34);
+                        tintAlpha
+                        + hairAlpha);
                     float3 browPigment = saturate(lerp(
                         _RegionColor.rgb,
-                        _RegionColor.rgb * 0.55,
-                        strandDetail * strandAmount * 0.42));
-                    float3 liftColor = float3(0.86, 0.76, 0.68);
-                    float browMix = browAlpha / max(browAlpha + neutralizeAlpha, 0.0001);
-                    maskStrength = saturate(browAlpha + neutralizeAlpha);
+                        _RegionColor.rgb * 0.48,
+                        saturate(hairAlpha * 1.34)));
+                    maskStrength = browAlpha;
                     pigmentColor = browPigment;
-                    alphaColor = saturate(lerp(liftColor, browPigment, browMix));
+                    alphaColor = browPigment;
                 }
 
                 float detailAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);

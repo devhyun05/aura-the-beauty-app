@@ -404,7 +404,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WSLFBT6QHB;
+				DEVELOPMENT_TEAM = 5947QNM627;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -424,7 +424,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile.seojin;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -444,7 +444,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = WSLFBT6QHB;
+				DEVELOPMENT_TEAM = 5947QNM627;
 				INFOPLIST_FILE = AURA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -459,7 +459,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile.seojin;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

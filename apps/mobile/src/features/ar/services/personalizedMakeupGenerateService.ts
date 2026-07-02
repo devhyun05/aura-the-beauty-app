@@ -258,10 +258,12 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
     DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
   options: {
     activeRegion?: PersonalizedCompanionMakeupActiveRegion;
+    includeBrowLayer?: boolean;
     useCheekRegionAlias?: boolean;
   } = {},
 ): FullFaceMakeupRecipe {
   const activeRegion = options.activeRegion ?? 'all';
+  const shouldIncludeBrowLayer = options.includeBrowLayer ?? true;
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
   const isRegionEnabled = (region: 'blush' | 'brow') =>
     activeRegion === 'all' || activeRegion === region;
@@ -307,7 +309,9 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   });
   const layers = recipe.layers
     .filter(
-      layer => layer.region === 'blush' || layer.region === 'brow',
+      layer =>
+        layer.region === 'blush' ||
+        (shouldIncludeBrowLayer && layer.region === 'brow'),
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

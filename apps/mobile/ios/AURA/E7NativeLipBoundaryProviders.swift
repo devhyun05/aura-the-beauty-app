@@ -804,6 +804,8 @@ final class E7NativeLipBoundaryProviders: NSObject {
       mediaPipeRightUpperEyelidIndices,
       mediaPipeLeftBrowIndices,
       mediaPipeRightBrowIndices,
+      mediaPipeLeftDenseBrowIndices,
+      mediaPipeRightDenseBrowIndices,
       mediaPipeLeftTempleIndices,
       mediaPipeRightTempleIndices,
       mediaPipeNoseBridgeIndices
@@ -814,6 +816,27 @@ final class E7NativeLipBoundaryProviders: NSObject {
         requiredIndex
       )
     }
+
+    let leftEyebrowAppearance = mediaPipeBrowAppearancePayload(
+      uiImage: uiImage,
+      landmarks: faceLandmarks,
+      coreIndices: mediaPipeLeftBrowIndices,
+      eyeIndices: mediaPipeLeftEyeIndices,
+      upperEyelidIndices: mediaPipeLeftUpperEyelidIndices,
+      side: "left",
+      width: width,
+      height: height
+    )
+    let rightEyebrowAppearance = mediaPipeBrowAppearancePayload(
+      uiImage: uiImage,
+      landmarks: faceLandmarks,
+      coreIndices: mediaPipeRightBrowIndices,
+      eyeIndices: mediaPipeRightEyeIndices,
+      upperEyelidIndices: mediaPipeRightUpperEyelidIndices,
+      side: "right",
+      width: width,
+      height: height
+    )
 
     return E7MediaPipeFaceLandmarks(
       outerPoints: convertMediaPipePoints(
@@ -866,16 +889,48 @@ final class E7NativeLipBoundaryProviders: NSObject {
         ),
         "leftEyebrow": mediaPipeRegionPayload(
           faceLandmarks,
+          browCoreIndices: mediaPipeLeftBrowIndices,
+          width: width,
+          height: height
+        ),
+        "leftEyebrowCore": mediaPipeRegionPayload(
+          faceLandmarks,
           indices: mediaPipeLeftBrowIndices,
           width: width,
           height: height
         ),
+        "leftEyebrowSurroundAnchors": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeLeftDenseBrowIndices,
+          coreIndices: mediaPipeLeftBrowIndices,
+          eyeIndices: mediaPipeLeftEyeIndices,
+          upperEyelidIndices: mediaPipeLeftUpperEyelidIndices,
+          width: width,
+          height: height
+        ),
+        "leftEyebrowAppearance": leftEyebrowAppearance,
         "rightEyebrow": mediaPipeRegionPayload(
+          faceLandmarks,
+          browCoreIndices: mediaPipeRightBrowIndices,
+          width: width,
+          height: height
+        ),
+        "rightEyebrowCore": mediaPipeRegionPayload(
           faceLandmarks,
           indices: mediaPipeRightBrowIndices,
           width: width,
           height: height
         ),
+        "rightEyebrowSurroundAnchors": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeRightDenseBrowIndices,
+          coreIndices: mediaPipeRightBrowIndices,
+          eyeIndices: mediaPipeRightEyeIndices,
+          upperEyelidIndices: mediaPipeRightUpperEyelidIndices,
+          width: width,
+          height: height
+        ),
+        "rightEyebrowAppearance": rightEyebrowAppearance,
         "leftTemple": mediaPipeRegionPayload(
           faceLandmarks,
           indices: mediaPipeLeftTempleIndices,
@@ -960,6 +1015,516 @@ final class E7NativeLipBoundaryProviders: NSObject {
       "pointCount": imagePoints.count,
       "imagePoints": imagePoints
     ]
+  }
+
+  private func mediaPipeRegionPayload(
+    _ landmarks: [NormalizedLandmark],
+    browCoreIndices: [Int],
+    width: Int,
+    height: Int
+  ) -> [String: Any] {
+    let corePoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: browCoreIndices,
+      width: width,
+      height: height
+    )
+    let denseBoundaryPoints = densifyBrowBoundaryPoints(corePoints)
+    return [
+      "status": denseBoundaryPoints.isEmpty ? "unavailable" : "available",
+      "generationMethod": "mediapipe_brow_core_curve_densified_v1",
+      "indices": browCoreIndices.filter { $0 < landmarks.count },
+      "sourcePointCount": corePoints.count,
+      "samplesPerSegment": E7MediaPipeBrowBoundarySamplesPerSegment,
+      "pointCount": denseBoundaryPoints.count,
+      "imagePoints": denseBoundaryPoints
+    ]
+  }
+
+  private func mediaPipeRegionPayload(
+    _ landmarks: [NormalizedLandmark],
+    indices seedIndices: [Int],
+    coreIndices: [Int],
+    eyeIndices: [Int],
+    upperEyelidIndices: [Int],
+    width: Int,
+    height: Int
+  ) -> [String: Any] {
+    let corePoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: coreIndices,
+      width: width,
+      height: height
+    )
+    let eyePoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: eyeIndices,
+      width: width,
+      height: height
+    )
+    let eyelidPoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: upperEyelidIndices,
+      width: width,
+      height: height
+    )
+
+    guard let browBounds = mediaPipeBounds(corePoints),
+          let eyeBounds = mediaPipeBounds(eyePoints) else {
+      return mediaPipeRegionPayload(
+        landmarks,
+        indices: coreIndices,
+        width: width,
+        height: height
+      )
+    }
+
+    let eyelidBounds = mediaPipeBounds(eyelidPoints) ?? eyeBounds
+    let browWidth = max(1.0, browBounds.maxX - browBounds.minX)
+    let browHeight = max(1.0, browBounds.maxY - browBounds.minY)
+    let eyeHeight = max(1.0, eyeBounds.maxY - eyeBounds.minY)
+    let roiMinX = browBounds.minX - browWidth * 0.22
+    let roiMaxX = browBounds.maxX + browWidth * 0.22
+    let roiMinY = browBounds.minY - max(browHeight * 0.90, eyeHeight * 0.35)
+    let eyeGuardTop = min(eyeBounds.minY, eyelidBounds.minY) - eyeHeight * 0.10
+    let roiMaxY = min(
+      browBounds.maxY + max(browHeight * 0.32, eyeHeight * 0.18),
+      eyeGuardTop
+    )
+    let seedIndexSet = Set(seedIndices + coreIndices)
+    var densePoints = [E7MediaPipeIndexedPixelPoint]()
+
+    for (index, landmark) in landmarks.enumerated() {
+      let x = Double(landmark.x) * Double(width)
+      let y = Double(landmark.y) * Double(height)
+      if (x >= roiMinX && x <= roiMaxX && y >= roiMinY && y <= roiMaxY)
+        || seedIndexSet.contains(index) {
+        densePoints.append(E7MediaPipeIndexedPixelPoint(index: index, x: x, y: y, z: Double(landmark.z)))
+      }
+    }
+
+    let sortedPoints = sortDenseBrowPoints(densePoints, corePoints: corePoints)
+    return [
+      "status": sortedPoints.isEmpty ? "unavailable" : "available",
+      "generationMethod": "mediapipe_dense_brow_roi_v1",
+      "indices": sortedPoints.map(\.index),
+      "pointCount": sortedPoints.count,
+      "corePointCount": corePoints.count,
+      "imagePoints": sortedPoints.map { point in
+        [
+          "x": point.x,
+          "y": point.y,
+          "z": point.z
+        ]
+      }
+    ]
+  }
+
+  private func mediaPipeBrowAppearancePayload(
+    uiImage: UIImage,
+    landmarks: [NormalizedLandmark],
+    coreIndices: [Int],
+    eyeIndices: [Int],
+    upperEyelidIndices: [Int],
+    side: String,
+    width: Int,
+    height: Int
+  ) -> [String: Any] {
+    let fallbackPayload = mediaPipeRegionPayload(
+      landmarks,
+      browCoreIndices: coreIndices,
+      width: width,
+      height: height
+    )
+    guard let sampler = makeBrowImageSampler(uiImage) else {
+      return fallbackPayload
+    }
+
+    let corePoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: coreIndices,
+      width: width,
+      height: height
+    )
+    let eyePoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: eyeIndices,
+      width: width,
+      height: height
+    )
+    let eyelidPoints = mediaPipeIndexedPixelPoints(
+      landmarks,
+      indices: upperEyelidIndices,
+      width: width,
+      height: height
+    )
+    guard let browBounds = mediaPipeBounds(corePoints),
+          let eyeBounds = mediaPipeBounds(eyePoints) else {
+      return fallbackPayload
+    }
+
+    let eyelidBounds = mediaPipeBounds(eyelidPoints) ?? eyeBounds
+    let browWidth = max(1.0, browBounds.maxX - browBounds.minX)
+    let browHeight = max(1.0, browBounds.maxY - browBounds.minY)
+    let eyeHeight = max(1.0, eyeBounds.maxY - eyeBounds.minY)
+    let roiMinX = max(0.0, browBounds.minX)
+    let roiMaxX = min(Double(width - 1), browBounds.maxX)
+    let roiMinY = max(0.0, browBounds.minY - max(browHeight * 0.46, eyeHeight * 0.18))
+    let roiMaxY = min(
+      Double(height - 1),
+      min(
+        browBounds.maxY + max(browHeight * 0.26, eyeHeight * 0.10),
+        min(eyeBounds.minY, eyelidBounds.minY) - eyeHeight * 0.16
+      )
+    )
+    guard roiMaxX > roiMinX, roiMaxY > roiMinY else {
+      return fallbackPayload
+    }
+
+    let scaleX = Double(sampler.width) / Double(width)
+    let scaleY = Double(sampler.height) / Double(height)
+    func luminance(_ x: Double, _ y: Double) -> Double {
+      sampler.luminance(x: x * scaleX, y: y * scaleY)
+    }
+
+    var roiLumas = [Double]()
+    let xStep = max(1, Int((roiMaxX - roiMinX) / 36.0))
+    let yStep = max(1, Int((roiMaxY - roiMinY) / 18.0))
+    var sampleX = Int(roiMinX.rounded())
+    while sampleX <= Int(roiMaxX.rounded()) {
+      var sampleY = Int(roiMinY.rounded())
+      while sampleY <= Int(roiMaxY.rounded()) {
+        roiLumas.append(luminance(Double(sampleX), Double(sampleY)))
+        sampleY += yStep
+      }
+      sampleX += xStep
+    }
+    let skinBaseline = percentile(roiLumas, percentile: 0.72) ?? 168.0
+    let sampleCount = 18
+    var upperPoints = [[String: Double]]()
+    var lowerPoints = [[String: Double]]()
+    var confidenceSum = 0.0
+    let sortedCorePoints = corePoints.sorted { first, second in
+      first.x == second.x ? first.y < second.y : first.x < second.x
+    }
+
+    for sampleIndex in 0..<sampleCount {
+      let t = Double(sampleIndex) / Double(sampleCount - 1)
+      let x = roiMinX + (roiMaxX - roiMinX) * t
+      let predictedY =
+        interpolateMediaPipePointY(sortedCorePoints, x: x) ??
+        (browBounds.minY + browBounds.maxY) * 0.5
+      var bestY = predictedY
+      var bestLuma = luminance(x, predictedY)
+      var bestScore = -Double.greatestFiniteMagnitude
+      let scanMinY = max(
+        roiMinY,
+        predictedY - max(browHeight * 0.62, eyeHeight * 0.10)
+      )
+      let scanMaxY = min(
+        roiMaxY,
+        predictedY + max(browHeight * 0.48, eyeHeight * 0.10)
+      )
+      var scanY = Int(scanMinY.rounded())
+      while scanY <= Int(scanMaxY.rounded()) {
+        let y = Double(scanY)
+        let currentLuma = luminance(x, y)
+        let verticalContrast = max(
+          abs(currentLuma - luminance(x, y - 2.0)),
+          abs(currentLuma - luminance(x, y + 2.0))
+        )
+        let distancePenalty = abs(y - predictedY) / max(1.0, roiMaxY - roiMinY) * 0.38
+        let darknessScore = max(0.0, skinBaseline - currentLuma) / 255.0
+        let score = darknessScore + verticalContrast / 255.0 * 0.24 - distancePenalty
+        if score > bestScore {
+          bestScore = score
+          bestY = y
+          bestLuma = currentLuma
+        }
+        scanY += 1
+      }
+
+      if bestScore < 0.02 {
+        bestY = predictedY
+        bestLuma = luminance(x, predictedY)
+      }
+
+      let contrast = max(0.0, skinBaseline - bestLuma) / 255.0
+      confidenceSum += max(0.0, min(1.0, bestScore + 0.18))
+      let thickness = min(
+        max(4.0, browHeight * (0.24 + contrast * 0.82)),
+        max(5.0, (roiMaxY - roiMinY) * 0.36)
+      )
+      let upperY = max(roiMinY, bestY - thickness * 0.48)
+      let lowerY = min(roiMaxY, bestY + thickness * 0.52)
+      upperPoints.append([
+        "x": x,
+        "y": upperY,
+        "z": 0.0
+      ])
+      lowerPoints.append([
+        "x": x,
+        "y": lowerY,
+        "z": 0.0
+      ])
+    }
+
+    let imagePoints = upperPoints + lowerPoints.reversed()
+    return [
+      "status": imagePoints.isEmpty ? "unavailable" : "available",
+      "generationMethod": "image_guided_brow_appearance_roi_v1",
+      "side": side,
+      "pointCount": imagePoints.count,
+      "sampleColumnCount": sampleCount,
+      "sourcePointCount": corePoints.count,
+      "confidence": confidenceSum / Double(sampleCount),
+      "roi": [
+        "minX": roiMinX,
+        "minY": roiMinY,
+        "maxX": roiMaxX,
+        "maxY": roiMaxY
+      ],
+      "imagePoints": imagePoints
+    ]
+  }
+
+  private func makeBrowImageSampler(_ uiImage: UIImage) -> E7BrowImageSampler? {
+    guard let cgImage = uiImage.cgImage else {
+      return nil
+    }
+
+    let width = cgImage.width
+    let height = cgImage.height
+    guard width > 0, height > 0 else {
+      return nil
+    }
+
+    let bytesPerPixel = 4
+    let bytesPerRow = width * bytesPerPixel
+    var data = [UInt8](repeating: 0, count: height * bytesPerRow)
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo =
+      CGImageAlphaInfo.premultipliedLast.rawValue |
+      CGBitmapInfo.byteOrder32Big.rawValue
+    let didDraw = data.withUnsafeMutableBytes { pointer -> Bool in
+      guard let context = CGContext(
+        data: pointer.baseAddress,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: colorSpace,
+        bitmapInfo: bitmapInfo
+      ) else {
+        return false
+      }
+      context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+
+    guard didDraw else {
+      return nil
+    }
+
+    return E7BrowImageSampler(
+      bytesPerRow: bytesPerRow,
+      data: data,
+      height: height,
+      width: width
+    )
+  }
+
+  private func interpolateMediaPipePointY(
+    _ points: [E7MediaPipeIndexedPixelPoint],
+    x: Double
+  ) -> Double? {
+    guard let first = points.first else {
+      return nil
+    }
+    if x <= first.x {
+      return first.y
+    }
+    guard let last = points.last else {
+      return first.y
+    }
+    if x >= last.x {
+      return last.y
+    }
+
+    for index in 1..<points.count {
+      let previous = points[index - 1]
+      let current = points[index]
+      if x <= current.x {
+        let deltaX = current.x - previous.x
+        let ratio = max(
+          0.0,
+          min(1.0, (x - previous.x) / (deltaX == 0.0 ? 1.0 : deltaX))
+        )
+        return previous.y + (current.y - previous.y) * ratio
+      }
+    }
+
+    return last.y
+  }
+
+  private func percentile(_ values: [Double], percentile: Double) -> Double? {
+    guard !values.isEmpty else {
+      return nil
+    }
+
+    let sorted = values.sorted()
+    let index = Int(
+      max(0.0, min(Double(sorted.count - 1), Double(sorted.count - 1) * percentile))
+        .rounded()
+    )
+    return sorted[index]
+  }
+
+  private func mediaPipeIndexedPixelPoints(
+    _ landmarks: [NormalizedLandmark],
+    indices: [Int],
+    width: Int,
+    height: Int
+  ) -> [E7MediaPipeIndexedPixelPoint] {
+    indices.compactMap { index in
+      guard index >= 0 && index < landmarks.count else {
+        return nil
+      }
+
+      let landmark = landmarks[index]
+      return E7MediaPipeIndexedPixelPoint(
+        index: index,
+        x: Double(landmark.x) * Double(width),
+        y: Double(landmark.y) * Double(height),
+        z: Double(landmark.z)
+      )
+    }
+  }
+
+  private func mediaPipeBounds(
+    _ points: [E7MediaPipeIndexedPixelPoint]
+  ) -> (minX: Double, minY: Double, maxX: Double, maxY: Double)? {
+    guard let first = points.first else {
+      return nil
+    }
+
+    return points.dropFirst().reduce(
+      (minX: first.x, minY: first.y, maxX: first.x, maxY: first.y)
+    ) { bounds, point in
+      (
+        minX: min(bounds.minX, point.x),
+        minY: min(bounds.minY, point.y),
+        maxX: max(bounds.maxX, point.x),
+        maxY: max(bounds.maxY, point.y)
+      )
+    }
+  }
+
+  private func sortDenseBrowPoints(
+    _ points: [E7MediaPipeIndexedPixelPoint],
+    corePoints: [E7MediaPipeIndexedPixelPoint]
+  ) -> [E7MediaPipeIndexedPixelPoint] {
+    var uniquePointsByIndex = [Int: E7MediaPipeIndexedPixelPoint]()
+    for point in points {
+      uniquePointsByIndex[point.index] = point
+    }
+
+    let uniquePoints = Array(uniquePointsByIndex.values)
+    guard !uniquePoints.isEmpty else {
+      return []
+    }
+
+    let splitYSource = corePoints.isEmpty ? uniquePoints : corePoints
+    let splitY =
+      splitYSource.reduce(0.0) { $0 + $1.y } / Double(splitYSource.count)
+    let topChain = uniquePoints
+      .filter { $0.y <= splitY }
+      .sorted { first, second in
+        first.x == second.x ? first.y < second.y : first.x < second.x
+      }
+    let bottomChain = uniquePoints
+      .filter { $0.y > splitY }
+      .sorted { first, second in
+        first.x == second.x ? first.y > second.y : first.x > second.x
+      }
+
+    if topChain.isEmpty || bottomChain.isEmpty {
+      return uniquePoints.sorted { first, second in
+        first.x == second.x ? first.y < second.y : first.x < second.x
+      }
+    }
+
+    return topChain + bottomChain
+  }
+
+  private func densifyBrowBoundaryPoints(
+    _ corePoints: [E7MediaPipeIndexedPixelPoint]
+  ) -> [[String: Double]] {
+    guard corePoints.count >= 4 else {
+      return corePoints.map { point in
+        [
+          "x": point.x,
+          "y": point.y,
+          "z": point.z
+        ]
+      }
+    }
+
+    let splitY = corePoints.reduce(0.0) { $0 + $1.y } / Double(corePoints.count)
+    let topChain = corePoints
+      .filter { $0.y <= splitY }
+      .sorted { first, second in
+        first.x == second.x ? first.y < second.y : first.x < second.x
+      }
+    let bottomChain = corePoints
+      .filter { $0.y > splitY }
+      .sorted { first, second in
+        first.x == second.x ? first.y > second.y : first.x > second.x
+      }
+
+    let boundaryChain = topChain + Array(bottomChain.reversed())
+    let chain = boundaryChain.count >= 4
+      ? boundaryChain
+      : corePoints.sorted { first, second in
+        first.x == second.x ? first.y < second.y : first.x < second.x
+      }
+
+    return densifyClosedPointChain(
+      chain,
+      samplesPerSegment: E7MediaPipeBrowBoundarySamplesPerSegment
+    )
+  }
+
+  private func densifyClosedPointChain(
+    _ points: [E7MediaPipeIndexedPixelPoint],
+    samplesPerSegment: Int
+  ) -> [[String: Double]] {
+    guard points.count >= 2 else {
+      return points.map { point in
+        [
+          "x": point.x,
+          "y": point.y,
+          "z": point.z
+        ]
+      }
+    }
+
+    var result = [[String: Double]]()
+    let stepCount = max(1, samplesPerSegment)
+    for index in points.indices {
+      let start = points[index]
+      let end = points[(index + 1) % points.count]
+      for step in 0..<stepCount {
+        let ratio = Double(step) / Double(stepCount)
+        result.append([
+          "x": start.x + (end.x - start.x) * ratio,
+          "y": start.y + (end.y - start.y) * ratio,
+          "z": start.z + (end.z - start.z) * ratio
+        ])
+      }
+    }
+
+    return result
   }
   #endif
 
@@ -1179,6 +1744,36 @@ private struct E7MediaPipeFaceLandmarks {
   let namedRegions: [String: [String: Any]]
 }
 
+private struct E7MediaPipeIndexedPixelPoint {
+  let index: Int
+  let x: Double
+  let y: Double
+  let z: Double
+}
+
+private struct E7BrowImageSampler {
+  let bytesPerRow: Int
+  let data: [UInt8]
+  let height: Int
+  let width: Int
+
+  func luminance(x: Double, y: Double) -> Double {
+    let pixelX = min(max(Int(x.rounded()), 0), width - 1)
+    let pixelY = min(max(Int(y.rounded()), 0), height - 1)
+    let offset = pixelY * bytesPerRow + pixelX * 4
+    guard offset + 2 < data.count else {
+      return 255.0
+    }
+
+    let red = Double(data[offset])
+    let green = Double(data[offset + 1])
+    let blue = Double(data[offset + 2])
+    return red * 0.299 + green * 0.587 + blue * 0.114
+  }
+}
+
+private let E7MediaPipeBrowBoundarySamplesPerSegment = 4
+
 private let mediaPipeOuterLipIndices = [
   61, 146, 91, 181, 84, 17, 314, 405, 321, 375,
   291, 409, 270, 269, 267, 0, 37, 39, 40, 185
@@ -1219,6 +1814,16 @@ private let mediaPipeLeftBrowIndices = [
 
 private let mediaPipeRightBrowIndices = [
   46, 53, 52, 65, 55, 107, 66, 105, 63, 70
+]
+
+private let mediaPipeLeftDenseBrowIndices = [
+  299, 337, 284, 333, 298, 334, 296, 251, 336, 293, 301, 282,
+  295, 283, 300, 389, 285, 276, 443, 442, 444, 257, 368, 445
+]
+
+private let mediaPipeRightDenseBrowIndices = [
+  69, 108, 54, 104, 68, 105, 66, 21, 107, 63, 52, 71,
+  65, 53, 70, 55, 223, 162, 46, 222, 224, 27, 139, 28, 225
 ]
 
 private let mediaPipeLeftTempleIndices = [

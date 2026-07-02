@@ -7,7 +7,7 @@ import asyncpg
 from app.core.settings import get_settings
 
 
-SEED_VERSION = "seed.sql:v1"
+SEED_VERSION = "seed.sql:v2"
 
 
 def get_seed_path() -> Path:
