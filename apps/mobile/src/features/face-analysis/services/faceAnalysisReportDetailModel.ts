@@ -1,5 +1,6 @@
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 import type {
+  FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
   FaceAnalysisReport,
 } from '../../../shared/types/faceAnalysis';
@@ -14,6 +15,12 @@ export type FaceAnalysisReportGuideItem = {
 export type FaceAnalysisReportSummaryItem = {
   label: string;
   value: string;
+};
+
+export type FaceAnalysisReportPrimaryMakeupRecommendation = {
+  makeup: FaceAnalysisMakeupCard;
+  guideSummary: string;
+  reason: string;
 };
 
 export type FaceAnalysisReportCreateFilterButtonPlacement = 'floating-bottom';
@@ -160,4 +167,32 @@ export function getFaceAnalysisReportPointGuideItems(
       };
     }),
   ];
+}
+
+export function getFaceAnalysisReportPrimaryMakeupRecommendation(
+  report: FaceAnalysisReport,
+  guideItems = getFaceAnalysisReportPointGuideItems(report),
+): FaceAnalysisReportPrimaryMakeupRecommendation | null {
+  const [makeup] = report.recommendedMakeups;
+
+  if (!makeup) {
+    return null;
+  }
+
+  const guideSummary = guideItems
+    .filter(
+      (guide) => guide.key === 'base' || guide.key === 'blush' || guide.key === 'lip',
+    )
+    .map((guide) => guide.point)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' · ');
+  const fallbackGuideSummary =
+    guideSummary || report.toneSummary || report.recommendedMood;
+
+  return {
+    makeup,
+    guideSummary: fallbackGuideSummary,
+    reason: `${report.recommendedMood} 무드와 ${fallbackGuideSummary} 포인트를 반영한 데일리 추천입니다.`,
+  };
 }

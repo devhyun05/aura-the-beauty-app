@@ -9,6 +9,7 @@ import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens
 import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
 import {useAuthSession} from '../../../features/auth';
 import {BackendApiError} from '../../../shared/services/backendApi';
+import {colors} from '../../../shared/theme';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
@@ -237,6 +238,9 @@ export function FaceAnalysisReportDetailRouteScreen({
 
   return (
     <DetailRouteChrome
+      backgroundColor={colors.surfaceMuted}
+      headerBackgroundColor={colors.surfaceMuted}
+      headerBorderColor={colors.surfaceMuted}
       routeName="FaceAnalysisReportDetail"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
       onShare={shareAction?.cb}
