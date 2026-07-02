@@ -1,31 +1,18 @@
-import type {ImageSourcePropType} from 'react-native';
-
+import {appAssetSource} from '../config/mediaAssets';
 import type {MakeupLook} from '../types/profile';
 
-const lookOjiGirl =
-  require('../../assets/images/looks/look-ojigirl.png') as ImageSourcePropType;
-const lookMoriGirl =
-  require('../../assets/images/looks/look-morigirl.png') as ImageSourcePropType;
-const lookCleanSmoky =
-  require('../../assets/images/looks/look-clean-smoky.png') as ImageSourcePropType;
-const lookMuteRosy =
-  require('../../assets/images/looks/look-mute-rosy-daily.png') as ImageSourcePropType;
-const lookRoyalBrown =
-  require('../../assets/images/looks/look-royal-brown.png') as ImageSourcePropType;
-const lookWarmBeige =
-  require('../../assets/images/looks/look-warm-beige-natural.png') as ImageSourcePropType;
-const lookCherryBlossom =
-  require('../../assets/images/looks/look-cherry-blossom-pink.png') as ImageSourcePropType;
-const lookPeachCoral =
-  require('../../assets/images/looks/look-peach-coral.png') as ImageSourcePropType;
-const lookCoolRose =
-  require('../../assets/images/looks/look-cool-rose.png') as ImageSourcePropType;
-const lookBerryPlum =
-  require('../../assets/images/looks/look-berry-plum.png') as ImageSourcePropType;
-const lookDryRose =
-  require('../../assets/images/looks/look-dry-rose.png') as ImageSourcePropType;
-const lookTerracotta =
-  require('../../assets/images/looks/look-terracotta.png') as ImageSourcePropType;
+const lookOjiGirl = appAssetSource('images/looks/look-ojigirl.png');
+const lookMoriGirl = appAssetSource('images/looks/look-morigirl.png');
+const lookCleanSmoky = appAssetSource('images/looks/look-clean-smoky.png');
+const lookMuteRosy = appAssetSource('images/looks/look-mute-rosy-daily.png');
+const lookRoyalBrown = appAssetSource('images/looks/look-royal-brown.png');
+const lookWarmBeige = appAssetSource('images/looks/look-warm-beige-natural.png');
+const lookCherryBlossom = appAssetSource('images/looks/look-cherry-blossom-pink.png');
+const lookPeachCoral = appAssetSource('images/looks/look-peach-coral.png');
+const lookCoolRose = appAssetSource('images/looks/look-cool-rose.png');
+const lookBerryPlum = appAssetSource('images/looks/look-berry-plum.png');
+const lookDryRose = appAssetSource('images/looks/look-dry-rose.png');
+const lookTerracotta = appAssetSource('images/looks/look-terracotta.png');
 
 export const makeupLooksMock: MakeupLook[] = [
   {

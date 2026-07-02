@@ -16,6 +16,9 @@
 		E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */; };
 		E5F0A1032F80111100FACE01 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F0A1022F80111100FACE01 /* Vision.framework */; };
 		E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */; };
+		E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */; };
+		E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */; };
+		E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */ = {isa = PBXBuildFile; fileRef = E7A110022F81000000E7AAA3 /* face_landmarker.task */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */; };
 /* End PBXBuildFile section */
@@ -24,17 +27,20 @@
 		13B07F961A680F5B00A75B9A /* AURA.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AURA.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = AURA/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = AURA/Info.plist; sourceTree = "<group>"; };
-		1CF056D4BCFBCB119E2FD9FD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = AURA/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1CF056D4BCFBCB119E2FD9FD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = AURA/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		504346C7D22F1FFCE44CAEE5 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AURA/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		6986E656A2EB340C2DE7FA3C /* Pods-AURA.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AURA.debug.xcconfig"; path = "Target Support Files/Pods-AURA/Pods-AURA.debug.xcconfig"; sourceTree = "<group>"; };
 		90F57427B8CDFED1AC0B228A /* libPods-AURA.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AURA.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = AURA/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		D9C44DF0657BF1437F17C109 /* Pods-AURA.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AURA.release.xcconfig"; path = "Target Support Files/Pods-AURA/Pods-AURA.release.xcconfig"; sourceTree = "<group>"; };
-		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURAFaceLandmarkDetector.m; path = AURA/AURAFaceLandmarkDetector.m; sourceTree = "<group>"; };
 		E5F0A1022F80111100FACE01 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURARealtimeFaceCaptureView.m; path = AURA/AURARealtimeFaceCaptureView.m; sourceTree = "<group>"; };
+		E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = E7NativeLipBoundaryProviders.swift; path = AURA/E7NativeLipBoundaryProviders.swift; sourceTree = "<group>"; };
+		E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = E7NativeLipBoundaryProvidersBridge.m; path = AURA/E7NativeLipBoundaryProvidersBridge.m; sourceTree = "<group>"; };
+		E7A110022F81000000E7AAA3 /* face_landmarker.task */ = {isa = PBXFileReference; lastKnownFileType = file; name = face_landmarker.task; path = AURA/E7Models/face_landmarker.task; sourceTree = "<group>"; };
+		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AURA/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "AURA-Bridging-Header.h"; path = "AURA/AURA-Bridging-Header.h"; sourceTree = "<group>"; };
 		F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = UnityMakeupBridge.m; path = AURA/UnityMakeupBridge.m; sourceTree = "<group>"; };
@@ -58,6 +64,9 @@
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
+				E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */,
+				E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */,
+				E7A110022F81000000E7AAA3 /* face_landmarker.task */,
 				E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */,
 				E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */,
 				F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */,
@@ -86,7 +95,6 @@
 				6986E656A2EB340C2DE7FA3C /* Pods-AURA.debug.xcconfig */,
 				D9C44DF0657BF1437F17C109 /* Pods-AURA.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -181,7 +189,6 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
-						DevelopmentTeam = "WSLFBT6QHB";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -213,6 +220,7 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				0FA0A731B5B2E91D85A3C0C3 /* PrivacyInfo.xcprivacy in Resources */,
+				E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,22 +304,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-AURA/Pods-AURA-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		F4E2A61C2F6C8B2400C7D101 /* Embed UnityFramework */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Embed UnityFramework";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\n\nif [ \"${PLATFORM_NAME}\" != \"iphoneos\" ]; then\n  echo \"[aura:unity] Skipping UnityFramework embed for ${PLATFORM_NAME}.\"\n  exit 0\nfi\n\nUNITY_BUILD_DIR=\"${SRCROOT}/UnityBuild\"\nUNITY_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/UnityFramework.framework\"\nUNITY_DATA_SRC=\"${UNITY_BUILD_DIR}/Data\"\nUNITY_FRAMEWORK_DST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/UnityFramework.framework\"\n\nif [ -d \"${UNITY_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding UnityFramework from ${UNITY_FRAMEWORK_SRC}\"\n  mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n  rsync -a --delete \"${UNITY_FRAMEWORK_SRC}\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/\"\n  if [ -d \"${UNITY_DATA_SRC}\" ]; then\n    rsync -a --delete \"${UNITY_DATA_SRC}/\" \"${UNITY_FRAMEWORK_DST}/Data/\"\n  else\n    echo \"[aura:unity] Data folder not found at ${UNITY_DATA_SRC}; Unity may fail to load assets.\"\n  fi\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${UNITY_FRAMEWORK_DST}\"\n  fi\nelse\n  echo \"[aura:unity] UnityFramework.framework not found at ${UNITY_FRAMEWORK_SRC}; skipping embed.\"\nfi\n";
-			showEnvVarsInLog = 0;
-		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -366,6 +358,22 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-AURA/expo-configure-project.sh\"\n";
 		};
+		F4E2A61C2F6C8B2400C7D101 /* Embed UnityFramework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed UnityFramework";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\nif [ \"${PLATFORM_NAME}\" != \"iphoneos\" ]; then\n  echo \"[aura:unity] Skipping UnityFramework embed for ${PLATFORM_NAME}.\"\n  exit 0\nfi\n\nUNITY_BUILD_DIR=\"${SRCROOT}/UnityBuild\"\nUNITY_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/UnityFramework.framework\"\nUNITY_DATA_SRC=\"${UNITY_BUILD_DIR}/Data\"\nUNITY_FRAMEWORK_DST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/UnityFramework.framework\"\n\nif [ -d \"${UNITY_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding UnityFramework from ${UNITY_FRAMEWORK_SRC}\"\n  mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n  rsync -a --delete \"${UNITY_FRAMEWORK_SRC}\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/\"\n  if [ -d \"${UNITY_DATA_SRC}\" ]; then\n    rsync -a --delete \"${UNITY_DATA_SRC}/\" \"${UNITY_FRAMEWORK_DST}/Data/\"\n  else\n    echo \"[aura:unity] Data folder not found at ${UNITY_DATA_SRC}; Unity may fail to load assets.\"\n  fi\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${UNITY_FRAMEWORK_DST}\"\n  fi\nelse\n  echo \"[aura:unity] UnityFramework.framework not found at ${UNITY_FRAMEWORK_SRC}; skipping embed.\"\nfi\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -375,6 +383,8 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
+				E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */,
+				E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */,
 				E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */,
 				E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */,
 				D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */,
@@ -391,7 +401,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = AURA/AURA.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -418,9 +431,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				DEVELOPMENT_TEAM = "WSLFBT6QHB";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Debug;
 		};
@@ -431,7 +441,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = AURA/AURA.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				INFOPLIST_FILE = AURA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -452,9 +465,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				DEVELOPMENT_TEAM = "WSLFBT6QHB";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Release;
 		};

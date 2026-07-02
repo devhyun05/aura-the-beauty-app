@@ -31,6 +31,10 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)sendMessageToGameObject:(NSString *)gameObject
                          method:(NSString *)method
                         payload:(NSString *)payload;
+- (void)sendMessageToGameObject:(NSString *)gameObject
+                         method:(NSString *)method
+                        payload:(NSString *)payload
+                       metadata:(NSString *)metadata;
 
 @end
 
@@ -191,21 +195,66 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
                          method:(NSString *)method
                         payload:(NSString *)payload
 {
+  [self sendMessageToGameObject:gameObject method:method payload:payload metadata:nil];
+}
+
+- (void)sendMessageToGameObject:(NSString *)gameObject
+                         method:(NSString *)method
+                        payload:(NSString *)payload
+                       metadata:(NSString *)metadata
+{
+  NSUInteger payloadLength = payload != nil ? payload.length : 0;
+  NSLog(
+      @"[aura:unity-native] UnitySendMessage prepare gameObject=%@ method=%@ messageLength=%lu frameworkLoaded=%@ runtimeReady=%@ running=%@ metadata=%@",
+      gameObject,
+      method,
+      (unsigned long)payloadLength,
+      _unityFramework != nil ? @"true" : @"false",
+      _isReady ? @"true" : @"false",
+      [self isRunning] ? @"true" : @"false",
+      metadata ?: @"none");
+
   if (![self ensureRunning]) {
+    NSLog(
+        @"[aura:unity-native] UnitySendMessage skipped reason=ensureRunningFailed gameObject=%@ method=%@ messageLength=%lu metadata=%@",
+        gameObject,
+        method,
+        (unsigned long)payloadLength,
+        metadata ?: @"none");
     return;
   }
 
   SEL sendSelector = NSSelectorFromString(@"sendMessageToGOWithName:functionName:message:");
   if (![_unityFramework respondsToSelector:sendSelector]) {
+    NSLog(
+        @"[aura:unity-native] UnitySendMessage skipped reason=selectorMissing gameObject=%@ method=%@ messageLength=%lu metadata=%@",
+        gameObject,
+        method,
+        (unsigned long)payloadLength,
+        metadata ?: @"none");
     return;
   }
 
+  NSLog(
+      @"[aura:unity-native] UnitySendMessage invoke gameObject=%@ method=%@ messageLength=%lu frameworkLoaded=%@ runtimeReady=%@ metadata=%@",
+      gameObject,
+      method,
+      (unsigned long)payloadLength,
+      _unityFramework != nil ? @"true" : @"false",
+      _isReady ? @"true" : @"false",
+      metadata ?: @"none");
   ((void (*)(id, SEL, const char *, const char *, const char *))objc_msgSend)(
       _unityFramework,
       sendSelector,
       gameObject.UTF8String,
       method.UTF8String,
       payload.UTF8String);
+  NSLog(
+      @"[aura:unity-native] UnitySendMessage invoked gameObject=%@ method=%@ messageLength=%lu metadata=%@",
+      gameObject,
+      method,
+      (unsigned long)payloadLength,
+      metadata ?: @"none");
 }
 
 - (NSString *)unityFrameworkPath
@@ -483,6 +532,19 @@ RCT_EXPORT_METHOD(postMessage:(NSString *)gameObject
     [[UnityMakeupRuntime sharedRuntime] sendMessageToGameObject:gameObject
                                                          method:method
                                                         payload:payload];
+  });
+}
+
+RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
+                  method:(NSString *)method
+                  payload:(NSString *)payload
+                  metadata:(NSString *)metadata)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] sendMessageToGameObject:gameObject
+                                                         method:method
+                                                        payload:payload
+                                                       metadata:metadata];
   });
 }
 

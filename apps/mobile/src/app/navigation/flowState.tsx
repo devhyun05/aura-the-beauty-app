@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useContext,
   useMemo,
@@ -18,21 +18,27 @@ export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
+  selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
+  referenceMakeupUploadedPhotos: readonly ReferenceMakeupPhoto[];
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
   setMakeupFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
+  setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
+  setReferenceMakeupUploadedPhotos: Dispatch<SetStateAction<readonly ReferenceMakeupPhoto[]>>;
 };
 
 const NavigationFlowStateContext =
@@ -40,6 +46,7 @@ const NavigationFlowStateContext =
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
+    likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
     savedMakeupLook: null,
     selectedFaceAnalysisReport: null,
@@ -47,7 +54,9 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
+    selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
+    referenceMakeupUploadedPhotos: [],
   };
 }
 
@@ -70,8 +79,14 @@ export function NavigationFlowStateProvider({
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
+  const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
+    useState<string | null>(initialState.selectedRecommendedMakeupFilterId);
   const [selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto] =
     useState<ReferenceMakeupPhoto | null>(initialState.selectedReferenceMakeupPhoto);
+  const [referenceMakeupUploadedPhotos, setReferenceMakeupUploadedPhotos] =
+    useState<readonly ReferenceMakeupPhoto[]>(initialState.referenceMakeupUploadedPhotos);
+  const [likedMakeupFilterIds, setLikedMakeupFilterIds] =
+    useState<readonly string[]>(initialState.likedMakeupFilterIds);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
@@ -79,26 +94,35 @@ export function NavigationFlowStateProvider({
 
   const value = useMemo(
     () => ({
+      likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
+      referenceMakeupUploadedPhotos,
+      setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedMakeupFeedbackPhoto,
+      setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
+      setReferenceMakeupUploadedPhotos,
     }),
     [
+      likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
+      selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
+      referenceMakeupUploadedPhotos,
     ],
   );
 

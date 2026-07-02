@@ -155,3 +155,12 @@ expectEqual(
 />;
 
 <ARFilterScreen initialComparisonMode="left" initialGuideMode="half" />;
+
+<ARFilterScreen
+  initialComparisonMode="left"
+  initialGuideMode="half"
+  initialMakeupFilterId="filter-douyin-pink"
+  initialSource="recommendedFilter"
+  onOpenShapeAdjust={() => undefined}
+  onSave={() => undefined}
+/>;

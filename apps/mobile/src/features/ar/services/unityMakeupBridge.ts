@@ -5,18 +5,35 @@ import type {
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
+import {
+  DEFAULT_FULL_FACE_REGION_CONTROLS,
+  FULL_FACE_REGION_RUNTIME_ASSETS,
+  MAKEUP_RECIPE_REGIONS,
+  PRODUCT_REGION_LABELS,
+  buildFullFaceMakeupRecipe,
+  createDefaultRegionParams,
+  getMakeupRecipeRegionsForArea,
+  type FullFaceMakeupRecipe,
+  type FullFaceMakeupRecipeLayer,
+  type UnitySynchronizedCaptureRequest,
+  type FullFaceRegionControls,
+  type MakeupRecipeRegion,
+} from '../../../shared/contracts/fullFaceMakeupRecipe';
 import {ORIGINAL_OPTION_CARD_ID} from './arFilterOptionRules';
 
 export const UNITY_MAKEUP_BRIDGE_TARGET = {
   gameObject: 'RNBridge',
   applyRecipeMethod: 'ApplyRecipeJson',
+  captureReferenceFrameMethod: 'CaptureE7ReferenceFrameJson',
+  applyGeneratedLipMaskMethod: 'ApplyGeneratedLipMaskJson',
+  regionOverlayVisibilityMethod: 'SetE7RegionOverlayVisibleJson',
 } as const;
 
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
 
-export type UnityMakeupRegion = 'lip' | 'cheek' | 'brow';
+export type UnityMakeupRegion = MakeupRecipeRegion;
 
-export type UnityMakeupLayerRegion = UnityMakeupRegion | 'eye';
+export type UnityMakeupLayerRegion = MakeupRecipeRegion;
 
 export type UnityMakeupRegionPreset = {
   branchSource: string;
@@ -29,28 +46,9 @@ export type UnityMakeupRegionPreset = {
   texture: string;
 };
 
-export type UnityMakeupLayer = UnityMakeupRegionPreset & {
-  blendMode: 'normal' | 'screen';
-  coverage: number;
-  enabled: boolean;
-  feather: number;
-  id: string;
-  intensity: number;
-  rendererMode: 'smooth-region-mask';
-  textureMode: 'sample';
-};
+export type UnityMakeupLayer = FullFaceMakeupRecipeLayer;
 
-export type UnityMakeupRecipeBatch = {
-  activeRegions: string;
-  enabledLayerCount: number;
-  layerCount: number;
-  layers: UnityMakeupLayer[];
-  lookId: 'lip_cheek_brow_region_preview';
-  recipeBatchId: string;
-  rendererMode: 'smooth-region-mask';
-  sentAtMs: number;
-  version: 1;
-};
+export type UnityMakeupRecipeBatch = FullFaceMakeupRecipe;
 
 export type UnityMakeupARFilterSelection = {
   selectedColor: Pick<FilterColorOption, 'hex' | 'label'>;
@@ -65,53 +63,49 @@ export type UnityMakeupARFilterSelection = {
   sentAtMs?: number;
 };
 
-export const UNITY_MAKEUP_LAYER_ORDER: readonly UnityMakeupLayerRegion[] = [
-  'lip',
-  'cheek',
-  'eye',
-  'brow',
-];
+export const UNITY_MAKEUP_LAYER_ORDER: readonly UnityMakeupLayerRegion[] =
+  MAKEUP_RECIPE_REGIONS;
 
 export const UNITY_MAKEUP_LAYER_PRESETS: Record<
   UnityMakeupLayerRegion,
   UnityMakeupRegionPreset
 > = {
   lip: {
-    branchSource: 'COMETIC-EXPRESSION-ENINEERING',
+    branchSource: 'makeupAR-full-face',
     color: '#D94B74',
     finish: 'gradient-lip',
-    label: 'Lip',
+    label: PRODUCT_REGION_LABELS.lip,
     maskTextureId: 'lip-drawn-style-atlas-v1',
     opacity: 0.95,
     region: 'lip',
     texture: 'gradient_lip',
   },
-  cheek: {
-    branchSource: 'blush-mask@c0c518d',
+  blush: {
+    branchSource: 'makeupAR-full-face',
     color: '#E67B5F',
     finish: 'powder-blush',
-    label: 'Cheek',
-    maskTextureId: 'cheek-daily-mask-v1',
+    label: PRODUCT_REGION_LABELS.blush,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
     opacity: 0.78,
-    region: 'cheek',
+    region: 'blush',
     texture: 'soft_blush',
   },
-  eye: {
-    branchSource: 'eye-mask@smooth-v1',
+  eyeliner: {
+    branchSource: 'makeupAR-full-face',
     color: '#8A756E',
     finish: 'soft-eye-shimmer',
-    label: 'Eye',
-    maskTextureId: 'eye-smooth-mask-v1',
+    label: PRODUCT_REGION_LABELS.eyeliner,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.eyeliner.maskTextureId,
     opacity: 0.52,
-    region: 'eye',
+    region: 'eyeliner',
     texture: 'shimmer_eye',
   },
   brow: {
-    branchSource: 'feature/brow-0626',
+    branchSource: 'makeupAR-psd-brow',
     color: '#4A342B',
     finish: 'soft-powder-brow',
-    label: 'Brow',
-    maskTextureId: 'brow-png-dailyflat-sharp-v1',
+    label: PRODUCT_REGION_LABELS.brow,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId,
     opacity: 0.92,
     region: 'brow',
     texture: 'natural_brow',
@@ -123,27 +117,15 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   UnityMakeupRegionPreset
 > = {
   brow: UNITY_MAKEUP_LAYER_PRESETS.brow,
-  cheek: UNITY_MAKEUP_LAYER_PRESETS.cheek,
+  blush: UNITY_MAKEUP_LAYER_PRESETS.blush,
+  eyeliner: UNITY_MAKEUP_LAYER_PRESETS.eyeliner,
   lip: UNITY_MAKEUP_LAYER_PRESETS.lip,
-};
-
-const UNITY_LAYER_REGIONS_BY_MAKEUP_AREA: Record<
-  MakeupArea,
-  readonly UnityMakeupLayerRegion[]
-> = {
-  all: ['lip', 'cheek', 'eye', 'brow'],
-  base: [],
-  brow: ['brow'],
-  cheek: ['cheek'],
-  contour: [],
-  eye: ['eye'],
-  lip: ['lip'],
 };
 
 export function getUnityMakeupLayerRegionsForMakeupArea(
   selectedMakeupArea: MakeupArea,
 ): readonly UnityMakeupLayerRegion[] {
-  return UNITY_LAYER_REGIONS_BY_MAKEUP_AREA[selectedMakeupArea];
+  return getMakeupRecipeRegionsForArea(selectedMakeupArea);
 }
 
 export function createUnityMakeupRecipeBatch(
@@ -205,38 +187,22 @@ export function createUnityMakeupRecipeBatchFromARFilterSelections(
     );
   });
 
-  const layers = UNITY_MAKEUP_LAYER_ORDER.map(region => {
-    const selection = layerSelections.get(region);
-
-    return createUnityMakeupLayer({
-      enabled: Boolean(selection),
-      region,
-      selectedColor: selection?.selectedColor,
-      selectedShapeId: selection?.selectedShapeId,
-      selectedTextureId: selection?.selectedTextureId,
-      selectedTypeId: selection?.selectedTypeId,
-    });
-  });
   const activeRegions = UNITY_MAKEUP_LAYER_ORDER.filter(region =>
     layerSelections.has(region),
   );
-  const activeRegionSummary =
-    activeRegions.length > 0 ? activeRegions.join(',') : 'none';
   const recipeAreas = selections
     .map(selection => sanitizeRecipeIdPart(selection.selectedMakeupArea))
     .join('_');
 
-  return {
-    activeRegions: activeRegionSummary,
-    enabledLayerCount: layers.filter(layer => layer.enabled).length,
-    layerCount: layers.length,
-    layers,
-    lookId: 'lip_cheek_brow_region_preview',
+  return buildFullFaceMakeupRecipe({
+    controls: createUnityMakeupControlsForRegions({
+      activeRegions,
+      layerSelections,
+    }),
+    recipeId: ['rn-filter-combined', recipeAreas || 'none', sentAtMs].join('-'),
     recipeBatchId: ['rn-filter-combined', recipeAreas || 'none', sentAtMs].join('-'),
-    rendererMode: 'smooth-region-mask',
     sentAtMs,
-    version: 1,
-  };
+  });
 }
 
 function createUnityMakeupRecipeBatchForRegions({
@@ -256,31 +222,84 @@ function createUnityMakeupRecipeBatchForRegions({
   selectedTypeId?: string;
   sentAtMs: number;
 }): UnityMakeupRecipeBatch {
-  const activeRegionSet = new Set(activeRegions);
-  const layers = UNITY_MAKEUP_LAYER_ORDER.map(region =>
-    createUnityMakeupLayer({
-      enabled: activeRegionSet.has(region),
-      region,
-      selectedColor,
-      selectedShapeId,
-      selectedTextureId,
-      selectedTypeId,
-    }),
-  );
-  const activeRegionSummary =
-    activeRegions.length > 0 ? activeRegions.join(',') : 'none';
+  const layerSelections = new Map<UnityMakeupLayerRegion, UnityMakeupARFilterSelection>();
 
-  return {
-    activeRegions: activeRegionSummary,
-    enabledLayerCount: layers.filter(layer => layer.enabled).length,
-    layerCount: layers.length,
-    layers,
-    lookId: 'lip_cheek_brow_region_preview',
+  activeRegions.forEach(region => {
+    const preset = UNITY_MAKEUP_LAYER_PRESETS[region];
+
+    layerSelections.set(region, {
+      selectedColor: selectedColor ?? {
+        hex: preset.color,
+        label: preset.label,
+      },
+      selectedColorId: 'unity-region-color',
+      selectedMakeupArea: region === 'blush' ? 'cheek' : region === 'eyeliner' ? 'eye' : region,
+      selectedMakeupFilter: {
+        id: 'unity-region-recipe',
+        imageSource: 1,
+        categoryId: 'recommended',
+        title: preset.label,
+        subtitle: preset.label,
+        intensityLabel: '',
+        makeupAreas: [],
+        colorOptions: [],
+        typeOptions: [],
+        textureOptions: [],
+      },
+      selectedPointMakeupLookId: '',
+      selectedShapeId: selectedShapeId ?? '',
+      selectedTextureId: selectedTextureId ?? '',
+      selectedTotalMakeupLookId: null,
+      selectedTypeId: selectedTypeId ?? '',
+    });
+  });
+
+  return buildFullFaceMakeupRecipe({
+    controls: createUnityMakeupControlsForRegions({
+      activeRegions,
+      layerSelections,
+    }),
+    recipeId: recipeBatchId,
     recipeBatchId,
-    rendererMode: 'smooth-region-mask',
     sentAtMs,
-    version: 1,
-  };
+  });
+}
+
+function createUnityMakeupControlsForRegions({
+  activeRegions,
+  layerSelections,
+}: {
+  activeRegions: readonly UnityMakeupLayerRegion[];
+  layerSelections: ReadonlyMap<UnityMakeupLayerRegion, UnityMakeupARFilterSelection>;
+}): FullFaceRegionControls {
+  const activeRegionSet = new Set(activeRegions);
+
+  return UNITY_MAKEUP_LAYER_ORDER.reduce((controls, region) => {
+    const selection = layerSelections.get(region);
+    const defaultControl = DEFAULT_FULL_FACE_REGION_CONTROLS[region];
+    const preset = UNITY_MAKEUP_LAYER_PRESETS[region];
+    const selectedHex = normalizeSelectedHex(selection?.selectedColor.hex);
+    const selectedShapeId = selection?.selectedShapeId ?? '';
+    const selectedTextureId = selection?.selectedTextureId ?? '';
+    const selectedTypeId = selection?.selectedTypeId ?? '';
+    const params = createDefaultRegionParams(region);
+
+    params.coverage = resolveCoverageForRegion(region, selectedShapeId);
+    params.feather = resolveFeatherForRegion(region, selectedShapeId);
+    params.maskThreshold = resolveMaskThresholdForRegion(region);
+
+    return {
+      ...controls,
+      [region]: {
+        ...defaultControl,
+        enabled: activeRegionSet.has(region),
+        colorHex: selectedHex ?? preset.color,
+        opacity: resolveOpacityForRegion(region, selectedTextureId, selectedTypeId),
+        intensity: activeRegionSet.has(region) ? 1 : 0,
+        params,
+      },
+    };
+  }, {} as FullFaceRegionControls);
 }
 
 function shouldEnableUnityMakeupSelection({
@@ -315,118 +334,6 @@ function shouldEnableUnityMakeupSelection({
   return !shouldClearPoint && !shouldClearColor;
 }
 
-function createUnityMakeupLayer({
-  enabled,
-  region,
-  selectedColor,
-  selectedShapeId,
-  selectedTextureId,
-  selectedTypeId,
-}: {
-  enabled: boolean;
-  region: UnityMakeupLayerRegion;
-  selectedColor?: Pick<FilterColorOption, 'hex' | 'label'>;
-  selectedShapeId?: string;
-  selectedTextureId?: string;
-  selectedTypeId?: string;
-}): UnityMakeupLayer {
-  const preset = UNITY_MAKEUP_LAYER_PRESETS[region];
-  const texture = resolveTextureForRegion(
-    region,
-    selectedTextureId,
-    selectedTypeId,
-    selectedShapeId,
-  );
-  const maskTextureId = resolveMaskTextureIdForRegion(region, selectedShapeId);
-  const selectedHex = normalizeSelectedHex(selectedColor?.hex);
-  const layerColor = enabled && selectedHex ? selectedHex : preset.color;
-  const label =
-    enabled && selectedColor?.label
-      ? `${preset.label} ${selectedColor.label}`
-      : preset.label;
-
-  return {
-    ...preset,
-    blendMode: resolveBlendModeForRegion(region, texture),
-    color: layerColor,
-    coverage: resolveCoverageForRegion(region, selectedShapeId),
-    enabled,
-    feather: resolveFeatherForRegion(region, selectedShapeId),
-    id: `${region}-${maskTextureId}`,
-    intensity: enabled ? 1 : 0,
-    label,
-    maskTextureId,
-    opacity: enabled
-      ? resolveOpacityForRegion(region, selectedTextureId, selectedTypeId)
-      : 0,
-    rendererMode: 'smooth-region-mask',
-    texture,
-    textureMode: 'sample',
-  };
-}
-
-function resolveTextureForRegion(
-  region: UnityMakeupLayerRegion,
-  selectedTextureId = '',
-  selectedTypeId = '',
-  selectedShapeId = '',
-): string {
-  if (region === 'lip') {
-    if (selectedShapeId === 'lip-over') {
-      return 'overline_lip';
-    }
-
-    if (
-      includesAny(selectedTextureId, ['matte', 'velvet']) ||
-      includesAny(selectedTypeId, ['lipstick'])
-    ) {
-      return 'matte_lip';
-    }
-
-    if (
-      includesAny(selectedTextureId, ['glow', 'glass', 'balmy', 'satin']) ||
-      includesAny(selectedTypeId, ['gloss', 'balm', 'tint'])
-    ) {
-      return 'gloss_lip';
-    }
-
-    return 'gradient_lip';
-  }
-
-  if (region === 'brow') {
-    return selectedShapeId === 'brow-soft-arch' ? 'soft_brow' : 'natural_brow';
-  }
-
-  return UNITY_MAKEUP_LAYER_PRESETS[region].texture;
-}
-
-function resolveMaskTextureIdForRegion(
-  region: UnityMakeupLayerRegion,
-  selectedShapeId = '',
-): string {
-  if (region === 'lip' && selectedShapeId === 'lip-gradient') {
-    return 'lip-drawn-gradient-density-atlas-v1';
-  }
-
-  if (region === 'cheek' && selectedShapeId === 'cheek-diagonal') {
-    return 'cheek-sunkissed-mask1-v1';
-  }
-
-  if (region === 'cheek' && selectedShapeId === 'cheek-round') {
-    return 'cheek-lovely-mask-v1';
-  }
-
-  if (region === 'brow' && selectedShapeId === 'brow-soft-arch') {
-    return 'brow-soft-arch-fine-hair-v1';
-  }
-
-  if (region === 'brow' && selectedShapeId === 'brow-straight') {
-    return 'brow-png-dailyflat-sharp-v1';
-  }
-
-  return UNITY_MAKEUP_LAYER_PRESETS[region].maskTextureId;
-}
-
 function resolveOpacityForRegion(
   region: UnityMakeupLayerRegion,
   selectedTextureId = '',
@@ -438,7 +345,7 @@ function resolveOpacityForRegion(
     return 0.86;
   }
 
-  if (region === 'eye' && includesAny(selectedTypeId, ['liner'])) {
+  if (region === 'eyeliner' && includesAny(selectedTypeId, ['liner'])) {
     return 0.64;
   }
 
@@ -453,11 +360,11 @@ function resolveCoverageForRegion(
     return selectedShapeId === 'lip-over' ? 0.84 : 0.72;
   }
 
-  if (region === 'cheek') {
+  if (region === 'blush') {
     return selectedShapeId === 'cheek-round' ? 0.66 : 0.72;
   }
 
-  if (region === 'eye') {
+  if (region === 'eyeliner') {
     return selectedShapeId === 'eye-tail' ? 0.5 : 0.4;
   }
 
@@ -472,18 +379,27 @@ function resolveFeatherForRegion(
     return selectedShapeId === 'brow-soft-arch' ? 0.38 : 0.34;
   }
 
-  if (region === 'eye') {
+  if (region === 'eyeliner') {
     return 0.24;
   }
 
   return selectedShapeId === 'cheek-round' ? 0.3 : 0.24;
 }
 
-function resolveBlendModeForRegion(
-  region: UnityMakeupLayerRegion,
-  texture: string,
-): UnityMakeupLayer['blendMode'] {
-  return region === 'eye' || texture === 'gloss_lip' ? 'screen' : 'normal';
+function resolveMaskThresholdForRegion(region: UnityMakeupLayerRegion): number {
+  if (region === 'lip') {
+    return 0.35;
+  }
+
+  if (region === 'blush') {
+    return 0.18;
+  }
+
+  if (region === 'brow') {
+    return 0.035;
+  }
+
+  return 0.12;
 }
 
 function normalizeSelectedHex(hex: string | undefined): string | null {
@@ -502,6 +418,68 @@ function sanitizeRecipeIdPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+function readJsonStringField(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fieldValue = record[field];
+
+  return typeof fieldValue === 'string' && fieldValue.trim().length > 0
+    ? fieldValue.trim()
+    : undefined;
+}
+
+function readJsonNumberField(
+  value: unknown,
+  field: string,
+): number | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fieldValue = record[field];
+
+  return typeof fieldValue === 'number' && Number.isFinite(fieldValue)
+    ? fieldValue
+    : undefined;
+}
+
+function extractGeneratedLipMaskMetadata(payload: string): {
+  messageId: string;
+  packageId: string;
+} {
+  try {
+    const parsed = JSON.parse(payload) as unknown;
+    const generatedMaskId =
+      readJsonStringField(parsed, 'generatedMaskId') ??
+      readJsonStringField(parsed, 'maskTextureId') ??
+      readJsonStringField(parsed, 'captureSetId');
+    const packageId = generatedMaskId ?? `generated-lip-payload-${payload.length}`;
+    const revision =
+      readJsonNumberField(parsed, 'validationControlRequestId') ??
+      readJsonNumberField(parsed, 'controlRequestId') ??
+      readJsonNumberField(parsed, 'validationControlRevision') ??
+      readJsonNumberField(parsed, 'controlRevision') ??
+      0;
+
+    return {
+      messageId: sanitizeRecipeIdPart(`${packageId}-${revision}-${payload.length}`),
+      packageId,
+    };
+  } catch {
+    return {
+      messageId: sanitizeRecipeIdPart(`generated-lip-unparsed-${payload.length}`),
+      packageId: `generated-lip-unparsed-${payload.length}`,
+    };
+  }
+}
+
 export function serializeUnityMakeupRecipeBatch(
   recipeBatch: UnityMakeupRecipeBatch,
 ): string {
@@ -514,6 +492,12 @@ type NativeUnityMakeupBridge = {
   isReady?: () => boolean;
   isRuntimeAvailable?: () => boolean;
   postMessage?: (gameObject: string, method: string, payload: string) => void;
+  postMessageWithMetadata?: (
+    gameObject: string,
+    method: string,
+    payload: string,
+    metadata: string,
+  ) => void;
   prepareFramework?: () => void;
   prepareRuntime?: () => void;
 };
@@ -522,8 +506,30 @@ function getNativeUnityMakeupBridge(): NativeUnityMakeupBridge | undefined {
   return NativeModules.UnityMakeupBridge as NativeUnityMakeupBridge | undefined;
 }
 
+type NativeUnityPostMetadata = {
+  eventName: string;
+  messageId: string;
+  packageId?: string;
+  payloadBytes: number;
+  retryKey: string;
+};
+
+type ScheduledNativePost = {
+  attemptNumber: number;
+  createdAtMs: number;
+  metadata: NativeUnityPostMetadata;
+  method: string;
+  payload: string;
+  sequence: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+const NATIVE_UNITY_RETRY_DELAYS_MS = [0, 250, 750, 1500, 2500, 4000, 6000, 8000];
+const GENERATED_LIP_MASK_NATIVE_SEND_RETRY_DELAY_MS = 1500;
+const GENERATED_LIP_MASK_NATIVE_SEND_MAX_ATTEMPTS = 24;
+
 let latestNativePostSequence = 0;
-let scheduledNativePostTimers: ReturnType<typeof setTimeout>[] = [];
+const scheduledNativePosts = new Map<string, ScheduledNativePost>();
 let nativeUnityEventEmitter: NativeEventEmitter | null = null;
 
 export function isUnityMakeupFrameworkAvailable(): boolean {
@@ -601,18 +607,229 @@ export function addUnityMakeupEventListener(
     return {remove: () => undefined};
   }
 
-  return eventEmitter.addListener(UNITY_MAKEUP_NATIVE_EVENT_NAME, listener);
+  return eventEmitter.addListener(UNITY_MAKEUP_NATIVE_EVENT_NAME, event => {
+    handleUnityMakeupNativeEvent(event);
+    listener(event);
+  });
 }
 
-function clearScheduledNativePosts() {
-  scheduledNativePostTimers.forEach(timer => clearTimeout(timer));
-  scheduledNativePostTimers = [];
+function clearScheduledNativePost(retryKey: string) {
+  const scheduledPost = scheduledNativePosts.get(retryKey);
+
+  if (!scheduledPost) {
+    return;
+  }
+
+  if (scheduledPost.timer) {
+    clearTimeout(scheduledPost.timer);
+  }
+  scheduledNativePosts.delete(retryKey);
+}
+
+function clearGeneratedLipMaskNativePosts() {
+  Array.from(scheduledNativePosts.keys())
+    .filter(retryKey => retryKey.startsWith('generated-lip-mask:'))
+    .forEach(clearScheduledNativePost);
+}
+
+function handleUnityMakeupNativeEvent(event: {message?: string}) {
+  if (!event.message) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(event.message) as {type?: string};
+
+    if (parsed.type === 'generated_lip_mask_applied') {
+      clearGeneratedLipMaskNativePosts();
+    }
+  } catch {
+    // Unity also sends diagnostic strings that are intentionally passed through.
+  }
+}
+
+function getNativeUnityRetryDelayMs(attemptNumber: number): number {
+  return (
+    NATIVE_UNITY_RETRY_DELAYS_MS[attemptNumber - 1] ??
+    NATIVE_UNITY_RETRY_DELAYS_MS[NATIVE_UNITY_RETRY_DELAYS_MS.length - 1]
+  );
+}
+
+function getNativeUnityMaxAttempts(metadata: NativeUnityPostMetadata): number {
+  return metadata.eventName === 'generated_lip_mask_apply'
+    ? GENERATED_LIP_MASK_NATIVE_SEND_MAX_ATTEMPTS
+    : NATIVE_UNITY_RETRY_DELAYS_MS.length;
+}
+
+function scheduleNativePostAttempt(retryKey: string, delayMs: number) {
+  const scheduledPost = scheduledNativePosts.get(retryKey);
+
+  if (!scheduledPost) {
+    return;
+  }
+
+  if (scheduledPost.timer) {
+    clearTimeout(scheduledPost.timer);
+  }
+
+  scheduledPost.timer = setTimeout(() => {
+    runScheduledNativePostAttempt(retryKey);
+  }, delayMs);
+}
+
+function scheduleNextNativePostAttempt(
+  scheduledPost: ScheduledNativePost,
+  unityReady: boolean,
+) {
+  const maxAttempts = getNativeUnityMaxAttempts(scheduledPost.metadata);
+
+  if (scheduledPost.attemptNumber >= maxAttempts) {
+    console.info('[aura:unity] native-send:exhausted', {
+      attemptNumber: scheduledPost.attemptNumber,
+      eventName: scheduledPost.metadata.eventName,
+      messageId: scheduledPost.metadata.messageId,
+      method: scheduledPost.method,
+      packageId: scheduledPost.metadata.packageId,
+      payloadBytes: scheduledPost.payload.length,
+      retryKey: scheduledPost.metadata.retryKey,
+      waitedMs: Date.now() - scheduledPost.createdAtMs,
+    });
+    clearScheduledNativePost(scheduledPost.metadata.retryKey);
+    return;
+  }
+
+  const delayMs =
+    scheduledPost.metadata.eventName === 'generated_lip_mask_apply' && unityReady
+      ? Math.max(
+          getNativeUnityRetryDelayMs(scheduledPost.attemptNumber + 1),
+          GENERATED_LIP_MASK_NATIVE_SEND_RETRY_DELAY_MS,
+        )
+      : getNativeUnityRetryDelayMs(scheduledPost.attemptNumber + 1);
+
+  scheduleNativePostAttempt(scheduledPost.metadata.retryKey, delayMs);
+}
+
+function runScheduledNativePostAttempt(retryKey: string) {
+  const scheduledPost = scheduledNativePosts.get(retryKey);
+
+  if (!scheduledPost) {
+    return;
+  }
+
+  scheduledPost.timer = null;
+
+  const nativeBridge = getNativeUnityMakeupBridge();
+  const attemptNumber = scheduledPost.attemptNumber + 1;
+  scheduledPost.attemptNumber = attemptNumber;
+
+  const frameworkAvailable = isUnityMakeupFrameworkAvailable();
+  const unityReady = isUnityMakeupReady();
+  const unityWarm = frameworkAvailable && !unityReady;
+
+  console.info('[aura:unity] native-send:attempt', {
+    attemptNumber,
+    delayMs: attemptNumber === 1 ? 0 : getNativeUnityRetryDelayMs(attemptNumber),
+    eventName: scheduledPost.metadata.eventName,
+    frameworkAvailable,
+    gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+    messageId: scheduledPost.metadata.messageId,
+    method: scheduledPost.method,
+    packageId: scheduledPost.metadata.packageId,
+    payloadBytes: scheduledPost.payload.length,
+    retryKey,
+    unityReady,
+    unityWarm,
+  });
+
+  if (!nativeBridge?.postMessage || !frameworkAvailable) {
+    scheduleNextNativePostAttempt(scheduledPost, unityReady);
+    return;
+  }
+
+  if (!unityReady) {
+    nativeBridge.prepareRuntime?.();
+    scheduleNextNativePostAttempt(scheduledPost, unityReady);
+    return;
+  }
+
+  sendNativeUnityMethod(nativeBridge, scheduledPost.method, scheduledPost.payload, {
+    ...scheduledPost.metadata,
+    attemptNumber,
+    unityReady,
+    unityWarm,
+  });
+
+  if (scheduledPost.metadata.eventName === 'generated_lip_mask_apply') {
+    scheduleNextNativePostAttempt(scheduledPost, unityReady);
+    return;
+  }
+
+  clearScheduledNativePost(retryKey);
+}
+
+function sendNativeUnityMethod(
+  nativeBridge: NativeUnityMakeupBridge,
+  method: string,
+  payload: string,
+  metadata?: NativeUnityPostMetadata & {attemptNumber?: number; unityReady?: boolean; unityWarm?: boolean},
+) {
+  const payloadBytes = payload.length;
+  const metadataPayload = metadata
+    ? JSON.stringify({
+        attemptNumber: metadata.attemptNumber,
+        eventName: metadata.eventName,
+        gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+        messageId: metadata.messageId,
+        method,
+        packageId: metadata.packageId,
+        payloadBytes,
+        retryKey: metadata.retryKey,
+        unityReady: metadata.unityReady,
+        unityWarm: metadata.unityWarm,
+      })
+    : undefined;
+
+  console.info('[aura:unity] native-send:dispatch', {
+    attemptNumber: metadata?.attemptNumber,
+    eventName: metadata?.eventName ?? 'unity_method',
+    gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+    messageId: metadata?.messageId,
+    method,
+    packageId: metadata?.packageId,
+    payloadBytes,
+    retryKey: metadata?.retryKey,
+    unityReady: metadata?.unityReady,
+    unityWarm: metadata?.unityWarm,
+  });
+
+  if (metadataPayload && nativeBridge.postMessageWithMetadata) {
+    nativeBridge.postMessageWithMetadata(
+      UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+      method,
+      payload,
+      metadataPayload,
+    );
+    return;
+  }
+
+  nativeBridge.postMessage?.(UNITY_MAKEUP_BRIDGE_TARGET.gameObject, method, payload);
 }
 
 function sendNativeUnityMessage(nativeBridge: NativeUnityMakeupBridge, payload: string) {
+  sendNativeUnityMethod(
+    nativeBridge,
+    UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod,
+    payload,
+  );
+}
+
+function sendNativeUnityCaptureRequest(
+  nativeBridge: NativeUnityMakeupBridge,
+  payload: string,
+) {
   nativeBridge.postMessage?.(
     UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
-    UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod,
+    UNITY_MAKEUP_BRIDGE_TARGET.captureReferenceFrameMethod,
     payload,
   );
 }
@@ -620,24 +837,39 @@ function sendNativeUnityMessage(nativeBridge: NativeUnityMakeupBridge, payload: 
 function postNativeUnityMessageWithWarmupRetries(
   nativeBridge: NativeUnityMakeupBridge,
   payload: string,
+  method: string = UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod,
+  metadata: {
+    eventName?: string;
+    messageId?: string;
+    packageId?: string;
+    retryKey?: string;
+  } = {},
 ) {
   latestNativePostSequence += 1;
-  const postSequence = latestNativePostSequence;
-  clearScheduledNativePosts();
+  const sequence = latestNativePostSequence;
+  const retryKey = metadata.retryKey ?? `${method}:latest`;
+  const messageId = metadata.messageId ?? `${retryKey}:${sequence}`;
+  const eventName = metadata.eventName ?? 'unity_method';
+  const postMetadata: NativeUnityPostMetadata = {
+    eventName,
+    messageId,
+    packageId: metadata.packageId,
+    payloadBytes: payload.length,
+    retryKey,
+  };
 
-  scheduledNativePostTimers = [0, 250, 750, 1500, 2500, 4000, 6000, 8000].map(delayMs =>
-    setTimeout(() => {
-      if (
-        postSequence !== latestNativePostSequence ||
-        !isUnityMakeupFrameworkAvailable() ||
-        !isUnityMakeupReady()
-      ) {
-        return;
-      }
-
-      sendNativeUnityMessage(nativeBridge, payload);
-    }, delayMs),
-  );
+  clearScheduledNativePost(retryKey);
+  scheduledNativePosts.set(retryKey, {
+    attemptNumber: 0,
+    createdAtMs: Date.now(),
+    metadata: postMetadata,
+    method,
+    payload,
+    sequence,
+    timer: null,
+  });
+  nativeBridge.prepareRuntime?.();
+  scheduleNativePostAttempt(retryKey, getNativeUnityRetryDelayMs(1));
 }
 
 export function postUnityMakeupRecipe(recipeBatch: UnityMakeupRecipeBatch): boolean {
@@ -646,7 +878,12 @@ export function postUnityMakeupRecipe(recipeBatch: UnityMakeupRecipeBatch): bool
   const canUseBridge = isUnityMakeupFrameworkAvailable();
 
   if (nativeBridge?.postMessage && canUseBridge) {
-    postNativeUnityMessageWithWarmupRetries(nativeBridge, payload);
+    postNativeUnityMessageWithWarmupRetries(nativeBridge, payload, UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod, {
+      eventName: 'makeup_recipe_apply',
+      messageId: `makeup-recipe:${recipeBatch.recipeBatchId}:${Date.now()}`,
+      packageId: recipeBatch.recipeBatchId,
+      retryKey: `${UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod}:latest`,
+    });
 
     return true;
   }
@@ -655,6 +892,114 @@ export function postUnityMakeupRecipe(recipeBatch: UnityMakeupRecipeBatch): bool
     activeRegions: recipeBatch.activeRegions,
     layerCount: recipeBatch.layerCount,
     target: UNITY_MAKEUP_BRIDGE_TARGET,
+  });
+
+  return false;
+}
+
+export function postUnityGeneratedLipMaskPayload(payload: string): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  const canUseBridge = isUnityMakeupFrameworkAvailable();
+  const lipMaskMetadata = extractGeneratedLipMaskMetadata(payload);
+
+  if (nativeBridge?.postMessage && canUseBridge) {
+    postNativeUnityMessageWithWarmupRetries(
+      nativeBridge,
+      payload,
+      UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+      {
+        eventName: 'generated_lip_mask_apply',
+        messageId: lipMaskMetadata.messageId,
+        packageId: lipMaskMetadata.packageId,
+        retryKey: `generated-lip-mask:${lipMaskMetadata.messageId}`,
+      },
+    );
+
+    return true;
+  }
+
+  console.info('[aura:unity] generated-lip-mask:fallback-log', {
+    messageId: lipMaskMetadata.messageId,
+    packageId: lipMaskMetadata.packageId,
+    payloadBytes: payload.length,
+    target: {
+      gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+      method: UNITY_MAKEUP_BRIDGE_TARGET.applyGeneratedLipMaskMethod,
+    },
+  });
+
+  return false;
+}
+
+export function postUnityRegionOverlayVisibility({
+  diagnosticsHudVisible = false,
+  guideOverlayVisible = false,
+  maskOverlayVisible = true,
+  reason,
+  visible,
+}: {
+  diagnosticsHudVisible?: boolean;
+  guideOverlayVisible?: boolean;
+  maskOverlayVisible?: boolean;
+  reason: string;
+  visible: boolean;
+}): boolean {
+  const payload = JSON.stringify({
+    diagnosticsHudVisible,
+    guideOverlayVisible,
+    maskOverlayVisible,
+    reason,
+    validationViewMode: 'clean',
+    visible,
+  });
+  const nativeBridge = getNativeUnityMakeupBridge();
+  const canUseBridge = isUnityMakeupFrameworkAvailable();
+
+  if (nativeBridge?.postMessage && canUseBridge) {
+    sendNativeUnityMethod(
+      nativeBridge,
+      UNITY_MAKEUP_BRIDGE_TARGET.regionOverlayVisibilityMethod,
+      payload,
+      {
+        eventName: 'region_overlay_visibility',
+        messageId: `region-overlay:${reason}:${Date.now()}`,
+        packageId: reason,
+        payloadBytes: payload.length,
+        retryKey: `${UNITY_MAKEUP_BRIDGE_TARGET.regionOverlayVisibilityMethod}:immediate`,
+      },
+    );
+    return true;
+  }
+
+  return false;
+}
+
+export function postUnitySynchronizedCaptureRequest(
+  request: UnitySynchronizedCaptureRequest,
+): boolean {
+  const payload = JSON.stringify(request);
+  const nativeBridge = getNativeUnityMakeupBridge();
+  const canUseBridge = isUnityMakeupFrameworkAvailable();
+
+  if (nativeBridge?.postMessage && canUseBridge) {
+    sendNativeUnityMethod(nativeBridge, UNITY_MAKEUP_BRIDGE_TARGET.captureReferenceFrameMethod, payload, {
+      eventName: 'synchronized_capture_request',
+      messageId: request.capturePairId,
+      packageId: request.captureSetId,
+      payloadBytes: payload.length,
+      retryKey: `${UNITY_MAKEUP_BRIDGE_TARGET.captureReferenceFrameMethod}:${request.capturePairId}`,
+    });
+    return true;
+  }
+
+  console.info('[aura:unity] capture-request:fallback-log', {
+    capturePairId: request.capturePairId,
+    captureSetId: request.captureSetId,
+    captureShotKind: request.captureShotKind,
+    target: {
+      gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+      method: UNITY_MAKEUP_BRIDGE_TARGET.captureReferenceFrameMethod,
+    },
   });
 
   return false;

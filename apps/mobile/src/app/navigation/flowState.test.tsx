@@ -17,6 +17,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().likedMakeupFilterIds.length,
+  0,
+  'initial liked makeup filter count',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'initial makeup feedback photoSource',
@@ -46,7 +52,19 @@ expectEqual(
   'initial selected reference makeup photo',
 );
 
+expectEqual(
+  getInitialNavigationFlowState().selectedRecommendedMakeupFilterId,
+  null,
+  'initial selected recommended makeup filter id',
+);
+
 const demoState = getDemoNavigationFlowState();
+
+expectEqual(
+  demoState.likedMakeupFilterIds.length,
+  0,
+  'demo liked makeup filter count',
+);
 
 expectEqual(
   demoState.selectedMakeupFeedbackPhoto.photoSource,
@@ -70,4 +88,10 @@ expectEqual(
   demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
   'demo saved makeup look id',
+);
+
+expectEqual(
+  demoState.selectedRecommendedMakeupFilterId,
+  null,
+  'demo selected recommended makeup filter id',
 );

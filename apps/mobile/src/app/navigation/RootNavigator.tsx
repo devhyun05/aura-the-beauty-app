@@ -23,6 +23,7 @@ import {
   FaceCaptureRouteScreen,
 } from './routes/faceAnalysisRoutes';
 import {
+  MakeupFeedbackAlbumUploadRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
   MakeupFeedbackEntryRouteScreen,
   MakeupCorrectionGuideRouteScreen,
@@ -59,7 +60,11 @@ export function RootNavigator() {
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
-      <Stack.Screen name="UnityMakeupCapture" component={UnityMakeupCaptureRouteScreen} />
+      <Stack.Screen
+        name="UnityMakeupCapture"
+        component={UnityMakeupCaptureRouteScreen}
+        options={{gestureEnabled: false}}
+      />
       <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
       <Stack.Screen
         name="FaceAnalysisReportsList"
@@ -82,6 +87,7 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
       <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
+      <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />

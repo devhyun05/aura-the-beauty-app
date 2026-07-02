@@ -12,7 +12,8 @@ export interface UserProfile {
   birthDate: string;
   gender: string;
   interest: string;
-  avatarSource: ImageSourcePropType;
+  avatarMediaId?: string | null;
+  avatarSource?: ImageSourcePropType;
 }
 
 export interface BeautyProfile {
@@ -26,6 +27,10 @@ export type MakeupFilterScope = 'totalMakeup' | 'pointMakeup';
 
 export type MakeupPresetValues = {
   colorId?: string;
+  finish?: string;
+  intensity?: number;
+  makeupArea?: MakeupArea;
+  sourceFilterId?: string;
   typeId?: string;
   textureId?: string;
   shapeId?: string;
@@ -77,6 +82,7 @@ export interface MyPageProfileSummary {
   profile: UserProfile;
   beautyProfile: BeautyProfile;
   faceAnalysisReport: FaceAnalysisReport | null;
+  faceAnalysisReports: FaceAnalysisReport[];
   makeupLooks: MakeupLook[];
   likedProducts: Product[];
 }

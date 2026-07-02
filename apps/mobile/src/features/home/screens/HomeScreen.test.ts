@@ -1,20 +1,31 @@
 import {
-  filterStoreCategoryChipContainerStyle,
-  filterStoreCategoryChipTextStyle,
+  filterRecommendedMakeupFiltersByHomeCategory,
   getHeroCarouselInitialOffset,
   getHeroCarouselLoopResetOffset,
   getHeroCarouselRenderItems,
   createHeroCarouselLoopResetHandlers,
-  getFilterStoreCategoryChipLabel,
+  getRecommendedFilterCategoryLabels,
+  getRecommendedFilterGridColumnCount,
+  getIsHomeScrollTopButtonVisible,
+  getRecommendedFilterAccessibilityLabel,
+  getRecommendedFilterRouteParams,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
   getHeroTrendHeadline,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_SCROLL_TOP_VISIBLE_OFFSET,
+  recommendedFilterListVirtualizationConfig,
+  recommendedFilterSectionDescription,
+  recommendedFilterSectionTitle,
 } from './HomeScreen';
 import {mapFaceAnalysisReportsToHomeSavedMakeupLooks} from '../services/homeService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {colors, radius, typography} from '../../../shared/theme';
+import {typography} from '../../../shared/theme';
+import {
+  getRecommendedMakeupFilterById,
+  getRecommendedMakeupFilters,
+} from '../../../shared/services/makeupGuideService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -34,16 +45,29 @@ const expectedShadowColor: 'rgba(255, 255, 255, 0.30)' =
 const expectedShadowRadius: 8 = heroTrendTitleReadableTextStyle.textShadowRadius;
 const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffset.height;
 const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
+const expectedRecommendedFilterSectionTitle: '추천 메이크업 필터' =
+  recommendedFilterSectionTitle;
+const expectedRecommendedFilterSectionDescription:
+  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' =
+    recommendedFilterSectionDescription;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
-const filterStoreCategoryChipLabel = getFilterStoreCategoryChipLabel('Lip');
-const expectedFilterStoreCategoryChipLabel: 'Lip' = filterStoreCategoryChipLabel;
-const expectedFilterStoreCategoryChipRadius: typeof radius.pill =
-  filterStoreCategoryChipContainerStyle.borderRadius;
-const expectedFilterStoreCategoryChipBorderColor: typeof colors.border =
-  filterStoreCategoryChipContainerStyle.borderColor;
-const expectedFilterStoreCategoryChipTextFontFamily: typeof typography.fontFamily.semibold =
-  filterStoreCategoryChipTextStyle.fontFamily;
+const recommendedFilterCategoryLabels = getRecommendedFilterCategoryLabels();
+const recommendedFilters = getRecommendedMakeupFilters();
+const allRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
+  recommendedFilters,
+  'all',
+);
+const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
+  recommendedFilters,
+  'red',
+);
+const expectedRecommendedFilterGridColumnCount: 2 =
+  getRecommendedFilterGridColumnCount();
+const expectedInitialRecommendedFiltersToRender: 6 =
+  recommendedFilterListVirtualizationConfig.initialNumToRender;
+const expectedRecommendedFilterRenderBatchSize: 4 =
+  recommendedFilterListVirtualizationConfig.maxToRenderPerBatch;
 const heroCarouselItems = [
   {id: 'first', title: '첫 카드'},
   {id: 'second', title: '두번째 카드'},
@@ -54,6 +78,8 @@ const heroCarouselSnapInterval = 320;
 const heroCarouselScrollEndHandler = () => undefined;
 const heroCarouselLoopResetHandlers =
   createHeroCarouselLoopResetHandlers(heroCarouselScrollEndHandler);
+const cleanSmokyFilter = getRecommendedMakeupFilterById('filter-clean-smoky-city');
+const cleanSmokyRouteParams = getRecommendedFilterRouteParams(cleanSmokyFilter.id);
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -78,29 +104,64 @@ expectEqual(
 );
 expectEqual(heroCtaLabel, expectedHeroCtaLabel, 'hero CTA label');
 expectEqual(
+  recommendedFilterSectionTitle,
+  expectedRecommendedFilterSectionTitle,
+  'recommended filter section title',
+);
+expectEqual(
+  recommendedFilterSectionDescription,
+  expectedRecommendedFilterSectionDescription,
+  'recommended filter section description',
+);
+expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,
   expectedHeroTitleMainFontFamily,
   'weekly trend main title font family',
 );
 expectEqual(
-  filterStoreCategoryChipLabel,
-  expectedFilterStoreCategoryChipLabel,
-  'filter store category chip label',
+  recommendedFilterCategoryLabels.join(','),
+  '전체,레드,글로우,스모키,브라운,핑크,트렌드,유니크',
+  'recommended filter category labels',
 );
 expectEqual(
-  filterStoreCategoryChipContainerStyle.borderRadius,
-  expectedFilterStoreCategoryChipRadius,
-  'filter store category chip radius',
+  allRecommendedFilters.length,
+  recommendedFilters.length,
+  'recommended filter all category count',
 );
 expectEqual(
-  filterStoreCategoryChipContainerStyle.borderColor,
-  expectedFilterStoreCategoryChipBorderColor,
-  'filter store category chip border color',
+  redRecommendedFilters.some(filter => filter.id === 'filter-wanghong-glass-pink'),
+  true,
+  'recommended filter red category includes Wanghong filter',
 );
 expectEqual(
-  filterStoreCategoryChipTextStyle.fontFamily,
-  expectedFilterStoreCategoryChipTextFontFamily,
-  'filter store category chip text font family',
+  getRecommendedFilterGridColumnCount(),
+  expectedRecommendedFilterGridColumnCount,
+  'recommended filter grid column count',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.initialNumToRender,
+  expectedInitialRecommendedFiltersToRender,
+  'recommended filter initial render count',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.maxToRenderPerBatch,
+  expectedRecommendedFilterRenderBatchSize,
+  'recommended filter render batch size',
+);
+expectEqual(
+  recommendedFilterListVirtualizationConfig.initialNumToRender < recommendedFilters.length,
+  true,
+  'recommended filter list does not initially render every card',
+);
+expectEqual(
+  getIsHomeScrollTopButtonVisible(HOME_SCROLL_TOP_VISIBLE_OFFSET - 1),
+  false,
+  'scroll top button is hidden before threshold',
+);
+expectEqual(
+  getIsHomeScrollTopButtonVisible(HOME_SCROLL_TOP_VISIBLE_OFFSET),
+  true,
+  'scroll top button is visible at threshold',
 );
 expectEqual(
   loopedHeroCarouselItems[0].id,
@@ -156,6 +217,26 @@ expectEqual(
   heroCarouselLoopResetHandlers.onScrollEndDrag,
   heroCarouselScrollEndHandler,
   'hero carousel drag end reset handler',
+);
+expectEqual(
+  getRecommendedFilterAccessibilityLabel(cleanSmokyFilter),
+  '차가운 도시의 클린 스모키, 96퍼센트 추천',
+  'recommended filter accessibility label',
+);
+expectEqual(
+  cleanSmokyRouteParams.initialMakeupFilterId,
+  cleanSmokyFilter.id,
+  'recommended filter route id',
+);
+expectEqual(
+  cleanSmokyRouteParams.initialGuideMode,
+  'half',
+  'recommended filter route guide mode',
+);
+expectEqual(
+  cleanSmokyRouteParams.source,
+  'recommendedFilter',
+  'recommended filter route source',
 );
 
 let selectedQuickAction: 'community' | 'consulting' | 'recommendation' | null = null;

@@ -7,6 +7,7 @@ import {YStack} from 'tamagui';
 
 import {spacing} from '../../shared/theme';
 import {AppFooter, type FooterTabKey} from '../../shared/ui';
+import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {HomeRouteScreen} from './routes/homeRoutes';
 import {ProfileRouteScreen} from './routes/profileRoutes';
@@ -37,7 +38,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
     (tab: FooterTabKey) => {
       const targetRoute = getRootRouteForFooterTab(tab);
 
-      if (targetRoute === 'ARFilter') {
+      if (targetRoute === 'ARFilter' || targetRoute === 'UnityMakeupCapture') {
         navigation
           .getParent<NavigationProp<RootStackParamList>>()
           ?.navigate(targetRoute);
@@ -55,7 +56,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
       style={[
         styles.tabBarHost,
         {
-          height: 102 + Math.max(insets.bottom, spacing.md),
+          height: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md),
         },
       ]}>
       <AppFooter

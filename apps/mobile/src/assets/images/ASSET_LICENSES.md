@@ -13,6 +13,7 @@ These files are local mock assets for the profile, analysis, look, and product p
 - `product-coral-tint.png`
 - `product-glow-cushion.png`
 - `product-mood-cheek.png`
+- `makeup-filters/filter-*.png`
 
 ## Source and production notes
 
@@ -25,5 +26,6 @@ These files are local mock assets for the profile, analysis, look, and product p
 
 - OpenAI Terms of Use assign OpenAI's right, title, and interest in generated Output to the user to the extent permitted by law, but the user remains responsible for having the rights, licenses, and permissions for any Input.
 - Current portrait assets are treated as AI-generated mock assets. If the team later replaces them with real-person photography or real-person likenesses, obtain consent/model-release approval before commercial production use.
+- The `makeup-filters/filter-*.png` thumbnails were generated as fictional-model mock assets for the recommended AR filter demo. They do not intentionally depict real people, celebrities, influencers, brands, logos, SNS handles, or watermarks.
 - No attribution is required for these local mock assets.
 - Before app-store release, replace or explicitly approve these mock assets through the team's final design/legal review process.

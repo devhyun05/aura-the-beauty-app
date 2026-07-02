@@ -1,4 +1,5 @@
 from datetime import date
+from uuid import UUID
 
 from pydantic import Field
 
@@ -6,6 +7,7 @@ from app.schemas.base import CamelModel
 
 
 class ProfileUpdate(CamelModel):
+  avatar_media_id: UUID | None = Field(default=None, alias="avatarMediaId")
   nickname: str | None = None
   phone: str | None = None
   birth_date: date | None = Field(default=None, alias="birthDate")

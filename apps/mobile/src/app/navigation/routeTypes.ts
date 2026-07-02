@@ -1,30 +1,53 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
+import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
+import type {
+  ARFilterLaunchSource,
+  GuideMode,
+} from '../../shared/types/makeupGuide';
 
 export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
+export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
+export type MakeupFilterEditMode = 'preset' | 'fullFace';
 
 export type RootStackParamList = {
   Login: undefined;
   ProfileSetup: undefined;
   Tutorial: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
-  FaceCapture: undefined;
+  FaceCapture: {
+    afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
+    initialSource?: 'gallery';
+  } | undefined;
   UnityMakeupCapture: undefined;
-  FaceAnalysisLoading: undefined;
+  FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
   ProfileEdit: undefined;
-  HomeFilterStore: undefined;
+  HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   SavedMakeupList: undefined;
-  ProductRecommendation: undefined;
+  ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
   Consulting: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
-  ARFilter: undefined;
+  ARFilter:
+    | {
+        fullFaceEditState?: FullFaceMakeupEditState;
+        initialGuideMode?: GuideMode;
+        initialMakeupFilterId?: string;
+        source?: ARFilterLaunchSource;
+      }
+    | undefined;
   ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
+  MakeupFilterEdit: {
+    backRoute?: ARFilterBackRouteName;
+    mode?: MakeupFilterEditMode;
+    sourceFrameMetadata?: FullFaceMakeupSourceInput;
+  } | undefined;
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
+  MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
@@ -72,6 +95,7 @@ export const rootStackRoutes = [
   'MakeupFilterEdit',
   'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
+  'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackLoading',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',

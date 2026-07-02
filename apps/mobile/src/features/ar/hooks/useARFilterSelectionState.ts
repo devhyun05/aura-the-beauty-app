@@ -1,13 +1,19 @@
 import {useState} from 'react';
 
-import {getFiltersByCategory} from '../../../shared/services/makeupGuideService';
+import {
+  getFiltersByCategory,
+  getRecommendedMakeupFilterById,
+  isRecommendedFilterLaunchSource,
+} from '../../../shared/services/makeupGuideService';
 import type {
+  ARFilterLaunchSource,
   ARMakeupGuideData,
   ComparisonMode,
   FilterCategoryId,
   GuideMode,
   MakeupArea,
   MakeupFilter,
+  RecommendedMakeupFilter,
 } from '../../../shared/types/makeupGuide';
 import {
   ORIGINAL_OPTION_CARD_ID,
@@ -36,9 +42,36 @@ type UseARFilterSelectionStateParams = {
   defaultFilter: MakeupFilter;
   initialComparisonMode: ComparisonMode;
   initialGuideMode: GuideMode;
+  initialMakeupFilterId?: string;
+  initialSource?: ARFilterLaunchSource;
 };
 
-function createInitialARFilterSelectionState(): ARFilterSelectionState {
+function createInitialARFilterSelectionState(
+  initialMakeupFilter?: RecommendedMakeupFilter,
+  initialSource?: ARFilterLaunchSource,
+): ARFilterSelectionState {
+  if (initialMakeupFilter) {
+    return {
+      selectedTotalMakeupLookId: initialMakeupFilter.id,
+      selectedPointMakeupLookId: ORIGINAL_OPTION_CARD_ID,
+      selectedColorId:
+        initialMakeupFilter.presetValues.colorId ??
+        initialMakeupFilter.colorOptions[0]?.id ??
+        ORIGINAL_OPTION_CARD_ID,
+      selectedTypeId:
+        initialMakeupFilter.presetValues.typeId ??
+        initialMakeupFilter.typeOptions[0]?.id ??
+        ORIGINAL_OPTION_CARD_ID,
+      selectedTextureId:
+        initialMakeupFilter.presetValues.textureId ??
+        initialMakeupFilter.textureOptions[0]?.id ??
+        ORIGINAL_OPTION_CARD_ID,
+      selectedShapeId:
+        initialMakeupFilter.presetValues.shapeId ?? ORIGINAL_OPTION_CARD_ID,
+      hasUnsavedMakeupChanges: isRecommendedFilterLaunchSource(initialSource),
+    };
+  }
+
   return {
     selectedTotalMakeupLookId: ORIGINAL_OPTION_CARD_ID,
     selectedPointMakeupLookId: ORIGINAL_OPTION_CARD_ID,
@@ -52,14 +85,25 @@ function createInitialARFilterSelectionState(): ARFilterSelectionState {
 
 function createInitialSelectionStatesByArea(
   makeupAreas: ARMakeupGuideData['makeupAreas'],
+  initialMakeupFilter?: RecommendedMakeupFilter,
+  initialSource?: ARFilterLaunchSource,
 ): ARFilterSelectionStatesByArea {
   return makeupAreas.reduce<ARFilterSelectionStatesByArea>(
     (selectionStates, makeupArea) => ({
       ...selectionStates,
-      [makeupArea.id]: createInitialARFilterSelectionState(),
+      [makeupArea.id]:
+        makeupArea.id === 'all'
+          ? createInitialARFilterSelectionState(
+              initialMakeupFilter,
+              initialSource,
+            )
+          : createInitialARFilterSelectionState(),
     }),
     {
-      all: createInitialARFilterSelectionState(),
+      all: createInitialARFilterSelectionState(
+        initialMakeupFilter,
+        initialSource,
+      ),
     },
   );
 }
@@ -69,15 +113,21 @@ export function useARFilterSelectionState({
   defaultFilter,
   initialComparisonMode,
   initialGuideMode,
+  initialMakeupFilterId,
+  initialSource,
 }: UseARFilterSelectionStateParams) {
+  const initialMakeupFilter = initialMakeupFilterId
+    ? getRecommendedMakeupFilterById(initialMakeupFilterId)
+    : undefined;
   const [guideMode, setGuideMode] = useState<GuideMode>(initialGuideMode);
   const [selectedComparisonMode, setSelectedComparisonMode] =
     useState<ComparisonMode>(initialComparisonMode);
   const [selectedCategoryId, setSelectedCategoryId] = useState<FilterCategoryId>(
-    arGuideData.categories[0].id,
+    initialMakeupFilter?.categoryId ?? arGuideData.categories[0].id,
   );
-  const initialMakeupArea =
-    arGuideData.makeupAreas[0]?.id ?? DEFAULT_VISIBLE_MAKEUP_AREA;
+  const initialMakeupArea = initialMakeupFilter
+    ? 'all'
+    : DEFAULT_VISIBLE_MAKEUP_AREA;
   const [selectedMakeupArea, setSelectedMakeupArea] =
     useState<MakeupArea>(initialMakeupArea);
   const [selectedMakeupOptionGroup, setSelectedMakeupOptionGroup] =
@@ -86,7 +136,11 @@ export function useARFilterSelectionState({
     );
   const [selectionStatesByArea, setSelectionStatesByArea] =
     useState<ARFilterSelectionStatesByArea>(() =>
-      createInitialSelectionStatesByArea(arGuideData.makeupAreas),
+      createInitialSelectionStatesByArea(
+        arGuideData.makeupAreas,
+        initialMakeupFilter,
+        initialSource,
+      ),
     );
   const getSelectionStateForMakeupArea = (makeupArea: MakeupArea) =>
     selectionStatesByArea[makeupArea] ?? createInitialARFilterSelectionState();

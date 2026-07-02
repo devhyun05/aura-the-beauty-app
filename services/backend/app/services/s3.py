@@ -50,7 +50,6 @@ class S3Service:
       Params={
         "Bucket": self.settings.s3_bucket_name,
         "Key": object_key,
-        "ContentType": content_type,
       },
       ExpiresIn=expires_in,
     )
@@ -66,3 +65,9 @@ class S3Service:
       "expires_in": expires_in,
       "content_type": content_type,
     }
+
+  def delete_object(self, *, bucket: str, object_key: str) -> None:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_DELETE_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    self._client().delete_object(Bucket=bucket, Key=object_key)

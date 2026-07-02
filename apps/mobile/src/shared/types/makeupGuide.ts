@@ -15,7 +15,12 @@ export type MakeupArea =
   | 'cheek'
   | 'contour';
 
-export type MakeupOptionGroupId = 'color' | 'type' | 'texture';
+export type MakeupOptionGroupId =
+  | 'makeupLook'
+  | 'color'
+  | 'type'
+  | 'texture'
+  | 'shape';
 
 export type FilterCategory = {
   id: FilterCategoryId;
@@ -57,9 +62,36 @@ export type MakeupFilter = {
   textureOptions: readonly FilterTextOption[];
 };
 
+export type MakeupFilterPresetValues = {
+  makeupArea: MakeupArea;
+  colorId: string;
+  typeId: string;
+  textureId: string;
+  shapeId: string;
+  intensity: number;
+  finish: string;
+};
+
+export type ARFilterLaunchSource =
+  | 'quickAction'
+  | 'recommendedFilter'
+  | 'savedLook';
+
+export type RecommendedMakeupFilter = MakeupFilter & {
+  headline: string;
+  displayTitle: string;
+  description: string;
+  keywords: readonly string[];
+  embeddingVector: readonly number[];
+  matchScore: number;
+  sourceImageId: string;
+  categoryTags: readonly string[];
+  presetValues: MakeupFilterPresetValues;
+};
+
 export type ARMakeupGuideData = {
   categories: readonly FilterCategory[];
   comparisonModes: readonly ComparisonModeOption[];
   makeupAreas: readonly MakeupAreaOption[];
-  filters: readonly MakeupFilter[];
+  filters: readonly RecommendedMakeupFilter[];
 };

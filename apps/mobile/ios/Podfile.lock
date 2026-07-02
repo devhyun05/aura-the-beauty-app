@@ -81,6 +81,11 @@ PODS:
   - ExpoModulesWorklets (56.0.17):
     - ExpoModulesCore
     - ExpoModulesJSI
+  - ExpoModulesWorkletsAdapter (56.0.17):
+    - ExpoModulesCore
+    - ExpoModulesJSI
+    - ExpoModulesWorklets
+    - RNWorklets
   - ExpoSecureStore (56.0.4):
     - ExpoModulesCore
   - ExpoWebBrowser (56.0.5):
@@ -89,6 +94,9 @@ PODS:
   - hermes-engine (250829098.0.10):
     - hermes-engine/Pre-built (= 250829098.0.10)
   - hermes-engine/Pre-built (250829098.0.10)
+  - MediaPipeTasksCommon (0.10.35)
+  - MediaPipeTasksVision (0.10.35):
+    - MediaPipeTasksCommon (= 0.10.35)
   - RCTDeprecation (0.85.3)
   - RCTRequired (0.85.3)
   - RCTSwiftUI (0.85.3)
@@ -1942,6 +1950,105 @@ PODS:
     - React-utils (= 0.85.3)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.85.3)
+  - RNReanimated (4.5.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNReanimated/apple (= 4.5.0)
+    - RNReanimated/common (= 4.5.0)
+    - RNReanimated/view (= 4.5.0)
+    - RNWorklets
+    - Yoga
+  - RNReanimated/apple (4.5.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets
+    - Yoga
+  - RNReanimated/common (4.5.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets
+    - Yoga
+  - RNReanimated/view (4.5.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets
+    - Yoga
   - RNScreens (4.25.2):
     - hermes-engine
     - RCTRequired
@@ -2034,6 +2141,77 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNWorklets (0.10.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNWorklets/apple (= 0.10.0)
+    - RNWorklets/common (= 0.10.0)
+    - Yoga
+  - RNWorklets/apple (0.10.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - RNWorklets/common (0.10.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-hermes
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2054,10 +2232,12 @@ DEPENDENCIES:
   - ExpoModulesCore (from `../node_modules/expo-modules-core/ExpoModulesCore.podspec`)
   - ExpoModulesJSI (from `../node_modules/expo-modules-jsi/apple`)
   - ExpoModulesWorklets (from `../node_modules/expo-modules-core/ExpoModulesWorklets.podspec`)
+  - ExpoModulesWorkletsAdapter (from `../node_modules/expo-modules-core`)
   - ExpoSecureStore (from `../node_modules/expo-secure-store/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - MediaPipeTasksVision (= 0.10.35)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
   - RCTSwiftUI (from `../node_modules/react-native/ReactApple/RCTSwiftUI`)
@@ -2131,9 +2311,16 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
+  - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
+  - RNWorklets (from `../node_modules/react-native-worklets`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
+
+SPEC REPOS:
+  trunk:
+    - MediaPipeTasksCommon
+    - MediaPipeTasksVision
 
 EXTERNAL SOURCES:
   EXApplication:
@@ -2170,6 +2357,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-modules-jsi/apple"
   ExpoModulesWorklets:
     :podspec: "../node_modules/expo-modules-core/ExpoModulesWorklets.podspec"
+  ExpoModulesWorkletsAdapter:
+    :path: "../node_modules/expo-modules-core"
   ExpoSecureStore:
     :path: "../node_modules/expo-secure-store/ios"
   ExpoWebBrowser:
@@ -2323,10 +2512,14 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RNReanimated:
+    :path: "../node_modules/react-native-reanimated"
   RNScreens:
     :path: "../node_modules/react-native-screens"
   RNSVG:
     :path: "../node_modules/react-native-svg"
+  RNWorklets:
+    :path: "../node_modules/react-native-worklets"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2348,10 +2541,13 @@ SPEC CHECKSUMS:
   ExpoModulesCore: 405df6bf83e6ca0608be99987a94270e2248607a
   ExpoModulesJSI: abc606cf32f6eeb4e2ad44ec3fc4b24143abd8f6
   ExpoModulesWorklets: 25d712f4e0a4eb37397d46c0ff5b450eca897fd1
+  ExpoModulesWorkletsAdapter: c141a7854ac985cda989175ae6944c1bfe3ff91b
   ExpoSecureStore: f1bd083c1b7b8d4142013ffcc0082d377d9f49f4
   ExpoWebBrowser: 6e3d90e3fe1952d21a8494872b1e1a485cd50e2f
   FBLazyVector: 24e62c765683b8d89006a88a2c8f5cf019f0074d
   hermes-engine: 532f45dba5d90cddbd84343ad6bb8ef9096bf68b
+  MediaPipeTasksCommon: ae27d88c4d185db114a1a768c504f8270dda79b5
+  MediaPipeTasksVision: 1d6c3efa89830a131dbd0dc4fb80dea283fac521
   RCTDeprecation: a4c521821fab57cbb125b36effe84d897d0dfa12
   RCTRequired: 9f3a7e5645d4bc3f551593de7550bb66ab6e42bc
   RCTSwiftUI: 239ed2eb9e73de5a6f518810630f0c95e01c8702
@@ -2424,10 +2620,12 @@ SPEC CHECKSUMS:
   ReactCodegen: c8f81e6c6f762dcf442a6203a1fb58f7dafc8014
   ReactCommon: 7dfc3250793bf36cf221096ff59e1179e13eef7f
   ReactNativeDependencies: 016d44c2bc8ce97699c8356b83b8494efa68035b
+  RNReanimated: a9bf68fb5f19ce1c363b7d1413dcf8ee323185b8
   RNScreens: 991cc417cd396602a6cf59a42139e5a9d91462a9
   RNSVG: 04044c3abcf177fd674a1a3d13097efa1adebcbe
+  RNWorklets: ae7f2b95d75b903387e6359583f2fd67bc9a93ff
   Yoga: 77dfa8673de2874e1855002ae59c68b8be9b007b
 
-PODFILE CHECKSUM: a4cbd6211398781def535c8d51a0c27387d37242
+PODFILE CHECKSUM: b4754efe3b98dd072c8d9723ee49277d4e82bb7a
 
 COCOAPODS: 1.16.2
