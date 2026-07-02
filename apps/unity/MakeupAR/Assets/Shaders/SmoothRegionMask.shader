@@ -22,6 +22,9 @@ Shader "MakeupAR/SmoothRegionMask"
         _GlossHaloIntensity ("Gloss Halo Intensity", Range(0, 1)) = 0.07
         _GradientAmount ("Gradient Amount", Range(0, 1)) = 0
         _DetailAmount ("Detail Amount", Range(0, 1)) = 0
+        [HideInInspector] _BrowGeneratedMode ("Generated Brow Mode", Float) = 0
+        [HideInInspector] _BrowCleanupStrength ("Brow Cleanup Strength", Range(0, 1)) = 0
+        [HideInInspector] _BrowNeutralizeStrength ("Brow Neutralize Strength", Range(0, 1)) = 0
         _PreserveDetail ("Preserve Detail", Range(0, 1)) = 1
         _DensityPower ("Density Power", Range(0, 1)) = 0.72
         _EdgeSoftness ("Edge Softness", Range(0, 1)) = 0.86
@@ -86,6 +89,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float _GlossBoost;
             float _GradientAmount;
             float _DetailAmount;
+            float _BrowGeneratedMode;
+            float _BrowCleanupStrength;
+            float _BrowNeutralizeStrength;
             float _PreserveDetail;
             float _DensityPower;
             float _EdgeSoftness;
@@ -414,8 +420,41 @@ Shader "MakeupAR/SmoothRegionMask"
                     }
                 }
 
+                if (_BrowGeneratedMode > 0.5)
+                {
+                    float cleanupSoft = SoftMaskAlpha(
+                        max(softMask.r, mask.r),
+                        _Threshold * 0.72,
+                        max(_Feather, 0.24));
+                    float desiredSoft = SoftMaskAlpha(max(softMask.g, mask.g), _Threshold, _Feather);
+                    float desiredCore = CoreMaskAlpha(mask.g, _Threshold, _Feather);
+                    float cleanupOnly = saturate(
+                        cleanupSoft
+                        - desiredSoft * lerp(0.72, 0.92, saturate(_BrowCleanupStrength)));
+                    float strandDetail = saturate(max(mask.b, softMask.b) * desiredSoft);
+                    float strandAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
+                    float browAlpha = saturate(
+                        desiredSoft * coverage * lerp(0.46, 0.74, saturate(_BlushIntensity))
+                        + desiredCore * coverage * 0.14
+                        + strandDetail * strandAmount * coverage * 0.34);
+                    float neutralizeAlpha = saturate(
+                        cleanupOnly
+                        * saturate(_BrowCleanupStrength)
+                        * saturate(_BrowNeutralizeStrength)
+                        * 0.34);
+                    float3 browPigment = saturate(lerp(
+                        _RegionColor.rgb,
+                        _RegionColor.rgb * 0.55,
+                        strandDetail * strandAmount * 0.42));
+                    float3 liftColor = float3(0.86, 0.76, 0.68);
+                    float browMix = browAlpha / max(browAlpha + neutralizeAlpha, 0.0001);
+                    maskStrength = saturate(browAlpha + neutralizeAlpha);
+                    pigmentColor = browPigment;
+                    alphaColor = saturate(lerp(liftColor, browPigment, browMix));
+                }
+
                 float detailAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
-                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && detailAmount > 0.001)
+                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && _BrowGeneratedMode < 0.5 && detailAmount > 0.001)
                 {
                     float rawHairDetail = saturate(mask.b * fullSoft);
                     float softHairDetail = saturate(softMask.b * fullSoft);

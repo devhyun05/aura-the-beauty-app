@@ -75,6 +75,12 @@ final class E7NativeLipBoundaryProviders: NSObject {
           "source": "vision",
           "generationMethod": "native_vision_curve_landmarks"
         ],
+        "faceLandmarks": [
+          "provider": "vision",
+          "coordinateSpace": "frame_image_pixel_top_left",
+          "faceBoundingBox": landmarks.faceBoundingBox,
+          "contours": landmarks.contours
+        ],
         "arFaceExport": arFaceExport,
         "blendShapes": arFaceExport["blendShapes"] as? [String: Any] ?? [
           "available": false,
@@ -144,6 +150,12 @@ final class E7NativeLipBoundaryProviders: NSObject {
         "innerPoints": landmarks.innerPoints,
         "source": "mediapipe",
         "generationMethod": "native_mediapipe_face_landmarker_curve"
+      ],
+      "faceLandmarks": [
+        "provider": "mediapipe",
+        "coordinateSpace": "frame_image_pixel_top_left",
+        "landmarkCount": landmarks.landmarkPoints.count,
+        "namedRegions": landmarks.namedRegions
       ],
       "arFaceExport": arFaceExport,
       "blendShapes": arFaceExport["blendShapes"] as? [String: Any] ?? [
@@ -667,13 +679,31 @@ final class E7NativeLipBoundaryProviders: NSObject {
           width: cgImage.width,
           height: cgImage.height
         ),
+        "faceOval": landmarkRegionPayload(
+          landmarks.faceContour,
+          faceBoundingBox: face.boundingBox,
+          width: cgImage.width,
+          height: cgImage.height
+        ),
         "leftEye": landmarkRegionPayload(
           landmarks.leftEye,
           faceBoundingBox: face.boundingBox,
           width: cgImage.width,
           height: cgImage.height
         ),
+        "leftUpperEyelid": landmarkRegionPayload(
+          landmarks.leftEye,
+          faceBoundingBox: face.boundingBox,
+          width: cgImage.width,
+          height: cgImage.height
+        ),
         "rightEye": landmarkRegionPayload(
+          landmarks.rightEye,
+          faceBoundingBox: face.boundingBox,
+          width: cgImage.width,
+          height: cgImage.height
+        ),
+        "rightUpperEyelid": landmarkRegionPayload(
           landmarks.rightEye,
           faceBoundingBox: face.boundingBox,
           width: cgImage.width,
@@ -698,6 +728,12 @@ final class E7NativeLipBoundaryProviders: NSObject {
           height: cgImage.height
         ),
         "noseCrest": landmarkRegionPayload(
+          landmarks.noseCrest,
+          faceBoundingBox: face.boundingBox,
+          width: cgImage.width,
+          height: cgImage.height
+        ),
+        "noseBridge": landmarkRegionPayload(
           landmarks.noseCrest,
           faceBoundingBox: face.boundingBox,
           width: cgImage.width,
@@ -758,10 +794,20 @@ final class E7NativeLipBoundaryProviders: NSObject {
       throw E7NativeProviderError.mediapipeNoFaceDetected
     }
 
-    let requiredIndex = max(
-      mediaPipeOuterLipIndices.max() ?? 0,
-      mediaPipeInnerLipIndices.max() ?? 0
-    )
+    let requiredIndex = [
+      mediaPipeOuterLipIndices,
+      mediaPipeInnerLipIndices,
+      mediaPipeFaceOvalIndices,
+      mediaPipeLeftEyeIndices,
+      mediaPipeLeftUpperEyelidIndices,
+      mediaPipeRightEyeIndices,
+      mediaPipeRightUpperEyelidIndices,
+      mediaPipeLeftBrowIndices,
+      mediaPipeRightBrowIndices,
+      mediaPipeLeftTempleIndices,
+      mediaPipeRightTempleIndices,
+      mediaPipeNoseBridgeIndices
+    ].compactMap { $0.max() }.max() ?? 0
     if faceLandmarks.count <= requiredIndex {
       throw E7NativeProviderError.mediapipeLandmarkCountTooSmall(
         faceLandmarks.count,
@@ -800,9 +846,21 @@ final class E7NativeLipBoundaryProviders: NSObject {
           width: width,
           height: height
         ),
+        "leftUpperEyelid": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeLeftUpperEyelidIndices,
+          width: width,
+          height: height
+        ),
         "rightEye": mediaPipeRegionPayload(
           faceLandmarks,
           indices: mediaPipeRightEyeIndices,
+          width: width,
+          height: height
+        ),
+        "rightUpperEyelid": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeRightUpperEyelidIndices,
           width: width,
           height: height
         ),
@@ -815,6 +873,24 @@ final class E7NativeLipBoundaryProviders: NSObject {
         "rightEyebrow": mediaPipeRegionPayload(
           faceLandmarks,
           indices: mediaPipeRightBrowIndices,
+          width: width,
+          height: height
+        ),
+        "leftTemple": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeLeftTempleIndices,
+          width: width,
+          height: height
+        ),
+        "rightTemple": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeRightTempleIndices,
+          width: width,
+          height: height
+        ),
+        "noseBridge": mediaPipeRegionPayload(
+          faceLandmarks,
+          indices: mediaPipeNoseBridgeIndices,
           width: width,
           height: height
         ),
@@ -1124,9 +1200,17 @@ private let mediaPipeLeftEyeIndices = [
   362, 398, 384, 385, 386, 387, 388, 466
 ]
 
+private let mediaPipeLeftUpperEyelidIndices = [
+  362, 398, 384, 385, 386, 387, 388, 466, 263
+]
+
 private let mediaPipeRightEyeIndices = [
   33, 7, 163, 144, 145, 153, 154, 155,
   133, 173, 157, 158, 159, 160, 161, 246
+]
+
+private let mediaPipeRightUpperEyelidIndices = [
+  33, 246, 161, 160, 159, 158, 157, 173, 133
 ]
 
 private let mediaPipeLeftBrowIndices = [
@@ -1135,6 +1219,18 @@ private let mediaPipeLeftBrowIndices = [
 
 private let mediaPipeRightBrowIndices = [
   46, 53, 52, 65, 55, 107, 66, 105, 63, 70
+]
+
+private let mediaPipeLeftTempleIndices = [
+  251, 389, 356, 454, 323, 361
+]
+
+private let mediaPipeRightTempleIndices = [
+  109, 67, 103, 54, 21, 162
+]
+
+private let mediaPipeNoseBridgeIndices = [
+  168, 6, 197, 195, 5, 4, 1
 ]
 
 private enum E7NativeProviderError: LocalizedError {

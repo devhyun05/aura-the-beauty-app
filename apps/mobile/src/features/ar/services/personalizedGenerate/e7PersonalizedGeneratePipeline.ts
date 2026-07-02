@@ -57,8 +57,25 @@ export type E7NativeBoundaryResult = {
   };
   arFaceExport?: E7ArFaceExport;
   blendShapes?: E7BlendShapeState;
+  faceLandmarks?: E7NativeFaceLandmarks;
   warnings?: string[];
   blockedReason?: string;
+};
+
+export type E7NativeFaceLandmarkRegion = {
+  imagePoints?: E7Point2D[];
+  indices?: number[];
+  pointCount?: number;
+  status?: 'available' | 'unavailable' | string;
+};
+
+export type E7NativeFaceLandmarks = {
+  contours?: Record<string, E7NativeFaceLandmarkRegion>;
+  coordinateSpace: 'frame_image_pixel_top_left';
+  faceBoundingBox?: Record<string, number>;
+  landmarkCount?: number;
+  namedRegions?: Record<string, E7NativeFaceLandmarkRegion>;
+  provider: LipMaskProvider;
 };
 
 export type E7ArFaceExport = {

@@ -42,6 +42,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float Specular;
         public float SpecularPower;
         public float GlossBoost;
+        public float TextureAmount;
         public float GradientAmount;
         public bool PreserveDetail;
         public string TopologyAuditStatus;
@@ -82,6 +83,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float OverlaySyncDurationMs;
         public float OverlaySyncWorstDurationMs;
         public bool OverlayTopologyChanged;
+        public string StabilityMode;
+        public float StabilizationDeadZoneMeters;
+        public float StabilizationSnapDistanceMeters;
     }
 
     private sealed class RegionRecipeState
@@ -107,6 +111,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float Specular = 0.04f;
         public float SpecularPower = 8.0f;
         public float GlossBoost = 0.0f;
+        public float TextureAmount = 0.0f;
         public float GradientAmount = 0.08f;
         public bool PreserveDetail = true;
     }
@@ -144,6 +149,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int VisionUvMaskWidth;
         public int VisionUvMaskHeight;
         public MaskTextureDiagnostics VisionUvMaskDiagnostics;
+        public Vector3[] GeneratedBrowStableVertices;
+        public float GeneratedBrowLastStableAtSeconds = -1.0f;
     }
 
     private sealed class MaskDefinition
@@ -217,6 +224,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private const string VisionLipBoundaryRenderer = "apple_vision_lip_landmark_arface_uv_baked";
     private const string VisionBoundaryRuntimeTransform = "flip-y";
     private const string GeneratedLipMaskPrefix = "e7-generated-lip";
+    private const string GeneratedBrowMaskPrefix = "e7-generated-brow";
     private const int VisionScreenMaskMaxDimension = 1024;
     private const int VisionUvMaskSize = 512;
     private const int VisionUvMaskSoftSplatRadius = 3;
@@ -228,6 +236,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private const float FeatherFarRadiusScale = 1.85f;
     private const float VisionFaceMotionMediumThreshold = 0.18f;
     private const float VisionFaceMotionLargeThreshold = 0.32f;
+    private const float GeneratedBrowVertexJitterDeadZoneMeters = 0.00055f;
+    private const float GeneratedBrowVertexSnapDistanceMeters = 0.0065f;
+    private const float GeneratedBrowVertexFollowHz = 48.0f;
 
     private readonly Dictionary<string, RegionRecipeState> recipes =
         new Dictionary<string, RegionRecipeState>();
@@ -238,6 +249,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static readonly Dictionary<string, Texture2D> MaskTextures =
         new Dictionary<string, Texture2D>();
     private static readonly Dictionary<string, Texture2D> RuntimeGeneratedLipMaskTextures =
+        new Dictionary<string, Texture2D>();
+    private static readonly Dictionary<string, Texture2D> RuntimeGeneratedBrowMaskTextures =
         new Dictionary<string, Texture2D>();
     private static readonly Dictionary<string, MaskTextureDiagnostics> MaskTextureDiagnosticsCache =
         new Dictionary<string, MaskTextureDiagnostics>();
@@ -304,6 +317,62 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         {
             Debug.LogWarning(
                 "[E7] generated_lip_mask_texture_register_failed"
+                + " maskTextureId=" + maskTextureId
+                + " error=" + exception.Message);
+            return false;
+        }
+    }
+
+    public bool RegisterGeneratedBrowMaskTexture(
+        string maskTextureId,
+        string rawRgbaBase64,
+        int width,
+        int height)
+    {
+        maskTextureId = NormalizeGeneratedBrowMaskTextureId(maskTextureId);
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
+            int expectedByteCount = width * height * 4;
+            if (rawBytes.Length != expectedByteCount)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_brow_mask_texture_invalid"
+                    + " maskTextureId=" + maskTextureId
+                    + " expectedBytes=" + expectedByteCount.ToString(CultureInfo.InvariantCulture)
+                    + " actualBytes=" + rawBytes.Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            {
+                name = "Generated Brow Mask " + maskTextureId,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            texture.LoadRawTextureData(rawBytes);
+            texture.Apply(false, false);
+            RuntimeGeneratedBrowMaskTextures[maskTextureId] = texture;
+            MaskTextureDiagnosticsCache.Remove("GeneratedBrowMasks/" + maskTextureId);
+            MaskTextureSampleCache.Remove("GeneratedBrowMasks/" + maskTextureId);
+
+            Debug.Log(
+                "[E7] generated_brow_mask_texture_registered"
+                + " maskTextureId=" + maskTextureId
+                + " width=" + width.ToString(CultureInfo.InvariantCulture)
+                + " height=" + height.ToString(CultureInfo.InvariantCulture)
+                + " bytes=" + rawBytes.Length.ToString(CultureInfo.InvariantCulture));
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                "[E7] generated_brow_mask_texture_register_failed"
                 + " maskTextureId=" + maskTextureId
                 + " error=" + exception.Message);
             return false;
@@ -387,6 +456,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         Color secondaryColor,
         float coverage,
         string finish,
+        float textureAmount,
         float roughness,
         float specular,
         float specularPower,
@@ -419,6 +489,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             Specular = Mathf.Clamp01(specular),
             SpecularPower = Mathf.Max(1.0f, specularPower),
             GlossBoost = Mathf.Clamp01(glossBoost),
+            TextureAmount = Mathf.Clamp01(textureAmount),
             GradientAmount = Mathf.Clamp01(gradientAmount),
             PreserveDetail = preserveDetail
         };
@@ -475,6 +546,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             secondaryColor,
             coverage,
             finish,
+            textureAmount,
             roughness,
             specular,
             specularPower,
@@ -637,6 +709,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             Specular = 0.0f,
             SpecularPower = 0.0f,
             GlossBoost = 0.0f,
+            TextureAmount = 0.0f,
             GradientAmount = 0.0f,
             PreserveDetail = true,
             TopologyAuditStatus = "not_run",
@@ -670,6 +743,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             VisionBoundaryFaceCenterShiftPx = 0.0f,
             VisionBoundaryFaceScaleDelta = 0.0f,
             VisionBoundaryFaceMotionRisk = "none",
+            StabilityMode = "none",
+            StabilizationDeadZoneMeters = 0.0f,
+            StabilizationSnapDistanceMeters = 0.0f,
         };
     }
 
@@ -688,11 +764,13 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         result.Specular = recipe.Specular;
         result.SpecularPower = recipe.SpecularPower;
         result.GlossBoost = recipe.GlossBoost;
+        result.TextureAmount = recipe.TextureAmount;
         result.GradientAmount = recipe.GradientAmount;
         result.PreserveDetail = recipe.PreserveDetail;
         result.MaskTextureId = recipe.MaskTextureId;
         bool lipStyleAtlas = IsLipStyleAtlasMask(recipe.MaskTextureId);
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
+        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
         bool cheekBlushMask = (recipe.Region == "cheek" || recipe.Region == "blush")
             && IsCheekBlushMask(recipe.MaskTextureId);
         bool lipLogicalMultilayer = lipStyleAtlas || visionLipBoundary;
@@ -725,6 +803,13 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             : LegacySoftSampleMode;
         result.MaskFeatherNearRadiusPx = ResolveShaderFeatherNearRadiusPx(result.MaskFeatherUvNormalized);
         result.MaskFeatherFarRadiusPx = ResolveShaderFeatherFarRadiusPx(result.MaskFeatherUvNormalized);
+        if (generatedBrowMask)
+        {
+            result.StabilityMode = "generated_brow_arface_uv_deadband_fast_follow";
+            result.StabilizationDeadZoneMeters = GeneratedBrowVertexJitterDeadZoneMeters;
+            result.StabilizationSnapDistanceMeters = GeneratedBrowVertexSnapDistanceMeters;
+        }
+
         ApplyMaskTextureDiagnostics(mask, ref result);
     }
 
@@ -984,6 +1069,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return false;
         }
 
+        if (IsGeneratedBrowRecipe(recipe))
+        {
+            StabilizeGeneratedBrowVertices(view, vertices);
+        }
+
         view.Mesh.Clear();
         view.Mesh.SetVertices(vertices);
         view.Mesh.SetUVs(0, textureCoordinates);
@@ -991,6 +1081,53 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         view.Mesh.RecalculateNormals();
         view.Mesh.RecalculateBounds();
         return true;
+    }
+
+    private static void StabilizeGeneratedBrowVertices(
+        RegionOverlayView view,
+        List<Vector3> vertices)
+    {
+        if (view == null || vertices == null || vertices.Count == 0)
+        {
+            return;
+        }
+
+        float nowSeconds = Time.realtimeSinceStartup;
+        if (view.GeneratedBrowStableVertices == null
+            || view.GeneratedBrowStableVertices.Length != vertices.Count
+            || view.GeneratedBrowLastStableAtSeconds < 0.0f)
+        {
+            view.GeneratedBrowStableVertices = vertices.ToArray();
+            view.GeneratedBrowLastStableAtSeconds = nowSeconds;
+            return;
+        }
+
+        float deltaTime = Mathf.Clamp(
+            nowSeconds - view.GeneratedBrowLastStableAtSeconds,
+            1.0f / 120.0f,
+            1.0f / 20.0f);
+        view.GeneratedBrowLastStableAtSeconds = nowSeconds;
+        float followAlpha = 1.0f - Mathf.Exp(-GeneratedBrowVertexFollowHz * deltaTime);
+
+        for (int index = 0; index < vertices.Count; index++)
+        {
+            Vector3 current = vertices[index];
+            Vector3 stable = view.GeneratedBrowStableVertices[index];
+            Vector3 delta = current - stable;
+            float distance = delta.magnitude;
+
+            if (distance >= GeneratedBrowVertexSnapDistanceMeters)
+            {
+                stable = current;
+            }
+            else if (distance > GeneratedBrowVertexJitterDeadZoneMeters)
+            {
+                stable += delta * followAlpha;
+            }
+
+            view.GeneratedBrowStableVertices[index] = stable;
+            vertices[index] = stable;
+        }
     }
 
     private void EnsureVisionLipBoundaryRuntime()
@@ -2206,6 +2343,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         bool lipStyleAtlas = region == "lip" && IsLipStyleAtlasMask(maskTextureId);
         bool visionLipBoundary = region == "lip" && IsVisionLipBoundaryMask(maskTextureId);
         bool generatedLipMask = region == "lip" && IsGeneratedLipMaskTextureId(maskTextureId);
+        bool generatedBrowMask = region == "brow" && IsGeneratedBrowMaskTextureId(maskTextureId);
         bool cheekBlushMask = (region == "cheek" || region == "blush")
             && IsCheekBlushMask(maskTextureId);
         return new MaskDefinition
@@ -2214,14 +2352,18 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MaskTextureId = maskTextureId,
             ResourcePath = generatedLipMask
                 ? "GeneratedLipMasks/" + maskTextureId
+                : generatedBrowMask
+                ? "GeneratedBrowMasks/" + maskTextureId
                 : "SmoothRegionMasks/" + maskTextureId,
-            Threshold = lipStyleAtlas || visionLipBoundary || cheekBlushMask || generatedLipMask ? 0.025f : 0.04f,
+            Threshold = lipStyleAtlas || visionLipBoundary || cheekBlushMask || generatedLipMask || generatedBrowMask ? 0.025f : 0.04f,
             FeatherUvNormalized = lipStyleAtlas
                 ? 0.32f
                 : visionLipBoundary
                 ? 0.34f
                 : generatedLipMask
                 ? 0.26f
+                : generatedBrowMask
+                ? 0.30f
                 : cheekBlushMask
                 ? 0.78f
                 : 0.56f
@@ -2365,6 +2507,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
             Debug.LogWarning(
                 "[E7] generated_lip_mask_texture_missing"
+                + " maskTextureId=" + mask.MaskTextureId
+                + " resourcePath=" + mask.ResourcePath);
+            return null;
+        }
+
+        if (IsGeneratedBrowMaskTextureId(mask.MaskTextureId))
+        {
+            if (RuntimeGeneratedBrowMaskTextures.TryGetValue(mask.MaskTextureId, out Texture2D generatedTexture))
+            {
+                return generatedTexture;
+            }
+
+            Debug.LogWarning(
+                "[E7] generated_brow_mask_texture_missing"
                 + " maskTextureId=" + mask.MaskTextureId
                 + " resourcePath=" + mask.ResourcePath);
             return null;
@@ -2680,6 +2836,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         ApplyMaterialBlendMode(material, recipe.BlendMode, IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId));
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
         bool generatedLipMask = IsGeneratedLipMaskTextureId(recipe.MaskTextureId);
+        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
 
         if (material.HasProperty("_UseScreenSpaceMask"))
         {
@@ -2776,6 +2933,26 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (material.HasProperty("_GradientAmount"))
         {
             material.SetFloat("_GradientAmount", recipe.GradientAmount);
+        }
+
+        if (material.HasProperty("_DetailAmount"))
+        {
+            material.SetFloat("_DetailAmount", recipe.TextureAmount);
+        }
+
+        if (material.HasProperty("_BrowGeneratedMode"))
+        {
+            material.SetFloat("_BrowGeneratedMode", generatedBrowMask ? 1.0f : 0.0f);
+        }
+
+        if (material.HasProperty("_BrowCleanupStrength"))
+        {
+            material.SetFloat("_BrowCleanupStrength", generatedBrowMask ? recipe.GradientAmount : 0.0f);
+        }
+
+        if (material.HasProperty("_BrowNeutralizeStrength"))
+        {
+            material.SetFloat("_BrowNeutralizeStrength", generatedBrowMask ? recipe.GlossBoost : 0.0f);
         }
 
         if (material.HasProperty("_PreserveDetail"))
@@ -3244,7 +3421,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 || maskTextureId == "eye-drawn-mask-v1"))
             || (region == "brow" && (maskTextureId.StartsWith("brow-", StringComparison.Ordinal)
                 || maskTextureId.StartsWith("psd-arcore-brow-", StringComparison.Ordinal)
-                || maskTextureId.StartsWith("e7-brow-", StringComparison.Ordinal)))
+                || maskTextureId.StartsWith("e7-brow-", StringComparison.Ordinal)
+                || IsGeneratedBrowMaskTextureId(maskTextureId)))
             || (region == "eyeliner" && (maskTextureId.StartsWith("e7-eyeliner-", StringComparison.Ordinal)
                 || maskTextureId == "eye-smooth-mask-v1"
                 || maskTextureId == "eye-drawn-mask-v1")))
@@ -3294,6 +3472,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (!IsGeneratedLipMaskTextureId(maskTextureId))
         {
             throw new ArgumentException("Unsupported generated lip mask texture id: " + maskTextureId);
+        }
+
+        return maskTextureId;
+    }
+
+    private static bool IsGeneratedBrowMaskTextureId(string maskTextureId)
+    {
+        maskTextureId = string.IsNullOrWhiteSpace(maskTextureId)
+            ? string.Empty
+            : maskTextureId.Trim();
+
+        return maskTextureId.StartsWith(GeneratedBrowMaskPrefix, StringComparison.Ordinal);
+    }
+
+    private static bool IsGeneratedBrowRecipe(RegionRecipeState recipe)
+    {
+        return recipe != null
+            && recipe.Region == "brow"
+            && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
+    }
+
+    private static string NormalizeGeneratedBrowMaskTextureId(string maskTextureId)
+    {
+        maskTextureId = string.IsNullOrWhiteSpace(maskTextureId)
+            ? string.Empty
+            : maskTextureId.Trim();
+
+        if (!IsGeneratedBrowMaskTextureId(maskTextureId))
+        {
+            throw new ArgumentException("Unsupported generated brow mask texture id: " + maskTextureId);
         }
 
         return maskTextureId;
