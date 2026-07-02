@@ -7,6 +7,7 @@ import {getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
 const USER_PROFILE_STORAGE_KEY = 'aura.user.profile.v1';
 const HIDDEN_PROFILE_EDIT_FIELD_IDS = new Set(['phone', 'interest']);
+const DEV_BACKEND_PROFILE_PLACEHOLDER_VALUES = new Set(['Local Dev', 'dev@example.com']);
 
 type StoredUserProfile = Omit<UserProfile, 'avatarSource'> & {
   avatarUri?: string | null;
@@ -69,6 +70,31 @@ function mapProfileGenderToBackend(gender: string | null | undefined): string | 
   }
 }
 
+function resolveProfileText(value: string, defaultValue: string) {
+  const normalized = value.trim();
+
+  if (!normalized || DEV_BACKEND_PROFILE_PLACEHOLDER_VALUES.has(normalized)) {
+    return defaultValue;
+  }
+
+  return normalized;
+}
+
+function resolveBackendProfileText(
+  backendValue: string | null | undefined,
+  fallbackValue: string,
+  defaultValue: string,
+) {
+  const normalized = backendValue?.trim();
+  const fallbackText = resolveProfileText(fallbackValue, defaultValue);
+
+  if (!normalized || DEV_BACKEND_PROFILE_PLACEHOLDER_VALUES.has(normalized)) {
+    return fallbackText;
+  }
+
+  return normalized;
+}
+
 function mapBackendUserToProfile(
   backendUser: BackendUser,
   fallbackProfile: UserProfile,
@@ -94,12 +120,12 @@ function mapBackendUserToProfile(
       backendUser.birthDate ??
       backendUser.birth_date ??
       fallbackProfile.birthDate,
-    email: backendUser.email ?? fallbackProfile.email,
+    email: resolveBackendProfileText(backendUser.email, fallbackProfile.email, userProfileMock.email),
     gender: mapBackendGenderToProfile(backendUser.gender) ?? fallbackProfile.gender,
     id: backendUser.id ?? fallbackProfile.id,
     interest: backendUser.interest ?? fallbackProfile.interest,
-    name: backendUser.name ?? fallbackProfile.name,
-    nickname: backendUser.nickname ?? fallbackProfile.nickname,
+    name: resolveBackendProfileText(backendUser.name, fallbackProfile.name, userProfileMock.name),
+    nickname: resolveBackendProfileText(backendUser.nickname, fallbackProfile.nickname, userProfileMock.nickname),
     phone: backendUser.phone ?? fallbackProfile.phone,
   };
 }
