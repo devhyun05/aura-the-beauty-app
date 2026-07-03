@@ -83,7 +83,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - `npm run mobile:test:generated-brow` from the repo root
   - `npm run test:generated-brow` from `apps/mobile`
   - The test compiles and runs `apps/mobile/src/features/ar/services/browGenerateCore.test.ts`.
-  - It verifies non-empty generated brow UV mask output, raw RGBA payload shape, strand channel output, right-to-left mirrored brow polygon shape, surround anchor usage, color/opacity/strand strength boost, and disabled cleanup/neutralize values.
+  - It verifies non-empty generated brow UV mask output, raw RGBA payload shape, strand channel output, right-to-left mirrored brow polygon shape, lifted brow-body alignment above the raw brow body, eye-exclusion separation, surround anchor usage, color/opacity/strand strength boost, and disabled cleanup/neutralize values.
 - The referenced MIT web repo has been checked for its eyebrow path:
   - `EYE_BROW_CONNECTIONS` is a simple MediaPipe eyebrow polygon ring.
   - `fillPoly` creates the feature mask.

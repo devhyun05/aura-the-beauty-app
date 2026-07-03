@@ -28,6 +28,12 @@ function expectGreaterThan(actual: number, expected: number, label: string) {
   }
 }
 
+function expectLessThan(actual: number, expected: number, label: string) {
+  if (!(actual < expected)) {
+    throw new Error(`${label}: expected < ${expected}, received ${actual}`);
+  }
+}
+
 function expectClose(actual: number, expected: number, epsilon: number, label: string) {
   if (Math.abs(actual - expected) > epsilon) {
     throw new Error(`${label}: expected ${expected}, received ${actual}`);
@@ -48,6 +54,30 @@ function points(values: readonly [number, number][]): E7Point2D[] {
 
 function centerX(bounds: readonly [number, number, number, number]) {
   return (bounds[0] + bounds[2]) * 0.5;
+}
+
+function boundsOfPoints(points: readonly E7Point2D[]): [number, number, number, number] {
+  return points.reduce(
+    (nextBounds, point) => [
+      Math.min(nextBounds[0], point.x),
+      Math.min(nextBounds[1], point.y),
+      Math.max(nextBounds[2], point.x),
+      Math.max(nextBounds[3], point.y),
+    ],
+    [
+      Number.POSITIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ] as [number, number, number, number],
+  );
+}
+
+function regionPoints(regionValue: E7NativeFaceLandmarkRegion, label: string): E7Point2D[] {
+  if (!regionValue.imagePoints) {
+    throw new Error(`${label}: expected imagePoints`);
+  }
+  return regionValue.imagePoints;
 }
 
 function normalizePointToBounds(
@@ -299,6 +329,10 @@ expectGreaterThan(envelopes[1].polygon.length, 10, 'second brow shape-corrected 
 const [screenLeftEnvelope, screenRightEnvelope] = [...envelopes].sort(
   (first, second) => centerX(first.fillBounds) - centerX(second.fillBounds),
 );
+const [screenLeftSourceBrowBounds, screenRightSourceBrowBounds] = [
+  boundsOfPoints(regionPoints(namedRegions.leftEyebrow, 'left eyebrow source')),
+  boundsOfPoints(regionPoints(namedRegions.rightEyebrow, 'right eyebrow source')),
+].sort((first, second) => centerX(first) - centerX(second));
 expectEqual(
   screenLeftEnvelope.polygon.length,
   screenRightEnvelope.polygon.length,
@@ -318,6 +352,26 @@ screenLeftEnvelope.polygon.forEach((leftPoint, index) => {
   );
   expectClose(normalizedLeft.y, normalizedRight.y, 0.025, `mirrored brow polygon y ${index}`);
 });
+expectLessThan(
+  screenLeftEnvelope.fillBounds[3],
+  screenLeftEnvelope.eyeExclusionBounds[1],
+  'screen-left generated brow stays above eye exclusion',
+);
+expectLessThan(
+  screenRightEnvelope.fillBounds[3],
+  screenRightEnvelope.eyeExclusionBounds[1],
+  'screen-right generated brow stays above eye exclusion',
+);
+expectLessThan(
+  screenLeftEnvelope.fillBounds[3],
+  screenLeftSourceBrowBounds[3],
+  'screen-left generated brow bottom is lifted above raw brow body',
+);
+expectLessThan(
+  screenRightEnvelope.fillBounds[3],
+  screenRightSourceBrowBounds[3],
+  'screen-right generated brow bottom is lifted above raw brow body',
+);
 expectGreaterThan(
   payload.surroundAnchorPointCount,
   70,
@@ -327,6 +381,17 @@ expectEqual(
   payload.anchorStabilizationMode,
   'surround_anchor_eye_eyelid_temple_nose_face_oval_v2',
   'generated brow stabilization mode',
+);
+expectEqual(
+  payload.eyeExclusionMode,
+  'upper_eyelid_expanded_eye_bounds_v2',
+  'generated brow eye exclusion mode',
+);
+expectEqual(payload.eyeAnchorPointCount, 20, 'generated brow eye anchor count');
+expectGreaterThan(
+  payload.upperEyelidAnchorPointCount,
+  10,
+  'generated brow upper eyelid anchor count',
 );
 expectEqual(payload.cleanupStrength, 0, 'generated brow cleanup stays disabled');
 expectEqual(payload.neutralizeStrength, 0, 'generated brow neutralize stays disabled');
