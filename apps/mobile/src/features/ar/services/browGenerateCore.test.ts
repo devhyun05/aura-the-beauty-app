@@ -28,6 +28,12 @@ function expectGreaterThan(actual: number, expected: number, label: string) {
   }
 }
 
+function expectGreaterThanOrEqual(actual: number, expected: number, label: string) {
+  if (!(actual >= expected)) {
+    throw new Error(`${label}: expected >= ${expected}, received ${actual}`);
+  }
+}
+
 function expectLessThan(actual: number, expected: number, label: string) {
   if (!(actual < expected)) {
     throw new Error(`${label}: expected < ${expected}, received ${actual}`);
@@ -455,10 +461,20 @@ expectLessThan(
   screenLeftSourceBrowBounds[3],
   'screen-left generated brow bottom is lifted above raw brow body',
 );
+expectGreaterThanOrEqual(
+  screenLeftSourceBrowBounds[3] - screenLeftEnvelope.fillBounds[3],
+  3,
+  'screen-left generated brow minimum vertical lift',
+);
 expectLessThan(
   screenRightEnvelope.fillBounds[3],
   screenRightSourceBrowBounds[3],
   'screen-right generated brow bottom is lifted above raw brow body',
+);
+expectGreaterThanOrEqual(
+  screenRightSourceBrowBounds[3] - screenRightEnvelope.fillBounds[3],
+  3,
+  'screen-right generated brow minimum vertical lift',
 );
 expectGreaterThan(
   payload.surroundAnchorPointCount,
