@@ -192,19 +192,39 @@ type RuntimeMakeupSnapshot = {
   generatedMaskControls: GeneratedMaskControls;
 };
 type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
+  anchorStabilizationMode?: string;
   applied?: boolean;
   applyTrigger?: string;
   attemptCount?: number;
   blockedReason?: string;
+  browAnchorPointCount?: number;
+  color?: string;
+  debugExaggerate?: boolean;
+  debugMode?: number;
+  debugShowLeftRight?: boolean;
+  eyeAnchorPointCount?: number;
+  eyeExclusionMode?: string;
+  faceOvalPointCount?: number;
   faceCount?: number;
   generatedMaskId?: string;
+  meshIndexCount?: number;
+  meshUvCount?: number;
+  meshVertexCount?: number;
   maskTextureId?: string;
   maskTriangles?: number;
+  noseBridgeAnchorPointCount?: number;
+  opacity?: number;
   runtimeReady?: boolean;
   stateAction?: string;
+  stabilityMode?: string;
+  stabilizationDeadZoneMeters?: number;
+  stabilizationSnapDistanceMeters?: number;
   status?: string;
+  surroundAnchorPointCount?: number;
+  templeAnchorPointCount?: number;
   trackingState?: string;
   type?: string;
+  upperEyelidAnchorPointCount?: number;
   uvAvailable?: boolean;
 };
 
@@ -1717,18 +1737,38 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
   }
 
   const logPayload = {
+    anchorStabilizationMode: event.anchorStabilizationMode,
     applied: event.applied,
     applyTrigger: event.applyTrigger,
     attemptCount: event.attemptCount,
     blockedReason: event.blockedReason,
+    browAnchorPointCount: event.browAnchorPointCount,
+    color: event.color,
+    debugExaggerate: event.debugExaggerate,
+    debugMode: event.debugMode,
+    debugShowLeftRight: event.debugShowLeftRight,
+    eyeAnchorPointCount: event.eyeAnchorPointCount,
+    eyeExclusionMode: event.eyeExclusionMode,
+    faceOvalPointCount: event.faceOvalPointCount,
     faceCount: event.faceCount,
     generatedMaskId: event.generatedMaskId,
+    meshIndexCount: event.meshIndexCount,
+    meshUvCount: event.meshUvCount,
+    meshVertexCount: event.meshVertexCount,
     maskTextureId: event.maskTextureId,
     maskTriangles: event.maskTriangles,
+    noseBridgeAnchorPointCount: event.noseBridgeAnchorPointCount,
+    opacity: event.opacity,
     runtimeReady: event.runtimeReady,
     stateAction: event.stateAction,
+    stabilityMode: event.stabilityMode,
+    stabilizationDeadZoneMeters: event.stabilizationDeadZoneMeters,
+    stabilizationSnapDistanceMeters: event.stabilizationSnapDistanceMeters,
     status: event.status,
+    surroundAnchorPointCount: event.surroundAnchorPointCount,
+    templeAnchorPointCount: event.templeAnchorPointCount,
     trackingState: event.trackingState,
+    upperEyelidAnchorPointCount: event.upperEyelidAnchorPointCount,
     uvAvailable: event.uvAvailable,
   };
 
