@@ -554,7 +554,7 @@ expectLessThan(
 );
 expectGreaterThanOrEqual(
   screenLeftSourceBrowBounds[3] - screenLeftEnvelope.fillBounds[3],
-  3,
+  4,
   'screen-left generated brow minimum vertical lift',
 );
 expectLessThan(
@@ -564,7 +564,7 @@ expectLessThan(
 );
 expectGreaterThanOrEqual(
   screenRightSourceBrowBounds[3] - screenRightEnvelope.fillBounds[3],
-  3,
+  4,
   'screen-right generated brow minimum vertical lift',
 );
 expectGreaterThan(
@@ -609,6 +609,7 @@ expectEqual(payload.debugExaggerate, false, 'generated brow default exaggeration
 
 const runtimeDiagnostic = summarizeGeneratedBrowRuntimeDiagnostics({
   applied: true,
+  applyTrigger: 'runtime_sample',
   browAnchorPointCount: payload.browAnchorPointCount,
   browCorePointCount: payload.browCorePointCount,
   browShapeBasePointCount: payload.browShapeBasePointCount,
@@ -638,6 +639,7 @@ expectEqual(runtimeDiagnostic.status, 'ready', 'generated brow runtime diagnosti
 expectTruthy(
   runtimeDiagnostic.detailText.includes('core 20') &&
     runtimeDiagnostic.detailText.includes('base 20') &&
+    runtimeDiagnostic.detailText.includes('trigger runtime_sample') &&
     runtimeDiagnostic.detailText.includes('uv 0.31,0.35,0.62,0.48') &&
     runtimeDiagnostic.detailText.includes('exp ') &&
     runtimeDiagnostic.detailText.includes('stab generated_brow_arface_uv_deadband_fast_follow') &&

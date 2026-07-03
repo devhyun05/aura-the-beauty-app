@@ -1,6 +1,7 @@
 export type GeneratedBrowRuntimeDiagnosticEvent = {
   anchorStabilizationMode?: string;
   applied?: boolean;
+  applyTrigger?: string;
   browAnchorPointCount?: number;
   browCorePointCount?: number;
   browShapeBasePointCount?: number;
@@ -64,6 +65,7 @@ export function summarizeGeneratedBrowRuntimeDiagnostics(
   return {
     detailText: [
       `tri ${maskTriangles}`,
+      `trigger ${event.applyTrigger ?? '-'}`,
       `uv ${formatUvBounds(event)}`,
       `exp ${formatExpectedUvBounds(event)}`,
       `split ${event.maskUvSplitMode ?? '-'}`,

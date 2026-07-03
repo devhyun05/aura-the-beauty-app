@@ -1326,7 +1326,7 @@ function buildBrowRingSilhouettePolygon({
       lerp(ringLowerY, lowerFlowBaselineY, lowerFlowFlatten) -
       lowerAnchorLift +
       tailDrop;
-    lowerY -= height * (shapeId === 'straight' ? 0.018 : 0.032);
+    lowerY -= height * (shapeId === 'straight' ? 0.028 : 0.046);
 
     if (shapeId === 'straight') {
       const straightCenter = topY + height * 0.52;
