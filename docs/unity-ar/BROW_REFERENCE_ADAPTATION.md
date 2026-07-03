@@ -45,6 +45,12 @@ Our app keeps that idea, but changes the runtime target:
 The generated brow mask is a sibling pipeline to generated lip. It must not
 be merged into the lip payload or the legacy lip/blush shader paths.
 
+The iOS MediaPipe provider keeps the upstream brow core set as the source of
+truth, but stores open rings instead of duplicate closing points. The app's
+left brow core also includes MediaPipe point `282` as a body-balance point so
+both brow sides expose 10 core samples before the denser surround-anchor and
+appearance samplers run.
+
 ## Runtime Contract
 
 The generated brow texture uses this channel contract:
@@ -65,6 +71,7 @@ for the current MVP.
 Run these from the repo root after changing generated brow logic:
 
 ```bash
+npm run mobile:check:brow-native-landmarks
 npm run mobile:test:generated-brow
 npm run mobile:test:unity-bridge
 npm run mobile:check:brow-runtime-log -- --self-test
@@ -79,6 +86,8 @@ The generated brow contract test covers:
 - strand texture channel output,
 - MediaPipe/reference brow core and shape-base ring point counts carried into
   the Unity runtime payload,
+- native iOS MediaPipe brow core indices staying aligned to the upstream
+  `EYE_BROW_CONNECTIONS` set plus the app's documented left-body balance point,
 - right brow shape mirrored onto the left side,
 - minimum brow vertical lift,
 - eye exclusion separation,
