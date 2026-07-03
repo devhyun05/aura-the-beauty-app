@@ -6,7 +6,7 @@ import {
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
-import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import {useAuthSession} from '../../../features/auth';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {colors} from '../../../shared/theme';
@@ -54,8 +54,10 @@ export function FaceCaptureRouteScreen({
   }
 
   return (
-    <FaceCaptureScreen
+    <CameraFaceCaptureScreen
       autoOpenGallery={route.params?.initialSource === 'gallery'}
+      captureMode="face"
+      captureType="face_analysis"
       onCapture={result => {
         if (result) {
           setSelectedFaceCapture(result);

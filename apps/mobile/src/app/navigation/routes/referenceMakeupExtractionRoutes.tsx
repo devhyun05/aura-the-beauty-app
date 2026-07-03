@@ -8,10 +8,11 @@ import {
   MakeupRecipeSaveCompleteScreen,
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
-  ReferenceMakeupExtractionUploadScreen,
   type MakeupExtractionProgressUpdate,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
   getReferenceMakeupExtractionDataSync,
   runReferenceMakeupExtraction,
@@ -24,6 +25,24 @@ import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
+
+export function mapFaceCaptureResultToReferenceMakeupPhoto(
+  result?: FaceCaptureUploadResult,
+): ReferenceMakeupPhoto | null {
+  if (!result?.imageUri) {
+    return null;
+  }
+
+  const isAlbumSource = result.source === 'gallery';
+
+  return {
+    contentType: result.contentType ?? null,
+    id: `${isAlbumSource ? 'album' : 'camera'}-reference-${result.photoCaptureId}`,
+    imageSource: {uri: result.imageUri},
+    referenceSource: isAlbumSource ? 'album' : 'camera',
+    title: isAlbumSource ? '업로드한 참고 사진' : '촬영한 참고 사진',
+  };
+}
 
 function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
@@ -53,7 +72,6 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
     referenceMakeupUploadedPhotos,
-    selectedReferenceMakeupPhoto,
     setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
@@ -65,24 +83,26 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
     navigateMainTab(navigation, 'HomeTab');
   };
 
-  const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
+  const handleStartAnalysis = (result?: FaceCaptureUploadResult) => {
+    const photo = mapFaceCaptureResultToReferenceMakeupPhoto(result);
+
+    if (!photo) {
+      return;
+    }
+
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
+    setReferenceMakeupUploadedPhotos([photo, ...referenceMakeupUploadedPhotos]);
     navigation.replace('ReferenceMakeupExtractionLoading');
   };
 
   return (
-    <DetailRouteChrome
-      routeName="ReferenceMakeupExtractionUpload"
-      onClose={handleClose}>
-      <ReferenceMakeupExtractionUploadScreen
-        onSelectPhoto={setSelectedReferenceMakeupPhoto}
-        onStartAnalysis={handleStartAnalysis}
-        onUploadedPhotosChange={setReferenceMakeupUploadedPhotos}
-        selectedPhoto={selectedReferenceMakeupPhoto}
-        uploadedPhotos={referenceMakeupUploadedPhotos}
-      />
-    </DetailRouteChrome>
+    <CameraFaceCaptureScreen
+      captureMode="reference"
+      captureType="filter_extraction"
+      onCapture={handleStartAnalysis}
+      onClose={handleClose}
+    />
   );
 }
 

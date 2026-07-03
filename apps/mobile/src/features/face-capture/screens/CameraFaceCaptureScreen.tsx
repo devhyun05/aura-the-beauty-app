@@ -49,6 +49,7 @@ import {
   uploadFaceCaptureImage,
   type FaceCaptureUploadResult,
   type FaceCaptureImageInput,
+  type FaceCaptureUploadCaptureType,
 } from '../services/faceCaptureUploadService';
 
 type CameraDirection = 'front' | 'back';
@@ -67,8 +68,12 @@ type ScreenGuideBounds = {
   width: number;
 };
 
-type FaceCaptureScreenProps = {
+export type CameraFaceCaptureMode = 'face' | 'reference';
+
+type CameraFaceCaptureScreenProps = {
   autoOpenGallery?: boolean;
+  captureMode?: CameraFaceCaptureMode;
+  captureType?: FaceCaptureUploadCaptureType;
   checks?: FaceCaptureCheckState;
   onCapture?: (result?: FaceCaptureUploadResult) => void;
   onClose?: () => void;
@@ -76,8 +81,12 @@ type FaceCaptureScreenProps = {
   onToggleCamera?: (direction: CameraDirection) => void;
 };
 
-export function getFaceCaptureCameraMode(): 'live-camera' {
+export function getCameraFaceCaptureCameraMode(): 'live-camera' {
   return 'live-camera';
+}
+
+export function shouldValidateCameraFaceCapture(mode: CameraFaceCaptureMode): boolean {
+  return mode === 'face';
 }
 
 const FACE_LANDMARK_SCAN_INITIAL_DELAY_MS = 250;
@@ -298,19 +307,24 @@ function createLocalFaceCaptureResult({
   };
 }
 
-export function FaceCaptureScreen({
+export function CameraFaceCaptureScreen({
   autoOpenGallery = false,
+  captureMode = 'face',
+  captureType,
   checks,
   onCapture,
   onClose,
   onPickImage,
   onToggleCamera,
-}: FaceCaptureScreenProps) {
+}: CameraFaceCaptureScreenProps) {
+  const shouldValidateFace = shouldValidateCameraFaceCapture(captureMode);
   const {height, width} = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
   const realtimeCameraRef = useRef<RealtimeFaceCaptureNativeViewHandle>(null);
-  const [cameraDirection, setCameraDirection] = useState<CameraDirection>('front');
+  const [cameraDirection, setCameraDirection] = useState<CameraDirection>(() =>
+    shouldValidateFace ? 'front' : 'back',
+  );
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -324,10 +338,13 @@ export function FaceCaptureScreen({
   const lastRealtimeLogAtRef = useRef(0);
   const hasAutoOpenedGalleryRef = useRef(false);
 
-  const realtimeCaptureAvailable = useMemo(() => isRealtimeFaceCaptureAvailable(), []);
+  const realtimeCaptureAvailable = useMemo(
+    () => shouldValidateFace && isRealtimeFaceCaptureAvailable(),
+    [shouldValidateFace],
+  );
   const landmarkDetectorAvailable = useMemo(
-    () => !realtimeCaptureAvailable && isFaceLandmarkDetectorAvailable(),
-    [realtimeCaptureAvailable],
+    () => shouldValidateFace && !realtimeCaptureAvailable && isFaceLandmarkDetectorAvailable(),
+    [realtimeCaptureAvailable, shouldValidateFace],
   );
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   const guideWidth = Math.min(Math.max(width * 0.66, 236), 292);
@@ -354,17 +371,19 @@ export function FaceCaptureScreen({
     }),
     [guideCenterX, guideCenterY, guideHeight, guideWidth, height, width],
   );
-  const effectiveChecks =
-    checks ??
-    liveCaptureChecks ??
-    (landmarkDetectorAvailable || realtimeCaptureAvailable
-      ? blockedFaceCaptureChecks
-      : mockReadyFaceCaptureChecks);
+  const effectiveChecks = shouldValidateFace
+    ? checks ??
+      liveCaptureChecks ??
+      (landmarkDetectorAvailable || realtimeCaptureAvailable
+        ? blockedFaceCaptureChecks
+        : mockReadyFaceCaptureChecks)
+    : mockReadyFaceCaptureChecks;
   const hasLiveCaptureChecks =
-    checks !== undefined ||
-    liveCaptureChecks !== null ||
-    landmarkDetectorAvailable ||
-    realtimeCaptureAvailable;
+    shouldValidateFace &&
+    (checks !== undefined ||
+      liveCaptureChecks !== null ||
+      landmarkDetectorAvailable ||
+      realtimeCaptureAvailable);
   const guidance = useMemo(
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
@@ -375,7 +394,9 @@ export function FaceCaptureScreen({
     uploadError ??
     (isUploading
       ? '사진을 업로드하는 중이에요'
-      : captureValidationMessage ?? guidance.message);
+      : shouldValidateFace
+        ? captureValidationMessage ?? guidance.message
+        : captureValidationMessage);
   const isCaptureDisabled = isUploading;
   const shouldUseBackendUpload = Boolean(getBackendApiBaseUrl());
   const foreheadDot = useMemo(
@@ -417,10 +438,15 @@ export function FaceCaptureScreen({
   );
   const hasScreenLandmarks = Boolean(foreheadDot && chinDot);
   const shouldBlockForScreenGuide =
+    shouldValidateFace &&
     (landmarkDetectorAvailable || realtimeCaptureAvailable) &&
     (!hasScreenLandmarks || !areScreenLandmarksInsideGuide);
   const captureTintColor =
-    uploadError || !isCameraReady || shouldBlockForScreenGuide
+    !shouldValidateFace
+      ? uploadError || !isCameraReady
+        ? colors.danger
+        : colors.white
+      : uploadError || !isCameraReady || shouldBlockForScreenGuide
       ? colors.danger
       : guidance.tintColor;
 
@@ -437,7 +463,7 @@ export function FaceCaptureScreen({
   }, [guidance.status]);
 
   useEffect(() => {
-    if (!landmarkDetectorAvailable) {
+    if (shouldValidateFace && !landmarkDetectorAvailable) {
       console.info(
         '[aura:face-capture] landmark-detector:unavailable',
         realtimeCaptureAvailable
@@ -445,7 +471,7 @@ export function FaceCaptureScreen({
           : 'AURAFaceLandmarkDetector native module is missing. Rebuild the iOS app.',
       );
     }
-  }, [landmarkDetectorAvailable, realtimeCaptureAvailable]);
+  }, [landmarkDetectorAvailable, realtimeCaptureAvailable, shouldValidateFace]);
 
   const handleRealtimeLandmarksDetected = useCallback(
     ({nativeEvent}: {nativeEvent: RealtimeFaceCaptureLandmarkPayload}) => {
@@ -559,6 +585,7 @@ export function FaceCaptureScreen({
   useEffect(() => {
     if (
       realtimeCaptureAvailable ||
+      !shouldValidateFace ||
       checks !== undefined ||
       !landmarkDetectorAvailable ||
       !isCameraReady ||
@@ -733,6 +760,7 @@ export function FaceCaptureScreen({
     landmarkDetectorAvailable,
     realtimeCaptureAvailable,
     screenGuideBounds,
+    shouldValidateFace,
     width,
   ]);
 
@@ -763,19 +791,21 @@ export function FaceCaptureScreen({
       return;
     }
 
-    if (!realtimeCaptureAvailable && landmarkScanInFlightRef.current) {
-      triggerBlockedCaptureFeedback('얼굴 위치를 확인 중이에요. 잠시 후 다시 촬영해 주세요.');
-      return;
-    }
+    if (shouldValidateFace) {
+      if (!realtimeCaptureAvailable && landmarkScanInFlightRef.current) {
+        triggerBlockedCaptureFeedback('얼굴 위치를 확인 중이에요. 잠시 후 다시 촬영해 주세요.');
+        return;
+      }
 
-    if (shouldBlockForScreenGuide) {
-      triggerBlockedCaptureFeedback(FACE_CAPTURE_ALIGNMENT_MESSAGE);
-      return;
-    }
+      if (shouldBlockForScreenGuide) {
+        triggerBlockedCaptureFeedback(FACE_CAPTURE_ALIGNMENT_MESSAGE);
+        return;
+      }
 
-    if (hasLiveCaptureChecks && !guidance.isCaptureEnabled) {
-      triggerBlockedCaptureFeedback(guidance.message ?? FACE_CAPTURE_ALIGNMENT_MESSAGE);
-      return;
+      if (hasLiveCaptureChecks && !guidance.isCaptureEnabled) {
+        triggerBlockedCaptureFeedback(guidance.message ?? FACE_CAPTURE_ALIGNMENT_MESSAGE);
+        return;
+      }
     }
 
     setIsUploading(true);
@@ -795,6 +825,7 @@ export function FaceCaptureScreen({
       }
 
       const imageInput: FaceCaptureImageInput = {
+        captureType,
         height: picture.height,
         source: 'camera',
         uri: picture.uri,
@@ -860,6 +891,7 @@ export function FaceCaptureScreen({
       setIsUploading(true);
       const asset = pickerResult.assets[0];
       const imageInput: FaceCaptureImageInput = {
+        captureType,
         contentType: asset.mimeType,
         fileName: asset.fileName,
         height: asset.height,
@@ -934,23 +966,25 @@ export function FaceCaptureScreen({
         <X color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
       </FloatingOverlayIconButton>
 
-      <View
-        pointerEvents="none"
-        style={[
-          styles.faceGuide,
-          {
-            borderColor: captureTintColor,
-            borderRadius: guideWidth / 2,
-            height: guideWidth,
-            left: guideCenterX - guideWidth / 2,
-            top: guideTop,
-            transform: [{scaleY: guideScaleY}],
-            width: guideWidth,
-          },
-        ]}
-      />
+      {shouldValidateFace ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.faceGuide,
+            {
+              borderColor: captureTintColor,
+              borderRadius: guideWidth / 2,
+              height: guideWidth,
+              left: guideCenterX - guideWidth / 2,
+              top: guideTop,
+              transform: [{scaleY: guideScaleY}],
+              width: guideWidth,
+            },
+          ]}
+        />
+      ) : null}
 
-      {(hasLiveCaptureChecks && guidance.status === 'blocked') ||
+      {(shouldValidateFace && hasLiveCaptureChecks && guidance.status === 'blocked') ||
       captureValidationMessage ||
       uploadError ? (
         <View pointerEvents="none" style={[styles.errorBar, {bottom: errorBottom}]}>

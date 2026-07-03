@@ -4,7 +4,6 @@ import {
   MakeupCorrectionGuideOverlayScreen,
   MakeupCorrectionTipScreen,
   MakeupFeedbackAlbumUploadScreen,
-  MakeupFeedbackCaptureScreen,
   MakeupFeedbackEntryScreen,
   MakeupFeedbackGoalInputScreen,
   MakeupFeedbackLoadingScreen,
@@ -12,6 +11,8 @@ import {
   type MakeupFeedbackPhotoSelection,
   type MakeupFeedbackResult,
 } from '../../../features/makeup-feedback';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -21,6 +22,15 @@ function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelecti
   return selection.photoSource === 'gallery'
     ? 'MakeupFeedbackAlbumUpload'
     : 'MakeupFeedbackCapture';
+}
+
+export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
+  result: FaceCaptureUploadResult,
+): MakeupFeedbackPhotoSelection {
+  return {
+    imageUri: result.imageUri,
+    photoSource: result.source === 'gallery' ? 'gallery' : 'camera',
+  };
 }
 
 export function MakeupFeedbackEntryRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackEntry'>) {
@@ -46,19 +56,27 @@ export function MakeupFeedbackCaptureRouteScreen({
 }: RootScreenProps<'MakeupFeedbackCapture'>) {
   const {setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto} = useNavigationFlowState();
 
-  const handleSelectPhoto = React.useCallback(
-    (selection: MakeupFeedbackPhotoSelection) => {
+  const handleCapture = React.useCallback(
+    (result?: FaceCaptureUploadResult) => {
+      if (!result) {
+        return;
+      }
+
       setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto(selection);
+      setSelectedMakeupFeedbackPhoto(
+        mapFaceCaptureResultToMakeupFeedbackPhotoSelection(result),
+      );
       navigation.replace('MakeupFeedbackGoalInput');
     },
     [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
 
   return (
-    <MakeupFeedbackCaptureScreen
+    <CameraFaceCaptureScreen
+      captureMode="face"
+      captureType="makeup_feedback"
+      onCapture={handleCapture}
       onClose={() => navigateMainTab(navigation, 'CustomTab')}
-      onSelectPhoto={handleSelectPhoto}
     />
   );
 }

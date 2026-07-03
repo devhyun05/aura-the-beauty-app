@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
-import ViewShot from 'react-native-view-shot';
+import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
 import {ChevronDown, ChevronUp, Download, Eye, Heart, Share2, Sparkles} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
@@ -60,7 +60,7 @@ function waitForNextFrame() {
   });
 }
 
-async function captureFeedbackImage(captureRef: {current: ViewShot | null}) {
+async function captureFeedbackImage(captureRef: {current: ViewShotRef | null}) {
   const captureTarget = captureRef.current;
   const capture = captureTarget?.capture;
 
@@ -127,7 +127,7 @@ export function MakeupFeedbackResultScreen({
   result,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
-  const captureRef = useRef<ViewShot | null>(null);
+  const captureRef = useRef<ViewShotRef | null>(null);
   const [openPointId, setOpenPointId] = useState<string | null>(result.points[0]?.id ?? null);
   const [openStrengthId, setOpenStrengthId] = useState<string | null>(result.strengths[0]?.id ?? null);
   const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
