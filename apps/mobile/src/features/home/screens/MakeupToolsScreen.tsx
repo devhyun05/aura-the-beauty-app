@@ -40,10 +40,7 @@ export function MakeupToolsScreen({
         </View>
         <YStack style={styles.heroCopy}>
           <Text style={styles.eyebrow}>MAKEUP TOOLS</Text>
-          <Text style={styles.title}>메이크업 분석</Text>
-          <Text style={styles.description}>
-            사진 한 장으로 메이크업 추출과 피드백을 이어서 확인해요.
-          </Text>
+          <Text style={styles.title}>AI 피드백</Text>
         </YStack>
       </YStack>
 
@@ -124,14 +121,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
-  },
-  description: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
   },
   eyebrow: {
     color: colors.successMuted,

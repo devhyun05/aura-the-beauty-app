@@ -48,6 +48,8 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
 
     setIsTakingPhoto(true);
     let capturedImageUri: string | undefined;
+    let capturedImageWidth: number | null = null;
+    let capturedImageHeight: number | null = null;
 
     try {
       if (permission?.granted && isCameraReady) {
@@ -57,6 +59,8 @@ export function MakeupFeedbackCaptureScreen({onClose, onSelectPhoto}: MakeupFeed
         });
 
         capturedImageUri = picture?.uri;
+        capturedImageWidth = picture?.width ?? null;
+        capturedImageHeight = picture?.height ?? null;
       }
     } catch {
       // Simulator camera capture can fail even when the UI flow is still demoable.

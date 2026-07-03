@@ -57,8 +57,8 @@ const footerItems: FooterTabItem[] = [
   },
   {
     key: 'custom',
-    label: '아우라딘',
-    accessibilityLabel: '아우라딘 화면으로 이동',
+    label: 'AI 피드백',
+    accessibilityLabel: 'AI 피드백 사진 선택 열기',
     icon: color => <BrushFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
 ];

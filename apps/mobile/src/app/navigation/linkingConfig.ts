@@ -65,6 +65,7 @@ export const rootStackLinkingScreens = {
   MakeupFeedbackEntry: 'makeup-feedback-entry',
   MakeupFeedbackCapture: 'makeup-feedback-capture',
   MakeupFeedbackAlbumUpload: 'makeup-feedback-album-upload',
+  MakeupFeedbackGoalInput: 'makeup-feedback-goal-input',
   MakeupFeedbackLoading: 'makeup-feedback-loading',
   MakeupFeedbackResult: 'makeup-feedback-result',
   MakeupCorrectionGuide: 'makeup-correction-guide',
