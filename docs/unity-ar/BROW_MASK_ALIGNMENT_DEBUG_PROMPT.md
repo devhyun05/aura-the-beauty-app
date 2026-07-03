@@ -114,7 +114,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - After pulling either file from a device, run:
     - `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.jsonl>`
     - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
-  - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
+  - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 

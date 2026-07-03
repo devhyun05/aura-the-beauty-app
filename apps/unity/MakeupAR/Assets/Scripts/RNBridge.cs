@@ -2583,6 +2583,11 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"faceCount\":" + result.FaceCount.ToString(CultureInfo.InvariantCulture)
             + ",\"maskTriangles\":" + result.MaskTriangleCount.ToString(CultureInfo.InvariantCulture)
             + ",\"uvAvailable\":" + result.UvAvailable.ToString().ToLowerInvariant()
+            + ",\"maskUvBoundsAvailable\":" + result.MaskUvBoundsAvailable.ToString().ToLowerInvariant()
+            + ",\"maskUvMinX\":" + result.MaskUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMinY\":" + result.MaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMaxX\":" + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMaxY\":" + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + ",\"blockedReason\":\"" + EscapeJsonString(blockedReason) + "\""
             + ",\"trackingState\":\"" + EscapeJsonString(result.TrackingState) + "\""
             + ",\"stateAction\":\"" + EscapeJsonString(result.StateAction) + "\""

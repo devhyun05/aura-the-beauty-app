@@ -85,6 +85,8 @@ function evaluateGeneratedBrowEvents(events) {
     requireNumberAtLeast(latestReady, 'browAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'eyeAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'upperEyelidAnchorPointCount', 10, failures);
+    requireEqual(latestReady, 'maskUvBoundsAvailable', true, failures);
+    requireUvBounds(latestReady, failures);
     requireEqual(latestReady, 'anchorStabilizationMode', EXPECTED_ANCHOR_MODE, failures);
     requireEqual(latestReady, 'eyeExclusionMode', EXPECTED_EYE_EXCLUSION_MODE, failures);
     requireEqual(latestReady, 'cleanupStrength', 0, failures);
@@ -133,6 +135,32 @@ function requireEqual(event, field, expected, failures) {
   const value = event[field];
   if (value !== expected) {
     failures.push(`${field} expected ${formatValue(expected)}, received ${formatValue(value)}.`);
+  }
+}
+
+function requireUvBounds(event, failures) {
+  const minX = numberField(event, 'maskUvMinX');
+  const minY = numberField(event, 'maskUvMinY');
+  const maxX = numberField(event, 'maskUvMaxX');
+  const maxY = numberField(event, 'maskUvMaxY');
+  const values = {maskUvMinX: minX, maskUvMinY: minY, maskUvMaxX: maxX, maskUvMaxY: maxY};
+
+  Object.entries(values).forEach(([field, value]) => {
+    if (value === undefined || value < 0 || value > 1) {
+      failures.push(`${field} expected within 0..1, received ${formatValue(value)}.`);
+    }
+  });
+
+  if (
+    minX !== undefined &&
+    minY !== undefined &&
+    maxX !== undefined &&
+    maxY !== undefined &&
+    (maxX <= minX || maxY <= minY)
+  ) {
+    failures.push(
+      `mask UV bounds expected positive area, received [${minX}, ${minY}, ${maxX}, ${maxY}].`,
+    );
   }
 }
 
@@ -192,6 +220,11 @@ function runSelfTest() {
     eyeExclusionMode: EXPECTED_EYE_EXCLUSION_MODE,
     faceCount: 1,
     maskTriangles: 118,
+    maskUvBoundsAvailable: true,
+    maskUvMaxX: 0.62,
+    maskUvMaxY: 0.48,
+    maskUvMinX: 0.31,
+    maskUvMinY: 0.35,
     meshUvCount: 1220,
     meshVertexCount: 1220,
     neutralizeStrength: 0,

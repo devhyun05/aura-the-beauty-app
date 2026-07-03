@@ -212,6 +212,11 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   meshVertexCount?: number;
   maskTextureId?: string;
   maskTriangles?: number;
+  maskUvBoundsAvailable?: boolean;
+  maskUvMaxX?: number;
+  maskUvMaxY?: number;
+  maskUvMinX?: number;
+  maskUvMinY?: number;
   noseBridgeAnchorPointCount?: number;
   opacity?: number;
   runtimeReady?: boolean;
@@ -1757,6 +1762,11 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
     meshVertexCount: event.meshVertexCount,
     maskTextureId: event.maskTextureId,
     maskTriangles: event.maskTriangles,
+    maskUvBoundsAvailable: event.maskUvBoundsAvailable,
+    maskUvMaxX: event.maskUvMaxX,
+    maskUvMaxY: event.maskUvMaxY,
+    maskUvMinX: event.maskUvMinX,
+    maskUvMinY: event.maskUvMinY,
     noseBridgeAnchorPointCount: event.noseBridgeAnchorPointCount,
     opacity: event.opacity,
     runtimeReady: event.runtimeReady,

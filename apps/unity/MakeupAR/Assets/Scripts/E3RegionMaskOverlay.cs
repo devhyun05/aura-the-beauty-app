@@ -22,6 +22,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int MeshVertexCount;
         public int MeshIndexCount;
         public int MeshUvCount;
+        public bool MaskUvBoundsAvailable;
+        public float MaskUvMinX;
+        public float MaskUvMinY;
+        public float MaskUvMaxX;
+        public float MaskUvMaxY;
         public string RendererMode;
         public string MaskTextureId;
         public string MaskSource;
@@ -656,6 +661,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             int sourceTriangleCount = 0;
             int culledTriangleCount = 0;
             string meshCullingMode = "none";
+            bool maskUvBoundsAvailable = false;
+            Vector4 maskUvBounds = Vector4.zero;
             VisionBoundaryGateInfo visionGateInfo = CreateDefaultVisionGateInfo();
             MaskTextureDiagnostics dynamicMaskDiagnostics = null;
             bool meshApplied = useMeshMasks && TryUpdateFullFaceUvMesh(
@@ -666,6 +673,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 out sourceTriangleCount,
                 out culledTriangleCount,
                 out meshCullingMode,
+                out maskUvBoundsAvailable,
+                out maskUvBounds,
                 out visionGateInfo,
                 out dynamicMaskDiagnostics);
             result.SourceTriangleCount += sourceTriangleCount;
@@ -673,6 +682,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             result.MaskTriangleCount += triangleCount;
             result.CulledTriangleCount += culledTriangleCount;
             result.MeshCullingMode = meshCullingMode;
+            MergeMaskUvBounds(ref result, maskUvBoundsAvailable, maskUvBounds);
             ApplyVisionGateInfo(ref result, visionGateInfo);
             ApplyDynamicMaskDiagnostics(ref result, dynamicMaskDiagnostics);
 
@@ -707,6 +717,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MeshVertexCount = 0,
             MeshIndexCount = 0,
             MeshUvCount = 0,
+            MaskUvBoundsAvailable = false,
+            MaskUvMinX = 0.0f,
+            MaskUvMinY = 0.0f,
+            MaskUvMaxX = 0.0f,
+            MaskUvMaxY = 0.0f,
             RendererMode = RendererMode,
             MaskTextureId = maskTextureId,
             MaskSource = MaskSource,
@@ -911,6 +926,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         out int sourceTriangleCount,
         out int culledTriangleCount,
         out string meshCullingMode,
+        out bool maskUvBoundsAvailable,
+        out Vector4 maskUvBounds,
         out VisionBoundaryGateInfo visionGateInfo,
         out MaskTextureDiagnostics dynamicMaskDiagnostics)
     {
@@ -918,6 +935,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         sourceTriangleCount = 0;
         culledTriangleCount = 0;
         meshCullingMode = "none";
+        maskUvBoundsAvailable = false;
+        maskUvBounds = Vector4.zero;
         visionGateInfo = CreateDefaultVisionGateInfo();
         dynamicMaskDiagnostics = null;
 
@@ -1081,6 +1100,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             triangles.Add(sourceA);
             triangles.Add(sourceB);
             triangles.Add(sourceC);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceA]);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceB]);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceC]);
         }
 
         triangleCount = triangles.Count / 3;
@@ -1102,6 +1124,52 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         view.Mesh.RecalculateNormals();
         view.Mesh.RecalculateBounds();
         return true;
+    }
+
+    private static void AccumulateUvBounds(
+        ref bool boundsAvailable,
+        ref Vector4 bounds,
+        Vector2 uv)
+    {
+        float x = Mathf.Clamp01(uv.x);
+        float y = Mathf.Clamp01(uv.y);
+        if (!boundsAvailable)
+        {
+            bounds = new Vector4(x, y, x, y);
+            boundsAvailable = true;
+            return;
+        }
+
+        bounds.x = Mathf.Min(bounds.x, x);
+        bounds.y = Mathf.Min(bounds.y, y);
+        bounds.z = Mathf.Max(bounds.z, x);
+        bounds.w = Mathf.Max(bounds.w, y);
+    }
+
+    private static void MergeMaskUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskUvBoundsAvailable)
+        {
+            result.MaskUvMinX = bounds.x;
+            result.MaskUvMinY = bounds.y;
+            result.MaskUvMaxX = bounds.z;
+            result.MaskUvMaxY = bounds.w;
+            result.MaskUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskUvMinX = Mathf.Min(result.MaskUvMinX, bounds.x);
+        result.MaskUvMinY = Mathf.Min(result.MaskUvMinY, bounds.y);
+        result.MaskUvMaxX = Mathf.Max(result.MaskUvMaxX, bounds.z);
+        result.MaskUvMaxY = Mathf.Max(result.MaskUvMaxY, bounds.w);
     }
 
     private static void StabilizeGeneratedBrowVertices(
@@ -3754,6 +3822,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " meshIndexCount=" + result.MeshIndexCount.ToString(CultureInfo.InvariantCulture)
             + " meshUvCount=" + result.MeshUvCount.ToString(CultureInfo.InvariantCulture)
             + " uvAvailable=" + result.UvAvailable.ToString().ToLowerInvariant()
+            + " maskUvBoundsAvailable=" + result.MaskUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskUvBounds="
+            + result.MaskUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + " sourceTriangles=" + result.SourceTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " appliedTriangles=" + result.MeshTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " culledTriangles=" + result.CulledTriangleCount.ToString(CultureInfo.InvariantCulture)
