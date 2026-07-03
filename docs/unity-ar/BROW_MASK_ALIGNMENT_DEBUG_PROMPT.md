@@ -78,6 +78,11 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - `E3RegionMaskOverlay` reports this as `maskTextureSampleChannel=generated_brow_green_alpha`.
   - Generated brow mesh culling uses `generated_brow_green_alpha_threshold_sample`.
   - Existing lip atlas masks still use the legacy red-channel threshold path.
+- Unity generated brow runtime events also report face-local X split diagnostics:
+  - `maskUvSplitMode=face_local_x_sign`.
+  - Negative-X and positive-X UV bounds.
+  - Negative-X and positive-X triangle counts.
+  - This does not by itself prove camera-facing left/right, but it proves both face sides have live ARFace UV brow triangles.
 - Offline debug scripts exist:
   - `scripts/e7_brow_debug/validate_generated_brow_package.js`
   - `scripts/e7_brow_debug/render_image_guided_brow_preview.swift`
@@ -121,6 +126,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
     - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
   - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
   - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
+  - The runtime log gate also fails unless generated brow reports `maskUvSplitMode=face_local_x_sign` with positive negative-X and positive-X triangle counts and valid split UV bounds.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 
@@ -248,6 +254,8 @@ For each brow side, log or display:
 - ARFace index count
 - ARFace UV count
 - brow triangle count
+- face-local negative-X brow triangle count and UV bounds
+- face-local positive-X brow triangle count and UV bounds
 - left brow UV bounds
 - right brow UV bounds
 - left brow screen/world bounds
@@ -280,6 +288,7 @@ Verify:
   - A = desired brow alpha
 - Unity generated brow culling and diagnostics must sample `max(G, A)`.
 - Runtime logs should show `maskTextureSampleChannel=generated_brow_green_alpha`.
+- Runtime logs should show `maskUvSplitMode=face_local_x_sign` with both negative-X and positive-X UV bounds populated.
 
 If offline preview is correct but live Unity is wrong, prioritize UV projection, texture sampling, mirroring, or shader channel usage over shape tweaks.
 

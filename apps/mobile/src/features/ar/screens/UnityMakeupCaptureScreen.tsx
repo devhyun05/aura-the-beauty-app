@@ -213,11 +213,24 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   maskTextureId?: string;
   maskTextureSampleChannel?: string;
   maskTriangles?: number;
+  maskNegativeXTriangleCount?: number;
+  maskNegativeXUvBoundsAvailable?: boolean;
+  maskNegativeXUvMaxX?: number;
+  maskNegativeXUvMaxY?: number;
+  maskNegativeXUvMinX?: number;
+  maskNegativeXUvMinY?: number;
+  maskPositiveXTriangleCount?: number;
+  maskPositiveXUvBoundsAvailable?: boolean;
+  maskPositiveXUvMaxX?: number;
+  maskPositiveXUvMaxY?: number;
+  maskPositiveXUvMinX?: number;
+  maskPositiveXUvMinY?: number;
   maskUvBoundsAvailable?: boolean;
   maskUvMaxX?: number;
   maskUvMaxY?: number;
   maskUvMinX?: number;
   maskUvMinY?: number;
+  maskUvSplitMode?: string;
   noseBridgeAnchorPointCount?: number;
   opacity?: number;
   runtimeReady?: boolean;
@@ -1764,11 +1777,24 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
     maskTextureId: event.maskTextureId,
     maskTextureSampleChannel: event.maskTextureSampleChannel,
     maskTriangles: event.maskTriangles,
+    maskNegativeXTriangleCount: event.maskNegativeXTriangleCount,
+    maskNegativeXUvBoundsAvailable: event.maskNegativeXUvBoundsAvailable,
+    maskNegativeXUvMaxX: event.maskNegativeXUvMaxX,
+    maskNegativeXUvMaxY: event.maskNegativeXUvMaxY,
+    maskNegativeXUvMinX: event.maskNegativeXUvMinX,
+    maskNegativeXUvMinY: event.maskNegativeXUvMinY,
+    maskPositiveXTriangleCount: event.maskPositiveXTriangleCount,
+    maskPositiveXUvBoundsAvailable: event.maskPositiveXUvBoundsAvailable,
+    maskPositiveXUvMaxX: event.maskPositiveXUvMaxX,
+    maskPositiveXUvMaxY: event.maskPositiveXUvMaxY,
+    maskPositiveXUvMinX: event.maskPositiveXUvMinX,
+    maskPositiveXUvMinY: event.maskPositiveXUvMinY,
     maskUvBoundsAvailable: event.maskUvBoundsAvailable,
     maskUvMaxX: event.maskUvMaxX,
     maskUvMaxY: event.maskUvMaxY,
     maskUvMinX: event.maskUvMinX,
     maskUvMinY: event.maskUvMinY,
+    maskUvSplitMode: event.maskUvSplitMode,
     noseBridgeAnchorPointCount: event.noseBridgeAnchorPointCount,
     opacity: event.opacity,
     runtimeReady: event.runtimeReady,

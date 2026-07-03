@@ -134,7 +134,8 @@ const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
-const BROW_MASK_VERTICAL_LIFT_RATIO = 0.13;
+const BROW_MASK_VERTICAL_LIFT_RATIO = 0.16;
+const BROW_MASK_MIN_VERTICAL_LIFT_PX = 3;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -731,7 +732,10 @@ function liftBrowEnvelopeSlightly(
   frameHeight: number,
 ): BrowEnvelope {
   const [, minY, , maxY] = envelope.fillBounds;
-  const lift = Math.max(2, (maxY - minY) * BROW_MASK_VERTICAL_LIFT_RATIO);
+  const lift = Math.max(
+    BROW_MASK_MIN_VERTICAL_LIFT_PX,
+    (maxY - minY) * BROW_MASK_VERTICAL_LIFT_RATIO,
+  );
   const liftPoint = (point: E7Point2D) => ({
     x: point.x,
     y: clamp(point.y - lift, 0, frameHeight - 1),

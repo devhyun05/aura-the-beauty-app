@@ -4,6 +4,7 @@ const EXPECTED_SCHEMA = 'generated_brow_mask_applied';
 const EXPECTED_ANCHOR_MODE = 'surround_anchor_eye_eyelid_temple_nose_face_oval_v2';
 const EXPECTED_EYE_EXCLUSION_MODE = 'upper_eyelid_expanded_eye_bounds_v2';
 const EXPECTED_MASK_SAMPLE_CHANNEL = 'generated_brow_green_alpha';
+const EXPECTED_MASK_UV_SPLIT_MODE = 'face_local_x_sign';
 
 const args = process.argv.slice(2);
 
@@ -89,6 +90,13 @@ function evaluateGeneratedBrowEvents(events) {
     requireEqual(latestReady, 'maskUvBoundsAvailable', true, failures);
     requireEqual(latestReady, 'maskTextureSampleChannel', EXPECTED_MASK_SAMPLE_CHANNEL, failures);
     requireUvBounds(latestReady, failures);
+    requireEqual(latestReady, 'maskUvSplitMode', EXPECTED_MASK_UV_SPLIT_MODE, failures);
+    requireNumberAtLeast(latestReady, 'maskNegativeXTriangleCount', 1, failures);
+    requireNumberAtLeast(latestReady, 'maskPositiveXTriangleCount', 1, failures);
+    requireEqual(latestReady, 'maskNegativeXUvBoundsAvailable', true, failures);
+    requireEqual(latestReady, 'maskPositiveXUvBoundsAvailable', true, failures);
+    requireUvBoundsForPrefix(latestReady, 'maskNegativeXUv', failures);
+    requireUvBoundsForPrefix(latestReady, 'maskPositiveXUv', failures);
     requireEqual(latestReady, 'anchorStabilizationMode', EXPECTED_ANCHOR_MODE, failures);
     requireEqual(latestReady, 'eyeExclusionMode', EXPECTED_EYE_EXCLUSION_MODE, failures);
     requireEqual(latestReady, 'cleanupStrength', 0, failures);
@@ -166,6 +174,37 @@ function requireUvBounds(event, failures) {
   }
 }
 
+function requireUvBoundsForPrefix(event, prefix, failures) {
+  const minX = numberField(event, `${prefix}MinX`);
+  const minY = numberField(event, `${prefix}MinY`);
+  const maxX = numberField(event, `${prefix}MaxX`);
+  const maxY = numberField(event, `${prefix}MaxY`);
+  const values = {
+    [`${prefix}MinX`]: minX,
+    [`${prefix}MinY`]: minY,
+    [`${prefix}MaxX`]: maxX,
+    [`${prefix}MaxY`]: maxY,
+  };
+
+  Object.entries(values).forEach(([field, value]) => {
+    if (value === undefined || value < 0 || value > 1) {
+      failures.push(`${field} expected within 0..1, received ${formatValue(value)}.`);
+    }
+  });
+
+  if (
+    minX !== undefined &&
+    minY !== undefined &&
+    maxX !== undefined &&
+    maxY !== undefined &&
+    (maxX <= minX || maxY <= minY)
+  ) {
+    failures.push(
+      `${prefix} bounds expected positive area, received [${minX}, ${minY}, ${maxX}, ${maxY}].`,
+    );
+  }
+}
+
 function numberField(event, field) {
   const value = event?.[field];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -200,6 +239,9 @@ function printResult(result) {
         `trackingState=${result.latestReady.trackingState}`,
         `uvAvailable=${result.latestReady.uvAvailable}`,
         `maskTextureSampleChannel=${result.latestReady.maskTextureSampleChannel}`,
+        `maskUvSplitMode=${result.latestReady.maskUvSplitMode}`,
+        `maskNegativeXTriangles=${result.latestReady.maskNegativeXTriangleCount}`,
+        `maskPositiveXTriangles=${result.latestReady.maskPositiveXTriangleCount}`,
         `anchorMode=${result.latestReady.anchorStabilizationMode}`,
       ].join(' '),
     );
@@ -223,12 +265,25 @@ function runSelfTest() {
     eyeExclusionMode: EXPECTED_EYE_EXCLUSION_MODE,
     faceCount: 1,
     maskTriangles: 118,
+    maskNegativeXTriangleCount: 56,
+    maskNegativeXUvBoundsAvailable: true,
+    maskNegativeXUvMaxX: 0.44,
+    maskNegativeXUvMaxY: 0.47,
+    maskNegativeXUvMinX: 0.31,
+    maskNegativeXUvMinY: 0.35,
+    maskPositiveXTriangleCount: 62,
+    maskPositiveXUvBoundsAvailable: true,
+    maskPositiveXUvMaxX: 0.62,
+    maskPositiveXUvMaxY: 0.48,
+    maskPositiveXUvMinX: 0.49,
+    maskPositiveXUvMinY: 0.36,
     maskTextureSampleChannel: EXPECTED_MASK_SAMPLE_CHANNEL,
     maskUvBoundsAvailable: true,
     maskUvMaxX: 0.62,
     maskUvMaxY: 0.48,
     maskUvMinX: 0.31,
     maskUvMinY: 0.35,
+    maskUvSplitMode: EXPECTED_MASK_UV_SPLIT_MODE,
     meshUvCount: 1220,
     meshVertexCount: 1220,
     neutralizeStrength: 0,

@@ -2677,6 +2677,24 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"faceCount\":" + result.FaceCount.ToString(CultureInfo.InvariantCulture)
             + ",\"maskTriangles\":" + result.MaskTriangleCount.ToString(CultureInfo.InvariantCulture)
             + ",\"uvAvailable\":" + result.UvAvailable.ToString().ToLowerInvariant()
+            + ",\"maskUvBoundsAvailable\":" + result.MaskUvBoundsAvailable.ToString().ToLowerInvariant()
+            + ",\"maskUvMinX\":" + result.MaskUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMinY\":" + result.MaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMaxX\":" + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvMaxY\":" + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskUvSplitMode\":\"" + EscapeJsonString(result.MaskUvSplitMode) + "\""
+            + ",\"maskNegativeXTriangleCount\":" + result.MaskNegativeXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + ",\"maskPositiveXTriangleCount\":" + result.MaskPositiveXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + ",\"maskNegativeXUvBoundsAvailable\":" + result.MaskNegativeXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + ",\"maskNegativeXUvMinX\":" + result.MaskNegativeXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskNegativeXUvMinY\":" + result.MaskNegativeXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskNegativeXUvMaxX\":" + result.MaskNegativeXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskNegativeXUvMaxY\":" + result.MaskNegativeXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskPositiveXUvBoundsAvailable\":" + result.MaskPositiveXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + ",\"maskPositiveXUvMinX\":" + result.MaskPositiveXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskPositiveXUvMinY\":" + result.MaskPositiveXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskPositiveXUvMaxX\":" + result.MaskPositiveXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"maskPositiveXUvMaxY\":" + result.MaskPositiveXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + ",\"blockedReason\":\"" + EscapeJsonString(blockedReason) + "\""
             + ",\"trackingState\":\"" + EscapeJsonString(result.TrackingState) + "\""
             + ",\"stateAction\":\"" + EscapeJsonString(result.StateAction) + "\""

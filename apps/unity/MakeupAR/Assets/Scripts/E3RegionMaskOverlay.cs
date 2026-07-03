@@ -27,6 +27,19 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float MaskUvMinY;
         public float MaskUvMaxX;
         public float MaskUvMaxY;
+        public string MaskUvSplitMode;
+        public bool MaskNegativeXUvBoundsAvailable;
+        public float MaskNegativeXUvMinX;
+        public float MaskNegativeXUvMinY;
+        public float MaskNegativeXUvMaxX;
+        public float MaskNegativeXUvMaxY;
+        public int MaskNegativeXTriangleCount;
+        public bool MaskPositiveXUvBoundsAvailable;
+        public float MaskPositiveXUvMinX;
+        public float MaskPositiveXUvMinY;
+        public float MaskPositiveXUvMaxX;
+        public float MaskPositiveXUvMaxY;
+        public int MaskPositiveXTriangleCount;
         public string RendererMode;
         public string MaskTextureId;
         public string MaskSource;
@@ -142,6 +155,17 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public bool ShouldRender;
         public float AlphaMultiplier;
         public string Action;
+    }
+
+    private struct MaskUvSplitBounds
+    {
+        public string Mode;
+        public bool NegativeXAvailable;
+        public Vector4 NegativeXBounds;
+        public int NegativeXTriangleCount;
+        public bool PositiveXAvailable;
+        public Vector4 PositiveXBounds;
+        public int PositiveXTriangleCount;
     }
 
     private sealed class RegionOverlayView
@@ -700,6 +724,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             string meshCullingMode = "none";
             bool maskUvBoundsAvailable = false;
             Vector4 maskUvBounds = Vector4.zero;
+            MaskUvSplitBounds maskUvSplitBounds = CreateDefaultMaskUvSplitBounds();
             VisionBoundaryGateInfo visionGateInfo = CreateDefaultVisionGateInfo();
             MaskTextureDiagnostics dynamicMaskDiagnostics = null;
             bool meshApplied = useMeshMasks && TryUpdateFullFaceUvMesh(
@@ -712,6 +737,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 out meshCullingMode,
                 out maskUvBoundsAvailable,
                 out maskUvBounds,
+                out maskUvSplitBounds,
                 out visionGateInfo,
                 out dynamicMaskDiagnostics);
             result.SourceTriangleCount += sourceTriangleCount;
@@ -720,6 +746,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             result.CulledTriangleCount += culledTriangleCount;
             result.MeshCullingMode = meshCullingMode;
             MergeMaskUvBounds(ref result, maskUvBoundsAvailable, maskUvBounds);
+            MergeMaskUvSplitBounds(ref result, maskUvSplitBounds);
             ApplyVisionGateInfo(ref result, visionGateInfo);
             ApplyDynamicMaskDiagnostics(ref result, dynamicMaskDiagnostics);
 
@@ -759,6 +786,19 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MaskUvMinY = 0.0f,
             MaskUvMaxX = 0.0f,
             MaskUvMaxY = 0.0f,
+            MaskUvSplitMode = "none",
+            MaskNegativeXUvBoundsAvailable = false,
+            MaskNegativeXUvMinX = 0.0f,
+            MaskNegativeXUvMinY = 0.0f,
+            MaskNegativeXUvMaxX = 0.0f,
+            MaskNegativeXUvMaxY = 0.0f,
+            MaskNegativeXTriangleCount = 0,
+            MaskPositiveXUvBoundsAvailable = false,
+            MaskPositiveXUvMinX = 0.0f,
+            MaskPositiveXUvMinY = 0.0f,
+            MaskPositiveXUvMaxX = 0.0f,
+            MaskPositiveXUvMaxY = 0.0f,
+            MaskPositiveXTriangleCount = 0,
             RendererMode = RendererMode,
             MaskTextureId = maskTextureId,
             MaskSource = MaskSource,
@@ -967,6 +1007,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         out string meshCullingMode,
         out bool maskUvBoundsAvailable,
         out Vector4 maskUvBounds,
+        out MaskUvSplitBounds maskUvSplitBounds,
         out VisionBoundaryGateInfo visionGateInfo,
         out MaskTextureDiagnostics dynamicMaskDiagnostics)
     {
@@ -976,6 +1017,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         meshCullingMode = "none";
         maskUvBoundsAvailable = false;
         maskUvBounds = Vector4.zero;
+        maskUvSplitBounds = CreateDefaultMaskUvSplitBounds();
         visionGateInfo = CreateDefaultVisionGateInfo();
         dynamicMaskDiagnostics = null;
 
@@ -1082,6 +1124,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         bool cheekBlushMask = IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId);
+        bool splitGeneratedBrowByFaceLocalX = IsGeneratedBrowRecipe(recipe);
+        if (splitGeneratedBrowByFaceLocalX)
+        {
+            maskUvSplitBounds.Mode = "face_local_x_sign";
+        }
         List<Vector3> vertices = new List<Vector3>(face.vertices.Length);
         List<Vector2> textureCoordinates = cheekBlushMask
             ? BuildCheekFaceLocalUvCoordinates(face)
@@ -1146,6 +1193,17 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceA]);
             AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceB]);
             AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceC]);
+            if (splitGeneratedBrowByFaceLocalX)
+            {
+                AccumulateFaceLocalXSplitUvBounds(
+                    ref maskUvSplitBounds,
+                    face.vertices[sourceA],
+                    face.vertices[sourceB],
+                    face.vertices[sourceC],
+                    textureCoordinates[sourceA],
+                    textureCoordinates[sourceB],
+                    textureCoordinates[sourceC]);
+            }
         }
 
         triangleCount = triangles.Count / 3;
@@ -1189,6 +1247,45 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         bounds.w = Mathf.Max(bounds.w, y);
     }
 
+    private static MaskUvSplitBounds CreateDefaultMaskUvSplitBounds()
+    {
+        return new MaskUvSplitBounds
+        {
+            Mode = "none",
+            NegativeXAvailable = false,
+            NegativeXBounds = Vector4.zero,
+            NegativeXTriangleCount = 0,
+            PositiveXAvailable = false,
+            PositiveXBounds = Vector4.zero,
+            PositiveXTriangleCount = 0
+        };
+    }
+
+    private static void AccumulateFaceLocalXSplitUvBounds(
+        ref MaskUvSplitBounds splitBounds,
+        Vector3 vertexA,
+        Vector3 vertexB,
+        Vector3 vertexC,
+        Vector2 uvA,
+        Vector2 uvB,
+        Vector2 uvC)
+    {
+        float centroidX = (vertexA.x + vertexB.x + vertexC.x) / 3.0f;
+        if (centroidX < 0.0f)
+        {
+            splitBounds.NegativeXTriangleCount++;
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvA);
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvB);
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvC);
+            return;
+        }
+
+        splitBounds.PositiveXTriangleCount++;
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvA);
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvB);
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvC);
+    }
+
     private static void MergeMaskUvBounds(
         ref RegionApplyResult result,
         bool boundsAvailable,
@@ -1213,6 +1310,74 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         result.MaskUvMinY = Mathf.Min(result.MaskUvMinY, bounds.y);
         result.MaskUvMaxX = Mathf.Max(result.MaskUvMaxX, bounds.z);
         result.MaskUvMaxY = Mathf.Max(result.MaskUvMaxY, bounds.w);
+    }
+
+    private static void MergeMaskUvSplitBounds(
+        ref RegionApplyResult result,
+        MaskUvSplitBounds splitBounds)
+    {
+        if (string.IsNullOrWhiteSpace(splitBounds.Mode) || splitBounds.Mode == "none")
+        {
+            return;
+        }
+
+        result.MaskUvSplitMode = splitBounds.Mode;
+        result.MaskNegativeXTriangleCount += splitBounds.NegativeXTriangleCount;
+        result.MaskPositiveXTriangleCount += splitBounds.PositiveXTriangleCount;
+        MergeMaskNegativeXUvBounds(ref result, splitBounds.NegativeXAvailable, splitBounds.NegativeXBounds);
+        MergeMaskPositiveXUvBounds(ref result, splitBounds.PositiveXAvailable, splitBounds.PositiveXBounds);
+    }
+
+    private static void MergeMaskNegativeXUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskNegativeXUvBoundsAvailable)
+        {
+            result.MaskNegativeXUvMinX = bounds.x;
+            result.MaskNegativeXUvMinY = bounds.y;
+            result.MaskNegativeXUvMaxX = bounds.z;
+            result.MaskNegativeXUvMaxY = bounds.w;
+            result.MaskNegativeXUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskNegativeXUvMinX = Mathf.Min(result.MaskNegativeXUvMinX, bounds.x);
+        result.MaskNegativeXUvMinY = Mathf.Min(result.MaskNegativeXUvMinY, bounds.y);
+        result.MaskNegativeXUvMaxX = Mathf.Max(result.MaskNegativeXUvMaxX, bounds.z);
+        result.MaskNegativeXUvMaxY = Mathf.Max(result.MaskNegativeXUvMaxY, bounds.w);
+    }
+
+    private static void MergeMaskPositiveXUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskPositiveXUvBoundsAvailable)
+        {
+            result.MaskPositiveXUvMinX = bounds.x;
+            result.MaskPositiveXUvMinY = bounds.y;
+            result.MaskPositiveXUvMaxX = bounds.z;
+            result.MaskPositiveXUvMaxY = bounds.w;
+            result.MaskPositiveXUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskPositiveXUvMinX = Mathf.Min(result.MaskPositiveXUvMinX, bounds.x);
+        result.MaskPositiveXUvMinY = Mathf.Min(result.MaskPositiveXUvMinY, bounds.y);
+        result.MaskPositiveXUvMaxX = Mathf.Max(result.MaskPositiveXUvMaxX, bounds.z);
+        result.MaskPositiveXUvMaxY = Mathf.Max(result.MaskPositiveXUvMaxY, bounds.w);
     }
 
     private static void StabilizeGeneratedBrowVertices(
@@ -3897,6 +4062,27 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
             + ","
             + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + " maskUvSplitMode=" + result.MaskUvSplitMode
+            + " maskNegativeXTriangles=" + result.MaskNegativeXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + " maskPositiveXTriangles=" + result.MaskPositiveXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + " maskNegativeXUvBoundsAvailable=" + result.MaskNegativeXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskNegativeXUvBounds="
+            + result.MaskNegativeXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + " maskPositiveXUvBoundsAvailable=" + result.MaskPositiveXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskPositiveXUvBounds="
+            + result.MaskPositiveXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + " sourceTriangles=" + result.SourceTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " appliedTriangles=" + result.MeshTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " culledTriangles=" + result.CulledTriangleCount.ToString(CultureInfo.InvariantCulture)
