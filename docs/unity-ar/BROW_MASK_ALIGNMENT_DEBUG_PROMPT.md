@@ -128,6 +128,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
   - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
   - The runtime log gate also fails unless generated brow reports `maskUvSplitMode=face_local_x_sign` with positive negative-X and positive-X triangle counts and valid split UV bounds.
+  - The runtime log gate also fails unless generated brow reports positive `softEdgeTexels`, proving the payload carried a feathered/partial-alpha brow mask.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 

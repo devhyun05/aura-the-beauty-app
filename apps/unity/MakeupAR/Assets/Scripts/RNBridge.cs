@@ -208,6 +208,7 @@ public sealed class RNBridge : MonoBehaviour
         public int maskTextureHeight;
         public float maskThreshold;
         public float maskFeatherUvNormalized;
+        public int softEdgeTexels;
         public bool localOnly;
         public bool offDeviceUpload;
         public bool longTermRawFrameStored;
@@ -2729,6 +2730,7 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"strandTextureAmount\":" + layer.TextureAmount.ToString("0.##", CultureInfo.InvariantCulture)
             + ",\"maskThreshold\":" + layer.MaskThreshold.ToString("0.###", CultureInfo.InvariantCulture)
             + ",\"maskFeatherUvNormalized\":" + layer.MaskFeatherUvNormalized.ToString("0.###", CultureInfo.InvariantCulture)
+            + ",\"softEdgeTexels\":" + payload.softEdgeTexels.ToString(CultureInfo.InvariantCulture)
             + ",\"cleanupStrength\":" + Mathf.Clamp01(payload.cleanupStrength).ToString("0.###", CultureInfo.InvariantCulture)
             + ",\"neutralizeStrength\":" + Mathf.Clamp01(payload.neutralizeStrength).ToString("0.###", CultureInfo.InvariantCulture)
             + ",\"controlRequestId\":" + layer.ValidationControlRequestId.ToString(CultureInfo.InvariantCulture)

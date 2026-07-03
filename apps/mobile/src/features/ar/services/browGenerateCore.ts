@@ -100,6 +100,7 @@ export type BrowRuntimeApplyPayload = {
   maskTextureHeight?: number;
   maskThreshold: number;
   maskFeatherUvNormalized: number;
+  softEdgeTexels: number;
   localOnly: true;
   offDeviceUpload: false;
   longTermRawFrameStored: false;
@@ -354,6 +355,7 @@ function buildBrowRuntimeApplyPayload({
     maskTextureHeight: mask.height,
     maskThreshold: 0.34,
     maskFeatherUvNormalized: 0.3,
+    softEdgeTexels: mask.softEdgeTexels,
     localOnly: true,
     offDeviceUpload: false,
     longTermRawFrameStored: false,

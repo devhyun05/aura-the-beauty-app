@@ -437,6 +437,11 @@ expectGreaterThan(
   0,
   'generated brow UV metadata tracks soft feathered edge texels',
 );
+expectEqual(
+  payload.softEdgeTexels,
+  generatedPackage.uvCoverageMetadata.softEdgeTexels,
+  'generated brow payload carries soft feathered edge texels',
+);
 expectGreaterThan(
   generatedPackage.uvCoverageMetadata.strandChecksum,
   0,

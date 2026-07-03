@@ -73,6 +73,7 @@ The generated brow contract test covers:
 
 - raw RGBA channel contract,
 - non-empty UV mask generation,
+- soft-edge texel output carried into the Unity runtime payload,
 - strand texture channel output,
 - right brow shape mirrored onto the left side,
 - minimum brow vertical lift,

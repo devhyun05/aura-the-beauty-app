@@ -239,6 +239,7 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   stabilizationDeadZoneMeters?: number;
   stabilizationSnapDistanceMeters?: number;
   status?: string;
+  softEdgeTexels?: number;
   surroundAnchorPointCount?: number;
   templeAnchorPointCount?: number;
   trackingState?: string;
@@ -1803,6 +1804,7 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
     stabilizationDeadZoneMeters: event.stabilizationDeadZoneMeters,
     stabilizationSnapDistanceMeters: event.stabilizationSnapDistanceMeters,
     status: event.status,
+    softEdgeTexels: event.softEdgeTexels,
     surroundAnchorPointCount: event.surroundAnchorPointCount,
     templeAnchorPointCount: event.templeAnchorPointCount,
     trackingState: event.trackingState,

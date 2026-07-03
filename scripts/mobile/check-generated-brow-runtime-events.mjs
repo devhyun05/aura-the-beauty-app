@@ -87,6 +87,7 @@ function evaluateGeneratedBrowEvents(events) {
     requireNumberAtLeast(latestReady, 'browAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'eyeAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'upperEyelidAnchorPointCount', 10, failures);
+    requireNumberAtLeast(latestReady, 'softEdgeTexels', 1, failures);
     requireEqual(latestReady, 'maskUvBoundsAvailable', true, failures);
     requireEqual(latestReady, 'maskTextureSampleChannel', EXPECTED_MASK_SAMPLE_CHANNEL, failures);
     requireUvBounds(latestReady, failures);
@@ -242,6 +243,7 @@ function printResult(result) {
         `maskUvSplitMode=${result.latestReady.maskUvSplitMode}`,
         `maskNegativeXTriangles=${result.latestReady.maskNegativeXTriangleCount}`,
         `maskPositiveXTriangles=${result.latestReady.maskPositiveXTriangleCount}`,
+        `softEdgeTexels=${result.latestReady.softEdgeTexels}`,
         `anchorMode=${result.latestReady.anchorStabilizationMode}`,
       ].join(' '),
     );
@@ -288,6 +290,7 @@ function runSelfTest() {
     meshVertexCount: 1220,
     neutralizeStrength: 0,
     runtimeReady: true,
+    softEdgeTexels: 824,
     status: 'ready',
     surroundAnchorPointCount: 84,
     trackingState: 'Tracking',
