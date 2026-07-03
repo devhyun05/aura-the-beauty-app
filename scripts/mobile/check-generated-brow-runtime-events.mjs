@@ -66,6 +66,9 @@ function evaluateGeneratedBrowEvents(events) {
   const browEvents = events.filter(event => event?.type === EXPECTED_SCHEMA);
   const latest = browEvents[browEvents.length - 1] ?? null;
   const readyEvents = browEvents.filter(isReadyBrowEvent);
+  const readyRuntimeSampleEvents = readyEvents.filter(
+    event => stringField(event, 'applyTrigger') === 'runtime_sample',
+  );
   const latestReady = readyEvents[readyEvents.length - 1] ?? null;
   const blockedCounts = countBy(
     browEvents
@@ -74,7 +77,9 @@ function evaluateGeneratedBrowEvents(events) {
   );
   const failures = [];
   const warnings = [];
-  const recentReadyEvents = readyEvents.slice(-RECENT_READY_EVENT_LIMIT);
+  const recentReadyEvents = (
+    readyRuntimeSampleEvents.length > 0 ? readyRuntimeSampleEvents : readyEvents
+  ).slice(-RECENT_READY_EVENT_LIMIT);
   const uvAlignmentStats = evaluateRecentReadyUvAlignment(
     recentReadyEvents,
     failures,
@@ -87,6 +92,10 @@ function evaluateGeneratedBrowEvents(events) {
 
   if (!latestReady) {
     failures.push('No ready/partial generated brow event with applied=true, uvAvailable=true, and maskTriangles>0.');
+  }
+
+  if (readyRuntimeSampleEvents.length === 0) {
+    failures.push('No ready generated brow runtime_sample events found; live movement drift cannot be verified.');
   }
 
   if (latestReady) {
@@ -145,6 +154,7 @@ function evaluateGeneratedBrowEvents(events) {
     latestReady,
     pass: failures.length === 0,
     readyEventCount: readyEvents.length,
+    readyRuntimeSampleEventCount: readyRuntimeSampleEvents.length,
     uvAlignmentStats,
     warnings,
   };
@@ -494,7 +504,9 @@ function formatValue(value) {
 
 function printResult(result) {
   console.log(`[aura:brow-runtime] ${result.pass ? 'PASS' : 'FAIL'}`);
-  console.log(`events=${result.browEventCount} ready=${result.readyEventCount}`);
+  console.log(
+    `events=${result.browEventCount} ready=${result.readyEventCount} readyRuntimeSamples=${result.readyRuntimeSampleEventCount}`,
+  );
 
   if (result.latestReady) {
     console.log(
@@ -589,11 +601,12 @@ function runSelfTest() {
     upperEyelidAnchorPointCount: 12,
     uvAvailable: true,
   };
-  const sampleEvents = Array.from({length: 8}, (_, index) => {
+  const sampleEvents = Array.from({length: 9}, (_, index) => {
     const horizontalShift = index * 0.001;
     const verticalShift = index * 0.0005;
     return {
       ...sampleEvent,
+      applyTrigger: index === 0 ? 'received' : 'runtime_sample',
       maskUvMaxX: sampleEvent.maskUvMaxX + horizontalShift,
       maskUvMaxY: sampleEvent.maskUvMaxY + verticalShift,
       maskUvMinX: sampleEvent.maskUvMinX + horizontalShift,

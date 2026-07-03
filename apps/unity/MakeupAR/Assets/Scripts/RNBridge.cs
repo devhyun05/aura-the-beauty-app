@@ -495,9 +495,14 @@ public sealed class RNBridge : MonoBehaviour
     private int lastSuppressedFaceTrackableCount = -1;
     private PendingGeneratedLipMaskApply pendingGeneratedLipMaskApply;
     private PendingGeneratedBrowMaskApply pendingGeneratedBrowMaskApply;
+    private GeneratedBrowMaskPayload activeGeneratedBrowMaskPayload;
+    private ParsedRecipeLayer activeGeneratedBrowMaskLayer;
+    private bool hasActiveGeneratedBrowMaskLayer;
     private ARFaceManager subscribedGeneratedLipFaceManager;
     private bool generatedLipMaskRetryRequested;
     private bool generatedBrowMaskRetryRequested;
+    private float lastGeneratedBrowRuntimeSampleAtSeconds = -1000.0f;
+    private int generatedBrowRuntimeSampleCount;
 
     private const float GeneratedLipMaskRetryIntervalSeconds = 0.12f;
     private const float GeneratedLipMaskAckIntervalSeconds = 0.75f;
@@ -505,6 +510,7 @@ public sealed class RNBridge : MonoBehaviour
     private const float GeneratedBrowMaskRetryIntervalSeconds = 0.12f;
     private const float GeneratedBrowMaskAckIntervalSeconds = 0.75f;
     private const float GeneratedBrowMaskBlockedAfterSeconds = 8.0f;
+    private const float GeneratedBrowRuntimeSampleIntervalSeconds = 0.25f;
 
 #if UNITY_IOS && !UNITY_EDITOR
     [DllImport("__Internal")]
@@ -540,6 +546,7 @@ public sealed class RNBridge : MonoBehaviour
 
         TryApplyPendingGeneratedLipMask("late_update", false);
         TryApplyPendingGeneratedBrowMask("late_update", false);
+        TryEmitGeneratedBrowRuntimeSample();
     }
 
     public void ApplyRecipeJson(string json)
@@ -2186,6 +2193,18 @@ public sealed class RNBridge : MonoBehaviour
         {
             LogRecipeApplied("generated_brow_mask", layer, result, appliedAtMs, appliedFrame);
             SendRecipeAppliedEvent(layer, result, appliedAtMs, appliedFrame);
+            activeGeneratedBrowMaskPayload = pendingGeneratedBrowMaskApply.Payload;
+            activeGeneratedBrowMaskLayer = layer;
+            hasActiveGeneratedBrowMaskLayer = true;
+            lastGeneratedBrowRuntimeSampleAtSeconds = nowSeconds;
+            generatedBrowRuntimeSampleCount = 0;
+        }
+        else if (disabledByPayload)
+        {
+            activeGeneratedBrowMaskPayload = null;
+            activeGeneratedBrowMaskLayer = default(ParsedRecipeLayer);
+            hasActiveGeneratedBrowMaskLayer = false;
+            generatedBrowRuntimeSampleCount = 0;
         }
 
         SendGeneratedBrowMaskAppliedEvent(
@@ -2203,6 +2222,56 @@ public sealed class RNBridge : MonoBehaviour
         {
             pendingGeneratedBrowMaskApply = null;
         }
+    }
+
+    private void TryEmitGeneratedBrowRuntimeSample()
+    {
+        if (activeGeneratedBrowMaskPayload == null || !hasActiveGeneratedBrowMaskLayer)
+        {
+            return;
+        }
+
+        ParsedRecipeLayer layer = activeGeneratedBrowMaskLayer;
+        if (!layer.Enabled)
+        {
+            activeGeneratedBrowMaskPayload = null;
+            activeGeneratedBrowMaskLayer = default(ParsedRecipeLayer);
+            hasActiveGeneratedBrowMaskLayer = false;
+            generatedBrowRuntimeSampleCount = 0;
+            return;
+        }
+
+        float nowSeconds = Time.realtimeSinceStartup;
+        if (nowSeconds - lastGeneratedBrowRuntimeSampleAtSeconds < GeneratedBrowRuntimeSampleIntervalSeconds)
+        {
+            return;
+        }
+
+        EnsureRegionMaskOverlay();
+        if (regionMaskOverlay == null
+            || !regionMaskOverlay.TryGetLatestRegionApplyResult(
+                layer.Region,
+                out E3RegionMaskOverlay.RegionApplyResult result))
+        {
+            return;
+        }
+
+        lastGeneratedBrowRuntimeSampleAtSeconds = nowSeconds;
+        generatedBrowRuntimeSampleCount++;
+        RememberRegionFeatureState(layer, result);
+
+        bool ready = IsGeneratedBrowMaskRuntimeReady(result);
+        string blockedReason = BuildGeneratedBrowMaskApplyBlockedReason(layer, result);
+        SendGeneratedBrowMaskAppliedEvent(
+            activeGeneratedBrowMaskPayload,
+            layer,
+            result,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Time.frameCount,
+            ready ? "ready" : "partial",
+            blockedReason,
+            generatedBrowRuntimeSampleCount,
+            "runtime_sample");
     }
 
     private static bool IsGeneratedLipMaskRuntimeReady(E3RegionMaskOverlay.RegionApplyResult result)
