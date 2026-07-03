@@ -198,6 +198,8 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   attemptCount?: number;
   blockedReason?: string;
   browAnchorPointCount?: number;
+  browCorePointCount?: number;
+  browShapeBasePointCount?: number;
   color?: string;
   debugExaggerate?: boolean;
   debugMode?: number;
@@ -1763,6 +1765,8 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
     attemptCount: event.attemptCount,
     blockedReason: event.blockedReason,
     browAnchorPointCount: event.browAnchorPointCount,
+    browCorePointCount: event.browCorePointCount,
+    browShapeBasePointCount: event.browShapeBasePointCount,
     color: event.color,
     debugExaggerate: event.debugExaggerate,
     debugMode: event.debugMode,

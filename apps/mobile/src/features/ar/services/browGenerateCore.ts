@@ -27,7 +27,9 @@ export type GeneratedBrowControls = {
 
 export type BrowEnvelope = {
   anchorMetadata: {
+    browCorePointCount: number;
     browPointCount: number;
+    browShapeBasePointCount: number;
     eyePointCount: number;
     faceDirectionSlope: number;
     faceOvalPointCount: number;
@@ -45,6 +47,8 @@ export type BrowEnvelope = {
 export type BrowUvMaskMetadata = {
   alphaChecksum: number;
   alphaSum: number;
+  browCorePointCount: number;
+  browShapeBasePointCount: number;
   envelopeCount: number;
   eyeExclusionTexels: number;
   faceOvalPointCount: number;
@@ -107,6 +111,8 @@ export type BrowRuntimeApplyPayload = {
   runtimeReady: boolean;
   anchorStabilizationMode: 'surround_anchor_eye_eyelid_temple_nose_face_oval_v2';
   browAnchorPointCount: number;
+  browCorePointCount: number;
+  browShapeBasePointCount: number;
   colorHex: string;
   coverage: number;
   eyeAnchorPointCount: number;
@@ -248,6 +254,8 @@ export function buildGeneratedBrowPackage({
     uvCoverageMetadata: {
       alphaChecksum: uvMask.alphaChecksum,
       alphaSum: uvMask.alphaSum,
+      browCorePointCount: anchorSummary.browCorePointCount,
+      browShapeBasePointCount: anchorSummary.browShapeBasePointCount,
       envelopeCount: envelopes.length,
       eyeExclusionTexels: uvMask.eyeExclusionTexels,
       faceOvalPointCount: anchorSummary.faceOvalPointCount,
@@ -362,6 +370,8 @@ function buildBrowRuntimeApplyPayload({
     runtimeReady: false,
     anchorStabilizationMode: 'surround_anchor_eye_eyelid_temple_nose_face_oval_v2',
     browAnchorPointCount: anchorSummary.browAnchorPointCount,
+    browCorePointCount: anchorSummary.browCorePointCount,
+    browShapeBasePointCount: anchorSummary.browShapeBasePointCount,
     colorHex: controls.colorHex,
     coverage: clamp01(controls.coverage),
     eyeAnchorPointCount: anchorSummary.eyeAnchorPointCount,
@@ -930,7 +940,9 @@ function buildSingleBrowEnvelope({
 
   return {
     anchorMetadata: {
+      browCorePointCount: browPoints.length,
       browPointCount: browAnchorPoints.length,
+      browShapeBasePointCount: shapeBasePoints.length,
       eyePointCount: eyePoints.length,
       faceDirectionSlope,
       faceOvalPointCount: faceOvalPoints.length,
@@ -956,6 +968,8 @@ function summarizeBrowAnchorMetadata(envelopes: readonly BrowEnvelope[]) {
     (summary, envelope) => {
       const metadata = envelope.anchorMetadata;
       summary.browAnchorPointCount += metadata.browPointCount;
+      summary.browCorePointCount += metadata.browCorePointCount;
+      summary.browShapeBasePointCount += metadata.browShapeBasePointCount;
       summary.eyeAnchorPointCount += metadata.eyePointCount;
       summary.upperEyelidAnchorPointCount += metadata.upperEyelidPointCount;
       summary.templeAnchorPointCount += metadata.templePointCount;
@@ -971,6 +985,8 @@ function summarizeBrowAnchorMetadata(envelopes: readonly BrowEnvelope[]) {
     },
     {
       browAnchorPointCount: 0,
+      browCorePointCount: 0,
+      browShapeBasePointCount: 0,
       eyeAnchorPointCount: 0,
       faceOvalPointCount: 0,
       noseBridgeAnchorPointCount: 0,

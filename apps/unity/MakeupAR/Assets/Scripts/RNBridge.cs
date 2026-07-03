@@ -223,6 +223,8 @@ public sealed class RNBridge : MonoBehaviour
         public bool strongMode;
         public string anchorStabilizationMode;
         public int browAnchorPointCount;
+        public int browCorePointCount;
+        public int browShapeBasePointCount;
         public int eyeAnchorPointCount;
         public string eyeExclusionMode;
         public int faceOvalPointCount;
@@ -2703,6 +2705,8 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"anchorStabilizationMode\":\"" + EscapeJsonString(NormalizeOptional(payload.anchorStabilizationMode)) + "\""
             + ",\"surroundAnchorPointCount\":" + payload.surroundAnchorPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"browAnchorPointCount\":" + payload.browAnchorPointCount.ToString(CultureInfo.InvariantCulture)
+            + ",\"browCorePointCount\":" + payload.browCorePointCount.ToString(CultureInfo.InvariantCulture)
+            + ",\"browShapeBasePointCount\":" + payload.browShapeBasePointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"eyeAnchorPointCount\":" + payload.eyeAnchorPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"upperEyelidAnchorPointCount\":" + payload.upperEyelidAnchorPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"templeAnchorPointCount\":" + payload.templeAnchorPointCount.ToString(CultureInfo.InvariantCulture)

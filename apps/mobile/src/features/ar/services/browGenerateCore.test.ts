@@ -447,6 +447,16 @@ expectGreaterThan(
   0,
   'generated brow strand texture channel',
 );
+expectEqual(
+  generatedPackage.uvCoverageMetadata.browCorePointCount,
+  20,
+  'generated brow UV metadata tracks MediaPipe brow core ring points',
+);
+expectEqual(
+  generatedPackage.uvCoverageMetadata.browShapeBasePointCount,
+  20,
+  'generated brow UV metadata tracks reference brow shape-base ring points',
+);
 expectEqual(envelopes.length, 2, 'generated brow envelope count');
 expectGreaterThan(envelopes[0].polygon.length, 10, 'first brow shape-corrected polygon');
 expectGreaterThan(envelopes[1].polygon.length, 10, 'second brow shape-corrected polygon');
@@ -510,6 +520,16 @@ expectGreaterThan(
   payload.surroundAnchorPointCount,
   70,
   'generated brow surround anchor count',
+);
+expectEqual(
+  payload.browCorePointCount,
+  20,
+  'generated brow payload carries MediaPipe brow core ring points',
+);
+expectEqual(
+  payload.browShapeBasePointCount,
+  20,
+  'generated brow payload carries reference brow shape-base ring points',
 );
 expectEqual(
   payload.anchorStabilizationMode,

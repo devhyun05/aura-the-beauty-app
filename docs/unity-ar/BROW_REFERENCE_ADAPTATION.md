@@ -75,6 +75,8 @@ The generated brow contract test covers:
 - non-empty UV mask generation,
 - soft-edge texel output carried into the Unity runtime payload,
 - strand texture channel output,
+- MediaPipe/reference brow core and shape-base ring point counts carried into
+  the Unity runtime payload,
 - right brow shape mirrored onto the left side,
 - minimum brow vertical lift,
 - eye exclusion separation,

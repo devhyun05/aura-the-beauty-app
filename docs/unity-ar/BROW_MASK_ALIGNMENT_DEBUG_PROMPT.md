@@ -126,6 +126,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
     - `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.jsonl>`
     - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
   - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
+  - The runtime log gate also fails unless generated brow reports at least 20 `browCorePointCount` and 20 `browShapeBasePointCount`, proving the MediaPipe/reference brow ring is present instead of only surrounding anchors.
   - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
   - The runtime log gate also fails unless generated brow reports `maskUvSplitMode=face_local_x_sign` with positive negative-X and positive-X triangle counts and valid split UV bounds.
   - The runtime log gate also fails unless generated brow reports positive `softEdgeTexels`, proving the payload carried a feathered/partial-alpha brow mask.

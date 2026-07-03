@@ -85,6 +85,8 @@ function evaluateGeneratedBrowEvents(events) {
     requireNumberAtLeast(latestReady, 'meshUvCount', 1, failures);
     requireNumberAtLeast(latestReady, 'surroundAnchorPointCount', 70, failures);
     requireNumberAtLeast(latestReady, 'browAnchorPointCount', 20, failures);
+    requireNumberAtLeast(latestReady, 'browCorePointCount', 20, failures);
+    requireNumberAtLeast(latestReady, 'browShapeBasePointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'eyeAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'upperEyelidAnchorPointCount', 10, failures);
     requireNumberAtLeast(latestReady, 'softEdgeTexels', 1, failures);
@@ -243,6 +245,8 @@ function printResult(result) {
         `maskUvSplitMode=${result.latestReady.maskUvSplitMode}`,
         `maskNegativeXTriangles=${result.latestReady.maskNegativeXTriangleCount}`,
         `maskPositiveXTriangles=${result.latestReady.maskPositiveXTriangleCount}`,
+        `browCorePoints=${result.latestReady.browCorePointCount}`,
+        `browShapeBasePoints=${result.latestReady.browShapeBasePointCount}`,
         `softEdgeTexels=${result.latestReady.softEdgeTexels}`,
         `anchorMode=${result.latestReady.anchorStabilizationMode}`,
       ].join(' '),
@@ -262,6 +266,8 @@ function runSelfTest() {
     anchorStabilizationMode: EXPECTED_ANCHOR_MODE,
     applied: true,
     browAnchorPointCount: 24,
+    browCorePointCount: 20,
+    browShapeBasePointCount: 20,
     cleanupStrength: 0,
     eyeAnchorPointCount: 20,
     eyeExclusionMode: EXPECTED_EYE_EXCLUSION_MODE,
