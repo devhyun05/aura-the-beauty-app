@@ -1,5 +1,10 @@
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
-import {mapFaceCaptureResultToReferenceMakeupPhoto} from './referenceMakeupExtractionRoutes';
+import {
+  mapFaceCaptureResultToReferenceMakeupPhoto,
+  REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX,
+  type ReferenceMakeupExtractionSafeRunner,
+  runReferenceMakeupExtractionSafely,
+} from './referenceMakeupExtractionRoutes';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -28,6 +33,10 @@ const albumPhoto = mapFaceCaptureResultToReferenceMakeupPhoto({
   source: 'gallery',
 });
 const missingPhoto = mapFaceCaptureResultToReferenceMakeupPhoto(undefined);
+const safeRunner: ReferenceMakeupExtractionSafeRunner =
+  runReferenceMakeupExtractionSafely;
+const errorLogPrefix: '[aura:extraction] extraction:error' =
+  REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX;
 
 function getImageSourceUri(photo: ReturnType<typeof mapFaceCaptureResultToReferenceMakeupPhoto>) {
   const imageSource = photo?.imageSource;
@@ -44,3 +53,9 @@ expectEqual(albumPhoto?.referenceSource, 'album', 'gallery source maps to refere
 expectEqual(getImageSourceUri(albumPhoto), 'file:///reference-album.jpg', 'album photo preserves uri');
 expectEqual(albumPhoto?.title, '업로드한 참고 사진', 'album photo title');
 expectEqual(missingPhoto, null, 'missing capture result maps to null');
+expectEqual(typeof safeRunner, 'function', 'reference extraction safe runner is exported');
+expectEqual(
+  errorLogPrefix,
+  '[aura:extraction] extraction:error',
+  'reference extraction error log prefix',
+);

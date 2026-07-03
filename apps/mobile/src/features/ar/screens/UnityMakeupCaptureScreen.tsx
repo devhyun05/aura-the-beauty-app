@@ -160,6 +160,18 @@ const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
   eyebrow: false,
   lip: false,
 };
+export const UNITY_GENERATED_LIP_RETRY_USES_LATEST_COMPANION_CONTROLS = true;
+
+export function isCurrentUnityCaptureRequest(
+  pendingRequest: UnitySynchronizedCaptureRequest | null | undefined,
+  capturePairId: string,
+) {
+  return pendingRequest?.capturePairId === capturePairId;
+}
+
+export function getUnityHudSliderPanResponderInitMode(): 'lazy-ref' {
+  return 'lazy-ref';
+}
 
 export function UnityMakeupCaptureScreen({
   onBack,
@@ -186,8 +198,10 @@ export function UnityMakeupCaptureScreen({
   const pendingCaptureRequestRef = useRef<UnitySynchronizedCaptureRequest | null>(null);
   const pendingGeneratedMaskIdRef = useRef<string | null>(null);
   const latestGeneratedApplyPayloadRef = useRef<string | null>(null);
+  const companionMakeupControlsRef = useRef(companionMakeupControls);
   const generatedMaskControlRevisionRef = useRef(0);
   const preparePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  companionMakeupControlsRef.current = companionMakeupControls;
 
   useEffect(() => {
     return () => {
@@ -312,6 +326,15 @@ export function UnityMakeupCaptureScreen({
         sourceFrameMetadata: nextSourceFrameMetadata,
       });
 
+      if (
+        !isCurrentUnityCaptureRequest(
+          pendingCaptureRequestRef.current,
+          pendingRequest.capturePairId,
+        )
+      ) {
+        return;
+      }
+
       pendingGeneratedMaskIdRef.current = result.generatedPackage.generatedMaskId;
       const unityApplyPayload = JSON.stringify(
         buildGeneratedMaskUnityPayload(
@@ -346,6 +369,15 @@ export function UnityMakeupCaptureScreen({
         ),
       );
     } catch (error) {
+      if (
+        !isCurrentUnityCaptureRequest(
+          pendingCaptureRequestRef.current,
+          pendingRequest.capturePairId,
+        )
+      ) {
+        return;
+      }
+
       setPhase('error');
       setNotice(
         error instanceof Error
@@ -394,7 +426,7 @@ export function UnityMakeupCaptureScreen({
         }
         postUnityGeneratedLipMaskPayload(latestGeneratedApplyPayloadRef.current);
         postUnityMakeupRecipe(
-          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
+          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControlsRef.current, {
             activeRegion: 'none',
           }),
         );
@@ -1146,8 +1178,9 @@ function HudSliderControl({
     onChangeRef.current(Number(nextValue.toFixed(3)));
   };
 
-  const panResponderRef = useRef(
-    PanResponder.create({
+  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  if (!panResponderRef.current) {
+    panResponderRef.current = PanResponder.create({
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: event => {
@@ -1159,8 +1192,9 @@ function HudSliderControl({
       onPanResponderMove: updateValueFromEvent,
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
-    }),
-  );
+    });
+  }
+  const panHandlers = panResponderRef.current.panHandlers;
 
   const handleTrackLayout = (event: LayoutChangeEvent) => {
     trackWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
@@ -1178,7 +1212,7 @@ function HudSliderControl({
         accessibilityRole="adjustable"
         onLayout={handleTrackLayout}
         style={styles.arBlushSliderTrack}
-        {...panResponderRef.current.panHandlers}>
+        {...panHandlers}>
         <RNView
           pointerEvents="none"
           style={[

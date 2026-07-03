@@ -26,6 +26,15 @@ import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
+export const REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX =
+  '[aura:extraction] extraction:error';
+
+export type ReferenceMakeupExtractionSafeRunner = (
+  photo: ReferenceMakeupPhoto,
+  onProgress: (progress: MakeupExtractionProgressUpdate) => void,
+  onError?: (error: unknown) => void,
+) => Promise<void>;
+
 export function mapFaceCaptureResultToReferenceMakeupPhoto(
   result?: FaceCaptureUploadResult,
 ): ReferenceMakeupPhoto | null {
@@ -47,6 +56,21 @@ export function mapFaceCaptureResultToReferenceMakeupPhoto(
 function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
+
+function logReferenceMakeupExtractionError(error: unknown) {
+  console.info(REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX, {
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
+export const runReferenceMakeupExtractionSafely: ReferenceMakeupExtractionSafeRunner =
+  async (photo, onProgress, onError = logReferenceMakeupExtractionError) => {
+    try {
+      await runReferenceMakeupExtraction(photo, onProgress);
+    } catch (error) {
+      onError(error);
+    }
+  };
 
 function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
@@ -119,11 +143,12 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
     setIsAnalysisReady(false);
     setAnalysisProgress(null);
-    runReferenceMakeupExtraction(photo, setAnalysisProgress).finally(() => {
-      if (isMounted) {
-        setIsAnalysisReady(true);
-      }
-    });
+    void runReferenceMakeupExtractionSafely(photo, setAnalysisProgress)
+      .finally(() => {
+        if (isMounted) {
+          setIsAnalysisReady(true);
+        }
+      });
 
     return () => {
       isMounted = false;
