@@ -11,6 +11,8 @@ import type {
   E7Point2D,
 } from './personalizedGenerate/e7PersonalizedGeneratePipeline';
 
+const UPSTREAM_EYE_BROW_RING_POINT_COUNT_PER_SIDE = 10;
+
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
@@ -359,6 +361,17 @@ const nativeResult: E7NativeBoundaryResult = {
   provider: 'mediapipe',
   status: 'ready',
 };
+
+expectEqual(
+  regionPoints(namedRegions.leftEyebrow, 'left eyebrow source').length,
+  UPSTREAM_EYE_BROW_RING_POINT_COUNT_PER_SIDE,
+  'screen-left generated brow keeps the reference eyebrow ring point count',
+);
+expectEqual(
+  regionPoints(namedRegions.rightEyebrow, 'right eyebrow source').length,
+  UPSTREAM_EYE_BROW_RING_POINT_COUNT_PER_SIDE,
+  'screen-right generated brow keeps the reference eyebrow ring point count',
+);
 
 const controls = {
   ...DEFAULT_GENERATED_BROW_CONTROLS,

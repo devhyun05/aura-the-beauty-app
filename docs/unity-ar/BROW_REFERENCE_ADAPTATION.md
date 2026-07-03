@@ -17,11 +17,13 @@ Reference repository:
 The web reference uses a small canvas/OpenCV flow:
 
 1. MediaPipe Face Landmarker returns normalized landmarks.
-2. `EYE_BROW_CONNECTIONS` selects two eyebrow polygon rings.
+2. `EYE_BROW_CONNECTIONS` selects two eyebrow polygon rings:
+   - `[55, 107, 66, 105, 63, 70, 46, 53, 52, 65, 55]`
+   - `[285, 336, 296, 334, 293, 300, 276, 283, 295, 285]`
 3. `normalizedToPixel` converts landmarks into image pixels.
 4. `fillPoly` rasterizes each brow ring into a colored mask.
-5. `GaussianBlur` feathers the mask edge.
-6. `addWeighted` blends the mask onto the camera frame.
+5. `GaussianBlur(mask, mask, new cv.Size(7, 7), 4)` feathers the mask edge.
+6. `addWeighted(mat, 1.0, mask, 0.2, 0.5, mat)` blends the mask onto the camera frame.
 
 The key idea is not a screen-space sticker. It is landmark-anchored polygon
 masking with soft compositing.
