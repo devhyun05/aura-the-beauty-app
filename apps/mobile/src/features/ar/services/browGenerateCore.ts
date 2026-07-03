@@ -50,6 +50,10 @@ export type BrowUvMaskMetadata = {
   browCorePointCount: number;
   browShapeBasePointCount: number;
   envelopeCount: number;
+  expectedMaskUvMaxX: number;
+  expectedMaskUvMaxY: number;
+  expectedMaskUvMinX: number;
+  expectedMaskUvMinY: number;
   eyeExclusionTexels: number;
   faceOvalPointCount: number;
   softEdgeTexels: number;
@@ -117,6 +121,10 @@ export type BrowRuntimeApplyPayload = {
   coverage: number;
   eyeAnchorPointCount: number;
   eyeExclusionMode: 'upper_eyelid_expanded_eye_bounds_v2';
+  expectedMaskUvMaxX: number;
+  expectedMaskUvMaxY: number;
+  expectedMaskUvMinX: number;
+  expectedMaskUvMinY: number;
   faceOvalPointCount: number;
   intensity: number;
   noseBridgeAnchorPointCount: number;
@@ -142,8 +150,8 @@ const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
-const BROW_MASK_VERTICAL_LIFT_RATIO = 0.2;
-const BROW_MASK_MIN_VERTICAL_LIFT_PX = 5;
+const BROW_MASK_VERTICAL_LIFT_RATIO = 0.22;
+const BROW_MASK_MIN_VERTICAL_LIFT_PX = 6;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -257,6 +265,10 @@ export function buildGeneratedBrowPackage({
       browCorePointCount: anchorSummary.browCorePointCount,
       browShapeBasePointCount: anchorSummary.browShapeBasePointCount,
       envelopeCount: envelopes.length,
+      expectedMaskUvMaxX: uvMask.expectedMaskUvMaxX,
+      expectedMaskUvMaxY: uvMask.expectedMaskUvMaxY,
+      expectedMaskUvMinX: uvMask.expectedMaskUvMinX,
+      expectedMaskUvMinY: uvMask.expectedMaskUvMinY,
       eyeExclusionTexels: uvMask.eyeExclusionTexels,
       faceOvalPointCount: anchorSummary.faceOvalPointCount,
       softEdgeTexels: uvMask.softEdgeTexels,
@@ -376,6 +388,10 @@ function buildBrowRuntimeApplyPayload({
     coverage: clamp01(controls.coverage),
     eyeAnchorPointCount: anchorSummary.eyeAnchorPointCount,
     eyeExclusionMode: 'upper_eyelid_expanded_eye_bounds_v2',
+    expectedMaskUvMaxX: mask.expectedMaskUvMaxX,
+    expectedMaskUvMaxY: mask.expectedMaskUvMaxY,
+    expectedMaskUvMinX: mask.expectedMaskUvMinX,
+    expectedMaskUvMinY: mask.expectedMaskUvMinY,
     faceOvalPointCount: anchorSummary.faceOvalPointCount,
     intensity: clamp01(controls.intensity),
     noseBridgeAnchorPointCount: anchorSummary.noseBridgeAnchorPointCount,
@@ -402,6 +418,10 @@ type BrowUvMaskRawRgba = {
   alphaChecksum: number;
   alphaSum: number;
   eyeExclusionTexels: number;
+  expectedMaskUvMaxX: number;
+  expectedMaskUvMaxY: number;
+  expectedMaskUvMinX: number;
+  expectedMaskUvMinY: number;
   positiveTexels: number;
   rawRgbaBase64: string;
   softEdgeTexels: number;
@@ -537,6 +557,10 @@ function buildBrowUvMaskRawRgba({
   let softEdgeTexels = 0;
   let alphaSum = 0;
   let alphaChecksum = 0;
+  let expectedMaskUvMinX = 1;
+  let expectedMaskUvMinY = 1;
+  let expectedMaskUvMaxX = 0;
+  let expectedMaskUvMaxY = 0;
   let strandChecksum = 0;
   for (let texelIndex = 0; texelIndex < resolution * resolution; texelIndex += 1) {
     const rawIndex = texelIndex * 4;
@@ -551,6 +575,14 @@ function buildBrowUvMaskRawRgba({
       UV_ALPHA_CHECKSUM_MOD;
     if (alpha > 8) {
       positiveTexels += 1;
+      const column = texelIndex % resolution;
+      const row = Math.floor(texelIndex / resolution);
+      const u = (column + 0.5) / resolution;
+      const v = (row + 0.5) / resolution;
+      expectedMaskUvMinX = Math.min(expectedMaskUvMinX, u);
+      expectedMaskUvMinY = Math.min(expectedMaskUvMinY, v);
+      expectedMaskUvMaxX = Math.max(expectedMaskUvMaxX, u);
+      expectedMaskUvMaxY = Math.max(expectedMaskUvMaxY, v);
     }
     if (alpha > 8 && alpha < 247) {
       softEdgeTexels += 1;
@@ -561,6 +593,10 @@ function buildBrowUvMaskRawRgba({
     alphaChecksum,
     alphaSum,
     eyeExclusionTexels,
+    expectedMaskUvMaxX,
+    expectedMaskUvMaxY,
+    expectedMaskUvMinX,
+    expectedMaskUvMinY,
     height: resolution,
     positiveTexels,
     rawRgbaBase64: encodeBase64(raw),

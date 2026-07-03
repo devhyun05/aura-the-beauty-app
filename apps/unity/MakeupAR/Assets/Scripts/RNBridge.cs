@@ -227,6 +227,10 @@ public sealed class RNBridge : MonoBehaviour
         public int browShapeBasePointCount;
         public int eyeAnchorPointCount;
         public string eyeExclusionMode;
+        public float expectedMaskUvMaxX;
+        public float expectedMaskUvMaxY;
+        public float expectedMaskUvMinX;
+        public float expectedMaskUvMinY;
         public int faceOvalPointCount;
         public int noseBridgeAnchorPointCount;
         public int surroundAnchorPointCount;
@@ -2685,6 +2689,10 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"maskUvMinY\":" + result.MaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
             + ",\"maskUvMaxX\":" + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
             + ",\"maskUvMaxY\":" + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"expectedMaskUvMinX\":" + payload.expectedMaskUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"expectedMaskUvMinY\":" + payload.expectedMaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"expectedMaskUvMaxX\":" + payload.expectedMaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ",\"expectedMaskUvMaxY\":" + payload.expectedMaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + ",\"maskUvSplitMode\":\"" + EscapeJsonString(result.MaskUvSplitMode) + "\""
             + ",\"maskNegativeXTriangleCount\":" + result.MaskNegativeXTriangleCount.ToString(CultureInfo.InvariantCulture)
             + ",\"maskPositiveXTriangleCount\":" + result.MaskPositiveXTriangleCount.ToString(CultureInfo.InvariantCulture)

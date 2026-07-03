@@ -438,6 +438,56 @@ expectGreaterThan(
   0,
   'generated brow UV metadata tracks soft feathered edge texels',
 );
+expectGreaterThanOrEqual(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinX,
+  0,
+  'generated brow expected UV min x stays in range',
+);
+expectGreaterThanOrEqual(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinY,
+  0,
+  'generated brow expected UV min y stays in range',
+);
+expectLessThan(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxX,
+  1,
+  'generated brow expected UV max x stays in range',
+);
+expectLessThan(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxY,
+  1,
+  'generated brow expected UV max y stays in range',
+);
+expectGreaterThan(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxX,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinX,
+  'generated brow expected UV x bounds have positive area',
+);
+expectGreaterThan(
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxY,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinY,
+  'generated brow expected UV y bounds have positive area',
+);
+expectEqual(
+  payload.expectedMaskUvMinX,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinX,
+  'generated brow payload carries expected UV min x',
+);
+expectEqual(
+  payload.expectedMaskUvMinY,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMinY,
+  'generated brow payload carries expected UV min y',
+);
+expectEqual(
+  payload.expectedMaskUvMaxX,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxX,
+  'generated brow payload carries expected UV max x',
+);
+expectEqual(
+  payload.expectedMaskUvMaxY,
+  generatedPackage.uvCoverageMetadata.expectedMaskUvMaxY,
+  'generated brow payload carries expected UV max y',
+);
 expectEqual(
   payload.softEdgeTexels,
   generatedPackage.uvCoverageMetadata.softEdgeTexels,
@@ -570,6 +620,10 @@ const runtimeDiagnostic = summarizeGeneratedBrowRuntimeDiagnostics({
   maskUvMinX: 0.31,
   maskUvMinY: 0.35,
   maskUvSplitMode: 'face_local_x_sign',
+  expectedMaskUvMaxX: payload.expectedMaskUvMaxX,
+  expectedMaskUvMaxY: payload.expectedMaskUvMaxY,
+  expectedMaskUvMinX: payload.expectedMaskUvMinX,
+  expectedMaskUvMinY: payload.expectedMaskUvMinY,
   runtimeReady: true,
   softEdgeTexels: payload.softEdgeTexels,
   status: 'ready',
@@ -582,6 +636,7 @@ expectTruthy(
   runtimeDiagnostic.detailText.includes('core 20') &&
     runtimeDiagnostic.detailText.includes('base 20') &&
     runtimeDiagnostic.detailText.includes('uv 0.31,0.35,0.62,0.48') &&
+    runtimeDiagnostic.detailText.includes('exp ') &&
     runtimeDiagnostic.detailText.includes('sample generated_brow_green_alpha'),
   'generated brow runtime diagnostic exposes attachment evidence',
 );

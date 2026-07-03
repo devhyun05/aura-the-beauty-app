@@ -129,7 +129,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - After pulling either file from a device, run:
     - `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.jsonl>`
     - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
-  - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
+  - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, expected generated-mask UV bounds, overlap between expected generated-mask UV bounds and Unity-applied mask UV bounds, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
   - The runtime log gate also fails unless generated brow reports at least 20 `browCorePointCount` and 20 `browShapeBasePointCount`, proving the MediaPipe/reference brow ring is present instead of only surrounding anchors.
   - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
   - The runtime log gate also fails unless generated brow reports `maskUvSplitMode=face_local_x_sign` with positive negative-X and positive-X triangle counts and valid split UV bounds.
@@ -298,6 +298,7 @@ Verify:
 - Unity generated brow culling and diagnostics must sample `max(G, A)`.
 - Runtime logs should show `maskTextureSampleChannel=generated_brow_green_alpha`.
 - Runtime logs should show `maskUvSplitMode=face_local_x_sign` with both negative-X and positive-X UV bounds populated.
+- Runtime logs should show `expectedMaskUvMinX/Y/MaxX/MaxY`, and those expected generated-mask bounds should overlap Unity's applied `maskUvMinX/Y/MaxX/MaxY`.
 
 If offline preview is correct but live Unity is wrong, prioritize UV projection, texture sampling, mirroring, or shader channel usage over shape tweaks.
 

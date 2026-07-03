@@ -93,6 +93,8 @@ function evaluateGeneratedBrowEvents(events) {
     requireEqual(latestReady, 'maskUvBoundsAvailable', true, failures);
     requireEqual(latestReady, 'maskTextureSampleChannel', EXPECTED_MASK_SAMPLE_CHANNEL, failures);
     requireUvBounds(latestReady, failures);
+    requireUvBoundsForPrefix(latestReady, 'expectedMaskUv', failures);
+    requireUvBoundsOverlap(latestReady, 'maskUv', 'expectedMaskUv', 0.12, failures);
     requireEqual(latestReady, 'maskUvSplitMode', EXPECTED_MASK_UV_SPLIT_MODE, failures);
     requireNumberAtLeast(latestReady, 'maskNegativeXTriangleCount', 1, failures);
     requireNumberAtLeast(latestReady, 'maskPositiveXTriangleCount', 1, failures);
@@ -208,6 +210,69 @@ function requireUvBoundsForPrefix(event, prefix, failures) {
   }
 }
 
+function requireUvBoundsOverlap(event, actualPrefix, expectedPrefix, maxCenterDistance, failures) {
+  const actual = boundsForPrefix(event, actualPrefix);
+  const expected = boundsForPrefix(event, expectedPrefix);
+  if (!actual || !expected) {
+    return;
+  }
+
+  const intersectionWidth =
+    Math.min(actual.maxX, expected.maxX) - Math.max(actual.minX, expected.minX);
+  const intersectionHeight =
+    Math.min(actual.maxY, expected.maxY) - Math.max(actual.minY, expected.minY);
+  if (intersectionWidth <= 0 || intersectionHeight <= 0) {
+    failures.push(
+      `${actualPrefix} and ${expectedPrefix} expected to overlap, received ${formatBounds(
+        actual,
+      )} vs ${formatBounds(expected)}.`,
+    );
+    return;
+  }
+
+  const actualCenterX = (actual.minX + actual.maxX) * 0.5;
+  const actualCenterY = (actual.minY + actual.maxY) * 0.5;
+  const expectedCenterX = (expected.minX + expected.maxX) * 0.5;
+  const expectedCenterY = (expected.minY + expected.maxY) * 0.5;
+  const centerDistance = Math.hypot(
+    actualCenterX - expectedCenterX,
+    actualCenterY - expectedCenterY,
+  );
+  if (centerDistance > maxCenterDistance) {
+    failures.push(
+      `${actualPrefix} and ${expectedPrefix} centers expected within ${maxCenterDistance}, received ${centerDistance.toFixed(
+        4,
+      )}.`,
+    );
+  }
+}
+
+function boundsForPrefix(event, prefix) {
+  const minX = numberField(event, `${prefix}MinX`);
+  const minY = numberField(event, `${prefix}MinY`);
+  const maxX = numberField(event, `${prefix}MaxX`);
+  const maxY = numberField(event, `${prefix}MaxY`);
+  if (
+    minX === undefined ||
+    minY === undefined ||
+    maxX === undefined ||
+    maxY === undefined
+  ) {
+    return null;
+  }
+
+  return {maxX, maxY, minX, minY};
+}
+
+function formatBounds(bounds) {
+  return `[${bounds.minX}, ${bounds.minY}, ${bounds.maxX}, ${bounds.maxY}]`;
+}
+
+function formatBoundsForPrefix(event, prefix) {
+  const bounds = boundsForPrefix(event, prefix);
+  return bounds ? formatBounds(bounds) : '-';
+}
+
 function numberField(event, field) {
   const value = event?.[field];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -245,6 +310,7 @@ function printResult(result) {
         `maskUvSplitMode=${result.latestReady.maskUvSplitMode}`,
         `maskNegativeXTriangles=${result.latestReady.maskNegativeXTriangleCount}`,
         `maskPositiveXTriangles=${result.latestReady.maskPositiveXTriangleCount}`,
+        `expectedUv=${formatBoundsForPrefix(result.latestReady, 'expectedMaskUv')}`,
         `browCorePoints=${result.latestReady.browCorePointCount}`,
         `browShapeBasePoints=${result.latestReady.browShapeBasePointCount}`,
         `softEdgeTexels=${result.latestReady.softEdgeTexels}`,
@@ -291,6 +357,10 @@ function runSelfTest() {
     maskUvMaxY: 0.48,
     maskUvMinX: 0.31,
     maskUvMinY: 0.35,
+    expectedMaskUvMaxX: 0.61,
+    expectedMaskUvMaxY: 0.47,
+    expectedMaskUvMinX: 0.32,
+    expectedMaskUvMinY: 0.36,
     maskUvSplitMode: EXPECTED_MASK_UV_SPLIT_MODE,
     meshUvCount: 1220,
     meshVertexCount: 1220,

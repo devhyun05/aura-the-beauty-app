@@ -210,6 +210,10 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   debugShowLeftRight?: boolean;
   eyeAnchorPointCount?: number;
   eyeExclusionMode?: string;
+  expectedMaskUvMaxX?: number;
+  expectedMaskUvMaxY?: number;
+  expectedMaskUvMinX?: number;
+  expectedMaskUvMinY?: number;
   faceOvalPointCount?: number;
   faceCount?: number;
   generatedMaskId?: string;
@@ -1808,6 +1812,10 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
     debugShowLeftRight: event.debugShowLeftRight,
     eyeAnchorPointCount: event.eyeAnchorPointCount,
     eyeExclusionMode: event.eyeExclusionMode,
+    expectedMaskUvMaxX: event.expectedMaskUvMaxX,
+    expectedMaskUvMaxY: event.expectedMaskUvMaxY,
+    expectedMaskUvMinX: event.expectedMaskUvMinX,
+    expectedMaskUvMinY: event.expectedMaskUvMinY,
     faceOvalPointCount: event.faceOvalPointCount,
     faceCount: event.faceCount,
     generatedMaskId: event.generatedMaskId,

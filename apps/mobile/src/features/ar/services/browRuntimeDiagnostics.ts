@@ -5,6 +5,10 @@ export type GeneratedBrowRuntimeDiagnosticEvent = {
   browCorePointCount?: number;
   browShapeBasePointCount?: number;
   eyeAnchorPointCount?: number;
+  expectedMaskUvMaxX?: number;
+  expectedMaskUvMaxY?: number;
+  expectedMaskUvMinX?: number;
+  expectedMaskUvMinY?: number;
   maskTextureSampleChannel?: string;
   maskTriangles?: number;
   maskUvBoundsAvailable?: boolean;
@@ -58,6 +62,7 @@ export function summarizeGeneratedBrowRuntimeDiagnostics(
     detailText: [
       `tri ${maskTriangles}`,
       `uv ${formatUvBounds(event)}`,
+      `exp ${formatExpectedUvBounds(event)}`,
       `split ${event.maskUvSplitMode ?? '-'}`,
       `core ${browCorePointCount}`,
       `base ${browShapeBasePointCount}`,
@@ -72,6 +77,15 @@ export function summarizeGeneratedBrowRuntimeDiagnostics(
       `applied ${event.applied === true ? 'yes' : 'no'}`,
     ].join(' / '),
   };
+}
+
+function formatExpectedUvBounds(event: GeneratedBrowRuntimeDiagnosticEvent) {
+  return [
+    formatUvValue(event.expectedMaskUvMinX),
+    formatUvValue(event.expectedMaskUvMinY),
+    formatUvValue(event.expectedMaskUvMaxX),
+    formatUvValue(event.expectedMaskUvMaxY),
+  ].join(',');
 }
 
 function formatUvBounds(event: GeneratedBrowRuntimeDiagnosticEvent) {
