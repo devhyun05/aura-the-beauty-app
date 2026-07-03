@@ -2671,6 +2671,7 @@ public sealed class RNBridge : MonoBehaviour
             + ",\"generatedMaskId\":\"" + EscapeJsonString(payload.generatedMaskId) + "\""
             + ",\"captureSetId\":\"" + EscapeJsonString(NormalizeOptional(payload.captureSetId)) + "\""
             + ",\"maskTextureId\":\"" + EscapeJsonString(layer.MaskTextureId) + "\""
+            + ",\"maskTextureSampleChannel\":\"" + EscapeJsonString(result.MaskTextureSampleChannel) + "\""
             + ",\"runtimeReady\":" + hasRuntimeTexture.ToString().ToLowerInvariant()
             + ",\"applied\":" + result.Applied.ToString().ToLowerInvariant()
             + ",\"faceCount\":" + result.FaceCount.ToString(CultureInfo.InvariantCulture)

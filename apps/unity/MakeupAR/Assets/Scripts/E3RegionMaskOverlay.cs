@@ -58,6 +58,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float MaskFeatherNearRadiusPx;
         public float MaskFeatherFarRadiusPx;
         public string MaskTextureDiagnosticStatus;
+        public string MaskTextureSampleChannel;
         public int MaskTextureWidth;
         public int MaskTextureHeight;
         public int MaskTextureActivePixelCountGt8;
@@ -187,11 +188,13 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float DensityCoverageGt8;
         public string DensityBbox = "none";
         public int DensityMax;
+        public string SampleChannel = "red";
     }
 
     private sealed class MaskTextureSampleData
     {
         public string Status = "not_run";
+        public string SampleChannel = "red";
         public int Width;
         public int Height;
         public int ThresholdByte;
@@ -313,8 +316,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             texture.LoadRawTextureData(rawBytes);
             texture.Apply(false, false);
             RuntimeGeneratedLipMaskTextures[maskTextureId] = texture;
-            MaskTextureDiagnosticsCache.Remove("GeneratedLipMasks/" + maskTextureId);
-            MaskTextureSampleCache.Remove("GeneratedLipMasks/" + maskTextureId);
+            RemoveMaskTextureCaches("GeneratedLipMasks/" + maskTextureId);
 
             Debug.Log(
                 "[E7] generated_lip_mask_texture_registered"
@@ -369,8 +371,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             texture.LoadRawTextureData(rawBytes);
             texture.Apply(false, false);
             RuntimeGeneratedBrowMaskTextures[maskTextureId] = texture;
-            MaskTextureDiagnosticsCache.Remove("GeneratedBrowMasks/" + maskTextureId);
-            MaskTextureSampleCache.Remove("GeneratedBrowMasks/" + maskTextureId);
+            RemoveMaskTextureCaches("GeneratedBrowMasks/" + maskTextureId);
 
             Debug.Log(
                 "[E7] generated_brow_mask_texture_registered"
@@ -393,6 +394,42 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     public bool TryGetLatestRegionApplyResult(string region, out RegionApplyResult result)
     {
         return latestRegionResults.TryGetValue(NormalizeRegion(region), out result);
+    }
+
+    private static void RemoveMaskTextureCaches(string resourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(resourcePath))
+        {
+            return;
+        }
+
+        RemoveCacheEntriesWithResourcePrefix(MaskTextureDiagnosticsCache, resourcePath);
+        RemoveCacheEntriesWithResourcePrefix(MaskTextureSampleCache, resourcePath);
+    }
+
+    private static void RemoveCacheEntriesWithResourcePrefix<TValue>(
+        Dictionary<string, TValue> cache,
+        string resourcePath)
+    {
+        if (cache == null || cache.Count == 0)
+        {
+            return;
+        }
+
+        List<string> keysToRemove = new List<string>();
+        foreach (string key in cache.Keys)
+        {
+            if (key == resourcePath
+                || key.StartsWith(resourcePath + "|", StringComparison.Ordinal))
+            {
+                keysToRemove.Add(key);
+            }
+        }
+
+        foreach (string key in keysToRemove)
+        {
+            cache.Remove(key);
+        }
     }
 
     public void SetOverlayRenderingSuppressed(bool suppressed)
@@ -753,6 +790,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MaskFeatherNearRadiusPx = ResolveShaderFeatherNearRadiusPx(mask.FeatherUvNormalized),
             MaskFeatherFarRadiusPx = ResolveShaderFeatherFarRadiusPx(mask.FeatherUvNormalized),
             MaskTextureDiagnosticStatus = "not_run",
+            MaskTextureSampleChannel = ResolveMaskCoverageSampleChannel(mask),
             MaskTextureWidth = 0,
             MaskTextureHeight = 0,
             MaskTextureActivePixelCountGt8 = 0,
@@ -801,6 +839,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         result.GradientAmount = recipe.GradientAmount;
         result.PreserveDetail = recipe.PreserveDetail;
         result.MaskTextureId = recipe.MaskTextureId;
+        result.MaskTextureSampleChannel = ResolveMaskCoverageSampleChannel(mask);
         bool lipStyleAtlas = IsLipStyleAtlasMask(recipe.MaskTextureId);
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
         bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
@@ -968,10 +1007,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (shouldCullToMask)
         {
             sampleData = GetMaskTextureSampleData(mask);
-            meshCullingMode = "lip_atlas_threshold_sample";
+            meshCullingMode = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)
+                ? "generated_brow_green_alpha_threshold_sample"
+                : "lip_atlas_threshold_sample";
             if (sampleData == null || sampleData.Status != "ok")
             {
-                meshCullingMode = "lip_atlas_threshold_sample_unavailable";
+                meshCullingMode = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)
+                    ? "generated_brow_green_alpha_threshold_sample_unavailable"
+                    : "lip_atlas_threshold_sample_unavailable";
                 view.Mesh.Clear();
                 return false;
             }
@@ -1305,6 +1348,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         result.MaskTextureDiagnosticStatus = diagnostics.Status;
+        result.MaskTextureSampleChannel = diagnostics.SampleChannel;
         result.MaskTextureWidth = diagnostics.Width;
         result.MaskTextureHeight = diagnostics.Height;
         result.MaskTextureActivePixelCountGt8 = diagnostics.ActivePixelCountGt8;
@@ -2660,6 +2704,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     {
         MaskTextureDiagnostics diagnostics = GetMaskTextureDiagnostics(mask);
         result.MaskTextureDiagnosticStatus = diagnostics.Status;
+        result.MaskTextureSampleChannel = diagnostics.SampleChannel;
         result.MaskTextureWidth = diagnostics.Width;
         result.MaskTextureHeight = diagnostics.Height;
         result.MaskTextureActivePixelCountGt8 = diagnostics.ActivePixelCountGt8;
@@ -2676,8 +2721,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static bool ShouldCullMeshToMask(RegionRecipeState recipe)
     {
         return recipe != null
-            && recipe.Region == "lip"
-            && IsLipStyleAtlasMask(recipe.MaskTextureId);
+            && ((recipe.Region == "lip" && IsLipStyleAtlasMask(recipe.MaskTextureId))
+                || (recipe.Region == "brow" && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)));
     }
 
     private static bool ShouldCullMeshToVisionBoundary(RegionRecipeState recipe)
@@ -2694,8 +2739,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return null;
         }
 
-        string cacheKey = mask.ResourcePath + "|sampleThreshold="
-            + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
+        string sampleChannel = ResolveMaskCoverageSampleChannel(mask);
+        string cacheKey = mask.ResourcePath
+            + "|sampleChannel=" + sampleChannel
+            + "|sampleThreshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
         if (MaskTextureSampleCache.TryGetValue(cacheKey, out MaskTextureSampleData cached))
         {
             return cached;
@@ -2703,6 +2750,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         MaskTextureSampleData sampleData = new MaskTextureSampleData
         {
+            SampleChannel = sampleChannel,
             ThresholdByte = Mathf.Clamp(Mathf.RoundToInt(mask.Threshold * 255.0f), 0, 255)
         };
         Texture2D texture = GetMaskTexture(mask);
@@ -2780,7 +2828,21 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return 0;
         }
 
-        return sampleData.Pixels[pixelIndex].r;
+        return SampleMaskCoverageByte(sampleData.Pixels[pixelIndex], sampleData.SampleChannel);
+    }
+
+    private static string ResolveMaskCoverageSampleChannel(MaskDefinition mask)
+    {
+        return mask != null && IsGeneratedBrowMaskTextureId(mask.MaskTextureId)
+            ? "generated_brow_green_alpha"
+            : "red";
+    }
+
+    private static int SampleMaskCoverageByte(Color32 pixel, string sampleChannel)
+    {
+        return sampleChannel == "generated_brow_green_alpha"
+            ? Mathf.Max(pixel.g, pixel.a)
+            : pixel.r;
     }
 
     private static MaskTextureDiagnostics GetMaskTextureDiagnostics(MaskDefinition mask)
@@ -2790,13 +2852,17 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return new MaskTextureDiagnostics { Status = "mask_missing" };
         }
 
-        string cacheKey = mask.ResourcePath + "|threshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
+        string sampleChannel = ResolveMaskCoverageSampleChannel(mask);
+        string cacheKey = mask.ResourcePath
+            + "|sampleChannel=" + sampleChannel
+            + "|threshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
         if (MaskTextureDiagnosticsCache.TryGetValue(cacheKey, out MaskTextureDiagnostics cached))
         {
             return cached;
         }
 
         MaskTextureDiagnostics diagnostics = new MaskTextureDiagnostics();
+        diagnostics.SampleChannel = sampleChannel;
         Texture2D texture = GetMaskTexture(mask);
         if (texture == null)
         {
@@ -2836,7 +2902,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                         continue;
                     }
 
-                    int value = pixels[pixelIndex].r;
+                    int value = SampleMaskCoverageByte(pixels[pixelIndex], sampleChannel);
                     int densityValue = pixels[pixelIndex].b;
                     densityMax = Mathf.Max(densityMax, densityValue);
                     if (value > thresholdByte)
@@ -3841,6 +3907,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " maskFeatherNearRadiusPx=" + result.MaskFeatherNearRadiusPx.ToString("0.###", CultureInfo.InvariantCulture)
             + " maskFeatherFarRadiusPx=" + result.MaskFeatherFarRadiusPx.ToString("0.###", CultureInfo.InvariantCulture)
             + " maskTextureDiagnosticStatus=" + result.MaskTextureDiagnosticStatus
+            + " maskTextureSampleChannel=" + result.MaskTextureSampleChannel
             + " maskTextureSize=" + result.MaskTextureWidth.ToString(CultureInfo.InvariantCulture)
             + "x" + result.MaskTextureHeight.ToString(CultureInfo.InvariantCulture)
             + " maskTextureGt8Pixels=" + result.MaskTextureActivePixelCountGt8.ToString(CultureInfo.InvariantCulture)

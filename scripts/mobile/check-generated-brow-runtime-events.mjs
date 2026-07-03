@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 const EXPECTED_SCHEMA = 'generated_brow_mask_applied';
 const EXPECTED_ANCHOR_MODE = 'surround_anchor_eye_eyelid_temple_nose_face_oval_v2';
 const EXPECTED_EYE_EXCLUSION_MODE = 'upper_eyelid_expanded_eye_bounds_v2';
+const EXPECTED_MASK_SAMPLE_CHANNEL = 'generated_brow_green_alpha';
 
 const args = process.argv.slice(2);
 
@@ -86,6 +87,7 @@ function evaluateGeneratedBrowEvents(events) {
     requireNumberAtLeast(latestReady, 'eyeAnchorPointCount', 20, failures);
     requireNumberAtLeast(latestReady, 'upperEyelidAnchorPointCount', 10, failures);
     requireEqual(latestReady, 'maskUvBoundsAvailable', true, failures);
+    requireEqual(latestReady, 'maskTextureSampleChannel', EXPECTED_MASK_SAMPLE_CHANNEL, failures);
     requireUvBounds(latestReady, failures);
     requireEqual(latestReady, 'anchorStabilizationMode', EXPECTED_ANCHOR_MODE, failures);
     requireEqual(latestReady, 'eyeExclusionMode', EXPECTED_EYE_EXCLUSION_MODE, failures);
@@ -197,6 +199,7 @@ function printResult(result) {
         `faceCount=${result.latestReady.faceCount}`,
         `trackingState=${result.latestReady.trackingState}`,
         `uvAvailable=${result.latestReady.uvAvailable}`,
+        `maskTextureSampleChannel=${result.latestReady.maskTextureSampleChannel}`,
         `anchorMode=${result.latestReady.anchorStabilizationMode}`,
       ].join(' '),
     );
@@ -220,6 +223,7 @@ function runSelfTest() {
     eyeExclusionMode: EXPECTED_EYE_EXCLUSION_MODE,
     faceCount: 1,
     maskTriangles: 118,
+    maskTextureSampleChannel: EXPECTED_MASK_SAMPLE_CHANNEL,
     maskUvBoundsAvailable: true,
     maskUvMaxX: 0.62,
     maskUvMaxY: 0.48,
