@@ -108,6 +108,13 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - In React Native dev builds, the eyebrow option row exposes debug controls:
     `일반`, `마스크 확인`, and `좌우 확인`.
   - Runtime logs and region snapshots include brow debug state.
+  - Unity persists generated brow runtime events to:
+    - `<Application.persistentDataPath>/e7-runtime-events/generated_brow_mask_applied.latest.json`
+    - `<Application.persistentDataPath>/e7-runtime-events/generated_brow_mask_applied.jsonl`
+  - After pulling either file from a device, run:
+    - `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.jsonl>`
+    - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
+  - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 
@@ -119,7 +126,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
 - It is not proven that left/right brow mapping is correct in live AR.
 - It is not proven that U/V orientation is correct in live AR.
 - There is no complete runtime debug overlay that shows brow landmarks, brow bounds, brow UV bounds, and brow mask preview on-device.
-- There is no acceptance gate proving that the mask follows the eyebrow during face movement without jitter or delay.
+- The runtime JSONL gate can prove that Unity accepted and applied the generated brow mask with valid UV/mesh/anchor state, but it cannot by itself prove visual attachment quality or no jitter/delay during head movement.
 - Offline preview images are useful, but they do not prove final AR attachment.
 
 ## Main Problem To Solve
