@@ -12,7 +12,7 @@ using UnityEngine.XR.ARSubsystems;
 public sealed class RNBridge : MonoBehaviour
 {
     private static readonly string[] FeatureSnapshotRegions =
-        { "lip", "cheek", "eye", "blush", "brow", "eyeliner" };
+        { "foundation", "lip", "cheek", "eye", "blush", "brow", "eyeliner" };
 
     [Serializable]
     private sealed class RecipePayload
@@ -62,6 +62,11 @@ public sealed class RNBridge : MonoBehaviour
         public float verticalOffset;
         public bool cameraBackdropAvailable;
         public bool lightEstimateAvailable;
+        public string mode;
+        public string fallbackMode;
+        public int debugMaskMode;
+        public string foundationMode;
+        public string foundationFallbackMode;
         public RecipeLayerPayload[] layers;
     }
 
@@ -114,6 +119,11 @@ public sealed class RNBridge : MonoBehaviour
         public float verticalOffset;
         public bool cameraBackdropAvailable;
         public bool lightEstimateAvailable;
+        public string mode;
+        public string fallbackMode;
+        public int debugMaskMode;
+        public string foundationMode;
+        public string foundationFallbackMode;
     }
 
     [Serializable]
@@ -278,6 +288,9 @@ public sealed class RNBridge : MonoBehaviour
         public float VerticalOffset;
         public bool CameraBackdropAvailable;
         public bool LightEstimateAvailable;
+        public string FoundationMode;
+        public string FoundationFallbackMode;
+        public int FoundationDebugMaskMode;
         public bool ValidationVisible;
         public bool ValidationStrongMode;
         public string ValidationMode;
@@ -1954,7 +1967,10 @@ public sealed class RNBridge : MonoBehaviour
             layer.Roughness,
             layer.Specular,
             layer.SpecularPower,
-            layer.GlossBoost);
+            layer.GlossBoost,
+            layer.FoundationMode,
+            layer.FoundationFallbackMode,
+            layer.FoundationDebugMaskMode);
     }
 
     private void RememberRegionFeatureState(
@@ -2558,6 +2574,37 @@ public sealed class RNBridge : MonoBehaviour
             + " overlaySyncCount=" + result.OverlaySyncCount.ToString(CultureInfo.InvariantCulture)
             + " overlayTopologyChanged=" + result.OverlayTopologyChanged.ToString().ToLowerInvariant());
 
+        if (layer.Region == "foundation" || layer.Region == "base")
+        {
+            Debug.Log(
+                "[E7] foundation_recipe_applied"
+                + " source=" + source
+                + " recipeBatchId=" + layer.RecipeBatchId
+                + " activeRegions=" + layer.ActiveRegions
+                + " enabled=" + layer.Enabled.ToString().ToLowerInvariant()
+                + " validationVisible=" + layer.ValidationVisible.ToString().ToLowerInvariant()
+                + " applied=" + applied
+                + " blockedReason=" + BuildRegionApplyBlockedReason(layer, result)
+                + " maskTextureId=" + layer.MaskTextureId
+                + " texture=" + layer.TextureSample
+                + " blendMode=" + layer.BlendMode
+                + " color=" + layer.ColorHex
+                + " skinBase=" + layer.SecondaryColorHex
+                + " opacity=" + layer.Opacity.ToString("0.###", CultureInfo.InvariantCulture)
+                + " intensity=" + layer.Intensity.ToString("0.###", CultureInfo.InvariantCulture)
+                + " coverage=" + layer.Coverage.ToString("0.###", CultureInfo.InvariantCulture)
+                + " finish=" + layer.Finish
+                + " roughness=" + layer.Roughness.ToString("0.###", CultureInfo.InvariantCulture)
+                + " glossBoost=" + layer.GlossBoost.ToString("0.###", CultureInfo.InvariantCulture)
+                + " resultRegion=" + result.Region
+                + " resultTexture=" + result.TextureSample
+                + " maskTriangles=" + result.MaskTriangleCount.ToString(CultureInfo.InvariantCulture)
+                + " meshTriangles=" + result.MeshTriangleCount.ToString(CultureInfo.InvariantCulture)
+                + " uvAvailable=" + result.UvAvailable.ToString().ToLowerInvariant()
+                + " trackingState=" + result.TrackingState
+                + " faceCount=" + result.FaceCount.ToString(CultureInfo.InvariantCulture));
+        }
+
         Debug.Log(
             "[E7] recipe_latency"
             + " source=unity_applied"
@@ -2898,6 +2945,22 @@ public sealed class RNBridge : MonoBehaviour
             VerticalOffset = NormalizeLipAdjustment(layer.verticalOffset, recipe.verticalOffset, region),
             CameraBackdropAvailable = layer.cameraBackdropAvailable || recipe.cameraBackdropAvailable,
             LightEstimateAvailable = layer.lightEstimateAvailable || recipe.lightEstimateAvailable,
+            FoundationMode = NormalizeFoundationMode(
+                layer.foundationMode,
+                layer.mode,
+                recipe.foundationMode,
+                recipe.mode,
+                region),
+            FoundationFallbackMode = NormalizeFoundationFallbackMode(
+                layer.foundationFallbackMode,
+                layer.fallbackMode,
+                recipe.foundationFallbackMode,
+                recipe.fallbackMode,
+                region),
+            FoundationDebugMaskMode = NormalizeFoundationDebugMaskMode(
+                layer.debugMaskMode,
+                recipe.debugMaskMode,
+                region),
             ValidationVisible = layer.enabled,
             ValidationStrongMode = false,
             ValidationMode = "standard",
@@ -2914,7 +2977,13 @@ public sealed class RNBridge : MonoBehaviour
             ? string.Empty
             : value.Trim().ToLowerInvariant();
 
-        if (value == "lip"
+        if (value == "base")
+        {
+            return "foundation";
+        }
+
+        if (value == "foundation"
+            || value == "lip"
             || value == "cheek"
             || value == "eye"
             || value == "blush"
@@ -2925,6 +2994,97 @@ public sealed class RNBridge : MonoBehaviour
         }
 
         throw new ArgumentException("Unsupported E4 region: " + value);
+    }
+
+    private static string NormalizeFoundationMode(
+        string preferred,
+        string secondary,
+        string recipePreferred,
+        string recipeSecondary,
+        string region)
+    {
+        if (region != "foundation")
+        {
+            return "uvMask";
+        }
+
+        string value = FirstNonBlank(preferred, secondary, recipePreferred, recipeSecondary);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "uvMask";
+        }
+
+        value = value.Trim();
+        if (value.Equals("screenSpace", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("screen-space", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("screenspace", StringComparison.OrdinalIgnoreCase))
+        {
+            return "screenSpace";
+        }
+
+        if (value.Equals("uvMask", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("uv-mask", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("uv", StringComparison.OrdinalIgnoreCase))
+        {
+            return "uvMask";
+        }
+
+        Debug.LogWarning("[FoundationScreenSpace] unsupported mode=" + value + " fallback=uvMask");
+        return "uvMask";
+    }
+
+    private static string NormalizeFoundationFallbackMode(
+        string preferred,
+        string secondary,
+        string recipePreferred,
+        string recipeSecondary,
+        string region)
+    {
+        if (region != "foundation")
+        {
+            return "uvMask";
+        }
+
+        string value = FirstNonBlank(preferred, secondary, recipePreferred, recipeSecondary);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "uvMask";
+        }
+
+        value = value.Trim();
+        if (value.Equals("off", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("none", StringComparison.OrdinalIgnoreCase))
+        {
+            return "off";
+        }
+
+        if (value.Equals("uvMask", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("uv-mask", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("uv", StringComparison.OrdinalIgnoreCase))
+        {
+            return "uvMask";
+        }
+
+        Debug.LogWarning("[FoundationScreenSpace] unsupported fallbackMode=" + value + " fallback=uvMask");
+        return "uvMask";
+    }
+
+    private static int NormalizeFoundationDebugMaskMode(int preferred, int secondary, string region)
+    {
+        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 5) : 0;
+    }
+
+    private static string FirstNonBlank(params string[] values)
+    {
+        foreach (string value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static string NormalizeColor(string color)
@@ -3052,7 +3212,11 @@ public sealed class RNBridge : MonoBehaviour
                 "Recipe sample does not match texture for region " + region + ": " + sample);
         }
 
-        if ((region == "lip"
+        if ((region == "foundation"
+                && (value == "foundation_natural"
+                    || value == "foundation_matte"
+                    || value == "foundation_glow"))
+            || (region == "lip"
                 && (value == "matte_lip"
                     || value == "gloss_lip"
                     || value == "full_lip"
@@ -3243,6 +3407,8 @@ public sealed class RNBridge : MonoBehaviour
     {
         switch (region)
         {
+            case "foundation":
+                return "foundation-skin-mask-v1";
             case "cheek":
             case "blush":
                 return "cheek-session-mask-1-v1";
@@ -3263,7 +3429,8 @@ public sealed class RNBridge : MonoBehaviour
         }
 
         string value = maskTextureId.Trim();
-        return (region == "lip" && value.StartsWith("e7-lip-", StringComparison.Ordinal))
+        return (region == "foundation" && value == "foundation-skin-mask-v1")
+            || (region == "lip" && value.StartsWith("e7-lip-", StringComparison.Ordinal))
             || ((region == "blush" || region == "cheek")
                 && (value.StartsWith("e7-blush-", StringComparison.Ordinal)
                     || value.StartsWith("cheek-", StringComparison.Ordinal)))
@@ -3300,7 +3467,8 @@ public sealed class RNBridge : MonoBehaviour
         }
 
         string value = candidateId.Trim();
-        return (region == "lip" && value.StartsWith("lip-", StringComparison.Ordinal))
+        return (region == "foundation" && value.StartsWith("foundation-", StringComparison.Ordinal))
+            || (region == "lip" && value.StartsWith("lip-", StringComparison.Ordinal))
             || ((region == "blush" || region == "cheek")
                 && (value.StartsWith("blush-", StringComparison.Ordinal)
                     || value.StartsWith("blush_", StringComparison.Ordinal)))

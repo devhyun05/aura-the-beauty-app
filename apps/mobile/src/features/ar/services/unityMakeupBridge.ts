@@ -70,6 +70,16 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
   UnityMakeupLayerRegion,
   UnityMakeupRegionPreset
 > = {
+  foundation: {
+    branchSource: 'makeupAR-full-face',
+    color: '#D7B19A',
+    finish: 'natural-foundation',
+    label: PRODUCT_REGION_LABELS.foundation,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,
+    opacity: 0.65,
+    region: 'foundation',
+    texture: 'foundation_natural',
+  },
   lip: {
     branchSource: 'makeupAR-full-face',
     color: '#D94B74',
@@ -116,6 +126,7 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   UnityMakeupRegion,
   UnityMakeupRegionPreset
 > = {
+  foundation: UNITY_MAKEUP_LAYER_PRESETS.foundation,
   brow: UNITY_MAKEUP_LAYER_PRESETS.brow,
   blush: UNITY_MAKEUP_LAYER_PRESETS.blush,
   eyeliner: UNITY_MAKEUP_LAYER_PRESETS.eyeliner,
@@ -233,7 +244,13 @@ function createUnityMakeupRecipeBatchForRegions({
         label: preset.label,
       },
       selectedColorId: 'unity-region-color',
-      selectedMakeupArea: region === 'blush' ? 'cheek' : region === 'eyeliner' ? 'eye' : region,
+      selectedMakeupArea: region === 'foundation'
+        ? 'base'
+        : region === 'blush'
+        ? 'cheek'
+        : region === 'eyeliner'
+        ? 'eye'
+        : region,
       selectedMakeupFilter: {
         id: 'unity-region-recipe',
         imageSource: 1,
@@ -349,6 +366,10 @@ function resolveOpacityForRegion(
     return 0.64;
   }
 
+  if (region === 'foundation') {
+    return 0.65;
+  }
+
   return defaultOpacity;
 }
 
@@ -368,6 +389,10 @@ function resolveCoverageForRegion(
     return selectedShapeId === 'eye-tail' ? 0.5 : 0.4;
   }
 
+  if (region === 'foundation') {
+    return 0.6;
+  }
+
   return selectedShapeId === 'brow-straight' ? 0.9 : 0.82;
 }
 
@@ -381,6 +406,10 @@ function resolveFeatherForRegion(
 
   if (region === 'eyeliner') {
     return 0.24;
+  }
+
+  if (region === 'foundation') {
+    return 0.42;
   }
 
   return selectedShapeId === 'cheek-round' ? 0.3 : 0.24;
@@ -397,6 +426,10 @@ function resolveMaskThresholdForRegion(region: UnityMakeupLayerRegion): number {
 
   if (region === 'brow') {
     return 0.035;
+  }
+
+  if (region === 'foundation') {
+    return 0.04;
   }
 
   return 0.12;

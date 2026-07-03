@@ -72,6 +72,7 @@ const PERSONAL_MASK_REGIONS = [
   {id: 'brow', label: '눈썹', guidance: '브로우 기준'},
 ] as const;
 const AR_BLUSH_HUD_REGIONS = [
+  {id: 'foundation', label: '베이스'},
   {id: 'lip', label: '립'},
   {id: 'cheek', label: '치크'},
   {id: 'eyebrow', label: '눈썹'},
@@ -83,6 +84,12 @@ const GENERATED_MASK_VALIDATION_COLORS = [
   {name: '베리', color: '#A83567', secondaryColor: '#D66A91'},
   {name: '레드', color: '#CF1838', secondaryColor: '#F05C70'},
   {name: '연핑크', color: '#F1CBD5', secondaryColor: '#F8DEE5'},
+] as const;
+const FOUNDATION_VALIDATION_COLORS = [
+  {name: '뉴트럴 21', color: '#D7B19A'},
+  {name: '아이보리 19', color: '#E6C4AD'},
+  {name: '베이지 23', color: '#CFA58A'},
+  {name: '샌드 25', color: '#B98E74'},
 ] as const;
 const INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
   ...DEFAULT_GENERATED_MASK_CONTROLS,
@@ -149,6 +156,18 @@ const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
   {label: '내추럴', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},
   {label: '슬림', candidateId: 'brow-slim-tail-fine-hair-v1', maskTextureId: 'brow-slim-tail-fine-hair-v1'},
 ] as const;
+const FOUNDATION_FINISH_OPTIONS = [
+  {label: '내추럴', finish: 'natural', luminanceInfluence: 0.35, evenness: 0.3},
+  {label: '세미매트', finish: 'matte', luminanceInfluence: 0.28, evenness: 0.38},
+  {label: '윤광', finish: 'glow', luminanceInfluence: 0.4, evenness: 0.24},
+] as const;
+const FOUNDATION_DEBUG_MODE_OPTIONS = [
+  {label: '끄기', mode: 0},
+  {label: '표면', mode: 1},
+  {label: '최종', mode: 3},
+  {label: '강제색', mode: 5},
+  {label: '앵커', mode: 6},
+] as const;
 
 type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
 type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
@@ -157,6 +176,7 @@ type EnabledHudRegions = Record<ArBlushHudRegion, boolean>;
 
 const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
   cheek: false,
+  foundation: true,
   eyebrow: false,
   lip: false,
 };
@@ -180,7 +200,7 @@ export function UnityMakeupCaptureScreen({
     useState<PersonalizedCompanionMakeupControls>(
       DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
     );
-  const [activeHudRegion, setActiveHudRegion] = useState<ArBlushHudRegion>('lip');
+  const [activeHudRegion, setActiveHudRegion] = useState<ArBlushHudRegion>('foundation');
   const [enabledHudRegions, setEnabledHudRegions] =
     useState<EnabledHudRegions>(INITIAL_ENABLED_HUD_REGIONS);
   const pendingCaptureRequestRef = useRef<UnitySynchronizedCaptureRequest | null>(null);
@@ -253,7 +273,7 @@ export function UnityMakeupCaptureScreen({
     setNotice('정면 사진을 촬영해 입술, 볼, 눈썹 기준 마스크를 만듭니다');
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
-        activeRegion: 'none',
+        activeRegions: [],
       }),
     );
     postUnityRegionOverlayVisibility({
@@ -342,7 +362,7 @@ export function UnityMakeupCaptureScreen({
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
           DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
-          {activeRegion: 'none'},
+          {activeRegions: getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS)},
         ),
       );
     } catch (error) {
@@ -395,7 +415,7 @@ export function UnityMakeupCaptureScreen({
         postUnityGeneratedLipMaskPayload(latestGeneratedApplyPayloadRef.current);
         postUnityMakeupRecipe(
           buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
-            activeRegion: 'none',
+            activeRegions: getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
           }),
         );
       }, 800);
@@ -434,7 +454,7 @@ export function UnityMakeupCaptureScreen({
     setNotice('입술, 볼, 눈썹 기준이 될 현재 프레임을 스캔하는 중입니다');
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
-        activeRegion: 'none',
+        activeRegions: [],
       }),
     );
     postUnityRegionOverlayVisibility({
@@ -524,6 +544,11 @@ export function UnityMakeupCaptureScreen({
     nextEnabledRegions: EnabledHudRegions,
   ) {
     if (!generatedPackage) {
+      console.info('[aura:foundation-ar] post-runtime-makeup skipped', {
+        reason: 'generated_package_missing',
+        enabledHudRegions: nextEnabledRegions,
+        foundation: nextCompanionControls.foundation,
+      });
       return;
     }
 
@@ -531,6 +556,39 @@ export function UnityMakeupCaptureScreen({
       ...nextGeneratedControls,
       maskVisible: nextEnabledRegions.lip,
     };
+    const companionActiveRegions = getEnabledCompanionRegions(nextEnabledRegions);
+    const companionRecipe = buildCheekBrowRecipeAfterGeneratedLip(
+      Date.now(),
+      nextCompanionControls,
+      {
+        activeRegions: companionActiveRegions,
+      },
+    );
+    const foundationLayer = companionRecipe.layers.find(
+      layer => layer.region === 'foundation',
+    );
+
+    console.info('[aura:foundation-ar] post-runtime-makeup', {
+      activeRegions: companionActiveRegions,
+      enabledHudRegions: nextEnabledRegions,
+      foundationLayer: foundationLayer
+        ? {
+            blendMode: foundationLayer.blendMode,
+            color: foundationLayer.color,
+            coverage: foundationLayer.coverage,
+            debugMaskMode: nextCompanionControls.foundation.debugMaskMode ?? 0,
+            enabled: foundationLayer.enabled,
+            finish: foundationLayer.finish,
+            intensity: foundationLayer.intensity,
+            maskTextureId: foundationLayer.maskTextureId,
+            opacity: foundationLayer.opacity,
+            roughness: foundationLayer.roughness,
+            sample: foundationLayer.sample,
+            secondaryColor: foundationLayer.secondaryColor,
+            texture: foundationLayer.texture,
+          }
+        : null,
+    });
 
     postUnityGeneratedLipMaskPayload(
       JSON.stringify(
@@ -540,11 +598,7 @@ export function UnityMakeupCaptureScreen({
         }),
       ),
     );
-    postUnityMakeupRecipe(
-      buildCheekBrowRecipeAfterGeneratedLip(Date.now(), nextCompanionControls, {
-        activeRegion: getCompanionActiveRegion(nextEnabledRegions),
-      }),
-    );
+    postUnityMakeupRecipe(companionRecipe);
   };
 
   const isBusy = phase === 'capturing' || phase === 'generating' || phase === 'applying';
@@ -797,12 +851,20 @@ function ArBlushRuntimeHud({
   const [isHudHidden, setIsHudHidden] = useState(false);
   const activeValues = getHudRegionValues(activeRegion, controls, companionControls);
   const isActiveRegionEnabled = enabledRegions[activeRegion];
+  const colorOptions =
+    activeRegion === 'foundation'
+      ? FOUNDATION_VALIDATION_COLORS
+      : GENERATED_MASK_VALIDATION_COLORS;
 
-  const handleColorPress = (color: (typeof GENERATED_MASK_VALIDATION_COLORS)[number]) => {
+  const handleColorPress = (color: {
+    color: string;
+    name: string;
+    secondaryColor?: string;
+  }) => {
     if (activeRegion === 'lip') {
       onChangeControls({
         colorHex: color.color,
-        secondaryColorHex: color.secondaryColor,
+        secondaryColorHex: color.secondaryColor ?? color.color,
       });
       return;
     }
@@ -833,6 +895,24 @@ function ArBlushRuntimeHud({
     const regionKey = getCompanionRegionKey(activeRegion);
     onChangeCompanionControls(regionKey, {
       opacity: value,
+    });
+  };
+
+  const handleFoundationCoverageChange = (value: number) => {
+    onChangeCompanionControls('foundation', {
+      coverage: value,
+    });
+  };
+
+  const handleFoundationEvennessChange = (value: number) => {
+    onChangeCompanionControls('foundation', {
+      evenness: value,
+    });
+  };
+
+  const handleFoundationDebugModeChange = (debugMaskMode: number) => {
+    onChangeCompanionControls('foundation', {
+      debugMaskMode,
     });
   };
 
@@ -927,7 +1007,7 @@ function ArBlushRuntimeHud({
               선택 안함
             </Text>
           </Pressable>
-          {GENERATED_MASK_VALIDATION_COLORS.map(color => (
+          {colorOptions.map(color => (
             <Pressable
               accessibilityRole="button"
               accessibilityState={{
@@ -965,7 +1045,7 @@ function ArBlushRuntimeHud({
 
         <HudSliderControl
           colorHex={activeValues.colorHex}
-          label="발색"
+          label={activeRegion === 'foundation' ? '강도' : '발색'}
           onChange={handleIntensityChange}
           value={activeValues.intensity}
         />
@@ -975,6 +1055,57 @@ function ArBlushRuntimeHud({
           onChange={handleOpacityChange}
           value={activeValues.opacity}
         />
+
+        {activeRegion === 'foundation' ? (
+          <>
+            <YStack style={styles.foundationDebugGroup}>
+              <Text style={styles.foundationDebugLabel}>마스크 디버그</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.foundationDebugModeRow}>
+                {FOUNDATION_DEBUG_MODE_OPTIONS.map(option => {
+                  const isSelected =
+                    (companionControls.foundation.debugMaskMode ?? 0) === option.mode;
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={`파운데이션 디버그 ${option.label}`}
+                      accessibilityRole="button"
+                      accessibilityState={{selected: isSelected}}
+                      key={option.mode}
+                      onPress={() => handleFoundationDebugModeChange(option.mode)}
+                      style={({pressed}) => [
+                        styles.foundationDebugModeButton,
+                        isSelected && styles.foundationDebugModeButtonActive,
+                        pressed && styles.pressed,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.foundationDebugModeText,
+                          isSelected && styles.foundationDebugModeTextActive,
+                        ]}>
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </YStack>
+            <HudSliderControl
+              colorHex={activeValues.colorHex}
+              label="커버력"
+              onChange={handleFoundationCoverageChange}
+              value={companionControls.foundation.coverage ?? 0.6}
+            />
+            <HudSliderControl
+              colorHex={activeValues.colorHex}
+              label="균일도"
+              onChange={handleFoundationEvennessChange}
+              value={companionControls.foundation.evenness ?? 0.3}
+            />
+          </>
+        ) : null}
 
       </YStack>
     </YStack>
@@ -1057,8 +1188,64 @@ function HudRegionOptions({
     );
   }
 
+  if (activeRegion === 'foundation') {
+    return (
+      <>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{selected: !activeRegionEnabled}}
+          onPress={onDisableActiveRegion}
+          style={[
+            styles.arBlushOptionButton,
+            styles.arBlushNoneOptionButton,
+            !activeRegionEnabled && styles.arBlushNoneOptionButtonActive,
+          ]}>
+          <Text style={styles.arBlushNoneOptionText}>
+            선택 안함
+          </Text>
+        </Pressable>
+        {FOUNDATION_FINISH_OPTIONS.map(option => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{
+              selected:
+                activeRegionEnabled &&
+                companionControls.foundation.finish === option.finish,
+            }}
+            key={option.finish}
+            onPress={() =>
+              onChangeCompanionControls('foundation', {
+                evenness: option.evenness,
+                finish: option.finish,
+                luminanceInfluence: option.luminanceInfluence,
+              })
+            }
+            style={[
+              styles.arBlushOptionButton,
+              activeRegionEnabled &&
+                companionControls.foundation.finish === option.finish &&
+                styles.arBlushOptionButtonActive,
+            ]}>
+            <Text
+              style={[
+                styles.arBlushOptionText,
+                activeRegionEnabled &&
+                  companionControls.foundation.finish === option.finish &&
+                  styles.arBlushOptionTextActive,
+              ]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </>
+    );
+  }
+
   const regionKey = getCompanionRegionKey(activeRegion);
-  const options = getCompanionOptions(activeRegion);
+  const options =
+    activeRegion === 'cheek'
+      ? AR_BLUSH_CHEEK_REGION_OPTIONS
+      : AR_BLUSH_EYEBROW_REGION_OPTIONS;
 
   return (
     <>
@@ -1228,11 +1415,17 @@ function getHudRegionValues(
 
 function getColorName(colorHex: string): string {
   return (
-    GENERATED_MASK_VALIDATION_COLORS.find(color => color.color === colorHex)?.name ?? '사용자 지정'
+    [...FOUNDATION_VALIDATION_COLORS, ...GENERATED_MASK_VALIDATION_COLORS].find(
+      color => color.color === colorHex,
+    )?.name ?? '사용자 지정'
   );
 }
 
 function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
+  if (region === 'foundation') {
+    return 'foundation';
+  }
+
   if (region === 'cheek') {
     return 'blush';
   }
@@ -1241,6 +1434,10 @@ function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
 }
 
 function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): CompanionHudRegion {
+  if (region === 'foundation') {
+    return 'foundation';
+  }
+
   if (region === 'blush') {
     return 'cheek';
   }
@@ -1248,25 +1445,21 @@ function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): Compani
   return 'eyebrow';
 }
 
-function getCompanionActiveRegion(
+function getEnabledCompanionRegions(
   enabledRegions: EnabledHudRegions,
-): 'all' | 'blush' | 'brow' | 'none' {
-  if (enabledRegions.cheek && enabledRegions.eyebrow) {
-    return 'all';
-  }
-
-  if (enabledRegions.cheek) {
-    return 'blush';
-  }
-
-  if (enabledRegions.eyebrow) {
-    return 'brow';
-  }
-
-  return 'none';
+): readonly CompanionRegionKey[] {
+  return [
+    enabledRegions.foundation ? 'foundation' : null,
+    enabledRegions.cheek ? 'blush' : null,
+    enabledRegions.eyebrow ? 'brow' : null,
+  ].filter((region): region is CompanionRegionKey => Boolean(region));
 }
 
 function getCompanionOptions(region: CompanionHudRegion) {
+  if (region === 'foundation') {
+    return FOUNDATION_FINISH_OPTIONS;
+  }
+
   if (region === 'cheek') {
     return AR_BLUSH_CHEEK_REGION_OPTIONS;
   }
@@ -1275,11 +1468,23 @@ function getCompanionOptions(region: CompanionHudRegion) {
 }
 
 function getCompanionStyleLabel(region: CompanionHudRegion, maskTextureId: string): string {
-  const option = getCompanionOptions(region).find(candidate => candidate.maskTextureId === maskTextureId);
+  if (region === 'foundation') {
+    return '베이스';
+  }
+
+  const options =
+    region === 'cheek'
+      ? AR_BLUSH_CHEEK_REGION_OPTIONS
+      : AR_BLUSH_EYEBROW_REGION_OPTIONS;
+  const option = options.find(candidate => candidate.maskTextureId === maskTextureId);
   return option?.label ?? '사용자 지정';
 }
 
 function getHudOptionSectionLabel(region: ArBlushHudRegion): string {
+  if (region === 'foundation') {
+    return '베이스 마무리';
+  }
+
   if (region === 'lip') {
     return '립 마무리';
   }
@@ -1315,6 +1520,7 @@ function clampCompanionMakeupControls(
     blush: clampCompanionMakeupRegionControl(controls.blush),
     brow: clampCompanionMakeupRegionControl(controls.brow),
     eyeliner: clampCompanionMakeupRegionControl(controls.eyeliner),
+    foundation: clampCompanionMakeupRegionControl(controls.foundation),
   };
 }
 
@@ -1323,7 +1529,13 @@ function clampCompanionMakeupRegionControl(
 ) {
   return {
     ...control,
+    coverage: control.coverage === undefined ? undefined : Math.max(0, Math.min(1, control.coverage)),
+    evenness: control.evenness === undefined ? undefined : Math.max(0, Math.min(1, control.evenness)),
     intensity: Math.max(0, Math.min(1, control.intensity)),
+    luminanceInfluence:
+      control.luminanceInfluence === undefined
+        ? undefined
+        : Math.max(0, Math.min(1, control.luminanceInfluence)),
     opacity: Math.max(0, Math.min(1, control.opacity)),
   };
 }
@@ -1401,6 +1613,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.md,
+  },
+  foundationDebugGroup: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  foundationDebugLabel: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  foundationDebugModeButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(255, 255, 255, 0.32)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    minWidth: 66,
+    paddingHorizontal: spacing.sm,
+  },
+  foundationDebugModeButtonActive: {
+    backgroundColor: '#FFE978',
+    borderColor: '#FFE978',
+  },
+  foundationDebugModeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  foundationDebugModeText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  foundationDebugModeTextActive: {
+    color: colors.black,
   },
   arBlushHideButton: {
     alignItems: 'center',

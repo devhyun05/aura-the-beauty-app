@@ -55,20 +55,29 @@ export type PersonalizedMakeupGenerateResult = {
 export type PersonalizedCompanionMakeupRegionControl = {
   candidateId: string;
   colorHex: string;
+  coverage?: number | undefined;
+  debugMaskMode?: number | undefined;
+  finish?: 'natural' | 'matte' | 'glow' | undefined;
+  fallbackMode?: 'uvMask' | 'off' | undefined;
   intensity: number;
+  luminanceInfluence?: number | undefined;
   maskTextureId: string;
+  mode?: 'uvMask' | 'screenSpace' | undefined;
   opacity: number;
+  evenness?: number | undefined;
 };
 
 export type PersonalizedCompanionMakeupControls = {
   blush: PersonalizedCompanionMakeupRegionControl;
   brow: PersonalizedCompanionMakeupRegionControl;
   eyeliner: PersonalizedCompanionMakeupRegionControl;
+  foundation: PersonalizedCompanionMakeupRegionControl;
 };
 
 export type PersonalizedCompanionMakeupActiveRegion =
   | 'blush'
   | 'brow'
+  | 'foundation'
   | 'all'
   | 'none';
 
@@ -105,6 +114,20 @@ export const DEFAULT_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
 };
 
 export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompanionMakeupControls = {
+  foundation: {
+    candidateId: 'foundation-skin-tone-relative-v1',
+    colorHex: '#D7B19A',
+    coverage: 1,
+    evenness: 0.42,
+    fallbackMode: 'off',
+    finish: 'natural',
+    debugMaskMode: 0,
+    intensity: 1,
+    luminanceInfluence: 0.52,
+    maskTextureId: 'foundation-skin-mask-v1',
+    mode: 'screenSpace',
+    opacity: 1,
+  },
   blush: {
     candidateId: 'blush-session-1-v1',
     colorHex: '#E67B5F',
@@ -225,15 +248,50 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
     DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
   options: {
     activeRegion?: PersonalizedCompanionMakeupActiveRegion;
+    activeRegions?: readonly PersonalizedCompanionMakeupActiveRegion[];
     useCheekRegionAlias?: boolean;
   } = {},
 ): FullFaceMakeupRecipe {
   const activeRegion = options.activeRegion ?? 'all';
+  const hasExplicitActiveRegions = options.activeRegions !== undefined;
+  const activeRegionSet = new Set(options.activeRegions ?? []);
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
-  const isRegionEnabled = (region: 'blush' | 'brow') =>
-    activeRegion === 'all' || activeRegion === region;
+  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation') =>
+    hasExplicitActiveRegions
+      ? activeRegionSet.has(region)
+      : activeRegion === 'all' || activeRegion === region;
   const controls: FullFaceRegionControls = {
     ...DEFAULT_FULL_FACE_REGION_CONTROLS,
+    foundation: {
+      ...DEFAULT_FULL_FACE_REGION_CONTROLS.foundation,
+      candidateId: companionControls.foundation.candidateId,
+      colorHex: companionControls.foundation.colorHex,
+      enabled: isRegionEnabled('foundation'),
+      finish: companionControls.foundation.finish ?? DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.finish,
+      foundationDebugMaskMode: companionControls.foundation.debugMaskMode ?? 0,
+      foundationFallbackMode: companionControls.foundation.fallbackMode ?? 'uvMask',
+      foundationMode: companionControls.foundation.mode ?? 'screenSpace',
+      glossBoost: companionControls.foundation.evenness ?? DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.glossBoost,
+      intensity: companionControls.foundation.intensity,
+      maskTextureId: companionControls.foundation.maskTextureId,
+      opacity: companionControls.foundation.opacity,
+      roughness:
+        companionControls.foundation.luminanceInfluence ??
+        DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.roughness,
+      specular:
+        companionControls.foundation.finish === 'glow'
+          ? 0.08
+          : DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.specular,
+      textureAmount:
+        companionControls.foundation.evenness ??
+        DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.textureAmount,
+      params: {
+        ...DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.params,
+        coverage:
+          companionControls.foundation.coverage ??
+          DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.params.coverage,
+      },
+    },
     brow: {
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.brow,
       candidateId: companionControls.brow.candidateId,
@@ -274,7 +332,10 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   });
   const layers = recipe.layers
     .filter(
-      layer => layer.region === 'blush' || layer.region === 'brow',
+      layer =>
+        layer.region === 'foundation' ||
+        layer.region === 'blush' ||
+        layer.region === 'brow',
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

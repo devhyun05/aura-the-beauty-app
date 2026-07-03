@@ -1,10 +1,10 @@
 import type {FullFaceMakeupSourceInput} from './fullFaceMakeupCapture';
 
-export const MAKEUP_RECIPE_REGIONS = ['lip', 'blush', 'brow', 'eyeliner'] as const;
+export const MAKEUP_RECIPE_REGIONS = ['foundation', 'lip', 'blush', 'brow', 'eyeliner'] as const;
 
 export type MakeupRecipeRegion = (typeof MAKEUP_RECIPE_REGIONS)[number];
 
-export type MakeupRecipeRegionAlias = MakeupRecipeRegion | 'cheek' | 'eye';
+export type MakeupRecipeRegionAlias = MakeupRecipeRegion | 'base' | 'cheek' | 'eye';
 
 export type MakeupAreaLike =
   | 'all'
@@ -50,6 +50,10 @@ export type FullFaceRegionCandidateOption = {
   maskTextureId: string;
 };
 
+export type FoundationRenderMode = 'uvMask' | 'screenSpace';
+
+export type FoundationFallbackMode = 'uvMask' | 'off';
+
 export type FullFaceMakeupRecipeLayer = {
   id: string;
   recipeId?: string;
@@ -63,8 +67,12 @@ export type FullFaceMakeupRecipeLayer = {
   layer: MakeupRecipeRegion;
   enabled: boolean;
   color: string;
+  secondaryColor?: string;
   opacity: number;
   texture:
+    | 'foundation_natural'
+    | 'foundation_matte'
+    | 'foundation_glow'
     | 'matte_lip'
     | 'soft_blush'
     | 'blush_session_1'
@@ -75,6 +83,9 @@ export type FullFaceMakeupRecipeLayer = {
     | 'natural_brow'
     | 'shimmer_eye';
   sample:
+    | 'foundation_natural'
+    | 'foundation_matte'
+    | 'foundation_glow'
     | 'matte_lip'
     | 'soft_blush'
     | 'blush_session_1'
@@ -125,6 +136,11 @@ export type FullFaceMakeupRecipeLayer = {
   verticalOffset: number;
   cameraBackdropAvailable: boolean;
   lightEstimateAvailable: boolean;
+  mode?: FoundationRenderMode | undefined;
+  fallbackMode?: FoundationFallbackMode | undefined;
+  debugMaskMode?: number | undefined;
+  foundationMode?: FoundationRenderMode | undefined;
+  foundationFallbackMode?: FoundationFallbackMode | undefined;
 };
 
 export type FullFaceMakeupRecipe = {
@@ -135,7 +151,7 @@ export type FullFaceMakeupRecipe = {
   rendererMode: 'smooth-region-mask';
   activeRegions: string;
   region: MakeupRecipeRegion;
-  layerCount: 4;
+  layerCount: number;
   enabledLayerCount: number;
   sentAtMs: number;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
@@ -157,6 +173,9 @@ export type FullFaceRegionControl = {
   candidateId: string;
   maskTextureId: string;
   params: Record<string, number>;
+  foundationMode?: FoundationRenderMode | undefined;
+  foundationFallbackMode?: FoundationFallbackMode | undefined;
+  foundationDebugMaskMode?: number | undefined;
 };
 
 export type FullFaceRegionControls = Record<MakeupRecipeRegion, FullFaceRegionControl>;
@@ -178,15 +197,18 @@ export type LipRegionPayload = {
 };
 
 export const MAKEUP_REGION_ALIASES: Record<MakeupRecipeRegionAlias, MakeupRecipeRegion> = {
+  base: 'foundation',
   blush: 'blush',
   brow: 'brow',
   cheek: 'blush',
   eye: 'eyeliner',
   eyeliner: 'eyeliner',
+  foundation: 'foundation',
   lip: 'lip',
 };
 
 export const PRODUCT_REGION_LABELS: Record<MakeupRecipeRegion, string> = {
+  foundation: '파운데이션',
   lip: '립',
   blush: '블러셔',
   brow: '브로우',
@@ -197,6 +219,14 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   MakeupRecipeRegion,
   FullFaceRegionRuntimeAsset
 > = {
+  foundation: {
+    region: 'foundation',
+    candidateId: 'foundation-skin-tone-relative-v1',
+    maskTextureId: 'foundation-skin-mask-v1',
+    width: 512,
+    height: 512,
+    runtimeReady: false,
+  },
   lip: {
     region: 'lip',
     candidateId: 'lip-balanced-gold-v0',
@@ -235,6 +265,12 @@ export const REGION_COLOR_OPTIONS: Record<
   MakeupRecipeRegion,
   readonly FullFaceRegionColorOption[]
 > = {
+  foundation: [
+    {id: 'neutral-21', label: '뉴트럴 21', hex: '#D7B19A'},
+    {id: 'ivory-19', label: '아이보리 19', hex: '#E6C4AD'},
+    {id: 'beige-23', label: '베이지 23', hex: '#CFA58A'},
+    {id: 'sand-25', label: '샌드 25', hex: '#B98E74'},
+  ],
   lip: [
     {id: 'rose', label: '로즈', hex: '#C76B74'},
     {id: 'berry', label: '베리', hex: '#A64262'},
@@ -265,6 +301,41 @@ export const REGION_FINISH_OPTIONS: Record<
   MakeupRecipeRegion,
   readonly FullFaceRegionFinishOption[]
 > = {
+  foundation: [
+    {
+      id: 'natural',
+      label: '내추럴',
+      finish: 'natural',
+      textureAmount: 0.3,
+      roughness: 0.35,
+      specular: 0,
+      specularPower: 8,
+      glossBoost: 0.3,
+      shimmer: 0,
+    },
+    {
+      id: 'matte',
+      label: '세미매트',
+      finish: 'matte',
+      textureAmount: 0.38,
+      roughness: 0.28,
+      specular: 0,
+      specularPower: 8,
+      glossBoost: 0.38,
+      shimmer: 0,
+    },
+    {
+      id: 'glow',
+      label: '윤광',
+      finish: 'glow',
+      textureAmount: 0.24,
+      roughness: 0.4,
+      specular: 0.08,
+      specularPower: 16,
+      glossBoost: 0.24,
+      shimmer: 0,
+    },
+  ],
   lip: [
     {
       id: 'natural',
@@ -411,6 +482,14 @@ export const REGION_CANDIDATE_OPTIONS: Record<
   MakeupRecipeRegion,
   readonly FullFaceRegionCandidateOption[]
 > = {
+  foundation: [
+    {
+      id: 'skin',
+      label: '피부 영역',
+      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.foundation.candidateId,
+      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,
+    },
+  ],
   lip: [
     {
       id: 'balanced',
@@ -509,6 +588,35 @@ export const REGION_ADJUSTMENT_FIELD_SCHEMAS: Record<
   MakeupRecipeRegion,
   RegionAdjustmentFieldSchema[]
 > = {
+  foundation: [
+    {
+      name: 'coverage',
+      label: '커버력',
+      min: 0.15,
+      max: 0.85,
+      step: 0.05,
+      defaultValue: 0.6,
+      help: '현재 피부톤을 파운데이션 쉐이드 방향으로 정돈하는 정도입니다.',
+    },
+    {
+      name: 'feather',
+      label: '경계',
+      min: 0.18,
+      max: 0.7,
+      step: 0.04,
+      defaultValue: 0.42,
+      help: '턱선과 헤어라인 주변의 부드러운 정도입니다.',
+    },
+    {
+      name: 'maskThreshold',
+      label: '피부영역',
+      min: 0.02,
+      max: 0.2,
+      step: 0.01,
+      defaultValue: 0.04,
+      help: '피부 마스크가 잡히는 기준입니다.',
+    },
+  ],
   lip: [
     {
       name: 'cornerReach',
@@ -682,6 +790,16 @@ export const REGION_ADJUSTMENT_FIELD_SCHEMAS: Record<
 };
 
 export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
+  foundation: {
+    enabled: false,
+    colorHex: REGION_COLOR_OPTIONS.foundation[0].hex,
+    opacity: 0.65,
+    intensity: 0.5,
+    ...REGION_FINISH_OPTIONS.foundation[0],
+    candidateId: REGION_CANDIDATE_OPTIONS.foundation[0].candidateId,
+    maskTextureId: REGION_CANDIDATE_OPTIONS.foundation[0].maskTextureId,
+    params: createDefaultRegionParams('foundation'),
+  },
   lip: {
     enabled: true,
     colorHex: REGION_COLOR_OPTIONS.lip[0].hex,
@@ -745,6 +863,10 @@ export function getMakeupRecipeRegionsForArea(
     return ['eyeliner'];
   }
 
+  if (area === 'base') {
+    return ['foundation'];
+  }
+
   if (area === 'lip' || area === 'brow') {
     return [area];
   }
@@ -803,7 +925,7 @@ export function buildFullFaceMakeupRecipe({
     rendererMode: 'smooth-region-mask',
     activeRegions: activeRegionSummary,
     region: 'lip',
-    layerCount: 4,
+    layerCount: MAKEUP_RECIPE_REGIONS.length,
     enabledLayerCount,
     sentAtMs,
     sourceFrameMetadata,
@@ -833,7 +955,7 @@ function buildFullFaceMakeupRecipeLayer({
   const texture = getTextureForRegionControl(region, control);
   const blendMode = 'multiply';
   const materialId = `e7-full-face-${region}-material-v0`;
-  const skinAdaptive = region === 'lip';
+  const skinAdaptive = region === 'lip' || region === 'foundation';
 
   return {
     id: `${region}-${control.candidateId}`,
@@ -842,12 +964,13 @@ function buildFullFaceMakeupRecipeLayer({
     lookId: 'e7_full_face_region_generate_v0',
     sentAtMs,
     activeRegions,
-    layerCount: 4,
+    layerCount: MAKEUP_RECIPE_REGIONS.length,
     enabledLayerCount,
     region,
     layer: region,
     enabled: control.enabled,
     color: control.colorHex,
+    secondaryColor: region === 'foundation' ? '#C89A82' : undefined,
     opacity: control.enabled ? control.opacity : 0,
     texture,
     sample: texture,
@@ -892,12 +1015,25 @@ function buildFullFaceMakeupRecipeLayer({
     verticalOffset: getRegionParam(params, 'verticalOffset', 0),
     cameraBackdropAvailable: false,
     lightEstimateAvailable: false,
+    mode: region === 'foundation' ? control.foundationMode : undefined,
+    fallbackMode: region === 'foundation' ? control.foundationFallbackMode : undefined,
+    debugMaskMode:
+      region === 'foundation'
+        ? control.foundationDebugMaskMode ?? getRegionParam(params, 'debugMaskMode', 0)
+        : undefined,
+    foundationMode: region === 'foundation' ? control.foundationMode : undefined,
+    foundationFallbackMode:
+      region === 'foundation' ? control.foundationFallbackMode : undefined,
   };
 }
 
 function getDefaultTextureForRegion(
   region: MakeupRecipeRegion,
 ): FullFaceMakeupRecipeLayer['texture'] {
+  if (region === 'foundation') {
+    return 'foundation_natural';
+  }
+
   if (region === 'lip') {
     return 'matte_lip';
   }
@@ -918,6 +1054,15 @@ function getTextureForRegionControl(
   control: FullFaceRegionControl,
 ): FullFaceMakeupRecipeLayer['texture'] {
   if (region !== 'blush') {
+    if (region === 'foundation') {
+      if (control.finish === 'matte') {
+        return 'foundation_matte';
+      }
+      if (control.finish === 'glow') {
+        return 'foundation_glow';
+      }
+    }
+
     return getDefaultTextureForRegion(region);
   }
 
@@ -938,6 +1083,10 @@ function getTextureForRegionControl(
 }
 
 function getDefaultMaskThreshold(region: MakeupRecipeRegion): number {
+  if (region === 'foundation') {
+    return 0.04;
+  }
+
   if (region === 'lip') {
     return 0.35;
   }
