@@ -135,6 +135,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
   - The runtime log gate also fails unless generated brow reports `maskUvSplitMode=face_local_x_sign` with positive negative-X and positive-X triangle counts and valid split UV bounds.
   - The runtime log gate also fails unless generated brow reports positive `softEdgeTexels`, proving the payload carried a feathered/partial-alpha brow mask.
+  - The runtime log gate also fails unless generated brow reports `stabilityMode=generated_brow_arface_uv_deadband_fast_follow` with non-zero deadzone and snap distances, proving the generated brow vertex stabilizer is active.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 
@@ -301,6 +302,7 @@ Verify:
 - Runtime logs should show `maskUvSplitMode=face_local_x_sign` with both negative-X and positive-X UV bounds populated.
 - Runtime logs should show `expectedMaskUvMinX/Y/MaxX/MaxY`, and those expected generated-mask bounds should overlap Unity's applied `maskUvMinX/Y/MaxX/MaxY`.
 - Runtime log checker output should include `uvAlign.maxCenter`, `uvAlign.avgCenter`, and `uvAlign.maxFrameDelta`; high values mean the mask is drifting from the expected brow UV area across frames.
+- Runtime logs should show `stabilityMode=generated_brow_arface_uv_deadband_fast_follow`, `stabilizationDeadZoneMeters`, and `stabilizationSnapDistanceMeters`.
 
 If offline preview is correct but live Unity is wrong, prioritize UV projection, texture sampling, mirroring, or shader channel usage over shape tweaks.
 

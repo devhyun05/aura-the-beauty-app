@@ -5,6 +5,7 @@ const EXPECTED_ANCHOR_MODE = 'surround_anchor_eye_eyelid_temple_nose_face_oval_v
 const EXPECTED_EYE_EXCLUSION_MODE = 'upper_eyelid_expanded_eye_bounds_v2';
 const EXPECTED_MASK_SAMPLE_CHANNEL = 'generated_brow_green_alpha';
 const EXPECTED_MASK_UV_SPLIT_MODE = 'face_local_x_sign';
+const EXPECTED_STABILITY_MODE = 'generated_brow_arface_uv_deadband_fast_follow';
 const RECENT_READY_EVENT_LIMIT = 30;
 const MAX_EXPECTED_UV_CENTER_DISTANCE = 0.12;
 const MAX_EXPECTED_UV_AVERAGE_CENTER_DISTANCE = 0.08;
@@ -106,6 +107,15 @@ function evaluateGeneratedBrowEvents(events) {
     requireUvBoundsForPrefix(latestReady, 'expectedMaskUv', failures);
     requireUvBoundsOverlap(latestReady, 'maskUv', 'expectedMaskUv', 0.12, failures);
     requireEqual(latestReady, 'maskUvSplitMode', EXPECTED_MASK_UV_SPLIT_MODE, failures);
+    requireEqual(latestReady, 'stabilityMode', EXPECTED_STABILITY_MODE, failures);
+    requireNumberInRange(latestReady, 'stabilizationDeadZoneMeters', 0.0001, 0.002, failures);
+    requireNumberInRange(latestReady, 'stabilizationSnapDistanceMeters', 0.003, 0.02, failures);
+    requireGreaterThanField(
+      latestReady,
+      'stabilizationSnapDistanceMeters',
+      'stabilizationDeadZoneMeters',
+      failures,
+    );
     requireNumberAtLeast(latestReady, 'maskNegativeXTriangleCount', 1, failures);
     requireNumberAtLeast(latestReady, 'maskPositiveXTriangleCount', 1, failures);
     requireEqual(latestReady, 'maskNegativeXUvBoundsAvailable', true, failures);
@@ -161,6 +171,31 @@ function requireEqual(event, field, expected, failures) {
   const value = event[field];
   if (value !== expected) {
     failures.push(`${field} expected ${formatValue(expected)}, received ${formatValue(value)}.`);
+  }
+}
+
+function requireNumberInRange(event, field, minimum, maximum, failures) {
+  const value = numberField(event, field);
+  if (value === undefined || value < minimum || value > maximum) {
+    failures.push(
+      `${field} expected within ${minimum}..${maximum}, received ${formatValue(value)}.`,
+    );
+  }
+}
+
+function requireGreaterThanField(event, greaterField, lesserField, failures) {
+  const greaterValue = numberField(event, greaterField);
+  const lesserValue = numberField(event, lesserField);
+  if (
+    greaterValue === undefined ||
+    lesserValue === undefined ||
+    greaterValue <= lesserValue
+  ) {
+    failures.push(
+      `${greaterField} expected > ${lesserField}, received ${formatValue(
+        greaterValue,
+      )} <= ${formatValue(lesserValue)}.`,
+    );
   }
 }
 
@@ -474,6 +509,9 @@ function printResult(result) {
         `maskNegativeXTriangles=${result.latestReady.maskNegativeXTriangleCount}`,
         `maskPositiveXTriangles=${result.latestReady.maskPositiveXTriangleCount}`,
         `expectedUv=${formatBoundsForPrefix(result.latestReady, 'expectedMaskUv')}`,
+        `stability=${result.latestReady.stabilityMode}`,
+        `deadZone=${result.latestReady.stabilizationDeadZoneMeters}`,
+        `snap=${result.latestReady.stabilizationSnapDistanceMeters}`,
         `browCorePoints=${result.latestReady.browCorePointCount}`,
         `browShapeBasePoints=${result.latestReady.browShapeBasePointCount}`,
         `softEdgeTexels=${result.latestReady.softEdgeTexels}`,
@@ -541,6 +579,9 @@ function runSelfTest() {
     neutralizeStrength: 0,
     runtimeReady: true,
     softEdgeTexels: 824,
+    stabilityMode: EXPECTED_STABILITY_MODE,
+    stabilizationDeadZoneMeters: 0.00055,
+    stabilizationSnapDistanceMeters: 0.0065,
     status: 'ready',
     surroundAnchorPointCount: 84,
     trackingState: 'Tracking',

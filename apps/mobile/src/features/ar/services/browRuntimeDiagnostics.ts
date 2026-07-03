@@ -19,6 +19,9 @@ export type GeneratedBrowRuntimeDiagnosticEvent = {
   maskUvSplitMode?: string;
   runtimeReady?: boolean;
   softEdgeTexels?: number;
+  stabilizationDeadZoneMeters?: number;
+  stabilizationSnapDistanceMeters?: number;
+  stabilityMode?: string;
   status?: string;
   surroundAnchorPointCount?: number;
   trackingState?: string;
@@ -64,6 +67,9 @@ export function summarizeGeneratedBrowRuntimeDiagnostics(
       `uv ${formatUvBounds(event)}`,
       `exp ${formatExpectedUvBounds(event)}`,
       `split ${event.maskUvSplitMode ?? '-'}`,
+      `stab ${event.stabilityMode ?? '-'}`,
+      `dead ${formatMeterValue(event.stabilizationDeadZoneMeters)}`,
+      `snap ${formatMeterValue(event.stabilizationSnapDistanceMeters)}`,
       `core ${browCorePointCount}`,
       `base ${browShapeBasePointCount}`,
       `anchor ${surroundAnchorPointCount}`,
@@ -104,6 +110,12 @@ function formatUvBounds(event: GeneratedBrowRuntimeDiagnosticEvent) {
 function formatUvValue(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? value.toFixed(2)
+    : '-';
+}
+
+function formatMeterValue(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toFixed(5)
     : '-';
 }
 

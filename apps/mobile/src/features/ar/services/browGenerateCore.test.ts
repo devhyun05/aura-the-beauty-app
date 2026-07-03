@@ -626,6 +626,9 @@ const runtimeDiagnostic = summarizeGeneratedBrowRuntimeDiagnostics({
   expectedMaskUvMinY: payload.expectedMaskUvMinY,
   runtimeReady: true,
   softEdgeTexels: payload.softEdgeTexels,
+  stabilizationDeadZoneMeters: 0.00055,
+  stabilizationSnapDistanceMeters: 0.0065,
+  stabilityMode: 'generated_brow_arface_uv_deadband_fast_follow',
   status: 'ready',
   surroundAnchorPointCount: payload.surroundAnchorPointCount,
   trackingState: 'Tracking',
@@ -637,6 +640,9 @@ expectTruthy(
     runtimeDiagnostic.detailText.includes('base 20') &&
     runtimeDiagnostic.detailText.includes('uv 0.31,0.35,0.62,0.48') &&
     runtimeDiagnostic.detailText.includes('exp ') &&
+    runtimeDiagnostic.detailText.includes('stab generated_brow_arface_uv_deadband_fast_follow') &&
+    runtimeDiagnostic.detailText.includes('dead 0.00055') &&
+    runtimeDiagnostic.detailText.includes('snap 0.00650') &&
     runtimeDiagnostic.detailText.includes('sample generated_brow_green_alpha'),
   'generated brow runtime diagnostic exposes attachment evidence',
 );
