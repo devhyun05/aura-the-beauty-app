@@ -118,6 +118,10 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - Debug modes can be selected through `GeneratedBrowControls` and are serialized into `e7-generated-brow-mask-runtime-payload-v0`.
   - In React Native dev builds, the eyebrow option row exposes debug controls:
     `일반`, `마스크 확인`, and `좌우 확인`.
+  - In React Native dev builds, the eyebrow HUD also shows the latest generated
+    brow runtime event summary: status/tracking, mask triangle count, UV bounds,
+    UV split mode, brow core/shape-base point counts, surrounding anchor count,
+    soft-edge texels, and Unity mask sample channel.
   - Runtime logs and region snapshots include brow debug state.
   - Unity persists generated brow runtime events to:
     - `<Application.persistentDataPath>/e7-runtime-events/generated_brow_mask_applied.latest.json`
@@ -140,7 +144,9 @@ The most important failure is **mask alignment and attachment on the eyebrow are
 - It is not proven that MediaPipe image-space brow mask coordinates match Unity ARFace UV sampling.
 - It is not proven that left/right brow mapping is correct in live AR.
 - It is not proven that U/V orientation is correct in live AR.
-- There is no complete runtime debug overlay that shows brow landmarks, brow bounds, brow UV bounds, and brow mask preview on-device.
+- The React Native dev HUD can show runtime event counts and UV bounds, but it
+  still does not draw the actual MediaPipe landmark lines over the live Unity
+  camera feed.
 - The runtime JSONL gate can prove that Unity accepted and applied the generated brow mask with valid UV/mesh/anchor state, but it cannot by itself prove visual attachment quality or no jitter/delay during head movement.
 - Offline preview images are useful, but they do not prove final AR attachment.
 

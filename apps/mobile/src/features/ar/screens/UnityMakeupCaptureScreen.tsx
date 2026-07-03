@@ -51,6 +51,10 @@ import {
   type PersonalizedMakeupGenerateResult,
   isPersonalizedMakeupGenerateAvailable,
 } from '../services/personalizedMakeupGenerateService';
+import {
+  summarizeGeneratedBrowRuntimeDiagnostics,
+  type GeneratedBrowRuntimeDiagnosticEvent,
+} from '../services/browRuntimeDiagnostics';
 
 type UnityMakeupCaptureScreenProps = {
   onBack?: () => void;
@@ -275,6 +279,8 @@ export function UnityMakeupCaptureScreen({
     useState<GeneratedMaskControls>(DEFAULT_GENERATED_MASK_CONTROLS);
   const [generatedBrowControls, setGeneratedBrowControls] =
     useState<GeneratedBrowControls>(DEFAULT_GENERATED_BROW_CONTROLS);
+  const [lastGeneratedBrowRuntimeEvent, setLastGeneratedBrowRuntimeEvent] =
+    useState<GeneratedBrowRuntimeDiagnosticEvent | null>(null);
   const [companionMakeupControls, setCompanionMakeupControls] =
     useState<PersonalizedCompanionMakeupControls>(
       DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
@@ -472,6 +478,7 @@ export function UnityMakeupCaptureScreen({
       setGeneratedBrowPackage(result.generatedBrowPackage);
       setGeneratedMaskControls(nextGeneratedMaskControls);
       setGeneratedBrowControls(nextGeneratedBrowControls);
+      setLastGeneratedBrowRuntimeEvent(null);
       setCompanionMakeupControls(nextCompanionMakeupControls);
       latestCompanionMakeupControlsRef.current = nextCompanionMakeupControls;
       setActiveHudRegion(nextActiveHudRegion);
@@ -569,6 +576,7 @@ export function UnityMakeupCaptureScreen({
     }
 
     logGeneratedBrowAppliedEvent(event);
+    setLastGeneratedBrowRuntimeEvent(event);
 
     const isApplied =
       (event.status === 'partial' || event.status === 'ready') &&
@@ -635,6 +643,7 @@ export function UnityMakeupCaptureScreen({
     setGeneratedBrowPackage(null);
     setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
     setGeneratedBrowControls(DEFAULT_GENERATED_BROW_CONTROLS);
+    setLastGeneratedBrowRuntimeEvent(null);
     setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
     setActiveHudRegion('lip');
     setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
@@ -947,6 +956,7 @@ export function UnityMakeupCaptureScreen({
           companionControls={companionMakeupControls}
           controls={generatedMaskControls}
           enabledRegions={enabledHudRegions}
+          lastBrowRuntimeEvent={lastGeneratedBrowRuntimeEvent}
           onChangeActiveRegion={handleChangeActiveHudRegion}
           onChangeBrowControls={handleGeneratedBrowControlChange}
           onChangeCompanionControls={handleCompanionMakeupControlChange}
@@ -1102,6 +1112,7 @@ function ArBlushRuntimeHud({
   companionControls,
   controls,
   enabledRegions,
+  lastBrowRuntimeEvent,
   onChangeActiveRegion,
   onChangeBrowControls,
   onChangeCompanionControls,
@@ -1114,6 +1125,7 @@ function ArBlushRuntimeHud({
   companionControls: PersonalizedCompanionMakeupControls;
   controls: GeneratedMaskControls;
   enabledRegions: EnabledHudRegions;
+  lastBrowRuntimeEvent: GeneratedBrowRuntimeDiagnosticEvent | null;
   onChangeActiveRegion: (region: ArBlushHudRegion) => void;
   onChangeBrowControls: (patch: Partial<GeneratedBrowControls>) => void;
   onChangeCompanionControls: (
@@ -1345,10 +1357,33 @@ function ArBlushRuntimeHud({
               onChange={value => onChangeBrowControls({strandTextureAmount: value})}
               value={browControls.strandTextureAmount}
             />
+            {__DEV__ ? (
+              <GeneratedBrowRuntimeDiagnosticCard event={lastBrowRuntimeEvent} />
+            ) : null}
           </>
         ) : null}
 
       </YStack>
+    </YStack>
+  );
+}
+
+function GeneratedBrowRuntimeDiagnosticCard({
+  event,
+}: {
+  event: GeneratedBrowRuntimeDiagnosticEvent | null;
+}) {
+  const summary = summarizeGeneratedBrowRuntimeDiagnostics(event);
+
+  return (
+    <YStack
+      style={[
+        styles.generatedBrowRuntimeCard,
+        summary.status === 'ready' && styles.generatedBrowRuntimeCardReady,
+        summary.status === 'blocked' && styles.generatedBrowRuntimeCardBlocked,
+      ]}>
+      <Text style={styles.generatedBrowRuntimeTitle}>{summary.titleText}</Text>
+      <Text style={styles.generatedBrowRuntimeDetail}>{summary.detailText}</Text>
     </YStack>
   );
 }
@@ -2112,6 +2147,33 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.sm,
+  },
+  generatedBrowRuntimeCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  generatedBrowRuntimeCardBlocked: {
+    borderColor: 'rgba(255, 91, 84, 0.52)',
+  },
+  generatedBrowRuntimeCardReady: {
+    borderColor: 'rgba(38, 214, 121, 0.52)',
+  },
+  generatedBrowRuntimeDetail: {
+    color: 'rgba(255, 255, 255, 0.68)',
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  generatedBrowRuntimeTitle: {
+    color: '#BEEFFF',
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   arBlushRegionButton: {
     alignItems: 'center',

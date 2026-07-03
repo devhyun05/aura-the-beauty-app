@@ -3,6 +3,7 @@ import {
   buildGeneratedBrowMaskUnityPayload,
   buildGeneratedBrowPackage,
 } from './browGenerateCore';
+import {summarizeGeneratedBrowRuntimeDiagnostics} from './browRuntimeDiagnostics';
 import type {
   E7ArFaceExport,
   E7NativeBoundaryResult,
@@ -555,6 +556,35 @@ expectEqual(payload.strandTextureAmount, 1, 'generated brow max strand texture b
 expectEqual(payload.debugMode, 0, 'generated brow default debug mode');
 expectEqual(payload.debugShowLeftRight, false, 'generated brow default left/right debug');
 expectEqual(payload.debugExaggerate, false, 'generated brow default exaggeration debug');
+
+const runtimeDiagnostic = summarizeGeneratedBrowRuntimeDiagnostics({
+  applied: true,
+  browAnchorPointCount: payload.browAnchorPointCount,
+  browCorePointCount: payload.browCorePointCount,
+  browShapeBasePointCount: payload.browShapeBasePointCount,
+  maskTextureSampleChannel: 'generated_brow_green_alpha',
+  maskTriangles: 118,
+  maskUvBoundsAvailable: true,
+  maskUvMaxX: 0.62,
+  maskUvMaxY: 0.48,
+  maskUvMinX: 0.31,
+  maskUvMinY: 0.35,
+  maskUvSplitMode: 'face_local_x_sign',
+  runtimeReady: true,
+  softEdgeTexels: payload.softEdgeTexels,
+  status: 'ready',
+  surroundAnchorPointCount: payload.surroundAnchorPointCount,
+  trackingState: 'Tracking',
+  uvAvailable: true,
+});
+expectEqual(runtimeDiagnostic.status, 'ready', 'generated brow runtime diagnostic ready state');
+expectTruthy(
+  runtimeDiagnostic.detailText.includes('core 20') &&
+    runtimeDiagnostic.detailText.includes('base 20') &&
+    runtimeDiagnostic.detailText.includes('uv 0.31,0.35,0.62,0.48') &&
+    runtimeDiagnostic.detailText.includes('sample generated_brow_green_alpha'),
+  'generated brow runtime diagnostic exposes attachment evidence',
+);
 
 const disabledControls = {
   ...controls,
