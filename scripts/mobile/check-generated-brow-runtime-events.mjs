@@ -5,6 +5,10 @@ const EXPECTED_ANCHOR_MODE = 'surround_anchor_eye_eyelid_temple_nose_face_oval_v
 const EXPECTED_EYE_EXCLUSION_MODE = 'upper_eyelid_expanded_eye_bounds_v2';
 const EXPECTED_MASK_SAMPLE_CHANNEL = 'generated_brow_green_alpha';
 const EXPECTED_MASK_UV_SPLIT_MODE = 'face_local_x_sign';
+const RECENT_READY_EVENT_LIMIT = 30;
+const MAX_EXPECTED_UV_CENTER_DISTANCE = 0.12;
+const MAX_EXPECTED_UV_AVERAGE_CENTER_DISTANCE = 0.08;
+const MAX_FRAME_TO_FRAME_ALIGNMENT_DELTA = 0.08;
 
 const args = process.argv.slice(2);
 
@@ -69,6 +73,12 @@ function evaluateGeneratedBrowEvents(events) {
   );
   const failures = [];
   const warnings = [];
+  const recentReadyEvents = readyEvents.slice(-RECENT_READY_EVENT_LIMIT);
+  const uvAlignmentStats = evaluateRecentReadyUvAlignment(
+    recentReadyEvents,
+    failures,
+    warnings,
+  );
 
   if (browEvents.length === 0) {
     failures.push('No generated_brow_mask_applied events found.');
@@ -125,6 +135,7 @@ function evaluateGeneratedBrowEvents(events) {
     latestReady,
     pass: failures.length === 0,
     readyEventCount: readyEvents.length,
+    uvAlignmentStats,
     warnings,
   };
 }
@@ -247,6 +258,133 @@ function requireUvBoundsOverlap(event, actualPrefix, expectedPrefix, maxCenterDi
   }
 }
 
+function evaluateRecentReadyUvAlignment(events, failures, warnings) {
+  if (events.length === 0) {
+    return null;
+  }
+
+  let missingBounds = 0;
+  let invalidBounds = 0;
+  let nonOverlappingBounds = 0;
+  let centerDistanceSum = 0;
+  let maxCenterDistance = 0;
+  let maxFrameToFrameAlignmentDelta = 0;
+  let measuredCount = 0;
+  let previousOffset = null;
+
+  events.forEach(event => {
+    const actual = boundsForPrefix(event, 'maskUv');
+    const expected = boundsForPrefix(event, 'expectedMaskUv');
+    if (!actual || !expected) {
+      missingBounds += 1;
+      return;
+    }
+
+    if (!isValidUnitBounds(actual) || !isValidUnitBounds(expected)) {
+      invalidBounds += 1;
+      return;
+    }
+
+    if (!boundsOverlap(actual, expected)) {
+      nonOverlappingBounds += 1;
+    }
+
+    const actualCenter = boundsCenter(actual);
+    const expectedCenter = boundsCenter(expected);
+    const offset = {
+      x: actualCenter.x - expectedCenter.x,
+      y: actualCenter.y - expectedCenter.y,
+    };
+    const centerDistance = Math.hypot(offset.x, offset.y);
+    centerDistanceSum += centerDistance;
+    maxCenterDistance = Math.max(maxCenterDistance, centerDistance);
+
+    if (previousOffset) {
+      maxFrameToFrameAlignmentDelta = Math.max(
+        maxFrameToFrameAlignmentDelta,
+        Math.hypot(offset.x - previousOffset.x, offset.y - previousOffset.y),
+      );
+    }
+    previousOffset = offset;
+    measuredCount += 1;
+  });
+
+  const averageCenterDistance =
+    measuredCount > 0 ? centerDistanceSum / measuredCount : Number.POSITIVE_INFINITY;
+
+  if (missingBounds > 0) {
+    failures.push(
+      `${missingBounds} recent ready brow events missing maskUv or expectedMaskUv bounds.`,
+    );
+  }
+
+  if (invalidBounds > 0) {
+    failures.push(
+      `${invalidBounds} recent ready brow events have invalid maskUv or expectedMaskUv bounds.`,
+    );
+  }
+
+  if (nonOverlappingBounds > 0) {
+    failures.push(
+      `${nonOverlappingBounds} recent ready brow events have non-overlapping expected/applied UV bounds.`,
+    );
+  }
+
+  if (measuredCount > 0 && maxCenterDistance > MAX_EXPECTED_UV_CENTER_DISTANCE) {
+    failures.push(
+      `recent brow UV max center distance expected <= ${MAX_EXPECTED_UV_CENTER_DISTANCE}, received ${maxCenterDistance.toFixed(
+        4,
+      )}.`,
+    );
+  }
+
+  if (
+    measuredCount > 0 &&
+    averageCenterDistance > MAX_EXPECTED_UV_AVERAGE_CENTER_DISTANCE
+  ) {
+    failures.push(
+      `recent brow UV average center distance expected <= ${MAX_EXPECTED_UV_AVERAGE_CENTER_DISTANCE}, received ${averageCenterDistance.toFixed(
+        4,
+      )}.`,
+    );
+  }
+
+  if (
+    measuredCount > 1 &&
+    maxFrameToFrameAlignmentDelta > MAX_FRAME_TO_FRAME_ALIGNMENT_DELTA
+  ) {
+    failures.push(
+      `recent brow UV frame-to-frame alignment delta expected <= ${MAX_FRAME_TO_FRAME_ALIGNMENT_DELTA}, received ${maxFrameToFrameAlignmentDelta.toFixed(
+        4,
+      )}.`,
+    );
+  }
+
+  if (events.length < 8) {
+    warnings.push(
+      `Only ${events.length} ready brow event(s) available; movement/jitter coverage is weak.`,
+    );
+  }
+
+  const maxSyncWorst = Math.max(
+    ...events
+      .map(event => numberField(event, 'overlaySyncWorstDurationMs'))
+      .filter(value => value !== undefined),
+    0,
+  );
+  if (maxSyncWorst > 50) {
+    warnings.push(`recent overlaySyncWorstDurationMs is high: ${maxSyncWorst}ms.`);
+  }
+
+  return {
+    averageCenterDistance,
+    maxCenterDistance,
+    maxFrameToFrameAlignmentDelta,
+    measuredCount,
+    recentEventCount: events.length,
+  };
+}
+
 function boundsForPrefix(event, prefix) {
   const minX = numberField(event, `${prefix}MinX`);
   const minY = numberField(event, `${prefix}MinY`);
@@ -262,6 +400,31 @@ function boundsForPrefix(event, prefix) {
   }
 
   return {maxX, maxY, minX, minY};
+}
+
+function isValidUnitBounds(bounds) {
+  return (
+    bounds.minX >= 0 &&
+    bounds.minY >= 0 &&
+    bounds.maxX <= 1 &&
+    bounds.maxY <= 1 &&
+    bounds.maxX > bounds.minX &&
+    bounds.maxY > bounds.minY
+  );
+}
+
+function boundsOverlap(first, second) {
+  return (
+    Math.min(first.maxX, second.maxX) > Math.max(first.minX, second.minX) &&
+    Math.min(first.maxY, second.maxY) > Math.max(first.minY, second.minY)
+  );
+}
+
+function boundsCenter(bounds) {
+  return {
+    x: (bounds.minX + bounds.maxX) * 0.5,
+    y: (bounds.minY + bounds.maxY) * 0.5,
+  };
 }
 
 function formatBounds(bounds) {
@@ -315,6 +478,17 @@ function printResult(result) {
         `browShapeBasePoints=${result.latestReady.browShapeBasePointCount}`,
         `softEdgeTexels=${result.latestReady.softEdgeTexels}`,
         `anchorMode=${result.latestReady.anchorStabilizationMode}`,
+      ].join(' '),
+    );
+  }
+
+  if (result.uvAlignmentStats) {
+    console.log(
+      [
+        `uvAlign.samples=${result.uvAlignmentStats.measuredCount}/${result.uvAlignmentStats.recentEventCount}`,
+        `uvAlign.maxCenter=${result.uvAlignmentStats.maxCenterDistance.toFixed(4)}`,
+        `uvAlign.avgCenter=${result.uvAlignmentStats.averageCenterDistance.toFixed(4)}`,
+        `uvAlign.maxFrameDelta=${result.uvAlignmentStats.maxFrameToFrameAlignmentDelta.toFixed(4)}`,
       ].join(' '),
     );
   }
@@ -374,7 +548,18 @@ function runSelfTest() {
     upperEyelidAnchorPointCount: 12,
     uvAvailable: true,
   };
-  const result = evaluateGeneratedBrowEvents([sampleEvent]);
+  const sampleEvents = Array.from({length: 8}, (_, index) => {
+    const horizontalShift = index * 0.001;
+    const verticalShift = index * 0.0005;
+    return {
+      ...sampleEvent,
+      maskUvMaxX: sampleEvent.maskUvMaxX + horizontalShift,
+      maskUvMaxY: sampleEvent.maskUvMaxY + verticalShift,
+      maskUvMinX: sampleEvent.maskUvMinX + horizontalShift,
+      maskUvMinY: sampleEvent.maskUvMinY + verticalShift,
+    };
+  });
+  const result = evaluateGeneratedBrowEvents(sampleEvents);
   printResult(result);
   if (!result.pass) {
     process.exit(1);
