@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   CameraFaceCaptureScreen,
+  getCameraFaceCaptureCloseButtonPosition,
   getCameraFaceCaptureCameraMode,
   shouldValidateCameraFaceCapture,
 } from './CameraFaceCaptureScreen';
@@ -26,6 +27,16 @@ expectEqual(
   shouldValidateCameraFaceCapture('reference'),
   false,
   'reference capture mode skips face validation',
+);
+expectEqual(
+  getCameraFaceCaptureCloseButtonPosition(47).top,
+  55,
+  'camera face capture close button sits near the top edge',
+);
+expectEqual(
+  getCameraFaceCaptureCloseButtonPosition(47).right,
+  8,
+  'camera face capture close button sits near the right edge',
 );
 
 <CameraFaceCaptureScreen

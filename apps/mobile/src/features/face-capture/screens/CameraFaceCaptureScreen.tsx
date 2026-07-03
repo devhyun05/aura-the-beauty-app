@@ -85,6 +85,13 @@ export function getCameraFaceCaptureCameraMode(): 'live-camera' {
   return 'live-camera';
 }
 
+export function getCameraFaceCaptureCloseButtonPosition(safeAreaTop: number) {
+  return {
+    right: spacing.sm,
+    top: safeAreaTop + spacing.sm,
+  };
+}
+
 export function shouldValidateCameraFaceCapture(mode: CameraFaceCaptureMode): boolean {
   return mode === 'face';
 }
@@ -347,12 +354,13 @@ export function CameraFaceCaptureScreen({
     [realtimeCaptureAvailable, shouldValidateFace],
   );
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
-  const guideWidth = Math.min(Math.max(width * 0.66, 236), 292);
+  const guideWidth = Math.min(Math.max(width * 0.58, 210), 256);
   const guideHeight = guideWidth * 1.34;
   const guideScaleY = guideHeight / guideWidth;
-  const guideCenterX = width / 2 - Math.min(width * 0.045, 20);
-  const guideCenterY = Math.max(insets.top + guideHeight / 2 + 78, height * 0.47 - 18);
-  const guideTop = guideCenterY - guideWidth / 2;
+  const guideCenterX = width / 2;
+  const guideCenterY = height / 2;
+  const guideTop = guideCenterY - guideHeight / 2;
+  const closeButtonPosition = getCameraFaceCaptureCloseButtonPosition(insets.top);
   const screenGuideBounds = useMemo<ScreenGuideBounds>(
     () => ({
       centerX: guideCenterX,
@@ -962,7 +970,8 @@ export function CameraFaceCaptureScreen({
 
       <FloatingOverlayIconButton
         accessibilityLabel="Close capture screen"
-        onPress={onClose}>
+        onPress={onClose}
+        style={closeButtonPosition}>
         <X color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
       </FloatingOverlayIconButton>
 
@@ -1004,7 +1013,8 @@ export function CameraFaceCaptureScreen({
             disabled={isCaptureDisabled}
             innerColor={captureTintColor}
             onPress={handleCapture}
-            showInnerDot={!isUploading}>
+            showInnerDot={!isUploading}
+            surfaceStyle={styles.transparentCaptureButtonSurface}>
             {isUploading ? <ActivityIndicator color={colors.white} size="small" /> : null}
           </CameraCaptureButton>
         }
@@ -1060,5 +1070,8 @@ const styles = StyleSheet.create({
     shadowOffset: shadows.guideGlow.shadowOffset,
     shadowOpacity: shadows.guideGlow.shadowOpacity,
     shadowRadius: shadows.guideGlow.shadowRadius,
+  },
+  transparentCaptureButtonSurface: {
+    backgroundColor: 'transparent',
   },
 });
