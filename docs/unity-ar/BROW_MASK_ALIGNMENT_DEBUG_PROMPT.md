@@ -99,6 +99,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
   - `fillPoly` creates the feature mask.
   - `GaussianBlur` feathers the mask.
   - `addWeighted` blends the colored mask onto the camera image.
+  - Full adaptation mapping is documented in `docs/unity-ar/BROW_REFERENCE_ADAPTATION.md`.
 - Our app adapts that model as a sibling generated brow pipeline:
   - MediaPipe/Vision brow and surrounding anchors build the brow envelope.
   - The envelope is rasterized into a generated brow UV mask texture.

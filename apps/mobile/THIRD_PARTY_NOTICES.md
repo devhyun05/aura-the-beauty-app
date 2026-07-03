@@ -44,6 +44,7 @@ Notes:
 
 - Source: https://github.com/otdnnc/virtual-makeup
 - License: MIT, as declared by the upstream README.
+- Reference paths: `apps/web/src/lib/makeup/landmarks.ts`, `apps/web/src/lib/makeup/face.ts`.
 - Usage: Reference implementation consulted for the generated eyebrow mask approach.
 
 Notes:

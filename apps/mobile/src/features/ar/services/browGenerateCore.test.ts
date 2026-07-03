@@ -380,6 +380,16 @@ expectEqual(payload.maskTextureEncoding, 'raw_rgba_base64', 'generated brow text
 expectTruthy(payload.maskRawRgbaBase64, 'generated brow raw texture payload');
 expectEqual(payload.maskTextureWidth, 512, 'generated brow mask texture width');
 expectEqual(payload.maskTextureHeight, 512, 'generated brow mask texture height');
+expectEqual(
+  generatedPackage.browEnvelope.generationMethod,
+  'brow_surround_anchor_envelope_v2',
+  'generated brow adapted reference envelope method',
+);
+expectGreaterThan(
+  payload.maskFeatherUvNormalized,
+  0,
+  'generated brow Unity feather replaces reference GaussianBlur',
+);
 const rawRgba = decodeBase64(payload.maskRawRgbaBase64 ?? '');
 const rawChannelSummary = summarizeGeneratedBrowRgbaChannels(rawRgba);
 expectEqual(
