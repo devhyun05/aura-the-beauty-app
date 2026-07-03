@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
   Vibration,
@@ -19,7 +20,6 @@ import {
   CameraCaptureControlRow,
   CameraCaptureButton,
   CameraUtilityButton,
-  FloatingOverlayIconButton,
   FullscreenOverlayScreen,
   LiveCameraLayer,
 } from '../../../shared/ui';
@@ -87,8 +87,9 @@ export function getCameraFaceCaptureCameraMode(): 'live-camera' {
 
 export function getCameraFaceCaptureCloseButtonPosition(safeAreaTop: number) {
   return {
+    position: 'absolute' as const,
     right: spacing.sm,
-    top: safeAreaTop + spacing.sm,
+    top: safeAreaTop,
   };
 }
 
@@ -968,12 +969,16 @@ export function CameraFaceCaptureScreen({
         />
       )}
 
-      <FloatingOverlayIconButton
-        accessibilityLabel="Close capture screen"
-        onPress={onClose}
-        style={closeButtonPosition}>
-        <X color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
-      </FloatingOverlayIconButton>
+      <View style={[styles.closeButtonWrap, closeButtonPosition]}>
+        <Pressable
+          accessibilityLabel="Close capture screen"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onClose}
+          style={styles.closeButton}>
+          <X color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
+        </Pressable>
+      </View>
 
       {shouldValidateFace ? (
         <View
@@ -1070,6 +1075,15 @@ const styles = StyleSheet.create({
     shadowOffset: shadows.guideGlow.shadowOffset,
     shadowOpacity: shadows.guideGlow.shadowOpacity,
     shadowRadius: shadows.guideGlow.shadowRadius,
+  },
+  closeButtonWrap: {
+    zIndex: 20,
+  },
+  closeButton: {
+    alignItems: 'center',
+    height: iconSize.xl + spacing.xxl,
+    justifyContent: 'center',
+    width: iconSize.xl + spacing.xxl,
   },
   transparentCaptureButtonSurface: {
     backgroundColor: 'transparent',

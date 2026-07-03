@@ -30,13 +30,18 @@ expectEqual(
 );
 expectEqual(
   getCameraFaceCaptureCloseButtonPosition(47).top,
-  55,
+  47,
   'camera face capture close button sits near the top edge',
 );
 expectEqual(
   getCameraFaceCaptureCloseButtonPosition(47).right,
   8,
   'camera face capture close button sits near the right edge',
+);
+expectEqual(
+  getCameraFaceCaptureCloseButtonPosition(47).position,
+  'absolute',
+  'camera face capture close button host is absolutely positioned',
 );
 
 <CameraFaceCaptureScreen
