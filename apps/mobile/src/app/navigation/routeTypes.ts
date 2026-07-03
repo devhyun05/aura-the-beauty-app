@@ -48,6 +48,7 @@ export type RootStackParamList = {
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
   MakeupFeedbackAlbumUpload: undefined;
+  MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
@@ -96,6 +97,7 @@ export const rootStackRoutes = [
   'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
   'MakeupFeedbackAlbumUpload',
+  'MakeupFeedbackGoalInput',
   'MakeupFeedbackLoading',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',

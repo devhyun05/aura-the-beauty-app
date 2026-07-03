@@ -16,7 +16,7 @@ from app.core.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-MODEL_VERSION = "makeup-feedback:bedrock-v1"
+MODEL_VERSION = "makeup-feedback:bedrock-v2-goal-context"
 
 FEEDBACK_TOPICS: list[dict[str, str]] = [
   {"id": "brow", "label": "눈썹", "kind": "eye"},
@@ -32,19 +32,23 @@ FEEDBACK_TOPICS: list[dict[str, str]] = [
 ]
 
 TOPIC_BY_ID = {topic["id"]: topic for topic in FEEDBACK_TOPICS}
-DEFAULT_IMPROVEMENT_TOPIC_IDS = {"lash", "eyeliner", "blush", "shading"}
+DEFAULT_STRENGTH_TOPIC_IDS = {"brow", "foundation", "blush", "highlight"}
+DEFAULT_IMPROVEMENT_TOPIC_IDS = {"eyeliner", "shading"}
+VALID_STATUSES = {"strength", "improvement", "optional"}
+VALID_SCORE_IMPACTS = {"high", "medium", "low"}
+VALID_INTENSITIES = {"light", "medium", "bold"}
 
 FALLBACK_DESCRIPTIONS = {
-  "brow": "눈썹 결이 얼굴형과 잘 맞게 정리돼 있어요. 앞머리는 부드럽고 꼬리는 깔끔해서 전체 인상이 또렷해 보여요.",
-  "lash": "속눈썹 중앙 볼륨은 좋지만 바깥쪽 컬이 조금 처져 보여요. 끝부분만 한 번 더 집어 올리면 눈매가 더 선명해져요.",
-  "lens": "렌즈 직경과 컬러가 메이크업 톤을 방해하지 않고 자연스럽게 어울려요. 눈동자 선명도도 잘 살아나요.",
-  "eyeliner": "눈꼬리 끝 각도가 양쪽에서 살짝 달라 보여요. 끝점 높이를 먼저 맞춘 뒤 얇게 연결하면 인상이 안정적으로 정리돼요.",
-  "eyeshadow": "아이섀도 음영이 과하지 않고 눈두덩에 자연스럽게 깔려 있어요. 데일리 무드와 깊이감이 균형 있게 잡혔어요.",
-  "aegyosal": "애교살 밝기가 과하지 않아 눈 밑이 깨끗해 보여요. 하이라이트가 필요한 부분에만 잘 올라가 있어요.",
-  "foundation": "파운데이션 톤과 피부 표현이 안정적이에요. 목선과의 차이가 크지 않고 베이스가 얇게 밀착돼 보여요.",
-  "blush": "블러셔가 광대 아래로 조금 내려와 보여요. 광대 중심보다 반 마디 위에서 바깥쪽으로 퍼뜨리면 얼굴이 더 또렷해져요.",
-  "highlight": "하이라이터 위치가 좋아요. 콧대와 앞광대에 필요한 만큼만 빛이 올라와 얼굴 윤곽이 맑게 살아나요.",
-  "shading": "섀딩 경계가 살짝 강하게 남아 있어요. 턱선과 코 옆은 브러시에 남은 양으로만 쓸어 주면 입체감이 자연스러워져요.",
+  "brow": "목적에 맞게 눈썹 결과 농도를 함께 보면 인상 정리에 도움이 됩니다. 앞머리와 꼬리 경계가 자연스러우면 전체 완성도가 더 좋아집니다.",
+  "lash": "이번 목적에서 속눈썹은 선택적으로 조절할 수 있는 항목입니다. 강조가 필요하다면 뭉침 없이 결만 살리는 방향이 안정적입니다.",
+  "lens": "렌즈는 목적과 표현 강도에 따라 선택할 수 있습니다. 자연스러운 목적이라면 눈동자 색감이 과하게 튀지 않는 쪽이 잘 맞습니다.",
+  "eyeliner": "아이라인은 끝 각도와 두께가 인상에 큰 영향을 줍니다. 목적에 맞게 선명도와 자연스러움 사이의 균형을 맞추면 좋습니다.",
+  "eyeshadow": "아이섀도는 눈매 깊이를 만들되 전체 톤과 어긋나지 않는 것이 중요합니다. 경계가 부드러우면 목적에 맞는 완성도가 올라갑니다.",
+  "aegyosal": "애교살은 목적에 따라 선택적으로 조절할 수 있습니다. 필요하다면 눈 밑 중앙에만 밝기를 얇게 더하는 정도가 안전합니다.",
+  "foundation": "피부톤이 고르게 정리되면 사진에서 깔끔한 인상을 줍니다. 목선과의 톤 차이와 베이스 경계가 적을수록 완성도가 좋아집니다.",
+  "blush": "블러셔는 얼굴에 생기를 주는 핵심 포인트입니다. 목적에 맞는 색감과 위치라면 부담 없이 분위기를 살릴 수 있습니다.",
+  "highlight": "하이라이터는 입체감을 만드는 항목입니다. 번들거림보다 필요한 부위에만 은은하게 살아나는 표현이 안정적입니다.",
+  "shading": "섀딩은 경계가 부드러울수록 자연스럽게 입체감을 만듭니다. 턱선과 코 옆은 양을 줄여 블렌딩하면 완성도가 올라갑니다.",
 }
 
 
@@ -63,12 +67,75 @@ def _clean_topic_id(value: Any) -> str | None:
   return None
 
 
-def _normalize_status(value: Any) -> str:
-  return "strength" if value == "strength" else "improvement"
+def _clamp_score(value: int) -> int:
+  return max(0, min(100, value))
+
+
+def _clamp_confidence(value: Any) -> float | None:
+  if isinstance(value, bool) or not isinstance(value, (int, float)):
+    return None
+
+  return max(0.0, min(1.0, float(value)))
+
+
+def _normalize_status(value: Any, fallback: str = "optional") -> str:
+  return value if isinstance(value, str) and value in VALID_STATUSES else fallback
+
+
+def _normalize_score_impact(value: Any, fallback: str = "medium") -> str:
+  return value if isinstance(value, str) and value in VALID_SCORE_IMPACTS else fallback
+
+
+def _normalize_intensity(value: Any, fallback: str = "medium") -> str:
+  return value if isinstance(value, str) and value in VALID_INTENSITIES else fallback
+
+
+def _get_feedback_context(payload: dict[str, Any]) -> dict[str, str]:
+  raw_context = payload.get("feedbackContext") or payload.get("feedback_context")
+  context = raw_context if isinstance(raw_context, dict) else {}
+  user_goal_text = _clean_text(
+    context.get("userGoalText") or context.get("user_goal_text") or payload.get("userGoalText") or payload.get("user_goal_text"),
+    "사진 속 메이크업이 사용 목적에 잘 맞는지 평가해 주세요.",
+  )
+  profile_gender = _clean_text(
+    context.get("profileGender") or context.get("profile_gender") or payload.get("profileGender") or payload.get("profile_gender"),
+    "unknown",
+  )
+
+  return {"profileGender": profile_gender, "userGoalText": user_goal_text}
+
+
+def _infer_goal_intensity(user_goal_text: str) -> str:
+  normalized = user_goal_text.lower()
+
+  if any(keyword in normalized for keyword in ["아이돌", "무대", "화려", "bold", "강하게", "커버", "공연"]):
+    return "bold"
+
+  if any(keyword in normalized for keyword in ["내추럴", "자연", "데일리", "면접", "증명", "티 안", "깔끔"]):
+    return "light"
+
+  return "medium"
+
+
+def _fallback_goal_label(user_goal_text: str) -> str:
+  if len(user_goal_text) <= 28:
+    return user_goal_text
+
+  return f"{user_goal_text[:28]}..."
+
+
+def _default_status_for_topic(topic_id: str) -> str:
+  if topic_id in DEFAULT_STRENGTH_TOPIC_IDS:
+    return "strength"
+
+  if topic_id in DEFAULT_IMPROVEMENT_TOPIC_IDS:
+    return "improvement"
+
+  return "optional"
 
 
 def _score_from_counts(strength_count: int, improvement_count: int) -> int:
-  return max(0, min(100, 70 + strength_count * 4 - improvement_count * 2))
+  return _clamp_score(72 + strength_count * 4 - improvement_count * 3)
 
 
 def _build_points(evaluations: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -127,12 +194,10 @@ def _normalize_evaluations(raw_evaluations: Any) -> list[dict[str, Any]]:
   for topic in FEEDBACK_TOPICS:
     topic_id = topic["id"]
     raw_item = item_by_topic.get(topic_id, {})
-    status = _normalize_status(
-      raw_item.get("status")
-      if raw_item
-      else ("improvement" if topic_id in DEFAULT_IMPROVEMENT_TOPIC_IDS else "strength"),
-    )
+    fallback_status = _default_status_for_topic(topic_id)
+    status = _normalize_status(raw_item.get("status") if raw_item else fallback_status, fallback_status)
     description = _clean_text(raw_item.get("description"), FALLBACK_DESCRIPTIONS[topic_id])
+    score_impact = _normalize_score_impact(raw_item.get("scoreImpact") or raw_item.get("score_impact"), "medium")
 
     normalized.append(
       {
@@ -142,26 +207,69 @@ def _normalize_evaluations(raw_evaluations: Any) -> list[dict[str, Any]]:
         "status": status,
         "title": _clean_text(raw_item.get("title"), topic["label"]),
         "description": description,
+        "scoreImpact": score_impact,
         "kind": topic["kind"],
-        "confidence": raw_item.get("confidence") if isinstance(raw_item.get("confidence"), (int, float)) else None,
+        "confidence": _clamp_confidence(raw_item.get("confidence")),
       },
     )
 
   return normalized
 
 
+def _normalize_interpreted_goal(raw_goal: Any, payload: dict[str, Any]) -> dict[str, str]:
+  feedback_context = _get_feedback_context(payload)
+  user_goal_text = feedback_context["userGoalText"]
+
+  if isinstance(raw_goal, dict):
+    intensity = _normalize_intensity(raw_goal.get("intensity"), _infer_goal_intensity(user_goal_text))
+
+    return {
+      "label": _clean_text(raw_goal.get("label"), _fallback_goal_label(user_goal_text)),
+      "intensity": intensity,
+      "reason": _clean_text(raw_goal.get("reason"), "사용자가 입력한 목적과 사진의 표현 강도를 함께 참고했습니다."),
+    }
+
+  return {
+    "label": _fallback_goal_label(user_goal_text),
+    "intensity": _infer_goal_intensity(user_goal_text),
+    "reason": "사용자가 입력한 목적을 최우선 기준으로 해석했습니다.",
+  }
+
+
+def _normalize_summary(raw_summary: Any) -> dict[str, str]:
+  summary = raw_summary if isinstance(raw_summary, dict) else {}
+
+  return {
+    "strengthSummary": _clean_text(
+      summary.get("strengthSummary") or summary.get("strength_summary"),
+      "목적에 맞는 표현이 잘 살아난 항목이 있습니다.",
+    ),
+    "improvementSummary": _clean_text(
+      summary.get("improvementSummary") or summary.get("improvement_summary"),
+      "조금만 정리하면 목적에 더 잘 맞는 완성도로 보일 수 있습니다.",
+    ),
+  }
+
+
 def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
+  raw_result = result if isinstance(result, dict) else {}
   source = _clean_text(payload.get("source"), "camera")
-  evaluations = _normalize_evaluations(result.get("evaluations") if isinstance(result, dict) else None)
+  evaluations = _normalize_evaluations(raw_result.get("evaluations"))
   points = _build_points(evaluations)
   strengths = _build_strengths(evaluations)
-  score = result.get("score") if isinstance(result, dict) else None
+  score = raw_result.get("score")
 
-  if not isinstance(score, int):
+  if isinstance(score, bool) or not isinstance(score, int):
     score = _score_from_counts(len(strengths), len(points))
 
   return {
-    "score": max(0, min(100, score)),
+    "score": _clamp_score(score),
+    "scoreLabel": _clean_text(raw_result.get("scoreLabel") or raw_result.get("score_label"), "종합 점수"),
+    "interpretedGoal": _normalize_interpreted_goal(
+      raw_result.get("interpretedGoal") or raw_result.get("interpreted_goal"),
+      payload,
+    ),
+    "summary": _normalize_summary(raw_result.get("summary")),
     "photoSourceLabel": "앨범 사진" if source == "gallery" else "촬영 사진",
     "summaryBadges": [
       {"id": "strength-count", "label": f"잘한 항목 {len(strengths)}개"},
@@ -253,26 +361,137 @@ class MakeupFeedbackBedrockService:
     return image_bytes
 
   def _build_prompt(self, payload: dict[str, Any]) -> str:
+    feedback_context = _get_feedback_context(payload)
+    profile_gender = feedback_context["profileGender"]
+    user_goal_text = feedback_context["userGoalText"]
     metadata = {
       key: value
       for key, value in payload.items()
       if key not in {"imageUrl", "cdnUrl", "sourceUri"}
     }
-    topic_text = ", ".join(f"{topic['id']}={topic['label']}" for topic in FEEDBACK_TOPICS)
+    output_contract = {
+      "score": 0,
+      "scoreLabel": "종합 점수",
+      "interpretedGoal": {
+        "label": "사용자 목적을 짧게 요약",
+        "intensity": "light | medium | bold",
+        "reason": "이렇게 해석한 이유를 짧게 설명",
+      },
+      "evaluations": [
+        {
+          "topicId": "brow",
+          "topicLabel": "눈썹",
+          "status": "strength | improvement | optional",
+          "title": "짧은 제목",
+          "description": "사용자 목적에 맞춰 평가한 한국어 피드백",
+          "scoreImpact": "high | medium | low",
+          "confidence": 0.0,
+        },
+      ],
+      "summary": {
+        "strengthSummary": "잘한 점 전체 요약 1문장",
+        "improvementSummary": "보완하면 좋은 점 전체 요약 1문장",
+      },
+    }
+    topic_id_text = "\n".join(f"- {topic['id']}: {topic['label']}" for topic in FEEDBACK_TOPICS)
 
-    return (
-      "Analyze the provided makeup photo as a practical K-beauty makeup artist. "
-      "Evaluate exactly these 10 topics: "
-      f"{topic_text}. "
-      "For every topic, decide whether it is a strength or an improvement. "
-      "Return JSON only. Top-level keys: score, evaluations. "
-      "evaluations must contain exactly 10 objects in the same topic order. "
-      "Each evaluation keys: topicId, status, title, description, confidence. "
-      "status must be either strength or improvement. "
-      "description must be Korean, concrete, kind, and based only on visible makeup cues. "
-      "Do not diagnose skin or identity. Do not mention uncertainty unless the image is unusable. "
-      f"Request metadata: {json.dumps(metadata, ensure_ascii=False)}"
-    )
+    return f"""
+당신은 K-뷰티 메이크업 피드백 전문가입니다.
+사용자가 업로드한 얼굴/메이크업 사진을 분석하고, 사용자가 입력한 “메이크업 상황/목적”에 맞는 메이크업 퀄리티를 평가하세요.
+
+입력 정보:
+- profileGender: {profile_gender}
+- userGoalText: {json.dumps(user_goal_text, ensure_ascii=False)}
+
+가장 중요한 원칙:
+- 사용자가 입력한 userGoalText를 최우선 기준으로 평가하세요.
+- profileGender는 참고 정보로만 사용하세요.
+- gender를 고정관념적으로 해석하지 마세요.
+- 남성이라고 무조건 내추럴 메이크업 기준으로 평가하지 마세요.
+- 여성이라고 무조건 데일리/화려한 메이크업 기준으로 평가하지 마세요.
+- 사용자가 원하는 상황, 목적, 표현 강도에 맞는지 평가하세요.
+- 메이크업을 많이 했는지보다, 목적에 맞는 완성도와 퀄리티를 평가하세요.
+
+점수 기준:
+- score는 0~100 정수입니다.
+- 화면에는 “종합 점수”로 표시됩니다.
+- 단, 점수 산정 기준은 단순한 메이크업 양이나 화려함이 아니라, 사용자가 입력한 목적/상황에 얼마나 잘 맞는지에 대한 종합 평가입니다.
+- 목적이 내추럴/데일리라면 자연스러움, 피부 표현, 경계 정리, 과하지 않음이 중요합니다.
+- 목적이 면접/증명사진이라면 깔끔함, 인상 정리, 피부톤 균일감, 과하지 않음이 중요합니다.
+- 목적이 데이트/꾸안꾸라면 자연스러운 생기, 조화로운 톤, 부담 없는 포인트가 중요합니다.
+- 목적이 아이돌/무대라면 선명도, 존재감, 카메라에서 보이는 균형감, 디테일 완성도가 중요합니다.
+- 목적이 촬영/화보라면 조명 아래 입체감, 색감 전달력, 사진에서의 완성도가 중요합니다.
+- 목적이 커버 메이크업이라면 원본 스타일과의 유사성, 핵심 포인트 재현도, 분위기 일치도가 중요합니다.
+
+사용자 목적 해석:
+1. userGoalText를 읽고 사용자가 원하는 상황/목적을 짧게 해석하세요.
+2. 표현 강도를 light, medium, bold 중 하나로 판단하세요.
+3. userGoalText가 모호하면 사진에서 보이는 메이크업 강도와 profileGender를 참고하되, 성별 고정관념으로 판단하지 마세요.
+4. 사용자의 목적과 맞지 않는 과한 조언을 하지 마세요.
+   예: “남자 데일리 메이크업인데 티 안 나게 자연스러운지 보고 싶어”라면 속눈썹을 진하게 하라고 하지 말고, 피부 표현, 눈썹 정리, 톤 차이, 경계 흐림, 자연스러움을 중심으로 평가하세요.
+5. 반대로 “아이돌 무대 메이크업처럼 화려한지 봐줘”라면 속눈썹, 아이라인, 렌즈, 아이섀도, 하이라이터, 섀딩도 적극 평가할 수 있습니다.
+
+평가 주제:
+아래 10개 주제를 모두 확인하세요.
+
+- 눈썹
+- 속눈썹
+- 렌즈
+- 아이라인
+- 아이섀도
+- 애교살
+- 파운데이션
+- 블러셔
+- 하이라이터
+- 섀딩
+
+각 주제는 아래 3가지 중 하나로 분류하세요:
+
+1. strength
+- 사용자의 목적에 잘 맞고, 현재 표현이 좋은 항목입니다.
+- 결과 화면의 “잘한 포인트”에 표시됩니다.
+
+2. improvement
+- 사용자의 목적에 비해 보완하면 더 좋아질 항목입니다.
+- 결과 화면의 “보완 포인트”에 표시됩니다.
+
+3. optional
+- 이번 목적에서는 필수 평가/강화 항목은 아니지만, 원하면 조절할 수 있는 항목입니다.
+- 결과 화면에는 크게 표시하지 않습니다.
+- 내부 JSON에는 포함하세요.
+- optional 항목을 억지로 잘한 포인트나 보완 포인트로 만들지 마세요.
+
+중요한 피드백 원칙:
+- 모든 항목을 억지로 보완시키지 마세요.
+- 모든 항목을 억지로 칭찬하지 마세요.
+- 사용자의 목적에 맞는 완성도, 자연스러움, 표현 강도, 과함 여부, 균형감을 기준으로 판단하세요.
+- 사진에서 보이지 않거나 확실하지 않은 부분은 단정하지 마세요.
+- 속눈썹, 렌즈, 아이라인, 아이섀도, 애교살은 목적에 따라 선택항목이 될 수 있습니다.
+- 특히 자연스러운 남성 데일리, 면접, 증명사진 목적에서는 속눈썹/렌즈/아이라인을 강하게 권하지 마세요.
+- 다만 사용자가 무대, 촬영, 아이돌, 커버 메이크업을 원하면 해당 항목도 적극 평가하세요.
+- 의학적 피부 진단, 외모 비하, 성별 고정관념, 정체성 추정은 하지 마세요.
+- 피드백은 친절하고 실용적인 한국어로 작성하세요.
+- 각 설명은 1~2문장으로 작성하세요.
+
+출력 JSON 형식:
+반드시 JSON만 반환하세요.
+마크다운, 설명 문장, 코드블록은 반환하지 마세요.
+
+{json.dumps(output_contract, ensure_ascii=False, indent=2)}
+
+topicId는 반드시 아래 값만 사용하세요:
+{topic_id_text}
+
+evaluations 배열에는 위 10개 topicId가 모두 정확히 한 번씩 포함되어야 합니다.
+각 topic의 status는 strength, improvement, optional 중 하나여야 합니다.
+confidence는 0.0 이상 1.0 이하 숫자여야 합니다.
+scoreImpact는 high, medium, low 중 하나여야 합니다.
+
+출력 예시의 문장을 그대로 복사하지 말고, 반드시 실제 사진과 userGoalText에 맞춰 작성하세요.
+
+Request metadata:
+{json.dumps(metadata, ensure_ascii=False)}
+""".strip()
 
   def _extract_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
@@ -327,9 +546,9 @@ class MakeupFeedbackBedrockService:
       body=json.dumps(
         {
           "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 2400,
+          "max_tokens": 3600,
           "temperature": 0.2,
-          "system": "You are a concise K-beauty makeup feedback analyst. Return JSON only.",
+          "system": "당신은 K-뷰티 메이크업 피드백 전문가입니다. 반드시 JSON만 반환하세요.",
           "messages": [
             {
               "role": "user",

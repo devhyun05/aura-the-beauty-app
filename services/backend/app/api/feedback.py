@@ -59,11 +59,40 @@ def build_feedback_payload(payload: FeedbackJobCreate, request_payload: dict[str
   return {"request": request_payload or payload.request_payload}
 
 
+def clean_optional_text(value: Any) -> str | None:
+  if isinstance(value, str):
+    normalized = value.strip()
+    return normalized or None
+
+  return None
+
+
+def merge_profile_feedback_context(request_payload: dict[str, Any], user: dict[str, Any]) -> None:
+  raw_context = request_payload.get("feedbackContext") or request_payload.get("feedback_context")
+  feedback_context = dict(raw_context) if isinstance(raw_context, dict) else {}
+  top_level_goal_text = clean_optional_text(
+    request_payload.get("userGoalText") or request_payload.get("user_goal_text"),
+  )
+
+  if top_level_goal_text and not clean_optional_text(
+    feedback_context.get("userGoalText") or feedback_context.get("user_goal_text"),
+  ):
+    feedback_context["userGoalText"] = top_level_goal_text
+
+  if not clean_optional_text(
+    feedback_context.get("profileGender") or feedback_context.get("profile_gender"),
+  ):
+    feedback_context["profileGender"] = clean_optional_text(user.get("gender"))
+
+  request_payload["feedbackContext"] = feedback_context
+
+
 async def resolve_feedback_request_payload(
   db: Database,
-  user_id: UUID,
+  user: dict[str, Any],
   payload: FeedbackJobCreate,
 ) -> dict[str, Any]:
+  user_id = user["id"]
   request_payload = dict(payload.request_payload or {})
   request_payload.setdefault("source", payload.source)
   request_payload.setdefault("sourceLabel", payload.source_label)
@@ -106,6 +135,8 @@ async def resolve_feedback_request_payload(
       },
     )
 
+  merge_profile_feedback_context(request_payload, user)
+
   return request_payload
 
 
@@ -117,7 +148,7 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  request_payload = await resolve_feedback_request_payload(db, user["id"], payload)
+  request_payload = await resolve_feedback_request_payload(db, user, payload)
   logger.info(
     "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s",
     auth.subject,

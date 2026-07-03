@@ -23,28 +23,28 @@ export const makeupFeedbackLoadingPreviewSource =
 export const makeupFeedbackLoadingSteps: readonly MakeupFeedbackLoadingStep[] = [
   {
     id: 'image-quality',
-    title: '사진 품질을 확인하고 있어요',
-    description: '얼굴 방향, 밝기, 흔들림을 먼저 보고 분석 가능한 기준을 잡아요.',
+    title: '사진 상태를 확인하고 있어요',
+    description: '밝기와 흔들림을 먼저 확인해 분석 기준을 맞추고 있어요.',
   },
   {
-    id: 'topic-scan',
-    title: '10개 메이크업 항목을 읽고 있어요',
-    description: '눈썹, 속눈썹, 렌즈, 아이라인부터 베이스와 윤곽까지 나눠 봐요.',
+    id: 'goal-context',
+    title: '상황 기준을 정리하고 있어요',
+    description: '입력한 목적과 원하는 분위기를 피드백 기준으로 반영하고 있어요.',
   },
   {
-    id: 'classify',
-    title: '잘한 포인트와 보완 포인트를 나누고 있어요',
-    description: '각 항목을 잘한 점과 개선하면 좋은 점으로 분류해요.',
+    id: 'makeup-balance',
+    title: '메이크업 균형을 살펴보고 있어요',
+    description: '눈매, 베이스, 컬러감, 음영이 목적에 맞게 어울리는지 확인하고 있어요.',
   },
   {
     id: 'report',
-    title: 'AI 피드백 리포트를 구성하고 있어요',
-    description: '바로 확인하기 쉬운 카드 형태로 분석 내용을 정리해요.',
+    title: '피드백을 구성하고 있어요',
+    description: '잘한 포인트와 보완 포인트를 보기 쉬운 결과로 정리하고 있어요.',
   },
 ];
 
 export const makeupFeedbackLoadingTip =
-  '정면에 가까운 사진일수록 눈매, 베이스, 윤곽 항목을 더 안정적으로 비교할 수 있어요.';
+  '정면에 가까운 사진일수록 눈매, 베이스, 색감의 균형을 더 안정적으로 비교할 수 있어요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / MAKEUP_FEEDBACK_LOADING_TOTAL_MS, 0), 1);

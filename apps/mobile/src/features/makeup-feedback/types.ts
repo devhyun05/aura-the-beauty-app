@@ -2,12 +2,18 @@ import type {ImageSourcePropType} from 'react-native';
 
 export type MakeupFeedbackPhotoSource = 'camera' | 'gallery';
 
+export type MakeupFeedbackContext = {
+  profileGender?: string | null;
+  userGoalText: string;
+};
+
 export type MakeupFeedbackPhotoSelection = {
   photoSource: MakeupFeedbackPhotoSource;
   imageUri?: string;
   imageWidth?: number | null;
   imageHeight?: number | null;
   photoTitle?: string;
+  feedbackContext?: MakeupFeedbackContext;
 };
 
 export type MakeupFeedbackSummaryBadge = {
@@ -40,7 +46,9 @@ export type MakeupFeedbackTopicId =
   | 'highlight'
   | 'shading';
 
-export type MakeupFeedbackEvaluationStatus = 'strength' | 'improvement';
+export type MakeupFeedbackEvaluationStatus = 'strength' | 'improvement' | 'optional';
+export type MakeupFeedbackScoreImpact = 'high' | 'medium' | 'low';
+export type MakeupFeedbackIntensity = 'light' | 'medium' | 'bold';
 
 export type MakeupFeedbackTopic = {
   id: MakeupFeedbackTopicId;
@@ -70,6 +78,7 @@ export type MakeupFeedbackEvaluation = {
   description: string;
   kind: MakeupFeedbackCorrectionPointKind;
   confidence?: number;
+  scoreImpact?: MakeupFeedbackScoreImpact;
 };
 
 export type MakeupFeedbackCorrectionPoint = {
@@ -92,12 +101,26 @@ export type MakeupFeedbackStrength = {
   kind: MakeupFeedbackCorrectionPointKind;
 };
 
+export type MakeupFeedbackInterpretedGoal = {
+  label: string;
+  intensity: MakeupFeedbackIntensity;
+  reason: string;
+};
+
+export type MakeupFeedbackSummary = {
+  strengthSummary: string;
+  improvementSummary: string;
+};
+
 export type MakeupFeedbackResult = {
   id: string;
   uploadedImage: ImageSourcePropType;
   photoSource: MakeupFeedbackPhotoSource;
   photoSourceLabel: string;
   score: number;
+  scoreLabel?: string;
+  interpretedGoal?: MakeupFeedbackInterpretedGoal;
+  summary?: MakeupFeedbackSummary;
   summaryBadges: MakeupFeedbackSummaryBadge[];
   annotations: MakeupFeedbackAnnotation[];
   evaluations: MakeupFeedbackEvaluation[];

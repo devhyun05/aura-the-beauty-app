@@ -35,6 +35,14 @@ export function resolveMakeupFeedbackLoadingPreviewSource(
   return selection.imageUri ? {uri: selection.imageUri} : makeupFeedbackLoadingPreviewSource;
 }
 
+function getSelectionTitle(selection: MakeupFeedbackPhotoSelection) {
+  if (selection.photoTitle?.trim()) {
+    return selection.photoTitle.trim();
+  }
+
+  return selection.photoSource === 'gallery' ? '앨범 사진' : '촬영 사진';
+}
+
 export function MakeupFeedbackLoadingScreen({
   selection,
   onComplete,
@@ -123,10 +131,7 @@ export function MakeupFeedbackLoadingScreen({
       topPadding="none">
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>AI가 메이크업을 분석하고 있어요</Text>
-          <Text style={styles.heroDescription}>
-            사진 속 10개 항목을 읽고 잘한 포인트와 보완 포인트로 정리할게요.
-          </Text>
+          <Text style={styles.heroTitle}>AI가 피드백을 준비하고 있어요</Text>
         </YStack>
 
         <YStack style={styles.analysisCard}>
@@ -140,12 +145,12 @@ export function MakeupFeedbackLoadingScreen({
             <View style={styles.previewDim} />
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.previewBadgeText}>AI 피드백 생성 중</Text>
+              <Text style={styles.previewBadgeText}>분석 중</Text>
             </XStack>
             <YStack style={styles.previewTitleBlock}>
               <Text style={styles.previewLabel}>AI FEEDBACK</Text>
               <Text numberOfLines={1} style={styles.previewTitle}>
-                {selection.photoTitle ?? (selection.photoSource === 'gallery' ? '앨범 사진' : '촬영 사진')}
+                {getSelectionTitle(selection)}
               </Text>
             </YStack>
           </View>
@@ -175,14 +180,13 @@ export function MakeupFeedbackLoadingScreen({
                     )}
                     <YStack style={styles.stepCopy}>
                       <Text
-                        numberOfLines={1}
                         style={[
                           styles.stepTitle,
                           isDone || isActive ? styles.stepTitleActive : undefined,
                         ]}>
                         {step.title}
                       </Text>
-                      <Text numberOfLines={2} style={styles.stepDescription}>
+                      <Text style={styles.stepDescription}>
                         {step.description}
                       </Text>
                     </YStack>
@@ -239,6 +243,7 @@ function ProgressRing({label, progress}: ProgressRingProps) {
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   analysisCard: {
     backgroundColor: colors.surface,
@@ -262,15 +267,6 @@ const styles = StyleSheet.create({
   heroCopy: {
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  heroDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-    textAlign: 'center',
   },
   heroTitle: {
     color: colors.textPrimary,
@@ -355,13 +351,14 @@ const styles = StyleSheet.create({
     right: spacing.md,
   },
   progressBlock: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.lg,
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
   progressRing: {
     alignItems: 'center',
+    flexShrink: 0,
     height: RING_SIZE,
     justifyContent: 'center',
     width: RING_SIZE,
@@ -377,11 +374,13 @@ const styles = StyleSheet.create({
   },
   stepCopy: {
     flex: 1,
+    flexShrink: 1,
     gap: spacing.xs,
     minWidth: 0,
   },
   stepDescription: {
     color: colors.textSecondary,
+    flexShrink: 1,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.regular,
@@ -390,15 +389,18 @@ const styles = StyleSheet.create({
   },
   stepList: {
     flex: 1,
+    flexShrink: 1,
     gap: spacing.md,
     minWidth: 0,
   },
   stepRow: {
     alignItems: 'flex-start',
     gap: spacing.sm,
+    width: '100%',
   },
   stepTitle: {
     color: colors.textSecondary,
+    flexShrink: 1,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,

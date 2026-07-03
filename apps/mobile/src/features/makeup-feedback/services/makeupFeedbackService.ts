@@ -6,9 +6,12 @@ import type {
   MakeupFeedbackCorrectionPointKind,
   MakeupFeedbackEvaluation,
   MakeupFeedbackEvaluationStatus,
+  MakeupFeedbackInterpretedGoal,
   MakeupFeedbackPhotoSelection,
   MakeupFeedbackResult,
+  MakeupFeedbackScoreImpact,
   MakeupFeedbackStrength,
+  MakeupFeedbackSummary,
   MakeupFeedbackSummaryBadge,
   MakeupFeedbackTopicId,
 } from '../types';
@@ -22,10 +25,13 @@ const topicById = new Map(MAKEUP_FEEDBACK_TOPICS.map(topic => [topic.id, topic])
 type BackendFeedbackPayload = {
   result?: {
     evaluations?: unknown;
+    interpretedGoal?: MakeupFeedbackInterpretedGoal | null;
     photoSourceLabel?: string | null;
     points?: unknown;
     score?: number | null;
+    scoreLabel?: string | null;
     strengths?: unknown;
+    summary?: MakeupFeedbackSummary | null;
     summaryBadges?: MakeupFeedbackSummaryBadge[] | null;
   } | null;
 } | null;
@@ -51,12 +57,20 @@ function firstText(...values: Array<string | null | undefined>): string | undefi
   return values.find(value => Boolean(value?.trim()))?.trim();
 }
 
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function isTopicId(value: unknown): value is MakeupFeedbackTopicId {
   return typeof value === 'string' && topicById.has(value as MakeupFeedbackTopicId);
+}
+
+function isScoreImpact(value: unknown): value is MakeupFeedbackScoreImpact {
+  return value === 'high' || value === 'medium' || value === 'low';
 }
 
 function normalizeKind(value: unknown, topicId: MakeupFeedbackTopicId): MakeupFeedbackCorrectionPointKind {
@@ -68,7 +82,11 @@ function normalizeKind(value: unknown, topicId: MakeupFeedbackTopicId): MakeupFe
 }
 
 function normalizeStatus(value: unknown): MakeupFeedbackEvaluationStatus {
-  return value === 'strength' ? 'strength' : 'improvement';
+  if (value === 'strength' || value === 'optional') {
+    return value;
+  }
+
+  return 'improvement';
 }
 
 function mapEvaluations(value: unknown, fallback: MakeupFeedbackResult): MakeupFeedbackEvaluation[] {
@@ -90,17 +108,18 @@ function mapEvaluations(value: unknown, fallback: MakeupFeedbackResult): MakeupF
 
     const topic = topicById.get(topicId);
     const status = normalizeStatus(item.status);
-    const description = typeof item.description === 'string' ? item.description : undefined;
+    const description = stringValue(item.description);
 
     return {
-      id: firstText(String(item.id ?? ''), `${topicId}-${status}`) ?? `${topicId}-${status}`,
+      id: firstText(stringValue(item.id), `${topicId}-${status}`) ?? `${topicId}-${status}`,
       topicId,
-      topicLabel: firstText(String(item.topicLabel ?? ''), topic?.label) ?? topicId,
+      topicLabel: firstText(stringValue(item.topicLabel), topic?.label) ?? topicId,
       status,
-      title: firstText(String(item.title ?? ''), topic?.label) ?? topicId,
-      description: firstText(description, fallbackEvaluation?.description) ?? `${topic?.label ?? topicId} 항목을 분석했어요.`,
+      title: firstText(stringValue(item.title), topic?.label) ?? topicId,
+      description: firstText(description, fallbackEvaluation?.description) ?? `${topic?.label ?? topicId} 피드백을 준비했어요.`,
       kind: normalizeKind(item.kind, topicId),
       confidence: typeof item.confidence === 'number' ? item.confidence : undefined,
+      scoreImpact: isScoreImpact(item.scoreImpact) ? item.scoreImpact : undefined,
     };
   });
 
@@ -135,6 +154,13 @@ function buildStrengthsFromEvaluations(evaluations: MakeupFeedbackEvaluation[]):
     }));
 }
 
+function getFeedbackContext(selection: MakeupFeedbackPhotoSelection) {
+  return {
+    profileGender: selection.feedbackContext?.profileGender ?? null,
+    userGoalText: selection.feedbackContext?.userGoalText?.trim() ?? '',
+  };
+}
+
 function mapBackendJobToFeedbackResult(
   job: BackendFeedbackJob,
   selection: MakeupFeedbackPhotoSelection,
@@ -155,6 +181,7 @@ function mapBackendJobToFeedbackResult(
   return {
     ...fallback,
     id: firstText(job.id, fallback.id) ?? fallback.id,
+    interpretedGoal: backendResult?.interpretedGoal ?? fallback.interpretedGoal,
     photoSourceLabel:
       firstText(backendResult?.photoSourceLabel, job.sourceLabel, fallback.photoSourceLabel) ??
       fallback.photoSourceLabel,
@@ -164,6 +191,8 @@ function mapBackendJobToFeedbackResult(
         : typeof job.score === 'number'
           ? job.score
           : fallback.score,
+    scoreLabel: firstText(backendResult?.scoreLabel, fallback.scoreLabel),
+    summary: backendResult?.summary ?? fallback.summary,
     summaryBadges,
     annotations: [],
     evaluations,
@@ -187,6 +216,7 @@ async function createBackendMakeupFeedback(
     uri: selection.imageUri,
     width: selection.imageWidth ?? undefined,
   });
+  const feedbackContext = getFeedbackContext(selection);
 
   const {job} = await requestBackendJson<CreateFeedbackJobResponse>('/feedback/jobs', {
     body: {
@@ -196,11 +226,12 @@ async function createBackendMakeupFeedback(
         bucket: uploadedPhoto.bucket,
         cdnUrl: uploadedPhoto.cdnUrl ?? null,
         contentType: uploadedPhoto.contentType ?? 'image/jpeg',
+        feedbackContext,
         imageUrl: uploadedPhoto.cdnUrl ?? null,
         objectKey: uploadedPhoto.objectKey,
         source: selection.photoSource,
         sourceUri: selection.imageUri,
-        task: 'makeup_feedback_report_v1',
+        task: 'makeup_feedback_report_v2',
         topics: MAKEUP_FEEDBACK_TOPICS.map(topic => ({id: topic.id, label: topic.label})),
       },
       runImmediately: true,

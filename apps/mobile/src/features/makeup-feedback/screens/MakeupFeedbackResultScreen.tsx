@@ -256,7 +256,7 @@ function PointAccordionItem({
   return (
     <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${point.title} 상세 보기`}
+        accessibilityLabel={`${point.topicLabel} 상세 보기`}
         accessibilityRole="button"
         accessibilityState={{expanded: isOpen}}
         onPress={onPress}
@@ -270,12 +270,15 @@ function PointAccordionItem({
           <View style={styles.pointIcon}>
             <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
           </View>
-          <Text style={styles.accordionTitle}>{point.title}</Text>
+          <Text numberOfLines={1} style={styles.accordionTitle}>{point.topicLabel}</Text>
         </View>
         <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
       {isOpen ? (
         <View style={styles.accordionDetail}>
+          {point.title !== point.topicLabel ? (
+            <Text style={styles.accordionDetailTitle}>{point.title}</Text>
+          ) : null}
           <Text style={styles.accordionText}>{point.description}</Text>
         </View>
       ) : null}
@@ -298,7 +301,7 @@ function StrengthAccordionItem({
   return (
     <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${strength.title} 상세 보기`}
+        accessibilityLabel={`${strength.topicLabel} 상세 보기`}
         accessibilityRole="button"
         accessibilityState={{expanded: isOpen}}
         onPress={onPress}
@@ -312,12 +315,15 @@ function StrengthAccordionItem({
           <View style={styles.strengthIcon}>
             <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
           </View>
-          <Text style={styles.accordionTitle}>{strength.title}</Text>
+          <Text numberOfLines={1} style={styles.accordionTitle}>{strength.topicLabel}</Text>
         </View>
         <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
       {isOpen ? (
         <View style={styles.accordionDetail}>
+          {strength.title !== strength.topicLabel ? (
+            <Text style={styles.accordionDetailTitle}>{strength.title}</Text>
+          ) : null}
           <Text style={styles.accordionText}>{strength.description}</Text>
         </View>
       ) : null}
@@ -411,6 +417,7 @@ const styles = StyleSheet.create({
   accordionDetail: {
     borderTopColor: feedbackColors.borderSoft,
     borderTopWidth: 1,
+    gap: spacing.xs,
     paddingBottom: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -424,6 +431,14 @@ const styles = StyleSheet.create({
   },
   accordionList: {
     gap: spacing.sm,
+  },
+  accordionDetailTitle: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
   accordionText: {
     color: feedbackColors.textMuted,

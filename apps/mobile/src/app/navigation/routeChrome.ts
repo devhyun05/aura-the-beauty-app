@@ -210,6 +210,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '\uBA54\uC774\uD06C\uC5C5 \uD53C\uB4DC\uBC31',
   },
+  MakeupFeedbackGoalInput: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['close'],
+    statusBarStyle: 'dark',
+    title: 'AI 피드백',
+  },
   MakeupFeedbackLoading: {
     category: 'progress',
     depth: 'sub',

@@ -26,6 +26,7 @@ import {
   MakeupFeedbackAlbumUploadRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
   MakeupFeedbackEntryRouteScreen,
+  MakeupFeedbackGoalInputRouteScreen,
   MakeupCorrectionGuideRouteScreen,
   MakeupFeedbackLoadingRouteScreen,
   MakeupFeedbackResultRouteScreen,
@@ -88,6 +89,7 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
       <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
+      <Stack.Screen name="MakeupFeedbackGoalInput" component={MakeupFeedbackGoalInputRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
