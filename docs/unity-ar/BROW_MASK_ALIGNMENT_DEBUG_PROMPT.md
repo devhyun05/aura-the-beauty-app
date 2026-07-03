@@ -70,9 +70,14 @@ The most important failure is **mask alignment and attachment on the eyebrow are
 - Shader has a generated brow mode:
   - `apps/unity/MakeupAR/Assets/Shaders/SmoothRegionMask.shader`
   - `_BrowGeneratedMode`
+  - red channel = intentionally empty for generated brow runtime masks
   - green channel = desired brow mask
   - blue channel = hair strand detail
   - alpha = desired brow alpha
+- Unity must sample generated brow coverage from `max(G, A)`, not `R`:
+  - `E3RegionMaskOverlay` reports this as `maskTextureSampleChannel=generated_brow_green_alpha`.
+  - Generated brow mesh culling uses `generated_brow_green_alpha_threshold_sample`.
+  - Existing lip atlas masks still use the legacy red-channel threshold path.
 - Offline debug scripts exist:
   - `scripts/e7_brow_debug/validate_generated_brow_package.js`
   - `scripts/e7_brow_debug/render_image_guided_brow_preview.swift`
@@ -115,6 +120,7 @@ The most important failure is **mask alignment and attachment on the eyebrow are
     - `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.jsonl>`
     - or `npm run mobile:check:brow-runtime-log -- <path-to-generated_brow_mask_applied.latest.json>`
   - The runtime log gate fails if no ready/partial brow event has `applied=true`, `runtimeReady=true`, `uvAvailable=true`, positive mask triangles, valid 0..1 mask UV bounds with positive area, sufficient brow/eye/upper-eyelid/surround anchors, the expected anchor stabilization mode, the expected eye exclusion mode, and disabled cleanup/neutralize values.
+  - The runtime log gate also fails unless generated brow reports `maskTextureSampleChannel=generated_brow_green_alpha`.
   - `debugMode=5` or `debugExaggerate=true` renders the generated brow mask as a high-opacity yellow debug overlay on the face surface.
   - `debugMode=6` or `debugShowLeftRight=true` renders the generated brow mask as a high-opacity cyan orientation-check overlay on the face surface.
 
@@ -272,6 +278,8 @@ Verify:
   - G = desired brow alpha
   - B = hair strand detail
   - A = desired brow alpha
+- Unity generated brow culling and diagnostics must sample `max(G, A)`.
+- Runtime logs should show `maskTextureSampleChannel=generated_brow_green_alpha`.
 
 If offline preview is correct but live Unity is wrong, prioritize UV projection, texture sampling, mirroring, or shader channel usage over shape tweaks.
 

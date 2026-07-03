@@ -92,6 +92,67 @@ function normalizePointToBounds(
   };
 }
 
+const BASE64_ALPHABET =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function decodeBase64(base64: string): Uint8Array {
+  const clean = base64.replace(/\s/g, '');
+  const bytes: number[] = [];
+
+  for (let index = 0; index < clean.length; index += 4) {
+    const first = BASE64_ALPHABET.indexOf(clean[index] ?? 'A');
+    const second = BASE64_ALPHABET.indexOf(clean[index + 1] ?? 'A');
+    const thirdChar = clean[index + 2] ?? '=';
+    const fourthChar = clean[index + 3] ?? '=';
+    const third = thirdChar === '=' ? 0 : BASE64_ALPHABET.indexOf(thirdChar);
+    const fourth = fourthChar === '=' ? 0 : BASE64_ALPHABET.indexOf(fourthChar);
+
+    bytes.push((first << 2) | (second >> 4));
+    if (thirdChar !== '=') {
+      bytes.push(((second & 15) << 4) | (third >> 2));
+    }
+    if (fourthChar !== '=') {
+      bytes.push(((third & 3) << 6) | fourth);
+    }
+  }
+
+  return new Uint8Array(bytes);
+}
+
+function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
+  let redActiveTexels = 0;
+  let greenAlphaActiveTexels = 0;
+  let greenAlphaMismatchTexels = 0;
+  let strandActiveTexels = 0;
+
+  for (let rawIndex = 0; rawIndex + 3 < raw.length; rawIndex += 4) {
+    const red = raw[rawIndex];
+    const green = raw[rawIndex + 1];
+    const blue = raw[rawIndex + 2];
+    const alpha = raw[rawIndex + 3];
+
+    if (red > 8) {
+      redActiveTexels += 1;
+    }
+    if (Math.max(green, alpha) > 8) {
+      greenAlphaActiveTexels += 1;
+    }
+    if (green !== alpha) {
+      greenAlphaMismatchTexels += 1;
+    }
+    if (blue > 8) {
+      strandActiveTexels += 1;
+    }
+  }
+
+  return {
+    greenAlphaActiveTexels,
+    greenAlphaMismatchTexels,
+    redActiveTexels,
+    strandActiveTexels,
+  };
+}
+
 const frameWidth = 800;
 const frameHeight = 600;
 const arFaceExport: E7ArFaceExport = {
@@ -313,6 +374,33 @@ expectEqual(payload.maskTextureEncoding, 'raw_rgba_base64', 'generated brow text
 expectTruthy(payload.maskRawRgbaBase64, 'generated brow raw texture payload');
 expectEqual(payload.maskTextureWidth, 512, 'generated brow mask texture width');
 expectEqual(payload.maskTextureHeight, 512, 'generated brow mask texture height');
+const rawRgba = decodeBase64(payload.maskRawRgbaBase64 ?? '');
+const rawChannelSummary = summarizeGeneratedBrowRgbaChannels(rawRgba);
+expectEqual(
+  rawRgba.length,
+  512 * 512 * 4,
+  'generated brow raw texture byte count',
+);
+expectEqual(
+  rawChannelSummary.redActiveTexels,
+  0,
+  'generated brow red channel stays empty because Unity samples green/alpha',
+);
+expectGreaterThan(
+  rawChannelSummary.greenAlphaActiveTexels,
+  0,
+  'generated brow green/alpha mask channel has active texels',
+);
+expectEqual(
+  rawChannelSummary.greenAlphaMismatchTexels,
+  0,
+  'generated brow green and alpha mask channels stay in sync',
+);
+expectGreaterThan(
+  rawChannelSummary.strandActiveTexels,
+  0,
+  'generated brow blue strand channel has active texels',
+);
 expectGreaterThan(
   generatedPackage.uvCoverageMetadata.positiveTexels,
   0,
