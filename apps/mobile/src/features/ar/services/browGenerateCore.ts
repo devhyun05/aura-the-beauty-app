@@ -48,6 +48,7 @@ export type BrowUvMaskMetadata = {
   envelopeCount: number;
   eyeExclusionTexels: number;
   faceOvalPointCount: number;
+  softEdgeTexels: number;
   surroundAnchorPointCount: number;
   positiveTexels: number;
   strandChecksum: number;
@@ -249,6 +250,7 @@ export function buildGeneratedBrowPackage({
       envelopeCount: envelopes.length,
       eyeExclusionTexels: uvMask.eyeExclusionTexels,
       faceOvalPointCount: anchorSummary.faceOvalPointCount,
+      softEdgeTexels: uvMask.softEdgeTexels,
       surroundAnchorPointCount: anchorSummary.surroundAnchorPointCount,
       positiveTexels: uvMask.positiveTexels,
       strandChecksum: uvMask.strandChecksum,
@@ -390,6 +392,7 @@ type BrowUvMaskRawRgba = {
   eyeExclusionTexels: number;
   positiveTexels: number;
   rawRgbaBase64: string;
+  softEdgeTexels: number;
   strandChecksum: number;
   width: number;
   height: number;
@@ -519,6 +522,7 @@ function buildBrowUvMaskRawRgba({
   }
 
   let positiveTexels = 0;
+  let softEdgeTexels = 0;
   let alphaSum = 0;
   let alphaChecksum = 0;
   let strandChecksum = 0;
@@ -536,6 +540,9 @@ function buildBrowUvMaskRawRgba({
     if (alpha > 8) {
       positiveTexels += 1;
     }
+    if (alpha > 8 && alpha < 247) {
+      softEdgeTexels += 1;
+    }
   }
 
   return {
@@ -545,6 +552,7 @@ function buildBrowUvMaskRawRgba({
     height: resolution,
     positiveTexels,
     rawRgbaBase64: encodeBase64(raw),
+    softEdgeTexels,
     strandChecksum,
     width: resolution,
   };

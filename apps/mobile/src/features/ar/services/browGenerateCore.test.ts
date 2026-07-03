@@ -129,6 +129,7 @@ function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
   let redActiveTexels = 0;
   let greenAlphaActiveTexels = 0;
   let greenAlphaMismatchTexels = 0;
+  let greenAlphaSoftEdgeTexels = 0;
   let strandActiveTexels = 0;
 
   for (let rawIndex = 0; rawIndex + 3 < raw.length; rawIndex += 4) {
@@ -143,6 +144,9 @@ function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
     if (Math.max(green, alpha) > 8) {
       greenAlphaActiveTexels += 1;
     }
+    if (Math.max(green, alpha) > 8 && Math.max(green, alpha) < 247) {
+      greenAlphaSoftEdgeTexels += 1;
+    }
     if (green !== alpha) {
       greenAlphaMismatchTexels += 1;
     }
@@ -154,6 +158,7 @@ function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
   return {
     greenAlphaActiveTexels,
     greenAlphaMismatchTexels,
+    greenAlphaSoftEdgeTexels,
     redActiveTexels,
     strandActiveTexels,
   };
@@ -407,6 +412,11 @@ expectGreaterThan(
   0,
   'generated brow green/alpha mask channel has active texels',
 );
+expectGreaterThan(
+  rawChannelSummary.greenAlphaSoftEdgeTexels,
+  0,
+  'generated brow green/alpha mask channel has soft-edge texels',
+);
 expectEqual(
   rawChannelSummary.greenAlphaMismatchTexels,
   0,
@@ -421,6 +431,11 @@ expectGreaterThan(
   generatedPackage.uvCoverageMetadata.positiveTexels,
   0,
   'generated brow positive texels',
+);
+expectGreaterThan(
+  generatedPackage.uvCoverageMetadata.softEdgeTexels,
+  0,
+  'generated brow UV metadata tracks soft feathered edge texels',
 );
 expectGreaterThan(
   generatedPackage.uvCoverageMetadata.strandChecksum,
