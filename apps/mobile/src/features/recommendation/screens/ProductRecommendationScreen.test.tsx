@@ -4,6 +4,8 @@ import {
   ProductRecommendationScreen,
   getRecommendationSetSectionTitle,
   getProductRecommendationReportLabel,
+  productCategoryTabWidthMode,
+  productListScrollAxis,
   productRecommendationHeaderCopy,
 } from './ProductRecommendationScreen';
 
@@ -40,6 +42,16 @@ expectEqual(
   getProductRecommendationReportLabel(null),
   '최근 분석 기준',
   'product recommendation report selector fallback label',
+);
+expectEqual(
+  productCategoryTabWidthMode,
+  'labelContent',
+  'product category tab width mode',
+);
+expectEqual(
+  productListScrollAxis,
+  'vertical',
+  'product list scroll axis',
 );
 
 <ProductRecommendationScreen />;

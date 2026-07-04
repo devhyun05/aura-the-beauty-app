@@ -20,6 +20,7 @@ import {
   HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
   HOME_MAGAZINE_QUICK_ACTION_ICON_NAME,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
+  recommendedFilterCopyVerticalPadding,
   recommendedFilterListVirtualizationConfig,
   recommendedFilterMoreButtonLabel,
   recommendedFilterSectionDescription,
@@ -57,6 +58,8 @@ const expectedRecommendedFilterSectionDescription: undefined =
   recommendedFilterSectionDescription;
 const expectedRecommendedFilterMoreButtonLabel: '더보기' =
   recommendedFilterMoreButtonLabel;
+const expectedRecommendedFilterCopyVerticalPadding: 10 =
+  recommendedFilterCopyVerticalPadding;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
 const expectedHomeHeroTopPadding: 8 = homeHeroLayoutMetrics.listTopPadding;
@@ -129,6 +132,11 @@ expectEqual(
   recommendedFilterMoreButtonLabel,
   expectedRecommendedFilterMoreButtonLabel,
   'recommended filter more button label',
+);
+expectEqual(
+  recommendedFilterCopyVerticalPadding,
+  expectedRecommendedFilterCopyVerticalPadding,
+  'recommended filter copy vertical padding',
 );
 expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,

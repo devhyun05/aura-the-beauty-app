@@ -1,6 +1,8 @@
 import React from 'react';
 
 import {
+  AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET,
+  AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,
   ARFilterScreen,
   getARFilterCameraMode,
   getARFilterCaptureButtonMetrics,
@@ -145,6 +147,16 @@ expectEqual(
   getARFilterInitialColorId([]),
   '',
   'AR filter initial color id fallback',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET,
+  0,
+  'AR filter bottom sheet sticks to screen bottom',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,
+  'aboveSheet',
+  'AR filter bottom sheet toggle placement',
 );
 
 <ARFilterScreen

@@ -352,6 +352,8 @@ export const recommendedFilterListVirtualizationConfig = {
   windowSize: 5,
 } as const;
 
+export const recommendedFilterCopyVerticalPadding = 10;
+
 export const HOME_SCROLL_TOP_VISIBLE_OFFSET = 360;
 
 export function getIsHomeScrollTopButtonVisible(scrollOffsetY: number): boolean {
@@ -1009,7 +1011,7 @@ const styles = StyleSheet.create({
     gap: 2,
     left: 0,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: recommendedFilterCopyVerticalPadding,
     position: 'absolute',
     right: 0,
     zIndex: 1,

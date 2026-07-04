@@ -2,11 +2,12 @@ import {useEffect, useMemo, useState} from 'react';
 import {
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   type GestureResponderEvent,
   useWindowDimensions,
 } from 'react-native';
-import {Heart, Sparkles} from 'lucide-react-native';
+import {Heart} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
@@ -35,6 +36,10 @@ const filterStoreCategories = [
 type FilterStoreCategoryId = (typeof filterStoreCategories)[number]['id'];
 
 const filterStoreCategoryIds = filterStoreCategories.map(category => category.id);
+
+export const FILTER_STORE_SHOW_SUMMARY_CARD = false;
+export const FILTER_STORE_CATEGORY_LIST_SCROLL_AXIS = 'horizontal';
+export const FILTER_STORE_CATEGORY_LIST_ALLOWS_WRAP = false;
 
 function isFilterStoreCategoryId(categoryId: string): categoryId is FilterStoreCategoryId {
   return filterStoreCategoryIds.includes(categoryId as FilterStoreCategoryId);
@@ -128,19 +133,10 @@ export function FilterStoreScreen({
 
   return (
     <AppScreen contentGap={spacing.xl} topPadding="none">
-      <YStack style={styles.summary}>
-        <XStack style={styles.summaryHeader}>
-          <View style={styles.summaryIcon}>
-            <Sparkles color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-          </View>
-          <Text style={styles.summaryTitle}>추천 필터</Text>
-        </XStack>
-        <Text style={styles.summaryDescription}>
-          썸네일의 메이크업을 AR 필터로 바로 적용해요.
-        </Text>
-      </YStack>
-
-      <XStack style={styles.categoryList}>
+      <ScrollView
+        horizontal={FILTER_STORE_CATEGORY_LIST_SCROLL_AXIS === 'horizontal'}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoryList}>
         {filterStoreCategories.map(category => {
           const selected = category.id === selectedCategory;
 
@@ -165,7 +161,7 @@ export function FilterStoreScreen({
             </Pressable>
           );
         })}
-      </XStack>
+      </ScrollView>
 
       <View style={[styles.grid, {columnGap: gap, rowGap: spacing.xl}]}>
         {visibleFilters.map(filter => (
@@ -283,7 +279,7 @@ const styles = StyleSheet.create({
   },
   categoryList: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: FILTER_STORE_CATEGORY_LIST_ALLOWS_WRAP ? 'wrap' : 'nowrap',
     gap: spacing.sm,
   },
   categoryText: {
@@ -391,42 +387,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.78,
-  },
-  summary: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.lg,
-  },
-  summaryDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  summaryHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  summaryIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: 'center',
-    width: 34,
-  },
-  summaryTitle: {
-    color: colors.textPrimary,
-    flex: 1,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
   },
   textArea: {
     gap: spacing.sm,
