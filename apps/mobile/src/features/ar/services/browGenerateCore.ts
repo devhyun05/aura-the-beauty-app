@@ -832,9 +832,8 @@ function buildSingleBrowEnvelope({
     noseBridgeAnchor,
     templeAnchor,
   );
-  const polygonXPad = Math.max(browWidth * 0.03, eyelidWidth * 0.012);
-  let minX = clamp(browMinX - polygonXPad, 0, frameWidth - 1);
-  let maxX = clamp(browMaxX + polygonXPad, 0, frameWidth - 1);
+  let minX = clamp(browMinX, 0, frameWidth - 1);
+  let maxX = clamp(browMaxX, 0, frameWidth - 1);
   if (noseBridgeAnchor) {
     const noseGuard = eyeWidth * 0.035;
     if (side === 'left') {
@@ -849,10 +848,6 @@ function buildSingleBrowEnvelope({
     minX = Math.max(minX, faceMinX + faceWidth * 0.025);
     maxX = Math.min(maxX, faceMaxX - faceWidth * 0.025);
   }
-  if (maxX - minX < browWidth * 0.62) {
-    minX = clamp(browMinX - polygonXPad * 0.6, 0, frameWidth - 1);
-    maxX = clamp(browMaxX + polygonXPad * 0.6, 0, frameWidth - 1);
-  }
   const topPad = Math.max(browHeight * 0.18, eyelidHeight * 0.07);
   const bottomPad = Math.max(browHeight * 0.1, eyelidHeight * 0.05);
   const topY = clamp(browMinY - topPad, 0, frameHeight - 1);
@@ -864,8 +859,13 @@ function buildSingleBrowEnvelope({
   );
   const centerX = (minX + maxX) * 0.5;
   const height = Math.max(1, bottomY - topY);
-  const innerX = side === 'left' ? minX : maxX;
-  const outerX = side === 'left' ? maxX : minX;
+  // head = inner end (toward nose), tail = outer end (toward temple). Inset the
+  // head slightly so the mask does not run past the start of the brow, and pull
+  // the tail in a touch (a sharp tip is extended past it in the envelope).
+  const browHeadX = side === 'left' ? minX : maxX;
+  const browTailX = side === 'left' ? maxX : minX;
+  const innerX = browHeadX + direction * browWidth * 0.06;
+  const outerX = browTailX - direction * browWidth * 0.01;
 
   const stabilizePoint = (point: E7Point2D) =>
     stabilizePointToFaceDirection(point, centerX, height, faceDirectionSlope);
@@ -1096,24 +1096,21 @@ function buildSmoothBrowEnvelopePolygon({
     };
   };
 
-  // Robust anchors: the brow underside (lower chord) sets the natural baseline
-  // and tilt, body samples give a median thickness, and the largest rise above
-  // the head->tail chord tells us how arched this brow actually is. The arch is
-  // applied to the TOP edge; the underside follows the real brow so the mask
-  // reliably covers the brow body instead of floating.
+  // Robust anchors: head/tail brow CENTERS set the natural baseline and tilt.
+  // The mask is a constant-thickness band centered on the brow; only the arch
+  // (how much the band curves up toward the peak) differs between shapes, so
+  // 일자/세미아치/아치 read as different SHAPES at the same thickness.
   const headMeasure = measure(0);
   const tailMeasure = measure(1);
   const headCenterY = (headMeasure.upperY + headMeasure.lowerY) * 0.5;
   const tailCenterY = (tailMeasure.upperY + tailMeasure.lowerY) * 0.5;
   const thicknessSamples: number[] = [];
-  const lowerSamples: number[] = [];
   let measuredArchRise = 0;
-  let measuredArchPeakT = 0.6;
+  let measuredArchPeakT = 0.62;
   for (let step = 0; step <= 24; step += 1) {
     const t = step / 24;
     const sample = measure(t);
     thicknessSamples.push(Math.max(1, sample.lowerY - sample.upperY));
-    lowerSamples.push(sample.lowerY);
     const chordCenterY = lerp(headCenterY, tailCenterY, t);
     const rise = chordCenterY - sample.upperY;
     if (rise > measuredArchRise) {
@@ -1123,40 +1120,29 @@ function buildSmoothBrowEnvelopePolygon({
   }
   const sortedThickness = [...thicknessSamples].sort((first, second) => first - second);
   const medianThickness = sortedThickness[Math.floor(sortedThickness.length / 2)] ?? height * 0.3;
-  const deepestLowerY = Math.max(...lowerSamples);
 
-  const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.55;
-  const tailTaperStrength =
-    shapeId === 'straight' ? 0.66 : shapeId === 'slim-tail' ? 0.95 : 0.84;
-  const tailTaperStartT = shapeId === 'straight' ? 0.52 : 0.4;
-  const thicknessScale =
-    shapeId === 'straight' ? 0.78 : shapeId === 'slim-tail' ? 0.66 : 0.72;
-  const archPeakT = clamp(measuredArchPeakT, 0.5, 0.72);
-  const archMagnitude = archScale * (measuredArchRise * 0.5 + medianThickness * 0.42);
-  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.09, height * 0.56);
-  // Small upward lift so the mask sits ON the brow body (device feedback: it was
-  // landing slightly low). Lower edge otherwise follows the real brow underside.
-  const verticalLift = medianThickness * 0.22;
-  const headLowerY =
-    Math.max(headMeasure.lowerY, deepestLowerY - medianThickness * 0.45) - verticalLift;
-  const tailLowerY = tailMeasure.lowerY - verticalLift;
+  // Thickness is the SAME across shapes (only the arch differs).
+  const bodyThickness = clamp(medianThickness * 0.82, height * 0.08, height * 0.48);
+  // Sit slightly high on the brow so the band covers the body without dropping
+  // below it (device feedback: 일자 was landing under the brow).
+  const verticalLift = medianThickness * 0.16;
+  // Arch is the ONLY per-shape difference: flat / gentle / pronounced.
+  const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.5;
+  const archPeakT = clamp(measuredArchPeakT, 0.54, 0.72);
+  const archMagnitude = archScale * (medianThickness * 0.55 + measuredArchRise * 0.35);
 
   const archProfile = (t: number) => {
-    const sigma = 0.34;
+    const sigma = 0.32;
     const d = (t - archPeakT) / sigma;
     return Math.exp(-0.5 * d * d);
   };
+  // Thickness profile is shape-independent: soft head, sharp tapered tail tip.
   const thicknessProfile = (t: number) => {
-    const headRamp = lerp(0.52, 1, smoothstep(0, 0.16, t));
-    // Sharper tail: taper harder and let the very tip get thin so it reads as a
-    // sleek point rather than a blunt end.
-    const tailRamp = 1 - smoothstep(tailTaperStartT, 1, t) * tailTaperStrength;
-    const bodyRamp = 0.9 + 0.1 * Math.sin(Math.PI * t);
+    const headRamp = lerp(0.62, 1, smoothstep(0, 0.14, t));
+    const tailRamp = 1 - smoothstep(0.5, 1, t) * 0.9;
+    const bodyRamp = 0.94 + 0.06 * Math.sin(Math.PI * t);
     return clamp(headRamp * tailRamp * bodyRamp, 0.05, 1);
   };
-  // How much the underside follows the top arch (arched brows stay flatter
-  // underneath than on top).
-  const lowerArchFollow = shapeId === 'slim-tail' ? 0.34 : 0.22;
 
   const sampleCount = 48;
   const upperCurve: E7Point2D[] = [];
@@ -1164,11 +1150,11 @@ function buildSmoothBrowEnvelopePolygon({
   for (let index = 0; index < sampleCount; index += 1) {
     const t = index / (sampleCount - 1);
     const x = lerp(innerX, outerX, t);
-    const arch = archMagnitude * archProfile(t);
+    const centerY =
+      lerp(headCenterY, tailCenterY, t) - archMagnitude * archProfile(t) - verticalLift;
     const width = bodyThickness * thicknessProfile(t);
-    const lowerBaseY = lerp(headLowerY, tailLowerY, t) - arch * lowerArchFollow;
-    upperCurve.push({x, y: lowerBaseY - width - arch});
-    lowerCurve.push({x, y: lowerBaseY});
+    upperCurve.push({x, y: centerY - width * 0.5});
+    lowerCurve.push({x, y: centerY + width * 0.5});
   }
 
   // Extend the tail to a sharp point beyond the last sample so head->body->tail
@@ -1176,8 +1162,8 @@ function buildSmoothBrowEnvelopePolygon({
   const tailUpper = upperCurve[sampleCount - 1];
   const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.1 : shapeId === 'straight' ? 0.04 : 0.07),
-    y: (tailUpper.y + tailLower.y) * 0.5 - archMagnitude * archProfile(1) * 0.4,
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.08 : 0.05),
+    y: (tailUpper.y + tailLower.y) * 0.5,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),

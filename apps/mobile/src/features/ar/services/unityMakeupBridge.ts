@@ -1014,6 +1014,11 @@ export function postUnityGeneratedBrowMaskPayload(payload: string): boolean {
   const browRoute = getUnityGeneratedMaskBridgeRoute('brow');
 
   if (nativeBridge?.postMessage && canUseBridge) {
+    // Cancel any in-flight retry loops for previous brow payloads. Each payload
+    // otherwise keeps re-sending for up to 24 attempts / 8s under its own
+    // retryKey, so a stale shape/color would race with — and overwrite — the one
+    // the user just selected. Only the latest brow payload should be retried.
+    clearGeneratedBrowMaskNativePosts();
     postNativeUnityMessageWithWarmupRetries(
       nativeBridge,
       payload,

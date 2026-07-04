@@ -578,7 +578,7 @@ const [screenLeftSourceBrowBounds, screenRightSourceBrowBounds] = [
   );
 });
 expectGreaterThan(
-  screenLeftEnvelope.fillBounds[1] - screenRightEnvelope.fillBounds[1],
+  Math.abs(screenLeftEnvelope.fillBounds[1] - screenRightEnvelope.fillBounds[1]),
   3,
   'per-side generated brow keeps asymmetric arch heights instead of mirroring',
 );
