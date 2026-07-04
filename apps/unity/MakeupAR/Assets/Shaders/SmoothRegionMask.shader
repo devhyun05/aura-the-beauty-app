@@ -691,6 +691,18 @@ Shader "MakeupAR/SmoothRegionMask"
                         cheekGrayBlurred
                         * cheekGain
                         * (1.0 + cheekCenterGain * cheekBoostGate * 0.82));
+                    // Mouth guard: photo-derived cheek session masks can carry
+                    // lip-corner residue; suppress any blush contribution in
+                    // the mouth neighborhood (face-local anatomy space, so it
+                    // holds for every user, mask and UV transform).
+                    float cheekMouthGuard = 1.0 - FoundationEllipse(
+                        maskUv,
+                        float2(0.500, 0.360),
+                        float2(0.210, 0.105),
+                        0.55);
+                    cheekGrayRaw *= cheekMouthGuard;
+                    cheekGrayBlurred *= cheekMouthGuard;
+
                     float cheekCoverageSeed = max(cheekGrayRaw, cheekGrayBlurred * 0.94);
                     float cheekFeather = saturate(max(_Feather, 0.68) * lerp(1.02, 1.20, saturate(_EdgeSoftness)));
                     float cheekCoverage = SoftMaskAlpha(cheekCoverageSeed, _Threshold * 0.72, cheekFeather);

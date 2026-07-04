@@ -43,7 +43,7 @@ public sealed class VisionFaceParsingProvider : MonoBehaviour, IFoundationSegmen
     private double lastResultAtMs;
     private int consecutiveFailures;
 
-#if UNITY_IOS && !UNITY_EDITOR
+#if UNITY_IOS && !UNITY_EDITOR && AURA_ENABLE_VISION_FACE_PARSING_PNG
     [DllImport("__Internal")]
     private static extern int E7VisionFaceParsingPng(
         byte[] pngBytes,
@@ -144,6 +144,19 @@ public sealed class VisionFaceParsingProvider : MonoBehaviour, IFoundationSegmen
 
         try
         {
+#if !AURA_ENABLE_VISION_FACE_PARSING_PNG
+            runtimeRequested = false;
+            consecutiveFailures++;
+            if (consecutiveFailures == 1)
+            {
+                Debug.LogWarning(
+                    "[FoundationSegmentation] vision_face_parsing_disabled"
+                    + " reason=png_encoder_unavailable"
+                    + " path=screen_space_arface_manager_default");
+            }
+
+            yield break;
+#else
             int width = Screen.width;
             int height = Screen.height;
             if (width <= 0 || height <= 0)
@@ -154,7 +167,7 @@ public sealed class VisionFaceParsingProvider : MonoBehaviour, IFoundationSegmen
             EnsureBuffers(width, height);
             frameTexture.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
             frameTexture.Apply(false, false);
-            byte[] pngBytes = frameTexture.EncodeToPNG();
+            byte[] pngBytes = ImageConversion.EncodeToPNG(frameTexture);
             if (pngBytes == null || pngBytes.Length == 0)
             {
                 yield break;
@@ -194,6 +207,7 @@ public sealed class VisionFaceParsingProvider : MonoBehaviour, IFoundationSegmen
                 registered = true;
                 FoundationSegmentationRegistry.Register(this);
             }
+#endif
         }
         finally
         {

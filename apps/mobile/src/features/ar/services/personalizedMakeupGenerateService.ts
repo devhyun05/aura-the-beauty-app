@@ -13,6 +13,7 @@ import {
 import {
   buildFullFaceMakeupRecipe,
   DEFAULT_FULL_FACE_REGION_CONTROLS,
+  REGION_COLOR_OPTIONS,
   type FullFaceMakeupRecipeLayer,
   type FullFaceMakeupRecipe,
   type FullFaceMakeupSourceInput,
@@ -77,6 +78,7 @@ export type PersonalizedCompanionMakeupControls = {
 export type PersonalizedCompanionMakeupActiveRegion =
   | 'blush'
   | 'brow'
+  | 'eyeliner'
   | 'foundation'
   | 'all'
   | 'none';
@@ -116,7 +118,7 @@ export const DEFAULT_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
 export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompanionMakeupControls = {
   foundation: {
     candidateId: 'foundation-skin-tone-relative-v1',
-    colorHex: '#D7B19A',
+    colorHex: REGION_COLOR_OPTIONS.foundation[0].hex,
     coverage: 1,
     evenness: 0.42,
     // Foundation must never paint the face mesh / uvMask overlay directly:
@@ -264,7 +266,7 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   const hasExplicitActiveRegions = options.activeRegions !== undefined;
   const activeRegionSet = new Set(options.activeRegions ?? []);
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
-  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation') =>
+  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation' | 'eyeliner') =>
     hasExplicitActiveRegions
       ? activeRegionSet.has(region)
       : activeRegion === 'all' || activeRegion === region;
@@ -322,7 +324,7 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.eyeliner,
       candidateId: companionControls.eyeliner.candidateId,
       colorHex: companionControls.eyeliner.colorHex,
-      enabled: false,
+      enabled: isRegionEnabled('eyeliner'),
       intensity: companionControls.eyeliner.intensity,
       maskTextureId: companionControls.eyeliner.maskTextureId,
       opacity: companionControls.eyeliner.opacity,
@@ -343,7 +345,8 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       layer =>
         layer.region === 'foundation' ||
         layer.region === 'blush' ||
-        layer.region === 'brow',
+        layer.region === 'brow' ||
+        layer.region === 'eyeliner',
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

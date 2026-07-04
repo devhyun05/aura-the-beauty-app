@@ -72,7 +72,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
 > = {
   foundation: {
     branchSource: 'makeupAR-full-face',
-    color: '#D7B19A',
+    color: '#E8C9B5',
     finish: 'natural-foundation',
     label: PRODUCT_REGION_LABELS.foundation,
     maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,

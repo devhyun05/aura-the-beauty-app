@@ -3142,7 +3142,13 @@ public sealed class RNBridge : MonoBehaviour
 
     private static int NormalizeFoundationDebugMaskMode(int preferred, int secondary, string region)
     {
-        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 5) : 0;
+        // 0-16: modes 8-11 are the in-app mask orientation probes
+        // (8=none, 9=X, 10=Y, 11=XY). This entry clamp MUST match the
+        // controller/E3 clamps or the probe buttons silently degrade to 8.
+        // Mode 12 is a shader-only asymmetric basic-mask test. Modes 13-16
+        // test clockwise/counter-clockwise 90-degree display rotations. Mode
+        // 19 is a shader-path confirmation fill.
+        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 24) : 0;
     }
 
     private static string FirstNonBlank(params string[] values)

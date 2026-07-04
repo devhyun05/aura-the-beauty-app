@@ -56,14 +56,21 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private const float NeckChromaGate = 0.85f;
     private const float NeckChromaTolerance = 0.16f;
     private const float NeckMaskStrength = 0.90f;
+    private const float DefaultScreenSpaceUvFlip = 0.0f;
+    private const float DefaultScreenSpaceUvFlipX = 0.0f;
     private static readonly int CameraTextureModeId = Shader.PropertyToID("_CameraTextureMode");
     private static readonly int CameraTexId = Shader.PropertyToID("_CameraTex");
     private static readonly int DisplayTransformId = Shader.PropertyToID("_UnityDisplayTransform");
+    private static readonly int ActiveRendererModeId = Shader.PropertyToID("_FoundationActiveRendererMode");
     private static readonly int TextureYId = Shader.PropertyToID("_textureY");
     private static readonly int TextureCbCrId = Shader.PropertyToID("_textureCbCr");
 
     private FoundationMaskRuntime maskRuntime;
     private FoundationSemanticMaskCompositor semanticCompositor;
+    private FoundationScreenSpaceCompositor screenSpaceCompositor;
+    private E7VisionLipBoundaryRuntime visionStabilizerRuntime;
+    private E7HandOcclusionRuntime handOcclusionRuntime;
+    private int lastVisionStabilizerSequence = -1;
     private Material material;
     private MeshRenderer quadRenderer;
     private MeshFilter quadFilter;
@@ -78,6 +85,11 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private int cameraTextureMode;
     private int cameraTextureCount;
     private string cameraTextureSource = "none";
+    private bool hasDisplayMatrix;
+    private Matrix4x4 lastDisplayMatrix = Matrix4x4.identity;
+    private float lastQuadDistance;
+    private float lastQuadWidth;
+    private float lastQuadHeight;
 
     public ScreenSpaceFoundationState CurrentState => state;
 
@@ -128,7 +140,13 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         state.Enabled = enabled && intensity > 0.0001f && opacity > 0.0001f;
         state.Mode = NormalizeMode(mode);
         state.FallbackMode = NormalizeFallbackMode(fallbackMode);
-        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 6);
+        // Modes 8-11 are mask-orientation probes used while calibrating the
+        // screen-space mask against the ARKit camera feed. Mode 12 bypasses
+        // the generated mask entirely and draws a shader-only asymmetric test
+        // mask so we can distinguish display-path flips from mask-generation
+        // flips. Modes 13-16 are 90-degree orientation probes. Mode 19 is a
+        // shader-path confirmation fill.
+        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 30);
         state.Intensity = Mathf.Clamp01(intensity) * Mathf.Clamp01(opacity);
         state.Coverage = Mathf.Clamp01(coverage);
         state.Evenness = Mathf.Clamp01(evenness);
@@ -153,6 +171,9 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_FoundationEvenness", state.Evenness);
         material.SetFloat("_FoundationLuminanceInfluence", state.LuminanceInfluence);
         material.SetFloat("_FoundationDebugMode", state.DebugMaskMode);
+        material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
+        material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
+        material.SetFloat(ActiveRendererModeId, 0.0f);
         material.SetFloat("_ProviderProductionReady", ProviderProductionReady ? 1.0f : 0.0f);
         ApplyBlendModeForDebug(state.DebugMaskMode);
     }
@@ -247,9 +268,16 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
             maskRuntime.UvSkinMaskOverride = state.FaceTracked
                 ? E3RegionMaskOverlay.GetSharedFoundationSkinMask(face)
                 : null;
+            UpdateDisplayProjectionInputs();
             maskState = state.FaceTracked
                 ? maskRuntime.UpdateMask(face, arCamera, state.DebugMaskMode)
                 : maskRuntime.InvalidateMask(false, state.DebugMaskMode, "face_unavailable");
+            // Probe self-diagnosis: mode 19 renders RED when the
+            // display-matrix projection is live, BLUE when it silently fell
+            // back to the legacy projection (missing intrinsics/matrix).
+            material.SetFloat(
+                "_DisplayProjectionActive",
+                maskRuntime.DisplayProjectionActive ? 1.0f : 0.0f);
             state.MaskChannelRMax = maskState.MaskMax;
             state.MaskAverage = maskState.MaskAverage;
             state.MaskChannelRFinalNonZero = maskState.MaskMax > 0.025f;
@@ -258,8 +286,13 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
             state.ProjectedVertexCount = maskState.ProjectedVertexCount;
             state.ProjectedTriangleCount = maskState.ProjectedTriangleCount;
             maskTexture = maskRuntime.FoundationMaskTexture;
-            maskValid = maskState.DynamicMaskValid && maskTexture != null;
-            maskInvalidReason = maskState.Status;
+            // The compositor projects the real face mesh, so it needs no
+            // screen-bounds validity: gate ONLY on live tracking. The old
+            // DynamicMaskValid gate required the whole face inside the frame
+            // (visible-vertex/bounds minimums), which wrongly disabled the
+            // foundation when the face was half out of frame.
+            maskValid = state.FaceTracked;
+            maskInvalidReason = state.FaceTracked ? "none" : "face_not_tracking";
         }
 
         state.NormalCorrectionEnabled = false;
@@ -312,8 +345,6 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         state.ShaderPath = "real_screen_space_pixel_correction";
         state.NormalCorrectionEnabled = state.DebugMaskMode == 0;
         currentCamera = arCamera;
-        EnsureQuad(arCamera);
-        UpdateQuadGeometry(arCamera);
 
         // Fallback attenuation: without a real segmentation provider the mask
         // boundary is only prior+chroma-gate accurate, so reduce strength to
@@ -327,6 +358,12 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
 
         material.SetTexture("_SkinMaskTex", maskTexture);
+        // Reset the compositor's sampling-compensation uniforms so leaving
+        // mode 24 never leaves a stale shift/scale on the quad path; the
+        // compositor re-sets them every frame while it is active.
+        material.SetVector("_MaskSampleShift", Vector4.zero);
+        material.SetFloat("_MaskSampleScaleY", 1.0f);
+        material.SetFloat("_MaskFaceCenterY", 0.5f);
         material.SetFloat(CameraTextureModeId, cameraTextureMode);
         material.SetFloat("_RawMaskAvailable", maskValid ? 1.0f : 0.0f);
         material.SetFloat("_FinalMaskAvailable", maskValid ? 1.0f : 0.0f);
@@ -350,13 +387,227 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
             "_FoundationDebugMouth",
             DebugAnchor(maskState.MouthAnchor, maskState.LipExclusionValid));
         ApplyBlendModeForDebug(state.DebugMaskMode);
-        SetQuadVisible(true);
+
+        // Prefer the CommandBuffer + DrawRenderer compositor for all normal
+        // screen-space foundation rendering. It draws the live ARFace mesh in
+        // the AR camera pass, so the mask uses the same final camera matrices
+        // as the visible frame. The old near-camera Quad remains a fallback
+        // only when the compositor cannot run.
+        bool cbCompositeActive = false;
+        if (!semanticMode && state.FaceTracked && face != null)
+        {
+            EnsureScreenSpaceCompositor();
+            material.SetFloat(ActiveRendererModeId, 1.0f);
+            cbCompositeActive = screenSpaceCompositor != null
+                && screenSpaceCompositor.UpdateCompositor(
+                    arCamera,
+                    face,
+                    material,
+                    E3RegionMaskOverlay.GetSharedFoundationSkinMask(face));
+            if (cbCompositeActive)
+            {
+                state.ActiveRenderer = "screenSpaceCommandBuffer";
+                state.ShaderPath = "command_buffer_draw_renderer";
+                state.FallbackReason = "none";
+            }
+            else
+            {
+                state.FallbackReason = "command_buffer_unavailable_quad_fallback";
+                material.SetFloat(ActiveRendererModeId, 0.0f);
+            }
+        }
+        else if (screenSpaceCompositor != null)
+        {
+            screenSpaceCompositor.Deactivate();
+        }
+
+        material.SetFloat(ActiveRendererModeId, cbCompositeActive ? 1.0f : 0.0f);
+        if (!cbCompositeActive)
+        {
+            EnsureQuad(arCamera);
+            UpdateQuadGeometry(arCamera);
+        }
+
+        SetQuadVisible(!cbCompositeActive);
         MaybeLogState();
         return state;
     }
 
+    /// <summary>
+    /// Feeds the mask runtime the ARKit display matrix (the exact transform
+    /// the camera feed is rendered with) and the sensor intrinsics for the
+    /// orientation-proof projection path (debug mode 19). Intrinsics can be
+    /// momentarily unavailable; the runtime falls back to the legacy
+    /// WorldToViewportPoint projection in that case.
+    /// </summary>
+    private void UpdateDisplayProjectionInputs()
+    {
+        if (maskRuntime == null)
+        {
+            return;
+        }
+
+        bool intrinsicsValid = false;
+        Vector2 focal = Vector2.zero;
+        Vector2 principal = Vector2.zero;
+        Vector2Int resolution = Vector2Int.zero;
+        if (cameraManager != null
+            && cameraManager.TryGetIntrinsics(out XRCameraIntrinsics intrinsics))
+        {
+            focal = intrinsics.focalLength;
+            principal = intrinsics.principalPoint;
+            resolution = intrinsics.resolution;
+            intrinsicsValid = true;
+        }
+
+        maskRuntime.ConfigureDisplayProjection(
+            lastDisplayMatrix,
+            hasDisplayMatrix,
+            focal,
+            principal,
+            resolution,
+            intrinsicsValid);
+    }
+
+    private bool cameraPoseUpdateModeApplied;
+
+    /// <summary>
+    /// The screen-space mask is projected with the camera pose available at
+    /// Update time, but TrackedPoseDriver by default applies one more pose
+    /// update right before rendering ("Update &amp; Before Render"). That gap
+    /// makes the mask trail the face whenever the phone moves. Forcing the
+    /// driver to Update-only keeps the rendered camera pose identical to the
+    /// pose the mask was projected with, so the mask stays glued.
+    /// </summary>
+    private void EnsureCameraPoseUpdateOnly(Camera arCamera)
+    {
+        if (cameraPoseUpdateModeApplied || arCamera == null)
+        {
+            return;
+        }
+
+        cameraPoseUpdateModeApplied = true;
+
+        UnityEngine.InputSystem.XR.TrackedPoseDriver inputSystemDriver =
+            arCamera.GetComponent<UnityEngine.InputSystem.XR.TrackedPoseDriver>();
+        if (inputSystemDriver != null
+            && inputSystemDriver.updateType != UnityEngine.InputSystem.XR.TrackedPoseDriver.UpdateType.Update)
+        {
+            inputSystemDriver.updateType = UnityEngine.InputSystem.XR.TrackedPoseDriver.UpdateType.Update;
+            Debug.Log("[FoundationScreenSpace] camera_pose_update_mode=update_only source=input_system");
+        }
+
+        UnityEngine.SpatialTracking.TrackedPoseDriver legacyDriver =
+            arCamera.GetComponent<UnityEngine.SpatialTracking.TrackedPoseDriver>();
+        if (legacyDriver != null
+            && legacyDriver.updateType != UnityEngine.SpatialTracking.TrackedPoseDriver.UpdateType.Update)
+        {
+            legacyDriver.updateType = UnityEngine.SpatialTracking.TrackedPoseDriver.UpdateType.Update;
+            Debug.Log("[FoundationScreenSpace] camera_pose_update_mode=update_only source=legacy");
+        }
+    }
+
+    private void UpdateVisionStabilizer()
+    {
+        if (visionStabilizerRuntime == null)
+        {
+            visionStabilizerRuntime = FindFirstObjectByType<E7VisionLipBoundaryRuntime>();
+            if (visionStabilizerRuntime == null)
+            {
+                visionStabilizerRuntime = gameObject.AddComponent<E7VisionLipBoundaryRuntime>();
+                visionStabilizerRuntime.Configure(FindFirstObjectByType<RNBridge>());
+            }
+        }
+
+        // Keep the 5fps Vision capture loop alive while foundation is active.
+        visionStabilizerRuntime.SetRuntimeRequested(true);
+
+        if (!visionStabilizerRuntime.TryGetLatestBoundary(
+                Screen.width,
+                Screen.height,
+                out E7VisionLipBoundaryRuntime.BoundarySnapshot snapshot))
+        {
+            return;
+        }
+
+        if (!snapshot.FaceBoundsAvailable || snapshot.Sequence == lastVisionStabilizerSequence)
+        {
+            return;
+        }
+
+        lastVisionStabilizerSequence = snapshot.Sequence;
+        maskRuntime.ApplyVisionFaceObservation(
+            snapshot.DetectedAtMs,
+            snapshot.FaceBoundsCenter,
+            Screen.width,
+            Screen.height);
+        if (screenSpaceCompositor != null)
+        {
+            screenSpaceCompositor.ApplyVisionFaceObservation(
+                snapshot.DetectedAtMs,
+                snapshot.FaceBoundsCenter,
+                snapshot.FaceBoundsSize,
+                Screen.width,
+                Screen.height);
+        }
+    }
+
+    private void UpdateHandOcclusion(Rect faceViewportBounds)
+    {
+        if (handOcclusionRuntime == null)
+        {
+            handOcclusionRuntime = FindFirstObjectByType<E7HandOcclusionRuntime>();
+            if (handOcclusionRuntime == null)
+            {
+                handOcclusionRuntime = gameObject.AddComponent<E7HandOcclusionRuntime>();
+            }
+        }
+
+        handOcclusionRuntime.SetRuntimeRequested(true);
+
+        // ROI = whole face area (top-left pixel rect), so a hand anywhere
+        // over the face counts as occluding — not just near the mouth.
+        float screenWidth = Mathf.Max(1.0f, Screen.width);
+        float screenHeight = Mathf.Max(1.0f, Screen.height);
+        if (faceViewportBounds.width > 0.01f && faceViewportBounds.height > 0.01f)
+        {
+            handOcclusionRuntime.UpdateMouthScreenBounds(new Rect(
+                faceViewportBounds.xMin * screenWidth,
+                (1.0f - faceViewportBounds.yMax) * screenHeight,
+                faceViewportBounds.width * screenWidth,
+                faceViewportBounds.height * screenHeight));
+        }
+
+        E7HandOcclusionRuntime.HandOcclusionState handState = handOcclusionRuntime.CurrentState;
+        bool enabled = handState.HandNearMouth
+            && (handState.HasHandMask || handState.HasOcclusionRect);
+        material.SetFloat("_HandOcclusionEnabled", enabled ? 1.0f : 0.0f);
+        if (!enabled)
+        {
+            return;
+        }
+
+        if (handOcclusionRuntime.HandMaskTexture != null)
+        {
+            material.SetTexture("_HandOcclusionMaskTex", handOcclusionRuntime.HandMaskTexture);
+        }
+
+        bool useRect = handState.HasOcclusionRect && !handState.HasHandMask;
+        material.SetFloat("_HandOcclusionUseRect", useRect ? 1.0f : 0.0f);
+        if (useRect)
+        {
+            Rect rect = handState.ScreenRect;
+            material.SetVector("_HandOcclusionRect", new Vector4(
+                Mathf.Clamp01(rect.xMin / screenWidth),
+                Mathf.Clamp01(1.0f - rect.yMax / screenHeight),
+                Mathf.Clamp01(rect.xMax / screenWidth),
+                Mathf.Clamp01(1.0f - rect.yMin / screenHeight)));
+        }
+    }
+
     private void EnsureCameraSubscription(Camera arCamera)
     {
+        EnsureCameraPoseUpdateOnly(arCamera);
         ARCameraManager nextManager = null;
         if (arCamera != null)
         {
@@ -435,7 +686,9 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
 
         if (eventArgs.displayMatrix.HasValue)
         {
-            material.SetMatrix(DisplayTransformId, eventArgs.displayMatrix.Value);
+            lastDisplayMatrix = eventArgs.displayMatrix.Value;
+            hasDisplayMatrix = true;
+            material.SetMatrix(DisplayTransformId, lastDisplayMatrix);
         }
 
         if (hasTextureY && hasTextureCbCr)
@@ -516,6 +769,9 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.renderQueue = FoundationRenderQueue;
         material.SetFloat("_FoundationMaskStrength", 1.0f);
         material.SetFloat("_FoundationMaskFeather", 0.0f);
+        material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
+        material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
+        material.SetFloat(ActiveRendererModeId, 0.0f);
         material.SetFloat("_NeckChromaGate", NeckChromaGate);
         material.SetFloat("_NeckChromaTolerance", NeckChromaTolerance);
         material.SetFloat("_NeckMaskStrength", NeckMaskStrength);
@@ -566,6 +822,9 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         float distance = Mathf.Max(arCamera.nearClipPlane + 0.035f, 0.05f);
         float height = 2.0f * distance * Mathf.Tan(arCamera.fieldOfView * Mathf.Deg2Rad * 0.5f);
         float width = height * Mathf.Max(0.1f, arCamera.aspect);
+        lastQuadDistance = distance;
+        lastQuadWidth = width;
+        lastQuadHeight = height;
         quadMesh.Clear();
         quadMesh.SetVertices(new[]
         {
@@ -605,6 +864,25 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         if (quadRenderer != null)
         {
             quadRenderer.enabled = visible;
+        }
+
+        if (!visible && screenSpaceCompositor != null && !state.ScreenSpaceActive)
+        {
+            screenSpaceCompositor.Deactivate();
+        }
+    }
+
+    private void EnsureScreenSpaceCompositor()
+    {
+        if (screenSpaceCompositor != null)
+        {
+            return;
+        }
+
+        screenSpaceCompositor = FindFirstObjectByType<FoundationScreenSpaceCompositor>();
+        if (screenSpaceCompositor == null)
+        {
+            screenSpaceCompositor = gameObject.AddComponent<FoundationScreenSpaceCompositor>();
         }
     }
 
@@ -749,6 +1027,149 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
             + " faceTracked=" + state.FaceTracked.ToString().ToLowerInvariant()
             + " activeRenderer=" + state.ActiveRenderer
             + " shaderPath=" + state.ShaderPath
-            + " fallbackReason=" + state.FallbackReason);
+            + " fallbackReason=" + state.FallbackReason
+            + " materialShader="
+            + (material != null && material.shader != null ? material.shader.name : "none")
+            + " srcBlend="
+            + (material != null ? material.GetInt("_SrcBlend").ToString(CultureInfo.InvariantCulture) : "none")
+            + " dstBlend="
+            + (material != null ? material.GetInt("_DstBlend").ToString(CultureInfo.InvariantCulture) : "none")
+            + " activeRendererMode="
+            + (material != null
+                ? material.GetFloat(ActiveRendererModeId).ToString("0.###", CultureInfo.InvariantCulture)
+                : "none"));
+        MaybeLogProjectionDiagnostics();
+    }
+
+    private void MaybeLogProjectionDiagnostics()
+    {
+        Camera arCamera = currentCamera;
+        if (arCamera == null)
+        {
+            Debug.Log("[FoundationProjection] camera=null");
+            return;
+        }
+
+        Matrix4x4 projection = arCamera.projectionMatrix;
+        float matrixAspect = Mathf.Abs(projection.m00) > 0.000001f
+            ? Mathf.Abs(projection.m11 / projection.m00)
+            : 0.0f;
+        float verticalFovFromProjection = Mathf.Abs(projection.m11) > 0.000001f
+            ? 2.0f * Mathf.Atan(1.0f / Mathf.Abs(projection.m11)) * Mathf.Rad2Deg
+            : 0.0f;
+        float horizontalFovFromProjection = Mathf.Abs(projection.m00) > 0.000001f
+            ? 2.0f * Mathf.Atan(1.0f / Mathf.Abs(projection.m00)) * Mathf.Rad2Deg
+            : 0.0f;
+        float cameraAspect = Mathf.Max(0.0001f, arCamera.aspect);
+        float screenAspect = Screen.height > 0 ? Screen.width / (float)Screen.height : 0.0f;
+        float pixelAspect = arCamera.pixelHeight > 0
+            ? arCamera.pixelWidth / (float)arCamera.pixelHeight
+            : 0.0f;
+        float quadAspect = lastQuadHeight > 0.000001f ? lastQuadWidth / lastQuadHeight : 0.0f;
+        float maskAspect = state.MaskHeight > 0 ? state.MaskWidth / (float)state.MaskHeight : 0.0f;
+        float fovDelta = arCamera.fieldOfView - verticalFovFromProjection;
+        float cameraMatrixAspectDelta = cameraAspect - matrixAspect;
+        float quadMatrixAspectDelta = quadAspect - matrixAspect;
+        bool asymmetricProjection =
+            Mathf.Abs(projection.m02) > 0.0005f
+            || Mathf.Abs(projection.m12) > 0.0005f;
+        bool fovMismatch = Mathf.Abs(fovDelta) > 0.05f;
+        bool aspectMismatch =
+            Mathf.Abs(cameraMatrixAspectDelta) > 0.002f
+            || Mathf.Abs(quadMatrixAspectDelta) > 0.002f;
+
+        Debug.Log(
+            "[FoundationProjection]"
+            + " arFov=" + arCamera.fieldOfView.ToString("0.###", CultureInfo.InvariantCulture)
+            + " projectionFovV=" + verticalFovFromProjection.ToString("0.###", CultureInfo.InvariantCulture)
+            + " projectionFovH=" + horizontalFovFromProjection.ToString("0.###", CultureInfo.InvariantCulture)
+            + " fovDelta=" + fovDelta.ToString("0.###", CultureInfo.InvariantCulture)
+            + " arAspect=" + cameraAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " matrixAspect=" + matrixAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " pixelAspect=" + pixelAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " screenAspect=" + screenAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " quadAspect=" + quadAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " cameraMatrixAspectDelta=" + cameraMatrixAspectDelta.ToString("0.####", CultureInfo.InvariantCulture)
+            + " quadMatrixAspectDelta=" + quadMatrixAspectDelta.ToString("0.####", CultureInfo.InvariantCulture)
+            + " projectionM00=" + projection.m00.ToString("0.#####", CultureInfo.InvariantCulture)
+            + " projectionM11=" + projection.m11.ToString("0.#####", CultureInfo.InvariantCulture)
+            + " projectionM02=" + projection.m02.ToString("0.#####", CultureInfo.InvariantCulture)
+            + " projectionM12=" + projection.m12.ToString("0.#####", CultureInfo.InvariantCulture)
+            + " asymmetricProjection=" + asymmetricProjection.ToString().ToLowerInvariant()
+            + " fovMismatch=" + fovMismatch.ToString().ToLowerInvariant()
+            + " aspectMismatch=" + aspectMismatch.ToString().ToLowerInvariant()
+            + " near=" + arCamera.nearClipPlane.ToString("0.###", CultureInfo.InvariantCulture)
+            + " far=" + arCamera.farClipPlane.ToString("0.###", CultureInfo.InvariantCulture)
+            + " quadDistance=" + lastQuadDistance.ToString("0.###", CultureInfo.InvariantCulture)
+            + " quadSize=" + lastQuadWidth.ToString("0.###", CultureInfo.InvariantCulture)
+            + "x"
+            + lastQuadHeight.ToString("0.###", CultureInfo.InvariantCulture)
+            + " maskAspect=" + maskAspect.ToString("0.####", CultureInfo.InvariantCulture)
+            + " maskResolution=" + state.MaskWidth.ToString(CultureInfo.InvariantCulture)
+            + "x"
+            + state.MaskHeight.ToString(CultureInfo.InvariantCulture)
+            + " cameraPixel=" + arCamera.pixelWidth.ToString(CultureInfo.InvariantCulture)
+            + "x"
+            + arCamera.pixelHeight.ToString(CultureInfo.InvariantCulture)
+            + " screen=" + Screen.width.ToString(CultureInfo.InvariantCulture)
+            + "x"
+            + Screen.height.ToString(CultureInfo.InvariantCulture)
+            + " cameraRect=" + FormatRect(arCamera.rect)
+            + " pixelRect=" + FormatRect(arCamera.pixelRect)
+            + " poseDriver=" + ResolvePoseDriverMode(arCamera)
+            + " displayMatrix=" + (hasDisplayMatrix ? FormatDisplayMatrix(lastDisplayMatrix) : "none"));
+    }
+
+    private static string ResolvePoseDriverMode(Camera arCamera)
+    {
+        if (arCamera == null)
+        {
+            return "none";
+        }
+
+        string inputMode = "none";
+        UnityEngine.InputSystem.XR.TrackedPoseDriver inputSystemDriver =
+            arCamera.GetComponent<UnityEngine.InputSystem.XR.TrackedPoseDriver>();
+        if (inputSystemDriver != null)
+        {
+            inputMode = inputSystemDriver.updateType.ToString();
+        }
+
+        string legacyMode = "none";
+        UnityEngine.SpatialTracking.TrackedPoseDriver legacyDriver =
+            arCamera.GetComponent<UnityEngine.SpatialTracking.TrackedPoseDriver>();
+        if (legacyDriver != null)
+        {
+            legacyMode = legacyDriver.updateType.ToString();
+        }
+
+        return "input=" + inputMode + ",legacy=" + legacyMode;
+    }
+
+    private static string FormatDisplayMatrix(Matrix4x4 matrix)
+    {
+        return "m00:"
+            + matrix.m00.ToString("0.####", CultureInfo.InvariantCulture)
+            + ",m01:"
+            + matrix.m01.ToString("0.####", CultureInfo.InvariantCulture)
+            + ",m03:"
+            + matrix.m03.ToString("0.####", CultureInfo.InvariantCulture)
+            + ",m10:"
+            + matrix.m10.ToString("0.####", CultureInfo.InvariantCulture)
+            + ",m11:"
+            + matrix.m11.ToString("0.####", CultureInfo.InvariantCulture)
+            + ",m13:"
+            + matrix.m13.ToString("0.####", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatRect(Rect rect)
+    {
+        return rect.x.ToString("0.###", CultureInfo.InvariantCulture)
+            + ":"
+            + rect.y.ToString("0.###", CultureInfo.InvariantCulture)
+            + ":"
+            + rect.width.ToString("0.###", CultureInfo.InvariantCulture)
+            + ":"
+            + rect.height.ToString("0.###", CultureInfo.InvariantCulture);
     }
 }

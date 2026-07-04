@@ -266,10 +266,12 @@ export const REGION_COLOR_OPTIONS: Record<
   readonly FullFaceRegionColorOption[]
 > = {
   foundation: [
-    {id: 'neutral-21', label: '뉴트럴 21', hex: '#D7B19A'},
-    {id: 'ivory-19', label: '아이보리 19', hex: '#E6C4AD'},
-    {id: 'beige-23', label: '베이지 23', hex: '#CFA58A'},
-    {id: 'sand-25', label: '샌드 25', hex: '#B98E74'},
+    {id: 'porcelain-cool-110c', label: '포슬린 쿨', hex: '#F0E7DB'},
+    {id: 'light-warm-beige-200w', label: '라이트 웜베이지', hex: '#EDCAA1'},
+    {id: 'golden-sand-260n', label: '골든 샌드', hex: '#D9AD7E'},
+    {id: 'rosy-medium-320n', label: '로지 미디엄', hex: '#B88C6A'},
+    {id: 'caramel-tan-400n', label: '카라멜 탠', hex: '#8E5A31'},
+    {id: 'deep-cocoa-500c', label: '딥 코코아', hex: '#613920'},
   ],
   lip: [
     {id: 'rose', label: '로즈', hex: '#C76B74'},
@@ -294,6 +296,8 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'brown', label: '브라운', hex: '#4A332D'},
     {id: 'plum', label: '플럼', hex: '#40303F'},
     {id: 'taupe', label: '토프', hex: '#5E514E'},
+    // 컬러드 아이라이너 스타일의 기본색 (AR 검증 팔레트와 동일 hex).
+    {id: 'burgundy', label: '버건디', hex: '#5A2A33'},
   ],
 };
 

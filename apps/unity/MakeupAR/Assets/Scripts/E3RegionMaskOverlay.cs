@@ -311,23 +311,23 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static Vector2 foundationCalUvMax = new Vector2(1.0f, 1.0f);
     private static FoundationMaskZone foundationCalLeftEye = new FoundationMaskZone
     {
-        Center = new Vector2(0.355f, 0.674f), Radius = new Vector2(0.112f, 0.052f), Valid = true
+        Center = new Vector2(0.355f, 0.674f), Radius = new Vector2(0.074f, 0.032f), Valid = true
     };
     private static FoundationMaskZone foundationCalRightEye = new FoundationMaskZone
     {
-        Center = new Vector2(0.645f, 0.674f), Radius = new Vector2(0.112f, 0.052f), Valid = true
+        Center = new Vector2(0.645f, 0.674f), Radius = new Vector2(0.074f, 0.032f), Valid = true
     };
     private static FoundationMaskZone foundationCalLeftBrow = new FoundationMaskZone
     {
-        Center = new Vector2(0.355f, 0.776f), Radius = new Vector2(0.190f, 0.078f), Valid = true
+        Center = new Vector2(0.355f, 0.776f), Radius = new Vector2(0.095f, 0.026f), Valid = true
     };
     private static FoundationMaskZone foundationCalRightBrow = new FoundationMaskZone
     {
-        Center = new Vector2(0.645f, 0.776f), Radius = new Vector2(0.190f, 0.078f), Valid = true
+        Center = new Vector2(0.645f, 0.776f), Radius = new Vector2(0.095f, 0.026f), Valid = true
     };
     private static FoundationMaskZone foundationCalMouth = new FoundationMaskZone
     {
-        Center = new Vector2(0.500f, 0.415f), Radius = new Vector2(0.150f, 0.060f), Valid = true
+        Center = new Vector2(0.500f, 0.402f), Radius = new Vector2(0.128f, 0.031f), Valid = true
     };
 
     // Base/exclusion mask sources for the generated foundation skin mask.
@@ -665,7 +665,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             PreserveDetail = preserveDetail,
             FoundationMode = NormalizeFoundationMode(region, foundationMode),
             FoundationFallbackMode = NormalizeFoundationFallbackMode(foundationFallbackMode),
-            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 6)
+            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 30)
         };
 
         return ApplyRegionToTrackedFaces(region, true);
@@ -2789,8 +2789,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 ? "GeneratedLipMasks/" + maskTextureId
                 : "SmoothRegionMasks/" + maskTextureId,
             Threshold = foundationMask || lipStyleAtlas || visionLipBoundary || cheekBlushMask || generatedLipMask ? 0.025f : 0.04f,
+            // Eyeliner is a thin line: the default 0.56 feather would blur it
+            // into a shadow, so keep its edge tight.
             FeatherUvNormalized = foundationMask
                 ? 0.54f
+                : region == "eyeliner"
+                ? 0.10f
                 : lipStyleAtlas
                 ? 0.32f
                 : visionLipBoundary
@@ -2931,6 +2935,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (IsVisionLipBoundaryMask(mask.MaskTextureId))
         {
             return GetVisionBoundaryMaskTexture();
+        }
+
+        if (IsGeneratedEyelinerMaskTextureId(mask.MaskTextureId))
+        {
+            return GetGeneratedEyelinerMaskTexture(mask.MaskTextureId);
         }
 
         if (IsGeneratedLipMaskTextureId(mask.MaskTextureId))
@@ -4662,7 +4671,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             {
                 zone = 3; // right brow
             }
-            else if (nx >= 0.33f && nx <= 0.67f && ny >= 0.320f && ny <= 0.455f)
+            else if (nx >= 0.30f && nx <= 0.70f && ny >= 0.350f && ny <= 0.425f)
             {
                 zone = 4; // mouth (lips only)
             }
@@ -4687,16 +4696,19 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         // Eyes: eye opening plus a small safety margin. Brows: taller band so
         // brow hair is fully excluded (centers are measured from the mesh, so
         // widening the band does not eat under-brow skin). Mouth: lips only.
+        // Device feedback 2026-07-05: exclusion must hug the eye opening —
+        // the skin at the inner/outer corners (left/right of the eyes) gets
+        // painted, only the opening itself stays clear.
         foundationCalLeftEye = BuildFoundationMaskZone(
-            zoneMin[0], zoneMax[0], zoneSum[0], zoneCount[0], 0.95f, 0.85f, 0.050f, 0.032f);
+            zoneMin[0], zoneMax[0], zoneSum[0], zoneCount[0], 0.46f, 0.44f, 0.021f, 0.014f);
         foundationCalRightEye = BuildFoundationMaskZone(
-            zoneMin[1], zoneMax[1], zoneSum[1], zoneCount[1], 0.95f, 0.85f, 0.050f, 0.032f);
+            zoneMin[1], zoneMax[1], zoneSum[1], zoneCount[1], 0.46f, 0.44f, 0.021f, 0.014f);
         foundationCalLeftBrow = BuildFoundationMaskZone(
-            zoneMin[2], zoneMax[2], zoneSum[2], zoneCount[2], 1.15f, 1.35f, 0.090f, 0.050f);
+            zoneMin[2], zoneMax[2], zoneSum[2], zoneCount[2], 0.58f, 0.44f, 0.048f, 0.016f);
         foundationCalRightBrow = BuildFoundationMaskZone(
-            zoneMin[3], zoneMax[3], zoneSum[3], zoneCount[3], 1.15f, 1.35f, 0.090f, 0.050f);
+            zoneMin[3], zoneMax[3], zoneSum[3], zoneCount[3], 0.58f, 0.44f, 0.048f, 0.016f);
         foundationCalMouth = BuildFoundationMaskZone(
-            zoneMin[4], zoneMax[4], zoneSum[4], zoneCount[4], 0.92f, 0.80f, 0.095f, 0.042f);
+            zoneMin[4], zoneMax[4], zoneSum[4], zoneCount[4], 0.82f, 0.42f, 0.105f, 0.018f);
         foundationCalUvMin = uvMin;
         foundationCalUvMax = uvMax;
         foundationSkinMaskCalibrated = true;
@@ -4706,6 +4718,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             UnityEngine.Object.Destroy(foundationGeneratedSkinMaskTexture);
             foundationGeneratedSkinMaskTexture = null;
         }
+
+        // Regenerate eyeliner shapes with the freshly measured eye zones.
+        ClearGeneratedEyelinerMasks();
 
         Debug.Log(
             "[E7] foundation_skin_mask_calibrated"
@@ -4979,10 +4994,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     /// UV calibration when possible and returns the calibrated canonical-UV
     /// skin mask (eyes/brows/lips excluded, hairline faded).
     /// </summary>
+    private static UnityEngine.XR.ARSubsystems.TrackableId foundationCalibrationFaceId =
+        UnityEngine.XR.ARSubsystems.TrackableId.invalidId;
+
     public static Texture2D GetSharedFoundationSkinMask(ARFace face)
     {
         if (face != null)
         {
+            // Per-person calibration: when a DIFFERENT face is tracked
+            // (new trackable id — e.g. handing the phone to someone else),
+            // drop the cached calibration and generated mask so the zones
+            // are re-measured from the new person's mesh.
+            if (face.trackableId != foundationCalibrationFaceId)
+            {
+                foundationCalibrationFaceId = face.trackableId;
+                if (foundationSkinMaskCalibrated)
+                {
+                    foundationSkinMaskCalibrated = false;
+                    if (foundationGeneratedSkinMaskTexture != null)
+                    {
+                        UnityEngine.Object.Destroy(foundationGeneratedSkinMaskTexture);
+                        foundationGeneratedSkinMaskTexture = null;
+                    }
+
+                    // Eyeliner shapes are built from the same measured eye
+                    // zones — regenerate them for the new person too.
+                    ClearGeneratedEyelinerMasks();
+                    Debug.Log("[E7] foundation_skin_mask_recalibrating reason=new_face");
+                }
+            }
+
             EnsureFoundationSkinMaskCalibration(face);
         }
 
@@ -4998,6 +5039,437 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         return FoundationMaskEllipse(
             u, v, zone.Center.x, zone.Center.y, zone.Radius.x, zone.Radius.y, feather);
+    }
+
+    // ---- Generated eyeliner shape masks -----------------------------------
+    // Parametric eyeliner drawn in canonical face-UV space from the SAME
+    // measured per-person eye zones used by the foundation exclusions, so
+    // every shape hugs THIS user's lash line (no static PNG misalignment).
+    // Styles follow the reference chart (v2 model: quadratic thickness
+    // profile along the lid, bezier wing, optional inner-corner extension
+    // and lower lash band):
+    //   e7-eyeliner-gen-cat-v2     : thin line, short steep upward-curled flick
+    //   e7-eyeliner-gen-puppy-v2   : soft tail following the eye down-out
+    //   e7-eyeliner-gen-sexy-v2    : long near-horizontal wing + inner-corner point
+    //   e7-eyeliner-gen-winged-v2  : bold filled triangular wing, crisp edges
+    //   e7-eyeliner-gen-colored-v2 : soft basic line (identity carried by color)
+    //   e7-eyeliner-gen-doll-v2    : centre-heavy soft line + under-eye shading
+    private static readonly Dictionary<string, Texture2D> GeneratedEyelinerMaskTextures =
+        new Dictionary<string, Texture2D>();
+
+    private static bool IsGeneratedEyelinerMaskTextureId(string maskTextureId)
+    {
+        return !string.IsNullOrWhiteSpace(maskTextureId)
+            && maskTextureId.StartsWith("e7-eyeliner-gen-", StringComparison.Ordinal);
+    }
+
+    private static void ClearGeneratedEyelinerMasks()
+    {
+        foreach (KeyValuePair<string, Texture2D> entry in GeneratedEyelinerMaskTextures)
+        {
+            if (entry.Value != null)
+            {
+                UnityEngine.Object.Destroy(entry.Value);
+            }
+        }
+
+        GeneratedEyelinerMaskTextures.Clear();
+    }
+
+    // Per-style shape parameters. All lengths/thicknesses are face-UV units
+    // (eye zone is roughly rx=0.074, ry=0.032); angles are degrees where
+    // positive lifts the wing upward (+v is UP the face in this UV space).
+    private struct EyelinerStyleParams
+    {
+        // Upper lash band (3-point quadratic thickness profile inner->outer).
+        public float InnerStart;          // t where the band begins (-1 inner corner .. +1 outer)
+        public float InnerThickness;
+        public float MidThickness;
+        public float OuterThickness;
+        public float BandSoftness;
+
+        // Wing: quadratic bezier from the outer corner.
+        public float WingLength;
+        public float WingAngleDeg;        // chord angle; + = upward flick, - = droopy
+        public float WingCurl;            // perpendicular bow of the bezier; + = curls upward
+        public float WingRootThickness;   // half-width at the root, tapers to a point
+        public float WingSoftness;
+
+        // Inner-corner (front-of-eye) extension; 0 length disables.
+        public float InnerExtLength;
+        public float InnerExtThickness;
+        public float InnerExtDropDeg;     // + drops the point below horizontal
+
+        // Lower lash band (under-eye shading); LowerEnd <= LowerStart disables.
+        public float LowerStart;
+        public float LowerEnd;
+        public float LowerThickness;
+        public float LowerSoftness;
+        public float LowerOpacity;
+    }
+
+    // Geometry precomputed once per eye per texture so the per-pixel loop
+    // only does cheap distance tests inside a bounding box.
+    private struct EyelinerEyeGeometry
+    {
+        public bool Valid;
+        public Vector2 Center;
+        public float Rx;
+        public float Ry;
+        public float OuterSign;
+        public Vector2[] WingPoints;
+        public float[] WingHalfWidths;
+        public Vector2 InnerExtA;
+        public Vector2 InnerExtB;
+        public Vector2 BoundsMin;
+        public Vector2 BoundsMax;
+    }
+
+    private static EyelinerStyleParams GetEyelinerStyleParams(string maskTextureId)
+    {
+        EyelinerStyleParams style = new EyelinerStyleParams
+        {
+            // Colored: soft basic lash line with a small tail; the style's
+            // identity is carried by its burgundy default color on the RN
+            // side. Also the graceful fallback for stale/unknown gen ids.
+            InnerStart = -0.90f,
+            InnerThickness = 0.006f,
+            MidThickness = 0.010f,
+            OuterThickness = 0.012f,
+            BandSoftness = 0.0055f,
+            WingLength = 0.028f,
+            WingAngleDeg = 18.0f,
+            WingCurl = 0.08f,
+            WingRootThickness = 0.009f,
+            WingSoftness = 0.0055f
+        };
+
+        switch (maskTextureId)
+        {
+            case "e7-eyeliner-gen-cat-v2":
+                // Thin sleek line, short steep flick curling upward.
+                style.InnerStart = -0.95f;
+                style.InnerThickness = 0.004f;
+                style.MidThickness = 0.007f;
+                style.OuterThickness = 0.011f;
+                style.BandSoftness = 0.0035f;
+                style.WingLength = 0.042f;
+                style.WingAngleDeg = 52.0f;
+                style.WingCurl = 0.22f;
+                style.WingRootThickness = 0.009f;
+                style.WingSoftness = 0.0035f;
+                break;
+            case "e7-eyeliner-gen-puppy-v2":
+                // Soft medium band, tail follows the eye down-and-out.
+                style.InnerStart = -0.90f;
+                style.InnerThickness = 0.006f;
+                style.MidThickness = 0.010f;
+                style.OuterThickness = 0.014f;
+                style.BandSoftness = 0.0065f;
+                style.WingLength = 0.048f;
+                style.WingAngleDeg = -22.0f;
+                style.WingCurl = -0.12f;
+                style.WingRootThickness = 0.012f;
+                style.WingSoftness = 0.0065f;
+                break;
+            case "e7-eyeliner-gen-sexy-v2":
+                // Horizontal elongation: long near-flat wing plus a pointed
+                // inner-corner extension toward the nose.
+                style.InnerStart = -1.00f;
+                style.InnerThickness = 0.005f;
+                style.MidThickness = 0.009f;
+                style.OuterThickness = 0.017f;
+                style.BandSoftness = 0.0040f;
+                style.WingLength = 0.085f;
+                style.WingAngleDeg = 8.0f;
+                style.WingCurl = 0.06f;
+                style.WingRootThickness = 0.015f;
+                style.WingSoftness = 0.0040f;
+                style.InnerExtLength = 0.022f;
+                style.InnerExtThickness = 0.0055f;
+                style.InnerExtDropDeg = 8.0f;
+                break;
+            case "e7-eyeliner-gen-winged-v2":
+                // Bold filled triangle: strongest outer growth, thick wing
+                // root, crispest edges.
+                style.InnerStart = -0.95f;
+                style.InnerThickness = 0.005f;
+                style.MidThickness = 0.010f;
+                style.OuterThickness = 0.021f;
+                style.BandSoftness = 0.0028f;
+                style.WingLength = 0.062f;
+                style.WingAngleDeg = 30.0f;
+                style.WingCurl = 0.10f;
+                style.WingRootThickness = 0.020f;
+                style.WingSoftness = 0.0028f;
+                break;
+            case "e7-eyeliner-gen-doll-v2":
+                // Centre-heavy profile rounds the eye; softest edges plus an
+                // under-eye shading band on the lower lash line.
+                style.InnerStart = -0.90f;
+                style.InnerThickness = 0.007f;
+                style.MidThickness = 0.015f;
+                style.OuterThickness = 0.010f;
+                style.BandSoftness = 0.0090f;
+                style.WingLength = 0.018f;
+                style.WingAngleDeg = 8.0f;
+                style.WingCurl = 0.0f;
+                style.WingRootThickness = 0.007f;
+                style.WingSoftness = 0.0090f;
+                style.LowerStart = 0.0f;
+                style.LowerEnd = 1.05f;
+                style.LowerThickness = 0.0075f;
+                style.LowerSoftness = 0.0110f;
+                style.LowerOpacity = 0.55f;
+                break;
+            case "e7-eyeliner-gen-colored-v2":
+            default:
+                break;
+        }
+
+        return style;
+    }
+
+    private static EyelinerEyeGeometry BuildEyelinerEyeGeometry(
+        FoundationMaskZone eye, float outerSign, EyelinerStyleParams style)
+    {
+        EyelinerEyeGeometry geo = default;
+        if (!eye.Valid)
+        {
+            return geo;
+        }
+
+        geo.Valid = true;
+        geo.Center = eye.Center;
+        geo.Rx = Mathf.Max(eye.Radius.x, 0.02f);
+        geo.Ry = Mathf.Max(eye.Radius.y, 0.012f);
+        geo.OuterSign = outerSign;
+
+        // Wing bezier -> short polyline with per-point half-widths. The x
+        // component mirrors with outerSign; the curl perpendicular keeps its
+        // vertical sense so both wings bow the same way (up or down).
+        const int wingSamples = 11;
+        Vector2 wingRoot = new Vector2(
+            geo.Center.x + outerSign * geo.Rx * 0.97f,
+            geo.Center.y + geo.Ry * 0.30f);
+        float theta = style.WingAngleDeg * Mathf.Deg2Rad;
+        Vector2 chord = new Vector2(outerSign * Mathf.Cos(theta), Mathf.Sin(theta));
+        Vector2 wingTip = wingRoot + style.WingLength * chord;
+        Vector2 curlPerp = new Vector2(-outerSign * Mathf.Sin(theta), Mathf.Cos(theta));
+        Vector2 wingControl =
+            (wingRoot + wingTip) * 0.5f + style.WingCurl * style.WingLength * curlPerp;
+        geo.WingPoints = new Vector2[wingSamples];
+        geo.WingHalfWidths = new float[wingSamples];
+        for (int i = 0; i < wingSamples; i++)
+        {
+            float s = i / (float)(wingSamples - 1);
+            float inv = 1.0f - s;
+            geo.WingPoints[i] =
+                inv * inv * wingRoot + 2.0f * inv * s * wingControl + s * s * wingTip;
+            geo.WingHalfWidths[i] = Mathf.Lerp(
+                style.WingRootThickness, 0.0012f, Mathf.Pow(s, 1.2f));
+        }
+
+        // Inner-corner extension segment (tapered toward the nose).
+        if (style.InnerExtLength > 0.0f)
+        {
+            float phi = style.InnerExtDropDeg * Mathf.Deg2Rad;
+            geo.InnerExtA = new Vector2(
+                geo.Center.x - outerSign * geo.Rx * 0.96f,
+                geo.Center.y + geo.Ry * 0.10f);
+            geo.InnerExtB = geo.InnerExtA + style.InnerExtLength * new Vector2(
+                -outerSign * Mathf.Cos(phi), -Mathf.Sin(phi));
+        }
+
+        // Early-out bounds: eye ellipse + wing + inner extension, padded by
+        // the largest thickness and softness in play.
+        float margin = 0.004f
+            + Mathf.Max(Mathf.Max(style.BandSoftness, style.WingSoftness), style.LowerSoftness)
+            + Mathf.Max(
+                Mathf.Max(style.OuterThickness, style.MidThickness),
+                Mathf.Max(style.WingRootThickness, style.LowerThickness));
+        Vector2 min = new Vector2(geo.Center.x - geo.Rx * 1.1f, geo.Center.y - geo.Ry * 1.1f);
+        Vector2 max = new Vector2(geo.Center.x + geo.Rx * 1.1f, geo.Center.y + geo.Ry * 1.1f);
+        for (int i = 0; i < wingSamples; i++)
+        {
+            min = Vector2.Min(min, geo.WingPoints[i]);
+            max = Vector2.Max(max, geo.WingPoints[i]);
+        }
+
+        if (style.InnerExtLength > 0.0f)
+        {
+            min = Vector2.Min(min, Vector2.Min(geo.InnerExtA, geo.InnerExtB));
+            max = Vector2.Max(max, Vector2.Max(geo.InnerExtA, geo.InnerExtB));
+        }
+
+        geo.BoundsMin = min - new Vector2(margin, margin);
+        geo.BoundsMax = max + new Vector2(margin, margin);
+        return geo;
+    }
+
+    // Shared by the runtime texture cache and the editor PNG exporter (a
+    // separate assembly, hence public), so parameter tuning can be inspected
+    // offline against the reference photo.
+    public static Color32[] RasterizeEyelinerMask(string maskTextureId, int size)
+    {
+        EyelinerStyleParams style = GetEyelinerStyleParams(maskTextureId);
+        EyelinerEyeGeometry leftGeo =
+            BuildEyelinerEyeGeometry(foundationCalLeftEye, -1.0f, style);
+        EyelinerEyeGeometry rightGeo =
+            BuildEyelinerEyeGeometry(foundationCalRightEye, 1.0f, style);
+
+        Color32[] pixels = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            float v = (y + 0.5f) / size;
+            int row = y * size;
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+                float weight = Mathf.Max(
+                    EvaluateEyelinerWeight(u, v, leftGeo, style),
+                    EvaluateEyelinerWeight(u, v, rightGeo, style));
+                byte value = (byte)Mathf.RoundToInt(Mathf.Clamp01(weight) * 255.0f);
+                pixels[row + x] = new Color32(value, 0, value, value);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static Texture2D GetGeneratedEyelinerMaskTexture(string maskTextureId)
+    {
+        if (GeneratedEyelinerMaskTextures.TryGetValue(maskTextureId, out Texture2D cached)
+            && cached != null)
+        {
+            return cached;
+        }
+
+        // 512 keeps thin curved lines from aliasing (a 0.010-UV line is only
+        // ~2.5px at 256). One-time cost per style; cache is cleared whenever
+        // the eye zones are (re)calibrated.
+        const int size = 512;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "Generated Eyeliner " + maskTextureId,
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+        texture.SetPixels32(RasterizeEyelinerMask(maskTextureId, size));
+        texture.Apply(false, true);
+        GeneratedEyelinerMaskTextures[maskTextureId] = texture;
+        Debug.Log(
+            "[E7] generated_eyeliner_mask_created id=" + maskTextureId
+            + " calibrated=" + foundationSkinMaskCalibrated.ToString().ToLowerInvariant());
+        return texture;
+    }
+
+    private static float EvaluateEyelinerWeight(
+        float u, float v, in EyelinerEyeGeometry geo, in EyelinerStyleParams style)
+    {
+        if (!geo.Valid
+            || u < geo.BoundsMin.x || u > geo.BoundsMax.x
+            || v < geo.BoundsMin.y || v > geo.BoundsMax.y)
+        {
+            return 0.0f;
+        }
+
+        // Eye-local coordinate: t=+1 is always the OUTER corner regardless
+        // of which eye, so every shape mirrors automatically.
+        float t = (u - geo.Center.x) / geo.Rx * geo.OuterSign;
+        float bandSoft = Mathf.Max(style.BandSoftness, 1e-4f);
+        float weight = 0.0f;
+
+        // Upper lash band along the lid curve, thickness following a
+        // quadratic profile that passes through MidThickness at eye centre.
+        if (t > style.InnerStart && t < 1.05f)
+        {
+            float clamped = Mathf.Clamp(t, -1.0f, 1.0f);
+            float lid = geo.Center.y
+                + geo.Ry * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
+            float s = Mathf.Clamp01((t + 1.0f) * 0.5f);
+            float midControl =
+                (4.0f * style.MidThickness - style.InnerThickness - style.OuterThickness) * 0.5f;
+            float inv = 1.0f - s;
+            float bandThickness = Mathf.Max(
+                inv * inv * style.InnerThickness
+                    + 2.0f * inv * s * midControl
+                    + s * s * style.OuterThickness,
+                0.0f);
+            float distance = v < lid
+                ? lid - v
+                : (v > lid + bandThickness ? v - (lid + bandThickness) : 0.0f);
+            float innerFade = Mathf.Clamp01((t - style.InnerStart) / 0.25f);
+            float outerFade = Mathf.Clamp01((1.05f - t) / 0.18f);
+            weight = Mathf.Clamp01(1.0f - distance / bandSoft) * innerFade * outerFade;
+        }
+
+        // Wing: signed distance to the precomputed bezier polyline with a
+        // tapered half-width, so the tip ends in a point.
+        if (geo.WingPoints != null && geo.WingPoints.Length > 1)
+        {
+            Vector2 point = new Vector2(u, v);
+            float wingSoft = Mathf.Max(style.WingSoftness, 1e-4f);
+            float best = float.MaxValue;
+            for (int i = 0; i < geo.WingPoints.Length - 1; i++)
+            {
+                Vector2 a = geo.WingPoints[i];
+                Vector2 ab = geo.WingPoints[i + 1] - a;
+                float lengthSq = ab.sqrMagnitude;
+                float proj = lengthSq > 1e-12f
+                    ? Mathf.Clamp01(Vector2.Dot(point - a, ab) / lengthSq)
+                    : 0.0f;
+                float halfWidth = Mathf.Lerp(
+                    geo.WingHalfWidths[i], geo.WingHalfWidths[i + 1], proj);
+                float distance = Vector2.Distance(point, a + proj * ab) - halfWidth;
+                if (distance < best)
+                {
+                    best = distance;
+                }
+            }
+
+            weight = Mathf.Max(
+                weight, Mathf.Clamp01(1.0f - Mathf.Max(0.0f, best) / wingSoft));
+        }
+
+        // Inner-corner extension: straight tapered segment toward the nose.
+        if (style.InnerExtLength > 0.0f)
+        {
+            Vector2 point = new Vector2(u, v);
+            Vector2 a = geo.InnerExtA;
+            Vector2 ab = geo.InnerExtB - a;
+            float lengthSq = ab.sqrMagnitude;
+            float proj = lengthSq > 1e-12f
+                ? Mathf.Clamp01(Vector2.Dot(point - a, ab) / lengthSq)
+                : 0.0f;
+            float halfWidth = Mathf.Lerp(style.InnerExtThickness, 0.0008f, proj);
+            float distance = Vector2.Distance(point, a + proj * ab) - halfWidth;
+            weight = Mathf.Max(
+                weight, Mathf.Clamp01(1.0f - Mathf.Max(0.0f, distance) / bandSoft));
+        }
+
+        // Lower lash band: mirrored lid curve, extends downward, rendered at
+        // reduced opacity so it reads as shading rather than solid liner.
+        if (style.LowerEnd > style.LowerStart
+            && t > style.LowerStart && t < style.LowerEnd)
+        {
+            float clamped = Mathf.Clamp(t, -1.0f, 1.0f);
+            float lidLow = geo.Center.y
+                - geo.Ry * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
+            float distance = v > lidLow
+                ? v - lidLow
+                : (v < lidLow - style.LowerThickness
+                    ? (lidLow - style.LowerThickness) - v
+                    : 0.0f);
+            float lowerSoft = Mathf.Max(style.LowerSoftness, 1e-4f);
+            float startFade = Mathf.Clamp01((t - style.LowerStart) / 0.15f);
+            float endFade = Mathf.Clamp01((style.LowerEnd - t) / 0.15f);
+            float lower = Mathf.Clamp01(1.0f - distance / lowerSoft)
+                * startFade * endFade * style.LowerOpacity;
+            weight = Mathf.Max(weight, lower);
+        }
+
+        return weight;
     }
 
     // Runtime replacement for foundation-skin-mask-v1.png (whose R channel is
@@ -5150,14 +5622,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 float hairlineFade = 1.0f - FoundationMaskSmooth01(topV - 0.155f, topV - 0.015f, v);
                 float baseWeight = edgeX * bottomFade * hairlineFade;
 
-                // Calibrated exclusions: eyes tight (only the eye opening),
-                // brows generous, mouth lips-only so the philtrum stays covered.
+                // Calibrated exclusions: eyes and brows stay tight so base
+                // foundation remains on the nose bridge and surrounding skin;
+                // mouth remains lips-only so the philtrum stays covered.
                 float eyes = Mathf.Max(
-                    FoundationMaskZoneEllipse(u, v, foundationCalLeftEye, 0.35f),
-                    FoundationMaskZoneEllipse(u, v, foundationCalRightEye, 0.35f));
+                    FoundationMaskZoneEllipse(u, v, foundationCalLeftEye, 0.10f),
+                    FoundationMaskZoneEllipse(u, v, foundationCalRightEye, 0.10f));
                 float brows = Mathf.Max(
-                    FoundationMaskZoneEllipse(u, v, foundationCalLeftBrow, 0.45f),
-                    FoundationMaskZoneEllipse(u, v, foundationCalRightBrow, 0.45f));
+                    FoundationMaskZoneEllipse(u, v, foundationCalLeftBrow, 0.14f),
+                    FoundationMaskZoneEllipse(u, v, foundationCalRightBrow, 0.14f));
 
                 // Lips-only exclusion: reuse the actual lip region mask when
                 // readable (philtrum and around-mouth skin stay covered);
@@ -5166,18 +5639,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 // sampling can never ring into the lips; the small dilation in
                 // SampleFoundationExclusionMask stays modest so the philtrum
                 // and the skin just below the lower lip remain covered.
-                float mouth = foundationLipExclusionMask != null
-                    ? FoundationMaskSmooth01(
-                        0.05f,
-                        0.22f,
-                        SampleFoundationExclusionMask(foundationLipExclusionMask, u, v))
-                    : FoundationMaskZoneEllipse(u, v, foundationCalMouth, 0.35f);
+                // The lip region mask has a soft halo that can reach the
+                // philtrum / nose base. Keep only the lip core and bound it by
+                // the calibrated mouth ellipse so foundation stays on the
+                // nose, philtrum and around-mouth skin while lips remain clear.
+                // Lip texture DISABLED for this exclusion: its content lives
+                // in a different UV convention, so its lip-shaped hole lands
+                // on the nose (device screenshot 2026-07-05, cupid's-bow blob
+                // above the mouth) — and min()-ing a misplaced texture with
+                // the ellipse would instead leave the REAL lips painted.
+                // The calibrated ellipse alone is measured from this user's
+                // tracked lip vertices every session, so it is always on the
+                // lips: lips excluded, philtrum/nose fully painted.
+                float mouth = FoundationMaskZoneEllipse(u, v, foundationCalMouth, 0.045f);
 
-                // Validated shipped/personal mask contributes as the base
-                // when available; otherwise the procedural base stands alone.
-                float baseSample = foundationValidatedBaseMask != null
-                    ? Mathf.Clamp01(SampleFoundationMaskPixel(foundationValidatedBaseMask, u, v))
-                    : 1.0f;
+                // Hard vertical guard: nothing above the measured mouth zone
+                // may be excluded by the lip mask — the philtrum and the
+                // whole nose must always receive foundation.
+                float mouthGuardTop = foundationCalMouth.Center.y
+                    + foundationCalMouth.Radius.y * 0.78f;
+                mouth *= 1.0f - FoundationMaskSmooth01(
+                    mouthGuardTop,
+                    mouthGuardTop + 0.012f,
+                    v);
+
+                // The shipped foundation-skin-mask-v1 can contain weak mid-face
+                // values, especially around the nose. Do not multiply it into
+                // the final CB mask; the ARFace mesh already clips the result to
+                // the actual face surface and the calibrated exclusions remove
+                // lips, eyes and brows.
+                const float baseSample = 1.0f;
 
                 float weight = Mathf.Clamp01(
                     baseWeight

@@ -69,11 +69,129 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
     private const float MaskBoundsExpansionX = 0.060f;
     private const float MaskBoundsExpansionY = 0.050f;
     // The mask lives in screen space, so holding a stale mask while the phone
-    // moves leaves it floating away from the face. Keep the hold window short.
-    private const float StaleMaskSeconds = 0.12f;
+    // moves paints the OLD face position (e.g. onto the shirt). Hold just
+    // long enough to bridge a single dropped frame, nothing more.
+    private const float StaleMaskSeconds = 0.04f;
     // Set to true only if a target device/orientation displays the mask
     // horizontally flipped relative to the face.
     private const bool MirrorMaskUvX = false;
+
+    // ---- Display-matrix projection (debug mode 19, "정밀 투영") ----------
+    // Projects face vertices world -> camera view space -> SENSOR image
+    // coordinates via the ARKit camera intrinsics (orientation-independent)
+    // -> display uv via the inverse of the SAME displayMatrix the camera
+    // feed is rendered with. Because every stage is either orientation-free
+    // or literally shared with the feed, the mask cannot disagree with the
+    // feed no matter what interface-orientation state Unity/UaaL believes.
+    // Fixed ARKit convention: sensor image y grows DOWNWARD while camera
+    // view-space y grows upward; if a device ever proves otherwise, flip
+    // this single constant.
+    // The display->image matrix direction and mul convention are VERIFIED:
+    // they replicate the exact CameraUv() formula that renders the camera
+    // feed correctly on screen. The only genuine unknowns are the sensor
+    // axis signs, covered by four in-app variants (no rebuild needed):
+    //   mode 19: image y down, x right   (expected ARKit convention)
+    //   mode 20: image y up,   x right
+    //   mode 21: image y down, x left
+    //   mode 22: image y up,   x left
+    private bool sensorYDownActive = true;
+    private bool sensorXRightActive = true;
+    private int dmFrameCounter;
+    private Matrix4x4 displayTransform = Matrix4x4.identity;
+    private bool hasDisplayTransform;
+    private Vector2 sensorFocalPx;
+    private Vector2 sensorPrincipalPx;
+    private Vector2Int sensorResolutionPx;
+    private bool hasSensorIntrinsics;
+    private bool displayProjectionRequested;
+    private bool loggedDisplayProjectionState;
+
+    /// <summary>
+    /// True only when mode 19 is on AND the display-matrix projection is
+    /// actually running (not silently falling back). Surfaced to the shader
+    /// so the probe renders red when active, blue when falling back.
+    /// </summary>
+    public bool DisplayProjectionActive { get; private set; }
+
+    public void ConfigureDisplayProjection(
+        Matrix4x4 displayMatrix,
+        bool displayMatrixValid,
+        Vector2 focalLengthPx,
+        Vector2 principalPointPx,
+        Vector2Int resolutionPx,
+        bool intrinsicsValid)
+    {
+        displayTransform = displayMatrix;
+        hasDisplayTransform = displayMatrixValid;
+        sensorFocalPx = focalLengthPx;
+        sensorPrincipalPx = principalPointPx;
+        sensorResolutionPx = resolutionPx;
+        hasSensorIntrinsics = intrinsicsValid
+            && resolutionPx.x > 16
+            && resolutionPx.y > 16
+            && focalLengthPx.x > 1.0f
+            && focalLengthPx.y > 1.0f;
+    }
+
+    /// <summary>
+    /// world -> display uv using intrinsics + inverse displayMatrix.
+    /// Returns false (caller falls back to WorldToViewportPoint) when the
+    /// mode is off or the required per-frame data is unavailable.
+    /// viewport.z carries the positive view-space depth so existing
+    /// near-plane culling keeps working unchanged.
+    /// </summary>
+    private bool TryProjectDisplayViewport(Camera arCamera, Vector3 world, out Vector3 viewport)
+    {
+        viewport = default;
+        if (!displayProjectionRequested || !hasDisplayTransform || !hasSensorIntrinsics)
+        {
+            return false;
+        }
+
+        Vector3 view = arCamera.worldToCameraMatrix.MultiplyPoint3x4(world);
+        float depth = -view.z; // Unity view space looks down -Z.
+        if (depth <= arCamera.nearClipPlane)
+        {
+            return false;
+        }
+
+        float invDepth = 1.0f / depth;
+        float xNorm = sensorFocalPx.x * view.x * invDepth;
+        float uPx = sensorXRightActive
+            ? sensorPrincipalPx.x + xNorm
+            : sensorPrincipalPx.x - xNorm;
+        float yNorm = sensorFocalPx.y * view.y * invDepth;
+        float vPx = sensorYDownActive
+            ? sensorPrincipalPx.y - yNorm
+            : sensorPrincipalPx.y + yNorm;
+        Vector2 imageUv = new Vector2(
+            uPx / sensorResolutionPx.x,
+            vPx / sensorResolutionPx.y);
+
+        // The AR background shader computes image = mul((d.x, d.y, 1, 1), M)
+        // with M = displayMatrix, i.e. an affine map from display uv to
+        // image uv:  image.x = a*dx + c*dy + tx,  image.y = b*dx + d*dy + ty.
+        // Invert it to go image -> display.
+        float a = displayTransform.m00;
+        float c = displayTransform.m10;
+        float tx = displayTransform.m20 + displayTransform.m30;
+        float b = displayTransform.m01;
+        float d = displayTransform.m11;
+        float ty = displayTransform.m21 + displayTransform.m31;
+        float det = a * d - c * b;
+        if (Mathf.Abs(det) < 1e-6f)
+        {
+            return false;
+        }
+
+        float ix = imageUv.x - tx;
+        float iy = imageUv.y - ty;
+        viewport = new Vector3(
+            (d * ix - c * iy) / det,
+            (-b * ix + a * iy) / det,
+            depth);
+        return true;
+    }
     private const float DiagnosticsIntervalSeconds = 0.75f;
     private const int DiagnosticsSampleGrid = 16;
 
@@ -86,6 +204,95 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
     private const float NeckJawBandFraction = 0.30f;
     private const int NeckMinJawPoints = 3;
     private const int NeckShaderPassIndex = 2;
+
+    // Motion prediction: ARKit face-anchor poses arrive ~1 frame behind the
+    // camera image, so a mask projected with the current pose trails the
+    // face whenever the phone moves. We measure the face's on-screen motion
+    // between frames and shift the whole projection forward by that amount,
+    // cancelling the perceived lag. Clamped so noise can never fling the mask.
+    // ARKit face-tracking sessions are device-anchored: the camera image
+    // pans with zero latency while the face anchor (the ONLY input to our
+    // projection) is updated late and smoothed by ARKit — several frames in
+    // practice. During a steady pan, shifting by (anchor velocity x N)
+    // exactly cancels an N-frame lag, which is why this constant must match
+    // the real lag scale, not just 1-2 frames.
+    private const float MotionPredictionFrames = 4.0f;
+    private const float MotionPredictionMaxUvShift = 0.12f;
+    private Vector2 previousFaceCenterUv;
+    private bool hasPreviousFaceCenterUv;
+    private Vector2 smoothedFaceVelocityUv;
+
+    // Vision-based 2D stabilization: Apple Vision measures where the face
+    // actually is IN THE IMAGE (no anchor lag). We keep a short history of
+    // the ARKit-projected face center and, whenever a Vision observation
+    // arrives, estimate the systematic projection bias at that capture time.
+    // The smoothed bias is added to every mask projection, anchoring the
+    // mask to the image instead of the (laggy/offset) 3D anchor alone.
+    private const int ProjectionHistoryCapacity = 48;
+    private const long VisionMatchMaxAgeMs = 450;
+    private const float VisionBiasSmoothing = 0.25f;
+    private const float VisionBiasMaxUvShift = 0.05f;
+    private readonly long[] projectionHistoryTimesMs = new long[ProjectionHistoryCapacity];
+    private readonly Vector2[] projectionHistoryCenters = new Vector2[ProjectionHistoryCapacity];
+    private int projectionHistoryCount;
+    private int projectionHistoryNext;
+    private Vector2 visionBiasUv;
+    private bool hasVisionBias;
+
+    /// <summary>
+    /// Feed one Vision face-bounds observation (image/screen pixel space,
+    /// sized to the given dimensions). The y-axis convention of Vision
+    /// output is resolved automatically by picking the candidate closest to
+    /// the ARKit projection recorded at capture time.
+    /// </summary>
+    public void ApplyVisionFaceObservation(long detectedAtMs, Vector2 centerPx, float width, float height)
+    {
+        if (width <= 1.0f || height <= 1.0f || projectionHistoryCount == 0)
+        {
+            return;
+        }
+
+        long bestDelta = long.MaxValue;
+        Vector2 arkitCenter = Vector2.zero;
+        for (int i = 0; i < projectionHistoryCount; i++)
+        {
+            long delta = System.Math.Abs(projectionHistoryTimesMs[i] - detectedAtMs);
+            if (delta < bestDelta)
+            {
+                bestDelta = delta;
+                arkitCenter = projectionHistoryCenters[i];
+            }
+        }
+
+        if (bestDelta > VisionMatchMaxAgeMs)
+        {
+            return;
+        }
+
+        Vector2 candidateA = new Vector2(centerPx.x / width, centerPx.y / height);
+        Vector2 candidateB = new Vector2(centerPx.x / width, 1.0f - centerPx.y / height);
+        Vector2 biasA = candidateA - arkitCenter;
+        Vector2 biasB = candidateB - arkitCenter;
+        Vector2 bias = biasA.sqrMagnitude <= biasB.sqrMagnitude ? biasA : biasB;
+        bias = Vector2.ClampMagnitude(bias, VisionBiasMaxUvShift);
+
+        visionBiasUv = hasVisionBias
+            ? Vector2.Lerp(visionBiasUv, bias, VisionBiasSmoothing)
+            : bias;
+        hasVisionBias = true;
+    }
+
+    private void RecordProjectionHistory(Vector2 faceCenterUv)
+    {
+        long nowMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        projectionHistoryTimesMs[projectionHistoryNext] = nowMs;
+        projectionHistoryCenters[projectionHistoryNext] = faceCenterUv;
+        projectionHistoryNext = (projectionHistoryNext + 1) % ProjectionHistoryCapacity;
+        if (projectionHistoryCount < ProjectionHistoryCapacity)
+        {
+            projectionHistoryCount++;
+        }
+    }
 
     private RenderTexture foundationMaskTexture;
     private Material foundationMaskMaterial;
@@ -229,6 +436,23 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
 
     public FoundationMaskState UpdateMask(ARFace face, Camera arCamera, int debugMode)
     {
+        SetSourceOrientationProbe(debugMode);
+        displayProjectionRequested = debugMode >= 19 && debugMode <= 22;
+        sensorYDownActive = debugMode == 19 || debugMode == 21;
+        sensorXRightActive = debugMode == 19 || debugMode == 20;
+        DisplayProjectionActive = displayProjectionRequested
+            && hasDisplayTransform
+            && hasSensorIntrinsics;
+        if (displayProjectionRequested && !loggedDisplayProjectionState)
+        {
+            loggedDisplayProjectionState = true;
+            Debug.Log(
+                "[FoundationScreenSpace] display_projection_probe"
+                + " hasDisplayMatrix=" + hasDisplayTransform.ToString().ToLowerInvariant()
+                + " hasIntrinsics=" + hasSensorIntrinsics.ToString().ToLowerInvariant()
+                + " sensorRes=" + sensorResolutionPx.x + "x" + sensorResolutionPx.y);
+        }
+
         EnsureResources();
         bool tracked = face != null && face.trackingState == TrackingState.Tracking;
         if (!tracked
@@ -357,6 +581,10 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         {
             ClearMaskTexture();
         }
+
+        // Tracking dropped: restart motion prediction from scratch so the
+        // first frame after reacquisition cannot inherit a stale velocity.
+        hasPreviousFaceCenterUv = false;
 
         currentState = new FoundationMaskState
         {
@@ -614,6 +842,42 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         List<Vector3> meshVertices = new List<Vector3>(vertices.Length);
         List<Vector2> meshMaskData = new List<Vector2>(vertices.Length);
         List<Vector2> meshFaceUvs = new List<Vector2>(vertices.Length);
+
+        // One-frame-ahead motion prediction (see MotionPredictionFrames)
+        // plus the Vision-measured absolute bias correction.
+        Vector2 predictionShift = Vector2.zero;
+        Vector3 faceCenterViewport = arCamera.WorldToViewportPoint(face.transform.position);
+        if (faceCenterViewport.z > arCamera.nearClipPlane)
+        {
+            Vector2 faceCenterUv = ToMaskUv(faceCenterViewport);
+            RecordProjectionHistory(faceCenterUv);
+            if (hasPreviousFaceCenterUv)
+            {
+                // EMA-smoothed velocity: with a 4x prediction factor, raw
+                // per-frame deltas would amplify tracker noise into jitter.
+                Vector2 rawVelocity = faceCenterUv - previousFaceCenterUv;
+                smoothedFaceVelocityUv = Vector2.Lerp(smoothedFaceVelocityUv, rawVelocity, 0.5f);
+                predictionShift = smoothedFaceVelocityUv * MotionPredictionFrames;
+                predictionShift = Vector2.ClampMagnitude(predictionShift, MotionPredictionMaxUvShift);
+            }
+            else
+            {
+                smoothedFaceVelocityUv = Vector2.zero;
+            }
+
+            previousFaceCenterUv = faceCenterUv;
+            hasPreviousFaceCenterUv = true;
+        }
+        else
+        {
+            hasPreviousFaceCenterUv = false;
+            smoothedFaceVelocityUv = Vector2.zero;
+        }
+
+        if (hasVisionBias)
+        {
+            predictionShift += Vector2.ClampMagnitude(visionBiasUv, VisionBiasMaxUvShift);
+        }
         int leftCheekWeighted = 0;
         int rightCheekWeighted = 0;
         int noseWeighted = 0;
@@ -639,19 +903,46 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         RegionAccumulator chinAnchor = default;
         RegionAccumulator foreheadAnchor = default;
         RegionAccumulator mouthAnchor = default;
+        int dmProjectedCount = 0;
+        int dmOobCount = 0;
+        Vector2 dmSampleUv = Vector2.zero;
         for (int i = 0; i < vertices.Length; i++)
         {
             Vector3 local = vertices[i];
             Vector3 world = face.transform.TransformPoint(local);
-            Vector3 viewport = arCamera.WorldToViewportPoint(world);
+            // Mode 19: orientation-proof projection through intrinsics +
+            // inverse display matrix (already display-space, so ToMaskUv's
+            // projection-space correction must NOT be applied on top).
+            bool displayProjected = TryProjectDisplayViewport(arCamera, world, out Vector3 viewport);
+            if (!displayProjected)
+            {
+                viewport = arCamera.WorldToViewportPoint(world);
+            }
+
             if (viewport.z <= arCamera.nearClipPlane)
             {
                 continue;
             }
 
-            Vector2 uv = ToMaskUv(viewport);
+            Vector2 uv = (displayProjected
+                ? new Vector2(viewport.x, viewport.y)
+                : ToMaskUv(viewport)) + predictionShift;
+            if (displayProjected)
+            {
+                dmProjectedCount++;
+                if (dmProjectedCount == 1)
+                {
+                    dmSampleUv = uv;
+                }
+            }
+
             if (uv.x < -0.08f || uv.x > 1.08f || uv.y < -0.08f || uv.y > 1.08f)
             {
+                if (displayProjected)
+                {
+                    dmOobCount++;
+                }
+
                 continue;
             }
 
@@ -701,6 +992,29 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             meshVertices.Add(new Vector3(uv.x * 2.0f - 1.0f, uv.y * 2.0f - 1.0f, 0.0f));
             meshMaskData.Add(new Vector2(rawSkin, exclusion));
             meshFaceUvs.Add(faceUvsAvailable ? face.uvs[i] : Vector2.zero);
+        }
+
+        if (displayProjectionRequested)
+        {
+            dmFrameCounter++;
+            if (dmFrameCounter % 60 == 1)
+            {
+                Debug.Log(
+                    "[FoundationProjectionDM]"
+                    + " active=" + DisplayProjectionActive.ToString().ToLowerInvariant()
+                    + " yDown=" + sensorYDownActive.ToString().ToLowerInvariant()
+                    + " xRight=" + sensorXRightActive.ToString().ToLowerInvariant()
+                    + " hasIntrinsics=" + hasSensorIntrinsics.ToString().ToLowerInvariant()
+                    + " sensorRes=" + sensorResolutionPx.x + "x" + sensorResolutionPx.y
+                    + " fx=" + sensorFocalPx.x.ToString("0.#")
+                    + " fy=" + sensorFocalPx.y.ToString("0.#")
+                    + " cx=" + sensorPrincipalPx.x.ToString("0.#")
+                    + " cy=" + sensorPrincipalPx.y.ToString("0.#")
+                    + " projected=" + dmProjectedCount
+                    + " oob=" + dmOobCount
+                    + " oobRatio=" + (dmProjectedCount > 0 ? ((float)dmOobCount / dmProjectedCount).ToString("0.##") : "n/a")
+                    + " sampleUv=" + dmSampleUv.x.ToString("0.###") + "," + dmSampleUv.y.ToString("0.###"));
+            }
         }
 
         List<int> meshTriangles = new List<int>(indices.Length);
@@ -1146,15 +1460,43 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         return a.x * b.y - a.y * b.x;
     }
 
+    // Source-side orientation probe. Unlike the shader's read-side uv
+    // rotations (which distort the mask aspect on a non-square screen), a
+    // rotation applied HERE is per-vertex and therefore exact: on the
+    // correct setting the mask matches the face in both shape and position.
+    // 0 = identity (production), 17 = rotate 90 CW, 18 = rotate 90 CCW.
+    // Driven by the foundation debug mode; production default stays 0 until
+    // the on-device probe confirms which orientation is correct.
+    private static int sourceOrientationProbe;
+
+    public static void SetSourceOrientationProbe(int debugMode)
+    {
+        sourceOrientationProbe = debugMode == 17 || debugMode == 18 ? debugMode : 0;
+    }
+
     private static Vector2 ToMaskUv(Vector3 viewport)
     {
-        // The mask is sampled with the screen-space quad UV, and
-        // Camera.WorldToViewportPoint already returns the exact on-screen
-        // position of the tracked face, so no axis flip is required here.
-        // Flipping X made the mask move opposite to the face whenever the
-        // phone (or the face) moved horizontally.
+        // Camera.WorldToViewportPoint returns the on-screen position of the
+        // tracked face in the camera's PROJECTION space. Device evidence
+        // (2026-07-04): the mask aligns with the face when the phone is held
+        // landscape, i.e. the projection space is rotated 90 degrees from
+        // the displayed portrait feed, so a quarter-turn correction belongs
+        // here at the source (exact, per-vertex).
         float x = MirrorMaskUvX ? 1.0f - viewport.x : viewport.x;
-        return new Vector2(x, viewport.y);
+        Vector2 uv = new Vector2(x, viewport.y);
+        if (sourceOrientationProbe == 17)
+        {
+            // Rotate mask content 90 degrees clockwise about uv center.
+            return new Vector2(uv.y, 1.0f - uv.x);
+        }
+
+        if (sourceOrientationProbe == 18)
+        {
+            // Rotate mask content 90 degrees counter-clockwise.
+            return new Vector2(1.0f - uv.y, uv.x);
+        }
+
+        return uv;
     }
 
     private static bool TryBuildProjectedRegions(
@@ -1370,8 +1712,12 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             * chinLowerClamp
             * upperForeheadClamp);
 
-        float leftEye = LocalEllipse(nx, ny, 0.355f, 0.640f, 0.102f, 0.044f, 0.18f);
-        float rightEye = LocalEllipse(nx, ny, 0.645f, 0.640f, 0.102f, 0.044f, 0.18f);
+        // Tightened to the eye OPENING (device feedback 2026-07-05): the
+        // vertex-level exclusion unions with the calibrated UV-mask zones,
+        // so both must hug the opening or the wider one wins and the skin
+        // at the eye corners stays unpainted.
+        float leftEye = LocalEllipse(nx, ny, 0.355f, 0.640f, 0.072f, 0.036f, 0.10f);
+        float rightEye = LocalEllipse(nx, ny, 0.645f, 0.640f, 0.072f, 0.036f, 0.10f);
         eye = Mathf.Max(leftEye, rightEye);
         float leftBrow = LocalEllipse(nx, ny, 0.355f, 0.733f, 0.118f, 0.030f, 0.16f);
         float rightBrow = LocalEllipse(nx, ny, 0.645f, 0.733f, 0.118f, 0.030f, 0.16f);
