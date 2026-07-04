@@ -151,7 +151,7 @@ function MakeupFeedbackActionSheet({
         style={styles.sheetBackdrop}>
         <Pressable
           accessibilityRole="menu"
-          onPress={event => event.stopPropagation()}
+          onPress={() => {}}
           style={styles.actionSheet}>
           <View style={styles.sheetHandle} />
           <YStack style={styles.sheetHeader}>

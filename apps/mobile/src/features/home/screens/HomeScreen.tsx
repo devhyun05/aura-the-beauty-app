@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView as NativeScrollView,
   StyleSheet,
-  type GestureResponderEvent,
   type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -697,7 +696,7 @@ function MakeupExtractionActionSheet({
         style={styles.sheetBackdrop}>
         <Pressable
           accessibilityRole="menu"
-          onPress={event => event.stopPropagation()}
+          onPress={() => {}}
           style={styles.makeupExtractionSheet}>
           <View style={styles.sheetHandle} />
           <YStack style={styles.sheetHeader}>
@@ -757,7 +756,11 @@ function BeautyJourneyGuideDialog({
   onConfirm?: () => void;
 }) {
   return (
-    <Modal animationType="fade" transparent visible={isVisible}>
+    <Modal
+      animationType="fade"
+      onRequestClose={onConfirm}
+      transparent
+      visible={isVisible}>
       <View style={styles.dialogBackdrop}>
         <YStack style={styles.beautyJourneyDialog}>
           <Text style={styles.dialogTitle}>아우라 여정을 시작해볼까요?</Text>
@@ -856,8 +859,7 @@ function RecommendedFilterCard({
   onPress?: (filterId: string) => void;
   onToggleLike?: (filterId: string) => void;
 }) {
-  const handleToggleLike = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleToggleLike = () => {
     onToggleLike?.(filter.id);
   };
 

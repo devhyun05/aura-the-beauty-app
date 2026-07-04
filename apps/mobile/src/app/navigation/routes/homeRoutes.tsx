@@ -65,11 +65,15 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     setShouldShowBeautyJourneyGuide(false);
 
     void (async () => {
-      if (session) {
-        await markFaceCaptureTutorialCompleted(session.user);
+      try {
+        if (session) {
+          await markFaceCaptureTutorialCompleted(session.user);
+        }
+      } catch {
+        // Continue to the intro even if the preference save call fails.
+      } finally {
+        rootNavigation?.navigate('FaceAnalysisIntro');
       }
-
-      rootNavigation?.navigate('FaceAnalysisIntro');
     })();
   }, [rootNavigation, session, setShouldShowBeautyJourneyGuide]);
 
