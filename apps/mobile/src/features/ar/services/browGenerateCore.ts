@@ -372,7 +372,7 @@ function buildBrowRuntimeApplyPayload({
     maskTextureWidth: mask.width,
     maskTextureHeight: mask.height,
     maskThreshold: 0.34,
-    maskFeatherUvNormalized: 0.09,
+    maskFeatherUvNormalized: 0.05,
     softEdgeTexels: mask.softEdgeTexels,
     localOnly: true,
     offDeviceUpload: false,
@@ -1496,18 +1496,15 @@ function browStrandDensity(
 }
 
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
-  const {t, v} = browLocalCoordinates(point, envelope);
-  // Head/tail longitudinal fade keeps the ends tapered, not blunt.
-  const headFade = lerp(0.72, 1, smoothstep(0, 0.1, t));
-  const tailFade = lerp(1, 0.5, smoothstep(0.68, 1, t));
-  // Essentially solid fill with only a hairline soft rim at the very top/bottom.
-  // Device feedback: the wide soft outer layer read as bumpy on the sparse face
-  // mesh and hurt naturalness, so the brow is now a clean defined shape with a
-  // tight anti-aliased edge instead of a fuzzy halo.
-  const topSoft = smoothstep(0, 0.07, v);
-  const bottomSoft = smoothstep(0, 0.05, 1 - v);
-  const bodyGradient = 0.9 + 0.1 * topSoft * bottomSoft;
-  return clamp01(bodyGradient * headFade * tailFade);
+  const {t} = browLocalCoordinates(point, envelope);
+  // Solid fill: no vertical gradient / soft outer layer at all. Device feedback
+  // (repeated): the soft outer band renders bumpy and asymmetric on the sparse
+  // ARFace mesh and hurts naturalness, so the brow is a clean defined shape and
+  // the only softening is the polygon anti-alias edge plus a tight shader
+  // feather. Head/tail keep a longitudinal taper so the ends are not blunt.
+  const headFade = lerp(0.74, 1, smoothstep(0, 0.09, t));
+  const tailFade = lerp(1, 0.55, smoothstep(0.7, 1, t));
+  return clamp01(headFade * tailFade);
 }
 
 function browLocalCoordinates(point: E7Point2D, envelope: BrowEnvelope) {
