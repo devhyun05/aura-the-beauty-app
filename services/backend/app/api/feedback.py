@@ -10,11 +10,13 @@ from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
-from app.schemas.analysis import FeedbackJobCreate
+from app.schemas.analysis import FeedbackConferenceMessagesCreate, FeedbackJobCreate
 from app.services.makeup_feedback_analysis import (
   MODEL_VERSION,
   build_makeup_feedback_result_for_request,
 )
+from app.services.makeup_feedback_conference import build_makeup_feedback_conference_messages
+from app.services.makeup_feedback_goal_intent import normalize_feedback_goal_context_for_request
 from app.services.users import ensure_user
 
 
@@ -91,6 +93,7 @@ async def resolve_feedback_request_payload(
   db: Database,
   user: dict[str, Any],
   payload: FeedbackJobCreate,
+  settings: Settings,
 ) -> dict[str, Any]:
   user_id = user["id"]
   request_payload = dict(payload.request_payload or {})
@@ -136,6 +139,7 @@ async def resolve_feedback_request_payload(
     )
 
   merge_profile_feedback_context(request_payload, user)
+  await normalize_feedback_goal_context_for_request(request_payload, settings)
 
   return request_payload
 
@@ -148,7 +152,7 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  request_payload = await resolve_feedback_request_payload(db, user, payload)
+  request_payload = await resolve_feedback_request_payload(db, user, payload, settings)
   logger.info(
     "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s",
     auth.subject,
@@ -221,6 +225,33 @@ async def create_feedback_job(
   )
 
   return success({"job": normalize_feedback_report_row(completed_report)})
+
+
+@router.post("/conference-messages")
+async def create_feedback_conference_messages(
+  payload: FeedbackConferenceMessagesCreate,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  messages, generation_status, generation_error = await build_makeup_feedback_conference_messages(
+    payload.result,
+    payload.request_payload,
+    settings,
+  )
+  logger.info(
+    "[aura:feedback-api] conference-messages:completed userSub=%s status=%s count=%s",
+    auth.subject,
+    generation_status,
+    len(messages),
+  )
+
+  return success(
+    {
+      "messages": messages,
+      "generationStatus": generation_status,
+      "generationError": generation_error,
+    },
+  )
 
 
 @router.get("/reports")

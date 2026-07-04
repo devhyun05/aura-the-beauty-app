@@ -33,6 +33,11 @@ class Settings(BaseSettings):
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
   bedrock_analysis_region: str | None = None
+  bedrock_guardrail_id: str | None = None
+  bedrock_guardrail_version: str | None = None
+  bedrock_guardrail_region: str | None = None
+  bedrock_guardrail_required: bool = False
+  bedrock_guardrail_trace: bool = False
   bedrock_embedding_model_id: str | None = "amazon.titan-embed-text-v2:0"
   bedrock_embedding_region: str | None = None
   embedding_dimension: int = 1024
@@ -75,6 +80,14 @@ class Settings(BaseSettings):
   @property
   def effective_bedrock_embedding_region(self) -> str:
     return (self.bedrock_embedding_region or self.aws_region).strip()
+
+  @property
+  def effective_bedrock_guardrail_region(self) -> str:
+    return (self.bedrock_guardrail_region or self.effective_bedrock_analysis_region).strip()
+
+  @property
+  def bedrock_guardrail_configured(self) -> bool:
+    return bool((self.bedrock_guardrail_id or "").strip() and (self.bedrock_guardrail_version or "").strip())
 
   @property
   def effective_analysis_model_id(self) -> str:
@@ -195,6 +208,11 @@ class Settings(BaseSettings):
         "requiredWhen": "Embedding-backed recommendations or semantic search are used.",
         "value": self.effective_embedding_model_id,
       },
+      "bedrockGuardrail": {
+        "configured": self.bedrock_guardrail_configured or not self.bedrock_guardrail_required,
+        "requiredWhen": "BEDROCK_GUARDRAIL_REQUIRED=true or production feedback safety enforcement.",
+        "value": self.bedrock_guardrail_id if self.bedrock_guardrail_configured else None,
+      },
       "embeddingDimension": {
         "configured": self.embedding_dimension > 0,
         "requiredWhen": "BEDROCK_EMBEDDING_MODEL_ID is used.",
@@ -235,6 +253,7 @@ class Settings(BaseSettings):
       "awsRegion": self.aws_region,
       "aiProvider": analysis_provider,
       "analysisModel": self.effective_analysis_model_id,
+      "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,
       "imageGenerationProvider": image_generation_provider,

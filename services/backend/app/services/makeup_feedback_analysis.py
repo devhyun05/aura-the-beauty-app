@@ -12,6 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.errors import AppError
 from app.core.settings import Settings
+from app.services.bedrock_guardrails import build_bedrock_guardrail_invoke_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -94,16 +95,42 @@ def _get_feedback_context(payload: dict[str, Any]) -> dict[str, str]:
   raw_context = payload.get("feedbackContext") or payload.get("feedback_context")
   context = raw_context if isinstance(raw_context, dict) else {}
   user_goal_text = _clean_text(
-    context.get("userGoalText") or context.get("user_goal_text") or payload.get("userGoalText") or payload.get("user_goal_text"),
-    "사진 속 메이크업이 사용 목적에 잘 맞는지 평가해 주세요.",
+    context.get("normalizedGoalText")
+    or context.get("normalized_goal_text")
+    or context.get("userGoalText")
+    or context.get("user_goal_text")
+    or payload.get("userGoalText")
+    or payload.get("user_goal_text"),
+    "전체적인 메이크업 균형과 자연스러움 기준으로 피드백",
+  )
+  original_goal_text = _clean_text(
+    context.get("originalGoalText")
+    or context.get("original_goal_text")
+    or payload.get("originalGoalText")
+    or payload.get("original_goal_text"),
+    user_goal_text,
+  )
+  goal_intent_type = _clean_text(
+    context.get("goalIntentType")
+    or context.get("goal_intent_type")
+    or payload.get("goalIntentType")
+    or payload.get("goal_intent_type"),
+    "valid_context",
   )
   profile_gender = _clean_text(
-    context.get("profileGender") or context.get("profile_gender") or payload.get("profileGender") or payload.get("profile_gender"),
+    context.get("profileGender")
+    or context.get("profile_gender")
+    or payload.get("profileGender")
+    or payload.get("profile_gender"),
     "unknown",
   )
 
-  return {"profileGender": profile_gender, "userGoalText": user_goal_text}
-
+  return {
+    "goalIntentType": goal_intent_type,
+    "originalGoalText": original_goal_text,
+    "profileGender": profile_gender,
+    "userGoalText": user_goal_text,
+  }
 
 def _infer_goal_intensity(user_goal_text: str) -> str:
   normalized = user_goal_text.lower()
@@ -270,7 +297,7 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
       payload,
     ),
     "summary": _normalize_summary(raw_result.get("summary")),
-    "photoSourceLabel": "앨범 사진" if source == "gallery" else "촬영 사진",
+    "photoSourceLabel": "선택한 사진" if source == "gallery" else "선택한 사진",
     "summaryBadges": [
       {"id": "strength-count", "label": f"잘한 항목 {len(strengths)}개"},
       {"id": "improvement-count", "label": f"보완 항목 {len(points)}개"},
@@ -364,6 +391,8 @@ class MakeupFeedbackBedrockService:
     feedback_context = _get_feedback_context(payload)
     profile_gender = feedback_context["profileGender"]
     user_goal_text = feedback_context["userGoalText"]
+    original_goal_text = feedback_context.get("originalGoalText", user_goal_text)
+    goal_intent_type = feedback_context.get("goalIntentType", "valid_context")
     metadata = {
       key: value
       for key, value in payload.items()
@@ -402,6 +431,8 @@ class MakeupFeedbackBedrockService:
 입력 정보:
 - profileGender: {profile_gender}
 - userGoalText: {json.dumps(user_goal_text, ensure_ascii=False)}
+- originalGoalText: {json.dumps(original_goal_text, ensure_ascii=False)}
+- goalIntentType: {goal_intent_type}
 
 가장 중요한 원칙:
 - 사용자가 입력한 userGoalText를 최우선 기준으로 평가하세요.
@@ -425,9 +456,11 @@ class MakeupFeedbackBedrockService:
 
 사용자 목적 해석:
 1. userGoalText를 읽고 사용자가 원하는 상황/목적을 짧게 해석하세요.
-2. 표현 강도를 light, medium, bold 중 하나로 판단하세요.
-3. userGoalText가 모호하면 사진에서 보이는 메이크업 강도와 profileGender를 참고하되, 성별 고정관념으로 판단하지 마세요.
-4. 사용자의 목적과 맞지 않는 과한 조언을 하지 마세요.
+2. goalIntentType이 generic_default라면 사용자가 구체 목적을 맡긴 것이므로 전체적인 균형, 자연스러움, 완성도 기준으로 평가하세요.
+3. goalIntentType이 valid_context라면 userGoalText의 장소, 일정, 대상, 원하는 인상을 분석 기준에 반영하세요.
+4. 표현 강도를 light, medium, bold 중 하나로 판단하세요.
+5. userGoalText가 모호하면 사진에서 보이는 메이크업 강도와 profileGender를 참고하되, 성별 고정관념으로 판단하지 마세요.
+6. 사용자의 목적과 맞지 않는 과한 조언을 하지 마세요.
    예: “남자 데일리 메이크업인데 티 안 나게 자연스러운지 보고 싶어”라면 속눈썹을 진하게 하라고 하지 말고, 피부 표현, 눈썹 정리, 톤 차이, 경계 흐림, 자연스러움을 중심으로 평가하세요.
 5. 반대로 “아이돌 무대 메이크업처럼 화려한지 봐줘”라면 속눈썹, 아이라인, 렌즈, 아이섀도, 하이라이터, 섀딩도 적극 평가할 수 있습니다.
 
@@ -541,6 +574,7 @@ Request metadata:
       model_id,
       self.settings.effective_bedrock_analysis_region,
     )
+    guardrail_kwargs = build_bedrock_guardrail_invoke_kwargs(self.settings)
     response = self._bedrock_runtime_client().invoke_model(
       modelId=model_id,
       body=json.dumps(
@@ -570,6 +604,7 @@ Request metadata:
       ),
       accept="application/json",
       contentType="application/json",
+      **guardrail_kwargs,
     )
     response_payload = json.loads(response["body"].read())
     output_text = self._extract_output_text(response_payload)
