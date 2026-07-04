@@ -169,18 +169,6 @@ const BROW_NEUTRALIZE_STRENGTH = 0.85;
 // nothing looks better than smearing dark hair over the brow.
 const BROW_BANG_DARK_RATIO_CLEAR = 0.3;
 const BROW_BANG_DARK_RATIO_COVERED = 0.62;
-// Shader mask ramp: SoftMaskAlpha = smoothstep(threshold - 0.46 * feather,
-// threshold + feather, storedValue), so stored bytes below the lower ramp
-// edge are invisible. Partial-alpha zones (the absorb tint) must be encoded
-// through the inverse of that ramp — see encodeMaskSoftAlphaByte.
-const BROW_MASK_THRESHOLD = 0.34;
-const BROW_MASK_FEATHER_UV_NORMALIZED = 0.05;
-// Absorb-don't-erase: where the user's real brow pokes outside the generated
-// makeup shape, tint it with the makeup color at this fraction of the
-// full-fill soft alpha (a brow-gel effect over stray hairs) instead of
-// leaving a hard shape edge against raw hair. The target shape itself is not
-// enlarged, so thin/neat brows are unaffected.
-const BROW_ABSORB_TINT_SOFT_ALPHA = 0.42;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -404,8 +392,8 @@ function buildBrowRuntimeApplyPayload({
     maskRawRgbaBase64: includeTexture ? mask.rawRgbaBase64 : undefined,
     maskTextureWidth: mask.width,
     maskTextureHeight: mask.height,
-    maskThreshold: BROW_MASK_THRESHOLD,
-    maskFeatherUvNormalized: BROW_MASK_FEATHER_UV_NORMALIZED,
+    maskThreshold: 0.34,
+    maskFeatherUvNormalized: 0.05,
     softEdgeTexels: mask.softEdgeTexels,
     localOnly: true,
     offDeviceUpload: false,
@@ -462,29 +450,6 @@ type BrowUvMaskRawRgba = {
   height: number;
 };
 
-function inverseSmoothstep(y: number): number {
-  return 0.5 - Math.sin(Math.asin(1 - 2 * clamp01(y)) / 3);
-}
-
-// Encodes a desired post-ramp soft alpha into the stored byte that the
-// shader's SoftMaskAlpha smoothstep decodes back to that alpha. Storing the
-// alpha directly would land below the ramp's lower edge and render invisible.
-function encodeMaskSoftAlphaByte(softAlpha: number): number {
-  const alpha = clamp01(softAlpha);
-  if (alpha <= 0) {
-    return 0;
-  }
-  if (alpha >= 1) {
-    return 255;
-  }
-  const rampLow =
-    BROW_MASK_THRESHOLD - BROW_MASK_FEATHER_UV_NORMALIZED * 0.46;
-  const rampHigh = BROW_MASK_THRESHOLD + BROW_MASK_FEATHER_UV_NORMALIZED;
-  return Math.round(
-    (rampLow + (rampHigh - rampLow) * inverseSmoothstep(alpha)) * 255,
-  );
-}
-
 function buildBrowUvMaskRawRgba({
   arFaceExport,
   controls,
@@ -537,7 +502,6 @@ function buildBrowUvMaskRawRgba({
 
     for (let row = minRow; row <= maxRow; row += 1) {
       for (let column = minColumn; column <= maxColumn; column += 1) {
-        let absorbSamples = 0;
         let cleanupSamples = 0;
         let desiredSamples = 0;
         let exclusionSamples = 0;
@@ -577,8 +541,7 @@ function buildBrowUvMaskRawRgba({
             }
 
             cleanupSamples += 1;
-            const insideMakeup = pointInPolygon(screenPoint, envelope.polygon);
-            if (insideMakeup) {
+            if (pointInPolygon(screenPoint, envelope.polygon)) {
               const fillDensity = browFillDensity(screenPoint, envelope);
               desiredSamples += fillDensity;
               strandSamples +=
@@ -589,13 +552,6 @@ function buildBrowUvMaskRawRgba({
               pointInPolygon(screenPoint, envelope.neutralizePolygon)
             ) {
               neutralizeSamples += 1;
-              if (!insideMakeup) {
-                // Real brow poking outside the makeup shape: absorb it with a
-                // light makeup tint instead of leaving a hard shape edge. No
-                // synthetic strands here — the user's real hairs showing
-                // through the tint ARE the texture (brow-gel effect).
-                absorbSamples += 1;
-              }
             }
           }
         }
@@ -628,20 +584,10 @@ function buildBrowUvMaskRawRgba({
           clamp01(neutralizeSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) *
             255,
         );
-        // Absorb tint: encoded through the shader ramp so its decoded soft
-        // alpha is BROW_ABSORB_TINT_SOFT_ALPHA (scaled by edge coverage).
-        const absorbFraction = clamp01(
-          absorbSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID),
-        );
-        const absorbByte =
-          absorbFraction > 0
-            ? encodeMaskSoftAlphaByte(BROW_ABSORB_TINT_SOFT_ALPHA * absorbFraction)
-            : 0;
-        const fillAlpha = Math.max(desiredAlpha, absorbByte);
         raw[rawIndex] = neutralizeAlpha;
-        raw[rawIndex + 1] = fillAlpha;
+        raw[rawIndex + 1] = desiredAlpha;
         raw[rawIndex + 2] = strand;
-        raw[rawIndex + 3] = fillAlpha;
+        raw[rawIndex + 3] = desiredAlpha;
       }
     }
   }
