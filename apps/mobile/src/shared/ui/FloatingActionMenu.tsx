@@ -494,14 +494,17 @@ export function FloatingActionMenu({
   const visibleActionIds = useMemo(() => getVisibleFloatingActionIds(actionIds), [actionIds]);
   const [uncontrolledIsExpanded, setUncontrolledIsExpanded] = useState(false);
   const isExpanded = controlledIsExpanded ?? uncontrolledIsExpanded;
+  const isExpandedRef = useRef(isExpanded);
   const [activeActionId, setActiveActionId] = useState<FloatingActionId | null>(null);
   const activeActionIdRef = useRef<FloatingActionId | null>(null);
   const wasExpandedAtGestureStartRef = useRef(false);
   const visibleDefinitions = visibleActionIds.map(getFloatingActionDefinition);
 
+  isExpandedRef.current = isExpanded;
+
   const setExpanded = useCallback((nextIsExpanded: boolean | ((current: boolean) => boolean)) => {
     const resolvedIsExpanded = typeof nextIsExpanded === 'function'
-      ? nextIsExpanded(isExpanded)
+      ? nextIsExpanded(isExpandedRef.current)
       : nextIsExpanded;
 
     if (controlledIsExpanded === undefined) {
@@ -509,7 +512,7 @@ export function FloatingActionMenu({
     }
 
     onExpandedChange?.(resolvedIsExpanded);
-  }, [controlledIsExpanded, isExpanded, onExpandedChange]);
+  }, [controlledIsExpanded, onExpandedChange]);
 
   const closeMenu = useCallback(() => {
     setExpanded(false);
@@ -536,7 +539,7 @@ export function FloatingActionMenu({
       onMoveShouldSetPanResponder: () => interactionMode === 'drag',
       onMoveShouldSetPanResponderCapture: () => interactionMode === 'drag',
       onPanResponderGrant: () => {
-        wasExpandedAtGestureStartRef.current = isExpanded;
+        wasExpandedAtGestureStartRef.current = isExpandedRef.current;
         setExpanded(true);
       },
       onPanResponderMove: (
@@ -610,7 +613,6 @@ export function FloatingActionMenu({
     [
       closeMenu,
       interactionMode,
-      isExpanded,
       placement,
       buttonPosition,
       selectAction,
