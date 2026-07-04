@@ -120,6 +120,7 @@ Shader "MakeupAR/SmoothRegionMask"
             struct appdata
             {
                 float4 vertex : POSITION;
+                float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
             };
 
@@ -129,6 +130,10 @@ Shader "MakeupAR/SmoothRegionMask"
                 float2 uv : TEXCOORD0;
                 float4 clipPos : TEXCOORD1;
                 float4 grabPos : TEXCOORD2;
+                // How directly this surface faces the camera (1 = head-on,
+                // ~0 = edge-on). Used to fade the brow tail as the face turns to
+                // profile, where the UV-glued mask would otherwise smear/stretch.
+                float facing : TEXCOORD3;
             };
 
             v2f vert(appdata input)
@@ -138,6 +143,10 @@ Shader "MakeupAR/SmoothRegionMask"
                 output.clipPos = output.vertex;
                 output.grabPos = ComputeGrabScreenPos(output.vertex);
                 output.uv = input.uv;
+                float3 worldNormal = UnityObjectToWorldNormal(input.normal);
+                float3 worldPos = mul(unity_ObjectToWorld, input.vertex).xyz;
+                float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - worldPos);
+                output.facing = saturate(dot(worldNormal, viewDir));
                 return output;
             }
 
@@ -465,16 +474,24 @@ Shader "MakeupAR/SmoothRegionMask"
 
                   if (_DebugMaskMode < 0.5)
                   {
+                    // View-angle fade: as the face turns to profile, the brow tail
+                    // near the temple goes edge-on and the UV-glued mask smears
+                    // outward (looks unnaturally long/stretched). Fade the brow out
+                    // where the surface is grazing so that stretched tail
+                    // disappears; head-on (facing ~1) is untouched, so the front
+                    // view is unchanged. Only strongly grazing (>~60deg) fades.
+                    float facingFade = smoothstep(0.16, 0.5, input.facing);
+
                     float browOpacity = saturate(_Opacity * _VisibilityAlpha);
                     // Makeup layer obeys the opacity slider.
-                    float makeupAlpha = saturate(browAlpha * browOpacity);
+                    float makeupAlpha = saturate(browAlpha * browOpacity * facingFade);
 
                     // Neutralize layer: red channel marks the user's real brow.
                     // Paint surrounding skin over it (independent of the makeup
                     // opacity slider) so the real brow does not stick out.
                     float neutralizeCov = SoftMaskAlpha(max(softMask.r, mask.r), _Threshold, _Feather);
                     float neutralizeAlpha = saturate(
-                        neutralizeCov * saturate(_BrowNeutralizeStrength) * saturate(_VisibilityAlpha));
+                        neutralizeCov * saturate(_BrowNeutralizeStrength) * saturate(_VisibilityAlpha) * facingFade);
 
                     // Camera pixel behind this fragment (grabbed pre-overlay).
                     float2 grabUv = input.grabPos.xy / max(input.grabPos.w, 0.00001);
