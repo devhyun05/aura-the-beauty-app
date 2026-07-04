@@ -936,7 +936,9 @@ function buildSingleBrowEnvelope({
   // usually stops short of the visible one.
   const browHeadX = side === 'left' ? minX : maxX;
   const browTailX = side === 'left' ? maxX : minX;
-  const innerX = browHeadX + direction * browWidth * 0.015;
+  // Start the head exactly at the detected inner end (no forward extension) so
+  // the head does not poke toward the nose (device feedback: 앞머리 튀어나옴).
+  const innerX = browHeadX;
   // Only a slight tail extension past the detected end. A longer tail sweeps up
   // toward the temple and, under an upward camera tilt, reads as an unnatural
   // soaring brow (device feedback). Looking down foreshortens it away, which is
@@ -1220,7 +1222,7 @@ function buildSmoothBrowEnvelopePolygon({
   // Sit high enough on the brow that the band covers the body without dropping
   // below it. Straight brows have no arch to raise their middle, so they need a
   // larger lift or they read as sitting under the real brow (device feedback).
-  const verticalLift = medianThickness * (shapeId === 'straight' ? 0.34 : 0.18);
+  const verticalLift = medianThickness * (shapeId === 'straight' ? 0.42 : 0.18);
   // Per-shape curve: arch height at the peak, then a tail that DESCENDS below
   // the head->tail chord past the peak (눈썹 산 기준 하강) — natural Korean brow
   // finishes lower than the arch, even for 일자.
@@ -1243,7 +1245,10 @@ function buildSmoothBrowEnvelopePolygon({
   // Thickness profile is shape-independent: soft head, late tail taper so the
   // tail stays visible while it descends, finishing in a sharp tip.
   const thicknessProfile = (t: number) => {
-    const headRamp = lerp(0.7, 1, smoothstep(0, 0.12, t));
+    // Thinner, more gradual head taper (0.52 over the first 17%) so the inner
+    // end reads as a soft rounded head instead of a tall angular wall poking
+    // forward (device feedback: 앞머리 각짐).
+    const headRamp = lerp(0.52, 1, smoothstep(0, 0.17, t));
     const tailRamp = 1 - smoothstep(0.62, 1, t) * 0.84;
     const bodyRamp = 0.94 + 0.06 * Math.sin(Math.PI * t);
     return clamp(headRamp * tailRamp * bodyRamp, 0.07, 1);
