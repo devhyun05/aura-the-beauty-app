@@ -418,10 +418,15 @@ expectEqual(
   512 * 512 * 4,
   'generated brow raw texture byte count',
 );
-expectEqual(
+expectGreaterThan(
   rawChannelSummary.redActiveTexels,
   0,
-  'generated brow red channel stays empty because Unity samples green/alpha',
+  'generated brow red channel carries the real-brow neutralize region',
+);
+expectGreaterThan(
+  rawChannelSummary.redActiveTexels,
+  rawChannelSummary.greenAlphaActiveTexels,
+  'neutralize region (red) is larger than the makeup fill (green) so the real brow is covered beyond the shape',
 );
 expectGreaterThan(
   rawChannelSummary.greenAlphaActiveTexels,
@@ -614,7 +619,11 @@ expectGreaterThan(
   'generated brow upper eyelid anchor count',
 );
 expectEqual(payload.cleanupStrength, 0, 'generated brow cleanup stays disabled');
-expectEqual(payload.neutralizeStrength, 0, 'generated brow neutralize stays disabled');
+expectGreaterThan(
+  payload.neutralizeStrength,
+  0,
+  'generated brow neutralize is enabled so the shader can cover the real brow',
+);
 expectEqual(payload.intensity, 1, 'generated brow max color intensity boost');
 expectEqual(payload.opacity, 1, 'generated brow max opacity boost');
 expectEqual(payload.strandTextureAmount, 1, 'generated brow max strand texture boost');

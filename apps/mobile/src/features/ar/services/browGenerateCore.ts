@@ -40,6 +40,11 @@ export type BrowEnvelope = {
   cleanupPolygon: E7Point2D[];
   eyeExclusionBounds: [number, number, number, number];
   fillBounds: [number, number, number, number];
+  // Region of the user's REAL eyebrow (dilated hull of the detected brow ring).
+  // Rasterized into the mask RED channel so the Unity shader can neutralize the
+  // real brow (paint surrounding skin over it) where it sticks out past the
+  // generated makeup shape.
+  neutralizePolygon: E7Point2D[];
   polygon: E7Point2D[];
   side: 'left' | 'right';
 };
@@ -150,6 +155,10 @@ const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
+// Real-brow neutralization strength sent to Unity (_BrowNeutralizeStrength).
+// The shader reads the live camera and paints surrounding skin over the real
+// brow (red-channel region) so it does not stick out past the makeup shape.
+const BROW_NEUTRALIZE_STRENGTH = 0.85;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -313,7 +322,7 @@ export function buildGeneratedBrowMaskUnityPayload(
     intensity: runtimeIntensity,
     maskOpacity: runtimeOpacity,
     maskVisible: controls.enabled,
-    neutralizeStrength: 0,
+    neutralizeStrength: BROW_NEUTRALIZE_STRENGTH,
     opacity: runtimeOpacity,
     preserveDetail: true,
     sample: 'natural_brow',
@@ -398,7 +407,7 @@ function buildBrowRuntimeApplyPayload({
     surroundAnchorPointCount: anchorSummary.surroundAnchorPointCount,
     templeAnchorPointCount: anchorSummary.templeAnchorPointCount,
     cleanupStrength: 0,
-    neutralizeStrength: 0,
+    neutralizeStrength: BROW_NEUTRALIZE_STRENGTH,
     upperEyelidAnchorPointCount: anchorSummary.upperEyelidAnchorPointCount,
     texture: 'natural_brow',
     finish: 'hair-stroke-brow',
@@ -483,6 +492,7 @@ function buildBrowUvMaskRawRgba({
         let cleanupSamples = 0;
         let desiredSamples = 0;
         let exclusionSamples = 0;
+        let neutralizeSamples = 0;
         let strandSamples = 0;
 
         for (let sampleY = 0; sampleY < BROW_SUPERSAMPLE_GRID; sampleY += 1) {
@@ -524,6 +534,12 @@ function buildBrowUvMaskRawRgba({
               strandSamples +=
                 browStrandDensity(screenPoint, envelope, controls) * fillDensity;
             }
+            if (
+              envelope.neutralizePolygon.length >= 3 &&
+              pointInPolygon(screenPoint, envelope.neutralizePolygon)
+            ) {
+              neutralizeSamples += 1;
+            }
           }
         }
 
@@ -548,7 +564,14 @@ function buildBrowUvMaskRawRgba({
             255 *
             clamp01(controls.strandTextureAmount),
         );
-        raw[rawIndex] = 0;
+        // Red channel = real-brow neutralize coverage. The shader paints
+        // surrounding skin here (gated by _BrowNeutralizeStrength) so the user's
+        // real brow does not stick out past the generated makeup shape.
+        const neutralizeAlpha = Math.round(
+          clamp01(neutralizeSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) *
+            255,
+        );
+        raw[rawIndex] = neutralizeAlpha;
         raw[rawIndex + 1] = desiredAlpha;
         raw[rawIndex + 2] = strand;
         raw[rawIndex + 3] = desiredAlpha;
@@ -775,6 +798,7 @@ function mirrorEnvelopeAcrossFaceCenter(
     cleanupPolygon: envelope.cleanupPolygon.map(flipPoint),
     eyeExclusionBounds: flipRect(envelope.eyeExclusionBounds),
     fillBounds: bounds(polygon) ?? flipRect(envelope.fillBounds),
+    neutralizePolygon: envelope.neutralizePolygon.map(flipPoint),
     polygon,
     side: envelope.side === 'left' ? 'right' : 'left',
   };
@@ -890,16 +914,31 @@ function buildSingleBrowEnvelope({
     stabilizePoint,
     topY,
   });
+  // Real-brow region for neutralization: dilated convex hull of the detected
+  // brow ring, stabilized to the face tilt like the fill polygon.
+  const realBrowSource = [...shapeBasePoints, ...browPoints];
+  const realBrowHull = convexHull(realBrowSource);
+  const neutralizePolygon =
+    realBrowHull.length >= 3
+      ? expandPolygonFromCentroid(realBrowHull, 1.14, 1.55, frameWidth, frameHeight).map(
+          stabilizePoint,
+        )
+      : [];
+
   const polygonBounds = bounds(polygon) ?? [minX, topY, maxX, bottomY];
+  const neutralizeBounds = bounds(neutralizePolygon) ?? polygonBounds;
+  // Cleanup box (the writable mask region) must cover BOTH the generated fill
+  // and the real-brow neutralize region so the red channel can be written where
+  // the real brow extends past the makeup shape.
+  const regionMinX = Math.min(polygonBounds[0], neutralizeBounds[0]);
+  const regionMinY = Math.min(polygonBounds[1], neutralizeBounds[1]);
+  const regionMaxX = Math.max(polygonBounds[2], neutralizeBounds[2]);
+  const regionMaxY = Math.max(polygonBounds[3], neutralizeBounds[3]);
   const cleanupMargin = Math.max(4, browHeight * 0.2);
-  const cleanupMinX = clamp(polygonBounds[0] - cleanupMargin, 0, frameWidth - 1);
-  const cleanupMaxX = clamp(polygonBounds[2] + cleanupMargin, 0, frameWidth - 1);
-  const cleanupTopY = clamp(polygonBounds[1] - cleanupMargin, 0, frameHeight - 1);
-  const cleanupBottomY = clamp(
-    polygonBounds[3] + cleanupMargin,
-    0,
-    frameHeight - 1,
-  );
+  const cleanupMinX = clamp(regionMinX - cleanupMargin, 0, frameWidth - 1);
+  const cleanupMaxX = clamp(regionMaxX + cleanupMargin, 0, frameWidth - 1);
+  const cleanupTopY = clamp(regionMinY - cleanupMargin, 0, frameHeight - 1);
+  const cleanupBottomY = clamp(regionMaxY + cleanupMargin, 0, frameHeight - 1);
   const cleanupPolygon = [
     {x: cleanupMinX, y: cleanupTopY},
     {x: cleanupMaxX, y: cleanupTopY},
@@ -927,6 +966,7 @@ function buildSingleBrowEnvelope({
       clamp(eyeMaxY + eyeHeight * 0.14, 0, frameHeight - 1),
     ],
     fillBounds: bounds(polygon) ?? [minX, topY, maxX, bottomY],
+    neutralizePolygon,
     polygon,
     side,
   };
@@ -1444,6 +1484,62 @@ function stabilizePointToFaceDirection(
     x: point.x,
     y: point.y + yOffset,
   };
+}
+
+function convexHull(points: readonly E7Point2D[]): E7Point2D[] {
+  const unique = points
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+    .map(point => ({x: point.x, y: point.y}))
+    .sort((first, second) => first.x - second.x || first.y - second.y);
+  if (unique.length < 3) {
+    return unique;
+  }
+  const cross = (o: E7Point2D, a: E7Point2D, b: E7Point2D) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: E7Point2D[] = [];
+  for (const point of unique) {
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0
+    ) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+  const upper: E7Point2D[] = [];
+  for (let index = unique.length - 1; index >= 0; index -= 1) {
+    const point = unique[index];
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0
+    ) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+// Dilate a polygon outward from its centroid so the real-brow hull covers hair
+// that extends beyond the detected landmark ring. Vertical dilation is larger
+// because brow hair is thickest above/below the ring.
+function expandPolygonFromCentroid(
+  polygon: readonly E7Point2D[],
+  scaleX: number,
+  scaleY: number,
+  frameWidth: number,
+  frameHeight: number,
+): E7Point2D[] {
+  const center = centroid(polygon as E7Point2D[]);
+  if (!center) {
+    return polygon.map(point => ({x: point.x, y: point.y}));
+  }
+  return polygon.map(point => ({
+    x: clamp(center.x + (point.x - center.x) * scaleX, 0, frameWidth - 1),
+    y: clamp(center.y + (point.y - center.y) * scaleY, 0, frameHeight - 1),
+  }));
 }
 
 function centroid(points: E7Point2D[]): E7Point2D | null {

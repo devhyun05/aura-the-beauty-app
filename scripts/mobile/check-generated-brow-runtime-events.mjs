@@ -134,7 +134,9 @@ function evaluateGeneratedBrowEvents(events) {
     requireEqual(latestReady, 'anchorStabilizationMode', EXPECTED_ANCHOR_MODE, failures);
     requireEqual(latestReady, 'eyeExclusionMode', EXPECTED_EYE_EXCLUSION_MODE, failures);
     requireEqual(latestReady, 'cleanupStrength', 0, failures);
-    requireEqual(latestReady, 'neutralizeStrength', 0, failures);
+    // Neutralize is now enabled: the shader paints skin over the real brow so it
+    // does not stick out past the generated makeup shape.
+    requireNumberInRange(latestReady, 'neutralizeStrength', 0.2, 1, failures);
 
     if (stringField(latestReady, 'trackingState') !== 'Tracking') {
       warnings.push(`Latest ready trackingState is ${stringField(latestReady, 'trackingState') || 'unknown'}.`);
@@ -588,7 +590,7 @@ function runSelfTest() {
     maskUvSplitMode: EXPECTED_MASK_UV_SPLIT_MODE,
     meshUvCount: 1220,
     meshVertexCount: 1220,
-    neutralizeStrength: 0,
+    neutralizeStrength: 0.85,
     runtimeReady: true,
     softEdgeTexels: 824,
     stabilityMode: EXPECTED_STABILITY_MODE,
