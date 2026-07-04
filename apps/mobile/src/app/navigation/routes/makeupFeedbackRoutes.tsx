@@ -66,7 +66,7 @@ export function MakeupFeedbackCaptureRouteScreen({
       setSelectedMakeupFeedbackPhoto(
         mapFaceCaptureResultToMakeupFeedbackPhotoSelection(result),
       );
-      navigation.replace('MakeupFeedbackGoalInput');
+      navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
     [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
@@ -90,7 +90,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
     (selection: MakeupFeedbackPhotoSelection) => {
       setMakeupFeedbackResult(null);
       setSelectedMakeupFeedbackPhoto(selection);
-      navigation.replace('MakeupFeedbackGoalInput');
+      navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
     [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );

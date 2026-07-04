@@ -16,6 +16,7 @@ import {
   ARFilterRouteScreen,
   UnityMakeupCaptureRouteScreen,
 } from './routes/arRoutes';
+import {FaceCaptureConfirmationRouteScreen} from './routes/faceCaptureConfirmationRoutes';
 import {
   FaceAnalysisIntroRouteScreen,
   FaceAnalysisLoadingRouteScreen,
@@ -62,6 +63,10 @@ export function RootNavigator() {
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
+      <Stack.Screen
+        name="FaceCaptureConfirmation"
+        component={FaceCaptureConfirmationRouteScreen}
+      />
       <Stack.Screen
         name="UnityMakeupCapture"
         component={UnityMakeupCaptureRouteScreen}

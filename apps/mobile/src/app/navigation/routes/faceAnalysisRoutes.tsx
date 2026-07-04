@@ -92,15 +92,16 @@ export function FaceCaptureRouteScreen({
       captureMode="face"
       captureType="face_analysis"
       onCapture={result => {
-        if (result) {
-          setSelectedFaceCapture(result);
+        if (!result) {
+          return;
         }
 
-        navigation.navigate(
-          'FaceAnalysisLoading',
+        setSelectedFaceCapture(result);
+        navigation.replace(
+          'FaceCaptureConfirmation',
           route.params?.afterAnalysisRoute
-            ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
-            : undefined,
+            ? {afterAnalysisRoute: route.params.afterAnalysisRoute, target: 'faceAnalysis'}
+            : {target: 'faceAnalysis'},
         );
       }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}

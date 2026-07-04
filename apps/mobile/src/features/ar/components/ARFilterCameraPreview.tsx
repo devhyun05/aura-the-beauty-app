@@ -1,5 +1,6 @@
 import React from 'react';
 import {StyleSheet, type ViewStyle} from 'react-native';
+import type {CameraType} from 'expo-camera';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
@@ -16,6 +17,7 @@ type MakeupPreviewColorOverlayLayer = {
 };
 
 type ARFilterCameraPreviewProps = {
+  cameraFacing: CameraType;
   guideMode: GuideMode;
   previewColorHex: string;
   selectedComparisonMode: ComparisonMode;
@@ -38,6 +40,7 @@ export function shouldShowARFilterHeaderCopy(): false {
 }
 
 export function ARFilterCameraPreview({
+  cameraFacing,
   guideMode,
   previewColorHex,
   selectedComparisonMode,
@@ -57,7 +60,7 @@ export function ARFilterCameraPreview({
         <UnityMakeupNativeView />
       ) : (
         <>
-          <LiveCameraLayer />
+          <LiveCameraLayer facing={cameraFacing} />
           <View style={styles.previewDim} />
           <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
           {shouldShowLeftCheekOverlay ? (

@@ -96,7 +96,6 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
   route,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
-    setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
@@ -116,8 +115,7 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
-    setReferenceMakeupUploadedPhotos(currentPhotos => [photo, ...currentPhotos]);
-    navigation.replace('ReferenceMakeupExtractionLoading');
+    navigation.replace('FaceCaptureConfirmation', {target: 'referenceMakeupExtraction'});
   };
 
   return (

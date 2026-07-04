@@ -1164,14 +1164,13 @@ const styles = StyleSheet.create({
   },
   recommendedFilterCopy: {
     backgroundColor: 'rgba(17, 17, 17, 0.70)',
-    borderRadius: radius.md,
-    bottom: spacing.sm,
+    bottom: 0,
     gap: 2,
-    left: spacing.md,
-    paddingHorizontal: spacing.sm,
+    left: 0,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     position: 'absolute',
-    right: spacing.md,
+    right: 0,
     zIndex: 1,
   },
   recommendedFilterHeadline: {

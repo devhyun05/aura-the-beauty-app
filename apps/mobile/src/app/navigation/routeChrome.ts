@@ -86,6 +86,14 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
+  FaceCaptureConfirmation: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['close'],
+    statusBarStyle: 'dark',
+    title: '사진 확인',
+  },
   UnityMakeupCapture: {
     category: 'capture-runtime',
     depth: 'immersive',

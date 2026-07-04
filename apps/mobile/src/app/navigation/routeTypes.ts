@@ -8,6 +8,10 @@ import type {
 
 export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
+export type FaceCaptureConfirmationTarget =
+  | 'faceAnalysis'
+  | 'makeupFeedback'
+  | 'referenceMakeupExtraction';
 export type MakeupFilterEditMode = 'preset' | 'fullFace';
 
 export type RootStackParamList = {
@@ -19,6 +23,10 @@ export type RootStackParamList = {
     afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
     initialSource?: 'gallery';
   } | undefined;
+  FaceCaptureConfirmation: {
+    afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
+    target: FaceCaptureConfirmationTarget;
+  };
   UnityMakeupCapture: undefined;
   FaceAnalysisIntro: undefined;
   FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
@@ -82,6 +90,7 @@ export const rootStackRoutes = [
   'Tutorial',
   'MainTabs',
   'FaceCapture',
+  'FaceCaptureConfirmation',
   'UnityMakeupCapture',
   'FaceAnalysisIntro',
   'FaceAnalysisLoading',
