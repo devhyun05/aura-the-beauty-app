@@ -8,11 +8,13 @@ import {
   StyleSheet,
   View as RNView,
 } from 'react-native';
-import {ChevronLeft, Sparkles} from 'lucide-react-native';
+import {Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui';
 import {
   buildFullFaceCaptureBundleFromEvent,
   buildFullFaceMakeupSourceInput,
@@ -178,10 +180,11 @@ export function UnityMakeupCaptureScreen({
 }: UnityMakeupCaptureScreenProps) {
   const insets = useSafeAreaInsets();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
+  const cameraSessionActive = useCameraSessionActive();
   const [hasStartedMaskFlow, setHasStartedMaskFlow] = useState(false);
   const [isPreparingUnity, setIsPreparingUnity] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('ready');
-  const [notice, setNotice] = useState('개인 마스크를 먼저 만든 뒤 립, 볼, 눈썹을 적용합니다');
+  const [notice, setNotice] = useState('개인 마스크를 만든 뒤 립, 볼, 눈썹에 적용합니다');
   const [sourceFrameMetadata, setSourceFrameMetadata] =
     useState<FullFaceMakeupSourceInput | null>(null);
   const [generatedPackage, setGeneratedPackage] =
@@ -245,6 +248,12 @@ export function UnityMakeupCaptureScreen({
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!cameraSessionActive) {
+      hideUnityMakeupView();
+    }
+  }, [cameraSessionActive]);
 
   const handleBack = () => {
     if (preparePollTimerRef.current) {
@@ -596,27 +605,18 @@ export function UnityMakeupCaptureScreen({
           paddingTop: Math.max(insets.top, spacing.lg),
         },
       ]}>
-      <XStack style={styles.header}>
-        <Pressable
-          accessibilityLabel="홈으로 돌아가기"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={handleBack}
-          style={({pressed}) => [styles.iconButton, pressed && styles.pressed]}>
-          <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
-        </Pressable>
-
-        <YStack style={styles.headerTitleGroup}>
-          <Text style={styles.headerEyebrow}>맞춤 생성</Text>
-          <Text style={styles.headerTitle}>개인 마스크 적용</Text>
-        </YStack>
-
-        <View style={styles.headerSpacer} />
-      </XStack>
+      <AppHeader
+        containerProps={{style: styles.immersiveHeader}}
+        contextLabel="PERSONAL MASK"
+        onBack={handleBack}
+        title="개인 마스크 적용"
+        topInset={0}
+        variant="immersive"
+      />
 
       <YStack style={styles.cameraStage}>
         <View style={[styles.unityMountPoint, !hasStartedMaskFlow && styles.maskIntroStage]}>
-          {hasStartedMaskFlow && shouldUseUnityPreview ? (
+          {hasStartedMaskFlow && shouldUseUnityPreview && cameraSessionActive ? (
             <UnityMakeupNativeView />
           ) : !hasStartedMaskFlow ? (
             <YStack style={styles.maskIntroContent}>
@@ -1887,43 +1887,8 @@ const styles = StyleSheet.create({
     top: '66%',
     width: 68,
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    minHeight: 48,
-  },
-  headerEyebrow: {
-    color: 'rgba(255, 255, 255, 0.62)',
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
-  headerSpacer: {
-    height: 42,
-    width: 42,
-  },
-  headerTitle: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-    textAlign: 'center',
-  },
-  headerTitleGroup: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 2,
-  },
-  iconButton: {
-    alignItems: 'center',
-    backgroundColor: colors.glassSurface,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
+  immersiveHeader: {
+    paddingHorizontal: 0,
   },
   maskIntroContent: {
     alignItems: 'center',
@@ -2098,14 +2063,13 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     alignItems: 'center',
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     backgroundColor: colors.glassSurface,
     borderColor: 'rgba(255, 255, 255, 0.14)',
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.sm,
-    maxWidth: '94%',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
@@ -2115,6 +2079,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: colors.white,
+    flex: 1,
     flexShrink: 1,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,

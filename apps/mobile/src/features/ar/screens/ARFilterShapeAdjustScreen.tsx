@@ -6,7 +6,7 @@ import {
   type LayoutChangeEvent,
   type ViewStyle,
 } from 'react-native';
-import {ChevronLeft, Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
+import {Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {
@@ -21,12 +22,12 @@ import {
   FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
   FullscreenOverlayLayer,
   FullscreenOverlayScreen,
+  AppHeader,
   LiveCameraLayer,
   OverlayChipButton,
   OverlayIconButton,
   OverlayPanelSection,
   OverlaySaveButton,
-  OverlayTopBar,
 } from '../../../shared/ui';
 import {
   createMakeupFilterShapePresetSaveValue,
@@ -100,6 +101,7 @@ export function ARFilterShapeAdjustScreen({
   const arGuideData = getARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
   const shapeFilterColor = filter.colorOptions[0]?.hex ?? colors.white;
+  const cameraSessionActive = useCameraSessionActive();
   const [shapeState, setShapeState] = useState<FilterShapeState>(
     getFilterShapeState(),
   );
@@ -237,7 +239,7 @@ export function ARFilterShapeAdjustScreen({
         <NativeView
           onLayout={handlePreviewLayout}
           style={styles.previewGestureLayer}>
-          <LiveCameraLayer />
+          <LiveCameraLayer active={cameraSessionActive} />
           <View style={styles.previewDim} />
           <View
             style={[
@@ -283,15 +285,10 @@ export function ARFilterShapeAdjustScreen({
       </FullscreenOverlayLayer>
 
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
-        <OverlayTopBar
-          eyebrow="FILTER CUSTOM"
-          leftSlot={
-            <OverlayIconButton
-              accessibilityLabel="AR 필터 화면으로 돌아가기"
-              onPress={onBack}>
-              <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
-            </OverlayIconButton>
-          }
+        <AppHeader
+          containerProps={{style: styles.immersiveHeader}}
+          contextLabel="FILTER CUSTOM"
+          onBack={onBack}
           rightSlot={
             <OverlayIconButton
               accessibilityLabel="현재 형태 저장"
@@ -300,6 +297,8 @@ export function ARFilterShapeAdjustScreen({
             </OverlayIconButton>
           }
           title={SHAPE_ADJUST_TITLE}
+          topInset={0}
+          variant="immersive"
         />
 
         <XStack style={styles.quickActions}>
@@ -442,6 +441,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
     zIndex: 3,
+  },
+  immersiveHeader: {
+    paddingHorizontal: 0,
   },
   previewGestureLayer: {
     ...StyleSheet.absoluteFill,

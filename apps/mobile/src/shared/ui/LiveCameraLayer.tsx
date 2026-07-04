@@ -40,6 +40,18 @@ export function shouldMirrorLiveCamera(facing: CameraType): boolean {
   return facing === 'front';
 }
 
+export function shouldRenderLiveCamera({
+  active,
+  mountError,
+  permission,
+}: {
+  active: boolean;
+  mountError?: string | null;
+  permission: LiveCameraPermissionState | null | undefined;
+}): boolean {
+  return active && permission?.granted === true && !mountError;
+}
+
 export function getLiveCameraPermissionAction(
   permission: LiveCameraPermissionState | null | undefined,
   hasMountError = false,
@@ -82,7 +94,8 @@ export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps
   ) {
     const [permission, requestPermission] = useCameraPermissions();
     const [mountError, setMountError] = useState<string | null>(null);
-    const shouldShowCamera = permission?.granted === true && !mountError;
+    const shouldShowCamera = shouldRenderLiveCamera({active, mountError, permission});
+    const shouldShowPermission = active && !shouldShowCamera;
     const permissionCopy = getLiveCameraPermissionCopy(
       mountError ? 'mountError' : 'permission',
       mountError,
@@ -90,10 +103,14 @@ export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps
     const permissionAction = getLiveCameraPermissionAction(permission, Boolean(mountError));
 
     useEffect(() => {
+      if (!active) {
+        return;
+      }
+
       if (permission && !permission.granted && permission.canAskAgain) {
         void requestPermission();
       }
-    }, [permission, requestPermission]);
+    }, [active, permission, requestPermission]);
 
     const handleRequestPermission = async () => {
       const nextPermission = await requestPermission();
@@ -110,7 +127,7 @@ export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps
     return (
       <View
         pointerEvents="box-none"
-        style={[styles.layer, !shouldShowCamera ? styles.permissionHost : undefined, style]}>
+        style={[styles.layer, shouldShowPermission ? styles.permissionHost : undefined, style]}>
         {shouldShowCamera ? (
           <CameraView
             active={active}
@@ -133,7 +150,7 @@ export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps
           <View style={styles.fallbackLayer}>{fallback}</View>
         )}
 
-        {!shouldShowCamera ? (
+        {shouldShowPermission ? (
           <View style={styles.permissionLayer}>
             {permission === null && !mountError ? (
               <ActivityIndicator color={colors.white} size="large" />

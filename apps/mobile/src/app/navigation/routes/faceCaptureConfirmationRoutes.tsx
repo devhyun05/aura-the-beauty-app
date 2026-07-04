@@ -297,7 +297,7 @@ export function FaceCaptureConfirmationRouteScreen({
 
   const handleClose = React.useCallback(() => {
     if (target === 'makeupFeedback') {
-      navigateMainTab(navigation, 'CustomTab');
+      navigateMainTab(navigation, 'HomeTab');
       return;
     }
 

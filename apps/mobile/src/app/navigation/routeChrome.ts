@@ -2,7 +2,6 @@ import type {FooterTabKey} from '../../shared/ui';
 import type {
   MainTabRouteName,
   RouteName,
-  RootStackRouteName,
 } from './routeTypes';
 import {routes} from './routeTypes';
 
@@ -12,8 +11,9 @@ export type ScreenCategory =
   | 'auth'
   | 'onboarding'
   | 'main-home'
-  | 'main-makeup-tools'
   | 'main-profile'
+  | 'main-community'
+  | 'main-consulting'
   | 'feature-entry'
   | 'list'
   | 'detail-report'
@@ -35,12 +35,13 @@ type RouteChromeBase = {
 
 export type RouteChrome =
   | (RouteChromeBase & {
-      footerTab?: Extract<FooterTabKey, 'home' | 'custom'>;
+      footerTab?: FooterTabKey;
       headerVariant: MainHeaderVariant;
       kind: 'mainTab';
       statusBarStyle: 'dark';
     })
   | (RouteChromeBase & {
+      contextLabel: string;
       kind: 'detail';
       rightActions?: readonly DetailHeaderRightAction[];
       statusBarStyle: 'dark';
@@ -51,9 +52,7 @@ export type RouteChrome =
       statusBarStyle: 'dark' | 'light';
     });
 
-export type FooterTargetRoute =
-  | MainTabRouteName
-  | Extract<RootStackRouteName, 'ARFilter' | 'UnityMakeupCapture'>;
+export type FooterTargetRoute = MainTabRouteName;
 
 export const routeChromeByRoute = {
   Login: {
@@ -88,6 +87,7 @@ export const routeChromeByRoute = {
   },
   FaceCaptureConfirmation: {
     category: 'feature-entry',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -102,14 +102,15 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisIntro: {
     category: 'feature-entry',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
-    rightActions: ['close'],
     statusBarStyle: 'dark',
     title: '얼굴 분석',
   },
   FaceAnalysisLoading: {
     category: 'progress',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -117,6 +118,7 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisReportsList: {
     category: 'list',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -124,14 +126,32 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisReportDetail: {
     category: 'detail-report',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
-    rightActions: ['share', 'close'],
+    rightActions: ['share'],
     statusBarStyle: 'dark',
     title: '맞춤 분석 보고서',
   },
+  FloatingActionSettings: {
+    category: 'form-edit',
+    contextLabel: 'QUICK ACTION',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '빠른 실행 설정',
+  },
+  AppSettings: {
+    category: 'form-edit',
+    contextLabel: 'SETTINGS',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '앱 환경설정',
+  },
   ProfileEdit: {
     category: 'form-edit',
+    contextLabel: 'PROFILE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -139,13 +159,23 @@ export const routeChromeByRoute = {
   },
   HomeFilterStore: {
     category: 'list',
+    contextLabel: 'FILTER STORE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '필터 스토어',
   },
+  Magazine: {
+    category: 'list',
+    contextLabel: 'MAGAZINE',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '매거진',
+  },
   SavedMakeupList: {
     category: 'list',
+    contextLabel: 'SAVED LOOKS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -153,6 +183,7 @@ export const routeChromeByRoute = {
   },
   ProductRecommendation: {
     category: 'list',
+    contextLabel: 'PRODUCTS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -160,6 +191,7 @@ export const routeChromeByRoute = {
   },
   Community: {
     category: 'list',
+    contextLabel: 'COMMUNITY',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -167,13 +199,15 @@ export const routeChromeByRoute = {
   },
   Consulting: {
     category: 'list',
+    contextLabel: 'CONSULTING',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '메이크업 컨설팅',
+    title: '컨설팅',
   },
   MakeupLookList: {
     category: 'list',
+    contextLabel: 'MAKEUP LOOK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -181,6 +215,7 @@ export const routeChromeByRoute = {
   },
   LikedProductList: {
     category: 'list',
+    contextLabel: 'SAVED ITEMS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -204,13 +239,6 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  MakeupFeedbackEntry: {
-    category: 'feature-entry',
-    depth: 'sub',
-    kind: 'detail',
-    statusBarStyle: 'dark',
-    title: '메이크업 피드백',
-  },
   MakeupFeedbackCapture: {
     category: 'capture-runtime',
     depth: 'immersive',
@@ -219,6 +247,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackAlbumUpload: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -226,6 +255,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackGoalInput: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -234,20 +264,32 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackLoading: {
     category: 'progress',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
-  MakeupFeedbackResult: {
-    category: 'detail-report',
+  MakeupFeedbackResultsList: {
+    category: 'list',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '피드백 목록',
+  },
+  MakeupFeedbackResult: {
+    category: 'detail-report',
+    contextLabel: 'MAKEUP FEEDBACK',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['share'],
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
   MakeupCorrectionGuide: {
     category: 'detail-report',
+    contextLabel: 'CORRECTION GUIDE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -255,6 +297,7 @@ export const routeChromeByRoute = {
   },
   MakeupCorrectionTip: {
     category: 'detail-report',
+    contextLabel: 'CORRECTION GUIDE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -262,6 +305,7 @@ export const routeChromeByRoute = {
   },
   ReferenceMakeupExtractionUpload: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP EXTRACTION',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -276,6 +320,7 @@ export const routeChromeByRoute = {
   },
   ReferenceMakeupExtractionResult: {
     category: 'detail-report',
+    contextLabel: 'MAKEUP EXTRACTION',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -289,6 +334,7 @@ export const routeChromeByRoute = {
   },
   MakeupFilterSave: {
     category: 'form-edit',
+    contextLabel: 'FILTER CUSTOM',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['done'],
@@ -301,10 +347,20 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
-  MakeupRecipeDetail: {
-    category: 'detail-report',
+  MakeupRecipeList: {
+    category: 'list',
+    contextLabel: 'MAKEUP RECIPE',
     depth: 'sub',
     kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '레시피 목록',
+  },
+  MakeupRecipeDetail: {
+    category: 'detail-report',
+    contextLabel: 'MAKEUP RECIPE',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['share'],
     statusBarStyle: 'dark',
     title: '상세 분석',
   },
@@ -322,17 +378,26 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
-  CustomTab: {
-    category: 'main-makeup-tools',
-    depth: 'main',
-    footerTab: 'custom',
-    headerVariant: 'custom',
-    kind: 'mainTab',
-    statusBarStyle: 'dark',
-  },
   ProfileTab: {
     category: 'main-profile',
     depth: 'main',
+    footerTab: 'profile',
+    headerVariant: 'home',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  CommunityTab: {
+    category: 'main-community',
+    depth: 'main',
+    footerTab: 'community',
+    headerVariant: 'home',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  ConsultingTab: {
+    category: 'main-consulting',
+    depth: 'main',
+    footerTab: 'consulting',
     headerVariant: 'home',
     kind: 'mainTab',
     statusBarStyle: 'dark',
@@ -353,13 +418,27 @@ export function getDetailRouteTitle(route: RouteName): string {
   return chrome.title;
 }
 
-export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
-  if (tab === 'capture') {
-    return 'UnityMakeupCapture';
+export function getDetailRouteContextLabel(route: RouteName): string {
+  const chrome = getRouteChrome(route);
+
+  if (chrome.kind !== 'detail') {
+    throw new Error(`${route} is not a detail route`);
   }
 
-  if (tab === 'custom') {
-    return 'CustomTab';
+  return chrome.contextLabel;
+}
+
+export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
+  if (tab === 'profile') {
+    return 'ProfileTab';
+  }
+
+  if (tab === 'community') {
+    return 'CommunityTab';
+  }
+
+  if (tab === 'consulting') {
+    return 'ConsultingTab';
   }
 
   return 'HomeTab';

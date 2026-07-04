@@ -15,12 +15,9 @@ type HasRightActions<RouteName extends keyof typeof routeChromeByRoute> =
     ? true
     : false;
 
-type ExpectFalse<Condition extends false> = Condition;
 type ExpectTrue<Condition extends true> = Condition;
+type ExpectFalse<Condition extends false> = Condition;
 
-type MakeupFeedbackEntryNoCloseContract = ExpectFalse<
-  HasRightActions<'MakeupFeedbackEntry'>
->;
 type MakeupFeedbackAlbumUploadNoCloseContract = ExpectFalse<
   HasRightActions<'MakeupFeedbackAlbumUpload'>
 >;
@@ -34,14 +31,24 @@ expectEqual(
   'profile edit route header title',
 );
 expectEqual(
+  getDetailHeaderPresentation('ProfileEdit').contextLabel,
+  'PROFILE',
+  'profile edit route header context label',
+);
+expectEqual(
+  getDetailHeaderPresentation('AppSettings').contextLabel,
+  'SETTINGS',
+  'app settings route header context label',
+);
+expectEqual(
   getDetailHeaderRightActions('ProfileEdit').join(','),
   '',
   'profile edit route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('MakeupFeedbackEntry').join(','),
+  getDetailHeaderRightActions('FaceAnalysisIntro').join(','),
   '',
-  'makeup feedback entry route header actions',
+  'face analysis intro route header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackAlbumUpload').join(','),
@@ -60,6 +67,16 @@ expectEqual(
 );
 expectEqual(
   getDetailHeaderRightActions('FaceAnalysisReportDetail').join(','),
-  'share,close',
+  'share',
   'face analysis report route header actions',
+);
+expectEqual(
+  getDetailHeaderRightActions('MakeupFeedbackResult').join(','),
+  'share',
+  'makeup feedback result route header actions',
+);
+expectEqual(
+  getDetailHeaderRightActions('MakeupRecipeDetail').join(','),
+  'share',
+  'makeup recipe detail route header actions',
 );

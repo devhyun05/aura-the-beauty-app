@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   HEADER_ICON_LIBRARY_NAMES,
+  MenuHeaderIcon,
   ProfileHeaderIcon,
   SearchHeaderIcon,
 } from './HeaderIcons';
@@ -18,10 +19,11 @@ expectEqual(
   'search header icon library name',
 );
 expectEqual(
-  HEADER_ICON_LIBRARY_NAMES.ProfileHeaderIcon,
-  'UserRound',
-  'profile header icon library name',
+  HEADER_ICON_LIBRARY_NAMES.MenuHeaderIcon,
+  'Menu',
+  'menu header icon library name',
 );
 
 <SearchHeaderIcon color="#111111" />;
+<MenuHeaderIcon color="#111111" />;
 <ProfileHeaderIcon color="#111111" />;

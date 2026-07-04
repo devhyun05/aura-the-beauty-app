@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {Modal, Pressable, StyleSheet} from 'react-native';
+import {Modal, Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {createBottomTabNavigator, type BottomTabBarProps} from '@react-navigation/bottom-tabs';
 import type {NavigationProp} from '@react-navigation/native';
 import {ArrowRight, Camera, ImagePlus} from 'lucide-react-native';
@@ -7,16 +7,64 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../shared/theme';
-import {AppFooter, type FooterTabKey} from '../../shared/ui';
+import {
+  AppFooter,
+  FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+  FloatingActionMenu,
+  type FloatingActionId,
+  type FooterTabKey,
+} from '../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
+import {MakeupExtractionActionSheet} from '../../features/home/components/MakeupExtractionActionSheet';
 import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {HomeRouteScreen} from './routes/homeRoutes';
+import {
+  CommunityTabRouteScreen,
+  ConsultingTabRouteScreen,
+} from './routes/homeRoutes';
 import {ProfileRouteScreen} from './routes/profileRoutes';
-import {CustomRouteScreen} from './routes/recommendationRoutes';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
+
+export type FloatingActionPresentation =
+  | 'route'
+  | 'makeupExtractionSheet'
+  | 'makeupFeedbackSheet';
+
+export function getFloatingActionPresentation(
+  actionId: FloatingActionId,
+): FloatingActionPresentation {
+  if (actionId === 'makeupExtraction') {
+    return 'makeupExtractionSheet';
+  }
+
+  if (actionId === 'makeupFeedback') {
+    return 'makeupFeedbackSheet';
+  }
+
+  return 'route';
+}
+
+export function getMainTabBarMinHostHeight(footerBottomInset: number): number {
+  return (
+    APP_FOOTER_FLOATING_HOST_BASE_HEIGHT +
+    footerBottomInset +
+    FLOATING_ACTION_HOST_EXTRA_HEIGHT
+  );
+}
+
+export function getMainTabBarHostHeight(
+  windowHeight: number,
+  footerBottomInset: number,
+): number {
+  return Math.max(windowHeight, getMainTabBarMinHostHeight(footerBottomInset));
+}
+
+export function shouldShowFloatingActionDismissLayer(isExpanded: boolean): boolean {
+  return isExpanded;
+}
 
 export function MainTabNavigator() {
   return (
@@ -25,26 +73,54 @@ export function MainTabNavigator() {
       screenOptions={{headerShown: false}}
       tabBar={props => <MainTabBar {...props} />}>
       <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
-      <Tab.Screen name="CustomTab" component={CustomRouteScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
+      <Tab.Screen name="CommunityTab" component={CommunityTabRouteScreen} />
+      <Tab.Screen name="ConsultingTab" component={ConsultingTabRouteScreen} />
     </Tab.Navigator>
   );
 }
 
 function MainTabBar({navigation, state}: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const {height: windowHeight} = useWindowDimensions();
+  const [isExtractionSheetVisible, setIsExtractionSheetVisible] = useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = useState(false);
+  const [isFloatingActionMenuExpanded, setIsFloatingActionMenuExpanded] = useState(false);
   const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
   const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
   const {
+    floatingActionButtonPosition,
+    floatingActionIds,
+    floatingActionInteractionMode,
     setMakeupFeedbackResult,
     setSelectedMakeupFeedbackPhoto,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
   const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
+  const footerBottomInset = Math.max(insets.bottom, spacing.md);
+
+  const closeExtractionSheet = useCallback(() => {
+    setIsExtractionSheetVisible(false);
+  }, []);
 
   const closeFeedbackSheet = useCallback(() => {
     setIsFeedbackSheetVisible(false);
   }, []);
+
+  const startMakeupExtraction = useCallback((initialSource: 'camera' | 'gallery') => {
+    setIsExtractionSheetVisible(false);
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+
+    requestAnimationFrame(() => {
+      rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    });
+  }, [
+    rootNavigation,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  ]);
 
   const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
@@ -63,22 +139,62 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
 
   const handleTabPress = useCallback(
     (tab: FooterTabKey) => {
-      if (tab === 'custom') {
+      const targetRoute = getRootRouteForFooterTab(tab);
+
+      setIsFloatingActionMenuExpanded(false);
+      navigation.navigate(targetRoute);
+    },
+    [navigation],
+  );
+
+  const handleFloatingActionPress = useCallback(
+    (actionId: FloatingActionId) => {
+      const presentation = getFloatingActionPresentation(actionId);
+
+      if (presentation === 'makeupExtractionSheet') {
+        setIsFeedbackSheetVisible(false);
+        setIsExtractionSheetVisible(true);
+        return;
+      }
+
+      if (presentation === 'makeupFeedbackSheet') {
+        setIsExtractionSheetVisible(false);
         setIsFeedbackSheetVisible(true);
         return;
       }
 
-      const targetRoute = getRootRouteForFooterTab(tab);
-
-      if (targetRoute === 'ARFilter' || targetRoute === 'UnityMakeupCapture') {
-        rootNavigation?.navigate(targetRoute);
+      if (actionId === 'arFilter') {
+        setSelectedRecommendedMakeupFilterId(null);
+        rootNavigation?.navigate('ARFilter');
         return;
       }
 
-      navigation.navigate(targetRoute);
+      if (actionId === 'faceAnalysis') {
+        rootNavigation?.navigate('FaceAnalysisIntro');
+        return;
+      }
+
+      if (actionId === 'filterStore') {
+        rootNavigation?.navigate('HomeFilterStore');
+        return;
+      }
+
+      if (actionId === 'magazine') {
+        rootNavigation?.navigate('Magazine');
+        return;
+      }
+
+      rootNavigation?.navigate('ProductRecommendation');
     },
-    [navigation, rootNavigation],
+    [
+      rootNavigation,
+      setSelectedRecommendedMakeupFilterId,
+    ],
   );
+
+  const handleFloatingActionSettingsPress = useCallback(() => {
+    rootNavigation?.navigate('FloatingActionSettings');
+  }, [rootNavigation]);
 
   return (
     <YStack
@@ -86,14 +202,41 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
       style={[
         styles.tabBarHost,
         {
-          height: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md),
+          height: getMainTabBarHostHeight(windowHeight, footerBottomInset),
         },
       ]}>
+      {shouldShowFloatingActionDismissLayer(isFloatingActionMenuExpanded) ? (
+        <Pressable
+          accessibilityLabel="빠른 실행 메뉴 닫기"
+          accessibilityRole="button"
+          onPress={() => setIsFloatingActionMenuExpanded(false)}
+          style={styles.floatingActionDismissLayer}
+        />
+      ) : null}
       <AppFooter
-        activeTab={isFeedbackSheetVisible ? 'custom' : activeTab}
+        actionSlotPosition={floatingActionButtonPosition}
+        actionSlot={
+          <FloatingActionMenu
+            actionIds={floatingActionIds}
+            buttonPosition={floatingActionButtonPosition}
+            interactionMode={floatingActionInteractionMode}
+            isExpanded={isFloatingActionMenuExpanded}
+            onExpandedChange={setIsFloatingActionMenuExpanded}
+            onPressSettings={handleFloatingActionSettingsPress}
+            onSelectAction={handleFloatingActionPress}
+            placement="inline"
+          />
+        }
+        activeTab={activeTab}
         bottomInset={insets.bottom}
         floating
         onTabPress={handleTabPress}
+      />
+      <MakeupExtractionActionSheet
+        isVisible={isExtractionSheetVisible}
+        onClose={closeExtractionSheet}
+        onPressCamera={() => startMakeupExtraction('camera')}
+        onPressUpload={() => startMakeupExtraction('gallery')}
       />
       <MakeupFeedbackActionSheet
         isVisible={isFeedbackSheetVisible}
@@ -205,7 +348,7 @@ function MakeupFeedbackActionSheet({
 
 const styles = StyleSheet.create({
   actionSheet: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.lg,
@@ -222,7 +365,7 @@ const styles = StyleSheet.create({
   },
   sheetActionButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -245,7 +388,7 @@ const styles = StyleSheet.create({
   },
   sheetActionIcon: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.bottomSheetMutedSurface,
     borderRadius: radius.pill,
     height: 44,
     justifyContent: 'center',
@@ -273,7 +416,7 @@ const styles = StyleSheet.create({
   },
   sheetCancelButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -319,5 +462,14 @@ const styles = StyleSheet.create({
     left: 0,
     position: 'absolute',
     right: 0,
+  },
+  floatingActionDismissLayer: {
+    backgroundColor: 'transparent',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 10,
   },
 });

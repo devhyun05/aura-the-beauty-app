@@ -4,7 +4,7 @@ import {
   CAMERA_CAPTURE_BUTTON_METRICS,
   CameraCaptureButton,
 } from './CameraCaptureButton';
-import {APP_FOOTER_CAPTURE_BUBBLE_SIZE} from './AppFooter';
+import {APP_FOOTER_ACTION_BUBBLE_SIZE} from './AppFooter';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -13,14 +13,14 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  APP_FOOTER_CAPTURE_BUBBLE_SIZE,
+  APP_FOOTER_ACTION_BUBBLE_SIZE,
   64,
-  'footer capture button height matches the footer bar',
+  'footer action button height matches the footer bar',
 );
 expectEqual(
-  APP_FOOTER_CAPTURE_BUBBLE_SIZE,
+  APP_FOOTER_ACTION_BUBBLE_SIZE,
   CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 14,
-  'footer capture button size offset',
+  'footer action button size offset',
 );
 expectEqual(
   CAMERA_CAPTURE_BUTTON_METRICS.borderWidth,

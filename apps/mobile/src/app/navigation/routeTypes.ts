@@ -32,8 +32,11 @@ export type RootStackParamList = {
   FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
+  FloatingActionSettings: undefined;
+  AppSettings: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
+  Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
@@ -54,11 +57,11 @@ export type RootStackParamList = {
     mode?: MakeupFilterEditMode;
     sourceFrameMetadata?: FullFaceMakeupSourceInput;
   } | undefined;
-  MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
   MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
+  MakeupFeedbackResultsList: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
@@ -70,14 +73,16 @@ export type RootStackParamList = {
   ExtractedMakeupLookAdjust: undefined;
   MakeupFilterSave: undefined;
   MakeupFilterSaveComplete: undefined;
+  MakeupRecipeList: undefined;
   MakeupRecipeDetail: undefined;
   MakeupRecipeSaveComplete: undefined;
 };
 
 export type MainTabParamList = {
   HomeTab: undefined;
-  CustomTab: undefined;
   ProfileTab: undefined;
+  CommunityTab: undefined;
+  ConsultingTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -96,8 +101,11 @@ export const rootStackRoutes = [
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',
   'FaceAnalysisReportDetail',
+  'FloatingActionSettings',
+  'AppSettings',
   'ProfileEdit',
   'HomeFilterStore',
+  'Magazine',
   'SavedMakeupList',
   'ProductRecommendation',
   'Community',
@@ -107,11 +115,11 @@ export const rootStackRoutes = [
   'ARFilter',
   'ARFilterShapeAdjust',
   'MakeupFilterEdit',
-  'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
   'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackGoalInput',
   'MakeupFeedbackLoading',
+  'MakeupFeedbackResultsList',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
@@ -121,14 +129,16 @@ export const rootStackRoutes = [
   'ExtractedMakeupLookAdjust',
   'MakeupFilterSave',
   'MakeupFilterSaveComplete',
+  'MakeupRecipeList',
   'MakeupRecipeDetail',
   'MakeupRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];
 
 export const mainTabRoutes = [
   'HomeTab',
-  'CustomTab',
   'ProfileTab',
+  'CommunityTab',
+  'ConsultingTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

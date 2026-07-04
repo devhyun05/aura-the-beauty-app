@@ -17,6 +17,7 @@ type MakeupPreviewColorOverlayLayer = {
 };
 
 type ARFilterCameraPreviewProps = {
+  active?: boolean;
   cameraFacing: CameraType;
   guideMode: GuideMode;
   previewColorHex: string;
@@ -40,6 +41,7 @@ export function shouldShowARFilterHeaderCopy(): false {
 }
 
 export function ARFilterCameraPreview({
+  active = true,
   cameraFacing,
   guideMode,
   previewColorHex,
@@ -56,11 +58,11 @@ export function ARFilterCameraPreview({
 
   return (
     <FullscreenOverlayLayer>
-      {shouldUseUnityPreview ? (
+      {shouldUseUnityPreview && active ? (
         <UnityMakeupNativeView />
       ) : (
         <>
-          <LiveCameraLayer facing={cameraFacing} />
+          <LiveCameraLayer active={active} facing={cameraFacing} />
           <View style={styles.previewDim} />
           <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
           {shouldShowLeftCheekOverlay ? (

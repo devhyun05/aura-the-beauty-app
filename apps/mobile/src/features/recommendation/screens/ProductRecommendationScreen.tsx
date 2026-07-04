@@ -5,8 +5,6 @@ import {
   Image,
   Linking,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -45,8 +43,17 @@ import type {
 
 const formatPrice = (price: number) =>
   price > 0 ? `${price.toLocaleString('ko-KR')}원` : '가격 확인';
-const PRODUCT_PAGE_SIZE = 4;
 const LOOK_SELECTION_STORAGE_KEY_PREFIX = 'aura.productRecommendation.lookIndex';
+
+type ProductCategoryTabWidthMode = 'equal' | 'labelContent';
+type ProductListScrollAxis = 'horizontal' | 'vertical';
+
+export const productCategoryTabWidthMode: ProductCategoryTabWidthMode = 'labelContent';
+export const productListScrollAxis: ProductListScrollAxis = 'vertical';
+
+function getIsProductListHorizontal(axis: ProductListScrollAxis): boolean {
+  return axis === 'horizontal';
+}
 
 type ProductSortOption = 'matchDesc' | 'priceAsc' | 'priceDesc';
 
@@ -170,7 +177,6 @@ export function ProductRecommendationScreen({
     sourceReportId ?? null,
   );
   const [sortOption, setSortOption] = useState<ProductSortOption>('matchDesc');
-  const [currentPage, setCurrentPage] = useState(1);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isLookPickerOpen, setIsLookPickerOpen] = useState(false);
   const [isRecommendationRefreshing, setIsRecommendationRefreshing] = useState(false);
@@ -200,7 +206,6 @@ export function ProductRecommendationScreen({
     Math.min(maxCardHeight, Math.floor((availableProductHeight - productRowGap) / 2)),
   );
   const productImageHeight = Math.floor(cardHeight * 0.56);
-  const productCarouselHeight = cardHeight * 2 + productRowGap;
   const selectedReport = useMemo(
     () => reports.find((report) => report.id === selectedReportId) ?? null,
     [reports, selectedReportId],
@@ -354,34 +359,16 @@ export function ProductRecommendationScreen({
     });
   }, [activeCategory, data, sortOption]);
 
-  const productPages = useMemo(() => {
-    const pages: RecommendedProduct[][] = [];
-
-    for (let index = 0; index < products.length; index += PRODUCT_PAGE_SIZE) {
-      pages.push(products.slice(index, index + PRODUCT_PAGE_SIZE));
-    }
-
-    return pages;
-  }, [products]);
-  const totalProductPages = Math.max(1, productPages.length);
-  const currentProductPage = Math.min(currentPage, totalProductPages);
-
   useEffect(() => {
-    setCurrentPage(1);
     setIsSortMenuOpen(false);
     productScrollRef.current?.scrollTo({animated: false, x: 0, y: 0});
-  }, [activeCategory, contentWidth, sortOption]);
+  }, [activeCategory, sortOption]);
 
   useEffect(() => {
     setActiveCategory('all');
-    setCurrentPage(1);
     setIsSortMenuOpen(false);
     productScrollRef.current?.scrollTo({animated: false, x: 0, y: 0});
   }, [selectedReportId]);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalProductPages));
-  }, [totalProductPages]);
 
   const handleChangeCategory = useCallback((category: ProductRecommendationCategory) => {
     setActiveCategory(category);
@@ -399,25 +386,6 @@ export function ProductRecommendationScreen({
     setSortOption(option);
     setIsSortMenuOpen(false);
   }, []);
-
-  const handleProductMomentumEnd = useCallback((
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    const nextPage = Math.round(event.nativeEvent.contentOffset.x / contentWidth) + 1;
-
-    setCurrentPage(Math.min(totalProductPages, Math.max(1, nextPage)));
-  }, [contentWidth, totalProductPages]);
-
-  const handleSelectProductPage = useCallback((page: number) => {
-    const nextPage = Math.min(totalProductPages, Math.max(1, page));
-
-    setCurrentPage(nextPage);
-    productScrollRef.current?.scrollTo({
-      animated: true,
-      x: (nextPage - 1) * contentWidth,
-      y: 0,
-    });
-  }, [contentWidth, totalProductPages]);
 
   const handleToggleLike = useCallback(async (product: RecommendedProduct) => {
     const wasLiked = likedProductIds.has(product.id);
@@ -567,43 +535,33 @@ export function ProductRecommendationScreen({
         </View>
 
         {products.length > 0 ? (
-          <>
-            <ScrollView
-              bounces={false}
-              horizontal
-              onMomentumScrollEnd={handleProductMomentumEnd}
-              pagingEnabled
-              ref={productScrollRef}
-              scrollEventThrottle={16}
-              showsHorizontalScrollIndicator={false}
-              style={[styles.productCarousel, {height: productCarouselHeight}]}>
-              {productPages.map((productPage, pageIndex) => (
-                <View
-                  key={`products-page-${pageIndex}`}
-                  style={[styles.productPage, {width: contentWidth}]}>
-                  <View style={[styles.productGrid, {columnGap: cardGap, rowGap: productRowGap}]}>
-                    {productPage.map((product) => (
-                      <ProductCard
-                        height={cardHeight}
-                        imageHeight={productImageHeight}
-                        key={product.id}
-                        isLiked={likedProductIds.has(product.id)}
-                        onToggleLike={handleToggleLike}
-                        product={product}
-                        width={cardWidth}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-
-            <ProductPageDots
-              currentPage={currentProductPage}
-              onSelectPage={handleSelectProductPage}
-              totalPages={totalProductPages}
-            />
-          </>
+          <ScrollView
+            bounces={false}
+            horizontal={getIsProductListHorizontal(productListScrollAxis)}
+            ref={productScrollRef}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            style={styles.productListScroller}
+            contentContainerStyle={[
+              styles.productGrid,
+              {
+                columnGap: cardGap,
+                rowGap: productRowGap,
+                paddingBottom: spacing.sm,
+              },
+            ]}>
+            {products.map((product) => (
+              <ProductCard
+                height={cardHeight}
+                imageHeight={productImageHeight}
+                key={product.id}
+                isLiked={likedProductIds.has(product.id)}
+                onToggleLike={handleToggleLike}
+                product={product}
+                width={cardWidth}
+              />
+            ))}
+          </ScrollView>
         ) : (
           <View style={styles.emptyProductState}>
             <Text style={styles.emptyProductText}>
@@ -871,44 +829,14 @@ function CategoryTabs({
             key={tab.id}
             onPress={() => onChangeCategory(tab.id)}
             style={styles.tabButton}>
-            <Text style={isActive ? styles.tabTextActive : styles.tabText}>{tab.label}</Text>
+            <Text numberOfLines={1} style={isActive ? styles.tabTextActive : styles.tabText}>
+              {tab.label}
+            </Text>
             <View style={isActive ? styles.tabIndicatorActive : styles.tabIndicator} />
           </Pressable>
         );
       })}
     </ScrollView>
-  );
-}
-
-function ProductPageDots({
-  currentPage,
-  onSelectPage,
-  totalPages,
-}: {
-  currentPage: number;
-  onSelectPage: (page: number) => void;
-  totalPages: number;
-}) {
-  const pages = Array.from({length: totalPages}, (_, index) => index + 1);
-
-  return (
-    <View style={styles.productPageDots}>
-      {pages.map((page) => {
-        const isActive = page === currentPage;
-
-        return (
-          <Pressable
-            accessibilityLabel={`${page}번째 추천 제품 페이지 보기`}
-            accessibilityRole="button"
-            accessibilityState={{selected: isActive}}
-            hitSlop={8}
-            key={page}
-            onPress={() => onSelectPage(page)}
-            style={isActive ? styles.productPageDotActive : styles.productPageDot}
-          />
-        );
-      })}
-    </View>
   );
 }
 
@@ -1249,9 +1177,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
     ...sharedCardShadow,
   },
-  productCarousel: {
-    flexGrow: 0,
-  },
   productCopy: {
     flex: 1,
     gap: 2,
@@ -1266,6 +1191,7 @@ const styles = StyleSheet.create({
   productGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    width: '100%',
   },
   productImage: {
     height: '100%',
@@ -1290,29 +1216,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
   },
-  productPage: {
-    paddingRight: 0,
-  },
-  productPageDot: {
-    backgroundColor: colors.border,
-    borderRadius: radius.pill,
-    height: 7,
-    width: 7,
-  },
-  productPageDotActive: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 7,
-    width: 22,
-  },
-  productPageDots: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    marginTop: 'auto',
-    minHeight: 22,
-    paddingTop: 2,
+  productListScroller: {
+    flex: 1,
   },
   productPrice: {
     color: colors.textPrimary,
@@ -1550,8 +1455,10 @@ const styles = StyleSheet.create({
   },
   tabButton: {
     alignItems: 'center',
+    flexGrow: productCategoryTabWidthMode === 'labelContent' ? 0 : 1,
+    flexShrink: 0,
     gap: spacing.xs,
-    minWidth: 58,
+    paddingHorizontal: spacing.xs,
   },
   tabIndicator: {
     backgroundColor: 'transparent',
@@ -1566,6 +1473,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   tabList: {
+    alignItems: 'flex-start',
     gap: spacing.md,
     paddingTop: 2,
     paddingRight: spacing.sm,

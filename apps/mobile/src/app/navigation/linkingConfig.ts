@@ -34,8 +34,9 @@ type MainTabLinkingScreenConfig = NonNullable<
 
 export const mainTabLinkingScreens = {
   HomeTab: 'home',
-  CustomTab: 'custom',
   ProfileTab: 'profile',
+  CommunityTab: 'community-tab',
+  ConsultingTab: 'consulting-tab',
 } as const satisfies Record<MainTabRouteName, MainTabLinkingScreenConfig>;
 
 export const rootStackLinkingScreens = {
@@ -53,8 +54,11 @@ export const rootStackLinkingScreens = {
   FaceAnalysisLoading: 'face-analysis-loading',
   FaceAnalysisReportsList: 'face-analysis-reports',
   FaceAnalysisReportDetail: 'face-analysis-report/:reportId?',
+  FloatingActionSettings: 'floating-action-settings',
+  AppSettings: 'app-settings',
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
+  Magazine: 'magazine',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
   Community: 'community',
@@ -64,11 +68,11 @@ export const rootStackLinkingScreens = {
   ARFilter: 'ar-filter',
   ARFilterShapeAdjust: 'ar-filter-shape-adjust',
   MakeupFilterEdit: 'makeup-filter-edit',
-  MakeupFeedbackEntry: 'makeup-feedback-entry',
   MakeupFeedbackCapture: 'makeup-feedback-capture',
   MakeupFeedbackAlbumUpload: 'makeup-feedback-album-upload',
   MakeupFeedbackGoalInput: 'makeup-feedback-goal-input',
   MakeupFeedbackLoading: 'makeup-feedback-loading',
+  MakeupFeedbackResultsList: 'makeup-feedback-results',
   MakeupFeedbackResult: 'makeup-feedback-result',
   MakeupCorrectionGuide: 'makeup-correction-guide',
   MakeupCorrectionTip: 'makeup-correction-tip/:pointId',
@@ -78,6 +82,7 @@ export const rootStackLinkingScreens = {
   ExtractedMakeupLookAdjust: 'extracted-makeup-look-adjust',
   MakeupFilterSave: 'makeup-filter-save',
   MakeupFilterSaveComplete: 'makeup-filter-save-complete',
+  MakeupRecipeList: 'makeup-recipe-list',
   MakeupRecipeDetail: 'makeup-recipe-detail',
   MakeupRecipeSaveComplete: 'makeup-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;

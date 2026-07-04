@@ -14,7 +14,7 @@ expectEqual(
   'home tab header border is hidden',
 );
 expectEqual(
-  getMainTabHeaderBorderWidth('CustomTab'),
+  getMainTabHeaderBorderWidth('ProfileTab'),
   undefined,
-  'custom tab header keeps default border',
+  'profile tab header keeps default border',
 );

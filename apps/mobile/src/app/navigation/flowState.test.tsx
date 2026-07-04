@@ -23,6 +23,24 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().floatingActionIds.join(','),
+  'arFilter,makeupExtraction,makeupFeedback',
+  'initial floating action ids',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().floatingActionInteractionMode,
+  'tap',
+  'initial floating action interaction mode',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().floatingActionButtonPosition,
+  'right',
+  'initial floating action button position',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'initial makeup feedback photoSource',
@@ -38,6 +56,12 @@ expectEqual(
   getInitialNavigationFlowState().savedMakeupLook,
   null,
   'initial saved makeup look',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().savedMakeupLooks.length,
+  0,
+  'initial saved makeup looks',
 );
 
 expectEqual(
@@ -73,6 +97,24 @@ expectEqual(
 );
 
 expectEqual(
+  demoState.floatingActionIds.join(','),
+  'arFilter,makeupExtraction,makeupFeedback',
+  'demo floating action ids',
+);
+
+expectEqual(
+  demoState.floatingActionInteractionMode,
+  'tap',
+  'demo floating action interaction mode',
+);
+
+expectEqual(
+  demoState.floatingActionButtonPosition,
+  'right',
+  'demo floating action button position',
+);
+
+expectEqual(
   demoState.selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'demo makeup feedback photoSource',
@@ -100,6 +142,12 @@ expectEqual(
   demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
   'demo saved makeup look id',
+);
+
+expectEqual(
+  demoState.savedMakeupLooks.length,
+  0,
+  'demo saved makeup looks',
 );
 
 expectEqual(
