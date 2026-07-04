@@ -920,7 +920,7 @@ function buildSingleBrowEnvelope({
   const realBrowHull = convexHull(realBrowSource);
   const neutralizePolygon =
     realBrowHull.length >= 3
-      ? expandPolygonFromCentroid(realBrowHull, 1.14, 1.55, frameWidth, frameHeight).map(
+      ? expandPolygonFromCentroid(realBrowHull, 1.08, 1.28, frameWidth, frameHeight).map(
           stabilizePoint,
         )
       : [];

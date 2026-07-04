@@ -469,29 +469,34 @@ Shader "MakeupAR/SmoothRegionMask"
                     // Camera pixel behind this fragment (grabbed pre-overlay).
                     float2 grabUv = input.grabPos.xy / max(input.grabPos.w, 0.00001);
                     float3 cameraHere = tex2D(_BrowBackgroundTexture, grabUv).rgb;
-                    // Estimate skin: the brow hair is darker than the skin above
-                    // and below it, so sample outward and keep the brightest tap.
                     float2 grabTexel = _BrowBackgroundTexture_TexelSize.xy;
                     grabTexel = grabTexel.x > 0.0 ? grabTexel : (1.0 / max(_ScreenParams.xy, float2(1.0, 1.0)));
-                    float3 skin = cameraHere;
-                    float skinScore = dot(skin, float3(0.299, 0.587, 0.114));
-                    float2 offsets[8] = {
-                        float2(0.0, 9.0), float2(0.0, -9.0),
-                        float2(0.0, 16.0), float2(0.0, -16.0),
-                        float2(0.0, 24.0), float2(0.0, -24.0),
-                        float2(11.0, 0.0), float2(-11.0, 0.0)
-                    };
+                    // Reconstruct skin by a brightness-weighted blur instead of a
+                    // single flat color: the brow is a horizontal band, so blur
+                    // mostly VERTICALLY (reaching the skin above/below) and weight
+                    // bright pixels heavily so the dark brow hair barely counts.
+                    // This continues the real forehead->under-brow skin gradient
+                    // across the brow — an inpaint, not a pasted patch.
+                    float3 lumW = float3(0.299, 0.587, 0.114);
+                    float3 skinAcc = float3(0.0, 0.0, 0.0);
+                    float skinWsum = 0.0001;
                     [unroll]
-                    for (int i = 0; i < 8; i++)
+                    for (int vy = -12; vy <= 12; vy++)
                     {
-                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + offsets[i] * grabTexel).rgb;
-                        float sc = dot(s, float3(0.299, 0.587, 0.114));
-                        if (sc > skinScore)
-                        {
-                            skinScore = sc;
-                            skin = s;
-                        }
+                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(0.0, float(vy)) * grabTexel * 2.4).rgb;
+                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0);
+                        skinAcc += s * w;
+                        skinWsum += w;
                     }
+                    [unroll]
+                    for (int hx = -5; hx <= 5; hx++)
+                    {
+                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(float(hx), 0.0) * grabTexel * 2.4).rgb;
+                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0) * 0.5;
+                        skinAcc += s * w;
+                        skinWsum += w;
+                    }
+                    float3 skin = skinAcc / skinWsum;
 
                     // Compose: neutralized skin first, makeup pigment on top.
                     float3 neutralized = lerp(cameraHere, skin, neutralizeAlpha);
