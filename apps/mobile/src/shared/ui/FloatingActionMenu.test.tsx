@@ -1,5 +1,6 @@
 import {
   DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
   FLOATING_ACTION_ACTIVE_SCALE,
   FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
@@ -10,6 +11,7 @@ import {
   FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
   FLOATING_ACTION_MAX_ITEM_COUNT,
   FLOATING_ACTION_SETTINGS_BACKGROUND,
+  floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   getFloatingActionButtonScale,
   getFloatingActionMenuTarget,
@@ -42,6 +44,24 @@ const rightSlot = getFloatingActionSlotOffset(2, FLOATING_ACTION_MAX_ITEM_COUNT)
 const inlineTopSlot = getFloatingActionSlotOffset(0, FLOATING_ACTION_MAX_ITEM_COUNT, 'inline');
 const inlineLeftSlot = getFloatingActionSlotOffset(1, FLOATING_ACTION_MAX_ITEM_COUNT, 'inline');
 const inlineRightSlot = getFloatingActionSlotOffset(2, FLOATING_ACTION_MAX_ITEM_COUNT, 'inline');
+const inlineLeftPositionTopSlot = getFloatingActionSlotOffset(
+  0,
+  FLOATING_ACTION_MAX_ITEM_COUNT,
+  'inline',
+  'left',
+);
+const inlineLeftPositionMiddleSlot = getFloatingActionSlotOffset(
+  1,
+  FLOATING_ACTION_MAX_ITEM_COUNT,
+  'inline',
+  'left',
+);
+const inlineLeftPositionEndSlot = getFloatingActionSlotOffset(
+  2,
+  FLOATING_ACTION_MAX_ITEM_COUNT,
+  'inline',
+  'left',
+);
 const inlineArFilterSlot = getFloatingActionSlotOffsetForAction('arFilter', 'inline');
 const inlineMakeupExtractionSlot = getFloatingActionSlotOffsetForAction(
   'makeupExtraction',
@@ -52,6 +72,7 @@ const inlineMakeupFeedbackSlot = getFloatingActionSlotOffsetForAction(
   'inline',
 );
 const inlineSettingsSlot = getFloatingActionSettingsSlotOffset('inline');
+const inlineLeftPositionSettingsSlot = getFloatingActionSettingsSlotOffset('inline', 'left');
 const customOrderedFloatingActions: readonly FloatingActionId[] = [
   'makeupFeedback',
   'arFilter',
@@ -76,9 +97,19 @@ expectEqual(
   'default floating action interaction mode',
 );
 expectEqual(
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  'right',
+  'default floating action button position',
+);
+expectEqual(
   floatingActionInteractionModeOptions.map(option => option.id).join(','),
   'tap,drag',
   'floating action interaction mode ids',
+);
+expectEqual(
+  floatingActionButtonPositionOptions.map(option => option.id).join(','),
+  'right,left',
+  'floating action button position ids',
 );
 expectEqual(
   visibleFloatingActions.join(','),
@@ -131,6 +162,46 @@ expectEqual(inlineMakeupFeedbackSlot.x, 30, 'inline makeup feedback sits closer 
 expectEqual(inlineMakeupFeedbackSlot.y, -66, 'inline makeup feedback moves closer to the star');
 expectEqual(inlineSettingsSlot.x, 58, 'inline settings keeps a small gap from the star');
 expectEqual(inlineSettingsSlot.y, 0, 'inline settings aligns horizontally');
+expectEqual(
+  inlineLeftPositionTopSlot.x,
+  46,
+  'left-position inline slot 1 mirrors toward the tab bar',
+);
+expectEqual(
+  inlineLeftPositionTopSlot.y,
+  -66,
+  'left-position inline slot 1 keeps vertical offset',
+);
+expectEqual(
+  inlineLeftPositionMiddleSlot.x,
+  78,
+  'left-position inline slot 2 mirrors toward the tab bar',
+);
+expectEqual(
+  inlineLeftPositionMiddleSlot.y,
+  0,
+  'left-position inline slot 2 keeps horizontal alignment',
+);
+expectEqual(
+  inlineLeftPositionEndSlot.x,
+  -30,
+  'left-position inline slot 3 stays near the screen edge',
+);
+expectEqual(
+  inlineLeftPositionEndSlot.y,
+  -66,
+  'left-position inline slot 3 keeps vertical offset',
+);
+expectEqual(
+  inlineLeftPositionSettingsSlot.x,
+  0,
+  'left-position settings sits above the star to avoid edge clipping',
+);
+expectEqual(
+  inlineLeftPositionSettingsSlot.y,
+  -116,
+  'left-position settings stays clear of the quick action options',
+);
 expectEqual(
   getFloatingActionSelectedSlotNumber(customOrderedFloatingActions, 'makeupFeedback'),
   1,
@@ -214,6 +285,36 @@ expectEqual(
   ),
   'makeupExtraction',
   'inline slot 3 uses the third selected action',
+);
+expectEqual(
+  getFloatingActionMenuTarget(
+    {translationX: 46, translationY: -66},
+    customOrderedFloatingActions,
+    'inline',
+    'left',
+  ),
+  'makeupFeedback',
+  'left-position inline slot 1 uses the first selected action',
+);
+expectEqual(
+  getFloatingActionMenuTarget(
+    {translationX: 78, translationY: 0},
+    customOrderedFloatingActions,
+    'inline',
+    'left',
+  ),
+  'arFilter',
+  'left-position inline slot 2 uses the second selected action',
+);
+expectEqual(
+  getFloatingActionMenuTarget(
+    {translationX: -30, translationY: -66},
+    customOrderedFloatingActions,
+    'inline',
+    'left',
+  ),
+  'makeupExtraction',
+  'left-position inline slot 3 uses the third selected action',
 );
 expectEqual(
   getFloatingActionMenuTarget(

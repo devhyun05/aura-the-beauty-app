@@ -35,6 +35,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().floatingActionButtonPosition,
+  'right',
+  'initial floating action button position',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'initial makeup feedback photoSource',
@@ -100,6 +106,12 @@ expectEqual(
   demoState.floatingActionInteractionMode,
   'tap',
   'demo floating action interaction mode',
+);
+
+expectEqual(
+  demoState.floatingActionButtonPosition,
+  'right',
+  'demo floating action button position',
 );
 
 expectEqual(

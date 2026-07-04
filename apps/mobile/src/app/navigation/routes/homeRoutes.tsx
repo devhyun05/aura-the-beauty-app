@@ -24,8 +24,10 @@ export function FloatingActionSettingsRouteScreen({
   navigation,
 }: RootScreenProps<'FloatingActionSettings'>) {
   const {
+    floatingActionButtonPosition,
     floatingActionIds,
     floatingActionInteractionMode,
+    setFloatingActionButtonPosition,
     setFloatingActionIds,
     setFloatingActionInteractionMode,
   } = useNavigationFlowState();
@@ -43,8 +45,10 @@ export function FloatingActionSettingsRouteScreen({
       }}>
       <FloatingActionSettingsScreen
         selectedActionIds={floatingActionIds}
+        selectedButtonPosition={floatingActionButtonPosition}
         selectedInteractionMode={floatingActionInteractionMode}
         onChangeActionIds={setFloatingActionIds}
+        onChangeButtonPosition={setFloatingActionButtonPosition}
         onChangeInteractionMode={setFloatingActionInteractionMode}
       />
     </DetailRouteChrome>

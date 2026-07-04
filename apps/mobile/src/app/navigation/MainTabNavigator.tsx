@@ -89,6 +89,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
   const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
   const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
   const {
+    floatingActionButtonPosition,
     floatingActionIds,
     floatingActionInteractionMode,
     setMakeupFeedbackResult,
@@ -213,9 +214,11 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
         />
       ) : null}
       <AppFooter
+        actionSlotPosition={floatingActionButtonPosition}
         actionSlot={
           <FloatingActionMenu
             actionIds={floatingActionIds}
+            buttonPosition={floatingActionButtonPosition}
             interactionMode={floatingActionInteractionMode}
             isExpanded={isFloatingActionMenuExpanded}
             onExpandedChange={setIsFloatingActionMenuExpanded}

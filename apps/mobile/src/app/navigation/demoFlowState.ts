@@ -4,6 +4,7 @@ import {getReferenceMakeupExtractionDataSync} from '../../features/reference-mak
 import type {MakeupLookPreview} from '../../shared/types/profile';
 import {
   DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
 } from '../../shared/ui';
 import type {NavigationFlowState} from './flowState';
@@ -29,6 +30,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   };
 
   return {
+    floatingActionButtonPosition: DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
     floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
     floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],

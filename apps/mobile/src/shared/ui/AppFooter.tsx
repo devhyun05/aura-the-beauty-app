@@ -9,6 +9,10 @@ import {
   HomeFooterIcon,
   ProfileFooterIcon,
 } from './FooterIcons';
+import {
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  type FloatingActionButtonPosition,
+} from './FloatingActionMenu';
 
 export type FooterTabKey = 'home' | 'profile' | 'community' | 'consulting';
 
@@ -27,6 +31,10 @@ export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
 export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
 export const APP_FOOTER_SIDE_TAB_WIDTH = 58;
+export const APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION =
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION;
+
+export type AppFooterActionSlotItem = 'tabs' | 'action';
 
 type FooterTabItem = {
   key: FooterTabKey;
@@ -37,6 +45,7 @@ type FooterTabItem = {
 
 type AppFooterProps = {
   actionSlot?: ReactNode;
+  actionSlotPosition?: FloatingActionButtonPosition;
   activeTab?: FooterTabKey;
   bottomInset?: number;
   floating?: boolean;
@@ -71,14 +80,67 @@ const footerItems: FooterTabItem[] = [
   },
 ];
 
+export function getAppFooterActionSlotOrder(
+  actionSlotPosition: FloatingActionButtonPosition,
+): readonly AppFooterActionSlotItem[] {
+  return actionSlotPosition === 'left' ? ['action', 'tabs'] : ['tabs', 'action'];
+}
+
 export function AppFooter({
   actionSlot,
+  actionSlotPosition = APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION,
   activeTab,
   bottomInset = 0,
   floating = false,
   onTabPress,
   showLabels = APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
 }: AppFooterProps) {
+  const footerBar = (
+    <XStack key="tabs" style={styles.footerBar}>
+      <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
+      {footerItems.map(item => {
+        const isActive = item.key === activeTab;
+        const iconColor = isActive ? colors.white : colors.textPrimary;
+        const labelColor = isActive ? colors.white : colors.textPrimary;
+
+        return (
+          <Button
+            key={item.key}
+            unstyled
+            accessibilityRole="tab"
+            accessibilityState={{selected: isActive}}
+            accessibilityLabel={item.accessibilityLabel}
+            hitSlop={6}
+            pressStyle={{scale: 0.98}}
+            style={[
+              styles.tabButton,
+              isActive ? styles.activeTabButton : undefined,
+            ]}
+            onPress={() => onTabPress?.(item.key)}>
+            <YStack style={styles.tabContent}>
+              {item.icon(iconColor)}
+              {showLabels ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.tabLabel, {color: labelColor}]}>
+                  {item.label}
+                </Text>
+              ) : null}
+            </YStack>
+          </Button>
+        );
+      })}
+    </XStack>
+  );
+  const actionSlotElement = actionSlot ? (
+    <YStack key="action" style={styles.actionSlot}>
+      {actionSlot}
+    </YStack>
+  ) : null;
+  const footerContent = getAppFooterActionSlotOrder(actionSlotPosition).map(item =>
+    item === 'action' ? actionSlotElement : footerBar,
+  );
+
   return (
     <YStack
       pointerEvents="box-none"
@@ -90,47 +152,7 @@ export function AppFooter({
         },
       ]}>
       <XStack style={styles.footerRow}>
-        <XStack style={styles.footerBar}>
-          <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
-          {footerItems.map(item => {
-            const isActive = item.key === activeTab;
-            const iconColor = isActive ? colors.white : colors.textPrimary;
-            const labelColor = isActive ? colors.white : colors.textPrimary;
-
-            return (
-              <Button
-                key={item.key}
-                unstyled
-                accessibilityRole="tab"
-                accessibilityState={{selected: isActive}}
-                accessibilityLabel={item.accessibilityLabel}
-                hitSlop={6}
-                pressStyle={{scale: 0.98}}
-                style={[
-                  styles.tabButton,
-                  isActive ? styles.activeTabButton : undefined,
-                ]}
-                onPress={() => onTabPress?.(item.key)}>
-                <YStack style={styles.tabContent}>
-                  {item.icon(iconColor)}
-                  {showLabels ? (
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.tabLabel, {color: labelColor}]}>
-                      {item.label}
-                    </Text>
-                  ) : null}
-                </YStack>
-              </Button>
-            );
-          })}
-        </XStack>
-
-        {actionSlot ? (
-          <YStack style={styles.actionSlot}>
-            {actionSlot}
-          </YStack>
-        ) : null}
+        {footerContent}
       </XStack>
     </YStack>
   );

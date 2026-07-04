@@ -15,7 +15,9 @@ import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
 import {
   DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  type FloatingActionButtonPosition,
   type FloatingActionId,
   type FloatingActionInteractionMode,
 } from '../../shared/ui';
@@ -24,6 +26,7 @@ export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  floatingActionButtonPosition: FloatingActionButtonPosition;
   floatingActionIds: readonly FloatingActionId[];
   floatingActionInteractionMode: FloatingActionInteractionMode;
   likedMakeupFilterIds: readonly string[];
@@ -40,6 +43,7 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
   setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
   setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
   setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
@@ -60,6 +64,7 @@ const NavigationFlowStateContext =
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
+    floatingActionButtonPosition: DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
     floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
     floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
@@ -109,6 +114,8 @@ export function NavigationFlowStateProvider({
     useState<readonly FloatingActionId[]>(initialState.floatingActionIds);
   const [floatingActionInteractionMode, setFloatingActionInteractionMode] =
     useState<FloatingActionInteractionMode>(initialState.floatingActionInteractionMode);
+  const [floatingActionButtonPosition, setFloatingActionButtonPosition] =
+    useState<FloatingActionButtonPosition>(initialState.floatingActionButtonPosition);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [savedMakeupLooks, setSavedMakeupLooks] =
@@ -120,6 +127,7 @@ export function NavigationFlowStateProvider({
 
   const value = useMemo(
     () => ({
+      floatingActionButtonPosition,
       floatingActionIds,
       floatingActionInteractionMode,
       likedMakeupFilterIds,
@@ -133,6 +141,7 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       shouldShowBeautyJourneyGuide,
+      setFloatingActionButtonPosition,
       setFloatingActionIds,
       setFloatingActionInteractionMode,
       setLikedMakeupFilterIds,
@@ -149,6 +158,7 @@ export function NavigationFlowStateProvider({
     }),
     [
       floatingActionIds,
+      floatingActionButtonPosition,
       floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,

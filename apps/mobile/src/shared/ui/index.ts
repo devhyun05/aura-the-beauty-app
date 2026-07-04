@@ -1,5 +1,11 @@
 export {AppCard} from './AppCard';
-export {AppFooter, type FooterTabKey} from './AppFooter';
+export {
+  APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION,
+  AppFooter,
+  getAppFooterActionSlotOrder,
+  type AppFooterActionSlotItem,
+  type FooterTabKey,
+} from './AppFooter';
 export {AppHeader} from './AppHeader';
 export {AppScreen} from './AppScreen';
 export {AuraLogo} from './AuraLogo';
@@ -18,6 +24,7 @@ export {
 export {
   DEFAULT_FLOATING_ACTION_IDS,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
   FLOATING_ACTION_HOST_EXTRA_HEIGHT,
   FLOATING_ACTION_ICON_LIBRARY_NAMES,
@@ -27,6 +34,7 @@ export {
   FLOATING_ACTION_MAX_ITEM_COUNT,
   FLOATING_ACTION_SETTINGS_BACKGROUND,
   FloatingActionMenu,
+  floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   floatingActionDefinitions,
   getFloatingActionDefinition,
@@ -37,6 +45,7 @@ export {
   getFloatingActionSlotOffset,
   getNextFloatingActionSelection,
   getVisibleFloatingActionIds,
+  type FloatingActionButtonPosition,
   type FloatingActionId,
   type FloatingActionInteractionMode,
 } from './FloatingActionMenu';

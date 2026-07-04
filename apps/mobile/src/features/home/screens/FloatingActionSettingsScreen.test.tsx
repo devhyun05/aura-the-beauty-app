@@ -1,4 +1,5 @@
 import {
+  getFloatingActionButtonPositionLabels,
   getFloatingActionCandidateLabels,
   getFloatingActionInteractionModeLabels,
   getFloatingActionInteractionModeSelectionBadgeLabel,
@@ -22,6 +23,12 @@ expectEqual(
   getFloatingActionInteractionModeSelectionBadgeLabel(),
   '하나 선택',
   'floating action interaction mode single selection badge',
+);
+
+expectEqual(
+  getFloatingActionButtonPositionLabels().join(','),
+  '오른쪽,왼쪽',
+  'floating action button position labels',
 );
 
 expectEqual(

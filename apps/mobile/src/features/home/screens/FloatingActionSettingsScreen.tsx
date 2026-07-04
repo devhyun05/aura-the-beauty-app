@@ -4,10 +4,12 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {
   FLOATING_ACTION_MAX_ITEM_COUNT,
+  floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   floatingActionDefinitions,
   getNextFloatingActionSelection,
   getFloatingActionSelectedSlotNumber,
+  type FloatingActionButtonPosition,
   type FloatingActionId,
   type FloatingActionInteractionMode,
 } from '../../../shared/ui';
@@ -15,8 +17,10 @@ import {colors, iconSize, radius, shadows, spacing, typography} from '../../../s
 
 type FloatingActionSettingsScreenProps = {
   onChangeActionIds?: (actionIds: readonly FloatingActionId[]) => void;
+  onChangeButtonPosition?: (position: FloatingActionButtonPosition) => void;
   onChangeInteractionMode?: (mode: FloatingActionInteractionMode) => void;
   selectedActionIds: readonly FloatingActionId[];
+  selectedButtonPosition: FloatingActionButtonPosition;
   selectedInteractionMode: FloatingActionInteractionMode;
 };
 
@@ -26,6 +30,10 @@ export function getFloatingActionInteractionModeLabels(): readonly string[] {
 
 export function getFloatingActionInteractionModeSelectionBadgeLabel(): '하나 선택' {
   return '하나 선택';
+}
+
+export function getFloatingActionButtonPositionLabels(): readonly string[] {
+  return floatingActionButtonPositionOptions.map(option => option.label);
 }
 
 export function getFloatingActionCandidateLabels(): readonly string[] {
@@ -49,8 +57,10 @@ export function getFloatingActionSelectionBadgeLabel(
 
 export function FloatingActionSettingsScreen({
   onChangeActionIds,
+  onChangeButtonPosition,
   onChangeInteractionMode,
   selectedActionIds,
+  selectedButtonPosition,
   selectedInteractionMode,
 }: FloatingActionSettingsScreenProps) {
   const selectedCount = selectedActionIds.length;
@@ -75,6 +85,55 @@ export function FloatingActionSettingsScreen({
                 accessibilityState={{selected: isSelected}}
                 key={option.id}
                 onPress={() => onChangeInteractionMode?.(option.id)}
+                style={({pressed}) => [
+                  styles.modeRow,
+                  isSelected && styles.modeRowSelected,
+                  pressed && styles.pressed,
+                ]}>
+                <View
+                  style={[
+                    styles.modeRadio,
+                    isSelected && styles.modeRadioSelected,
+                  ]}>
+                  {isSelected ? <View style={styles.modeRadioDot} /> : null}
+                </View>
+
+                <YStack style={styles.modeCopy}>
+                  <Text style={[styles.modeTitle, isSelected && styles.modeTitleSelected]}>
+                    {option.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modeDescription,
+                      isSelected && styles.modeDescriptionSelected,
+                    ]}>
+                    {option.description}
+                  </Text>
+                </YStack>
+              </Pressable>
+            );
+          })}
+        </YStack>
+      </YStack>
+
+      <YStack style={styles.section}>
+        <XStack style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>버튼 위치</Text>
+          <Text style={styles.modeSelectionBadge}>
+            {getFloatingActionInteractionModeSelectionBadgeLabel()}
+          </Text>
+        </XStack>
+        <YStack style={styles.modeList}>
+          {floatingActionButtonPositionOptions.map(option => {
+            const isSelected = option.id === selectedButtonPosition;
+
+            return (
+              <Pressable
+                accessibilityLabel={`${option.label} 배치 선택`}
+                accessibilityRole="radio"
+                accessibilityState={{selected: isSelected}}
+                key={option.id}
+                onPress={() => onChangeButtonPosition?.(option.id)}
                 style={({pressed}) => [
                   styles.modeRow,
                   isSelected && styles.modeRowSelected,

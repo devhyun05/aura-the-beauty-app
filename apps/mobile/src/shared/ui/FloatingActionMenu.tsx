@@ -58,6 +58,7 @@ export type FloatingActionSlotOffset = {
 
 export type FloatingActionPlacement = 'floating' | 'inline';
 export type FloatingActionInteractionMode = 'tap' | 'drag';
+export type FloatingActionButtonPosition = 'right' | 'left';
 
 export type FloatingActionReleaseOutcome =
   | {kind: 'select'; actionId: FloatingActionId}
@@ -67,6 +68,12 @@ export type FloatingActionReleaseOutcome =
 export type FloatingActionInteractionModeOption = {
   description: string;
   id: FloatingActionInteractionMode;
+  label: string;
+};
+
+export type FloatingActionButtonPositionOption = {
+  description: string;
+  id: FloatingActionButtonPosition;
   label: string;
 };
 
@@ -90,6 +97,7 @@ export const FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET: FloatingActionSlotOff
   y: -66,
 };
 export const DEFAULT_FLOATING_ACTION_INTERACTION_MODE: FloatingActionInteractionMode = 'tap';
+export const DEFAULT_FLOATING_ACTION_BUTTON_POSITION: FloatingActionButtonPosition = 'right';
 export const DEFAULT_FLOATING_ACTION_IDS = [
   'arFilter',
   'makeupExtraction',
@@ -108,6 +116,19 @@ export const floatingActionInteractionModeOptions = [
     label: '드래그로 실행',
   },
 ] as const satisfies readonly FloatingActionInteractionModeOption[];
+
+export const floatingActionButtonPositionOptions = [
+  {
+    description: '기존처럼 하단바 오른쪽에서 빠르게 열어요.',
+    id: 'right',
+    label: '오른쪽',
+  },
+  {
+    description: '하단바 왼쪽에서 엄지 위치에 맞춰 열어요.',
+    id: 'left',
+    label: '왼쪽',
+  },
+] as const satisfies readonly FloatingActionButtonPositionOption[];
 
 export const FLOATING_ACTION_ICON_LIBRARY_NAMES = {
   arFilter: 'Camera',
@@ -241,25 +262,29 @@ export function getFloatingActionSlotOffset(
   index: number,
   itemCount: number,
   placement: FloatingActionPlacement = 'floating',
+  buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionSlotOffset {
   if (placement === 'inline') {
+    const resolveInlineOffset = (offset: FloatingActionSlotOffset) =>
+      buttonPosition === 'left' ? {x: -offset.x, y: offset.y} : offset;
+
     if (itemCount <= 1) {
-      return FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET;
+      return resolveInlineOffset(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET);
     }
 
     if (itemCount === 2) {
-      return index === 0 ? {x: -78, y: 0} : {x: 30, y: -66};
+      return resolveInlineOffset(index === 0 ? {x: -78, y: 0} : {x: 30, y: -66});
     }
 
     if (index === 0) {
-      return FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET;
+      return resolveInlineOffset(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET);
     }
 
     if (index === 1) {
-      return {x: -78, y: 0};
+      return resolveInlineOffset({x: -78, y: 0});
     }
 
-    return {x: 30, y: -66};
+    return resolveInlineOffset({x: 30, y: -66});
   }
 
   if (itemCount <= 1) {
@@ -286,18 +311,24 @@ export function getFloatingActionSlotOffsetForAction(
   placement: FloatingActionPlacement = 'floating',
   fallbackIndex?: number,
   itemCount = FLOATING_ACTION_MAX_ITEM_COUNT,
+  buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionSlotOffset {
   const defaultActionIndex =
     (DEFAULT_FLOATING_ACTION_IDS as readonly FloatingActionId[]).indexOf(actionId);
   const resolvedIndex = fallbackIndex ?? (defaultActionIndex >= 0 ? defaultActionIndex : 0);
 
-  return getFloatingActionSlotOffset(resolvedIndex, itemCount, placement);
+  return getFloatingActionSlotOffset(resolvedIndex, itemCount, placement, buttonPosition);
 }
 
 export function getFloatingActionSettingsSlotOffset(
   placement: FloatingActionPlacement = 'floating',
+  buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionSlotOffset {
-  return placement === 'inline' ? {x: 58, y: 0} : {x: 120, y: 0};
+  if (placement !== 'inline') {
+    return {x: 120, y: 0};
+  }
+
+  return buttonPosition === 'left' ? {x: 0, y: -116} : {x: 58, y: 0};
 }
 
 export function getFloatingActionButtonScale(isActive: boolean): number {
@@ -308,6 +339,7 @@ function getFloatingActionSlotOffsetById(
   actionId: FloatingActionId,
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement,
+  buttonPosition: FloatingActionButtonPosition,
 ): FloatingActionSlotOffset | null {
   const visibleActionIds = getVisibleFloatingActionIds(actionIds);
   const actionIndex = visibleActionIds.indexOf(actionId);
@@ -321,6 +353,7 @@ function getFloatingActionSlotOffsetById(
     placement,
     actionIndex,
     visibleActionIds.length,
+    buttonPosition,
   );
 }
 
@@ -329,8 +362,14 @@ function isFloatingActionFlickActivation(
   activeActionId: FloatingActionId,
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement,
+  buttonPosition: FloatingActionButtonPosition,
 ) {
-  const slotOffset = getFloatingActionSlotOffsetById(activeActionId, actionIds, placement);
+  const slotOffset = getFloatingActionSlotOffsetById(
+    activeActionId,
+    actionIds,
+    placement,
+    buttonPosition,
+  );
 
   if (!slotOffset) {
     return false;
@@ -354,6 +393,7 @@ export function getFloatingActionMenuTarget(
   dragPoint: FloatingActionDragPoint,
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement = 'floating',
+  buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionId | null {
   const visibleActionIds = getVisibleFloatingActionIds(actionIds);
   const dragDistance = Math.hypot(dragPoint.translationX, dragPoint.translationY);
@@ -371,6 +411,7 @@ export function getFloatingActionMenuTarget(
       placement,
       index,
       visibleActionIds.length,
+      buttonPosition,
     );
     const distance = Math.hypot(
       dragPoint.translationX - slotOffset.x,
@@ -392,8 +433,14 @@ export function getFloatingActionReleaseOutcome(
   wasExpandedAtGestureStart: boolean,
   placement: FloatingActionPlacement = 'floating',
   activeActionId: FloatingActionId | null = null,
+  buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionReleaseOutcome {
-  const directTargetActionId = getFloatingActionMenuTarget(dragPoint, actionIds, placement);
+  const directTargetActionId = getFloatingActionMenuTarget(
+    dragPoint,
+    actionIds,
+    placement,
+    buttonPosition,
+  );
 
   if (directTargetActionId) {
     return {kind: 'select', actionId: directTargetActionId};
@@ -401,7 +448,13 @@ export function getFloatingActionReleaseOutcome(
 
   if (
     activeActionId &&
-    isFloatingActionFlickActivation(dragPoint, activeActionId, actionIds, placement)
+    isFloatingActionFlickActivation(
+      dragPoint,
+      activeActionId,
+      actionIds,
+      placement,
+      buttonPosition,
+    )
   ) {
     return {kind: 'select', actionId: activeActionId};
   }
@@ -420,6 +473,7 @@ type FloatingActionMenuProps = {
   bottomOffset?: number;
   interactionMode?: FloatingActionInteractionMode;
   isExpanded?: boolean;
+  buttonPosition?: FloatingActionButtonPosition;
   onExpandedChange?: (isExpanded: boolean) => void;
   onPressSettings?: () => void;
   onSelectAction?: (actionId: FloatingActionId) => void;
@@ -429,6 +483,7 @@ type FloatingActionMenuProps = {
 export function FloatingActionMenu({
   actionIds = DEFAULT_FLOATING_ACTION_IDS,
   bottomOffset = 0,
+  buttonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   interactionMode = DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
   isExpanded: controlledIsExpanded,
   onExpandedChange,
@@ -490,13 +545,14 @@ export function FloatingActionMenu({
       ) => {
         setExpanded(true);
         const nextActionId = getFloatingActionMenuTarget(
-            {
-              translationX: gestureState.dx,
-              translationY: gestureState.dy,
-            },
-            visibleActionIds,
-            placement,
-          );
+          {
+            translationX: gestureState.dx,
+            translationY: gestureState.dy,
+          },
+          visibleActionIds,
+          placement,
+          buttonPosition,
+        );
         const retainedActionId =
           nextActionId ??
           (
@@ -509,6 +565,7 @@ export function FloatingActionMenu({
               activeActionIdRef.current,
               visibleActionIds,
               placement,
+              buttonPosition,
             )
               ? activeActionIdRef.current
               : null
@@ -530,6 +587,7 @@ export function FloatingActionMenu({
           wasExpandedAtGestureStartRef.current,
           placement,
           activeActionIdRef.current,
+          buttonPosition,
         );
 
         if (releaseOutcome.kind === 'select') {
@@ -554,6 +612,7 @@ export function FloatingActionMenu({
       interactionMode,
       isExpanded,
       placement,
+      buttonPosition,
       selectAction,
       setExpanded,
       visibleActionIds,
@@ -584,6 +643,7 @@ export function FloatingActionMenu({
               placement,
               index,
               visibleDefinitions.length,
+              buttonPosition,
             );
             const isActive = definition.id === activeActionId;
 
@@ -609,7 +669,7 @@ export function FloatingActionMenu({
               style={({pressed}) => [
                 styles.settingsButton,
                 getFloatingActionPlacementStyle(
-                  getFloatingActionSettingsSlotOffset(placement),
+                  getFloatingActionSettingsSlotOffset(placement, buttonPosition),
                   FLOATING_ACTION_SETTINGS_SIZE,
                 ),
                 pressed && styles.pressed,

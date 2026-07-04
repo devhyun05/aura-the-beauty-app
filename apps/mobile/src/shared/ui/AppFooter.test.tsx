@@ -8,6 +8,7 @@ import {
   APP_FOOTER_ACTION_SLOT_WIDTH,
   APP_FOOTER_ACTION_ICON_SIZE,
   APP_FOOTER_FLOATING_HOST_BASE_HEIGHT,
+  APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION,
   APP_FOOTER_GLASS_BACKGROUND,
   APP_FOOTER_GLASS_BORDER,
   APP_FOOTER_GLASS_HIGHLIGHT,
@@ -17,6 +18,7 @@ import {
   APP_FOOTER_SIDE_TAB_WIDTH,
   APP_FOOTER_TAB_HEIGHT,
   AppFooter,
+  getAppFooterActionSlotOrder,
 } from './AppFooter';
 import {CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND} from './CameraCaptureButton';
 
@@ -42,8 +44,21 @@ const footerCaptureButtonBackground:
   'rgba(255, 255, 255, 0.78)' =
     CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND;
 
+if (APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION !== 'right') {
+  throw new Error('default action slot position: expected right');
+}
+
+if (getAppFooterActionSlotOrder('right').join(',') !== 'tabs,action') {
+  throw new Error('right action slot order: expected tabs,action');
+}
+
+if (getAppFooterActionSlotOrder('left').join(',') !== 'action,tabs') {
+  throw new Error('left action slot order: expected action,tabs');
+}
+
 <AppFooter
   actionSlot={<>별 액션</>}
+  actionSlotPosition="left"
   activeTab="profile"
   bottomInset={0}
   floating
