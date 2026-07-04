@@ -386,14 +386,22 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 return false;
             }
 
-            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            // Mipmapped + trilinear so the fine directional hair strokes in the
+            // blue channel do not crawl/shimmer under head motion when the face
+            // minifies (moves away). SetPixelData(mip0) + Apply(updateMipmaps:
+            // true) preserves the raw top-left byte layout (unlike SetPixels32,
+            // which would flip rows) while generating the mip chain — plain
+            // LoadRawTextureData cannot, as it expects the full mip-chain size.
+            // Brow-only: this is RuntimeGeneratedBrowMaskTextures, separate from
+            // the lip VisionUvMaskTexture path.
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, true)
             {
                 name = "Generated Brow Mask " + maskTextureId,
                 wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
+                filterMode = FilterMode.Trilinear
             };
-            texture.LoadRawTextureData(rawBytes);
-            texture.Apply(false, false);
+            texture.SetPixelData(rawBytes, 0);
+            texture.Apply(true, false);
             RuntimeGeneratedBrowMaskTextures[maskTextureId] = texture;
             RemoveMaskTextureCaches("GeneratedBrowMasks/" + maskTextureId);
 
