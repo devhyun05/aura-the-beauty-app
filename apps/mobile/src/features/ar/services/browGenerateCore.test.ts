@@ -2,6 +2,7 @@ import {
   DEFAULT_GENERATED_BROW_CONTROLS,
   buildGeneratedBrowMaskUnityPayload,
   buildGeneratedBrowPackage,
+  resolveBrowNeutralizeStrength,
 } from './browGenerateCore';
 import {summarizeGeneratedBrowRuntimeDiagnostics} from './browRuntimeDiagnostics';
 import type {
@@ -736,4 +737,95 @@ expectEqual(
   zeroStrengthPayload.strandTextureAmount,
   0,
   'zero generated brow strand texture stays zero',
+);
+
+// --- Bang (앞머리) detection: capture-time neutralize attenuation ---
+
+const bangAppearanceRegion = (
+  source: E7NativeFaceLandmarkRegion,
+  aboveBrowDarkRatio: number,
+): E7NativeFaceLandmarkRegion => ({
+  ...source,
+  aboveBrowDarkRatio,
+  aboveBrowSampleCount: 180,
+  generationMethod: 'image_guided_brow_appearance_roi_v1',
+  skinBaselineLuma: 168,
+});
+
+const withBangRatio = (ratio: number): E7NativeBoundaryResult => ({
+  ...nativeResult,
+  faceLandmarks: {
+    ...nativeResult.faceLandmarks!,
+    namedRegions: {
+      ...namedRegions,
+      leftEyebrowAppearance: bangAppearanceRegion(namedRegions.leftEyebrow, ratio),
+      rightEyebrowAppearance: bangAppearanceRegion(namedRegions.rightEyebrow, ratio),
+    },
+  },
+});
+
+const noProbeStrength = resolveBrowNeutralizeStrength(nativeResult);
+expectEqual(
+  noProbeStrength.neutralizeStrength,
+  0.85,
+  'no bang probe keeps full neutralize strength',
+);
+expectEqual(
+  noProbeStrength.bangCoverageRatio,
+  undefined,
+  'no bang probe reports no coverage ratio',
+);
+
+const clearForehead = resolveBrowNeutralizeStrength(withBangRatio(0.1));
+expectEqual(
+  clearForehead.neutralizeStrength,
+  0.85,
+  'clear forehead keeps full neutralize strength',
+);
+
+const partialBangs = resolveBrowNeutralizeStrength(withBangRatio(0.46));
+expectGreaterThan(
+  partialBangs.neutralizeStrength,
+  0.3,
+  'partial bang coverage attenuates but keeps some neutralize',
+);
+expectLessThan(
+  partialBangs.neutralizeStrength,
+  0.6,
+  'partial bang coverage attenuates below full strength',
+);
+
+const heavyBangs = resolveBrowNeutralizeStrength(withBangRatio(0.8));
+expectEqual(
+  heavyBangs.neutralizeStrength,
+  0,
+  'heavy bang coverage disables neutralize entirely',
+);
+expectEqual(
+  heavyBangs.bangCoverageRatio,
+  0.8,
+  'heavy bang coverage ratio is reported',
+);
+
+const bangPackage = buildGeneratedBrowPackage({
+  controls,
+  nativeResult: withBangRatio(0.8),
+});
+expectEqual(
+  bangPackage.runtimeApplyPayload.neutralizeStrength,
+  0,
+  'bang-covered package payload carries attenuated neutralize',
+);
+expectEqual(
+  bangPackage.runtimeApplyPayload.bangCoverageRatio,
+  0.8,
+  'bang-covered package payload carries the coverage ratio',
+);
+const bangUnityPayload = buildGeneratedBrowMaskUnityPayload(bangPackage, controls, {
+  includeTexture: false,
+});
+expectEqual(
+  bangUnityPayload.neutralizeStrength,
+  0,
+  'bang attenuation survives the Unity payload rebuild on control changes',
 );

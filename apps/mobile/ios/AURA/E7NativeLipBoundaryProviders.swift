@@ -1200,6 +1200,36 @@ final class E7NativeLipBoundaryProviders: NSObject {
       sampleX += xStep
     }
     let skinBaseline = percentile(roiLumas, percentile: 0.72) ?? 168.0
+
+    // Bang (앞머리) coverage probe: sample the band ABOVE the brow. When bangs
+    // hang over the forehead this band is hair-dark, which means the runtime
+    // has no nearby skin to inpaint from — RN uses this ratio to attenuate the
+    // neutralize strength instead of smearing dark hair over the brow.
+    var aboveBrowDarkSamples = 0
+    var aboveBrowTotalSamples = 0
+    let bangBandMinY = max(0.0, browBounds.minY - browHeight * 2.4)
+    let bangBandMaxY = max(0.0, browBounds.minY - browHeight * 0.8)
+    if bangBandMaxY > bangBandMinY + 1.0 {
+      let bangDarkThreshold = skinBaseline * 0.66
+      let bangXStep = max(1, Int((roiMaxX - roiMinX) / 24.0))
+      let bangYStep = max(1, Int((bangBandMaxY - bangBandMinY) / 8.0))
+      var bangX = Int(roiMinX.rounded())
+      while bangX <= Int(roiMaxX.rounded()) {
+        var bangY = Int(bangBandMinY.rounded())
+        while bangY <= Int(bangBandMaxY.rounded()) {
+          if luminance(Double(bangX), Double(bangY)) < bangDarkThreshold {
+            aboveBrowDarkSamples += 1
+          }
+          aboveBrowTotalSamples += 1
+          bangY += bangYStep
+        }
+        bangX += bangXStep
+      }
+    }
+    let aboveBrowDarkRatio = aboveBrowTotalSamples > 0
+      ? Double(aboveBrowDarkSamples) / Double(aboveBrowTotalSamples)
+      : -1.0
+
     let sampleCount = 18
     var upperPoints = [[String: Double]]()
     var lowerPoints = [[String: Double]]()
@@ -1270,7 +1300,7 @@ final class E7NativeLipBoundaryProviders: NSObject {
     }
 
     let imagePoints = upperPoints + lowerPoints.reversed()
-    return [
+    var payload: [String: Any] = [
       "status": imagePoints.isEmpty ? "unavailable" : "available",
       "generationMethod": "image_guided_brow_appearance_roi_v1",
       "side": side,
@@ -1286,6 +1316,12 @@ final class E7NativeLipBoundaryProviders: NSObject {
       ],
       "imagePoints": imagePoints
     ]
+    if aboveBrowDarkRatio >= 0.0 {
+      payload["aboveBrowDarkRatio"] = aboveBrowDarkRatio
+      payload["aboveBrowSampleCount"] = aboveBrowTotalSamples
+      payload["skinBaselineLuma"] = skinBaseline
+    }
+    return payload
   }
 
   private func makeBrowImageSampler(_ uiImage: UIImage) -> E7BrowImageSampler? {

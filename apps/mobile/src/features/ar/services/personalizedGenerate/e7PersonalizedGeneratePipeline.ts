@@ -63,11 +63,17 @@ export type E7NativeBoundaryResult = {
 };
 
 export type E7NativeFaceLandmarkRegion = {
+  // Fraction of dark (hair-like) samples in the band above the brow, measured
+  // by the native appearance sampler. High values mean bangs cover the
+  // forehead so there is no skin to inpaint the real brow from.
+  aboveBrowDarkRatio?: number;
+  aboveBrowSampleCount?: number;
   corePointCount?: number;
   generationMethod?: string;
   imagePoints?: E7Point2D[];
   indices?: number[];
   pointCount?: number;
+  skinBaselineLuma?: number;
   status?: 'available' | 'unavailable' | string;
 };
 

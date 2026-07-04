@@ -139,6 +139,9 @@ export type BrowRuntimeApplyPayload = {
   templeAnchorPointCount: number;
   cleanupStrength: number;
   neutralizeStrength: number;
+  // Bang coverage measured above the brow at capture (0..1); present only
+  // when the native image-guided probe ran. Drives neutralize attenuation.
+  bangCoverageRatio?: number;
   upperEyelidAnchorPointCount: number;
   texture: 'natural_brow';
   finish: 'hair-stroke-brow';
@@ -159,6 +162,13 @@ const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
 // The shader reads the live camera and paints surrounding skin over the real
 // brow (red-channel region) so it does not stick out past the makeup shape.
 const BROW_NEUTRALIZE_STRENGTH = 0.85;
+// Bang (앞머리) attenuation: the native appearance sampler reports how dark the
+// band above each brow is (aboveBrowDarkRatio). Below CLEAR the forehead is
+// skin and neutralize runs at full strength; above COVERED bangs block the
+// skin the shader would inpaint from, so neutralize fades to 0 — doing
+// nothing looks better than smearing dark hair over the brow.
+const BROW_BANG_DARK_RATIO_CLEAR = 0.3;
+const BROW_BANG_DARK_RATIO_COVERED = 0.62;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -322,7 +332,8 @@ export function buildGeneratedBrowMaskUnityPayload(
     intensity: runtimeIntensity,
     maskOpacity: runtimeOpacity,
     maskVisible: controls.enabled,
-    neutralizeStrength: BROW_NEUTRALIZE_STRENGTH,
+    // neutralizeStrength flows from the package payload spread above so the
+    // capture-time bang attenuation survives shape/control changes.
     opacity: runtimeOpacity,
     preserveDetail: true,
     sample: 'natural_brow',
@@ -368,6 +379,7 @@ function buildBrowRuntimeApplyPayload({
   nativeResult: E7NativeBoundaryResult;
 }): BrowRuntimeApplyPayload {
   const anchorSummary = summarizeBrowAnchorMetadata(envelopes);
+  const neutralize = resolveBrowNeutralizeStrength(nativeResult);
 
   return {
     schemaVersion: 'e7-generated-brow-mask-runtime-payload-v0',
@@ -407,7 +419,8 @@ function buildBrowRuntimeApplyPayload({
     surroundAnchorPointCount: anchorSummary.surroundAnchorPointCount,
     templeAnchorPointCount: anchorSummary.templeAnchorPointCount,
     cleanupStrength: 0,
-    neutralizeStrength: BROW_NEUTRALIZE_STRENGTH,
+    neutralizeStrength: neutralize.neutralizeStrength,
+    bangCoverageRatio: neutralize.bangCoverageRatio,
     upperEyelidAnchorPointCount: anchorSummary.upperEyelidAnchorPointCount,
     texture: 'natural_brow',
     finish: 'hair-stroke-brow',
@@ -671,6 +684,33 @@ function getBrowLandmarkRegions(nativeResult: E7NativeBoundaryResult) {
     rightUpperEyelid: normalizeLandmarkRegion(
       regions.rightUpperEyelid ?? regions.rightEye,
     ),
+  };
+}
+
+export function resolveBrowNeutralizeStrength(
+  nativeResult: E7NativeBoundaryResult,
+): {bangCoverageRatio?: number; neutralizeStrength: number} {
+  const regions =
+    nativeResult.faceLandmarks?.namedRegions ??
+    nativeResult.faceLandmarks?.contours ??
+    {};
+  const ratios = [
+    regions.leftEyebrowAppearance?.aboveBrowDarkRatio,
+    regions.rightEyebrowAppearance?.aboveBrowDarkRatio,
+  ].filter((value): value is number => Number.isFinite(value ?? NaN));
+  if (ratios.length === 0) {
+    // No image-guided probe (fixtures, providers without a frame): keep the
+    // full strength rather than guessing.
+    return {neutralizeStrength: BROW_NEUTRALIZE_STRENGTH};
+  }
+  const bangCoverageRatio = Math.max(...ratios);
+  const covered = clamp01(
+    (bangCoverageRatio - BROW_BANG_DARK_RATIO_CLEAR) /
+      (BROW_BANG_DARK_RATIO_COVERED - BROW_BANG_DARK_RATIO_CLEAR),
+  );
+  return {
+    bangCoverageRatio,
+    neutralizeStrength: BROW_NEUTRALIZE_STRENGTH * (1 - covered),
   };
 }
 
