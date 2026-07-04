@@ -3005,8 +3005,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
     private static int SampleMaskCoverageByte(Color32 pixel, string sampleChannel)
     {
+        // For generated brow the red channel carries the real-brow neutralize
+        // region, which extends beyond the green makeup fill. Include red so the
+        // mesh keeps the triangles that cover the real brow (where the shader
+        // paints skin), otherwise the neutralize area would be culled away.
         return sampleChannel == "generated_brow_green_alpha"
-            ? Mathf.Max(pixel.g, pixel.a)
+            ? Mathf.Max(pixel.r, Mathf.Max(pixel.g, pixel.a))
             : pixel.r;
     }
 
