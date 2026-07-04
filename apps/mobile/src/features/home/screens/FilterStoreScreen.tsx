@@ -40,6 +40,9 @@ const filterStoreCategoryIds = filterStoreCategories.map(category => category.id
 export const FILTER_STORE_SHOW_SUMMARY_CARD = false;
 export const FILTER_STORE_CATEGORY_LIST_SCROLL_AXIS = 'horizontal';
 export const FILTER_STORE_CATEGORY_LIST_ALLOWS_WRAP = false;
+export const FILTER_STORE_CATEGORY_CHIP_HEIGHT = 34;
+export const FILTER_STORE_CATEGORY_TEXT_NUMBER_OF_LINES = 1;
+export const FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT = 76;
 
 function isFilterStoreCategoryId(categoryId: string): categoryId is FilterStoreCategoryId {
   return filterStoreCategoryIds.includes(categoryId as FilterStoreCategoryId);
@@ -152,6 +155,7 @@ export function FilterStoreScreen({
                 pressed && styles.pressed,
               ]}>
               <Text
+                numberOfLines={FILTER_STORE_CATEGORY_TEXT_NUMBER_OF_LINES}
                 style={[
                   styles.categoryText,
                   selected && styles.categoryTextSelected,
@@ -269,7 +273,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    minHeight: 34,
+    flexShrink: 0,
+    height: FILTER_STORE_CATEGORY_CHIP_HEIGHT,
+    justifyContent: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -286,6 +292,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
+    flexShrink: 0,
     lineHeight: typography.lineHeight.xs,
   },
   categoryTextSelected: {
@@ -340,7 +347,7 @@ const styles = StyleSheet.create({
   imageScrim: {
     backgroundColor: 'rgba(0, 0, 0, 0.42)',
     bottom: 0,
-    height: 86,
+    height: FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT,
     left: 0,
     position: 'absolute',
     right: 0,
