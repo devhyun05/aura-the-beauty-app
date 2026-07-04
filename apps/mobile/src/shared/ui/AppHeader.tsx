@@ -12,6 +12,7 @@ export const APP_HEADER_VERTICAL_PADDING = spacing.sm;
 export const APP_HEADER_ACTION_BUTTON_SIZE = 40;
 export const APP_HEADER_SIDE_SIZE = 40;
 export const APP_HEADER_CENTER_TITLE_FONT_SIZE = typography.title.fontSize;
+export const APP_HEADER_CONTEXT_TITLE_LEFT_MARGIN = spacing.xs;
 
 type AppHeaderVariant = 'default' | 'immersive';
 
@@ -237,6 +238,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
     justifyContent: 'center',
+    marginLeft: APP_HEADER_CONTEXT_TITLE_LEFT_MARGIN,
     minWidth: 0,
   },
   immersiveActionButton: {
