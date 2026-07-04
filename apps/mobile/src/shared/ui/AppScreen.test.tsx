@@ -43,7 +43,7 @@ expectEqual(
 );
 expectEqual(
   getAppScreenBottomPadding('floatingFooter', 34),
-  110,
+  98,
   'floating footer app screen bottom padding',
 );
 expectEqual(getAppScreenBottomPadding(0, 34), 0, 'custom app screen bottom padding');

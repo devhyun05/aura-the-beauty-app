@@ -12,15 +12,16 @@ import {
 
 export type FooterTabKey = 'home' | 'capture' | 'custom';
 
-export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xxl;
-export const APP_FOOTER_BAR_HEIGHT = 64;
-export const APP_FOOTER_TAB_HEIGHT = 52;
+export const APP_FOOTER_HORIZONTAL_PADDING = (spacing.xxl + spacing.md) as 36;
+export const APP_FOOTER_BAR_HEIGHT = 52;
+export const APP_FOOTER_TAB_HEIGHT = 40;
 export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
-export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = 62;
+export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = 54;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
-export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.lg;
+export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.md;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
-export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
+export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 64;
+export const APP_FOOTER_SHOW_LABELS_BY_DEFAULT = false;
 export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
 export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
@@ -68,7 +69,7 @@ export function AppFooter({
   bottomInset = 0,
   floating = false,
   onTabPress,
-  showLabels = true,
+  showLabels = APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
 }: AppFooterProps) {
   return (
     <YStack
@@ -85,8 +86,14 @@ export function AppFooter({
         {footerItems.map(item => {
           const isActive = item.key === activeTab;
           const isCaptureTab = item.key === 'capture';
-          const iconColor = isCaptureTab || isActive ? colors.white : colors.textPrimary;
-          const labelColor = isCaptureTab ? colors.textPrimary : isActive ? colors.white : colors.textPrimary;
+          const iconColor = isCaptureTab || isActive
+            ? colors.white
+            : colors.textPrimary;
+          const labelColor = isCaptureTab
+            ? colors.textPrimary
+            : isActive
+              ? colors.white
+              : colors.textPrimary;
 
           return (
             <Button
@@ -102,7 +109,11 @@ export function AppFooter({
                 !isCaptureTab && isActive ? styles.activeTabButton : undefined,
               ]}
               onPress={() => onTabPress?.(item.key)}>
-              <YStack style={isCaptureTab ? styles.captureTabContent : styles.tabContent}>
+              <YStack
+                style={[
+                  isCaptureTab ? styles.captureTabContent : styles.tabContent,
+                  !showLabels ? styles.iconOnlyTabContent : undefined,
+                ]}>
                 {isCaptureTab ? (
                   <CameraCaptureButtonSurface
                     showInnerDot={false}
@@ -131,7 +142,7 @@ export function AppFooter({
 const styles = StyleSheet.create({
   footerArea: {
     paddingHorizontal: APP_FOOTER_HORIZONTAL_PADDING,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
   },
   dockedFooterArea: {
     backgroundColor: colors.background,
@@ -153,19 +164,20 @@ const styles = StyleSheet.create({
     height: APP_FOOTER_BAR_HEIGHT,
     justifyContent: 'space-between',
     overflow: APP_FOOTER_BAR_OVERFLOW,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
     shadowColor: shadows.soft.shadowColor,
-    shadowOffset: {width: 0, height: -6},
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
+    shadowOffset: {width: 0, height: -4},
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
   },
   footerGlassHighlight: {
     backgroundColor: APP_FOOTER_GLASS_HIGHLIGHT,
-    height: 18,
-    left: spacing.md,
+    borderRadius: radius.pill,
+    height: 12,
+    left: spacing.lg,
     position: 'absolute',
-    right: spacing.md,
+    right: spacing.lg,
     top: 1,
   },
   tabButton: {
@@ -189,13 +201,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     justifyContent: 'center',
-    transform: [{translateY: -12}],
+    transform: [{translateY: -7}],
   },
   tabContent: {
     alignItems: 'center',
     gap: spacing.xs,
     justifyContent: 'center',
     minWidth: 0,
+  },
+  iconOnlyTabContent: {
+    gap: 0,
   },
   tabLabel: {
     fontFamily: typography.fontFamily.bold,

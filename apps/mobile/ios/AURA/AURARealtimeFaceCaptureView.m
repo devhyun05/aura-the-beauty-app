@@ -760,39 +760,45 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
     didFinishProcessingPhoto:(AVCapturePhoto *)photo
                        error:(NSError *)error
 {
-  RCTPromiseResolveBlock resolve = _captureResolve;
-  RCTPromiseRejectBlock reject = _captureReject;
-  _captureResolve = nil;
-  _captureReject = nil;
-  _hasPendingCapture = NO;
+  dispatch_async(_sessionQueue, ^{
+    RCTPromiseResolveBlock resolve = self->_captureResolve;
+    RCTPromiseRejectBlock reject = self->_captureReject;
+    self->_captureResolve = nil;
+    self->_captureReject = nil;
+    self->_hasPendingCapture = NO;
 
-  if (error) {
-    reject(@"REALTIME_CAPTURE_FAILED", error.localizedDescription, error);
-    return;
-  }
+    if (!resolve || !reject) {
+      return;
+    }
 
-  NSData *imageData = [photo fileDataRepresentation];
-  if (!imageData) {
-    reject(@"REALTIME_CAPTURE_EMPTY", @"Realtime face camera returned an empty image.", nil);
-    return;
-  }
+    if (error) {
+      reject(@"REALTIME_CAPTURE_FAILED", error.localizedDescription, error);
+      return;
+    }
 
-  NSString *fileName = [NSString stringWithFormat:@"aura-face-%@.jpg", NSUUID.UUID.UUIDString];
-  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
-  NSURL *url = [NSURL fileURLWithPath:path];
-  NSError *writeError = nil;
+    NSData *imageData = [photo fileDataRepresentation];
+    if (!imageData) {
+      reject(@"REALTIME_CAPTURE_EMPTY", @"Realtime face camera returned an empty image.", nil);
+      return;
+    }
 
-  if (![imageData writeToURL:url options:NSDataWritingAtomic error:&writeError]) {
-    reject(@"REALTIME_CAPTURE_WRITE_FAILED", writeError.localizedDescription, writeError);
-    return;
-  }
+    NSString *fileName = [NSString stringWithFormat:@"aura-face-%@.jpg", NSUUID.UUID.UUIDString];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSURL *url = [NSURL fileURLWithPath:path];
+    NSError *writeError = nil;
 
-  UIImage *image = [UIImage imageWithData:imageData];
-  resolve(@{
-    @"uri": url.absoluteString,
-    @"width": @(image.size.width),
-    @"height": @(image.size.height),
-    @"format": @"jpg",
+    if (![imageData writeToURL:url options:NSDataWritingAtomic error:&writeError]) {
+      reject(@"REALTIME_CAPTURE_WRITE_FAILED", writeError.localizedDescription, writeError);
+      return;
+    }
+
+    UIImage *image = [UIImage imageWithData:imageData];
+    resolve(@{
+      @"uri": url.absoluteString,
+      @"width": @(image.size.width),
+      @"height": @(image.size.height),
+      @"format": @"jpg",
+    });
   });
 }
 
