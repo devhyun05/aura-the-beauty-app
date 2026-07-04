@@ -372,7 +372,7 @@ function buildBrowRuntimeApplyPayload({
     maskTextureWidth: mask.width,
     maskTextureHeight: mask.height,
     maskThreshold: 0.34,
-    maskFeatherUvNormalized: 0.16,
+    maskFeatherUvNormalized: 0.09,
     softEdgeTexels: mask.softEdgeTexels,
     localOnly: true,
     offDeviceUpload: false,
@@ -1133,9 +1133,10 @@ function buildSmoothBrowEnvelopePolygon({
   // the band must hide the real brow underneath, otherwise it reads as a small
   // sticker floating on top of visible hairs.
   const bodyThickness = clamp(medianThickness * 1.12, height * 0.12, height * 0.6);
-  // Sit slightly high on the brow so the band covers the body without dropping
-  // below it (device feedback: 일자 was landing under the brow).
-  const verticalLift = medianThickness * 0.12;
+  // Sit high enough on the brow that the band covers the body without dropping
+  // below it. Straight brows have no arch to raise their middle, so they need a
+  // larger lift or they read as sitting under the real brow (device feedback).
+  const verticalLift = medianThickness * (shapeId === 'straight' ? 0.34 : 0.18);
   // Per-shape curve: arch height at the peak, then a tail that DESCENDS below
   // the head->tail chord past the peak (눈썹 산 기준 하강) — natural Korean brow
   // finishes lower than the arch, even for 일자.
@@ -1496,15 +1497,16 @@ function browStrandDensity(
 
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
   const {t, v} = browLocalCoordinates(point, envelope);
-  // Head/tail longitudinal fade keeps the ends soft rather than blunt.
-  const headFade = lerp(0.62, 1, smoothstep(0, 0.12, t));
-  const tailFade = lerp(1, 0.4, smoothstep(0.64, 1, t));
-  // Mostly solid body with only a thin softening at the very top/bottom rim, so
-  // the fill reads as one even painted brow (not a dark core + light halo). The
-  // remaining soft edge is a tight, clean transition, not a wide fuzzy layer.
-  const topSoft = smoothstep(0, 0.14, v);
-  const bottomSoft = smoothstep(0, 0.1, 1 - v);
-  const bodyGradient = 0.78 + 0.22 * topSoft * bottomSoft;
+  // Head/tail longitudinal fade keeps the ends tapered, not blunt.
+  const headFade = lerp(0.72, 1, smoothstep(0, 0.1, t));
+  const tailFade = lerp(1, 0.5, smoothstep(0.68, 1, t));
+  // Essentially solid fill with only a hairline soft rim at the very top/bottom.
+  // Device feedback: the wide soft outer layer read as bumpy on the sparse face
+  // mesh and hurt naturalness, so the brow is now a clean defined shape with a
+  // tight anti-aliased edge instead of a fuzzy halo.
+  const topSoft = smoothstep(0, 0.07, v);
+  const bottomSoft = smoothstep(0, 0.05, 1 - v);
+  const bodyGradient = 0.9 + 0.1 * topSoft * bottomSoft;
   return clamp01(bodyGradient * headFade * tailFade);
 }
 
