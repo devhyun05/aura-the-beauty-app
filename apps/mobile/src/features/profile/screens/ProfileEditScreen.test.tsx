@@ -18,6 +18,7 @@ expectEqual(
   'AppHeader',
   'profile edit header component',
 );
+expectEqual(headerPresentation.contextLabel, 'PROFILE', 'profile edit header context label');
 expectEqual(headerPresentation.title, '프로필 수정', 'profile edit header title');
 
 <ProfileEditScreen onBack={() => undefined} onLogout={() => undefined} />;

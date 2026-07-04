@@ -16,3 +16,4 @@ const headerSideSize: 40 = APP_HEADER_SIDE_SIZE;
 const headerCenterTitleFontSize: 18 = APP_HEADER_CENTER_TITLE_FONT_SIZE;
 
 <AppHeader title="AURA" onProfilePress={() => undefined} />;
+<AppHeader contextLabel="SETTINGS" onBack={() => undefined} title="앱 환경설정" />;

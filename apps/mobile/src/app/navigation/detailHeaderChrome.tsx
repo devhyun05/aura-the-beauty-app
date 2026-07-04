@@ -5,10 +5,16 @@ import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, spacing, typography} from '../../shared/theme';
 import {AppHeader, XIcon} from '../../shared/ui';
-import {getDetailRouteTitle, getRouteChrome, type DetailHeaderRightAction} from './routeChrome';
+import {
+  getDetailRouteContextLabel,
+  getDetailRouteTitle,
+  getRouteChrome,
+  type DetailHeaderRightAction,
+} from './routeChrome';
 import type {RootStackRouteName} from './routeTypes';
 
 export type DetailHeaderPresentation = {
+  contextLabel: string;
   rightActions: readonly DetailHeaderRightAction[];
   title: string;
 };
@@ -29,6 +35,7 @@ export function getDetailHeaderPresentation(
   routeName: RootStackRouteName,
 ): DetailHeaderPresentation {
   return {
+    contextLabel: getDetailRouteContextLabel(routeName),
     rightActions: getDetailHeaderRightActions(routeName),
     title: getDetailRouteTitle(routeName),
   };
@@ -79,6 +86,7 @@ export function DetailRouteChrome({
             {backgroundColor: headerBackgroundColor, borderBottomColor: headerBorderColor},
           ],
         }}
+        contextLabel={presentation.contextLabel}
         leftSlot={shouldReserveLeftSlot ? <View /> : undefined}
         onBack={onBack}
         rightSlot={rightSlot}

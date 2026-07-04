@@ -3,6 +3,7 @@ import {
   resolveActiveRouteName,
 } from './navigationState';
 import {
+  getDetailRouteContextLabel,
   getFooterTargetRoute,
   getDetailRouteTitle,
   getRouteChrome,
@@ -58,6 +59,11 @@ expectEqual(
   getDetailRouteTitle('FloatingActionSettings'),
   '빠른 실행 설정',
   'floating action settings detail route title',
+);
+expectEqual(
+  getDetailRouteContextLabel('FloatingActionSettings'),
+  'QUICK ACTION',
+  'floating action settings detail route context label',
 );
 expectEqual(
   getDetailRouteTitle('AppSettings'),

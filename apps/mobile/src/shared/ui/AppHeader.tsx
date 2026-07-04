@@ -13,7 +13,10 @@ export const APP_HEADER_ACTION_BUTTON_SIZE = 40;
 export const APP_HEADER_SIDE_SIZE = 40;
 export const APP_HEADER_CENTER_TITLE_FONT_SIZE = typography.title.fontSize;
 
+type AppHeaderVariant = 'default' | 'immersive';
+
 type AppHeaderProps = {
+  contextLabel?: string;
   title?: string;
   titleSlot?: ReactNode;
   subtitle?: string;
@@ -25,9 +28,11 @@ type AppHeaderProps = {
   onProfilePress?: () => void;
   profileAccessibilityLabel?: string;
   containerProps?: XStackProps;
+  variant?: AppHeaderVariant;
 };
 
 export function AppHeader({
+  contextLabel,
   title = 'AI AR Makeup',
   titleSlot,
   subtitle = 'MAKEUP GUIDE',
@@ -39,15 +44,21 @@ export function AppHeader({
   onProfilePress,
   profileAccessibilityLabel = '전체 기능 메뉴',
   containerProps,
+  variant = 'default',
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
   const resolvedTopInset = topInset ?? insets.top;
+  const isImmersive = variant === 'immersive';
   const shouldUseCenteredTitle = Boolean(onBack || leftSlot);
+  const labelText = contextLabel ?? subtitle;
   const leftContent =
     leftSlot ??
     (onBack ? (
-      <HeaderIconButton accessibilityLabel="뒤로가기" onPress={onBack}>
-        <ChevronLeftIcon />
+      <HeaderIconButton
+        accessibilityLabel="뒤로가기"
+        onPress={onBack}
+        variant={variant}>
+        <ChevronLeftIcon color={isImmersive ? colors.white : colors.textPrimary} />
       </HeaderIconButton>
     ) : null);
   const rightContent =
@@ -55,8 +66,9 @@ export function AppHeader({
     (!shouldUseCenteredTitle ? (
       <HeaderIconButton
         accessibilityLabel={profileAccessibilityLabel}
-        onPress={onProfilePress}>
-        <MenuHeaderIcon />
+        onPress={onProfilePress}
+        variant={variant}>
+        <MenuHeaderIcon color={isImmersive ? colors.white : colors.black} />
       </HeaderIconButton>
     ) : null);
 
@@ -65,6 +77,7 @@ export function AppHeader({
       {...containerProps}
       style={[
         styles.container,
+        isImmersive && styles.immersiveContainer,
         shouldUseCenteredTitle && styles.centeredContainer,
         {
           minHeight: APP_HEADER_BASE_HEIGHT + resolvedTopInset,
@@ -77,6 +90,25 @@ export function AppHeader({
           <XStack style={styles.side}>{leftContent}</XStack>
           {titleSlot ? (
             <XStack style={styles.centerTitleSlot}>{titleSlot}</XStack>
+          ) : contextLabel ? (
+            <YStack style={styles.contextTitleArea}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.contextLabel,
+                  isImmersive && styles.immersiveContextLabel,
+                ]}>
+                {contextLabel}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.contextTitle,
+                  isImmersive && styles.immersiveContextTitle,
+                ]}>
+                {title}
+              </Text>
+            </YStack>
           ) : (
             <Text numberOfLines={1} style={styles.centerTitle}>
               {title}
@@ -97,7 +129,7 @@ export function AppHeader({
                     letterSpacing={1.2}
                     lineHeight={typography.caption.lineHeight}
                     numberOfLines={1}>
-                    {subtitle}
+                    {labelText}
                   </Text>
                   <Text
                     color={colors.textPrimary}
@@ -124,13 +156,17 @@ type HeaderIconButtonProps = {
   accessibilityLabel: string;
   children: ReactNode;
   onPress?: () => void;
+  variant: AppHeaderVariant;
 };
 
 function HeaderIconButton({
   accessibilityLabel,
   children,
   onPress,
+  variant,
 }: HeaderIconButtonProps) {
+  const isImmersive = variant === 'immersive';
+
   return (
     <Button
       accessibilityLabel={accessibilityLabel}
@@ -138,7 +174,7 @@ function HeaderIconButton({
       hitSlop={8}
       onPress={onPress}
       pressStyle={{scale: 0.97}}
-      style={styles.actionButton}
+      style={[styles.actionButton, isImmersive && styles.immersiveActionButton]}
       unstyled>
       {children}
     </Button>
@@ -182,6 +218,40 @@ const styles = StyleSheet.create({
   centerTitleSlot: {
     alignItems: 'center',
     flex: 1,
+  },
+  contextLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 1.2,
+    lineHeight: typography.lineHeight.xs,
+  },
+  contextTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.lg,
+  },
+  contextTitleArea: {
+    flex: 1,
+    gap: 1,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  immersiveActionButton: {
+    backgroundColor: colors.glassSurface,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  immersiveContainer: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0,
+  },
+  immersiveContextLabel: {
+    color: 'rgba(255, 255, 255, 0.62)',
+  },
+  immersiveContextTitle: {
+    color: colors.white,
   },
   container: {
     alignItems: 'center',

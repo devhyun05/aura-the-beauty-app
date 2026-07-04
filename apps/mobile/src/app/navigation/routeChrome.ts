@@ -41,6 +41,7 @@ export type RouteChrome =
       statusBarStyle: 'dark';
     })
   | (RouteChromeBase & {
+      contextLabel: string;
       kind: 'detail';
       rightActions?: readonly DetailHeaderRightAction[];
       statusBarStyle: 'dark';
@@ -86,6 +87,7 @@ export const routeChromeByRoute = {
   },
   FaceCaptureConfirmation: {
     category: 'feature-entry',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -100,6 +102,7 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisIntro: {
     category: 'feature-entry',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -108,6 +111,7 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisLoading: {
     category: 'progress',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -115,6 +119,7 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisReportsList: {
     category: 'list',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -122,6 +127,7 @@ export const routeChromeByRoute = {
   },
   FaceAnalysisReportDetail: {
     category: 'detail-report',
+    contextLabel: 'FACE ANALYSIS',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['share', 'close'],
@@ -130,6 +136,7 @@ export const routeChromeByRoute = {
   },
   FloatingActionSettings: {
     category: 'form-edit',
+    contextLabel: 'QUICK ACTION',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -137,6 +144,7 @@ export const routeChromeByRoute = {
   },
   AppSettings: {
     category: 'form-edit',
+    contextLabel: 'SETTINGS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -144,6 +152,7 @@ export const routeChromeByRoute = {
   },
   ProfileEdit: {
     category: 'form-edit',
+    contextLabel: 'PROFILE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -151,6 +160,7 @@ export const routeChromeByRoute = {
   },
   HomeFilterStore: {
     category: 'list',
+    contextLabel: 'FILTER STORE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -158,6 +168,7 @@ export const routeChromeByRoute = {
   },
   Magazine: {
     category: 'list',
+    contextLabel: 'MAGAZINE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -165,6 +176,7 @@ export const routeChromeByRoute = {
   },
   SavedMakeupList: {
     category: 'list',
+    contextLabel: 'SAVED LOOKS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -172,6 +184,7 @@ export const routeChromeByRoute = {
   },
   ProductRecommendation: {
     category: 'list',
+    contextLabel: 'PRODUCTS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -179,6 +192,7 @@ export const routeChromeByRoute = {
   },
   Community: {
     category: 'list',
+    contextLabel: 'COMMUNITY',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -186,6 +200,7 @@ export const routeChromeByRoute = {
   },
   Consulting: {
     category: 'list',
+    contextLabel: 'CONSULTING',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -193,6 +208,7 @@ export const routeChromeByRoute = {
   },
   MakeupLookList: {
     category: 'list',
+    contextLabel: 'MAKEUP LOOK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -200,6 +216,7 @@ export const routeChromeByRoute = {
   },
   LikedProductList: {
     category: 'list',
+    contextLabel: 'SAVED ITEMS',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -231,6 +248,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackAlbumUpload: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -238,6 +256,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackGoalInput: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -246,6 +265,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackLoading: {
     category: 'progress',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -253,6 +273,7 @@ export const routeChromeByRoute = {
   },
   MakeupFeedbackResult: {
     category: 'detail-report',
+    contextLabel: 'MAKEUP FEEDBACK',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -260,6 +281,7 @@ export const routeChromeByRoute = {
   },
   MakeupCorrectionGuide: {
     category: 'detail-report',
+    contextLabel: 'CORRECTION GUIDE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -267,6 +289,7 @@ export const routeChromeByRoute = {
   },
   MakeupCorrectionTip: {
     category: 'detail-report',
+    contextLabel: 'CORRECTION GUIDE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -274,6 +297,7 @@ export const routeChromeByRoute = {
   },
   ReferenceMakeupExtractionUpload: {
     category: 'feature-entry',
+    contextLabel: 'MAKEUP EXTRACTION',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['close'],
@@ -288,6 +312,7 @@ export const routeChromeByRoute = {
   },
   ReferenceMakeupExtractionResult: {
     category: 'detail-report',
+    contextLabel: 'MAKEUP EXTRACTION',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -301,6 +326,7 @@ export const routeChromeByRoute = {
   },
   MakeupFilterSave: {
     category: 'form-edit',
+    contextLabel: 'FILTER CUSTOM',
     depth: 'sub',
     kind: 'detail',
     rightActions: ['done'],
@@ -315,6 +341,7 @@ export const routeChromeByRoute = {
   },
   MakeupRecipeDetail: {
     category: 'detail-report',
+    contextLabel: 'MAKEUP RECIPE',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
@@ -372,6 +399,16 @@ export function getDetailRouteTitle(route: RouteName): string {
   }
 
   return chrome.title;
+}
+
+export function getDetailRouteContextLabel(route: RouteName): string {
+  const chrome = getRouteChrome(route);
+
+  if (chrome.kind !== 'detail') {
+    throw new Error(`${route} is not a detail route`);
+  }
+
+  return chrome.contextLabel;
 }
 
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {

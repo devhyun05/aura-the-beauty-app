@@ -31,6 +31,16 @@ expectEqual(
   'profile edit route header title',
 );
 expectEqual(
+  getDetailHeaderPresentation('ProfileEdit').contextLabel,
+  'PROFILE',
+  'profile edit route header context label',
+);
+expectEqual(
+  getDetailHeaderPresentation('AppSettings').contextLabel,
+  'SETTINGS',
+  'app settings route header context label',
+);
+expectEqual(
   getDetailHeaderRightActions('ProfileEdit').join(','),
   '',
   'profile edit route header actions',

@@ -51,6 +51,7 @@ type VisibleProfileEditField = ProfileEditField & {
 };
 
 const profileEditHeaderPresentation = {
+  contextLabel: 'PROFILE',
   headerComponent: 'AppHeader',
   title: '프로필 수정',
 } as const;
@@ -403,6 +404,7 @@ export function ProfileEditScreen({
   return (
     <View style={styles.screen}>
       <AppHeader
+        contextLabel={profileEditHeaderPresentation.contextLabel}
         leftSlot={onBack ? undefined : <View />}
         onBack={onBack}
         title={headerTitle}
