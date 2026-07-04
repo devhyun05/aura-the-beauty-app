@@ -4,7 +4,6 @@ import {useAuthSession} from '../../../features/auth';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
 import {getLikedMakeupFilterLooks} from '../../../shared/services/makeupGuideService';
-import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
   MainTabChrome,
@@ -72,10 +71,9 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
   }, [clearSession, navigation]);
 
   return (
-    <DetailRouteChrome
-      routeName="ProfileEdit"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <ProfileEditScreen onLogout={handleLogout} />
-    </DetailRouteChrome>
+    <ProfileEditScreen
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}
+      onLogout={handleLogout}
+    />
   );
 }

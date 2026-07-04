@@ -14,6 +14,7 @@ import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ProfileEditField, UserProfile} from '../../../shared/types/profile';
 import {
   AppCard,
+  AppHeader,
   AppScreen,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -49,6 +50,15 @@ type VisibleProfileEditField = ProfileEditField & {
   id: VisibleEditableProfileFieldId;
 };
 
+const profileEditHeaderPresentation = {
+  headerComponent: 'AppHeader',
+  title: '프로필 수정',
+} as const;
+
+export function getProfileEditHeaderPresentation() {
+  return profileEditHeaderPresentation;
+}
+
 function isVisibleProfileEditField(
   field: ProfileEditField,
 ): field is VisibleProfileEditField {
@@ -70,7 +80,11 @@ function getFieldsForProfile(
   );
 }
 
-export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
+export function ProfileEditScreen({
+  headerTitle = profileEditHeaderPresentation.title,
+  onBack,
+  onLogout,
+}: ProfileEditScreenProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [fields, setFields] = useState<ProfileEditField[]>([]);
   const [notice, setNotice] = useState('');
@@ -388,6 +402,11 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
 
   return (
     <View style={styles.screen}>
+      <AppHeader
+        leftSlot={onBack ? undefined : <View />}
+        onBack={onBack}
+        title={headerTitle}
+      />
       <AppScreen contentGap={spacing.xl} topPadding="none">
         <View style={styles.profileArea}>
           <View style={styles.avatarFrame}>
@@ -427,7 +446,7 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
 
         <AppCard style={styles.infoCard}>
           <View style={styles.editHeaderRow}>
-            <Text style={styles.editHeaderTitle}>프로필 수정</Text>
+            <Text style={styles.editHeaderTitle}>기본 정보</Text>
             {!isEditing ? (
               <IconButton
                 accessibilityLabel="프로필 수정"
