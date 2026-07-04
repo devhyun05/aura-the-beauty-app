@@ -17,6 +17,7 @@ export type RootStackParamList = {
     initialSource?: 'gallery';
   } | undefined;
   UnityMakeupCapture: undefined;
+  FaceAnalysisIntro: undefined;
   FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
@@ -44,6 +45,7 @@ export type RootStackParamList = {
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
+  ReferenceMakeupExtractionCapture: undefined;
   ReferenceMakeupExtractionUpload: undefined;
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
@@ -71,6 +73,7 @@ export const rootStackRoutes = [
   'MainTabs',
   'FaceCapture',
   'UnityMakeupCapture',
+  'FaceAnalysisIntro',
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',
   'FaceAnalysisReportDetail',
@@ -92,6 +95,7 @@ export const rootStackRoutes = [
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
+  'ReferenceMakeupExtractionCapture',
   'ReferenceMakeupExtractionUpload',
   'ReferenceMakeupExtractionLoading',
   'ReferenceMakeupExtractionResult',

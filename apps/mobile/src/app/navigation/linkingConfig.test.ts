@@ -44,6 +44,9 @@ type SavedMakeupListPathContract = ExpectType<
 type ProductRecommendationPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.ProductRecommendation, 'product-recommendation'>
 >;
+type FaceAnalysisIntroPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.FaceAnalysisIntro, 'face-analysis-intro'>
+>;
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
 >;
@@ -54,6 +57,12 @@ type ReferenceMakeupExtractionUploadPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.ReferenceMakeupExtractionUpload,
     'reference-makeup-extraction-upload'
+  >
+>;
+type ReferenceMakeupExtractionCapturePathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.ReferenceMakeupExtractionCapture,
+    'reference-makeup-extraction-capture'
   >
 >;
 type MakeupFilterSavePathContract = ExpectType<
@@ -147,6 +156,11 @@ expectEqual(
   'product recommendation path uses product naming',
 );
 expectEqual(
+  navigationLinking.config?.screens?.FaceAnalysisIntro,
+  'face-analysis-intro',
+  'face analysis intro path uses analysis naming',
+);
+expectEqual(
   navigationLinking.config?.screens?.Community,
   'community',
   'community path uses community naming',
@@ -160,6 +174,11 @@ expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,
   'reference-makeup-extraction-upload',
   'reference makeup extraction upload path uses extraction naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.ReferenceMakeupExtractionCapture,
+  'reference-makeup-extraction-capture',
+  'reference makeup extraction capture path uses extraction naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupFilterSave,

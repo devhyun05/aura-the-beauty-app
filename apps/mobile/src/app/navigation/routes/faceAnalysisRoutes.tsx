@@ -2,12 +2,14 @@ import React from 'react';
 
 import {
   createFaceAnalysisReportFromCapture,
+  FaceAnalysisIntroScreen,
   FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
 import {useAuthSession} from '../../../features/auth';
+import {FaceCaptureTutorialScreen} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -26,6 +28,30 @@ const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
   'ANALYSIS_REPORT_TIMEOUT',
   'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
 ]);
+
+export function FaceAnalysisIntroRouteScreen({
+  navigation,
+}: RootScreenProps<'FaceAnalysisIntro'>) {
+  const [isGuideVisible, setIsGuideVisible] = React.useState(false);
+
+  if (isGuideVisible) {
+    return (
+      <FaceCaptureTutorialScreen
+        onBackToIntro={() => setIsGuideVisible(false)}
+        onCloseToHome={() => navigateMainTab(navigation, 'HomeTab')}
+        onStartCapture={() => navigation.navigate('FaceCapture')}
+      />
+    );
+  }
+
+  return (
+    <DetailRouteChrome
+      routeName="FaceAnalysisIntro"
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
+    </DetailRouteChrome>
+  );
+}
 
 function shouldRetryAnalysisError(error: unknown): boolean {
   if (!(error instanceof BackendApiError) || !error.code) {

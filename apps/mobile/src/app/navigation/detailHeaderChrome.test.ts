@@ -2,12 +2,30 @@ import {
   getDetailHeaderPresentation,
   getDetailHeaderRightActions,
 } from './detailHeaderChrome';
+import {routeChromeByRoute} from './routeChrome';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
   }
 }
+
+type HasRightActions<RouteName extends keyof typeof routeChromeByRoute> =
+  'rightActions' extends keyof (typeof routeChromeByRoute)[RouteName]
+    ? true
+    : false;
+
+type ExpectFalse<Condition extends false> = Condition;
+
+type MakeupFeedbackEntryNoCloseContract = ExpectFalse<
+  HasRightActions<'MakeupFeedbackEntry'>
+>;
+type MakeupFeedbackAlbumUploadNoCloseContract = ExpectFalse<
+  HasRightActions<'MakeupFeedbackAlbumUpload'>
+>;
+type ReferenceMakeupExtractionUploadNoCloseContract = ExpectFalse<
+  HasRightActions<'ReferenceMakeupExtractionUpload'>
+>;
 
 expectEqual(
   getDetailHeaderPresentation('ProfileEdit').title,
@@ -21,12 +39,17 @@ expectEqual(
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackEntry').join(','),
-  'close',
+  '',
   'makeup feedback entry route header actions',
 );
 expectEqual(
+  getDetailHeaderRightActions('MakeupFeedbackAlbumUpload').join(','),
+  '',
+  'makeup feedback album upload route header actions',
+);
+expectEqual(
   getDetailHeaderRightActions('ReferenceMakeupExtractionUpload').join(','),
-  'close',
+  '',
   'reference makeup extraction upload route header actions',
 );
 expectEqual(

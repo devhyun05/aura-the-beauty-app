@@ -16,8 +16,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yeoduchi.aura.mobile",
-      "appleTeamId": "5947QNM627"
+      "bundleIdentifier": "com.aura.mobile",
+      "appleTeamId": "BRA7W3G4QS"
     },
     "plugins": [
       "expo-status-bar",

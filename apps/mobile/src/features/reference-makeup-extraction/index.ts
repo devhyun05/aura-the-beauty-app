@@ -1,3 +1,7 @@
+export {
+  ReferenceMakeupExtractionCaptureScreen,
+  type ReferenceMakeupExtractionCaptureResult,
+} from './screens/ReferenceMakeupExtractionCaptureScreen';
 export {ReferenceMakeupExtractionLoadingScreen} from './screens/ReferenceMakeupExtractionLoadingScreen';
 export {ReferenceMakeupExtractionResultScreen} from './screens/ReferenceMakeupExtractionResultScreen';
 export {ReferenceMakeupExtractionUploadScreen} from './screens/ReferenceMakeupExtractionUploadScreen';

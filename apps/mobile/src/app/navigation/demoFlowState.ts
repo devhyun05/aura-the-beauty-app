@@ -33,5 +33,6 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
     selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto,
+    shouldShowBeautyJourneyGuide: false,
   };
 }

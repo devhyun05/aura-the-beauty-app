@@ -6,6 +6,8 @@ import {
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import {useAuthSession} from '../../../features/auth';
+import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -17,6 +19,10 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+export function getHomeRecommendedFilterMoreRouteName(): 'HomeFilterStore' {
+  return 'HomeFilterStore';
+}
+
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const {
@@ -24,7 +30,10 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     setLikedMakeupFilterIds,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
+    setShouldShowBeautyJourneyGuide,
+    shouldShowBeautyJourneyGuide,
   } = useNavigationFlowState();
+  const {session} = useAuthSession();
 
   const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
@@ -32,14 +41,33 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
   const handleHeroTrendFilterPress = React.useCallback((filterId: string) => {
-    rootNavigation?.navigate('HomeFilterStore', {initialMakeupFilterId: filterId});
-  }, [rootNavigation]);
+    setSelectedRecommendedMakeupFilterId(filterId);
+    rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
-  const handleMakeupExtractionPress = React.useCallback(() => {
+  const handleMakeupExtractionCameraPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    rootNavigation?.navigate('ReferenceMakeupExtractionCapture');
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
+
+  const handleMakeupExtractionUploadPress = React.useCallback(() => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
     rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
+
+  const handleBeautyJourneyGuideConfirm = React.useCallback(() => {
+    setShouldShowBeautyJourneyGuide(false);
+
+    void (async () => {
+      if (session) {
+        await markFaceCaptureTutorialCompleted(session.user);
+      }
+
+      rootNavigation?.navigate('FaceAnalysisIntro');
+    })();
+  }, [rootNavigation, session, setShouldShowBeautyJourneyGuide]);
 
   const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {
     setLikedMakeupFilterIds(currentFilterIds =>
@@ -62,13 +90,19 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       <HomeScreen
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
         onPressCommunity={() => rootNavigation?.navigate('Community')}
-        onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
+        onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
-        onPressMakeupExtraction={handleMakeupExtractionPress}
+        onPressMakeupExtractionCamera={handleMakeupExtractionCameraPress}
+        onPressMakeupExtractionUpload={handleMakeupExtractionUploadPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
+        onPressRecommendedFilterMore={() =>
+          rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
+        }
         onPressRecommendedFilter={handleRecommendedFilterPress}
         isMakeupFilterLiked={isMakeupFilterLiked}
         onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
+        showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
+        onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
       />
     </MainTabChrome>
   );

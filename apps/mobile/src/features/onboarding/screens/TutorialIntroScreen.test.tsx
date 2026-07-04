@@ -9,15 +9,16 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 const heroContent = getTutorialIntroHeroContent();
+const tutorialIntroTitle: '얼굴 분석을 시작합니다.' = heroContent.title;
 
 expectEqual(heroContent.brand, 'AURA', 'tutorial intro brand');
-expectEqual(heroContent.title, '이미지 진단을 시작합니다.', 'tutorial intro title');
+expectEqual(tutorialIntroTitle, '얼굴 분석을 시작합니다.', 'tutorial intro title');
 expectEqual(
   heroContent.subtitle,
-  '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 룩로 자연스럽게 완성해보세요.',
+  '내 얼굴에 맞는 메이크업을 추천받고,\n나만의 룩으로 자연스럽게 완성해보세요.',
   'tutorial intro subtitle',
 );
-expectEqual(heroContent.primaryActionLabel, '진단 시작', 'tutorial intro primary action');
+expectEqual(heroContent.primaryActionLabel, '분석 시작', 'tutorial intro primary action');
 
 <TutorialIntroScreen
   onCloseToHome={() => undefined}

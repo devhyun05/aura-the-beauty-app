@@ -28,7 +28,7 @@ export function MakeupFeedbackEntryRouteScreen({navigation}: RootScreenProps<'Ma
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackEntry"
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
       <MakeupFeedbackEntryScreen onPressAiFeedback={handlePressAiFeedback} />
     </DetailRouteChrome>
   );
@@ -73,8 +73,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackAlbumUpload"
-      onBack={() => navigateMainTab(navigation, 'CustomTab')}
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
       <MakeupFeedbackAlbumUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );

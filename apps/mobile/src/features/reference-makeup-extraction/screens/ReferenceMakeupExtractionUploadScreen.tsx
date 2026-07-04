@@ -14,8 +14,6 @@ import type {
 } from '../types';
 
 type ReferenceMakeupExtractionUploadScreenProps = {
-  headerTitle?: string;
-  onClose?: () => void;
   onStartAnalysis: (photo: ReferenceMakeupPhoto) => void;
 };
 

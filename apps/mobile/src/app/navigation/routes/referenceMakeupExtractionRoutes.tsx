@@ -6,6 +6,8 @@ import {
   MakeupFilterSaveScreen,
   MakeupRecipeDetailScreen,
   MakeupRecipeSaveCompleteScreen,
+  ReferenceMakeupExtractionCaptureScreen,
+  type ReferenceMakeupExtractionCaptureResult,
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   ReferenceMakeupExtractionUploadScreen,
@@ -23,6 +25,19 @@ import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
 function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
+}
+
+function buildCapturedReferenceMakeupPhoto({
+  imageUri,
+}: ReferenceMakeupExtractionCaptureResult): ReferenceMakeupPhoto {
+  const fallbackPhoto = getReferenceMakeupExtractionDataSync().photos[0];
+
+  return {
+    id: `captured-reference-${Date.now()}`,
+    imageSource: imageUri ? {uri: imageUri} : fallbackPhoto.imageSource,
+    referenceSource: 'camera',
+    title: '카메라로 촬영한 사진',
+  };
 }
 
 function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
@@ -67,9 +82,48 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionUpload"
-      onClose={handleClose}>
+      onBack={handleClose}>
       <ReferenceMakeupExtractionUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
+  );
+}
+
+export function ReferenceMakeupExtractionCaptureRouteScreen({
+  navigation,
+}: RootScreenProps<'ReferenceMakeupExtractionCapture'>) {
+  const {
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
+
+  const handleCapture = React.useCallback(
+    (result: ReferenceMakeupExtractionCaptureResult) => {
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(buildCapturedReferenceMakeupPhoto(result));
+      navigation.replace('ReferenceMakeupExtractionLoading');
+    },
+    [
+      navigation,
+      setSelectedRecommendedMakeupFilterId,
+      setSelectedReferenceMakeupPhoto,
+    ],
+  );
+
+  const handleClose = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    navigateMainTab(navigation, 'HomeTab');
+  }, [
+    navigation,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  ]);
+
+  return (
+    <ReferenceMakeupExtractionCaptureScreen
+      onCapture={handleCapture}
+      onClose={handleClose}
+    />
   );
 }
 
