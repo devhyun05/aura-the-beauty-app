@@ -40,6 +40,9 @@ export type BrowEnvelope = {
   cleanupPolygon: E7Point2D[];
   eyeExclusionBounds: [number, number, number, number];
   fillBounds: [number, number, number, number];
+  // Undilated hull of the detected real brow: neutralize runs at full
+  // strength inside it, then fades across the shell out to neutralizePolygon.
+  neutralizeCorePolygon: E7Point2D[];
   // Region of the user's REAL eyebrow (dilated hull of the detected brow ring).
   // Rasterized into the mask RED channel so the Unity shader can neutralize the
   // real brow (paint surrounding skin over it) where it sticks out past the
@@ -181,6 +184,12 @@ const BROW_MASK_FEATHER_UV_NORMALIZED = 0.05;
 // leaving a hard shape edge against raw hair. The target shape itself is not
 // enlarged, so thin/neat brows are unaffected.
 const BROW_ABSORB_TINT_SOFT_ALPHA = 0.42;
+// Real-brow neutralize territory = detected hull expanded by these factors.
+// Inside the hull neutralize runs at full strength; across the expansion
+// shell it fades to zero (graded halo) so there is no visible hard boundary
+// between "erased" and untouched skin.
+const BROW_NEUTRALIZE_EXPAND_X = 1.08;
+const BROW_NEUTRALIZE_EXPAND_Y = 1.28;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -485,6 +494,40 @@ function encodeMaskSoftAlphaByte(softAlpha: number): number {
   );
 }
 
+// Graded neutralize halo: 1 inside the real-brow core hull, fading to 0 at
+// the outer edge of the expansion shell. Core and expanded polygons share
+// per-vertex correspondence (the expansion is a per-vertex centroid map), so
+// intermediate shells are exact vertex lerps; binary-search the shell that
+// passes through the sample point.
+function browNeutralizeFade(
+  point: E7Point2D,
+  core: E7Point2D[],
+  expanded: E7Point2D[],
+): number {
+  if (core.length >= 3 && pointInPolygon(point, core)) {
+    return 1;
+  }
+  if (core.length < 3 || core.length !== expanded.length) {
+    // No usable shell data: keep the legacy hard fill.
+    return 1;
+  }
+  let lower = 0;
+  let upper = 1;
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    const mid = (lower + upper) / 2;
+    const shell = core.map((corePoint, index) => ({
+      x: corePoint.x + (expanded[index].x - corePoint.x) * mid,
+      y: corePoint.y + (expanded[index].y - corePoint.y) * mid,
+    }));
+    if (pointInPolygon(point, shell)) {
+      upper = mid;
+    } else {
+      lower = mid;
+    }
+  }
+  return clamp01(1 - upper);
+}
+
 function buildBrowUvMaskRawRgba({
   arFaceExport,
   controls,
@@ -588,13 +631,22 @@ function buildBrowUvMaskRawRgba({
               envelope.neutralizePolygon.length >= 3 &&
               pointInPolygon(screenPoint, envelope.neutralizePolygon)
             ) {
-              neutralizeSamples += 1;
+              // Full strength over the real-brow core, fading to 0 across the
+              // expansion shell so the neutralize boundary never shows as a
+              // hard "erased vs untouched" line.
+              const fade = browNeutralizeFade(
+                screenPoint,
+                envelope.neutralizeCorePolygon,
+                envelope.neutralizePolygon,
+              );
+              neutralizeSamples += fade;
               if (!insideMakeup) {
                 // Real brow poking outside the makeup shape: absorb it with a
                 // light makeup tint instead of leaving a hard shape edge. No
                 // synthetic strands here — the user's real hairs showing
-                // through the tint ARE the texture (brow-gel effect).
-                absorbSamples += 1;
+                // through the tint ARE the texture (brow-gel effect). Shares
+                // the halo fade so the tint dissolves with the neutralize.
+                absorbSamples += fade;
               }
             }
           }
@@ -623,10 +675,12 @@ function buildBrowUvMaskRawRgba({
         );
         // Red channel = real-brow neutralize coverage. The shader paints
         // surrounding skin here (gated by _BrowNeutralizeStrength) so the user's
-        // real brow does not stick out past the generated makeup shape.
-        const neutralizeAlpha = Math.round(
-          clamp01(neutralizeSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) *
-            255,
+        // real brow does not stick out past the generated makeup shape. The
+        // graded halo fade must be pre-warped through the shader ramp, else
+        // fades below the SoftMaskAlpha lower edge would collapse to invisible
+        // and the halo would degenerate back into a hard boundary.
+        const neutralizeAlpha = encodeMaskSoftAlphaByte(
+          clamp01(neutralizeSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)),
         );
         // Absorb tint: encoded through the shader ramp so its decoded soft
         // alpha is BROW_ABSORB_TINT_SOFT_ALPHA (scaled by edge coverage).
@@ -892,6 +946,7 @@ function mirrorEnvelopeAcrossFaceCenter(
     cleanupPolygon: envelope.cleanupPolygon.map(flipPoint),
     eyeExclusionBounds: flipRect(envelope.eyeExclusionBounds),
     fillBounds: bounds(polygon) ?? flipRect(envelope.fillBounds),
+    neutralizeCorePolygon: envelope.neutralizeCorePolygon.map(flipPoint),
     neutralizePolygon: envelope.neutralizePolygon.map(flipPoint),
     polygon,
     side: envelope.side === 'left' ? 'right' : 'left',
@@ -1009,14 +1064,22 @@ function buildSingleBrowEnvelope({
     topY,
   });
   // Real-brow region for neutralization: dilated convex hull of the detected
-  // brow ring, stabilized to the face tilt like the fill polygon.
+  // brow ring, stabilized to the face tilt like the fill polygon. The core
+  // (undilated) hull is kept alongside so the rasterizer can fade neutralize
+  // strength across the expansion shell instead of cutting off hard.
   const realBrowSource = [...shapeBasePoints, ...browPoints];
   const realBrowHull = convexHull(realBrowSource);
+  const neutralizeCorePolygon =
+    realBrowHull.length >= 3 ? realBrowHull.map(stabilizePoint) : [];
   const neutralizePolygon =
     realBrowHull.length >= 3
-      ? expandPolygonFromCentroid(realBrowHull, 1.08, 1.28, frameWidth, frameHeight).map(
-          stabilizePoint,
-        )
+      ? expandPolygonFromCentroid(
+          realBrowHull,
+          BROW_NEUTRALIZE_EXPAND_X,
+          BROW_NEUTRALIZE_EXPAND_Y,
+          frameWidth,
+          frameHeight,
+        ).map(stabilizePoint)
       : [];
 
   const polygonBounds = bounds(polygon) ?? [minX, topY, maxX, bottomY];
@@ -1060,6 +1123,7 @@ function buildSingleBrowEnvelope({
       clamp(eyeMaxY + eyeHeight * 0.14, 0, frameHeight - 1),
     ],
     fillBounds: bounds(polygon) ?? [minX, topY, maxX, bottomY],
+    neutralizeCorePolygon,
     neutralizePolygon,
     polygon,
     side,
