@@ -131,6 +131,7 @@ function decodeBase64(base64: string): Uint8Array {
 
 function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
   let redActiveTexels = 0;
+  let redWithoutFillTexels = 0;
   let greenAlphaActiveTexels = 0;
   let greenAlphaMismatchTexels = 0;
   let greenAlphaSoftEdgeTexels = 0;
@@ -144,6 +145,9 @@ function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
 
     if (red > 8) {
       redActiveTexels += 1;
+      if (Math.max(green, alpha) <= 8) {
+        redWithoutFillTexels += 1;
+      }
     }
     if (Math.max(green, alpha) > 8) {
       greenAlphaActiveTexels += 1;
@@ -164,6 +168,7 @@ function summarizeGeneratedBrowRgbaChannels(raw: Uint8Array) {
     greenAlphaMismatchTexels,
     greenAlphaSoftEdgeTexels,
     redActiveTexels,
+    redWithoutFillTexels,
     strandActiveTexels,
   };
 }
@@ -424,10 +429,18 @@ expectGreaterThan(
   0,
   'generated brow red channel carries the real-brow neutralize region',
 );
-expectGreaterThan(
-  rawChannelSummary.redActiveTexels,
+// Absorb-don't-erase: every real-brow (red) texel must also carry at least a
+// light makeup tint in green/alpha so stray hairs never sit against a hard
+// shape edge — the fill therefore covers the full red region plus the shape.
+expectEqual(
+  rawChannelSummary.redWithoutFillTexels,
+  0,
+  'real-brow texels are always absorbed under a makeup tint',
+);
+expectGreaterThanOrEqual(
   rawChannelSummary.greenAlphaActiveTexels,
-  'neutralize region (red) is larger than the makeup fill (green) so the real brow is covered beyond the shape',
+  rawChannelSummary.redActiveTexels,
+  'makeup fill (with absorb tint) covers at least the real-brow region',
 );
 expectGreaterThan(
   rawChannelSummary.greenAlphaActiveTexels,
