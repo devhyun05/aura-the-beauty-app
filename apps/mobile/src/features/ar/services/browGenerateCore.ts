@@ -372,7 +372,7 @@ function buildBrowRuntimeApplyPayload({
     maskTextureWidth: mask.width,
     maskTextureHeight: mask.height,
     maskThreshold: 0.34,
-    maskFeatherUvNormalized: 0.3,
+    maskFeatherUvNormalized: 0.16,
     softEdgeTexels: mask.softEdgeTexels,
     localOnly: true,
     offDeviceUpload: false,
@@ -535,11 +535,16 @@ function buildBrowUvMaskRawRgba({
         }
 
         const rawIndex = (row * resolution + column) * 4;
-        const desiredAlpha = Math.round(
-          (desiredSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) * 255,
+        const localFill = clamp01(
+          desiredSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID),
         );
+        const desiredAlpha = Math.round(localFill * 255);
+        // Confine hair strands to the dense body: fade them out with the fill so
+        // individual strokes do not fringe past the brow edge (that fringing is
+        // what made the soft outer layer look bumpy).
         const strand = Math.round(
           clamp01(desiredSamples > 0 ? strandSamples / desiredSamples : 0) *
+            localFill *
             255 *
             clamp01(controls.strandTextureAmount),
         );
@@ -1492,14 +1497,14 @@ function browStrandDensity(
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
   const {t, v} = browLocalCoordinates(point, envelope);
   // Head/tail longitudinal fade keeps the ends soft rather than blunt.
-  const headFade = lerp(0.5, 1, smoothstep(0, 0.14, t));
-  const tailFade = lerp(1, 0.28, smoothstep(0.58, 1, t));
-  // Vertical gradient: soft at the top edge, densest through the lower brow body
-  // where real hair sits. This graded fill (vs a flat solid) is what makes it
-  // read as painted makeup instead of a flat sticker.
-  const topSoft = smoothstep(0, 0.34, v);
-  const bottomSoft = smoothstep(0, 0.16, 1 - v);
-  const bodyGradient = 0.4 + 0.6 * topSoft * bottomSoft;
+  const headFade = lerp(0.62, 1, smoothstep(0, 0.12, t));
+  const tailFade = lerp(1, 0.4, smoothstep(0.64, 1, t));
+  // Mostly solid body with only a thin softening at the very top/bottom rim, so
+  // the fill reads as one even painted brow (not a dark core + light halo). The
+  // remaining soft edge is a tight, clean transition, not a wide fuzzy layer.
+  const topSoft = smoothstep(0, 0.14, v);
+  const bottomSoft = smoothstep(0, 0.1, 1 - v);
+  const bodyGradient = 0.78 + 0.22 * topSoft * bottomSoft;
   return clamp01(bodyGradient * headFade * tailFade);
 }
 
