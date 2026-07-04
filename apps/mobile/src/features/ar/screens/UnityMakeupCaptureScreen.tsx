@@ -12,6 +12,7 @@ import {Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppHeader} from '../../../shared/ui';
 import {
@@ -179,6 +180,7 @@ export function UnityMakeupCaptureScreen({
 }: UnityMakeupCaptureScreenProps) {
   const insets = useSafeAreaInsets();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
+  const cameraSessionActive = useCameraSessionActive();
   const [hasStartedMaskFlow, setHasStartedMaskFlow] = useState(false);
   const [isPreparingUnity, setIsPreparingUnity] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('ready');
@@ -246,6 +248,12 @@ export function UnityMakeupCaptureScreen({
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!cameraSessionActive) {
+      hideUnityMakeupView();
+    }
+  }, [cameraSessionActive]);
 
   const handleBack = () => {
     if (preparePollTimerRef.current) {
@@ -608,7 +616,7 @@ export function UnityMakeupCaptureScreen({
 
       <YStack style={styles.cameraStage}>
         <View style={[styles.unityMountPoint, !hasStartedMaskFlow && styles.maskIntroStage]}>
-          {hasStartedMaskFlow && shouldUseUnityPreview ? (
+          {hasStartedMaskFlow && shouldUseUnityPreview && cameraSessionActive ? (
             <UnityMakeupNativeView />
           ) : !hasStartedMaskFlow ? (
             <YStack style={styles.maskIntroContent}>

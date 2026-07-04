@@ -14,6 +14,7 @@ import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {
@@ -100,6 +101,7 @@ export function ARFilterShapeAdjustScreen({
   const arGuideData = getARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
   const shapeFilterColor = filter.colorOptions[0]?.hex ?? colors.white;
+  const cameraSessionActive = useCameraSessionActive();
   const [shapeState, setShapeState] = useState<FilterShapeState>(
     getFilterShapeState(),
   );
@@ -237,7 +239,7 @@ export function ARFilterShapeAdjustScreen({
         <NativeView
           onLayout={handlePreviewLayout}
           style={styles.previewGestureLayer}>
-          <LiveCameraLayer />
+          <LiveCameraLayer active={cameraSessionActive} />
           <View style={styles.previewDim} />
           <View
             style={[

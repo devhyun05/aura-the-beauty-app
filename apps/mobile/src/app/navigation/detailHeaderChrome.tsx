@@ -1,5 +1,5 @@
 import React, {type ReactNode} from 'react';
-import {Share2} from 'lucide-react-native';
+import {ChevronDown, Share2} from 'lucide-react-native';
 import {StyleSheet} from 'react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
@@ -49,6 +49,7 @@ type DetailRouteChromeProps = {
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
+  onOpenDocumentList?: () => void;
   onShare?: () => void;
   routeName: RootStackRouteName;
   shareDisabled?: boolean;
@@ -62,11 +63,19 @@ export function DetailRouteChrome({
   onBack,
   onClose,
   onDone,
+  onOpenDocumentList,
   onShare,
   routeName,
   shareDisabled = false,
 }: DetailRouteChromeProps) {
   const presentation = getDetailHeaderPresentation(routeName);
+  const leftSlot = onOpenDocumentList ? (
+    <HeaderIconAction
+      accessibilityLabel="문서 목록 열기"
+      onPress={onOpenDocumentList}>
+      <ChevronDown color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+    </HeaderIconAction>
+  ) : undefined;
   const rightSlot = renderRightSlot({
     actions: presentation.rightActions,
     onBack,
@@ -75,7 +84,8 @@ export function DetailRouteChrome({
     onShare,
     shareDisabled,
   });
-  const shouldReserveLeftSlot = !onBack && presentation.rightActions.length > 0;
+  const shouldReserveLeftSlot =
+    !onBack && !leftSlot && presentation.rightActions.length > 0;
 
   return (
     <YStack style={[styles.screen, {backgroundColor}]}>
@@ -87,7 +97,7 @@ export function DetailRouteChrome({
           ],
         }}
         contextLabel={presentation.contextLabel}
-        leftSlot={shouldReserveLeftSlot ? <View /> : undefined}
+        leftSlot={leftSlot ?? (shouldReserveLeftSlot ? <View /> : undefined)}
         onBack={onBack}
         rightSlot={rightSlot}
         title={presentation.title}

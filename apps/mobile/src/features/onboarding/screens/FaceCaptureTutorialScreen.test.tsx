@@ -4,6 +4,7 @@ import {
   FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
   FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL,
   FaceCaptureTutorialScreen,
+  FaceCaptureTutorialSheet,
   getFaceCaptureTutorialIconNames,
   getFaceCaptureTutorialNavigationMode,
   getFaceCaptureTutorialVisualPresentation,
@@ -27,6 +28,7 @@ const imageFillPresentation: {
   imageFillScale: 1;
 } = visualPresentation;
 const finalPrivacyPlacement: 'none' = visualPresentation.finalPrivacyPlacement;
+const sheetPresentation: 'bottom-modal-sheet' = visualPresentation.sheetPresentation;
 
 void imageFillPresentation;
 
@@ -86,6 +88,16 @@ expectEqual(
   'face capture tutorial common header component',
 );
 expectEqual(
+  sheetPresentation,
+  'bottom-modal-sheet',
+  'face capture tutorial sheet presentation',
+);
+expectEqual(
+  visualPresentation.sheetDismissControl,
+  'close-button',
+  'face capture tutorial sheet dismiss control',
+);
+expectEqual(
   visualPresentation.swipeNavigationPlacement,
   'fixed-footer-pagination',
   'face capture swipe navigation placement',
@@ -99,5 +111,11 @@ expectEqual(
 <FaceCaptureTutorialScreen
   onBackToIntro={() => undefined}
   onCloseToHome={() => undefined}
+  onStartCapture={() => undefined}
+/>;
+
+<FaceCaptureTutorialSheet
+  isVisible={false}
+  onDismiss={() => undefined}
   onStartCapture={() => undefined}
 />;

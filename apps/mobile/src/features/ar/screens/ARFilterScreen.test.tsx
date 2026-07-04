@@ -23,7 +23,7 @@ import {
   getMakeupPreviewColorOverlayLayers,
   shouldShowARFilterHeaderCopy,
 } from './ARFilterScreen';
-import {colors} from '../../../shared/theme';
+import {colors, spacing} from '../../../shared/theme';
 import {CAMERA_CAPTURE_BUTTON_METRICS} from '../../../shared/ui';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -150,8 +150,8 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET,
-  0,
-  'AR filter bottom sheet sticks to screen bottom',
+  spacing.md,
+  'AR filter bottom sheet floats above screen bottom',
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,

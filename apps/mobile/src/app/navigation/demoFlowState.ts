@@ -34,6 +34,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     likedMakeupFilterIds: [],
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
+    savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,

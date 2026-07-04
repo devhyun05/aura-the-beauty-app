@@ -16,6 +16,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, iconSize, shadows, spacing, typography} from '../../../shared/theme';
 import {getBackendApiBaseUrl} from '../../../shared/services/backendApi';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {
   CameraCaptureControlRow,
   CameraCaptureButton,
@@ -330,6 +331,7 @@ export function CameraFaceCaptureScreen({
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
   const realtimeCameraRef = useRef<RealtimeFaceCaptureNativeViewHandle>(null);
+  const cameraSessionActive = useCameraSessionActive();
   const [cameraDirection, setCameraDirection] = useState<CameraDirection>(() =>
     shouldValidateFace ? 'front' : 'back',
   );
@@ -936,6 +938,12 @@ export function CameraFaceCaptureScreen({
   };
 
   useEffect(() => {
+    if (!cameraSessionActive) {
+      setIsCameraReady(false);
+    }
+  }, [cameraSessionActive]);
+
+  useEffect(() => {
     if (!autoOpenGallery || hasAutoOpenedGalleryRef.current) {
       return;
     }
@@ -954,14 +962,19 @@ export function CameraFaceCaptureScreen({
     <FullscreenOverlayScreen>
       <StatusBar style="light" />
       {realtimeCaptureAvailable ? (
-        <RealtimeFaceCaptureNativeView
-          facing={cameraDirection}
-          onLandmarksDetected={handleRealtimeLandmarksDetected}
-          ref={realtimeCameraRef}
-          style={StyleSheet.absoluteFill}
-        />
+        cameraSessionActive ? (
+          <RealtimeFaceCaptureNativeView
+            facing={cameraDirection}
+            onLandmarksDetected={handleRealtimeLandmarksDetected}
+            ref={realtimeCameraRef}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : (
+          <View style={StyleSheet.absoluteFill} />
+        )
       ) : (
         <LiveCameraLayer
+          active={cameraSessionActive}
           facing={cameraDirection}
           ref={cameraRef}
           onCameraReady={() => setIsCameraReady(true)}

@@ -91,6 +91,16 @@ expectEqual(leftSlot.x, -92, 'floating action left slot x offset');
 expectEqual(rightSlot.x, 92, 'floating action right slot x offset');
 expectEqual(FLOATING_ACTION_ICON_LIBRARY_NAMES.arFilter, 'Camera', 'AR filter icon library name');
 expectEqual(
+  FLOATING_ACTION_ICON_LIBRARY_NAMES.filterStore,
+  'Store',
+  'filter store icon library name',
+);
+expectEqual(
+  FLOATING_ACTION_ICON_LIBRARY_NAMES.magazine,
+  'Newspaper',
+  'magazine icon library name',
+);
+expectEqual(
   FLOATING_ACTION_ICON_LIBRARY_NAMES.makeupFeedback,
   'MessageSquareText',
   'makeup feedback icon library name',

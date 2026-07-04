@@ -61,6 +61,16 @@ expectEqual(
   'floating action settings detail route title',
 );
 expectEqual(
+  getDetailRouteTitle('MakeupFeedbackResultsList'),
+  '피드백 목록',
+  'makeup feedback results list route title',
+);
+expectEqual(
+  getDetailRouteTitle('MakeupRecipeList'),
+  '레시피 목록',
+  'makeup recipe list route title',
+);
+expectEqual(
   getDetailRouteContextLabel('FloatingActionSettings'),
   'QUICK ACTION',
   'floating action settings detail route context label',

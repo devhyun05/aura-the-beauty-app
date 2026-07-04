@@ -72,6 +72,7 @@ export const rootStackLinkingScreens = {
   MakeupFeedbackAlbumUpload: 'makeup-feedback-album-upload',
   MakeupFeedbackGoalInput: 'makeup-feedback-goal-input',
   MakeupFeedbackLoading: 'makeup-feedback-loading',
+  MakeupFeedbackResultsList: 'makeup-feedback-results',
   MakeupFeedbackResult: 'makeup-feedback-result',
   MakeupCorrectionGuide: 'makeup-correction-guide',
   MakeupCorrectionTip: 'makeup-correction-tip/:pointId',
@@ -81,6 +82,7 @@ export const rootStackLinkingScreens = {
   ExtractedMakeupLookAdjust: 'extracted-makeup-look-adjust',
   MakeupFilterSave: 'makeup-filter-save',
   MakeupFilterSaveComplete: 'makeup-filter-save-complete',
+  MakeupRecipeList: 'makeup-recipe-list',
   MakeupRecipeDetail: 'makeup-recipe-detail',
   MakeupRecipeSaveComplete: 'makeup-recipe-save-complete',
 } as const satisfies Record<RootStackRouteName, RootStackLinkingScreenConfig>;

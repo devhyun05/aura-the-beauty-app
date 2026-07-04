@@ -53,6 +53,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().savedMakeupLooks.length,
+  0,
+  'initial saved makeup looks',
+);
+
+expectEqual(
   getInitialNavigationFlowState().shouldShowBeautyJourneyGuide,
   false,
   'initial beauty journey guide visibility',
@@ -124,6 +130,12 @@ expectEqual(
   demoState.savedMakeupLook.id,
   'capture-demo-saved-makeup-look',
   'demo saved makeup look id',
+);
+
+expectEqual(
+  demoState.savedMakeupLooks.length,
+  0,
+  'demo saved makeup looks',
 );
 
 expectEqual(

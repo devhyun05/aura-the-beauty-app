@@ -17,11 +17,13 @@ import {
 import {
   Camera,
   MessageSquareText,
+  Newspaper,
   PackageSearch,
   ScanFace,
   ScanSearch,
   Settings2,
   Sparkles,
+  Store,
 } from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
@@ -32,7 +34,9 @@ export type FloatingActionId =
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'faceAnalysis'
-  | 'productRecommendation';
+  | 'productRecommendation'
+  | 'filterStore'
+  | 'magazine';
 
 export type FloatingActionDefinition = {
   accessibilityLabel: string;
@@ -107,6 +111,8 @@ export const floatingActionInteractionModeOptions = [
 
 export const FLOATING_ACTION_ICON_LIBRARY_NAMES = {
   arFilter: 'Camera',
+  filterStore: 'Store',
+  magazine: 'Newspaper',
   makeupFeedback: 'MessageSquareText',
 } as const;
 
@@ -147,6 +153,20 @@ export const floatingActionDefinitions = [
     icon: (color: string) => <PackageSearch color={color} size={iconSize.sm} strokeWidth={2} />,
     id: 'productRecommendation',
     label: '추천 제품',
+  },
+  {
+    accessibilityLabel: '필터 스토어 보기',
+    description: '추천 필터를 둘러보고 바로 적용해요.',
+    icon: (color: string) => <Store color={color} size={iconSize.sm} strokeWidth={2} />,
+    id: 'filterStore',
+    label: '필터 스토어',
+  },
+  {
+    accessibilityLabel: '매거진 보기',
+    description: '뷰티 영상과 기사를 확인해요.',
+    icon: (color: string) => <Newspaper color={color} size={iconSize.sm} strokeWidth={2} />,
+    id: 'magazine',
+    label: '매거진',
   },
 ] as const satisfies readonly FloatingActionDefinition[];
 

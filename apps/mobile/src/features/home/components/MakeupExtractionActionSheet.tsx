@@ -111,7 +111,7 @@ export function MakeupExtractionActionSheet({
 
 const styles = StyleSheet.create({
   actionSheet: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.lg,
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   sheetActionButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   sheetActionIcon: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.bottomSheetMutedSurface,
     borderRadius: radius.pill,
     height: 44,
     justifyContent: 'center',
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   },
   sheetCancelButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,

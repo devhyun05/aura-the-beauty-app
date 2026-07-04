@@ -250,7 +250,7 @@ export function ProfileScreen({
             ))}
           </View>
         ) : (
-          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
+          <EmptySection label="저장한 메이크업 룩이 없어요." />
         )}
       </View>
 

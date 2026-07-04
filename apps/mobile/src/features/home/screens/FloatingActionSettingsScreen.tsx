@@ -1,7 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet} from 'react-native';
-import {Check} from 'lucide-react-native';
-import {Text, View, YStack} from 'tamagui';
+import {Text, View, XStack, YStack} from 'tamagui';
 
 import {
   FLOATING_ACTION_MAX_ITEM_COUNT,
@@ -25,6 +24,20 @@ export function getFloatingActionInteractionModeLabels(): readonly string[] {
   return floatingActionInteractionModeOptions.map(option => option.label);
 }
 
+export function getFloatingActionInteractionModeSelectionBadgeLabel(): '하나 선택' {
+  return '하나 선택';
+}
+
+export function getFloatingActionCandidateLabels(): readonly string[] {
+  return floatingActionDefinitions.map(action => action.label);
+}
+
+export function getFloatingActionSelectedCountLabel(
+  selectedActionIds: readonly FloatingActionId[],
+): string {
+  return `${selectedActionIds.length}/${FLOATING_ACTION_MAX_ITEM_COUNT} 선택됨`;
+}
+
 export function getFloatingActionSelectionBadgeLabel(
   selectedActionIds: readonly FloatingActionId[],
   actionId: FloatingActionId,
@@ -44,15 +57,13 @@ export function FloatingActionSettingsScreen({
 
   return (
     <YStack style={styles.screen}>
-      <YStack style={styles.header}>
-        <Text style={styles.title}>별 버튼 빠른 실행</Text>
-        <Text style={styles.countText}>
-          {selectedCount}/{FLOATING_ACTION_MAX_ITEM_COUNT} 선택됨
-        </Text>
-      </YStack>
-
       <YStack style={styles.section}>
-        <Text style={styles.sectionTitle}>조작 방식</Text>
+        <XStack style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>조작 방식</Text>
+          <Text style={styles.modeSelectionBadge}>
+            {getFloatingActionInteractionModeSelectionBadgeLabel()}
+          </Text>
+        </XStack>
         <YStack style={styles.modeList}>
           {floatingActionInteractionModeOptions.map(option => {
             const isSelected = option.id === selectedInteractionMode;
@@ -60,7 +71,7 @@ export function FloatingActionSettingsScreen({
             return (
               <Pressable
                 accessibilityLabel={`${option.label} 선택`}
-                accessibilityRole="button"
+                accessibilityRole="radio"
                 accessibilityState={{selected: isSelected}}
                 key={option.id}
                 onPress={() => onChangeInteractionMode?.(option.id)}
@@ -69,9 +80,87 @@ export function FloatingActionSettingsScreen({
                   isSelected && styles.modeRowSelected,
                   pressed && styles.pressed,
                 ]}>
+                <View
+                  style={[
+                    styles.modeRadio,
+                    isSelected && styles.modeRadioSelected,
+                  ]}>
+                  {isSelected ? <View style={styles.modeRadioDot} /> : null}
+                </View>
+
                 <YStack style={styles.modeCopy}>
-                  <Text style={styles.modeTitle}>{option.label}</Text>
-                  <Text style={styles.modeDescription}>{option.description}</Text>
+                  <Text style={[styles.modeTitle, isSelected && styles.modeTitleSelected]}>
+                    {option.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modeDescription,
+                      isSelected && styles.modeDescriptionSelected,
+                    ]}>
+                    {option.description}
+                  </Text>
+                </YStack>
+              </Pressable>
+            );
+          })}
+        </YStack>
+      </YStack>
+
+      <YStack style={styles.section}>
+        <XStack style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>기능 등록</Text>
+          <Text style={styles.countText}>
+            {getFloatingActionSelectedCountLabel(selectedActionIds)}
+          </Text>
+        </XStack>
+
+        <YStack style={styles.actionList}>
+          {floatingActionDefinitions.map(action => {
+            const slotNumber = getFloatingActionSelectedSlotNumber(
+              selectedActionIds,
+              action.id,
+            );
+            const badgeLabel = getFloatingActionSelectionBadgeLabel(
+              selectedActionIds,
+              action.id,
+            );
+            const isSelected = slotNumber !== null;
+            const isDisabled =
+              !isSelected && selectedCount >= FLOATING_ACTION_MAX_ITEM_COUNT;
+
+            return (
+              <Pressable
+                accessibilityLabel={`${action.label} 빠른 실행 ${
+                  isSelected
+                    ? `${slotNumber}번 자리 해제`
+                    : `${selectedCount + 1}번 자리로 추가`
+                }`}
+                accessibilityRole="button"
+                accessibilityState={{disabled: isDisabled, selected: isSelected}}
+                disabled={isDisabled}
+                key={action.id}
+                onPress={() => {
+                  onChangeActionIds?.(
+                    getNextFloatingActionSelection(selectedActionIds, action.id),
+                  );
+                }}
+                style={({pressed}) => [
+                  styles.actionRow,
+                  isSelected && styles.actionRowSelected,
+                  isDisabled && styles.actionRowDisabled,
+                  pressed && styles.pressed,
+                ]}>
+                <View
+                  style={[
+                    styles.actionIcon,
+                    isSelected && styles.actionIconSelected,
+                  ]}>
+                  {action.icon(isSelected ? colors.white : colors.textPrimary)}
+                </View>
+
+                <YStack style={styles.actionCopy}>
+                  <Text style={styles.actionTitle}>{action.label}</Text>
+                  <Text style={styles.actionDescription}>{action.description}</Text>
                 </YStack>
 
                 <View
@@ -80,76 +169,13 @@ export function FloatingActionSettingsScreen({
                     isSelected && styles.checkmarkSelected,
                   ]}>
                   {isSelected ? (
-                    <Check color={colors.white} size={iconSize.xs} strokeWidth={2.4} />
+                    <Text style={styles.slotBadgeText}>{badgeLabel}</Text>
                   ) : null}
                 </View>
               </Pressable>
             );
           })}
         </YStack>
-      </YStack>
-
-      <YStack style={styles.actionList}>
-        {floatingActionDefinitions.map(action => {
-          const slotNumber = getFloatingActionSelectedSlotNumber(
-            selectedActionIds,
-            action.id,
-          );
-          const badgeLabel = getFloatingActionSelectionBadgeLabel(
-            selectedActionIds,
-            action.id,
-          );
-          const isSelected = slotNumber !== null;
-          const isDisabled =
-            !isSelected && selectedCount >= FLOATING_ACTION_MAX_ITEM_COUNT;
-
-          return (
-            <Pressable
-              accessibilityLabel={`${action.label} 빠른 실행 ${
-                isSelected
-                  ? `${slotNumber}번 자리 해제`
-                  : `${selectedCount + 1}번 자리로 추가`
-              }`}
-              accessibilityRole="button"
-              accessibilityState={{disabled: isDisabled, selected: isSelected}}
-              disabled={isDisabled}
-              key={action.id}
-              onPress={() => {
-                onChangeActionIds?.(
-                  getNextFloatingActionSelection(selectedActionIds, action.id),
-                );
-              }}
-              style={({pressed}) => [
-                styles.actionRow,
-                isSelected && styles.actionRowSelected,
-                isDisabled && styles.actionRowDisabled,
-                pressed && styles.pressed,
-              ]}>
-              <View
-                style={[
-                  styles.actionIcon,
-                  isSelected && styles.actionIconSelected,
-                ]}>
-                {action.icon(isSelected ? colors.white : colors.textPrimary)}
-              </View>
-
-              <YStack style={styles.actionCopy}>
-                <Text style={styles.actionTitle}>{action.label}</Text>
-                <Text style={styles.actionDescription}>{action.description}</Text>
-              </YStack>
-
-              <View
-                style={[
-                  styles.checkmark,
-                  isSelected && styles.checkmarkSelected,
-                ]}>
-                {isSelected ? (
-                  <Text style={styles.slotBadgeText}>{badgeLabel}</Text>
-                ) : null}
-              </View>
-            </Pressable>
-          );
-        })}
       </YStack>
     </YStack>
   );
@@ -233,9 +259,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  header: {
-    gap: spacing.sm,
-  },
   modeCopy: {
     flex: 1,
     gap: spacing.xs,
@@ -252,6 +275,25 @@ const styles = StyleSheet.create({
   modeList: {
     gap: spacing.sm,
   },
+  modeRadio: {
+    alignItems: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  modeRadioDot: {
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    height: 10,
+    width: 10,
+  },
+  modeRadioSelected: {
+    borderColor: colors.white,
+    borderWidth: 2,
+  },
   modeRow: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -264,7 +306,23 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modeRowSelected: {
+    backgroundColor: colors.textPrimary,
     borderColor: colors.textPrimary,
+  },
+  modeSelectionBadge: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  modeDescriptionSelected: {
+    color: colors.white,
   },
   modeTitle: {
     color: colors.textPrimary,
@@ -273,6 +331,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
+  },
+  modeTitleSelected: {
+    color: colors.white,
   },
   pressed: {
     opacity: 0.78,
@@ -286,6 +347,10 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.sm,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sectionTitle: {
     color: colors.textPrimary,
@@ -303,13 +368,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
-  },
-  title: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xl,
   },
 });

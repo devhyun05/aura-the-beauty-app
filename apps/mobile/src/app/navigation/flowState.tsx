@@ -29,6 +29,7 @@ export type NavigationFlowState = {
   likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
+  savedMakeupLooks: readonly MakeupLookPreview[];
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
@@ -44,6 +45,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
   setMakeupFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
+  setSavedMakeupLooks: Dispatch<SetStateAction<readonly MakeupLookPreview[]>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
@@ -63,6 +65,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
     savedMakeupLook: null,
+    savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: {
@@ -108,6 +111,8 @@ export function NavigationFlowStateProvider({
     useState<FloatingActionInteractionMode>(initialState.floatingActionInteractionMode);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
+  const [savedMakeupLooks, setSavedMakeupLooks] =
+    useState<readonly MakeupLookPreview[]>(initialState.savedMakeupLooks);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
     useState<MakeupFeedbackResult | null>(initialState.makeupFeedbackResult);
   const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
@@ -120,6 +125,7 @@ export function NavigationFlowStateProvider({
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
+      savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
@@ -132,6 +138,7 @@ export function NavigationFlowStateProvider({
       setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
+      setSavedMakeupLooks,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedMakeupFeedbackPhoto,
@@ -146,6 +153,7 @@ export function NavigationFlowStateProvider({
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
+      savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,

@@ -61,6 +61,7 @@ export type RootStackParamList = {
   MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
+  MakeupFeedbackResultsList: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
@@ -72,6 +73,7 @@ export type RootStackParamList = {
   ExtractedMakeupLookAdjust: undefined;
   MakeupFilterSave: undefined;
   MakeupFilterSaveComplete: undefined;
+  MakeupRecipeList: undefined;
   MakeupRecipeDetail: undefined;
   MakeupRecipeSaveComplete: undefined;
 };
@@ -117,6 +119,7 @@ export const rootStackRoutes = [
   'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackGoalInput',
   'MakeupFeedbackLoading',
+  'MakeupFeedbackResultsList',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
@@ -126,6 +129,7 @@ export const rootStackRoutes = [
   'ExtractedMakeupLookAdjust',
   'MakeupFilterSave',
   'MakeupFilterSaveComplete',
+  'MakeupRecipeList',
   'MakeupRecipeDetail',
   'MakeupRecipeSaveComplete',
 ] as const satisfies readonly RootStackRouteName[];

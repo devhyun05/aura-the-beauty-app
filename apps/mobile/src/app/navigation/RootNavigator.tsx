@@ -33,6 +33,7 @@ import {
   MakeupCorrectionGuideRouteScreen,
   MakeupFeedbackLoadingRouteScreen,
   MakeupFeedbackResultRouteScreen,
+  MakeupFeedbackResultsListRouteScreen,
   MakeupCorrectionTipRouteScreen,
 } from './routes/makeupFeedbackRoutes';
 import {
@@ -48,6 +49,7 @@ import {
   ExtractedMakeupLookAdjustRouteScreen,
   ReferenceMakeupExtractionUploadRouteScreen,
   MakeupRecipeDetailRouteScreen,
+  MakeupRecipeListRouteScreen,
   MakeupRecipeSaveCompleteRouteScreen,
 } from './routes/referenceMakeupExtractionRoutes';
 import {ProfileEditRouteScreen} from './routes/profileRoutes';
@@ -105,6 +107,7 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
       <Stack.Screen name="MakeupFeedbackGoalInput" component={MakeupFeedbackGoalInputRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
+      <Stack.Screen name="MakeupFeedbackResultsList" component={MakeupFeedbackResultsListRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
       <Stack.Screen name="MakeupCorrectionTip" component={MakeupCorrectionTipRouteScreen} />
@@ -114,6 +117,7 @@ export function RootNavigator() {
       <Stack.Screen name="ExtractedMakeupLookAdjust" component={ExtractedMakeupLookAdjustRouteScreen} />
       <Stack.Screen name="MakeupFilterSave" component={MakeupFilterSaveRouteScreen} />
       <Stack.Screen name="MakeupFilterSaveComplete" component={MakeupFilterSaveCompleteRouteScreen} />
+      <Stack.Screen name="MakeupRecipeList" component={MakeupRecipeListRouteScreen} />
       <Stack.Screen name="MakeupRecipeDetail" component={MakeupRecipeDetailRouteScreen} />
       <Stack.Screen name="MakeupRecipeSaveComplete" component={MakeupRecipeSaveCompleteRouteScreen} />
     </Stack.Navigator>

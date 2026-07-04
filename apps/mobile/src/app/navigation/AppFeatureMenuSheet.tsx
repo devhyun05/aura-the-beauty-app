@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   },
   itemButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderRadius: radius.md,
     flexDirection: 'row',
     gap: spacing.md,
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   sheet: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.lg,

@@ -245,7 +245,6 @@ const styles = StyleSheet.create({
   },
   immersiveContainer: {
     backgroundColor: 'transparent',
-    borderBottomWidth: 0,
   },
   immersiveContextLabel: {
     color: 'rgba(255, 255, 255, 0.62)',
@@ -256,8 +255,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.lg,
     justifyContent: 'space-between',

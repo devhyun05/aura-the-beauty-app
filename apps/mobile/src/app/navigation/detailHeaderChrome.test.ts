@@ -46,6 +46,11 @@ expectEqual(
   'profile edit route header actions',
 );
 expectEqual(
+  getDetailHeaderRightActions('FaceAnalysisIntro').join(','),
+  '',
+  'face analysis intro route header actions',
+);
+expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackAlbumUpload').join(','),
   '',
   'makeup feedback album upload route header actions',
@@ -62,6 +67,16 @@ expectEqual(
 );
 expectEqual(
   getDetailHeaderRightActions('FaceAnalysisReportDetail').join(','),
-  'share,close',
+  'share',
   'face analysis report route header actions',
+);
+expectEqual(
+  getDetailHeaderRightActions('MakeupFeedbackResult').join(','),
+  'share',
+  'makeup feedback result route header actions',
+);
+expectEqual(
+  getDetailHeaderRightActions('MakeupRecipeDetail').join(','),
+  'share',
+  'makeup recipe detail route header actions',
 );

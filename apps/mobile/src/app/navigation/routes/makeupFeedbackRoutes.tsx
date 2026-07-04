@@ -7,20 +7,62 @@ import {
   MakeupFeedbackGoalInputScreen,
   MakeupFeedbackLoadingScreen,
   MakeupFeedbackResultScreen,
+  MakeupFeedbackResultsListScreen,
   type MakeupFeedbackPhotoSelection,
   type MakeupFeedbackResult,
 } from '../../../features/makeup-feedback';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {createMockMakeupFeedback} from '../../../features/makeup-feedback/mocks/makeupFeedback.mock';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
+type HeaderShareAction = {
+  cb: () => void;
+};
+
+const makeupFeedbackListSelections: readonly MakeupFeedbackPhotoSelection[] = [
+  {
+    feedbackContext: {
+      goalIntentType: 'valid_context',
+      normalizedGoalText: '출근 메이크업',
+      originalGoalText: '출근 전에 보기 좋은 자연스러운 메이크업',
+      userGoalText: '출근 전에 보기 좋은 자연스러운 메이크업',
+    },
+    photoSource: 'gallery',
+  },
+  {
+    feedbackContext: {
+      goalIntentType: 'valid_context',
+      normalizedGoalText: '저녁 약속 메이크업',
+      originalGoalText: '저녁 약속에서 또렷해 보이는 메이크업',
+      userGoalText: '저녁 약속에서 또렷해 보이는 메이크업',
+    },
+    photoSource: 'camera',
+  },
+];
+
 function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelection) {
   return selection.photoSource === 'gallery'
     ? 'MakeupFeedbackAlbumUpload'
     : 'MakeupFeedbackCapture';
+}
+
+function getMakeupFeedbackResultList(currentResult: MakeupFeedbackResult | null) {
+  const mockResults = makeupFeedbackListSelections.map(createMockMakeupFeedback);
+  const results = currentResult ? [currentResult, ...mockResults] : mockResults;
+  const seenResultIds = new Set<string>();
+
+  return results.filter((result) => {
+    if (seenResultIds.has(result.id)) {
+      return false;
+    }
+
+    seenResultIds.add(result.id);
+    return true;
+  });
 }
 
 export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
@@ -143,14 +185,50 @@ export function MakeupFeedbackLoadingRouteScreen({
   );
 }
 
-export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackResult'>) {
+export function MakeupFeedbackResultsListRouteScreen({
+  navigation,
+}: RootScreenProps<'MakeupFeedbackResultsList'>) {
+  const {makeupFeedbackResult, setMakeupFeedbackResult} = useNavigationFlowState();
+  const results = React.useMemo(
+    () => getMakeupFeedbackResultList(makeupFeedbackResult),
+    [makeupFeedbackResult],
+  );
+  const handlePressResult = React.useCallback((result: MakeupFeedbackResult) => {
+    setMakeupFeedbackResult(result);
+    navigation.navigate('MakeupFeedbackResult');
+  }, [navigation, setMakeupFeedbackResult]);
+
+  return (
+    <DetailRouteChrome
+      routeName="MakeupFeedbackResultsList"
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      <MakeupFeedbackResultsListScreen
+        onPressResult={handlePressResult}
+        results={results}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function MakeupFeedbackResultRouteScreen({
+  navigation,
+}: RootScreenProps<'MakeupFeedbackResult'>) {
   const {makeupFeedbackResult} = useNavigationFlowState();
+  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
+  const handleHeaderShareActionChange = React.useCallback(
+    (nextShareAction: (() => void) | null) => {
+      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
+    },
+    [],
+  );
 
   if (!makeupFeedbackResult) {
     return (
       <DetailRouteChrome
         routeName="MakeupFeedbackResult"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        onOpenDocumentList={() => navigation.navigate('MakeupFeedbackResultsList')}
+        onShare={shareAction?.cb}
+        shareDisabled>
         <RoutePlaceholder
           description="Start makeup feedback analysis first."
           showHeader={false}
@@ -163,8 +241,13 @@ export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'M
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackResult"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <MakeupFeedbackResultScreen result={makeupFeedbackResult} />
+      onOpenDocumentList={() => navigation.navigate('MakeupFeedbackResultsList')}
+      onShare={shareAction?.cb}
+      shareDisabled={!shareAction}>
+      <MakeupFeedbackResultScreen
+        onHeaderShareActionChange={handleHeaderShareActionChange}
+        result={makeupFeedbackResult}
+      />
     </DetailRouteChrome>
   );
 }

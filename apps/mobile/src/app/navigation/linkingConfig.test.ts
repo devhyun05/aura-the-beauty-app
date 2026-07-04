@@ -80,6 +80,18 @@ type MakeupFilterSaveCompletePathContract = ExpectType<
     'makeup-filter-save-complete'
   >
 >;
+type MakeupFeedbackResultsListPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupFeedbackResultsList,
+    'makeup-feedback-results'
+  >
+>;
+type MakeupRecipeListPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupRecipeList,
+    'makeup-recipe-list'
+  >
+>;
 type MakeupRecipeDetailPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.MakeupRecipeDetail,
@@ -202,6 +214,16 @@ expectEqual(
   navigationLinking.config?.screens?.MakeupFilterSaveComplete,
   'makeup-filter-save-complete',
   'makeup filter save complete path distinguishes completion route',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupFeedbackResultsList,
+  'makeup-feedback-results',
+  'makeup feedback results list path uses document list naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupRecipeList,
+  'makeup-recipe-list',
+  'makeup recipe list path uses reusable recipe naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupRecipeDetail,

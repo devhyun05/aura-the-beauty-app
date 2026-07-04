@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,9 +34,11 @@ import type {
 } from '../types';
 
 type MakeupFeedbackResultScreenProps = {
+  onHeaderShareActionChange?: (action: MakeupFeedbackHeaderShareAction | null) => void;
   result: MakeupFeedbackResult;
 };
 
+type MakeupFeedbackHeaderShareAction = () => void;
 type MakeupFeedbackShareTarget = 'save-image' | 'share-report';
 type MakeupFeedbackShareFeedback = {
   message: string;
@@ -124,6 +126,7 @@ function getShareErrorMessage(error: unknown) {
 }
 
 export function MakeupFeedbackResultScreen({
+  onHeaderShareActionChange,
   result,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
@@ -169,6 +172,37 @@ export function MakeupFeedbackResultScreen({
       setActiveShareTarget(null);
     }
   }, [activeShareTarget]);
+
+  const handleOpenShareOptions = useCallback(() => {
+    if (activeShareTarget) {
+      Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
+      return;
+    }
+
+    Alert.alert('메이크업 피드백', '원하는 방식을 선택해 주세요.', [
+      {
+        text: shareTargetLabels['save-image'],
+        onPress: () => {
+          void handleShareAction('save-image');
+        },
+      },
+      {
+        text: shareTargetLabels['share-report'],
+        onPress: () => {
+          void handleShareAction('share-report');
+        },
+      },
+      {text: '취소', style: 'cancel'},
+    ]);
+  }, [activeShareTarget, handleShareAction]);
+
+  useEffect(() => {
+    onHeaderShareActionChange?.(handleOpenShareOptions);
+
+    return () => {
+      onHeaderShareActionChange?.(null);
+    };
+  }, [handleOpenShareOptions, onHeaderShareActionChange]);
 
   return (
     <MakeupFeedbackScreenScaffold topPadding="none">

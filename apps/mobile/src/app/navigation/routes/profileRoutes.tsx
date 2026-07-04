@@ -3,7 +3,10 @@
 import {useAuthSession} from '../../../features/auth';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
-import {getLikedMakeupFilterLooks} from '../../../shared/services/makeupGuideService';
+import {
+  getLikedMakeupFilterLooks,
+  mergeSavedAndLikedMakeupLooks,
+} from '../../../shared/services/makeupGuideService';
 import {useNavigationFlowState} from '../flowState';
 import {
   MainTabChrome,
@@ -17,14 +20,23 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
   const rootNavigation = navigation.getParent<RootNavigation>();
   const {
     likedMakeupFilterIds,
+    savedMakeupLook,
+    savedMakeupLooks,
     setSelectedRecommendedMakeupFilterId,
   } = useNavigationFlowState();
   const likedMakeupLooks = React.useMemo(
     () => getLikedMakeupFilterLooks(likedMakeupFilterIds),
     [likedMakeupFilterIds],
   );
+  const savedAndLikedMakeupLooks = React.useMemo(() => {
+    return mergeSavedAndLikedMakeupLooks({
+      likedMakeupLooks,
+      savedMakeupLook,
+      savedMakeupLooks,
+    });
+  }, [likedMakeupLooks, savedMakeupLook, savedMakeupLooks]);
   const handleMakeupLookPress = React.useCallback(
-    (makeupLook: (typeof likedMakeupLooks)[number]) => {
+    (makeupLook: (typeof savedAndLikedMakeupLooks)[number]) => {
       const filterId = makeupLook.makeupPresetValues.sourceFilterId;
 
       if (!filterId) {
@@ -56,7 +68,7 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
           rootNavigation?.navigate('ProductRecommendation', {reportId})
         }
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
-        likedMakeupLooks={likedMakeupLooks}
+        likedMakeupLooks={savedAndLikedMakeupLooks}
       />
     </MainTabChrome>
   );

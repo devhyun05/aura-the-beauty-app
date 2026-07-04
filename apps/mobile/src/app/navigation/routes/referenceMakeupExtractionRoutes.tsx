@@ -1,10 +1,12 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 
 import {
   ExtractedMakeupLookAdjustScreen,
   MakeupFilterSaveCompleteScreen,
   MakeupFilterSaveScreen,
   MakeupRecipeDetailScreen,
+  MakeupRecipeListScreen,
+  type MakeupRecipeListItem,
   MakeupRecipeSaveCompleteScreen,
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
@@ -22,9 +24,20 @@ import {
   mapMakeupFilterToSavedLook,
 } from '../../../shared/services/makeupGuideService';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
+import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  buildMakeupFilterSavedLooks,
+  getDefaultMakeupFilterSaveSettings,
+  prependSavedMakeupLooks,
+  type MakeupFilterSaveSettings,
+} from '../../../features/reference-makeup-extraction/services/makeupFilterSaveModel';
+
+type HeaderShareAction = {
+  cb: () => void;
+};
 
 export const REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX =
   '[aura:extraction] extraction:error';
@@ -34,6 +47,15 @@ export type ReferenceMakeupExtractionSafeRunner = (
   onProgress: (progress: MakeupExtractionProgressUpdate) => void,
   onError?: (error: unknown) => void,
 ) => Promise<void>;
+
+const REFERENCE_MAKEUP_SAVE_AREAS: readonly MakeupArea[] = [
+  'base',
+  'eye',
+  'brow',
+  'cheek',
+  'lip',
+  'contour',
+];
 
 export function mapFaceCaptureResultToReferenceMakeupPhoto(
   result?: FaceCaptureUploadResult,
@@ -55,6 +77,30 @@ export function mapFaceCaptureResultToReferenceMakeupPhoto(
 
 function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
+}
+
+function buildMakeupRecipeListItems(
+  selectedPhoto: ReferenceMakeupPhoto | null,
+): MakeupRecipeListItem[] {
+  const {extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
+  const primaryPhoto = getSelectedReferenceMakeupPhoto(selectedPhoto);
+  const recipePhotos = [
+    primaryPhoto,
+    ...photos.filter((photo) => photo.id !== primaryPhoto.id),
+  ];
+
+  return recipePhotos.map((photo, index) => ({
+    id: `makeup-recipe-${photo.id}`,
+    photo,
+    subtitle:
+      index === 0
+        ? extractedMakeupLook.subtitle
+        : '레퍼런스 사진에서 추출한 색상과 적용 순서를 정리했어요.',
+    tags: extractedMakeupLook.tags,
+    title: index === 0
+      ? extractedMakeupLook.title
+      : `${extractedMakeupLook.title} ${index + 1}`,
+  }));
 }
 
 function logReferenceMakeupExtractionError(error: unknown) {
@@ -222,6 +268,7 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     selectedRecommendedMakeupFilterId,
     selectedReferenceMakeupPhoto,
     setSavedMakeupLook,
+    setSavedMakeupLooks,
   } = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
   const recommendedFilter = selectedRecommendedMakeupFilterId
@@ -233,21 +280,48 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     ? {
         defaultName: recommendedFilter.displayTitle,
         imageSource: recommendedFilter.imageSource,
+        makeupAreas: recommendedFilter.makeupAreas,
         summaryDescription: 'AR 적용값과 조정값이 함께 저장돼요.',
         summaryTitle: '저장할 메이크업 룩',
       }
     : {
         defaultName: referenceMakeupLook.title,
         imageSource: photo.imageSource,
+        makeupAreas: REFERENCE_MAKEUP_SAVE_AREAS,
         summaryDescription: 'AR 적용값과 조정값이 함께 저장돼요.',
         summaryTitle: '저장할 메이크업 룩',
       };
+  const initialSaveSettings = useMemo(
+    () =>
+      getDefaultMakeupFilterSaveSettings({
+        defaultName: saveScreenData.defaultName,
+        makeupAreas: saveScreenData.makeupAreas,
+      }),
+    [saveScreenData.defaultName, saveScreenData.makeupAreas],
+  );
+  const [saveSettings, setSaveSettings] =
+    useState<MakeupFilterSaveSettings>(initialSaveSettings);
 
-  const handleSave = () => {
-    setSavedMakeupLook(
-      recommendedFilter
-        ? mapMakeupFilterToSavedLook(recommendedFilter)
-        : buildSavedMakeupLook(photo),
+  useEffect(() => {
+    setSaveSettings(initialSaveSettings);
+  }, [initialSaveSettings]);
+
+  const handleSave = (settings = saveSettings) => {
+    const baseSavedLook = recommendedFilter
+      ? mapMakeupFilterToSavedLook(recommendedFilter)
+      : buildSavedMakeupLook(photo);
+    const savedLooks = buildMakeupFilterSavedLooks({
+      baseSavedLook,
+      settings,
+    });
+
+    if (savedLooks.length === 0) {
+      return;
+    }
+
+    setSavedMakeupLook(savedLooks[0]);
+    setSavedMakeupLooks(currentSavedLooks =>
+      prependSavedMakeupLooks(currentSavedLooks, savedLooks),
     );
     navigation.navigate('MakeupFilterSaveComplete');
   };
@@ -269,11 +343,12 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     <DetailRouteChrome
       routeName="MakeupFilterSave"
       onBack={handleBack}
-      onDone={handleSave}>
+      onDone={() => handleSave()}>
       <MakeupFilterSaveScreen
-        defaultName={saveScreenData.defaultName}
         imageSource={saveScreenData.imageSource}
         onSave={handleSave}
+        onSettingsChange={setSaveSettings}
+        settings={saveSettings}
         summaryDescription={saveScreenData.summaryDescription}
         summaryTitle={saveScreenData.summaryTitle}
       />
@@ -313,14 +388,50 @@ export function MakeupRecipeDetailRouteScreen({
 }: RootScreenProps<'MakeupRecipeDetail'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
+  const handleHeaderShareActionChange = React.useCallback(
+    (nextShareAction: (() => void) | null) => {
+      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
+    },
+    [],
+  );
 
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeDetail"
-      onBack={() => navigation.goBack()}>
+      onOpenDocumentList={() => navigation.navigate('MakeupRecipeList')}
+      onShare={shareAction?.cb}
+      shareDisabled={!shareAction}>
       <MakeupRecipeDetailScreen
+        onHeaderShareActionChange={handleHeaderShareActionChange}
         onSaveRecipe={() => navigation.navigate('MakeupRecipeSaveComplete')}
         photo={photo}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function MakeupRecipeListRouteScreen({
+  navigation,
+}: RootScreenProps<'MakeupRecipeList'>) {
+  const {selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto} =
+    useNavigationFlowState();
+  const recipes = useMemo(
+    () => buildMakeupRecipeListItems(selectedReferenceMakeupPhoto),
+    [selectedReferenceMakeupPhoto],
+  );
+  const handlePressRecipe = (recipe: MakeupRecipeListItem) => {
+    setSelectedReferenceMakeupPhoto(recipe.photo);
+    navigation.navigate('MakeupRecipeDetail');
+  };
+
+  return (
+    <DetailRouteChrome
+      routeName="MakeupRecipeList"
+      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      <MakeupRecipeListScreen
+        onPressRecipe={handlePressRecipe}
+        recipes={recipes}
       />
     </DetailRouteChrome>
   );

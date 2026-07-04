@@ -1,6 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet} from 'react-native';
-import {ChevronRight, ClipboardList, ScanFace, Sparkles} from 'lucide-react-native';
+import {ClipboardList, ScanFace, Sparkles} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
@@ -15,7 +15,7 @@ const faceAnalysisIntroContent = {
   title: '얼굴 분석으로\n나에게 맞는 룩을 찾아요',
   description:
     '톤, 윤곽, 분위기를 함께 확인해 추천 필터와 제품을 더 정확하게 맞춰드려요.',
-  primaryActionLabel: '얼굴 분석 시작하기',
+  primaryActionLabel: '시작하기',
 } as const;
 
 const faceAnalysisIntroSteps = [
@@ -90,7 +90,6 @@ export function FaceAnalysisIntroScreen({
         <Text style={styles.primaryButtonText}>
           {faceAnalysisIntroContent.primaryActionLabel}
         </Text>
-        <ChevronRight color={colors.white} size={iconSize.sm} strokeWidth={2.2} />
       </Pressable>
     </AppScreen>
   );

@@ -10,7 +10,7 @@ import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {useAuthSession} from '../../../features/auth';
-import {FaceCaptureTutorialScreen} from '../../../features/onboarding';
+import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {colors} from '../../../shared/theme';
 import {DetailRouteChrome} from '../detailHeaderChrome';
@@ -36,22 +36,22 @@ export function FaceAnalysisIntroRouteScreen({
 }: RootScreenProps<'FaceAnalysisIntro'>) {
   const [isGuideVisible, setIsGuideVisible] = React.useState(false);
 
-  if (isGuideVisible) {
-    return (
-      <FaceCaptureTutorialScreen
-        onBackToIntro={() => setIsGuideVisible(false)}
-        onCloseToHome={() => navigateMainTab(navigation, 'HomeTab')}
-        onStartCapture={() => navigation.navigate('FaceCapture')}
-      />
-    );
-  }
-
   return (
-    <DetailRouteChrome
-      routeName="FaceAnalysisIntro"
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
-      <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
-    </DetailRouteChrome>
+    <>
+      <DetailRouteChrome
+        routeName="FaceAnalysisIntro"
+        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
+      </DetailRouteChrome>
+      <FaceCaptureTutorialSheet
+        isVisible={isGuideVisible}
+        onDismiss={() => setIsGuideVisible(false)}
+        onStartCapture={() => {
+          setIsGuideVisible(false);
+          navigation.navigate('FaceCapture');
+        }}
+      />
+    </>
   );
 }
 
@@ -282,7 +282,7 @@ export function FaceAnalysisReportDetailRouteScreen({
       headerBackgroundColor={colors.surfaceMuted}
       headerBorderColor={colors.surfaceMuted}
       routeName="FaceAnalysisReportDetail"
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
+      onOpenDocumentList={() => navigation.navigate('FaceAnalysisReportsList')}
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <FaceAnalysisReportDetailScreen

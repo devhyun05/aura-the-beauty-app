@@ -144,6 +144,31 @@ export function getLikedMakeupFilterLooks(
     .map(mapMakeupFilterToLikedLook);
 }
 
+export function mergeSavedAndLikedMakeupLooks({
+  likedMakeupLooks,
+  savedMakeupLook,
+  savedMakeupLooks = [],
+}: {
+  likedMakeupLooks: readonly MakeupLookPreview[];
+  savedMakeupLook?: MakeupLookPreview | null;
+  savedMakeupLooks?: readonly MakeupLookPreview[];
+}): readonly MakeupLookPreview[] {
+  const flowSavedMakeupLooks =
+    savedMakeupLooks.length > 0
+      ? savedMakeupLooks
+      : savedMakeupLook
+        ? [savedMakeupLook]
+        : [];
+  const savedMakeupLookIds = new Set(
+    flowSavedMakeupLooks.map(makeupLook => makeupLook.id),
+  );
+
+  return [
+    ...flowSavedMakeupLooks,
+    ...likedMakeupLooks.filter(makeupLook => !savedMakeupLookIds.has(makeupLook.id)),
+  ];
+}
+
 export function isRecommendedFilterLaunchSource(
   source: ARFilterLaunchSource | undefined,
 ): boolean {

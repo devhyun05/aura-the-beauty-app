@@ -1,6 +1,10 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
+  Animated,
+  Easing,
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   type ImageSourcePropType,
@@ -8,7 +12,7 @@ import {
   type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets, type Edge} from 'react-native-safe-area-context';
 import {
   Camera,
   CheckCircle2,
@@ -28,6 +32,7 @@ const accessoryGuideImageSource = appAssetSource('images/photo-capture-accessory
 const framingGuideImageSource = appAssetSource('images/photo-capture-framing-guide.png');
 
 type FaceCaptureTutorialIconKey = 'face' | 'hair' | 'accessory' | 'framing';
+type FaceCaptureTutorialPresentation = 'screen' | 'sheet';
 
 type FaceCaptureTutorialStep = {
   buttonLabel: string | null;
@@ -109,13 +114,23 @@ const faceCaptureTutorialVisualPresentation = {
   imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
+  sheetDismissControl: 'close-button',
+  sheetPresentation: 'bottom-modal-sheet',
   swipeNavigationPlacement: 'fixed-footer-pagination',
   usesImageScrim: false,
 } as const;
 
 type FaceCaptureTutorialScreenProps = {
+  closeAccessibilityLabel?: string;
   onBackToIntro?: () => void;
   onCloseToHome?: () => void;
+  onStartCapture?: () => void;
+  presentation?: FaceCaptureTutorialPresentation;
+};
+
+type FaceCaptureTutorialSheetProps = {
+  isVisible: boolean;
+  onDismiss: () => void;
   onStartCapture?: () => void;
 };
 
@@ -135,18 +150,112 @@ export function getFaceCaptureTutorialVisualPresentation() {
   return faceCaptureTutorialVisualPresentation;
 }
 
+export function FaceCaptureTutorialSheet({
+  isVisible,
+  onDismiss,
+  onStartCapture,
+}: FaceCaptureTutorialSheetProps) {
+  const [isSheetMounted, setIsSheetMounted] = useState(isVisible);
+  const transitionValue = useRef(new Animated.Value(isVisible ? 1 : 0)).current;
+  const {height} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const sheetHeight = Math.round(height * (height < 760 ? 0.92 : 0.88));
+  const sheetHiddenOffset = sheetHeight + Math.max(insets.bottom, spacing.xxl);
+  const backdropOpacity = transitionValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const sheetTranslateY = transitionValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [sheetHiddenOffset, 0],
+  });
+
+  useEffect(() => {
+    if (isVisible) {
+      setIsSheetMounted(true);
+    }
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (!isSheetMounted) {
+      return;
+    }
+
+    transitionValue.stopAnimation();
+    Animated.timing(transitionValue, {
+      duration: isVisible ? 240 : 180,
+      easing: isVisible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      toValue: isVisible ? 1 : 0,
+      useNativeDriver: true,
+    }).start(({finished}) => {
+      if (finished && !isVisible) {
+        setIsSheetMounted(false);
+      }
+    });
+  }, [isSheetMounted, isVisible, transitionValue]);
+
+  if (!isSheetMounted) {
+    return null;
+  }
+
+  return (
+    <Modal
+      animationType="none"
+      onRequestClose={onDismiss}
+      transparent
+      visible={isSheetMounted}>
+      <YStack style={styles.sheetRoot}>
+        <Animated.View style={[styles.sheetBackdropHost, {opacity: backdropOpacity}]}>
+          <Pressable
+            accessibilityLabel="사진 촬영 가이드 닫기"
+            accessibilityRole="button"
+            onPress={onDismiss}
+            style={styles.sheetBackdrop}
+          />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.sheetPanel,
+            {
+              height: sheetHeight,
+              paddingBottom: Math.max(insets.bottom, spacing.sm),
+              transform: [{translateY: sheetTranslateY}],
+            },
+          ]}>
+          <View style={styles.sheetHandle} />
+          <FaceCaptureTutorialScreen
+            closeAccessibilityLabel="사진 촬영 가이드 닫기"
+            onBackToIntro={onDismiss}
+            onCloseToHome={onDismiss}
+            onStartCapture={onStartCapture}
+            presentation="sheet"
+          />
+        </Animated.View>
+      </YStack>
+    </Modal>
+  );
+}
+
 export function FaceCaptureTutorialScreen({
+  closeAccessibilityLabel,
   onBackToIntro,
   onCloseToHome,
   onStartCapture,
+  presentation = 'screen',
 }: FaceCaptureTutorialScreenProps) {
   const guideScrollViewRef = useRef<ScrollView>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const {height, width} = useWindowDimensions();
   const currentStep = faceCaptureTutorialSteps[currentStepIndex] ?? faceCaptureTutorialSteps[0];
+  const isSheetPresentation = presentation === 'sheet';
   const isCompactHeight = height < 760;
-  const maxGuideImageWidth = Math.min(width - spacing.xl * 2, 362);
+  const maxGuideImageWidth = Math.min(width - spacing.xl * 2, isSheetPresentation ? 344 : 362);
   const contentGap = isCompactHeight ? spacing.md : spacing.lg;
+  const safeAreaEdges: Edge[] = isSheetPresentation
+    ? []
+    : ['top', 'right', 'bottom', 'left'];
+  const closeButtonAccessibilityLabel =
+    closeAccessibilityLabel ?? (isSheetPresentation ? '사진 촬영 가이드 닫기' : '홈으로 가기');
 
   const getGuideImageSize = (step: FaceCaptureTutorialStep) => {
     const maxGuideImageHeight = isCompactHeight ? 216 : 292;
@@ -232,13 +341,13 @@ export function FaceCaptureTutorialScreen({
   const actionButtonLabel = currentStep.buttonLabel ?? '촬영하기';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <YStack style={styles.screen}>
+    <SafeAreaView edges={safeAreaEdges} style={styles.safeArea}>
+      <YStack style={[styles.screen, isSheetPresentation ? styles.sheetScreen : null]}>
         <AppHeader
           onBack={handleBackPress}
           rightSlot={
             <IconButton
-              accessibilityLabel="홈으로 가기"
+              accessibilityLabel={closeButtonAccessibilityLabel}
               onPress={handleClosePress}
               variant="outlined">
               <XIcon color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
@@ -248,7 +357,7 @@ export function FaceCaptureTutorialScreen({
           topInset={0}
         />
 
-        <YStack style={styles.content}>
+        <YStack style={[styles.content, isSheetPresentation ? styles.sheetContent : null]}>
           <ScrollView
             ref={guideScrollViewRef}
             accessibilityLabel={FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL}
@@ -262,7 +371,13 @@ export function FaceCaptureTutorialScreen({
             showsHorizontalScrollIndicator={false}
             style={styles.guideCarousel}>
             {faceCaptureTutorialSteps.map((step) => (
-              <YStack key={step.stepLabel} style={[styles.guidePage, {gap: contentGap, width}]}>
+              <YStack
+                key={step.stepLabel}
+                style={[
+                  styles.guidePage,
+                  isSheetPresentation ? styles.sheetGuidePage : null,
+                  {gap: contentGap, width},
+                ]}>
                 <View
                   style={[
                     styles.imageFrame,
@@ -467,6 +582,57 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+  },
+  sheetBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.36)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetBackdropHost: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetContent: {
+    paddingBottom: spacing.lg,
+  },
+  sheetGuidePage: {
+    paddingTop: spacing.md,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    height: 4,
+    marginTop: spacing.sm,
+    width: 42,
+  },
+  sheetPanel: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    overflow: 'hidden',
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: {width: 0, height: -10},
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+  },
+  sheetRoot: {
+    bottom: 0,
+    justifyContent: 'flex-end',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetScreen: {
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
   },
   swipeNavigationArea: {
     alignItems: 'center',

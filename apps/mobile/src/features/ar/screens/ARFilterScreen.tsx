@@ -9,6 +9,7 @@ import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing} from '../../../shared/theme';
 import type {
   ARFilterLaunchSource,
@@ -86,7 +87,7 @@ const AR_FILTER_FALLBACK_COLOR = {
   label: '기본',
 };
 
-export const AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET = 0;
+export const AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET = spacing.md;
 export const AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT = 'aboveSheet';
 
 export {
@@ -150,6 +151,7 @@ export function ARFilterScreen({
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const [cameraFacing, setCameraFacing] = useState<CameraType>('front');
   const [isFilterSheetExpanded, setIsFilterSheetExpanded] = useState(true);
+  const cameraSessionActive = useCameraSessionActive();
   const selectedColor = getARFilterSelectedColor(
     arFilterSelectionState.selectedMakeupFilter.colorOptions,
     arFilterSelectionState.selectedColorId,
@@ -159,6 +161,12 @@ export function ARFilterScreen({
     : selectedColor.hex;
 
   useEffect(() => () => hideUnityMakeupView(), []);
+
+  useEffect(() => {
+    if (!cameraSessionActive) {
+      hideUnityMakeupView();
+    }
+  }, [cameraSessionActive]);
 
   const handleBack = () => {
     hideUnityMakeupView();
@@ -228,6 +236,7 @@ export function ARFilterScreen({
   return (
     <FullscreenOverlayScreen>
       <ARFilterCameraPreview
+        active={cameraSessionActive}
         cameraFacing={cameraFacing}
         guideMode={arFilterSelectionState.guideMode}
         previewColorHex={previewColorHex}
@@ -371,7 +380,7 @@ const styles = StyleSheet.create({
   sheetToggleButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.bottomSheetControlSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
