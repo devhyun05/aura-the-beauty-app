@@ -166,6 +166,8 @@ const AR_BLUSH_CHEEK_REGION_OPTIONS = [
   {label: '선키스 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
   {label: '선키스 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
 ] as const;
+// 결(strand hair texture)은 슬라이더 없이 항상 이 값으로 고정 유지한다.
+const BROW_STRAND_TEXTURE_AMOUNT = 0.9;
 const GENERATED_BROW_SHAPE_OPTIONS = [
   {label: '일자', shapeId: 'straight'},
   {label: '세미아치', shapeId: 'soft-arch'},
@@ -1377,18 +1379,8 @@ function ArBlushRuntimeHud({
           onChange={handleOpacityChange}
           value={activeValues.opacity}
         />
-        {activeRegion === 'eyebrow' ? (
-          <>
-            <HudSliderControl
-              colorHex={activeValues.colorHex}
-              label="결"
-              onChange={value => onChangeBrowControls({strandTextureAmount: value})}
-              value={browControls.strandTextureAmount}
-            />
-            {__DEV__ ? (
-              <GeneratedBrowRuntimeDiagnosticCard event={lastBrowRuntimeEvent} />
-            ) : null}
-          </>
+        {activeRegion === 'eyebrow' && __DEV__ ? (
+          <GeneratedBrowRuntimeDiagnosticCard event={lastBrowRuntimeEvent} />
         ) : null}
 
       </YStack>
@@ -1946,7 +1938,9 @@ function clampGeneratedBrowControls(
     intensity: Math.max(0, Math.min(1, controls.intensity)),
     neutralizeStrength: 0,
     opacity: Math.max(0, Math.min(1, controls.opacity)),
-    strandTextureAmount: Math.max(0, Math.min(1, controls.strandTextureAmount)),
+    // 결(strand hair texture)은 항상 살아있도록 고정한다. UI 슬라이더를 제거했고,
+    // 어떤 상태값이 들어와도 강하게 유지.
+    strandTextureAmount: BROW_STRAND_TEXTURE_AMOUNT,
   };
 }
 

@@ -1127,17 +1127,19 @@ function buildSmoothBrowEnvelopePolygon({
 
   const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.55;
   const tailTaperStrength =
-    shapeId === 'straight' ? 0.5 : shapeId === 'slim-tail' ? 0.88 : 0.72;
-  const tailTaperStartT = shapeId === 'straight' ? 0.6 : 0.46;
+    shapeId === 'straight' ? 0.66 : shapeId === 'slim-tail' ? 0.95 : 0.84;
+  const tailTaperStartT = shapeId === 'straight' ? 0.52 : 0.4;
   const thicknessScale =
-    shapeId === 'straight' ? 0.9 : shapeId === 'slim-tail' ? 0.8 : 0.86;
+    shapeId === 'straight' ? 0.78 : shapeId === 'slim-tail' ? 0.66 : 0.72;
   const archPeakT = clamp(measuredArchPeakT, 0.5, 0.72);
   const archMagnitude = archScale * (measuredArchRise * 0.5 + medianThickness * 0.42);
-  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.1, height * 0.66);
-  // Lower edge follows the real brow underside; endpoints taper up slightly so
-  // the head and tail come to soft points rather than blunt ends.
-  const headLowerY = Math.max(headMeasure.lowerY, deepestLowerY - medianThickness * 0.45);
-  const tailLowerY = tailMeasure.lowerY;
+  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.09, height * 0.56);
+  // Small upward lift so the mask sits ON the brow body (device feedback: it was
+  // landing slightly low). Lower edge otherwise follows the real brow underside.
+  const verticalLift = medianThickness * 0.22;
+  const headLowerY =
+    Math.max(headMeasure.lowerY, deepestLowerY - medianThickness * 0.45) - verticalLift;
+  const tailLowerY = tailMeasure.lowerY - verticalLift;
 
   const archProfile = (t: number) => {
     const sigma = 0.34;
@@ -1145,10 +1147,12 @@ function buildSmoothBrowEnvelopePolygon({
     return Math.exp(-0.5 * d * d);
   };
   const thicknessProfile = (t: number) => {
-    const headRamp = lerp(0.55, 1, smoothstep(0, 0.16, t));
+    const headRamp = lerp(0.52, 1, smoothstep(0, 0.16, t));
+    // Sharper tail: taper harder and let the very tip get thin so it reads as a
+    // sleek point rather than a blunt end.
     const tailRamp = 1 - smoothstep(tailTaperStartT, 1, t) * tailTaperStrength;
     const bodyRamp = 0.9 + 0.1 * Math.sin(Math.PI * t);
-    return clamp(headRamp * tailRamp * bodyRamp, 0.12, 1);
+    return clamp(headRamp * tailRamp * bodyRamp, 0.05, 1);
   };
   // How much the underside follows the top arch (arched brows stay flatter
   // underneath than on top).
@@ -1167,11 +1171,13 @@ function buildSmoothBrowEnvelopePolygon({
     lowerCurve.push({x, y: lowerBaseY});
   }
 
+  // Extend the tail to a sharp point beyond the last sample so head->body->tail
+  // finishes as one sleek stroke.
   const tailUpper = upperCurve[sampleCount - 1];
   const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.07 : shapeId === 'straight' ? 0.03 : 0.05),
-    y: (tailUpper.y + tailLower.y) * 0.5,
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.1 : shapeId === 'straight' ? 0.04 : 0.07),
+    y: (tailUpper.y + tailLower.y) * 0.5 - archMagnitude * archProfile(1) * 0.4,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),
