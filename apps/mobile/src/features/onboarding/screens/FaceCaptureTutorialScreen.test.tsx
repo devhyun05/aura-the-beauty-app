@@ -81,6 +81,11 @@ expectEqual(
   'face capture header dismiss control',
 );
 expectEqual(
+  visualPresentation.headerComponent,
+  'AppHeader',
+  'face capture tutorial common header component',
+);
+expectEqual(
   visualPresentation.swipeNavigationPlacement,
   'fixed-footer-pagination',
   'face capture swipe navigation placement',

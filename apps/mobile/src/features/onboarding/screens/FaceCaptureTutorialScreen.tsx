@@ -12,17 +12,15 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {
   Camera,
   CheckCircle2,
-  ChevronLeft,
   Glasses,
   ScanFace,
   WandSparkles,
-  X as XIcon,
 } from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {appAssetSource} from '../../../shared/config/mediaAssets';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {PaginationDots} from '../../../shared/ui';
+import {AppHeader, IconButton, PaginationDots, XIcon} from '../../../shared/ui';
 
 const expressionGuideImageSource = appAssetSource('images/photo-capture-expression-guide.png');
 const hairGuideImageSource = appAssetSource('images/photo-capture-hair-guide.png');
@@ -105,6 +103,7 @@ const faceCaptureTutorialNavigationMode = {
 const faceCaptureTutorialVisualPresentation = {
   finalActionWidth: 'compact',
   finalPrivacyPlacement: 'none',
+  headerComponent: 'AppHeader',
   headerDismissControl: 'close-to-home',
   imageFillMode: 'fit-image',
   imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
@@ -235,35 +234,19 @@ export function FaceCaptureTutorialScreen({
   return (
     <SafeAreaView style={styles.safeArea}>
       <YStack style={styles.screen}>
-        <XStack style={[styles.header, isCompactHeight ? styles.compactHeader : undefined]}>
-          <Button
-            accessibilityLabel="이전으로 돌아가기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleBackPress}
-            pressStyle={{scale: 0.97}}
-            style={styles.headerButton}
-            unstyled>
-            <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
-          </Button>
-
-          <YStack style={styles.headerTitleGroup}>
-            <Text numberOfLines={1} style={styles.headerTitle}>
-              사진 촬영 가이드
-            </Text>
-          </YStack>
-
-          <Button
-            accessibilityLabel="홈으로 가기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleClosePress}
-            pressStyle={{scale: 0.97}}
-            style={styles.headerButton}
-            unstyled>
-            <XIcon color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
-          </Button>
-        </XStack>
+        <AppHeader
+          onBack={handleBackPress}
+          rightSlot={
+            <IconButton
+              accessibilityLabel="홈으로 가기"
+              onPress={handleClosePress}
+              variant="outlined">
+              <XIcon color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            </IconButton>
+          }
+          title="사진 촬영 가이드"
+          topInset={0}
+        />
 
         <YStack style={styles.content}>
           <ScrollView
@@ -372,9 +355,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: spacing.xl,
   },
-  compactHeader: {
-    paddingBottom: spacing.md,
-  },
   description: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
@@ -423,40 +403,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
-  },
-  header: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  headerButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.xl + spacing.md,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.md,
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-    textAlign: 'center',
-  },
-  headerTitleGroup: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
   },
   heading: {
     color: colors.textPrimary,
