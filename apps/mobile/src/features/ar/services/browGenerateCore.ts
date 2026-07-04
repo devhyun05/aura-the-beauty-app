@@ -849,7 +849,9 @@ function buildSingleBrowEnvelope({
     maxX = Math.min(maxX, faceMaxX - faceWidth * 0.025);
   }
   const topPad = Math.max(browHeight * 0.18, eyelidHeight * 0.07);
-  const bottomPad = Math.max(browHeight * 0.1, eyelidHeight * 0.05);
+  // Generous bottom room so the descending tail (past the arch peak) is not
+  // clamped flat; the eye guard below remains the hard safety line.
+  const bottomPad = Math.max(browHeight * 0.4, eyelidHeight * 0.14);
   const topY = clamp(browMinY - topPad, 0, frameHeight - 1);
   const eyeGuardTop = Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.12;
   const bottomY = clamp(
@@ -859,13 +861,14 @@ function buildSingleBrowEnvelope({
   );
   const centerX = (minX + maxX) * 0.5;
   const height = Math.max(1, bottomY - topY);
-  // head = inner end (toward nose), tail = outer end (toward temple). Inset the
-  // head slightly so the mask does not run past the start of the brow, and pull
-  // the tail in a touch (a sharp tip is extended past it in the envelope).
+  // head = inner end (toward nose), tail = outer end (toward temple). Keep the
+  // full measured length and extend the tail slightly past the detected end —
+  // Korean-style brows finish with a drawn-out tail, and the MediaPipe ring
+  // usually stops short of the visible one.
   const browHeadX = side === 'left' ? minX : maxX;
   const browTailX = side === 'left' ? maxX : minX;
-  const innerX = browHeadX + direction * browWidth * 0.06;
-  const outerX = browTailX - direction * browWidth * 0.01;
+  const innerX = browHeadX + direction * browWidth * 0.015;
+  const outerX = browTailX + direction * browWidth * 0.04;
 
   const stabilizePoint = (point: E7Point2D) =>
     stabilizePointToFaceDirection(point, centerX, height, faceDirectionSlope);
@@ -1121,27 +1124,36 @@ function buildSmoothBrowEnvelopePolygon({
   const sortedThickness = [...thicknessSamples].sort((first, second) => first - second);
   const medianThickness = sortedThickness[Math.floor(sortedThickness.length / 2)] ?? height * 0.3;
 
-  // Thickness is the SAME across shapes (only the arch differs).
-  const bodyThickness = clamp(medianThickness * 0.82, height * 0.08, height * 0.48);
+  // Thickness is the SAME across shapes (only the curve differs). Full coverage:
+  // the band must hide the real brow underneath, otherwise it reads as a small
+  // sticker floating on top of visible hairs.
+  const bodyThickness = clamp(medianThickness * 1.12, height * 0.12, height * 0.6);
   // Sit slightly high on the brow so the band covers the body without dropping
   // below it (device feedback: 일자 was landing under the brow).
-  const verticalLift = medianThickness * 0.16;
-  // Arch is the ONLY per-shape difference: flat / gentle / pronounced.
+  const verticalLift = medianThickness * 0.12;
+  // Per-shape curve: arch height at the peak, then a tail that DESCENDS below
+  // the head->tail chord past the peak (눈썹 산 기준 하강) — natural Korean brow
+  // finishes lower than the arch, even for 일자.
   const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.5;
-  const archPeakT = clamp(measuredArchPeakT, 0.54, 0.72);
+  const archPeakT = clamp(measuredArchPeakT, 0.54, 0.7);
   const archMagnitude = archScale * (medianThickness * 0.55 + measuredArchRise * 0.35);
+  const tailDropMagnitude =
+    medianThickness *
+    (shapeId === 'straight' ? 0.22 : shapeId === 'slim-tail' ? 0.9 : 0.55);
 
   const archProfile = (t: number) => {
-    const sigma = 0.32;
+    const sigma = 0.3;
     const d = (t - archPeakT) / sigma;
     return Math.exp(-0.5 * d * d);
   };
-  // Thickness profile is shape-independent: soft head, sharp tapered tail tip.
+  const tailDropProfile = (t: number) => smoothstep(archPeakT, 1, t);
+  // Thickness profile is shape-independent: soft head, late tail taper so the
+  // tail stays visible while it descends, finishing in a sharp tip.
   const thicknessProfile = (t: number) => {
-    const headRamp = lerp(0.62, 1, smoothstep(0, 0.14, t));
-    const tailRamp = 1 - smoothstep(0.5, 1, t) * 0.9;
+    const headRamp = lerp(0.7, 1, smoothstep(0, 0.12, t));
+    const tailRamp = 1 - smoothstep(0.62, 1, t) * 0.84;
     const bodyRamp = 0.94 + 0.06 * Math.sin(Math.PI * t);
-    return clamp(headRamp * tailRamp * bodyRamp, 0.05, 1);
+    return clamp(headRamp * tailRamp * bodyRamp, 0.07, 1);
   };
 
   const sampleCount = 48;
@@ -1151,19 +1163,22 @@ function buildSmoothBrowEnvelopePolygon({
     const t = index / (sampleCount - 1);
     const x = lerp(innerX, outerX, t);
     const centerY =
-      lerp(headCenterY, tailCenterY, t) - archMagnitude * archProfile(t) - verticalLift;
+      lerp(headCenterY, tailCenterY, t) -
+      archMagnitude * archProfile(t) +
+      tailDropMagnitude * tailDropProfile(t) -
+      verticalLift;
     const width = bodyThickness * thicknessProfile(t);
     upperCurve.push({x, y: centerY - width * 0.5});
     lowerCurve.push({x, y: centerY + width * 0.5});
   }
 
-  // Extend the tail to a sharp point beyond the last sample so head->body->tail
-  // finishes as one sleek stroke.
+  // Extend the tail past the last sample into a sharp tip that keeps
+  // descending, so head->body->arch->tail finishes as one sleek stroke.
   const tailUpper = upperCurve[sampleCount - 1];
   const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.08 : 0.05),
-    y: (tailUpper.y + tailLower.y) * 0.5,
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.09 : 0.06),
+    y: (tailUpper.y + tailLower.y) * 0.5 + tailDropMagnitude * 0.3,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),

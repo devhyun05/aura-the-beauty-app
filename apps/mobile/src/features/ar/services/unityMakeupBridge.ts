@@ -702,7 +702,10 @@ function handleUnityMakeupNativeEvent(event: {message?: string}) {
   }
 
   try {
-    const parsed = JSON.parse(event.message) as {type?: string};
+    const parsed = JSON.parse(event.message) as {
+      generatedMaskId?: string;
+      type?: string;
+    };
 
     if (parsed.type === 'generated_lip_mask_applied') {
       clearGeneratedLipMaskNativePosts();
@@ -710,6 +713,21 @@ function handleUnityMakeupNativeEvent(event: {message?: string}) {
     }
 
     if (parsed.type === 'generated_brow_mask_applied') {
+      // Unity keeps streaming applied events (applyTrigger=runtime_sample) for
+      // whatever mask is currently active. Only clear retry loops whose payload
+      // matches the applied mask id — otherwise a stale mask's stream cancels a
+      // freshly scheduled shape/color payload before its first send fires.
+      const appliedMaskId = parsed.generatedMaskId;
+      if (typeof appliedMaskId === 'string' && appliedMaskId.length > 0) {
+        Array.from(scheduledNativePosts.entries())
+          .filter(
+            ([retryKey, post]) =>
+              retryKey.startsWith('generated-brow-mask:') &&
+              post.metadata.packageId === appliedMaskId,
+          )
+          .forEach(([retryKey]) => clearScheduledNativePost(retryKey));
+        return;
+      }
       clearGeneratedBrowMaskNativePosts();
     }
   } catch {

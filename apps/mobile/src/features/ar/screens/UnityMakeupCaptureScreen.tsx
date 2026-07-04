@@ -305,6 +305,12 @@ export function UnityMakeupCaptureScreen({
   // frozen at capture time and shape buttons only relabel the payload.
   const nativeBrowSourceRef =
     useRef<PersonalizedMakeupGenerateResult['nativeResult'] | null>(null);
+  // Per-shape package cache: rasterizing 512x512 + base64 in JS takes long
+  // enough to feel laggy, so each shape is built once (pre-warmed right after
+  // capture) and shape taps reuse the cached package instantly.
+  const browPackageCacheRef = useRef<
+    Partial<Record<GeneratedBrowControls['shapeId'], GeneratedBrowPackage>>
+  >({});
   const latestCompanionMakeupControlsRef =
     useRef<PersonalizedCompanionMakeupControls>(companionMakeupControls);
   const generatedMaskControlRevisionRef = useRef(0);
@@ -487,6 +493,34 @@ export function UnityMakeupCaptureScreen({
       latestGeneratedApplyPayloadRef.current = unityApplyPayload;
       latestGeneratedBrowApplyPayloadRef.current = browUnityApplyPayload;
       nativeBrowSourceRef.current = result.nativeResult;
+      browPackageCacheRef.current = {
+        [result.generatedBrowPackage.shapeId]: result.generatedBrowPackage,
+      };
+      // Pre-warm the remaining shape packages off the critical path so the
+      // first tap on each shape button applies instantly.
+      setTimeout(() => {
+        const nativeSource = nativeBrowSourceRef.current;
+        if (!nativeSource) {
+          return;
+        }
+        for (const option of GENERATED_BROW_SHAPE_OPTIONS) {
+          if (browPackageCacheRef.current[option.shapeId]) {
+            continue;
+          }
+          try {
+            browPackageCacheRef.current[option.shapeId] = buildGeneratedBrowPackage({
+              controls: {
+                ...DEFAULT_GENERATED_BROW_CONTROLS,
+                enabled: true,
+                shapeId: option.shapeId,
+              },
+              nativeResult: nativeSource,
+            });
+          } catch {
+            // Pre-warm is best-effort; the tap handler rebuilds on demand.
+          }
+        }
+      }, 900);
       setGeneratedPackage(result.generatedPackage);
       setGeneratedBrowPackage(result.generatedBrowPackage);
       setGeneratedMaskControls(nextGeneratedMaskControls);
@@ -730,10 +764,13 @@ export function UnityMakeupCaptureScreen({
     // not need a rebuild.
     let browPackageOverride: GeneratedBrowPackage | undefined;
     if (patch.shapeId !== undefined && nativeBrowSourceRef.current) {
-      const rebuiltBrowPackage = buildGeneratedBrowPackage({
-        controls: nextControls,
-        nativeResult: nativeBrowSourceRef.current,
-      });
+      const rebuiltBrowPackage =
+        browPackageCacheRef.current[nextControls.shapeId] ??
+        buildGeneratedBrowPackage({
+          controls: nextControls,
+          nativeResult: nativeBrowSourceRef.current,
+        });
+      browPackageCacheRef.current[nextControls.shapeId] = rebuiltBrowPackage;
       browPackageOverride = rebuiltBrowPackage;
       setGeneratedBrowPackage(rebuiltBrowPackage);
     }
