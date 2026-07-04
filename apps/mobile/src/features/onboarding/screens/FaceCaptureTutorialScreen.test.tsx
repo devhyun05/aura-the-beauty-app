@@ -21,10 +21,12 @@ const iconNames = getFaceCaptureTutorialIconNames();
 const navigationMode = getFaceCaptureTutorialNavigationMode();
 const visualPresentation = getFaceCaptureTutorialVisualPresentation();
 const lastStep = guideSteps[guideSteps.length - 1];
+const finalStepRequiresPrivacyAgreement: false = lastStep.requiresPrivacyAgreement;
 const imageFillPresentation: {
   imageFillMode: 'fit-image';
   imageFillScale: 1;
 } = visualPresentation;
+const finalPrivacyPlacement: 'none' = visualPresentation.finalPrivacyPlacement;
 
 void imageFillPresentation;
 
@@ -39,7 +41,11 @@ expectEqual(
   false,
   'face capture tutorial step advance button',
 );
-expectEqual(lastStep.requiresPrivacyAgreement, true, 'face capture privacy agreement');
+expectEqual(
+  finalStepRequiresPrivacyAgreement,
+  false,
+  'face capture privacy agreement removed',
+);
 expectEqual(lastStep.buttonLabel, '촬영하기', 'face capture final action');
 expectEqual(
   FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
@@ -60,8 +66,8 @@ expectEqual(
 );
 expectEqual(visualPresentation.finalActionWidth, 'compact', 'face capture final action width');
 expectEqual(
-  visualPresentation.finalPrivacyPlacement,
-  'below-pagination-above-action',
+  finalPrivacyPlacement,
+  'none',
   'face capture privacy placement',
 );
 expectEqual(

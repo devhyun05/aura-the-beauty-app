@@ -41,6 +41,12 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().shouldShowBeautyJourneyGuide,
+  false,
+  'initial beauty journey guide visibility',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedFaceAnalysisReport,
   null,
   'initial selected face analysis report',
@@ -70,6 +76,12 @@ expectEqual(
   demoState.selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'demo makeup feedback photoSource',
+);
+
+expectEqual(
+  demoState.shouldShowBeautyJourneyGuide,
+  false,
+  'demo beauty journey guide visibility',
 );
 
 if (!demoState.makeupFeedbackResult) {

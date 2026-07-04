@@ -93,10 +93,9 @@ function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
 
 export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
-    referenceMakeupUploadedPhotos,
-    setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
@@ -116,12 +115,12 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
-    setReferenceMakeupUploadedPhotos([photo, ...referenceMakeupUploadedPhotos]);
-    navigation.replace('ReferenceMakeupExtractionLoading');
+    navigation.replace('FaceCaptureConfirmation', {target: 'referenceMakeupExtraction'});
   };
 
   return (
     <CameraFaceCaptureScreen
+      autoOpenGallery={route.params?.initialSource === 'gallery'}
       captureMode="reference"
       captureType="filter_extraction"
       onCapture={handleStartAnalysis}
@@ -136,7 +135,8 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
   const [isAnalysisReady, setIsAnalysisReady] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<MakeupExtractionProgressUpdate | null>(null);
+  const [analysisProgress, setAnalysisProgress] =
+    useState<MakeupExtractionProgressUpdate | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -165,6 +165,7 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
     />
   );
 }
+
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {

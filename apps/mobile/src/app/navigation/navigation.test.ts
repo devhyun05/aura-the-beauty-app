@@ -21,6 +21,12 @@ expectEqual(getRouteChrome('ProfileEdit').kind, 'detail', 'profile edit chrome')
 expectEqual(getRouteChrome('ProfileEdit').category, 'form-edit', 'profile edit category');
 expectEqual(getRouteChrome('MakeupFeedbackLoading').kind, 'detail', 'makeup feedback loading chrome');
 expectEqual(getRouteChrome('MakeupFeedbackLoading').category, 'progress', 'makeup feedback loading category');
+expectEqual(getRouteChrome('FaceAnalysisIntro').kind, 'detail', 'face analysis intro chrome');
+expectEqual(
+  getDetailRouteTitle('FaceAnalysisIntro'),
+  '얼굴 분석',
+  'face analysis intro detail route title',
+);
 expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
 expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
@@ -60,6 +66,11 @@ expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
   'terminal route order',
+);
+expectEqual(
+  getRouteChrome('ReferenceMakeupExtractionUpload').kind,
+  'detail',
+  'reference makeup extraction upload chrome',
 );
 expectEqual(
   resolveActiveRouteName({

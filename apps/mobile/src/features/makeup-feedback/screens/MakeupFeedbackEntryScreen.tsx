@@ -17,8 +17,6 @@ import {
 import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 
 type MakeupFeedbackEntryScreenProps = {
-  headerTitle?: string;
-  onClose?: () => void;
   onPressAiFeedback: () => void;
 };
 

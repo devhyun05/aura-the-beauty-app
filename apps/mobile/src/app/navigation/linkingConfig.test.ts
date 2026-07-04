@@ -44,6 +44,9 @@ type SavedMakeupListPathContract = ExpectType<
 type ProductRecommendationPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.ProductRecommendation, 'product-recommendation'>
 >;
+type FaceAnalysisIntroPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.FaceAnalysisIntro, 'face-analysis-intro'>
+>;
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
 >;
@@ -145,6 +148,11 @@ expectEqual(
   navigationLinking.config?.screens?.ProductRecommendation,
   'product-recommendation',
   'product recommendation path uses product naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.FaceAnalysisIntro,
+  'face-analysis-intro',
+  'face analysis intro path uses analysis naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.Community,

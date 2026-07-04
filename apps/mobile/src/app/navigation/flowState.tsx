@@ -27,6 +27,7 @@ export type NavigationFlowState = {
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
   referenceMakeupUploadedPhotos: readonly ReferenceMakeupPhoto[];
+  shouldShowBeautyJourneyGuide: boolean;
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
@@ -39,6 +40,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
   setReferenceMakeupUploadedPhotos: Dispatch<SetStateAction<readonly ReferenceMakeupPhoto[]>>;
+  setShouldShowBeautyJourneyGuide: Dispatch<SetStateAction<boolean>>;
 };
 
 const NavigationFlowStateContext =
@@ -57,6 +59,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
     referenceMakeupUploadedPhotos: [],
+    shouldShowBeautyJourneyGuide: false,
   };
 }
 
@@ -91,6 +94,8 @@ export function NavigationFlowStateProvider({
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
     useState<MakeupFeedbackResult | null>(initialState.makeupFeedbackResult);
+  const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
+    useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
   const value = useMemo(
     () => ({
@@ -103,6 +108,7 @@ export function NavigationFlowStateProvider({
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      shouldShowBeautyJourneyGuide,
       setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
@@ -112,6 +118,7 @@ export function NavigationFlowStateProvider({
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
       setReferenceMakeupUploadedPhotos,
+      setShouldShowBeautyJourneyGuide,
     }),
     [
       likedMakeupFilterIds,
@@ -123,6 +130,7 @@ export function NavigationFlowStateProvider({
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      shouldShowBeautyJourneyGuide,
     ],
   );
 

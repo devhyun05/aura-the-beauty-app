@@ -2,9 +2,9 @@ import React, {useCallback, useState} from 'react';
 import {Modal, Pressable, StyleSheet} from 'react-native';
 import {createBottomTabNavigator, type BottomTabBarProps} from '@react-navigation/bottom-tabs';
 import type {NavigationProp} from '@react-navigation/native';
-import {Camera, ChevronRight, ImagePlus, Sparkles, X} from 'lucide-react-native';
+import {ArrowRight, Camera, ImagePlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Button, Text, View, XStack, YStack} from 'tamagui';
+import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../shared/theme';
 import {AppFooter, type FooterTabKey} from '../../shared/ui';
@@ -33,23 +33,23 @@ export function MainTabNavigator() {
 
 function MainTabBar({navigation, state}: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const [isFeedbackSheetVisible, setFeedbackSheetVisible] = useState(false);
-  const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
+  const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = useState(false);
+  const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
+  const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
   const {
     setMakeupFeedbackResult,
     setSelectedMakeupFeedbackPhoto,
   } = useNavigationFlowState();
-  const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
-  const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
+  const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
 
   const closeFeedbackSheet = useCallback(() => {
-    setFeedbackSheetVisible(false);
+    setIsFeedbackSheetVisible(false);
   }, []);
 
   const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
+    setIsFeedbackSheetVisible(false);
     setMakeupFeedbackResult(null);
     setSelectedMakeupFeedbackPhoto({photoSource});
-    setFeedbackSheetVisible(false);
 
     requestAnimationFrame(() => {
       if (photoSource === 'camera') {
@@ -64,7 +64,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
   const handleTabPress = useCallback(
     (tab: FooterTabKey) => {
       if (tab === 'custom') {
-        setFeedbackSheetVisible(true);
+        setIsFeedbackSheetVisible(true);
         return;
       }
 
@@ -81,161 +81,191 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
   );
 
   return (
-    <>
-      <YStack
-        pointerEvents="box-none"
-        style={[
-          styles.tabBarHost,
-          {
-            height: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md),
-          },
-        ]}>
-        <AppFooter
-          activeTab={activeTab}
-          bottomInset={insets.bottom}
-          floating
-          onTabPress={handleTabPress}
-        />
-      </YStack>
-      <AiFeedbackActionSheet
+    <YStack
+      pointerEvents="box-none"
+      style={[
+        styles.tabBarHost,
+        {
+          height: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md),
+        },
+      ]}>
+      <AppFooter
+        activeTab={isFeedbackSheetVisible ? 'custom' : activeTab}
         bottomInset={insets.bottom}
-        visible={isFeedbackSheetVisible}
-        onClose={closeFeedbackSheet}
-        onPickAlbum={() => startMakeupFeedback('gallery')}
-        onPickCamera={() => startMakeupFeedback('camera')}
+        floating
+        onTabPress={handleTabPress}
       />
-    </>
+      <MakeupFeedbackActionSheet
+        isVisible={isFeedbackSheetVisible}
+        onClose={closeFeedbackSheet}
+        onPressCamera={() => startMakeupFeedback('camera')}
+        onPressUpload={() => startMakeupFeedback('gallery')}
+      />
+    </YStack>
   );
 }
 
-type AiFeedbackActionSheetProps = {
-  bottomInset: number;
-  onClose: () => void;
-  onPickAlbum: () => void;
-  onPickCamera: () => void;
-  visible: boolean;
-};
+const makeupFeedbackSheetActions = [
+  {
+    id: 'camera',
+    label: '카메라 촬영',
+    description: '지금 메이크업 상태를 촬영해서 피드백받아요.',
+    accessibilityLabel: '카메라 촬영으로 메이크업 피드백 시작',
+    icon: (color: string) => <Camera color={color} size={iconSize.md} strokeWidth={1.9} />,
+  },
+  {
+    id: 'upload',
+    label: '사진 업로드',
+    description: '앨범 속 사진으로 메이크업 균형을 확인해요.',
+    accessibilityLabel: '사진 업로드로 메이크업 피드백 시작',
+    icon: (color: string) => <ImagePlus color={color} size={iconSize.md} strokeWidth={1.9} />,
+  },
+] as const;
 
-type AiFeedbackSheetOptionProps = {
-  description: string;
-  icon: React.ReactNode;
-  onPress: () => void;
-  title: string;
-};
-
-function AiFeedbackActionSheet({
-  bottomInset,
+function MakeupFeedbackActionSheet({
+  isVisible,
   onClose,
-  onPickAlbum,
-  onPickCamera,
-  visible,
-}: AiFeedbackActionSheetProps) {
+  onPressCamera,
+  onPressUpload,
+}: {
+  isVisible: boolean;
+  onClose: () => void;
+  onPressCamera: () => void;
+  onPressUpload: () => void;
+}) {
+  const actionHandlers = {
+    camera: onPressCamera,
+    upload: onPressUpload,
+  } as const;
+
   return (
     <Modal
       animationType="fade"
-      statusBarTranslucent
+      onRequestClose={onClose}
       transparent
-      visible={visible}
-      onRequestClose={onClose}>
-      <View style={styles.sheetRoot}>
+      visible={isVisible}>
+      <Pressable
+        accessibilityLabel="메이크업 피드백 선택 닫기"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.sheetBackdrop}>
         <Pressable
-          accessibilityLabel="AI 피드백 선택 닫기"
-          accessibilityRole="button"
-          style={styles.sheetBackdrop}
-          onPress={onClose}
-        />
-        <YStack
-          accessibilityViewIsModal
-          style={[
-            styles.sheetPanel,
-            {paddingBottom: Math.max(bottomInset, spacing.md) + spacing.md},
-          ]}>
+          accessibilityRole="menu"
+          onPress={() => {}}
+          style={styles.actionSheet}>
           <View style={styles.sheetHandle} />
-          <XStack style={styles.sheetHeader}>
-            <View style={styles.sheetHeaderIcon}>
-              <Sparkles color={colors.white} size={iconSize.md} strokeWidth={2.1} />
-            </View>
-            <YStack style={styles.sheetHeaderCopy}>
-              <Text style={styles.sheetEyebrow}>AI FEEDBACK</Text>
-              <Text style={styles.sheetTitle}>피드백 사진 선택</Text>
-            </YStack>
-            <Button
-              unstyled
-              accessibilityLabel="AI 피드백 선택 닫기"
-              accessibilityRole="button"
-              pressStyle={{scale: 0.96}}
-              style={styles.sheetCloseButton}
-              onPress={onClose}>
-              <X color={colors.textSecondary} size={iconSize.sm} strokeWidth={2.2} />
-            </Button>
-          </XStack>
-
-          <YStack style={styles.sheetOptions}>
-            <AiFeedbackSheetOption
-              description="지금 메이크업 상태를 바로 촬영"
-              icon={<Camera color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.9} />}
-              title="카메라로 촬영"
-              onPress={onPickCamera}
-            />
-            <AiFeedbackSheetOption
-              description="저장된 사진으로 피드백 받기"
-              icon={<ImagePlus color={colors.textPrimary} size={iconSize.lg} strokeWidth={1.9} />}
-              title="앨범에서 선택"
-              onPress={onPickAlbum}
-            />
+          <YStack style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>메이크업 피드백</Text>
+            <Text style={styles.sheetDescription}>
+              카메라 촬영 또는 사진 업로드로 오늘의 메이크업을 점검해요.
+            </Text>
           </YStack>
 
-          <Button
-            unstyled
-            accessibilityLabel="AI 피드백 선택 취소"
+          <YStack style={styles.sheetActionList}>
+            {makeupFeedbackSheetActions.map(action => (
+              <Pressable
+                accessibilityLabel={action.accessibilityLabel}
+                accessibilityRole="menuitem"
+                key={action.id}
+                onPress={actionHandlers[action.id]}
+                style={({pressed}) => [
+                  styles.sheetActionButton,
+                  pressed && styles.pressed,
+                ]}>
+                <View style={styles.sheetActionIcon}>
+                  {action.icon(colors.textPrimary)}
+                </View>
+                <YStack style={styles.sheetActionCopy}>
+                  <Text style={styles.sheetActionTitle}>{action.label}</Text>
+                  <Text style={styles.sheetActionDescription}>
+                    {action.description}
+                  </Text>
+                </YStack>
+                <ArrowRight
+                  color={colors.textPrimary}
+                  size={iconSize.sm}
+                  strokeWidth={2}
+                />
+              </Pressable>
+            ))}
+          </YStack>
+
+          <Pressable
+            accessibilityLabel="메이크업 피드백 선택 취소"
             accessibilityRole="button"
-            pressStyle={{scale: 0.98}}
-            style={styles.sheetCancelButton}
-            onPress={onClose}>
+            onPress={onClose}
+            style={({pressed}) => [styles.sheetCancelButton, pressed && styles.pressed]}>
             <Text style={styles.sheetCancelText}>취소</Text>
-          </Button>
-        </YStack>
-      </View>
+          </Pressable>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
 
-function AiFeedbackSheetOption({
-  description,
-  icon,
-  onPress,
-  title,
-}: AiFeedbackSheetOptionProps) {
-  return (
-    <Button
-      unstyled
-      accessibilityLabel={title}
-      accessibilityRole="button"
-      pressStyle={{scale: 0.985}}
-      style={styles.sheetOption}
-      onPress={onPress}>
-      <XStack style={styles.sheetOptionContent}>
-        <View style={styles.sheetOptionIcon}>{icon}</View>
-        <YStack style={styles.sheetOptionCopy}>
-          <Text style={styles.sheetOptionTitle}>{title}</Text>
-          <Text style={styles.sheetOptionDescription}>{description}</Text>
-        </YStack>
-        <ChevronRight color={colors.textTertiary} size={iconSize.sm} strokeWidth={2.1} />
-      </XStack>
-    </Button>
-  );
-}
-
 const styles = StyleSheet.create({
-  tabBarHost: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
+  actionSheet: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: {width: 0, height: -8},
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+  },
+  pressed: {
+    opacity: 0.78,
+  },
+  sheetActionButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  sheetActionCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  sheetActionDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  sheetActionIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  sheetActionList: {
+    gap: spacing.md,
+  },
+  sheetActionTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.md,
   },
   sheetBackdrop: {
-    backgroundColor: 'rgba(17, 17, 17, 0.28)',
+    backgroundColor: 'rgba(0, 0, 0, 0.34)',
     bottom: 0,
+    justifyContent: 'flex-end',
     left: 0,
     position: 'absolute',
     right: 0,
@@ -243,86 +273,22 @@ const styles = StyleSheet.create({
   },
   sheetCancelButton: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    height: 52,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
     justifyContent: 'center',
-    marginTop: spacing.md,
+    minHeight: 48,
   },
   sheetCancelText: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
+    lineHeight: typography.lineHeight.sm,
   },
-  sheetCloseButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  sheetEyebrow: {
-    color: colors.successMuted,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    backgroundColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    height: 4,
-    marginBottom: spacing.lg,
-    width: 42,
-  },
-  sheetHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  sheetHeaderCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  sheetHeaderIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  sheetOption: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    minHeight: 76,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-  },
-  sheetOptionContent: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  sheetOptionCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  sheetOptionDescription: {
+  sheetDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
@@ -330,43 +296,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
-  sheetOptionIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
     borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
+    height: 4,
+    width: 42,
   },
-  sheetOptions: {
-    gap: spacing.sm,
-    marginTop: spacing.xl,
-  },
-  sheetOptionTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  sheetPanel: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    elevation: 24,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    shadowColor: colors.black,
-    shadowOffset: {width: 0, height: -12},
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-  },
-  sheetRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
+  sheetHeader: {
+    gap: spacing.xs,
   },
   sheetTitle: {
     color: colors.textPrimary,
@@ -375,5 +313,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
+  },
+  tabBarHost: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
   },
 });

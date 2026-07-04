@@ -45,7 +45,7 @@ export function MakeupFeedbackEntryRouteScreen({navigation}: RootScreenProps<'Ma
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackEntry"
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
       <MakeupFeedbackEntryScreen onPressAiFeedback={handlePressAiFeedback} />
     </DetailRouteChrome>
   );
@@ -66,7 +66,7 @@ export function MakeupFeedbackCaptureRouteScreen({
       setSelectedMakeupFeedbackPhoto(
         mapFaceCaptureResultToMakeupFeedbackPhotoSelection(result),
       );
-      navigation.replace('MakeupFeedbackGoalInput');
+      navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
     [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
@@ -90,7 +90,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
     (selection: MakeupFeedbackPhotoSelection) => {
       setMakeupFeedbackResult(null);
       setSelectedMakeupFeedbackPhoto(selection);
-      navigation.replace('MakeupFeedbackGoalInput');
+      navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
     [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
@@ -98,8 +98,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackAlbumUpload"
-      onBack={() => navigateMainTab(navigation, 'CustomTab')}
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
       <MakeupFeedbackAlbumUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
