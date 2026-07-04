@@ -194,13 +194,13 @@ expectEqual(
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.x,
-  0,
-  'left-position settings sits above the star to avoid edge clipping',
+  -58,
+  'left-position settings sits to the left of the star',
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.y,
-  -116,
-  'left-position settings stays clear of the quick action options',
+  0,
+  'left-position settings aligns horizontally with the star',
 );
 expectEqual(
   getFloatingActionSelectedSlotNumber(customOrderedFloatingActions, 'makeupFeedback'),

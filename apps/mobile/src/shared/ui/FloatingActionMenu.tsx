@@ -328,7 +328,7 @@ export function getFloatingActionSettingsSlotOffset(
     return {x: 120, y: 0};
   }
 
-  return buttonPosition === 'left' ? {x: 0, y: -116} : {x: 58, y: 0};
+  return buttonPosition === 'left' ? {x: -58, y: 0} : {x: 58, y: 0};
 }
 
 export function getFloatingActionButtonScale(isActive: boolean): number {
