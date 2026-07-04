@@ -1028,75 +1028,150 @@ function buildShapeCorrectedBrowFillPolygon({
         })
       : null;
 
-  if (ringShape) {
-    return buildBrowRingSilhouettePolygon({
-      appearanceShape,
-      bottomY,
-      direction,
-      frameHeight,
-      frameWidth,
-      innerX,
-      outerX,
-      ringShape,
-      shapeId,
-      topY,
+  const measuredShape =
+    ringShape ??
+    ((t: number) => {
+      // No usable landmark ring: fall back to a flat band inside the envelope.
+      const upperY = topY + height * 0.34;
+      const lowerY = bottomY - height * 0.18;
+      void t;
+      return {lowerY, upperY};
     });
-  }
 
-  const archAmount =
-    shapeId === 'straight' ? 0.025 : shapeId === 'slim-tail' ? 0.11 : 0.15;
-  const tailDrop =
-    shapeId === 'straight' ? 0.035 : shapeId === 'slim-tail' ? 0.16 : 0.09;
-  const baseThickness =
-    shapeId === 'straight' ? 0.24 : shapeId === 'slim-tail' ? 0.2 : 0.26;
-  const tailTaper =
-    shapeId === 'straight' ? 0.22 : shapeId === 'slim-tail' ? 0.64 : 0.48;
+  return buildSmoothBrowEnvelopePolygon({
+    appearanceShape,
+    bottomY,
+    direction,
+    frameHeight,
+    frameWidth,
+    innerX,
+    measuredShape,
+    outerX,
+    shapeId,
+    stabilizePoint,
+    topY,
+  });
+}
+
+// Landmarks decide only WHERE the brow sits (head/tail anchors, measured
+// thickness, measured arch). The visible outline is a makeup-style smooth
+// envelope: an analytic centerline plus a thickness profile, sampled densely.
+// This keeps head -> body -> arch -> tail flowing as one curve and removes the
+// per-vertex MediaPipe jitter that made the older ring-following outline lumpy.
+function buildSmoothBrowEnvelopePolygon({
+  appearanceShape,
+  bottomY,
+  direction,
+  frameHeight,
+  frameWidth,
+  innerX,
+  measuredShape,
+  outerX,
+  shapeId,
+  stabilizePoint,
+  topY,
+}: {
+  appearanceShape: ((t: number) => {lowerY: number; upperY: number}) | null;
+  bottomY: number;
+  direction: number;
+  frameHeight: number;
+  frameWidth: number;
+  innerX: number;
+  measuredShape: (t: number) => {lowerY: number; upperY: number};
+  outerX: number;
+  shapeId: BrowShapeId;
+  stabilizePoint: (point: E7Point2D) => E7Point2D;
+  topY: number;
+}): E7Point2D[] {
+  const height = Math.max(1, bottomY - topY);
+  const measure = (t: number) => {
+    const ring = measuredShape(t);
+    const appearance = appearanceShape?.(t);
+    if (!appearance) {
+      return ring;
+    }
+    return {
+      lowerY: lerp(ring.lowerY, appearance.lowerY, 0.4),
+      upperY: lerp(ring.upperY, appearance.upperY, 0.4),
+    };
+  };
+
+  // Robust anchors: the brow underside (lower chord) sets the natural baseline
+  // and tilt, body samples give a median thickness, and the largest rise above
+  // the head->tail chord tells us how arched this brow actually is. The arch is
+  // applied to the TOP edge; the underside follows the real brow so the mask
+  // reliably covers the brow body instead of floating.
+  const headMeasure = measure(0);
+  const tailMeasure = measure(1);
+  const headCenterY = (headMeasure.upperY + headMeasure.lowerY) * 0.5;
+  const tailCenterY = (tailMeasure.upperY + tailMeasure.lowerY) * 0.5;
+  const thicknessSamples: number[] = [];
+  const lowerSamples: number[] = [];
+  let measuredArchRise = 0;
+  let measuredArchPeakT = 0.6;
+  for (let step = 0; step <= 24; step += 1) {
+    const t = step / 24;
+    const sample = measure(t);
+    thicknessSamples.push(Math.max(1, sample.lowerY - sample.upperY));
+    lowerSamples.push(sample.lowerY);
+    const chordCenterY = lerp(headCenterY, tailCenterY, t);
+    const rise = chordCenterY - sample.upperY;
+    if (rise > measuredArchRise) {
+      measuredArchRise = rise;
+      measuredArchPeakT = t;
+    }
+  }
+  const sortedThickness = [...thicknessSamples].sort((first, second) => first - second);
+  const medianThickness = sortedThickness[Math.floor(sortedThickness.length / 2)] ?? height * 0.3;
+  const deepestLowerY = Math.max(...lowerSamples);
+
+  const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.55;
+  const tailTaperStrength =
+    shapeId === 'straight' ? 0.32 : shapeId === 'slim-tail' ? 0.74 : 0.54;
+  const tailTaperStartT = shapeId === 'straight' ? 0.72 : 0.5;
+  const thicknessScale =
+    shapeId === 'straight' ? 1.08 : shapeId === 'slim-tail' ? 0.98 : 1.06;
+  const archPeakT = clamp(measuredArchPeakT, 0.5, 0.72);
+  const archMagnitude = archScale * (measuredArchRise * 0.5 + medianThickness * 0.42);
+  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.14, height * 0.86);
+  // Lower edge follows the real brow underside; endpoints taper up slightly so
+  // the head and tail come to soft points rather than blunt ends.
+  const headLowerY = Math.max(headMeasure.lowerY, deepestLowerY - medianThickness * 0.45);
+  const tailLowerY = tailMeasure.lowerY;
+
+  const archProfile = (t: number) => {
+    const sigma = 0.34;
+    const d = (t - archPeakT) / sigma;
+    return Math.exp(-0.5 * d * d);
+  };
+  const thicknessProfile = (t: number) => {
+    const headRamp = lerp(0.55, 1, smoothstep(0, 0.16, t));
+    const tailRamp = 1 - smoothstep(tailTaperStartT, 1, t) * tailTaperStrength;
+    const bodyRamp = 0.9 + 0.1 * Math.sin(Math.PI * t);
+    return clamp(headRamp * tailRamp * bodyRamp, 0.12, 1);
+  };
+  // How much the underside follows the top arch (arched brows stay flatter
+  // underneath than on top).
+  const lowerArchFollow = shapeId === 'slim-tail' ? 0.34 : 0.22;
+
+  const sampleCount = 48;
   const upperCurve: E7Point2D[] = [];
   const lowerCurve: E7Point2D[] = [];
-
-  for (let index = 0; index < BROW_SHAPE_ENGINE_SAMPLE_COUNT; index += 1) {
-    const t = index / (BROW_SHAPE_ENGINE_SAMPLE_COUNT - 1);
-    const x = lerp(innerX, outerX, remapBrowPreArchXProgress(t, shapeId));
-    const arch = Math.sin(Math.PI * t);
-    const tail = smoothstep(0.58, 1, t);
-    const innerSoftDrop = (1 - smoothstep(0, 0.18, t)) * 0.035;
-    const centerY =
-      topY +
-      height *
-        (0.54 -
-          arch * archAmount +
-            tail * tailDrop +
-          innerSoftDrop);
-    const thickness =
-      height *
-      baseThickness *
-      (1 - tail * tailTaper) *
-      (0.88 + 0.12 * Math.sin(Math.PI * t));
-    const upperBias = shapeId === 'straight' ? 0.48 : 0.56;
-    const templateUpperY = centerY - thickness * upperBias;
-    const templateLowerY = centerY + thickness * (1 - upperBias);
-    const appearanceSample = appearanceShape?.(t);
-    let upperY = templateUpperY;
-    let lowerY = templateLowerY;
-    if (appearanceSample) {
-      upperY = lerp(upperY, appearanceSample.upperY, 0.18);
-      lowerY = lerp(lowerY, appearanceSample.lowerY, 0.14);
-    }
-    upperCurve.push({
-      x,
-      y: upperY,
-    });
-    lowerCurve.push({
-      x: x - direction * thickness * 0.06 * tail,
-      y: lowerY,
-    });
+  for (let index = 0; index < sampleCount; index += 1) {
+    const t = index / (sampleCount - 1);
+    const x = lerp(innerX, outerX, t);
+    const arch = archMagnitude * archProfile(t);
+    const width = bodyThickness * thicknessProfile(t);
+    const lowerBaseY = lerp(headLowerY, tailLowerY, t) - arch * lowerArchFollow;
+    upperCurve.push({x, y: lowerBaseY - width - arch});
+    lowerCurve.push({x, y: lowerBaseY});
   }
 
-  const tailUpper = upperCurve[upperCurve.length - 1];
-  const tailLower = lowerCurve[lowerCurve.length - 1];
+  const tailUpper = upperCurve[sampleCount - 1];
+  const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * 0.02,
-    y: (tailUpper.y + tailLower.y) * 0.5 + height * 0.018,
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.045 : 0.025),
+    y: (tailUpper.y + tailLower.y) * 0.5,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),
@@ -1108,94 +1183,8 @@ function buildShapeCorrectedBrowFillPolygon({
     .map(stabilizePoint)
     .map(point => ({
       x: clamp(point.x, 0, frameWidth - 1),
-      y: clamp(point.y, 0, frameHeight - 1),
+      y: clamp(point.y, topY, Math.min(bottomY, frameHeight - 1)),
     }));
-}
-
-function buildBrowRingSilhouettePolygon({
-  appearanceShape,
-  bottomY,
-  direction,
-  frameHeight,
-  frameWidth,
-  innerX,
-  outerX,
-  ringShape,
-  shapeId,
-  topY,
-}: {
-  appearanceShape: ((t: number) => {lowerY: number; upperY: number}) | null;
-  bottomY: number;
-  direction: number;
-  frameHeight: number;
-  frameWidth: number;
-  innerX: number;
-  outerX: number;
-  ringShape: (t: number) => {lowerY: number; upperY: number};
-  shapeId: BrowShapeId;
-  topY: number;
-}): E7Point2D[] {
-  const height = Math.max(1, bottomY - topY);
-  const upperCurve: E7Point2D[] = [];
-  const lowerCurve: E7Point2D[] = [];
-  const headUpperY = ringShape(0).upperY;
-  const tailUpperY = ringShape(1).upperY;
-
-  for (let index = 0; index < BROW_SHAPE_ENGINE_SAMPLE_COUNT; index += 1) {
-    const t = index / (BROW_SHAPE_ENGINE_SAMPLE_COUNT - 1);
-    const x = lerp(innerX, outerX, t);
-    const ringSample = ringShape(t);
-    const appearanceSample = appearanceShape?.(t);
-    let upperY = ringSample.upperY;
-    let lowerY = ringSample.lowerY;
-
-    if (appearanceSample) {
-      upperY = lerp(upperY, appearanceSample.upperY, 0.5);
-      lowerY = lerp(lowerY, appearanceSample.lowerY, 0.5);
-    }
-
-    const ringThickness = Math.max(1, lowerY - upperY);
-    if (shapeId === 'straight') {
-      const chordUpperY = lerp(headUpperY, tailUpperY, t);
-      upperY = Math.min(
-        lerp(upperY, chordUpperY, 0.34),
-        lowerY - ringThickness * 0.55,
-      );
-    } else if (shapeId === 'slim-tail') {
-      const tailTaper = smoothstep(0.5, 1, t) * 0.42;
-      upperY = lowerY - ringThickness * (1 - tailTaper);
-    }
-
-    const thickness = Math.max(1, lowerY - upperY);
-    const coveragePad = thickness * 0.12 + height * 0.012;
-    upperCurve.push({x, y: upperY - coveragePad * 0.6});
-    lowerCurve.push({x, y: lowerY + coveragePad * 0.4});
-  }
-
-  const tailUpper = upperCurve[upperCurve.length - 1];
-  const tailLower = lowerCurve[lowerCurve.length - 1];
-  const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.05 : 0.03),
-    y: (tailUpper.y + tailLower.y) * 0.5,
-  };
-  const polygon = [
-    ...upperCurve.slice(0, -1),
-    tailPoint,
-    ...lowerCurve.slice(0, -1).reverse(),
-  ];
-
-  return polygon.map(point => ({
-    x: clamp(point.x, 0, frameWidth - 1),
-    y: clamp(point.y, 0, frameHeight - 1),
-  }));
-}
-
-function remapBrowPreArchXProgress(t: number, shapeId: BrowShapeId): number {
-  const preArchPush =
-    shapeId === 'slim-tail' ? 0.025 : shapeId === 'straight' ? 0.028 : 0.038;
-  const headGate = smoothstep(0.06, 0.24, t);
-  const archGate = 1 - smoothstep(0.62, 0.9, t);
-  return clamp01(t + preArchPush * headGate * archGate);
 }
 
 function buildOrderedBrowRingShapeModel({

@@ -166,9 +166,9 @@ const AR_BLUSH_CHEEK_REGION_OPTIONS = [
   {label: '선키스 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
 ] as const;
 const GENERATED_BROW_SHAPE_OPTIONS = [
-  {label: '소프트 아치', shapeId: 'soft-arch'},
   {label: '일자', shapeId: 'straight'},
-  {label: '슬림 꼬리', shapeId: 'slim-tail'},
+  {label: '세미아치', shapeId: 'soft-arch'},
+  {label: '아치', shapeId: 'slim-tail'},
 ] as const satisfies ReadonlyArray<{
   label: string;
   shapeId: GeneratedBrowControls['shapeId'];
