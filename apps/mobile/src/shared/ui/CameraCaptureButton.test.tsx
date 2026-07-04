@@ -37,4 +37,6 @@ expectEqual(
   accessibilityLabel="사진 촬영"
   disabled={false}
   onPress={() => undefined}
+  surfaceStyle={{opacity: 1}}
+  variant="liquidGlass"
 />;

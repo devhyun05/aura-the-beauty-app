@@ -50,7 +50,6 @@ class S3Service:
       Params={
         "Bucket": self.settings.s3_bucket_name,
         "Key": object_key,
-        "ContentType": content_type,
       },
       ExpiresIn=expires_in,
     )

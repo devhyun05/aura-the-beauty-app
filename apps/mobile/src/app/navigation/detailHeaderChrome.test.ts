@@ -16,6 +16,7 @@ type HasRightActions<RouteName extends keyof typeof routeChromeByRoute> =
     : false;
 
 type ExpectFalse<Condition extends false> = Condition;
+type ExpectTrue<Condition extends true> = Condition;
 
 type MakeupFeedbackEntryNoCloseContract = ExpectFalse<
   HasRightActions<'MakeupFeedbackEntry'>
@@ -23,7 +24,7 @@ type MakeupFeedbackEntryNoCloseContract = ExpectFalse<
 type MakeupFeedbackAlbumUploadNoCloseContract = ExpectFalse<
   HasRightActions<'MakeupFeedbackAlbumUpload'>
 >;
-type ReferenceMakeupExtractionUploadNoCloseContract = ExpectFalse<
+type ReferenceMakeupExtractionUploadCloseContract = ExpectTrue<
   HasRightActions<'ReferenceMakeupExtractionUpload'>
 >;
 
@@ -49,7 +50,7 @@ expectEqual(
 );
 expectEqual(
   getDetailHeaderRightActions('ReferenceMakeupExtractionUpload').join(','),
-  '',
+  'close',
   'reference makeup extraction upload route header actions',
 );
 expectEqual(

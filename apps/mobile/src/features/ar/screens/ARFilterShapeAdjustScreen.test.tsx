@@ -7,6 +7,7 @@ import {
   getARFilterShapeAdjustTitle,
   getARFilterShapeAdjustSelectedTabOpacity,
   getShapePreviewColorOverlayLayers,
+  getShapePointPanResponderDependencyMode,
 } from './ARFilterShapeAdjustScreen';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -39,6 +40,11 @@ expectEqual(
   getARFilterShapeAdjustInteractionMode(),
   'drag-shape-point',
   'AR shape adjust uses draggable shape points',
+);
+expectEqual(
+  getShapePointPanResponderDependencyMode(),
+  'shape-point-ids',
+  'AR shape point pan responders depend on point ids only',
 );
 
 <ARFilterShapeAdjustScreen

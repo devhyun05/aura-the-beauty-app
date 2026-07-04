@@ -55,15 +55,40 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   // Extension point for config-plugins
 
   override func sourceURL(for bridge: RCTBridge) -> URL? {
-    // needed to return the correct URL for expo-dev-client.
-    bridge.bundleURL ?? bundleURL()
+    // Prefer the explicit bundle URL in debug builds so a stale bridge URL
+    // cannot surface as "No script URL provided" on physical devices.
+    bundleURL() ?? bridge.bundleURL
   }
 
   override func bundleURL() -> URL? {
 #if DEBUG
+    if let explicitMetroURL = explicitMetroBundleURL() {
+      NSLog("[AURA] Using explicit Metro bundle URL: \(explicitMetroURL.absoluteString)")
+      return explicitMetroURL
+    }
+
     return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
 #else
     return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
+  }
+
+  private func explicitMetroBundleURL() -> URL? {
+    guard
+      let ipPath = Bundle.main.path(forResource: "ip", ofType: "txt"),
+      let host = try? String(contentsOfFile: ipPath, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !host.isEmpty
+    else {
+      return nil
+    }
+
+    return RCTBundleURLProvider.jsBundleURL(
+      forBundleRoot: ".expo/.virtual-metro-entry",
+      packagerHost: host,
+      enableDev: true,
+      enableMinification: false,
+      inlineSourceMap: false
+    )
   }
 }

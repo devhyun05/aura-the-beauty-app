@@ -876,7 +876,6 @@ function RecommendedFilterCard({
         source={filter.imageSource}
         style={styles.recommendedFilterImage}
       />
-      <View style={styles.recommendedFilterScrim} />
       <YStack style={styles.recommendedFilterCopy}>
         <Text numberOfLines={1} style={styles.recommendedFilterHeadline}>
           {filter.headline}
@@ -1176,6 +1175,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
+    textShadowColor: 'rgba(0, 0, 0, 0.58)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 5,
   },
   recommendedFilterImage: {
     height: '100%',
@@ -1216,19 +1218,14 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  recommendedFilterScrim: {
-    backgroundColor: 'rgba(0, 0, 0, 0.44)',
-    bottom: 0,
-    height: 96,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-  },
   recommendedFilterTitle: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 7,
   },
   recommendedFilterRow: {
     justifyContent: 'space-between',

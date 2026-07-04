@@ -48,13 +48,17 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const handleMakeupExtractionCameraPress = React.useCallback(() => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
-    rootNavigation?.navigate('ReferenceMakeupExtractionCapture');
+    rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {
+      initialSource: 'camera',
+    });
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
 
   const handleMakeupExtractionUploadPress = React.useCallback(() => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
-    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
+    rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {
+      initialSource: 'gallery',
+    });
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
 
   const handleBeautyJourneyGuideConfirm = React.useCallback(() => {

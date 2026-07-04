@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.XR.ARKit;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -17,6 +19,8 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
     private sealed class CaptureRequestPayload
     {
         public string capturePairId;
+        public string captureSetId;
+        public string captureShotKind;
         public double requestedAtMs;
         public string requestedBy;
         public string purpose;
@@ -80,7 +84,8 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         {
             SendCaptureEvent(
                 "busy",
-                request.capturePairId,
+                request,
+                string.Empty,
                 string.Empty,
                 "capture_already_in_progress",
                 0,
@@ -100,7 +105,8 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
 
         SendCaptureEvent(
             "requested",
-            request.capturePairId,
+            request,
+            string.Empty,
             string.Empty,
             "pending_end_of_frame_capture",
             0,
@@ -110,6 +116,8 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         Debug.Log(
             "[E7] reference_capture_requested"
             + " capturePairId=" + request.capturePairId
+            + " captureSetId=" + SanitizeLogValue(request.captureSetId)
+            + " captureShotKind=" + SanitizeLogValue(request.captureShotKind)
             + " purpose=" + SanitizeLogValue(request.purpose)
             + " requestedBy=" + SanitizeLogValue(request.requestedBy));
 
@@ -142,8 +150,9 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         {
             SendCaptureEvent(
                 "exported",
-                request.capturePairId,
+                request,
                 result.RelativeDirectory,
+                result.FramePreviewUri,
                 "pending_projected_mesh_overlay_review",
                 result.VertexCount,
                 result.IndexCount,
@@ -152,6 +161,8 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
             Debug.Log(
                 "[E7] reference_capture_exported"
                 + " capturePairId=" + request.capturePairId
+                + " captureSetId=" + SanitizeLogValue(request.captureSetId)
+                + " captureShotKind=" + SanitizeLogValue(request.captureShotKind)
                 + " exportPath=" + SanitizeLogValue(result.ExportDirectory)
                 + " frameWidth=" + result.FrameWidth.ToString(CultureInfo.InvariantCulture)
                 + " frameHeight=" + result.FrameHeight.ToString(CultureInfo.InvariantCulture)
@@ -165,8 +176,9 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         {
             SendCaptureEvent(
                 "failed",
-                request.capturePairId,
+                request,
                 result != null ? result.RelativeDirectory : string.Empty,
+                result != null ? result.FramePreviewUri : string.Empty,
                 result != null ? result.Error : "capture_result_missing",
                 result != null ? result.VertexCount : 0,
                 result != null ? result.IndexCount : 0,
@@ -239,13 +251,14 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
 
             File.WriteAllText(
                 Path.Combine(exportDirectory, "capture_summary.json"),
-                BuildCaptureSummaryJson(request, face, frameWidth, frameHeight),
+                BuildCaptureSummaryJson(request, face, projectedVertices, frameWidth, frameHeight),
                 Encoding.UTF8);
 
             Destroy(frameTexture);
 
             result.Success = true;
             result.ExportDirectory = exportDirectory;
+            result.FramePreviewUri = new Uri(Path.Combine(exportDirectory, "frame.png")).AbsoluteUri;
             result.FrameWidth = frameWidth;
             result.FrameHeight = frameHeight;
             result.VertexCount = GetVertexCount(face);
@@ -622,9 +635,11 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         builder.Append("{");
         AppendJsonField(builder, "schemaVersion", "e7-arface-frame-export-v1", true);
         AppendJsonField(builder, "capturePairId", request.capturePairId, false);
+        AppendJsonField(builder, "captureSetId", request.captureSetId, false);
+        AppendJsonField(builder, "captureShotKind", request.captureShotKind, false);
         AppendJsonField(builder, "frameId", request.capturePairId + "_frame", false);
         AppendJsonField(builder, "capturedAtUtc", DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture), false);
-        AppendJsonField(builder, "purpose", "synchronized_capture_one_frame_common_lip_eye_cheek", false);
+        AppendJsonField(builder, "purpose", request.purpose, false);
         builder.Append(",\"regions\":[\"lip\",\"eye\",\"cheek\"]");
         builder.Append(",\"annotationFrameClean\":true");
         builder.Append(",\"hudIncludedInFrame\":false");
@@ -636,12 +651,13 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         AppendJsonField(builder, "projectedMeshOverlayPath", "projected_mesh_overlay.png", false);
         AppendDisplayMetadata(builder, frameWidth, frameHeight);
         AppendFaceMetadata(builder, face);
+        AppendCaptureQuality(builder, face, projectedVertices, frameWidth, frameHeight);
         AppendVectorArray(builder, "localVertices", projectedVertices, "local");
         AppendVectorArray(builder, "worldVertices", projectedVertices, "world");
         AppendScreenVertices(builder, projectedVertices);
         AppendUvs(builder, face);
         AppendIndices(builder, face);
-        builder.Append(",\"blendShapes\":{\"available\":false,\"source\":\"not_exposed_in_current_capture_export\"}");
+        builder.Append(",\"blendShapes\":").Append(BuildBlendShapesJson(face));
         builder.Append(",\"privacy\":{\"rawFrameStored\":true,\"rawFrameScope\":\"single_selected_validation_frame\",\"offDeviceUpload\":false}");
         builder.Append("}");
         return builder.ToString();
@@ -650,6 +666,7 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
     private string BuildCaptureSummaryJson(
         CaptureRequestPayload request,
         ARFace face,
+        ProjectedVertex[] projectedVertices,
         int frameWidth,
         int frameHeight)
     {
@@ -657,6 +674,9 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         builder.Append("{");
         AppendJsonField(builder, "type", "e7_reference_capture_summary", true);
         AppendJsonField(builder, "capturePairId", request.capturePairId, false);
+        AppendJsonField(builder, "captureSetId", request.captureSetId, false);
+        AppendJsonField(builder, "captureShotKind", request.captureShotKind, false);
+        AppendJsonField(builder, "purpose", request.purpose, false);
         builder.Append(",\"regions\":[\"lip\",\"eye\",\"cheek\"]");
         builder.Append(",\"frameWidth\":").Append(frameWidth.ToString(CultureInfo.InvariantCulture));
         builder.Append(",\"frameHeight\":").Append(frameHeight.ToString(CultureInfo.InvariantCulture));
@@ -666,6 +686,7 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         builder.Append(",\"annotationFrameClean\":true");
         builder.Append(",\"coordinateSpaceValidated\":false");
         AppendJsonField(builder, "coordinateSpaceValidationStatus", "pending_projected_mesh_overlay_review", false);
+        AppendCaptureQuality(builder, face, projectedVertices, frameWidth, frameHeight);
         builder.Append(",\"files\":[\"frame.png\",\"arface_export.json\",\"projected_mesh_overlay.png\",\"capture_summary.json\"]");
         builder.Append("}");
         return builder.ToString();
@@ -708,6 +729,37 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         builder.Append(",\"meshIndexCount\":").Append(GetIndexCount(face).ToString(CultureInfo.InvariantCulture));
         builder.Append(",\"meshUvCount\":").Append(GetUvCount(face).ToString(CultureInfo.InvariantCulture));
         builder.Append(",\"hasStableUv\":").Append((GetUvCount(face) > 0).ToString().ToLowerInvariant());
+        builder.Append("}");
+    }
+
+    private static void AppendCaptureQuality(
+        StringBuilder builder,
+        ARFace face,
+        ProjectedVertex[] projectedVertices,
+        int frameWidth,
+        int frameHeight)
+    {
+        int vertexCount = GetVertexCount(face);
+        int indexCount = GetIndexCount(face);
+        int uvCount = GetUvCount(face);
+        int projectedVertexCount = projectedVertices != null ? projectedVertices.Length : 0;
+        bool isTracking = face != null && face.trackingState == TrackingState.Tracking;
+
+        builder.Append(",\"quality\":{");
+        AppendJsonField(builder, "trackingState", face != null ? face.trackingState.ToString() : "None", true);
+        builder.Append(",\"isTracking\":").Append(isTracking.ToString().ToLowerInvariant());
+        builder.Append(",\"frameWidth\":").Append(frameWidth.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"frameHeight\":").Append(frameHeight.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"meshVertexCount\":").Append(vertexCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"meshIndexCount\":").Append(indexCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"meshUvCount\":").Append(uvCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"projectedVertexCount\":").Append(projectedVertexCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"hasStableUv\":").Append((uvCount > 0).ToString().ToLowerInvariant());
+        builder.Append(",\"hasFrameImage\":true");
+        builder.Append(",\"hudIncludedInFrame\":false");
+        builder.Append(",\"rawFrameScope\":\"single_selected_calibration_frame\"");
+        AppendJsonField(builder, "blendShapeCapture", "arface_export.blendShapes", false);
+        AppendJsonField(builder, "qualityGate", "pending_visual_review", false);
         builder.Append("}");
     }
 
@@ -791,6 +843,249 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         }
 
         builder.Append("]");
+    }
+
+    private string BuildBlendShapesJson(ARFace face)
+    {
+        if (faceManager == null)
+        {
+            return BuildBlendShapesUnavailableJson(
+                "ar_face_manager_missing",
+                "ARFaceManager.TryGetBlendShapes",
+                "not_called",
+                0);
+        }
+
+        if (face == null)
+        {
+            return BuildBlendShapesUnavailableJson(
+                "ar_face_missing",
+                "ARFaceManager.TryGetBlendShapes",
+                "not_called",
+                0);
+        }
+
+        Result<NativeArray<XRFaceBlendShape>> result;
+        try
+        {
+            result = faceManager.TryGetBlendShapes(face, Allocator.Temp);
+        }
+        catch (Exception exception)
+        {
+            return BuildBlendShapesUnavailableJson(
+                "try_get_blend_shapes_exception:" + exception.GetType().Name + ":" + exception.Message,
+                "ARFaceManager.TryGetBlendShapes",
+                "exception",
+                0);
+        }
+
+        if (!result.status.IsSuccess())
+        {
+            return BuildBlendShapesUnavailableJson(
+                "try_get_blend_shapes_failed",
+                "ARFaceManager.TryGetBlendShapes",
+                result.status.statusCode.ToString(),
+                result.status.nativeStatusCode);
+        }
+
+        NativeArray<XRFaceBlendShape> blendShapes = result.value;
+        try
+        {
+            int count = blendShapes.IsCreated ? blendShapes.Length : 0;
+            StringBuilder builder = new StringBuilder(8192);
+            builder.Append("{");
+            builder.Append("\"available\":").Append((count > 0).ToString().ToLowerInvariant());
+            AppendJsonField(builder, "source", "ARFaceManager.TryGetBlendShapes", false);
+            AppendJsonField(builder, "provider", "ARKit", false);
+            AppendJsonField(builder, "statusCode", result.status.statusCode.ToString(), false);
+            builder.Append(",\"nativeStatusCode\":").Append(result.status.nativeStatusCode.ToString(CultureInfo.InvariantCulture));
+            builder.Append(",\"count\":").Append(count.ToString(CultureInfo.InvariantCulture));
+            if (count == 0)
+            {
+                AppendJsonField(builder, "reason", "empty_blend_shapes", false);
+            }
+
+            float jawOpen = 0.0f;
+            float mouthClose = 0.0f;
+            float mouthFunnel = 0.0f;
+            float mouthPucker = 0.0f;
+            float mouthSmileLeft = 0.0f;
+            float mouthSmileRight = 0.0f;
+            float mouthStretchLeft = 0.0f;
+            float mouthStretchRight = 0.0f;
+            float mouthUpperUpLeft = 0.0f;
+            float mouthUpperUpRight = 0.0f;
+            float mouthLowerDownLeft = 0.0f;
+            float mouthLowerDownRight = 0.0f;
+
+            builder.Append(",\"items\":[");
+            for (int index = 0; index < count; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(",");
+                }
+
+                XRFaceBlendShape blendShape = blendShapes[index];
+                ARKitBlendShapeLocation location = blendShape.AsARKitBlendShapeLocation();
+                float weight = blendShape.weight;
+                switch (location)
+                {
+                    case ARKitBlendShapeLocation.JawOpen:
+                        jawOpen = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthClose:
+                        mouthClose = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthFunnel:
+                        mouthFunnel = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthPucker:
+                        mouthPucker = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthSmileLeft:
+                        mouthSmileLeft = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthSmileRight:
+                        mouthSmileRight = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthStretchLeft:
+                        mouthStretchLeft = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthStretchRight:
+                        mouthStretchRight = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthUpperUpLeft:
+                        mouthUpperUpLeft = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthUpperUpRight:
+                        mouthUpperUpRight = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthLowerDownLeft:
+                        mouthLowerDownLeft = weight;
+                        break;
+                    case ARKitBlendShapeLocation.MouthLowerDownRight:
+                        mouthLowerDownRight = weight;
+                        break;
+                }
+
+                builder.Append("{\"blendShapeId\":")
+                    .Append(blendShape.blendShapeId.ToString(CultureInfo.InvariantCulture));
+                AppendJsonField(builder, "location", location.ToString(), false);
+                builder.Append(",\"weight\":")
+                    .Append(weight.ToString("0.######", CultureInfo.InvariantCulture))
+                    .Append("}");
+            }
+
+            builder.Append("]");
+            AppendBlendShapeKeySignals(
+                builder,
+                jawOpen,
+                mouthClose,
+                mouthFunnel,
+                mouthPucker,
+                mouthSmileLeft,
+                mouthSmileRight,
+                mouthStretchLeft,
+                mouthStretchRight,
+                mouthUpperUpLeft,
+                mouthUpperUpRight,
+                mouthLowerDownLeft,
+                mouthLowerDownRight);
+            builder.Append("}");
+            return builder.ToString();
+        }
+        catch (Exception exception)
+        {
+            return BuildBlendShapesUnavailableJson(
+                "serialize_blend_shapes_exception:" + exception.GetType().Name + ":" + exception.Message,
+                "ARFaceManager.TryGetBlendShapes",
+                "exception",
+                0);
+        }
+        finally
+        {
+            if (blendShapes.IsCreated)
+            {
+                blendShapes.Dispose();
+            }
+        }
+    }
+
+    private static string BuildBlendShapesUnavailableJson(
+        string reason,
+        string source,
+        string statusCode,
+        int nativeStatusCode)
+    {
+        StringBuilder builder = new StringBuilder(512);
+        builder.Append("{\"available\":false");
+        AppendJsonField(builder, "source", source, false);
+        AppendJsonField(builder, "provider", "ARKit", false);
+        AppendJsonField(builder, "statusCode", statusCode, false);
+        builder.Append(",\"nativeStatusCode\":").Append(nativeStatusCode.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"count\":0,\"items\":[]");
+        AppendJsonField(builder, "reason", reason, false);
+        AppendBlendShapeKeySignals(
+            builder,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f);
+        builder.Append("}");
+        return builder.ToString();
+    }
+
+    private static void AppendBlendShapeKeySignals(
+        StringBuilder builder,
+        float jawOpen,
+        float mouthClose,
+        float mouthFunnel,
+        float mouthPucker,
+        float mouthSmileLeft,
+        float mouthSmileRight,
+        float mouthStretchLeft,
+        float mouthStretchRight,
+        float mouthUpperUpLeft,
+        float mouthUpperUpRight,
+        float mouthLowerDownLeft,
+        float mouthLowerDownRight)
+    {
+        builder.Append(",\"keySignals\":{");
+        AppendNumericJsonField(builder, "jawOpen", jawOpen, true);
+        AppendNumericJsonField(builder, "mouthClose", mouthClose, false);
+        AppendNumericJsonField(builder, "mouthFunnel", mouthFunnel, false);
+        AppendNumericJsonField(builder, "mouthPucker", mouthPucker, false);
+        AppendNumericJsonField(builder, "mouthSmileLeft", mouthSmileLeft, false);
+        AppendNumericJsonField(builder, "mouthSmileRight", mouthSmileRight, false);
+        AppendNumericJsonField(builder, "mouthStretchLeft", mouthStretchLeft, false);
+        AppendNumericJsonField(builder, "mouthStretchRight", mouthStretchRight, false);
+        AppendNumericJsonField(builder, "mouthUpperUpLeft", mouthUpperUpLeft, false);
+        AppendNumericJsonField(builder, "mouthUpperUpRight", mouthUpperUpRight, false);
+        AppendNumericJsonField(builder, "mouthLowerDownLeft", mouthLowerDownLeft, false);
+        AppendNumericJsonField(builder, "mouthLowerDownRight", mouthLowerDownRight, false);
+        builder.Append("}");
+    }
+
+    private static void AppendNumericJsonField(StringBuilder builder, string key, float value, bool firstField)
+    {
+        if (!firstField)
+        {
+            builder.Append(",");
+        }
+
+        builder.Append("\"")
+            .Append(key)
+            .Append("\":")
+            .Append(value.ToString("0.######", CultureInfo.InvariantCulture));
     }
 
     private void RefreshSceneReferences()
@@ -880,6 +1175,12 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         request.capturePairId = string.IsNullOrWhiteSpace(request.capturePairId)
             ? DefaultCapturePairId
             : request.capturePairId.Trim();
+        request.captureSetId = string.IsNullOrWhiteSpace(request.captureSetId)
+            ? request.capturePairId
+            : request.captureSetId.Trim();
+        request.captureShotKind = string.IsNullOrWhiteSpace(request.captureShotKind)
+            ? "neutral"
+            : request.captureShotKind.Trim();
         request.requestedBy = string.IsNullOrWhiteSpace(request.requestedBy)
             ? "rn"
             : request.requestedBy.Trim();
@@ -891,8 +1192,9 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
 
     private void SendCaptureEvent(
         string status,
-        string capturePairId,
+        CaptureRequestPayload request,
         string relativeDirectory,
+        string framePreviewUri,
         string detail,
         int vertexCount,
         int indexCount,
@@ -907,9 +1209,12 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         string json = "{"
             + "\"type\":\"e7_reference_capture\""
             + ",\"status\":\"" + EscapeJsonString(status) + "\""
-            + ",\"capturePairId\":\"" + EscapeJsonString(capturePairId) + "\""
+            + ",\"capturePairId\":\"" + EscapeJsonString(request.capturePairId) + "\""
+            + ",\"captureSetId\":\"" + EscapeJsonString(request.captureSetId) + "\""
+            + ",\"captureShotKind\":\"" + EscapeJsonString(request.captureShotKind) + "\""
             + ",\"regions\":[\"lip\",\"eye\",\"cheek\"]"
             + ",\"relativeDirectory\":\"" + EscapeJsonString(relativeDirectory) + "\""
+            + ",\"framePreviewUri\":\"" + EscapeJsonString(framePreviewUri) + "\""
             + ",\"detail\":\"" + EscapeJsonString(detail) + "\""
             + ",\"meshVertexCount\":" + vertexCount.ToString(CultureInfo.InvariantCulture)
             + ",\"meshIndexCount\":" + indexCount.ToString(CultureInfo.InvariantCulture)
@@ -990,6 +1295,7 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         public string Error = string.Empty;
         public string ExportDirectory = string.Empty;
         public string RelativeDirectory = string.Empty;
+        public string FramePreviewUri = string.Empty;
         public int FrameWidth;
         public int FrameHeight;
         public int VertexCount;

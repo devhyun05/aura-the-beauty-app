@@ -1,12 +1,12 @@
 import React from 'react';
 
-import {MakeupToolsScreen} from '../../../features/home';
 import {
+  AuradinSearchScreen,
   LikedProductListScreen,
   MakeupLookListScreen,
   ProductRecommendationScreen,
 } from '../../../features/recommendation';
-import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {getRecommendedFilterRouteParams, MakeupToolsScreen} from '../../../features/home';
 import {getLikedMakeupFilterLooks} from '../../../shared/services/makeupGuideService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';

@@ -59,12 +59,6 @@ type ReferenceMakeupExtractionUploadPathContract = ExpectType<
     'reference-makeup-extraction-upload'
   >
 >;
-type ReferenceMakeupExtractionCapturePathContract = ExpectType<
-  TypeEquals<
-    typeof rootStackLinkingScreens.ReferenceMakeupExtractionCapture,
-    'reference-makeup-extraction-capture'
-  >
->;
 type MakeupFilterSavePathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.MakeupFilterSave,
@@ -174,11 +168,6 @@ expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionUpload,
   'reference-makeup-extraction-upload',
   'reference makeup extraction upload path uses extraction naming',
-);
-expectEqual(
-  navigationLinking.config?.screens?.ReferenceMakeupExtractionCapture,
-  'reference-makeup-extraction-capture',
-  'reference makeup extraction capture path uses extraction naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupFilterSave,

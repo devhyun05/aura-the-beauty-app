@@ -10,11 +10,11 @@ import {colors, iconSize, radius, shadows, spacing, typography} from '../../shar
 import {AppFooter, type FooterTabKey} from '../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
 import {useNavigationFlowState} from './flowState';
+import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {HomeRouteScreen} from './routes/homeRoutes';
 import {ProfileRouteScreen} from './routes/profileRoutes';
 import {CustomRouteScreen} from './routes/recommendationRoutes';
-import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -46,18 +46,19 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
     setIsFeedbackSheetVisible(false);
   }, []);
 
-  const handleFeedbackCameraPress = useCallback(() => {
+  const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
     setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource: 'camera'});
-    rootNavigation?.navigate('MakeupFeedbackCapture');
-  }, [rootNavigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
+    setSelectedMakeupFeedbackPhoto({photoSource});
 
-  const handleFeedbackUploadPress = useCallback(() => {
-    setIsFeedbackSheetVisible(false);
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
-    rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+    requestAnimationFrame(() => {
+      if (photoSource === 'camera') {
+        rootNavigation?.navigate('MakeupFeedbackCapture');
+        return;
+      }
+
+      rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+    });
   }, [rootNavigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
 
   const handleTabPress = useCallback(
@@ -69,7 +70,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
 
       const targetRoute = getRootRouteForFooterTab(tab);
 
-      if (targetRoute === 'ARFilter') {
+      if (targetRoute === 'ARFilter' || targetRoute === 'UnityMakeupCapture') {
         rootNavigation?.navigate(targetRoute);
         return;
       }
@@ -97,8 +98,8 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
       <MakeupFeedbackActionSheet
         isVisible={isFeedbackSheetVisible}
         onClose={closeFeedbackSheet}
-        onPressCamera={handleFeedbackCameraPress}
-        onPressUpload={handleFeedbackUploadPress}
+        onPressCamera={() => startMakeupFeedback('camera')}
+        onPressUpload={() => startMakeupFeedback('gallery')}
       />
     </YStack>
   );

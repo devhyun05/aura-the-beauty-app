@@ -1,14 +1,14 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, type ViewStyle} from 'react-native';
 import {ChevronLeft, Save} from 'lucide-react-native';
-import {Button, Text, View, XStack, YStack} from 'tamagui';
+import {Button, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
-import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing} from '../../../shared/theme';
 import type {
   MakeupArea,
   FilterColorOption,
@@ -31,10 +31,28 @@ import {
   updateMakeupFilterOptionSelection,
   type MakeupFilterOptionState,
 } from '../services/filterCustomizationService';
+import {
+  createFullFaceMakeupSavedContract,
+  type FullFaceMakeupSavedContract,
+} from '../services/fullFaceMakeupEditService';
+import {
+  hideUnityMakeupView,
+  postUnityMakeupRecipe,
+  prepareUnityMakeupRuntime,
+} from '../services/unityMakeupBridge';
+import {
+  UnityMakeupNativeView,
+  useUnityMakeupNativeViewReady,
+} from '../components/UnityMakeupNativeView';
+import {useFullFaceMakeupEditState} from '../hooks/useFullFaceMakeupEditState';
+import {FullFaceMakeupEditPanel} from '../components/FullFaceMakeupEditPanel';
+import type {FullFaceMakeupSourceInput} from '../../../shared/contracts/fullFaceMakeupRecipe';
 
 type MakeupFilterEditScreenProps = {
+  mode?: 'preset' | 'fullFace';
   onBack?: () => void;
-  onSave?: () => void;
+  onSave?: (savedContract?: FullFaceMakeupSavedContract) => void;
+  sourceFrameMetadata?: FullFaceMakeupSourceInput;
 };
 
 const OPTION_GROUPS: readonly {id: MakeupOptionGroupId; label: string}[] = [
@@ -72,6 +90,10 @@ export function getMakeupFilterEditSelectedTabOpacity(): number {
   return SELECTED_TAB_BACKGROUND_OPACITY;
 }
 
+export function getMakeupFilterEditTitle(mode: 'preset' | 'fullFace'): string {
+  return mode === 'fullFace' ? '맞춤 메이크업 조정' : '필터 수정';
+}
+
 export function getMakeupFilterEditSelectedColor(
   colorOptions: readonly FilterColorOption[],
   selectedColorId: string,
@@ -84,17 +106,46 @@ export function getMakeupFilterEditSelectedColor(
 }
 
 export function MakeupFilterEditScreen({
+  mode = 'preset',
   onBack,
   onSave,
+  sourceFrameMetadata,
 }: MakeupFilterEditScreenProps) {
   const insets = useSafeAreaInsets();
+  const isFullFaceMode = mode === 'fullFace';
   const arGuideData = getARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
+  const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
   const [optionState, setOptionState] = useState<MakeupFilterOptionState>(getMakeupFilterOptionState());
+  const fullFaceEditState = useFullFaceMakeupEditState({sourceFrameMetadata});
+  const {activeFullFaceControl, fullFaceRecipe, fullFaceState} = fullFaceEditState;
   const selectedColor = getMakeupFilterEditSelectedColor(
     filter.colorOptions,
     optionState.selectedColorId,
   );
+  const previewColorHex = isFullFaceMode
+    ? activeFullFaceControl.colorHex
+    : selectedColor.hex;
+
+  useEffect(() => {
+    if (!isFullFaceMode) {
+      return;
+    }
+
+    prepareUnityMakeupRuntime();
+
+    return () => {
+      hideUnityMakeupView();
+    };
+  }, [isFullFaceMode]);
+
+  useEffect(() => {
+    if (!isFullFaceMode) {
+      return;
+    }
+
+    postUnityMakeupRecipe(fullFaceRecipe);
+  }, [fullFaceRecipe, isFullFaceMode]);
 
   const handleMakeupAreaOptionPress = (makeupAreaId: MakeupArea) => {
     setOptionState(currentState => ({
@@ -116,20 +167,38 @@ export function MakeupFilterEditScreen({
     );
   };
 
+  const handleSave = () => {
+    if (!isFullFaceMode) {
+      onSave?.();
+      return;
+    }
+
+    postUnityMakeupRecipe(fullFaceRecipe);
+    onSave?.(
+      createFullFaceMakeupSavedContract({editState: fullFaceState, recipe: fullFaceRecipe}),
+    );
+  };
+
   return (
     <FullscreenOverlayScreen>
       <FullscreenOverlayLayer>
-        <LiveCameraLayer />
-        <View style={styles.previewDim} />
-        <View style={[styles.eyePreviewOverlay, {backgroundColor: selectedColor.hex}]} />
-        <View style={[styles.cheekPreviewOverlayLeft, {backgroundColor: selectedColor.hex}]} />
-        <View style={[styles.cheekPreviewOverlayRight, {backgroundColor: selectedColor.hex}]} />
-        <View style={[styles.lipPreviewOverlay, {backgroundColor: selectedColor.hex}]} />
+        {isFullFaceMode && shouldUseUnityPreview ? (
+          <UnityMakeupNativeView />
+        ) : (
+          <>
+            <LiveCameraLayer />
+            <View style={styles.previewDim} />
+            <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
+            <View style={[styles.cheekPreviewOverlayLeft, {backgroundColor: previewColorHex}]} />
+            <View style={[styles.cheekPreviewOverlayRight, {backgroundColor: previewColorHex}]} />
+            <View style={[styles.lipPreviewOverlay, {backgroundColor: previewColorHex}]} />
+          </>
+        )}
       </FullscreenOverlayLayer>
 
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
         <OverlayTopBar
-          eyebrow="FILTER CUSTOM"
+          eyebrow={isFullFaceMode ? '맞춤 설정' : '필터 설정'}
           leftSlot={
             <OverlayIconButton
               accessibilityLabel="AR 필터 화면으로 돌아가기"
@@ -140,100 +209,107 @@ export function MakeupFilterEditScreen({
           rightSlot={
             <OverlayIconButton
               accessibilityLabel="현재 필터 저장"
-              onPress={onSave}>
+              onPress={handleSave}>
               <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
             </OverlayIconButton>
           }
-          title="필터 수정"
+          title={getMakeupFilterEditTitle(mode)}
         />
       </YStack>
 
       <BottomOverlayPanel style={{paddingBottom: insets.bottom + spacing.lg}}>
-        <OverlayPanelSection label="메이크업 영역">
-          <ScrollView
-            contentContainerStyle={styles.horizontalList}
-            horizontal
-            showsHorizontalScrollIndicator={false}>
-            {arGuideData.makeupAreas.map(makeupArea => (
-              <OverlayChipButton
-                key={makeupArea.id}
-                isActive={makeupArea.id === optionState.selectedMakeupArea}
-                label={makeupArea.label}
-                onPress={() => handleMakeupAreaOptionPress(makeupArea.id)}
-              />
-            ))}
-          </ScrollView>
-        </OverlayPanelSection>
-
-        <OverlayPanelSection label="프리셋 옵션">
-          <XStack style={styles.optionGroupList}>
-            {OPTION_GROUPS.map(group => (
-              <OverlayChipButton
-                key={group.id}
-                isActive={group.id === optionState.selectedOptionGroup}
-                label={group.label}
-                onPress={() => handleOptionGroupPress(group.id)}
-              />
-            ))}
-          </XStack>
-        </OverlayPanelSection>
-
-        {optionState.selectedOptionGroup === 'color' ? (
-          <OverlayPanelSection label="컬러 선택">
-            <XStack style={styles.swatchList}>
-              {filter.colorOptions.map(option => (
-                <Button
-                  key={option.id}
-                  accessibilityLabel={`${option.label} 컬러 선택`}
-                  accessibilityRole="button"
-                  accessibilityState={{selected: option.id === optionState.selectedColorId}}
-                  onPress={() => handleOptionPress('color', option.id)}
-                  pressStyle={{scale: 0.96}}
-                  style={[
-                    styles.swatchButton,
-                    {
-                      backgroundColor: option.hex,
-                      borderColor:
-                        option.id === optionState.selectedColorId
-                          ? colors.black
-                          : colors.borderStrong,
-                    },
-                  ]}
-                  unstyled>
-                  <View style={styles.swatchInner} />
-                </Button>
-              ))}
-            </XStack>
-          </OverlayPanelSection>
+        {isFullFaceMode ? (
+          <FullFaceMakeupEditPanel {...fullFaceEditState} />
         ) : (
-          <OverlayPanelSection
-            label={optionState.selectedOptionGroup === 'type' ? '타입 선택' : '질감 선택'}>
-            <XStack style={styles.textOptionList}>
-              {(optionState.selectedOptionGroup === 'type'
-                ? filter.typeOptions
-                : filter.textureOptions
-              ).map(option => {
-                const isActive =
-                  optionState.selectedOptionGroup === 'type'
-                    ? option.id === optionState.selectedTypeId
-                    : option.id === optionState.selectedTextureId;
-
-                return (
+          <>
+            <OverlayPanelSection label="메이크업 영역">
+              <ScrollView
+                contentContainerStyle={styles.horizontalList}
+                horizontal
+                showsHorizontalScrollIndicator={false}>
+                {arGuideData.makeupAreas.map(makeupArea => (
                   <OverlayChipButton
-                    key={option.id}
-                    isActive={isActive}
-                    label={option.label}
-                    onPress={() => handleOptionPress(optionState.selectedOptionGroup, option.id)}
+                    key={makeupArea.id}
+                    isActive={makeupArea.id === optionState.selectedMakeupArea}
+                    label={makeupArea.label}
+                    onPress={() => handleMakeupAreaOptionPress(makeupArea.id)}
                   />
-                );
-              })}
-            </XStack>
-          </OverlayPanelSection>
+                ))}
+              </ScrollView>
+            </OverlayPanelSection>
+
+            <OverlayPanelSection label="프리셋 옵션">
+              <XStack style={styles.optionGroupList}>
+                {OPTION_GROUPS.map(group => (
+                  <OverlayChipButton
+                    key={group.id}
+                    isActive={group.id === optionState.selectedOptionGroup}
+                    label={group.label}
+                    onPress={() => handleOptionGroupPress(group.id)}
+                  />
+                ))}
+              </XStack>
+            </OverlayPanelSection>
+
+            {optionState.selectedOptionGroup === 'color' ? (
+              <OverlayPanelSection label="컬러 선택">
+                <XStack style={styles.swatchList}>
+                  {filter.colorOptions.map(option => (
+                    <Button
+                      key={option.id}
+                      accessibilityLabel={`${option.label} 컬러 선택`}
+                      accessibilityRole="button"
+                      accessibilityState={{selected: option.id === optionState.selectedColorId}}
+                      onPress={() => handleOptionPress('color', option.id)}
+                      pressStyle={{scale: 0.96}}
+                      style={[
+                        styles.swatchButton,
+                        {
+                          backgroundColor: option.hex,
+                          borderColor:
+                            option.id === optionState.selectedColorId
+                              ? colors.black
+                              : colors.borderStrong,
+                        },
+                      ]}
+                      unstyled>
+                      <View style={styles.swatchInner} />
+                    </Button>
+                  ))}
+                </XStack>
+              </OverlayPanelSection>
+            ) : (
+              <OverlayPanelSection
+                label={optionState.selectedOptionGroup === 'type' ? '타입 선택' : '질감 선택'}>
+                <XStack style={styles.textOptionList}>
+                  {(optionState.selectedOptionGroup === 'type'
+                    ? filter.typeOptions
+                    : filter.textureOptions
+                  ).map(option => {
+                    const isActive =
+                      optionState.selectedOptionGroup === 'type'
+                        ? option.id === optionState.selectedTypeId
+                        : option.id === optionState.selectedTextureId;
+
+                    return (
+                      <OverlayChipButton
+                        key={option.id}
+                        isActive={isActive}
+                        label={option.label}
+                        onPress={() => handleOptionPress(optionState.selectedOptionGroup, option.id)}
+                      />
+                    );
+                  })}
+                </XStack>
+              </OverlayPanelSection>
+            )}
+          </>
         )}
 
         <OverlaySaveButton
-          accessibilityLabel="현재 필터 저장"
-          onPress={onSave}
+          accessibilityLabel={isFullFaceMode ? '맞춤 메이크업 저장' : '현재 필터 저장'}
+          label={isFullFaceMode ? '맞춤 메이크업 저장' : undefined}
+          onPress={handleSave}
         />
       </BottomOverlayPanel>
     </FullscreenOverlayScreen>

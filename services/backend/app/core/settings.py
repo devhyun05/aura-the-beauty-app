@@ -10,6 +10,11 @@ class Settings(BaseSettings):
   api_prefix: str = "/api"
 
   database_url: str | None = None
+  database_secret_id: str | None = None
+  db_host: str | None = None
+  db_port: int = 5432
+  db_name: str | None = None
+  db_sslmode: str | None = None
 
   auth_required: bool = False
   dev_user_sub: str = "local-dev-user"
@@ -129,6 +134,20 @@ class Settings(BaseSettings):
     return "missing"
 
   @property
+  def database_configured(self) -> bool:
+    return bool(self.database_url or self.database_secret_id)
+
+  @property
+  def database_credential_source(self) -> str:
+    if self.database_url:
+      return "database_url"
+
+    if self.database_secret_id:
+      return "secrets_manager"
+
+    return "missing"
+
+  @property
   def cors_origins(self) -> list[str]:
     return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
@@ -137,8 +156,9 @@ class Settings(BaseSettings):
     image_generation_provider = self.image_generation_provider_normalized
     items = {
       "databaseUrl": {
-        "configured": bool(self.database_url),
-        "requiredWhen": "DB-backed APIs or schema/seed commands are used.",
+        "configured": self.database_configured,
+        "requiredWhen": "DB-backed APIs or schema/seed commands are used. Use DATABASE_URL or DATABASE_SECRET_ID.",
+        "source": self.database_credential_source,
       },
       "cognitoUserPoolId": {
         "configured": bool(self.cognito_user_pool_id),

@@ -13,6 +13,7 @@ import {
   APP_FOOTER_GLASS_HIGHLIGHT,
   APP_FOOTER_HORIZONTAL_PADDING,
   APP_FOOTER_ICON_SIZE,
+  APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
   APP_FOOTER_SIDE_TAB_WIDTH,
   APP_FOOTER_TAB_HEIGHT,
   AppFooter,
@@ -36,6 +37,7 @@ const footerGlassBackground: 'rgba(255, 255, 255, 0.72)' =
 const footerGlassBorder: 'rgba(255, 255, 255, 0.82)' = APP_FOOTER_GLASS_BORDER;
 const footerGlassHighlight: 'rgba(255, 255, 255, 0.42)' =
   APP_FOOTER_GLASS_HIGHLIGHT;
+const footerShowsLabelsByDefault: false = APP_FOOTER_SHOW_LABELS_BY_DEFAULT;
 const footerCaptureButtonBackground:
   'rgba(255, 255, 255, 0.78)' =
     CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND;

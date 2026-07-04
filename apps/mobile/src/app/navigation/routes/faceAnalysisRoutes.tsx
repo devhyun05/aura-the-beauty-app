@@ -7,10 +7,12 @@ import {
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
-import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialScreen} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
+import {colors} from '../../../shared/theme';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
@@ -61,6 +63,12 @@ function shouldRetryAnalysisError(error: unknown): boolean {
   return !NON_RETRYABLE_ANALYSIS_ERROR_CODES.has(error.code);
 }
 
+export function shouldCreateFaceAnalysisReportFromCapture(
+  capture: FaceCaptureUploadResult | null,
+): capture is FaceCaptureUploadResult {
+  return capture !== null;
+}
+
 export function FaceCaptureRouteScreen({
   navigation,
   route,
@@ -79,8 +87,10 @@ export function FaceCaptureRouteScreen({
   }
 
   return (
-    <FaceCaptureScreen
+    <CameraFaceCaptureScreen
       autoOpenGallery={route.params?.initialSource === 'gallery'}
+      captureMode="face"
+      captureType="face_analysis"
       onCapture={result => {
         if (result) {
           setSelectedFaceCapture(result);
@@ -117,12 +127,16 @@ export function FaceAnalysisLoadingRouteScreen({
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
 
   React.useEffect(() => {
-    let isMounted = true;
-    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
     setIsAnalysisReady(false);
     setAnalysisErrorMessage(null);
     setSelectedFaceAnalysisReport(null);
+
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     createFaceAnalysisReportFromCapture(selectedFaceCapture)
       .then(report => {
@@ -263,6 +277,9 @@ export function FaceAnalysisReportDetailRouteScreen({
 
   return (
     <DetailRouteChrome
+      backgroundColor={colors.surfaceMuted}
+      headerBackgroundColor={colors.surfaceMuted}
+      headerBorderColor={colors.surfaceMuted}
       routeName="FaceAnalysisReportDetail"
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
       onShare={shareAction?.cb}

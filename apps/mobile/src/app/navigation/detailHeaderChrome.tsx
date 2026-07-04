@@ -35,7 +35,10 @@ export function getDetailHeaderPresentation(
 }
 
 type DetailRouteChromeProps = {
+  backgroundColor?: string;
   children: ReactNode;
+  headerBackgroundColor?: string;
+  headerBorderColor?: string;
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
@@ -45,7 +48,10 @@ type DetailRouteChromeProps = {
 };
 
 export function DetailRouteChrome({
+  backgroundColor = colors.background,
   children,
+  headerBackgroundColor = backgroundColor,
+  headerBorderColor = colors.border,
   onBack,
   onClose,
   onDone,
@@ -65,14 +71,20 @@ export function DetailRouteChrome({
   const shouldReserveLeftSlot = !onBack && presentation.rightActions.length > 0;
 
   return (
-    <YStack style={styles.screen}>
+    <YStack style={[styles.screen, {backgroundColor}]}>
       <AppHeader
+        containerProps={{
+          style: [
+            styles.header,
+            {backgroundColor: headerBackgroundColor, borderBottomColor: headerBorderColor},
+          ],
+        }}
         leftSlot={shouldReserveLeftSlot ? <View /> : undefined}
         onBack={onBack}
         rightSlot={rightSlot}
         title={presentation.title}
       />
-      <YStack style={styles.body}>{children}</YStack>
+      <YStack style={[styles.body, {backgroundColor}]}>{children}</YStack>
     </YStack>
   );
 }
@@ -175,6 +187,9 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  header: {
+    backgroundColor: colors.background,
   },
   doneButton: {
     alignItems: 'center',

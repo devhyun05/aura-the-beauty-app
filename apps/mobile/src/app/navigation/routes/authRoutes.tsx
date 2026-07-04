@@ -212,7 +212,7 @@ export function ProfileSetupRouteScreen({navigation}: RootScreenProps<'ProfileSe
 }
 
 export function TutorialRouteScreen({navigation}: RootScreenProps<'Tutorial'>) {
-  const {isRestoringSession, session} = useAuthSession();
+  const {clearSession, isRestoringSession, session} = useAuthSession();
 
   React.useEffect(() => {
     if (!isRestoringSession && !session) {
@@ -240,6 +240,12 @@ export function TutorialRouteScreen({navigation}: RootScreenProps<'Tutorial'>) {
     });
   }, [markTutorialCompleted, navigation]);
 
+  const handleSwitchAccount = React.useCallback(() => {
+    void clearSession().finally(() => {
+      navigation.replace('Login');
+    });
+  }, [clearSession, navigation]);
+
   if (isRestoringSession || !session) {
     return null;
   }
@@ -248,6 +254,7 @@ export function TutorialRouteScreen({navigation}: RootScreenProps<'Tutorial'>) {
     <TutorialIntroScreen
       onCloseToHome={handleCloseToHome}
       onStartCapture={handleStartCapture}
+      onSwitchAccount={handleSwitchAccount}
     />
   );
 }

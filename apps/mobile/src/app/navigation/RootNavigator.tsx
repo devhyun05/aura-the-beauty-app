@@ -27,6 +27,7 @@ import {
   MakeupFeedbackAlbumUploadRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
   MakeupFeedbackEntryRouteScreen,
+  MakeupFeedbackGoalInputRouteScreen,
   MakeupCorrectionGuideRouteScreen,
   MakeupFeedbackLoadingRouteScreen,
   MakeupFeedbackResultRouteScreen,
@@ -38,7 +39,6 @@ import {
   ProductRecommendationRouteScreen,
 } from './routes/recommendationRoutes';
 import {
-  ReferenceMakeupExtractionCaptureRouteScreen,
   ReferenceMakeupExtractionLoadingRouteScreen,
   ReferenceMakeupExtractionResultRouteScreen,
   MakeupFilterSaveCompleteRouteScreen,
@@ -62,7 +62,11 @@ export function RootNavigator() {
       <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
       <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
-      <Stack.Screen name="UnityMakeupCapture" component={UnityMakeupCaptureRouteScreen} />
+      <Stack.Screen
+        name="UnityMakeupCapture"
+        component={UnityMakeupCaptureRouteScreen}
+        options={{gestureEnabled: false}}
+      />
       <Stack.Screen name="FaceAnalysisIntro" component={FaceAnalysisIntroRouteScreen} />
       <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
       <Stack.Screen
@@ -87,11 +91,11 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
       <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
+      <Stack.Screen name="MakeupFeedbackGoalInput" component={MakeupFeedbackGoalInputRouteScreen} />
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
       <Stack.Screen name="MakeupCorrectionTip" component={MakeupCorrectionTipRouteScreen} />
-      <Stack.Screen name="ReferenceMakeupExtractionCapture" component={ReferenceMakeupExtractionCaptureRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionUpload" component={ReferenceMakeupExtractionUploadRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionLoading" component={ReferenceMakeupExtractionLoadingRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionResult" component={ReferenceMakeupExtractionResultRouteScreen} />

@@ -36,6 +36,7 @@ type CameraCaptureButtonSurfaceProps = {
 type CameraCaptureButtonProps = CameraCaptureButtonSurfaceProps & {
   accessibilityLabel: string;
   onPress?: (event: GestureResponderEvent) => void;
+  surfaceStyle?: StyleProp<ViewStyle>;
   testID?: string;
 };
 
@@ -88,6 +89,7 @@ export function CameraCaptureButton({
   showInnerDot,
   size,
   style,
+  surfaceStyle,
   testID,
   variant,
 }: CameraCaptureButtonProps) {
@@ -111,6 +113,7 @@ export function CameraCaptureButton({
         innerColor={innerColor}
         showInnerDot={showInnerDot}
         size={size}
+        style={surfaceStyle}
         variant={variant}>
         {children}
       </CameraCaptureButtonSurface>

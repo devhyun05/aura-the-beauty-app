@@ -31,6 +31,7 @@ export {
 export {IconButton} from './IconButton';
 export {ImagePlaceholder} from './ImagePlaceholder';
 export {LiveCameraLayer} from './LiveCameraLayer';
+export {OverlayDisclosureSection} from './OverlayDisclosure';
 export {
   BookmarkIcon,
   ChevronLeftIcon,

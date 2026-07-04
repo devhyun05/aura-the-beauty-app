@@ -34,7 +34,19 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "AURA 보고서 이미지 저장을 위해 사진 보관함 접근 권한이 필요합니다.",
+          "savePhotosPermission": "AURA 추천 메이크업 이미지를 사진 앱에 저장하기 위해 권한이 필요합니다.",
+          "preventAutomaticLimitedAccessAlert": true,
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ],
+      "expo-sharing"
     ]
   }
 }

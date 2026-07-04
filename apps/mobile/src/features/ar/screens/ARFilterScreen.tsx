@@ -17,6 +17,7 @@ import {
   BottomOverlayPanel,
   FullscreenOverlayScreen,
 } from '../../../shared/ui';
+import {FullFaceMakeupEditPanel} from '../components/FullFaceMakeupEditPanel';
 import {ARFilterBottomActions} from '../components/ARFilterBottomActions';
 import {
   ARFilterCameraPreview,
@@ -43,6 +44,8 @@ import {
 } from '../components/ARFilterOptionCardList';
 import {ARFilterOptionGroupTabs} from '../components/ARFilterOptionGroupTabs';
 import {useARFilterSelectionState} from '../hooks/useARFilterSelectionState';
+import {useFullFaceMakeupEditState} from '../hooks/useFullFaceMakeupEditState';
+import type {FullFaceMakeupEditState} from '../services/fullFaceMakeupEditService';
 import {
   getARFilterInitialColorId,
   getARFilterOptionGroupLabels,
@@ -64,6 +67,7 @@ import {
 } from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
+  fullFaceEditState?: FullFaceMakeupEditState;
   initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
   initialMakeupFilterId?: string;
@@ -114,6 +118,7 @@ export function getARFilterSelectedColor(
 }
 
 export function ARFilterScreen({
+  fullFaceEditState,
   initialComparisonMode = 'left',
   initialGuideMode = 'basic',
   initialMakeupFilterId,
@@ -124,6 +129,7 @@ export function ARFilterScreen({
   onSave,
 }: ARFilterScreenProps) {
   const insets = useSafeAreaInsets();
+  const isFullFaceMode = Boolean(fullFaceEditState);
   const arGuideData = getARMakeupGuideData();
   const defaultFilter = getDefaultMakeupFilter(arGuideData);
   const arFilterSelectionState = useARFilterSelectionState({
@@ -134,11 +140,15 @@ export function ARFilterScreen({
     initialMakeupFilterId,
     initialSource,
   });
+  const fullFaceEdit = useFullFaceMakeupEditState({initialState: fullFaceEditState});
   const [captureMode, setCaptureMode] = useState<CaptureMode>('photo');
   const selectedColor = getARFilterSelectedColor(
     arFilterSelectionState.selectedMakeupFilter.colorOptions,
     arFilterSelectionState.selectedColorId,
   );
+  const previewColorHex = isFullFaceMode
+    ? fullFaceEdit.activeFullFaceControl.colorHex
+    : selectedColor.hex;
 
   useEffect(() => () => hideUnityMakeupView(), []);
 
@@ -153,6 +163,10 @@ export function ARFilterScreen({
   };
 
   useEffect(() => {
+    if (isFullFaceMode) {
+      return;
+    }
+
     const unitySelections = arGuideData.makeupAreas.map(makeupArea => {
       const selectionState =
         arFilterSelectionState.getSelectionStateForMakeupArea(makeupArea.id);
@@ -188,13 +202,22 @@ export function ARFilterScreen({
     arGuideData.filters,
     arGuideData.makeupAreas,
     defaultFilter,
+    isFullFaceMode,
   ]);
+
+  useEffect(() => {
+    if (!isFullFaceMode) {
+      return;
+    }
+
+    postUnityMakeupRecipe(fullFaceEdit.fullFaceRecipe);
+  }, [fullFaceEdit.fullFaceRecipe, isFullFaceMode]);
 
   return (
     <FullscreenOverlayScreen>
       <ARFilterCameraPreview
         guideMode={arFilterSelectionState.guideMode}
-        previewColorHex={selectedColor.hex}
+        previewColorHex={previewColorHex}
         selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
       />
 
@@ -213,40 +236,46 @@ export function ARFilterScreen({
           contentContainerStyle={styles.panelContent}
           horizontal={false}
           showsVerticalScrollIndicator={false}>
-          <ARFilterMakeupAreaTabs
-            makeupAreas={arGuideData.makeupAreas}
-            onMakeupAreaPress={arFilterSelectionState.handleMakeupAreaOptionPress}
-            selectedMakeupArea={arFilterSelectionState.selectedMakeupArea}
-          />
+          {isFullFaceMode ? (
+            <FullFaceMakeupEditPanel {...fullFaceEdit} />
+          ) : (
+            <>
+              <ARFilterMakeupAreaTabs
+                makeupAreas={arGuideData.makeupAreas}
+                onMakeupAreaPress={arFilterSelectionState.handleMakeupAreaOptionPress}
+                selectedMakeupArea={arFilterSelectionState.selectedMakeupArea}
+              />
 
-          <ARFilterOptionGroupTabs
-            onOptionGroupPress={arFilterSelectionState.setSelectedMakeupOptionGroup}
-            optionGroups={arFilterSelectionState.availableOptionGroups}
-            selectedMakeupOptionGroup={arFilterSelectionState.selectedMakeupOptionGroup}
-          />
+              <ARFilterOptionGroupTabs
+                onOptionGroupPress={arFilterSelectionState.setSelectedMakeupOptionGroup}
+                optionGroups={arFilterSelectionState.availableOptionGroups}
+                selectedMakeupOptionGroup={arFilterSelectionState.selectedMakeupOptionGroup}
+              />
 
-          <ARFilterOptionCardList
-            arGuideData={arGuideData}
-            availableMakeupFilters={arFilterSelectionState.availableMakeupFilters}
-            onCategoryPress={arFilterSelectionState.handleCategoryPress}
-            onColorOptionPress={arFilterSelectionState.handleColorOptionPress}
-            onMakeupFilterPress={arFilterSelectionState.handleMakeupFilterPress}
-            onOriginalOptionPress={arFilterSelectionState.handleOriginalOptionPress}
-            onShapeOptionPress={arFilterSelectionState.handleShapeOptionPress}
-            onTextureOptionPress={arFilterSelectionState.handleTextureOptionPress}
-            onTypeOptionPress={arFilterSelectionState.handleTypeOptionPress}
-            selectedCategoryId={arFilterSelectionState.selectedCategoryId}
-            selectedColorId={arFilterSelectionState.selectedColorId}
-            selectedMakeupArea={arFilterSelectionState.selectedMakeupArea}
-            selectedMakeupFilter={arFilterSelectionState.selectedMakeupFilter}
-            selectedMakeupOptionGroup={arFilterSelectionState.selectedMakeupOptionGroup}
-            selectedPointMakeupLookId={arFilterSelectionState.selectedPointMakeupLookId}
-            selectedShapeId={arFilterSelectionState.selectedShapeId}
-            selectedTextureId={arFilterSelectionState.selectedTextureId}
-            selectedTotalMakeupLookId={arFilterSelectionState.selectedTotalMakeupLookId}
-            selectedTypeId={arFilterSelectionState.selectedTypeId}
-            shapeOptions={arFilterSelectionState.shapeOptions}
-          />
+              <ARFilterOptionCardList
+                arGuideData={arGuideData}
+                availableMakeupFilters={arFilterSelectionState.availableMakeupFilters}
+                onCategoryPress={arFilterSelectionState.handleCategoryPress}
+                onColorOptionPress={arFilterSelectionState.handleColorOptionPress}
+                onMakeupFilterPress={arFilterSelectionState.handleMakeupFilterPress}
+                onOriginalOptionPress={arFilterSelectionState.handleOriginalOptionPress}
+                onShapeOptionPress={arFilterSelectionState.handleShapeOptionPress}
+                onTextureOptionPress={arFilterSelectionState.handleTextureOptionPress}
+                onTypeOptionPress={arFilterSelectionState.handleTypeOptionPress}
+                selectedCategoryId={arFilterSelectionState.selectedCategoryId}
+                selectedColorId={arFilterSelectionState.selectedColorId}
+                selectedMakeupArea={arFilterSelectionState.selectedMakeupArea}
+                selectedMakeupFilter={arFilterSelectionState.selectedMakeupFilter}
+                selectedMakeupOptionGroup={arFilterSelectionState.selectedMakeupOptionGroup}
+                selectedPointMakeupLookId={arFilterSelectionState.selectedPointMakeupLookId}
+                selectedShapeId={arFilterSelectionState.selectedShapeId}
+                selectedTextureId={arFilterSelectionState.selectedTextureId}
+                selectedTotalMakeupLookId={arFilterSelectionState.selectedTotalMakeupLookId}
+                selectedTypeId={arFilterSelectionState.selectedTypeId}
+                shapeOptions={arFilterSelectionState.shapeOptions}
+              />
+            </>
+          )}
 
           <ARFilterBottomActions
             hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}

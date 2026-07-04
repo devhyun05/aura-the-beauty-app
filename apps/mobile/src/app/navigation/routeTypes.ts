@@ -1,4 +1,6 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
+import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
 import type {
   ARFilterLaunchSource,
   GuideMode,
@@ -6,6 +8,7 @@ import type {
 
 export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
+export type MakeupFilterEditMode = 'preset' | 'fullFace';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -31,22 +34,29 @@ export type RootStackParamList = {
   LikedProductList: undefined;
   ARFilter:
     | {
+        fullFaceEditState?: FullFaceMakeupEditState;
         initialGuideMode?: GuideMode;
         initialMakeupFilterId?: string;
         source?: ARFilterLaunchSource;
       }
     | undefined;
   ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
-  MakeupFilterEdit: {backRoute?: ARFilterBackRouteName} | undefined;
+  MakeupFilterEdit: {
+    backRoute?: ARFilterBackRouteName;
+    mode?: MakeupFilterEditMode;
+    sourceFrameMetadata?: FullFaceMakeupSourceInput;
+  } | undefined;
   MakeupFeedbackEntry: undefined;
   MakeupFeedbackCapture: undefined;
   MakeupFeedbackAlbumUpload: undefined;
+  MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResult: undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
-  ReferenceMakeupExtractionCapture: undefined;
-  ReferenceMakeupExtractionUpload: undefined;
+  ReferenceMakeupExtractionUpload: {
+    initialSource?: 'camera' | 'gallery';
+  } | undefined;
   ReferenceMakeupExtractionLoading: undefined;
   ReferenceMakeupExtractionResult: undefined;
   ExtractedMakeupLookAdjust: undefined;
@@ -91,11 +101,11 @@ export const rootStackRoutes = [
   'MakeupFeedbackEntry',
   'MakeupFeedbackCapture',
   'MakeupFeedbackAlbumUpload',
+  'MakeupFeedbackGoalInput',
   'MakeupFeedbackLoading',
   'MakeupFeedbackResult',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
-  'ReferenceMakeupExtractionCapture',
   'ReferenceMakeupExtractionUpload',
   'ReferenceMakeupExtractionLoading',
   'ReferenceMakeupExtractionResult',

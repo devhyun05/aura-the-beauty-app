@@ -53,7 +53,7 @@ export type RouteChrome =
 
 export type FooterTargetRoute =
   | MainTabRouteName
-  | Extract<RootStackRouteName, 'ARFilter'>;
+  | Extract<RootStackRouteName, 'ARFilter' | 'UnityMakeupCapture'>;
 
 export const routeChromeByRoute = {
   Login: {
@@ -216,6 +216,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '\uBA54\uC774\uD06C\uC5C5 \uD53C\uB4DC\uBC31',
   },
+  MakeupFeedbackGoalInput: {
+    category: 'feature-entry',
+    depth: 'sub',
+    kind: 'detail',
+    rightActions: ['close'],
+    statusBarStyle: 'dark',
+    title: 'AI 피드백',
+  },
   MakeupFeedbackLoading: {
     category: 'progress',
     depth: 'sub',
@@ -244,16 +252,11 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '수정팁',
   },
-  ReferenceMakeupExtractionCapture: {
-    category: 'capture-runtime',
-    depth: 'immersive',
-    kind: 'fullscreen',
-    statusBarStyle: 'light',
-  },
   ReferenceMakeupExtractionUpload: {
     category: 'feature-entry',
     depth: 'sub',
     kind: 'detail',
+    rightActions: ['close'],
     statusBarStyle: 'dark',
     title: '메이크업 추출',
   },
@@ -268,7 +271,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '분석 결과',
+    title: '메이크업 추출',
   },
   ExtractedMakeupLookAdjust: {
     category: 'ar-runtime',
@@ -344,7 +347,7 @@ export function getDetailRouteTitle(route: RouteName): string {
 
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
   if (tab === 'capture') {
-    return 'ARFilter';
+    return 'UnityMakeupCapture';
   }
 
   if (tab === 'custom') {

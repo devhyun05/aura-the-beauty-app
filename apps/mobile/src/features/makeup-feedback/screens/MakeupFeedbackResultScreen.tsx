@@ -1,21 +1,19 @@
-import React, {useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {
-  Camera,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Eye,
-  Heart,
-  Sparkles,
-} from 'lucide-react-native';
-import {Text, View} from 'tamagui';
+import * as MediaLibrary from 'expo-media-library/legacy';
+import * as Sharing from 'expo-sharing';
+import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
+import {ChevronDown, ChevronUp, Download, Eye, Heart, Share2, Sparkles} from 'lucide-react-native';
+import {Button, Text, View} from 'tamagui';
 
 import {
   colors,
@@ -36,35 +34,141 @@ import type {
 } from '../types';
 
 type MakeupFeedbackResultScreenProps = {
-  headerTitle?: string;
   result: MakeupFeedbackResult;
-  onBack?: () => void;
-  onOpenGuide: () => void;
-  onOpenTip: (point: MakeupFeedbackCorrectionPoint) => void;
-  onRetake: () => void;
-  onUploadAgain: () => void;
 };
 
-type FooterButtonProps = {
-  label: string;
-  tone: 'outline' | 'filled';
-  onPress: () => void;
+type MakeupFeedbackShareTarget = 'save-image' | 'share-report';
+type MakeupFeedbackShareFeedback = {
+  message: string;
+  tone: 'success' | 'error';
 };
 
-const BASE_PHOTO_WIDTH = 360;
+const FEEDBACK_CAPTURE_OPTIONS = {
+  format: 'jpg',
+  quality: 0.95,
+  result: 'tmpfile',
+} as const;
+
+const shareTargetLabels: Record<MakeupFeedbackShareTarget, string> = {
+  'save-image': '이미지 저장',
+  'share-report': '공유하기',
+};
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function captureFeedbackImage(captureRef: {current: ViewShotRef | null}) {
+  const captureTarget = captureRef.current;
+  const capture = captureTarget?.capture;
+
+  if (!captureTarget || !capture) {
+    throw new Error('피드백 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  }
+
+  await waitForNextFrame();
+  const imageUri = await capture.call(captureTarget);
+
+  if (!imageUri) {
+    throw new Error('피드백 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
+  }
+
+  return imageUri;
+}
+
+async function requestFeedbackImageSavePermission() {
+  const currentPermission = await MediaLibrary.getPermissionsAsync(true, ['photo']);
+  const permission = currentPermission.granted
+    ? currentPermission
+    : await MediaLibrary.requestPermissionsAsync(true, ['photo']);
+
+  if (!permission.granted) {
+    throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
+  }
+}
+
+async function saveFeedbackImageToLibrary(imageUri: string) {
+  try {
+    await MediaLibrary.saveToLibraryAsync(imageUri);
+  } catch (error) {
+    console.info('[aura:makeup-feedback] share:save-to-library-failed', {
+      imageUri,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    await MediaLibrary.createAssetAsync(imageUri);
+  }
+}
+
+async function shareFeedbackImageWithSystemSheet(imageUri: string) {
+  const title = 'AI 피드백 리포트';
+  const isSharingAvailable = await Sharing.isAvailableAsync();
+
+  if (isSharingAvailable) {
+    await Sharing.shareAsync(imageUri, {
+      dialogTitle: title,
+      mimeType: 'image/jpeg',
+      UTI: 'public.jpeg',
+    });
+    return;
+  }
+
+  await Share.share({title, url: imageUri});
+}
+
+function getShareErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : '공유 작업을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
 
 export function MakeupFeedbackResultScreen({
   result,
-  onOpenGuide,
-  onOpenTip,
-  onRetake,
-  onUploadAgain,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
-  const [openStrengthId, setOpenStrengthId] = useState<string | null>(null);
+  const captureRef = useRef<ViewShotRef | null>(null);
+  const [openPointId, setOpenPointId] = useState<string | null>(result.points[0]?.id ?? null);
+  const [openStrengthId, setOpenStrengthId] = useState<string | null>(result.strengths[0]?.id ?? null);
+  const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<MakeupFeedbackShareFeedback | null>(null);
   const photoWidth = width;
   const photoHeight = Math.round(photoWidth);
-  const photoScale = photoWidth / BASE_PHOTO_WIDTH;
+
+  const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
+    if (activeShareTarget) {
+      Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
+      return;
+    }
+
+    setActiveShareTarget(target);
+    setShareFeedback(null);
+
+    try {
+      if (target === 'save-image') {
+        await requestFeedbackImageSavePermission();
+      }
+
+      const imageUri = await captureFeedbackImage(captureRef);
+
+      if (target === 'save-image') {
+        await saveFeedbackImageToLibrary(imageUri);
+        setShareFeedback({message: '이미지를 저장했어요.', tone: 'success'});
+        return;
+      }
+
+      await shareFeedbackImageWithSystemSheet(imageUri);
+      setShareFeedback({message: '공유 화면을 열었어요.', tone: 'success'});
+    } catch (error) {
+      console.info('[aura:makeup-feedback] share:failed', {
+        target,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setShareFeedback({message: getShareErrorMessage(error), tone: 'error'});
+    } finally {
+      setActiveShareTarget(null);
+    }
+  }, [activeShareTarget]);
 
   return (
     <MakeupFeedbackScreenScaffold topPadding="none">
@@ -73,132 +177,111 @@ export function MakeupFeedbackResultScreen({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <View style={[styles.resultCard, {width: photoWidth}]}>
-            <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
-              <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
-              {result.annotations.map((annotation) => (
-                <View
-                  accessibilityLabel={annotation.label}
-                  key={annotation.id}
-                  style={[
-                    styles.faceMarker,
-                    {
-                      left: annotation.lineLeft * photoScale,
-                      top: annotation.lineTop * photoScale,
-                    },
-                  ]}
+          <ViewShot
+            ref={captureRef}
+            options={FEEDBACK_CAPTURE_OPTIONS}
+            style={styles.captureArea}>
+            <View style={[styles.resultCard, {width: photoWidth}]}>
+              <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
+                <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
+              </View>
+
+              <View style={styles.scorePanel}>
+                <View style={styles.scoreBox}>
+                  <Text style={styles.scoreLabel}>종합 점수</Text>
+                  <Text style={styles.scoreNumber}>
+                    {result.score}
+                    <Text style={styles.scoreUnit}> 점</Text>
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.sectionTitle}>보완 포인트</Text>
+            <View style={styles.accordionList}>
+              {result.points.map((point) => (
+                <PointAccordionItem
+                  isOpen={openPointId === point.id}
+                  key={point.id}
+                  onPress={() => {
+                    setOpenPointId((currentId) =>
+                      currentId === point.id ? null : point.id,
+                    );
+                  }}
+                  point={point}
                 />
               ))}
             </View>
 
-            <View style={styles.scorePanel}>
-              <View style={styles.scoreBox}>
-                <Text style={styles.scoreLabel}>종합 점수</Text>
-                <Text style={styles.scoreNumber}>
-                  {result.score}
-                  <Text style={styles.scoreUnit}> 점</Text>
-                </Text>
-              </View>
-              <View style={styles.scoreDivider} />
-              <View style={styles.badgeArea}>
-                <View style={styles.badgeRow}>
-                  {result.summaryBadges.map((badge) => (
-                    <View key={badge.id} style={styles.badge}>
-                      <Text style={styles.badgeText}>{badge.label}</Text>
-                    </View>
-                  ))}
-                </View>
-                <Text style={styles.scoreHelper}>좋은 부분과 수정 포인트를 함께 확인해보세요</Text>
-              </View>
+            <Text style={styles.sectionTitle}>잘한 포인트</Text>
+            <View style={styles.accordionList}>
+              {result.strengths.map((strength) => (
+                <StrengthAccordionItem
+                  isOpen={openStrengthId === strength.id}
+                  key={strength.id}
+                  onPress={() => {
+                    setOpenStrengthId((currentId) =>
+                      currentId === strength.id ? null : strength.id,
+                    );
+                  }}
+                  strength={strength}
+                />
+              ))}
             </View>
-          </View>
+          </ViewShot>
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>수정 포인트 3가지</Text>
-            <Pressable accessibilityLabel="수정 포인트 모두 보기" accessibilityRole="button">
-              <Text style={styles.moreText}>모두 보기</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.pointList}>
-            {result.points.map((point) => (
-              <MakeupFeedbackCorrectionPointCard key={point.id} onOpenTip={onOpenTip} point={point} />
-            ))}
-          </View>
-
-          <Text style={styles.sectionTitle}>잘한 포인트</Text>
-          <View style={styles.strengthAccordionList}>
-            {result.strengths.map((strength) => (
-              <StrengthAccordionItem
-                isOpen={openStrengthId === strength.id}
-                key={strength.id}
-                onPress={() => {
-                  setOpenStrengthId((currentId) =>
-                    currentId === strength.id ? null : strength.id,
-                  );
-                }}
-                strength={strength}
-              />
-            ))}
-          </View>
-
-          <Pressable
-            accessibilityLabel="사진 다시 업로드"
-            accessibilityRole="button"
-            onPress={onUploadAgain}
-            style={({pressed}) => [
-              styles.uploadCard,
-              {
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}>
-            <View style={styles.uploadIcon}>
-              <Camera color={feedbackColors.text} size={iconSize.md} strokeWidth={2} />
-            </View>
-            <View style={styles.uploadCopy}>
-              <Text style={styles.uploadTitle}>사진 다시 업로드</Text>
-              <Text style={styles.uploadCaption}>정면 / 밝은 조명 / 액세서리 없이 촬영하면 더 정확해요</Text>
-            </View>
-            <ChevronRight color={feedbackColors.textSoft} size={iconSize.sm} strokeWidth={2} />
-          </Pressable>
-
-          <View style={styles.footerActions}>
-            <FooterButton label="다시 촬영" onPress={onRetake} tone="outline" />
-            <FooterButton label="가이드 오버레이 보기" onPress={onOpenGuide} tone="filled" />
-          </View>
+          <FeedbackShareActions
+            activeTarget={activeShareTarget}
+            feedback={shareFeedback}
+            onPressShareAction={handleShareAction}
+          />
         </ScrollView>
       </View>
     </MakeupFeedbackScreenScaffold>
   );
 }
 
-function MakeupFeedbackCorrectionPointCard({
-  onOpenTip,
+function PointAccordionItem({
+  isOpen,
+  onPress,
   point,
 }: {
-  onOpenTip: (point: MakeupFeedbackCorrectionPoint) => void;
+  isOpen: boolean;
+  onPress: () => void;
   point: MakeupFeedbackCorrectionPoint;
 }) {
   const Icon = point.kind === 'eye' ? Eye : point.kind === 'cheek' ? Sparkles : Heart;
+  const ToggleIcon = isOpen ? ChevronUp : ChevronDown;
 
   return (
-    <View style={styles.pointCard}>
-      <View style={styles.pointIcon}>
-        <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
-      </View>
-      <View style={styles.pointCopy}>
-        <Text style={styles.pointTitle}>{point.title}</Text>
-        <Text style={styles.pointDescription}>{point.description}</Text>
-      </View>
+    <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${point.title} ${point.actionLabel}`}
+        accessibilityLabel={`${point.topicLabel} 상세 보기`}
         accessibilityRole="button"
-        onPress={() => onOpenTip(point)}>
-        <View style={styles.pointAction}>
-          <Text style={styles.pointActionText}>{point.actionLabel}</Text>
-          <ChevronRight color={feedbackColors.accent} size={iconSize.xs} strokeWidth={2.1} />
+        accessibilityState={{expanded: isOpen}}
+        onPress={onPress}
+        style={({pressed}) => [
+          styles.accordionButton,
+          {
+            opacity: pressed ? 0.78 : 1,
+          },
+        ]}>
+        <View style={styles.accordionTitleGroup}>
+          <View style={styles.pointIcon}>
+            <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
+          </View>
+          <Text numberOfLines={1} style={styles.accordionTitle}>{point.topicLabel}</Text>
         </View>
+        <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
+      {isOpen ? (
+        <View style={styles.accordionDetail}>
+          {point.title !== point.topicLabel ? (
+            <Text style={styles.accordionDetailTitle}>{point.title}</Text>
+          ) : null}
+          <Text style={styles.accordionText}>{point.description}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -216,52 +299,102 @@ function StrengthAccordionItem({
   const ToggleIcon = isOpen ? ChevronUp : ChevronDown;
 
   return (
-    <View style={styles.strengthAccordionItem}>
+    <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${strength.title} 상세 보기`}
+        accessibilityLabel={`${strength.topicLabel} 상세 보기`}
         accessibilityRole="button"
         accessibilityState={{expanded: isOpen}}
         onPress={onPress}
         style={({pressed}) => [
-          styles.strengthAccordionButton,
+          styles.accordionButton,
           {
             opacity: pressed ? 0.78 : 1,
           },
         ]}>
-        <View style={styles.strengthAccordionTitleGroup}>
-          <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
-          <Text style={styles.strengthAccordionTitle}>{strength.title}</Text>
+        <View style={styles.accordionTitleGroup}>
+          <View style={styles.strengthIcon}>
+            <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
+          </View>
+          <Text numberOfLines={1} style={styles.accordionTitle}>{strength.topicLabel}</Text>
         </View>
         <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
       {isOpen ? (
-        <View style={styles.strengthAccordionDetail}>
-          <Text style={styles.strengthAccordionText}>{strength.description}</Text>
+        <View style={styles.accordionDetail}>
+          {strength.title !== strength.topicLabel ? (
+            <Text style={styles.accordionDetailTitle}>{strength.title}</Text>
+          ) : null}
+          <Text style={styles.accordionText}>{strength.description}</Text>
         </View>
       ) : null}
     </View>
   );
 }
 
-function FooterButton({label, onPress, tone}: FooterButtonProps) {
-  const isFilled = tone === 'filled';
+function FeedbackShareActions({
+  activeTarget,
+  feedback,
+  onPressShareAction,
+}: {
+  activeTarget: MakeupFeedbackShareTarget | null;
+  feedback: MakeupFeedbackShareFeedback | null;
+  onPressShareAction: (target: MakeupFeedbackShareTarget) => Promise<void>;
+}) {
+  const shareActions: Array<{
+    icon: React.ReactNode;
+    target: MakeupFeedbackShareTarget;
+  }> = [
+    {
+      icon: <Download color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />,
+      target: 'save-image',
+    },
+    {
+      icon: <Share2 color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />,
+      target: 'share-report',
+    },
+  ];
 
   return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.footerButton,
-        isFilled ? styles.footerButtonFilled : styles.footerButtonOutline,
-        {
-          opacity: pressed ? 0.78 : 1,
-        },
-      ]}>
-      <Text style={isFilled ? styles.footerButtonFilledText : styles.footerButtonOutlineText}>
-        {label}
-      </Text>
-    </Pressable>
+    <View style={styles.shareActionArea}>
+      <View style={styles.shareActionRow}>
+        {shareActions.map((action) => {
+          const isActive = activeTarget === action.target;
+          const isDisabled = Boolean(activeTarget);
+
+          return (
+            <Button
+              accessibilityLabel={shareTargetLabels[action.target]}
+              accessibilityRole="button"
+              accessibilityState={{busy: isActive, disabled: isDisabled}}
+              disabled={isDisabled}
+              disabledStyle={styles.shareActionDisabled}
+              key={action.target}
+              onPress={() => {
+                void onPressShareAction(action.target);
+              }}
+              pressStyle={{opacity: 0.56}}
+              style={styles.shareActionButton}
+              unstyled>
+              {isActive ? (
+                <ActivityIndicator color={feedbackColors.text} size="small" />
+              ) : (
+                action.icon
+              )}
+            </Button>
+          );
+        })}
+      </View>
+      {feedback ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.shareFeedback,
+            feedback.tone === 'success' ? styles.shareFeedbackSuccess : styles.shareFeedbackError,
+          ]}>
+          {feedback.message}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -273,92 +406,73 @@ const sharedCardShadow = {
 } as const;
 
 const styles = StyleSheet.create({
-  badge: {
-    backgroundColor: feedbackColors.accentSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  badgeArea: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  badgeRow: {
+  accordionButton: {
+    alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    minHeight: 62,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  accordionDetail: {
+    borderTopColor: feedbackColors.borderSoft,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  accordionItem: {
+    backgroundColor: feedbackColors.surface,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: feedbackRadius.card,
+    borderWidth: 1,
+    ...sharedCardShadow,
+  },
+  accordionList: {
     gap: spacing.sm,
   },
-  badgeText: {
+  accordionDetailTitle: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
+    lineHeight: typography.lineHeight.sm,
   },
-  faceMarker: {
-    backgroundColor: feedbackColors.text,
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: 11,
-    marginLeft: -5,
-    marginTop: -5,
-    position: 'absolute',
-    width: 11,
+  accordionText: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  accordionTitle: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  accordionTitleGroup: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+
+  captureArea: {
+    backgroundColor: feedbackColors.background,
+    gap: feedbackSpacing.cardGap,
   },
   content: {
     gap: feedbackSpacing.cardGap,
     paddingBottom: spacing.xxl,
     paddingHorizontal: feedbackSpacing.screenX,
     paddingTop: spacing.xl,
-  },
-  footerActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  footerButton: {
-    alignItems: 'center',
-    borderRadius: radius.sm,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: spacing.sm,
-  },
-  footerButtonFilled: {
-    backgroundColor: feedbackColors.text,
-  },
-  footerButtonFilledText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-    textAlign: 'center',
-  },
-  footerButtonOutline: {
-    backgroundColor: colors.white,
-    borderColor: feedbackColors.text,
-    borderWidth: 1,
-  },
-  footerButtonOutlineText: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-    textAlign: 'center',
-  },
-  moreText: {
-    color: feedbackColors.textSoft,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
   },
   photo: {
     height: '100%',
@@ -369,65 +483,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  pointAction: {
-    alignItems: 'center',
-    borderColor: feedbackColors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  pointActionText: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
-  pointCard: {
-    alignItems: 'center',
-    backgroundColor: feedbackColors.surface,
-    borderColor: feedbackColors.borderSoft,
-    borderRadius: feedbackRadius.card,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.md,
-    ...sharedCardShadow,
-  },
-  pointCopy: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  pointDescription: {
-    color: feedbackColors.textMuted,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
   pointIcon: {
     alignItems: 'center',
     backgroundColor: feedbackColors.accentSoft,
     borderRadius: radius.pill,
-    height: 42,
+    height: 38,
     justifyContent: 'center',
-    width: 42,
-  },
-  pointList: {
-    gap: spacing.sm,
-  },
-  pointTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
+    width: 38,
   },
   resultCard: {
     alignSelf: 'center',
@@ -435,21 +497,7 @@ const styles = StyleSheet.create({
   },
   scoreBox: {
     alignItems: 'center',
-    gap: spacing.xs,
-    width: 104,
-  },
-  scoreDivider: {
-    backgroundColor: feedbackColors.borderSoft,
-    height: 68,
-    width: 1,
-  },
-  scoreHelper: {
-    color: feedbackColors.textSoft,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
+    gap: spacing.sm,
   },
   scoreLabel: {
     color: feedbackColors.textMuted,
@@ -470,11 +518,10 @@ const styles = StyleSheet.create({
   scorePanel: {
     alignItems: 'center',
     backgroundColor: feedbackColors.surface,
-    flexDirection: 'row',
-    gap: spacing.md,
+    justifyContent: 'center',
     marginTop: 0,
     paddingHorizontal: feedbackSpacing.screenX,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xl,
   },
   scoreUnit: {
     color: feedbackColors.text,
@@ -491,11 +538,6 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
   sectionTitle: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
@@ -504,89 +546,47 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
   },
-  strengthAccordionButton: {
+  shareActionArea: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 58,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
   },
-  strengthAccordionDetail: {
-    borderTopColor: feedbackColors.borderSoft,
-    borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  strengthAccordionItem: {
-    backgroundColor: feedbackColors.surface,
-    borderColor: feedbackColors.borderSoft,
-    borderRadius: feedbackRadius.card,
-    borderWidth: 1,
-    ...sharedCardShadow,
-  },
-  strengthAccordionList: {
-    gap: spacing.sm,
-  },
-  strengthAccordionText: {
-    color: feedbackColors.textMuted,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  strengthAccordionTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  strengthAccordionTitleGroup: {
+  shareActionButton: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
+    borderRadius: radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
-  uploadCaption: {
-    color: feedbackColors.textSoft,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
+  shareActionDisabled: {
+    opacity: 0.52,
   },
-  uploadCard: {
+  shareActionRow: {
     alignItems: 'center',
-    backgroundColor: feedbackColors.surface,
-    borderColor: feedbackColors.borderSoft,
-    borderRadius: feedbackRadius.card,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.md,
-    padding: spacing.md,
-    ...sharedCardShadow,
+    justifyContent: 'center',
   },
-  uploadCopy: {
-    flex: 1,
-    gap: spacing.xs,
+  shareFeedback: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
   },
-  uploadIcon: {
+  shareFeedbackError: {
+    color: colors.danger,
+  },
+  shareFeedbackSuccess: {
+    color: feedbackColors.textSoft,
+  },
+  strengthIcon: {
     alignItems: 'center',
     backgroundColor: feedbackColors.accentSoft,
     borderRadius: radius.pill,
-    height: 46,
+    height: 38,
     justifyContent: 'center',
-    width: 46,
-  },
-  uploadTitle: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
+    width: 38,
   },
 });

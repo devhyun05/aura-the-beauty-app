@@ -43,6 +43,7 @@ export function ARFilterRouteScreen({
 
   return (
     <ARFilterScreen
+      fullFaceEditState={route.params?.fullFaceEditState}
       initialGuideMode={initialGuideMode}
       initialMakeupFilterId={initialMakeupFilterId}
       initialSource={initialSource}
@@ -59,8 +60,18 @@ export function UnityMakeupCaptureRouteScreen({
 }: RootScreenProps<'UnityMakeupCapture'>) {
   return (
     <UnityMakeupCaptureScreen
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}
-      onComplete={() => navigateMainTab(navigation, 'HomeTab')}
+      onBack={() =>
+        navigation.canGoBack()
+          ? navigation.goBack()
+          : navigateMainTab(navigation, 'HomeTab')
+      }
+      onComplete={sourceFrameMetadata =>
+        navigation.navigate('MakeupFilterEdit', {
+          backRoute: 'FaceAnalysisReportDetail',
+          mode: 'fullFace',
+          sourceFrameMetadata,
+        })
+      }
     />
   );
 }
@@ -98,8 +109,14 @@ export function MakeupFilterEditRouteScreen({
 }: RootScreenProps<'MakeupFilterEdit'>) {
   return (
     <MakeupFilterEditScreen
+      mode={route.params?.mode === 'fullFace' ? 'fullFace' : 'preset'}
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
-      onSave={() => navigation.navigate('ARFilter')}
+      onSave={savedContract =>
+        navigation.navigate('ARFilter', {
+          fullFaceEditState: savedContract?.editState,
+        })
+      }
+      sourceFrameMetadata={route.params?.sourceFrameMetadata}
     />
   );
 }

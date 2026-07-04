@@ -21,6 +21,7 @@ class FeedbackJobCreate(CamelModel):
   uploaded_media_id: UUID | None = Field(default=None, alias="uploadedMediaId")
   source: str = "camera"
   source_label: str | None = Field(default=None, alias="sourceLabel")
+  run_immediately: bool = Field(default=False, alias="runImmediately")
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")
 
 
@@ -29,4 +30,13 @@ class FilterExtractionJobCreate(CamelModel):
   result_media_id: UUID | None = Field(default=None, alias="resultMediaId")
   title: str = "Extracted makeup filter"
   subtitle: str | None = None
+  request_payload: dict = Field(default_factory=dict, alias="requestPayload")
+
+class FilterExtractionAnalyzeRequest(CamelModel):
+  photo_capture_id: UUID | None = Field(default=None, alias="photoCaptureId")
+  result_media_id: UUID | None = Field(default=None, alias="resultMediaId")
+  reference_image_id: str | None = Field(default=None, alias="referenceImageId")
+  title: str = "Reference makeup"
+  subtitle: str | None = None
+  run_ai: bool = Field(default=False, alias="runAi")
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")

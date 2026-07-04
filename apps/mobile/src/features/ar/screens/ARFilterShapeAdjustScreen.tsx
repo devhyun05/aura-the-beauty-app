@@ -61,6 +61,7 @@ const SHAPE_ADJUST_TITLE = '형태 수정';
 const SHAPE_ADJUST_INTERACTION_MODE = 'drag-shape-point';
 const SHAPE_PRESET_FILTER_ID = 'ar-filter-shape-preview';
 const SHAPE_PRESET_LOOK_ID = 'current-makeup-look';
+const SHAPE_POINT_PAN_RESPONDER_DEPENDENCY_MODE = 'shape-point-ids';
 
 type ShapePreviewColorOverlayLayer = {
   id: string;
@@ -85,6 +86,10 @@ export function getARFilterShapeAdjustTitle(): string {
 
 export function getARFilterShapeAdjustInteractionMode(): 'drag-shape-point' {
   return SHAPE_ADJUST_INTERACTION_MODE;
+}
+
+export function getShapePointPanResponderDependencyMode(): 'shape-point-ids' {
+  return SHAPE_POINT_PAN_RESPONDER_DEPENDENCY_MODE;
 }
 
 export function ARFilterShapeAdjustScreen({
@@ -114,28 +119,28 @@ export function ARFilterShapeAdjustScreen({
   const shapePointPanResponders = useMemo(() => {
     const responders: Record<string, ReturnType<typeof PanResponder.create>> = {};
 
-    shapeState.shapePoints.forEach(point => {
-      responders[point.id] = PanResponder.create({
+    shapePointIds.split(',').filter(Boolean).forEach(pointId => {
+      responders[pointId] = PanResponder.create({
         onMoveShouldSetPanResponder: () => true,
         onStartShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           const currentPoint = shapeStateRef.current.shapePoints.find(
-            shapePoint => shapePoint.id === point.id,
+            shapePoint => shapePoint.id === pointId,
           );
 
           if (!currentPoint) {
             return;
           }
 
-          setSelectedShapePointId(point.id);
-          dragStartOffsetsRef.current[point.id] = currentPoint.offset;
+          setSelectedShapePointId(pointId);
+          dragStartOffsetsRef.current[pointId] = currentPoint.offset;
         },
         onPanResponderMove: (_event, gestureState) => {
-          const startOffset = dragStartOffsetsRef.current[point.id];
+          const startOffset = dragStartOffsetsRef.current[pointId];
 
           setShapeState(currentState => {
             const currentPoint = currentState.shapePoints.find(
-              shapePoint => shapePoint.id === point.id,
+              shapePoint => shapePoint.id === pointId,
             );
 
             if (!currentPoint || !startOffset) {
@@ -154,20 +159,20 @@ export function ARFilterShapeAdjustScreen({
               previewSize: previewSizeRef.current,
             });
 
-            return updateFilterShapePointOffset(currentState, point.id, nextOffset);
+            return updateFilterShapePointOffset(currentState, pointId, nextOffset);
           });
         },
         onPanResponderRelease: () => {
-          delete dragStartOffsetsRef.current[point.id];
+          delete dragStartOffsetsRef.current[pointId];
         },
         onPanResponderTerminate: () => {
-          delete dragStartOffsetsRef.current[point.id];
+          delete dragStartOffsetsRef.current[pointId];
         },
       });
     });
 
     return responders;
-  }, [shapePointIds, shapeState.shapePoints]);
+  }, [shapePointIds]);
 
   const handlePreviewLayout = ({nativeEvent}: LayoutChangeEvent) => {
     const {height, width} = nativeEvent.layout;

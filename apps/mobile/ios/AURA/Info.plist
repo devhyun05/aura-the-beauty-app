@@ -51,6 +51,8 @@
 	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AURA 개발 빌드에서 앱 화면을 불러오기 위해 로컬 개발 서버에 연결합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AURA 사진 업로드와 분석 기능을 위해 사진 보관함 접근 권한이 필요합니다.</string>
 	<key>RCTNewArchEnabled</key>

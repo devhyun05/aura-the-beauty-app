@@ -1243,9 +1243,11 @@ async def _fetch_naver_category_products(
   settings: Settings,
   category: str,
   profile: dict[str, Any] | None = None,
+  query_override: str | None = None,
 ) -> list[dict[str, Any]]:
   queries = _dedupe(
     [
+      _clean_text(query_override),
       _build_category_query(category, profile),
       CATEGORY_CONFIG[category]["query"],
       *CATEGORY_FALLBACK_QUERIES.get(category, ()),
@@ -1293,6 +1295,7 @@ async def _fetch_naver_products(
   settings: Settings,
   category: str | None = None,
   profile: dict[str, Any] | None = None,
+  query_override: str | None = None,
 ) -> list[dict[str, Any]]:
   if not settings.naver_shopping_client_id or not settings.naver_shopping_client_secret:
     return []
@@ -1303,7 +1306,13 @@ async def _fetch_naver_products(
   async with httpx.AsyncClient(timeout=6.0) as client:
     results = await asyncio.gather(
       *(
-        _fetch_naver_category_products(client, settings, product_category, profile)
+        _fetch_naver_category_products(
+          client,
+          settings,
+          product_category,
+          profile,
+          query_override=query_override,
+        )
         for product_category in categories
         if product_category
       ),
@@ -1492,10 +1501,12 @@ async def build_product_recommendation_data(
   look_index: int | None = None,
   oauth_sub: str | None = None,
   report_id: str | None = None,
+  profile_override: dict[str, Any] | None = None,
+  query_override: str | None = None,
 ) -> tuple[dict[str, Any], str]:
   source = "fallback"
   products: list[dict[str, Any]] = []
-  profile = await _fetch_report_profile(
+  profile = profile_override if isinstance(profile_override, dict) else await _fetch_report_profile(
     db,
     auth_provider=auth_provider,
     oauth_sub=oauth_sub,
@@ -1505,7 +1516,12 @@ async def build_product_recommendation_data(
     profile["selectedRecommendedMakeupIndex"] = look_index
 
   try:
-    products = await _fetch_naver_products(settings, category, profile)
+    products = await _fetch_naver_products(
+      settings,
+      category,
+      profile,
+      query_override=query_override,
+    )
     if products:
       source = "naver_shopping_matched" if profile else "naver_shopping"
   except (httpx.HTTPError, ValueError):

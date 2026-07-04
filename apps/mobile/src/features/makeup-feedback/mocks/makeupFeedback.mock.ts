@@ -1,95 +1,170 @@
 import {appAssetSource} from '../../../shared/config/mediaAssets';
-import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
+import type {
+  MakeupFeedbackEvaluation,
+  MakeupFeedbackPhotoSelection,
+  MakeupFeedbackResult,
+} from '../types';
+import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 
 const sampleFeedbackImage = appAssetSource('images/analysis/report-retake-20260608.png');
 
+type MockEvaluationCopy = Pick<
+  MakeupFeedbackEvaluation,
+  'confidence' | 'description' | 'scoreImpact' | 'status' | 'title'
+>;
+
+const mockCopyByTopic: Record<MakeupFeedbackEvaluation['topicId'], MockEvaluationCopy> = {
+  brow: {
+    confidence: 0.86,
+    description: '목적에 맞게 눈썹 결이 정리되어 인상이 깔끔해 보여요. 앞머리는 부드럽고 꼬리는 과하지 않아 전체 균형을 잘 잡아줍니다.',
+    scoreImpact: 'high',
+    status: 'strength',
+    title: '인상을 정리한 눈썹',
+  },
+  lash: {
+    confidence: 0.64,
+    description: '이번 목적에서는 속눈썹을 더 강조하지 않아도 충분해 보여요. 원한다면 뭉침 없이 결만 살리는 정도가 적당합니다.',
+    scoreImpact: 'low',
+    status: 'optional',
+    title: '선택적으로 조절할 속눈썹',
+  },
+  lens: {
+    confidence: 0.58,
+    description: '렌즈는 목적에 따라 선택해도 되는 항목이에요. 자연스러운 기준이라면 현재처럼 눈동자 색감이 과하게 튀지 않는 쪽이 좋습니다.',
+    scoreImpact: 'low',
+    status: 'optional',
+    title: '목적에 따라 선택할 렌즈',
+  },
+  eyeliner: {
+    confidence: 0.74,
+    description: '아이라인 끝 각도가 살짝 떠 보여 인상 정리가 덜 선명해질 수 있어요. 점막 가까이 얇게 이어주면 목적에 맞는 깔끔함이 더 살아납니다.',
+    scoreImpact: 'medium',
+    status: 'improvement',
+    title: '라인 끝 정리',
+  },
+  eyeshadow: {
+    confidence: 0.82,
+    description: '아이섀도 톤이 과하지 않고 피부 표현과 자연스럽게 이어져요. 눈매에 깊이는 주면서 전체 분위기를 흐트러뜨리지 않는 점이 좋아요.',
+    scoreImpact: 'medium',
+    status: 'strength',
+    title: '자연스러운 음영 연결',
+  },
+  aegyosal: {
+    confidence: 0.55,
+    description: '애교살은 이번 목적에서 필수로 강조할 항목은 아니에요. 밝기를 더한다면 눈 밑 중앙에만 아주 얇게 올리는 정도가 안정적입니다.',
+    scoreImpact: 'low',
+    status: 'optional',
+    title: '가볍게 조절할 애교살',
+  },
+  foundation: {
+    confidence: 0.88,
+    description: '피부톤이 고르게 정돈되어 사진에서 깔끔한 인상을 줍니다. 목선과의 차이도 크지 않아 목적에 맞는 자연스러운 완성도가 좋아요.',
+    scoreImpact: 'high',
+    status: 'strength',
+    title: '균일한 피부 표현',
+  },
+  blush: {
+    confidence: 0.8,
+    description: '블러셔가 얼굴 중앙에 생기를 주면서 과하게 튀지 않아요. 전체 톤과 잘 맞아 부담 없는 포인트로 보입니다.',
+    scoreImpact: 'medium',
+    status: 'strength',
+    title: '부담 없는 생기',
+  },
+  highlight: {
+    confidence: 0.78,
+    description: '하이라이터가 필요한 부위에만 은은하게 살아 있어 입체감이 자연스럽습니다. 조명 아래에서도 번들거림보다 정돈된 윤기로 보일 가능성이 높아요.',
+    scoreImpact: 'medium',
+    status: 'strength',
+    title: '은은한 입체감',
+  },
+  shading: {
+    confidence: 0.72,
+    description: '섀딩 경계가 조금 더 부드러워지면 얼굴 입체감이 자연스럽게 살아날 수 있어요. 턱선과 코 옆은 브러시에 남은 양으로 가볍게 풀어주세요.',
+    scoreImpact: 'medium',
+    status: 'improvement',
+    title: '경계 블렌딩',
+  },
+};
+
+function buildMockEvaluations(): MakeupFeedbackEvaluation[] {
+  return MAKEUP_FEEDBACK_TOPICS.map((topic) => {
+    const copy = mockCopyByTopic[topic.id];
+
+    return {
+      id: `${topic.id}-${copy.status}`,
+      topicId: topic.id,
+      topicLabel: topic.label,
+      status: copy.status,
+      title: copy.title,
+      description: copy.description,
+      kind: topic.kind,
+      confidence: copy.confidence,
+      scoreImpact: copy.scoreImpact,
+    };
+  });
+}
+
 export const createMockMakeupFeedback = (
   selection: MakeupFeedbackPhotoSelection,
-): MakeupFeedbackResult => ({
-  id: `mock-feedback-${selection.photoSource}`,
-  uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
-  photoSource: selection.photoSource,
-  photoSourceLabel: selection.photoSource === 'camera' ? '촬영한 사진' : '갤러리 사진',
-  score: 82,
-  summaryBadges: [
-    {
-      id: 'tone',
-      label: '톤 조화 좋음',
+): MakeupFeedbackResult => {
+  const evaluations = buildMockEvaluations();
+  const points = evaluations
+    .filter((evaluation) => evaluation.status === 'improvement')
+    .map((evaluation) => ({
+      id: `${evaluation.topicId}-point`,
+      topicId: evaluation.topicId,
+      topicLabel: evaluation.topicLabel,
+      title: evaluation.title,
+      description: evaluation.description,
+      actionLabel: '보완 포인트',
+      kind: evaluation.kind,
+    }));
+  const strengths: MakeupFeedbackResult['strengths'] = evaluations
+    .filter((evaluation) => evaluation.status === 'strength')
+    .map((evaluation, index) => ({
+      id: `${evaluation.topicId}-strength`,
+      topicId: evaluation.topicId,
+      topicLabel: evaluation.topicLabel,
+      title: evaluation.title,
+      description: evaluation.description,
+      icon: index % 2 === 0 ? 'sparkle' : 'heart',
+      kind: evaluation.kind,
+    }));
+  const userGoalText = selection.feedbackContext?.userGoalText?.trim();
+
+  return {
+    id: `mock-feedback-${selection.photoSource}`,
+    uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
+    photoSource: selection.photoSource,
+    photoSourceLabel: selection.photoSource === 'camera' ? '촬영 사진' : '앨범 사진',
+    score: 84,
+    scoreLabel: '종합 점수',
+    interpretedGoal: {
+      intensity: 'medium',
+      label: userGoalText ? userGoalText.slice(0, 28) : '목적 맞춤 메이크업',
+      reason: '사용자가 입력한 상황과 사진에서 보이는 표현 강도를 함께 참고했어요.',
     },
-    {
-      id: 'lip',
-      label: '립 컬러 잘 어울림',
+    summary: {
+      strengthSummary: '피부 표현과 전체 톤 균형이 목적에 잘 맞아요.',
+      improvementSummary: '라인과 섀딩 경계만 조금 더 정리하면 완성도가 올라갑니다.',
     },
-  ],
-  annotations: [
-    {
-      id: 'eyeline',
-      label: '아이라인 좌우 각도 차이',
-      top: 88,
-      left: 22,
-      lineTop: 184,
-      lineLeft: 154,
-      lineWidth: 78,
-      rotate: '-8deg',
-    },
-    {
-      id: 'blusher',
-      label: '블러셔 위치가 조금 낮아요',
-      top: 130,
-      left: 250,
-      lineTop: 208,
-      lineLeft: 238,
-      lineWidth: 58,
-      rotate: '10deg',
-    },
-    {
-      id: 'lipline',
-      label: '립 경계 정리가 필요해요',
-      top: 188,
-      left: 42,
-      lineTop: 286,
-      lineLeft: 182,
-      lineWidth: 78,
-      rotate: '-22deg',
-    },
-  ],
-  points: [
-    {
-      id: 'eyeline-point',
-      title: '아이라인',
-      description: '오른쪽 꼬리가 왼쪽보다 조금 더 올라가 있어요',
-      actionLabel: '수정팁',
-      kind: 'eye',
-    },
-    {
-      id: 'blusher-point',
-      title: '블러셔',
-      description: '광대보다 살짝 위로 올리면 얼굴이 더 짧아 보여요',
-      actionLabel: '수정팁',
-      kind: 'cheek',
-    },
-    {
-      id: 'lip-point',
-      title: '립',
-      description: '입꼬리 라인을 정리하면 더 또렷한 인상이 돼요',
-      actionLabel: '수정팁',
-      kind: 'lip',
-    },
-  ],
-  strengths: [
-    {
-      id: 'shadow',
-      title: '아이섀도우 톤',
-      description:
-        '브라운 계열 음영이 피부 톤과 잘 맞아서 눈매가 과하게 진하지 않고 자연스럽게 또렷해 보여요. 눈두덩이 중앙은 밝게 살아 있고, 외곽 음영만 부드럽게 잡혀 전체 균형이 좋아요.',
-      icon: 'sparkle',
-    },
-    {
-      id: 'mood',
-      title: '전체무드',
-      description:
-        '베이스, 아이, 립 컬러의 채도가 비슷하게 맞아서 얼굴 전체가 차분하고 깨끗해 보여요. 한 부분만 튀지 않고 데일리 메이크업처럼 자연스러운 분위기가 잘 살아났어요.',
-      icon: 'heart',
-    },
-  ],
-});
+    summaryBadges: [
+      {
+        id: 'strength-count',
+        label: `잘한 항목 ${strengths.length}개`,
+      },
+      {
+        id: 'improvement-count',
+        label: `보완 항목 ${points.length}개`,
+      },
+      {
+        id: 'topic-count',
+        label: '10개 항목 분석',
+      },
+    ],
+    annotations: [],
+    evaluations,
+    points,
+    strengths,
+  };
+};

@@ -16,6 +16,9 @@
 		E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */; };
 		E5F0A1032F80111100FACE01 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F0A1022F80111100FACE01 /* Vision.framework */; };
 		E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */; };
+		E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */; };
+		E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */; };
+		E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */ = {isa = PBXBuildFile; fileRef = E7A110022F81000000E7AAA3 /* face_landmarker.task */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */; };
 /* End PBXBuildFile section */
@@ -34,6 +37,9 @@
 		E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURAFaceLandmarkDetector.m; path = AURA/AURAFaceLandmarkDetector.m; sourceTree = "<group>"; };
 		E5F0A1022F80111100FACE01 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURARealtimeFaceCaptureView.m; path = AURA/AURARealtimeFaceCaptureView.m; sourceTree = "<group>"; };
+		E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = E7NativeLipBoundaryProviders.swift; path = AURA/E7NativeLipBoundaryProviders.swift; sourceTree = "<group>"; };
+		E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = E7NativeLipBoundaryProvidersBridge.m; path = AURA/E7NativeLipBoundaryProvidersBridge.m; sourceTree = "<group>"; };
+		E7A110022F81000000E7AAA3 /* face_landmarker.task */ = {isa = PBXFileReference; lastKnownFileType = file; name = face_landmarker.task; path = AURA/E7Models/face_landmarker.task; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AURA/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "AURA-Bridging-Header.h"; path = "AURA/AURA-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -58,6 +64,9 @@
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
+				E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */,
+				E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */,
+				E7A110022F81000000E7AAA3 /* face_landmarker.task */,
 				E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */,
 				E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */,
 				F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */,
@@ -211,6 +220,7 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				0FA0A731B5B2E91D85A3C0C3 /* PrivacyInfo.xcprivacy in Resources */,
+				E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -268,6 +278,7 @@
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCameraBarcodeScanning/ZXingObjC.framework/ZXingObjC",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem.framework/ExpoFileSystem",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFont/ExpoFont.framework/ExpoFont",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoMediaLibrary/ExpoMediaLibrary.framework/ExpoMediaLibrary",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/ExpoModulesCore",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesWorklets/ExpoModulesWorklets.framework/ExpoModulesWorklets",
@@ -282,6 +293,7 @@
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ZXingObjC.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFileSystem.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFont.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoMediaLibrary.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesCore.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesWorklets.framework",
@@ -305,9 +317,11 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoMediaLibrary/ExpoMediaLibrary_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/react-native-view-shot/RNViewShotPrivacyInfo.bundle",
 			);
 			name = "[CP] Copy Pods Resources";
 			outputPaths = (
@@ -315,9 +329,11 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoMediaLibrary_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNViewShotPrivacyInfo.bundle",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -373,6 +389,8 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
+				E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */,
+				E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */,
 				E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */,
 				E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */,
 				D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */,
