@@ -17,6 +17,7 @@ import {
   homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
   recommendedFilterListVirtualizationConfig,
   recommendedFilterMoreButtonLabel,
@@ -167,6 +168,11 @@ expectEqual(
   quickActionLabels.join(','),
   '얼굴\n분석,메이크업\n추출,추천\n제품,커뮤니티,컨설팅',
   'home quick action order',
+);
+expectEqual(
+  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
+  'Compass',
+  'home consulting quick action icon name',
 );
 expectEqual(
   makeupExtractionActionLabels.join(','),

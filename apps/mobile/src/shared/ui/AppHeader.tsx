@@ -5,7 +5,7 @@ import {Button, Text, XStack, YStack, type XStackProps} from 'tamagui';
 
 import {colors, radius, shadows, spacing, typography} from '../theme';
 import {ChevronLeftIcon} from './LineIcons';
-import {ProfileHeaderIcon} from './HeaderIcons';
+import {MenuHeaderIcon} from './HeaderIcons';
 
 export const APP_HEADER_BASE_HEIGHT = 56;
 export const APP_HEADER_VERTICAL_PADDING = spacing.sm;
@@ -37,7 +37,7 @@ export function AppHeader({
   rightSlot,
   onBack,
   onProfilePress,
-  profileAccessibilityLabel = '마이페이지',
+  profileAccessibilityLabel = '전체 기능 메뉴',
   containerProps,
 }: AppHeaderProps) {
   const insets = useSafeAreaInsets();
@@ -56,7 +56,7 @@ export function AppHeader({
       <HeaderIconButton
         accessibilityLabel={profileAccessibilityLabel}
         onPress={onProfilePress}>
-        <ProfileHeaderIcon />
+        <MenuHeaderIcon />
       </HeaderIconButton>
     ) : null);
 

@@ -7,6 +7,7 @@ import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './
 import {
   ConsultingRouteScreen,
   CommunityRouteScreen,
+  FloatingActionSettingsRouteScreen,
   HomeFilterStoreRouteScreen,
   SavedMakeupListRouteScreen,
 } from './routes/homeRoutes';
@@ -27,7 +28,6 @@ import {
 import {
   MakeupFeedbackAlbumUploadRouteScreen,
   MakeupFeedbackCaptureRouteScreen,
-  MakeupFeedbackEntryRouteScreen,
   MakeupFeedbackGoalInputRouteScreen,
   MakeupCorrectionGuideRouteScreen,
   MakeupFeedbackLoadingRouteScreen,
@@ -50,6 +50,7 @@ import {
   MakeupRecipeSaveCompleteRouteScreen,
 } from './routes/referenceMakeupExtractionRoutes';
 import {ProfileEditRouteScreen} from './routes/profileRoutes';
+import {AppSettingsRouteScreen} from './routes/settingsRoutes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -82,6 +83,11 @@ export function RootNavigator() {
         name="FaceAnalysisReportDetail"
         component={FaceAnalysisReportDetailRouteScreen}
       />
+      <Stack.Screen
+        name="FloatingActionSettings"
+        component={FloatingActionSettingsRouteScreen}
+      />
+      <Stack.Screen name="AppSettings" component={AppSettingsRouteScreen} />
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
       <Stack.Screen name="HomeFilterStore" component={HomeFilterStoreRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
@@ -93,7 +99,6 @@ export function RootNavigator() {
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />
       <Stack.Screen name="ARFilterShapeAdjust" component={ARFilterShapeAdjustRouteScreen} />
       <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackEntry" component={MakeupFeedbackEntryRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
       <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
       <Stack.Screen name="MakeupFeedbackGoalInput" component={MakeupFeedbackGoalInputRouteScreen} />

@@ -2,7 +2,6 @@ import type {FooterTabKey} from '../../shared/ui';
 import type {
   MainTabRouteName,
   RouteName,
-  RootStackRouteName,
 } from './routeTypes';
 import {routes} from './routeTypes';
 
@@ -12,8 +11,9 @@ export type ScreenCategory =
   | 'auth'
   | 'onboarding'
   | 'main-home'
-  | 'main-makeup-tools'
   | 'main-profile'
+  | 'main-community'
+  | 'main-consulting'
   | 'feature-entry'
   | 'list'
   | 'detail-report'
@@ -35,7 +35,7 @@ type RouteChromeBase = {
 
 export type RouteChrome =
   | (RouteChromeBase & {
-      footerTab?: Extract<FooterTabKey, 'home' | 'custom'>;
+      footerTab?: FooterTabKey;
       headerVariant: MainHeaderVariant;
       kind: 'mainTab';
       statusBarStyle: 'dark';
@@ -51,9 +51,7 @@ export type RouteChrome =
       statusBarStyle: 'dark' | 'light';
     });
 
-export type FooterTargetRoute =
-  | MainTabRouteName
-  | Extract<RootStackRouteName, 'ARFilter' | 'UnityMakeupCapture'>;
+export type FooterTargetRoute = MainTabRouteName;
 
 export const routeChromeByRoute = {
   Login: {
@@ -130,6 +128,20 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '맞춤 분석 보고서',
   },
+  FloatingActionSettings: {
+    category: 'form-edit',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '빠른 실행 설정',
+  },
+  AppSettings: {
+    category: 'form-edit',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '앱 환경설정',
+  },
   ProfileEdit: {
     category: 'form-edit',
     depth: 'sub',
@@ -170,7 +182,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '메이크업 컨설팅',
+    title: '컨설팅',
   },
   MakeupLookList: {
     category: 'list',
@@ -203,13 +215,6 @@ export const routeChromeByRoute = {
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'dark',
-  },
-  MakeupFeedbackEntry: {
-    category: 'feature-entry',
-    depth: 'sub',
-    kind: 'detail',
-    statusBarStyle: 'dark',
-    title: '메이크업 피드백',
   },
   MakeupFeedbackCapture: {
     category: 'capture-runtime',
@@ -322,17 +327,26 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
-  CustomTab: {
-    category: 'main-makeup-tools',
-    depth: 'main',
-    footerTab: 'custom',
-    headerVariant: 'custom',
-    kind: 'mainTab',
-    statusBarStyle: 'dark',
-  },
   ProfileTab: {
     category: 'main-profile',
     depth: 'main',
+    footerTab: 'profile',
+    headerVariant: 'home',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  CommunityTab: {
+    category: 'main-community',
+    depth: 'main',
+    footerTab: 'community',
+    headerVariant: 'home',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
+  ConsultingTab: {
+    category: 'main-consulting',
+    depth: 'main',
+    footerTab: 'consulting',
     headerVariant: 'home',
     kind: 'mainTab',
     statusBarStyle: 'dark',
@@ -354,12 +368,16 @@ export function getDetailRouteTitle(route: RouteName): string {
 }
 
 export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
-  if (tab === 'capture') {
-    return 'UnityMakeupCapture';
+  if (tab === 'profile') {
+    return 'ProfileTab';
   }
 
-  if (tab === 'custom') {
-    return 'CustomTab';
+  if (tab === 'community') {
+    return 'CommunityTab';
+  }
+
+  if (tab === 'consulting') {
+    return 'ConsultingTab';
   }
 
   return 'HomeTab';

@@ -15,12 +15,9 @@ type HasRightActions<RouteName extends keyof typeof routeChromeByRoute> =
     ? true
     : false;
 
-type ExpectFalse<Condition extends false> = Condition;
 type ExpectTrue<Condition extends true> = Condition;
+type ExpectFalse<Condition extends false> = Condition;
 
-type MakeupFeedbackEntryNoCloseContract = ExpectFalse<
-  HasRightActions<'MakeupFeedbackEntry'>
->;
 type MakeupFeedbackAlbumUploadNoCloseContract = ExpectFalse<
   HasRightActions<'MakeupFeedbackAlbumUpload'>
 >;
@@ -37,11 +34,6 @@ expectEqual(
   getDetailHeaderRightActions('ProfileEdit').join(','),
   '',
   'profile edit route header actions',
-);
-expectEqual(
-  getDetailHeaderRightActions('MakeupFeedbackEntry').join(','),
-  '',
-  'makeup feedback entry route header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackAlbumUpload').join(','),

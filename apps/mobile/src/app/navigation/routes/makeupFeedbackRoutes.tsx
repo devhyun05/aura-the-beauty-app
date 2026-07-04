@@ -4,7 +4,6 @@ import {
   MakeupCorrectionGuideOverlayScreen,
   MakeupCorrectionTipScreen,
   MakeupFeedbackAlbumUploadScreen,
-  MakeupFeedbackEntryScreen,
   MakeupFeedbackGoalInputScreen,
   MakeupFeedbackLoadingScreen,
   MakeupFeedbackResultScreen,
@@ -33,24 +32,6 @@ export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
   };
 }
 
-export function MakeupFeedbackEntryRouteScreen({navigation}: RootScreenProps<'MakeupFeedbackEntry'>) {
-  const {setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto} = useNavigationFlowState();
-
-  const handlePressAiFeedback = React.useCallback(() => {
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource: 'camera'});
-    navigation.replace('MakeupFeedbackCapture');
-  }, [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
-
-  return (
-    <DetailRouteChrome
-      routeName="MakeupFeedbackEntry"
-      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
-      <MakeupFeedbackEntryScreen onPressAiFeedback={handlePressAiFeedback} />
-    </DetailRouteChrome>
-  );
-}
-
 export function MakeupFeedbackCaptureRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackCapture'>) {
@@ -76,7 +57,7 @@ export function MakeupFeedbackCaptureRouteScreen({
       captureMode="face"
       captureType="makeup_feedback"
       onCapture={handleCapture}
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );
 }
@@ -98,7 +79,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackAlbumUpload"
-      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <MakeupFeedbackAlbumUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
@@ -123,7 +104,7 @@ export function MakeupFeedbackGoalInputRouteScreen({
     <DetailRouteChrome
       routeName="MakeupFeedbackGoalInput"
       onBack={() => navigation.replace(getMakeupFeedbackPhotoSourceRoute(selectedMakeupFeedbackPhoto))}
-      onClose={() => navigateMainTab(navigation, 'CustomTab')}>
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
       <MakeupFeedbackGoalInputScreen
         onStartFeedback={handleStartFeedback}
         selection={selectedMakeupFeedbackPhoto}
@@ -169,7 +150,7 @@ export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'M
     return (
       <DetailRouteChrome
         routeName="MakeupFeedbackResult"
-        onBack={() => navigateMainTab(navigation, 'CustomTab')}>
+        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
         <RoutePlaceholder
           description="Start makeup feedback analysis first."
           showHeader={false}
@@ -182,7 +163,7 @@ export function MakeupFeedbackResultRouteScreen({navigation}: RootScreenProps<'M
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackResult"
-      onBack={() => navigateMainTab(navigation, 'CustomTab')}>
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <MakeupFeedbackResultScreen result={makeupFeedbackResult} />
     </DetailRouteChrome>
   );
@@ -195,7 +176,7 @@ export function MakeupCorrectionGuideRouteScreen({navigation}: RootScreenProps<'
     return (
       <DetailRouteChrome
         routeName="MakeupCorrectionGuide"
-        onBack={() => navigateMainTab(navigation, 'CustomTab')}>
+        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
         <RoutePlaceholder
           description="A makeup feedback result is required to show the guide."
           showHeader={false}
@@ -223,7 +204,7 @@ export function MakeupCorrectionTipRouteScreen({
     return (
       <DetailRouteChrome
         routeName="MakeupCorrectionTip"
-        onBack={() => navigateMainTab(navigation, 'CustomTab')}>
+        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
         <RoutePlaceholder
           description="The selected correction point was not found."
           showHeader={false}

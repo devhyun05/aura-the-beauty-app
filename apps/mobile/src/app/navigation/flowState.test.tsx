@@ -23,6 +23,18 @@ expectEqual(
 );
 
 expectEqual(
+  getInitialNavigationFlowState().floatingActionIds.join(','),
+  'arFilter,makeupExtraction,makeupFeedback',
+  'initial floating action ids',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().floatingActionInteractionMode,
+  'tap',
+  'initial floating action interaction mode',
+);
+
+expectEqual(
   getInitialNavigationFlowState().selectedMakeupFeedbackPhoto.photoSource,
   'camera',
   'initial makeup feedback photoSource',
@@ -70,6 +82,18 @@ expectEqual(
   demoState.likedMakeupFilterIds.length,
   0,
   'demo liked makeup filter count',
+);
+
+expectEqual(
+  demoState.floatingActionIds.join(','),
+  'arFilter,makeupExtraction,makeupFeedback',
+  'demo floating action ids',
+);
+
+expectEqual(
+  demoState.floatingActionInteractionMode,
+  'tap',
+  'demo floating action interaction mode',
 );
 
 expectEqual(

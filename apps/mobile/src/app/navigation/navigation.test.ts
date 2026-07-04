@@ -50,18 +50,29 @@ expectEqual(
   'product recommendation detail route title',
 );
 expectEqual(
+  getDetailRouteTitle('FloatingActionSettings'),
+  '빠른 실행 설정',
+  'floating action settings detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('AppSettings'),
+  '앱 환경설정',
+  'app settings detail route title',
+);
+expectEqual(
   getDetailRouteTitle('Community'),
   '커뮤니티',
   'community detail route title',
 );
 expectEqual(
   getDetailRouteTitle('Consulting'),
-  '메이크업 컨설팅',
+  '컨설팅',
   'consulting detail route title',
 );
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
-expectEqual(getFooterTargetRoute('custom'), 'CustomTab', 'custom footer target');
-expectEqual(getFooterTargetRoute('capture'), 'UnityMakeupCapture', 'capture footer action');
+expectEqual(getFooterTargetRoute('profile'), 'ProfileTab', 'profile footer target');
+expectEqual(getFooterTargetRoute('community'), 'CommunityTab', 'community footer target');
+expectEqual(getFooterTargetRoute('consulting'), 'ConsultingTab', 'consulting footer target');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
@@ -79,13 +90,18 @@ expectEqual(
       {
         name: 'MainTabs',
         state: {
-          index: 1,
-          routes: [{name: 'HomeTab'}, {name: 'CustomTab'}, {name: 'ProfileTab'}],
+          index: 2,
+          routes: [
+            {name: 'HomeTab'},
+            {name: 'ProfileTab'},
+            {name: 'CommunityTab'},
+            {name: 'ConsultingTab'},
+          ],
         },
       },
     ],
   }),
-  'CustomTab',
+  'CommunityTab',
   'nested active route',
 );
 expectEqual(

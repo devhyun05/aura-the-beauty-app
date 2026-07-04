@@ -8,7 +8,38 @@ export {
   CameraCaptureButton,
   CameraCaptureButtonSurface,
 } from './CameraCaptureButton';
-export {BrushFooterIcon, CameraFooterIcon, HomeFooterIcon} from './FooterIcons';
+export {
+  CommunityFooterIcon,
+  ConsultingFooterIcon,
+  FloatingActionFooterIcon,
+  HomeFooterIcon,
+  ProfileFooterIcon,
+} from './FooterIcons';
+export {
+  DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
+  FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+  FLOATING_ACTION_ICON_LIBRARY_NAMES,
+  FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET,
+  FLOATING_ACTION_MAIN_ICON_SIZE,
+  FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
+  FLOATING_ACTION_MAX_ITEM_COUNT,
+  FLOATING_ACTION_SETTINGS_BACKGROUND,
+  FloatingActionMenu,
+  floatingActionInteractionModeOptions,
+  floatingActionDefinitions,
+  getFloatingActionDefinition,
+  getFloatingActionMenuTarget,
+  getFloatingActionSelectedSlotNumber,
+  getFloatingActionSettingsSlotOffset,
+  getFloatingActionSlotOffsetForAction,
+  getFloatingActionSlotOffset,
+  getNextFloatingActionSelection,
+  getVisibleFloatingActionIds,
+  type FloatingActionId,
+  type FloatingActionInteractionMode,
+} from './FloatingActionMenu';
 export {
   BottomOverlayPanel,
   CameraCaptureControlRow,
@@ -44,6 +75,6 @@ export {
 } from './LineIcons';
 export {PagedGrid} from './PagedGrid';
 export {PaginationDots} from './PaginationDots';
-export {ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
+export {MenuHeaderIcon, ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
 export {RoutePlaceholder} from './RoutePlaceholder';
 export {SectionHeader} from './SectionHeader';

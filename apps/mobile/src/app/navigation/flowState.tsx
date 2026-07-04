@@ -13,11 +13,19 @@ import type {FaceCaptureUploadResult} from '../../features/face-capture/services
 import type {ReferenceMakeupPhoto} from '../../features/reference-makeup-extraction';
 import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
+import {
+  DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  type FloatingActionId,
+  type FloatingActionInteractionMode,
+} from '../../shared/ui';
 
 export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  floatingActionIds: readonly FloatingActionId[];
+  floatingActionInteractionMode: FloatingActionInteractionMode;
   likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
@@ -31,6 +39,8 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
+  setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
   setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
   setMakeupFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
@@ -48,6 +58,8 @@ const NavigationFlowStateContext =
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
+    floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
+    floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
     savedMakeupLook: null,
@@ -90,6 +102,10 @@ export function NavigationFlowStateProvider({
     useState<readonly ReferenceMakeupPhoto[]>(initialState.referenceMakeupUploadedPhotos);
   const [likedMakeupFilterIds, setLikedMakeupFilterIds] =
     useState<readonly string[]>(initialState.likedMakeupFilterIds);
+  const [floatingActionIds, setFloatingActionIds] =
+    useState<readonly FloatingActionId[]>(initialState.floatingActionIds);
+  const [floatingActionInteractionMode, setFloatingActionInteractionMode] =
+    useState<FloatingActionInteractionMode>(initialState.floatingActionInteractionMode);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
@@ -99,6 +115,8 @@ export function NavigationFlowStateProvider({
 
   const value = useMemo(
     () => ({
+      floatingActionIds,
+      floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
@@ -109,6 +127,8 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       shouldShowBeautyJourneyGuide,
+      setFloatingActionIds,
+      setFloatingActionInteractionMode,
       setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
@@ -121,6 +141,8 @@ export function NavigationFlowStateProvider({
       setShouldShowBeautyJourneyGuide,
     }),
     [
+      floatingActionIds,
+      floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,

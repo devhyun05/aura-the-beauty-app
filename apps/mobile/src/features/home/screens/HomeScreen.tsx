@@ -13,15 +13,13 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
-  Camera,
   ChevronUp,
+  Compass,
   Heart,
-  ImagePlus,
   MessageCircle,
   PackageSearch,
   ScanFace,
   ScanSearch,
-  UserRoundCheck,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -30,11 +28,14 @@ import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideS
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
+import {MakeupExtractionActionSheet} from '../components/MakeupExtractionActionSheet';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
   HomeTrendItem,
 } from '../types';
+
+export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
 
 type HomeScreenProps = {
   onPressConsulting?: () => void;
@@ -522,6 +523,8 @@ function HeroBannerCard({
   );
 }
 
+export const HOME_CONSULTING_QUICK_ACTION_ICON_NAME = 'Compass';
+
 const quickActions = [
   {
     id: 'diagnosis',
@@ -556,27 +559,10 @@ const quickActions = [
   {
     id: 'consulting',
     label: '\uCEE8\uC124\uD305',
-    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCEE8\uC124\uD305 \uBC1B\uAE30',
+    accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
     icon: (color: string) => (
-      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
-  },
-] as const;
-
-const makeupExtractionActions = [
-  {
-    id: 'camera',
-    label: '카메라 촬영',
-    description: '지금 참고할 메이크업을 촬영해요.',
-    accessibilityLabel: '카메라 촬영으로 메이크업 추출 시작',
-    icon: (color: string) => <Camera color={color} size={iconSize.md} strokeWidth={1.9} />,
-  },
-  {
-    id: 'upload',
-    label: '사진 업로드',
-    description: '앨범에서 메이크업 참고 사진을 선택해요.',
-    accessibilityLabel: '사진 업로드로 메이크업 추출 시작',
-    icon: (color: string) => <ImagePlus color={color} size={iconSize.md} strokeWidth={1.9} />,
   },
 ] as const;
 
@@ -627,10 +613,6 @@ export function getHomeQuickActionLabels(): readonly string[] {
   return quickActions.map(action => action.label);
 }
 
-export function getHomeMakeupExtractionActionLabels(): readonly string[] {
-  return makeupExtractionActions.map(action => action.label);
-}
-
 function QuickActionSection({
   onPressConsulting,
   onPressCommunity,
@@ -664,87 +646,6 @@ function QuickActionSection({
         </Pressable>
       ))}
     </XStack>
-  );
-}
-
-function MakeupExtractionActionSheet({
-  isVisible,
-  onClose,
-  onPressCamera,
-  onPressUpload,
-}: {
-  isVisible: boolean;
-  onClose: () => void;
-  onPressCamera: () => void;
-  onPressUpload: () => void;
-}) {
-  const actionHandlers = {
-    camera: onPressCamera,
-    upload: onPressUpload,
-  } as const;
-
-  return (
-    <Modal
-      animationType="fade"
-      onRequestClose={onClose}
-      transparent
-      visible={isVisible}>
-      <Pressable
-        accessibilityLabel="메이크업 추출 선택 닫기"
-        accessibilityRole="button"
-        onPress={onClose}
-        style={styles.sheetBackdrop}>
-        <Pressable
-          accessibilityRole="menu"
-          onPress={() => {}}
-          style={styles.makeupExtractionSheet}>
-          <View style={styles.sheetHandle} />
-          <YStack style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>메이크업 추출</Text>
-            <Text style={styles.sheetDescription}>
-              카메라 촬영 또는 사진 업로드로 참고 메이크업을 분석해요.
-            </Text>
-          </YStack>
-
-          <YStack style={styles.sheetActionList}>
-            {makeupExtractionActions.map(action => (
-              <Pressable
-                accessibilityLabel={action.accessibilityLabel}
-                accessibilityRole="menuitem"
-                key={action.id}
-                onPress={actionHandlers[action.id]}
-                style={({pressed}) => [
-                  styles.sheetActionButton,
-                  pressed && styles.pressed,
-                ]}>
-                <View style={styles.sheetActionIcon}>
-                  {action.icon(colors.textPrimary)}
-                </View>
-                <YStack style={styles.sheetActionCopy}>
-                  <Text style={styles.sheetActionTitle}>{action.label}</Text>
-                  <Text style={styles.sheetActionDescription}>
-                    {action.description}
-                  </Text>
-                </YStack>
-                <ArrowRight
-                  color={colors.textPrimary}
-                  size={iconSize.sm}
-                  strokeWidth={2}
-                />
-              </Pressable>
-            ))}
-          </YStack>
-
-          <Pressable
-            accessibilityLabel="메이크업 추출 선택 취소"
-            accessibilityRole="button"
-            onPress={onClose}
-            style={({pressed}) => [styles.sheetCancelButton, pressed && styles.pressed]}>
-            <Text style={styles.sheetCancelText}>취소</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
 
@@ -1118,15 +1019,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
   },
-  makeupExtractionSheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    gap: spacing.lg,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
   recommendedFilterCard: {
     aspectRatio: 0.78,
     backgroundColor: colors.surfaceMuted,
@@ -1336,99 +1228,5 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
-  },
-  sheetActionButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: spacing.lg,
-  },
-  sheetActionCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  sheetActionDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-  },
-  sheetActionIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.pill,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  sheetActionList: {
-    gap: spacing.md,
-  },
-  sheetActionTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  sheetBackdrop: {
-    backgroundColor: 'rgba(0, 0, 0, 0.34)',
-    bottom: 0,
-    justifyContent: 'flex-end',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  sheetCancelButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  sheetCancelText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  sheetDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    backgroundColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    height: 4,
-    width: 42,
-  },
-  sheetHeader: {
-    gap: spacing.xs,
-  },
-  sheetTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.lg,
   },
 });

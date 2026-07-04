@@ -3,30 +3,30 @@ import {StyleSheet} from 'react-native';
 import {Button, Text, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
-import {CameraCaptureButtonSurface} from './CameraCaptureButton';
 import {
-  BrushFooterIcon,
-  CameraFooterIcon,
+  CommunityFooterIcon,
+  ConsultingFooterIcon,
   HomeFooterIcon,
+  ProfileFooterIcon,
 } from './FooterIcons';
 
-export type FooterTabKey = 'home' | 'capture' | 'custom';
+export type FooterTabKey = 'home' | 'profile' | 'community' | 'consulting';
 
 export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xl;
 export const APP_FOOTER_BAR_HEIGHT = 64;
 export const APP_FOOTER_TAB_HEIGHT = 42;
 export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
-export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = APP_FOOTER_BAR_HEIGHT;
-export const APP_FOOTER_CAPTURE_SLOT_WIDTH = APP_FOOTER_BAR_HEIGHT;
+export const APP_FOOTER_ACTION_BUBBLE_SIZE = APP_FOOTER_BAR_HEIGHT;
+export const APP_FOOTER_ACTION_SLOT_WIDTH = APP_FOOTER_BAR_HEIGHT;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
-export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.lg;
+export const APP_FOOTER_ACTION_ICON_SIZE = iconSize.lg;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
 export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
 export const APP_FOOTER_SHOW_LABELS_BY_DEFAULT = false;
 export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
 export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
-export const APP_FOOTER_SIDE_TAB_WIDTH = 106;
+export const APP_FOOTER_SIDE_TAB_WIDTH = 58;
 
 type FooterTabItem = {
   key: FooterTabKey;
@@ -36,6 +36,7 @@ type FooterTabItem = {
 };
 
 type AppFooterProps = {
+  actionSlot?: ReactNode;
   activeTab?: FooterTabKey;
   bottomInset?: number;
   floating?: boolean;
@@ -51,25 +52,27 @@ const footerItems: FooterTabItem[] = [
     icon: color => <HomeFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   {
-    key: 'capture',
-    label: '실시간 AR',
-    accessibilityLabel: '실시간 AR 화면으로 이동',
-    icon: color => (
-      <CameraFooterIcon color={color} size={APP_FOOTER_CAPTURE_ICON_SIZE} />
-    ),
+    key: 'profile',
+    label: '프로필',
+    accessibilityLabel: '프로필로 이동',
+    icon: color => <ProfileFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   {
-    key: 'custom',
-    label: '메이크업 피드백',
-    accessibilityLabel: '메이크업 피드백 선택 열기',
-    icon: color => <BrushFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+    key: 'community',
+    label: '커뮤니티',
+    accessibilityLabel: '커뮤니티로 이동',
+    icon: color => <CommunityFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+  },
+  {
+    key: 'consulting',
+    label: '컨설팅',
+    accessibilityLabel: '컨설팅으로 이동',
+    icon: color => <ConsultingFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
 ];
 
-const footerTabItems = footerItems.filter(item => item.key !== 'capture');
-const captureFooterItem = footerItems.find(item => item.key === 'capture');
-
 export function AppFooter({
+  actionSlot,
   activeTab,
   bottomInset = 0,
   floating = false,
@@ -89,7 +92,7 @@ export function AppFooter({
       <XStack style={styles.footerRow}>
         <XStack style={styles.footerBar}>
           <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
-          {footerTabItems.map(item => {
+          {footerItems.map(item => {
             const isActive = item.key === activeTab;
             const iconColor = isActive ? colors.white : colors.textPrimary;
             const labelColor = isActive ? colors.white : colors.textPrimary;
@@ -123,23 +126,10 @@ export function AppFooter({
           })}
         </XStack>
 
-        {captureFooterItem ? (
-          <Button
-            unstyled
-            accessibilityRole="tab"
-            accessibilityState={{selected: activeTab === captureFooterItem.key}}
-            accessibilityLabel={captureFooterItem.accessibilityLabel}
-            hitSlop={6}
-            pressStyle={{scale: 0.96}}
-            style={styles.captureButton}
-            onPress={() => onTabPress?.(captureFooterItem.key)}>
-            <CameraCaptureButtonSurface
-              showInnerDot={false}
-              size={APP_FOOTER_CAPTURE_BUBBLE_SIZE}
-              variant="liquidGlass">
-              {captureFooterItem.icon(colors.textPrimary)}
-            </CameraCaptureButtonSurface>
-          </Button>
+        {actionSlot ? (
+          <YStack style={styles.actionSlot}>
+            {actionSlot}
+          </YStack>
         ) : null}
       </XStack>
     </YStack>
@@ -183,7 +173,7 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: 0.16,
     shadowRadius: 22,
-    width: APP_FOOTER_SIDE_TAB_WIDTH * 2 + spacing.sm * 2,
+    width: APP_FOOTER_SIDE_TAB_WIDTH * footerItems.length + spacing.sm * 2,
   },
   footerGlassHighlight: {
     backgroundColor: APP_FOOTER_GLASS_HIGHLIGHT,
@@ -205,11 +195,12 @@ const styles = StyleSheet.create({
   activeTabButton: {
     backgroundColor: APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   },
-  captureButton: {
+  actionSlot: {
     alignItems: 'center',
-    height: APP_FOOTER_BAR_HEIGHT,
+    height: APP_FOOTER_ACTION_BUBBLE_SIZE,
     justifyContent: 'center',
-    width: APP_FOOTER_CAPTURE_SLOT_WIDTH,
+    overflow: 'visible',
+    width: APP_FOOTER_ACTION_SLOT_WIDTH,
   },
   tabContent: {
     alignItems: 'center',

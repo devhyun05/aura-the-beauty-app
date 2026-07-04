@@ -47,6 +47,12 @@ type ProductRecommendationPathContract = ExpectType<
 type FaceAnalysisIntroPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.FaceAnalysisIntro, 'face-analysis-intro'>
 >;
+type FloatingActionSettingsPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.FloatingActionSettings, 'floating-action-settings'>
+>;
+type AppSettingsPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.AppSettings, 'app-settings'>
+>;
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
 >;
@@ -153,6 +159,16 @@ expectEqual(
   navigationLinking.config?.screens?.FaceAnalysisIntro,
   'face-analysis-intro',
   'face analysis intro path uses analysis naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.FloatingActionSettings,
+  'floating-action-settings',
+  'floating action settings path uses settings naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.AppSettings,
+  'app-settings',
+  'app settings path uses settings naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.Community,

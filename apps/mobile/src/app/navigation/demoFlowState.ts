@@ -2,6 +2,10 @@ import type {MakeupFeedbackPhotoSelection} from '../../features/makeup-feedback'
 import {createMockMakeupFeedback} from '../../features/makeup-feedback/mocks/makeupFeedback.mock';
 import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../shared/types/profile';
+import {
+  DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+} from '../../shared/ui';
 import type {NavigationFlowState} from './flowState';
 
 const demoSelectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection = {
@@ -25,6 +29,8 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   };
 
   return {
+    floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
+    floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
     savedMakeupLook,
