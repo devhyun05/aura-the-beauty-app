@@ -36,7 +36,7 @@ Our app keeps that idea, but changes the runtime target:
 | --- | --- |
 | React/Vite canvas frame | React Native capture/AR screen |
 | MediaPipe Face Landmarker points | MediaPipe/Vision brow, eye, eyelid, temple, nose, face oval regions |
-| `EYE_BROW_CONNECTIONS` polygon | `brow_surround_anchor_envelope_v2` shape-corrected brow envelope |
+| `EYE_BROW_CONNECTIONS` polygon | `brow_landmark_ring_follow_v3` landmark-following brow envelope |
 | `fillPoly` into an OpenCV mask | `buildBrowUvMaskRawRgba` rasterizes an ARFace UV mask |
 | `GaussianBlur` | `maskFeatherUvNormalized` + Unity mask feather radius |
 | `addWeighted` | `E3RegionMaskOverlay` shader/material blending on ARFace |
@@ -88,8 +88,9 @@ The generated brow contract test covers:
   the Unity runtime payload,
 - native iOS MediaPipe brow core indices staying aligned to the upstream
   `EYE_BROW_CONNECTIONS` set plus the app's documented left-body balance point,
-- right brow shape mirrored onto the left side,
-- minimum brow vertical lift,
+- per-side landmark-following brow shape (no forced left/right mirroring,
+  asymmetric brows keep their own detected arch),
+- mask covers the detected brow ring body without an artificial vertical lift,
 - eye exclusion separation,
 - surrounding anchor usage,
 - Unity feather payload equivalent to the reference blur step,

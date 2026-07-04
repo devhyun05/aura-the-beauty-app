@@ -203,12 +203,14 @@ const namedRegions = {
       [260, 95],
     ]),
   ),
+  // intentionally more arched than the right ring so per-side
+  // asymmetric shape following can be asserted below
   leftEyebrow: region(
     points([
       [488, 178],
       [512, 164],
-      [552, 156],
-      [603, 160],
+      [552, 148],
+      [603, 154],
       [650, 181],
       [646, 198],
       [604, 192],
@@ -401,8 +403,8 @@ expectEqual(payload.maskTextureWidth, 512, 'generated brow mask texture width');
 expectEqual(payload.maskTextureHeight, 512, 'generated brow mask texture height');
 expectEqual(
   generatedPackage.browEnvelope.generationMethod,
-  'brow_surround_anchor_envelope_v2',
-  'generated brow adapted reference envelope method',
+  'brow_landmark_ring_follow_v3',
+  'generated brow landmark-following envelope method',
 );
 expectGreaterThan(
   payload.maskFeatherUvNormalized,
@@ -531,54 +533,43 @@ const [screenLeftSourceBrowBounds, screenRightSourceBrowBounds] = [
   boundsOfPoints(regionPoints(namedRegions.leftEyebrow, 'left eyebrow source')),
   boundsOfPoints(regionPoints(namedRegions.rightEyebrow, 'right eyebrow source')),
 ].sort((first, second) => centerX(first) - centerX(second));
-expectEqual(
-  screenLeftEnvelope.polygon.length,
-  screenRightEnvelope.polygon.length,
-  'mirrored brow polygon point count',
-);
-screenLeftEnvelope.polygon.forEach((leftPoint, index) => {
-  const normalizedLeft = normalizePointToBounds(leftPoint, screenLeftEnvelope.fillBounds);
-  const normalizedRight = normalizePointToBounds(
-    screenRightEnvelope.polygon[index],
-    screenRightEnvelope.fillBounds,
+(
+  [
+    [screenLeftEnvelope, screenLeftSourceBrowBounds, 'screen-left'],
+    [screenRightEnvelope, screenRightSourceBrowBounds, 'screen-right'],
+  ] as const
+).forEach(([envelope, ringBounds, sideLabel]) => {
+  const ringWidth = Math.max(1, ringBounds[2] - ringBounds[0]);
+  expectLessThan(
+    Math.abs(envelope.fillBounds[0] - ringBounds[0]),
+    ringWidth * 0.12,
+    `${sideLabel} generated brow head follows its own ring x bounds`,
   );
-  expectClose(
-    normalizedLeft.x,
-    1 - normalizedRight.x,
-    0.025,
-    `mirrored brow polygon x ${index}`,
+  expectLessThan(
+    Math.abs(envelope.fillBounds[2] - ringBounds[2]),
+    ringWidth * 0.12,
+    `${sideLabel} generated brow tail follows its own ring x bounds`,
   );
-  expectClose(normalizedLeft.y, normalizedRight.y, 0.025, `mirrored brow polygon y ${index}`);
+  expectLessThan(
+    envelope.fillBounds[1],
+    ringBounds[1] + 2,
+    `${sideLabel} generated brow covers the ring upper edge`,
+  );
+  expectGreaterThanOrEqual(
+    envelope.fillBounds[3],
+    ringBounds[3] - 2,
+    `${sideLabel} generated brow covers the ring lower edge without vertical lift`,
+  );
+  expectLessThan(
+    envelope.fillBounds[3],
+    envelope.eyeExclusionBounds[1],
+    `${sideLabel} generated brow stays above eye exclusion`,
+  );
 });
-expectLessThan(
-  screenLeftEnvelope.fillBounds[3],
-  screenLeftEnvelope.eyeExclusionBounds[1],
-  'screen-left generated brow stays above eye exclusion',
-);
-expectLessThan(
-  screenRightEnvelope.fillBounds[3],
-  screenRightEnvelope.eyeExclusionBounds[1],
-  'screen-right generated brow stays above eye exclusion',
-);
-expectLessThan(
-  screenLeftEnvelope.fillBounds[3],
-  screenLeftSourceBrowBounds[3],
-  'screen-left generated brow bottom is lifted above raw brow body',
-);
-expectGreaterThanOrEqual(
-  screenLeftSourceBrowBounds[3] - screenLeftEnvelope.fillBounds[3],
-  4,
-  'screen-left generated brow minimum vertical lift',
-);
-expectLessThan(
-  screenRightEnvelope.fillBounds[3],
-  screenRightSourceBrowBounds[3],
-  'screen-right generated brow bottom is lifted above raw brow body',
-);
-expectGreaterThanOrEqual(
-  screenRightSourceBrowBounds[3] - screenRightEnvelope.fillBounds[3],
-  4,
-  'screen-right generated brow minimum vertical lift',
+expectGreaterThan(
+  screenLeftEnvelope.fillBounds[1] - screenRightEnvelope.fillBounds[1],
+  3,
+  'per-side generated brow keeps asymmetric arch heights instead of mirroring',
 );
 expectGreaterThan(
   payload.surroundAnchorPointCount,

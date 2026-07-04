@@ -427,8 +427,8 @@ Shader "MakeupAR/SmoothRegionMask"
                     float strandDetail = saturate(max(mask.b, softMask.b * 0.34) * desiredSoft);
                     float strandAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
                     float tintAlpha = saturate(
-                        desiredSoft * coverage * lerp(0.09, 0.22, saturate(_BlushIntensity))
-                        + desiredCore * coverage * 0.035);
+                        desiredSoft * coverage * lerp(0.16, 0.52, saturate(_BlushIntensity))
+                        + desiredCore * coverage * 0.14);
                     float hairAlpha = saturate(
                         pow(strandDetail, 0.68) * strandAmount * coverage * 0.82);
                     float browAlpha = saturate(

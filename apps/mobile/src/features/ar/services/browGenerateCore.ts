@@ -78,7 +78,7 @@ export type GeneratedBrowPackage = {
   browEnvelope: {
     coordinateSpace: 'frame_image_pixel_top_left';
     envelopes: BrowEnvelope[];
-    generationMethod: 'brow_surround_anchor_envelope_v2';
+    generationMethod: 'brow_landmark_ring_follow_v3';
   };
   eyeExclusion: {
     mode: 'upper_eyelid_expanded_eye_bounds_v2';
@@ -150,8 +150,6 @@ const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
-const BROW_MASK_VERTICAL_LIFT_RATIO = 0.22;
-const BROW_MASK_MIN_VERTICAL_LIFT_PX = 6;
 const UV_ALPHA_CHECKSUM_MOD = 2147483647;
 
 export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
@@ -252,7 +250,7 @@ export function buildGeneratedBrowPackage({
     browEnvelope: {
       coordinateSpace: 'frame_image_pixel_top_left',
       envelopes,
-      generationMethod: 'brow_surround_anchor_envelope_v2',
+      generationMethod: 'brow_landmark_ring_follow_v3',
     },
     eyeExclusion: {
       enforced: true,
@@ -724,85 +722,56 @@ function buildBrowEnvelopes({
     }),
   ].filter((envelope): envelope is BrowEnvelope => envelope !== null);
 
-  return mirrorScreenRightBrowShapeToScreenLeft(envelopes).map(envelope =>
-    liftBrowEnvelopeSlightly(envelope, frameHeight),
-  );
-}
-
-function mirrorScreenRightBrowShapeToScreenLeft(
-  envelopes: BrowEnvelope[],
-): BrowEnvelope[] {
-  if (envelopes.length !== 2) {
-    return envelopes;
+  if (envelopes.length === 1) {
+    const fallback = mirrorEnvelopeAcrossFaceCenter(
+      envelopes[0],
+      faceOval,
+      noseBridge,
+      frameWidth,
+    );
+    if (fallback) {
+      envelopes.push(fallback);
+    }
   }
 
-  const [screenLeftEnvelope, screenRightEnvelope] = [...envelopes].sort(
-    (first, second) => envelopeCenterX(first) - envelopeCenterX(second),
-  );
-  const mirroredPolygon = mirrorPolygonIntoTargetBounds(
-    screenRightEnvelope.polygon,
-    screenRightEnvelope.fillBounds,
-    screenLeftEnvelope.fillBounds,
-  );
-  const mirroredFillBounds = bounds(mirroredPolygon) ?? screenLeftEnvelope.fillBounds;
-  const nextScreenLeftEnvelope: BrowEnvelope = {
-    ...screenLeftEnvelope,
-    fillBounds: mirroredFillBounds,
-    polygon: mirroredPolygon,
-  };
-
-  return envelopes.map(envelope =>
-    envelope === screenLeftEnvelope ? nextScreenLeftEnvelope : envelope,
-  );
+  return envelopes;
 }
 
-function envelopeCenterX(envelope: BrowEnvelope): number {
-  const [minX, , maxX] = envelope.fillBounds;
-  return (minX + maxX) * 0.5;
-}
-
-function mirrorPolygonIntoTargetBounds(
-  sourcePolygon: readonly E7Point2D[],
-  sourceBounds: [number, number, number, number],
-  targetBounds: [number, number, number, number],
-): E7Point2D[] {
-  const [sourceMinX, sourceMinY, sourceMaxX, sourceMaxY] = sourceBounds;
-  const [targetMinX, targetMinY, targetMaxX, targetMaxY] = targetBounds;
-  const sourceWidth = Math.max(1, sourceMaxX - sourceMinX);
-  const sourceHeight = Math.max(1, sourceMaxY - sourceMinY);
-  const targetWidth = Math.max(1, targetMaxX - targetMinX);
-  const targetHeight = Math.max(1, targetMaxY - targetMinY);
-
-  return sourcePolygon.map(point => {
-    const sourceT = clamp01((point.x - sourceMinX) / sourceWidth);
-    const sourceV = clamp01((point.y - sourceMinY) / sourceHeight);
-    return {
-      x: targetMinX + (1 - sourceT) * targetWidth,
-      y: targetMinY + sourceV * targetHeight,
-    };
-  });
-}
-
-function liftBrowEnvelopeSlightly(
+function mirrorEnvelopeAcrossFaceCenter(
   envelope: BrowEnvelope,
-  frameHeight: number,
-): BrowEnvelope {
-  const [, minY, , maxY] = envelope.fillBounds;
-  const lift = Math.max(
-    BROW_MASK_MIN_VERTICAL_LIFT_PX,
-    (maxY - minY) * BROW_MASK_VERTICAL_LIFT_RATIO,
-  );
-  const liftPoint = (point: E7Point2D) => ({
-    x: point.x,
-    y: clamp(point.y - lift, 0, frameHeight - 1),
+  faceOvalPoints: E7Point2D[],
+  noseBridgePoints: E7Point2D[],
+  frameWidth: number,
+): BrowEnvelope | null {
+  const noseAnchor = centroid(noseBridgePoints);
+  const faceBounds = bounds(faceOvalPoints);
+  const faceCenterX =
+    noseAnchor?.x ?? (faceBounds ? (faceBounds[0] + faceBounds[2]) * 0.5 : null);
+  if (faceCenterX === null) {
+    return null;
+  }
+
+  const flipPoint = (point: E7Point2D): E7Point2D => ({
+    x: clamp(2 * faceCenterX - point.x, 0, frameWidth - 1),
+    y: point.y,
   });
-  const polygon = envelope.polygon.map(liftPoint);
+  const flipRect = (
+    rect: [number, number, number, number],
+  ): [number, number, number, number] => [
+    clamp(2 * faceCenterX - rect[2], 0, frameWidth - 1),
+    rect[1],
+    clamp(2 * faceCenterX - rect[0], 0, frameWidth - 1),
+    rect[3],
+  ];
+  const polygon = envelope.polygon.map(flipPoint);
 
   return {
     ...envelope,
-    cleanupPolygon: envelope.cleanupPolygon.map(liftPoint),
-    fillBounds: bounds(polygon) ?? envelope.fillBounds,
+    cleanupPolygon: envelope.cleanupPolygon.map(flipPoint),
+    eyeExclusionBounds: flipRect(envelope.eyeExclusionBounds),
+    fillBounds: bounds(polygon) ?? flipRect(envelope.fillBounds),
     polygon,
+    side: envelope.side === 'left' ? 'right' : 'left',
   };
 }
 
@@ -858,39 +827,14 @@ function buildSingleBrowEnvelope({
   const eyeHeight = Math.max(1, eyeMaxY - eyeMinY);
   const eyelidWidth = Math.max(1, lidMaxX - lidMinX);
   const eyelidHeight = Math.max(1, lidMaxY - lidMinY);
-  const usesImageGuidedAppearance = browPoints.length >= BROW_SHAPE_ENGINE_SAMPLE_COUNT * 2;
   const direction = side === 'left' ? 1 : -1;
   const faceDirectionSlope = estimateFaceDirectionSlope(
     noseBridgeAnchor,
     templeAnchor,
   );
-  const anchoredBrowBounds = usesImageGuidedAppearance
-    ? {maxX: browMaxX, minX: browMinX}
-    : expandBrowBoundsWithSurroundAnchors({
-        browMaxX,
-        browMinX,
-        eyeWidth,
-        faceBounds,
-        noseBridgeAnchor,
-        side,
-        templeAnchor,
-      });
-  const shapeScale =
-    shapeId === 'slim-tail' ? 0.78 : shapeId === 'straight' ? 0.92 : 0.96;
-  const xPad = Math.max(
-    usesImageGuidedAppearance
-      ? browWidth * (shapeId === 'slim-tail' ? 0.01 : 0.018)
-      : browWidth * (shapeId === 'slim-tail' ? 0.09 : shapeId === 'straight' ? 0.12 : 0.14),
-    eyelidWidth * (usesImageGuidedAppearance ? 0.006 : 0.025),
-  );
-  const topPad = usesImageGuidedAppearance
-    ? Math.max(browHeight * 0.04, eyelidHeight * 0.025)
-    : Math.max(browHeight * 0.18, eyelidHeight * 0.07);
-  const bottomPad = usesImageGuidedAppearance
-    ? Math.max(browHeight * 0.025, eyelidHeight * 0.018)
-    : Math.max(browHeight * 0.1, eyelidHeight * 0.05);
-  let minX = clamp(anchoredBrowBounds.minX - xPad, 0, frameWidth - 1);
-  let maxX = clamp(anchoredBrowBounds.maxX + xPad, 0, frameWidth - 1);
+  const polygonXPad = Math.max(browWidth * 0.03, eyelidWidth * 0.012);
+  let minX = clamp(browMinX - polygonXPad, 0, frameWidth - 1);
+  let maxX = clamp(browMaxX + polygonXPad, 0, frameWidth - 1);
   if (noseBridgeAnchor) {
     const noseGuard = eyeWidth * 0.035;
     if (side === 'left') {
@@ -906,21 +850,22 @@ function buildSingleBrowEnvelope({
     maxX = Math.min(maxX, faceMaxX - faceWidth * 0.025);
   }
   if (maxX - minX < browWidth * 0.62) {
-    minX = clamp(browMinX - xPad * 0.6, 0, frameWidth - 1);
-    maxX = clamp(browMaxX + xPad * 0.6, 0, frameWidth - 1);
+    minX = clamp(browMinX - polygonXPad * 0.6, 0, frameWidth - 1);
+    maxX = clamp(browMaxX + polygonXPad * 0.6, 0, frameWidth - 1);
   }
+  const topPad = Math.max(browHeight * 0.18, eyelidHeight * 0.07);
+  const bottomPad = Math.max(browHeight * 0.1, eyelidHeight * 0.05);
   const topY = clamp(browMinY - topPad, 0, frameHeight - 1);
-  const eyeGuardTop = Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.36;
+  const eyeGuardTop = Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.12;
   const bottomY = clamp(
     Math.min(browMaxY + bottomPad, eyeGuardTop),
     topY + Math.max(1, browHeight * 0.42),
     frameHeight - 1,
   );
   const centerX = (minX + maxX) * 0.5;
-  const width = Math.max(1, maxX - minX);
   const height = Math.max(1, bottomY - topY);
-  const innerX = centerX - direction * width * 0.5 * shapeScale;
-  const outerX = centerX + direction * width * 0.5 * shapeScale;
+  const innerX = side === 'left' ? minX : maxX;
+  const outerX = side === 'left' ? maxX : minX;
 
   const stabilizePoint = (point: E7Point2D) =>
     stabilizePointToFaceDirection(point, centerX, height, faceDirectionSlope);
@@ -937,42 +882,22 @@ function buildSingleBrowEnvelope({
     stabilizePoint,
     topY,
   });
-  const cleanupPadX = Math.max(
-    xPad * (usesImageGuidedAppearance ? 1.08 : 1.18),
-    eyelidWidth * (usesImageGuidedAppearance ? 0.018 : 0.05),
-  );
-  const cleanupMinX = clamp(anchoredBrowBounds.minX - cleanupPadX, 0, frameWidth - 1);
-  const cleanupMaxX = clamp(anchoredBrowBounds.maxX + cleanupPadX, 0, frameWidth - 1);
-  const cleanupTopY = clamp(
-    browMinY -
-      (usesImageGuidedAppearance
-        ? Math.max(topPad * 0.3, eyelidHeight * 0.018)
-        : Math.max(topPad * 0.48, eyelidHeight * 0.08)),
+  const polygonBounds = bounds(polygon) ?? [minX, topY, maxX, bottomY];
+  const cleanupMargin = Math.max(4, browHeight * 0.2);
+  const cleanupMinX = clamp(polygonBounds[0] - cleanupMargin, 0, frameWidth - 1);
+  const cleanupMaxX = clamp(polygonBounds[2] + cleanupMargin, 0, frameWidth - 1);
+  const cleanupTopY = clamp(polygonBounds[1] - cleanupMargin, 0, frameHeight - 1);
+  const cleanupBottomY = clamp(
+    polygonBounds[3] + cleanupMargin,
     0,
     frameHeight - 1,
   );
-  const cleanupBottomY = clamp(
-    Math.min(
-      browMaxY +
-        (usesImageGuidedAppearance
-          ? Math.max(bottomPad * 0.55, browHeight * 0.08)
-          : Math.max(bottomPad * 0.8, browHeight * 0.22)),
-      Math.min(eyeMinY, lidMinY) - eyelidHeight * (usesImageGuidedAppearance ? 0.32 : 0.26),
-    ),
-    cleanupTopY +
-      Math.max(1, browHeight * (usesImageGuidedAppearance ? 0.18 : 0.36)),
-    frameHeight - 1,
-  );
-  const cleanupWidth = Math.max(1, cleanupMaxX - cleanupMinX);
-  const cleanupHeight = Math.max(1, cleanupBottomY - cleanupTopY);
   const cleanupPolygon = [
-    {x: cleanupMinX, y: cleanupTopY + cleanupHeight * 0.34},
-    {x: cleanupMinX + cleanupWidth * 0.18, y: cleanupTopY},
-    {x: cleanupMaxX - cleanupWidth * 0.18, y: cleanupTopY},
-    {x: cleanupMaxX, y: cleanupTopY + cleanupHeight * 0.36},
+    {x: cleanupMinX, y: cleanupTopY},
+    {x: cleanupMaxX, y: cleanupTopY},
     {x: cleanupMaxX, y: cleanupBottomY},
     {x: cleanupMinX, y: cleanupBottomY},
-  ].map(stabilizePoint);
+  ];
 
   return {
     anchorMetadata: {
@@ -989,7 +914,7 @@ function buildSingleBrowEnvelope({
     cleanupPolygon,
     eyeExclusionBounds: [
       clamp(Math.min(eyeMinX, lidMinX) - eyeWidth * 0.18, 0, frameWidth - 1),
-      clamp(Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.36, 0, frameHeight - 1),
+      clamp(Math.min(eyeMinY, lidMinY) - eyelidHeight * 0.12, 0, frameHeight - 1),
       clamp(Math.max(eyeMaxX, lidMaxX) + eyeWidth * 0.18, 0, frameWidth - 1),
       clamp(eyeMaxY + eyeHeight * 0.14, 0, frameHeight - 1),
     ],
@@ -1039,70 +964,6 @@ function summarizeBrowAnchorMetadata(envelopes: readonly BrowEnvelope[]) {
     summary.noseBridgeAnchorPointCount +
     summary.faceOvalPointCount;
   return summary;
-}
-
-function expandBrowBoundsWithSurroundAnchors({
-  browMaxX,
-  browMinX,
-  eyeWidth,
-  faceBounds,
-  noseBridgeAnchor,
-  side,
-  templeAnchor,
-}: {
-  browMaxX: number;
-  browMinX: number;
-  eyeWidth: number;
-  faceBounds: [number, number, number, number] | null;
-  noseBridgeAnchor: E7Point2D | null;
-  side: BrowEnvelope['side'];
-  templeAnchor: E7Point2D | null;
-}) {
-  let minX = browMinX;
-  let maxX = browMaxX;
-  const templeReach = eyeWidth * 0.34;
-
-  if (templeAnchor) {
-    if (side === 'left') {
-      maxX = Math.max(
-        maxX,
-        clamp(templeAnchor.x - eyeWidth * 0.16, browMaxX, browMaxX + templeReach),
-      );
-    } else {
-      minX = Math.min(
-        minX,
-        clamp(templeAnchor.x + eyeWidth * 0.16, browMinX - templeReach, browMinX),
-      );
-    }
-  }
-
-  if (noseBridgeAnchor) {
-    const innerReach = eyeWidth * 0.14;
-    if (side === 'left') {
-      minX = Math.max(
-        Math.min(minX, browMinX + innerReach * 0.25),
-        noseBridgeAnchor.x + eyeWidth * 0.02,
-      );
-    } else {
-      maxX = Math.min(
-        Math.max(maxX, browMaxX - innerReach * 0.25),
-        noseBridgeAnchor.x - eyeWidth * 0.02,
-      );
-    }
-  }
-
-  if (faceBounds) {
-    const [faceMinX, , faceMaxX] = faceBounds;
-    const faceWidth = Math.max(1, faceMaxX - faceMinX);
-    minX = clamp(minX, faceMinX + faceWidth * 0.02, faceMaxX - faceWidth * 0.08);
-    maxX = clamp(maxX, faceMinX + faceWidth * 0.08, faceMaxX - faceWidth * 0.02);
-  }
-
-  if (maxX <= minX) {
-    return {maxX: browMaxX, minX: browMinX};
-  }
-
-  return {maxX, minX};
 }
 
 function buildShapeCorrectedBrowFillPolygon({
@@ -1178,7 +1039,6 @@ function buildShapeCorrectedBrowFillPolygon({
       outerX,
       ringShape,
       shapeId,
-      stabilizePoint,
       topY,
     });
   }
@@ -1262,7 +1122,6 @@ function buildBrowRingSilhouettePolygon({
   outerX,
   ringShape,
   shapeId,
-  stabilizePoint,
   topY,
 }: {
   appearanceShape: ((t: number) => {lowerY: number; upperY: number}) | null;
@@ -1274,103 +1133,50 @@ function buildBrowRingSilhouettePolygon({
   outerX: number;
   ringShape: (t: number) => {lowerY: number; upperY: number};
   shapeId: BrowShapeId;
-  stabilizePoint: (point: E7Point2D) => E7Point2D;
   topY: number;
 }): E7Point2D[] {
   const height = Math.max(1, bottomY - topY);
   const upperCurve: E7Point2D[] = [];
   const lowerCurve: E7Point2D[] = [];
-  const maxBodyThickness =
-    height * (shapeId === 'slim-tail' ? 0.4 : shapeId === 'straight' ? 0.48 : 0.54);
-  const minBodyThickness =
-    height * (shapeId === 'slim-tail' ? 0.11 : shapeId === 'straight' ? 0.14 : 0.16);
-  const tailTaperStrength =
-    shapeId === 'slim-tail' ? 0.92 : shapeId === 'straight' ? 0.54 : 0.82;
-  const headTaperStrength = shapeId === 'straight' ? 0.16 : 0.24;
-  const lowerHeadY = ringShape(0).lowerY;
-  const lowerTailY = ringShape(1).lowerY;
+  const headUpperY = ringShape(0).upperY;
+  const tailUpperY = ringShape(1).upperY;
 
   for (let index = 0; index < BROW_SHAPE_ENGINE_SAMPLE_COUNT; index += 1) {
     const t = index / (BROW_SHAPE_ENGINE_SAMPLE_COUNT - 1);
-    const x = lerp(innerX, outerX, remapBrowPreArchXProgress(t, shapeId));
+    const x = lerp(innerX, outerX, t);
     const ringSample = ringShape(t);
     const appearanceSample = appearanceShape?.(t);
-    const archLift =
-      shapeId === 'straight'
-        ? 0
-        : Math.sin(Math.PI * t) * height * (shapeId === 'slim-tail' ? 0.006 : 0.012);
-    const tail = smoothstep(0.58, 1, t);
-    const head = 1 - smoothstep(0, 0.18, t);
-    let ringUpperY = ringSample.upperY;
-    let ringLowerY = ringSample.lowerY;
+    let upperY = ringSample.upperY;
+    let lowerY = ringSample.lowerY;
 
     if (appearanceSample) {
-      ringUpperY = lerp(ringUpperY, appearanceSample.upperY, 0.04);
-      ringLowerY = lerp(ringLowerY, appearanceSample.lowerY, 0.08);
+      upperY = lerp(upperY, appearanceSample.upperY, 0.5);
+      lowerY = lerp(lowerY, appearanceSample.lowerY, 0.5);
     }
 
-    const ringThickness = Math.max(1, ringLowerY - ringUpperY);
-    const bodyThickness = clamp(
-      ringThickness * (shapeId === 'slim-tail' ? 0.58 : shapeId === 'straight' ? 0.64 : 0.68) +
-        height * 0.016,
-      minBodyThickness,
-      maxBodyThickness,
-    );
-    const lowerAnchorLift = archLift * 0.18;
-    const tailDrop = tail * height * (shapeId === 'straight' ? 0.018 : 0.036);
-    const lowerFlowBaselineY =
-      lerp(lowerHeadY, lowerTailY, t) -
-      Math.sin(Math.PI * t) * height * (shapeId === 'straight' ? 0.01 : 0.018);
-    const lowerFlowFlatten = Math.sin(Math.PI * t) * (shapeId === 'straight' ? 0.34 : 0.46);
-    let lowerY =
-      lerp(ringLowerY, lowerFlowBaselineY, lowerFlowFlatten) -
-      lowerAnchorLift +
-      tailDrop;
-    lowerY -= height * (shapeId === 'straight' ? 0.028 : 0.046);
-
+    const ringThickness = Math.max(1, lowerY - upperY);
     if (shapeId === 'straight') {
-      const straightCenter = topY + height * 0.52;
-      lowerY += (straightCenter + bodyThickness * 0.34 - lowerY) * 0.1;
+      const chordUpperY = lerp(headUpperY, tailUpperY, t);
+      upperY = Math.min(
+        lerp(upperY, chordUpperY, 0.34),
+        lowerY - ringThickness * 0.55,
+      );
+    } else if (shapeId === 'slim-tail') {
+      const tailTaper = smoothstep(0.5, 1, t) * 0.42;
+      upperY = lowerY - ringThickness * (1 - tailTaper);
     }
 
-    const visibleThicknessScale =
-      shapeId === 'slim-tail' ? 1.24 : shapeId === 'straight' ? 1.24 : 1.28;
-    let visibleThickness =
-      bodyThickness * (1 - tail * tailTaperStrength) * visibleThicknessScale;
-    visibleThickness *= 1 - head * headTaperStrength;
-    const minVisibleThickness =
-      height * (shapeId === 'slim-tail' ? 0.045 : shapeId === 'straight' ? 0.064 : 0.072);
-    if (tail < 0.92) {
-      visibleThickness = Math.max(visibleThickness, minVisibleThickness);
-    }
-    let upperY = lowerY - visibleThickness;
-    upperY = lerp(
-      upperY,
-      Math.max(ringUpperY + height * 0.018, lowerY - maxBodyThickness),
-      shapeId === 'straight' ? 0.08 : 0.14,
-    );
-
-    if (lowerY - upperY < minVisibleThickness && tail < 0.84) {
-      upperY = lowerY - minVisibleThickness;
-    }
-
-    upperCurve.push({
-      x,
-      y: upperY,
-    });
-    lowerCurve.push({
-      x: x - direction * Math.max(0, lowerY - upperY) * 0.03 * tail,
-      y: lowerY,
-    });
+    const thickness = Math.max(1, lowerY - upperY);
+    const coveragePad = thickness * 0.12 + height * 0.012;
+    upperCurve.push({x, y: upperY - coveragePad * 0.6});
+    lowerCurve.push({x, y: lowerY + coveragePad * 0.4});
   }
 
   const tailUpper = upperCurve[upperCurve.length - 1];
   const tailLower = lowerCurve[lowerCurve.length - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'straight' ? 0.024 : 0.045),
-    y:
-      (tailUpper.y + tailLower.y) * 0.5 +
-      height * (shapeId === 'slim-tail' ? 0.09 : shapeId === 'straight' ? 0.045 : 0.078),
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.05 : 0.03),
+    y: (tailUpper.y + tailLower.y) * 0.5,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),
@@ -1378,12 +1184,10 @@ function buildBrowRingSilhouettePolygon({
     ...lowerCurve.slice(0, -1).reverse(),
   ];
 
-  return polygon
-    .map(stabilizePoint)
-    .map(point => ({
-      x: clamp(point.x, 0, frameWidth - 1),
-      y: clamp(point.y, 0, frameHeight - 1),
-    }));
+  return polygon.map(point => ({
+    x: clamp(point.x, 0, frameWidth - 1),
+    y: clamp(point.y, 0, frameHeight - 1),
+  }));
 }
 
 function remapBrowPreArchXProgress(t: number, shapeId: BrowShapeId): number {
@@ -1690,13 +1494,10 @@ function browStrandDensity(
 }
 
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
-  const {t, v} = browLocalCoordinates(point, envelope);
-  const headFade = lerp(0.54, 1, smoothstep(0, 0.2, t));
-  const tailFade = lerp(1, 0.22, smoothstep(0.64, 1, t));
-  const verticalCore =
-    smoothstep(0.04, 0.36, v) * smoothstep(0.04, 0.34, 1 - v);
-  const bodyBoost = lerp(0.76, 1.08, Math.sin(Math.PI * t));
-  return clamp01((0.1 + verticalCore * 0.9) * headFade * tailFade * bodyBoost);
+  const {t} = browLocalCoordinates(point, envelope);
+  const headFade = lerp(0.6, 1, smoothstep(0, 0.16, t));
+  const tailFade = lerp(1, 0.5, smoothstep(0.68, 1, t));
+  return clamp01(0.96 * headFade * tailFade);
 }
 
 function browLocalCoordinates(point: E7Point2D, envelope: BrowEnvelope) {
