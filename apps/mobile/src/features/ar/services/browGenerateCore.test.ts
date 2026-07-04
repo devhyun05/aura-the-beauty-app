@@ -625,9 +625,11 @@ expectGreaterThan(
   0,
   'generated brow neutralize is enabled so the shader can cover the real brow',
 );
-expectEqual(payload.intensity, 1, 'generated brow max color intensity boost');
-expectEqual(payload.opacity, 1, 'generated brow max opacity boost');
-expectEqual(payload.strandTextureAmount, 1, 'generated brow max strand texture boost');
+// Runtime color boost gain is 1.0 (device feedback: max read too dark), so the
+// payload carries the clamped control values rather than an amplified value.
+expectClose(payload.intensity, 0.93, 1e-6, 'generated brow color intensity passthrough');
+expectClose(payload.opacity, 0.95, 1e-6, 'generated brow opacity passthrough');
+expectClose(payload.strandTextureAmount, 0.97, 1e-6, 'generated brow strand texture passthrough');
 expectEqual(payload.debugMode, 0, 'generated brow default debug mode');
 expectEqual(payload.debugShowLeftRight, false, 'generated brow default left/right debug');
 expectEqual(payload.debugExaggerate, false, 'generated brow default exaggeration debug');

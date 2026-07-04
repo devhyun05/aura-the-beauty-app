@@ -157,7 +157,9 @@ export type BrowRuntimeApplyPayload = {
 const BROW_UV_MASK_RESOLUTION = 512;
 const BROW_SUPERSAMPLE_GRID = 2;
 const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
-const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.18;
+// Device feedback: max color read too dark. Drop the runtime boost so the top
+// of the 발색/투명도 range is a bit softer (was 1.18).
+const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.0;
 // Real-brow neutralization strength sent to Unity (_BrowNeutralizeStrength).
 // The shader reads the live camera and paints surrounding skin over the real
 // brow (red-channel region) so it does not stick out past the makeup shape.
@@ -1278,10 +1280,19 @@ function buildSmoothBrowEnvelopePolygon({
     x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.05 : 0.03),
     y: (tailUpper.y + tailLower.y) * 0.5 + tailDropMagnitude * 0.55,
   };
+  // Taper the head to a soft, slightly-receded point instead of a blunt
+  // vertical wall at innerX, so the inner end reads as hairs starting (rounded)
+  // rather than an angular block poking toward the nose (device feedback:
+  // 앞머리 각짐/툭 튀어나옴).
+  const headPoint = {
+    x: lerp(innerX, outerX, 0.012),
+    y: (upperCurve[0].y + lowerCurve[0].y) * 0.5,
+  };
   const polygon = [
-    ...upperCurve.slice(0, -1),
+    headPoint,
+    ...upperCurve.slice(1, -1),
     tailPoint,
-    ...lowerCurve.slice(0, -1).reverse(),
+    ...lowerCurve.slice(1, -1).reverse(),
   ];
 
   return polygon
