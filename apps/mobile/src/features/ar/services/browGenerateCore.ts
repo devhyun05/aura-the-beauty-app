@@ -937,7 +937,11 @@ function buildSingleBrowEnvelope({
   const browHeadX = side === 'left' ? minX : maxX;
   const browTailX = side === 'left' ? maxX : minX;
   const innerX = browHeadX + direction * browWidth * 0.015;
-  const outerX = browTailX + direction * browWidth * 0.04;
+  // Only a slight tail extension past the detected end. A longer tail sweeps up
+  // toward the temple and, under an upward camera tilt, reads as an unnatural
+  // soaring brow (device feedback). Looking down foreshortens it away, which is
+  // why that angle looked fine.
+  const outerX = browTailX + direction * browWidth * 0.015;
 
   const stabilizePoint = (point: E7Point2D) =>
     stabilizePointToFaceDirection(point, centerX, height, faceDirectionSlope);
@@ -1221,7 +1225,10 @@ function buildSmoothBrowEnvelopePolygon({
   // the head->tail chord past the peak (눈썹 산 기준 하강) — natural Korean brow
   // finishes lower than the arch, even for 일자.
   const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.5;
-  const archPeakT = clamp(measuredArchPeakT, 0.54, 0.7);
+  // Peak earlier along the brow so the descending (tail) segment is longer —
+  // the arch comes back DOWN before the tail instead of still rising at the
+  // outer end, which is what made the tail soar upward on an up-tilt.
+  const archPeakT = clamp(measuredArchPeakT, 0.48, 0.6);
   const archMagnitude = archScale * (medianThickness * 0.55 + measuredArchRise * 0.35);
   const tailDropMagnitude =
     medianThickness *
@@ -1263,8 +1270,8 @@ function buildSmoothBrowEnvelopePolygon({
   const tailUpper = upperCurve[sampleCount - 1];
   const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.09 : 0.06),
-    y: (tailUpper.y + tailLower.y) * 0.5 + tailDropMagnitude * 0.3,
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.05 : 0.03),
+    y: (tailUpper.y + tailLower.y) * 0.5 + tailDropMagnitude * 0.55,
   };
   const polygon = [
     ...upperCurve.slice(0, -1),
