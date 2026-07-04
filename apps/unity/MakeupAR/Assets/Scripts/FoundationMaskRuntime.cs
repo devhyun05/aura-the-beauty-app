@@ -37,6 +37,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         public float EyeExclusionRadius;
         public bool FinalMaskLooksFilled;
         public bool BaseFaceSurfaceMaskReady;
+        public bool NeckExtensionReady;
         public int ProjectedVertexCount;
         public int ProjectedTriangleCount;
         public bool LeftCheekWeightValid;
@@ -67,15 +68,40 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
     private const int MaskBaseWidth = 256;
     private const float MaskBoundsExpansionX = 0.060f;
     private const float MaskBoundsExpansionY = 0.050f;
-    private const float StaleMaskSeconds = 0.45f;
+    // The mask lives in screen space, so holding a stale mask while the phone
+    // moves leaves it floating away from the face. Keep the hold window short.
+    private const float StaleMaskSeconds = 0.12f;
+    // Set to true only if a target device/orientation displays the mask
+    // horizontally flipped relative to the face.
+    private const bool MirrorMaskUvX = false;
     private const float DiagnosticsIntervalSeconds = 0.75f;
     private const int DiagnosticsSampleGrid = 16;
+
+    // Neck extension: how far below the jawline the foundation mask reaches,
+    // relative to the projected face height along the face-down axis.
+    private const float NeckLengthFactor = 0.60f;
+    // Fraction of the neck-strip width kept at the bottom edge (taper toward the throat).
+    private const float NeckBottomWidthFactor = 0.84f;
+    // Portion of the hull (along the face-down axis) treated as the jawline band.
+    private const float NeckJawBandFraction = 0.30f;
+    private const int NeckMinJawPoints = 3;
+    private const int NeckShaderPassIndex = 2;
 
     private RenderTexture foundationMaskTexture;
     private Material foundationMaskMaterial;
     private Material foundationMeshMaskMaterial;
     private Mesh foundationMeshMaskMesh;
     private Mesh foundationBaseSurfaceMesh;
+    private Mesh foundationNeckMesh;
+    private readonly List<Vector2> latestHullPoints = new List<Vector2>();
+
+    /// <summary>
+    /// Optional calibrated canonical-UV skin mask (from E3RegionMaskOverlay).
+    /// When set and the face provides UVs, the projected mesh pass samples it
+    /// so the screen-space prior carries the precise eye/lip/brow exclusions
+    /// and hairline fade instead of the coarse local-weight ellipses.
+    /// </summary>
+    public Texture2D UvSkinMaskOverride;
     private FoundationMaskState currentState;
     private float lastValidMaskAt = -10.0f;
     private float nextDiagnosticsLogAt;
@@ -165,6 +191,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
     private struct MeshMaskStats
     {
         public bool Ready;
+        public bool NeckExtensionReady;
         public int ProjectedVertexCount;
         public int ProjectedTriangleCount;
         public bool LeftCheekWeightValid;
@@ -280,6 +307,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
                 : 0.0f,
             FinalMaskLooksFilled = LooksFilled(maskAverage, maskMax),
             BaseFaceSurfaceMaskReady = meshMaskValid && meshStats.Ready,
+            NeckExtensionReady = meshMaskValid && meshStats.NeckExtensionReady,
             ProjectedVertexCount = meshMaskValid ? meshStats.ProjectedVertexCount : 0,
             ProjectedTriangleCount = meshMaskValid ? meshStats.ProjectedTriangleCount : 0,
             LeftCheekWeightValid = meshMaskValid ? meshStats.LeftCheekWeightValid : projectedValid && projectedRegions.LeftCheek.Valid,
@@ -359,6 +387,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             EyeExclusionRadius = keepLastMask ? currentState.EyeExclusionRadius : 0.0f,
             FinalMaskLooksFilled = keepLastMask && currentState.FinalMaskLooksFilled,
             BaseFaceSurfaceMaskReady = keepLastMask && currentState.BaseFaceSurfaceMaskReady,
+            NeckExtensionReady = keepLastMask && currentState.NeckExtensionReady,
             ProjectedVertexCount = keepLastMask ? currentState.ProjectedVertexCount : 0,
             ProjectedTriangleCount = keepLastMask ? currentState.ProjectedTriangleCount : 0,
             LeftCheekWeightValid = keepLastMask && currentState.LeftCheekWeightValid,
@@ -514,6 +543,15 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         maxX += width * MaskBoundsExpansionX;
         minY -= height * MaskBoundsExpansionY;
         maxY += height * MaskBoundsExpansionY;
+        if (MirrorMaskUvX)
+        {
+            // Keep the bbox fallback path in the same coordinate convention as
+            // the projected-mesh path (ToMaskUv), otherwise the two mask
+            // sources would disagree on the horizontal axis.
+            float mirroredMin = 1.0f - maxX;
+            maxX = 1.0f - minX;
+            minX = mirroredMin;
+        }
         minX = Mathf.Clamp01(minX);
         maxX = Mathf.Clamp01(maxX);
         minY = Mathf.Clamp01(minY);
@@ -572,8 +610,10 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             sourceToMesh[i] = -1;
         }
 
+        bool faceUvsAvailable = face.uvs.IsCreated && face.uvs.Length >= vertices.Length;
         List<Vector3> meshVertices = new List<Vector3>(vertices.Length);
         List<Vector2> meshMaskData = new List<Vector2>(vertices.Length);
+        List<Vector2> meshFaceUvs = new List<Vector2>(vertices.Length);
         int leftCheekWeighted = 0;
         int rightCheekWeighted = 0;
         int noseWeighted = 0;
@@ -660,6 +700,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             sourceToMesh[i] = meshVertices.Count;
             meshVertices.Add(new Vector3(uv.x * 2.0f - 1.0f, uv.y * 2.0f - 1.0f, 0.0f));
             meshMaskData.Add(new Vector2(rawSkin, exclusion));
+            meshFaceUvs.Add(faceUvsAvailable ? face.uvs[i] : Vector2.zero);
         }
 
         List<int> meshTriangles = new List<int>(indices.Length);
@@ -706,9 +747,18 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         foundationMeshMaskMesh.Clear();
         foundationMeshMaskMesh.SetVertices(meshVertices);
         foundationMeshMaskMesh.SetUVs(0, meshMaskData);
+        foundationMeshMaskMesh.SetUVs(1, meshFaceUvs);
         foundationMeshMaskMesh.SetTriangles(meshTriangles, 0, true);
         foundationMeshMaskMesh.RecalculateBounds();
+
+        bool uvSkinMaskUsable = UvSkinMaskOverride != null && faceUvsAvailable;
+        foundationMeshMaskMaterial.SetFloat("_UvSkinMaskValid", uvSkinMaskUsable ? 1.0f : 0.0f);
+        if (uvSkinMaskUsable)
+        {
+            foundationMeshMaskMaterial.SetTexture("_UvSkinMaskTex", UvSkinMaskOverride);
+        }
         bool baseSurfaceHullReady = TryUpdateBaseSurfaceHull(meshVertices);
+        bool neckExtensionReady = baseSurfaceHullReady && TryUpdateNeckExtensionMesh(face, arCamera);
 
         bool baseSurfaceReady = meshVertices.Count >= 64 && triangleCount >= 96;
 
@@ -718,16 +768,26 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         foundationMeshMaskMaterial.SetFloat("_TestBaseSurfaceOnly", debugMode == 1 ? 1.0f : 0.0f);
         if (foundationMeshMaskMaterial.SetPass(0))
         {
-            Graphics.DrawMeshNow(
-                baseSurfaceHullReady && foundationBaseSurfaceMesh != null
-                    ? foundationBaseSurfaceMesh
-                    : foundationMeshMaskMesh,
-                Matrix4x4.identity);
+            // Draw the projected ARKit face mesh itself so the base surface
+            // matches each person's exact face outline. The convex hull is NOT
+            // used here anymore: it bulged into hair/background and produced
+            // an egg-shaped blob instead of a face-shaped mask. The hull is
+            // still computed above, but only to extract the jawline band that
+            // anchors the neck extension strip.
+            Graphics.DrawMeshNow(foundationMeshMaskMesh, Matrix4x4.identity);
         }
 
         if (foundationMeshMaskMaterial.SetPass(1))
         {
             Graphics.DrawMeshNow(foundationMeshMaskMesh, Matrix4x4.identity);
+        }
+
+        if (neckExtensionReady
+            && foundationNeckMesh != null
+            && foundationMeshMaskMaterial.passCount > NeckShaderPassIndex
+            && foundationMeshMaskMaterial.SetPass(NeckShaderPassIndex))
+        {
+            Graphics.DrawMeshNow(foundationNeckMesh, Matrix4x4.identity);
         }
 
         RenderTexture.active = previous;
@@ -736,6 +796,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         stats = new MeshMaskStats
         {
             Ready = baseSurfaceReady,
+            NeckExtensionReady = neckExtensionReady,
             ProjectedVertexCount = meshVertices.Count,
             ProjectedTriangleCount = triangleCount,
             LeftCheekWeightValid = leftCheekWeighted >= 6,
@@ -822,8 +883,12 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         List<Vector2> hull = BuildConvexHull(unique);
         if (hull.Count < 3)
         {
+            latestHullPoints.Clear();
             return false;
         }
+
+        latestHullPoints.Clear();
+        latestHullPoints.AddRange(hull);
 
         if (foundationBaseSurfaceMesh == null)
         {
@@ -874,6 +939,174 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
         return true;
     }
 
+    private bool TryUpdateNeckExtensionMesh(ARFace face, Camera arCamera)
+    {
+        if (latestHullPoints.Count < NeckMinJawPoints)
+        {
+            return false;
+        }
+
+        // "Down" in mask clip space, following head roll/tilt so the strip stays
+        // attached to the jaw when the user tilts their head.
+        Vector2 down = CalculateFaceDownDirectionClip(face, arCamera);
+        Vector2 perp = new Vector2(-down.y, down.x);
+
+        float tMin = float.PositiveInfinity;
+        float tMax = float.NegativeInfinity;
+        for (int i = 0; i < latestHullPoints.Count; i++)
+        {
+            float t = Vector2.Dot(latestHullPoints[i], down);
+            tMin = Mathf.Min(tMin, t);
+            tMax = Mathf.Max(tMax, t);
+        }
+
+        float span = tMax - tMin;
+        if (span < 0.02f)
+        {
+            return false;
+        }
+
+        float bandStart = tMax - span * NeckJawBandFraction;
+        List<Vector2> jawPoints = new List<Vector2>(latestHullPoints.Count);
+        for (int i = 0; i < latestHullPoints.Count; i++)
+        {
+            if (Vector2.Dot(latestHullPoints[i], down) >= bandStart)
+            {
+                jawPoints.Add(latestHullPoints[i]);
+            }
+        }
+
+        if (jawPoints.Count < NeckMinJawPoints)
+        {
+            return false;
+        }
+
+        jawPoints.Sort((a, b) => Vector2.Dot(a, perp).CompareTo(Vector2.Dot(b, perp)));
+
+        float lateralCenter = 0.0f;
+        for (int i = 0; i < jawPoints.Count; i++)
+        {
+            lateralCenter += Vector2.Dot(jawPoints[i], perp);
+        }
+
+        lateralCenter /= jawPoints.Count;
+
+        float bandWidth = Mathf.Abs(
+            Vector2.Dot(jawPoints[jawPoints.Count - 1], perp) - Vector2.Dot(jawPoints[0], perp));
+        if (bandWidth < 0.01f)
+        {
+            return false;
+        }
+
+        float neckLength = span * NeckLengthFactor;
+        float edgeOffset = bandWidth * 0.08f;
+
+        int columnCount = jawPoints.Count + 2;
+        List<Vector3> vertices = new List<Vector3>(columnCount * 2);
+        List<Vector2> weights = new List<Vector2>(columnCount * 2);
+        AddNeckColumn(
+            vertices,
+            weights,
+            jawPoints[0] - perp * edgeOffset,
+            down,
+            perp,
+            lateralCenter,
+            neckLength,
+            0.0f);
+        for (int i = 0; i < jawPoints.Count; i++)
+        {
+            AddNeckColumn(vertices, weights, jawPoints[i], down, perp, lateralCenter, neckLength, 1.0f);
+        }
+
+        AddNeckColumn(
+            vertices,
+            weights,
+            jawPoints[jawPoints.Count - 1] + perp * edgeOffset,
+            down,
+            perp,
+            lateralCenter,
+            neckLength,
+            0.0f);
+
+        List<int> triangles = new List<int>((columnCount - 1) * 6);
+        for (int c = 0; c + 1 < columnCount; c++)
+        {
+            int topA = c * 2;
+            int bottomA = c * 2 + 1;
+            int topB = (c + 1) * 2;
+            int bottomB = (c + 1) * 2 + 1;
+            triangles.Add(topA);
+            triangles.Add(topB);
+            triangles.Add(bottomA);
+            triangles.Add(bottomA);
+            triangles.Add(topB);
+            triangles.Add(bottomB);
+        }
+
+        if (foundationNeckMesh == null)
+        {
+            foundationNeckMesh = new Mesh
+            {
+                name = "Foundation Neck Extension"
+            };
+            foundationNeckMesh.MarkDynamic();
+        }
+
+        foundationNeckMesh.Clear();
+        foundationNeckMesh.SetVertices(vertices);
+        foundationNeckMesh.SetUVs(0, weights);
+        foundationNeckMesh.SetTriangles(triangles, 0, true);
+        foundationNeckMesh.RecalculateBounds();
+        return true;
+    }
+
+    private static void AddNeckColumn(
+        List<Vector3> vertices,
+        List<Vector2> weights,
+        Vector2 top,
+        Vector2 down,
+        Vector2 perp,
+        float lateralCenter,
+        float neckLength,
+        float topWeight)
+    {
+        float lateral = Vector2.Dot(top, perp);
+        Vector2 bottom = top
+            + down * neckLength
+            + perp * ((lateralCenter - lateral) * (1.0f - NeckBottomWidthFactor));
+        // Tuck the top slightly up into the face hull so there is no seam at the jaw.
+        Vector2 tuckedTop = top - down * (neckLength * 0.06f);
+        vertices.Add(new Vector3(tuckedTop.x, tuckedTop.y, 0.0f));
+        weights.Add(new Vector2(topWeight, 0.0f));
+        vertices.Add(new Vector3(bottom.x, bottom.y, 0.0f));
+        weights.Add(new Vector2(0.0f, 0.0f));
+    }
+
+    private static Vector2 CalculateFaceDownDirectionClip(ARFace face, Camera arCamera)
+    {
+        if (face == null || arCamera == null)
+        {
+            return new Vector2(0.0f, -1.0f);
+        }
+
+        Vector3 origin = face.transform.position;
+        Vector3 below = origin - face.transform.up * 0.08f;
+        Vector3 viewportOrigin = arCamera.WorldToViewportPoint(origin);
+        Vector3 viewportBelow = arCamera.WorldToViewportPoint(below);
+        if (viewportOrigin.z <= arCamera.nearClipPlane || viewportBelow.z <= arCamera.nearClipPlane)
+        {
+            return new Vector2(0.0f, -1.0f);
+        }
+
+        Vector2 delta = ToMaskUv(viewportBelow) - ToMaskUv(viewportOrigin);
+        if (delta.sqrMagnitude < 0.000001f)
+        {
+            return new Vector2(0.0f, -1.0f);
+        }
+
+        return delta.normalized;
+    }
+
     private static List<Vector2> BuildConvexHull(List<Vector2> sortedPoints)
     {
         List<Vector2> lower = new List<Vector2>(sortedPoints.Count);
@@ -915,7 +1148,13 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
 
     private static Vector2 ToMaskUv(Vector3 viewport)
     {
-        return new Vector2(1.0f - viewport.x, viewport.y);
+        // The mask is sampled with the screen-space quad UV, and
+        // Camera.WorldToViewportPoint already returns the exact on-screen
+        // position of the tracked face, so no axis flip is required here.
+        // Flipping X made the mask move opposite to the face whenever the
+        // phone (or the face) moved horizontally.
+        float x = MirrorMaskUvX ? 1.0f - viewport.x : viewport.x;
+        return new Vector2(x, viewport.y);
     }
 
     private static bool TryBuildProjectedRegions(
@@ -1356,6 +1595,9 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             + " ageMs=" + state.AgeMs.ToString(CultureInfo.InvariantCulture)
             + " bounds=" + FormatRect(state.ScreenBounds)
             + " maskSource=" + (state.MaskSource ?? "none")
+            + " noseAnchorUv=" + state.NoseAnchor.x.ToString("0.###", CultureInfo.InvariantCulture)
+            + ":"
+            + state.NoseAnchor.y.ToString("0.###", CultureInfo.InvariantCulture)
             + " faceYaw=" + state.FaceYaw.ToString("0.#", CultureInfo.InvariantCulture)
             + " leftCheekValid=" + state.LeftCheekValid.ToString().ToLowerInvariant()
             + " rightCheekValid=" + state.RightCheekValid.ToString().ToLowerInvariant()
@@ -1369,6 +1611,7 @@ public sealed class FoundationMaskRuntime : MonoBehaviour
             + " eyeExclusionRadius=" + state.EyeExclusionRadius.ToString("0.###", CultureInfo.InvariantCulture)
             + " finalMaskLooksFilled=" + state.FinalMaskLooksFilled.ToString().ToLowerInvariant()
             + " baseFaceSurfaceMaskReady=" + state.BaseFaceSurfaceMaskReady.ToString().ToLowerInvariant()
+            + " neckExtensionReady=" + state.NeckExtensionReady.ToString().ToLowerInvariant()
             + " projectedVertexCount=" + state.ProjectedVertexCount.ToString(CultureInfo.InvariantCulture)
             + " projectedTriangleCount=" + state.ProjectedTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " leftCheekWeightValid=" + state.LeftCheekWeightValid.ToString().ToLowerInvariant()

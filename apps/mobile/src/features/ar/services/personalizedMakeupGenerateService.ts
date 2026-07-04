@@ -62,7 +62,7 @@ export type PersonalizedCompanionMakeupRegionControl = {
   intensity: number;
   luminanceInfluence?: number | undefined;
   maskTextureId: string;
-  mode?: 'uvMask' | 'screenSpace' | undefined;
+  mode?: 'uvMask' | 'screenSpace' | 'semantic' | undefined;
   opacity: number;
   evenness?: number | undefined;
 };
@@ -119,12 +119,20 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     colorHex: '#D7B19A',
     coverage: 1,
     evenness: 0.42,
+    // Foundation must never paint the face mesh / uvMask overlay directly:
+    // the final color composite happens only in the screen-space camera
+    // post-process. If the semantic mask is not ready, show nothing rather
+    // than falling back to mesh painting.
     fallbackMode: 'off',
     finish: 'natural',
     debugMaskMode: 0,
     intensity: 1,
     luminanceInfluence: 0.52,
     maskTextureId: 'foundation-skin-mask-v1',
+    // screenSpace: the final color composite happens in the screen-space
+    // camera post-process quad, driven by the projected face-mesh + neck
+    // mask (with calibrated eye/lip/brow exclusions). Never painted on the
+    // face mesh / uvMask overlay directly.
     mode: 'screenSpace',
     opacity: 1,
   },

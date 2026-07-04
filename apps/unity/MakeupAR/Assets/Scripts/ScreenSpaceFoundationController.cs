@@ -50,6 +50,12 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private const float DiagnosticsIntervalSeconds = 0.75f;
     private const float CameraTextureStaleSeconds = 0.45f;
     private const int FoundationRenderQueue = 4300;
+    // SODA-style neck extension: how strongly neck/edge pixels are gated by
+    // skin-chroma similarity, the chroma distance tolerance, and the maximum
+    // foundation strength applied on the neck relative to the face.
+    private const float NeckChromaGate = 0.85f;
+    private const float NeckChromaTolerance = 0.16f;
+    private const float NeckMaskStrength = 0.90f;
     private static readonly int CameraTextureModeId = Shader.PropertyToID("_CameraTextureMode");
     private static readonly int CameraTexId = Shader.PropertyToID("_CameraTex");
     private static readonly int DisplayTransformId = Shader.PropertyToID("_UnityDisplayTransform");
@@ -57,6 +63,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private static readonly int TextureCbCrId = Shader.PropertyToID("_textureCbCr");
 
     private FoundationMaskRuntime maskRuntime;
+    private FoundationSemanticMaskCompositor semanticCompositor;
     private Material material;
     private MeshRenderer quadRenderer;
     private MeshFilter quadFilter;
@@ -153,7 +160,8 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     public ScreenSpaceFoundationState UpdateRuntime(ARFaceManager faceManager, Camera arCamera)
     {
         state.NormalCorrectionEnabled = false;
-        if (!state.Requested || !state.Enabled || state.Mode != "screenSpace")
+        bool semanticMode = state.Mode == "semantic";
+        if (!state.Requested || !state.Enabled || (state.Mode != "screenSpace" && !semanticMode))
         {
             state.ScreenSpaceActive = false;
             state.ActiveRenderer = "off";
@@ -200,20 +208,61 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         ARFace face = FindTrackingFace(activeFaceManager);
         state.FaceTracked = face != null && face.trackingState == TrackingState.Tracking;
         state.TrackingState = face != null ? face.trackingState.ToString() : "None";
-        FoundationMaskRuntime.FoundationMaskState maskState = state.FaceTracked
-            ? maskRuntime.UpdateMask(face, arCamera, state.DebugMaskMode)
-            : maskRuntime.InvalidateMask(false, state.DebugMaskMode, "face_unavailable");
-        state.MaskChannelRMax = maskState.MaskMax;
-        state.MaskAverage = maskState.MaskAverage;
-        state.MaskChannelRFinalNonZero = maskState.MaskMax > 0.025f;
-        state.MaskChannelABaseNonZero = maskState.BaseFaceSurfaceMaskReady && maskState.ProjectedVertexCount > 0;
-        state.MaskSource = maskState.MaskSource;
-        state.ProjectedVertexCount = maskState.ProjectedVertexCount;
-        state.ProjectedTriangleCount = maskState.ProjectedTriangleCount;
-        state.NormalCorrectionEnabled = false;
 
-        Texture maskTexture = maskRuntime.FoundationMaskTexture;
-        bool maskValid = maskState.DynamicMaskValid && maskTexture != null;
+        Texture maskTexture;
+        bool maskValid;
+        string maskInvalidReason;
+        bool semanticProviderActive = false;
+        FoundationMaskRuntime.FoundationMaskState maskState = default;
+        if (semanticMode)
+        {
+            // Semantic foundation: ARFace acts only as tracking + geometry
+            // prior; the compositor decides the painted pixels from the
+            // segmentation/skin masks (per-frame, screen UV space).
+            EnsureSemanticCompositor();
+            FoundationSemanticMaskCompositor.SemanticMaskState semanticState =
+                semanticCompositor != null
+                    ? semanticCompositor.UpdateSemanticMask(face, arCamera)
+                    : default;
+            maskTexture = semanticCompositor != null ? semanticCompositor.FinalMaskTexture : null;
+            maskValid = semanticState.MaskValid && maskTexture != null;
+            maskInvalidReason = semanticState.Status ?? "semantic_unavailable";
+            // Full strength only with a TRUE semantic skin class; person-
+            // segmentation-derived or chroma-fallback skin gets attenuated.
+            semanticProviderActive = semanticState.SemanticSkinActive;
+            state.MaskSource = "semantic_segmentation_composite:" + (semanticState.SkinSource ?? "none");
+            state.MaskChannelRMax = maskValid ? 1.0f : 0.0f;
+            state.MaskAverage = 0.0f;
+            state.MaskChannelRFinalNonZero = maskValid;
+            state.MaskChannelABaseNonZero = maskValid;
+            state.ProjectedVertexCount = 0;
+            state.ProjectedTriangleCount = 0;
+        }
+        else
+        {
+            // Screen-space mode: project the calibrated canonical-UV skin
+            // mask (tight eye openings, lip-texture lips, brow bands,
+            // hairline fade) through the face UVs so the screen-space mask
+            // carries precise exclusions — lips/eyes/brows stay clean.
+            maskRuntime.UvSkinMaskOverride = state.FaceTracked
+                ? E3RegionMaskOverlay.GetSharedFoundationSkinMask(face)
+                : null;
+            maskState = state.FaceTracked
+                ? maskRuntime.UpdateMask(face, arCamera, state.DebugMaskMode)
+                : maskRuntime.InvalidateMask(false, state.DebugMaskMode, "face_unavailable");
+            state.MaskChannelRMax = maskState.MaskMax;
+            state.MaskAverage = maskState.MaskAverage;
+            state.MaskChannelRFinalNonZero = maskState.MaskMax > 0.025f;
+            state.MaskChannelABaseNonZero = maskState.BaseFaceSurfaceMaskReady && maskState.ProjectedVertexCount > 0;
+            state.MaskSource = maskState.MaskSource;
+            state.ProjectedVertexCount = maskState.ProjectedVertexCount;
+            state.ProjectedTriangleCount = maskState.ProjectedTriangleCount;
+            maskTexture = maskRuntime.FoundationMaskTexture;
+            maskValid = maskState.DynamicMaskValid && maskTexture != null;
+            maskInvalidReason = maskState.Status;
+        }
+
+        state.NormalCorrectionEnabled = false;
         state.ProviderReady = true;
         state.RawMaskAvailable = maskValid;
         state.FinalMaskAvailable = maskValid;
@@ -226,7 +275,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
 
         if (!maskValid)
         {
-            state.FallbackReason = maskState.Status;
+            state.FallbackReason = maskInvalidReason;
             state.ActiveRenderer = ResolveFallbackRenderer();
             state.ScreenSpaceActive = false;
             state.ShaderPath = "fallback";
@@ -265,6 +314,18 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         currentCamera = arCamera;
         EnsureQuad(arCamera);
         UpdateQuadGeometry(arCamera);
+
+        // Fallback attenuation: without a real segmentation provider the mask
+        // boundary is only prior+chroma-gate accurate, so reduce strength to
+        // keep edges unobtrusive; full strength returns with a provider.
+        if (semanticMode)
+        {
+            float opacityScale = semanticProviderActive ? 1.0f : 0.55f;
+            float coverageScale = semanticProviderActive ? 1.0f : 0.65f;
+            material.SetFloat("_FoundationIntensity", state.Intensity * opacityScale);
+            material.SetFloat("_FoundationCoverage", state.Coverage * coverageScale);
+        }
+
         material.SetTexture("_SkinMaskTex", maskTexture);
         material.SetFloat(CameraTextureModeId, cameraTextureMode);
         material.SetFloat("_RawMaskAvailable", maskValid ? 1.0f : 0.0f);
@@ -420,6 +481,20 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
     }
 
+    private void EnsureSemanticCompositor()
+    {
+        if (semanticCompositor != null)
+        {
+            return;
+        }
+
+        semanticCompositor = FindFirstObjectByType<FoundationSemanticMaskCompositor>();
+        if (semanticCompositor == null)
+        {
+            semanticCompositor = gameObject.AddComponent<FoundationSemanticMaskCompositor>();
+        }
+    }
+
     private void EnsureMaterial()
     {
         if (material != null)
@@ -441,6 +516,9 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.renderQueue = FoundationRenderQueue;
         material.SetFloat("_FoundationMaskStrength", 1.0f);
         material.SetFloat("_FoundationMaskFeather", 0.0f);
+        material.SetFloat("_NeckChromaGate", NeckChromaGate);
+        material.SetFloat("_NeckChromaTolerance", NeckChromaTolerance);
+        material.SetFloat("_NeckMaskStrength", NeckMaskStrength);
     }
 
     private void EnsureQuad(Camera arCamera)
@@ -584,6 +662,14 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
 
     private static string NormalizeMode(string mode)
     {
+        if (string.Equals(mode, "semantic", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "segmentation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "semanticFoundation", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "segmentationFoundation", StringComparison.OrdinalIgnoreCase))
+        {
+            return "semantic";
+        }
+
         return string.Equals(mode, "screenSpace", StringComparison.OrdinalIgnoreCase)
             || string.Equals(mode, "screen-space", StringComparison.OrdinalIgnoreCase)
             || string.Equals(mode, "screenspace", StringComparison.OrdinalIgnoreCase)

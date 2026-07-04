@@ -15,6 +15,9 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _FoundationDebugMode ("Foundation Debug Mode", Float) = 0
         _FoundationMaskStrength ("Foundation Mask Strength", Range(0, 2)) = 1
         _FoundationMaskFeather ("Foundation Mask Feather", Range(0, 1)) = 0
+        _NeckChromaGate ("Neck Chroma Gate", Range(0, 1)) = 0.85
+        _NeckChromaTolerance ("Neck Chroma Tolerance", Range(0.01, 1)) = 0.16
+        _NeckMaskStrength ("Neck Mask Strength", Range(0, 1)) = 0.9
         _RawMaskAvailable ("Raw Mask Available", Float) = 0
         _FinalMaskAvailable ("Final Mask Available", Float) = 0
         _ProviderProductionReady ("Provider Production Ready", Float) = 0
@@ -86,6 +89,9 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
             float _FoundationDebugMode;
             float _FoundationMaskStrength;
             float _FoundationMaskFeather;
+            float _NeckChromaGate;
+            float _NeckChromaTolerance;
+            float _NeckMaskStrength;
             float _RawMaskAvailable;
             float _FinalMaskAvailable;
             float _ProviderProductionReady;
@@ -173,13 +179,16 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 float3 lumaPreserved = saturate(filtered * (cameraLum / filteredLum));
                 float safeFoundationLum = max(foundationLum, 0.001);
                 float3 lumaMatchedFoundation = saturate(foundation * (cameraLum / safeFoundationLum));
-                float3 corrected = lerp(lumaPreserved, filtered, saturate(_FoundationLuminanceInfluence) * 0.35);
-                corrected = lerp(corrected, lumaMatchedFoundation, saturate(_FoundationCoverage) * 0.46);
-
-                // Keep the correction visibly testable while still preserving the camera luminance.
-                // The mask already limits the effect to face skin pixels; without this boost the
-                // default shade is too close to the sampled skin base and looks like no-op.
-                float visibleAmount = saturate(amount * lerp(1.85, 2.85, saturate(_FoundationCoverage)));
+                // Luminance-preserving blend: the camera pixel's luma (shadows,
+                // pores, nose shading) passes through untouched; only the
+                // foundation's chroma mixes in. lumaMatchedFoundation is the
+                // foundation color rescaled to the camera pixel's luminance,
+                // so even at high coverage the skin texture stays visible.
+                float3 corrected = lerp(
+                    lumaPreserved,
+                    lumaMatchedFoundation,
+                    saturate(_FoundationCoverage) * 0.55);
+                float visibleAmount = saturate(amount);
                 return lerp(cameraColor, corrected, visibleAmount);
             }
 
@@ -198,6 +207,58 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 {
                     finalMask = smoothstep(_FoundationMaskFeather, 1.0, finalMask);
                     surfaceMask = smoothstep(_FoundationMaskFeather, 1.0, surfaceMask);
+                }
+
+                // SODA-style neck / edge handling. Pixels covered by the extended
+                // surface (alpha) but without projected face-skin weights (blue)
+                // are neck-strip or hull-edge pixels. Gate them by chroma
+                // similarity against a live skin reference sampled at the cheek
+                // and chin anchors so hair, clothing, and background beneath the
+                // chin stay untinted while the actual neck skin gets foundation.
+                float neckness = saturate(surfaceMask) * (1.0 - smoothstep(0.10, 0.45, rawSkinMask));
+                if (_NeckChromaGate > 0.0001 && neckness > 0.0001 && _CameraTextureMode > 0.5)
+                {
+                    float3 skinRef = float3(0.0, 0.0, 0.0);
+                    float refWeight = 0.0;
+                    if (_FoundationDebugLeftCheek.z > 0.5)
+                    {
+                        skinRef += SampleCameraColor(_FoundationDebugLeftCheek.xy);
+                        refWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugRightCheek.z > 0.5)
+                    {
+                        skinRef += SampleCameraColor(_FoundationDebugRightCheek.xy);
+                        refWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugChin.z > 0.5)
+                    {
+                        skinRef += SampleCameraColor(_FoundationDebugChin.xy);
+                        refWeight += 1.0;
+                    }
+
+                    skinRef = refWeight > 0.5
+                        ? skinRef / refWeight
+                        : max(saturate(_UserSkinBaseColor.rgb), float3(0.075, 0.075, 0.075));
+                    float refLum = max(FoundationLuma(skinRef), 0.05);
+                    float camLum = max(FoundationLuma(cameraColor), 0.05);
+                    float2 refChroma = skinRef.rb / refLum;
+                    float2 camChroma = cameraColor.rb / camLum;
+                    float chromaDist = length(camChroma - refChroma);
+                    float skinGate = 1.0 - smoothstep(
+                        _NeckChromaTolerance,
+                        _NeckChromaTolerance * 2.4,
+                        chromaDist);
+                    float lumRatio = camLum / refLum;
+                    float lumGate = smoothstep(0.30, 0.62, lumRatio)
+                        * (1.0 - smoothstep(1.65, 2.40, lumRatio));
+                    float gate = lerp(
+                        1.0,
+                        saturate(skinGate * lumGate) * saturate(_NeckMaskStrength),
+                        saturate(_NeckChromaGate) * neckness);
+                    surfaceMask *= gate;
+                    finalMask *= gate;
                 }
 
                 float debugMode = _FoundationDebugMode;
@@ -254,7 +315,12 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                     return fixed4(exaggerated, 1.0);
                 }
 
-                return fixed4(CorrectCameraColor(cameraColor, surfaceMask), 1.0);
+                // Weight the correction by the final mask (R channel): it
+                // carries the eye/lip/brow exclusions and the neck strip,
+                // unlike the raw surface alpha which covers the whole face
+                // surface including lips and eyes. The mask is a continuous
+                // 0..1 weight map, so the effect fades smoothly at edges.
+                return fixed4(CorrectCameraColor(cameraColor, finalMask), 1.0);
             }
             ENDCG
         }

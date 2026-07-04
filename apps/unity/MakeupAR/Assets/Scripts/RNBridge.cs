@@ -544,6 +544,77 @@ public sealed class RNBridge : MonoBehaviour
         }
     }
 
+    [Serializable]
+    private sealed class FoundationParsingFramePayload
+    {
+        public int width;
+        public int height;
+        public string skinMaskBase64;
+        public string hairMaskBase64;
+        public string lipMaskBase64;
+        public string eyeMaskBase64;
+        public string browMaskBase64;
+        public string occlusionMaskBase64;
+        public string confidenceBase64;
+    }
+
+    /// <summary>
+    /// Receives one face-parsing frame from the native CoreML/Vision module
+    /// (single-channel R8 buffers per class, base64-encoded, screen-aligned,
+    /// bottom-up row order). See BridgeFaceParsingProvider for the contract.
+    /// </summary>
+    public void ApplyFoundationParsingFrameJson(string json)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                throw new ArgumentException("Foundation parsing frame JSON is empty.");
+            }
+
+            FoundationParsingFramePayload payload =
+                JsonUtility.FromJson<FoundationParsingFramePayload>(json);
+            if (payload == null)
+            {
+                throw new ArgumentException("Foundation parsing frame JSON did not parse.");
+            }
+
+            BridgeFaceParsingProvider.IngestFrame(
+                payload.width,
+                payload.height,
+                DecodeMaskBase64(payload.skinMaskBase64),
+                DecodeMaskBase64(payload.hairMaskBase64),
+                DecodeMaskBase64(payload.lipMaskBase64),
+                DecodeMaskBase64(payload.eyeMaskBase64),
+                DecodeMaskBase64(payload.browMaskBase64),
+                DecodeMaskBase64(payload.occlusionMaskBase64),
+                DecodeMaskBase64(payload.confidenceBase64));
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError(
+                "[FoundationSegmentation] parsing_frame_apply_failed error=" + exception.Message
+                + " payloadBytes=" + (json == null ? 0 : json.Length).ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static byte[] DecodeMaskBase64(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Convert.FromBase64String(value);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
     public void ApplyGeneratedLipMaskJson(string json)
     {
         GeneratedLipMaskPayload payload = null;

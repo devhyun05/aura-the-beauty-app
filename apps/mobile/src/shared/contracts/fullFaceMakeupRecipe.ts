@@ -50,7 +50,7 @@ export type FullFaceRegionCandidateOption = {
   maskTextureId: string;
 };
 
-export type FoundationRenderMode = 'uvMask' | 'screenSpace';
+export type FoundationRenderMode = 'uvMask' | 'screenSpace' | 'semantic';
 
 export type FoundationFallbackMode = 'uvMask' | 'off';
 

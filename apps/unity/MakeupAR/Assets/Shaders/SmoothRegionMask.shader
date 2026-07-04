@@ -69,6 +69,19 @@ Shader "MakeupAR/SmoothRegionMask"
         [HideInInspector] _CheekDensityGain ("Cheek Density Gain", Float) = 1
         [HideInInspector] _CheekCenterGain ("Cheek Center Gain", Float) = 0
         [HideInInspector] _PigmentMultiply ("Pigment Multiply", Float) = 0
+        [HideInInspector] _SkinGateEnabled ("Skin Gate Enabled", Float) = 0
+        [HideInInspector] _SkinGateStrength ("Skin Gate Strength", Range(0, 1)) = 0.85
+        [HideInInspector] _SkinGateCenterWeight ("Skin Gate Center Weight", Range(0, 1)) = 0.3
+        [HideInInspector] _SkinGateTolerance ("Skin Gate Tolerance", Range(0.01, 1)) = 0.13
+        [HideInInspector] _SkinGateCameraMode ("Skin Gate Camera Mode", Float) = 0
+        [HideInInspector] _SkinGateCameraTex ("Skin Gate Camera Texture", 2D) = "black" {}
+        [HideInInspector] _SkinGateTexY ("Skin Gate Texture Y", 2D) = "black" {}
+        [HideInInspector] _SkinGateTexCbCr ("Skin Gate Texture CbCr", 2D) = "gray" {}
+        [HideInInspector] _SkinGateRefA ("Skin Gate Reference A", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateRefB ("Skin Gate Reference B", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateRefC ("Skin Gate Reference C", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateUvRect ("Skin Gate Uv Rect", Vector) = (0, 1, 1, 0)
+        [HideInInspector] _SkinGateFailSafe ("Skin Gate Fail Safe", Float) = 0
         [HideInInspector] _UseScreenSpaceMask ("Use Screen Space Mask", Float) = 0
         [HideInInspector] _DebugMaskMode ("Debug Mask Mode", Float) = 0
         [HideInInspector] _SrcBlend ("Source Blend", Float) = 5
@@ -163,6 +176,128 @@ Shader "MakeupAR/SmoothRegionMask"
             float _PigmentMultiply;
             float _UseScreenSpaceMask;
             float _DebugMaskMode;
+            float _SkinGateEnabled;
+            float _SkinGateStrength;
+            float _SkinGateCenterWeight;
+            float _SkinGateTolerance;
+            float _SkinGateCameraMode;
+            sampler2D _SkinGateCameraTex;
+            sampler2D _SkinGateTexY;
+            sampler2D _SkinGateTexCbCr;
+            float4 _SkinGateRefA;
+            float4 _SkinGateRefB;
+            float4 _SkinGateRefC;
+            float4 _SkinGateUvRect;
+            float _SkinGateFailSafe;
+            float4x4 _SkinGateDisplayTransform;
+
+            // ---- Camera-texture skin gate -------------------------------
+            // Compares each pixel's chroma against a live skin reference
+            // sampled at stable face points (cheeks/chin). Suppresses
+            // foundation on hair, brows, clothing and background that the
+            // UV mask alone cannot separate from skin. Gate weight is
+            // strongest near the hairline/side edges (and on the neck skirt,
+            // which sets _SkinGateCenterWeight to 1) and softer at the face
+            // center so ordinary shading and shadows are not stripped.
+            float3 SampleSkinGateCamera(float2 screenUv)
+            {
+                float2 cameraUv = mul(float4(screenUv, 1.0, 1.0), _SkinGateDisplayTransform).xy;
+                if (_SkinGateCameraMode > 1.5)
+                {
+                    float lumaY = tex2D(_SkinGateTexY, cameraUv).r;
+                    float2 cbcr = tex2D(_SkinGateTexCbCr, cameraUv).rg - float2(0.5, 0.5);
+                    return saturate(float3(
+                        lumaY + 1.4020 * cbcr.y,
+                        lumaY - 0.3441 * cbcr.x - 0.7141 * cbcr.y,
+                        lumaY + 1.7720 * cbcr.x));
+                }
+
+                return saturate(tex2D(_SkinGateCameraTex, cameraUv).rgb);
+            }
+
+            float2 SkinGateChroma(float3 color)
+            {
+                float cb = -0.1146 * color.r - 0.3854 * color.g + 0.5 * color.b;
+                float cr = 0.5 * color.r - 0.4542 * color.g - 0.0458 * color.b;
+                return float2(cb, cr);
+            }
+
+            float SkinGateVisibility(float4 clipPos, float2 maskUv)
+            {
+                float sideDistanceEarly = min(
+                    maskUv.x - _SkinGateUvRect.x,
+                    _SkinGateUvRect.y - maskUv.x);
+                float sideProximityEarly = 1.0 - smoothstep(0.02, 0.17, sideDistanceEarly);
+                float topProximityEarly = smoothstep(
+                    _SkinGateUvRect.z - 0.22,
+                    _SkinGateUvRect.z - 0.05,
+                    maskUv.y);
+                float edgeProximityEarly = saturate(max(sideProximityEarly, topProximityEarly));
+
+                if (_SkinGateEnabled < 0.5)
+                {
+                    // FAIL-SAFE (foundation materials only): when the camera
+                    // gate is unavailable, never fail-open into painting hair.
+                    // Fade the hairline/side zones instead.
+                    return _SkinGateFailSafe > 0.5
+                        ? lerp(1.0, 0.30, edgeProximityEarly)
+                        : 1.0;
+                }
+
+                float3 referenceSum = float3(0.0, 0.0, 0.0);
+                float referenceCount = 0.0;
+                if (_SkinGateRefA.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefA.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (_SkinGateRefB.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefB.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (_SkinGateRefC.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefC.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (referenceCount < 0.5)
+                {
+                    return 1.0;
+                }
+
+                float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
+                float2 screenUv = saturate(ndc * 0.5 + 0.5);
+                float3 pixel = SampleSkinGateCamera(screenUv);
+                float3 reference = referenceSum / referenceCount;
+                float chromaDistance = length(SkinGateChroma(pixel) - SkinGateChroma(reference));
+                float similarity = 1.0 - smoothstep(
+                    _SkinGateTolerance,
+                    _SkinGateTolerance * 2.3,
+                    chromaDistance);
+                float pixelLum = dot(pixel, float3(0.2126, 0.7152, 0.0722));
+                float referenceLum = max(dot(reference, float3(0.2126, 0.7152, 0.0722)), 0.05);
+                // Dark-hair suppression: hair and brow pixels are far darker
+                // than sampled skin even when their chroma is ambiguous.
+                float darkGate = smoothstep(0.26, 0.52, pixelLum / referenceLum);
+                float gate = saturate(similarity * darkGate);
+
+                float sideDistance = min(
+                    maskUv.x - _SkinGateUvRect.x,
+                    _SkinGateUvRect.y - maskUv.x);
+                float sideProximity = 1.0 - smoothstep(0.02, 0.17, sideDistance);
+                float topProximity = smoothstep(
+                    _SkinGateUvRect.z - 0.22,
+                    _SkinGateUvRect.z - 0.05,
+                    maskUv.y);
+                float edgeProximity = saturate(max(sideProximity, topProximity));
+                float weight = lerp(saturate(_SkinGateCenterWeight), 1.0, edgeProximity)
+                    * saturate(_SkinGateStrength);
+                return lerp(1.0, gate, saturate(weight));
+            }
 
             struct appdata
             {
@@ -672,7 +807,9 @@ Shader "MakeupAR/SmoothRegionMask"
                 }
 
                 float preserveScale = lerp(1.0, 0.92, saturate(_PreserveDetail));
-                float opacity = saturate(_Opacity * _VisibilityAlpha) * HandOcclusionVisibility(input.clipPos);
+                float opacity = saturate(_Opacity * _VisibilityAlpha)
+                    * HandOcclusionVisibility(input.clipPos)
+                    * SkinGateVisibility(input.clipPos, maskUv);
 
                 if (_DebugMaskMode > 0.5 && _DebugMaskMode < 1.5)
                 {

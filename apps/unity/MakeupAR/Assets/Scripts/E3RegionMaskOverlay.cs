@@ -283,6 +283,76 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static readonly Vector4 FoundationBrowExclusionR = new Vector4(0.645f, 0.770f, 0.230f, 0.090f);
     private static readonly Vector4 FoundationMouthExclusion = new Vector4(0.500f, 0.425f, 0.330f, 0.135f);
 
+    // Foundation neck skirt: a face-anchored mesh extruded down from the
+    // jawline of the tracked ARKit face mesh, so the neck tint moves with the
+    // head (never with the phone) exactly like the face overlay itself.
+    private const string FoundationNeckViewKey = "foundation-neck";
+    private const float FoundationNeckLengthFaceHeightFactor = 0.38f;
+    private const float FoundationNeckTaper = 0.88f;
+    private const float FoundationNeckBackOffsetMeters = 0.020f;
+    private const int FoundationNeckColumns = 32;
+    private const int FoundationNeckMinColumns = 8;
+    private static Texture2D foundationNeckGradientTexture;
+    private static Texture2D foundationGeneratedSkinMaskTexture;
+
+    private struct FoundationMaskZone
+    {
+        public Vector2 Center;
+        public Vector2 Radius;
+        public bool Valid;
+    }
+
+    // Exclusion zones for the generated foundation mask. Defaults are rough
+    // canonical-UV estimates; EnsureFoundationSkinMaskCalibration replaces
+    // them with values measured from the tracked face mesh (anatomy-accurate
+    // and identical for every person because ARKit UVs are canonical).
+    private static bool foundationSkinMaskCalibrated;
+    private static Vector2 foundationCalUvMin = new Vector2(0.0f, 0.0f);
+    private static Vector2 foundationCalUvMax = new Vector2(1.0f, 1.0f);
+    private static FoundationMaskZone foundationCalLeftEye = new FoundationMaskZone
+    {
+        Center = new Vector2(0.355f, 0.674f), Radius = new Vector2(0.112f, 0.052f), Valid = true
+    };
+    private static FoundationMaskZone foundationCalRightEye = new FoundationMaskZone
+    {
+        Center = new Vector2(0.645f, 0.674f), Radius = new Vector2(0.112f, 0.052f), Valid = true
+    };
+    private static FoundationMaskZone foundationCalLeftBrow = new FoundationMaskZone
+    {
+        Center = new Vector2(0.355f, 0.776f), Radius = new Vector2(0.190f, 0.078f), Valid = true
+    };
+    private static FoundationMaskZone foundationCalRightBrow = new FoundationMaskZone
+    {
+        Center = new Vector2(0.645f, 0.776f), Radius = new Vector2(0.190f, 0.078f), Valid = true
+    };
+    private static FoundationMaskZone foundationCalMouth = new FoundationMaskZone
+    {
+        Center = new Vector2(0.500f, 0.415f), Radius = new Vector2(0.150f, 0.060f), Valid = true
+    };
+
+    // Base/exclusion mask sources for the generated foundation skin mask.
+    // The shipped/personal mask is used as the base only when it passes a
+    // coverage validity check; the lip region mask is reused as the lips-only
+    // exclusion when it is CPU-readable (fallback: calibrated mouth ellipse).
+    private static bool foundationBaseMaskEvaluated;
+    private static Texture2D foundationValidatedBaseMask;
+    private static bool foundationLipMaskEvaluated;
+    private static Texture2D foundationLipExclusionMask;
+
+    // Camera-texture skin gate state (hair/brow/clothing suppression).
+    private ARCameraManager skinGateCameraManager;
+    private int skinGateCameraTextureMode;
+    private float skinGateLastTextureAt = -10.0f;
+    private Matrix4x4 skinGateDisplayTransform = Matrix4x4.identity;
+    private Texture skinGateTextureY;
+    private Texture skinGateTextureCbCr;
+    private Texture skinGateTextureRgb;
+    private Vector4 skinGateSmoothedRefA = new Vector4(0.5f, 0.5f, 0.0f, 0.0f);
+    private Vector4 skinGateSmoothedRefB = new Vector4(0.5f, 0.5f, 0.0f, 0.0f);
+    private Vector4 skinGateSmoothedRefC = new Vector4(0.5f, 0.5f, 0.0f, 0.0f);
+    private static readonly int SkinGateSourceTextureYId = Shader.PropertyToID("_textureY");
+    private static readonly int SkinGateSourceTextureCbCrId = Shader.PropertyToID("_textureCbCr");
+
     private readonly Dictionary<string, RegionRecipeState> recipes =
         new Dictionary<string, RegionRecipeState>();
     private readonly Dictionary<ARFace, FaceOverlayState> overlays =
@@ -528,7 +598,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return;
         }
 
-        SetHandOcclusionRuntimeRequested(HasEnabledLipRecipe());
+        SetHandOcclusionRuntimeRequested(HasEnabledLipRecipe() || HasEnabledFoundationRecipe());
         UpdateScreenSpaceFoundationRuntime();
         foreach (KeyValuePair<string, RegionRecipeState> entry in recipes)
         {
@@ -747,6 +817,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             FaceOverlayState faceState = EnsureFaceOverlayState(face);
             RegionOverlayView view = EnsureRegionOverlayView(face.transform, faceState, region);
             ApplyRecipeAppearance(view, recipe);
+            if (IsFoundationRegion(region))
+            {
+                // ROOT CAUSE of the "foundation only shows on the chin" bug:
+                // the shipped foundation-skin-mask-v1.png is a premultiplied
+                // low-alpha veil whose R channel measures ~0.44 at the jaw,
+                // ~0.12 on the cheeks and 0.0 on the forehead/eyes/mouth, so
+                // whatever render path was used, only the chin ever tinted.
+                // Replace it with a runtime-generated full-face skin mask
+                // (eyes/brows/mouth softly excluded) and render through the
+                // same generic tint path the lip/cheek masks use. The ARKit
+                // face mesh itself clips the mask to each person's outline.
+                Material foundationMaterial =
+                    view.MeshRenderer != null ? view.MeshRenderer.sharedMaterial : null;
+                if (foundationMaterial != null)
+                {
+                    EnsureFoundationSkinMaskCalibration(face);
+                    Texture2D generatedSkinMask = GetFoundationSkinMaskTexture();
+                    if (generatedSkinMask != null)
+                    {
+                        foundationMaterial.SetTexture("_MaskTex", generatedSkinMask);
+                        if (foundationMaterial.HasProperty("_GlossMaskTex"))
+                        {
+                            foundationMaterial.SetTexture("_GlossMaskTex", generatedSkinMask);
+                        }
+                    }
+
+                    ApplyFoundationGenericTintOverrides(foundationMaterial);
+                    ApplyFoundationSkinGate(foundationMaterial, face, false);
+                }
+            }
             TrackingVisibility visibility = ResolveTrackingVisibility(face, faceState);
             ApplyHandOcclusionRect(view, region, face);
             ApplyFoundationDynamicMask(view, region, recipe, face, visibility);
@@ -766,6 +866,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             if (overlayRenderingSuppressed || visionCaptureSuppressed || !visibility.ShouldRender)
             {
                 SetViewVisibility(view, false);
+                if (IsFoundationRegion(region)
+                    && faceState.Regions.TryGetValue(FoundationNeckViewKey, out RegionOverlayView suppressedNeckView))
+                {
+                    SetViewVisibility(suppressedNeckView, false);
+                }
+
                 if (overlayRenderingSuppressed)
                 {
                     result.StateAction = "suppressed_for_clean_view";
@@ -803,6 +909,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             ApplyDynamicMaskDiagnostics(ref result, dynamicMaskDiagnostics);
 
             SetViewVisibility(view, meshApplied);
+            if (IsFoundationRegion(region))
+            {
+                UpdateFoundationNeckOverlay(face, faceState, recipe, visibility, meshApplied);
+            }
+
             result.Applied = result.Applied || meshApplied;
         }
 
@@ -977,6 +1088,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         return recipes.TryGetValue("lip", out RegionRecipeState lipRecipe) && lipRecipe.Enabled;
     }
 
+    private bool HasEnabledFoundationRecipe()
+    {
+        return recipes.TryGetValue("foundation", out RegionRecipeState foundationRecipe)
+            && foundationRecipe.Enabled;
+    }
+
     private void EnsureHandOcclusionRuntime()
     {
         if (handOcclusionRuntime != null)
@@ -1126,7 +1243,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private void ApplyHandOcclusionRect(RegionOverlayView view, string region, ARFace face)
     {
         Material material = view.MeshRenderer != null ? view.MeshRenderer.sharedMaterial : null;
-        if (region != "lip" || face == null)
+        bool foundationRegion = IsFoundationRegion(region);
+        if ((region != "lip" && !foundationRegion) || face == null)
         {
             ApplyMaterialHandOcclusion(material, false, null, false, Rect.zero);
             return;
@@ -1140,8 +1258,28 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         Camera arCamera = Camera.main;
-        if (TryCalculateApproximateMouthScreenBounds(face, arCamera, out Rect mouthBounds))
+        if (foundationRegion)
         {
+            // Foundation covers the whole face, so a hand anywhere over the
+            // face (not just near the mouth) must occlude it. The per-pixel
+            // hand mask in the shader shapes the actual hidden area.
+            if (TryCalculateCurrentFaceScreenBounds(face, arCamera, out Vector2 faceCenter, out Vector2 faceSize)
+                && faceSize.x > 1.0f
+                && faceSize.y > 1.0f)
+            {
+                handOcclusionRuntime.UpdateMouthScreenBounds(new Rect(
+                    faceCenter.x - faceSize.x * 0.5f,
+                    faceCenter.y - faceSize.y * 0.5f,
+                    faceSize.x,
+                    faceSize.y));
+            }
+        }
+        else if (!HasEnabledFoundationRecipe()
+            && TryCalculateApproximateMouthScreenBounds(face, arCamera, out Rect mouthBounds))
+        {
+            // Lip keeps the tighter mouth ROI only when foundation is off;
+            // otherwise the foundation's face-sized ROI stands so the two
+            // regions don't fight over the shared runtime every frame.
             handOcclusionRuntime.UpdateMouthScreenBounds(mouthBounds);
         }
 
@@ -4189,7 +4327,917 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             {
                 SetViewVisibility(view, false);
             }
+
+            if (IsFoundationRegion(region)
+                && faceState.Regions.TryGetValue(FoundationNeckViewKey, out RegionOverlayView neckView))
+            {
+                SetViewVisibility(neckView, false);
+            }
         }
+    }
+
+    private void UpdateFoundationNeckOverlay(
+        ARFace face,
+        FaceOverlayState faceState,
+        RegionRecipeState recipe,
+        TrackingVisibility visibility,
+        bool faceMeshApplied)
+    {
+        RegionOverlayView neckView = EnsureRegionOverlayView(face.transform, faceState, FoundationNeckViewKey);
+        if (!faceMeshApplied || recipe == null || !recipe.Enabled)
+        {
+            SetViewVisibility(neckView, false);
+            return;
+        }
+
+        ApplyRecipeAppearance(neckView, recipe);
+        Material material = neckView.MeshRenderer != null ? neckView.MeshRenderer.sharedMaterial : null;
+        Texture2D gradient = GetFoundationNeckGradientTexture();
+        if (material == null || gradient == null)
+        {
+            SetViewVisibility(neckView, false);
+            return;
+        }
+
+        // The neck strip uses its own gradient mask (white at the jaw fading
+        // to transparent at the bottom) and the same generic region tint path
+        // as the face foundation view, so the two blend into one continuous
+        // foundation layer.
+        material.SetTexture("_MaskTex", gradient);
+        if (material.HasProperty("_GlossMaskTex"))
+        {
+            material.SetTexture("_GlossMaskTex", gradient);
+        }
+
+        ApplyFoundationGenericTintOverrides(material);
+        ApplyFoundationSkinGate(material, face, true);
+        ApplyViewAlphaMultiplier(neckView, visibility.AlphaMultiplier);
+        ApplyHandOcclusionRect(neckView, recipe.Region, face);
+        bool neckMeshBuilt = TryBuildFoundationNeckMesh(face, neckView.Mesh);
+        SetViewVisibility(neckView, neckMeshBuilt);
+    }
+
+    private static void ApplyFoundationGenericTintOverrides(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (material.HasProperty("_FoundationMode"))
+        {
+            material.SetFloat("_FoundationMode", 0.0f);
+        }
+
+        if (material.HasProperty("_FoundationExclusionEnabled"))
+        {
+            material.SetFloat("_FoundationExclusionEnabled", 0.0f);
+        }
+
+        if (material.HasProperty("_UseScreenSpaceMask"))
+        {
+            material.SetFloat("_UseScreenSpaceMask", 0.0f);
+        }
+
+        if (material.HasProperty("_Threshold"))
+        {
+            // 0.45 (was 0.02): verified in simulation — with the permissive
+            // 0.02 threshold, SampleMaskSoft's bleed into the lip/eye holes
+            // was amplified to a 0.74-0.88 alpha ring INSIDE the lips. At
+            // 0.45/0.12 the ring measures 0.00 while the philtrum and face
+            // interior stay at 1.00 and the hairline fade tightens.
+            material.SetFloat("_Threshold", 0.45f);
+        }
+
+        if (material.HasProperty("_Feather"))
+        {
+            // Small feather: SampleMaskSoft's blur radius scales with this
+            // value, and at 0.35 the soft sampling bled a visible ring into
+            // the lip/eye holes of the mask (no re-subtraction exists in this
+            // path). 0.12 keeps edges soft while the holes stay clean.
+            material.SetFloat("_Feather", 0.12f);
+        }
+
+        // The additive gloss pass is lip-oriented highlight math; on a
+        // full-face foundation wash it reads as an artificial sheen.
+        if (material.HasProperty("_GlossBoost"))
+        {
+            material.SetFloat("_GlossBoost", 0.0f);
+        }
+
+        if (material.HasProperty("_Specular"))
+        {
+            material.SetFloat("_Specular", 0.0f);
+        }
+    }
+
+    private static bool TryBuildFoundationNeckMesh(ARFace face, Mesh mesh)
+    {
+        if (face == null
+            || mesh == null
+            || !face.vertices.IsCreated
+            || face.vertices.Length == 0)
+        {
+            return false;
+        }
+
+        var faceVertices = face.vertices;
+        Vector3 localMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vector3 localMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < faceVertices.Length; i++)
+        {
+            localMin = Vector3.Min(localMin, faceVertices[i]);
+            localMax = Vector3.Max(localMax, faceVertices[i]);
+        }
+
+        float faceWidth = localMax.x - localMin.x;
+        float faceHeight = localMax.y - localMin.y;
+        if (faceWidth < 0.01f || faceHeight < 0.01f)
+        {
+            return false;
+        }
+
+        // Jawline extraction: bucket vertices across X and keep the lowest-Y
+        // vertex per bucket (restricted to the lower part of the face and the
+        // central width so ear/temple boundary vertices are ignored).
+        float[] lowestY = new float[FoundationNeckColumns];
+        Vector3[] jawPoints = new Vector3[FoundationNeckColumns];
+        bool[] hasJawPoint = new bool[FoundationNeckColumns];
+        for (int i = 0; i < FoundationNeckColumns; i++)
+        {
+            lowestY[i] = float.PositiveInfinity;
+        }
+
+        float lowerFaceCutY = localMin.y + faceHeight * 0.45f;
+        for (int i = 0; i < faceVertices.Length; i++)
+        {
+            Vector3 vertex = faceVertices[i];
+            if (vertex.y > lowerFaceCutY)
+            {
+                continue;
+            }
+
+            float normalizedX = (vertex.x - localMin.x) / faceWidth;
+            if (normalizedX < 0.06f || normalizedX > 0.94f)
+            {
+                continue;
+            }
+
+            int column = Mathf.Clamp(
+                (int)(normalizedX * FoundationNeckColumns),
+                0,
+                FoundationNeckColumns - 1);
+            if (vertex.y < lowestY[column])
+            {
+                lowestY[column] = vertex.y;
+                jawPoints[column] = vertex;
+                hasJawPoint[column] = true;
+            }
+        }
+
+        List<Vector3> orderedJaw = new List<Vector3>(FoundationNeckColumns);
+        for (int i = 0; i < FoundationNeckColumns; i++)
+        {
+            if (hasJawPoint[i])
+            {
+                orderedJaw.Add(jawPoints[i]);
+            }
+        }
+
+        int jawColumnCount = orderedJaw.Count;
+        if (jawColumnCount < FoundationNeckMinColumns)
+        {
+            return false;
+        }
+
+        // Smooth the jaw curve (two passes of neighbor averaging) so the
+        // skirt edge follows the jawline without bucket-sampling zigzags.
+        for (int pass = 0; pass < 2; pass++)
+        {
+            for (int i = 1; i + 1 < orderedJaw.Count; i++)
+            {
+                orderedJaw[i] =
+                    (orderedJaw[i - 1] + orderedJaw[i] * 2.0f + orderedJaw[i + 1]) * 0.25f;
+            }
+        }
+
+        float neckLength = faceHeight * FoundationNeckLengthFaceHeightFactor;
+        // Small tuck: just enough to close the seam against the face mesh
+        // without stacking a second tint band on top of the jawline.
+        float tuck = neckLength * 0.02f;
+        List<Vector3> vertices = new List<Vector3>(jawColumnCount * 2);
+        List<Vector2> uvs = new List<Vector2>(jawColumnCount * 2);
+        List<int> triangles = new List<int>((jawColumnCount - 1) * 6);
+        for (int i = 0; i < jawColumnCount; i++)
+        {
+            Vector3 jaw = orderedJaw[i];
+            float u = jawColumnCount > 1 ? i / (float)(jawColumnCount - 1) : 0.5f;
+            Vector3 top = new Vector3(jaw.x, jaw.y + tuck, jaw.z);
+            Vector3 bottom = new Vector3(
+                jaw.x * FoundationNeckTaper,
+                jaw.y - neckLength,
+                jaw.z - FoundationNeckBackOffsetMeters);
+            vertices.Add(top);
+            uvs.Add(new Vector2(u, 0.98f));
+            vertices.Add(bottom);
+            uvs.Add(new Vector2(u, 0.02f));
+
+            if (i > 0)
+            {
+                int topB = vertices.Count - 2;
+                int bottomB = vertices.Count - 1;
+                int topA = topB - 2;
+                int bottomA = bottomB - 2;
+                triangles.Add(topA);
+                triangles.Add(topB);
+                triangles.Add(bottomA);
+                triangles.Add(bottomA);
+                triangles.Add(topB);
+                triangles.Add(bottomB);
+            }
+        }
+
+        if (triangles.Count < 6)
+        {
+            return false;
+        }
+
+        mesh.Clear();
+        mesh.SetVertices(vertices);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return true;
+    }
+
+    private static float FoundationMaskSmooth01(float edge0, float edge1, float value)
+    {
+        float t = Mathf.Clamp01((value - edge0) / Mathf.Max(0.0001f, edge1 - edge0));
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    private static float FoundationMaskEllipse(
+        float u,
+        float v,
+        float centerU,
+        float centerV,
+        float radiusU,
+        float radiusV,
+        float feather)
+    {
+        float du = (u - centerU) / Mathf.Max(0.0001f, radiusU);
+        float dv = (v - centerV) / Mathf.Max(0.0001f, radiusV);
+        float distanceSq = du * du + dv * dv;
+        return 1.0f - FoundationMaskSmooth01(1.0f, 1.0f + Mathf.Max(0.001f, feather), distanceSq);
+    }
+
+    // Measures where the eyes, brows and mouth actually sit in the face UV
+    // layout by sampling the tracked mesh: vertices are classified into
+    // anatomical zones using their normalized face-local position, and each
+    // zone's UV statistics become the exclusion ellipse for the generated
+    // mask. This removes hand-tuned UV constants and stays correct for every
+    // person, since it is derived from the live mesh itself.
+    private static void EnsureFoundationSkinMaskCalibration(ARFace face)
+    {
+        if (foundationSkinMaskCalibrated
+            || face == null
+            || !face.vertices.IsCreated
+            || face.vertices.Length == 0
+            || !face.uvs.IsCreated
+            || face.uvs.Length < face.vertices.Length)
+        {
+            return;
+        }
+
+        var vertices = face.vertices;
+        var uvs = face.uvs;
+        Vector3 localMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vector3 localMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            localMin = Vector3.Min(localMin, vertices[i]);
+            localMax = Vector3.Max(localMax, vertices[i]);
+        }
+
+        if (localMax.x - localMin.x < 0.01f || localMax.y - localMin.y < 0.01f)
+        {
+            return;
+        }
+
+        Vector2 uvMin = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        Vector2 uvMax = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        Vector2[] zoneMin = new Vector2[5];
+        Vector2[] zoneMax = new Vector2[5];
+        Vector2[] zoneSum = new Vector2[5];
+        int[] zoneCount = new int[5];
+        for (int z = 0; z < 5; z++)
+        {
+            zoneMin[z] = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            zoneMax[z] = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        }
+
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            float nx = Mathf.InverseLerp(localMin.x, localMax.x, vertices[i].x);
+            float ny = Mathf.InverseLerp(localMin.y, localMax.y, vertices[i].y);
+            Vector2 uv = uvs[i];
+            uvMin = Vector2.Min(uvMin, uv);
+            uvMax = Vector2.Max(uvMax, uv);
+
+            int zone = -1;
+            if (nx >= 0.23f && nx <= 0.47f && ny >= 0.585f && ny <= 0.700f)
+            {
+                zone = 0; // left eye
+            }
+            else if (nx >= 0.53f && nx <= 0.77f && ny >= 0.585f && ny <= 0.700f)
+            {
+                zone = 1; // right eye
+            }
+            else if (nx >= 0.21f && nx <= 0.49f && ny >= 0.705f && ny <= 0.795f)
+            {
+                zone = 2; // left brow
+            }
+            else if (nx >= 0.51f && nx <= 0.79f && ny >= 0.705f && ny <= 0.795f)
+            {
+                zone = 3; // right brow
+            }
+            else if (nx >= 0.33f && nx <= 0.67f && ny >= 0.320f && ny <= 0.455f)
+            {
+                zone = 4; // mouth (lips only)
+            }
+
+            if (zone >= 0)
+            {
+                zoneMin[zone] = Vector2.Min(zoneMin[zone], uv);
+                zoneMax[zone] = Vector2.Max(zoneMax[zone], uv);
+                zoneSum[zone] += uv;
+                zoneCount[zone]++;
+            }
+        }
+
+        for (int z = 0; z < 5; z++)
+        {
+            if (zoneCount[z] < 8)
+            {
+                return; // mesh not fully usable yet; retry next frame
+            }
+        }
+
+        // Eyes: eye opening plus a small safety margin. Brows: taller band so
+        // brow hair is fully excluded (centers are measured from the mesh, so
+        // widening the band does not eat under-brow skin). Mouth: lips only.
+        foundationCalLeftEye = BuildFoundationMaskZone(
+            zoneMin[0], zoneMax[0], zoneSum[0], zoneCount[0], 0.95f, 0.85f, 0.050f, 0.032f);
+        foundationCalRightEye = BuildFoundationMaskZone(
+            zoneMin[1], zoneMax[1], zoneSum[1], zoneCount[1], 0.95f, 0.85f, 0.050f, 0.032f);
+        foundationCalLeftBrow = BuildFoundationMaskZone(
+            zoneMin[2], zoneMax[2], zoneSum[2], zoneCount[2], 1.15f, 1.35f, 0.090f, 0.050f);
+        foundationCalRightBrow = BuildFoundationMaskZone(
+            zoneMin[3], zoneMax[3], zoneSum[3], zoneCount[3], 1.15f, 1.35f, 0.090f, 0.050f);
+        foundationCalMouth = BuildFoundationMaskZone(
+            zoneMin[4], zoneMax[4], zoneSum[4], zoneCount[4], 0.92f, 0.80f, 0.095f, 0.042f);
+        foundationCalUvMin = uvMin;
+        foundationCalUvMax = uvMax;
+        foundationSkinMaskCalibrated = true;
+
+        if (foundationGeneratedSkinMaskTexture != null)
+        {
+            UnityEngine.Object.Destroy(foundationGeneratedSkinMaskTexture);
+            foundationGeneratedSkinMaskTexture = null;
+        }
+
+        Debug.Log(
+            "[E7] foundation_skin_mask_calibrated"
+            + " leftEye=" + FormatFoundationZone(foundationCalLeftEye)
+            + " rightEye=" + FormatFoundationZone(foundationCalRightEye)
+            + " leftBrow=" + FormatFoundationZone(foundationCalLeftBrow)
+            + " rightBrow=" + FormatFoundationZone(foundationCalRightBrow)
+            + " mouth=" + FormatFoundationZone(foundationCalMouth)
+            + " uvMin=" + foundationCalUvMin.ToString("0.###")
+            + " uvMax=" + foundationCalUvMax.ToString("0.###"));
+    }
+
+    private static FoundationMaskZone BuildFoundationMaskZone(
+        Vector2 min,
+        Vector2 max,
+        Vector2 sum,
+        int count,
+        float radiusScaleU,
+        float radiusScaleV,
+        float minRadiusU,
+        float minRadiusV)
+    {
+        Vector2 center = sum / Mathf.Max(1, count);
+        Vector2 halfExtent = (max - min) * 0.5f;
+        return new FoundationMaskZone
+        {
+            Center = center,
+            Radius = new Vector2(
+                Mathf.Max(minRadiusU, halfExtent.x * radiusScaleU),
+                Mathf.Max(minRadiusV, halfExtent.y * radiusScaleV)),
+            Valid = true
+        };
+    }
+
+    private static string FormatFoundationZone(FoundationMaskZone zone)
+    {
+        return zone.Center.ToString("0.###") + "/" + zone.Radius.ToString("0.###");
+    }
+
+    private void EnsureSkinGateCameraFeed()
+    {
+        if (skinGateCameraManager != null)
+        {
+            return;
+        }
+
+        skinGateCameraManager = FindFirstObjectByType<ARCameraManager>();
+        if (skinGateCameraManager != null)
+        {
+            skinGateCameraManager.frameReceived += OnSkinGateCameraFrame;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (skinGateCameraManager != null)
+        {
+            skinGateCameraManager.frameReceived -= OnSkinGateCameraFrame;
+            skinGateCameraManager = null;
+        }
+    }
+
+    private void OnSkinGateCameraFrame(ARCameraFrameEventArgs eventArgs)
+    {
+        if (eventArgs.textures == null
+            || eventArgs.propertyNameIds == null
+            || eventArgs.textures.Count == 0
+            || eventArgs.propertyNameIds.Count == 0)
+        {
+            skinGateCameraTextureMode = 0;
+            return;
+        }
+
+        Texture firstTexture = null;
+        bool hasTextureY = false;
+        bool hasTextureCbCr = false;
+        int count = Mathf.Min(eventArgs.textures.Count, eventArgs.propertyNameIds.Count);
+        for (int i = 0; i < count; i++)
+        {
+            Texture2D texture = eventArgs.textures[i];
+            if (texture == null)
+            {
+                continue;
+            }
+
+            int propertyId = eventArgs.propertyNameIds[i];
+            if (propertyId == SkinGateSourceTextureYId)
+            {
+                skinGateTextureY = texture;
+                hasTextureY = true;
+            }
+            else if (propertyId == SkinGateSourceTextureCbCrId)
+            {
+                skinGateTextureCbCr = texture;
+                hasTextureCbCr = true;
+            }
+
+            if (firstTexture == null)
+            {
+                firstTexture = texture;
+            }
+        }
+
+        if (eventArgs.displayMatrix.HasValue)
+        {
+            skinGateDisplayTransform = eventArgs.displayMatrix.Value;
+        }
+
+        if (hasTextureY && hasTextureCbCr)
+        {
+            skinGateCameraTextureMode = 2;
+        }
+        else if (firstTexture != null)
+        {
+            skinGateTextureRgb = firstTexture;
+            skinGateCameraTextureMode = 1;
+        }
+        else
+        {
+            skinGateCameraTextureMode = 0;
+            return;
+        }
+
+        skinGateLastTextureAt = Time.realtimeSinceStartup;
+    }
+
+    private void ApplyFoundationSkinGate(Material material, ARFace face, bool isNeck)
+    {
+        if (material == null || !material.HasProperty("_SkinGateEnabled"))
+        {
+            return;
+        }
+
+        // Fail-safe configuration must be present even when the gate cannot
+        // run (camera stale / anchors invalid): the shader then fades the
+        // hairline/side zones instead of failing open onto hair.
+        if (material.HasProperty("_SkinGateFailSafe"))
+        {
+            material.SetFloat("_SkinGateFailSafe", 1.0f);
+        }
+
+        material.SetVector("_SkinGateUvRect", isNeck
+            ? new Vector4(-1.0f, 2.0f, 3.0f, 0.0f)
+            : new Vector4(foundationCalUvMin.x, foundationCalUvMax.x, foundationCalUvMax.y, 0.0f));
+
+        EnsureSkinGateCameraFeed();
+        Camera arCamera = Camera.main;
+        bool cameraFresh = skinGateCameraTextureMode > 0
+            && Time.realtimeSinceStartup - skinGateLastTextureAt <= 0.5f;
+        if (!cameraFresh || face == null || arCamera == null)
+        {
+            material.SetFloat("_SkinGateEnabled", 0.0f);
+            return;
+        }
+
+        UpdateSkinGateReferenceAnchors(face, arCamera);
+        if (skinGateSmoothedRefA.z < 0.5f
+            && skinGateSmoothedRefB.z < 0.5f
+            && skinGateSmoothedRefC.z < 0.5f)
+        {
+            material.SetFloat("_SkinGateEnabled", 0.0f);
+            return;
+        }
+
+        material.SetFloat("_SkinGateEnabled", 1.0f);
+        material.SetFloat("_SkinGateStrength", 0.85f);
+        material.SetFloat("_SkinGateCenterWeight", isNeck ? 1.0f : 0.30f);
+        material.SetFloat("_SkinGateTolerance", 0.13f);
+        material.SetFloat("_SkinGateCameraMode", skinGateCameraTextureMode);
+        material.SetMatrix("_SkinGateDisplayTransform", skinGateDisplayTransform);
+        if (skinGateCameraTextureMode == 2)
+        {
+            if (skinGateTextureY != null)
+            {
+                material.SetTexture("_SkinGateTexY", skinGateTextureY);
+            }
+
+            if (skinGateTextureCbCr != null)
+            {
+                material.SetTexture("_SkinGateTexCbCr", skinGateTextureCbCr);
+            }
+        }
+        else if (skinGateTextureRgb != null)
+        {
+            material.SetTexture("_SkinGateCameraTex", skinGateTextureRgb);
+        }
+
+        material.SetVector("_SkinGateRefA", skinGateSmoothedRefA);
+        material.SetVector("_SkinGateRefB", skinGateSmoothedRefB);
+        material.SetVector("_SkinGateRefC", skinGateSmoothedRefC);
+        // The neck strip uses synthetic UVs, so no UV-edge zones apply there;
+        // its gate runs at full weight via _SkinGateCenterWeight = 1.
+        material.SetVector("_SkinGateUvRect", isNeck
+            ? new Vector4(-1.0f, 2.0f, 3.0f, 0.0f)
+            : new Vector4(foundationCalUvMin.x, foundationCalUvMax.x, foundationCalUvMax.y, 0.0f));
+    }
+
+    private void UpdateSkinGateReferenceAnchors(ARFace face, Camera arCamera)
+    {
+        if (face == null
+            || arCamera == null
+            || !face.vertices.IsCreated
+            || face.vertices.Length == 0)
+        {
+            skinGateSmoothedRefA.z = 0.0f;
+            skinGateSmoothedRefB.z = 0.0f;
+            skinGateSmoothedRefC.z = 0.0f;
+            return;
+        }
+
+        var faceVertices = face.vertices;
+        Vector3 localMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+        Vector3 localMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < faceVertices.Length; i++)
+        {
+            localMin = Vector3.Min(localMin, faceVertices[i]);
+            localMax = Vector3.Max(localMax, faceVertices[i]);
+        }
+
+        // Stable skin sample points in normalized face-local space:
+        // left cheek, right cheek, chin center (near the surface, z high).
+        Vector4 anchorA = ProjectSkinGateAnchor(face, arCamera, localMin, localMax, new Vector3(0.30f, 0.52f, 0.80f));
+        Vector4 anchorB = ProjectSkinGateAnchor(face, arCamera, localMin, localMax, new Vector3(0.70f, 0.52f, 0.80f));
+        Vector4 anchorC = ProjectSkinGateAnchor(face, arCamera, localMin, localMax, new Vector3(0.50f, 0.16f, 0.90f));
+        skinGateSmoothedRefA = SmoothSkinGateAnchor(skinGateSmoothedRefA, anchorA);
+        skinGateSmoothedRefB = SmoothSkinGateAnchor(skinGateSmoothedRefB, anchorB);
+        skinGateSmoothedRefC = SmoothSkinGateAnchor(skinGateSmoothedRefC, anchorC);
+    }
+
+    private static Vector4 ProjectSkinGateAnchor(
+        ARFace face,
+        Camera arCamera,
+        Vector3 localMin,
+        Vector3 localMax,
+        Vector3 normalized)
+    {
+        Vector3 local = new Vector3(
+            Mathf.Lerp(localMin.x, localMax.x, normalized.x),
+            Mathf.Lerp(localMin.y, localMax.y, normalized.y),
+            Mathf.Lerp(localMin.z, localMax.z, normalized.z));
+        Vector3 world = face.transform.TransformPoint(local);
+        Vector3 viewport = arCamera.WorldToViewportPoint(world);
+        if (viewport.z <= arCamera.nearClipPlane
+            || viewport.x < 0.03f
+            || viewport.x > 0.97f
+            || viewport.y < 0.03f
+            || viewport.y > 0.97f)
+        {
+            return new Vector4(0.5f, 0.5f, 0.0f, 0.0f);
+        }
+
+        return new Vector4(viewport.x, viewport.y, 1.0f, 0.0f);
+    }
+
+    private static Vector4 SmoothSkinGateAnchor(Vector4 previous, Vector4 current)
+    {
+        if (current.z < 0.5f || previous.z < 0.5f)
+        {
+            return current;
+        }
+
+        Vector2 blended = Vector2.Lerp(
+            new Vector2(previous.x, previous.y),
+            new Vector2(current.x, current.y),
+            0.25f);
+        return new Vector4(blended.x, blended.y, 1.0f, 0.0f);
+    }
+
+    /// <summary>
+    /// Shared access for the semantic foundation pipeline: runs the per-face
+    /// UV calibration when possible and returns the calibrated canonical-UV
+    /// skin mask (eyes/brows/lips excluded, hairline faded).
+    /// </summary>
+    public static Texture2D GetSharedFoundationSkinMask(ARFace face)
+    {
+        if (face != null)
+        {
+            EnsureFoundationSkinMaskCalibration(face);
+        }
+
+        return GetFoundationSkinMaskTexture();
+    }
+
+    private static float FoundationMaskZoneEllipse(float u, float v, FoundationMaskZone zone, float feather)
+    {
+        if (!zone.Valid)
+        {
+            return 0.0f;
+        }
+
+        return FoundationMaskEllipse(
+            u, v, zone.Center.x, zone.Center.y, zone.Radius.x, zone.Radius.y, feather);
+    }
+
+    // Runtime replacement for foundation-skin-mask-v1.png (whose R channel is
+    // effectively chin-only, see ApplyRegionToTrackedFaces). Full-face skin
+    // coverage in ARKit face UV space with soft eye/brow/mouth exclusions,
+    // hairline fade at the top and feathered outer edges. The tracked face
+    // mesh clips this to the per-person face outline at render time.
+    // Validates the shipped/personal foundation mask (usable only if it
+    // actually covers the mid-face; the known-broken chin-only asset fails
+    // this check) and grabs the lip region mask for lips-only exclusion.
+    private static void EnsureFoundationMaskSources()
+    {
+        if (!foundationBaseMaskEvaluated)
+        {
+            foundationBaseMaskEvaluated = true;
+            foundationValidatedBaseMask = null;
+            Texture2D candidate = Resources.Load<Texture2D>("SmoothRegionMasks/" + FoundationSkinMaskId);
+            if (candidate != null)
+            {
+                try
+                {
+                    float total = 0.0f;
+                    int samples = 0;
+                    for (int gy = 0; gy < 10; gy++)
+                    {
+                        for (int gx = 0; gx < 10; gx++)
+                        {
+                            float sampleU = Mathf.Lerp(0.18f, 0.82f, gx / 9.0f);
+                            float sampleV = Mathf.Lerp(0.30f, 0.78f, gy / 9.0f);
+                            Color sample = candidate.GetPixelBilinear(sampleU, sampleV);
+                            total += Mathf.Max(sample.a, sample.r);
+                            samples++;
+                        }
+                    }
+
+                    float coverage = total / Mathf.Max(1, samples);
+                    if (coverage >= 0.30f)
+                    {
+                        foundationValidatedBaseMask = candidate;
+                    }
+
+                    Debug.Log(
+                        "[E7] foundation_base_mask_validated"
+                        + " coverage=" + coverage.ToString("0.###", CultureInfo.InvariantCulture)
+                        + " useAsBase=" + (foundationValidatedBaseMask != null).ToString().ToLowerInvariant());
+                }
+                catch (Exception)
+                {
+                    foundationValidatedBaseMask = null;
+                }
+            }
+        }
+
+        if (!foundationLipMaskEvaluated)
+        {
+            foundationLipMaskEvaluated = true;
+            foundationLipExclusionMask = null;
+            Texture2D lipMask = Resources.Load<Texture2D>("SmoothRegionMasks/lip-smooth-mask-v1");
+            if (lipMask != null)
+            {
+                try
+                {
+                    // Sanity check: a usable lip mask is sparse (lips only).
+                    // Reject it if it covers most of the UV space (wrong alpha
+                    // semantics) or contains no lip content at all.
+                    float total = 0.0f;
+                    float peak = 0.0f;
+                    int samples = 0;
+                    for (int gy = 0; gy < 8; gy++)
+                    {
+                        for (int gx = 0; gx < 8; gx++)
+                        {
+                            float value = SampleFoundationMaskPixel(
+                                lipMask,
+                                Mathf.Lerp(0.05f, 0.95f, gx / 7.0f),
+                                Mathf.Lerp(0.05f, 0.95f, gy / 7.0f));
+                            total += value;
+                            peak = Mathf.Max(peak, value);
+                            samples++;
+                        }
+                    }
+
+                    float mean = total / Mathf.Max(1, samples);
+                    foundationLipExclusionMask = mean < 0.35f && peak > 0.15f ? lipMask : null;
+                }
+                catch (Exception)
+                {
+                    foundationLipExclusionMask = null;
+                }
+            }
+
+            Debug.Log(
+                "[E7] foundation_lip_exclusion_source="
+                + (foundationLipExclusionMask != null ? "lip_region_mask" : "calibrated_ellipse"));
+        }
+    }
+
+    private static float SampleFoundationExclusionMask(Texture2D texture, float u, float v)
+    {
+        const float dilation = 0.010f;
+        float value = SampleFoundationMaskPixel(texture, u, v);
+        value = Mathf.Max(value, SampleFoundationMaskPixel(texture, u + dilation, v));
+        value = Mathf.Max(value, SampleFoundationMaskPixel(texture, u - dilation, v));
+        value = Mathf.Max(value, SampleFoundationMaskPixel(texture, u, v + dilation));
+        value = Mathf.Max(value, SampleFoundationMaskPixel(texture, u, v - dilation));
+        return value;
+    }
+
+    private static float SampleFoundationMaskPixel(Texture2D texture, float u, float v)
+    {
+        Color sample = texture.GetPixelBilinear(Mathf.Clamp01(u), Mathf.Clamp01(v));
+        return Mathf.Max(sample.a, sample.r * sample.a);
+    }
+
+    private static Texture2D GetFoundationSkinMaskTexture()
+    {
+        if (foundationGeneratedSkinMaskTexture != null)
+        {
+            return foundationGeneratedSkinMaskTexture;
+        }
+
+        EnsureFoundationMaskSources();
+        const int size = 256;
+        foundationGeneratedSkinMaskTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "Foundation Generated Skin Mask",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+
+        float minU = foundationCalUvMin.x;
+        float maxU = foundationCalUvMax.x;
+        float topV = foundationCalUvMax.y;
+        float sideFadeWidth = Mathf.Max(0.06f, (maxU - minU) * 0.10f);
+
+        for (int y = 0; y < size; y++)
+        {
+            float v = (y + 0.5f) / size;
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+
+                // Side fade relative to the measured UV extents keeps tint
+                // off sideburn/temple hair for every face.
+                float edgeX = FoundationMaskSmooth01(minU + 0.010f, minU + 0.010f + sideFadeWidth, u)
+                    * (1.0f - FoundationMaskSmooth01(maxU - 0.010f - sideFadeWidth, maxU - 0.010f, u));
+                float bottomFade = FoundationMaskSmooth01(0.0f, 0.05f, v);
+                // Forehead stays covered; only the band near the measured mesh
+                // top (hairline/bangs) fades out so hair is not tinted.
+                float hairlineFade = 1.0f - FoundationMaskSmooth01(topV - 0.155f, topV - 0.015f, v);
+                float baseWeight = edgeX * bottomFade * hairlineFade;
+
+                // Calibrated exclusions: eyes tight (only the eye opening),
+                // brows generous, mouth lips-only so the philtrum stays covered.
+                float eyes = Mathf.Max(
+                    FoundationMaskZoneEllipse(u, v, foundationCalLeftEye, 0.35f),
+                    FoundationMaskZoneEllipse(u, v, foundationCalRightEye, 0.35f));
+                float brows = Mathf.Max(
+                    FoundationMaskZoneEllipse(u, v, foundationCalLeftBrow, 0.45f),
+                    FoundationMaskZoneEllipse(u, v, foundationCalRightBrow, 0.45f));
+
+                // Lips-only exclusion: reuse the actual lip region mask when
+                // readable (philtrum and around-mouth skin stay covered);
+                // fall back to the calibrated lip ellipse otherwise.
+                // Earlier onset (0.05) hardens the lip hole so downstream soft
+                // sampling can never ring into the lips; the small dilation in
+                // SampleFoundationExclusionMask stays modest so the philtrum
+                // and the skin just below the lower lip remain covered.
+                float mouth = foundationLipExclusionMask != null
+                    ? FoundationMaskSmooth01(
+                        0.05f,
+                        0.22f,
+                        SampleFoundationExclusionMask(foundationLipExclusionMask, u, v))
+                    : FoundationMaskZoneEllipse(u, v, foundationCalMouth, 0.35f);
+
+                // Validated shipped/personal mask contributes as the base
+                // when available; otherwise the procedural base stands alone.
+                float baseSample = foundationValidatedBaseMask != null
+                    ? Mathf.Clamp01(SampleFoundationMaskPixel(foundationValidatedBaseMask, u, v))
+                    : 1.0f;
+
+                float weight = Mathf.Clamp01(
+                    baseWeight
+                    * baseSample
+                    * (1.0f - eyes)
+                    * (1.0f - brows)
+                    * (1.0f - mouth));
+
+                // R drives the tint mask, B adds inner density in the generic
+                // path, G stays 0 (lip overline channel), A mirrors R.
+                foundationGeneratedSkinMaskTexture.SetPixel(
+                    x,
+                    y,
+                    new Color(weight, 0.0f, weight, weight));
+            }
+        }
+
+        foundationGeneratedSkinMaskTexture.Apply(false, true);
+        Debug.Log("[E7] foundation_generated_skin_mask_created size=" + size);
+        return foundationGeneratedSkinMaskTexture;
+    }
+
+    private static Texture2D GetFoundationNeckGradientTexture()
+    {
+        if (foundationNeckGradientTexture != null)
+        {
+            return foundationNeckGradientTexture;
+        }
+
+        const int size = 64;
+        foundationNeckGradientTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "Foundation Neck Gradient Mask",
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+
+        for (int y = 0; y < size; y++)
+        {
+            float v = (y + 0.5f) / size;
+            // Full strength at the jaw (v -> 1) fading out toward the bottom,
+            // with a slight taper in the topmost band so the small overlap
+            // with the face mesh doesn't stack into a darker jawline stripe.
+            float vertical = Mathf.SmoothStep(0.0f, 1.0f, Mathf.InverseLerp(0.05f, 0.55f, v));
+            vertical *= 1.0f - 0.15f * Mathf.SmoothStep(0.0f, 1.0f, Mathf.InverseLerp(0.90f, 1.0f, v));
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+                float leftEdge = Mathf.SmoothStep(0.0f, 1.0f, Mathf.InverseLerp(0.0f, 0.18f, u));
+                float rightEdge = Mathf.SmoothStep(0.0f, 1.0f, Mathf.InverseLerp(1.0f, 0.82f, u));
+                float weight = vertical * leftEdge * rightEdge;
+                // R drives the tint, B matches the face mask so the neck gets
+                // the same inner-density formula (same final tone as the face);
+                // G stays 0 (lip overline channel).
+                foundationNeckGradientTexture.SetPixel(x, y, new Color(weight, 0.0f, weight, weight));
+            }
+        }
+
+        foundationNeckGradientTexture.Apply(false, true);
+        return foundationNeckGradientTexture;
     }
 
     private static void ApplyViewAlphaMultiplier(RegionOverlayView view, float alphaMultiplier)
@@ -4395,7 +5443,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     {
         return recipe != null
             && IsFoundationRegion(recipe.Region)
-            && recipe.FoundationMode == "screenSpace";
+            && (recipe.FoundationMode == "screenSpace" || recipe.FoundationMode == "semantic");
     }
 
     private static string NormalizeFoundationMode(string region, string mode)
@@ -4411,6 +5459,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         string value = mode.Trim();
+        if (value.Equals("semantic", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("segmentation", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("semanticFoundation", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("segmentationFoundation", StringComparison.OrdinalIgnoreCase))
+        {
+            return "semantic";
+        }
+
         if (value.Equals("screenSpace", StringComparison.OrdinalIgnoreCase)
             || value.Equals("screen-space", StringComparison.OrdinalIgnoreCase)
             || value.Equals("screenspace", StringComparison.OrdinalIgnoreCase))
