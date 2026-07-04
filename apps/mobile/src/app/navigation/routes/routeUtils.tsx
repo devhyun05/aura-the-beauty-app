@@ -90,6 +90,11 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
+  if (routeName === 'Magazine') {
+    navigation.navigate('Magazine');
+    return;
+  }
+
   if (routeName === 'ProductRecommendation') {
     navigation.navigate('ProductRecommendation');
     return;

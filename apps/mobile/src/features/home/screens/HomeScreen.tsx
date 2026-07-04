@@ -14,12 +14,11 @@ import {
 import {
   ArrowRight,
   ChevronUp,
-  Compass,
   Heart,
-  MessageCircle,
+  Newspaper,
   PackageSearch,
   ScanFace,
-  ScanSearch,
+  Store,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -28,7 +27,6 @@ import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideS
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
-import {MakeupExtractionActionSheet} from '../components/MakeupExtractionActionSheet';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -38,12 +36,8 @@ import type {
 export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
 
 type HomeScreenProps = {
-  onPressConsulting?: () => void;
-  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupExtraction?: () => void;
-  onPressMakeupExtractionCamera?: () => void;
-  onPressMakeupExtractionUpload?: () => void;
+  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
@@ -55,13 +49,9 @@ type HomeScreenProps = {
 };
 
 export function HomeScreen({
-  onPressConsulting,
-  onPressCommunity,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
-  onPressMakeupExtraction,
-  onPressMakeupExtractionCamera,
-  onPressMakeupExtractionUpload,
+  onPressMagazine,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
@@ -74,8 +64,6 @@ export function HomeScreen({
   const [selectedCategory, setSelectedCategory] =
     useState<RecommendedFilterCategoryId>('all');
   const [showScrollTopButton, setShowScrollTopButton] = useState(false);
-  const [isMakeupExtractionSheetVisible, setIsMakeupExtractionSheetVisible] =
-    useState(false);
   const listRef = useRef<FlatList<RecommendedMakeupFilter>>(null);
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
@@ -108,24 +96,6 @@ export function HomeScreen({
 
   const handleScrollToTop = () => {
     listRef.current?.scrollToOffset({animated: true, offset: 0});
-  };
-
-  const handleOpenMakeupExtractionSheet = () => {
-    setIsMakeupExtractionSheetVisible(true);
-  };
-
-  const handleCloseMakeupExtractionSheet = () => {
-    setIsMakeupExtractionSheetVisible(false);
-  };
-
-  const handlePressMakeupExtractionCamera = () => {
-    setIsMakeupExtractionSheetVisible(false);
-    (onPressMakeupExtractionCamera ?? onPressMakeupExtraction)?.();
-  };
-
-  const handlePressMakeupExtractionUpload = () => {
-    setIsMakeupExtractionSheetVisible(false);
-    (onPressMakeupExtractionUpload ?? onPressMakeupExtraction)?.();
   };
 
   useEffect(() => {
@@ -177,11 +147,10 @@ export function HomeScreen({
             />
 
             <QuickActionSection
-              onPressConsulting={onPressConsulting}
-              onPressCommunity={onPressCommunity}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
-              onPressMakeupExtraction={handleOpenMakeupExtractionSheet}
+              onPressMagazine={onPressMagazine}
               onPressProductRecommendations={onPressProductRecommendations}
+              onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
 
             <RecommendedFilterListHeader
@@ -226,13 +195,6 @@ export function HomeScreen({
           <ChevronUp color={colors.white} size={iconSize.md} strokeWidth={2.2} />
         </Pressable>
       ) : null}
-
-      <MakeupExtractionActionSheet
-        isVisible={isMakeupExtractionSheetVisible}
-        onClose={handleCloseMakeupExtractionSheet}
-        onPressCamera={handlePressMakeupExtractionCamera}
-        onPressUpload={handlePressMakeupExtractionUpload}
-      />
 
       <BeautyJourneyGuideDialog
         isVisible={showBeautyJourneyGuide}
@@ -523,7 +485,8 @@ function HeroBannerCard({
   );
 }
 
-export const HOME_CONSULTING_QUICK_ACTION_ICON_NAME = 'Compass';
+export const HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME = 'Store';
+export const HOME_MAGAZINE_QUICK_ACTION_ICON_NAME = 'Newspaper';
 
 const quickActions = [
   {
@@ -531,14 +494,6 @@ const quickActions = [
     label: '얼굴\n분석',
     accessibilityLabel: '얼굴 분석 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'makeupExtraction',
-    label: '\uBA54\uC774\uD06C\uC5C5\n\uCD94\uCD9C',
-    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCD94\uCD9C \uC2DC\uC791',
-    icon: (color: string) => (
-      <ScanSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
   },
   {
     id: 'recommendation',
@@ -549,19 +504,19 @@ const quickActions = [
     ),
   },
   {
-    id: 'community',
-    label: '\uCEE4\uBBA4\uB2C8\uD2F0',
-    accessibilityLabel: '\uCEE4\uBBA4\uB2C8\uD2F0 \uBCF4\uAE30',
+    id: 'filterStore',
+    label: '\uD544\uD130\n\uC2A4\uD1A0\uC5B4',
+    accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
     icon: (color: string) => (
-      <MessageCircle color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
   {
-    id: 'consulting',
-    label: '\uCEE8\uC124\uD305',
-    accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
+    id: 'magazine',
+    label: '\uB9E4\uAC70\uC9C4',
+    accessibilityLabel: '\uB9E4\uAC70\uC9C4 \uBCF4\uAE30',
     icon: (color: string) => (
-      <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <Newspaper color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
 ] as const;
@@ -569,21 +524,19 @@ const quickActions = [
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
-  onPressConsulting?: () => void;
-  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupExtraction?: () => void;
+  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
+  onPressRecommendedFilterMore?: () => void;
 };
 
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
-    onPressConsulting,
-    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupExtraction,
+    onPressMagazine,
     onPressProductRecommendations,
+    onPressRecommendedFilterMore,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
   if (actionId === 'diagnosis') {
@@ -594,16 +547,12 @@ export function getHomeQuickActionPressHandler(
     return onPressProductRecommendations;
   }
 
-  if (actionId === 'makeupExtraction') {
-    return onPressMakeupExtraction;
+  if (actionId === 'filterStore') {
+    return onPressRecommendedFilterMore;
   }
 
-  if (actionId === 'community') {
-    return onPressCommunity;
-  }
-
-  if (actionId === 'consulting') {
-    return onPressConsulting;
+  if (actionId === 'magazine') {
+    return onPressMagazine;
   }
 
   return undefined;
@@ -614,18 +563,16 @@ export function getHomeQuickActionLabels(): readonly string[] {
 }
 
 function QuickActionSection({
-  onPressConsulting,
-  onPressCommunity,
   onPressFaceDiagnosis,
-  onPressMakeupExtraction,
+  onPressMagazine,
   onPressProductRecommendations,
+  onPressRecommendedFilterMore,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
-    onPressConsulting,
-    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupExtraction,
+    onPressMagazine,
     onPressProductRecommendations,
+    onPressRecommendedFilterMore,
   };
 
   return (

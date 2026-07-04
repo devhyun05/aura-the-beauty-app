@@ -58,6 +58,7 @@ export const rootStackLinkingScreens = {
   AppSettings: 'app-settings',
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
+  Magazine: 'magazine',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
   Community: 'community',

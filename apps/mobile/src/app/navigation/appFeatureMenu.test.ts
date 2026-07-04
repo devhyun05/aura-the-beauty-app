@@ -12,7 +12,9 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 const sectionLabels = getAppFeatureMenuSectionLabels();
 const settingsSection = appFeatureMenuSections.find(section => section.id === 'settings');
+const analysisSection = appFeatureMenuSections.find(section => section.id === 'analysis');
 const makeupFeedbackTarget = getAppFeatureMenuTarget('makeupFeedback');
+const magazineTarget = getAppFeatureMenuTarget('magazine');
 const appSettingsTarget = getAppFeatureMenuTarget('appSettings');
 
 expectEqual(
@@ -26,11 +28,22 @@ expectEqual(
   'feature menu includes app settings',
 );
 expectEqual(settingsSection?.items.map(item => item.label).join(','), '빠른 실행 설정,프로필 수정,앱 환경설정', 'settings menu labels');
+expectEqual(
+  analysisSection?.items.map(item => item.label).includes('매거진'),
+  true,
+  'analysis menu includes magazine',
+);
 expectEqual(makeupFeedbackTarget.kind, 'root', 'makeup feedback menu target kind');
 expectEqual(
   makeupFeedbackTarget.kind === 'root' ? makeupFeedbackTarget.routeName : null,
   'MakeupFeedbackAlbumUpload',
   'makeup feedback menu opens available feedback flow',
+);
+expectEqual(magazineTarget.kind, 'root', 'magazine menu target kind');
+expectEqual(
+  magazineTarget.kind === 'root' ? magazineTarget.routeName : null,
+  'Magazine',
+  'magazine menu opens magazine route',
 );
 expectEqual(appSettingsTarget.kind, 'root', 'app settings target kind');
 expectEqual(

@@ -38,6 +38,9 @@ type MakeupLookListPathContract = ExpectType<
 type HomeFilterStorePathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.HomeFilterStore, 'filter-store'>
 >;
+type MagazinePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.Magazine, 'magazine'>
+>;
 type SavedMakeupListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
 >;
@@ -144,6 +147,11 @@ expectEqual(
   navigationLinking.config?.screens?.HomeFilterStore,
   'filter-store',
   'filter store path uses home store naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.Magazine,
+  'magazine',
+  'magazine path uses magazine naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.SavedMakeupList,

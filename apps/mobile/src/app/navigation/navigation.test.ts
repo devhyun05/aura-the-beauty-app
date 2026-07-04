@@ -40,6 +40,11 @@ expectEqual(
   'home filter store detail route title',
 );
 expectEqual(
+  getDetailRouteTitle('Magazine'),
+  '매거진',
+  'magazine detail route title',
+);
+expectEqual(
   getDetailRouteTitle('SavedMakeupList'),
   '저장된 메이크업',
   'saved makeup list detail route title',

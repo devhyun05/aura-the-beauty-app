@@ -36,6 +36,7 @@ export type RootStackParamList = {
   AppSettings: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
+  Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
@@ -102,6 +103,7 @@ export const rootStackRoutes = [
   'AppSettings',
   'ProfileEdit',
   'HomeFilterStore',
+  'Magazine',
   'SavedMakeupList',
   'ProductRecommendation',
   'Community',

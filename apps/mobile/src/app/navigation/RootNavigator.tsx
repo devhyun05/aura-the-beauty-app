@@ -9,6 +9,7 @@ import {
   CommunityRouteScreen,
   FloatingActionSettingsRouteScreen,
   HomeFilterStoreRouteScreen,
+  MagazineRouteScreen,
   SavedMakeupListRouteScreen,
 } from './routes/homeRoutes';
 import {
@@ -90,6 +91,7 @@ export function RootNavigator() {
       <Stack.Screen name="AppSettings" component={AppSettingsRouteScreen} />
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
       <Stack.Screen name="HomeFilterStore" component={HomeFilterStoreRouteScreen} />
+      <Stack.Screen name="Magazine" component={MagazineRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />

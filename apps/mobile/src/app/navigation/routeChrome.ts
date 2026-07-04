@@ -156,6 +156,13 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '필터 스토어',
   },
+  Magazine: {
+    category: 'list',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '매거진',
+  },
   SavedMakeupList: {
     category: 'list',
     depth: 'sub',
