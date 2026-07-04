@@ -1,5 +1,5 @@
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
-import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import {createMockMakeupFeedback} from '../mocks/makeupFeedback.mock';
 import type {
   MakeupFeedbackCorrectionPoint,
@@ -19,8 +19,25 @@ import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 
 const MOCK_ANALYSIS_DELAY_MS = 1400;
 const FEEDBACK_ANALYSIS_TIMEOUT_MS = 120000;
+const FEEDBACK_GOAL_VALIDATION_ERROR_CODES = new Set([
+  'FEEDBACK_GOAL_INVALID',
+  'FEEDBACK_GOAL_NEEDS_DETAIL',
+  'FEEDBACK_GOAL_GUARDRAIL_BLOCKED',
+]);
 
 const topicById = new Map(MAKEUP_FEEDBACK_TOPICS.map(topic => [topic.id, topic]));
+
+export function isMakeupFeedbackGoalValidationError(error: unknown): error is BackendApiError {
+  return error instanceof BackendApiError && FEEDBACK_GOAL_VALIDATION_ERROR_CODES.has(error.code ?? '');
+}
+
+export function getMakeupFeedbackAnalysisErrorMessage(error: unknown): string {
+  if (isMakeupFeedbackGoalValidationError(error)) {
+    return error.message;
+  }
+
+  return '피드백 분석을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
 
 type BackendFeedbackPayload = {
   result?: {
@@ -155,9 +172,16 @@ function buildStrengthsFromEvaluations(evaluations: MakeupFeedbackEvaluation[]):
 }
 
 function getFeedbackContext(selection: MakeupFeedbackPhotoSelection) {
+  const userGoalText = selection.feedbackContext?.userGoalText?.trim() ?? '';
+  const originalGoalText = selection.feedbackContext?.originalGoalText?.trim() || userGoalText;
+  const normalizedGoalText = selection.feedbackContext?.normalizedGoalText?.trim() || userGoalText;
+
   return {
+    goalIntentType: selection.feedbackContext?.goalIntentType ?? 'valid_context',
+    normalizedGoalText,
+    originalGoalText,
     profileGender: selection.feedbackContext?.profileGender ?? null,
-    userGoalText: selection.feedbackContext?.userGoalText?.trim() ?? '',
+    userGoalText: normalizedGoalText,
   };
 }
 
@@ -236,7 +260,7 @@ async function createBackendMakeupFeedback(
       },
       runImmediately: true,
       source: selection.photoSource,
-      sourceLabel: selection.photoTitle ?? (selection.photoSource === 'gallery' ? '앨범 사진' : '촬영 사진'),
+      sourceLabel: selection.photoTitle ?? null,
     },
     method: 'POST',
     timeoutMs: FEEDBACK_ANALYSIS_TIMEOUT_MS,
@@ -256,6 +280,10 @@ export async function analyzeMakeupForFeedback(
   try {
     return await createBackendMakeupFeedback(selection);
   } catch (error) {
+    if (isMakeupFeedbackGoalValidationError(error)) {
+      throw error;
+    }
+
     console.info('[aura:makeup-feedback] backend-analysis:fallback', {
       message: error instanceof Error ? error.message : String(error),
       source: selection.photoSource,

@@ -14,6 +14,10 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {
+  buildMakeupFeedbackGoalContext,
+  classifyMakeupFeedbackGoalText,
+} from '../services/makeupFeedbackGoalIntentService';
 import {makeupFeedbackLoadingPreviewSource} from '../services/makeupFeedbackLoadingService';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 
@@ -23,31 +27,31 @@ type MakeupFeedbackGoalInputScreenProps = {
 };
 
 const goalTextMaxLength = 180;
-const minGoalTextLength = 4;
-
-function getPhotoTitle(selection: MakeupFeedbackPhotoSelection) {
-  if (selection.photoTitle?.trim()) {
-    return selection.photoTitle.trim();
-  }
-
-  return selection.photoSource === 'gallery' ? '앨범 사진' : '촬영 사진';
-}
 
 export function MakeupFeedbackGoalInputScreen({
   selection,
   onStartFeedback,
 }: MakeupFeedbackGoalInputScreenProps) {
   const insets = useSafeAreaInsets();
-  const [goalText, setGoalText] = useState(selection.feedbackContext?.userGoalText ?? '');
-  const normalizedGoalText = goalText.trim();
-  const isStartDisabled = normalizedGoalText.length < minGoalTextLength;
+  const [goalText, setGoalText] = useState(selection.feedbackContext?.originalGoalText ?? selection.feedbackContext?.userGoalText ?? '');
+  const goalIntent = useMemo(() => classifyMakeupFeedbackGoalText(goalText), [goalText]);
+  const isBlockingGoalIntent =
+    goalIntent.intentType === 'noise' ||
+    goalIntent.intentType === 'needs_detail';
+  const shouldShowGoalError = goalText.trim().length > 0 && isBlockingGoalIntent;
+  const isStartDisabled = isBlockingGoalIntent;
   const previewSource = useMemo(
     () => (selection.imageUri ? {uri: selection.imageUri} : makeupFeedbackLoadingPreviewSource),
     [selection.imageUri],
   );
 
   const handleStartFeedback = () => {
-    if (isStartDisabled) {
+    const nextFeedbackContext = buildMakeupFeedbackGoalContext(
+      goalIntent,
+      selection.feedbackContext?.profileGender,
+    );
+
+    if (!nextFeedbackContext) {
       return;
     }
 
@@ -55,7 +59,7 @@ export function MakeupFeedbackGoalInputScreen({
       ...selection,
       feedbackContext: {
         ...selection.feedbackContext,
-        userGoalText: normalizedGoalText,
+        ...nextFeedbackContext,
       },
     });
   };
@@ -67,89 +71,94 @@ export function MakeupFeedbackGoalInputScreen({
       horizontalPadding={0}
       scroll={false}
       topPadding="none">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardView}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          style={styles.scrollView}>
-          <YStack style={styles.heroBlock}>
-            <View style={styles.previewFrame}>
-              <Image resizeMode="cover" source={previewSource} style={styles.previewImage} />
-              <View style={styles.previewOverlay} />
-              <XStack style={styles.previewBadge}>
-                <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2.1} />
-                <Text style={styles.previewBadgeText}>AI FEEDBACK</Text>
-              </XStack>
-              <Text numberOfLines={1} style={styles.previewTitle}>
-                {getPhotoTitle(selection)}
-              </Text>
-            </View>
+      <YStack style={styles.screenRoot}>
+        <View style={styles.previewFrame}>
+          <Image resizeMode="cover" source={previewSource} style={styles.previewImage} />
+          <View style={styles.previewOverlay} />
+          <XStack style={styles.previewBadge}>
+            <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2.1} />
+            <Text style={styles.previewBadgeText}>AI FEEDBACK</Text>
+          </XStack>
+        </View>
 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          style={styles.keyboardView}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.scrollView}>
             <YStack style={styles.titleBlock}>
               <Text style={styles.screenTitle}>어떤 기준으로 피드백 받을까요?</Text>
-              <Text style={styles.screenDescription}>상황과 원하는 분위기를 적어주세요.</Text>
+              <Text style={styles.screenDescription}>사진을 보면서 상황이나 원하는 분위기를 적어주세요.</Text>
             </YStack>
-          </YStack>
 
-          <YStack style={styles.formBlock}>
-            <XStack style={styles.fieldHeader}>
-              <View style={styles.fieldIcon}>
-                <MessageSquareText color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            <YStack style={styles.formBlock}>
+              <XStack style={styles.fieldHeader}>
+                <View style={styles.fieldIcon}>
+                  <MessageSquareText color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+                </View>
+                <Text style={styles.fieldLabel}>메이크업 상황/목적</Text>
+              </XStack>
+
+              <View style={[styles.inputFrame, shouldShowGoalError && styles.inputFrameError]}>
+                <TextInput
+                  maxLength={goalTextMaxLength}
+                  multiline
+                  onChangeText={setGoalText}
+                  placeholder="예: 데일리 메이크업인데 티 안 나게 자연스러운지 보고 싶어요."
+                  placeholderTextColor={colors.textTertiary}
+                  style={styles.input}
+                  textAlignVertical="top"
+                  value={goalText}
+                />
+                <XStack style={styles.inputMetaRow}>
+                  {shouldShowGoalError ? (
+                    <Text style={styles.validationText}>{goalIntent.errorMessage}</Text>
+                  ) : (
+                    <View style={styles.validationSpacer} />
+                  )}
+                  <Text style={styles.countText}>
+                    {goalText.length}/{goalTextMaxLength}
+                  </Text>
+                </XStack>
               </View>
-              <Text style={styles.fieldLabel}>메이크업 상황/목적</Text>
-            </XStack>
+            </YStack>
+          </ScrollView>
 
-            <View style={styles.inputFrame}>
-              <TextInput
-                maxLength={goalTextMaxLength}
-                multiline
-                onChangeText={setGoalText}
-                placeholder="예: 데일리 메이크업인데 티 안 나게 자연스러운지 보고 싶어요."
-                placeholderTextColor={colors.textTertiary}
-                style={styles.input}
-                textAlignVertical="top"
-                value={goalText}
-              />
-              <Text style={styles.countText}>
-                {goalText.length}/{goalTextMaxLength}
-              </Text>
-            </View>
+          <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.md}]}>
+            <Pressable
+              accessibilityLabel="AI 피드백 시작"
+              accessibilityRole="button"
+              accessibilityState={{disabled: isStartDisabled}}
+              disabled={isStartDisabled}
+              onPress={handleStartFeedback}
+              style={({pressed}) => [
+                styles.primaryButton,
+                isStartDisabled && styles.primaryButtonDisabled,
+                pressed && !isStartDisabled && styles.pressed,
+              ]}>
+              <Text style={styles.primaryButtonText}>AI 피드백 시작</Text>
+            </Pressable>
           </YStack>
-        </ScrollView>
-
-        <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.md}]}> 
-          <Pressable
-            accessibilityLabel="AI 피드백 시작"
-            accessibilityRole="button"
-            accessibilityState={{disabled: isStartDisabled}}
-            disabled={isStartDisabled}
-            onPress={handleStartFeedback}
-            style={({pressed}) => [
-              styles.primaryButton,
-              isStartDisabled && styles.primaryButtonDisabled,
-              pressed && !isStartDisabled && styles.pressed,
-            ]}>
-            <Text style={styles.primaryButtonText}>AI 피드백 시작</Text>
-          </Pressable>
-        </YStack>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </YStack>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: spacing.xl,
-    paddingBottom: 112,
+    gap: spacing.lg,
+    paddingBottom: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
   },
   countText: {
-    alignSelf: 'flex-end',
     color: colors.textTertiary,
+    flexShrink: 0,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
@@ -193,16 +202,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: shadows.soft.shadowRadius,
   },
-  heroBlock: {
-    gap: spacing.lg,
-  },
   input: {
     color: colors.textPrimary,
     flex: 1,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
-    minHeight: 118,
+    minHeight: 108,
     padding: 0,
   },
   inputFrame: {
@@ -210,11 +216,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.sm,
-    minHeight: 158,
+    minHeight: 146,
     padding: spacing.md,
+  },
+  inputFrameError: {
+    borderColor: colors.heart,
+  },
+  inputMetaRow: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   keyboardView: {
     flex: 1,
+    minHeight: 0,
   },
   pressed: {
     opacity: 0.76,
@@ -240,9 +255,10 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   previewFrame: {
-    aspectRatio: 1.18,
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    height: 210,
     overflow: 'hidden',
     width: '100%',
   },
@@ -258,19 +274,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
-  },
-  previewTitle: {
-    bottom: spacing.md,
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    left: spacing.md,
-    lineHeight: typography.lineHeight.lg,
-    position: 'absolute',
-    right: spacing.md,
-    textShadowColor: 'rgba(0, 0, 0, 0.42)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 5,
   },
   primaryButton: {
     alignItems: 'center',
@@ -294,17 +297,31 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  screenRoot: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
   screenTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
   },
   scrollView: {
     backgroundColor: colors.background,
     flex: 1,
   },
   titleBlock: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  validationSpacer: {
+    flex: 1,
+  },
+  validationText: {
+    color: colors.heart,
+    flex: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
 });

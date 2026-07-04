@@ -25,6 +25,11 @@ class FeedbackJobCreate(CamelModel):
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")
 
 
+class FeedbackConferenceMessagesCreate(CamelModel):
+  result: dict = Field(default_factory=dict)
+  request_payload: dict = Field(default_factory=dict, alias="requestPayload")
+
+
 class FilterExtractionJobCreate(CamelModel):
   photo_capture_id: UUID | None = Field(default=None, alias="photoCaptureId")
   result_media_id: UUID | None = Field(default=None, alias="resultMediaId")

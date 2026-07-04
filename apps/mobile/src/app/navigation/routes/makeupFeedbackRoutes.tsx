@@ -120,6 +120,10 @@ export function MakeupFeedbackLoadingRouteScreen({
 }: RootScreenProps<'MakeupFeedbackLoading'>) {
   const {selectedMakeupFeedbackPhoto, setMakeupFeedbackResult} = useNavigationFlowState();
 
+  const handleBack = React.useCallback(() => {
+    navigation.replace('MakeupFeedbackGoalInput');
+  }, [navigation]);
+
   const handleComplete = React.useCallback(
     (result: MakeupFeedbackResult) => {
       setMakeupFeedbackResult(result);
@@ -131,8 +135,9 @@ export function MakeupFeedbackLoadingRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackLoading"
-      onBack={() => navigation.replace('MakeupFeedbackGoalInput')}>
+      onBack={handleBack}>
       <MakeupFeedbackLoadingScreen
+        onBack={handleBack}
         onComplete={handleComplete}
         selection={selectedMakeupFeedbackPhoto}
       />

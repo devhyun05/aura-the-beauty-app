@@ -136,7 +136,7 @@ export const createMockMakeupFeedback = (
     id: `mock-feedback-${selection.photoSource}`,
     uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
     photoSource: selection.photoSource,
-    photoSourceLabel: selection.photoSource === 'camera' ? '촬영 사진' : '앨범 사진',
+    photoSourceLabel: selection.photoSource === 'camera' ? '선택한 사진' : '선택한 사진',
     score: 84,
     scoreLabel: '종합 점수',
     interpretedGoal: {

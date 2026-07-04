@@ -2,7 +2,12 @@ import type {ImageSourcePropType} from 'react-native';
 
 export type MakeupFeedbackPhotoSource = 'camera' | 'gallery';
 
+export type MakeupFeedbackGoalIntentType = 'generic_default' | 'valid_context';
+
 export type MakeupFeedbackContext = {
+  goalIntentType?: MakeupFeedbackGoalIntentType;
+  normalizedGoalText?: string;
+  originalGoalText?: string;
   profileGender?: string | null;
   userGoalText: string;
 };
