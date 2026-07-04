@@ -1127,13 +1127,13 @@ function buildSmoothBrowEnvelopePolygon({
 
   const archScale = shapeId === 'straight' ? 0 : shapeId === 'slim-tail' ? 1 : 0.55;
   const tailTaperStrength =
-    shapeId === 'straight' ? 0.32 : shapeId === 'slim-tail' ? 0.74 : 0.54;
-  const tailTaperStartT = shapeId === 'straight' ? 0.72 : 0.5;
+    shapeId === 'straight' ? 0.5 : shapeId === 'slim-tail' ? 0.88 : 0.72;
+  const tailTaperStartT = shapeId === 'straight' ? 0.6 : 0.46;
   const thicknessScale =
-    shapeId === 'straight' ? 1.08 : shapeId === 'slim-tail' ? 0.98 : 1.06;
+    shapeId === 'straight' ? 0.9 : shapeId === 'slim-tail' ? 0.8 : 0.86;
   const archPeakT = clamp(measuredArchPeakT, 0.5, 0.72);
   const archMagnitude = archScale * (measuredArchRise * 0.5 + medianThickness * 0.42);
-  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.14, height * 0.86);
+  const bodyThickness = clamp(medianThickness * thicknessScale, height * 0.1, height * 0.66);
   // Lower edge follows the real brow underside; endpoints taper up slightly so
   // the head and tail come to soft points rather than blunt ends.
   const headLowerY = Math.max(headMeasure.lowerY, deepestLowerY - medianThickness * 0.45);
@@ -1170,7 +1170,7 @@ function buildSmoothBrowEnvelopePolygon({
   const tailUpper = upperCurve[sampleCount - 1];
   const tailLower = lowerCurve[sampleCount - 1];
   const tailPoint = {
-    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.045 : 0.025),
+    x: outerX + direction * height * (shapeId === 'slim-tail' ? 0.07 : shapeId === 'straight' ? 0.03 : 0.05),
     y: (tailUpper.y + tailLower.y) * 0.5,
   };
   const polygon = [
@@ -1483,10 +1483,17 @@ function browStrandDensity(
 }
 
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
-  const {t} = browLocalCoordinates(point, envelope);
-  const headFade = lerp(0.6, 1, smoothstep(0, 0.16, t));
-  const tailFade = lerp(1, 0.5, smoothstep(0.68, 1, t));
-  return clamp01(0.96 * headFade * tailFade);
+  const {t, v} = browLocalCoordinates(point, envelope);
+  // Head/tail longitudinal fade keeps the ends soft rather than blunt.
+  const headFade = lerp(0.5, 1, smoothstep(0, 0.14, t));
+  const tailFade = lerp(1, 0.28, smoothstep(0.58, 1, t));
+  // Vertical gradient: soft at the top edge, densest through the lower brow body
+  // where real hair sits. This graded fill (vs a flat solid) is what makes it
+  // read as painted makeup instead of a flat sticker.
+  const topSoft = smoothstep(0, 0.34, v);
+  const bottomSoft = smoothstep(0, 0.16, 1 - v);
+  const bodyGradient = 0.4 + 0.6 * topSoft * bottomSoft;
+  return clamp01(bodyGradient * headFade * tailFade);
 }
 
 function browLocalCoordinates(point: E7Point2D, envelope: BrowEnvelope) {

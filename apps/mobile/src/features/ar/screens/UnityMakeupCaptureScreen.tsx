@@ -39,6 +39,7 @@ import {
 import {
   buildGeneratedMaskUnityPayload,
   buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
   buildCheekBrowRecipeAfterGeneratedLip,
   DEFAULT_GENERATED_BROW_CONTROLS,
   DEFAULT_GENERATED_MASK_CONTROLS,
@@ -297,6 +298,11 @@ export function UnityMakeupCaptureScreen({
   const pendingGeneratedBrowMaskIdRef = useRef<string | null>(null);
   const latestGeneratedApplyPayloadRef = useRef<string | null>(null);
   const latestGeneratedBrowApplyPayloadRef = useRef<string | null>(null);
+  // Source landmarks kept so the brow mask can be re-rasterized when the user
+  // switches brow shape (일자/세미아치/아치). Without this the mask texture is
+  // frozen at capture time and shape buttons only relabel the payload.
+  const nativeBrowSourceRef =
+    useRef<PersonalizedMakeupGenerateResult['nativeResult'] | null>(null);
   const latestCompanionMakeupControlsRef =
     useRef<PersonalizedCompanionMakeupControls>(companionMakeupControls);
   const generatedMaskControlRevisionRef = useRef(0);
@@ -478,6 +484,7 @@ export function UnityMakeupCaptureScreen({
       );
       latestGeneratedApplyPayloadRef.current = unityApplyPayload;
       latestGeneratedBrowApplyPayloadRef.current = browUnityApplyPayload;
+      nativeBrowSourceRef.current = result.nativeResult;
       setGeneratedPackage(result.generatedPackage);
       setGeneratedBrowPackage(result.generatedBrowPackage);
       setGeneratedMaskControls(nextGeneratedMaskControls);
@@ -715,6 +722,20 @@ export function UnityMakeupCaptureScreen({
       eyebrow: true,
     };
     setEnabledHudRegions(nextEnabledRegions);
+
+    // Shape changes the mask geometry, so the texture must be re-rasterized from
+    // the source landmarks. Color/opacity/strand are applied downstream and do
+    // not need a rebuild.
+    let browPackageOverride: GeneratedBrowPackage | undefined;
+    if (patch.shapeId !== undefined && nativeBrowSourceRef.current) {
+      const rebuiltBrowPackage = buildGeneratedBrowPackage({
+        controls: nextControls,
+        nativeResult: nativeBrowSourceRef.current,
+      });
+      browPackageOverride = rebuiltBrowPackage;
+      setGeneratedBrowPackage(rebuiltBrowPackage);
+    }
+
     postRuntimeMakeup(
       generatedMaskControls,
       companionMakeupControls,
@@ -725,6 +746,7 @@ export function UnityMakeupCaptureScreen({
           !enabledHudRegions.eyebrow ||
           patch.colorHex !== undefined ||
           patch.shapeId !== undefined,
+        browPackageOverride,
       },
     );
   };
@@ -840,6 +862,7 @@ export function UnityMakeupCaptureScreen({
     nextEnabledRegions: EnabledHudRegions,
     options: {
       includeBrowTexture?: boolean;
+      browPackageOverride?: GeneratedBrowPackage;
     } = {},
   ) {
     if (!generatedPackage) {
@@ -859,19 +882,20 @@ export function UnityMakeupCaptureScreen({
         }),
       ),
     );
-    if (generatedBrowPackage) {
+    const activeBrowPackage = options.browPackageOverride ?? generatedBrowPackage;
+    if (activeBrowPackage) {
       const browControls = clampGeneratedBrowControls({
         ...nextGeneratedBrowControls,
         enabled: nextEnabledRegions.eyebrow,
       });
       const browPayload = JSON.stringify(
-        buildGeneratedBrowMaskUnityPayload(generatedBrowPackage, browControls, {
+        buildGeneratedBrowMaskUnityPayload(activeBrowPackage, browControls, {
           controlRevision: generatedBrowControlRevisionRef.current,
           includeTexture: options.includeBrowTexture === true,
         }),
       );
       pendingGeneratedBrowMaskIdRef.current = browControls.enabled
-        ? generatedBrowPackage.generatedMaskId
+        ? activeBrowPackage.generatedMaskId
         : null;
       latestGeneratedBrowApplyPayloadRef.current = browPayload;
       postUnityGeneratedBrowMaskPayload(browPayload);

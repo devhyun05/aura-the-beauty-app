@@ -62,6 +62,7 @@ export type PersonalizedMakeupGenerateResult = {
 
 export {
   buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
   DEFAULT_GENERATED_BROW_CONTROLS,
 };
 
