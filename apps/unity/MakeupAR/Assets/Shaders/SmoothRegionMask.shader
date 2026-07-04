@@ -435,9 +435,14 @@ Shader "MakeupAR/SmoothRegionMask"
                     float desiredCore = CoreMaskAlpha(mask.g, _Threshold, _Feather);
                     float strandDetail = saturate(max(mask.b, softMask.b * 0.34) * desiredSoft);
                     float strandAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
+                    // Defined brow: lean on the CORE mask (sharp body) with only
+                    // a thin soft halo, instead of a wide low-alpha soft outer
+                    // layer that read as a hazy, spread-out wash (device
+                    // feedback: remove the outer layer). The tight AA edge plus a
+                    // sliver of desiredSoft keeps it from becoming a hard sticker.
                     float tintAlpha = saturate(
-                        desiredSoft * coverage * lerp(0.16, 0.52, saturate(_BlushIntensity))
-                        + desiredCore * coverage * 0.14);
+                        desiredCore * coverage * lerp(0.5, 0.9, saturate(_BlushIntensity))
+                        + desiredSoft * coverage * 0.08);
                     float hairAlpha = saturate(
                         pow(strandDetail, 0.68) * strandAmount * coverage * 0.82);
                     float browAlpha = saturate(
