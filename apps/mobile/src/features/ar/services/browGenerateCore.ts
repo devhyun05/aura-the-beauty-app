@@ -185,7 +185,7 @@ export const DEFAULT_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
   neutralizeStrength: 0,
   opacity: 0.72,
   shapeId: 'soft-arch',
-  strandTextureAmount: 0.72,
+  strandTextureAmount: 0.9,
 };
 
 export function buildGeneratedBrowPackage({
@@ -546,8 +546,7 @@ function buildBrowUvMaskRawRgba({
             if (pointInPolygon(screenPoint, envelope.polygon)) {
               const fillDensity = browFillDensity(screenPoint, envelope);
               desiredSamples += fillDensity;
-              strandSamples +=
-                browStrandDensity(screenPoint, envelope, controls) * fillDensity;
+              strandSamples += browStrandDensity(screenPoint, envelope) * fillDensity;
             }
             if (
               envelope.neutralizePolygon.length >= 3 &&
@@ -570,14 +569,17 @@ function buildBrowUvMaskRawRgba({
           desiredSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID),
         );
         const desiredAlpha = Math.round(localFill * 255);
-        // Confine hair strands to the dense body: fade them out with the fill so
-        // individual strokes do not fringe past the brow edge (that fringing is
-        // what made the soft outer layer look bumpy).
+        // strandSamples/desiredSamples is ALREADY the fill-weighted mean strand
+        // density, so multiplying by localFill again (the old code) crushed the
+        // strokes to ~30% (blue peaked at 79/255). Use a gentle body/edge taper
+        // instead so strokes stay strong in the body and only soften at the
+        // very ends; the slider dims but never kills them.
+        const strandMean = clamp01(desiredSamples > 0 ? strandSamples / desiredSamples : 0);
         const strand = Math.round(
-          clamp01(desiredSamples > 0 ? strandSamples / desiredSamples : 0) *
-            localFill *
+          strandMean *
+            lerp(0.9, 1.0, localFill) *
             255 *
-            clamp01(controls.strandTextureAmount),
+            lerp(0.7, 1.0, clamp01(controls.strandTextureAmount)),
         );
         // Red channel = real-brow neutralize coverage. The shader paints
         // surrounding skin here (gated by _BrowNeutralizeStrength) so the user's
@@ -1623,35 +1625,64 @@ function centroid(points: E7Point2D[]): E7Point2D | null {
   };
 }
 
-function browStrandDensity(
-  point: E7Point2D,
-  envelope: BrowEnvelope,
-  controls: GeneratedBrowControls,
-) {
-  const local = browLocalCoordinates(point, envelope);
-  const {t, v} = local;
-  const arch = Math.sin(Math.PI * t);
+// Directional brow-hair strokes. Instead of fixed-slope stripes (which read as
+// a flat wash), synthesize oriented strokes on a per-position FLOW FIELD that
+// matches real brow anatomy: head (inner) hairs point up, body sweeps
+// up-and-out, tail lies flat then dips down. Two separable profiles — a thin
+// across-hair line (with skin gaps) and an along-hair dash — give genuine
+// two-tone contrast so it reads as hair, not tint.
+function browStrandDensity(point: E7Point2D, envelope: BrowEnvelope) {
+  const {t, v} = browLocalCoordinates(point, envelope);
+  const [minX, minY, maxX, maxY] = envelope.fillBounds;
+  const aspect = clamp(
+    Math.max(1, maxX - minX) / Math.max(1, maxY - minY),
+    1.4,
+    3.4,
+  );
+
+  // Hair direction fan (degrees above the along-brow axis). Screen y is down,
+  // so "up" = negative angle.
+  const degBase = lerp(64, 33, smoothstep(0, 0.35, t)); // head steep -> body mid
+  let deg = lerp(degBase, -9, smoothstep(0.5, 1, t)); // body -> tail flat/down
+  deg += (0.5 - v) * lerp(16, 6, t); // top hairs steeper than bottom
+  deg += Math.sin(t * 7 + v * 3) * 4; // slow waviness (deterministic, no shimmer)
+  const a = (deg * Math.PI) / 180;
+  const dir = {x: Math.cos(a), y: -Math.sin(a)};
+  const per = {x: -dir.y, y: dir.x};
+
+  // Aspect-corrected flow frame so strokes keep a hair-like spacing regardless
+  // of the brow's screen proportions.
+  const flowX = t * aspect;
+  const flowY = v;
+
+  const ACROSS_F = 24; // ~9-10 strokes across the body (Nyquist-safe)
+  const ALONG_F = 5.0;
+  const aaW = 0.22;
+  const TONE_FLOOR = 0.5; // stroke body >= 50%, dash centers -> 100%
+  const STRAND_GAIN = 1.9;
+
+  const across = (flowX * per.x + flowY * per.y) * ACROSS_F;
+  const lane = Math.floor(across);
+  const cell = fract(across);
+  const acrossProfile =
+    1 - smoothstep(0.5 - aaW, 0.5 + aaW, Math.abs(cell - 0.5) * 2);
+  const along = (flowX * dir.x + flowY * dir.y) * ALONG_F + hash01(lane) * 1.0;
+  const jitterLen = lerp(0.55, 1.4, hash01(lane * 1.7 + 3.1));
+  const alongProfile =
+    1 - smoothstep(0.5 * jitterLen, 0.94, Math.abs(fract(along) - 0.5) * 2);
+  const stroke = acrossProfile * (TONE_FLOOR + (1 - TONE_FLOOR) * alongProfile);
+
+  // Amplitude envelope only (head/tail/vertical taper). No stray-hair / edge
+  // feather term — that reintroduced the bumpy outer layer prior feedback killed.
   const head = 1 - smoothstep(0.02, 0.28, t);
   const tail = smoothstep(0.58, 1, t);
   const body = smoothstep(0.05, 0.2, t) * smoothstep(0.02, 0.28, 1 - t);
-  const verticalBody =
-    smoothstep(0.1, 0.42, v) * smoothstep(0.04, 0.38, 1 - v);
-  const browCurve = arch * 0.82 - tail * 0.36 + head * 0.18;
-  const primaryPhase = fract(t * 42.0 + v * 8.4 + browCurve * 0.52);
-  const secondaryPhase = fract(t * 31.0 + v * 5.2 + browCurve * 0.37 + 0.27);
-  const finePhase = fract(t * 63.0 + v * 10.6 + browCurve * 0.24 + 0.61);
-  const primaryStroke = ridge(primaryPhase, 0.035);
-  const secondaryStroke = ridge(secondaryPhase, 0.026) * 0.54;
-  const fineStroke = ridge(finePhase, 0.018) * 0.34;
-  const headPhase = fract(t * 54.0 + v * 2.2 + 0.19);
-  const headStroke = ridge(headPhase, 0.032) * head * smoothstep(0.18, 0.82, v);
-  const tailFade = lerp(1, 0.44, tail);
-  const opacityProfile =
-    (verticalBody * (0.74 + body * 0.26) + headStroke * 0.42) * tailFade;
-  const strand =
-    (primaryStroke * 0.82 + secondaryStroke + fineStroke + headStroke * 0.72) *
-    opacityProfile;
-  return clamp01(strand * controls.intensity * 1.18);
+  const verticalBody = smoothstep(0.1, 0.42, v) * smoothstep(0.04, 0.38, 1 - v);
+  const bodyEnv = clamp01(
+    (verticalBody * (0.72 + body * 0.28) + head * 0.26) * lerp(1, 0.6, tail),
+  );
+
+  return clamp01(stroke * bodyEnv * STRAND_GAIN);
 }
 
 function browFillDensity(point: E7Point2D, envelope: BrowEnvelope) {
@@ -1754,6 +1785,12 @@ function lerp(start: number, end: number, amount: number) {
 
 function fract(value: number) {
   return value - Math.floor(value);
+}
+
+// Deterministic per-lane hash in [0,1) for stroke phase/length jitter. Stable
+// across frames (baked once), so it varies strokes without causing shimmer.
+function hash01(n: number): number {
+  return fract(Math.sin(n * 127.1 + 311.7) * 43758.5453);
 }
 
 function ridge(phase: number, width: number) {
