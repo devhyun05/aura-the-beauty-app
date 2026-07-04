@@ -443,10 +443,15 @@ Shader "MakeupAR/SmoothRegionMask"
                     float browAlpha = saturate(
                         tintAlpha
                         + hairAlpha);
+                    // Core darkening is smoothed (smoothstep instead of a hard
+                    // *1.34 ramp) with a gentler floor (0.6 vs 0.48) so the dense
+                    // hair core no longer forms a hard seam against the lighter
+                    // tint rim.
+                    float coreDarken = smoothstep(0.04, 0.8, hairAlpha);
                     float3 browPigment = saturate(lerp(
                         _RegionColor.rgb,
-                        _RegionColor.rgb * 0.48,
-                        saturate(hairAlpha * 1.34)));
+                        _RegionColor.rgb * 0.6,
+                        coreDarken));
                     // Keep the makeup-only values available for the debug overlays
                     // below (they render maskStrength/pigmentColor directly).
                     maskStrength = browAlpha;
@@ -498,9 +503,19 @@ Shader "MakeupAR/SmoothRegionMask"
                     }
                     float3 skin = skinAcc / skinWsum;
 
-                    // Compose: neutralized skin first, makeup pigment on top.
+                    // Compose over the neutralized skin. The soft tint rim
+                    // STAINS the skin (multiply: base * pigment) so its edge melts
+                    // into skin instead of ending in a hard line, while the dense
+                    // hair core leans toward opaque PAINT so the body stays
+                    // defined. Blending the two by how "core" the fragment is
+                    // removes the rim/core seam the flat alpha-blend produced.
                     float3 neutralized = lerp(cameraHere, skin, neutralizeAlpha);
-                    float3 composited = lerp(neutralized, browPigment, makeupAlpha);
+                    float coreWeight = browAlpha > 0.0001
+                        ? saturate(hairAlpha / browAlpha)
+                        : 0.0;
+                    float3 stain = neutralized * lerp(float3(1.0, 1.0, 1.0), browPigment, makeupAlpha);
+                    float3 paint = lerp(neutralized, browPigment, makeupAlpha);
+                    float3 composited = lerp(stain, paint, coreWeight);
                     float coverageOut = saturate(neutralizeAlpha + makeupAlpha * (1.0 - neutralizeAlpha));
 
                     // We folded the camera into `composited`; invert the alpha
