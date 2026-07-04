@@ -14,12 +14,12 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(
   APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-  62,
-  'footer capture button size is larger than the default camera button',
+  64,
+  'footer capture button height matches the footer bar',
 );
 expectEqual(
   APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 12,
+  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 14,
   'footer capture button size offset',
 );
 expectEqual(
@@ -37,4 +37,6 @@ expectEqual(
   accessibilityLabel="사진 촬영"
   disabled={false}
   onPress={() => undefined}
+  surfaceStyle={{opacity: 1}}
+  variant="liquidGlass"
 />;

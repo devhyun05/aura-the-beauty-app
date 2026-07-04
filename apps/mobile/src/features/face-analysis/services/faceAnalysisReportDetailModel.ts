@@ -34,7 +34,7 @@ type FaceAnalysisReportGuideLabel = {
 
 const guideLabels: FaceAnalysisReportGuideLabel[] = [
   {key: 'brow', label: '\uB208\uC379'},
-  {key: 'eyeshadow', label: '\uC544\uC774\uC12C\uB3C4\uC6B0'},
+  {key: 'eyeshadow', label: '\uC544\uC774\uC100\uB3C4'},
   {key: 'eyeliner', label: '\uC544\uC774\uB77C\uC778'},
   {key: 'blush', label: '\uBE14\uB7EC\uC154'},
   {key: 'highlight', label: '\uD558\uC774\uB77C\uC774\uD2B8'},

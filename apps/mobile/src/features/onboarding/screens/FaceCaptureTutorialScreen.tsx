@@ -13,8 +13,6 @@ import {
   Camera,
   CheckCircle2,
   ChevronLeft,
-  ChevronRight,
-  Circle,
   Glasses,
   ScanFace,
   WandSparkles,
@@ -39,7 +37,7 @@ type FaceCaptureTutorialStep = {
   heading: string;
   iconKey: FaceCaptureTutorialIconKey;
   imageSource: ImageSourcePropType;
-  requiresPrivacyAgreement: boolean;
+  requiresPrivacyAgreement: false;
   stepLabel: string;
   tip: string;
 };
@@ -93,7 +91,7 @@ const faceCaptureTutorialSteps = [
     heading: '얼굴을 중앙에 맞춰 촬영해 주세요',
     iconKey: 'framing',
     imageSource: framingGuideImageSource,
-    requiresPrivacyAgreement: true,
+    requiresPrivacyAgreement: false,
     stepLabel: '4/4',
     tip: '역광보다 정면의 부드러운 조명이 좋아요.',
   },
@@ -106,7 +104,7 @@ const faceCaptureTutorialNavigationMode = {
 
 const faceCaptureTutorialVisualPresentation = {
   finalActionWidth: 'compact',
-  finalPrivacyPlacement: 'below-pagination-above-action',
+  finalPrivacyPlacement: 'none',
   headerDismissControl: 'close-to-home',
   imageFillMode: 'fit-image',
   imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
@@ -145,7 +143,6 @@ export function FaceCaptureTutorialScreen({
 }: FaceCaptureTutorialScreenProps) {
   const guideScrollViewRef = useRef<ScrollView>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [hasAgreedToPrivacy, setHasAgreedToPrivacy] = useState(false);
   const {height, width} = useWindowDimensions();
   const currentStep = faceCaptureTutorialSteps[currentStepIndex] ?? faceCaptureTutorialSteps[0];
   const isCompactHeight = height < 760;
@@ -153,8 +150,7 @@ export function FaceCaptureTutorialScreen({
   const contentGap = isCompactHeight ? spacing.md : spacing.lg;
 
   const getGuideImageSize = (step: FaceCaptureTutorialStep) => {
-    const shouldReduceForPrivacy = isCompactHeight && step.requiresPrivacyAgreement;
-    const maxGuideImageHeight = shouldReduceForPrivacy ? 190 : isCompactHeight ? 216 : 292;
+    const maxGuideImageHeight = isCompactHeight ? 216 : 292;
     const imageWidth = Math.min(
       maxGuideImageWidth,
       maxGuideImageHeight * FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
@@ -167,10 +163,6 @@ export function FaceCaptureTutorialScreen({
   };
 
   const handleStartCapturePress = () => {
-    if (currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy) {
-      return;
-    }
-
     onStartCapture?.();
   };
 
@@ -217,10 +209,6 @@ export function FaceCaptureTutorialScreen({
     settleStepIndexFromScrollOffset(event.nativeEvent.contentOffset.x);
   };
 
-  const handlePrivacyPress = () => {
-    setHasAgreedToPrivacy((prevValue) => !prevValue);
-  };
-
   const handleClosePress = () => {
     onCloseToHome?.();
   };
@@ -241,7 +229,6 @@ export function FaceCaptureTutorialScreen({
     updateCurrentStepIndex(previousStepIndex);
   };
 
-  const isNextDisabled = currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy;
   const isFinalStep = currentStepIndex === faceCaptureTutorialSteps.length - 1;
   const actionButtonLabel = currentStep.buttonLabel ?? '촬영하기';
 
@@ -263,9 +250,6 @@ export function FaceCaptureTutorialScreen({
           <YStack style={styles.headerTitleGroup}>
             <Text numberOfLines={1} style={styles.headerTitle}>
               사진 촬영 가이드
-            </Text>
-            <Text numberOfLines={1} style={styles.headerSubtitle}>
-              정확한 추천을 위한 촬영 준비
             </Text>
           </YStack>
 
@@ -339,48 +323,17 @@ export function FaceCaptureTutorialScreen({
             />
           </YStack>
 
-          {isFinalStep ? (
-            <Button
-              accessibilityLabel="개인정보 수집 및 이용 동의"
-              accessibilityRole="checkbox"
-              accessibilityState={{checked: hasAgreedToPrivacy}}
-              onPress={handlePrivacyPress}
-              pressStyle={{opacity: 0.78}}
-              style={[
-                styles.privacyNotice,
-                hasAgreedToPrivacy ? styles.privacyNoticeSelected : undefined,
-              ]}
-              unstyled>
-              {hasAgreedToPrivacy ? (
-                <CheckCircle2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-              ) : (
-                <Circle color={colors.borderStrong} size={iconSize.sm} strokeWidth={2} />
-              )}
-              <Text style={styles.privacyText}>개인정보 수집 및 이용</Text>
-              <Text style={styles.privacyLink}>자세히 보기</Text>
-              <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
-            </Button>
-          ) : (
-            <View style={styles.privacyNoticePlaceholder} />
-          )}
+          <View style={styles.privacyNoticePlaceholder} />
 
           {isFinalStep ? (
             <Button
               accessibilityLabel={actionButtonLabel}
               accessibilityRole="button"
-              disabled={isNextDisabled}
-              disabledStyle={{opacity: 1}}
               onPress={handleStartCapturePress}
               pressStyle={{opacity: 0.78}}
-              style={[styles.nextButton, isNextDisabled ? styles.nextButtonDisabled : undefined]}
+              style={styles.nextButton}
               unstyled>
-              <Text
-                style={[
-                  styles.nextButtonText,
-                  isNextDisabled ? styles.nextButtonTextDisabled : undefined,
-                ]}>
-                {actionButtonLabel}
-              </Text>
+              <Text style={styles.nextButtonText}>{actionButtonLabel}</Text>
             </Button>
           ) : (
             <View style={styles.nextButtonPlaceholder} />
@@ -490,15 +443,6 @@ const styles = StyleSheet.create({
     padding: 0,
     width: iconSize.xl + spacing.md,
   },
-  headerSubtitle: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
   headerTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
@@ -548,11 +492,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     width: '72%',
   },
-  nextButtonDisabled: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderWidth: 1,
-  },
   nextButtonPlaceholder: {
     alignSelf: 'center',
     height: iconSize.xl + spacing.xxl,
@@ -568,50 +507,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
   },
-  nextButtonTextDisabled: {
-    color: colors.textTertiary,
-  },
-  privacyLink: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    marginLeft: 'auto',
-  },
-  privacyNotice: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-    maxWidth: 362,
-    minHeight: iconSize.xl + spacing.lg,
-    paddingHorizontal: spacing.lg,
-    width: '100%',
-  },
   privacyNoticePlaceholder: {
     alignSelf: 'center',
     marginBottom: spacing.md,
     maxWidth: 362,
-    minHeight: iconSize.xl + spacing.lg,
+    minHeight: 0,
     width: '100%',
-  },
-  privacyNoticeSelected: {
-    borderColor: colors.textPrimary,
-  },
-  privacyText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
   },
   safeArea: {
     backgroundColor: colors.background,

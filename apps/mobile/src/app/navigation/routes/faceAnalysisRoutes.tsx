@@ -2,12 +2,15 @@ import React from 'react';
 
 import {
   createFaceAnalysisReportFromCapture,
+  FaceAnalysisIntroScreen,
   FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
-import {FaceCaptureScreen} from '../../../features/face-capture/screens/FaceCaptureScreen';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {useAuthSession} from '../../../features/auth';
+import {FaceCaptureTutorialScreen} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {colors} from '../../../shared/theme';
 import {DetailRouteChrome} from '../detailHeaderChrome';
@@ -28,12 +31,42 @@ const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
   'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
 ]);
 
+export function FaceAnalysisIntroRouteScreen({
+  navigation,
+}: RootScreenProps<'FaceAnalysisIntro'>) {
+  const [isGuideVisible, setIsGuideVisible] = React.useState(false);
+
+  if (isGuideVisible) {
+    return (
+      <FaceCaptureTutorialScreen
+        onBackToIntro={() => setIsGuideVisible(false)}
+        onCloseToHome={() => navigateMainTab(navigation, 'HomeTab')}
+        onStartCapture={() => navigation.navigate('FaceCapture')}
+      />
+    );
+  }
+
+  return (
+    <DetailRouteChrome
+      routeName="FaceAnalysisIntro"
+      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
+    </DetailRouteChrome>
+  );
+}
+
 function shouldRetryAnalysisError(error: unknown): boolean {
   if (!(error instanceof BackendApiError) || !error.code) {
     return true;
   }
 
   return !NON_RETRYABLE_ANALYSIS_ERROR_CODES.has(error.code);
+}
+
+export function shouldCreateFaceAnalysisReportFromCapture(
+  capture: FaceCaptureUploadResult | null,
+): capture is FaceCaptureUploadResult {
+  return capture !== null;
 }
 
 export function FaceCaptureRouteScreen({
@@ -54,18 +87,21 @@ export function FaceCaptureRouteScreen({
   }
 
   return (
-    <FaceCaptureScreen
+    <CameraFaceCaptureScreen
       autoOpenGallery={route.params?.initialSource === 'gallery'}
+      captureMode="face"
+      captureType="face_analysis"
       onCapture={result => {
-        if (result) {
-          setSelectedFaceCapture(result);
+        if (!result) {
+          return;
         }
 
-        navigation.navigate(
-          'FaceAnalysisLoading',
+        setSelectedFaceCapture(result);
+        navigation.replace(
+          'FaceCaptureConfirmation',
           route.params?.afterAnalysisRoute
-            ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
-            : undefined,
+            ? {afterAnalysisRoute: route.params.afterAnalysisRoute, target: 'faceAnalysis'}
+            : {target: 'faceAnalysis'},
         );
       }}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
@@ -92,12 +128,16 @@ export function FaceAnalysisLoadingRouteScreen({
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
 
   React.useEffect(() => {
-    let isMounted = true;
-    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
     setIsAnalysisReady(false);
     setAnalysisErrorMessage(null);
     setSelectedFaceAnalysisReport(null);
+
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     createFaceAnalysisReportFromCapture(selectedFaceCapture)
       .then(report => {

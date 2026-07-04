@@ -27,7 +27,6 @@ import {
   getARFilterSelectionAfterTotalMakeupLookSelect,
   getARFilterShapeOptions,
   getFirstMakeupFilterForCategory,
-  getMakeupFiltersForMakeupArea,
   isTotalMakeupArea,
   type ARFilterSelectionState,
   type ARMakeupOptionGroupId,
@@ -153,11 +152,7 @@ export function useARFilterSelectionState({
     selectedPointMakeupLookId: selectionState.selectedPointMakeupLookId,
     selectedTotalMakeupLookId: selectionState.selectedTotalMakeupLookId,
   });
-  const categoryMakeupFilters = getFiltersByCategory(selectedCategoryId, arGuideData);
-  const availableMakeupFilters = getMakeupFiltersForMakeupArea(
-    categoryMakeupFilters,
-    selectedMakeupArea,
-  );
+  const availableMakeupFilters = arGuideData.filters;
   const availableOptionGroups = getARFilterOptionGroups(selectedMakeupArea);
   const shapeOptions = getARFilterShapeOptions(selectedMakeupArea);
 

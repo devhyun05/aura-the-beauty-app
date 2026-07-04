@@ -13,7 +13,7 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
-import ViewShot from 'react-native-view-shot';
+import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
 import {Download, Share2, WandSparkles} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
@@ -121,7 +121,7 @@ function waitForNextFrame() {
   });
 }
 
-async function captureReportImage(reportCaptureRef: {current: ViewShot | null}) {
+async function captureReportImage(reportCaptureRef: {current: ViewShotRef | null}) {
   const captureTarget = reportCaptureRef.current;
   const capture = captureTarget?.capture;
 
@@ -208,7 +208,7 @@ export function FaceAnalysisReportDetailScreen({
     useState<FaceAnalysisReportShareTarget | null>(null);
   const [shareFeedback, setShareFeedback] =
     useState<FaceAnalysisReportShareFeedback | null>(null);
-  const reportCaptureRef = useRef<ViewShot | null>(null);
+  const reportCaptureRef = useRef<ViewShotRef | null>(null);
 
   useEffect(() => {
     let isMounted = true;

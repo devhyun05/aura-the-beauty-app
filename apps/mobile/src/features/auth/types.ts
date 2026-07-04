@@ -1,4 +1,4 @@
-export type SocialLoginProvider = 'google' | 'kakao' | 'naver';
+export type SocialLoginProvider = 'apple' | 'google' | 'kakao' | 'naver';
 
 export type SocialLoginItem = {
   id: SocialLoginProvider;

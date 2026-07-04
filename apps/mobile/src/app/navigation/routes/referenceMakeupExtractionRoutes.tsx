@@ -8,10 +8,11 @@ import {
   MakeupRecipeSaveCompleteScreen,
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
-  ReferenceMakeupExtractionUploadScreen,
   type MakeupExtractionProgressUpdate,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
+import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
   getReferenceMakeupExtractionDataSync,
   runReferenceMakeupExtraction,
@@ -25,9 +26,51 @@ import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
+export const REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX =
+  '[aura:extraction] extraction:error';
+
+export type ReferenceMakeupExtractionSafeRunner = (
+  photo: ReferenceMakeupPhoto,
+  onProgress: (progress: MakeupExtractionProgressUpdate) => void,
+  onError?: (error: unknown) => void,
+) => Promise<void>;
+
+export function mapFaceCaptureResultToReferenceMakeupPhoto(
+  result?: FaceCaptureUploadResult,
+): ReferenceMakeupPhoto | null {
+  if (!result?.imageUri) {
+    return null;
+  }
+
+  const isAlbumSource = result.source === 'gallery';
+
+  return {
+    contentType: result.contentType ?? null,
+    id: `${isAlbumSource ? 'album' : 'camera'}-reference-${result.photoCaptureId}`,
+    imageSource: {uri: result.imageUri},
+    referenceSource: isAlbumSource ? 'album' : 'camera',
+    title: isAlbumSource ? '업로드한 참고 사진' : '촬영한 참고 사진',
+  };
+}
+
 function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): ReferenceMakeupPhoto {
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
+
+function logReferenceMakeupExtractionError(error: unknown) {
+  console.info(REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX, {
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
+export const runReferenceMakeupExtractionSafely: ReferenceMakeupExtractionSafeRunner =
+  async (photo, onProgress, onError = logReferenceMakeupExtractionError) => {
+    try {
+      await runReferenceMakeupExtraction(photo, onProgress);
+    } catch (error) {
+      onError(error);
+    }
+  };
 
 function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
@@ -50,11 +93,9 @@ function buildSavedMakeupLook(photo: ReferenceMakeupPhoto): MakeupLookPreview {
 
 export function ReferenceMakeupExtractionUploadRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ReferenceMakeupExtractionUpload'>) {
   const {
-    referenceMakeupUploadedPhotos,
-    selectedReferenceMakeupPhoto,
-    setReferenceMakeupUploadedPhotos,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
@@ -65,24 +106,26 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
     navigateMainTab(navigation, 'HomeTab');
   };
 
-  const handleStartAnalysis = (photo: ReferenceMakeupPhoto) => {
+  const handleStartAnalysis = (result?: FaceCaptureUploadResult) => {
+    const photo = mapFaceCaptureResultToReferenceMakeupPhoto(result);
+
+    if (!photo) {
+      return;
+    }
+
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(photo);
-    navigation.replace('ReferenceMakeupExtractionLoading');
+    navigation.replace('FaceCaptureConfirmation', {target: 'referenceMakeupExtraction'});
   };
 
   return (
-    <DetailRouteChrome
-      routeName="ReferenceMakeupExtractionUpload"
-      onClose={handleClose}>
-      <ReferenceMakeupExtractionUploadScreen
-        onSelectPhoto={setSelectedReferenceMakeupPhoto}
-        onStartAnalysis={handleStartAnalysis}
-        onUploadedPhotosChange={setReferenceMakeupUploadedPhotos}
-        selectedPhoto={selectedReferenceMakeupPhoto}
-        uploadedPhotos={referenceMakeupUploadedPhotos}
-      />
-    </DetailRouteChrome>
+    <CameraFaceCaptureScreen
+      autoOpenGallery={route.params?.initialSource === 'gallery'}
+      captureMode="reference"
+      captureType="filter_extraction"
+      onCapture={handleStartAnalysis}
+      onClose={handleClose}
+    />
   );
 }
 
@@ -92,18 +135,20 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
   const [isAnalysisReady, setIsAnalysisReady] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<MakeupExtractionProgressUpdate | null>(null);
+  const [analysisProgress, setAnalysisProgress] =
+    useState<MakeupExtractionProgressUpdate | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     setIsAnalysisReady(false);
     setAnalysisProgress(null);
-    runReferenceMakeupExtraction(photo, setAnalysisProgress).finally(() => {
-      if (isMounted) {
-        setIsAnalysisReady(true);
-      }
-    });
+    void runReferenceMakeupExtractionSafely(photo, setAnalysisProgress)
+      .finally(() => {
+        if (isMounted) {
+          setIsAnalysisReady(true);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -120,6 +165,7 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
     />
   );
 }
+
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {

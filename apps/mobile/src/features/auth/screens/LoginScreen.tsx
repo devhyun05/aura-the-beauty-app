@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {StyleSheet} from 'react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {colors, typography} from '../../../shared/theme';
+import {colors, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {AuraLogo} from '../components/AuraLogo';
 import {SocialLoginButton} from '../components/SocialLoginButton';
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   socialRow: {
     alignItems: 'center',
-    columnGap: 74,
+    columnGap: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'center',
   },

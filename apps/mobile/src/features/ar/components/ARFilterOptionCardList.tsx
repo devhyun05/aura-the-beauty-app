@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     minHeight: 92,
-    paddingRight: spacing.lg,
+    paddingRight: spacing.sm,
   },
   optionCard: {
     alignItems: 'center',

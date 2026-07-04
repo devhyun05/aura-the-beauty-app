@@ -13,6 +13,7 @@ type CognitoEnvironment = {
   redirectUri?: string;
   scopes?: string;
   prompt?: string;
+  appleIdp?: string;
   googleIdp?: string;
   kakaoIdp?: string;
   naverIdp?: string;
@@ -40,6 +41,7 @@ const env: CognitoEnvironment = {
   redirectUri: process.env.EXPO_PUBLIC_COGNITO_REDIRECT_URI,
   scopes: process.env.EXPO_PUBLIC_COGNITO_SCOPES,
   prompt: process.env.EXPO_PUBLIC_COGNITO_PROMPT,
+  appleIdp: process.env.EXPO_PUBLIC_COGNITO_APPLE_IDP,
   googleIdp: process.env.EXPO_PUBLIC_COGNITO_GOOGLE_IDP,
   kakaoIdp: process.env.EXPO_PUBLIC_COGNITO_KAKAO_IDP,
   naverIdp: process.env.EXPO_PUBLIC_COGNITO_NAVER_IDP,
@@ -125,6 +127,7 @@ export function getCognitoAuthConfig(): CognitoAuthConfig {
       userInfoEndpoint: `${domain}/oauth2/userInfo`,
     },
     providerNames: {
+      apple: normalizeOptional(env.appleIdp) ?? 'SignInWithApple',
       google: normalizeOptional(env.googleIdp) ?? 'Google',
       kakao: normalizeOptional(env.kakaoIdp) ?? 'Kakao',
       naver: normalizeOptional(env.naverIdp) ?? 'Naver',

@@ -52,7 +52,7 @@ export const auradinDraftMock: AuradinDraftData = {
     {
       id: 'profile',
       title: '내 톤 기준',
-      description: '얼굴 진단 결과로 좁히기',
+      description: '얼굴 분석 결과로 좁히기',
       tone: 'TONE',
     },
   ],

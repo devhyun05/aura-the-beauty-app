@@ -9,13 +9,17 @@ import {
   getIsHomeScrollTopButtonVisible,
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
+  getHomeMakeupExtractionActionLabels,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
+  getHomeQuickActionLabels,
   getHeroTrendHeadline,
+  homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
   recommendedFilterListVirtualizationConfig,
+  recommendedFilterMoreButtonLabel,
   recommendedFilterSectionDescription,
   recommendedFilterSectionTitle,
 } from './HomeScreen';
@@ -47,11 +51,15 @@ const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffse
 const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
 const expectedRecommendedFilterSectionTitle: '추천 메이크업 필터' =
   recommendedFilterSectionTitle;
-const expectedRecommendedFilterSectionDescription:
-  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' =
-    recommendedFilterSectionDescription;
+const expectedRecommendedFilterSectionDescription: undefined =
+  recommendedFilterSectionDescription;
+const expectedRecommendedFilterMoreButtonLabel: '더보기' =
+  recommendedFilterMoreButtonLabel;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
+const expectedHomeHeroTopPadding: 8 = homeHeroLayoutMetrics.listTopPadding;
+const expectedHomeHeroCopyGap: 8 = homeHeroLayoutMetrics.copyGap;
+const expectedHomeHeroTitleGroupGap: 2 = homeHeroLayoutMetrics.titleGroupGap;
 const recommendedFilterCategoryLabels = getRecommendedFilterCategoryLabels();
 const recommendedFilters = getRecommendedMakeupFilters();
 const allRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
@@ -62,6 +70,8 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
   recommendedFilters,
   'red',
 );
+const quickActionLabels = getHomeQuickActionLabels();
+const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
 const expectedInitialRecommendedFiltersToRender: 6 =
@@ -114,9 +124,29 @@ expectEqual(
   'recommended filter section description',
 );
 expectEqual(
+  recommendedFilterMoreButtonLabel,
+  expectedRecommendedFilterMoreButtonLabel,
+  'recommended filter more button label',
+);
+expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,
   expectedHeroTitleMainFontFamily,
   'weekly trend main title font family',
+);
+expectEqual(
+  homeHeroLayoutMetrics.listTopPadding,
+  expectedHomeHeroTopPadding,
+  'home hero top padding',
+);
+expectEqual(
+  homeHeroLayoutMetrics.copyGap,
+  expectedHomeHeroCopyGap,
+  'home hero copy gap',
+);
+expectEqual(
+  homeHeroLayoutMetrics.titleGroupGap,
+  expectedHomeHeroTitleGroupGap,
+  'home hero title group gap',
 );
 expectEqual(
   recommendedFilterCategoryLabels.join(','),
@@ -132,6 +162,16 @@ expectEqual(
   redRecommendedFilters.some(filter => filter.id === 'filter-wanghong-glass-pink'),
   true,
   'recommended filter red category includes Wanghong filter',
+);
+expectEqual(
+  quickActionLabels.join(','),
+  '얼굴\n분석,메이크업\n추출,추천\n제품,커뮤니티,컨설팅',
+  'home quick action order',
+);
+expectEqual(
+  makeupExtractionActionLabels.join(','),
+  '카메라 촬영,사진 업로드',
+  'home makeup extraction sheet actions',
 );
 expectEqual(
   getRecommendedFilterGridColumnCount(),
@@ -240,6 +280,20 @@ expectEqual(
 );
 
 let selectedQuickAction: 'community' | 'consulting' | 'recommendation' | null = null;
+
+const diagnosisPressHandler = getHomeQuickActionPressHandler('diagnosis', {
+  onPressFaceDiagnosis: () => {
+    selectedQuickAction = 'recommendation';
+  },
+});
+
+if (!diagnosisPressHandler) {
+  throw new Error('face analysis quick action should have a press handler');
+}
+
+diagnosisPressHandler();
+
+expectEqual(selectedQuickAction, 'recommendation', 'face analysis quick action target');
 
 const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
   onPressProductRecommendations: () => {

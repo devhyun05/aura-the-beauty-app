@@ -50,6 +50,12 @@ export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterB
   navigation.navigate('ARFilter');
 }
 
+export function getMainTabHeaderBorderWidth(
+  routeName: MainTabRouteName,
+): 0 | undefined {
+  return routeName === 'HomeTab' ? 0 : undefined;
+}
+
 export function MainTabChrome({
   children,
   navigation,
@@ -59,6 +65,7 @@ export function MainTabChrome({
   const insets = useSafeAreaInsets();
   const headerCopy = getMainHeaderCopy(routeName);
   const contentGap = routeName === 'HomeTab' ? spacing.xxl : spacing.xl;
+  const headerBorderWidth = getMainTabHeaderBorderWidth(routeName);
 
   return (
     <YStack style={styles.screen}>
@@ -68,6 +75,11 @@ export function MainTabChrome({
         title={headerCopy.title}
         titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
         topInset={insets.top}
+        containerProps={
+          headerBorderWidth === undefined
+            ? undefined
+            : {style: {borderBottomWidth: headerBorderWidth}}
+        }
         onProfilePress={() => navigation.navigate('ProfileTab')}
       />
       <YStack style={styles.body}>
