@@ -10,6 +10,34 @@ Shader "MakeupAR/SmoothRegionMask"
         _Threshold ("Threshold", Range(0, 1)) = 0.04
         _Feather ("Feather", Range(0, 1)) = 0.5
         _VisibilityAlpha ("Visibility Alpha", Range(0, 1)) = 1
+        [HideInInspector] _HandOcclusionEnabled ("Hand Occlusion Enabled", Float) = 0
+        [HideInInspector] _HandOcclusionUseRect ("Hand Occlusion Use Rect", Float) = 0
+        [HideInInspector] _HandOcclusionRect ("Hand Occlusion Rect", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _HandOcclusionMaskTex ("Hand Occlusion Mask", 2D) = "black" {}
+        [HideInInspector] _FoundationMode ("Foundation Mode", Float) = 0
+        [HideInInspector] _FoundationDynamicMaskTex ("Foundation Dynamic Mask", 2D) = "black" {}
+        [HideInInspector] _FoundationDynamicMaskValid ("Foundation Dynamic Mask Valid", Float) = 0
+        [HideInInspector] _FoundationExclusionEnabled ("Foundation Exclusion Enabled", Float) = 1
+        [HideInInspector] _FoundationDebugMode ("Foundation Debug Mode", Float) = 0
+        [HideInInspector] _FoundationEyeExclusionL ("Foundation Left Eye Exclusion", Vector) = (0.355, 0.674, 0.235, 0.125)
+        [HideInInspector] _FoundationEyeExclusionR ("Foundation Right Eye Exclusion", Vector) = (0.645, 0.674, 0.235, 0.125)
+        [HideInInspector] _FoundationBrowExclusionL ("Foundation Left Brow Exclusion", Vector) = (0.355, 0.770, 0.230, 0.090)
+        [HideInInspector] _FoundationBrowExclusionR ("Foundation Right Brow Exclusion", Vector) = (0.645, 0.770, 0.230, 0.090)
+        [HideInInspector] _FoundationMouthExclusion ("Foundation Mouth Exclusion", Vector) = (0.500, 0.425, 0.330, 0.135)
+        [HideInInspector] _FoundationEyeFeather ("Foundation Eye Feather", Float) = 0.52
+        [HideInInspector] _FoundationBrowFeather ("Foundation Brow Feather", Float) = 0.54
+        [HideInInspector] _FoundationMouthFeather ("Foundation Mouth Feather", Float) = 0.62
+        [HideInInspector] _FoundationUpperForeheadStart ("Foundation Upper Forehead Start", Float) = 0.735
+        [HideInInspector] _FoundationUpperForeheadEnd ("Foundation Upper Forehead End", Float) = 0.900
+        [HideInInspector] _FoundationOuterFalloffStrength ("Foundation Outer Falloff Strength", Float) = 0.78
+        [HideInInspector] _FoundationMaskBoostForDebug ("Foundation Mask Boost For Debug", Float) = 1.45
+        _UserSkinBaseColor ("User Skin Base Color", Color) = (0.78, 0.60, 0.51, 1)
+        _FoundationIntensity ("Foundation Intensity", Range(0, 1)) = 0.5
+        _FoundationEvenness ("Foundation Evenness", Range(0, 1)) = 0.3
+        _FoundationLuminanceInfluence ("Foundation Luminance Influence", Range(0, 1)) = 0.35
+        _FoundationMaxLumShift ("Foundation Max Luminance Shift", Range(0, 0.25)) = 0.12
+        _FoundationGlowAmount ("Foundation Glow Amount", Range(0, 1)) = 0
+        _FoundationVisibleBoost ("Foundation Visible Boost", Range(0.5, 2.5)) = 1.0
         _Coverage ("Coverage", Range(0, 1)) = 0.62
         _MaskOffset ("Mask UV Offset", Vector) = (0, 0, 0, 0)
         _MaskSpreadX ("Mask Spread X", Float) = 0
@@ -17,11 +45,18 @@ Shader "MakeupAR/SmoothRegionMask"
         _Specular ("Specular", Range(0, 1)) = 0.04
         _SpecularPower ("Specular Power", Range(1, 64)) = 8
         _GlossBoost ("Gloss Boost", Range(0, 1)) = 0
-        _GlossColor ("Gloss Color", Color) = (1.0, 0.78, 0.84, 1)
+        _GlossColor ("Gloss Color", Color) = (1.0, 0.965, 0.92, 1)
         _GlossSharpness ("Gloss Sharpness", Range(0, 1)) = 0.72
         _GlossHaloIntensity ("Gloss Halo Intensity", Range(0, 1)) = 0.07
+        _HighlightThreshold ("Highlight Threshold", Range(0, 1)) = 0.68
+        _ExistingHighlightBoost ("Existing Highlight Boost", Range(0, 1)) = 0.28
+        _LowerLipHighlightWeight ("Lower Lip Highlight Weight", Range(0, 1)) = 1
+        _UpperLipHighlightWeight ("Upper Lip Highlight Weight", Range(0, 1)) = 0.45
         _GradientAmount ("Gradient Amount", Range(0, 1)) = 0
         _DetailAmount ("Detail Amount", Range(0, 1)) = 0
+        [HideInInspector] _BrowGeneratedMode ("Generated Brow Mode", Float) = 0
+        [HideInInspector] _BrowCleanupStrength ("Brow Cleanup Strength", Range(0, 1)) = 0
+        [HideInInspector] _BrowNeutralizeStrength ("Brow Neutralize Strength", Range(0, 1)) = 0
         _PreserveDetail ("Preserve Detail", Range(0, 1)) = 1
         _DensityPower ("Density Power", Range(0, 1)) = 0.72
         _EdgeSoftness ("Edge Softness", Range(0, 1)) = 0.86
@@ -31,12 +66,26 @@ Shader "MakeupAR/SmoothRegionMask"
         _BlushIntensity ("Blush Intensity", Range(0, 1)) = 0.5
         _LipStyleMode ("Lip Style Mode", Float) = -1
         [HideInInspector] _CheekBlushMode ("Cheek Blush Mode", Float) = 0
+        [HideInInspector] _EyelinerMode ("Eyeliner Mode", Float) = 0
         [HideInInspector] _CheekUvTransform ("Cheek UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartUvTransform ("Cheek Part UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartBlend ("Cheek Part Blend", Float) = 0
         [HideInInspector] _CheekDensityGain ("Cheek Density Gain", Float) = 1
         [HideInInspector] _CheekCenterGain ("Cheek Center Gain", Float) = 0
         [HideInInspector] _PigmentMultiply ("Pigment Multiply", Float) = 0
+        [HideInInspector] _SkinGateEnabled ("Skin Gate Enabled", Float) = 0
+        [HideInInspector] _SkinGateStrength ("Skin Gate Strength", Range(0, 1)) = 0.85
+        [HideInInspector] _SkinGateCenterWeight ("Skin Gate Center Weight", Range(0, 1)) = 0.3
+        [HideInInspector] _SkinGateTolerance ("Skin Gate Tolerance", Range(0.01, 1)) = 0.13
+        [HideInInspector] _SkinGateCameraMode ("Skin Gate Camera Mode", Float) = 0
+        [HideInInspector] _SkinGateCameraTex ("Skin Gate Camera Texture", 2D) = "black" {}
+        [HideInInspector] _SkinGateTexY ("Skin Gate Texture Y", 2D) = "black" {}
+        [HideInInspector] _SkinGateTexCbCr ("Skin Gate Texture CbCr", 2D) = "gray" {}
+        [HideInInspector] _SkinGateRefA ("Skin Gate Reference A", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateRefB ("Skin Gate Reference B", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateRefC ("Skin Gate Reference C", Vector) = (0.5, 0.5, 0, 0)
+        [HideInInspector] _SkinGateUvRect ("Skin Gate Uv Rect", Vector) = (0, 1, 1, 0)
+        [HideInInspector] _SkinGateFailSafe ("Skin Gate Fail Safe", Float) = 0
         [HideInInspector] _UseScreenSpaceMask ("Use Screen Space Mask", Float) = 0
         [HideInInspector] _DebugMaskMode ("Debug Mask Mode", Float) = 0
         [HideInInspector] _SrcBlend ("Source Blend", Float) = 5
@@ -51,6 +100,11 @@ Shader "MakeupAR/SmoothRegionMask"
             "RenderType" = "Transparent"
             "IgnoreProjector" = "True"
         }
+
+        // Capture the live camera feed (rendered before this transparent overlay)
+        // so the generated-brow pass can neutralize the user's real eyebrow by
+        // painting surrounding skin over it.
+        GrabPass { "_BrowBackgroundTexture" }
 
         Pass
         {
@@ -69,6 +123,8 @@ Shader "MakeupAR/SmoothRegionMask"
             #include "UnityCG.cginc"
 
             sampler2D _MaskTex;
+            sampler2D _HandOcclusionMaskTex;
+            sampler2D _FoundationDynamicMaskTex;
             float4 _MaskTex_TexelSize;
             float4 _RegionColor;
             float4 _SecondaryColor;
@@ -77,6 +133,32 @@ Shader "MakeupAR/SmoothRegionMask"
             float _Threshold;
             float _Feather;
             float _VisibilityAlpha;
+            float _HandOcclusionEnabled;
+            float _HandOcclusionUseRect;
+            float4 _HandOcclusionRect;
+            float _FoundationMode;
+            float _FoundationDynamicMaskValid;
+            float _FoundationExclusionEnabled;
+            float _FoundationDebugMode;
+            float4 _FoundationEyeExclusionL;
+            float4 _FoundationEyeExclusionR;
+            float4 _FoundationBrowExclusionL;
+            float4 _FoundationBrowExclusionR;
+            float4 _FoundationMouthExclusion;
+            float _FoundationEyeFeather;
+            float _FoundationBrowFeather;
+            float _FoundationMouthFeather;
+            float _FoundationUpperForeheadStart;
+            float _FoundationUpperForeheadEnd;
+            float _FoundationOuterFalloffStrength;
+            float _FoundationMaskBoostForDebug;
+            float4 _UserSkinBaseColor;
+            float _FoundationIntensity;
+            float _FoundationEvenness;
+            float _FoundationLuminanceInfluence;
+            float _FoundationMaxLumShift;
+            float _FoundationGlowAmount;
+            float _FoundationVisibleBoost;
             float _Coverage;
             float4 _MaskOffset;
             float _MaskSpreadX;
@@ -86,6 +168,11 @@ Shader "MakeupAR/SmoothRegionMask"
             float _GlossBoost;
             float _GradientAmount;
             float _DetailAmount;
+            float _BrowGeneratedMode;
+            float _BrowCleanupStrength;
+            float _BrowNeutralizeStrength;
+            sampler2D _BrowBackgroundTexture;
+            float4 _BrowBackgroundTexture_TexelSize;
             float _PreserveDetail;
             float _DensityPower;
             float _EdgeSoftness;
@@ -95,6 +182,7 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BlushIntensity;
             float _LipStyleMode;
             float _CheekBlushMode;
+            float _EyelinerMode;
             float4 _CheekUvTransform;
             float4 _CheekPartUvTransform;
             float _CheekPartBlend;
@@ -103,10 +191,133 @@ Shader "MakeupAR/SmoothRegionMask"
             float _PigmentMultiply;
             float _UseScreenSpaceMask;
             float _DebugMaskMode;
+            float _SkinGateEnabled;
+            float _SkinGateStrength;
+            float _SkinGateCenterWeight;
+            float _SkinGateTolerance;
+            float _SkinGateCameraMode;
+            sampler2D _SkinGateCameraTex;
+            sampler2D _SkinGateTexY;
+            sampler2D _SkinGateTexCbCr;
+            float4 _SkinGateRefA;
+            float4 _SkinGateRefB;
+            float4 _SkinGateRefC;
+            float4 _SkinGateUvRect;
+            float _SkinGateFailSafe;
+            float4x4 _SkinGateDisplayTransform;
+
+            // ---- Camera-texture skin gate -------------------------------
+            // Compares each pixel's chroma against a live skin reference
+            // sampled at stable face points (cheeks/chin). Suppresses
+            // foundation on hair, brows, clothing and background that the
+            // UV mask alone cannot separate from skin. Gate weight is
+            // strongest near the hairline/side edges (and on the neck skirt,
+            // which sets _SkinGateCenterWeight to 1) and softer at the face
+            // center so ordinary shading and shadows are not stripped.
+            float3 SampleSkinGateCamera(float2 screenUv)
+            {
+                float2 cameraUv = mul(float4(screenUv, 1.0, 1.0), _SkinGateDisplayTransform).xy;
+                if (_SkinGateCameraMode > 1.5)
+                {
+                    float lumaY = tex2D(_SkinGateTexY, cameraUv).r;
+                    float2 cbcr = tex2D(_SkinGateTexCbCr, cameraUv).rg - float2(0.5, 0.5);
+                    return saturate(float3(
+                        lumaY + 1.4020 * cbcr.y,
+                        lumaY - 0.3441 * cbcr.x - 0.7141 * cbcr.y,
+                        lumaY + 1.7720 * cbcr.x));
+                }
+
+                return saturate(tex2D(_SkinGateCameraTex, cameraUv).rgb);
+            }
+
+            float2 SkinGateChroma(float3 color)
+            {
+                float cb = -0.1146 * color.r - 0.3854 * color.g + 0.5 * color.b;
+                float cr = 0.5 * color.r - 0.4542 * color.g - 0.0458 * color.b;
+                return float2(cb, cr);
+            }
+
+            float SkinGateVisibility(float4 clipPos, float2 maskUv)
+            {
+                float sideDistanceEarly = min(
+                    maskUv.x - _SkinGateUvRect.x,
+                    _SkinGateUvRect.y - maskUv.x);
+                float sideProximityEarly = 1.0 - smoothstep(0.02, 0.17, sideDistanceEarly);
+                float topProximityEarly = smoothstep(
+                    _SkinGateUvRect.z - 0.22,
+                    _SkinGateUvRect.z - 0.05,
+                    maskUv.y);
+                float edgeProximityEarly = saturate(max(sideProximityEarly, topProximityEarly));
+
+                if (_SkinGateEnabled < 0.5)
+                {
+                    // FAIL-SAFE (foundation materials only): when the camera
+                    // gate is unavailable, never fail-open into painting hair.
+                    // Fade the hairline/side zones instead.
+                    return _SkinGateFailSafe > 0.5
+                        ? lerp(1.0, 0.30, edgeProximityEarly)
+                        : 1.0;
+                }
+
+                float3 referenceSum = float3(0.0, 0.0, 0.0);
+                float referenceCount = 0.0;
+                if (_SkinGateRefA.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefA.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (_SkinGateRefB.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefB.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (_SkinGateRefC.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefC.xy);
+                    referenceCount += 1.0;
+                }
+
+                if (referenceCount < 0.5)
+                {
+                    return 1.0;
+                }
+
+                float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
+                float2 screenUv = saturate(ndc * 0.5 + 0.5);
+                float3 pixel = SampleSkinGateCamera(screenUv);
+                float3 reference = referenceSum / referenceCount;
+                float chromaDistance = length(SkinGateChroma(pixel) - SkinGateChroma(reference));
+                float similarity = 1.0 - smoothstep(
+                    _SkinGateTolerance,
+                    _SkinGateTolerance * 2.3,
+                    chromaDistance);
+                float pixelLum = dot(pixel, float3(0.2126, 0.7152, 0.0722));
+                float referenceLum = max(dot(reference, float3(0.2126, 0.7152, 0.0722)), 0.05);
+                // Dark-hair suppression: hair and brow pixels are far darker
+                // than sampled skin even when their chroma is ambiguous.
+                float darkGate = smoothstep(0.26, 0.52, pixelLum / referenceLum);
+                float gate = saturate(similarity * darkGate);
+
+                float sideDistance = min(
+                    maskUv.x - _SkinGateUvRect.x,
+                    _SkinGateUvRect.y - maskUv.x);
+                float sideProximity = 1.0 - smoothstep(0.02, 0.17, sideDistance);
+                float topProximity = smoothstep(
+                    _SkinGateUvRect.z - 0.22,
+                    _SkinGateUvRect.z - 0.05,
+                    maskUv.y);
+                float edgeProximity = saturate(max(sideProximity, topProximity));
+                float weight = lerp(saturate(_SkinGateCenterWeight), 1.0, edgeProximity)
+                    * saturate(_SkinGateStrength);
+                return lerp(1.0, gate, saturate(weight));
+            }
 
             struct appdata
             {
                 float4 vertex : POSITION;
+                float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
             };
 
@@ -115,6 +326,11 @@ Shader "MakeupAR/SmoothRegionMask"
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float4 clipPos : TEXCOORD1;
+                float4 grabPos : TEXCOORD2;
+                // How directly this surface faces the camera (1 = head-on,
+                // ~0 = edge-on). Used to fade the brow tail as the face turns to
+                // profile, where the UV-glued mask would otherwise smear/stretch.
+                float facing : TEXCOORD3;
             };
 
             v2f vert(appdata input)
@@ -122,8 +338,36 @@ Shader "MakeupAR/SmoothRegionMask"
                 v2f output;
                 output.vertex = UnityObjectToClipPos(input.vertex);
                 output.clipPos = output.vertex;
+                output.grabPos = ComputeGrabScreenPos(output.vertex);
                 output.uv = input.uv;
+                float3 worldNormal = UnityObjectToWorldNormal(input.normal);
+                float3 worldPos = mul(unity_ObjectToWorld, input.vertex).xyz;
+                float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - worldPos);
+                output.facing = saturate(dot(worldNormal, viewDir));
                 return output;
+            }
+
+            float HandOcclusionVisibility(float4 clipPos)
+            {
+                if (_HandOcclusionEnabled < 0.5)
+                {
+                    return 1.0;
+                }
+
+                float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
+                float2 screenUv = saturate(ndc * 0.5 + 0.5);
+                float mask = tex2D(_HandOcclusionMaskTex, screenUv).r;
+                if (_HandOcclusionUseRect > 0.5)
+                {
+                    float inside =
+                        step(_HandOcclusionRect.x, screenUv.x)
+                        * step(screenUv.x, _HandOcclusionRect.z)
+                        * step(_HandOcclusionRect.y, screenUv.y)
+                        * step(screenUv.y, _HandOcclusionRect.w);
+                    mask = max(mask, inside);
+                }
+
+                return 1.0 - saturate(mask);
             }
 
             float FeatherTexelRadius(float feather)
@@ -227,6 +471,108 @@ Shader "MakeupAR/SmoothRegionMask"
                 return saturate(maskAlpha * max(horizontal * mouthProximity, lowerCenter * 0.68));
             }
 
+            float FoundationLuma(float3 color)
+            {
+                return dot(color, float3(0.2126, 0.7152, 0.0722));
+            }
+
+            float FoundationEllipse(float2 uv, float2 center, float2 radius, float feather)
+            {
+                float2 local = (uv - center) / max(radius, float2(0.0001, 0.0001));
+                float dist = dot(local, local);
+                return 1.0 - smoothstep(1.0, 1.0 + max(feather, 0.001), dist);
+            }
+
+            float FoundationExclusionEllipse(float2 uv, float4 ellipse, float feather)
+            {
+                return FoundationEllipse(uv, ellipse.xy, max(ellipse.zw, float2(0.0001, 0.0001)), feather);
+            }
+
+            float FoundationFeatureExclusion(float2 uv, out float exclusionPreview)
+            {
+                if (_FoundationExclusionEnabled < 0.5)
+                {
+                    exclusionPreview = 0.0;
+                    return 1.0;
+                }
+
+                float leftEye = FoundationExclusionEllipse(uv, _FoundationEyeExclusionL, _FoundationEyeFeather);
+                float rightEye = FoundationExclusionEllipse(uv, _FoundationEyeExclusionR, _FoundationEyeFeather);
+                float glassesBridge = FoundationEllipse(uv, float2(0.500, 0.674), float2(0.092, 0.058), 0.40) * 0.70;
+                float eyeBand = FoundationEllipse(uv, float2(0.500, 0.674), float2(0.472, 0.158), 0.48) * 0.26;
+                float leftBrow = FoundationExclusionEllipse(uv, _FoundationBrowExclusionL, _FoundationBrowFeather);
+                float rightBrow = FoundationExclusionEllipse(uv, _FoundationBrowExclusionR, _FoundationBrowFeather);
+                float browBridge = FoundationEllipse(uv, float2(0.500, 0.748), float2(0.355, 0.090), 0.50) * 0.72;
+                float mouth = FoundationExclusionEllipse(uv, _FoundationMouthExclusion, _FoundationMouthFeather);
+                float mouthBand = FoundationEllipse(uv, float2(0.500, 0.472), float2(0.300, 0.078), 0.58) * 0.55;
+                float nostril = FoundationEllipse(uv, float2(0.500, 0.555), float2(0.136, 0.046), 0.44) * 0.28;
+                float exclusion = saturate(max(
+                    max(max(leftEye, rightEye), max(glassesBridge, max(eyeBand, browBridge))),
+                    max(max(leftBrow, rightBrow), max(mouth, max(mouthBand, nostril)))));
+                exclusionPreview = exclusion;
+                return 1.0 - exclusion;
+            }
+
+            float FoundationRegionWeight(float2 uv)
+            {
+                float2 faceLocal = (uv - float2(0.500, 0.515)) / float2(0.425, 0.492);
+                float faceDistance = dot(faceLocal, faceLocal);
+                float faceCore = 1.0 - smoothstep(0.58, 1.00, faceDistance);
+                float contourFeather = 1.0 - smoothstep(0.42, 0.96, faceDistance) * saturate(_FoundationOuterFalloffStrength);
+
+                float leftCheek = FoundationEllipse(uv, float2(0.335, 0.535), float2(0.172, 0.198), 0.84);
+                float rightCheek = FoundationEllipse(uv, float2(0.665, 0.535), float2(0.172, 0.198), 0.84);
+                float noseCenter = FoundationEllipse(uv, float2(0.500, 0.592), float2(0.106, 0.178), 0.70);
+                float lowerNoseCheek = FoundationEllipse(uv, float2(0.500, 0.505), float2(0.236, 0.162), 0.82) * 0.50;
+                float chin = FoundationEllipse(uv, float2(0.500, 0.315), float2(0.200, 0.118), 0.78) * 0.62;
+                float lowForehead = FoundationEllipse(uv, float2(0.500, 0.805), float2(0.190, 0.072), 0.58) * 0.28;
+                float skinIslands = saturate(max(
+                    max(leftCheek, rightCheek),
+                    max(max(noseCenter, lowerNoseCheek), max(chin, lowForehead))));
+
+                float eyeFalloff = 1.0 - FoundationEllipse(uv, float2(0.500, 0.680), float2(0.455, 0.170), 0.52) * 0.64;
+                float mouthFalloff = 1.0 - FoundationEllipse(uv, float2(0.500, 0.425), float2(0.335, 0.128), 0.58) * 0.62;
+                // Hairline and bangs need segmentation for production quality; v1 uses a conservative UV falloff.
+                float hairlineFalloff = lerp(1.0, 0.06, smoothstep(_FoundationUpperForeheadStart, _FoundationUpperForeheadEnd, uv.y));
+                float jawFalloff = lerp(0.34, 1.0, smoothstep(0.145, 0.250, uv.y));
+
+                return saturate(faceCore * skinIslands * contourFeather * eyeFalloff * mouthFalloff * hairlineFalloff * jawFalloff);
+            }
+
+            float3 FoundationToneFilter(float visibleSkin)
+            {
+                float coverageAmount = saturate(_Coverage);
+                float luminanceInfluence = saturate(_FoundationLuminanceInfluence);
+                float amount = saturate(
+                    _FoundationIntensity
+                    * lerp(0.75, 1.35, coverageAmount)
+                    * max(_FoundationVisibleBoost, 0.1))
+                    * visibleSkin;
+                float3 userSkin = max(saturate(_UserSkinBaseColor.rgb), float3(0.075, 0.075, 0.075));
+                float3 foundation = max(saturate(_RegionColor.rgb), float3(0.075, 0.075, 0.075));
+                float userLum = max(FoundationLuma(userSkin), 0.08);
+                float foundationLum = FoundationLuma(foundation);
+                float3 chromaRatio = foundation / userSkin;
+                float chromaRatioLum = max(FoundationLuma(chromaRatio), 0.08);
+                chromaRatio /= chromaRatioLum;
+                float chromaDelta = length(chromaRatio - float3(1.0, 1.0, 1.0));
+                float deltaBoost = lerp(1.6, 1.0, saturate(chromaDelta * 1.75));
+                float lumShift = clamp(
+                    foundationLum - userLum,
+                    -max(_FoundationMaxLumShift, 0.001),
+                    max(_FoundationMaxLumShift, 0.001));
+                float lumFilter = 1.0 + (lumShift / userLum) * luminanceInfluence;
+                float3 targetFilter = lerp(float3(1.0, 1.0, 1.0), chromaRatio, saturate(coverageAmount * deltaBoost));
+                targetFilter *= lerp(1.0, lumFilter, luminanceInfluence);
+                float filterLum = FoundationLuma(targetFilter);
+                targetFilter = lerp(
+                    targetFilter,
+                    float3(filterLum, filterLum, filterLum),
+                    saturate(_FoundationEvenness) * 0.16);
+                targetFilter += _FoundationGlowAmount * visibleSkin * 0.024;
+                return lerp(float3(1.0, 1.0, 1.0), saturate(targetFilter), amount);
+            }
+
             fixed4 frag(v2f input) : SV_Target
             {
                 float2 maskUv = input.uv;
@@ -263,6 +609,60 @@ Shader "MakeupAR/SmoothRegionMask"
                 float cheekOuterBand = 0.0;
                 float cheekMidBand = 0.0;
                 float cheekCoreBand = 0.0;
+
+                if (_FoundationMode > 0.5)
+                {
+                    float rawFoundationMask = fullSoft;
+                    float exclusionPreview = 0.0;
+                    float featureExclusion = FoundationFeatureExclusion(maskUv, exclusionPreview);
+                    float regionWeight = FoundationRegionWeight(maskUv);
+                    float baseFoundationMask = saturate(rawFoundationMask * regionWeight);
+                    float staticFoundationMask = saturate(baseFoundationMask * featureExclusion);
+                    float2 foundationScreenUv = saturate((input.clipPos.xy / max(input.clipPos.w, 0.00001)) * 0.5 + 0.5);
+                    float4 dynamicFoundationSample = tex2D(_FoundationDynamicMaskTex, foundationScreenUv);
+                    float dynamicFoundationMask = saturate(dynamicFoundationSample.r);
+                    float foundationMask = _FoundationDynamicMaskValid > 0.5
+                        ? dynamicFoundationMask
+                        : staticFoundationMask;
+                    float foundationDebugMode = max(_FoundationDebugMode, _DebugMaskMode);
+                    float visibleSkin = saturate(
+                        foundationMask
+                        * _VisibilityAlpha
+                        * HandOcclusionVisibility(input.clipPos));
+
+                    if (foundationDebugMode > 0.5 && foundationDebugMode < 1.5)
+                    {
+                        return fixed4(baseFoundationMask.xxx, saturate(baseFoundationMask * 0.88));
+                    }
+
+                    if (foundationDebugMode >= 1.5 && foundationDebugMode < 2.5)
+                    {
+                        return fixed4(exclusionPreview, 0.08, 0.0, saturate(exclusionPreview * 0.88));
+                    }
+
+                    if (foundationDebugMode >= 2.5 && foundationDebugMode < 3.5)
+                    {
+                        return fixed4(visibleSkin.xxx, saturate(visibleSkin * 0.92));
+                    }
+
+                    if (foundationDebugMode >= 3.5)
+                    {
+                        float preview = saturate(visibleSkin * max(_FoundationMaskBoostForDebug, 1.0));
+                        return fixed4(lerp(float3(0.0, 0.0, 0.0), _RegionColor.rgb, preview), saturate(preview * 0.92));
+                    }
+
+                    if (_PigmentMultiply > 0.5)
+                    {
+                        return fixed4(FoundationToneFilter(visibleSkin), 1.0);
+                    }
+
+                    float foundationAlpha = saturate(
+                        visibleSkin
+                        * max(_Opacity, 0.28)
+                        * lerp(0.70, 1.02, saturate(_FoundationIntensity)));
+                    float3 fallbackTint = lerp(_UserSkinBaseColor.rgb, _RegionColor.rgb, saturate(_Coverage));
+                    return fixed4(saturate(fallbackTint), foundationAlpha);
+                }
 
                 if (_CheekBlushMode > 0.5)
                 {
@@ -317,6 +717,18 @@ Shader "MakeupAR/SmoothRegionMask"
                         cheekGrayBlurred
                         * cheekGain
                         * (1.0 + cheekCenterGain * cheekBoostGate * 0.82));
+                    // Mouth guard: photo-derived cheek session masks can carry
+                    // lip-corner residue; suppress any blush contribution in
+                    // the mouth neighborhood (face-local anatomy space, so it
+                    // holds for every user, mask and UV transform).
+                    float cheekMouthGuard = 1.0 - FoundationEllipse(
+                        maskUv,
+                        float2(0.500, 0.360),
+                        float2(0.210, 0.105),
+                        0.55);
+                    cheekGrayRaw *= cheekMouthGuard;
+                    cheekGrayBlurred *= cheekMouthGuard;
+
                     float cheekCoverageSeed = max(cheekGrayRaw, cheekGrayBlurred * 0.94);
                     float cheekFeather = saturate(max(_Feather, 0.68) * lerp(1.02, 1.20, saturate(_EdgeSoftness)));
                     float cheekCoverage = SoftMaskAlpha(cheekCoverageSeed, _Threshold * 0.72, cheekFeather);
@@ -414,8 +826,141 @@ Shader "MakeupAR/SmoothRegionMask"
                     }
                 }
 
+                if (_EyelinerMode > 0.5)
+                {
+                    // Eyeliner is a thin drawn line, not a diffuse stain: the
+                    // generic path (blurred fullSoft * 0.54) can never get
+                    // darker than ~40% alpha, which reads as a gray smudge.
+                    // Sample the RAW mask so the line stays crisp, weight the
+                    // core near full strength, and let coverage only trim the
+                    // strength gently instead of scaling it to nothing.
+                    float linerCore = CoreMaskAlpha(mask.r, _Threshold, _Feather * 0.6);
+                    float linerSoft = SoftMaskAlpha(mask.r, _Threshold, _Feather);
+                    // Modulate by the raw mask value so authored sub-full
+                    // weights (e.g. the doll style's 55% under-eye shading)
+                    // keep their intended density instead of being pushed to
+                    // full strength by the smoothstep.
+                    float linerDensity = saturate(mask.r * 1.06);
+                    maskStrength = saturate(linerCore * linerDensity * 0.92 + linerSoft * 0.20)
+                        * lerp(0.75, 1.0, coverage);
+                }
+                if (_BrowGeneratedMode > 0.5)
+                {
+                    float desiredSoft = SoftMaskAlpha(max(softMask.g, mask.g), _Threshold, _Feather);
+                    float desiredCore = CoreMaskAlpha(mask.g, _Threshold, _Feather);
+                    float strandDetail = saturate(max(mask.b, softMask.b * 0.34) * desiredSoft);
+                    float strandAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
+                    // Defined brow: lean on the CORE mask (sharp body) with only
+                    // a thin soft halo, instead of a wide low-alpha soft outer
+                    // layer that read as a hazy, spread-out wash (device
+                    // feedback: remove the outer layer). The tight AA edge plus a
+                    // sliver of desiredSoft keeps it from becoming a hard sticker.
+                    float tintAlpha = saturate(
+                        desiredCore * coverage * lerp(0.5, 0.9, saturate(_BlushIntensity))
+                        + desiredSoft * coverage * 0.08);
+                    float hairAlpha = saturate(
+                        pow(strandDetail, 0.68) * strandAmount * coverage * 0.82);
+                    float browAlpha = saturate(
+                        tintAlpha
+                        + hairAlpha);
+                    // Core darkening is smoothed (smoothstep instead of a hard
+                    // *1.34 ramp) with a gentler floor (0.6 vs 0.48) so the dense
+                    // hair core no longer forms a hard seam against the lighter
+                    // tint rim.
+                    float coreDarken = smoothstep(0.04, 0.8, hairAlpha);
+                    float3 browPigment = saturate(lerp(
+                        _RegionColor.rgb,
+                        _RegionColor.rgb * 0.6,
+                        coreDarken));
+                    // Keep the makeup-only values available for the debug overlays
+                    // below (they render maskStrength/pigmentColor directly).
+                    maskStrength = browAlpha;
+                    pigmentColor = browPigment;
+                    alphaColor = browPigment;
+
+                  if (_DebugMaskMode < 0.5)
+                  {
+                    // View-angle fade: as the face turns to profile, the brow tail
+                    // near the temple goes edge-on and the UV-glued mask smears
+                    // outward (looks unnaturally long/stretched). Fade the brow out
+                    // where the surface is grazing so that stretched tail
+                    // disappears; head-on (facing ~1) is untouched, so the front
+                    // view is unchanged. Only strongly grazing (>~60deg) fades.
+                    float facingFade = smoothstep(0.16, 0.5, input.facing);
+
+                    float browOpacity = saturate(_Opacity * _VisibilityAlpha);
+                    // Makeup layer obeys the opacity slider.
+                    float makeupAlpha = saturate(browAlpha * browOpacity * facingFade);
+
+                    // Neutralize layer: red channel marks the user's real brow.
+                    // Paint surrounding skin over it (independent of the makeup
+                    // opacity slider) so the real brow does not stick out.
+                    float neutralizeCov = SoftMaskAlpha(max(softMask.r, mask.r), _Threshold, _Feather);
+                    float neutralizeAlpha = saturate(
+                        neutralizeCov * saturate(_BrowNeutralizeStrength) * saturate(_VisibilityAlpha) * facingFade);
+
+                    // Camera pixel behind this fragment (grabbed pre-overlay).
+                    float2 grabUv = input.grabPos.xy / max(input.grabPos.w, 0.00001);
+                    float3 cameraHere = tex2D(_BrowBackgroundTexture, grabUv).rgb;
+                    float2 grabTexel = _BrowBackgroundTexture_TexelSize.xy;
+                    grabTexel = grabTexel.x > 0.0 ? grabTexel : (1.0 / max(_ScreenParams.xy, float2(1.0, 1.0)));
+                    // Reconstruct skin by a brightness-weighted blur instead of a
+                    // single flat color: the brow is a horizontal band, so blur
+                    // mostly VERTICALLY (reaching the skin above/below) and weight
+                    // bright pixels heavily so the dark brow hair barely counts.
+                    // This continues the real forehead->under-brow skin gradient
+                    // across the brow — an inpaint, not a pasted patch.
+                    float3 lumW = float3(0.299, 0.587, 0.114);
+                    float3 skinAcc = float3(0.0, 0.0, 0.0);
+                    float skinWsum = 0.0001;
+                    [unroll]
+                    for (int vy = -12; vy <= 12; vy++)
+                    {
+                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(0.0, float(vy)) * grabTexel * 2.4).rgb;
+                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0);
+                        skinAcc += s * w;
+                        skinWsum += w;
+                    }
+                    [unroll]
+                    for (int hx = -5; hx <= 5; hx++)
+                    {
+                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(float(hx), 0.0) * grabTexel * 2.4).rgb;
+                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0) * 0.5;
+                        skinAcc += s * w;
+                        skinWsum += w;
+                    }
+                    float3 skin = skinAcc / skinWsum;
+
+                    // Compose over the neutralized skin. The soft tint rim
+                    // STAINS the skin (multiply: base * pigment) so its edge melts
+                    // into skin instead of ending in a hard line, while the dense
+                    // hair core leans toward opaque PAINT so the body stays
+                    // defined. Blending the two by how "core" the fragment is
+                    // removes the rim/core seam the flat alpha-blend produced.
+                    float3 neutralized = lerp(cameraHere, skin, neutralizeAlpha);
+                    float coreWeight = browAlpha > 0.0001
+                        ? saturate(hairAlpha / browAlpha)
+                        : 0.0;
+                    float3 stain = neutralized * lerp(float3(1.0, 1.0, 1.0), browPigment, makeupAlpha);
+                    float3 paint = lerp(neutralized, browPigment, makeupAlpha);
+                    float3 composited = lerp(stain, paint, coreWeight);
+                    float coverageOut = saturate(neutralizeAlpha + makeupAlpha * (1.0 - neutralizeAlpha));
+
+                    // We folded the camera into `composited`; invert the alpha
+                    // blend so the framebuffer ends up exactly `composited`.
+                    float3 outColor = coverageOut > 0.0001
+                        ? saturate((composited - cameraHere * (1.0 - coverageOut)) / coverageOut)
+                        : browPigment;
+                    return fixed4(outColor, coverageOut);
+                  }
+                }
+
                 float detailAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
-                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && detailAmount > 0.001)
+                if (_LipStyleMode < -0.5
+                    && _CheekBlushMode < 0.5
+                    && _EyelinerMode < 0.5
+                    && _BrowGeneratedMode < 0.5
+                    && detailAmount > 0.001)
                 {
                     float rawHairDetail = saturate(mask.b * fullSoft);
                     float softHairDetail = saturate(softMask.b * fullSoft);
@@ -433,7 +978,9 @@ Shader "MakeupAR/SmoothRegionMask"
                 }
 
                 float preserveScale = lerp(1.0, 0.92, saturate(_PreserveDetail));
-                float opacity = saturate(_Opacity * _VisibilityAlpha);
+                float opacity = saturate(_Opacity * _VisibilityAlpha)
+                    * HandOcclusionVisibility(input.clipPos)
+                    * SkinGateVisibility(input.clipPos, maskUv);
 
                 if (_DebugMaskMode > 0.5 && _DebugMaskMode < 1.5)
                 {
@@ -532,6 +1079,7 @@ Shader "MakeupAR/SmoothRegionMask"
 
             sampler2D _MaskTex;
             sampler2D _GlossMaskTex;
+            sampler2D _HandOcclusionMaskTex;
             float4 _MaskTex_TexelSize;
             float4 _RegionColor;
             float4 _SecondaryColor;
@@ -540,6 +1088,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float _Threshold;
             float _Feather;
             float _VisibilityAlpha;
+            float _HandOcclusionEnabled;
+            float _HandOcclusionUseRect;
+            float4 _HandOcclusionRect;
             float _Coverage;
             float4 _MaskOffset;
             float _MaskSpreadX;
@@ -548,9 +1099,14 @@ Shader "MakeupAR/SmoothRegionMask"
             float _GlossBoost;
             float _GlossSharpness;
             float _GlossHaloIntensity;
+            float _HighlightThreshold;
+            float _ExistingHighlightBoost;
+            float _LowerLipHighlightWeight;
+            float _UpperLipHighlightWeight;
             float _LipStyleMode;
             float _UseScreenSpaceMask;
             float _DebugMaskMode;
+            float _BrowGeneratedMode;
 
             struct appdata
             {
@@ -563,6 +1119,7 @@ Shader "MakeupAR/SmoothRegionMask"
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float4 clipPos : TEXCOORD1;
+                float4 grabPos : TEXCOORD2;
             };
 
             v2f vert(appdata input)
@@ -570,8 +1127,32 @@ Shader "MakeupAR/SmoothRegionMask"
                 v2f output;
                 output.vertex = UnityObjectToClipPos(input.vertex);
                 output.clipPos = output.vertex;
+                output.grabPos = ComputeGrabScreenPos(output.vertex);
                 output.uv = input.uv;
                 return output;
+            }
+
+            float HandOcclusionVisibility(float4 clipPos)
+            {
+                if (_HandOcclusionEnabled < 0.5)
+                {
+                    return 1.0;
+                }
+
+                float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
+                float2 screenUv = saturate(ndc * 0.5 + 0.5);
+                float mask = tex2D(_HandOcclusionMaskTex, screenUv).r;
+                if (_HandOcclusionUseRect > 0.5)
+                {
+                    float inside =
+                        step(_HandOcclusionRect.x, screenUv.x)
+                        * step(screenUv.x, _HandOcclusionRect.z)
+                        * step(_HandOcclusionRect.y, screenUv.y)
+                        * step(screenUv.y, _HandOcclusionRect.w);
+                    mask = max(mask, inside);
+                }
+
+                return 1.0 - saturate(mask);
             }
 
             float FeatherTexelRadius(float feather)
@@ -641,6 +1222,13 @@ Shader "MakeupAR/SmoothRegionMask"
                 return smoothstep(saturate(threshold + soft * 0.18), saturate(threshold + soft * 0.88), value);
             }
 
+            float EllipseMask(float2 uv, float2 center, float2 radius, float feather)
+            {
+                float2 local = (uv - center) / max(radius, float2(0.0001, 0.0001));
+                float dist = dot(local, local);
+                return 1.0 - smoothstep(1.0, 1.0 + max(feather, 0.001), dist);
+            }
+
             fixed4 frag(v2f input) : SV_Target
             {
                 if (_DebugMaskMode > 0.5)
@@ -648,7 +1236,7 @@ Shader "MakeupAR/SmoothRegionMask"
                     return fixed4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                if (_LipStyleMode < -0.5 || _GlossBoost <= 0.001 || _Specular <= 0.001)
+                if (_LipStyleMode < -0.5 || _BrowGeneratedMode > 0.5 || _GlossBoost <= 0.001 || _Specular <= 0.001)
                 {
                     return fixed4(0.0, 0.0, 0.0, 0.0);
                 }
@@ -673,35 +1261,49 @@ Shader "MakeupAR/SmoothRegionMask"
                 float coverage = saturate(max(_Coverage, 0.001));
                 float styleCoverage = saturate(max(fullSoft, max(gradientSoft, overlineSoft)));
                 float styleCore = saturate(max(fullCore, max(gradientSoft * 0.52, overlineSoft * 0.38)));
-                float styleGlossSeed = saturate(glossMask.a);
-                float softGlossSeed = saturate(max(softGlossMask.a, glossMask.a * 0.46));
-
-                float glossSharpMask = SoftMaskAlpha(
-                    styleGlossSeed,
-                    max(_Threshold * 0.96, 0.022),
-                    max(lerp(0.044, 0.032, saturate(_GlossSharpness)), 0.032))
-                    * styleCoverage
-                    * max(styleCore, styleGlossSeed * 0.58);
-                float glossHaloMask = SoftMaskAlpha(
-                    softGlossSeed,
-                    max(_Threshold * 0.70, 0.018),
-                    max(_Feather * 0.26, 0.050))
-                    * styleCoverage
-                    * max(styleCore, styleGlossSeed * 0.42);
-                float glossHalo = saturate(glossHaloMask - glossSharpMask * 0.56);
-                float glossEnergy = coverage
-                    * coverage
-                    * saturate(_Specular)
+                float visibleLip = styleCoverage
+                    * saturate(_VisibilityAlpha)
+                    * HandOcclusionVisibility(input.clipPos);
+                float2 lipLocal = maskUv - float2(0.5, 0.5);
+                float horizontalCenter = 1.0 - smoothstep(0.10, 0.46, abs(lipLocal.x));
+                float edgeGuard = saturate(max(styleCore, fullSoft * 0.62));
+                float lowerCenter = EllipseMask(maskUv, float2(0.50, 0.435), float2(0.235, 0.060), 0.92);
+                float lowerWetLine = EllipseMask(maskUv, float2(0.50, 0.405), float2(0.180, 0.030), 0.58);
+                float upperCenter = EllipseMask(maskUv, float2(0.50, 0.565), float2(0.180, 0.038), 0.78);
+                float upperWetLine = EllipseMask(maskUv, float2(0.50, 0.592), float2(0.125, 0.024), 0.52);
+                float regionWeight = saturate(
+                    (lowerCenter * 0.72 + lowerWetLine * 0.95) * saturate(_LowerLipHighlightWeight)
+                    + (upperCenter * 0.48 + upperWetLine * 0.48) * saturate(_UpperLipHighlightWeight));
+                float styleGlossSeed = saturate(max(glossMask.a, softGlossMask.a * 0.58));
+                float densityHighlight = saturate(max(mask.b * 0.78, styleGlossSeed));
+                float existingHighlight = smoothstep(
+                    saturate(_HighlightThreshold * 0.72),
+                    1.0,
+                    densityHighlight);
+                float centerSpec = pow(
+                    saturate(regionWeight * horizontalCenter),
+                    lerp(1.45, 3.35, saturate(_GlossSharpness)));
+                float shardSpec = pow(
+                    saturate(styleGlossSeed * regionWeight * 1.25),
+                    lerp(0.95, 2.25, saturate(_GlossSharpness)));
+                float visibleHighlightMask = visibleLip
+                    * edgeGuard
+                    * saturate(centerSpec + shardSpec * 0.74 + existingHighlight * saturate(_ExistingHighlightBoost));
+                float glossEnergy = saturate(_Specular)
                     * saturate(_GlossBoost)
                     * saturate(_Opacity)
-                    * saturate(_VisibilityAlpha);
-                float sharpHighlight = glossSharpMask * glossEnergy * 0.96;
-                float haloHighlight = glossHalo * glossEnergy * saturate(_GlossHaloIntensity) * 0.22;
-                float3 glossScreenLift = saturate(1.0 - _RegionColor.rgb * 0.56);
-                float3 sharpHighlightColor = saturate(lerp(_RegionColor.rgb, _GlossColor.rgb, 0.34));
-                float3 haloHighlightColor = saturate(lerp(_RegionColor.rgb, _GlossColor.rgb, 0.03));
-                float3 additiveGloss = sharpHighlightColor * glossScreenLift * sharpHighlight
-                    + haloHighlightColor * glossScreenLift * haloHighlight;
+                    * lerp(0.42, 1.0, coverage);
+                float sharpHighlight = visibleHighlightMask * glossEnergy * 0.72;
+                float haloHighlight = visibleLip
+                    * edgeGuard
+                    * saturate(regionWeight * (1.0 - centerSpec * 0.30))
+                    * glossEnergy
+                    * saturate(_GlossHaloIntensity)
+                    * 0.075;
+                float3 warmWhite = float3(1.0, 0.965, 0.92);
+                float3 glossColor = saturate(lerp(warmWhite, _GlossColor.rgb, 0.12));
+                float3 additiveGloss = glossColor * sharpHighlight
+                    + warmWhite * haloHighlight;
                 return fixed4(additiveGloss, 0.0);
             }
             ENDCG

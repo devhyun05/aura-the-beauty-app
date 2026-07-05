@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -13,32 +14,94 @@ from app.services.users import ensure_user
 router = APIRouter(prefix="/ar", tags=["ar"])
 
 
+def _decode_json_object(value: object) -> dict[str, Any]:
+  if isinstance(value, dict):
+    return value
+
+  if isinstance(value, str) and value.strip():
+    try:
+      decoded = json.loads(value)
+    except json.JSONDecodeError:
+      return {}
+
+    return decoded if isinstance(decoded, dict) else {}
+
+  return {}
+
+
+def _clean_text(value: object) -> str:
+  return str(value or "").strip()
+
+
+def _map_ar_filter(row: dict[str, Any]) -> dict[str, Any]:
+  payload = _decode_json_object(row.get("filter_payload"))
+  external_key = _clean_text(row.get("external_key"))
+  row_id = _clean_text(row.get("id"))
+  filter_id = external_key or row_id
+  title = _clean_text(row.get("title"))
+  subtitle = _clean_text(row.get("subtitle"))
+  match_score = payload.get("matchScore")
+  mapped = {
+    "id": filter_id,
+    "databaseId": row_id,
+    "externalKey": external_key or None,
+    "categoryId": _clean_text(row.get("category")),
+    "title": title,
+    "subtitle": subtitle,
+    "intensityLabel": _clean_text(row.get("intensity_label")),
+    "headline": _clean_text(payload.get("headline")),
+    "displayTitle": _clean_text(payload.get("displayTitle")) or title,
+    "description": _clean_text(payload.get("description")) or subtitle,
+    "categoryTags": payload.get("categoryTags") if isinstance(payload.get("categoryTags"), list) else [],
+    "keywords": payload.get("keywords") if isinstance(payload.get("keywords"), list) else [],
+    "embeddingVector": payload.get("embeddingVector") if isinstance(payload.get("embeddingVector"), list) else [],
+    "matchScore": match_score if isinstance(match_score, (int, float)) else 0,
+    "makeupAreas": payload.get("makeupAreas") if isinstance(payload.get("makeupAreas"), list) else [],
+    "colorOptions": payload.get("colorOptions") if isinstance(payload.get("colorOptions"), list) else [],
+    "typeOptions": payload.get("typeOptions") if isinstance(payload.get("typeOptions"), list) else [],
+    "textureOptions": payload.get("textureOptions") if isinstance(payload.get("textureOptions"), list) else [],
+    "presetValues": payload.get("presetValues") if isinstance(payload.get("presetValues"), dict) else {},
+    "filterPayload": payload,
+  }
+
+  return mapped
+
+
 @router.get("/filters")
 async def list_ar_filters(
   category: str | None = None,
+  kind: str | None = None,
   db: Database = Depends(require_database),
 ) -> dict:
-  if category:
-    filters = await db.fetch(
-      """
-      select *
-      from ar_filters
-      where is_public = true and category = $1
-      order by created_at desc
-      """,
-      category,
-    )
-  else:
-    filters = await db.fetch(
-      """
-      select *
-      from ar_filters
-      where is_public = true
-      order by created_at desc
-      """,
-    )
+  conditions = ["f.is_public = true"]
+  args: list[str] = []
 
-  return success({"filters": filters})
+  if category:
+    args.append(category)
+    conditions.append(f"f.category = ${len(args)}::filter_category")
+
+  if kind:
+    args.append(kind)
+    conditions.append(f"f.filter_payload->>'kind' = ${len(args)}")
+
+  filters = await db.fetch(
+    f"""
+    select
+      f.*
+    from ar_filters f
+    where {" and ".join(conditions)}
+    order by
+      case
+        when f.filter_payload->>'sortOrder' ~ '^[0-9]+$'
+        then (f.filter_payload->>'sortOrder')::integer
+        else 9999
+      end asc,
+      f.created_at desc
+    """,
+    *args,
+  )
+
+  return success({"filters": [_map_ar_filter(filter_row) for filter_row in filters]})
 
 
 @router.get("/filter-states")

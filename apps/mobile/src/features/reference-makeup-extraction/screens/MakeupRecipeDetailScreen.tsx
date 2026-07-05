@@ -1,5 +1,5 @@
-import {useMemo, useState} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {Alert, Image, Pressable, ScrollView, Share, StyleSheet} from 'react-native';
 import {BookmarkPlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
@@ -13,8 +13,11 @@ type MakeupRecipeDetailScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
+  onHeaderShareActionChange?: (action: MakeupRecipeHeaderShareAction | null) => void;
   onSaveRecipe: () => void;
 };
+
+type MakeupRecipeHeaderShareAction = () => void;
 
 const mainTabs: {id: MakeupRecipeTab; label: string}[] = [
   {id: 'all', label: '전체'},
@@ -86,6 +89,7 @@ const recipeItems = [
 ];
 
 export function MakeupRecipeDetailScreen({
+  onHeaderShareActionChange,
   photo,
   onSaveRecipe,
 }: MakeupRecipeDetailScreenProps) {
@@ -101,6 +105,33 @@ export function MakeupRecipeDetailScreen({
 
     return recipeItems.filter((item) => item.area === activeTab);
   }, [activeTab]);
+
+  const handleHeaderShare = useCallback(() => {
+    const message = buildRecipeShareMessage(extractedMakeupLook.title);
+
+    void Share.share({
+      message,
+      title: '메이크업 레시피',
+    }).catch((error: unknown) => {
+      console.info('[aura:makeup-recipe] share:failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      Alert.alert(
+        '공유 실패',
+        error instanceof Error
+          ? error.message
+          : '레시피 공유 화면을 열지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    });
+  }, [extractedMakeupLook.title]);
+
+  useEffect(() => {
+    onHeaderShareActionChange?.(handleHeaderShare);
+
+    return () => {
+      onHeaderShareActionChange?.(null);
+    };
+  }, [handleHeaderShare, onHeaderShareActionChange]);
 
   return (
     <AppScreen
@@ -205,6 +236,14 @@ export function MakeupRecipeDetailScreen({
       </YStack>
     </AppScreen>
   );
+}
+
+function buildRecipeShareMessage(title: string) {
+  const itemLines = recipeItems
+    .map((item) => `${item.number}. ${item.title}: ${item.value}`)
+    .join('\n');
+
+  return `${title}\n사진에서 추출한 메이크업 레시피예요.\n\n${itemLines}`;
 }
 
 function GuideNumber({number, style}: {number: string; style: object}) {

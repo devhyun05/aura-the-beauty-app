@@ -442,7 +442,7 @@ MakeupRecipeDetail
 옵션 노출 규칙:
 
 - 전체 얼굴(`MakeupArea = all`): `룩`, `형태`
-- 개별 부위(`base`, `eye`, `lip`, `cheek`, `contour`): `룩`, `컬러`, `타입`, `질감`, `형태`
+- 개별 부위(`base`, `eye`, `brow`, `lip`, `cheek`, `contour`): `룩`, `컬러`, `타입`, `질감`, `형태`
 - 옵션 카드 목록의 첫 번째 항목은 항상 `원본`이다.
 - 개별 옵션 수정 시 `selectedTotalMakeupLookId`는 `null`이 되고 `hasUnsavedMakeupChanges`가 켜진다.
 

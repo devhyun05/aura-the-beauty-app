@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
   },
   sheetPanel: {
     alignSelf: 'stretch',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.lg,

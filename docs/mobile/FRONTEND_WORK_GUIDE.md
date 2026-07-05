@@ -10,10 +10,12 @@ AI AR Makeup Guide는 사용자의 얼굴, 피부톤, 취향, 분위기를 바�
 
 현재 단계에서는 프론트엔드 UI/UX 구현을 우선합니다.
 
-- 백엔드 API, Unity AR, ARKit, ARCore, AI 추천 로직은 실제 구현하지 않습니다.
+- 백엔드 API, Unity AR, ARKit, ARCore, AI 추천 로직은 기본적으로 mock 또는 bridge/service layer로 처리합니다.
 - 필요한 데이터는 mock 데이터로 처리합니다.
 - 나중에 실제 API 또는 Unity 모듈로 교체할 수 있도록 interface와 service layer를 분리합니다.
 - 프론트엔드 작업 중 임의로 백엔드 서버, 데이터베이스, Unity 프로젝트, 네이티브 AR 코드를 생성하지 않습니다.
+- 단, 사용자가 명시적으로 AR 런타임 구현을 요청한 경우에는 기존 Unity/iOS bridge 구조를 확장할 수 있습니다. 이때 새 기술 스택을 추가하지 않고, 기존 `MediaPipeTasksVision`, RN bridge, Unity `E3RegionMaskOverlay` 계열 흐름을 우선 재사용합니다.
+- 눈썹 AR 구현은 기존 lip/blush 흐름 안에 섞지 말고 별도 brow runtime path로 추가합니다. lip generated mask, blush mask texture, cheek shader 분기는 회귀가 없도록 유지합니다.
 - 이 프로젝트의 모바일 앱은 iOS 우선으로 작업합니다.
 
 ## 기술 스택
@@ -187,7 +189,8 @@ shared/mocks/makeup.mock.ts
 ## 하지 말아야 할 것
 
 - 백엔드 서버 코드를 임의로 만들지 않습니다.
-- Unity, ARKit, ARCore 실제 구현 코드를 임의로 만들지 않습니다.
+- Unity, ARKit, ARCore 실제 구현 코드를 임의로 만들지 않습니다. 명시적으로 요청된 AR 런타임 작업은 기존 bridge와 renderer 경계를 유지하며 진행합니다.
+- 눈썹 AR 작업에서 lip/blush 동작을 변경하는 공통 shader, 공통 recipe parser, 기존 mask id 정책 수정은 필요한 경우에만 최소 범위로 제한합니다.
 - 팀 합의 없이 새로운 라이브러리를 추가하지 않습니다.
 - Tamagui 외의 UI 라이브러리를 임의로 추가하지 않습니다.
 - 기존 폴더 구조를 큰 폭으로 바꾸지 않습니다.

@@ -8,6 +8,11 @@
     "mobile:pods": "npm --prefix apps/mobile run pods",
     "mobile:ios": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios",
     "mobile:ios:device": "node scripts/check-ios-env.mjs && npm --prefix apps/mobile run ios:device",
+    "mobile:check:brow-native-landmarks": "node scripts/mobile/check-brow-native-landmark-contract.mjs",
+    "mobile:check:brow-runtime-log": "node scripts/mobile/check-generated-brow-runtime-events.mjs",
+    "mobile:test:generated-brow": "npm --prefix apps/mobile run test:generated-brow",
+    "mobile:test:face-ratio-distortion": "npm --prefix apps/mobile run test:face-ratio-distortion",
+    "mobile:test:unity-bridge": "npm --prefix apps/mobile run test:unity-bridge",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {

@@ -17,10 +17,28 @@ type UsersMePayload = {
   user?: BackendUser;
 };
 
+const devAuthPlaceholderValues = new Set(['Local Dev', 'dev@example.com']);
+
+function resolveBackendAuthText(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  if (!normalized || devAuthPlaceholderValues.has(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 function mapBackendUser(sessionUser: AuthUser, backendUser: BackendUser): AuthUser {
-  const email = sessionUser.email ?? backendUser.email;
-  const name = sessionUser.name ?? backendUser.name;
-  const nickname = sessionUser.nickname ?? backendUser.nickname ?? name ?? email ?? 'AURA User';
+  const sessionEmail = resolveBackendAuthText(sessionUser.email);
+  const sessionName = resolveBackendAuthText(sessionUser.name);
+  const sessionNickname = resolveBackendAuthText(sessionUser.nickname);
+  const backendEmail = resolveBackendAuthText(backendUser.email);
+  const backendName = resolveBackendAuthText(backendUser.name);
+  const backendNickname = resolveBackendAuthText(backendUser.nickname);
+  const email = sessionEmail ?? backendEmail;
+  const name = sessionName ?? backendName;
+  const nickname = sessionNickname ?? backendNickname ?? name ?? email ?? 'AURA User';
   const profileCompleted =
     sessionUser.profileCompleted ?? backendUser.profileCompleted ?? backendUser.profile_completed;
 

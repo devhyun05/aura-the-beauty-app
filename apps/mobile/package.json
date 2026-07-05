@@ -8,6 +8,11 @@
     "pods": "cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install",
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
     "ios:device": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios --device",
+    "ios:face-capture-lab": "EXPO_PUBLIC_AURA_EXPERIMENT_APP=face-capture-lab LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
+    "start:face-capture-lab": "EXPO_PUBLIC_AURA_EXPERIMENT_APP=face-capture-lab expo start",
+    "test:generated-brow": "node ../../scripts/mobile/run-generated-brow-contract.mjs",
+    "test:face-ratio-distortion": "node ../../scripts/mobile/run-face-ratio-distortion-contract.mjs",
+    "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,7 +26,9 @@
     "expo-file-system": "~56.0.8",
     "expo-font": "~56.0.7",
     "expo-image-picker": "~56.0.18",
+    "expo-media-library": "~56.0.8",
     "expo-secure-store": "~56.0.4",
+    "expo-sharing": "~56.0.19",
     "expo-status-bar": "~56.0.4",
     "expo-web-browser": "~56.0.5",
     "lucide-react-native": "^1.21.0",
@@ -32,6 +39,7 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
     "react-native-svg": "15.15.4",
+    "react-native-view-shot": "^5.1.1",
     "react-native-worklets": "^0.10.0",
     "tamagui": "^2.3.2"
   },

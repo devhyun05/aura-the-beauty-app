@@ -38,13 +38,27 @@ For a one-page implementation and setup summary, see `docs/backend/BACKEND_STATU
 
 ## Apply DB schema
 
-Set `DATABASE_URL` in `.env`, then run:
+Set `DATABASE_URL` in `.env`, or configure `DATABASE_SECRET_ID` with `DB_HOST`/`DB_NAME` for Secrets Manager-backed RDS credentials. Then run:
 
 ```powershell
 python -m app.db.init_db
 python -m app.db.seed_db
 python -m app.db.check_schema --require-seed
 ```
+
+For RDS instances that manage the master password in AWS Secrets Manager, keep the password out of `.env` and use:
+
+```env
+DATABASE_URL=
+DATABASE_SECRET_ID=rds!db-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+DB_HOST=aura-dev-postgres-1.xxxxx.ap-northeast-2.rds.amazonaws.com
+DB_PORT=5432
+DB_NAME=postgres
+DB_SSLMODE=require
+AWS_REGION=ap-northeast-2
+```
+
+The IAM user or ECS task role used by the backend must allow `secretsmanager:GetSecretValue` for that secret. Secret values may contain only `username` and `password`; in that case host, port, database, and ssl mode come from the env vars above.
 
 The schema source is `docs/backend/schema.sql`. This is the bootstrap path.
 The init command records `schema.sql:v1` in `schema_migrations`, so repeated
@@ -121,7 +135,7 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 ```
 
-Store secrets such as `DATABASE_URL` in AWS Secrets Manager and inject them into the ECS task definition. Keep non-secret values such as `AWS_REGION`, `S3_BUCKET_NAME`, `COGNITO_USER_POOL_ID`, and `COGNITO_APP_CLIENT_ID` in task environment variables or the same managed secret depending on team preference.
+For ECS/Fargate with RDS-managed credentials, prefer `DATABASE_SECRET_ID` plus `DB_HOST`, `DB_PORT`, `DB_NAME`, and `DB_SSLMODE` over embedding a password in `DATABASE_URL`. The task role needs `secretsmanager:GetSecretValue` for the RDS secret. Keep non-secret values such as `AWS_REGION`, `S3_BUCKET_NAME`, `COGNITO_USER_POOL_ID`, and `COGNITO_APP_CLIENT_ID` in task environment variables or the same managed secret depending on team preference.
 
 Build from the repository root:
 

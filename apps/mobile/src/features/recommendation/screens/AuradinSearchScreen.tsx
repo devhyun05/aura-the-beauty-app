@@ -26,6 +26,7 @@ import Svg, {Circle, Defs, RadialGradient, Stop} from 'react-native-svg';
 import {ArrowUp, Camera} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
+import {appAssetSource} from '../../../shared/config/mediaAssets';
 import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {getAuradinDraftData} from '../services/auradinService';
 import type {
@@ -36,8 +37,7 @@ import type {
 
 const AURA = '#C26572';
 
-const heroImage =
-  require('../../../assets/images/looks/look-cool-rose.png') as ImageSourcePropType;
+const heroImage = appAssetSource('images/looks/look-cool-rose.png') as ImageSourcePropType;
 
 type Phase = 'home' | 'searching' | 'question' | 'results';
 

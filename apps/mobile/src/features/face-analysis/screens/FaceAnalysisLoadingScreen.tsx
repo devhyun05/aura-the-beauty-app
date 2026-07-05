@@ -128,7 +128,7 @@ export function FaceAnalysisLoadingScreen({
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
               <Text style={styles.previewBadgeText}>
-                {hasAnalysisError ? '확인 필요' : '얼굴 진단 중'}
+                {hasAnalysisError ? '확인 필요' : '얼굴 분석 중'}
               </Text>
             </XStack>
           </View>

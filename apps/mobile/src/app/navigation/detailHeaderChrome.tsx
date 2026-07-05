@@ -1,14 +1,20 @@
 import React, {type ReactNode} from 'react';
-import {Share2} from 'lucide-react-native';
+import {ChevronDown, Share2} from 'lucide-react-native';
 import {StyleSheet} from 'react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, spacing, typography} from '../../shared/theme';
 import {AppHeader, XIcon} from '../../shared/ui';
-import {getDetailRouteTitle, getRouteChrome, type DetailHeaderRightAction} from './routeChrome';
+import {
+  getDetailRouteContextLabel,
+  getDetailRouteTitle,
+  getRouteChrome,
+  type DetailHeaderRightAction,
+} from './routeChrome';
 import type {RootStackRouteName} from './routeTypes';
 
 export type DetailHeaderPresentation = {
+  contextLabel: string;
   rightActions: readonly DetailHeaderRightAction[];
   title: string;
 };
@@ -29,31 +35,47 @@ export function getDetailHeaderPresentation(
   routeName: RootStackRouteName,
 ): DetailHeaderPresentation {
   return {
+    contextLabel: getDetailRouteContextLabel(routeName),
     rightActions: getDetailHeaderRightActions(routeName),
     title: getDetailRouteTitle(routeName),
   };
 }
 
 type DetailRouteChromeProps = {
+  backgroundColor?: string;
   children: ReactNode;
+  headerBackgroundColor?: string;
+  headerBorderColor?: string;
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
+  onOpenDocumentList?: () => void;
   onShare?: () => void;
   routeName: RootStackRouteName;
   shareDisabled?: boolean;
 };
 
 export function DetailRouteChrome({
+  backgroundColor = colors.background,
   children,
+  headerBackgroundColor = backgroundColor,
+  headerBorderColor = colors.border,
   onBack,
   onClose,
   onDone,
+  onOpenDocumentList,
   onShare,
   routeName,
   shareDisabled = false,
 }: DetailRouteChromeProps) {
   const presentation = getDetailHeaderPresentation(routeName);
+  const leftSlot = onOpenDocumentList ? (
+    <HeaderIconAction
+      accessibilityLabel="문서 목록 열기"
+      onPress={onOpenDocumentList}>
+      <ChevronDown color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+    </HeaderIconAction>
+  ) : undefined;
   const rightSlot = renderRightSlot({
     actions: presentation.rightActions,
     onBack,
@@ -62,17 +84,25 @@ export function DetailRouteChrome({
     onShare,
     shareDisabled,
   });
-  const shouldReserveLeftSlot = !onBack && presentation.rightActions.length > 0;
+  const shouldReserveLeftSlot =
+    !onBack && !leftSlot && presentation.rightActions.length > 0;
 
   return (
-    <YStack style={styles.screen}>
+    <YStack style={[styles.screen, {backgroundColor}]}>
       <AppHeader
-        leftSlot={shouldReserveLeftSlot ? <View /> : undefined}
+        containerProps={{
+          style: [
+            styles.header,
+            {backgroundColor: headerBackgroundColor, borderBottomColor: headerBorderColor},
+          ],
+        }}
+        contextLabel={presentation.contextLabel}
+        leftSlot={leftSlot ?? (shouldReserveLeftSlot ? <View /> : undefined)}
         onBack={onBack}
         rightSlot={rightSlot}
         title={presentation.title}
       />
-      <YStack style={styles.body}>{children}</YStack>
+      <YStack style={[styles.body, {backgroundColor}]}>{children}</YStack>
     </YStack>
   );
 }
@@ -175,6 +205,9 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  header: {
+    backgroundColor: colors.background,
   },
   doneButton: {
     alignItems: 'center',
