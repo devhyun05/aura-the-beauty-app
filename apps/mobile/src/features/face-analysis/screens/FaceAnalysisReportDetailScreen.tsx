@@ -1,8 +1,8 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
-  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -11,7 +11,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {ChevronDown, ChevronUp, WandSparkles} from 'lucide-react-native';
+import * as MediaLibrary from 'expo-media-library/legacy';
+import * as Sharing from 'expo-sharing';
+import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
+import {Download, Share2, WandSparkles} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
 import {
@@ -28,13 +31,14 @@ import {AppScreen} from '../../../shared/ui';
 import {
   faceAnalysisReportCreateFilterButtonAccessibilityLabels,
   faceAnalysisReportLiquidGlassButtonStyle,
-  faceAnalysisReportLiquidGlassSurfaceStyle,
   getFaceAnalysisReportPointGuideItems,
+  getFaceAnalysisReportPrimaryMakeupRecommendation,
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSubtitleTextStyle,
   getFaceAnalysisReportSummaryItems,
   type FaceAnalysisReportCreateFilterButtonPlacement,
   type FaceAnalysisReportGuideItem,
+  type FaceAnalysisReportPrimaryMakeupRecommendation,
 } from '../services/faceAnalysisReportDetailModel';
 import {
   type FaceAnalysisReportDetailLoadState,
@@ -49,15 +53,27 @@ type FaceAnalysisReportDetailScreenProps = {
   onBack?: () => void;
   onCreateARFilter?: () => void;
   onHeaderShareActionChange?: (action: FaceAnalysisReportShareAction | null) => void;
-  onShare?: (report: FaceAnalysisReport) => void;
 };
 
 type FaceAnalysisReportShareAction = () => void;
-type FacePointGuideKey = FaceAnalysisReportGuideItem['key'];
+type FaceAnalysisReportShareTarget = 'save-image' | 'share-report';
+type FaceAnalysisReportShareFeedback = {
+  message: string;
+};
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
 const REPORT_IMAGE_POLL_INTERVAL_MS = 4000;
 const MAKEUP_IMAGE_PENDING_TEXT = '\uC774\uBBF8\uC9C0 \uC0DD\uC131 \uC911';
+const REPORT_BACKGROUND_COLOR = colors.surfaceMuted;
+const REPORT_TEXT_PRIMARY = '#111827';
+const REPORT_TEXT_BODY = '#1F2937';
+const REPORT_TEXT_SECONDARY = '#374151';
+const REPORT_CARD_BORDER = '#E5E7EB';
+const REPORT_CAPTURE_OPTIONS = {
+  format: 'jpg',
+  quality: 0.95,
+  result: 'tmpfile',
+} as const;
 const faceAnalysisReportScreenFramePresentation =
   getFaceAnalysisReportScreenFramePresentation();
 const faceAnalysisReportSubtitleTextStyle =
@@ -80,8 +96,102 @@ const formatReportDate = (dateText: string, name?: string) => {
   return `${year}년 ${month}월 ${day}일 ${displayName}`;
 };
 
+const shareTargetLabels: Record<FaceAnalysisReportShareTarget, string> = {
+  'save-image': "이미지 저장",
+  'share-report': "공유하기",
+};
+
+function isMakeupImagePending(item?: FaceAnalysisMakeupCard | null) {
+  return item?.imageStatus === 'pending';
+}
+
 function countPendingRecommendedMakeupImages(report: FaceAnalysisReport | null): number {
-  return report?.recommendedMakeups.filter(item => item.imageStatus !== 'ready').length ?? 0;
+  const [primaryMakeup] = report?.recommendedMakeups ?? [];
+
+  return isMakeupImagePending(primaryMakeup) ? 1 : 0;
+}
+
+function getReportCaptureTitle(profileName?: string) {
+  return profileName ? [profileName, "님 맞춤 분석 보고서"].join('') : "맞춤 분석 보고서";
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function captureReportImage(reportCaptureRef: {current: ViewShotRef | null}) {
+  const captureTarget = reportCaptureRef.current;
+  const capture = captureTarget?.capture;
+
+  if (!captureTarget || !capture) {
+    throw new Error("보고서 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.");
+  }
+
+  await waitForNextFrame();
+  const imageUri = await capture.call(captureTarget);
+
+  if (!imageUri) {
+    throw new Error("보고서 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.");
+  }
+
+  return imageUri;
+}
+
+async function shareReportImageWithSystemSheet({
+  imageUri,
+  title,
+}: {
+  imageUri: string;
+  title: string;
+}): Promise<'shared' | 'dismissed'> {
+  const isSharingAvailable = await Sharing.isAvailableAsync();
+
+  if (isSharingAvailable) {
+    await Sharing.shareAsync(imageUri, {
+      dialogTitle: title,
+      mimeType: 'image/jpeg',
+      UTI: 'public.jpeg',
+    });
+    return 'shared';
+  }
+
+  const shareResult = await Share.share({
+    title,
+    url: imageUri,
+  });
+
+  return shareResult.action === Share.dismissedAction ? 'dismissed' : 'shared';
+}
+
+async function requestReportImageSavePermission() {
+  const currentPermission = await MediaLibrary.getPermissionsAsync(true, ['photo']);
+  const permission = currentPermission.granted
+    ? currentPermission
+    : await MediaLibrary.requestPermissionsAsync(true, ['photo']);
+
+  if (!permission.granted) {
+    throw new Error("사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.");
+  }
+}
+
+async function saveReportImageToLibrary(imageUri: string) {
+  try {
+    await MediaLibrary.saveToLibraryAsync(imageUri);
+  } catch (error) {
+    console.info('[aura:analysis] report-share:save-to-library-failed', {
+      imageUri,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    await MediaLibrary.createAssetAsync(imageUri);
+  }
+}
+
+function getShareErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "공유 작업을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.";
 }
 
 export function FaceAnalysisReportDetailScreen({
@@ -91,10 +201,14 @@ export function FaceAnalysisReportDetailScreen({
   reportId,
   onCreateARFilter,
   onHeaderShareActionChange,
-  onShare,
 }: FaceAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
     useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
+  const [activeShareTarget, setActiveShareTarget] =
+    useState<FaceAnalysisReportShareTarget | null>(null);
+  const [shareFeedback, setShareFeedback] =
+    useState<FaceAnalysisReportShareFeedback | null>(null);
+  const reportCaptureRef = useRef<ViewShotRef | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -150,6 +264,10 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportSummaryItems(report) : []),
     [report],
   );
+  const primaryMakeupRecommendation = useMemo(
+    () => (report ? getFaceAnalysisReportPrimaryMakeupRecommendation(report, guideItems) : null),
+    [guideItems, report],
+  );
   const heroImageSource = resolveFaceAnalysisReportHeroImageSource(capturedPhotoUri, report);
   const pendingRecommendedMakeupImageCount = useMemo(
     () => countPendingRecommendedMakeupImages(report),
@@ -201,34 +319,92 @@ export function FaceAnalysisReportDetailScreen({
     };
   }, [pendingRecommendedMakeupImageCount, report?.id]);
 
+  const handleShareAction = useCallback(async (target: FaceAnalysisReportShareTarget) => {
+    if (!report || activeShareTarget) {
+      return;
+    }
+
+    const label = shareTargetLabels[target];
+    const reportTitle = getReportCaptureTitle(profile?.name);
+
+    setActiveShareTarget(target);
+    setShareFeedback(null);
+
+    try {
+      if (target === 'save-image') {
+        await requestReportImageSavePermission();
+      }
+
+      const imageUri = await captureReportImage(reportCaptureRef);
+
+      if (target === 'save-image') {
+        await saveReportImageToLibrary(imageUri);
+        return;
+      }
+
+      await shareReportImageWithSystemSheet({
+        imageUri,
+        title: reportTitle,
+      });
+    } catch (error) {
+      console.info('[aura:analysis] report-share:failed', {
+        message: error instanceof Error ? error.message : String(error),
+        target,
+      });
+      const errorMessage = getShareErrorMessage(error);
+
+      setShareFeedback({
+        message: errorMessage,
+      });
+      Alert.alert([label, " 실패"].join(''), errorMessage);
+    } finally {
+      setActiveShareTarget(null);
+    }
+  }, [
+    activeShareTarget,
+    profile?.name,
+    report,
+  ]);
+
+  const handleOpenShareOptions = useCallback(() => {
+    if (!report) {
+      return;
+    }
+
+    if (activeShareTarget) {
+      Alert.alert("공유 준비 중", "이전 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.");
+      return;
+    }
+
+    Alert.alert("맞춤 분석 보고서", "원하는 방식을 선택해 주세요.", [
+      {
+        text: shareTargetLabels['save-image'],
+        onPress: () => {
+          void handleShareAction('save-image');
+        },
+      },
+      {
+        text: shareTargetLabels['share-report'],
+        onPress: () => {
+          void handleShareAction('share-report');
+        },
+      },
+      {text: "취소", style: 'cancel'},
+    ]);
+  }, [activeShareTarget, handleShareAction, report]);
+
   useEffect(() => {
     if (!report) {
       onHeaderShareActionChange?.(null);
       return;
     }
 
-    const shareAction = () => {
-      if (onShare) {
-        onShare(report);
-        return;
-      }
-
-      void Share.share({
-        message: [
-          formatReportDate(report.analyzedAt, profile?.name),
-          `퍼스널 컬러: ${report.personalColor}`,
-          `추천 무드: ${report.recommendedMood}`,
-        ].join('\n'),
-        title: headerTitle,
-      });
-    };
-
-    onHeaderShareActionChange?.(shareAction);
+    onHeaderShareActionChange?.(handleOpenShareOptions);
 
     return () => {
       onHeaderShareActionChange?.(null);
     };
-  }, [headerTitle, onHeaderShareActionChange, onShare, profile?.name, report]);
+  }, [handleOpenShareOptions, onHeaderShareActionChange, report]);
 
   if (!report) {
     return (
@@ -255,40 +431,52 @@ export function FaceAnalysisReportDetailScreen({
         />
       }
     >
-      <Text style={styles.subtitle}>
-        {formatReportDate(report.analyzedAt, profile?.name)}
-      </Text>
-
-      <View style={styles.heroCard}>
-        <Image
-          resizeMode="cover"
-          source={heroImageSource}
-          style={styles.heroImage}
-          testID="face-analysis-report-hero-image"
-        />
-      </View>
-
-      <View style={styles.summaryGrid}>
-        {summaryItems.map((item) => (
-          <SummaryItem key={item.label} label={item.label} value={item.value} />
-        ))}
-      </View>
-
-      <ReportSection title="분석 요약">
-        <Text numberOfLines={3} style={styles.paragraph}>
-          {report.skinAnalysisSummary || report.shortSummary}
+      <ViewShot
+        ref={reportCaptureRef}
+        options={REPORT_CAPTURE_OPTIONS}
+        style={styles.captureArea}
+      >
+        <Text style={styles.subtitle}>
+          {formatReportDate(report.analyzedAt, profile?.name)}
         </Text>
-      </ReportSection>
 
-      <ReportSection title={'\uD3EC\uC778\uD2B8 \uAC00\uC774\uB4DC'}>
-        <FacePointGuideMap guideItems={guideItems} />
-      </ReportSection>
+        <View style={styles.heroCard}>
+          <Image
+            resizeMode="cover"
+            source={heroImageSource}
+            style={styles.heroImage}
+            testID="face-analysis-report-hero-image"
+          />
+        </View>
 
-      <MakeupCardRail title="추천 메이크업" items={report.recommendedMakeups} />
+        <View style={styles.summaryGrid}>
+          {summaryItems.map((item) => (
+            <SummaryItem key={item.label} label={item.label} value={item.value} />
+          ))}
+        </View>
 
-      <Text style={styles.notice}>
-        분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
-      </Text>
+        <ReportSection title={"분석 요약"}>
+          <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
+        </ReportSection>
+
+        {primaryMakeupRecommendation ? (
+          <PrimaryMakeupRecommendationCard recommendation={primaryMakeupRecommendation} />
+        ) : null}
+
+        <ReportSection title={"포인트 가이드"}>
+          <FacePointGuideMap guideItems={guideItems} />
+        </ReportSection>
+
+        <Text style={styles.notice}>
+          분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
+        </Text>
+      </ViewShot>
+
+      <ReportShareActions
+        activeTarget={activeShareTarget}
+        feedback={shareFeedback}
+        onPressShareAction={handleShareAction}
+      />
     </FaceAnalysisReportScaffold>
   );
 }
@@ -299,73 +487,27 @@ function FacePointGuideMap({
 }: {
   guideItems: FaceAnalysisReportGuideItem[];
 }) {
-  const [expandedGuideKey, setExpandedGuideKey] = useState<FacePointGuideKey | null>(null);
-
-  useEffect(() => {
-    if (
-      expandedGuideKey &&
-      !guideItems.some((guide) => guide.key === expandedGuideKey)
-    ) {
-      setExpandedGuideKey(null);
-    }
-  }, [expandedGuideKey, guideItems]);
-
   if (guideItems.length === 0) {
     return null;
   }
 
   return (
     <View style={styles.pointGuideBoard}>
-      {guideItems.map((guide, index) => {
-        const isExpanded = guide.key === expandedGuideKey;
-
-        return (
-          <View
-            key={guide.key}
-            style={[
-              styles.pointGuideItem,
-              index === guideItems.length - 1 ? styles.pointGuideItemLast : null,
-            ]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{expanded: isExpanded}}
-              onPress={() =>
-                setExpandedGuideKey((currentGuideKey) =>
-                  currentGuideKey === guide.key ? null : guide.key,
-                )
-              }
-              style={({pressed}) => [
-                styles.pointGuideRow,
-                isExpanded ? styles.pointGuideRowExpanded : null,
-                pressed ? styles.pointGuideRowPressed : null,
-              ]}>
-              <Text numberOfLines={1} style={styles.pointGuideLabel}>
-                {guide.label}
-              </Text>
-              <View style={styles.pointGuideIcon}>
-                {isExpanded ? (
-                  <ChevronUp
-                    color={colors.textTertiary}
-                    size={iconSize.sm}
-                    strokeWidth={2}
-                  />
-                ) : (
-                  <ChevronDown
-                    color={colors.textTertiary}
-                    size={iconSize.sm}
-                    strokeWidth={2}
-                  />
-                )}
-              </View>
-            </Pressable>
-            {isExpanded ? (
-              <View style={styles.pointGuideBubble}>
-                <Text style={styles.pointGuideBubbleText}>{guide.detail}</Text>
-              </View>
-            ) : null}
-          </View>
-        );
-      })}
+      {guideItems.map((guide, index) => (
+        <View
+          key={guide.key}
+          style={[
+            styles.pointGuideItem,
+            index === guideItems.length - 1 ? styles.pointGuideItemLast : null,
+          ]}>
+          <Text style={styles.pointGuideLabel}>
+            {guide.label}
+          </Text>
+          <Text style={styles.pointGuidePoint}>
+            {guide.detail}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -394,7 +536,7 @@ function FaceAnalysisReportScaffold({
 
   return (
     <AppScreen
-      backgroundColor={colors.surfaceMuted}
+      backgroundColor={REPORT_BACKGROUND_COLOR}
       bottomPadding={0}
       contentGap={0}
       horizontalPadding={0}
@@ -453,9 +595,17 @@ function SummaryItem({label, value}: {label: string; value: string}) {
   return (
     <View style={styles.summaryItem}>
       <Text style={styles.summaryLabel}>{label}</Text>
-      <Text numberOfLines={2} style={styles.summaryValue}>
+      <Text numberOfLines={3} style={styles.summaryValue}>
         {value}
       </Text>
+    </View>
+  );
+}
+
+function AnalysisSummaryBlock({summary}: {summary: string}) {
+  return (
+    <View style={styles.analysisSummaryCard}>
+      <Text style={styles.analysisSummaryText}>{summary}</Text>
     </View>
   );
 }
@@ -480,83 +630,136 @@ function ReportSection({
   );
 }
 
-function MakeupCardRail({
-  items,
-  title,
+function getMakeupMoodLabels(makeup: FaceAnalysisMakeupCard) {
+  const labels = [
+    "데일리",
+    makeup.subtitle,
+    ...makeup.tags.filter((tag) => tag !== "추천"),
+  ]
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(labels)).slice(0, 3);
+}
+
+function PrimaryMakeupRecommendationCard({
+  recommendation,
 }: {
-  items: FaceAnalysisMakeupCard[];
-  title: string;
+  recommendation: FaceAnalysisReportPrimaryMakeupRecommendation;
 }) {
   const {width} = useWindowDimensions();
-  const cardWidth = Math.min(286, Math.max(230, width * 0.72));
-  const snapInterval = cardWidth + spacing.md;
-  const visibleItems = items.slice(0, 3);
+  const imageHeight = Math.min(340, Math.max(236, width * 0.76));
+  const {makeup} = recommendation;
+  const isImagePending = isMakeupImagePending(makeup);
+  const moodLabels = getMakeupMoodLabels(makeup);
+  const makeupTitle = makeup.subtitle || makeup.title;
 
   return (
-    <ReportSection title={title}>
-      <ScrollView
-        style={styles.railViewport}
-        contentContainerStyle={styles.railContent}
-        decelerationRate="fast"
-        horizontal
-        removeClippedSubviews={false}
-        snapToAlignment="start"
-        snapToInterval={snapInterval}
-        showsHorizontalScrollIndicator={false}
-      >
-        {visibleItems.map((item) => {
-          const isImagePending = item.imageStatus !== 'ready';
-
-          return (
-            <View key={item.id} style={[styles.makeupCard, {width: cardWidth}]}>
-              <View style={styles.makeupImageWrap}>
-                <Image
-                  resizeMode="cover"
-                  source={item.imageSource}
-                  style={[
-                    styles.makeupImage,
-                    isImagePending ? styles.makeupImagePending : null,
-                  ]}
-                />
-                <View style={styles.makeupImageScrim} />
-                {isImagePending ? (
-                  <View style={styles.makeupImagePendingOverlay}>
-                    <ActivityIndicator color={colors.white} size="small" />
-                    <Text style={styles.makeupImagePendingText}>
-                      {MAKEUP_IMAGE_PENDING_TEXT}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.makeupBody}>
-                <View style={styles.makeupTitleRow}>
-                  <View style={styles.makeupTitleTextGroup}>
-                    <Text numberOfLines={1} style={styles.makeupTitle}>
-                      {item.title}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.makeupSubtitle}>
-                      {item.subtitle}
-                    </Text>
-                  </View>
-                </View>
-                <Text numberOfLines={3} style={styles.makeupDescription}>
-                  {item.description}
-                </Text>
-                <View style={styles.tagRow}>
-                  {item.tags.slice(0, 2).map((tag) => (
-                    <Text key={tag} style={styles.tag}>
-                      {tag}
-                    </Text>
-                  ))}
-                </View>
-              </View>
+    <ReportSection title={"추천 메이크업"}>
+      <View style={styles.makeupCard}>
+        <View style={[styles.makeupImageWrap, {height: imageHeight}]}>
+          <Image
+            resizeMode="cover"
+            source={makeup.imageSource}
+            style={[
+              styles.makeupImage,
+              isImagePending ? styles.makeupImagePending : null,
+            ]}
+          />
+          <View style={styles.makeupImageScrim} />
+          {isImagePending ? (
+            <View style={styles.makeupImagePendingOverlay}>
+              <ActivityIndicator color={colors.white} size="small" />
+              <Text style={styles.makeupImagePendingText}>
+                {MAKEUP_IMAGE_PENDING_TEXT}
+              </Text>
             </View>
-          );
-        })}
-      </ScrollView>
+          ) : null}
+        </View>
+        <View style={styles.makeupBody}>
+          <View style={styles.makeupTitleRow}>
+            <View style={styles.makeupTitleTextGroup}>
+              <Text style={styles.makeupEyebrow}>데일리</Text>
+              <Text numberOfLines={2} style={styles.makeupTitle}>
+                {makeupTitle}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.makeupMoodRow}>
+            {moodLabels.map((label) => (
+              <Text key={label} numberOfLines={1} style={styles.makeupMoodTag}>
+                {label}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </View>
     </ReportSection>
   );
 }
+
+function ReportShareActions({
+  activeTarget,
+  feedback,
+  onPressShareAction,
+}: {
+  activeTarget: FaceAnalysisReportShareTarget | null;
+  feedback: FaceAnalysisReportShareFeedback | null;
+  onPressShareAction: (target: FaceAnalysisReportShareTarget) => Promise<void>;
+}) {
+  const shareActions: Array<{
+    icon: React.ReactNode;
+    target: FaceAnalysisReportShareTarget;
+  }> = [
+    {
+      icon: <Download color={REPORT_TEXT_PRIMARY} size={iconSize.md} strokeWidth={2.1} />,
+      target: 'save-image',
+    },
+    {
+      icon: <Share2 color={REPORT_TEXT_PRIMARY} size={iconSize.md} strokeWidth={2.1} />,
+      target: 'share-report',
+    },
+  ];
+
+  return (
+    <View style={styles.shareActionArea}>
+      <View style={styles.shareActionRow}>
+        {shareActions.map((action) => {
+          const isActive = activeTarget === action.target;
+          const isDisabled = Boolean(activeTarget);
+
+          return (
+            <Button
+              accessibilityLabel={shareTargetLabels[action.target]}
+              accessibilityRole="button"
+              accessibilityState={{busy: isActive, disabled: isDisabled}}
+              disabled={isDisabled}
+              disabledStyle={styles.shareActionDisabled}
+              key={action.target}
+              onPress={() => {
+                void onPressShareAction(action.target);
+              }}
+              pressStyle={{opacity: 0.56}}
+              style={styles.shareActionButton}
+              unstyled>
+              {isActive ? (
+                <ActivityIndicator color={REPORT_TEXT_PRIMARY} size="small" />
+              ) : (
+                action.icon
+              )}
+            </Button>
+          );
+        })}
+      </View>
+      {feedback ? (
+        <Text accessibilityLiveRegion="polite" style={styles.shareFeedback}>
+          {feedback.message}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   empty: {
     alignItems: 'center',
@@ -565,18 +768,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyDescription: {
-    color: colors.textSecondary,
+    color: REPORT_TEXT_BODY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
   },
   emptyTitle: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
     textAlign: 'center',
+  },
+  captureArea: {
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    gap: spacing.xl,
+  },
+  analysisSummaryCard: {
+    backgroundColor: colors.surface,
+    borderColor: REPORT_CARD_BORDER,
+    borderLeftColor: REPORT_TEXT_PRIMARY,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  analysisSummaryText: {
+    color: REPORT_TEXT_BODY,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.md,
   },
   floatingCreateFilterArea: {
     bottom: 0,
@@ -598,15 +821,22 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   createFilterButtonText: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.md,
   },
   heroCard: {
-    ...faceAnalysisReportLiquidGlassSurfaceStyle,
+    backgroundColor: colors.surface,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.lg,
+    borderWidth: 1,
+    elevation: 3,
     padding: spacing.xs,
+    shadowColor: colors.black,
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   heroImage: {
     backgroundColor: colors.surface,
@@ -622,7 +852,7 @@ const styles = StyleSheet.create({
   },
   makeupCard: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.lg,
     borderWidth: 1,
     elevation: 4,
@@ -633,9 +863,36 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
   },
   makeupDescription: {
-    color: colors.textSecondary,
+    color: REPORT_TEXT_BODY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
+  makeupEyebrow: {
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  makeupGuideCallout: {
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    borderColor: REPORT_CARD_BORDER,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  makeupGuideCaption: {
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  makeupGuideText: {
+    color: REPORT_TEXT_BODY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
   makeupImage: {
@@ -643,7 +900,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   makeupImageScrim: {
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -671,15 +928,14 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   makeupImageWrap: {
-    backgroundColor: colors.surfaceMuted,
-    height: 220,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
     overflow: 'hidden',
     position: 'relative',
   },
   makeupSubtitle: {
-    color: colors.textTertiary,
+    color: REPORT_TEXT_SECONDARY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
   makeupTitleRow: {
@@ -693,98 +949,118 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   makeupTitle: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
+    textShadowColor: 'rgba(17, 24, 39, 0.08)',
+    textShadowOffset: {height: 1, width: 0},
+    textShadowRadius: 1,
+  },
+  makeupMoodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  makeupMoodTag: {
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    borderColor: REPORT_CARD_BORDER,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    color: REPORT_TEXT_BODY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+    maxWidth: '100%',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
   },
   notice: {
-    color: colors.textTertiary,
+    color: REPORT_TEXT_SECONDARY,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
   paragraph: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_BODY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.sm,
-  },
-  paragraphMuted: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.regular,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
   pointGuideBoard: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
   pointGuideBubble: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.md,
     borderWidth: 1,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     marginHorizontal: spacing.md,
+    marginLeft: spacing.xl,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     position: 'relative',
   },
   pointGuideBubbleText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.xs,
+    color: REPORT_TEXT_BODY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
   },
   pointGuideIcon: {
     alignItems: 'center',
     height: 24,
     justifyContent: 'center',
+    marginTop: 2,
     width: 24,
   },
   pointGuideItem: {
-    borderBottomColor: colors.divider,
+    borderBottomColor: REPORT_CARD_BORDER,
     borderBottomWidth: 1,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   pointGuideItemLast: {
     borderBottomWidth: 0,
   },
   pointGuideLabel: {
-    color: colors.textPrimary,
-    flex: 1,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.sm,
-    minWidth: 0,
+  },
+  pointGuidePoint: {
+    color: REPORT_TEXT_BODY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
   },
   pointGuideRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: spacing.sm,
     justifyContent: 'space-between',
-    minHeight: 46,
+    minHeight: 64,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  pointGuideTextGroup: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
   },
   pointGuideRowExpanded: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
   },
   pointGuideRowPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  railContent: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.screenX,
-    paddingVertical: spacing.sm,
-  },
-  railViewport: {
-    marginHorizontal: -spacing.screenX,
-    overflow: 'visible',
+    backgroundColor: REPORT_BACKGROUND_COLOR,
   },
   reportContent: {
     gap: spacing.xl,
@@ -792,11 +1068,11 @@ const styles = StyleSheet.create({
     paddingTop: faceAnalysisReportScreenFramePresentation.contentTopPadding,
   },
   scrollBody: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
     flex: 1,
   },
   section: {
-    borderTopColor: colors.divider,
+    borderTopColor: REPORT_CARD_BORDER,
     borderTopWidth: 1,
     gap: spacing.md,
     paddingTop: spacing.lg,
@@ -808,20 +1084,51 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_PRIMARY,
     flex: 1,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
+    textShadowColor: 'rgba(17, 24, 39, 0.08)',
+    textShadowOffset: {height: 1, width: 0},
+    textShadowRadius: 1,
+  },
+  shareActionArea: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+  },
+  shareActionButton: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  shareActionDisabled: {
+    opacity: 0.52,
+  },
+  shareActionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'center',
+  },
+  shareFeedback: {
+    color: colors.danger,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
   },
   staticBody: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
     flex: 1,
   },
   subtitle: {
-    color: colors.textSecondary,
+    color: REPORT_TEXT_BODY,
     fontSize: faceAnalysisReportSubtitleTextStyle.fontSize,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.semibold,
     lineHeight: faceAnalysisReportSubtitleTextStyle.lineHeight,
     textAlign: 'center',
   },
@@ -831,32 +1138,42 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   summaryItem: {
-    ...faceAnalysisReportLiquidGlassSurfaceStyle,
+    backgroundColor: colors.surface,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.md,
+    borderWidth: 1,
+    elevation: 3,
     flexGrow: 1,
     gap: spacing.xs,
-    minHeight: 72,
-    padding: spacing.md,
+    minHeight: 84,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    shadowColor: colors.black,
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
     width: '47%',
   },
   summaryLabel: {
-    color: colors.textTertiary,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xs,
   },
   summaryValue: {
-    color: colors.textPrimary,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
+    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
   tag: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    borderColor: REPORT_CARD_BORDER,
     borderRadius: radius.pill,
-    color: colors.textSecondary,
+    borderWidth: 1,
+    color: REPORT_TEXT_BODY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

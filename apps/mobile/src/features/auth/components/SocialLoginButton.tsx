@@ -1,7 +1,9 @@
 import {StyleSheet} from 'react-native';
+import {Apple} from 'lucide-react-native';
 import {Button, Image, Spinner} from 'tamagui';
 
 import {appAssetUri} from '../../../shared/config/mediaAssets';
+import {colors, iconSize, spacing} from '../../../shared/theme';
 import type {SocialLoginItem, SocialLoginProvider} from '../types';
 
 type SocialLoginButtonProps = {
@@ -34,6 +36,10 @@ export function SocialLoginButton({
 }
 
 function SocialLoginMark({item}: {item: SocialLoginItem}) {
+  if (item.id === 'apple') {
+    return <Apple color={colors.black} size={iconSize.xl} strokeWidth={2.4} />;
+  }
+
   if (item.id === 'kakao') {
     return (
       <Image
@@ -75,6 +81,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 0,
     paddingVertical: 0,
-    width: 14,
+    width: iconSize.xl + spacing.xxl,
   },
 });

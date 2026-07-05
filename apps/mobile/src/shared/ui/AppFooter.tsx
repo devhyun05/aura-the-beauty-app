@@ -3,27 +3,38 @@ import {StyleSheet} from 'react-native';
 import {Button, Text, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
-import {CameraCaptureButtonSurface} from './CameraCaptureButton';
 import {
-  BrushFooterIcon,
-  CameraFooterIcon,
+  CommunityFooterIcon,
+  ConsultingFooterIcon,
   HomeFooterIcon,
+  ProfileFooterIcon,
 } from './FooterIcons';
+import {
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  type FloatingActionButtonPosition,
+} from './FloatingActionMenu';
 
-export type FooterTabKey = 'home' | 'capture' | 'custom';
+export type FooterTabKey = 'home' | 'profile' | 'community' | 'consulting';
 
-export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xxl;
+export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xl;
 export const APP_FOOTER_BAR_HEIGHT = 64;
-export const APP_FOOTER_TAB_HEIGHT = 52;
+export const APP_FOOTER_TAB_HEIGHT = 42;
 export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
-export const APP_FOOTER_CAPTURE_BUBBLE_SIZE = 62;
+export const APP_FOOTER_ACTION_BUBBLE_SIZE = APP_FOOTER_BAR_HEIGHT;
+export const APP_FOOTER_ACTION_SLOT_WIDTH = APP_FOOTER_BAR_HEIGHT;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
-export const APP_FOOTER_CAPTURE_ICON_SIZE = iconSize.lg;
+export const APP_FOOTER_ACTION_ICON_SIZE = iconSize.lg;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
 export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
+export const APP_FOOTER_SHOW_LABELS_BY_DEFAULT = false;
 export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
 export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
+export const APP_FOOTER_SIDE_TAB_WIDTH = 58;
+export const APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION =
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION;
+
+export type AppFooterActionSlotItem = 'tabs' | 'action';
 
 type FooterTabItem = {
   key: FooterTabKey;
@@ -33,6 +44,8 @@ type FooterTabItem = {
 };
 
 type AppFooterProps = {
+  actionSlot?: ReactNode;
+  actionSlotPosition?: FloatingActionButtonPosition;
   activeTab?: FooterTabKey;
   bottomInset?: number;
   floating?: boolean;
@@ -48,28 +61,86 @@ const footerItems: FooterTabItem[] = [
     icon: color => <HomeFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   {
-    key: 'capture',
-    label: '실시간 AR',
-    accessibilityLabel: '실시간 AR 화면으로 이동',
-    icon: color => (
-      <CameraFooterIcon color={color} size={APP_FOOTER_CAPTURE_ICON_SIZE} />
-    ),
+    key: 'profile',
+    label: '프로필',
+    accessibilityLabel: '프로필로 이동',
+    icon: color => <ProfileFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   {
-    key: 'custom',
-    label: '아우라딘',
-    accessibilityLabel: '아우라딘 화면으로 이동',
-    icon: color => <BrushFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+    key: 'community',
+    label: '커뮤니티',
+    accessibilityLabel: '커뮤니티로 이동',
+    icon: color => <CommunityFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+  },
+  {
+    key: 'consulting',
+    label: '컨설팅',
+    accessibilityLabel: '컨설팅으로 이동',
+    icon: color => <ConsultingFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
 ];
 
+export function getAppFooterActionSlotOrder(
+  actionSlotPosition: FloatingActionButtonPosition,
+): readonly AppFooterActionSlotItem[] {
+  return actionSlotPosition === 'left' ? ['action', 'tabs'] : ['tabs', 'action'];
+}
+
 export function AppFooter({
+  actionSlot,
+  actionSlotPosition = APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION,
   activeTab,
   bottomInset = 0,
   floating = false,
   onTabPress,
-  showLabels = true,
+  showLabels = APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
 }: AppFooterProps) {
+  const footerBar = (
+    <XStack key="tabs" style={styles.footerBar}>
+      <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
+      {footerItems.map(item => {
+        const isActive = item.key === activeTab;
+        const iconColor = isActive ? colors.white : colors.textPrimary;
+        const labelColor = isActive ? colors.white : colors.textPrimary;
+
+        return (
+          <Button
+            key={item.key}
+            unstyled
+            accessibilityRole="tab"
+            accessibilityState={{selected: isActive}}
+            accessibilityLabel={item.accessibilityLabel}
+            hitSlop={6}
+            pressStyle={{scale: 0.98}}
+            style={[
+              styles.tabButton,
+              isActive ? styles.activeTabButton : undefined,
+            ]}
+            onPress={() => onTabPress?.(item.key)}>
+            <YStack style={styles.tabContent}>
+              {item.icon(iconColor)}
+              {showLabels ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.tabLabel, {color: labelColor}]}>
+                  {item.label}
+                </Text>
+              ) : null}
+            </YStack>
+          </Button>
+        );
+      })}
+    </XStack>
+  );
+  const actionSlotElement = actionSlot ? (
+    <YStack key="action" style={styles.actionSlot}>
+      {actionSlot}
+    </YStack>
+  ) : null;
+  const footerContent = getAppFooterActionSlotOrder(actionSlotPosition).map(item =>
+    item === 'action' ? actionSlotElement : footerBar,
+  );
+
   return (
     <YStack
       pointerEvents="box-none"
@@ -80,49 +151,8 @@ export function AppFooter({
           paddingBottom: Math.max(bottomInset, spacing.md),
         },
       ]}>
-      <XStack style={styles.footerBar}>
-        <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
-        {footerItems.map(item => {
-          const isActive = item.key === activeTab;
-          const isCaptureTab = item.key === 'capture';
-          const iconColor = isCaptureTab || isActive ? colors.white : colors.textPrimary;
-          const labelColor = isCaptureTab ? colors.textPrimary : isActive ? colors.white : colors.textPrimary;
-
-          return (
-            <Button
-              key={item.key}
-              unstyled
-              accessibilityRole="tab"
-              accessibilityState={{selected: isActive}}
-              accessibilityLabel={item.accessibilityLabel}
-              hitSlop={6}
-              pressStyle={{scale: isCaptureTab ? 0.96 : 0.98}}
-              style={[
-                isCaptureTab ? styles.captureTabButton : styles.tabButton,
-                !isCaptureTab && isActive ? styles.activeTabButton : undefined,
-              ]}
-              onPress={() => onTabPress?.(item.key)}>
-              <YStack style={isCaptureTab ? styles.captureTabContent : styles.tabContent}>
-                {isCaptureTab ? (
-                  <CameraCaptureButtonSurface
-                    showInnerDot={false}
-                    size={APP_FOOTER_CAPTURE_BUBBLE_SIZE}>
-                    {item.icon(iconColor)}
-                  </CameraCaptureButtonSurface>
-                ) : (
-                  item.icon(iconColor)
-                )}
-                {showLabels ? (
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.tabLabel, {color: labelColor}]}>
-                    {item.label}
-                  </Text>
-                ) : null}
-              </YStack>
-            </Button>
-          );
-        })}
+      <XStack style={styles.footerRow}>
+        {footerContent}
       </XStack>
     </YStack>
   );
@@ -143,6 +173,12 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 20,
   },
+  footerRow: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
   footerBar: {
     alignItems: 'center',
     backgroundColor: APP_FOOTER_GLASS_BACKGROUND,
@@ -151,7 +187,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     height: APP_FOOTER_BAR_HEIGHT,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     overflow: APP_FOOTER_BAR_OVERFLOW,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -159,9 +195,11 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: 0.16,
     shadowRadius: 22,
+    width: APP_FOOTER_SIDE_TAB_WIDTH * footerItems.length + spacing.sm * 2,
   },
   footerGlassHighlight: {
     backgroundColor: APP_FOOTER_GLASS_HIGHLIGHT,
+    borderRadius: radius.pill,
     height: 18,
     left: spacing.md,
     position: 'absolute',
@@ -171,25 +209,20 @@ const styles = StyleSheet.create({
   tabButton: {
     alignItems: 'center',
     borderRadius: radius.pill,
-    flex: 1,
     height: APP_FOOTER_TAB_HEIGHT,
     justifyContent: 'center',
+    position: 'relative',
+    width: APP_FOOTER_SIDE_TAB_WIDTH,
   },
   activeTabButton: {
     backgroundColor: APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   },
-  captureTabButton: {
+  actionSlot: {
     alignItems: 'center',
-    alignSelf: 'stretch',
-    flex: 1,
+    height: APP_FOOTER_ACTION_BUBBLE_SIZE,
     justifyContent: 'center',
-    minWidth: 0,
-  },
-  captureTabContent: {
-    alignItems: 'center',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    transform: [{translateY: -12}],
+    overflow: 'visible',
+    width: APP_FOOTER_ACTION_SLOT_WIDTH,
   },
   tabContent: {
     alignItems: 'center',

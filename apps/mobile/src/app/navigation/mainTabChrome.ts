@@ -41,7 +41,7 @@ export function getMainHeaderCopy(routeName: MainTabRouteName): MainHeaderCopy {
 
 export function getMainTabFooterState(
   routeName: MainTabRouteName,
-): Extract<FooterTabKey, 'home' | 'custom'> | undefined {
+): FooterTabKey | undefined {
   const chrome = getRouteChrome(routeName);
 
   if (chrome.kind !== 'mainTab') {

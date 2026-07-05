@@ -79,7 +79,7 @@ def profile_notes(profile: str) -> list[str]:
   ]
 
   if profile == "local":
-    notes.append("After DATABASE_URL is set, run init_db, seed_db, then check_schema.")
+    notes.append("After DATABASE_URL or DATABASE_SECRET_ID is set, run init_db, seed_db, then check_schema.")
   elif profile == "aws":
     notes.append("For ECS, prefer AWS_USE_IAM_ROLE=true with an attached task role.")
     notes.append("Set EXPO_PUBLIC_API_BASE_URL in the mobile app after CloudFront is ready.")

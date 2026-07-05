@@ -1,5 +1,6 @@
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 import type {
+  FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
   FaceAnalysisReport,
 } from '../../../shared/types/faceAnalysis';
@@ -16,6 +17,12 @@ export type FaceAnalysisReportSummaryItem = {
   value: string;
 };
 
+export type FaceAnalysisReportPrimaryMakeupRecommendation = {
+  makeup: FaceAnalysisMakeupCard;
+  guideSummary: string;
+  reason: string;
+};
+
 export type FaceAnalysisReportCreateFilterButtonPlacement = 'floating-bottom';
 type FaceAnalysisReportLiquidGlassButtonTarget = 'create-filter';
 type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
@@ -27,7 +34,7 @@ type FaceAnalysisReportGuideLabel = {
 
 const guideLabels: FaceAnalysisReportGuideLabel[] = [
   {key: 'brow', label: '\uB208\uC379'},
-  {key: 'eyeshadow', label: '\uC544\uC774\uC12C\uB3C4\uC6B0'},
+  {key: 'eyeshadow', label: '\uC544\uC774\uC100\uB3C4'},
   {key: 'eyeliner', label: '\uC544\uC774\uB77C\uC778'},
   {key: 'blush', label: '\uBE14\uB7EC\uC154'},
   {key: 'highlight', label: '\uD558\uC774\uB77C\uC774\uD2B8'},
@@ -160,4 +167,32 @@ export function getFaceAnalysisReportPointGuideItems(
       };
     }),
   ];
+}
+
+export function getFaceAnalysisReportPrimaryMakeupRecommendation(
+  report: FaceAnalysisReport,
+  guideItems = getFaceAnalysisReportPointGuideItems(report),
+): FaceAnalysisReportPrimaryMakeupRecommendation | null {
+  const [makeup] = report.recommendedMakeups;
+
+  if (!makeup) {
+    return null;
+  }
+
+  const guideSummary = guideItems
+    .filter(
+      (guide) => guide.key === 'base' || guide.key === 'blush' || guide.key === 'lip',
+    )
+    .map((guide) => guide.point)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' · ');
+  const fallbackGuideSummary =
+    guideSummary || report.toneSummary || report.recommendedMood;
+
+  return {
+    makeup,
+    guideSummary: fallbackGuideSummary,
+    reason: `${report.recommendedMood} 무드와 ${fallbackGuideSummary} 포인트를 반영한 데일리 추천입니다.`,
+  };
 }

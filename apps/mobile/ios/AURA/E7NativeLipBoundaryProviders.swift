@@ -10,6 +10,11 @@ import MediaPipeTasksVision
 
 @objc(E7NativeLipBoundaryProviders)
 final class E7NativeLipBoundaryProviders: NSObject {
+  #if canImport(MediaPipeTasksVision)
+  private let mediaPipeFaceLandmarkerLock = NSLock()
+  private var cachedMediaPipeFaceLandmarker: FaceLandmarker?
+  #endif
+
   @objc
   static func requiresMainQueueSetup() -> Bool {
     false
@@ -762,19 +767,12 @@ final class E7NativeLipBoundaryProviders: NSObject {
   }
 
   #if canImport(MediaPipeTasksVision)
-  private func extractMediaPipeFaceLandmarks(
-    frameUrl: URL,
-    width: Int,
-    height: Int
-  ) throws -> E7MediaPipeFaceLandmarks {
+  private func makeMediaPipeFaceLandmarker() throws -> FaceLandmarker {
     guard let modelPath = Bundle.main.path(
       forResource: "face_landmarker",
       ofType: "task"
     ) else {
       throw E7NativeProviderError.mediapipeModelMissing
-    }
-    guard let uiImage = UIImage(contentsOfFile: frameUrl.path) else {
-      throw E7NativeProviderError.invalidFrameImage(frameUrl.path)
     }
 
     let options = FaceLandmarkerOptions()
@@ -787,9 +785,40 @@ final class E7NativeLipBoundaryProviders: NSObject {
     options.minFacePresenceConfidence = 0.3
     options.minTrackingConfidence = 0.3
 
-    let landmarker = try FaceLandmarker(options: options)
+    return try FaceLandmarker(options: options)
+  }
+
+  private func getCachedMediaPipeFaceLandmarker() throws -> FaceLandmarker {
+    if let cachedMediaPipeFaceLandmarker {
+      return cachedMediaPipeFaceLandmarker
+    }
+
+    let landmarker = try makeMediaPipeFaceLandmarker()
+    cachedMediaPipeFaceLandmarker = landmarker
+    return landmarker
+  }
+
+  private func detectMediaPipeFaceLandmarks(_ image: MPImage) throws -> FaceLandmarkerResult {
+    mediaPipeFaceLandmarkerLock.lock()
+    defer {
+      mediaPipeFaceLandmarkerLock.unlock()
+    }
+
+    let landmarker = try getCachedMediaPipeFaceLandmarker()
+    return try landmarker.detect(image: image)
+  }
+
+  private func extractMediaPipeFaceLandmarks(
+    frameUrl: URL,
+    width: Int,
+    height: Int
+  ) throws -> E7MediaPipeFaceLandmarks {
+    guard let uiImage = UIImage(contentsOfFile: frameUrl.path) else {
+      throw E7NativeProviderError.invalidFrameImage(frameUrl.path)
+    }
+
     let image = try MPImage(uiImage: uiImage)
-    let result = try landmarker.detect(image: image)
+    let result = try detectMediaPipeFaceLandmarks(image)
     guard let faceLandmarks = result.faceLandmarks.first else {
       throw E7NativeProviderError.mediapipeNoFaceDetected
     }

@@ -20,6 +20,7 @@ import {
   Pressable,
   StyleSheet,
   TextInput,
+  type ImageSourcePropType,
 } from 'react-native';
 import Svg, {Circle, Defs, RadialGradient, Stop} from 'react-native-svg';
 import {ArrowUp, Camera} from 'lucide-react-native';
@@ -36,7 +37,7 @@ import type {
 
 const AURA = '#C26572';
 
-const heroImage = appAssetSource('images/looks/look-cool-rose.png');
+const heroImage = appAssetSource('images/looks/look-cool-rose.png') as ImageSourcePropType;
 
 type Phase = 'home' | 'searching' | 'question' | 'results';
 

@@ -17,9 +17,14 @@ import {
   TutorialIntroScreen,
 } from '../../../features/onboarding';
 import {getUserProfile, updateUserProfile} from '../../../shared/services/userService';
+import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
 
-type PostLoginRouteName = 'ProfileSetup' | 'Tutorial' | 'MainTabs';
+type PostLoginRouteName = 'ProfileSetup' | 'MainTabs';
+type PostLoginRoute = {
+  routeName: PostLoginRouteName;
+  shouldShowBeautyJourneyGuide: boolean;
+};
 
 function getProfileSetupUser(session: AuthSession): AuthUser {
   const tokenUser = getAuthUserClaimsFromIdToken(session.idToken);
@@ -53,15 +58,44 @@ async function hasStoredProfileForUser(user: AuthUser): Promise<boolean> {
   return isStoredProfileForUser(profile.email, profile.id, user);
 }
 
-async function getPostLoginRoute(session: AuthSession): Promise<PostLoginRouteName> {
-  if (
-    !(await hasCompletedProfileSetup(session.user)) ||
-    !(await hasStoredProfileForUser(session.user))
-  ) {
-    return 'ProfileSetup';
+export function getPostLoginRouteForFlags({
+  hasCompletedInitialGuide,
+  hasCompletedProfile,
+  hasStoredProfile,
+}: {
+  hasCompletedInitialGuide: boolean;
+  hasCompletedProfile: boolean;
+  hasStoredProfile: boolean;
+}): PostLoginRoute {
+  if (!hasCompletedProfile || !hasStoredProfile) {
+    return {
+      routeName: 'ProfileSetup',
+      shouldShowBeautyJourneyGuide: false,
+    };
   }
 
-  return (await hasCompletedFaceCaptureTutorial(session.user)) ? 'MainTabs' : 'Tutorial';
+  return {
+    routeName: 'MainTabs',
+    shouldShowBeautyJourneyGuide: !hasCompletedInitialGuide,
+  };
+}
+
+async function getPostLoginRoute(session: AuthSession): Promise<PostLoginRoute> {
+  const [
+    hasCompletedProfile,
+    hasStoredProfile,
+    hasCompletedInitialGuide,
+  ] = await Promise.all([
+    hasCompletedProfileSetup(session.user),
+    hasStoredProfileForUser(session.user),
+    hasCompletedFaceCaptureTutorial(session.user),
+  ]);
+
+  return getPostLoginRouteForFlags({
+    hasCompletedInitialGuide,
+    hasCompletedProfile,
+    hasStoredProfile,
+  });
 }
 
 function replacePostLoginRoute(
@@ -73,16 +107,12 @@ function replacePostLoginRoute(
     return;
   }
 
-  if (routeName === 'Tutorial') {
-    navigation.replace('Tutorial');
-    return;
-  }
-
   navigation.replace('MainTabs', {screen: 'HomeTab'});
 }
 
 export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
   const {isRestoringSession, session, setSession} = useAuthSession();
+  const {setShouldShowBeautyJourneyGuide} = useNavigationFlowState();
   const isRoutingAfterLoginRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -96,9 +126,16 @@ export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
       const nextRoute = await getPostLoginRoute(nextSession);
 
       await setSession(nextSession);
-      replacePostLoginRoute(navigation, nextRoute);
+      setShouldShowBeautyJourneyGuide(nextRoute.shouldShowBeautyJourneyGuide);
+      replacePostLoginRoute(navigation, nextRoute.routeName);
     })();
-  }, [isRestoringSession, navigation, session, setSession]);
+  }, [
+    isRestoringSession,
+    navigation,
+    session,
+    setSession,
+    setShouldShowBeautyJourneyGuide,
+  ]);
 
   const handleLoginSuccess = (nextSession: AuthSession) => {
     isRoutingAfterLoginRef.current = true;
@@ -107,7 +144,8 @@ export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
       const nextRoute = await getPostLoginRoute(normalizedSession);
 
       await setSession(normalizedSession);
-      replacePostLoginRoute(navigation, nextRoute);
+      setShouldShowBeautyJourneyGuide(nextRoute.shouldShowBeautyJourneyGuide);
+      replacePostLoginRoute(navigation, nextRoute.routeName);
     })();
   };
 
@@ -116,6 +154,7 @@ export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
 
 export function ProfileSetupRouteScreen({navigation}: RootScreenProps<'ProfileSetup'>) {
   const {isRestoringSession, session, setSession} = useAuthSession();
+  const {setShouldShowBeautyJourneyGuide} = useNavigationFlowState();
 
   React.useEffect(() => {
     if (!isRestoringSession && !session) {
@@ -155,7 +194,8 @@ export function ProfileSetupRouteScreen({navigation}: RootScreenProps<'ProfileSe
       await updateUserProfile(nextProfile);
       await markProfileSetupCompleted(nextSession.user);
       await setSession(nextSession);
-      navigation.replace('Tutorial');
+      setShouldShowBeautyJourneyGuide(true);
+      navigation.replace('MainTabs', {screen: 'HomeTab'});
     })();
   };
 

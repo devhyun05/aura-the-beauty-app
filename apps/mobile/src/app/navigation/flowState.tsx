@@ -13,32 +13,50 @@ import type {FaceCaptureUploadResult} from '../../features/face-capture/services
 import type {ReferenceMakeupPhoto} from '../../features/reference-makeup-extraction';
 import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
+import {
+  DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  type FloatingActionButtonPosition,
+  type FloatingActionId,
+  type FloatingActionInteractionMode,
+} from '../../shared/ui';
 
 export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  floatingActionButtonPosition: FloatingActionButtonPosition;
+  floatingActionIds: readonly FloatingActionId[];
+  floatingActionInteractionMode: FloatingActionInteractionMode;
   likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
   savedMakeupLook: MakeupLookPreview | null;
+  savedMakeupLooks: readonly MakeupLookPreview[];
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
   referenceMakeupUploadedPhotos: readonly ReferenceMakeupPhoto[];
+  shouldShowBeautyJourneyGuide: boolean;
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
+  setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
+  setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
   setLikedMakeupFilterIds: Dispatch<SetStateAction<readonly string[]>>;
   setMakeupFeedbackResult: Dispatch<SetStateAction<MakeupFeedbackResult | null>>;
   setSavedMakeupLook: Dispatch<SetStateAction<MakeupLookPreview | null>>;
+  setSavedMakeupLooks: Dispatch<SetStateAction<readonly MakeupLookPreview[]>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
   setReferenceMakeupUploadedPhotos: Dispatch<SetStateAction<readonly ReferenceMakeupPhoto[]>>;
+  setShouldShowBeautyJourneyGuide: Dispatch<SetStateAction<boolean>>;
 };
 
 const NavigationFlowStateContext =
@@ -46,9 +64,13 @@ const NavigationFlowStateContext =
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
   return {
+    floatingActionButtonPosition: DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+    floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
+    floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
     savedMakeupLook: null,
+    savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedMakeupFeedbackPhoto: {
@@ -57,6 +79,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto: null,
     referenceMakeupUploadedPhotos: [],
+    shouldShowBeautyJourneyGuide: false,
   };
 }
 
@@ -87,42 +110,67 @@ export function NavigationFlowStateProvider({
     useState<readonly ReferenceMakeupPhoto[]>(initialState.referenceMakeupUploadedPhotos);
   const [likedMakeupFilterIds, setLikedMakeupFilterIds] =
     useState<readonly string[]>(initialState.likedMakeupFilterIds);
+  const [floatingActionIds, setFloatingActionIds] =
+    useState<readonly FloatingActionId[]>(initialState.floatingActionIds);
+  const [floatingActionInteractionMode, setFloatingActionInteractionMode] =
+    useState<FloatingActionInteractionMode>(initialState.floatingActionInteractionMode);
+  const [floatingActionButtonPosition, setFloatingActionButtonPosition] =
+    useState<FloatingActionButtonPosition>(initialState.floatingActionButtonPosition);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
+  const [savedMakeupLooks, setSavedMakeupLooks] =
+    useState<readonly MakeupLookPreview[]>(initialState.savedMakeupLooks);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
     useState<MakeupFeedbackResult | null>(initialState.makeupFeedbackResult);
+  const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
+    useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
   const value = useMemo(
     () => ({
+      floatingActionButtonPosition,
+      floatingActionIds,
+      floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
+      savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      shouldShowBeautyJourneyGuide,
+      setFloatingActionButtonPosition,
+      setFloatingActionIds,
+      setFloatingActionInteractionMode,
       setLikedMakeupFilterIds,
       setMakeupFeedbackResult,
       setSavedMakeupLook,
+      setSavedMakeupLooks,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedMakeupFeedbackPhoto,
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
       setReferenceMakeupUploadedPhotos,
+      setShouldShowBeautyJourneyGuide,
     }),
     [
+      floatingActionIds,
+      floatingActionButtonPosition,
+      floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
       savedMakeupLook,
+      savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      shouldShowBeautyJourneyGuide,
     ],
   );
 

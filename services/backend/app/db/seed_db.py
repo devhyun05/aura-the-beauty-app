@@ -5,6 +5,7 @@ from pathlib import Path
 import asyncpg
 
 from app.core.settings import get_settings
+from app.db.connection_config import DatabaseConfigurationError, connect_database
 
 
 SEED_VERSION = "seed.sql:v2"
@@ -62,12 +63,15 @@ async def apply_seed(database_url: str | None = None, force: bool = False) -> st
   settings = get_settings()
   dsn = database_url or settings.database_url
 
-  if not dsn:
-    raise RuntimeError("DATABASE_URL is required to apply seed data.")
+  if dsn:
+    connection = await asyncpg.connect(dsn=dsn)
+  else:
+    try:
+      connection, _ = await connect_database(settings)
+    except DatabaseConfigurationError as error:
+      raise RuntimeError("DATABASE_URL or DATABASE_SECRET_ID is required to apply seed data.") from error
 
   seed = get_seed_path().read_text(encoding="utf-8")
-  connection = await asyncpg.connect(dsn=dsn)
-
   try:
     await ensure_migration_table(connection)
 

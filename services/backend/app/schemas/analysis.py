@@ -21,6 +21,12 @@ class FeedbackJobCreate(CamelModel):
   uploaded_media_id: UUID | None = Field(default=None, alias="uploadedMediaId")
   source: str = "camera"
   source_label: str | None = Field(default=None, alias="sourceLabel")
+  run_immediately: bool = Field(default=False, alias="runImmediately")
+  request_payload: dict = Field(default_factory=dict, alias="requestPayload")
+
+
+class FeedbackConferenceMessagesCreate(CamelModel):
+  result: dict = Field(default_factory=dict)
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")
 
 

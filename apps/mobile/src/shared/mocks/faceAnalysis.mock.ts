@@ -55,11 +55,11 @@ const createRecommendedMakeups = (
 ): FaceAnalysisMakeupCard[] => [
   {
     id: `${reportId}-clear-gloss`,
-    title: '분석 룩 1',
+    title: '데일리 추천 메이크업',
     subtitle: mood,
-    description: '얼굴 분위기에 맞춘 개인화 추천 후보예요.',
+    description: '포인트 가이드와 얼굴 분위기를 반영한 데일리 추천 룩이에요.',
     imageSource: reportRecommendClearGloss,
-    tags: ['추천', '룩1'],
+    tags: ['데일리', '추천'],
   },
   {
     id: `${reportId}-fruity-juice`,

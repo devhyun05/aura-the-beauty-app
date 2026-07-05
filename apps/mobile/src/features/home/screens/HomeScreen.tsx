@@ -2,10 +2,10 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
   Image,
+  Modal,
   Pressable,
   ScrollView as NativeScrollView,
   StyleSheet,
-  type GestureResponderEvent,
   type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -15,11 +15,10 @@ import {
   ArrowRight,
   ChevronUp,
   Heart,
-  MessageCircle,
+  Newspaper,
   PackageSearch,
   ScanFace,
-  ScanSearch,
-  UserRoundCheck,
+  Store,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -37,28 +36,32 @@ import type {
   HomeTrendItem,
 } from '../types';
 
+export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
+
 type HomeScreenProps = {
-  onPressConsulting?: () => void;
-  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupExtraction?: () => void;
+  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
+  onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
   onPressRecommendedFilter?: (filterId: string) => void;
   isMakeupFilterLiked?: (filterId: string) => boolean;
   onToggleMakeupFilterLike?: (filterId: string) => void;
+  onConfirmBeautyJourneyGuide?: () => void;
+  showBeautyJourneyGuide?: boolean;
 };
 
 export function HomeScreen({
-  onPressConsulting,
-  onPressCommunity,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
-  onPressMakeupExtraction,
+  onPressMagazine,
   onPressProductRecommendations,
+  onPressRecommendedFilterMore,
   onPressRecommendedFilter,
   isMakeupFilterLiked,
   onToggleMakeupFilterLike,
+  onConfirmBeautyJourneyGuide,
+  showBeautyJourneyGuide = false,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [selectedCategory, setSelectedCategory] =
@@ -162,14 +165,15 @@ export function HomeScreen({
             />
 
             <QuickActionSection
-              onPressConsulting={onPressConsulting}
-              onPressCommunity={onPressCommunity}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
+              onPressMagazine={onPressMagazine}
               onPressProductRecommendations={onPressProductRecommendations}
+              onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
 
             <RecommendedFilterListHeader
               selectedCategory={selectedCategory}
+              onPressMore={onPressRecommendedFilterMore}
               onSelectCategory={setSelectedCategory}
             />
           </YStack>
@@ -209,6 +213,11 @@ export function HomeScreen({
           <ChevronUp color={colors.white} size={iconSize.md} strokeWidth={2.2} />
         </Pressable>
       ) : null}
+
+      <BeautyJourneyGuideDialog
+        isVisible={showBeautyJourneyGuide}
+        onConfirm={onConfirmBeautyJourneyGuide}
+      />
     </View>
   );
 }
@@ -255,8 +264,13 @@ export const heroTrendTitleMainTextStyle = {
 
 export const heroCtaLabel = '보러가기' as const;
 export const recommendedFilterSectionTitle = '추천 메이크업 필터' as const;
-export const recommendedFilterSectionDescription =
-  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' as const;
+export const recommendedFilterSectionDescription = undefined;
+export const recommendedFilterMoreButtonLabel = '더보기' as const;
+export const homeHeroLayoutMetrics = {
+  copyGap: spacing.sm,
+  listTopPadding: spacing.sm,
+  titleGroupGap: 2,
+} as const;
 
 type HeroCarouselItemBase = {
   id: string;
@@ -355,6 +369,8 @@ export const recommendedFilterListVirtualizationConfig = {
   updateCellsBatchingPeriod: 60,
   windowSize: 5,
 } as const;
+
+export const recommendedFilterCopyVerticalPadding = 10;
 
 export const HOME_SCROLL_TOP_VISIBLE_OFFSET = 360;
 
@@ -489,27 +505,14 @@ function HeroBannerCard({
   );
 }
 
+export const HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME = 'Store';
+export const HOME_MAGAZINE_QUICK_ACTION_ICON_NAME = 'Newspaper';
+
 const quickActions = [
   {
-    id: 'consulting',
-    label: '\uCEE8\uC124\uD305',
-    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCEE8\uC124\uD305 \uBC1B\uAE30',
-    icon: (color: string) => (
-      <UserRoundCheck color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
-    id: 'makeupExtraction',
-    label: '\uBA54\uC774\uD06C\uC5C5\n\uCD94\uCD9C',
-    accessibilityLabel: '\uBA54\uC774\uD06C\uC5C5 \uCD94\uCD9C \uC2DC\uC791',
-    icon: (color: string) => (
-      <ScanSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
     id: 'diagnosis',
-    label: '\uC5BC\uAD74\n\uC9C4\uB2E8',
-    accessibilityLabel: '\uC5BC\uAD74 \uC9C4\uB2E8 \uC2DC\uC791',
+    label: '얼굴\n분석',
+    accessibilityLabel: '얼굴 분석 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
@@ -521,11 +524,19 @@ const quickActions = [
     ),
   },
   {
-    id: 'community',
-    label: '\uCEE4\uBBA4\uB2C8\uD2F0',
-    accessibilityLabel: '\uCEE4\uBBA4\uB2C8\uD2F0 \uBCF4\uAE30',
+    id: 'filterStore',
+    label: '\uD544\uD130\n\uC2A4\uD1A0\uC5B4',
+    accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
     icon: (color: string) => (
-      <MessageCircle color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'magazine',
+    label: '\uB9E4\uAC70\uC9C4',
+    accessibilityLabel: '\uB9E4\uAC70\uC9C4 \uBCF4\uAE30',
+    icon: (color: string) => (
+      <Newspaper color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
 ] as const;
@@ -533,21 +544,19 @@ const quickActions = [
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
-  onPressConsulting?: () => void;
-  onPressCommunity?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMakeupExtraction?: () => void;
+  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
+  onPressRecommendedFilterMore?: () => void;
 };
 
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
-    onPressConsulting,
-    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupExtraction,
+    onPressMagazine,
     onPressProductRecommendations,
+    onPressRecommendedFilterMore,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
   if (actionId === 'diagnosis') {
@@ -558,34 +567,32 @@ export function getHomeQuickActionPressHandler(
     return onPressProductRecommendations;
   }
 
-  if (actionId === 'makeupExtraction') {
-    return onPressMakeupExtraction;
+  if (actionId === 'filterStore') {
+    return onPressRecommendedFilterMore;
   }
 
-  if (actionId === 'community') {
-    return onPressCommunity;
-  }
-
-  if (actionId === 'consulting') {
-    return onPressConsulting;
+  if (actionId === 'magazine') {
+    return onPressMagazine;
   }
 
   return undefined;
 }
 
+export function getHomeQuickActionLabels(): readonly string[] {
+  return quickActions.map(action => action.label);
+}
+
 function QuickActionSection({
-  onPressConsulting,
-  onPressCommunity,
   onPressFaceDiagnosis,
-  onPressMakeupExtraction,
+  onPressMagazine,
   onPressProductRecommendations,
+  onPressRecommendedFilterMore,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
-    onPressConsulting,
-    onPressCommunity,
     onPressFaceDiagnosis,
-    onPressMakeupExtraction,
+    onPressMagazine,
     onPressProductRecommendations,
+    onPressRecommendedFilterMore,
   };
 
   return (
@@ -609,17 +616,54 @@ function QuickActionSection({
   );
 }
 
+function BeautyJourneyGuideDialog({
+  isVisible,
+  onConfirm,
+}: {
+  isVisible: boolean;
+  onConfirm?: () => void;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      onRequestClose={onConfirm}
+      transparent
+      visible={isVisible}>
+      <View style={styles.dialogBackdrop}>
+        <YStack style={styles.beautyJourneyDialog}>
+          <Text style={styles.dialogTitle}>아우라 여정을 시작해볼까요?</Text>
+          <Text style={styles.dialogDescription}>
+            맞춤형 뷰티 컨설팅 앱인 아우라와의 여정을 시작하려면 설문과 얼굴 분석이 필요해요.
+          </Text>
+          <Pressable
+            accessibilityLabel="얼굴 분석 소개 보기"
+            accessibilityRole="button"
+            onPress={onConfirm}
+            style={({pressed}) => [styles.dialogButton, pressed && styles.pressed]}>
+            <Text style={styles.dialogButtonText}>얼굴 분석 알아보기</Text>
+          </Pressable>
+        </YStack>
+      </View>
+    </Modal>
+  );
+}
+
 function RecommendedFilterListHeader({
+  onPressMore,
   onSelectCategory,
   selectedCategory,
 }: {
+  onPressMore?: () => void;
   onSelectCategory: (categoryId: RecommendedFilterCategoryId) => void;
   selectedCategory: RecommendedFilterCategoryId;
 }) {
   return (
     <YStack style={styles.section}>
       <SectionHeader
+        actionAccessibilityLabel="추천 메이크업 필터 더보기"
+        actionLabel={recommendedFilterMoreButtonLabel}
         description={recommendedFilterSectionDescription}
+        onPressAction={onPressMore}
         title={recommendedFilterSectionTitle}
       />
 
@@ -683,8 +727,7 @@ function RecommendedFilterCard({
   onPress?: (filterId: string) => void;
   onToggleLike?: (filterId: string) => void;
 }) {
-  const handleToggleLike = (event: GestureResponderEvent) => {
-    event.stopPropagation();
+  const handleToggleLike = () => {
     onToggleLike?.(filter.id);
   };
 
@@ -739,12 +782,18 @@ function RecommendedFilterRowSeparator() {
 }
 
 type SectionHeaderProps = {
+  actionAccessibilityLabel?: string;
+  actionLabel?: string;
   description?: string;
+  onPressAction?: () => void;
   title: string;
 };
 
 function SectionHeader({
+  actionAccessibilityLabel,
+  actionLabel,
   description,
+  onPressAction,
   title,
 }: SectionHeaderProps) {
   return (
@@ -757,6 +806,16 @@ function SectionHeader({
           </Text>
         ) : null}
       </YStack>
+      {actionLabel && onPressAction ? (
+        <Pressable
+          accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
+          accessibilityRole="button"
+          onPress={onPressAction}
+          style={({pressed}) => [styles.sectionMoreButton, pressed && styles.pressed]}>
+          <Text style={styles.sectionMoreText}>{actionLabel}</Text>
+          <ArrowRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
+        </Pressable>
+      ) : null}
     </XStack>
   );
 }
@@ -768,7 +827,7 @@ const styles = StyleSheet.create({
   },
   homeListContent: {
     paddingHorizontal: spacing.screenX,
-    paddingTop: spacing.lg,
+    paddingTop: homeHeroLayoutMetrics.listTopPadding,
   },
   homeListHeader: {
     gap: spacing.xxl,
@@ -813,7 +872,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   heroCopy: {
-    gap: spacing.md,
+    gap: homeHeroLayoutMetrics.copyGap,
     left: spacing.xl,
     maxWidth: 236,
     position: 'absolute',
@@ -821,7 +880,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   heroTitleGroup: {
-    gap: spacing.xs,
+    gap: homeHeroLayoutMetrics.titleGroupGap,
   },
   heroTitleLead: {
     ...heroTrendTitleReadableTextStyle,
@@ -872,6 +931,61 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  beautyJourneyDialog: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.lg,
+    marginHorizontal: spacing.xl,
+    padding: spacing.xl,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+  },
+  dialogBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  dialogButton: {
+    alignItems: 'center',
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: spacing.xl,
+  },
+  dialogButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.md,
+  },
+  dialogDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  dialogTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.lg,
+  },
   recommendedFilterCard: {
     aspectRatio: 0.78,
     backgroundColor: colors.surfaceMuted,
@@ -910,11 +1024,14 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   recommendedFilterCopy: {
-    bottom: spacing.lg,
+    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    bottom: 0,
     gap: 2,
-    left: spacing.md,
+    left: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: recommendedFilterCopyVerticalPadding,
     position: 'absolute',
-    right: spacing.md,
+    right: 0,
     zIndex: 1,
   },
   recommendedFilterHeadline: {
@@ -1040,6 +1157,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: spacing.md,
     justifyContent: 'space-between',
   },
   sectionDescription: {
@@ -1055,6 +1173,27 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   sectionTitleGroup: {
+    flex: 1,
     gap: 2,
+    minWidth: 0,
+  },
+  sectionMoreButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 34,
+    paddingHorizontal: spacing.md,
+  },
+  sectionMoreText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
   },
 });

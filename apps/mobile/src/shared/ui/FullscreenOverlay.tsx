@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   cardPanel: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetSurface,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   sheetPanel: {
-    backgroundColor: colors.background,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.md,

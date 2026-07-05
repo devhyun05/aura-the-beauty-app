@@ -1,5 +1,6 @@
 import React from 'react';
 
+import {colors} from '../theme';
 import {
   BottomOverlayPanel,
   CameraCaptureControlRow,
@@ -34,6 +35,16 @@ expectEqual(
   FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
   0.62,
   'fullscreen overlay segment active opacity',
+);
+expectEqual(
+  colors.bottomSheetSurface.startsWith('rgba('),
+  true,
+  'bottom sheet surface color is translucent',
+);
+expectEqual(
+  colors.bottomSheetControlSurface.startsWith('rgba('),
+  true,
+  'bottom sheet control surface color is translucent',
 );
 
 <FullscreenOverlayScreen>

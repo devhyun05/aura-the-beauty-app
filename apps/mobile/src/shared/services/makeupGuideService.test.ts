@@ -6,6 +6,7 @@ import {
   getLikedMakeupFilterLooks,
   getRecommendedMakeupFilterById,
   getRecommendedMakeupFilters,
+  mergeSavedAndLikedMakeupLooks,
   mapMakeupFilterToSavedLook,
   sortMakeupFiltersByRecommendationScore,
 } from './makeupGuideService';
@@ -23,6 +24,16 @@ const recommendationFilters = getFiltersByCategory('recommended', arGuideData);
 const recommendedMakeupFilters = getRecommendedMakeupFilters();
 const fallbackRecommendedFilter = getRecommendedMakeupFilterById('missing-filter-id');
 const mappedSavedLook = mapMakeupFilterToSavedLook(defaultFilter, 123);
+const mergedSavedAndLikedLooks = mergeSavedAndLikedMakeupLooks({
+  likedMakeupLooks: [
+    mapMakeupFilterToSavedLook(defaultFilter, 456),
+    {
+      ...mapMakeupFilterToSavedLook(defaultFilter, 789),
+      id: 'liked-unique-look',
+    },
+  ],
+  savedMakeupLooks: [mappedSavedLook],
+});
 const likedMakeupLooks = getLikedMakeupFilterLooks([
   'filter-wanghong-glass-pink',
   'missing-filter-id',
@@ -88,6 +99,16 @@ expectEqual(
   mappedSavedLook.makeupPresetValues.sourceFilterId,
   defaultFilter.id,
   'recommended saved look source filter id',
+);
+expectEqual(
+  mergedSavedAndLikedLooks[0].id,
+  mappedSavedLook.id,
+  'saved makeup look is first in merged look list',
+);
+expectEqual(
+  mergedSavedAndLikedLooks.length,
+  3,
+  'merged saved and liked look count',
 );
 expectEqual(likedMakeupLooks.length, 2, 'liked makeup look count');
 expectEqual(

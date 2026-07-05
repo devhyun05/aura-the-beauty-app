@@ -9,13 +9,20 @@ import {
   getIsHomeScrollTopButtonVisible,
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
+  getHomeMakeupExtractionActionLabels,
   heroCtaLabel,
   getHomeQuickActionPressHandler,
+  getHomeQuickActionLabels,
   getHeroTrendHeadline,
+  homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
+  HOME_MAGAZINE_QUICK_ACTION_ICON_NAME,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
+  recommendedFilterCopyVerticalPadding,
   recommendedFilterListVirtualizationConfig,
+  recommendedFilterMoreButtonLabel,
   recommendedFilterSectionDescription,
   recommendedFilterSectionTitle,
 } from './HomeScreen';
@@ -47,11 +54,17 @@ const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffse
 const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
 const expectedRecommendedFilterSectionTitle: '추천 메이크업 필터' =
   recommendedFilterSectionTitle;
-const expectedRecommendedFilterSectionDescription:
-  '얼굴 무드에 맞춰 바로 적용해볼 수 있어요.' =
-    recommendedFilterSectionDescription;
+const expectedRecommendedFilterSectionDescription: undefined =
+  recommendedFilterSectionDescription;
+const expectedRecommendedFilterMoreButtonLabel: '더보기' =
+  recommendedFilterMoreButtonLabel;
+const expectedRecommendedFilterCopyVerticalPadding: 10 =
+  recommendedFilterCopyVerticalPadding;
 const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
   heroTrendTitleMainTextStyle.fontFamily;
+const expectedHomeHeroTopPadding: 8 = homeHeroLayoutMetrics.listTopPadding;
+const expectedHomeHeroCopyGap: 8 = homeHeroLayoutMetrics.copyGap;
+const expectedHomeHeroTitleGroupGap: 2 = homeHeroLayoutMetrics.titleGroupGap;
 const recommendedFilterCategoryLabels = getRecommendedFilterCategoryLabels();
 const recommendedFilters = getRecommendedMakeupFilters();
 const allRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
@@ -62,6 +75,8 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
   recommendedFilters,
   'red',
 );
+const quickActionLabels = getHomeQuickActionLabels();
+const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
 const expectedInitialRecommendedFiltersToRender: 6 =
@@ -114,9 +129,34 @@ expectEqual(
   'recommended filter section description',
 );
 expectEqual(
+  recommendedFilterMoreButtonLabel,
+  expectedRecommendedFilterMoreButtonLabel,
+  'recommended filter more button label',
+);
+expectEqual(
+  recommendedFilterCopyVerticalPadding,
+  expectedRecommendedFilterCopyVerticalPadding,
+  'recommended filter copy vertical padding',
+);
+expectEqual(
   heroTrendTitleMainTextStyle.fontFamily,
   expectedHeroTitleMainFontFamily,
   'weekly trend main title font family',
+);
+expectEqual(
+  homeHeroLayoutMetrics.listTopPadding,
+  expectedHomeHeroTopPadding,
+  'home hero top padding',
+);
+expectEqual(
+  homeHeroLayoutMetrics.copyGap,
+  expectedHomeHeroCopyGap,
+  'home hero copy gap',
+);
+expectEqual(
+  homeHeroLayoutMetrics.titleGroupGap,
+  expectedHomeHeroTitleGroupGap,
+  'home hero title group gap',
 );
 expectEqual(
   recommendedFilterCategoryLabels.join(','),
@@ -132,6 +172,26 @@ expectEqual(
   redRecommendedFilters.some(filter => filter.id === 'filter-wanghong-glass-pink'),
   true,
   'recommended filter red category includes Wanghong filter',
+);
+expectEqual(
+  quickActionLabels.join(','),
+  '얼굴\n분석,추천\n제품,필터\n스토어,매거진',
+  'home quick action order',
+);
+expectEqual(
+  HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
+  'Store',
+  'home filter store quick action icon name',
+);
+expectEqual(
+  HOME_MAGAZINE_QUICK_ACTION_ICON_NAME,
+  'Newspaper',
+  'home magazine quick action icon name',
+);
+expectEqual(
+  makeupExtractionActionLabels.join(','),
+  '카메라 촬영,사진 업로드',
+  'home makeup extraction sheet actions',
 );
 expectEqual(
   getRecommendedFilterGridColumnCount(),
@@ -239,7 +299,21 @@ expectEqual(
   'recommended filter route source',
 );
 
-let selectedQuickAction: 'community' | 'consulting' | 'recommendation' | null = null;
+let selectedQuickAction: 'filterStore' | 'magazine' | 'recommendation' | null = null;
+
+const diagnosisPressHandler = getHomeQuickActionPressHandler('diagnosis', {
+  onPressFaceDiagnosis: () => {
+    selectedQuickAction = 'recommendation';
+  },
+});
+
+if (!diagnosisPressHandler) {
+  throw new Error('face analysis quick action should have a press handler');
+}
+
+diagnosisPressHandler();
+
+expectEqual(selectedQuickAction, 'recommendation', 'face analysis quick action target');
 
 const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
   onPressProductRecommendations: () => {
@@ -255,33 +329,33 @@ recommendationPressHandler();
 
 expectEqual(selectedQuickAction, 'recommendation', 'product recommendation quick action target');
 
-const communityPressHandler = getHomeQuickActionPressHandler('community', {
-  onPressCommunity: () => {
-    selectedQuickAction = 'community';
+const filterStorePressHandler = getHomeQuickActionPressHandler('filterStore', {
+  onPressRecommendedFilterMore: () => {
+    selectedQuickAction = 'filterStore';
   },
 });
 
-if (!communityPressHandler) {
-  throw new Error('community quick action should have a press handler');
+if (!filterStorePressHandler) {
+  throw new Error('filter store quick action should have a press handler');
 }
 
-communityPressHandler();
+filterStorePressHandler();
 
-expectEqual(selectedQuickAction, 'community', 'community quick action target');
+expectEqual(selectedQuickAction, 'filterStore', 'filter store quick action target');
 
-const consultingPressHandler = getHomeQuickActionPressHandler('consulting', {
-  onPressConsulting: () => {
-    selectedQuickAction = 'consulting';
+const magazinePressHandler = getHomeQuickActionPressHandler('magazine', {
+  onPressMagazine: () => {
+    selectedQuickAction = 'magazine';
   },
 });
 
-if (!consultingPressHandler) {
-  throw new Error('consulting quick action should have a press handler');
+if (!magazinePressHandler) {
+  throw new Error('magazine quick action should have a press handler');
 }
 
-consultingPressHandler();
+magazinePressHandler();
 
-expectEqual(selectedQuickAction, 'consulting', 'consulting quick action target');
+expectEqual(selectedQuickAction, 'magazine', 'magazine quick action target');
 
 const completeReport: FaceAnalysisReport = {
   analyzedAt: '2026-06-29T07:00:00.000Z',
