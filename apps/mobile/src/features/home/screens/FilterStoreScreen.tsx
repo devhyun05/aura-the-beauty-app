@@ -299,8 +299,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   categoryChipSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   categoryList: {
     flexDirection: 'row',
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(17, 17, 17, 0.72)',
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 32,
     justifyContent: 'center',
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   favoriteButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   grid: {
     flexDirection: 'row',
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   },
   matchBadge: {
     alignItems: 'center',
-    backgroundColor: 'rgba(17, 17, 17, 0.72)',
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     left: spacing.sm,
     minHeight: 28,

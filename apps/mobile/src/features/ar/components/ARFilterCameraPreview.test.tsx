@@ -8,6 +8,7 @@ import {
   AR_FILTER_COMPARISON_DIVIDER_WIDTH,
   AR_FILTER_HALF_GUIDE_SIDE_SHADE_VISIBILITY,
   AR_FILTER_MOCK_MAKEUP_OVERLAY_VISIBILITY,
+  AR_FILTER_SOURCE_IMAGE_PREVIEW_MODE,
   ARFilterCameraPreview,
   getARFilterCameraMode,
   getMakeupPreviewBadgeContent,
@@ -47,6 +48,11 @@ expectEqual(
   AR_FILTER_MOCK_MAKEUP_OVERLAY_VISIBILITY,
   'hidden',
   'AR filter temporary mock makeup overlays are hidden',
+);
+expectEqual(
+  AR_FILTER_SOURCE_IMAGE_PREVIEW_MODE,
+  'gallery-image-over-camera',
+  'AR filter selected gallery image replaces the live camera preview',
 );
 expectEqual(
   shouldShowARFilterMockMakeupOverlays(),
@@ -89,4 +95,5 @@ expectEqual(
   guideMode="half"
   previewColorHex="#FFFFFF"
   selectedComparisonMode="left"
+  sourceImageUri="file:///selected-filter-source.jpg"
 />;

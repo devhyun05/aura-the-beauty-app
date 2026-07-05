@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {StatusBar} from 'expo-status-bar';
-import {Image as ImageIcon, RefreshCw, X} from 'lucide-react-native';
+import {X} from 'lucide-react-native';
 import {CameraView, type CameraCapturedPicture} from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -20,6 +20,8 @@ import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActi
 import {
   CameraCaptureControlRow,
   CameraCaptureButton,
+  CameraFacingToggleButton,
+  CameraGalleryButton,
   CameraUtilityButton,
   FullscreenOverlayScreen,
   LiveCameraLayer,
@@ -1038,20 +1040,19 @@ export function CameraFaceCaptureScreen({
         }
         horizontalPadding={spacing.xxl * 2 + spacing.xs}
         leftSlot={
-          <CameraUtilityButton
+          <CameraGalleryButton
             accessibilityLabel="Pick photo from album"
             disabled={isPickingImage || isUploading}
-            onPress={handlePickImage}>
-            <ImageIcon color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
-          </CameraUtilityButton>
+            onPress={handlePickImage}
+          />
         }
         rightSlot={
-          <CameraUtilityButton
+          <CameraFacingToggleButton
             accessibilityLabel={`Switch to ${cameraDirection === 'front' ? 'back' : 'front'} camera`}
+            cameraFacing={cameraDirection}
             disabled={isUploading}
-            onPress={handleToggleCamera}>
-            <RefreshCw color={colors.white} size={iconSize.lg} strokeWidth={2.1} />
-          </CameraUtilityButton>
+            onPress={handleToggleCamera}
+          />
         }
       />
     </FullscreenOverlayScreen>

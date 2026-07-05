@@ -6,6 +6,9 @@ import {
   AR_FILTER_CAMERA_BUTTON_SURFACE_VARIANT,
   AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING,
   AR_FILTER_CAMERA_CONTROL_DESIGN_TONE,
+  AR_FILTER_CAMERA_FACING_TOGGLE_ICON_SOURCE,
+  AR_FILTER_CAMERA_GALLERY_BUTTON_PLACEMENT,
+  AR_FILTER_CAMERA_GALLERY_ICON_SOURCE,
   AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT,
   AR_FILTER_CAMERA_CONTROL_ROW_TOP_PADDING,
   AR_FILTER_CAMERA_MODE_ACTIVE_BACKGROUND_COLOR,
@@ -15,7 +18,11 @@ import {
   getARFilterCaptureButtonMetrics,
 } from './ARFilterCaptureControls';
 import {colors, spacing} from '../../../shared/theme';
-import {CAMERA_CAPTURE_BUTTON_METRICS} from '../../../shared/ui';
+import {
+  CAMERA_CAPTURE_BUTTON_METRICS,
+  CAMERA_FACING_TOGGLE_BUTTON_ICON_NAME,
+  CAMERA_GALLERY_BUTTON_ICON_NAME,
+} from '../../../shared/ui';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -35,23 +42,38 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_CAMERA_BUTTON_SURFACE_VARIANT,
-  'liquidGlass',
-  'AR filter capture button uses liquid glass surface',
+  'dark',
+  'AR filter capture button uses the face capture dark ring surface',
 );
 expectEqual(
   AR_FILTER_CAMERA_BUTTON_INNER_COLOR,
-  'transparent',
-  'AR filter capture button inner color is transparent',
+  colors.white,
+  'AR filter capture button inner dot is white like face capture controls',
 );
 expectEqual(
   AR_FILTER_CAMERA_BUTTON_INNER_TREATMENT,
-  'transparent',
-  'AR filter capture button inner treatment has no gray fill',
+  'solidDot',
+  'AR filter capture button uses the face capture inner dot treatment',
 );
 expectEqual(
   AR_FILTER_CAMERA_CONTROL_DESIGN_TONE,
-  'bottomSheetGlass',
-  'AR filter camera controls use bottom sheet glass tone',
+  'faceCaptureControls',
+  'AR filter camera controls match the face capture control tone',
+);
+expectEqual(
+  AR_FILTER_CAMERA_GALLERY_BUTTON_PLACEMENT,
+  'leftOfCaptureModeToggle',
+  'AR filter gallery button sits left of the photo/video toggle',
+);
+expectEqual(
+  AR_FILTER_CAMERA_GALLERY_ICON_SOURCE,
+  CAMERA_GALLERY_BUTTON_ICON_NAME,
+  'AR filter gallery button uses the shared face capture gallery icon',
+);
+expectEqual(
+  AR_FILTER_CAMERA_FACING_TOGGLE_ICON_SOURCE,
+  CAMERA_FACING_TOGGLE_BUTTON_ICON_NAME,
+  'AR filter camera toggle uses the shared face capture camera switch icon',
 );
 expectEqual(
   AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT,
@@ -70,18 +92,18 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_CAMERA_MODE_ACTIVE_BACKGROUND_COLOR,
-  colors.textSecondary,
-  'AR filter active camera mode uses a neutral gray selected surface',
+  colors.liquidGlassSurface,
+  'AR filter active camera mode uses the liquid glass selected surface',
 );
 expectEqual(
   AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR,
-  colors.white,
-  'AR filter active camera mode icon has strong contrast',
+  colors.black,
+  'AR filter active camera mode icon has strong contrast on white',
 );
 expectEqual(
   AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR,
-  colors.textSecondary,
-  'AR filter inactive camera mode icon is subdued',
+  colors.white,
+  'AR filter inactive camera mode icon follows face capture utility buttons',
 );
 
 <ARFilterCaptureControls
@@ -90,4 +112,5 @@ expectEqual(
   onCameraFacingToggle={() => undefined}
   onCaptureModeChange={() => undefined}
   onComplete={() => undefined}
+  onOpenGallery={() => undefined}
 />;

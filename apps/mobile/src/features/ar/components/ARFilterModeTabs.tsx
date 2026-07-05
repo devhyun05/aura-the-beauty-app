@@ -27,7 +27,7 @@ type ARFilterModeTabsProps = {
 };
 
 const MODE_TAB_HEIGHT = 24;
-const MODE_TAB_CONTROL_WIDTH = spacing.xxl * 7;
+export const AR_FILTER_GUIDE_MODE_CONTROL_WIDTH = spacing.xxl * 8;
 const MODE_TAB_CONTAINER_PADDING = spacing.xs / 2;
 const MODE_TAB_CONTAINER_BORDER_WIDTH = 1;
 const MODE_TAB_CONTROL_HEIGHT =
@@ -41,6 +41,7 @@ export const AR_FILTER_GUIDE_MODE_CONTROL_BOTTOM_OFFSET =
 export const AR_FILTER_COMPARISON_MODE_CONTROL_STYLE = 'plainTextToggle' as const;
 export const AR_FILTER_COMPARISON_MODE_ACTIVE_INDICATOR = 'underline' as const;
 export const AR_FILTER_COMPARISON_MODE_CONTAINER_CHROME = 'none' as const;
+export const AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET = -spacing.xs;
 
 export function getARFilterModeTabHeight(): number {
   return MODE_TAB_HEIGHT;
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: MODE_TAB_CONTAINER_BORDER_WIDTH,
     padding: MODE_TAB_CONTAINER_PADDING,
-    width: MODE_TAB_CONTROL_WIDTH,
+    width: AR_FILTER_GUIDE_MODE_CONTROL_WIDTH,
   },
   comparisonBar: {
     alignSelf: 'center',
@@ -199,6 +200,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     gap: spacing.xl,
     padding: 0,
+    transform: [{translateY: AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET}],
   },
   modeTabText: {
     fontSize: typography.fontSize.xs,

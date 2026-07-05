@@ -5,12 +5,15 @@ import {
   AR_FILTER_COMPARISON_MODE_ACTIVE_INDICATOR,
   AR_FILTER_COMPARISON_MODE_CONTAINER_CHROME,
   AR_FILTER_COMPARISON_MODE_CONTROL_STYLE,
+  AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET,
+  AR_FILTER_GUIDE_MODE_CONTROL_WIDTH,
   AR_FILTER_GUIDE_MODE_PLACEMENT,
   ARFilterModeTabs,
   getARFilterComparisonTabs,
   getARFilterModeTabHeight,
   getARFilterSelectedTabOpacity,
 } from './ARFilterModeTabs';
+import {spacing} from '../../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -82,6 +85,11 @@ const guideModeControl = assertElement(
 );
 const headerStyle = flattenStyle(modeTabsHeader.props.style);
 const guideModeControlStyle = flattenStyle(guideModeControl.props.style);
+const comparisonBar = assertElement(
+  getElementChildren(modeTabsRoot)[1],
+  'AR filter comparison mode control',
+);
+const comparisonBarStyle = flattenStyle(comparisonBar.props.style);
 
 expectEqual(
   AR_FILTER_GUIDE_MODE_PLACEMENT,
@@ -104,6 +112,11 @@ expectEqual(
   'AR filter comparison control has no tab container chrome',
 );
 expectEqual(
+  AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET,
+  -spacing.xs,
+  'AR filter comparison buttons are raised slightly toward the guide mode tabs',
+);
+expectEqual(
   getARFilterModeTabHeight(),
   24,
   'AR filter mode tab height',
@@ -124,9 +137,19 @@ expectEqual(
   'AR filter guide mode control self-aligns to center',
 );
 expectEqual(
+  AR_FILTER_GUIDE_MODE_CONTROL_WIDTH,
+  192,
+  'AR filter guide mode control width gives the tab labels more room',
+);
+expectEqual(
   guideModeControlStyle.width,
-  168,
-  'AR filter guide mode control uses a compact width',
+  AR_FILTER_GUIDE_MODE_CONTROL_WIDTH,
+  'AR filter guide mode control applies the wider tab width',
+);
+expectEqual(
+  JSON.stringify(comparisonBarStyle.transform),
+  JSON.stringify([{translateY: -spacing.xs}]),
+  'AR filter comparison buttons move slightly upward',
 );
 expectEqual(
   getARFilterComparisonTabs(arGuideData).join(','),

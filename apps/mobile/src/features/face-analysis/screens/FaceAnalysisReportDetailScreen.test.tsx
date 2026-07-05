@@ -88,8 +88,8 @@ expectEqual(
 );
 expectEqual(
   (liquidGlassPresentation.cardTargets as readonly string[]).includes('summary'),
-  false,
-  'image analysis report summary avoids liquid glass cards',
+  true,
+  'image analysis report summary uses light glass metric cards',
 );
 expectEqual(
   liquidGlassPresentation.cardTargets.includes('makeup'),
@@ -103,13 +103,13 @@ expectEqual(
 );
 expectEqual(
   editorialPresentation.summaryTreatment,
-  'dark-ribbon-metrics',
-  'image analysis report summary uses a dark ribbon treatment',
+  'light-profile-metrics',
+  'image analysis report summary uses a light profile metric treatment',
 );
 expectEqual(
   editorialPresentation.sectionTreatment,
-  'cardless-divided-sections',
-  'image analysis report sections avoid stacked card clutter',
+  'editorial-glass-sections',
+  'image analysis report sections use editorial glass sections',
 );
 expectEqual(
   editorialPresentation.heroMinimumHeight,
@@ -169,13 +169,13 @@ expectEqual(
 );
 expectEqual(
   longPointGuideItems[0].point,
-  '피부 결은 얇은 세미글로우 베이스로 정돈하고',
-  'image analysis report point guide keeps long first clause without ellipsis',
+  '얇은 피부 표현',
+  'image analysis report point guide uses concise non-repeating point labels',
 );
 expectEqual(
-  longPointGuideItems[0].point.includes('...'),
+  longPointGuideItems[0].detail.includes(longPointGuideItems[0].point),
   false,
-  'image analysis report point guide does not inject ellipsis',
+  'image analysis report point label does not repeat inside detail copy',
 );
 expectEqual(
   pointGuideItems[1].label,

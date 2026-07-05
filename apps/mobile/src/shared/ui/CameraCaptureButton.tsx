@@ -16,12 +16,12 @@ export const CAMERA_CAPTURE_BUTTON_METRICS = {
   innerScale: 0.56,
 } as const;
 
-export const CAMERA_CAPTURE_BUTTON_BACKGROUND = 'rgba(17, 17, 17, 0.9)';
+export const CAMERA_CAPTURE_BUTTON_BACKGROUND = colors.blackSurface;
 export const CAMERA_CAPTURE_BUTTON_BORDER = 'rgba(255, 255, 255, 0.86)';
 export const CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND =
-  'rgba(255, 255, 255, 0.78)';
+  colors.liquidGlassSurface;
 export const CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BORDER =
-  'rgba(255, 255, 255, 0.92)';
+  colors.liquidGlassBorder;
 
 type CameraCaptureButtonSurfaceProps = {
   children?: ReactNode;

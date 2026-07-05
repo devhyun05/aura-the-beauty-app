@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   nextButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,

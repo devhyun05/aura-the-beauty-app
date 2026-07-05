@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.18,
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     width: spacing.md,
   },
   shapePointDotActive: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     transform: [{scale: 1.18}],
   },
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   adjustmentFill: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: '100%',
   },

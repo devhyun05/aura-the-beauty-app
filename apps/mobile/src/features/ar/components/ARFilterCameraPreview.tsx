@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, type ViewStyle} from 'react-native';
+import {Image, StyleSheet, type ViewStyle} from 'react-native';
 import type {CameraType} from 'expo-camera';
 import {Text, View} from 'tamagui';
 
@@ -24,6 +24,7 @@ type ARFilterCameraPreviewProps = {
   comparisonDividerTopOffset?: number;
   previewColorHex: string;
   selectedComparisonMode: ComparisonMode;
+  sourceImageUri?: string | null;
 };
 
 export function getMakeupPreviewColorOverlayLayers(): readonly MakeupPreviewColorOverlayLayer[] {
@@ -46,6 +47,8 @@ export const AR_FILTER_COMPARISON_DIVIDER_TOP =
 export const AR_FILTER_COMPARISON_DIVIDER_BOTTOM = 0;
 export const AR_FILTER_MOCK_MAKEUP_OVERLAY_VISIBILITY = 'hidden' as const;
 export const AR_FILTER_HALF_GUIDE_SIDE_SHADE_VISIBILITY = 'hidden' as const;
+export const AR_FILTER_SOURCE_IMAGE_PREVIEW_MODE =
+  'gallery-image-over-camera' as const;
 
 export function shouldShowARFilterHeaderCopy(): false {
   return false;
@@ -65,19 +68,29 @@ export function ARFilterCameraPreview({
   comparisonDividerTopOffset = AR_FILTER_COMPARISON_DIVIDER_TOP,
   guideMode,
   selectedComparisonMode,
+  sourceImageUri,
 }: ARFilterCameraPreviewProps) {
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
+  const shouldUseSourceImagePreview = Boolean(sourceImageUri);
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
   const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 
   return (
     <FullscreenOverlayLayer>
-      {shouldUseUnityPreview && active ? (
+      {shouldUseUnityPreview && active && !shouldUseSourceImagePreview ? (
         <UnityMakeupNativeView />
       ) : (
         <>
-          <LiveCameraLayer active={active} facing={cameraFacing} />
+          {sourceImageUri ? (
+            <Image
+              resizeMode="cover"
+              source={{uri: sourceImageUri}}
+              style={styles.sourceImagePreview}
+            />
+          ) : (
+            <LiveCameraLayer active={active} facing={cameraFacing} />
+          )}
           <View style={styles.previewDim} />
           {previewColorOverlayLayers.map(layer => (
             <View
@@ -109,13 +122,17 @@ export function ARFilterCameraPreview({
 
 const styles = StyleSheet.create({
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.08,
     position: 'absolute',
     right: 0,
     top: 0,
+  },
+  sourceImagePreview: {
+    height: '100%',
+    width: '100%',
   },
   comparisonDivider: {
     backgroundColor: colors.white,

@@ -566,8 +566,8 @@ const styles = StyleSheet.create({
   },
   areaTabActive: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
   },
   introSparkleBadge: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 2,
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1.35,
     flexDirection: 'row',
@@ -819,8 +819,8 @@ const styles = StyleSheet.create({
     width: 30,
   },
   productReasonButtonActive: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   productReasonLabel: {
     color: colors.textPrimary,

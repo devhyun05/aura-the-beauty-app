@@ -95,8 +95,8 @@ export const FLOATING_ACTION_ITEM_SIZE = 58;
 export const FLOATING_ACTION_SETTINGS_SIZE = 42;
 export const FLOATING_ACTION_SETTINGS_SELECTION_RADIUS =
   FLOATING_ACTION_SETTINGS_SIZE / 2 + spacing.sm;
-export const FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND = '#FFFFFF';
-export const FLOATING_ACTION_SETTINGS_BACKGROUND = '#E7E7E7';
+export const FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND = colors.liquidGlassSurface;
+export const FLOATING_ACTION_SETTINGS_BACKGROUND = colors.bottomSheetControlSurface;
 export const FLOATING_ACTION_HOST_EXTRA_HEIGHT = 178;
 export const FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET: FloatingActionSlotOffset = {
   x: 0,
@@ -337,7 +337,7 @@ export function getFloatingActionSettingsVisualState(
   isActive: boolean,
 ): FloatingActionSettingsVisualState {
   return {
-    backgroundColor: isActive ? colors.textPrimary : FLOATING_ACTION_SETTINGS_BACKGROUND,
+    backgroundColor: isActive ? colors.blackSurface : FLOATING_ACTION_SETTINGS_BACKGROUND,
     borderColor: isActive ? colors.textPrimary : colors.borderStrong,
     iconColor: isActive ? colors.white : colors.textPrimary,
   };
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     width: FLOATING_ACTION_ITEM_SIZE,
   },
   actionButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
     shadowOpacity: 0.24,
   },
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
     width: FLOATING_ACTION_BUTTON_SIZE,
   },
   mainButtonExpanded: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
   },
   pressed: {

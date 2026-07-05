@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: iconSize.xl + spacing.xxl,
     justifyContent: 'center',

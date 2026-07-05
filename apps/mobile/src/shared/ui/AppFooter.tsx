@@ -21,19 +21,19 @@ export const APP_FOOTER_TAB_ORDER = [
 ] as const satisfies readonly FooterTabKey[];
 
 export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xl;
-export const APP_FOOTER_BAR_HEIGHT = 64;
+export const APP_FOOTER_BAR_HEIGHT = 60;
 export const APP_FOOTER_TAB_HEIGHT = 42;
-export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
-export const APP_FOOTER_ACTION_BUBBLE_SIZE = APP_FOOTER_BAR_HEIGHT;
-export const APP_FOOTER_ACTION_SLOT_WIDTH = APP_FOOTER_BAR_HEIGHT;
+export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = colors.blackSurface;
+export const APP_FOOTER_ACTION_BUBBLE_SIZE = 64;
+export const APP_FOOTER_ACTION_SLOT_WIDTH = APP_FOOTER_ACTION_BUBBLE_SIZE;
 export const APP_FOOTER_ACTION_SLOT_CORNER_INSET = spacing.sm;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
 export const APP_FOOTER_ACTION_ICON_SIZE = iconSize.lg;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
-export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 76;
+export const APP_FOOTER_FLOATING_HOST_BASE_HEIGHT = 72;
 export const APP_FOOTER_SHOW_LABELS_BY_DEFAULT = false;
-export const APP_FOOTER_GLASS_BACKGROUND = 'rgba(255, 255, 255, 0.72)';
-export const APP_FOOTER_GLASS_BORDER = 'rgba(255, 255, 255, 0.82)';
+export const APP_FOOTER_GLASS_BACKGROUND = colors.liquidGlassSurface;
+export const APP_FOOTER_GLASS_BORDER = colors.liquidGlassBorder;
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
 export const APP_FOOTER_SIDE_TAB_WIDTH = 58;
 export const APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION =

@@ -6,7 +6,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import {Check, ShoppingBag, Trash2} from 'lucide-react-native';
+import {Check, ChevronRight, ShoppingBag, Trash2} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
@@ -58,21 +58,56 @@ export function FaceAnalysisReportCard({
     <AppCard onPress={onPress} padded={false} style={[styles.card, style]}>
       <View style={styles.imageArea}>
         <ImagePlaceholder
-          borderRadius={radius.md}
+          borderRadius={radius.lg}
           resizeMode="cover"
           source={report.imageSource}
         />
+        <View pointerEvents="none" style={styles.imageScrim} />
+        <View style={styles.imageTopRow}>
+          <View style={styles.dateChip}>
+            <Text numberOfLines={1} style={styles.dateChipText}>
+              {formatShortDate(report.analyzedAt)}
+            </Text>
+          </View>
+          <View style={styles.environmentChip}>
+            <Text numberOfLines={1} style={styles.environmentChipText}>
+              {report.environmentLabel}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.imageCaption}>
+          <Text numberOfLines={1} style={styles.imageTitle}>
+            {report.personalColor}
+          </Text>
+          <Text numberOfLines={1} style={styles.imageSubtitle}>
+            {report.recommendedMood}
+          </Text>
+        </View>
       </View>
       <View style={styles.content}>
-        <Text numberOfLines={1} style={styles.date}>
-          {formatShortDate(report.analyzedAt)}
+        <View style={styles.metaGrid}>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>얼굴형</Text>
+            <Text numberOfLines={1} style={styles.metaValue}>
+              {report.faceShape}
+            </Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>피부 타입</Text>
+            <Text numberOfLines={1} style={styles.metaValue}>
+              {report.skinType}
+            </Text>
+          </View>
+        </View>
+        <Text numberOfLines={2} style={styles.summary}>
+          {report.shortSummary}
         </Text>
-        <Text numberOfLines={1} style={styles.title}>
-          {report.personalColor}
-        </Text>
-        <Text numberOfLines={2} style={styles.description}>
-          {report.recommendedMood}
-        </Text>
+        <View style={styles.detailHint}>
+          <Text numberOfLines={1} style={styles.detailHintText}>
+            분석 보고서 보기
+          </Text>
+          <ChevronRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.2} />
+        </View>
         {hasActions ? (
           <View style={styles.actionRow}>
             {onPressProducts ? (
@@ -84,9 +119,13 @@ export function FaceAnalysisReportCard({
                   styles.productAction,
                   pressed ? styles.actionPressed : null,
                 ]}>
-                <ShoppingBag color={colors.white} size={iconSize.xs} strokeWidth={2} />
+                <ShoppingBag
+                  color={colors.textPrimary}
+                  size={iconSize.xs}
+                  strokeWidth={2}
+                />
                 <Text numberOfLines={1} style={styles.productActionText}>
-                  추천
+                  추천 제품
                 </Text>
               </Pressable>
             ) : null}
@@ -136,42 +175,58 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
-    paddingTop: spacing.xs,
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
   },
   card: {
-    backgroundColor: colors.background,
+    backgroundColor: '#FBFAF7',
     borderWidth: 0,
     elevation: 0,
     minWidth: 0,
+    overflow: 'hidden',
     shadowOpacity: 0,
   },
   content: {
-    gap: 2,
-    paddingTop: spacing.sm,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  dateChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.84)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  dateChipText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
   },
   deleteAction: {
     alignItems: 'center',
-    borderColor: colors.border,
+    backgroundColor: 'rgba(255, 90, 77, 0.08)',
+    borderColor: colors.transparent,
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 2,
-    height: 30,
+    gap: spacing.xs,
+    height: 38,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
+    minWidth: 88,
+    paddingHorizontal: spacing.md,
   },
   deleteActionConfirm: {
     alignItems: 'center',
     backgroundColor: colors.danger,
-    borderColor: colors.danger,
+    borderColor: colors.transparent,
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 2,
-    height: 30,
+    gap: spacing.xs,
+    height: 38,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
+    minWidth: 88,
+    paddingHorizontal: spacing.md,
   },
   deleteActionText: {
     color: colors.danger,
@@ -185,49 +240,122 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.xs,
   },
-  date: {
-    color: colors.textTertiary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-  },
-  description: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.xs,
-  },
-  imageArea: {
-    aspectRatio: 0.86,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  productAction: {
+  detailHint: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flex: 1,
     flexDirection: 'row',
-    gap: 2,
-    height: 30,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
+    gap: spacing.xs,
   },
-  productActionText: {
+  detailHintText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  environmentChip: {
+    backgroundColor: 'rgba(17, 17, 17, 0.38)',
+    borderRadius: radius.pill,
+    maxWidth: 170,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  environmentChipText: {
     color: colors.white,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.xs,
   },
-  title: {
+  imageArea: {
+    aspectRatio: 1.32,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    margin: spacing.sm,
+    marginBottom: 0,
+    overflow: 'hidden',
+  },
+  imageCaption: {
+    bottom: spacing.lg,
+    gap: 2,
+    left: spacing.lg,
+    position: 'absolute',
+    right: spacing.lg,
+  },
+  imageScrim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  imageSubtitle: {
+    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
+  imageTitle: {
+    color: colors.white,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
+  },
+  imageTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    left: spacing.md,
+    position: 'absolute',
+    right: spacing.md,
+    top: spacing.md,
+  },
+  metaGrid: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  metaItem: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    flex: 1,
+    gap: 2,
+    minHeight: 58,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  metaLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+  },
+  metaValue: {
     color: colors.textPrimary,
     fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  productAction: {
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderColor: colors.transparent,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    height: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  productActionText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  summary: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
 });

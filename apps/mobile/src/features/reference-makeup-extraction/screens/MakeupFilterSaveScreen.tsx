@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 58,
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   visibilityButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   visibilityControl: {
     backgroundColor: colors.surfaceMuted,
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   checkboxChecked: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
   },
 });

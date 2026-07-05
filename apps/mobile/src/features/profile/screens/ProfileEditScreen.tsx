@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     width: '14.285%',
   },
   dayCellSelected: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
   },
   dayGrid: {
     flexDirection: 'row',
@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 38,
@@ -927,8 +927,8 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   segmentSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   segmentText: {
     color: colors.textPrimary,

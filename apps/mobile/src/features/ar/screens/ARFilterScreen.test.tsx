@@ -16,12 +16,19 @@ import {
   AR_FILTER_CAMERA_CONTROLS_BOTTOM_POSITION,
   AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE,
   AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING,
+  AR_FILTER_FLOATING_SHEET_CONTROLS_JUSTIFY_CONTENT,
+  AR_FILTER_FLOATING_SHEET_CONTROLS_LEFT_PADDING,
   AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX,
   AR_FILTER_FLOATING_SHEET_CONTROLS_GAP,
+  AR_FILTER_FLOATING_SHEET_CONTROLS_BOTTOM_GAP,
   AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
+  AR_FILTER_GALLERY_PICKER_ALLOWS_EDITING,
+  AR_FILTER_GALLERY_PICKER_MEDIA_TYPES,
+  AR_FILTER_GALLERY_PREVIEW_BEHAVIOR,
   AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,
   AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE,
   AR_FILTER_SHEET_TOGGLE_ALIGNMENT,
+  AR_FILTER_SHEET_TOGGLE_BORDER_COLOR,
   AR_FILTER_SHEET_TOGGLE_BACKGROUND_COLOR,
   AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET,
   AR_FILTER_SHEET_TOGGLE_MARGIN_SOURCE,
@@ -191,13 +198,18 @@ expectEqual(
   'AR filter bottom sheet toggle button is translucent',
 );
 expectEqual(
+  AR_FILTER_SHEET_TOGGLE_BORDER_COLOR,
+  colors.border,
+  'AR filter bottom sheet toggle button uses the shared icon action border',
+);
+expectEqual(
   AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET,
-  AR_FILTER_BOTTOM_SHEET_PADDING,
-  'AR filter bottom sheet toggle uses the sheet padding as its left margin',
+  0,
+  'AR filter bottom sheet toggle relies on the floating controls left padding',
 );
 expectEqual(
   AR_FILTER_SHEET_TOGGLE_MARGIN_SOURCE,
-  'bottomSheetPadding',
+  'floatingControlsPadding',
   'AR filter bottom sheet toggle margin source',
 );
 expectEqual(
@@ -216,9 +228,24 @@ expectEqual(
   'AR filter floating sheet controls use compact spacing',
 );
 expectEqual(
+  AR_FILTER_FLOATING_SHEET_CONTROLS_BOTTOM_GAP,
+  spacing.md,
+  'AR filter floating sheet controls leave breathing room above the bottom sheet',
+);
+expectEqual(
   AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
   AR_FILTER_BOTTOM_SHEET_PADDING,
   'AR filter floating sheet controls right padding matches the bottom sheet padding',
+);
+expectEqual(
+  AR_FILTER_FLOATING_SHEET_CONTROLS_LEFT_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter floating sheet controls left padding matches the bottom sheet padding',
+);
+expectEqual(
+  AR_FILTER_FLOATING_SHEET_CONTROLS_JUSTIFY_CONTENT,
+  'space-between',
+  'AR filter floating sheet controls pin sheet toggle and actions to opposite edges',
 );
 expectEqual(
   AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX,
@@ -241,9 +268,24 @@ expectEqual(
   'AR filter camera controls are not attached to the bottom edge',
 );
 expectEqual(
+  AR_FILTER_GALLERY_PICKER_MEDIA_TYPES.join(','),
+  'images',
+  'AR filter gallery picker opens image assets',
+);
+expectEqual(
+  AR_FILTER_GALLERY_PICKER_ALLOWS_EDITING,
+  false,
+  'AR filter gallery picker does not crop selected makeup source',
+);
+expectEqual(
+  AR_FILTER_GALLERY_PREVIEW_BEHAVIOR,
+  'replaceLiveCameraPreview',
+  'AR filter gallery selection replaces the live camera preview',
+);
+expectEqual(
   AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING,
-  AR_FILTER_BOTTOM_SHEET_PADDING,
-  'AR filter bottom sheet panel top padding matches sheet padding',
+  spacing.xl,
+  'AR filter bottom sheet panel top padding gives controls more breathing room',
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING,
@@ -267,8 +309,8 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_BACKGROUND_COLOR,
-  colors.arFilterBottomSheetSurface,
-  'AR filter bottom sheet uses translucent AR surface',
+  colors.bottomSheetSurface,
+  'AR filter bottom sheet uses shared app bottom sheet surface opacity',
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_PANEL_MAX_HEIGHT,
@@ -289,6 +331,7 @@ expectEqual(
 <ARFilterScreen
   initialGuideMode="basic"
   onBack={() => undefined}
+  onOpenDetailEdit={() => undefined}
   onOpenShapeAdjust={() => undefined}
   onSave={() => undefined}
 />;
@@ -300,6 +343,7 @@ expectEqual(
   initialGuideMode="half"
   initialMakeupFilterId="filter-douyin-pink"
   initialSource="recommendedFilter"
+  onOpenDetailEdit={() => undefined}
   onOpenShapeAdjust={() => undefined}
   onSave={() => undefined}
 />;

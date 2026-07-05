@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.12,

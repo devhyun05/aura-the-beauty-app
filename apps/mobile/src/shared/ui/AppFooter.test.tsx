@@ -24,31 +24,37 @@ import {
   getAppFooterActionSlotOrder,
 } from './AppFooter';
 import {CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND} from './CameraCaptureButton';
+import {colors} from '../theme';
 
-const footerBarHeight: 64 = APP_FOOTER_BAR_HEIGHT;
+const footerBarHeight: 60 = APP_FOOTER_BAR_HEIGHT;
 const footerTabHeight: 42 = APP_FOOTER_TAB_HEIGHT;
 const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
   APP_FOOTER_ACTIVE_TAB_BACKGROUND;
+const sharedBlackSurface: 'rgba(43, 43, 43, 0.62)' = colors.blackSurface;
 const footerActionBubbleSize: 64 = APP_FOOTER_ACTION_BUBBLE_SIZE;
 const footerActionSlotWidth: 64 = APP_FOOTER_ACTION_SLOT_WIDTH;
 const footerActionSlotCornerInset: 8 = APP_FOOTER_ACTION_SLOT_CORNER_INSET;
 const footerHorizontalPadding: 20 = APP_FOOTER_HORIZONTAL_PADDING;
 const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;
 const footerActionIconSize: 28 = APP_FOOTER_ACTION_ICON_SIZE;
-const footerFloatingHostBaseHeight: 76 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
+const footerFloatingHostBaseHeight: 72 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
 const footerSideTabWidth: 58 = APP_FOOTER_SIDE_TAB_WIDTH;
 const footerTabOrder: readonly ['home', 'community', 'profile'] =
   APP_FOOTER_TAB_ORDER;
 const footerBarOverflow: 'visible' = APP_FOOTER_BAR_OVERFLOW;
-const footerGlassBackground: 'rgba(255, 255, 255, 0.72)' =
+const footerGlassBackground: 'rgba(255, 255, 255, 0.74)' =
   APP_FOOTER_GLASS_BACKGROUND;
-const footerGlassBorder: 'rgba(255, 255, 255, 0.82)' = APP_FOOTER_GLASS_BORDER;
+const footerGlassBorder: 'rgba(255, 255, 255, 0.92)' = APP_FOOTER_GLASS_BORDER;
 const footerGlassHighlight: 'rgba(255, 255, 255, 0.42)' =
   APP_FOOTER_GLASS_HIGHLIGHT;
 const footerShowsLabelsByDefault: false = APP_FOOTER_SHOW_LABELS_BY_DEFAULT;
 const footerCaptureButtonBackground:
-  'rgba(255, 255, 255, 0.78)' =
+  'rgba(255, 255, 255, 0.74)' =
     CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND;
+
+if (APP_FOOTER_ACTIVE_TAB_BACKGROUND !== colors.blackSurface) {
+  throw new Error('footer active tab: expected shared translucent black surface');
+}
 
 if (APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION !== 'right') {
   throw new Error('default action slot position: expected right');

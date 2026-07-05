@@ -7,11 +7,19 @@ import {
   AR_FILTER_OPTION_CARD_ACTIVE_EDGE_TREATMENT,
   AR_FILTER_OPTION_CARD_ACTIVE_OUTLINE_VISIBILITY,
   AR_FILTER_OPTION_CARD_COPY_PLACEMENT,
+  AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT,
   AR_FILTER_OPTION_CARD_META_PLACEMENT,
   AR_FILTER_OPTION_CARD_PREVIEW_KINDS,
+  AR_FILTER_OPTION_CARD_SELECTED_BADGE,
+  AR_FILTER_OPTION_CARD_SELECTED_EFFECT,
   AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY,
   AR_FILTER_OPTION_CARD_WIDTH,
   AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
+  AR_FILTER_CATEGORY_SELECTOR_ACTIVE_INDICATOR,
+  AR_FILTER_CATEGORY_SELECTOR_CHROME,
+  AR_FILTER_CATEGORY_SELECTOR_HEIGHT,
+  AR_FILTER_CATEGORY_SELECTOR_STYLE,
+  AR_FILTER_CATEGORY_SELECTOR_VERTICAL_FOOTPRINT,
   AR_FILTER_ORIGINAL_OPTION_ICON_LIBRARY_NAME,
   AR_FILTER_ORIGINAL_OPTION_ICON_SOURCE,
   ARFilterOptionCardList,
@@ -38,6 +46,11 @@ expectEqual(
   AR_FILTER_OPTION_CARD_COPY_PLACEMENT,
   'bottomScrim',
   'AR filter option card copy placement matches home filter card',
+);
+expectEqual(
+  AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT,
+  'center',
+  'AR filter option card labels are centered inside the bottom scrim',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_META_PLACEMENT,
@@ -83,6 +96,41 @@ expectEqual(
   AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY,
   'accessibilityOnly',
   'AR filter option card does not render selected chips',
+);
+expectEqual(
+  AR_FILTER_OPTION_CARD_SELECTED_BADGE,
+  'topRightCheck',
+  'AR filter option card selected state shows a compact check badge',
+);
+expectEqual(
+  AR_FILTER_OPTION_CARD_SELECTED_EFFECT,
+  'innerGlowAndPressedDepth',
+  'AR filter option card selected state is visibly stronger than idle cards',
+);
+expectEqual(
+  AR_FILTER_CATEGORY_SELECTOR_STYLE,
+  'compactTextTabs',
+  'AR filter categories use compact text tabs instead of chips',
+);
+expectEqual(
+  AR_FILTER_CATEGORY_SELECTOR_CHROME,
+  'none',
+  'AR filter category selector removes chip chrome',
+);
+expectEqual(
+  AR_FILTER_CATEGORY_SELECTOR_ACTIVE_INDICATOR,
+  'underline',
+  'AR filter category selector uses an underline active state',
+);
+expectEqual(
+  AR_FILTER_CATEGORY_SELECTOR_HEIGHT,
+  24,
+  'AR filter category tabs are shorter than chip buttons',
+);
+expectEqual(
+  AR_FILTER_CATEGORY_SELECTOR_VERTICAL_FOOTPRINT,
+  28,
+  'AR filter category selector uses less vertical space than chips',
 );
 expectEqual(
   AR_FILTER_ORIGINAL_OPTION_ICON_SOURCE,

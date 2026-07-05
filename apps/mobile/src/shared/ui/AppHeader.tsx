@@ -10,6 +10,7 @@ import {MenuHeaderIcon} from './HeaderIcons';
 export const APP_HEADER_BASE_HEIGHT = 56;
 export const APP_HEADER_VERTICAL_PADDING = spacing.sm;
 export const APP_HEADER_ACTION_BUTTON_SIZE = 40;
+export const APP_HEADER_BACKGROUND_COLOR = colors.headerSurface;
 export const APP_HEADER_SIDE_SIZE = 40;
 export const APP_HEADER_CENTER_TITLE_FONT_SIZE = typography.title.fontSize;
 export const APP_HEADER_CONTEXT_TITLE_LEFT_MARGIN = spacing.xs;
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   },
   container: {
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: APP_HEADER_BACKGROUND_COLOR,
     flexDirection: 'row',
     gap: spacing.lg,
     justifyContent: 'space-between',

@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   },
   productAction: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
     borderRadius: radius.pill,
     borderWidth: 1,

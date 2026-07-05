@@ -41,6 +41,16 @@ const guideLabels: FaceAnalysisReportGuideLabel[] = [
   {key: 'lip', label: '\uB9BD'},
 ];
 
+const guidePointLabels: Record<FaceAnalysisReportGuideItem['key'], string> = {
+  base: '얇은 피부 표현',
+  brow: '결 정돈',
+  eyeshadow: '부드러운 음영',
+  eyeliner: '가벼운 라인',
+  blush: '넓은 생기',
+  highlight: '은은한 광',
+  lip: '톤 맞춘 립',
+};
+
 const createFilterButtonPlacements = [
   'floating-bottom',
 ] as const satisfies readonly FaceAnalysisReportCreateFilterButtonPlacement[];
@@ -71,8 +81,8 @@ const faceAnalysisReportScreenFramePresentation = {
 const faceAnalysisReportEditorialPresentation = {
   heroMinimumHeight: 420,
   heroTreatment: 'full-bleed-photo-report',
-  sectionTreatment: 'cardless-divided-sections',
-  summaryTreatment: 'dark-ribbon-metrics',
+  sectionTreatment: 'editorial-glass-sections',
+  summaryTreatment: 'light-profile-metrics',
 } as const;
 
 export const faceAnalysisReportLiquidGlassSurfaceStyle = {
@@ -99,6 +109,7 @@ const faceAnalysisReportLiquidGlassPresentation = {
   ] as const satisfies readonly FaceAnalysisReportLiquidGlassButtonTarget[],
   cardTargets: [
     'hero',
+    'summary',
     'makeup',
   ] as const satisfies readonly FaceAnalysisReportLiquidGlassCardTarget[],
   shadowRadius: faceAnalysisReportLiquidGlassSurfaceStyle.shadowRadius,
@@ -140,21 +151,18 @@ export function getFaceAnalysisReportSummaryItems(
   ];
 }
 
-function getGuidePoint(detail: string, fallback: string) {
+function getGuidePoint(
+  key: FaceAnalysisReportGuideItem['key'],
+  detail: string,
+  fallback: string,
+) {
   const normalized = detail.trim();
 
   if (!normalized) {
     return fallback;
   }
 
-  const [firstClause] = normalized.split(/[,.，。]/);
-  const point = firstClause.trim();
-
-  if (!point) {
-    return fallback;
-  }
-
-  return point;
+  return guidePointLabels[key] ?? fallback;
 }
 
 export function getFaceAnalysisReportPointGuideItems(
@@ -164,7 +172,7 @@ export function getFaceAnalysisReportPointGuideItems(
     {
       key: 'base',
       label: '베이스',
-      point: getGuidePoint(report.baseMakeupGuide, '피부 표현'),
+      point: getGuidePoint('base', report.baseMakeupGuide, '피부 표현'),
       detail: report.baseMakeupGuide,
     },
     ...guideLabels.map((guide) => {
@@ -172,7 +180,7 @@ export function getFaceAnalysisReportPointGuideItems(
 
       return {
         ...guide,
-        point: getGuidePoint(detail, guide.label),
+        point: getGuidePoint(guide.key, detail, guide.label),
         detail,
       };
     }),
@@ -203,6 +211,8 @@ export function getFaceAnalysisReportPrimaryMakeupRecommendation(
   return {
     makeup,
     guideSummary: fallbackGuideSummary,
-    reason: `${report.recommendedMood} 무드와 ${fallbackGuideSummary} 포인트를 반영한 데일리 추천입니다.`,
+    reason:
+      report.shortSummary ||
+      `${report.recommendedMood} 흐름을 데일리하게 풀어낸 추천 룩이에요.`,
   };
 }

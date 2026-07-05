@@ -1,16 +1,16 @@
 import React from 'react';
 import {Image, ScrollView, StyleSheet} from 'react-native';
-import {CircleOff} from 'lucide-react-native';
+import {Check, CircleOff} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   ARMakeupGuideData,
   FilterCategoryId,
+  FilterCategory,
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
-import {OverlayChipButton} from '../../../shared/ui';
 import {
   ORIGINAL_OPTION_CARD_ID,
   ORIGINAL_OPTION_CARD_LABEL,
@@ -44,6 +44,7 @@ type ARFilterOptionCardListProps = {
 
 export const AR_FILTER_OPTION_CARD_ASPECT_RATIO = 0.78;
 export const AR_FILTER_OPTION_CARD_COPY_PLACEMENT = 'bottomScrim' as const;
+export const AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT = 'center' as const;
 export const AR_FILTER_OPTION_CARD_META_PLACEMENT = 'none' as const;
 export const AR_FILTER_OPTION_CARD_ACTIVE_INDICATOR = 'pressedInset' as const;
 export const AR_FILTER_OPTION_CARD_ACTIVE_DEPTH_EFFECT = 'insetShadow' as const;
@@ -51,6 +52,9 @@ export const AR_FILTER_OPTION_CARD_ACTIVE_EDGE_TREATMENT = 'shadowOnly' as const
 export const AR_FILTER_OPTION_CARD_ACTIVE_OUTLINE_VISIBILITY = 'hidden' as const;
 export const AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY =
   'accessibilityOnly' as const;
+export const AR_FILTER_OPTION_CARD_SELECTED_BADGE = 'topRightCheck' as const;
+export const AR_FILTER_OPTION_CARD_SELECTED_EFFECT =
+  'innerGlowAndPressedDepth' as const;
 export const AR_FILTER_OPTION_CARD_PREVIEW_KINDS = [
   'makeupLook',
   'color',
@@ -65,6 +69,12 @@ export const AR_FILTER_OPTION_PICKER_MIN_HEIGHT = 112;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_SOURCE = 'lucide-react-native' as const;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_LIBRARY_NAME = 'CircleOff' as const;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_SIZE = iconSize.lg;
+export const AR_FILTER_CATEGORY_SELECTOR_STYLE = 'compactTextTabs' as const;
+export const AR_FILTER_CATEGORY_SELECTOR_CHROME = 'none' as const;
+export const AR_FILTER_CATEGORY_SELECTOR_ACTIVE_INDICATOR = 'underline' as const;
+export const AR_FILTER_CATEGORY_SELECTOR_HEIGHT = spacing.xxl;
+export const AR_FILTER_CATEGORY_SELECTOR_VERTICAL_FOOTPRINT =
+  AR_FILTER_CATEGORY_SELECTOR_HEIGHT + spacing.xs;
 
 export function getARFilterCategoryTitle(): null {
   return null;
@@ -102,10 +112,10 @@ export function ARFilterOptionCardList({
         {isTotalMakeupArea(selectedMakeupArea) ? (
           <HorizontalSection label={getARFilterCategoryTitle()}>
             {arGuideData.categories.map(category => (
-              <OverlayChipButton
+              <CategoryTextTab
+                category={category}
                 key={category.id}
                 isActive={category.id === selectedCategoryId}
-                label={category.label}
                 onPress={() => onCategoryPress(category.id)}
               />
             ))}
@@ -269,6 +279,40 @@ function HorizontalSection({children, label}: HorizontalSectionProps) {
   );
 }
 
+type CategoryTextTabProps = {
+  category: FilterCategory;
+  isActive: boolean;
+  onPress: () => void;
+};
+
+function CategoryTextTab({category, isActive, onPress}: CategoryTextTabProps) {
+  return (
+    <Button
+      accessibilityLabel={`${category.label} 카테고리 선택`}
+      accessibilityRole="button"
+      accessibilityState={{selected: isActive}}
+      onPress={onPress}
+      pressStyle={{opacity: 0.72}}
+      style={styles.categoryTextTab}
+      unstyled>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.categoryTextTabLabel,
+          isActive ? styles.categoryTextTabLabelActive : undefined,
+        ]}>
+        {category.label}
+      </Text>
+      <View
+        style={[
+          styles.categoryTextTabIndicator,
+          !isActive ? styles.categoryTextTabIndicatorInactive : undefined,
+        ]}
+      />
+    </Button>
+  );
+}
+
 type OptionCardProps = {
   accessibilityLabel: string;
   children?: React.ReactNode;
@@ -302,12 +346,21 @@ function OptionCard({
           children
         )}
       </View>
-      <View style={styles.optionCardCopy}>
-        <Text numberOfLines={1} style={styles.optionCardTitle}>
+      <View style={[styles.optionCardCopy, isActive ? styles.optionCardCopyActive : undefined]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.optionCardTitle, isActive ? styles.optionCardTitleActive : undefined]}>
           {label}
         </Text>
       </View>
-      {isActive ? <View pointerEvents="none" style={styles.optionCardActiveOverlay} /> : null}
+      {isActive ? (
+        <>
+          <View pointerEvents="none" style={styles.optionCardActiveOverlay} />
+          <View pointerEvents="none" style={styles.optionCardSelectedBadge}>
+            <Check color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.4} />
+          </View>
+        </>
+      ) : null}
     </Button>
   );
 }
@@ -360,7 +413,7 @@ function ShapeOptionPreview() {
 
 const styles = StyleSheet.create({
   horizontalSection: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   panelLabel: {
     color: colors.textPrimary,
@@ -371,7 +424,38 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   chipList: {
-    gap: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.lg,
+    minHeight: AR_FILTER_CATEGORY_SELECTOR_VERTICAL_FOOTPRINT,
+  },
+  categoryTextTab: {
+    alignItems: 'center',
+    gap: spacing.xs / 2,
+    height: AR_FILTER_CATEGORY_SELECTOR_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  categoryTextTabIndicator: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: 2,
+    width: 16,
+  },
+  categoryTextTabIndicatorInactive: {
+    opacity: 0,
+  },
+  categoryTextTabLabel: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  categoryTextTabLabelActive: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontWeight: typography.fontWeight.bold,
   },
   optionPickerList: {
     alignItems: 'center',
@@ -394,24 +478,44 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderWidth: 1,
     shadowColor: colors.black,
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.14,
-    shadowRadius: 4,
-    transform: [{scale: 0.98}],
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.24,
+    shadowRadius: 9,
+    transform: [{scale: 0.96}],
   },
   optionCardActiveOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.10)',
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+    borderColor: 'rgba(255, 255, 255, 0.88)',
     borderRadius: radius.lg,
+    borderWidth: 1,
     bottom: 4,
     left: 4,
     position: 'absolute',
     right: 4,
-    shadowColor: colors.black,
-    shadowOffset: {width: 0, height: 5},
-    shadowOpacity: 0.34,
-    shadowRadius: 10,
+    shadowColor: colors.white,
+    shadowOffset: {width: 0, height: 0},
+    shadowOpacity: 0.38,
+    shadowRadius: 8,
     top: 4,
     zIndex: 2,
+  },
+  optionCardSelectedBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.bottomSheetControlSurface,
+    borderColor: colors.liquidGlassBorder,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 20,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: spacing.xs,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    top: spacing.xs,
+    width: 20,
+    zIndex: 4,
   },
   optionCardPreview: {
     alignItems: 'center',
@@ -429,25 +533,37 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   optionCardCopy: {
-    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
     bottom: 0,
+    justifyContent: 'center',
     left: 0,
+    minHeight: 34,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     position: 'absolute',
     right: 0,
-    zIndex: 1,
+    zIndex: 3,
+  },
+  optionCardCopyActive: {
+    backgroundColor: 'rgba(17, 17, 17, 0.72)',
   },
   optionCardTitle: {
+    alignSelf: 'stretch',
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
+    textAlign: AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT,
     textShadowColor: 'rgba(0, 0, 0, 0.65)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 7,
+  },
+  optionCardTitleActive: {
+    textShadowColor: 'rgba(0, 0, 0, 0.82)',
+    textShadowRadius: 10,
   },
   colorPreview: {
     height: '100%',
@@ -464,7 +580,7 @@ const styles = StyleSheet.create({
     width: 68,
   },
   typePreviewLineStrong: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 6,
     width: 38,
@@ -495,7 +611,7 @@ const styles = StyleSheet.create({
     width: spacing.sm,
   },
   texturePreviewDotLarge: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: spacing.md,
     width: spacing.md,
@@ -516,7 +632,7 @@ const styles = StyleSheet.create({
     right: 6,
   },
   shapePreviewPoint: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: spacing.xs,
     position: 'absolute',

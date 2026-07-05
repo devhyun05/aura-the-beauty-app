@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.16,

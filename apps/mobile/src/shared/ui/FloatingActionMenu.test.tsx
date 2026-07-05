@@ -28,6 +28,7 @@ import {
   getVisibleFloatingActionIds,
   type FloatingActionId,
 } from './FloatingActionMenu';
+import {colors} from '../theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -181,13 +182,13 @@ expectEqual(
 );
 expectEqual(
   FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
-  '#FFFFFF',
-  'floating action option button background',
+  colors.liquidGlassSurface,
+  'floating action option button uses liquid glass background',
 );
 expectEqual(
   FLOATING_ACTION_SETTINGS_BACKGROUND,
-  '#E7E7E7',
-  'floating action settings button background',
+  colors.bottomSheetControlSurface,
+  'floating action settings button uses translucent control background',
 );
 expectEqual(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET.x, 0, 'AR filter 12 o clock x offset');
 expectEqual(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET.y, -74, 'AR filter 12 o clock y offset');
@@ -227,8 +228,8 @@ expectEqual(
 );
 expectEqual(
   activeSettingsVisualState.backgroundColor,
-  '#111111',
-  'active settings uses black background',
+  colors.blackSurface,
+  'active settings uses translucent black surface',
 );
 expectEqual(
   activeSettingsVisualState.borderColor,

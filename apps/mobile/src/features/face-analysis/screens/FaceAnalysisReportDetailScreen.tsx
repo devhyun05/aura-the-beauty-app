@@ -35,7 +35,6 @@ import {
   getFaceAnalysisReportPointGuideItems,
   getFaceAnalysisReportPrimaryMakeupRecommendation,
   getFaceAnalysisReportScreenFramePresentation,
-  getFaceAnalysisReportSubtitleTextStyle,
   getFaceAnalysisReportSummaryItems,
   type FaceAnalysisReportCreateFilterButtonPlacement,
   type FaceAnalysisReportGuideItem,
@@ -66,10 +65,12 @@ const CREATE_FILTER_BUTTON_HEIGHT = 56;
 const REPORT_IMAGE_POLL_INTERVAL_MS = 4000;
 const MAKEUP_IMAGE_PENDING_TEXT = '\uC774\uBBF8\uC9C0 \uC0DD\uC131 \uC911';
 const REPORT_BACKGROUND_COLOR = colors.surfaceMuted;
-const REPORT_TEXT_PRIMARY = '#111827';
-const REPORT_TEXT_BODY = '#1F2937';
-const REPORT_TEXT_SECONDARY = '#374151';
-const REPORT_CARD_BORDER = '#E5E7EB';
+const REPORT_PANEL_COLOR = colors.white;
+const REPORT_PANEL_MUTED_COLOR = 'rgba(255, 255, 255, 0.72)';
+const REPORT_TEXT_PRIMARY = colors.textPrimary;
+const REPORT_TEXT_BODY = '#202326';
+const REPORT_TEXT_SECONDARY = '#62666B';
+const REPORT_CARD_BORDER = 'rgba(17, 24, 39, 0.08)';
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
@@ -77,8 +78,6 @@ const REPORT_CAPTURE_OPTIONS = {
 } as const;
 const faceAnalysisReportScreenFramePresentation =
   getFaceAnalysisReportScreenFramePresentation();
-const faceAnalysisReportSubtitleTextStyle =
-  getFaceAnalysisReportSubtitleTextStyle();
 const faceAnalysisReportEditorialPresentation =
   getFaceAnalysisReportEditorialPresentation();
 
@@ -447,7 +446,7 @@ export function FaceAnalysisReportDetailScreen({
           summaryItems={summaryItems}
         />
 
-        <ReportSection title={"분석 요약"}>
+        <ReportSection eyebrow="AI TONE READING" title={"분석 요약"}>
           <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
         </ReportSection>
 
@@ -455,7 +454,7 @@ export function FaceAnalysisReportDetailScreen({
           <PrimaryMakeupRecommendationCard recommendation={primaryMakeupRecommendation} />
         ) : null}
 
-        <ReportSection title={"포인트 가이드"}>
+        <ReportSection eyebrow="MAKEUP TIPS" title={"메이크업 팁"}>
           <FacePointGuideMap guideItems={guideItems} />
         </ReportSection>
 
@@ -488,8 +487,8 @@ function ReportHero({
 }) {
   const {width} = useWindowDimensions();
   const heroHeight = Math.min(
-    540,
-    Math.max(faceAnalysisReportEditorialPresentation.heroMinimumHeight, width * 1.06),
+    580,
+    Math.max(faceAnalysisReportEditorialPresentation.heroMinimumHeight, width * 1.18),
   );
 
   return (
@@ -515,10 +514,16 @@ function ReportHero({
         </View>
       </View>
 
-      <View style={styles.summaryRibbon}>
-        {summaryItems.map((item) => (
-          <SummaryItem key={item.label} label={item.label} value={item.value} />
-        ))}
+      <View style={styles.summaryDeck}>
+        <View style={styles.summaryDeckHeader}>
+          <Text style={styles.summaryDeckEyebrow}>BEAUTY PROFILE</Text>
+          <Text style={styles.summaryDeckTitle}>얼굴 무드 핵심값</Text>
+        </View>
+        <View style={styles.summaryGrid}>
+          {summaryItems.map((item) => (
+            <SummaryItem key={item.label} label={item.label} value={item.value} />
+          ))}
+        </View>
       </View>
     </View>
   );
@@ -535,20 +540,24 @@ function FacePointGuideMap({
   }
 
   return (
-    <View style={styles.pointGuideBoard}>
+    <View style={styles.pointGuideTimeline}>
       {guideItems.map((guide, index) => (
         <View
           key={guide.key}
           style={[
-            styles.pointGuideItem,
-            index === guideItems.length - 1 ? styles.pointGuideItemLast : null,
+            styles.pointGuideTimelineItem,
+            index > 0 ? styles.pointGuideTimelineDivider : null,
           ]}>
-          <Text style={styles.pointGuideLabel}>
-            {guide.label}
-          </Text>
-          <Text style={styles.pointGuidePoint}>
-            {guide.detail}
-          </Text>
+          <View style={styles.pointGuideIndex}>
+            <Text style={styles.pointGuideIndexText}>
+              {String(index + 1).padStart(2, '0')}
+            </Text>
+            <Text style={styles.pointGuideLabel}>{guide.label}</Text>
+          </View>
+          <View style={styles.pointGuideTextGroup}>
+            <Text style={styles.pointGuidePoint}>{guide.point}</Text>
+            <Text style={styles.pointGuideDetail}>{guide.detail}</Text>
+          </View>
         </View>
       ))}
     </View>
@@ -648,6 +657,7 @@ function SummaryItem({label, value}: {label: string; value: string}) {
 function AnalysisSummaryBlock({summary}: {summary: string}) {
   return (
     <View style={styles.analysisSummaryCard}>
+      <Text style={styles.analysisSummaryLead}>분석 핵심</Text>
       <Text style={styles.analysisSummaryText}>{summary}</Text>
     </View>
   );
@@ -655,17 +665,22 @@ function AnalysisSummaryBlock({summary}: {summary: string}) {
 
 function ReportSection({
   children,
+  eyebrow,
   trailing,
   title,
 }: {
   children: React.ReactNode;
+  eyebrow?: string;
   trailing?: React.ReactNode;
   title: string;
 }) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <View style={styles.sectionTitleGroup}>
+          {eyebrow ? <Text style={styles.sectionEyebrow}>{eyebrow}</Text> : null}
+          <Text style={styles.sectionTitle}>{title}</Text>
+        </View>
         {trailing}
       </View>
       {children}
@@ -698,7 +713,7 @@ function PrimaryMakeupRecommendationCard({
   const makeupTitle = makeup.subtitle || makeup.title;
 
   return (
-    <ReportSection title={"추천 메이크업"}>
+    <ReportSection eyebrow="BEST ROUTE" title={"추천 메이크업"}>
       <View style={styles.makeupCard}>
         <View style={[styles.makeupImageWrap, {height: imageHeight}]}>
           <Image
@@ -718,16 +733,26 @@ function PrimaryMakeupRecommendationCard({
               </Text>
             </View>
           ) : null}
+          <View style={styles.makeupImageBadge}>
+            <Text style={styles.makeupImageBadgeText}>BEST MATCH</Text>
+          </View>
         </View>
         <View style={styles.makeupBody}>
           <View style={styles.makeupTitleRow}>
             <View style={styles.makeupTitleTextGroup}>
-              <Text style={styles.makeupEyebrow}>데일리</Text>
+              <Text style={styles.makeupEyebrow}>RECOMMENDED LOOK</Text>
               <Text numberOfLines={2} style={styles.makeupTitle}>
                 {makeupTitle}
               </Text>
             </View>
           </View>
+          <View style={styles.makeupGuideCallout}>
+            <Text style={styles.makeupGuideCaption}>적용 포인트</Text>
+            <Text style={styles.makeupGuideText}>{recommendation.guideSummary}</Text>
+          </View>
+          <Text style={styles.makeupDescription}>
+            {recommendation.reason}
+          </Text>
           <View style={styles.makeupMoodRow}>
             {moodLabels.map((label) => (
               <Text key={label} numberOfLines={1} style={styles.makeupMoodTag}>
@@ -826,19 +851,32 @@ const styles = StyleSheet.create({
   },
   captureArea: {
     backgroundColor: REPORT_BACKGROUND_COLOR,
-    gap: spacing.xxl,
+    gap: spacing.sectionGap,
   },
   analysisSummaryCard: {
-    backgroundColor: 'transparent',
-    borderLeftColor: REPORT_TEXT_PRIMARY,
-    borderLeftWidth: 2,
-    paddingLeft: spacing.lg,
-    paddingVertical: spacing.xs,
+    backgroundColor: REPORT_PANEL_COLOR,
+    borderColor: colors.transparent,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    shadowColor: colors.black,
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.03,
+    shadowRadius: 14,
+  },
+  analysisSummaryLead: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
   },
   analysisSummaryText: {
     color: REPORT_TEXT_BODY,
     fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.medium,
+    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.md,
   },
   floatingCreateFilterArea: {
@@ -867,22 +905,20 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   makeupBody: {
-    backgroundColor: colors.surface,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    backgroundColor: REPORT_PANEL_COLOR,
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
   },
   makeupCard: {
-    backgroundColor: colors.surface,
-    borderColor: REPORT_CARD_BORDER,
+    backgroundColor: REPORT_PANEL_COLOR,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    elevation: 4,
+    elevation: 0,
     overflow: 'hidden',
     shadowColor: colors.black,
     shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
+    shadowOpacity: 0.03,
+    shadowRadius: 18,
   },
   makeupDescription: {
     color: REPORT_TEXT_BODY,
@@ -891,14 +927,15 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   makeupEyebrow: {
-    color: REPORT_TEXT_PRIMARY,
+    color: REPORT_TEXT_SECONDARY,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
   },
   makeupGuideCallout: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-    borderColor: REPORT_CARD_BORDER,
+    backgroundColor: '#F5F1EA',
+    borderColor: colors.transparent,
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.xs,
@@ -954,11 +991,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  makeupSubtitle: {
-    color: REPORT_TEXT_SECONDARY,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.sm,
+  makeupImageBadge: {
+    backgroundColor: REPORT_PANEL_MUTED_COLOR,
+    borderColor: colors.transparent,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    bottom: spacing.md,
+    left: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    position: 'absolute',
+  },
+  makeupImageBadgeText: {
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
   },
   makeupTitleRow: {
     alignItems: 'flex-start',
@@ -985,8 +1033,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   makeupMoodTag: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-    borderColor: REPORT_CARD_BORDER,
+    backgroundColor: '#F3F0EA',
+    borderColor: colors.transparent,
     borderRadius: radius.pill,
     borderWidth: 1,
     color: REPORT_TEXT_BODY,
@@ -1004,100 +1052,73 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
-  paragraph: {
-    color: REPORT_TEXT_BODY,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
-  },
-  pointGuideBoard: {
-    backgroundColor: 'transparent',
-    borderTopColor: REPORT_TEXT_PRIMARY,
-    borderTopWidth: 1,
+  pointGuideTimeline: {
+    backgroundColor: REPORT_PANEL_COLOR,
+    borderRadius: radius.lg,
     overflow: 'hidden',
+    paddingHorizontal: spacing.lg,
   },
-  pointGuideBubble: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-    borderColor: REPORT_CARD_BORDER,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    marginBottom: spacing.md,
-    marginHorizontal: spacing.md,
-    marginLeft: spacing.xl,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    position: 'relative',
-  },
-  pointGuideBubbleText: {
-    color: REPORT_TEXT_BODY,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
-  },
-  pointGuideIcon: {
-    alignItems: 'center',
-    height: 24,
-    justifyContent: 'center',
-    marginTop: 2,
-    width: 24,
-  },
-  pointGuideItem: {
-    borderBottomColor: REPORT_CARD_BORDER,
-    borderBottomWidth: 1,
-    gap: spacing.sm,
+  pointGuideTimelineItem: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.md,
     paddingVertical: spacing.lg,
   },
-  pointGuideItemLast: {
-    borderBottomWidth: 0,
+  pointGuideTimelineDivider: {
+    borderTopColor: REPORT_CARD_BORDER,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  pointGuideIndex: {
+    alignItems: 'flex-start',
+    gap: 2,
+    paddingTop: 2,
+    width: 58,
+  },
+  pointGuideIndexText: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
   },
   pointGuideLabel: {
     color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
-    textTransform: 'uppercase',
   },
   pointGuidePoint: {
-    color: REPORT_TEXT_BODY,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.md,
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
   },
-  pointGuideRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 64,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+  pointGuideDetail: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
   },
   pointGuideTextGroup: {
     flex: 1,
-    gap: 3,
+    gap: spacing.xs,
     minWidth: 0,
   },
-  pointGuideRowExpanded: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-  },
-  pointGuideRowPressed: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-  },
   reportContent: {
-    gap: spacing.xxl,
+    gap: spacing.sectionGap,
     paddingHorizontal: spacing.screenX,
     paddingTop: faceAnalysisReportScreenFramePresentation.contentTopPadding,
   },
   reportHero: {
-    backgroundColor: colors.black,
+    backgroundColor: REPORT_BACKGROUND_COLOR,
     marginHorizontal: -spacing.screenX,
     marginTop: -faceAnalysisReportScreenFramePresentation.contentTopPadding,
   },
   reportHeroCopy: {
-    bottom: spacing.xxl,
-    gap: spacing.xs,
+    bottom: spacing.sectionGap,
+    gap: spacing.sm,
     left: spacing.screenX,
-    maxWidth: '78%',
+    maxWidth: '84%',
     position: 'absolute',
     right: spacing.screenX,
   },
@@ -1109,7 +1130,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   reportHeroImage: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     width: '100%',
   },
   reportHeroImageStage: {
@@ -1117,7 +1138,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   reportHeroScrim: {
-    backgroundColor: 'rgba(0, 0, 0, 0.34)',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -1132,19 +1153,29 @@ const styles = StyleSheet.create({
   },
   reportHeroTitle: {
     color: colors.white,
-    fontSize: typography.fontSize.xxl,
+    fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xxl,
+    lineHeight: typography.lineHeight.xl,
   },
   scrollBody: {
     backgroundColor: REPORT_BACKGROUND_COLOR,
     flex: 1,
   },
+  sectionEyebrow: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  sectionTitleGroup: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
   section: {
-    borderTopColor: REPORT_CARD_BORDER,
-    borderTopWidth: 1,
     gap: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.sm,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -1154,13 +1185,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: REPORT_TEXT_PRIMARY,
-    flex: 1,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
-    textShadowColor: 'rgba(17, 24, 39, 0.08)',
-    textShadowOffset: {height: 1, width: 0},
-    textShadowRadius: 1,
   },
   shareActionArea: {
     alignItems: 'center',
@@ -1194,56 +1221,55 @@ const styles = StyleSheet.create({
     backgroundColor: REPORT_BACKGROUND_COLOR,
     flex: 1,
   },
-  subtitle: {
-    color: REPORT_TEXT_BODY,
-    fontSize: faceAnalysisReportSubtitleTextStyle.fontSize,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: faceAnalysisReportSubtitleTextStyle.lineHeight,
-    textAlign: 'center',
+  summaryDeck: {
+    backgroundColor: REPORT_BACKGROUND_COLOR,
+    gap: spacing.lg,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.screenX,
+    paddingTop: spacing.xl,
   },
-  summaryRibbon: {
-    backgroundColor: colors.black,
+  summaryDeckHeader: {
+    gap: 2,
+  },
+  summaryDeckEyebrow: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  summaryDeckTitle: {
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
+  },
+  summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.screenX,
-    rowGap: spacing.lg,
+    gap: spacing.sm,
   },
   summaryItem: {
-    flexGrow: 1,
+    backgroundColor: REPORT_PANEL_COLOR,
+    borderColor: colors.transparent,
+    borderRadius: radius.md,
+    borderWidth: 1,
     gap: spacing.xs,
-    minHeight: 58,
-    paddingRight: spacing.md,
-    width: '47%',
+    minHeight: 82,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    width: '48%',
   },
   summaryLabel: {
-    color: 'rgba(255, 255, 255, 0.54)',
+    color: REPORT_TEXT_SECONDARY,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xs,
   },
   summaryValue: {
-    color: colors.white,
+    color: REPORT_TEXT_PRIMARY,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
+    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.sm,
-  },
-  tag: {
-    backgroundColor: REPORT_BACKGROUND_COLOR,
-    borderColor: REPORT_CARD_BORDER,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    color: REPORT_TEXT_BODY,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    paddingTop: spacing.xs,
   },
 });
