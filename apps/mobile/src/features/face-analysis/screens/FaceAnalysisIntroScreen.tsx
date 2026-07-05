@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   },
   heroIcon: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 64,
     justifyContent: 'center',
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,

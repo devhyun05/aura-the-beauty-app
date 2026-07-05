@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     width: 46,
   },
   actionIconSelected: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   actionList: {
     gap: spacing.md,
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   checkmarkSelected: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
   },
   countText: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   modeRowSelected: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
   },
   modeSelectionBadge: {

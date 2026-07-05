@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   previewOverlay: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.16,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 58,

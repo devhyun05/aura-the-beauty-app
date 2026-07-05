@@ -72,6 +72,7 @@ export function TutorialIntroScreen({
   return (
     <YStack style={styles.root}>
       <AppHeader
+        containerProps={{style: styles.overlayHeader}}
         leftSlot={onCloseToHome ? undefined : <View />}
         onBack={onCloseToHome}
         title={headerPresentation.title}
@@ -82,7 +83,7 @@ export function TutorialIntroScreen({
         contentGap={0}
         horizontalPadding={0}
         scroll={false}
-        topPadding="none">
+        topPadding="belowOverlayHeader">
         <YStack
           style={[
             styles.screen,
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: iconSize.xl + spacing.xxl,
     justifyContent: 'center',
@@ -167,6 +168,15 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
+  },
+  overlayHeader: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 30,
   },
   screen: {
     alignItems: 'center',

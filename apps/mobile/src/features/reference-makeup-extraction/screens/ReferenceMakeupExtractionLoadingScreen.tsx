@@ -39,7 +39,7 @@ const loadingStepDescriptions: Record<string, string> = {
   'core-points': '결과서 상단에 들어갈 메이크업 핵심 3가지를 추려요.',
   'area-guides': '피부, 눈, 눈썹, 볼, 입술, 윤곽별 따라 하는 법을 정리해요.',
   'product-criteria': '부위별 추천 제품을 찾기 위한 검색 기준을 만들어요.',
-  'ar-filter-ready': '이 레퍼런스 룩을 AR 필터로 이어볼 준비를 해요.',
+  'ar-filter-ready': '이 레퍼런스 룩을 메이크업 필터로 이어볼 준비를 해요.',
 };
 
 
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.12,

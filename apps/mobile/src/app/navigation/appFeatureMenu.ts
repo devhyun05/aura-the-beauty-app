@@ -13,7 +13,6 @@ export type AppFeatureMenuItemId =
   | 'makeupFeedback'
   | 'faceAnalysis'
   | 'recommendedFilters'
-  | 'magazine'
   | 'productRecommendation'
   | 'savedMakeup'
   | 'makeupLooks'
@@ -29,7 +28,7 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'MakeupFeedbackAlbumUpload'
   | 'FaceAnalysisIntro'
   | 'HomeFilterStore'
-  | 'Magazine'
+  | 'Consulting'
   | 'ProductRecommendation'
   | 'SavedMakeupList'
   | 'MakeupLookList'
@@ -89,7 +88,7 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         id: 'consulting',
         label: '컨설팅',
         description: '퍼스널 컬러, 헤어, 패션 컨설팅 화면으로 이동해요.',
-        target: {kind: 'mainTab', routeName: 'ConsultingTab'},
+        target: {kind: 'root', routeName: 'Consulting'},
       },
     ],
   },
@@ -99,8 +98,8 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
     items: [
       {
         id: 'arFilter',
-        label: 'AR Filter',
-        description: '필터를 바로 얼굴에 적용해요.',
+        label: '메이크업 필터',
+        description: '메이크업 필터를 바로 얼굴에 적용해요.',
         target: {kind: 'root', routeName: 'ARFilter'},
       },
       {
@@ -132,12 +131,6 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         label: '추천 필터',
         description: '전체 추천 메이크업 필터를 둘러봐요.',
         target: {kind: 'root', routeName: 'HomeFilterStore'},
-      },
-      {
-        id: 'magazine',
-        label: '매거진',
-        description: '뷰티와 이미지 컨설팅 콘텐츠를 둘러봐요.',
-        target: {kind: 'root', routeName: 'Magazine'},
       },
       {
         id: 'productRecommendation',

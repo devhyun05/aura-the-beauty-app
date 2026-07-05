@@ -930,7 +930,7 @@ const styles = StyleSheet.create({
   },
   heartButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
   },
   heartButtonLiked: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.textPrimary,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
   },
   lookPickerActionButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1,
     height: 38,
@@ -1091,7 +1091,7 @@ const styles = StyleSheet.create({
   },
   makeupLookCheck: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 2,
@@ -1136,7 +1136,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   matchBadge: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     bottom: spacing.xs,
     left: spacing.xs,
@@ -1245,7 +1245,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     marginTop: spacing.md,
@@ -1327,8 +1327,8 @@ const styles = StyleSheet.create({
     opacity: 0.84,
   },
   reportChipSelected: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
     borderRadius: radius.md,
     borderWidth: 1,
     gap: 1,
@@ -1467,7 +1467,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   tabIndicatorActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 3,
     width: '100%',
