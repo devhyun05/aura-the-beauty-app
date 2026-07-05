@@ -404,12 +404,13 @@ export function ProfileEditScreen({
   return (
     <View style={styles.screen}>
       <AppHeader
+        containerProps={{style: styles.overlayHeader}}
         contextLabel={profileEditHeaderPresentation.contextLabel}
         leftSlot={onBack ? undefined : <View />}
         onBack={onBack}
         title={headerTitle}
       />
-      <AppScreen contentGap={spacing.xl} topPadding="none">
+      <AppScreen contentGap={spacing.xl} topPadding="belowOverlayHeader">
         <View style={styles.profileArea}>
           <View style={styles.avatarFrame}>
             {activeProfile?.avatarSource ? (
@@ -913,9 +914,18 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
+  overlayHeader: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 30,
+  },
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
   },
   segment: {
     alignItems: 'center',
