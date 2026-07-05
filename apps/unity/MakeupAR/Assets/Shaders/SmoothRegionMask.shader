@@ -64,6 +64,8 @@ Shader "MakeupAR/SmoothRegionMask"
         _LipStyleMode ("Lip Style Mode", Float) = -1
         [HideInInspector] _CheekBlushMode ("Cheek Blush Mode", Float) = 0
         [HideInInspector] _EyelinerMode ("Eyeliner Mode", Float) = 0
+        [HideInInspector] _BrowGateTex ("Brow Gate", 2D) = "white" {}
+        [HideInInspector] _BrowGateValid ("Brow Gate Valid", Float) = 0
         [HideInInspector] _CheekUvTransform ("Cheek UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartUvTransform ("Cheek Part UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartBlend ("Cheek Part Blend", Float) = 0
@@ -170,6 +172,8 @@ Shader "MakeupAR/SmoothRegionMask"
             float _LipStyleMode;
             float _CheekBlushMode;
             float _EyelinerMode;
+            sampler2D _BrowGateTex;
+            float _BrowGateValid;
             float4 _CheekUvTransform;
             float4 _CheekPartUvTransform;
             float _CheekPartBlend;
@@ -838,6 +842,21 @@ Shader "MakeupAR/SmoothRegionMask"
                         pigmentColor * 0.52,
                         hairContrast * detailAmount * 0.82));
                     alphaColor = pigmentColor;
+                }
+
+                // Per-person brow gate: the Vision landmark polygon of the
+                // USER'S eyebrow (screen-space band from the parsing
+                // provider) clips the styled brow mask so it hugs their
+                // actual brow instead of the canonical-UV guess. The wide
+                // smoothstep keeps edges soft at the 192px mask resolution;
+                // when the mask is stale/absent the gate stays off and the
+                // styled mask renders unchanged.
+                if (_BrowGateValid > 0.5)
+                {
+                    float2 browNdc = input.clipPos.xy / max(input.clipPos.w, 0.00001);
+                    float2 browUv = saturate(browNdc * 0.5 + 0.5);
+                    float browBand = tex2D(_BrowGateTex, browUv).r;
+                    maskStrength *= smoothstep(0.02, 0.30, browBand);
                 }
 
                 float preserveScale = lerp(1.0, 0.92, saturate(_PreserveDetail));

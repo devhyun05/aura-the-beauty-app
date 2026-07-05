@@ -3861,7 +3861,51 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 recipe.Region == "eyeliner" ? 1.0f : 0.0f);
         }
 
+        if (material.HasProperty("_BrowGateValid"))
+        {
+            // Live per-person brow fit: the Vision face-parsing provider
+            // rasterizes the user's eyebrow landmark polygon per capture
+            // (screen space). Requesting here keeps its capture loop alive
+            // exactly while a brow layer renders — no reference photo step.
+            bool browGateActive = false;
+            if (recipe.Region == "brow" && recipe.Enabled)
+            {
+                EnsureLandmarkParsingProvider();
+                if (landmarkParsingProvider != null)
+                {
+                    landmarkParsingProvider.RequestCapture();
+                }
+
+                if (FoundationSegmentationRegistry.TryGetResult(
+                        Camera.main, out FoundationSegmentationResult browSegmentation)
+                    && browSegmentation.HasEyebrowClass
+                    && browSegmentation.EyebrowMask != null)
+                {
+                    material.SetTexture("_BrowGateTex", browSegmentation.EyebrowMask);
+                    browGateActive = true;
+                }
+            }
+
+            material.SetFloat("_BrowGateValid", browGateActive ? 1.0f : 0.0f);
+        }
+
         MaybeLogFoundationDiagnostics(material, mask, maskTexture, materialColor, recipe, foundationRegion);
+    }
+
+    private VisionFaceParsingProvider landmarkParsingProvider;
+
+    private void EnsureLandmarkParsingProvider()
+    {
+        if (landmarkParsingProvider != null)
+        {
+            return;
+        }
+
+        landmarkParsingProvider = FindFirstObjectByType<VisionFaceParsingProvider>();
+        if (landmarkParsingProvider == null)
+        {
+            landmarkParsingProvider = gameObject.AddComponent<VisionFaceParsingProvider>();
+        }
     }
 
     private static void ApplyFoundationMaskControls(Material material, bool foundationRegion)
