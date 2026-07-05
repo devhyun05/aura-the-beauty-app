@@ -107,10 +107,14 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     // deliver BGRA instead of RGBA (a blue face defeats Vision's detector),
     // so persistent no_face cycles through the four combinations and locks
     // on the first success.
-    private int captureFormatCombo;
+    private const string CaptureFormatPrefKey = "e7.lip.captureFormatCombo";
+    // Combo 1 (rows bottom-up, RGBA) is the verified answer for the Metal
+    // readback on device; the probe remains as a fallback for other GPUs.
+    private int captureFormatCombo = 1;
     private bool captureFormatLocked;
     private int noFaceFetchesSinceCombo;
     private bool wroteDebugCapture;
+    private bool loadedCaptureFormatPref;
     private BoundarySnapshot latestSnapshot;
     private BoundarySnapshot transitionFromSnapshot;
     private BoundarySnapshot transitionToSnapshot;
@@ -409,6 +413,7 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             {
                 captureFormatLocked = true;
                 noFaceFetchesSinceCombo = 0;
+                PlayerPrefs.SetInt(CaptureFormatPrefKey, captureFormatCombo);
                 Debug.Log(
                     "[E7] vision_lip_boundary_format_locked combo=" + captureFormatCombo);
             }
@@ -454,6 +459,13 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
     private void EnsureCaptureBuffers()
     {
+        if (!loadedCaptureFormatPref)
+        {
+            loadedCaptureFormatPref = true;
+            captureFormatCombo = Mathf.Clamp(
+                PlayerPrefs.GetInt(CaptureFormatPrefKey, captureFormatCombo), 0, 3);
+        }
+
         int screenWidth = Mathf.Max(1, Screen.width);
         int screenHeight = Mathf.Max(1, Screen.height);
         int captureHeight = Mathf.Clamp(
