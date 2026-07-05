@@ -32,6 +32,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         public float Coverage;
         public float Evenness;
         public float LuminanceInfluence;
+        public float SkinSmoothStrength;
         public float MaskChannelRMax;
         public float MaskAverage;
         public string Mode;
@@ -136,10 +137,15 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         float opacity,
         float coverage,
         float evenness,
-        float luminanceInfluence)
+        float luminanceInfluence,
+        float skinSmoothStrength)
     {
         state.Requested = true;
-        state.Enabled = enabled && intensity > 0.0001f && opacity > 0.0001f;
+        // 잡티 제거(skin smoothing) can run standalone: enable the screen-space
+        // pass when the base is on OR when only blemish smoothing is requested,
+        // so the slider works even at 0 foundation intensity.
+        state.Enabled = (enabled && intensity > 0.0001f && opacity > 0.0001f)
+            || skinSmoothStrength > 0.0001f;
         state.Mode = NormalizeMode(mode);
         state.FallbackMode = NormalizeFallbackMode(fallbackMode);
         // Modes 8-11 are mask-orientation probes used while calibrating the
@@ -153,6 +159,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         state.Coverage = Mathf.Clamp01(coverage);
         state.Evenness = Mathf.Clamp01(evenness);
         state.LuminanceInfluence = Mathf.Clamp01(luminanceInfluence);
+        state.SkinSmoothStrength = Mathf.Clamp01(skinSmoothStrength);
         state.ProviderType = ProviderType;
         state.CameraTextureSource = cameraTextureSource;
 
@@ -172,6 +179,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_FoundationCoverage", state.Coverage);
         material.SetFloat("_FoundationEvenness", state.Evenness);
         material.SetFloat("_FoundationLuminanceInfluence", state.LuminanceInfluence);
+        material.SetFloat("_SkinSmoothStrength", state.SkinSmoothStrength);
         material.SetFloat("_FoundationDebugMode", state.DebugMaskMode);
         material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
         material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);

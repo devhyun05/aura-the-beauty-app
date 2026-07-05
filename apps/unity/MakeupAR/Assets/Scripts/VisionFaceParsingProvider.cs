@@ -137,9 +137,31 @@ public sealed class VisionFaceParsingProvider : MonoBehaviour, IFoundationSegmen
         lastRequestedAt = Time.realtimeSinceStartup;
     }
 
+    // Flicker guard: the ScreenCapture.CaptureScreenshotIntoRenderTexture path
+    // (CaptureFrame below) forces a framebuffer resolve inside the Metal
+    // present loop and re-introduces the camera flicker the lip runtime already
+    // eliminated by moving to the ARKit camera CPU image. With the scan page
+    // removed, semantic foundation runs from frame 1 and would drive this every
+    // frame. Disable capture entirely: the screen-space foundation still
+    // excludes eyes/lips/brows via the mesh-locked canonical-UV mask
+    // (ScreenSpaceFoundation.shader maskSample.g) and rejects hair via the
+    // chroma skin gate — the Vision _SegHair/_SegBrow masks are only an
+    // additional refinement (gated by _SegHairValid/_SegBrowValid). Re-enabling
+    // requires porting this provider to the camera CPU image WITH the lip
+    // runtime's voted axis transform (front-camera selfie is mirrored, so an
+    // orientation hint alone lands the masks flipped) — a device-tuned follow-up.
+#if UNITY_IOS && !UNITY_EDITOR && AURA_ENABLE_VISION_FACE_PARSING
+    private static readonly bool ScreenCaptureFlickerGuardDisablesCapture = true;
+#endif
+
     private void Update()
     {
 #if UNITY_IOS && !UNITY_EDITOR && AURA_ENABLE_VISION_FACE_PARSING
+        if (ScreenCaptureFlickerGuardDisablesCapture)
+        {
+            return;
+        }
+
         if (runtimeRequested && Time.realtimeSinceStartup - lastRequestedAt > 1.0f)
         {
             runtimeRequested = false;

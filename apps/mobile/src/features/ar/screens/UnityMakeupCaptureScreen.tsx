@@ -533,10 +533,8 @@ export function UnityMakeupCaptureScreen({
   };
 
   const handleGeneratedMaskControlChange = (patch: Partial<GeneratedMaskControls>) => {
-    if (!generatedPackage) {
-      return;
-    }
-
+    // Live personalization: the lip layer works without a generated package
+    // (postRuntimeMakeup skips only the photo-refined texture payload).
     const nextControls = clampGeneratedMaskControls({
       ...generatedMaskControls,
       ...patch,
@@ -824,11 +822,12 @@ function ArBlushRuntimeHud({
     secondaryColor?: string;
   }) => {
     if (activeRegion === 'lip') {
+      // Keep the optional photo-refined lip payload in sync when it exists,
+      // but the live vision-boundary lip layer is driven by companion controls.
       onChangeControls({
         colorHex: color.color,
         secondaryColorHex: color.secondaryColor ?? color.color,
       });
-      return;
     }
 
     onChangeCompanionControls(getCompanionRegionKey(activeRegion), {
@@ -839,7 +838,6 @@ function ArBlushRuntimeHud({
   const handleIntensityChange = (value: number) => {
     if (activeRegion === 'lip') {
       onChangeControls({intensity: value});
-      return;
     }
 
     const regionKey = getCompanionRegionKey(activeRegion);
@@ -851,7 +849,6 @@ function ArBlushRuntimeHud({
   const handleOpacityChange = (value: number) => {
     if (activeRegion === 'lip') {
       onChangeControls({opacity: value});
-      return;
     }
 
     const regionKey = getCompanionRegionKey(activeRegion);
@@ -869,6 +866,12 @@ function ArBlushRuntimeHud({
   const handleFoundationEvennessChange = (value: number) => {
     onChangeCompanionControls('foundation', {
       evenness: value,
+    });
+  };
+
+  const handleFoundationBlemishChange = (value: number) => {
+    onChangeCompanionControls('foundation', {
+      blemish: value,
     });
   };
 
@@ -1092,6 +1095,12 @@ function ArBlushRuntimeHud({
               label="균일도"
               onChange={handleFoundationEvennessChange}
               value={companionControls.foundation.evenness ?? 0.3}
+            />
+            <HudSliderControl
+              colorHex={activeValues.colorHex}
+              label="잡티 제거"
+              onChange={handleFoundationBlemishChange}
+              value={companionControls.foundation.blemish ?? 0.38}
             />
           </>
         ) : null}
@@ -1384,11 +1393,14 @@ function getHudRegionValues(
   companionControls: PersonalizedCompanionMakeupControls,
 ) {
   if (activeRegion === 'lip') {
+    // Live vision-boundary lip layer is driven by companion controls; the
+    // generated controls only carry the optional photo-refined finish/texture.
+    const lipControls = companionControls.lip;
     return {
-      colorHex: controls.colorHex,
-      colorName: getColorName(controls.colorHex),
-      intensity: controls.intensity,
-      opacity: controls.opacity,
+      colorHex: lipControls.colorHex,
+      colorName: getColorName(lipControls.colorHex),
+      intensity: lipControls.intensity,
+      opacity: lipControls.opacity,
       styleLabel: controls.finish,
       textureLabel: controls.texture,
     };
@@ -1414,7 +1426,7 @@ function getColorName(colorHex: string): string {
   );
 }
 
-function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
+function getCompanionRegionKey(region: ArBlushHudRegion): CompanionRegionKey {
   if (region === 'foundation') {
     return 'foundation';
   }
@@ -1427,10 +1439,14 @@ function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
     return 'eyeliner';
   }
 
+  if (region === 'lip') {
+    return 'lip';
+  }
+
   return 'brow';
 }
 
-function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): CompanionHudRegion {
+function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): ArBlushHudRegion {
   if (region === 'foundation') {
     return 'foundation';
   }
@@ -1441,6 +1457,10 @@ function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): Compani
 
   if (region === 'eyeliner') {
     return 'eyeliner';
+  }
+
+  if (region === 'lip') {
+    return 'lip';
   }
 
   return 'eyebrow';

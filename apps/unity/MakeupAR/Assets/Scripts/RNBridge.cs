@@ -3419,6 +3419,15 @@ public sealed class RNBridge : MonoBehaviour
                 // per-frame Vision lip boundary; rejecting it here threw and
                 // discarded the ENTIRE recipe (every region went dark).
                 || value == "lip-vision-boundary-v1"
+                // Mesh-locked canonical-UV lip atlas (now the default). E3
+                // accepts these via its own GetDefaultMaskTextureId('lip') /
+                // IsLipStyleAtlasMask; without whitelisting them here the whole
+                // recipe throws and every region goes dark. This also fixes the
+                // pre-existing latent rejection of UNITY_MAKEUP_LAYER_PRESETS.lip
+                // ('lip-drawn-style-atlas-v1') on the full-face preset path.
+                || value == "lip-drawn-style-atlas-v1"
+                || value == "lip-drawn-gradient-density-atlas-v1"
+                || value == "lip-style-atlas-v1"
                 || IsGeneratedLipMaskTextureId(value)))
         {
             return value;

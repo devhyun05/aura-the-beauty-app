@@ -155,6 +155,16 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     if (!self->_isPresentingUnityView) {
       [self concealUnityView];
       [self scheduleConcealUnityView];
+    } else if (didInitialize) {
+      // The user entered before the scene was live (reveal was gated on
+      // _isReady in unityView). Now that Unity is initialized, reveal the
+      // view so the container flips straight from black to the live camera
+      // instead of showing the splash / a black pre-camera frame.
+      UIView *rootView = [self currentUnityRootView];
+      if (rootView) {
+        rootView.hidden = NO;
+        rootView.userInteractionEnabled = YES;
+      }
     }
 
     [[NSNotificationCenter defaultCenter] postNotificationName:UnityMakeupEventNotification
@@ -177,11 +187,41 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return nil;
   }
 
-  rootView.hidden = NO;
   rootView.userInteractionEnabled = YES;
+  // Reveal-gate: only show the Unity view once the scene is live
+  // (unity_initialized received). Before that the view would show Unity's
+  // splash / a black pre-camera frame — the "loading scene" flash. With the
+  // app-start offscreen preload, _isReady is normally already YES here so the
+  // reveal is instant. If not, keep it hidden (the black container masks the
+  // boot) and let handleUnityMessage reveal it the moment _isReady flips; a
+  // fallback timer reveals anyway so a missed unity_initialized can never
+  // leave a permanently black view.
+  if (_isReady) {
+    rootView.hidden = NO;
+  } else {
+    rootView.hidden = YES;
+    [self scheduleFallbackRevealUnityView];
+  }
   [self restoreReactWindowIfNeeded];
 
   return rootView;
+}
+
+- (void)scheduleFallbackRevealUnityView
+{
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+        if (!self->_isPresentingUnityView) {
+          return;
+        }
+
+        UIView *rootView = [self currentUnityRootView];
+        if (rootView) {
+          rootView.hidden = NO;
+          rootView.userInteractionEnabled = YES;
+        }
+      });
 }
 
 - (void)detachUnityView

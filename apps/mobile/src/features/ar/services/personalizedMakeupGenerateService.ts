@@ -66,6 +66,8 @@ export type PersonalizedCompanionMakeupRegionControl = {
   mode?: 'uvMask' | 'screenSpace' | 'semantic' | undefined;
   opacity: number;
   evenness?: number | undefined;
+  // 잡티 제거(blemish smoothing) strength [0,1]; foundation only.
+  blemish?: number | undefined;
 };
 
 export type PersonalizedCompanionMakeupControls = {
@@ -139,6 +141,9 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     // face mesh / uvMask overlay directly.
     mode: 'screenSpace',
     opacity: 0.5,
+    // 잡티 제거 on by default at a gentle level; users can drag to 0 (off) or
+    // up to 1.0 for a heavy, over-smoothed look.
+    blemish: 0.38,
   },
   blush: {
     candidateId: 'blush-session-1-v1',
@@ -161,13 +166,18 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     maskTextureId: 'eye-smooth-mask-v1',
     opacity: 0.5,
   },
-  // Live personalization: the Unity-side Vision lip boundary runtime tracks
-  // the user's actual lips per frame, so no reference capture is needed.
+  // Mesh-locked lip: the canonical-UV lip atlas is sampled through the LIVE
+  // ARKit face UVs (E3 "lip_style_atlas_v1_uv_back_projection"), so it is
+  // rigidly attached to the face mesh and cannot float/drift with head or
+  // phone motion — the SNOW/YouCam-stable behavior. The prior
+  // 'lip-vision-boundary-v1' was a lagging screen-space Vision polygon rebased
+  // onto a stale face-bounds reference, which drifted off the lips under
+  // motion and dropped out when calibration/latency went wrong.
   lip: {
-    candidateId: 'lip-vision-boundary-v1',
+    candidateId: 'lip-drawn-style-atlas-v1',
     colorHex: '#C96A6E',
     intensity: 0.5,
-    maskTextureId: 'lip-vision-boundary-v1',
+    maskTextureId: 'lip-drawn-style-atlas-v1',
     opacity: 0.5,
   },
 };
@@ -301,10 +311,12 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       roughness:
         companionControls.foundation.luminanceInfluence ??
         DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.roughness,
-      specular:
-        companionControls.foundation.finish === 'glow'
-          ? 0.08
-          : DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.specular,
+      // 잡티 제거(skin-smoothing) strength rides the foundation-unused Specular
+      // field end-to-end to Unity (E3 -> ScreenSpaceFoundationController ->
+      // _SkinSmoothStrength). Foundation never renders a mesh gloss, so reusing
+      // Specular avoids threading a new positional arg through the whole recipe
+      // chain. Default 0 keeps the feature off (bit-identical base).
+      specular: companionControls.foundation.blemish ?? 0,
       textureAmount:
         companionControls.foundation.evenness ??
         DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.textureAmount,

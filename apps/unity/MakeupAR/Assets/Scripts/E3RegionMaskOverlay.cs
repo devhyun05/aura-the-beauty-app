@@ -1178,7 +1178,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             recipe.Opacity,
             recipe.Coverage,
             recipe.GlossBoost,
-            recipe.Roughness);
+            recipe.Roughness,
+            // 잡티 제거 strength rides the (foundation-unused) Specular field
+            // end-to-end from RN so no new positional arg had to thread the
+            // whole recipe chain; foundation never renders a mesh gloss, so
+            // Specular is otherwise inert here.
+            recipe.Specular);
     }
 
     private ScreenSpaceFoundationController.ScreenSpaceFoundationState UpdateScreenSpaceFoundationRuntime()
