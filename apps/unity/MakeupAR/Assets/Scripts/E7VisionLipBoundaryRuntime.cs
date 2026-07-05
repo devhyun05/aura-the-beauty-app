@@ -103,9 +103,14 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     private RenderTexture captureTexture;
     private byte[] frameUploadBuffer;
     private FaceScreenBounds pendingSubmittedFaceBounds;
-    private bool captureRowsBottomUp;
-    private bool captureFlipLocked;
-    private int noFaceFetchesSinceToggle;
+    // Capture-format auto-probe: Metal readbacks vary in row order AND may
+    // deliver BGRA instead of RGBA (a blue face defeats Vision's detector),
+    // so persistent no_face cycles through the four combinations and locks
+    // on the first success.
+    private int captureFormatCombo;
+    private bool captureFormatLocked;
+    private int noFaceFetchesSinceCombo;
+    private bool wroteDebugCapture;
     private BoundarySnapshot latestSnapshot;
     private BoundarySnapshot transitionFromSnapshot;
     private BoundarySnapshot transitionToSnapshot;
@@ -122,7 +127,8 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         int width,
         int height,
         int strideBytes,
-        int rowsBottomUp);
+        int rowsBottomUp,
+        int swapRedBlue);
 
     [DllImport("__Internal")]
     private static extern IntPtr E7VisionLipBoundaryTryFetchJson();
@@ -272,9 +278,29 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             yield break;
         }
 
-        pendingSubmittedFaceBounds = CaptureCurrentFaceBounds();
+        // Face bounds are measured in SCREEN pixels but the landmark points
+        // will arrive in capture-image pixels; convert the bounds into the
+        // capture space so every field of the snapshot shares one coordinate
+        // system (TryGetLatestBoundary rescales them together).
+        FaceScreenBounds screenBounds = CaptureCurrentFaceBounds();
+        if (screenBounds.Available && captureTexture != null)
+        {
+            float scaleToCaptureX = captureTexture.width / (float)Mathf.Max(1, Screen.width);
+            float scaleToCaptureY = captureTexture.height / (float)Mathf.Max(1, Screen.height);
+            screenBounds.Center = new Vector2(
+                screenBounds.Center.x * scaleToCaptureX,
+                screenBounds.Center.y * scaleToCaptureY);
+            screenBounds.Size = new Vector2(
+                screenBounds.Size.x * scaleToCaptureX,
+                screenBounds.Size.y * scaleToCaptureY);
+        }
+
+        pendingSubmittedFaceBounds = screenBounds;
         ScreenCapture.CaptureScreenshotIntoRenderTexture(captureTexture);
         yield return new WaitForEndOfFrame();
+        // One extra frame so the end-of-frame screenshot blit is guaranteed
+        // to have executed before the readback samples the target.
+        yield return null;
 
         AsyncGPUReadback.Request(
             captureTexture, 0, TextureFormat.RGBA32, OnCaptureReadback);
@@ -314,7 +340,9 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
                 width,
                 height,
                 stride,
-                captureRowsBottomUp ? 1 : 0);
+                (captureFormatCombo & 1) != 0 ? 1 : 0,
+                (captureFormatCombo & 2) != 0 ? 1 : 0);
+            MaybeWriteDebugCapture(width, height, stride, required);
         }
         finally
         {
@@ -358,31 +386,70 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             return;
         }
 
-        // Auto-detect the readback row order: persistent "no_face" while a
-        // face is on screen means the rows are vertically flipped for this
-        // GPU path. Counted per completed job; locked after first success.
-        if (!captureFlipLocked)
+        // Auto-detect the readback format: persistent "no_face" while ARKit
+        // tracks a face means the rows are flipped and/or the channels are
+        // BGRA for this GPU path. Cycle the four combinations per six failed
+        // jobs and lock on the first success.
+        if (!captureFormatLocked)
         {
             if (payload.status == "no_face")
             {
-                noFaceFetchesSinceToggle++;
-                if (noFaceFetchesSinceToggle >= 6)
+                noFaceFetchesSinceCombo++;
+                if (noFaceFetchesSinceCombo >= 6)
                 {
-                    noFaceFetchesSinceToggle = 0;
-                    captureRowsBottomUp = !captureRowsBottomUp;
+                    noFaceFetchesSinceCombo = 0;
+                    captureFormatCombo = (captureFormatCombo + 1) % 4;
                     Debug.Log(
-                        "[E7] vision_lip_boundary_flip_toggle rowsBottomUp="
-                        + captureRowsBottomUp.ToString().ToLowerInvariant());
+                        "[E7] vision_lip_boundary_format_probe combo=" + captureFormatCombo
+                        + " rowsBottomUp=" + ((captureFormatCombo & 1) != 0).ToString().ToLowerInvariant()
+                        + " swapRedBlue=" + ((captureFormatCombo & 2) != 0).ToString().ToLowerInvariant());
                 }
             }
             else if (payload.status == "ok")
             {
-                captureFlipLocked = true;
-                noFaceFetchesSinceToggle = 0;
+                captureFormatLocked = true;
+                noFaceFetchesSinceCombo = 0;
+                Debug.Log(
+                    "[E7] vision_lip_boundary_format_locked combo=" + captureFormatCombo);
             }
         }
 
         ApplyBoundaryPayload(payload, pendingSubmittedFaceBounds);
+    }
+
+    // After every combination failed once (24+ no_face jobs), write ONE
+    // capture to disk so the frame content itself can be inspected — this
+    // separates "wrong orientation/channels" from "black or garbage frame".
+    private void MaybeWriteDebugCapture(int width, int height, int stride, int byteCount)
+    {
+        if (wroteDebugCapture || captureFormatLocked || noFaceFetchesSinceCombo + captureFormatCombo * 6 < 24)
+        {
+            return;
+        }
+
+        wroteDebugCapture = true;
+        try
+        {
+            Texture2D debugTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            byte[] tight = new byte[width * height * 4];
+            for (int y = 0; y < height; y++)
+            {
+                Buffer.BlockCopy(frameUploadBuffer, y * stride, tight, y * width * 4, width * 4);
+            }
+
+            debugTexture.LoadRawTextureData(tight);
+            debugTexture.Apply(false, false);
+            string path = System.IO.Path.Combine(
+                Application.persistentDataPath, "e7-lip-capture-debug.png");
+            System.IO.File.WriteAllBytes(path, ImageConversion.EncodeToPNG(debugTexture));
+            Destroy(debugTexture);
+            Debug.Log("[E7] vision_lip_boundary_debug_capture path=" + path);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                "[E7] vision_lip_boundary_debug_capture_failed error=" + exception.GetType().Name);
+        }
     }
 
     private void EnsureCaptureBuffers()

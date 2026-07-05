@@ -330,7 +330,8 @@ int E7VisionLipBoundarySubmitRgba(
   int width,
   int height,
   int strideBytes,
-  int rowsBottomUp)
+  int rowsBottomUp,
+  int swapRedBlue)
 {
   if (rgba == NULL || width <= 0 || height <= 0 || strideBytes < width * 4) {
     return -1;
@@ -361,6 +362,19 @@ int E7VisionLipBoundarySubmitRgba(
       frameCopy + (size_t)y * tightStride,
       rgba + (size_t)sourceY * (size_t)strideBytes,
       tightStride);
+  }
+
+  // Metal readbacks can arrive as BGRA even when RGBA was requested; a
+  // red/blue swapped (blue-tinted) face makes Vision miss the face
+  // entirely, so the caller auto-probes this flag alongside row order.
+  if (swapRedBlue != 0) {
+    size_t pixelCount = (size_t)width * (size_t)height;
+    for (size_t index = 0; index < pixelCount; index++) {
+      unsigned char *pixel = frameCopy + index * 4;
+      unsigned char swap = pixel[0];
+      pixel[0] = pixel[2];
+      pixel[2] = swap;
+    }
   }
 
   dispatch_async(E7LipBoundaryQueue(), ^{
