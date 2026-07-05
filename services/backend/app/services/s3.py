@@ -19,7 +19,14 @@ class S3Service:
       "region_name": region,
     }
 
-    if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
+    if self.settings.aws_profile_name:
+      return boto3.Session(profile_name=self.settings.aws_profile_name).client("s3", **client_kwargs)
+
+    if (
+      self.settings.aws_access_key_id
+      and self.settings.aws_secret_access_key
+      and not self.settings.aws_use_iam_role
+    ):
       client_kwargs.update(
         {
           "aws_access_key_id": self.settings.aws_access_key_id,
@@ -49,6 +56,7 @@ class S3Service:
       "put_object",
       Params={
         "Bucket": self.settings.s3_bucket_name,
+        "ContentType": content_type,
         "Key": object_key,
       },
       ExpiresIn=expires_in,

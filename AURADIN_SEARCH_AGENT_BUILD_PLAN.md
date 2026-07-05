@@ -1,17 +1,88 @@
+> ⚠️ **ARCHIVED (2026-07-06)** — 이 문서는 20260703 데이터 기준으로 작성되어 일부(특히 커버리지·질문 정책 표)가 낡았다.
+> 현재 단일 진실 소스는 **[AURADIN.md](AURADIN.md)** 다. 이 문서는 역사적 설계 참고용으로만 본다.
+
 # Auradin 대화형 검색 에이전트 — 밤샘 MVP 실행 스펙 v3
 
 > 목적: 내일 시연에서 **정보이득 기반 멀티턴 아키네이터 검색 경험**을 반드시 보여준다.
 > 단, 데이터 정밀도와 LLM 의존성은 MVP가 깨지지 않도록 현실 범위로 재정의한다.
+
+## 2026-07-03 총체 설계 기준
+
+아우라딘을 단순 제품추천 화면이 아니라 **아키네이터형 검색 에이전트**로 구현하기 위한 최신 총체 설계는 아래 문서를 우선한다.
+
+```txt
+AURADIN_AKINATOR_AGENT_SYSTEM_DESIGN_KO.md
+```
+
+이 문서의 원래 원칙은 유지한다.
+
+```txt
+- 정보이득 기반 질문 루프는 MVP 킥이므로 제거하지 않는다.
+- 서버가 ask/no-ask, attribute, filterDelta, hard/soft 질문 여부를 결정한다.
+- LLM/Bedrock은 후보 선택권이 아니라 intent/copy/embedding 보조 역할만 맡는다.
+- 최신 20260703 데이터 기준으로 undertone/intensity/suitableFor는 hard 질문보다 soft preference로 취급한다.
+- 제품추천 UI 통합은 ProductRecommendation route를 유지하되 Auradin shell을 메인 화면으로 세우는 방향이다.
+```
+
+---
+
+## 2026-07-03 MVP 전처리/Bedrock 실행 계획
+
+최신 실행 계획은 아래 문서를 우선한다.
+
+```txt
+AURADIN_MVP_PREPROCESSING_BEDROCK_AGENT_PLAN_KO.md
+```
+
+현재 결정:
+
+```txt
+- catalog_items_seed_20260703.jsonl 501개 row를 MVP input으로 사용한다.
+- lip / cheek / shadow 중심으로 먼저 검색 에이전트를 만든다.
+- raw title residual keyword로 결측 필드를 soft 보강한다.
+- confidence가 낮은 title 추론값은 질문/hard filter에 쓰지 않는다.
+- Bedrock은 먼저 embedding/query/copy 보조로 연결한다.
+- Bedrock managed Agent / Knowledge Base는 deterministic backend agent가 선 뒤 phase 2로 검토한다.
+```
+
+---
+
+## 2026-07-03 최신 수정: 검색 에이전트 선행 데이터 조건
+
+현재 Top10 산출물은 상세 catalog가 아니라 상품 후보 목록에 가깝다. 따라서 아우라딘 검색 에이전트는 아래 7개 필드군을 먼저 보강한 뒤 연결한다.
+
+```txt
+1. 색상/호수/옵션
+2. colorFamily / undertone / intensity
+3. finish / texture
+4. suitableFor / sellingPoints
+5. 가격 / 구매 URL / 이미지
+6. 올리브영·백화점 입점 여부
+7. 브랜드/제조국 정보
+```
+
+검색 엔진 구현 규칙:
+
+```txt
+- 색상/톤/마감/제형 질문은 해당 필드의 coverage와 confidence가 cutoff를 넘을 때만 묻는다.
+- coverage가 낮은 필드는 질문 후보에서 제외하고, 결과 카피에서도 확정적으로 말하지 않는다.
+- 가격/구매 URL/이미지는 final card 필수 조건으로 유지한다.
+- 올리브영·백화점 입점 여부는 channel hard filter 또는 premium/channel facet으로만 사용한다.
+- 브랜드/제조국은 신뢰 근거가 있을 때만 metadata filter/카피에 사용한다.
+- LLM은 7개 필드군 밖의 제품 속성을 만들어내면 안 된다.
+```
+
+---
 
 ## 0. 확정 결정
 
 | 항목 | 결정 |
 |---|---|
 | MVP 킥 | **정보이득 기반 멀티턴 아키네이터 루프는 필수**. 후보군을 가장 잘 가르는 질문을 서버가 계산해 묻는다. |
-| MVP 약속 | "정확한 호수 매칭"이 아니라 **구매 가능한 화장품 상품 단위 추천 + 후보 좁히기 대화**. |
-| 데이터 출처 | Naver 쇼핑 검색 API 우선. HTML 크롤링은 Day2/후순위이며 밤샘 MVP 필수 경로에서 제외. |
+| MVP 약속 | "정확한 호수 매칭"이 아니라 **구매 가능한 화장품 상품 단위 추천 + 7개 필드군 기반 후보 좁히기 대화**. |
+| 데이터 출처 | Naver 쇼핑 검색 API 후보 + 제한 상세 보강 catalog. 무제한 HTML 크롤링은 제외. |
 | 사용 가능한 Naver 필드 | `productId`, `title`, `link`, `image`, `lprice`, `brand`, `maker`, `mallName`. |
-| 불안정/추론 필드 | `shadeName`, 호수, 색상 옵션, 피부타입, 연출효과, finish, intensity. 신뢰도와 함께 추론값으로만 사용. |
+| 불안정/추론 필드 | `shadeName`, 호수, 색상 옵션, colorFamily, undertone, finish, texture, intensity, suitableFor, sellingPoints. 신뢰도와 함께 추론값으로만 사용. |
 | 에이전트 루프 | **서버 결정론 루프**. Claude가 후보 생성/질문 여부/필터 값을 좌우하지 않는다. |
 | Claude 역할 | 선택 사항. intent 보조/질문 카피/결과 카피만 생성. 실패해도 기본 추천과 질문 루프는 계속 동작. |
 | 임베딩 | Bedrock Titan embedding 클라이언트/코사인 계산은 재사용. 자유 프롬프트용 query embedding 경로는 신규 구현. |
@@ -46,7 +117,7 @@
 ### 2.1 카탈로그/후보 스키마
 
 ```ts
-export type Category = 'lip' | 'cheek' | 'shadow' | 'liner' | 'base';
+export type Category = 'lip' | 'cheek' | 'shadow' | 'liner' | 'base' | 'brow';
 export type ColorFamily =
   | 'pink'
   | 'rose'
@@ -109,7 +180,9 @@ export type FilterAttribute =
   | 'priceKrw'
   | 'priceTier'
   | 'colorFamily'
+  | 'undertone'
   | 'finish'
+  | 'texture'
   | 'intensity'
   | 'channel';
 

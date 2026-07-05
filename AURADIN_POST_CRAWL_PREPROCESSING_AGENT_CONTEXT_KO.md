@@ -6,13 +6,78 @@
 
 ---
 
+## 2026-07-03 MVP 실행 계획 우선순위
+
+2026-07-03 기준으로 제한 상세 수집본이 MVP seed 수준까지 확보됐다. 이제 이 문서의 넓은 후처리 구상보다 아래 최신 실행 계획을 우선한다.
+
+```txt
+AURADIN_MVP_PREPROCESSING_BEDROCK_AGENT_PLAN_KO.md
+```
+
+최신 입력 파일:
+
+```txt
+data/auradin/catalog/catalog_items_seed_20260703.jsonl
+data/auradin/detail/normalized/limited_detail_results_20260703.jsonl
+data/auradin/knowledge/product_knowledge_docs_20260703.jsonl
+reports/auradin/limited_detail_collection_summary_20260703.md
+reports/auradin/limited_detail_field_audit_20260703.md
+```
+
+핵심 변경:
+
+```txt
+- 더 많은 상세 크롤링을 기다리지 않고 501개 partial seed로 MVP를 만든다.
+- raw title에서 productName을 제외한 residual keyword로 빈 필드를 soft 보강한다.
+- title 기반 추론값은 hard filter가 아니라 RAG/soft rerank/설명 보조로 사용한다.
+- AWS Bedrock은 embedding과 LLM 보조에 먼저 연결하고, Bedrock managed Agent/Knowledge Base는 phase 2로 둔다.
+```
+
+---
+
+## 2026-07-03 최신 스코프 수정
+
+현재 `brand_category_top10` 산출물은 **상세 catalog 완성본이 아니라 Naver 기반 상품 후보/Top10 슬롯 목록**이다. 제품명, 가격, 이미지, 구매 URL, 판매처, 브랜드/카테고리/rank는 확보됐지만, 아우라딘 검색 품질에 필요한 상세 속성은 대부분 비어 있다.
+
+따라서 다음 작업은 검색 에이전트 구현으로 바로 가지 않고, 아래 7개 필드군만 대상으로 하는 **제한 상세 보강**을 먼저 수행한다. 이 목록 밖의 필드는 이번 재수집/전처리 범위가 아니다.
+
+```txt
+1. 색상/호수/옵션
+2. colorFamily / undertone / intensity
+3. finish / texture
+4. suitableFor / sellingPoints
+5. 가격 / 구매 URL / 이미지
+6. 올리브영·백화점 입점 여부
+7. 브랜드/제조국 정보
+```
+
+수집하지 않는 것:
+
+```txt
+- 리뷰 원문/리뷰 요약
+- 전성분
+- 피부 의학 효능
+- 상세 이미지 원본 저장
+- colorHex/colorLab 정밀 추출
+- productLine, containerType, coverage 등 보조 필드
+- SNS/인플루언서/실존 인물 기반 정보
+- 로그인, 캡차, 장바구니, 주문, 마이페이지 접근이 필요한 데이터
+```
+
+근거/상태 필드는 별도 수집 목표가 아니라 품질 관리용 metadata로만 유지한다. 즉 `sourceUrl`, `rawText`, `confidence`, `collectionStatus`, `failureReason`, `fetchedAt`, `parserVersion`은 7개 필드군을 검증하기 위한 부속 정보다.
+
+이 섹션은 문서 후반의 넓은 초기 설계보다 우선한다. 뒤쪽에 남아 있는 `colorHex/colorLab`, 리뷰 요약, 전성분, `coverage`, `containerType`, `productLine` 관련 언급은 이번 실행 대상이 아니라 제외/보류 메모로 해석한다.
+
+---
+
 ## 0. 한 줄 결론
 
-크롤링이 끝난 뒤의 다음 목표는 **크롤링 결과를 바로 추천에 쓰는 것**이 아니라, 아래 순서로 **검색 가능한 제품 catalog와 agent loop**로 바꾸는 것이다.
+크롤링이 끝난 뒤의 다음 목표는 **크롤링 결과를 바로 추천에 쓰는 것**이 아니라, 부족한 상세 필드 7개군을 보강한 뒤 아래 순서로 **검색 가능한 제품 catalog와 agent loop**로 바꾸는 것이다.
 
 ```txt
 raw crawl data
 -> audit / dedup / normalize
+-> limited detail field refresh
 -> ProductCatalogItem
 -> ProductKnowledgeDocument
 -> ProductKnowledgeChunk
@@ -41,7 +106,8 @@ raw crawl data
 
 ### 1.1 이미 완료 또는 진행 중인 것
 
-- 제품 데이터 크롤링이 거의 완료된 상태다.
+- Naver 기반 제품 후보 수집과 브랜드 x 카테고리 Top10 슬롯 구성은 완료된 상태다.
+- 그러나 상세 catalog는 완료되지 않았다. 색상/호수/옵션, 언더톤, 마감, 제형, 적합 대상, 소구점은 대부분 비어 있으므로 재보강이 필요하다.
 - AWS 계정은 사용자 계정으로 연결된 상태다.
 - 이후 단계에서 Bedrock을 사용할 수 있다.
 - 기존 크롤링 계획 문서가 있다.
@@ -81,10 +147,10 @@ finish
 texture
 intensity
 skinTypeTags
-coverage
-review keywords
-전성분
-정확한 퍼스널컬러 적합도
+suitableFor
+sellingPoints
+브랜드/제조국
+올리브영·백화점 입점 근거
 ```
 
 따라서 이 값들은 아래 중 하나로 만들어야 한다.
@@ -94,7 +160,7 @@ review keywords
 2. 공식몰/상세페이지/상품정보 테이블에서 추출
 3. LLM/rule parser로 구조화
 4. confidence/evidence를 붙여 보수적으로 사용
-5. 중요한 대표 상품은 manual_reviewed로 승격
+5. 중요한 대표 상품은 7개 필드군 기준으로 manual_reviewed 또는 field_limited로 승격
 ```
 
 ---
@@ -164,25 +230,28 @@ AWS_SECRET_ACCESS_KEY=...
 ### 3.1 데이터 산출물
 
 ```txt
-data/auradin/raw/raw_items.jsonl
-  크롤링 원본. 가능하면 변형 없이 저장.
+data/auradin/catalog/brand_category_top10_products_YYYYMMDD.jsonl
+  현재 기준 입력. 제품명/가격/이미지/구매 URL/rank 중심의 Top10 후보 목록.
 
-reports/auradin/crawl_audit_report.md
-  수집 품질 리포트.
+reports/auradin/limited_detail_field_audit_YYYYMMDD.md
+  7개 필드군 기준 결측/성공/실패 리포트.
 
-data/auradin/processed/product_candidates.jsonl
-  중복 제거, 브랜드/카테고리 정규화가 끝난 후보.
+data/auradin/detail/targets/limited_detail_targets_YYYYMMDD.csv
+  7개 필드군을 보강할 대상 제품 목록.
 
-data/auradin/catalog/catalog_items_seed.jsonl
-  추천 엔진이 기준으로 삼는 ProductCatalogItem.
+data/auradin/detail/normalized/limited_detail_results_YYYYMMDD.jsonl
+  제품별 7개 필드군 보강 결과와 confidence/evidence.
 
-data/auradin/knowledge/product_knowledge_docs.jsonl
-  catalog row에서 파생된 검색용 문서.
+data/auradin/catalog/catalog_items_seed_YYYYMMDD.jsonl
+  추천 엔진이 기준으로 삼는 ProductCatalogItem. 7개 필드군만 canonical field로 승격.
 
-data/auradin/knowledge/product_knowledge_chunks.jsonl
+data/auradin/knowledge/product_knowledge_docs_YYYYMMDD.jsonl
+  catalog row에서 파생된 검색용 문서. 7개 필드군 중심으로만 작성.
+
+data/auradin/knowledge/product_knowledge_chunks_YYYYMMDD.jsonl
   embedding/indexing 대상 chunk.
 
-data/auradin/embeddings/product_knowledge_chunk_embeddings.jsonl
+data/auradin/embeddings/product_knowledge_chunk_embeddings_YYYYMMDD.jsonl
   chunk embedding cache. MVP에서는 파일 cache 허용.
 
 reports/auradin/retrieval_eval_report.md
@@ -315,29 +384,27 @@ type ProductCatalogItem = {
   sourceProductId?: string;
   sourceType: 'manual' | 'naver_api' | 'brand_feed' | 'partner_feed' | 'allowed_static_collect';
   dataPermission: 'owned' | 'api_allowed' | 'partner_allowed' | 'manual_reviewed' | 'unknown_blocked';
-  status: 'candidate' | 'inferred' | 'manual_reviewed' | 'blocked';
+  status: 'candidate' | 'field_limited' | 'manual_reviewed' | 'blocked';
 
   brand: string;
   productName: string;
-  variantName?: string;
-  shadeName?: string;
-  shadeSource?: 'title_inferred' | 'llm_inferred' | 'html_verified' | 'manual' | 'unknown';
   category: 'lip' | 'cheek' | 'shadow' | 'liner' | 'base' | 'brow' | 'other';
 
-  colorHex?: string;
-  colorLab?: { l: number; a: number; b: number };
-  colorFamily?: 'pink' | 'rose' | 'coral' | 'red' | 'orange' | 'mauve' | 'brown' | 'nude' | 'peach' | 'burgundy' | 'unknown';
-  undertone?: 'warm' | 'cool' | 'neutral' | 'unknown';
-  finish?: 'matte' | 'gloss' | 'dewy' | 'velvet' | 'satin' | 'shimmer' | 'sheer' | 'unknown';
-  texture?: 'tint' | 'balm' | 'lipstick' | 'gloss' | 'cream' | 'powder' | 'pencil' | 'liquid' | 'cushion' | 'unknown';
-  intensity?: 'sheer' | 'medium' | 'full' | 'bold' | 'unknown';
+  shadeOptions: Array<{
+    optionName?: string;
+    shadeName?: string;
+    shadeNumber?: string;
+    rawOptionText?: string;
+  }>;
 
-  priceBand?: 'under_10000' | '10000_20000' | '20000_30000' | '30000_plus' | 'unknown';
-  skinTypeTags?: string[];
-  featureTags?: string[];
-  cautionTags?: string[];
-  containerType?: string;
-  officialDescription?: string;
+  colorFamily?: 'pink' | 'rose' | 'coral' | 'red' | 'orange' | 'mauve' | 'brown' | 'nude' | 'peach' | 'burgundy' | 'plum' | 'beige' | 'unknown';
+  undertone?: 'warm' | 'cool' | 'neutral' | 'unknown';
+  intensity?: 'sheer' | 'medium' | 'bold' | 'unknown';
+  finish?: 'matte' | 'glossy' | 'dewy' | 'velvet' | 'satin' | 'shimmer' | 'sheer' | 'unknown';
+  texture?: 'tint' | 'balm' | 'lipstick' | 'gloss' | 'cream' | 'powder' | 'pencil' | 'liquid' | 'cushion' | 'unknown';
+
+  suitableFor: string[];
+  sellingPoints: string[];
 
   liveOfferSnapshot?: {
     source: 'naver_shopping' | 'oliveyoung' | 'brand_store' | 'other';
@@ -347,6 +414,20 @@ type ProductCatalogItem = {
     mallName?: string;
     fetchedAt: string;
     ttlSeconds?: number;
+  };
+
+  retailPresence: {
+    oliveYoungStatus: 'listed' | 'not_found' | 'unknown';
+    oliveYoungEvidenceUrl?: string;
+    departmentStoreStatus: 'listed' | 'not_found' | 'unknown';
+    departmentStoreRetailers: string[];
+    departmentStoreEvidenceUrl?: string;
+  };
+
+  brandOrigin: {
+    brandCountry?: string;
+    manufacturerCountry?: string;
+    madeInCountry?: string;
   };
 
   confidence: Record<string, number>;
@@ -360,6 +441,8 @@ type ProductCatalogItem = {
   updatedAt: string;
 };
 ```
+
+`colorHex`, `colorLab`, 리뷰, 전성분, productLine, containerType, coverage, raw detail image는 이번 canonical schema에 넣지 않는다.
 
 ### 5.3 정규화 원칙
 
@@ -514,22 +597,18 @@ product_overview
   브랜드, 제품명, 카테고리, 대표 특징
 
 shade_color
-  호수명, 색상군, 언더톤, 컬러칩, colorHex/colorLab
+  호수명, 옵션명, 원문 옵션 텍스트, 색상군, 언더톤, 발색 강도
 
 texture_finish
   글로시, 매트, 벨벳, 쉬머, 글리터, 촉촉함, 보송함
 
-skin_fit
-  건성/지성/민감성/모든피부용, 베이스 제품 적합성
+suitability_claims
+  쿨톤, 웜톤, 데일리, 민감성 등 suitableFor와 지속력, 보습, 밀착, 광택 등 sellingPoints
 
-usage_context
-  데일리, 면접, 청순, 트렌디, 쿨톤 메이크업, 웜톤 메이크업
+retail_origin
+  가격, 구매 URL, 이미지 URL, 올리브영/백화점 입점 여부, 브랜드/제조국
 
-caution
-  고발색 주의, 끈적임 가능, 향료 확인 필요, 색상 차이 가능
-
-review_summary
-  허용된 리뷰 요약이 있을 때만 사용
+이번 범위에서는 review_summary, 전성분, colorHex/colorLab 전용 chunk를 만들지 않는다.
 ```
 
 ### 7.4 chunk schema
@@ -540,7 +619,7 @@ type ProductKnowledgeChunk = {
   docId: string;
   productId: string;
   shadeId?: string;
-  chunkType: 'product_overview' | 'shade_color' | 'texture_finish' | 'skin_fit' | 'usage_context' | 'caution' | 'review_summary';
+  chunkType: 'product_overview' | 'shade_color' | 'texture_finish' | 'suitability_claims' | 'retail_origin';
   text: string;
   metadata: {
     brand: string;
