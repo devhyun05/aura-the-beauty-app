@@ -331,9 +331,26 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         if (converted)
         {
             // Face bounds pair with this detection so the stabilizer can
-            // rebase the polygon onto the CURRENT face; the shared scale is
-            // approximate (camera vs screen space) — the rebase normalizes it.
-            pendingSubmittedFaceBounds = CaptureCurrentFaceBounds();
+            // rebase the polygon onto the CURRENT face. They are measured in
+            // SCREEN pixels but the landmark points arrive in CAPTURE-image
+            // pixels — every snapshot field must share one coordinate system
+            // or the downstream uniform rescale (TryGetLatestBoundary) blows
+            // the bounds up by the screen/image ratio and the stabilizer
+            // displaces the polygon off the face (empty UV bake, no lips).
+            FaceScreenBounds submitBounds = CaptureCurrentFaceBounds();
+            if (submitBounds.Available)
+            {
+                float scaleToCaptureX = outputWidth / (float)Mathf.Max(1, Screen.width);
+                float scaleToCaptureY = outputHeight / (float)Mathf.Max(1, Screen.height);
+                submitBounds.Center = new Vector2(
+                    submitBounds.Center.x * scaleToCaptureX,
+                    submitBounds.Center.y * scaleToCaptureY);
+                submitBounds.Size = new Vector2(
+                    submitBounds.Size.x * scaleToCaptureX,
+                    submitBounds.Size.y * scaleToCaptureY);
+            }
+
+            pendingSubmittedFaceBounds = submitBounds;
             E7VisionLipBoundarySubmitRgba(
                 frameUploadBuffer,
                 outputWidth,
