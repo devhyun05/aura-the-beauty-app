@@ -40,16 +40,16 @@ const sourcedRecipe = buildFullFaceMakeupRecipe({
 
 expectEqual(
   MAKEUP_RECIPE_REGIONS.join(','),
-  'lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeliner',
   'canonical full-face region order',
 );
 expectEqual(
   recipe.layers.map(layer => layer.region).join(','),
-  'lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeliner',
   'full-face recipe layer order',
 );
 expectEqual(recipe.version, 2, 'full-face recipe version');
-expectEqual(recipe.layerCount, 4, 'full-face recipe layer count');
+expectEqual(recipe.layerCount, 5, 'full-face recipe layer count');
 expectEqual(recipe.enabledLayerCount, 4, 'full-face recipe enabled layer count');
 expectEqual(recipe.rendererMode, 'smooth-region-mask', 'full-face renderer mode');
 expectEqual(
@@ -79,8 +79,13 @@ expectEqual(
 );
 expectEqual(
   getMakeupRecipeRegionsForArea('all').join(','),
-  'lip,blush,brow,eyeliner',
-  'all makeup area maps to four regions',
+  'foundation,lip,blush,brow,eyeliner',
+  'all makeup area maps to five regions',
+);
+expectEqual(
+  getMakeupRecipeRegionsForArea('base').join(','),
+  'foundation',
+  'base makeup area maps to foundation',
 );
 expectEqual(
   getMakeupRecipeRegionsForArea('cheek').join(','),
@@ -108,6 +113,11 @@ expectEqual(
   'lip finish options include gloss',
 );
 expectEqual(
+  REGION_FINISH_OPTIONS.foundation.some(option => option.finish === 'glow'),
+  true,
+  'foundation finish options include glow',
+);
+expectEqual(
   REGION_CANDIDATE_OPTIONS.lip.some(
     option => option.maskTextureId === 'e7-lip-validation-safe-v0',
   ),
@@ -128,6 +138,11 @@ expectEqual(
   FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
   'e7-blush-balanced-uv-v0',
   'blush runtime asset id',
+);
+expectEqual(
+  FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,
+  'foundation-skin-mask-v1',
+  'foundation runtime asset id',
 );
 expectEqual(
   captureRequest.purpose,

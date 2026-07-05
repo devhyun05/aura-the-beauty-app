@@ -58,3 +58,6 @@ apps/unity/MakeupAR/MemoryCaptures/
 apps/unity/MakeupAR/*.csproj
 apps/unity/MakeupAR/*.sln
 apps/unity/MakeupAR/*.user
+
+# Eyeliner mask PNG dumps from the Unity editor exporter (debug only)
+tmp-debug/
