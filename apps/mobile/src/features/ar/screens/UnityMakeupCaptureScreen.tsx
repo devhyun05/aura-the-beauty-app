@@ -321,17 +321,20 @@ export function UnityMakeupCaptureScreen({
     setIsPreparingUnity(false);
     setHasStartedMaskFlow(true);
     setPhase('ready');
-    setNotice('정면 사진을 촬영해 입술, 볼, 눈썹 기준 마스크를 만듭니다');
+    // Live personalization is active from the first frame (mesh-calibrated
+    // masks + Vision lip boundary); the frontal capture is now an OPTIONAL
+    // refinement instead of a required onboarding step.
+    setNotice('실시간 맞춤 메이크업이 적용 중입니다 · 정면 촬영은 선택 보정입니다');
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
-        activeRegions: [],
+        activeRegions: getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
       }),
     );
     postUnityRegionOverlayVisibility({
       guideOverlayVisible: false,
-      maskOverlayVisible: false,
-      reason: 'personalized_mask_entry_inactive',
-      visible: false,
+      maskOverlayVisible: true,
+      reason: 'personalized_live_makeup_entry',
+      visible: true,
     });
   };
 
@@ -356,6 +359,13 @@ export function UnityMakeupCaptureScreen({
       }
     }, 160);
   };
+
+  useEffect(() => {
+    // Auto-start: masks personalize live at runtime, so there is nothing to
+    // wait for — skip the intro gate and show makeup immediately on entry.
+    handleStartMaskFlow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleReferenceCaptureEvent = async (event: UnitySynchronizedCaptureEvent) => {
     const pendingRequest = pendingCaptureRequestRef.current;
@@ -594,15 +604,10 @@ export function UnityMakeupCaptureScreen({
     nextCompanionControls: PersonalizedCompanionMakeupControls,
     nextEnabledRegions: EnabledHudRegions,
   ) {
-    if (!generatedPackage) {
-      console.info('[aura:foundation-ar] post-runtime-makeup skipped', {
-        reason: 'generated_package_missing',
-        enabledHudRegions: nextEnabledRegions,
-        foundation: nextCompanionControls.foundation,
-      });
-      return;
-    }
-
+    // Live personalization: the companion recipe (mesh-calibrated masks +
+    // per-frame Vision lip boundary) works with NO reference capture, so a
+    // missing generated package no longer blocks the HUD — it only skips
+    // the photo-refined lip texture payload below.
     const lipControls = {
       ...nextGeneratedControls,
       maskVisible: nextEnabledRegions.lip,
@@ -641,14 +646,17 @@ export function UnityMakeupCaptureScreen({
         : null,
     });
 
-    postUnityGeneratedLipMaskPayload(
-      JSON.stringify(
-        buildGeneratedMaskUnityPayload(generatedPackage, lipControls, {
-          controlRevision: generatedMaskControlRevisionRef.current,
-          includeTexture: false,
-        }),
-      ),
-    );
+    if (generatedPackage) {
+      postUnityGeneratedLipMaskPayload(
+        JSON.stringify(
+          buildGeneratedMaskUnityPayload(generatedPackage, lipControls, {
+            controlRevision: generatedMaskControlRevisionRef.current,
+            includeTexture: false,
+          }),
+        ),
+      );
+    }
+
     postUnityMakeupRecipe(companionRecipe);
   };
 
@@ -1546,6 +1554,7 @@ function getEnabledCompanionRegions(
     enabledRegions.cheek ? 'blush' : null,
     enabledRegions.eyebrow ? 'brow' : null,
     enabledRegions.eyeliner ? 'eyeliner' : null,
+    enabledRegions.lip ? 'lip' : null,
   ].filter((region): region is CompanionRegionKey => Boolean(region));
 }
 
@@ -1619,6 +1628,7 @@ function clampCompanionMakeupControls(
     brow: clampCompanionMakeupRegionControl(controls.brow),
     eyeliner: clampCompanionMakeupRegionControl(controls.eyeliner),
     foundation: clampCompanionMakeupRegionControl(controls.foundation),
+    lip: clampCompanionMakeupRegionControl(controls.lip),
   };
 }
 

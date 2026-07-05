@@ -73,6 +73,7 @@ export type PersonalizedCompanionMakeupControls = {
   brow: PersonalizedCompanionMakeupRegionControl;
   eyeliner: PersonalizedCompanionMakeupRegionControl;
   foundation: PersonalizedCompanionMakeupRegionControl;
+  lip: PersonalizedCompanionMakeupRegionControl;
 };
 
 export type PersonalizedCompanionMakeupActiveRegion =
@@ -80,6 +81,7 @@ export type PersonalizedCompanionMakeupActiveRegion =
   | 'brow'
   | 'eyeliner'
   | 'foundation'
+  | 'lip'
   | 'all'
   | 'none';
 
@@ -157,6 +159,15 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     colorHex: '#40303F',
     intensity: 0.5,
     maskTextureId: 'eye-smooth-mask-v1',
+    opacity: 0.5,
+  },
+  // Live personalization: the Unity-side Vision lip boundary runtime tracks
+  // the user's actual lips per frame, so no reference capture is needed.
+  lip: {
+    candidateId: 'lip-vision-boundary-v1',
+    colorHex: '#C96A6E',
+    intensity: 0.5,
+    maskTextureId: 'lip-vision-boundary-v1',
     opacity: 0.5,
   },
 };
@@ -266,7 +277,9 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   const hasExplicitActiveRegions = options.activeRegions !== undefined;
   const activeRegionSet = new Set(options.activeRegions ?? []);
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
-  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation' | 'eyeliner') =>
+  const isRegionEnabled = (
+    region: 'blush' | 'brow' | 'foundation' | 'eyeliner' | 'lip',
+  ) =>
     hasExplicitActiveRegions
       ? activeRegionSet.has(region)
       : activeRegion === 'all' || activeRegion === region;
@@ -329,9 +342,16 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       maskTextureId: companionControls.eyeliner.maskTextureId,
       opacity: companionControls.eyeliner.opacity,
     },
+    // Live-personalized lips: the vision-boundary mask makes Unity track the
+    // user's actual lip contour per frame — no reference capture required.
     lip: {
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.lip,
-      enabled: false,
+      candidateId: companionControls.lip.candidateId,
+      colorHex: companionControls.lip.colorHex,
+      enabled: isRegionEnabled('lip'),
+      intensity: companionControls.lip.intensity,
+      maskTextureId: companionControls.lip.maskTextureId,
+      opacity: companionControls.lip.opacity,
     },
   };
   const recipe = buildFullFaceMakeupRecipe({
@@ -346,7 +366,8 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
         layer.region === 'foundation' ||
         layer.region === 'blush' ||
         layer.region === 'brow' ||
-        layer.region === 'eyeliner',
+        layer.region === 'eyeliner' ||
+        layer.region === 'lip',
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'
