@@ -39,6 +39,13 @@ import {
   type FaceCaptureGreenlightReport,
 } from '../services/faceCaptureGreenlight';
 import {
+  computeFaceEllipseGuideGeometry,
+} from '../constants/faceEllipseGuide';
+import {
+  FACE_PITCH_GATE_MESSAGE,
+  evaluateFacePitchGate,
+} from '../services/faceCapturePitchGate';
+import {
   detectFaceLandmarksFromImage,
   isFaceLandmarkDetectorAvailable,
   type NativeFaceLandmarkDetectionResult,
@@ -122,6 +129,9 @@ const MEDIAPIPE_CENTERLINE_KEYS = [
 
 const FACE_LANDMARK_SCAN_INITIAL_DELAY_MS = 250;
 const FACE_LANDMARK_SCAN_INTERVAL_MS = 450;
+// 안내 문구 최소 갱신 간격. 게이트가 임계값 근처에서 프레임마다 뒤바뀌어도
+// 문구는 이 간격마다만 바뀌어 어지러운 깜빡임을 막는다.
+const GUIDANCE_MESSAGE_REFRESH_MS = 700;
 const FACE_GUIDE_POINT_CENTER_X_SLACK_RATIO = 0.54;
 const FACE_GUIDE_FACE_CENTER_X_SLACK_RATIO = 0.58;
 const FACE_GUIDE_FOREHEAD_TOP_MIN_RATIO = -0.04;
@@ -376,6 +386,20 @@ export function CameraFaceCaptureScreen({
   const landmarkScanInFlightRef = useRef(false);
   const lastRealtimeLogAtRef = useRef(0);
   const hasAutoOpenedGalleryRef = useRef(false);
+  // 안내 문구 깜빡임 방지: 최신 목표 문구는 ref에 담고, 표시는 interval로 제한 갱신.
+  const guidanceMessageTargetRef = useRef<string | null>(null);
+  const [stableGuidanceMessage, setStableGuidanceMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setStableGuidanceMessage(previous => {
+        const target = guidanceMessageTargetRef.current;
+        return target === previous ? previous : target;
+      });
+    }, GUIDANCE_MESSAGE_REFRESH_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const realtimeCaptureAvailable = useMemo(
     () => shouldValidateFace && isRealtimeFaceCaptureAvailable(),
@@ -391,12 +415,23 @@ export function CameraFaceCaptureScreen({
   // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
   const semanticMatteCapture = requireGreenlight && captureType === 'face_analysis';
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
-  const guideWidth = Math.min(Math.max(width * 0.58, 210), 256);
-  const guideHeight = guideWidth * 1.34;
+  // 타원 프레이밍 가이드 (기획서 §3.5 비율, 화면 중앙 앵커).
+  // 정수리/턱끝이 타원 상하단 점에 맞아야 촬영되므로 얼굴 크기(=촬영 거리)를
+  // 간접적으로 제한한다. 크기/허용치 튜닝은 FACE_ELLIPSE_GUIDE_TUNING에서.
+  const ellipseGeometry = useMemo(
+    () =>
+      computeFaceEllipseGuideGeometry({
+        previewHeight: height,
+        previewWidth: width,
+        principalPointInPreview: null,
+      }),
+    [height, width],
+  );
+  const guideWidth = ellipseGeometry.width;
+  const guideHeight = ellipseGeometry.height;
   const guideScaleY = guideHeight / guideWidth;
-  const guideCenterX = width / 2;
-  const guideCenterY = height / 2;
-  const guideTop = guideCenterY - guideHeight / 2;
+  const guideCenterX = ellipseGeometry.centerX;
+  const guideCenterY = ellipseGeometry.centerY;
   const closeButtonPosition = getCameraFaceCaptureCloseButtonPosition(insets.top);
   const screenGuideBounds = useMemo<ScreenGuideBounds>(
     () => ({
@@ -444,6 +479,14 @@ export function CameraFaceCaptureScreen({
   );
   const shouldBlockForGreenlight =
     requireGreenlight && !greenlightReport.finalCaptureGreenlight;
+  // 얼굴 세로 비율 촬영에서만 실시간 pitch(고개 숙임/젖힘) 게이트 적용.
+  // 세로 비율 최대 왜곡원인데 greenlight는 pitch를 안 보므로 여기서 보강한다.
+  const requirePitchGate = requireGreenlight && captureType === 'face_analysis';
+  const pitchGate = useMemo(
+    () => evaluateFacePitchGate(latestMediaPipe?.pitchDeg),
+    [latestMediaPipe],
+  );
+  const shouldBlockForPitch = requirePitchGate && !pitchGate.pitchOk;
   const mediaPipeCenterLineX = useMemo(() => {
     const xs = MEDIAPIPE_CENTERLINE_KEYS
       .map(key => getScreenLandmarkPoint(latestMediaPipe?.screenLandmarks?.[key]))
@@ -461,15 +504,27 @@ export function CameraFaceCaptureScreen({
     !greenlightReport.failureReasons.includes('not_centered');
   const controlsBottom = Math.max(insets.bottom + 64, height * 0.1);
   const errorBottom = controlsBottom + 98;
+  // 게이트 기반 안내 문구(깜빡임 원인). 준비되면 null. 임계값 근처 프레임 지터로
+  // 프레임마다 값이 바뀌므로 아래 stableGuidanceMessage로 갱신 빈도를 제한한다.
+  const rawGuidanceMessage = !shouldValidateFace
+    ? null
+    : requireGreenlight
+      ? !greenlightReport.finalCaptureGreenlight
+        ? greenlightReport.message
+        : shouldBlockForPitch
+          ? FACE_PITCH_GATE_MESSAGE
+          : null
+      : guidance.status === 'blocked'
+        ? guidance.message
+        : null;
+  guidanceMessageTargetRef.current = rawGuidanceMessage;
   const captureMessage =
     uploadError ??
     (isUploading
       ? '사진을 업로드하는 중이에요'
-      : shouldValidateFace
-        ? captureValidationMessage ??
-          (requireGreenlight ? greenlightReport.message : guidance.message)
-        : captureValidationMessage);
-  const isCaptureDisabled = isUploading || shouldBlockForGreenlight;
+      : captureValidationMessage ?? stableGuidanceMessage);
+  const isCaptureDisabled =
+    isUploading || shouldBlockForGreenlight || shouldBlockForPitch;
   const shouldUseBackendUpload = Boolean(getBackendApiBaseUrl());
   const foreheadDot = useMemo(
     () => {
@@ -519,7 +574,11 @@ export function CameraFaceCaptureScreen({
       ? uploadError || !isCameraReady
         ? colors.danger
         : colors.white
-      : uploadError || !isCameraReady || shouldBlockForScreenGuide || shouldBlockForGreenlight
+      : uploadError ||
+          !isCameraReady ||
+          shouldBlockForScreenGuide ||
+          shouldBlockForGreenlight ||
+          shouldBlockForPitch
       ? colors.danger
       : requireGreenlight
         ? colors.guideReady
@@ -899,6 +958,11 @@ export function CameraFaceCaptureScreen({
         return;
       }
 
+      if (requirePitchGate && !pitchGate.pitchOk) {
+        triggerBlockedCaptureFeedback(FACE_PITCH_GATE_MESSAGE);
+        return;
+      }
+
       if (!realtimeCaptureAvailable && landmarkScanInFlightRef.current) {
         triggerBlockedCaptureFeedback('얼굴 위치를 확인 중이에요. 잠시 후 다시 촬영해 주세요.');
         return;
@@ -1106,6 +1170,10 @@ export function CameraFaceCaptureScreen({
       </View>
 
       {shouldValidateFace ? (
+        // 타원 가이드: 정원(width×width) View를 scaleY로 늘려 그린다.
+        // scaleY는 View 중심 기준이므로 top은 (centerY - width/2)여야
+        // 늘어난 타원의 중심이 guideCenterY에 정확히 온다.
+        // 얼굴을 타원 안에 맞추면 촬영(거리·정렬 판정은 greenlight가 담당).
         <View
           pointerEvents="none"
           style={[
@@ -1115,7 +1183,7 @@ export function CameraFaceCaptureScreen({
               borderRadius: guideWidth / 2,
               height: guideWidth,
               left: guideCenterX - guideWidth / 2,
-              top: guideTop,
+              top: guideCenterY - guideWidth / 2,
               transform: [{scaleY: guideScaleY}],
               width: guideWidth,
             },
@@ -1154,10 +1222,7 @@ export function CameraFaceCaptureScreen({
         />
       ) : null}
 
-      {(shouldValidateFace && hasLiveCaptureChecks && guidance.status === 'blocked') ||
-      shouldBlockForGreenlight ||
-      captureValidationMessage ||
-      uploadError ? (
+      {uploadError || captureValidationMessage || stableGuidanceMessage ? (
         <View pointerEvents="none" style={[styles.errorBar, {bottom: errorBottom}]}>
           <Text style={styles.errorText}>
             {captureMessage ?? FACE_CAPTURE_ALIGNMENT_MESSAGE}

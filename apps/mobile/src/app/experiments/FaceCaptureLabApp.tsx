@@ -1,4 +1,6 @@
 import React, {useCallback, useState} from 'react';
+import {NavigationContainer} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useFonts} from 'expo-font';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {TamaguiProvider} from 'tamagui';
@@ -24,6 +26,12 @@ type LabCapture = FaceCaptureUploadResult & {
   greenlightLogUri?: string;
   greenlightReport?: FaceCaptureGreenlightReport;
 };
+
+type FaceCaptureLabStackParamList = {
+  FaceCaptureLab: undefined;
+};
+
+const Stack = createNativeStackNavigator<FaceCaptureLabStackParamList>();
 
 function createLabCaptureResult(imageInput: FaceCaptureImageInput): LabCapture {
   const id = `face-capture-lab-${Date.now()}`;
@@ -119,7 +127,11 @@ export function FaceCaptureLabApp() {
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
-        <FaceCaptureLabContent />
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{headerShown: false}}>
+            <Stack.Screen component={FaceCaptureLabContent} name="FaceCaptureLab" />
+          </Stack.Navigator>
+        </NavigationContainer>
       </SafeAreaProvider>
     </TamaguiProvider>
   );

@@ -14,6 +14,9 @@ export type FaceCaptureImageInput = {
   fileName?: string | null;
   height?: number | null;
   mediaKind?: string;
+  // Apple semantic matte(hair/skin) 임베드 여부 — RealtimeCameraCaptureResult.semanticMattes를
+  // 그대로 실어 얼굴 세로 비율 분석까지 전달한다. 업로드에는 사용하지 않는다.
+  semanticMattes?: {hair: boolean; requested: boolean; skin: boolean};
   source: FaceCaptureImageSource;
   uri: string;
   width?: number | null;
@@ -27,6 +30,7 @@ export type FaceCaptureUploadResult = {
   mediaId: string;
   objectKey: string;
   photoCaptureId: string;
+  semanticMattes?: {hair: boolean; requested: boolean; skin: boolean};
   source: FaceCaptureImageSource;
 };
 
@@ -76,6 +80,10 @@ export function inferFaceCaptureContentType(uri: string, fallback?: string | nul
 
   if (normalizedUri.endsWith('.webp')) {
     return 'image/webp';
+  }
+
+  if (normalizedUri.endsWith('.heic') || normalizedUri.endsWith('.heif')) {
+    return 'image/heic';
   }
 
   return 'image/jpeg';
@@ -129,6 +137,7 @@ export async function uploadFaceCaptureImage({
   fileName,
   height,
   mediaKind = 'capture',
+  semanticMattes,
   source,
   uri,
   width,
@@ -246,6 +255,7 @@ export async function uploadFaceCaptureImage({
     mediaId: media.id,
     objectKey: media.objectKey,
     photoCaptureId: photoCapture.id,
+    semanticMattes,
     source,
   };
 }

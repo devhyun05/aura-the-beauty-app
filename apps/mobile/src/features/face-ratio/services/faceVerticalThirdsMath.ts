@@ -138,6 +138,22 @@ export function deriveDominantPart(
   return strongest.delta > 0 ? strongest.part : 'middle';
 }
 
+// 편차 크기를 사람이 읽을 강도 표현으로. 판정 문구를 편차에 따라 세분화한다.
+function describeDeltaStrength(absDelta: number): string {
+  if (absDelta >= 0.22) {
+    return '뚜렷하게';
+  }
+  if (absDelta >= 0.14) {
+    return '다소';
+  }
+  return '약간';
+}
+
+const PART_LABEL: Record<'upper' | 'lower', string> = {
+  lower: '하안부(코 아래~턱 끝)',
+  upper: '상안부(이마)',
+};
+
 function buildSuccessSummary(
   dominantPart: VerticalThirdsDominantPart,
   ratio?: VerticalThirdsRatio,
@@ -146,23 +162,21 @@ function buildSuccessSummary(
   const upperExcludedNote = hasUpper
     ? ''
     : ' 헤어라인을 인식하지 못해 상안부는 판정에서 제외했어요.';
+  const deltas = ratio ? getDominanceDeltas(ratio) : [];
 
   if (dominantPart === 'balanced') {
-    return `상·중·하안 비율이 평균 기준에 가깝게 잡혔어요.${upperExcludedNote}`;
+    return `상·중·하안 비율이 평균 기준에 고르게 가깝게 잡혔어요.${upperExcludedNote}`;
   }
 
-  if (dominantPart === 'upper') {
-    return '상안부(이마)가 평균보다 긴 편이에요.';
-  }
+  if (dominantPart === 'upper' || dominantPart === 'lower') {
+    const partDelta = deltas.find(({part}) => part === dominantPart);
+    const strength = describeDeltaStrength(Math.abs(partDelta?.delta ?? 0));
 
-  if (dominantPart === 'lower') {
-    return `하안부(코 아래~턱 끝)가 평균보다 긴 편이에요.${upperExcludedNote}`;
+    return `${PART_LABEL[dominantPart]}가 평균보다 ${strength} 긴 편이에요.${upperExcludedNote}`;
   }
 
   if (dominantPart === 'middle') {
-    const shortDeltas = ratio
-      ? getDominanceDeltas(ratio).filter(({delta}) => delta < -DOMINANCE_THRESHOLD)
-      : [];
+    const shortDeltas = deltas.filter(({delta}) => delta < -DOMINANCE_THRESHOLD);
     const strongestShort = shortDeltas.reduce<DominanceDelta | null>(
       (current, candidate) =>
         !current || Math.abs(candidate.delta) > Math.abs(current.delta)
@@ -171,8 +185,9 @@ function buildSuccessSummary(
       null,
     );
     const shortPartLabel = strongestShort?.part === 'upper' ? '상안부' : '하안부';
+    const strength = describeDeltaStrength(Math.abs(strongestShort?.delta ?? 0));
 
-    return `${shortPartLabel}가 평균보다 짧아 중안부가 상대적으로 길어 보여요.${upperExcludedNote}`;
+    return `${shortPartLabel}가 평균보다 ${strength} 짧아 중안부가 상대적으로 길어 보여요.${upperExcludedNote}`;
   }
 
   return `이마 기준선은 근사값으로 표시돼요.${upperExcludedNote}`;

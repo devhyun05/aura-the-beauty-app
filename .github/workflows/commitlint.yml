@@ -35,10 +35,14 @@ jobs:
       - name: Check commit messages on push
         if: github.event_name == 'push'
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+          BEFORE="${{ github.event.before }}"
+          # 새 브랜치(0000...)이거나 force-push로 이전 커밋이 사라져 조회 불가하면
+          # 범위 대신 마지막 커밋만 검사한다(force-push 시 spurious 실패 방지).
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || \
+             ! git rev-parse --verify --quiet "$BEFORE^{commit}" > /dev/null; then
             npx commitlint --last --verbose
           else
-            npx commitlint --from="${{ github.event.before }}" --to="${{ github.sha }}" --verbose
+            npx commitlint --from="$BEFORE" --to="${{ github.sha }}" --verbose
           fi
 
       - name: Check commit messages on pull request
