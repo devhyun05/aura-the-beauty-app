@@ -3415,6 +3415,10 @@ public sealed class RNBridge : MonoBehaviour
 
         if (region == "lip"
             && (value.StartsWith("e7-lip-validation-", StringComparison.Ordinal)
+                // Live-personalized lips: E3 resolves this id to the
+                // per-frame Vision lip boundary; rejecting it here threw and
+                // discarded the ENTIRE recipe (every region went dark).
+                || value == "lip-vision-boundary-v1"
                 || IsGeneratedLipMaskTextureId(value)))
         {
             return value;
