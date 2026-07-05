@@ -399,7 +399,15 @@ public static class MakeupARValidationSetup
     {
         TrackedPoseDriver trackedPoseDriver = GetOrAddComponent<TrackedPoseDriver>(cameraObject);
         trackedPoseDriver.trackingType = TrackedPoseDriver.TrackingType.RotationAndPosition;
-        trackedPoseDriver.updateType = TrackedPoseDriver.UpdateType.UpdateAndBeforeRender;
+        // Update-only, NOT UpdateAndBeforeRender: the before-render pass
+        // moves the camera to a fresher device pose than the one the face
+        // anchor (and the screen-locked camera image) came from, so during
+        // device motion every face-anchored overlay slides against the face
+        // in the image — most visible on the thin eyeliner line. Keeping the
+        // camera on the Update pose renders image, anchor and camera from
+        // the same frame; a face-mirror app doesn't need the extra pose
+        // freshness that world-anchored AR wants.
+        trackedPoseDriver.updateType = TrackedPoseDriver.UpdateType.Update;
         trackedPoseDriver.ignoreTrackingState = false;
 
         InputAction positionAction = new InputAction("Position", binding: "<XRHMD>/centerEyePosition", expectedControlType: "Vector3");

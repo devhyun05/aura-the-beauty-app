@@ -22,6 +22,9 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         public int FaceCount;
         public int OuterPointCount;
         public int InnerPointCount;
+        public float LipConfidence;
+        public bool LipBoundsAvailable;
+        public Rect LipBounds;
         public int Sequence;
         public long DetectedAtMs;
         public long AgeMs;
@@ -47,6 +50,15 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     }
 
     [Serializable]
+    private sealed class VisionBoundsPayload
+    {
+        public float x;
+        public float y;
+        public float width;
+        public float height;
+    }
+
+    [Serializable]
     private sealed class VisionBoundaryPayload
     {
         public string status;
@@ -58,6 +70,8 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         public int faceCount;
         public int outerPointCount;
         public int innerPointCount;
+        public float lipConfidence;
+        public VisionBoundsPayload lipBounds;
         public VisionPointPayload[] outer;
         public VisionPointPayload[] inner;
     }
@@ -170,6 +184,15 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         float scaleY = targetHeight / (float)snapshot.ImageHeight;
         snapshot.OuterPoints = ScalePoints(snapshot.OuterPoints, scaleX, scaleY);
         snapshot.InnerPoints = ScalePoints(snapshot.InnerPoints, scaleX, scaleY);
+        if (snapshot.LipBoundsAvailable)
+        {
+            snapshot.LipBounds = new Rect(
+                snapshot.LipBounds.x * scaleX,
+                snapshot.LipBounds.y * scaleY,
+                snapshot.LipBounds.width * scaleX,
+                snapshot.LipBounds.height * scaleY);
+        }
+
         if (snapshot.FaceBoundsAvailable)
         {
             snapshot.FaceBoundsCenter = new Vector2(
@@ -183,6 +206,16 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         snapshot.ImageWidth = targetWidth;
         snapshot.ImageHeight = targetHeight;
         return true;
+    }
+
+    public bool TryPeekLatestBoundary(out BoundarySnapshot snapshot)
+    {
+        long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        snapshot = BuildInterpolatedSnapshot(nowMs);
+        snapshot.AgeMs = snapshot.DetectedAtMs > 0
+            ? nowMs - snapshot.DetectedAtMs
+            : 0;
+        return snapshot.Available;
     }
 
     private void Awake()
@@ -368,6 +401,17 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             FaceCount = payload.faceCount,
             OuterPointCount = payload.outerPointCount > 0 ? payload.outerPointCount : outerPoints.Length,
             InnerPointCount = payload.innerPointCount > 0 ? payload.innerPointCount : innerPoints.Length,
+            LipConfidence = Mathf.Clamp01(payload.lipConfidence),
+            LipBoundsAvailable = payload.lipBounds != null
+                && payload.lipBounds.width > 0.0f
+                && payload.lipBounds.height > 0.0f,
+            LipBounds = payload.lipBounds != null
+                ? new Rect(
+                    payload.lipBounds.x,
+                    payload.lipBounds.y,
+                    payload.lipBounds.width,
+                    payload.lipBounds.height)
+                : Rect.zero,
             Sequence = sequence,
             DetectedAtMs = detectedAtMs,
             AgeMs = 0,
@@ -404,6 +448,8 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             + " outerPoints=" + eventSnapshot.OuterPointCount.ToString(CultureInfo.InvariantCulture)
             + " innerPoints=" + eventSnapshot.InnerPointCount.ToString(CultureInfo.InvariantCulture)
             + " available=" + eventSnapshot.Available.ToString().ToLowerInvariant()
+            + " lipConfidence=" + eventSnapshot.LipConfidence.ToString("0.###", CultureInfo.InvariantCulture)
+            + " lipBounds=" + FormatRect(eventSnapshot.LipBoundsAvailable, eventSnapshot.LipBounds)
             + " stabilization=" + eventSnapshot.StabilizationMode
             + " transitionMs=" + eventSnapshot.TransitionDurationMs.ToString(CultureInfo.InvariantCulture)
             + " faceBoundsAvailable=" + eventSnapshot.FaceBoundsAvailable.ToString().ToLowerInvariant()
@@ -512,6 +558,8 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             faceCount = 0,
             outerPointCount = 0,
             innerPointCount = 0,
+            lipConfidence = 0.0f,
+            lipBounds = new VisionBoundsPayload(),
             outer = new VisionPointPayload[0],
             inner = new VisionPointPayload[0]
         };
@@ -557,6 +605,13 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             + ",\"faceCount\":" + snapshot.FaceCount.ToString(CultureInfo.InvariantCulture)
             + ",\"outerPointCount\":" + snapshot.OuterPointCount.ToString(CultureInfo.InvariantCulture)
             + ",\"innerPointCount\":" + snapshot.InnerPointCount.ToString(CultureInfo.InvariantCulture)
+            + ",\"lipConfidence\":" + snapshot.LipConfidence.ToString("0.###", CultureInfo.InvariantCulture)
+            + ",\"lipBoundsAvailable\":" + snapshot.LipBoundsAvailable.ToString().ToLowerInvariant()
+            + ",\"lipBounds\":{\"x\":" + snapshot.LipBounds.x.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",\"y\":" + snapshot.LipBounds.y.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",\"width\":" + snapshot.LipBounds.width.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",\"height\":" + snapshot.LipBounds.height.ToString("0.#", CultureInfo.InvariantCulture)
+            + "}"
             + ",\"available\":" + snapshot.Available.ToString().ToLowerInvariant()
             + ",\"stabilizationMode\":\"" + EscapeJsonString(snapshot.StabilizationMode) + "\""
             + ",\"transitionProgress\":" + snapshot.TransitionProgress.ToString("0.###", CultureInfo.InvariantCulture)
@@ -767,6 +822,19 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         return string.IsNullOrWhiteSpace(value)
             ? "none"
             : value.Trim().Replace(" ", "_").Replace(",", "_").Replace("\"", string.Empty);
+    }
+
+    private static string FormatRect(bool available, Rect rect)
+    {
+        if (!available)
+        {
+            return "none";
+        }
+
+        return "x=" + rect.x.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",y=" + rect.y.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",w=" + rect.width.ToString("0.#", CultureInfo.InvariantCulture)
+            + ",h=" + rect.height.ToString("0.#", CultureInfo.InvariantCulture);
     }
 
     private static string EscapeJsonString(string value)
