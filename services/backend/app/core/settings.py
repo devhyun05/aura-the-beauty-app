@@ -17,6 +17,11 @@ class Settings(BaseSettings):
   api_prefix: str = "/api"
 
   database_url: str | None = None
+  database_secret_id: str | None = None
+  db_host: str | None = None
+  db_port: int = 5432
+  db_name: str | None = None
+  db_sslmode: str | None = None
 
   auth_required: bool = False
   dev_user_sub: str = "local-dev-user"
@@ -36,6 +41,11 @@ class Settings(BaseSettings):
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
   bedrock_analysis_region: str | None = None
+  bedrock_guardrail_id: str | None = None
+  bedrock_guardrail_version: str | None = None
+  bedrock_guardrail_region: str | None = None
+  bedrock_guardrail_required: bool = False
+  bedrock_guardrail_trace: bool = False
   bedrock_embedding_model_id: str | None = "amazon.titan-embed-text-v2:0"
   bedrock_embedding_region: str | None = None
   embedding_dimension: int = 1024
@@ -99,6 +109,14 @@ class Settings(BaseSettings):
   @property
   def effective_bedrock_embedding_region(self) -> str:
     return (self.bedrock_embedding_region or self.aws_region).strip()
+
+  @property
+  def effective_bedrock_guardrail_region(self) -> str:
+    return (self.bedrock_guardrail_region or self.effective_bedrock_analysis_region).strip()
+
+  @property
+  def bedrock_guardrail_configured(self) -> bool:
+    return bool((self.bedrock_guardrail_id or "").strip() and (self.bedrock_guardrail_version or "").strip())
 
   @property
   def effective_analysis_model_id(self) -> str:
@@ -165,6 +183,20 @@ class Settings(BaseSettings):
     return "missing"
 
   @property
+  def database_configured(self) -> bool:
+    return bool(self.database_url or self.database_secret_id)
+
+  @property
+  def database_credential_source(self) -> str:
+    if self.database_url:
+      return "database_url"
+
+    if self.database_secret_id:
+      return "secrets_manager"
+
+    return "missing"
+
+  @property
   def cors_origins(self) -> list[str]:
     return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
@@ -173,8 +205,9 @@ class Settings(BaseSettings):
     image_generation_provider = self.image_generation_provider_normalized
     items = {
       "databaseUrl": {
-        "configured": bool(self.database_url),
-        "requiredWhen": "DB-backed APIs or schema/seed commands are used.",
+        "configured": self.database_configured,
+        "requiredWhen": "DB-backed APIs or schema/seed commands are used. Use DATABASE_URL or DATABASE_SECRET_ID.",
+        "source": self.database_credential_source,
       },
       "cognitoUserPoolId": {
         "configured": bool(self.cognito_user_pool_id),
@@ -210,6 +243,11 @@ class Settings(BaseSettings):
         "configured": bool(self.effective_embedding_model_id),
         "requiredWhen": "Embedding-backed recommendations or semantic search are used.",
         "value": self.effective_embedding_model_id,
+      },
+      "bedrockGuardrail": {
+        "configured": self.bedrock_guardrail_configured or not self.bedrock_guardrail_required,
+        "requiredWhen": "BEDROCK_GUARDRAIL_REQUIRED=true or production feedback safety enforcement.",
+        "value": self.bedrock_guardrail_id if self.bedrock_guardrail_configured else None,
       },
       "embeddingDimension": {
         "configured": self.embedding_dimension > 0,
@@ -261,6 +299,7 @@ class Settings(BaseSettings):
       "awsRegion": self.aws_region,
       "aiProvider": analysis_provider,
       "analysisModel": self.effective_analysis_model_id,
+      "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,
       "auradinRetrievalBackend": self.auradin_retrieval_backend,

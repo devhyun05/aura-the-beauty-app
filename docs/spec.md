@@ -265,6 +265,12 @@ createUnityRecipeFromRecommendedFilter(filter)
 - `lip`: MLBB, 글로스, 플럼, 탕후루 광택
 - `contour`: 라떼, 오피스 사이렌, 소프트 고스
 
+눈썹 AR 런타임을 구현할 때는 기존 recipe 흐름을 유지하되, generated lip path 안에 눈썹 로직을 섞지 않는다. `brow`는 별도 generated brow mask path로 추가하며, MediaPipe brow/eye landmark를 기준점과 안전 영역으로 사용한다.
+
+눈썹 마스크는 실제 솜털까지 모두 따는 segmentation이 아니라 큰 brow ROI/envelope을 목표로 한다. eye exclusion zone으로 눈 영역 침범을 막고, 기존 사용자 눈썹은 완전 삭제보다 필터 shape 밖으로 벗어난 부분을 약하게 neutralize/tone lift한 뒤 brow tint/strand layer를 얹는다.
+
+립과 블러쉬는 기존 동작을 유지한다. brow 구현 때문에 lip generated mask, cheek/blush session mask, 공통 shader의 lip/cheek 전용 분기를 변경하지 않는다.
+
 ## 12. 조정 UX
 
 AR 화면 하단 기존 구조를 유지한다.

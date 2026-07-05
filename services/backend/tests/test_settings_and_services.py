@@ -158,6 +158,21 @@ def test_makeup_image_output_format_can_use_webp() -> None:
   assert params["output_compression"] == 70
 
 
+
+def test_public_config_status_treats_guardrail_as_optional_by_default() -> None:
+  status = Settings().public_config_status()
+
+  assert status["items"]["bedrockGuardrail"]["configured"] is True
+  assert status["bedrockGuardrailConfigured"] is False
+  assert "bedrockGuardrail" not in status["missing"]
+
+
+def test_public_config_status_requires_guardrail_when_enabled() -> None:
+  status = Settings(bedrock_guardrail_required=True).public_config_status()
+
+  assert status["items"]["bedrockGuardrail"]["configured"] is False
+  assert "bedrockGuardrail" in status["missing"]
+
 def test_public_config_status_accepts_iam_role_for_aws_credentials() -> None:
   settings = Settings(aws_use_iam_role=True)
 

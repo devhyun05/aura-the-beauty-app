@@ -8,6 +8,7 @@ import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing} from '../../../shared/theme';
 import type {
   MakeupArea,
@@ -116,6 +117,7 @@ export function MakeupFilterEditScreen({
   const arGuideData = getARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
+  const cameraSessionActive = useCameraSessionActive();
   const [optionState, setOptionState] = useState<MakeupFilterOptionState>(getMakeupFilterOptionState());
   const fullFaceEditState = useFullFaceMakeupEditState({sourceFrameMetadata});
   const {activeFullFaceControl, fullFaceRecipe, fullFaceState} = fullFaceEditState;
@@ -138,6 +140,12 @@ export function MakeupFilterEditScreen({
       hideUnityMakeupView();
     };
   }, [isFullFaceMode]);
+
+  useEffect(() => {
+    if (isFullFaceMode && !cameraSessionActive) {
+      hideUnityMakeupView();
+    }
+  }, [cameraSessionActive, isFullFaceMode]);
 
   useEffect(() => {
     if (!isFullFaceMode) {
@@ -182,11 +190,11 @@ export function MakeupFilterEditScreen({
   return (
     <FullscreenOverlayScreen>
       <FullscreenOverlayLayer>
-        {isFullFaceMode && shouldUseUnityPreview ? (
+        {isFullFaceMode && shouldUseUnityPreview && cameraSessionActive ? (
           <UnityMakeupNativeView />
         ) : (
           <>
-            <LiveCameraLayer />
+            <LiveCameraLayer active={cameraSessionActive} />
             <View style={styles.previewDim} />
             <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
             <View style={[styles.cheekPreviewOverlayLeft, {backgroundColor: previewColorHex}]} />

@@ -58,6 +58,7 @@ class S3Service:
         "Bucket": self.settings.s3_bucket_name,
         "ContentType": content_type,
         "Key": object_key,
+        "ContentType": content_type,
       },
       ExpiresIn=expires_in,
     )

@@ -7,12 +7,19 @@ import {
   type LipMaskProvider,
 } from './lipGenerateCore';
 import {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+  type GeneratedBrowPackage,
+} from './browGenerateCore';
+import {
   buildGeneratedLipCandidateSet,
   type E7NativeBoundaryResult,
 } from './personalizedGenerate/e7PersonalizedGeneratePipeline';
 import {
   buildFullFaceMakeupRecipe,
   DEFAULT_FULL_FACE_REGION_CONTROLS,
+  REGION_COLOR_OPTIONS,
   type FullFaceMakeupRecipeLayer,
   type FullFaceMakeupRecipe,
   type FullFaceMakeupSourceInput,
@@ -46,29 +53,52 @@ export type GeneratedMaskControls = {
 };
 
 export type PersonalizedMakeupGenerateResult = {
+  browUnityApplyPayload: string;
+  generatedBrowPackage: GeneratedBrowPackage;
   generatedPackage: LipGeneratePackage;
   nativeResult: E7NativeBoundaryResult;
   savedRecord?: unknown;
   unityApplyPayload: string;
 };
 
+export {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+};
+
+export type {
+  GeneratedBrowControls,
+  GeneratedBrowPackage,
+} from './browGenerateCore';
+
 export type PersonalizedCompanionMakeupRegionControl = {
   candidateId: string;
   colorHex: string;
+  coverage?: number | undefined;
+  debugMaskMode?: number | undefined;
+  finish?: 'natural' | 'matte' | 'glow' | undefined;
+  fallbackMode?: 'uvMask' | 'off' | undefined;
   intensity: number;
+  luminanceInfluence?: number | undefined;
   maskTextureId: string;
+  mode?: 'uvMask' | 'screenSpace' | 'semantic' | undefined;
   opacity: number;
+  evenness?: number | undefined;
 };
 
 export type PersonalizedCompanionMakeupControls = {
   blush: PersonalizedCompanionMakeupRegionControl;
   brow: PersonalizedCompanionMakeupRegionControl;
   eyeliner: PersonalizedCompanionMakeupRegionControl;
+  foundation: PersonalizedCompanionMakeupRegionControl;
 };
 
 export type PersonalizedCompanionMakeupActiveRegion =
   | 'blush'
   | 'brow'
+  | 'eyeliner'
+  | 'foundation'
   | 'all'
   | 'none';
 
@@ -105,6 +135,28 @@ export const DEFAULT_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
 };
 
 export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompanionMakeupControls = {
+  foundation: {
+    candidateId: 'foundation-skin-tone-relative-v1',
+    colorHex: REGION_COLOR_OPTIONS.foundation[0].hex,
+    coverage: 1,
+    evenness: 0.42,
+    // Foundation must never paint the face mesh / uvMask overlay directly:
+    // the final color composite happens only in the screen-space camera
+    // post-process. If the semantic mask is not ready, show nothing rather
+    // than falling back to mesh painting.
+    fallbackMode: 'off',
+    finish: 'natural',
+    debugMaskMode: 0,
+    intensity: 1,
+    luminanceInfluence: 0.52,
+    maskTextureId: 'foundation-skin-mask-v1',
+    // screenSpace: the final color composite happens in the screen-space
+    // camera post-process quad, driven by the projected face-mesh + neck
+    // mask (with calibrated eye/lip/brow exclusions). Never painted on the
+    // face mesh / uvMask overlay directly.
+    mode: 'screenSpace',
+    opacity: 1,
+  },
   blush: {
     candidateId: 'blush-session-1-v1',
     colorHex: '#E67B5F',
@@ -200,6 +252,11 @@ export async function generatePersonalizedLipMakeup({
     throw new Error(generatedCandidate?.blockedReason ?? 'generated_lip_package_missing');
   }
 
+  const generatedBrowPackage = buildGeneratedBrowPackage({
+    controls: DEFAULT_GENERATED_BROW_CONTROLS,
+    nativeResult,
+  });
+
   let savedRecord: unknown;
   if (nativeModule.saveGeneratedPackage) {
     savedRecord = JSON.parse(
@@ -208,6 +265,16 @@ export async function generatePersonalizedLipMakeup({
   }
 
   return {
+    browUnityApplyPayload: JSON.stringify(
+      buildGeneratedBrowMaskUnityPayload(
+        generatedBrowPackage,
+        DEFAULT_GENERATED_BROW_CONTROLS,
+        {
+          includeTexture: true,
+        },
+      ),
+    ),
+    generatedBrowPackage,
     generatedPackage,
     nativeResult,
     savedRecord,
@@ -225,15 +292,52 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
     DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
   options: {
     activeRegion?: PersonalizedCompanionMakeupActiveRegion;
+    activeRegions?: readonly PersonalizedCompanionMakeupActiveRegion[];
+    includeBrowLayer?: boolean;
     useCheekRegionAlias?: boolean;
   } = {},
 ): FullFaceMakeupRecipe {
   const activeRegion = options.activeRegion ?? 'all';
+  const hasExplicitActiveRegions = options.activeRegions !== undefined;
+  const activeRegionSet = new Set(options.activeRegions ?? []);
+  const shouldIncludeBrowLayer = options.includeBrowLayer ?? true;
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
-  const isRegionEnabled = (region: 'blush' | 'brow') =>
-    activeRegion === 'all' || activeRegion === region;
+  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation' | 'eyeliner') =>
+    hasExplicitActiveRegions
+      ? activeRegionSet.has(region)
+      : activeRegion === 'all' || activeRegion === region;
   const controls: FullFaceRegionControls = {
     ...DEFAULT_FULL_FACE_REGION_CONTROLS,
+    foundation: {
+      ...DEFAULT_FULL_FACE_REGION_CONTROLS.foundation,
+      candidateId: companionControls.foundation.candidateId,
+      colorHex: companionControls.foundation.colorHex,
+      enabled: isRegionEnabled('foundation'),
+      finish: companionControls.foundation.finish ?? DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.finish,
+      foundationDebugMaskMode: companionControls.foundation.debugMaskMode ?? 0,
+      foundationFallbackMode: companionControls.foundation.fallbackMode ?? 'uvMask',
+      foundationMode: companionControls.foundation.mode ?? 'screenSpace',
+      glossBoost: companionControls.foundation.evenness ?? DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.glossBoost,
+      intensity: companionControls.foundation.intensity,
+      maskTextureId: companionControls.foundation.maskTextureId,
+      opacity: companionControls.foundation.opacity,
+      roughness:
+        companionControls.foundation.luminanceInfluence ??
+        DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.roughness,
+      specular:
+        companionControls.foundation.finish === 'glow'
+          ? 0.08
+          : DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.specular,
+      textureAmount:
+        companionControls.foundation.evenness ??
+        DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.textureAmount,
+      params: {
+        ...DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.params,
+        coverage:
+          companionControls.foundation.coverage ??
+          DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.params.coverage,
+      },
+    },
     brow: {
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.brow,
       candidateId: companionControls.brow.candidateId,
@@ -256,7 +360,7 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.eyeliner,
       candidateId: companionControls.eyeliner.candidateId,
       colorHex: companionControls.eyeliner.colorHex,
-      enabled: false,
+      enabled: isRegionEnabled('eyeliner'),
       intensity: companionControls.eyeliner.intensity,
       maskTextureId: companionControls.eyeliner.maskTextureId,
       opacity: companionControls.eyeliner.opacity,
@@ -274,7 +378,11 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   });
   const layers = recipe.layers
     .filter(
-      layer => layer.region === 'blush' || layer.region === 'brow',
+      layer =>
+        layer.region === 'foundation' ||
+        layer.region === 'blush' ||
+        (shouldIncludeBrowLayer && layer.region === 'brow') ||
+        layer.region === 'eyeliner',
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

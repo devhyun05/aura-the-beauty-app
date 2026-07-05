@@ -2,10 +2,13 @@ import React from 'react';
 
 import {
   FilterStoreScreen,
+  FloatingActionSettingsScreen,
   getRecommendedFilterRouteParams,
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import {useAuthSession} from '../../../features/auth';
+import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -17,14 +20,55 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+export function FloatingActionSettingsRouteScreen({
+  navigation,
+}: RootScreenProps<'FloatingActionSettings'>) {
+  const {
+    floatingActionButtonPosition,
+    floatingActionIds,
+    floatingActionInteractionMode,
+    setFloatingActionButtonPosition,
+    setFloatingActionIds,
+    setFloatingActionInteractionMode,
+  } = useNavigationFlowState();
+
+  return (
+    <DetailRouteChrome
+      routeName="FloatingActionSettings"
+      onBack={() => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return;
+        }
+
+        navigateMainTab(navigation, 'HomeTab');
+      }}>
+      <FloatingActionSettingsScreen
+        selectedActionIds={floatingActionIds}
+        selectedButtonPosition={floatingActionButtonPosition}
+        selectedInteractionMode={floatingActionInteractionMode}
+        onChangeActionIds={setFloatingActionIds}
+        onChangeButtonPosition={setFloatingActionButtonPosition}
+        onChangeInteractionMode={setFloatingActionInteractionMode}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function getHomeRecommendedFilterMoreRouteName(): 'HomeFilterStore' {
+  return 'HomeFilterStore';
+}
+
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const {
     likedMakeupFilterIds,
     setLikedMakeupFilterIds,
     setSelectedRecommendedMakeupFilterId,
-    setSelectedReferenceMakeupPhoto,
+    setShouldShowBeautyJourneyGuide,
+    shouldShowBeautyJourneyGuide,
   } = useNavigationFlowState();
+  const {session} = useAuthSession();
 
   const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
@@ -32,14 +76,25 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
   const handleHeroTrendFilterPress = React.useCallback((filterId: string) => {
-    rootNavigation?.navigate('HomeFilterStore', {initialMakeupFilterId: filterId});
-  }, [rootNavigation]);
+    setSelectedRecommendedMakeupFilterId(filterId);
+    rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
-  const handleMakeupExtractionPress = React.useCallback(() => {
-    setSelectedRecommendedMakeupFilterId(null);
-    setSelectedReferenceMakeupPhoto(null);
-    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
-  }, [rootNavigation, setSelectedRecommendedMakeupFilterId, setSelectedReferenceMakeupPhoto]);
+  const handleBeautyJourneyGuideConfirm = React.useCallback(() => {
+    setShouldShowBeautyJourneyGuide(false);
+
+    void (async () => {
+      try {
+        if (session) {
+          await markFaceCaptureTutorialCompleted(session.user);
+        }
+      } catch {
+        // Continue to the intro even if the preference save call fails.
+      } finally {
+        rootNavigation?.navigate('FaceAnalysisIntro');
+      }
+    })();
+  }, [rootNavigation, session, setShouldShowBeautyJourneyGuide]);
 
   const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {
     setLikedMakeupFilterIds(currentFilterIds =>
@@ -60,15 +115,46 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       routeName="HomeTab"
       wrapContentInScreen={false}>
       <HomeScreen
-        onPressConsulting={() => rootNavigation?.navigate('Consulting')}
-        onPressCommunity={() => rootNavigation?.navigate('Community')}
-        onPressFaceDiagnosis={() => rootNavigation?.navigate('Tutorial')}
+        onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
+        onPressMagazine={() => rootNavigation?.navigate('Magazine')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
-        onPressMakeupExtraction={handleMakeupExtractionPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
+        onPressRecommendedFilterMore={() =>
+          rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
+        }
         onPressRecommendedFilter={handleRecommendedFilterPress}
         isMakeupFilterLiked={isMakeupFilterLiked}
         onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
+        showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
+        onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
+      />
+    </MainTabChrome>
+  );
+}
+
+export function CommunityTabRouteScreen({navigation}: MainTabScreenProps<'CommunityTab'>) {
+  return (
+    <MainTabChrome
+      navigation={navigation}
+      routeName="CommunityTab">
+      <RoutePlaceholder
+        description="커뮤니티 기능을 준비 중이에요."
+        showHeader={false}
+        title="커뮤니티"
+      />
+    </MainTabChrome>
+  );
+}
+
+export function ConsultingTabRouteScreen({navigation}: MainTabScreenProps<'ConsultingTab'>) {
+  return (
+    <MainTabChrome
+      navigation={navigation}
+      routeName="ConsultingTab">
+      <RoutePlaceholder
+        description="퍼스널 컬러, 헤어, 패션까지 다루는 컨설팅 기능을 준비 중이에요."
+        showHeader={false}
+        title="컨설팅"
       />
     </MainTabChrome>
   );
@@ -111,6 +197,20 @@ export function HomeFilterStoreRouteScreen({
         isFilterLiked={isMakeupFilterLiked}
         onApplyFilter={handleApplyFilter}
         onToggleFilterLike={handleToggleMakeupFilterLike}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function MagazineRouteScreen({navigation}: RootScreenProps<'Magazine'>) {
+  return (
+    <DetailRouteChrome
+      routeName="Magazine"
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      <RoutePlaceholder
+        description="메이크업, 퍼스널 컬러, 헤어, 패션 매거진 콘텐츠를 준비 중이에요."
+        showHeader={false}
+        title="매거진"
       />
     </DetailRouteChrome>
   );
@@ -159,9 +259,9 @@ export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'
       routeName="Consulting"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <RoutePlaceholder
-        description="전문가에게 메이크업 컨설팅을 받을 수 있는 기능을 준비 중이에요."
+        description="전문가에게 퍼스널 컬러, 체형, 헤어, 패션 컨설팅을 받을 수 있는 기능을 준비 중이에요."
         showHeader={false}
-        title="메이크업 컨설팅"
+        title="컨설팅"
       />
     </DetailRouteChrome>
   );
