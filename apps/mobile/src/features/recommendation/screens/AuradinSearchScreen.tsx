@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
   },
   send: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 42,
     justifyContent: 'center',
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   tsteps: {gap: 14, marginTop: 28, maxWidth: 268, width: '100%'},
   tstep: {alignItems: 'center', flexDirection: 'row', gap: 11},
   tdot: {backgroundColor: colors.borderStrong, borderRadius: radius.pill, height: 8, width: 8},
-  tdotDone: {backgroundColor: colors.textPrimary},
+  tdotDone: {backgroundColor: colors.blackSurface},
   tdotActive: {backgroundColor: AURA},
   tstepLabel: {color: colors.textTertiary, fontFamily: typography.fontFamily.semibold, fontSize: 13.5},
   tstepDone: {color: colors.textSecondary},

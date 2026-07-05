@@ -2,6 +2,7 @@ import {
   getStatusBarStyleForNavigationState,
   resolveActiveRouteName,
 } from './navigationState';
+import {mainTabRoutes, rootStackRoutes} from './routeTypes';
 import {
   getDetailRouteContextLabel,
   getFooterTargetRoute,
@@ -18,6 +19,16 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(getRouteChrome('HomeTab').kind, 'mainTab', 'home tab chrome');
 expectEqual(getRouteChrome('HomeTab').depth, 'main', 'home tab depth');
+expectEqual(
+  mainTabRoutes.join(','),
+  'HomeTab,ProfileTab,CommunityTab',
+  'main tab route order excludes consulting',
+);
+expectEqual(
+  rootStackRoutes.map(routeName => String(routeName)).includes('Magazine'),
+  false,
+  'root stack routes exclude magazine',
+);
 expectEqual(getRouteChrome('ProfileEdit').kind, 'detail', 'profile edit chrome');
 expectEqual(getRouteChrome('ProfileEdit').category, 'form-edit', 'profile edit category');
 expectEqual(getRouteChrome('MakeupFeedbackLoading').kind, 'detail', 'makeup feedback loading chrome');
@@ -39,11 +50,6 @@ expectEqual(
   getDetailRouteTitle('HomeFilterStore'),
   '필터 스토어',
   'home filter store detail route title',
-);
-expectEqual(
-  getDetailRouteTitle('Magazine'),
-  '매거진',
-  'magazine detail route title',
 );
 expectEqual(
   getDetailRouteTitle('SavedMakeupList'),
@@ -93,7 +99,6 @@ expectEqual(
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('profile'), 'ProfileTab', 'profile footer target');
 expectEqual(getFooterTargetRoute('community'), 'CommunityTab', 'community footer target');
-expectEqual(getFooterTargetRoute('consulting'), 'ConsultingTab', 'consulting footer target');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
@@ -116,7 +121,6 @@ expectEqual(
             {name: 'HomeTab'},
             {name: 'ProfileTab'},
             {name: 'CommunityTab'},
-            {name: 'ConsultingTab'},
           ],
         },
       },

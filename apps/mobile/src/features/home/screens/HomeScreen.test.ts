@@ -17,8 +17,11 @@ import {
   homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
   HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
-  HOME_MAGAZINE_QUICK_ACTION_ICON_NAME,
+  HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
+  HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES,
+  HOME_QUICK_ACTION_LABELS,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
   recommendedFilterCopyVerticalPadding,
   recommendedFilterListVirtualizationConfig,
@@ -76,6 +79,12 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
   'red',
 );
 const quickActionLabels = getHomeQuickActionLabels();
+const expectedQuickActionLabels: readonly [
+  '얼굴 분석',
+  '필터 스토어',
+  '추천 제품',
+  '컨설팅',
+] = HOME_QUICK_ACTION_LABELS;
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
@@ -175,8 +184,23 @@ expectEqual(
 );
 expectEqual(
   quickActionLabels.join(','),
-  '얼굴\n분석,추천\n제품,필터\n스토어,매거진',
+  expectedQuickActionLabels.join(','),
   'home quick action order',
+);
+expectEqual(
+  HOME_QUICK_ACTION_LABELS.some(label => label.includes('\n')),
+  false,
+  'home quick action labels do not contain manual line breaks',
+);
+expectEqual(
+  HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES,
+  1,
+  'home quick action labels render on one line',
+);
+expectEqual(
+  HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
+  typography.lineHeight.xs,
+  'home quick action label min height is one line',
 );
 expectEqual(
   HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
@@ -184,9 +208,9 @@ expectEqual(
   'home filter store quick action icon name',
 );
 expectEqual(
-  HOME_MAGAZINE_QUICK_ACTION_ICON_NAME,
-  'Newspaper',
-  'home magazine quick action icon name',
+  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
+  'Compass',
+  'home consulting quick action icon name',
 );
 expectEqual(
   makeupExtractionActionLabels.join(','),
@@ -299,11 +323,11 @@ expectEqual(
   'recommended filter route source',
 );
 
-let selectedQuickAction: 'filterStore' | 'magazine' | 'recommendation' | null = null;
+let selectedQuickAction: 'consulting' | 'diagnosis' | 'filterStore' | 'recommendation' | null = null;
 
 const diagnosisPressHandler = getHomeQuickActionPressHandler('diagnosis', {
   onPressFaceDiagnosis: () => {
-    selectedQuickAction = 'recommendation';
+    selectedQuickAction = 'diagnosis';
   },
 });
 
@@ -313,7 +337,7 @@ if (!diagnosisPressHandler) {
 
 diagnosisPressHandler();
 
-expectEqual(selectedQuickAction, 'recommendation', 'face analysis quick action target');
+expectEqual(selectedQuickAction, 'diagnosis', 'face analysis quick action target');
 
 const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
   onPressProductRecommendations: () => {
@@ -343,19 +367,19 @@ filterStorePressHandler();
 
 expectEqual(selectedQuickAction, 'filterStore', 'filter store quick action target');
 
-const magazinePressHandler = getHomeQuickActionPressHandler('magazine', {
-  onPressMagazine: () => {
-    selectedQuickAction = 'magazine';
+const consultingPressHandler = getHomeQuickActionPressHandler('consulting', {
+  onPressConsulting: () => {
+    selectedQuickAction = 'consulting';
   },
 });
 
-if (!magazinePressHandler) {
-  throw new Error('magazine quick action should have a press handler');
+if (!consultingPressHandler) {
+  throw new Error('consulting quick action should have a press handler');
 }
 
-magazinePressHandler();
+consultingPressHandler();
 
-expectEqual(selectedQuickAction, 'magazine', 'magazine quick action target');
+expectEqual(selectedQuickAction, 'consulting', 'consulting quick action target');
 
 const completeReport: FaceAnalysisReport = {
   analyzedAt: '2026-06-29T07:00:00.000Z',

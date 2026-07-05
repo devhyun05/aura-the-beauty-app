@@ -36,7 +36,6 @@ export type RootStackParamList = {
   AppSettings: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
-  Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
@@ -82,7 +81,6 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ProfileTab: undefined;
   CommunityTab: undefined;
-  ConsultingTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -105,7 +103,6 @@ export const rootStackRoutes = [
   'AppSettings',
   'ProfileEdit',
   'HomeFilterStore',
-  'Magazine',
   'SavedMakeupList',
   'ProductRecommendation',
   'Community',
@@ -138,7 +135,6 @@ export const mainTabRoutes = [
   'HomeTab',
   'ProfileTab',
   'CommunityTab',
-  'ConsultingTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

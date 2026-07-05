@@ -20,10 +20,7 @@ import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {HomeRouteScreen} from './routes/homeRoutes';
-import {
-  CommunityTabRouteScreen,
-  ConsultingTabRouteScreen,
-} from './routes/homeRoutes';
+import {CommunityTabRouteScreen} from './routes/homeRoutes';
 import {ProfileRouteScreen} from './routes/profileRoutes';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -75,7 +72,6 @@ export function MainTabNavigator() {
       <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
       <Tab.Screen name="CommunityTab" component={CommunityTabRouteScreen} />
-      <Tab.Screen name="ConsultingTab" component={ConsultingTabRouteScreen} />
     </Tab.Navigator>
   );
 }
@@ -176,11 +172,6 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
 
       if (actionId === 'filterStore') {
         rootNavigation?.navigate('HomeFilterStore');
-        return;
-      }
-
-      if (actionId === 'magazine') {
-        rootNavigation?.navigate('Magazine');
         return;
       }
 

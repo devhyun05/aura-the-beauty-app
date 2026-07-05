@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   },
   adjustHint: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     bottom: spacing.md,
     flexDirection: 'row',
@@ -332,14 +332,14 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
   },
   intensityFill: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: '100%',
     width: '68%',
   },
   intensityThumb: {
-    backgroundColor: colors.white,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.liquidGlassSurface,
+    borderColor: colors.liquidGlassBorder,
     borderRadius: radius.pill,
     borderWidth: 1,
     height: 36,
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,

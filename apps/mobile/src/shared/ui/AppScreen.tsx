@@ -5,10 +5,12 @@ import { View } from 'tamagui';
 
 import { colors, spacing } from '../theme';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from './AppFooter';
+import {APP_HEADER_BASE_HEIGHT} from './AppHeader';
 
 export type AppScreenTopPadding =
   | 'standalone'
   | 'belowShellHeader'
+  | 'belowOverlayHeader'
   | 'safeArea'
   | 'none';
 export type AppScreenBottomPadding = number | 'floatingFooter' | 'safeArea';
@@ -24,6 +26,10 @@ export function getAppScreenTopPadding(
 
   if (topPadding === 'belowShellHeader') {
     return APP_SCREEN_CONTENT_TOP_PADDING;
+  }
+
+  if (topPadding === 'belowOverlayHeader') {
+    return topInset + APP_HEADER_BASE_HEIGHT + APP_SCREEN_CONTENT_TOP_PADDING;
   }
 
   if (topPadding === 'safeArea') {

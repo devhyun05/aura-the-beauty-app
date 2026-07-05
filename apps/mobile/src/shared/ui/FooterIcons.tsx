@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Compass,
   House,
   MessageCircle,
   Sparkles,
@@ -12,7 +11,6 @@ import {colors, iconSize} from '../theme';
 
 const defaultStrokeWidth = 2.1;
 export const FOOTER_ACTION_ICON_NAME = 'Sparkles';
-export const FOOTER_CONSULTING_ICON_NAME = 'Compass';
 
 export function HomeFooterIcon({
   color = colors.black,
@@ -56,23 +54,6 @@ export function CommunityFooterIcon({
 }: LucideProps) {
   return (
     <MessageCircle
-      color={color}
-      pointerEvents="none"
-      size={size}
-      strokeWidth={strokeWidth}
-      {...props}
-    />
-  );
-}
-
-export function ConsultingFooterIcon({
-  color = colors.black,
-  size = iconSize.md,
-  strokeWidth = defaultStrokeWidth,
-  ...props
-}: LucideProps) {
-  return (
-    <Compass
       color={color}
       pointerEvents="none"
       size={size}
