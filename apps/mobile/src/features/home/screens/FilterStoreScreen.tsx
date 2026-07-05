@@ -10,7 +10,10 @@ import {
 import {Heart} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {getRecommendedMakeupFilters} from '../../../shared/services/makeupGuideService';
+import {
+  getRecommendedMakeupFilters,
+  getRecommendedMakeupFiltersFromApi,
+} from '../../../shared/services/makeupGuideService';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {AppScreen} from '../../../shared/ui';
@@ -111,7 +114,9 @@ export function FilterStoreScreen({
   onToggleFilterLike,
 }: FilterStoreScreenProps) {
   const {width} = useWindowDimensions();
-  const filters = useMemo(() => getRecommendedMakeupFilters(), []);
+  const [filters, setFilters] = useState<readonly RecommendedMakeupFilter[]>(() =>
+    getRecommendedMakeupFilters(),
+  );
   const initialCategory = useMemo(
     () => getFilterStoreCategoryForFilter(filters, initialFilterId),
     [filters, initialFilterId],
@@ -122,6 +127,20 @@ export function FilterStoreScreen({
   useEffect(() => {
     setSelectedCategory(initialCategory);
   }, [initialCategory]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getRecommendedMakeupFiltersFromApi().then((nextFilters) => {
+      if (isMounted) {
+        setFilters(nextFilters);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const visibleFilters = useMemo(
     () => pinFilterStoreFilterToFront(

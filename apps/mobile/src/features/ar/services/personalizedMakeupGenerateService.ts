@@ -7,6 +7,12 @@ import {
   type LipMaskProvider,
 } from './lipGenerateCore';
 import {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+  type GeneratedBrowPackage,
+} from './browGenerateCore';
+import {
   buildGeneratedLipCandidateSet,
   type E7NativeBoundaryResult,
 } from './personalizedGenerate/e7PersonalizedGeneratePipeline';
@@ -46,11 +52,24 @@ export type GeneratedMaskControls = {
 };
 
 export type PersonalizedMakeupGenerateResult = {
+  browUnityApplyPayload: string;
+  generatedBrowPackage: GeneratedBrowPackage;
   generatedPackage: LipGeneratePackage;
   nativeResult: E7NativeBoundaryResult;
   savedRecord?: unknown;
   unityApplyPayload: string;
 };
+
+export {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+};
+
+export type {
+  GeneratedBrowControls,
+  GeneratedBrowPackage,
+} from './browGenerateCore';
 
 export type PersonalizedCompanionMakeupRegionControl = {
   candidateId: string;
@@ -200,6 +219,11 @@ export async function generatePersonalizedLipMakeup({
     throw new Error(generatedCandidate?.blockedReason ?? 'generated_lip_package_missing');
   }
 
+  const generatedBrowPackage = buildGeneratedBrowPackage({
+    controls: DEFAULT_GENERATED_BROW_CONTROLS,
+    nativeResult,
+  });
+
   let savedRecord: unknown;
   if (nativeModule.saveGeneratedPackage) {
     savedRecord = JSON.parse(
@@ -208,6 +232,16 @@ export async function generatePersonalizedLipMakeup({
   }
 
   return {
+    browUnityApplyPayload: JSON.stringify(
+      buildGeneratedBrowMaskUnityPayload(
+        generatedBrowPackage,
+        DEFAULT_GENERATED_BROW_CONTROLS,
+        {
+          includeTexture: true,
+        },
+      ),
+    ),
+    generatedBrowPackage,
     generatedPackage,
     nativeResult,
     savedRecord,
@@ -225,10 +259,12 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
     DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
   options: {
     activeRegion?: PersonalizedCompanionMakeupActiveRegion;
+    includeBrowLayer?: boolean;
     useCheekRegionAlias?: boolean;
   } = {},
 ): FullFaceMakeupRecipe {
   const activeRegion = options.activeRegion ?? 'all';
+  const shouldIncludeBrowLayer = options.includeBrowLayer ?? true;
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
   const isRegionEnabled = (region: 'blush' | 'brow') =>
     activeRegion === 'all' || activeRegion === region;
@@ -274,7 +310,9 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   });
   const layers = recipe.layers
     .filter(
-      layer => layer.region === 'blush' || layer.region === 'brow',
+      layer =>
+        layer.region === 'blush' ||
+        (shouldIncludeBrowLayer && layer.region === 'brow'),
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

@@ -8,6 +8,8 @@
     "pods": "cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install",
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
     "ios:device": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios --device",
+    "test:generated-brow": "node ../../scripts/mobile/run-generated-brow-contract.mjs",
+    "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
