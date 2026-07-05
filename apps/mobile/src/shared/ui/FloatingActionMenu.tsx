@@ -60,6 +60,7 @@ export type FloatingActionButtonPosition = 'right' | 'left';
 
 export type FloatingActionReleaseOutcome =
   | {kind: 'select'; actionId: FloatingActionId}
+  | {kind: 'settings'}
   | {kind: 'close'};
 
 export type FloatingActionInteractionModeOption = {
@@ -74,6 +75,12 @@ export type FloatingActionButtonPositionOption = {
   label: string;
 };
 
+export type FloatingActionSettingsVisualState = {
+  backgroundColor: string;
+  borderColor: string;
+  iconColor: string;
+};
+
 export const FLOATING_ACTION_MAX_ITEM_COUNT = 3;
 export const FLOATING_ACTION_MIN_DRAG_DISTANCE = 48;
 export const FLOATING_ACTION_SELECTION_RADIUS = 54;
@@ -86,14 +93,25 @@ export const FLOATING_ACTION_MAIN_ICON_SIZE = iconSize.sm;
 export const FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH = 1.8;
 export const FLOATING_ACTION_ITEM_SIZE = 58;
 export const FLOATING_ACTION_SETTINGS_SIZE = 42;
+export const FLOATING_ACTION_SETTINGS_SELECTION_RADIUS =
+  FLOATING_ACTION_SETTINGS_SIZE / 2 + spacing.sm;
 export const FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND = '#FFFFFF';
 export const FLOATING_ACTION_SETTINGS_BACKGROUND = '#E7E7E7';
 export const FLOATING_ACTION_HOST_EXTRA_HEIGHT = 178;
 export const FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET: FloatingActionSlotOffset = {
-  x: -46,
-  y: -66,
+  x: 0,
+  y: -74,
 };
-export const DEFAULT_FLOATING_ACTION_INTERACTION_MODE: FloatingActionInteractionMode = 'tap';
+export const FLOATING_ACTION_INLINE_SETTINGS_SLOT_OFFSET: FloatingActionSlotOffset = {
+  x: -38,
+  y: 38,
+};
+const FLOATING_ACTION_INLINE_ARC_SLOT_OFFSETS = [
+  FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET,
+  {x: -52, y: -52},
+  {x: -74, y: 0},
+] as const satisfies readonly FloatingActionSlotOffset[];
+export const DEFAULT_FLOATING_ACTION_INTERACTION_MODE: FloatingActionInteractionMode = 'drag';
 export const DEFAULT_FLOATING_ACTION_BUTTON_POSITION: FloatingActionButtonPosition = 'right';
 export const DEFAULT_FLOATING_ACTION_IDS = [
   'arFilter',
@@ -259,23 +277,11 @@ export function getFloatingActionSlotOffset(
         ? {x: -rightCornerOffset.x, y: rightCornerOffset.y}
         : rightCornerOffset;
 
-    if (itemCount <= 1) {
-      return resolveInlineOffset(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET);
-    }
+    const arcIndex = itemCount <= 1
+      ? 0
+      : Math.min(index, FLOATING_ACTION_INLINE_ARC_SLOT_OFFSETS.length - 1);
 
-    if (itemCount === 2) {
-      return resolveInlineOffset(index === 0 ? {x: -78, y: 0} : {x: -46, y: -66});
-    }
-
-    if (index === 0) {
-      return resolveInlineOffset(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET);
-    }
-
-    if (index === 1) {
-      return resolveInlineOffset({x: -78, y: 0});
-    }
-
-    return resolveInlineOffset({x: -110, y: -66});
+    return resolveInlineOffset(FLOATING_ACTION_INLINE_ARC_SLOT_OFFSETS[arcIndex]);
   }
 
   if (itemCount <= 1) {
@@ -319,7 +325,22 @@ export function getFloatingActionSettingsSlotOffset(
     return {x: 120, y: 0};
   }
 
-  return buttonPosition === 'left' ? {x: 58, y: 0} : {x: -58, y: 0};
+  return buttonPosition === 'left'
+    ? {
+        x: -FLOATING_ACTION_INLINE_SETTINGS_SLOT_OFFSET.x,
+        y: FLOATING_ACTION_INLINE_SETTINGS_SLOT_OFFSET.y,
+      }
+    : FLOATING_ACTION_INLINE_SETTINGS_SLOT_OFFSET;
+}
+
+export function getFloatingActionSettingsVisualState(
+  isActive: boolean,
+): FloatingActionSettingsVisualState {
+  return {
+    backgroundColor: isActive ? colors.textPrimary : FLOATING_ACTION_SETTINGS_BACKGROUND,
+    borderColor: isActive ? colors.textPrimary : colors.borderStrong,
+    iconColor: isActive ? colors.white : colors.textPrimary,
+  };
 }
 
 export function getFloatingActionButtonScale(isActive: boolean): number {
@@ -418,6 +439,26 @@ export function getFloatingActionMenuTarget(
   return closestDistance <= FLOATING_ACTION_SELECTION_RADIUS ? closestActionId : null;
 }
 
+function isFloatingActionSettingsTarget(
+  dragPoint: FloatingActionDragPoint,
+  placement: FloatingActionPlacement,
+  buttonPosition: FloatingActionButtonPosition,
+) {
+  const dragDistance = Math.hypot(dragPoint.translationX, dragPoint.translationY);
+
+  if (dragDistance < FLOATING_ACTION_MIN_DRAG_DISTANCE) {
+    return false;
+  }
+
+  const slotOffset = getFloatingActionSettingsSlotOffset(placement, buttonPosition);
+  const distance = Math.hypot(
+    dragPoint.translationX - slotOffset.x,
+    dragPoint.translationY - slotOffset.y,
+  );
+
+  return distance <= FLOATING_ACTION_SETTINGS_SELECTION_RADIUS;
+}
+
 export function getFloatingActionReleaseOutcome(
   dragPoint: FloatingActionDragPoint,
   actionIds: readonly FloatingActionId[],
@@ -425,6 +466,10 @@ export function getFloatingActionReleaseOutcome(
   activeActionId: FloatingActionId | null = null,
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionReleaseOutcome {
+  if (isFloatingActionSettingsTarget(dragPoint, placement, buttonPosition)) {
+    return {kind: 'settings'};
+  }
+
   const directTargetActionId = getFloatingActionMenuTarget(
     dragPoint,
     actionIds,
@@ -481,6 +526,7 @@ export function FloatingActionMenu({
   const isExpandedRef = useRef(isExpanded);
   const [activeActionId, setActiveActionId] = useState<FloatingActionId | null>(null);
   const activeActionIdRef = useRef<FloatingActionId | null>(null);
+  const [isSettingsActive, setIsSettingsActive] = useState(false);
   const visibleDefinitions = visibleActionIds.map(getFloatingActionDefinition);
 
   isExpandedRef.current = isExpanded;
@@ -497,11 +543,16 @@ export function FloatingActionMenu({
     onExpandedChange?.(resolvedIsExpanded);
   }, [controlledIsExpanded, onExpandedChange]);
 
-  const closeMenu = useCallback(() => {
-    setExpanded(false);
+  const clearActiveTargets = useCallback(() => {
     setActiveActionId(null);
     activeActionIdRef.current = null;
-  }, [setExpanded]);
+    setIsSettingsActive(false);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setExpanded(false);
+    clearActiveTargets();
+  }, [clearActiveTargets, setExpanded]);
 
   const selectAction = useCallback((actionId: FloatingActionId) => {
     closeMenu();
@@ -510,10 +561,9 @@ export function FloatingActionMenu({
 
   useEffect(() => {
     if (!isExpanded) {
-      setActiveActionId(null);
-      activeActionIdRef.current = null;
+      clearActiveTargets();
     }
-  }, [isExpanded]);
+  }, [clearActiveTargets, isExpanded]);
 
   const panResponder = useMemo(
     () => PanResponder.create({
@@ -529,35 +579,43 @@ export function FloatingActionMenu({
         gestureState: PanResponderGestureState,
       ) => {
         setExpanded(true);
+        const dragPoint = {
+          translationX: gestureState.dx,
+          translationY: gestureState.dy,
+        };
+        const nextIsSettingsActive = Boolean(
+          onPressSettings &&
+          isFloatingActionSettingsTarget(dragPoint, placement, buttonPosition),
+        );
         const nextActionId = getFloatingActionMenuTarget(
-          {
-            translationX: gestureState.dx,
-            translationY: gestureState.dy,
-          },
+          dragPoint,
           visibleActionIds,
           placement,
           buttonPosition,
         );
-        const retainedActionId =
-          nextActionId ??
-          (
+        let retainedActionId: FloatingActionId | null = null;
+
+        if (!nextIsSettingsActive) {
+          retainedActionId = nextActionId;
+
+          if (
+            !retainedActionId &&
             activeActionIdRef.current &&
             isFloatingActionFlickActivation(
-              {
-                translationX: gestureState.dx,
-                translationY: gestureState.dy,
-              },
+              dragPoint,
               activeActionIdRef.current,
               visibleActionIds,
               placement,
               buttonPosition,
             )
-              ? activeActionIdRef.current
-              : null
-          );
+          ) {
+            retainedActionId = activeActionIdRef.current;
+          }
+        }
 
         activeActionIdRef.current = retainedActionId;
         setActiveActionId(retainedActionId);
+        setIsSettingsActive(nextIsSettingsActive);
       },
       onPanResponderRelease: (
         _event: GestureResponderEvent,
@@ -579,6 +637,12 @@ export function FloatingActionMenu({
           return;
         }
 
+        if (releaseOutcome.kind === 'settings') {
+          closeMenu();
+          onPressSettings?.();
+          return;
+        }
+
         closeMenu();
       },
       onPanResponderTerminationRequest: () => false,
@@ -589,6 +653,7 @@ export function FloatingActionMenu({
       interactionMode,
       placement,
       buttonPosition,
+      onPressSettings,
       selectAction,
       setExpanded,
       visibleActionIds,
@@ -635,23 +700,15 @@ export function FloatingActionMenu({
           })}
 
           {onPressSettings ? (
-            <Pressable
-              accessibilityLabel="빠른 실행 설정"
-              accessibilityRole="button"
+            <FloatingActionSettingsButton
+              buttonPosition={buttonPosition}
+              isActive={isSettingsActive}
               onPress={() => {
                 closeMenu();
                 onPressSettings();
               }}
-              style={({pressed}) => [
-                styles.settingsButton,
-                getFloatingActionPlacementStyle(
-                  getFloatingActionSettingsSlotOffset(placement, buttonPosition),
-                  FLOATING_ACTION_SETTINGS_SIZE,
-                ),
-                pressed && styles.pressed,
-              ]}>
-              <Settings2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-            </Pressable>
+              placement={placement}
+            />
           ) : null}
         </View>
       ) : null}
@@ -678,7 +735,7 @@ export function FloatingActionMenu({
           accessibilityRole="button"
           hitSlop={spacing.sm}
           onPress={() => {
-            setActiveActionId(null);
+            clearActiveTargets();
             setExpanded(current => !current);
           }}
           style={({pressed}) => [
@@ -694,6 +751,41 @@ export function FloatingActionMenu({
         </Pressable>
       )}
     </View>
+  );
+}
+
+function FloatingActionSettingsButton({
+  buttonPosition,
+  isActive,
+  onPress,
+  placement,
+}: {
+  buttonPosition: FloatingActionButtonPosition;
+  isActive: boolean;
+  onPress: () => void;
+  placement: FloatingActionPlacement;
+}) {
+  const visualState = getFloatingActionSettingsVisualState(isActive);
+
+  return (
+    <Pressable
+      accessibilityLabel="빠른 실행 설정"
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.settingsButton,
+        getFloatingActionPlacementStyle(
+          getFloatingActionSettingsSlotOffset(placement, buttonPosition),
+          FLOATING_ACTION_SETTINGS_SIZE,
+        ),
+        {
+          backgroundColor: visualState.backgroundColor,
+          borderColor: visualState.borderColor,
+        },
+        pressed && styles.pressed,
+      ]}>
+      <Settings2 color={visualState.iconColor} size={iconSize.sm} strokeWidth={2} />
+    </Pressable>
   );
 }
 
