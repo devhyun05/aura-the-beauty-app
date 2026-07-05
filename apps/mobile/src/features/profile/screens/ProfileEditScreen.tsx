@@ -14,6 +14,7 @@ import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {ProfileEditField, UserProfile} from '../../../shared/types/profile';
 import {
   AppCard,
+  AppHeader,
   AppScreen,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -49,6 +50,16 @@ type VisibleProfileEditField = ProfileEditField & {
   id: VisibleEditableProfileFieldId;
 };
 
+const profileEditHeaderPresentation = {
+  contextLabel: 'PROFILE',
+  headerComponent: 'AppHeader',
+  title: '프로필 수정',
+} as const;
+
+export function getProfileEditHeaderPresentation() {
+  return profileEditHeaderPresentation;
+}
+
 function isVisibleProfileEditField(
   field: ProfileEditField,
 ): field is VisibleProfileEditField {
@@ -70,7 +81,11 @@ function getFieldsForProfile(
   );
 }
 
-export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
+export function ProfileEditScreen({
+  headerTitle = profileEditHeaderPresentation.title,
+  onBack,
+  onLogout,
+}: ProfileEditScreenProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [fields, setFields] = useState<ProfileEditField[]>([]);
   const [notice, setNotice] = useState('');
@@ -388,7 +403,14 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
 
   return (
     <View style={styles.screen}>
-      <AppScreen contentGap={spacing.xl} topPadding="none">
+      <AppHeader
+        containerProps={{style: styles.overlayHeader}}
+        contextLabel={profileEditHeaderPresentation.contextLabel}
+        leftSlot={onBack ? undefined : <View />}
+        onBack={onBack}
+        title={headerTitle}
+      />
+      <AppScreen contentGap={spacing.xl} topPadding="belowOverlayHeader">
         <View style={styles.profileArea}>
           <View style={styles.avatarFrame}>
             {activeProfile?.avatarSource ? (
@@ -427,7 +449,7 @@ export function ProfileEditScreen({onLogout}: ProfileEditScreenProps) {
 
         <AppCard style={styles.infoCard}>
           <View style={styles.editHeaderRow}>
-            <Text style={styles.editHeaderTitle}>프로필 수정</Text>
+            <Text style={styles.editHeaderTitle}>기본 정보</Text>
             {!isEditing ? (
               <IconButton
                 accessibilityLabel="프로필 수정"
@@ -710,7 +732,7 @@ const styles = StyleSheet.create({
     width: '14.285%',
   },
   dayCellSelected: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
   },
   dayGrid: {
     flexDirection: 'row',
@@ -877,7 +899,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 38,
@@ -892,9 +914,18 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
+  overlayHeader: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 30,
+  },
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
   },
   segment: {
     alignItems: 'center',
@@ -906,8 +937,8 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   segmentSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   segmentText: {
     color: colors.textPrimary,

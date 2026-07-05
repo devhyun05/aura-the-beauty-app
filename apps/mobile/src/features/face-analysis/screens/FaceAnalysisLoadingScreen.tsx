@@ -128,7 +128,7 @@ export function FaceAnalysisLoadingScreen({
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
               <Text style={styles.previewBadgeText}>
-                {hasAnalysisError ? '확인 필요' : '얼굴 진단 중'}
+                {hasAnalysisError ? '확인 필요' : '얼굴 분석 중'}
               </Text>
             </XStack>
           </View>
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.12,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1,
     justifyContent: 'center',

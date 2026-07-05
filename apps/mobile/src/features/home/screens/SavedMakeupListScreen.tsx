@@ -373,7 +373,7 @@ function EmptySavedMakeupState({hasSearchQuery}: {hasSearchQuery: boolean}) {
       <Text style={styles.emptyDescription}>
         {hasSearchQuery
           ? '다른 메이크업 이름이나 무드로 다시 검색해보세요.'
-          : '얼굴 진단을 완료하면 분석마다 생성된 추천 메이크업 3장이 계정에 계속 쌓여요.'}
+          : '얼굴 분석을 완료하면 분석마다 생성된 추천 메이크업 3장이 계정에 계속 쌓여요.'}
       </Text>
     </YStack>
   );
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,

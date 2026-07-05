@@ -108,6 +108,16 @@ function createInitialSelectionStatesByArea(
   );
 }
 
+export function getAvailableARFilterMakeupFilters({
+  makeupFilters,
+  selectedMakeupArea,
+}: {
+  makeupFilters: readonly MakeupFilter[];
+  selectedMakeupArea: MakeupArea;
+}): readonly MakeupFilter[] {
+  return getMakeupFiltersForMakeupArea(makeupFilters, selectedMakeupArea);
+}
+
 export function useARFilterSelectionState({
   arGuideData,
   defaultFilter,
@@ -153,11 +163,10 @@ export function useARFilterSelectionState({
     selectedPointMakeupLookId: selectionState.selectedPointMakeupLookId,
     selectedTotalMakeupLookId: selectionState.selectedTotalMakeupLookId,
   });
-  const categoryMakeupFilters = getFiltersByCategory(selectedCategoryId, arGuideData);
-  const availableMakeupFilters = getMakeupFiltersForMakeupArea(
-    categoryMakeupFilters,
+  const availableMakeupFilters = getAvailableARFilterMakeupFilters({
+    makeupFilters: arGuideData.filters,
     selectedMakeupArea,
-  );
+  });
   const availableOptionGroups = getARFilterOptionGroups(selectedMakeupArea);
   const shapeOptions = getARFilterShapeOptions(selectedMakeupArea);
 

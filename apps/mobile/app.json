@@ -16,15 +16,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aiarmakeupguide.mobile",
-      "appleTeamId": "WSLFBT6QHB"
+      "bundleIdentifier": "com.aura.mobile",
+      "appleTeamId": "BRA7W3G4QS"
     },
     "plugins": [
       "expo-status-bar",
       [
         "expo-camera",
         {
-          "cameraPermission": "AURA 얼굴 촬영과 AR 메이크업 기능을 위해 카메라 접근 권한이 필요합니다."
+          "cameraPermission": "AURA 얼굴 촬영, AR 메이크업, 퍼스널 컬러(피부·헤어·입술 색) 분석 기능을 위해 카메라 접근 권한이 필요합니다. 퍼스널 컬러 분석은 기기 내에서만 처리됩니다."
         }
       ],
       [
@@ -34,7 +34,19 @@
         }
       ],
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "AURA 보고서 이미지 저장을 위해 사진 보관함 접근 권한이 필요합니다.",
+          "savePhotosPermission": "AURA 추천 메이크업 이미지를 사진 앱에 저장하기 위해 권한이 필요합니다.",
+          "preventAutomaticLimitedAccessAlert": true,
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ],
+      "expo-sharing"
     ]
   }
 }

@@ -55,7 +55,7 @@ export function MakeupLookListScreen({
   if (visibleMakeupLooks.length === 0) {
     return (
       <AppScreen contentGap={spacing.xl} topPadding="none">
-        <EmptyState label="좋아요한 메이크업 필터가 없어요." />
+        <EmptyState label="저장한 메이크업 룩이 없어요." />
       </AppScreen>
     );
   }

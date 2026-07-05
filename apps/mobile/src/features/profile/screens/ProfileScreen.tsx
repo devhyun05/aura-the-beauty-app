@@ -31,6 +31,9 @@ type ProfileScreenProps = {
   likedMakeupLooks?: readonly MakeupLookPreview[];
 };
 
+export const PROFILE_SCREEN_LAYOUT_MODE = 'dashboard';
+export const PROFILE_SCREEN_PREVIEW_COLUMN_COUNT = 2;
+
 export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReport,
@@ -50,17 +53,15 @@ export function ProfileScreen({
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [pendingDeleteReportId, setPendingDeleteReportId] = useState<string | null>(null);
   const contentWidth = width - spacing.screenX * 2;
-  const makeupLookCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
-  const productCardWidth = Math.floor((contentWidth - spacing.sm * 2) / 3);
-  const makeupLookCardLayout = {
-    flexBasis: makeupLookCardWidth,
-    maxWidth: makeupLookCardWidth,
-    width: makeupLookCardWidth,
-  };
-  const productCardStyle = {
-    flexBasis: productCardWidth,
-    maxWidth: productCardWidth,
-    width: productCardWidth,
+  const previewGap =
+    spacing.md * (PROFILE_SCREEN_PREVIEW_COLUMN_COUNT - 1);
+  const previewCardWidth = Math.floor(
+    (contentWidth - previewGap) / PROFILE_SCREEN_PREVIEW_COLUMN_COUNT,
+  );
+  const previewCardLayout = {
+    flexBasis: previewCardWidth,
+    maxWidth: previewCardWidth,
+    width: previewCardWidth,
   };
 
   const loadProfile = useCallback(() => {
@@ -177,18 +178,27 @@ export function ProfileScreen({
       : faceAnalysisReport
         ? [faceAnalysisReport]
         : [];
-  const previewMakeupLooks = likedMakeupLooks.slice(0, 3);
+  const previewMakeupLooks = likedMakeupLooks.slice(0, 4);
+  const previewProducts = data.likedProducts.slice(0, 4);
 
   return (
     <AppScreen
       bottomPadding="floatingFooter"
-      contentGap={spacing.xl}
+      contentGap={spacing.xxl}
       topPadding="none">
-      <ProfileSummaryCard
-        beautyProfile={data.beautyProfile}
-        onPressSettings={onPressProfileEdit}
-        profile={data.profile}
-      />
+      <View style={styles.hero}>
+        <ProfileSummaryCard
+          beautyProfile={data.beautyProfile}
+          onPressSettings={onPressProfileEdit}
+          profile={data.profile}
+        />
+
+        <ProfileOverview
+          analysisCount={faceAnalysisReports.length}
+          likedProductCount={data.likedProducts.length}
+          savedLookCount={likedMakeupLooks.length}
+        />
+      </View>
 
       <View style={styles.section}>
         <SectionHeader
@@ -229,18 +239,18 @@ export function ProfileScreen({
           title="메이크업 룩"
         />
         {previewMakeupLooks.length > 0 ? (
-          <View style={styles.makeupLookGrid}>
+          <View style={styles.previewGrid}>
             {previewMakeupLooks.map((makeupLook) => (
               <MakeupLookCard
                 key={makeupLook.id}
                 makeupLook={makeupLook}
                 onPress={onPressMakeupLook}
-                style={makeupLookCardLayout}
+                style={previewCardLayout}
               />
             ))}
           </View>
         ) : (
-          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
+          <EmptySection label="저장한 메이크업 룩이 없어요." />
         )}
       </View>
 
@@ -248,17 +258,21 @@ export function ProfileScreen({
         <SectionHeader
           actionLabel="전체 보기"
           onPressAction={onPressLikedProductList}
-          title="좋아요한 제품목록"
+          title="좋아요한 제품"
         />
-        <View style={styles.productGrid}>
-          {data.likedProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              style={productCardStyle}
-            />
-          ))}
-        </View>
+        {previewProducts.length > 0 ? (
+          <View style={styles.previewGrid}>
+            {previewProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                style={previewCardLayout}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptySection label="좋아요한 제품이 없어요." />
+        )}
       </View>
     </AppScreen>
   );
@@ -289,14 +303,46 @@ function EmptySection({label}: {label: string}) {
   );
 }
 
+function ProfileOverview({
+  analysisCount,
+  likedProductCount,
+  savedLookCount,
+}: {
+  analysisCount: number;
+  likedProductCount: number;
+  savedLookCount: number;
+}) {
+  return (
+    <View style={styles.overviewPanel}>
+      <ProfileOverviewItem label="분석" value={analysisCount} />
+      <View style={styles.overviewDivider} />
+      <ProfileOverviewItem label="저장 룩" value={savedLookCount} />
+      <View style={styles.overviewDivider} />
+      <ProfileOverviewItem label="좋아요" value={likedProductCount} />
+    </View>
+  );
+}
+
+function ProfileOverviewItem({label, value}: {label: string; value: number}) {
+  return (
+    <View style={styles.overviewItem}>
+      <Text numberOfLines={1} style={styles.overviewValue}>
+        {value}
+      </Text>
+      <Text numberOfLines={1} style={styles.overviewLabel}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   empty: {
     alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
     justifyContent: 'center',
-    minHeight: 104,
+    minHeight: 108,
     padding: spacing.lg,
   },
   emptyText: {
@@ -332,7 +378,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   faceAnalysisReportList: {
-    gap: spacing.sm,
+    gap: spacing.md,
+  },
+  hero: {
+    gap: spacing.md,
   },
   loading: {
     alignItems: 'center',
@@ -345,17 +394,46 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
-  makeupLookGrid: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  overviewDivider: {
+    backgroundColor: colors.divider,
+    height: 36,
+    width: 1,
   },
-  productGrid: {
+  overviewItem: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 2,
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  overviewLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+  },
+  overviewPanel: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
     flexDirection: 'row',
-    gap: spacing.sm,
+    minHeight: 76,
+    paddingHorizontal: spacing.lg,
+  },
+  overviewValue: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xl,
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     minWidth: 112,
     paddingHorizontal: spacing.xl,
@@ -371,6 +449,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   section: {
-    gap: spacing.sm,
+    gap: spacing.md,
   },
 });

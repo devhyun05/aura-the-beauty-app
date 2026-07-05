@@ -14,7 +14,8 @@
 - 모바일 작업 전 `docs/mobile/FRONTEND_WORK_GUIDE.md`를 다시 확인한다.
 - 현재 작업트리에 다른 변경이 많으므로 이번 구현 범위 파일만 수정한다.
 - 새 라이브러리는 추가하지 않는다.
-- 실제 백엔드, 실제 Unity/ARKit/ARCore, 실제 이미지 분석은 구현하지 않는다.
+- 추천 필터 패널 작업에서는 실제 백엔드, 실제 Unity/ARKit/ARCore, 실제 이미지 분석을 새로 구현하지 않는다.
+- 사용자가 별도로 요청한 눈썹 AR 런타임 작업은 이 제한의 예외로 둔다. 이 경우 기존 MediaPipe/iOS/Unity bridge와 `E3RegionMaskOverlay` 흐름을 재사용하고, lip/blush 구현은 변경하지 않는다.
 
 ### 산출물
 
@@ -24,7 +25,8 @@
 
 ### 완료 조건
 
-- 구현 범위가 홈 추천 패널, 추천 필터 데이터, AR 초기 진입, 저장 연결로 제한되어 있다.
+- 추천 필터 패널 구현 범위가 홈 추천 패널, 추천 필터 데이터, AR 초기 진입, 저장 연결로 제한되어 있다.
+- 눈썹 AR 런타임 구현을 병행할 경우 generated lip pipeline을 직접 수정하지 않고 generated brow pipeline을 별도로 추가한다.
 
 ## P1. 추천 필터 데이터와 타입 추가
 
@@ -366,6 +368,15 @@ AR 화면이 선택된 추천 필터를 처음부터 적용한 상태로 열린�
 
 - Unity layer에서 base, contour, eye 표현력을 확장한다.
 - mask texture와 opacity를 필터별로 더 세분화한다.
+
+### 눈썹 AR 런타임 확장
+
+- 기존 lip/blush path를 수정하지 않고 `generated brow` path를 별도로 추가한다.
+- MediaPipe Face Landmarker는 brow/eye landmark 기준점과 eye exclusion zone을 만드는 데 사용한다.
+- 눈썹 마스크는 솜털 단위 segmentation이 아니라 큰 brow ROI/envelope을 기준으로 만든다.
+- 기존 사용자 눈썹은 완전 삭제가 아니라 필터 shape 밖으로 벗어난 부분을 약하게 neutralize/tone lift한다.
+- Unity 적용은 `region: brow`와 generated brow mask texture를 사용하고, lip generated mask payload와 blush session mask 동작은 회귀 없이 유지한다.
+- 첨부 또는 생성한 brow asset은 Unity 적용 전에 alpha channel과 checkerboard baked 여부를 확인한다.
 
 ## 최종 완료 기준
 

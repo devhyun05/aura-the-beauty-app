@@ -7,11 +7,13 @@ import {
 import {
   getFaceAnalysisReportCreateFilterButtonPlacements,
   getFaceAnalysisReportAvoidedMakeupRailPresentation,
+  getFaceAnalysisReportEditorialPresentation,
   getFaceAnalysisReportLiquidGlassPresentation,
   getFaceAnalysisReportPointGuideItems,
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSubtitleTextStyle,
   getFaceAnalysisReportSummaryItems,
+  faceAnalysisReportCreateFilterButtonAccessibilityLabels,
 } from '../services/faceAnalysisReportDetailModel';
 import {faceAnalysisReportsMock} from '../../../shared/mocks/faceAnalysis.mock';
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
@@ -33,6 +35,7 @@ type ExpectType<Condition extends true> = Condition;
 const createFilterButtonPlacements =
   getFaceAnalysisReportCreateFilterButtonPlacements();
 const liquidGlassPresentation = getFaceAnalysisReportLiquidGlassPresentation();
+const editorialPresentation = getFaceAnalysisReportEditorialPresentation();
 const screenFramePresentation = getFaceAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getFaceAnalysisReportSubtitleTextStyle();
 const report = faceAnalysisReportsMock[0];
@@ -64,6 +67,11 @@ expectEqual(
   'image analysis report floating bottom create filter button placement',
 );
 expectEqual(
+  faceAnalysisReportCreateFilterButtonAccessibilityLabels['floating-bottom'],
+  '메이크업 필터 만들기',
+  'image analysis report create filter button copy',
+);
+expectEqual(
   screenFramePresentation.headerPlacement,
   'route-level',
   'image analysis report header placement',
@@ -79,14 +87,34 @@ expectEqual(
   'image analysis report content starts below fixed header',
 );
 expectEqual(
-  liquidGlassPresentation.cardTargets.includes('summary'),
+  (liquidGlassPresentation.cardTargets as readonly string[]).includes('summary'),
   true,
-  'image analysis report summary cards use liquid glass',
+  'image analysis report summary uses light glass metric cards',
 );
 expectEqual(
   liquidGlassPresentation.cardTargets.includes('makeup'),
   true,
   'image analysis report makeup cards use liquid glass',
+);
+expectEqual(
+  editorialPresentation.heroTreatment,
+  'full-bleed-photo-report',
+  'image analysis report uses an editorial photo hero',
+);
+expectEqual(
+  editorialPresentation.summaryTreatment,
+  'light-profile-metrics',
+  'image analysis report summary uses a light profile metric treatment',
+);
+expectEqual(
+  editorialPresentation.sectionTreatment,
+  'editorial-glass-sections',
+  'image analysis report sections use editorial glass sections',
+);
+expectEqual(
+  editorialPresentation.heroMinimumHeight,
+  420,
+  'image analysis report hero keeps a strong visual anchor',
 );
 expectEqual(
   liquidGlassPresentation.buttonTargets.includes('create-filter'),
@@ -141,13 +169,13 @@ expectEqual(
 );
 expectEqual(
   longPointGuideItems[0].point,
-  '피부 결은 얇은 세미글로우 베이스로 정돈하고',
-  'image analysis report point guide keeps long first clause without ellipsis',
+  '얇은 피부 표현',
+  'image analysis report point guide uses concise non-repeating point labels',
 );
 expectEqual(
-  longPointGuideItems[0].point.includes('...'),
+  longPointGuideItems[0].detail.includes(longPointGuideItems[0].point),
   false,
-  'image analysis report point guide does not inject ellipsis',
+  'image analysis report point label does not repeat inside detail copy',
 );
 expectEqual(
   pointGuideItems[1].label,

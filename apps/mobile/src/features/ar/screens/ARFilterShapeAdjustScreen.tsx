@@ -6,7 +6,7 @@ import {
   type LayoutChangeEvent,
   type ViewStyle,
 } from 'react-native';
-import {ChevronLeft, Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
+import {Eye, EyeOff, Minus, Plus, RotateCcw, Save} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {
@@ -21,12 +22,12 @@ import {
   FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
   FullscreenOverlayLayer,
   FullscreenOverlayScreen,
+  AppHeader,
   LiveCameraLayer,
   OverlayChipButton,
   OverlayIconButton,
   OverlayPanelSection,
   OverlaySaveButton,
-  OverlayTopBar,
 } from '../../../shared/ui';
 import {
   createMakeupFilterShapePresetSaveValue,
@@ -61,6 +62,7 @@ const SHAPE_ADJUST_TITLE = '형태 수정';
 const SHAPE_ADJUST_INTERACTION_MODE = 'drag-shape-point';
 const SHAPE_PRESET_FILTER_ID = 'ar-filter-shape-preview';
 const SHAPE_PRESET_LOOK_ID = 'current-makeup-look';
+const SHAPE_POINT_PAN_RESPONDER_DEPENDENCY_MODE = 'shape-point-ids';
 
 type ShapePreviewColorOverlayLayer = {
   id: string;
@@ -87,6 +89,10 @@ export function getARFilterShapeAdjustInteractionMode(): 'drag-shape-point' {
   return SHAPE_ADJUST_INTERACTION_MODE;
 }
 
+export function getShapePointPanResponderDependencyMode(): 'shape-point-ids' {
+  return SHAPE_POINT_PAN_RESPONDER_DEPENDENCY_MODE;
+}
+
 export function ARFilterShapeAdjustScreen({
   onBack,
   onSave,
@@ -95,6 +101,7 @@ export function ARFilterShapeAdjustScreen({
   const arGuideData = getARMakeupGuideData();
   const filter = getDefaultMakeupFilter(arGuideData);
   const shapeFilterColor = filter.colorOptions[0]?.hex ?? colors.white;
+  const cameraSessionActive = useCameraSessionActive();
   const [shapeState, setShapeState] = useState<FilterShapeState>(
     getFilterShapeState(),
   );
@@ -114,28 +121,28 @@ export function ARFilterShapeAdjustScreen({
   const shapePointPanResponders = useMemo(() => {
     const responders: Record<string, ReturnType<typeof PanResponder.create>> = {};
 
-    shapeState.shapePoints.forEach(point => {
-      responders[point.id] = PanResponder.create({
+    shapePointIds.split(',').filter(Boolean).forEach(pointId => {
+      responders[pointId] = PanResponder.create({
         onMoveShouldSetPanResponder: () => true,
         onStartShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           const currentPoint = shapeStateRef.current.shapePoints.find(
-            shapePoint => shapePoint.id === point.id,
+            shapePoint => shapePoint.id === pointId,
           );
 
           if (!currentPoint) {
             return;
           }
 
-          setSelectedShapePointId(point.id);
-          dragStartOffsetsRef.current[point.id] = currentPoint.offset;
+          setSelectedShapePointId(pointId);
+          dragStartOffsetsRef.current[pointId] = currentPoint.offset;
         },
         onPanResponderMove: (_event, gestureState) => {
-          const startOffset = dragStartOffsetsRef.current[point.id];
+          const startOffset = dragStartOffsetsRef.current[pointId];
 
           setShapeState(currentState => {
             const currentPoint = currentState.shapePoints.find(
-              shapePoint => shapePoint.id === point.id,
+              shapePoint => shapePoint.id === pointId,
             );
 
             if (!currentPoint || !startOffset) {
@@ -154,20 +161,20 @@ export function ARFilterShapeAdjustScreen({
               previewSize: previewSizeRef.current,
             });
 
-            return updateFilterShapePointOffset(currentState, point.id, nextOffset);
+            return updateFilterShapePointOffset(currentState, pointId, nextOffset);
           });
         },
         onPanResponderRelease: () => {
-          delete dragStartOffsetsRef.current[point.id];
+          delete dragStartOffsetsRef.current[pointId];
         },
         onPanResponderTerminate: () => {
-          delete dragStartOffsetsRef.current[point.id];
+          delete dragStartOffsetsRef.current[pointId];
         },
       });
     });
 
     return responders;
-  }, [shapePointIds, shapeState.shapePoints]);
+  }, [shapePointIds]);
 
   const handlePreviewLayout = ({nativeEvent}: LayoutChangeEvent) => {
     const {height, width} = nativeEvent.layout;
@@ -232,7 +239,7 @@ export function ARFilterShapeAdjustScreen({
         <NativeView
           onLayout={handlePreviewLayout}
           style={styles.previewGestureLayer}>
-          <LiveCameraLayer />
+          <LiveCameraLayer active={cameraSessionActive} />
           <View style={styles.previewDim} />
           <View
             style={[
@@ -278,15 +285,10 @@ export function ARFilterShapeAdjustScreen({
       </FullscreenOverlayLayer>
 
       <YStack style={[styles.headerArea, {paddingTop: insets.top + spacing.md}]}>
-        <OverlayTopBar
-          eyebrow="FILTER CUSTOM"
-          leftSlot={
-            <OverlayIconButton
-              accessibilityLabel="AR 필터 화면으로 돌아가기"
-              onPress={onBack}>
-              <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
-            </OverlayIconButton>
-          }
+        <AppHeader
+          containerProps={{style: styles.immersiveHeader}}
+          contextLabel="FILTER CUSTOM"
+          onBack={onBack}
           rightSlot={
             <OverlayIconButton
               accessibilityLabel="현재 형태 저장"
@@ -295,6 +297,8 @@ export function ARFilterShapeAdjustScreen({
             </OverlayIconButton>
           }
           title={SHAPE_ADJUST_TITLE}
+          topInset={0}
+          variant="immersive"
         />
 
         <XStack style={styles.quickActions}>
@@ -438,11 +442,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     zIndex: 3,
   },
+  immersiveHeader: {
+    paddingHorizontal: 0,
+  },
   previewGestureLayer: {
     ...StyleSheet.absoluteFill,
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.18,
@@ -497,7 +504,7 @@ const styles = StyleSheet.create({
     width: spacing.md,
   },
   shapePointDotActive: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     transform: [{scale: 1.18}],
   },
@@ -581,7 +588,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   adjustmentFill: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: '100%',
   },

@@ -5,11 +5,4 @@ import {MakeupFeedbackResultScreen} from './MakeupFeedbackResultScreen';
 
 const result = createMockMakeupFeedback({photoSource: 'camera'});
 
-<MakeupFeedbackResultScreen
-  onBack={() => undefined}
-  onOpenGuide={() => undefined}
-  onOpenTip={() => undefined}
-  onRetake={() => undefined}
-  onUploadAgain={() => undefined}
-  result={result}
-/>;
+<MakeupFeedbackResultScreen result={result} />;

@@ -1,5 +1,6 @@
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
 import type {
+  FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
   FaceAnalysisReport,
 } from '../../../shared/types/faceAnalysis';
@@ -16,6 +17,12 @@ export type FaceAnalysisReportSummaryItem = {
   value: string;
 };
 
+export type FaceAnalysisReportPrimaryMakeupRecommendation = {
+  makeup: FaceAnalysisMakeupCard;
+  guideSummary: string;
+  reason: string;
+};
+
 export type FaceAnalysisReportCreateFilterButtonPlacement = 'floating-bottom';
 type FaceAnalysisReportLiquidGlassButtonTarget = 'create-filter';
 type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
@@ -27,12 +34,22 @@ type FaceAnalysisReportGuideLabel = {
 
 const guideLabels: FaceAnalysisReportGuideLabel[] = [
   {key: 'brow', label: '\uB208\uC379'},
-  {key: 'eyeshadow', label: '\uC544\uC774\uC12C\uB3C4\uC6B0'},
+  {key: 'eyeshadow', label: '\uC544\uC774\uC100\uB3C4'},
   {key: 'eyeliner', label: '\uC544\uC774\uB77C\uC778'},
   {key: 'blush', label: '\uBE14\uB7EC\uC154'},
   {key: 'highlight', label: '\uD558\uC774\uB77C\uC774\uD2B8'},
   {key: 'lip', label: '\uB9BD'},
 ];
+
+const guidePointLabels: Record<FaceAnalysisReportGuideItem['key'], string> = {
+  base: '얇은 피부 표현',
+  brow: '결 정돈',
+  eyeshadow: '부드러운 음영',
+  eyeliner: '가벼운 라인',
+  blush: '넓은 생기',
+  highlight: '은은한 광',
+  lip: '톤 맞춘 립',
+};
 
 const createFilterButtonPlacements = [
   'floating-bottom',
@@ -42,7 +59,7 @@ export const faceAnalysisReportCreateFilterButtonAccessibilityLabels: Record<
   FaceAnalysisReportCreateFilterButtonPlacement,
   string
 > = {
-  'floating-bottom': 'AR 필터 만들기',
+  'floating-bottom': '메이크업 필터 만들기',
 };
 
 const faceAnalysisReportAvoidedMakeupRailPresentation = {
@@ -59,6 +76,13 @@ const faceAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
   headerPlacement: 'route-level',
   headerUsesTopInset: true,
+} as const;
+
+const faceAnalysisReportEditorialPresentation = {
+  heroMinimumHeight: 420,
+  heroTreatment: 'full-bleed-photo-report',
+  sectionTreatment: 'editorial-glass-sections',
+  summaryTreatment: 'light-profile-metrics',
 } as const;
 
 export const faceAnalysisReportLiquidGlassSurfaceStyle = {
@@ -112,6 +136,10 @@ export function getFaceAnalysisReportLiquidGlassPresentation() {
   return faceAnalysisReportLiquidGlassPresentation;
 }
 
+export function getFaceAnalysisReportEditorialPresentation() {
+  return faceAnalysisReportEditorialPresentation;
+}
+
 export function getFaceAnalysisReportSummaryItems(
   report: FaceAnalysisReport,
 ): FaceAnalysisReportSummaryItem[] {
@@ -123,21 +151,18 @@ export function getFaceAnalysisReportSummaryItems(
   ];
 }
 
-function getGuidePoint(detail: string, fallback: string) {
+function getGuidePoint(
+  key: FaceAnalysisReportGuideItem['key'],
+  detail: string,
+  fallback: string,
+) {
   const normalized = detail.trim();
 
   if (!normalized) {
     return fallback;
   }
 
-  const [firstClause] = normalized.split(/[,.，。]/);
-  const point = firstClause.trim();
-
-  if (!point) {
-    return fallback;
-  }
-
-  return point;
+  return guidePointLabels[key] ?? fallback;
 }
 
 export function getFaceAnalysisReportPointGuideItems(
@@ -147,7 +172,7 @@ export function getFaceAnalysisReportPointGuideItems(
     {
       key: 'base',
       label: '베이스',
-      point: getGuidePoint(report.baseMakeupGuide, '피부 표현'),
+      point: getGuidePoint('base', report.baseMakeupGuide, '피부 표현'),
       detail: report.baseMakeupGuide,
     },
     ...guideLabels.map((guide) => {
@@ -155,9 +180,39 @@ export function getFaceAnalysisReportPointGuideItems(
 
       return {
         ...guide,
-        point: getGuidePoint(detail, guide.label),
+        point: getGuidePoint(guide.key, detail, guide.label),
         detail,
       };
     }),
   ];
+}
+
+export function getFaceAnalysisReportPrimaryMakeupRecommendation(
+  report: FaceAnalysisReport,
+  guideItems = getFaceAnalysisReportPointGuideItems(report),
+): FaceAnalysisReportPrimaryMakeupRecommendation | null {
+  const [makeup] = report.recommendedMakeups;
+
+  if (!makeup) {
+    return null;
+  }
+
+  const guideSummary = guideItems
+    .filter(
+      (guide) => guide.key === 'base' || guide.key === 'blush' || guide.key === 'lip',
+    )
+    .map((guide) => guide.point)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' · ');
+  const fallbackGuideSummary =
+    guideSummary || report.toneSummary || report.recommendedMood;
+
+  return {
+    makeup,
+    guideSummary: fallbackGuideSummary,
+    reason:
+      report.shortSummary ||
+      `${report.recommendedMood} 흐름을 데일리하게 풀어낸 추천 룩이에요.`,
+  };
 }

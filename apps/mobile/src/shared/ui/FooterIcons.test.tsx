@@ -2,10 +2,11 @@ import React from 'react';
 
 import {iconSize} from '../theme';
 import {
-  BrushFooterIcon,
-  CameraFooterIcon,
-  FOOTER_RECOMMENDATION_ICON_NAME,
+  CommunityFooterIcon,
+  FloatingActionFooterIcon,
+  FOOTER_ACTION_ICON_NAME,
   HomeFooterIcon,
+  ProfileFooterIcon,
 } from './FooterIcons';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -15,11 +16,12 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  FOOTER_RECOMMENDATION_ICON_NAME,
-  'WandSparkles',
-  'footer recommendation icon name',
+  FOOTER_ACTION_ICON_NAME,
+  'Sparkles',
+  'footer action icon name',
 );
 
 <HomeFooterIcon color="#111111" size={iconSize.md} strokeWidth={2.1} />;
-<CameraFooterIcon color="#111111" size={iconSize.lg} strokeWidth={2.1} />;
-<BrushFooterIcon color="#111111" size={iconSize.md} strokeWidth={2.1} />;
+<ProfileFooterIcon color="#111111" size={iconSize.md} strokeWidth={2.1} />;
+<CommunityFooterIcon color="#111111" size={iconSize.md} strokeWidth={2.1} />;
+<FloatingActionFooterIcon color="#111111" size={iconSize.lg} strokeWidth={2.1} />;

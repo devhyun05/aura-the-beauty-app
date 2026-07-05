@@ -7,6 +7,7 @@ import {
   AppScreen,
   type AppScreenBottomPadding,
 } from './AppScreen';
+import {APP_HEADER_BASE_HEIGHT} from './AppHeader';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -23,6 +24,11 @@ expectEqual(
   getAppScreenTopPadding('belowShellHeader', 47),
   APP_SCREEN_CONTENT_TOP_PADDING,
   'below shell header app screen top padding',
+);
+expectEqual(
+  getAppScreenTopPadding('belowOverlayHeader', 47),
+  47 + APP_HEADER_BASE_HEIGHT + APP_SCREEN_CONTENT_TOP_PADDING,
+  'below overlay header app screen top padding',
 );
 expectEqual(
   getAppScreenTopPadding('safeArea', 47),
@@ -43,7 +49,7 @@ expectEqual(
 );
 expectEqual(
   getAppScreenBottomPadding('floatingFooter', 34),
-  110,
+  98,
   'floating footer app screen bottom padding',
 );
 expectEqual(getAppScreenBottomPadding(0, 34), 0, 'custom app screen bottom padding');
@@ -52,6 +58,7 @@ const safeAreaBottomPadding: AppScreenBottomPadding = 'safeArea';
 const floatingFooterBottomPadding: AppScreenBottomPadding = 'floatingFooter';
 
 <AppScreen topPadding="belowShellHeader">content</AppScreen>;
+<AppScreen topPadding="belowOverlayHeader">content</AppScreen>;
 <AppScreen
   backgroundColor="transparent"
   bottomPadding={safeAreaBottomPadding}

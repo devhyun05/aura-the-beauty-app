@@ -1,10 +1,12 @@
 import React from 'react';
 
 import {
+  CAMERA_CAPTURE_BUTTON_BACKGROUND,
   CAMERA_CAPTURE_BUTTON_METRICS,
   CameraCaptureButton,
 } from './CameraCaptureButton';
-import {APP_FOOTER_CAPTURE_BUBBLE_SIZE} from './AppFooter';
+import {APP_FOOTER_ACTION_BUBBLE_SIZE} from './AppFooter';
+import {colors} from '../theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -13,14 +15,14 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 expectEqual(
-  APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-  62,
-  'footer capture button size is larger than the default camera button',
+  APP_FOOTER_ACTION_BUBBLE_SIZE,
+  64,
+  'footer action button height matches the footer bar',
 );
 expectEqual(
-  APP_FOOTER_CAPTURE_BUBBLE_SIZE,
-  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 12,
-  'footer capture button size offset',
+  APP_FOOTER_ACTION_BUBBLE_SIZE,
+  CAMERA_CAPTURE_BUTTON_METRICS.defaultSize + 14,
+  'footer action button size offset',
 );
 expectEqual(
   CAMERA_CAPTURE_BUTTON_METRICS.borderWidth,
@@ -32,9 +34,16 @@ expectEqual(
   0.56,
   'camera capture button inner scale',
 );
+expectEqual(
+  CAMERA_CAPTURE_BUTTON_BACKGROUND,
+  colors.blackSurface,
+  'camera capture button uses translucent black surface',
+);
 
 <CameraCaptureButton
   accessibilityLabel="사진 촬영"
   disabled={false}
   onPress={() => undefined}
+  surfaceStyle={{opacity: 1}}
+  variant="liquidGlass"
 />;

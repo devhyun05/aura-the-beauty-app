@@ -16,8 +16,12 @@ export const CAMERA_CAPTURE_BUTTON_METRICS = {
   innerScale: 0.56,
 } as const;
 
-export const CAMERA_CAPTURE_BUTTON_BACKGROUND = 'rgba(17, 17, 17, 0.9)';
+export const CAMERA_CAPTURE_BUTTON_BACKGROUND = colors.blackSurface;
 export const CAMERA_CAPTURE_BUTTON_BORDER = 'rgba(255, 255, 255, 0.86)';
+export const CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND =
+  colors.liquidGlassSurface;
+export const CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BORDER =
+  colors.liquidGlassBorder;
 
 type CameraCaptureButtonSurfaceProps = {
   children?: ReactNode;
@@ -26,11 +30,13 @@ type CameraCaptureButtonSurfaceProps = {
   showInnerDot?: boolean;
   size?: number;
   style?: StyleProp<ViewStyle>;
+  variant?: 'dark' | 'liquidGlass';
 };
 
 type CameraCaptureButtonProps = CameraCaptureButtonSurfaceProps & {
   accessibilityLabel: string;
   onPress?: (event: GestureResponderEvent) => void;
+  surfaceStyle?: StyleProp<ViewStyle>;
   testID?: string;
 };
 
@@ -41,6 +47,7 @@ export function CameraCaptureButtonSurface({
   showInnerDot = true,
   size = CAMERA_CAPTURE_BUTTON_METRICS.defaultSize,
   style,
+  variant = 'dark',
 }: CameraCaptureButtonSurfaceProps) {
   const innerSize = Math.round(size * CAMERA_CAPTURE_BUTTON_METRICS.innerScale);
 
@@ -53,6 +60,7 @@ export function CameraCaptureButtonSurface({
           opacity: disabled ? 0.58 : 1,
           width: size,
         },
+        variant === 'liquidGlass' ? styles.liquidGlassSurface : undefined,
         style,
       ]}>
       {children ??
@@ -81,7 +89,9 @@ export function CameraCaptureButton({
   showInnerDot,
   size,
   style,
+  surfaceStyle,
   testID,
+  variant,
 }: CameraCaptureButtonProps) {
   return (
     <Pressable
@@ -102,7 +112,9 @@ export function CameraCaptureButton({
         disabled={disabled}
         innerColor={innerColor}
         showInnerDot={showInnerDot}
-        size={size}>
+        size={size}
+        style={surfaceStyle}
+        variant={variant}>
         {children}
       </CameraCaptureButtonSurface>
     </Pressable>
@@ -124,5 +136,12 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 6},
     shadowOpacity: 0.14,
     shadowRadius: 10,
+  },
+  liquidGlassSurface: {
+    backgroundColor: CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND,
+    borderColor: CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BORDER,
+    shadowColor: colors.white,
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
   },
 });

@@ -1,5 +1,11 @@
 export {AppCard} from './AppCard';
-export {AppFooter, type FooterTabKey} from './AppFooter';
+export {
+  APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION,
+  AppFooter,
+  getAppFooterActionSlotOrder,
+  type AppFooterActionSlotItem,
+  type FooterTabKey,
+} from './AppFooter';
 export {AppHeader} from './AppHeader';
 export {AppScreen} from './AppScreen';
 export {AuraLogo} from './AuraLogo';
@@ -8,12 +14,51 @@ export {
   CameraCaptureButton,
   CameraCaptureButtonSurface,
 } from './CameraCaptureButton';
-export {BrushFooterIcon, CameraFooterIcon, HomeFooterIcon} from './FooterIcons';
+export {
+  CommunityFooterIcon,
+  FloatingActionFooterIcon,
+  HomeFooterIcon,
+  ProfileFooterIcon,
+} from './FooterIcons';
+export {
+  DEFAULT_FLOATING_ACTION_IDS,
+  DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
+  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
+  FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+  FLOATING_ACTION_ICON_LIBRARY_NAMES,
+  FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET,
+  FLOATING_ACTION_MAIN_ICON_SIZE,
+  FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
+  FLOATING_ACTION_MAX_ITEM_COUNT,
+  FLOATING_ACTION_SETTINGS_BACKGROUND,
+  FloatingActionMenu,
+  floatingActionButtonPositionOptions,
+  floatingActionInteractionModeOptions,
+  floatingActionDefinitions,
+  getFloatingActionDefinition,
+  getFloatingActionMenuTarget,
+  getFloatingActionSelectedSlotNumber,
+  getFloatingActionSettingsSlotOffset,
+  getFloatingActionSlotOffsetForAction,
+  getFloatingActionSlotOffset,
+  getNextFloatingActionSelection,
+  getVisibleFloatingActionIds,
+  type FloatingActionButtonPosition,
+  type FloatingActionId,
+  type FloatingActionInteractionMode,
+} from './FloatingActionMenu';
 export {
   BottomOverlayPanel,
   CameraCaptureControlRow,
+  CameraFacingToggleButton,
+  CameraGalleryButton,
   CameraModeSwitch,
   CameraUtilityButton,
+  CAMERA_FACING_TOGGLE_BUTTON_ICON_NAME,
+  CAMERA_GALLERY_BUTTON_ICON_NAME,
+  CAMERA_UTILITY_ICON_SIZE,
+  CAMERA_UTILITY_ICON_STROKE_WIDTH,
   FULLSCREEN_OVERLAY_ICON_BUTTON_SIZE,
   FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_BACKGROUND,
   FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY,
@@ -44,6 +89,6 @@ export {
 } from './LineIcons';
 export {PagedGrid} from './PagedGrid';
 export {PaginationDots} from './PaginationDots';
-export {ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
+export {MenuHeaderIcon, ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
 export {RoutePlaceholder} from './RoutePlaceholder';
 export {SectionHeader} from './SectionHeader';

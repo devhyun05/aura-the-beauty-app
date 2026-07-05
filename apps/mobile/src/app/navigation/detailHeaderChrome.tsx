@@ -1,17 +1,31 @@
 import React, {type ReactNode} from 'react';
-import {Share2} from 'lucide-react-native';
-import {StyleSheet} from 'react-native';
+import {ChevronDown, Share2} from 'lucide-react-native';
+import {StyleSheet, View as RNView} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, spacing, typography} from '../../shared/theme';
-import {AppHeader, XIcon} from '../../shared/ui';
-import {getDetailRouteTitle, getRouteChrome, type DetailHeaderRightAction} from './routeChrome';
+import {XIcon} from '../../shared/ui';
+import {APP_HEADER_BASE_HEIGHT, AppHeader} from '../../shared/ui/AppHeader';
+import {
+  getDetailRouteContextLabel,
+  getDetailRouteTitle,
+  getRouteChrome,
+  type DetailHeaderRightAction,
+} from './routeChrome';
 import type {RootStackRouteName} from './routeTypes';
 
 export type DetailHeaderPresentation = {
+  contextLabel: string;
   rightActions: readonly DetailHeaderRightAction[];
   title: string;
 };
+
+export type DetailRouteHeaderMode = 'standard' | 'overlay';
+
+export const DETAIL_ROUTE_DEFAULT_HEADER_MODE: DetailRouteHeaderMode = 'overlay';
+export const DETAIL_ROUTE_OVERLAY_HEADER_BACKGROUND_COLOR =
+  colors.headerOverlaySurface;
 
 export function getDetailHeaderRightActions(
   routeName: RootStackRouteName,
@@ -29,56 +43,151 @@ export function getDetailHeaderPresentation(
   routeName: RootStackRouteName,
 ): DetailHeaderPresentation {
   return {
+    contextLabel: getDetailRouteContextLabel(routeName),
     rightActions: getDetailHeaderRightActions(routeName),
     title: getDetailRouteTitle(routeName),
   };
 }
 
 type DetailRouteChromeProps = {
+  backgroundColor?: string;
   children: ReactNode;
+  headerBackgroundColor?: string;
+  headerBorderColor?: string;
+  headerMode?: DetailRouteHeaderMode;
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
+  onOpenDocumentList?: () => void;
   onShare?: () => void;
+  reserveOverlayHeaderSpace?: boolean;
   routeName: RootStackRouteName;
   shareDisabled?: boolean;
 };
 
 export function DetailRouteChrome({
+  backgroundColor = colors.background,
   children,
+  headerBackgroundColor,
+  headerBorderColor,
+  headerMode = DETAIL_ROUTE_DEFAULT_HEADER_MODE,
   onBack,
   onClose,
   onDone,
+  onOpenDocumentList,
   onShare,
+  reserveOverlayHeaderSpace = true,
   routeName,
   shareDisabled = false,
 }: DetailRouteChromeProps) {
+  const insets = useSafeAreaInsets();
   const presentation = getDetailHeaderPresentation(routeName);
+  const isOverlayHeader = headerMode === 'overlay';
+  const resolvedHeaderBackgroundColor =
+    headerBackgroundColor ??
+    (isOverlayHeader
+      ? DETAIL_ROUTE_OVERLAY_HEADER_BACKGROUND_COLOR
+      : colors.headerSurface);
+  const resolvedHeaderBorderColor =
+    headerBorderColor ??
+    (isOverlayHeader ? colors.headerOverlayBorder : colors.border);
+  const overlayHeaderHeight = APP_HEADER_BASE_HEIGHT + insets.top;
+  const headerContentColor = colors.textPrimary;
+  const leftSlot = onOpenDocumentList ? (
+    <HeaderIconAction
+      accessibilityLabel="문서 목록 열기"
+      onPress={onOpenDocumentList}>
+      <ChevronDown color={headerContentColor} size={iconSize.sm} strokeWidth={2} />
+    </HeaderIconAction>
+  ) : undefined;
   const rightSlot = renderRightSlot({
     actions: presentation.rightActions,
+    iconColor: headerContentColor,
     onBack,
     onClose,
     onDone,
     onShare,
     shareDisabled,
   });
-  const shouldReserveLeftSlot = !onBack && presentation.rightActions.length > 0;
-
-  return (
-    <YStack style={styles.screen}>
+  const shouldReserveLeftSlot =
+    !onBack && !leftSlot && presentation.rightActions.length > 0;
+  const header = (
+    <RNView
+      pointerEvents={isOverlayHeader ? 'box-none' : 'auto'}
+      style={[
+        styles.headerHost,
+        isOverlayHeader
+          ? [styles.overlayHeaderHost, {height: overlayHeaderHeight}]
+          : undefined,
+      ]}>
+      {isOverlayHeader ? (
+        <OverlayHeaderBackground
+          backgroundColor={resolvedHeaderBackgroundColor}
+          borderColor={resolvedHeaderBorderColor}
+        />
+      ) : null}
       <AppHeader
-        leftSlot={shouldReserveLeftSlot ? <View /> : undefined}
+        containerProps={{
+          style: [
+            styles.header,
+            isOverlayHeader ? styles.overlayHeader : undefined,
+            {
+              backgroundColor: isOverlayHeader ? 'transparent' : resolvedHeaderBackgroundColor,
+              borderBottomColor: resolvedHeaderBorderColor,
+            },
+          ],
+        }}
+        contextLabel={presentation.contextLabel}
+        leftSlot={leftSlot ?? (shouldReserveLeftSlot ? <View /> : undefined)}
         onBack={onBack}
+        variant="default"
         rightSlot={rightSlot}
         title={presentation.title}
       />
-      <YStack style={styles.body}>{children}</YStack>
+    </RNView>
+  );
+
+  return (
+    <YStack style={[styles.screen, {backgroundColor}]}>
+      {isOverlayHeader ? null : header}
+      <YStack
+        style={[
+          styles.body,
+          {backgroundColor},
+          isOverlayHeader && reserveOverlayHeaderSpace
+            ? {paddingTop: overlayHeaderHeight}
+            : undefined,
+        ]}>
+        {children}
+      </YStack>
+      {isOverlayHeader ? header : null}
     </YStack>
+  );
+}
+
+function OverlayHeaderBackground({
+  backgroundColor,
+  borderColor,
+}: {
+  backgroundColor: string;
+  borderColor: string;
+}) {
+  return (
+    <RNView pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <RNView
+        style={[
+          StyleSheet.absoluteFill,
+          {backgroundColor},
+        ]}
+      />
+      <RNView style={[styles.overlayHeaderBorder, {backgroundColor: borderColor}]} />
+    </RNView>
   );
 }
 
 function renderRightSlot({
   actions,
+  iconColor,
   onBack,
   onClose,
   onDone,
@@ -86,6 +195,7 @@ function renderRightSlot({
   shareDisabled,
 }: {
   actions: readonly DetailHeaderRightAction[];
+  iconColor: string;
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
@@ -106,7 +216,7 @@ function renderRightSlot({
               disabled={shareDisabled || !onShare}
               key={action}
               onPress={onShare}>
-              <Share2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+              <Share2 color={iconColor} size={iconSize.sm} strokeWidth={2} />
             </HeaderIconAction>
           );
         }
@@ -117,7 +227,7 @@ function renderRightSlot({
               accessibilityLabel="닫기"
               key={action}
               onPress={onClose ?? onBack}>
-              <XIcon color={colors.textPrimary} size={iconSize.sm} />
+              <XIcon color={iconColor} size={iconSize.sm} />
             </HeaderIconAction>
           );
         }
@@ -131,7 +241,9 @@ function renderRightSlot({
             pressStyle={{scale: 0.97}}
             style={styles.doneButton}
             unstyled>
-            <Text style={styles.doneText}>완료</Text>
+            <Text style={styles.doneText}>
+              완료
+            </Text>
           </Button>
         );
       })}
@@ -176,6 +288,31 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
+  header: {
+    backgroundColor: colors.headerSurface,
+  },
+  headerHost: {
+    overflow: 'hidden',
+  },
+  overlayHeader: {
+    backgroundColor: 'transparent',
+  },
+  overlayHeaderBorder: {
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    left: 0,
+    opacity: 0.7,
+    position: 'absolute',
+    right: 0,
+  },
+  overlayHeaderHost: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 30,
+  },
   doneButton: {
     alignItems: 'center',
     height: 40,
@@ -198,5 +335,6 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+    position: 'relative',
   },
 });

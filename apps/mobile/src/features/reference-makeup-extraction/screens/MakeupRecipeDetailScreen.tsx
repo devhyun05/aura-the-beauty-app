@@ -1,5 +1,5 @@
-import {useMemo, useState} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {Alert, Image, Pressable, ScrollView, Share, StyleSheet} from 'react-native';
 import {BookmarkPlus} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
@@ -13,8 +13,11 @@ type MakeupRecipeDetailScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
   onBack?: () => void;
+  onHeaderShareActionChange?: (action: MakeupRecipeHeaderShareAction | null) => void;
   onSaveRecipe: () => void;
 };
+
+type MakeupRecipeHeaderShareAction = () => void;
 
 const mainTabs: {id: MakeupRecipeTab; label: string}[] = [
   {id: 'all', label: '전체'},
@@ -86,6 +89,7 @@ const recipeItems = [
 ];
 
 export function MakeupRecipeDetailScreen({
+  onHeaderShareActionChange,
   photo,
   onSaveRecipe,
 }: MakeupRecipeDetailScreenProps) {
@@ -101,6 +105,33 @@ export function MakeupRecipeDetailScreen({
 
     return recipeItems.filter((item) => item.area === activeTab);
   }, [activeTab]);
+
+  const handleHeaderShare = useCallback(() => {
+    const message = buildRecipeShareMessage(extractedMakeupLook.title);
+
+    void Share.share({
+      message,
+      title: '메이크업 레시피',
+    }).catch((error: unknown) => {
+      console.info('[aura:makeup-recipe] share:failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      Alert.alert(
+        '공유 실패',
+        error instanceof Error
+          ? error.message
+          : '레시피 공유 화면을 열지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    });
+  }, [extractedMakeupLook.title]);
+
+  useEffect(() => {
+    onHeaderShareActionChange?.(handleHeaderShare);
+
+    return () => {
+      onHeaderShareActionChange?.(null);
+    };
+  }, [handleHeaderShare, onHeaderShareActionChange]);
 
   return (
     <AppScreen
@@ -207,6 +238,14 @@ export function MakeupRecipeDetailScreen({
   );
 }
 
+function buildRecipeShareMessage(title: string) {
+  const itemLines = recipeItems
+    .map((item) => `${item.number}. ${item.title}: ${item.value}`)
+    .join('\n');
+
+  return `${title}\n사진에서 추출한 메이크업 레시피예요.\n\n${itemLines}`;
+}
+
 function GuideNumber({number, style}: {number: string; style: object}) {
   return (
     <View style={[styles.guideNumber, style]}>
@@ -262,7 +301,7 @@ const styles = StyleSheet.create({
   },
   guideNumber: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 2,
@@ -326,7 +365,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   mainTabIndicatorActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 3,
     width: '100%',
@@ -350,7 +389,7 @@ const styles = StyleSheet.create({
   },
   numberBadge: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 30,
     justifyContent: 'center',
@@ -411,7 +450,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -438,7 +477,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   subTabButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   subTabList: {
     gap: spacing.sm,

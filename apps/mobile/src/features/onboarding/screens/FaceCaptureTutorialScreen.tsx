@@ -1,6 +1,10 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
+  Animated,
+  Easing,
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   type ImageSourcePropType,
@@ -8,23 +12,19 @@ import {
   type NativeSyntheticEvent,
   useWindowDimensions,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets, type Edge} from 'react-native-safe-area-context';
 import {
   Camera,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
   Glasses,
   ScanFace,
   WandSparkles,
-  X as XIcon,
 } from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {appAssetSource} from '../../../shared/config/mediaAssets';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {PaginationDots} from '../../../shared/ui';
+import {AppHeader, IconButton, PaginationDots, XIcon} from '../../../shared/ui';
 
 const expressionGuideImageSource = appAssetSource('images/photo-capture-expression-guide.png');
 const hairGuideImageSource = appAssetSource('images/photo-capture-hair-guide.png');
@@ -32,6 +32,7 @@ const accessoryGuideImageSource = appAssetSource('images/photo-capture-accessory
 const framingGuideImageSource = appAssetSource('images/photo-capture-framing-guide.png');
 
 type FaceCaptureTutorialIconKey = 'face' | 'hair' | 'accessory' | 'framing';
+type FaceCaptureTutorialPresentation = 'screen' | 'sheet';
 
 type FaceCaptureTutorialStep = {
   buttonLabel: string | null;
@@ -39,7 +40,7 @@ type FaceCaptureTutorialStep = {
   heading: string;
   iconKey: FaceCaptureTutorialIconKey;
   imageSource: ImageSourcePropType;
-  requiresPrivacyAgreement: boolean;
+  requiresPrivacyAgreement: false;
   stepLabel: string;
   tip: string;
 };
@@ -93,7 +94,7 @@ const faceCaptureTutorialSteps = [
     heading: '얼굴을 중앙에 맞춰 촬영해 주세요',
     iconKey: 'framing',
     imageSource: framingGuideImageSource,
-    requiresPrivacyAgreement: true,
+    requiresPrivacyAgreement: false,
     stepLabel: '4/4',
     tip: '역광보다 정면의 부드러운 조명이 좋아요.',
   },
@@ -106,19 +107,30 @@ const faceCaptureTutorialNavigationMode = {
 
 const faceCaptureTutorialVisualPresentation = {
   finalActionWidth: 'compact',
-  finalPrivacyPlacement: 'below-pagination-above-action',
+  finalPrivacyPlacement: 'none',
+  headerComponent: 'AppHeader',
   headerDismissControl: 'close-to-home',
   imageFillMode: 'fit-image',
   imageFillScale: FACE_CAPTURE_TUTORIAL_IMAGE_FILL_SCALE,
   showsImageChip: false,
   showsPageNumberChip: false,
+  sheetDismissControl: 'close-button',
+  sheetPresentation: 'bottom-modal-sheet',
   swipeNavigationPlacement: 'fixed-footer-pagination',
   usesImageScrim: false,
 } as const;
 
 type FaceCaptureTutorialScreenProps = {
+  closeAccessibilityLabel?: string;
   onBackToIntro?: () => void;
   onCloseToHome?: () => void;
+  onStartCapture?: () => void;
+  presentation?: FaceCaptureTutorialPresentation;
+};
+
+type FaceCaptureTutorialSheetProps = {
+  isVisible: boolean;
+  onDismiss: () => void;
   onStartCapture?: () => void;
 };
 
@@ -138,23 +150,115 @@ export function getFaceCaptureTutorialVisualPresentation() {
   return faceCaptureTutorialVisualPresentation;
 }
 
+export function FaceCaptureTutorialSheet({
+  isVisible,
+  onDismiss,
+  onStartCapture,
+}: FaceCaptureTutorialSheetProps) {
+  const [isSheetMounted, setIsSheetMounted] = useState(isVisible);
+  const transitionValue = useRef(new Animated.Value(isVisible ? 1 : 0)).current;
+  const {height} = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const sheetHeight = Math.round(height * (height < 760 ? 0.92 : 0.88));
+  const sheetHiddenOffset = sheetHeight + Math.max(insets.bottom, spacing.xxl);
+  const backdropOpacity = transitionValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const sheetTranslateY = transitionValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [sheetHiddenOffset, 0],
+  });
+
+  useEffect(() => {
+    if (isVisible) {
+      setIsSheetMounted(true);
+    }
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (!isSheetMounted) {
+      return;
+    }
+
+    transitionValue.stopAnimation();
+    Animated.timing(transitionValue, {
+      duration: isVisible ? 240 : 180,
+      easing: isVisible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      toValue: isVisible ? 1 : 0,
+      useNativeDriver: true,
+    }).start(({finished}) => {
+      if (finished && !isVisible) {
+        setIsSheetMounted(false);
+      }
+    });
+  }, [isSheetMounted, isVisible, transitionValue]);
+
+  if (!isSheetMounted) {
+    return null;
+  }
+
+  return (
+    <Modal
+      animationType="none"
+      onRequestClose={onDismiss}
+      transparent
+      visible={isSheetMounted}>
+      <YStack style={styles.sheetRoot}>
+        <Animated.View style={[styles.sheetBackdropHost, {opacity: backdropOpacity}]}>
+          <Pressable
+            accessibilityLabel="사진 촬영 가이드 닫기"
+            accessibilityRole="button"
+            onPress={onDismiss}
+            style={styles.sheetBackdrop}
+          />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.sheetPanel,
+            {
+              height: sheetHeight,
+              paddingBottom: Math.max(insets.bottom, spacing.sm),
+              transform: [{translateY: sheetTranslateY}],
+            },
+          ]}>
+          <View style={styles.sheetHandle} />
+          <FaceCaptureTutorialScreen
+            closeAccessibilityLabel="사진 촬영 가이드 닫기"
+            onBackToIntro={onDismiss}
+            onCloseToHome={onDismiss}
+            onStartCapture={onStartCapture}
+            presentation="sheet"
+          />
+        </Animated.View>
+      </YStack>
+    </Modal>
+  );
+}
+
 export function FaceCaptureTutorialScreen({
+  closeAccessibilityLabel,
   onBackToIntro,
   onCloseToHome,
   onStartCapture,
+  presentation = 'screen',
 }: FaceCaptureTutorialScreenProps) {
   const guideScrollViewRef = useRef<ScrollView>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [hasAgreedToPrivacy, setHasAgreedToPrivacy] = useState(false);
   const {height, width} = useWindowDimensions();
   const currentStep = faceCaptureTutorialSteps[currentStepIndex] ?? faceCaptureTutorialSteps[0];
+  const isSheetPresentation = presentation === 'sheet';
   const isCompactHeight = height < 760;
-  const maxGuideImageWidth = Math.min(width - spacing.xl * 2, 362);
+  const maxGuideImageWidth = Math.min(width - spacing.xl * 2, isSheetPresentation ? 344 : 362);
   const contentGap = isCompactHeight ? spacing.md : spacing.lg;
+  const safeAreaEdges: Edge[] = isSheetPresentation
+    ? []
+    : ['top', 'right', 'bottom', 'left'];
+  const closeButtonAccessibilityLabel =
+    closeAccessibilityLabel ?? (isSheetPresentation ? '사진 촬영 가이드 닫기' : '홈으로 가기');
 
   const getGuideImageSize = (step: FaceCaptureTutorialStep) => {
-    const shouldReduceForPrivacy = isCompactHeight && step.requiresPrivacyAgreement;
-    const maxGuideImageHeight = shouldReduceForPrivacy ? 190 : isCompactHeight ? 216 : 292;
+    const maxGuideImageHeight = isCompactHeight ? 216 : 292;
     const imageWidth = Math.min(
       maxGuideImageWidth,
       maxGuideImageHeight * FACE_CAPTURE_TUTORIAL_IMAGE_ASPECT_RATIO,
@@ -167,10 +271,6 @@ export function FaceCaptureTutorialScreen({
   };
 
   const handleStartCapturePress = () => {
-    if (currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy) {
-      return;
-    }
-
     onStartCapture?.();
   };
 
@@ -217,10 +317,6 @@ export function FaceCaptureTutorialScreen({
     settleStepIndexFromScrollOffset(event.nativeEvent.contentOffset.x);
   };
 
-  const handlePrivacyPress = () => {
-    setHasAgreedToPrivacy((prevValue) => !prevValue);
-  };
-
   const handleClosePress = () => {
     onCloseToHome?.();
   };
@@ -241,47 +337,27 @@ export function FaceCaptureTutorialScreen({
     updateCurrentStepIndex(previousStepIndex);
   };
 
-  const isNextDisabled = currentStep.requiresPrivacyAgreement && !hasAgreedToPrivacy;
   const isFinalStep = currentStepIndex === faceCaptureTutorialSteps.length - 1;
   const actionButtonLabel = currentStep.buttonLabel ?? '촬영하기';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <YStack style={styles.screen}>
-        <XStack style={[styles.header, isCompactHeight ? styles.compactHeader : undefined]}>
-          <Button
-            accessibilityLabel="이전으로 돌아가기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleBackPress}
-            pressStyle={{scale: 0.97}}
-            style={styles.headerButton}
-            unstyled>
-            <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
-          </Button>
+    <SafeAreaView edges={safeAreaEdges} style={styles.safeArea}>
+      <YStack style={[styles.screen, isSheetPresentation ? styles.sheetScreen : null]}>
+        <AppHeader
+          onBack={handleBackPress}
+          rightSlot={
+            <IconButton
+              accessibilityLabel={closeButtonAccessibilityLabel}
+              onPress={handleClosePress}
+              variant="outlined">
+              <XIcon color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            </IconButton>
+          }
+          title="사진 촬영 가이드"
+          topInset={0}
+        />
 
-          <YStack style={styles.headerTitleGroup}>
-            <Text numberOfLines={1} style={styles.headerTitle}>
-              사진 촬영 가이드
-            </Text>
-            <Text numberOfLines={1} style={styles.headerSubtitle}>
-              정확한 추천을 위한 촬영 준비
-            </Text>
-          </YStack>
-
-          <Button
-            accessibilityLabel="홈으로 가기"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleClosePress}
-            pressStyle={{scale: 0.97}}
-            style={styles.headerButton}
-            unstyled>
-            <XIcon color={colors.textPrimary} size={iconSize.md} strokeWidth={2} />
-          </Button>
-        </XStack>
-
-        <YStack style={styles.content}>
+        <YStack style={[styles.content, isSheetPresentation ? styles.sheetContent : null]}>
           <ScrollView
             ref={guideScrollViewRef}
             accessibilityLabel={FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL}
@@ -295,7 +371,13 @@ export function FaceCaptureTutorialScreen({
             showsHorizontalScrollIndicator={false}
             style={styles.guideCarousel}>
             {faceCaptureTutorialSteps.map((step) => (
-              <YStack key={step.stepLabel} style={[styles.guidePage, {gap: contentGap, width}]}>
+              <YStack
+                key={step.stepLabel}
+                style={[
+                  styles.guidePage,
+                  isSheetPresentation ? styles.sheetGuidePage : null,
+                  {gap: contentGap, width},
+                ]}>
                 <View
                   style={[
                     styles.imageFrame,
@@ -339,48 +421,17 @@ export function FaceCaptureTutorialScreen({
             />
           </YStack>
 
-          {isFinalStep ? (
-            <Button
-              accessibilityLabel="개인정보 수집 및 이용 동의"
-              accessibilityRole="checkbox"
-              accessibilityState={{checked: hasAgreedToPrivacy}}
-              onPress={handlePrivacyPress}
-              pressStyle={{opacity: 0.78}}
-              style={[
-                styles.privacyNotice,
-                hasAgreedToPrivacy ? styles.privacyNoticeSelected : undefined,
-              ]}
-              unstyled>
-              {hasAgreedToPrivacy ? (
-                <CheckCircle2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-              ) : (
-                <Circle color={colors.borderStrong} size={iconSize.sm} strokeWidth={2} />
-              )}
-              <Text style={styles.privacyText}>개인정보 수집 및 이용</Text>
-              <Text style={styles.privacyLink}>자세히 보기</Text>
-              <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
-            </Button>
-          ) : (
-            <View style={styles.privacyNoticePlaceholder} />
-          )}
+          <View style={styles.privacyNoticePlaceholder} />
 
           {isFinalStep ? (
             <Button
               accessibilityLabel={actionButtonLabel}
               accessibilityRole="button"
-              disabled={isNextDisabled}
-              disabledStyle={{opacity: 1}}
               onPress={handleStartCapturePress}
               pressStyle={{opacity: 0.78}}
-              style={[styles.nextButton, isNextDisabled ? styles.nextButtonDisabled : undefined]}
+              style={styles.nextButton}
               unstyled>
-              <Text
-                style={[
-                  styles.nextButtonText,
-                  isNextDisabled ? styles.nextButtonTextDisabled : undefined,
-                ]}>
-                {actionButtonLabel}
-              </Text>
+              <Text style={styles.nextButtonText}>{actionButtonLabel}</Text>
             </Button>
           ) : (
             <View style={styles.nextButtonPlaceholder} />
@@ -418,9 +469,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     paddingBottom: spacing.xl,
-  },
-  compactHeader: {
-    paddingBottom: spacing.md,
   },
   description: {
     color: colors.textSecondary,
@@ -471,49 +519,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
-  header: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    gap: spacing.md,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  headerButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.xl + spacing.md,
-    justifyContent: 'center',
-    padding: 0,
-    width: iconSize.xl + spacing.md,
-  },
-  headerSubtitle: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
-  headerTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-    textAlign: 'center',
-  },
-  headerTitleGroup: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
   heading: {
     color: colors.textPrimary,
     flex: 1,
@@ -537,7 +542,7 @@ const styles = StyleSheet.create({
   nextButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -547,11 +552,6 @@ const styles = StyleSheet.create({
     minWidth: 220,
     paddingHorizontal: spacing.xl,
     width: '72%',
-  },
-  nextButtonDisabled: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderWidth: 1,
   },
   nextButtonPlaceholder: {
     alignSelf: 'center',
@@ -568,50 +568,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
   },
-  nextButtonTextDisabled: {
-    color: colors.textTertiary,
-  },
-  privacyLink: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    marginLeft: 'auto',
-  },
-  privacyNotice: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-    maxWidth: 362,
-    minHeight: iconSize.xl + spacing.lg,
-    paddingHorizontal: spacing.lg,
-    width: '100%',
-  },
   privacyNoticePlaceholder: {
     alignSelf: 'center',
     marginBottom: spacing.md,
     maxWidth: 362,
-    minHeight: iconSize.xl + spacing.lg,
+    minHeight: 0,
     width: '100%',
-  },
-  privacyNoticeSelected: {
-    borderColor: colors.textPrimary,
-  },
-  privacyText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
   },
   safeArea: {
     backgroundColor: colors.background,
@@ -620,6 +582,57 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: colors.background,
     flex: 1,
+  },
+  sheetBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.36)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetBackdropHost: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetContent: {
+    paddingBottom: spacing.lg,
+  },
+  sheetGuidePage: {
+    paddingTop: spacing.md,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    height: 4,
+    marginTop: spacing.sm,
+    width: 42,
+  },
+  sheetPanel: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    overflow: 'hidden',
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: {width: 0, height: -10},
+    shadowOpacity: 0.16,
+    shadowRadius: 28,
+  },
+  sheetRoot: {
+    bottom: 0,
+    justifyContent: 'flex-end',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  sheetScreen: {
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
   },
   swipeNavigationArea: {
     alignItems: 'center',

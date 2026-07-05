@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     width: '14.285%',
   },
   dayCellSelected: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
   },
   dayGrid: {
     flexDirection: 'row',
@@ -574,8 +574,8 @@ const styles = StyleSheet.create({
     minHeight: 42,
   },
   genderButtonSelected: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   genderRow: {
     gap: spacing.sm,
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   progressFill: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: '100%',
   },
@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
   },
   sheetPanel: {
     alignSelf: 'stretch',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.bottomSheetSurface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     gap: spacing.lg,
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
   submitButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 56,
