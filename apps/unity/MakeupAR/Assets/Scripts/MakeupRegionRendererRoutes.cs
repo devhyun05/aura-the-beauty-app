@@ -32,11 +32,21 @@ public static class MakeupRegionRendererRoutes
     public const string SmoothRegionMaskMode = "smooth-region-mask";
     public const string SmoothRegionMaskBackend = "E3RegionMaskOverlay";
 
-    public static readonly string[] Regions = { "lip", "blush", "brow", "eyeliner" };
+    public static readonly string[] Regions = { "foundation", "lip", "blush", "brow", "eyeliner" };
 
     private static readonly Dictionary<string, MakeupRegionRendererRoute> Routes =
         new Dictionary<string, MakeupRegionRendererRoute>
         {
+            {
+                "foundation",
+                new MakeupRegionRendererRoute(
+                    "foundation",
+                    "foundation-smooth-region-mask-renderer",
+                    SmoothRegionMaskMode,
+                    SmoothRegionMaskBackend,
+                    "smooth_mask_foundation",
+                    "foundation-style-v1")
+            },
             {
                 "lip",
                 new MakeupRegionRendererRoute(
@@ -99,6 +109,11 @@ public static class MakeupRegionRendererRoutes
         if (region == "eye")
         {
             return "eyeliner";
+        }
+
+        if (region == "base")
+        {
+            return "foundation";
         }
 
         if (Routes.ContainsKey(region))

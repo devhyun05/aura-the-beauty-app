@@ -10,6 +10,7 @@ import React, {
 
 import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../features/makeup-feedback';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
+import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
 import type {ReferenceMakeupPhoto} from '../../features/reference-makeup-extraction';
 import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
@@ -35,6 +36,7 @@ export type NavigationFlowState = {
   savedMakeupLooks: readonly MakeupLookPreview[];
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
+  selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
@@ -52,6 +54,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSavedMakeupLooks: Dispatch<SetStateAction<readonly MakeupLookPreview[]>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
+  setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
@@ -73,6 +76,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
+    selectedFaceVerticalThirds: null,
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
@@ -100,6 +104,8 @@ export function NavigationFlowStateProvider({
     useState<FaceCaptureUploadResult | null>(initialState.selectedFaceCapture);
   const [selectedFaceAnalysisReport, setSelectedFaceAnalysisReport] =
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
+  const [selectedFaceVerticalThirds, setSelectedFaceVerticalThirds] =
+    useState<FaceVerticalThirdsResult | null>(initialState.selectedFaceVerticalThirds);
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
   const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
@@ -136,6 +142,7 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedFaceVerticalThirds,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
@@ -150,6 +157,7 @@ export function NavigationFlowStateProvider({
       setSavedMakeupLooks,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
+      setSelectedFaceVerticalThirds,
       setSelectedMakeupFeedbackPhoto,
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
@@ -166,6 +174,7 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedFaceVerticalThirds,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,

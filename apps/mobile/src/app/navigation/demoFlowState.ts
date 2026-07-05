@@ -39,6 +39,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
+    selectedFaceVerticalThirds: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
     selectedRecommendedMakeupFilterId: null,
     selectedReferenceMakeupPhoto,
