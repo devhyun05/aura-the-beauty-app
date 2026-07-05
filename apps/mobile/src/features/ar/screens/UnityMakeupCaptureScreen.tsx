@@ -240,7 +240,7 @@ export function UnityMakeupCaptureScreen({
   const [hasStartedMaskFlow, setHasStartedMaskFlow] = useState(false);
   const [isPreparingUnity, setIsPreparingUnity] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('ready');
-  const [notice, setNotice] = useState('개인 마스크를 먼저 만든 뒤 립, 볼, 눈썹, 아이라이너를 적용합니다');
+  const [notice, setNotice] = useState('실시간 맞춤 메이크업을 준비하는 중입니다');
   const [sourceFrameMetadata, setSourceFrameMetadata] =
     useState<FullFaceMakeupSourceInput | null>(null);
   const [generatedPackage, setGeneratedPackage] =
@@ -814,21 +814,9 @@ export function UnityMakeupCaptureScreen({
           </Pressable>
         ) : null}
 
-        {hasStartedMaskFlow ? (
-          <Pressable
-            accessibilityLabel={captureButtonLabel}
-            accessibilityRole="button"
-            disabled={isBusy}
-            onPress={handleCapturePress}
-            style={({pressed}) => [
-              styles.captureButton,
-              isBusy && styles.captureButtonDisabled,
-              phase === 'applied' && styles.captureButtonApplied,
-              pressed && styles.capturePressed,
-            ]}>
-            <View style={styles.captureButtonInner} />
-          </Pressable>
-        ) : null}
+        {/* 개인 마스크 촬영 버튼 제거: 마스크는 런타임에서 실시간
+            개인화되므로 촬영 단계가 더 이상 필요 없다 (handleCapturePress
+            플로우는 추후 "정밀 보정" 기능으로 재노출할 수 있게 유지). */}
       </XStack>
     </YStack>
   );

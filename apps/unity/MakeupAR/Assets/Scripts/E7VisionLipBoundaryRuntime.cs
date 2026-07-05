@@ -497,6 +497,15 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         string status = NormalizeOptional(payload.status, "unknown");
         Vector2[] outerPoints = ConvertPoints(payload.outer);
         Vector2[] innerPoints = ConvertPoints(payload.inner);
+        if (payload.imageWidth > 0 && payload.imageHeight > 0 && outerPoints.Length >= 3)
+        {
+            int transformIndex = ResolvePointTransformIndex(
+                outerPoints, payload.imageWidth, payload.imageHeight, faceBounds);
+            outerPoints = ApplyPointTransform(
+                outerPoints, payload.imageWidth, payload.imageHeight, transformIndex);
+            innerPoints = ApplyPointTransform(
+                innerPoints, payload.imageWidth, payload.imageHeight, transformIndex);
+        }
         bool available = status == "ok"
             && outerPoints.Length >= 3
             && innerPoints.Length >= 3;
@@ -675,6 +684,141 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             outer = new VisionPointPayload[0],
             inner = new VisionPointPayload[0]
         };
+    }
+
+    // ---- Point-transform auto-calibration -------------------------------
+    // The camera CPU image reaches Vision through a chain of conventions
+    // (sensor rotation, MirrorY conversion, Vision orientation hint, raw-y)
+    // whose net 2D effect is one of eight axis transforms. Instead of
+    // deriving it analytically, each detection scores every candidate
+    // against the ARKit-known mouth position (from the paired face bounds)
+    // and a lips-are-wide sanity check; consistent votes lock the index and
+    // persist it. This is the same empirical strategy the hand-occlusion
+    // runtime uses for its landmark transforms.
+    private const string PointTransformPrefKey = "e7.lip.pointTransformV1";
+    private const int PointTransformVotesToLock = 8;
+    private int lockedPointTransform = -1;
+    private int pointTransformCandidate = -1;
+    private int pointTransformVotes;
+    private bool loadedPointTransformPref;
+
+    private static Vector2 TransformNormalizedPoint(Vector2 p, int index)
+    {
+        float u = p.x;
+        float v = p.y;
+        bool swap = index >= 4;
+        if (swap)
+        {
+            float t = u;
+            u = v;
+            v = t;
+        }
+
+        if ((index & 1) != 0)
+        {
+            u = 1.0f - u;
+        }
+
+        if ((index & 2) != 0)
+        {
+            v = 1.0f - v;
+        }
+
+        return new Vector2(u, v);
+    }
+
+    private static Vector2[] ApplyPointTransform(
+        Vector2[] points, int width, int height, int index)
+    {
+        if (index <= 0 || points == null || points.Length == 0)
+        {
+            return points;
+        }
+
+        Vector2[] result = new Vector2[points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector2 normalized = new Vector2(points[i].x / width, points[i].y / height);
+            Vector2 transformed = TransformNormalizedPoint(normalized, index);
+            result[i] = new Vector2(transformed.x * width, transformed.y * height);
+        }
+
+        return result;
+    }
+
+    private int ResolvePointTransformIndex(
+        Vector2[] outerPoints, int width, int height, FaceScreenBounds faceBounds)
+    {
+        if (!loadedPointTransformPref)
+        {
+            loadedPointTransformPref = true;
+            lockedPointTransform = PlayerPrefs.GetInt(PointTransformPrefKey, -1);
+        }
+
+        if (lockedPointTransform >= 0)
+        {
+            return lockedPointTransform;
+        }
+
+        if (!faceBounds.Available || faceBounds.Size.x <= 1.0f || faceBounds.Size.y <= 1.0f)
+        {
+            return 0;
+        }
+
+        // Expected mouth centre in normalized capture space (top-down):
+        // slightly below the face-bounds centre.
+        Vector2 expected = new Vector2(
+            faceBounds.Center.x / width,
+            (faceBounds.Center.y + faceBounds.Size.y * 0.22f) / height);
+
+        int best = 0;
+        float bestScore = float.MaxValue;
+        for (int index = 0; index < 8; index++)
+        {
+            Vector2 sum = Vector2.zero;
+            Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
+            Vector2 max = new Vector2(float.MinValue, float.MinValue);
+            for (int i = 0; i < outerPoints.Length; i++)
+            {
+                Vector2 n = TransformNormalizedPoint(
+                    new Vector2(outerPoints[i].x / width, outerPoints[i].y / height), index);
+                sum += n;
+                min = Vector2.Min(min, n);
+                max = Vector2.Max(max, n);
+            }
+
+            Vector2 centre = sum / outerPoints.Length;
+            float distance = Vector2.Distance(centre, expected);
+            float widthN = Mathf.Max(1e-4f, max.x - min.x);
+            float heightN = Mathf.Max(1e-4f, max.y - min.y);
+            // Lips are wider than tall; punish portrait-shaped candidates.
+            float aspectPenalty = heightN > widthN ? 0.35f : 0.0f;
+            float score = distance + aspectPenalty;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = index;
+            }
+        }
+
+        if (best == pointTransformCandidate)
+        {
+            pointTransformVotes++;
+            if (pointTransformVotes >= PointTransformVotesToLock)
+            {
+                lockedPointTransform = best;
+                PlayerPrefs.SetInt(PointTransformPrefKey, best);
+                Debug.Log(
+                    "[E7] vision_lip_boundary_point_transform_locked index=" + best);
+            }
+        }
+        else
+        {
+            pointTransformCandidate = best;
+            pointTransformVotes = 1;
+        }
+
+        return best;
     }
 
     private static Vector2[] ConvertPoints(VisionPointPayload[] points)
