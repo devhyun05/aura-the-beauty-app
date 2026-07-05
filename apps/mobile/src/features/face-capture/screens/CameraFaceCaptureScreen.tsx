@@ -45,6 +45,7 @@ import {
   FACE_PITCH_GATE_MESSAGE,
   evaluateFacePitchGate,
 } from '../services/faceCapturePitchGate';
+import {evaluateColorLightingGreenlight} from '../../personal-color/services/personalColorCore/colorLightingGreenlight';
 import {
   detectFaceLandmarksFromImage,
   isFaceLandmarkDetectorAvailable,
@@ -413,7 +414,9 @@ export function CameraFaceCaptureScreen({
   // realtime 뷰 없이는 mediaPipe/cameraStability 입력이 오지 않아 영구 차단되기 때문.
   const requireGreenlight = shouldValidateFace && realtimeCaptureAvailable;
   // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
-  const semanticMatteCapture = requireGreenlight && captureType === 'face_analysis';
+  const semanticMatteCapture =
+    requireGreenlight &&
+    (captureType === 'face_analysis' || captureType === 'personal_color');
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   // 타원 프레이밍 가이드 (기획서 §3.5 비율, 화면 중앙 앵커).
   // 정수리/턱끝이 타원 상하단 점에 맞아야 촬영되므로 얼굴 크기(=촬영 거리)를
@@ -487,6 +490,16 @@ export function CameraFaceCaptureScreen({
     [latestMediaPipe],
   );
   const shouldBlockForPitch = requirePitchGate && !pitchGate.pitchOk;
+
+  // 퍼스널 컬러 촬영에서만 조명 게이트 적용. HARD는 AE/AWB 미수렴 하나뿐(≈1초 자기해소),
+  // soft(너무 어두움/색조 캐스트)는 계측만 하고 촬영을 막지 않는다.
+  const requireColorLighting = requireGreenlight && captureType === 'personal_color';
+  const colorLightingReport = useMemo(
+    () => evaluateColorLightingGreenlight(latestCameraStability ?? {}),
+    [latestCameraStability],
+  );
+  const shouldBlockForColorLighting =
+    requireColorLighting && !colorLightingReport.hardBlockClear;
   const mediaPipeCenterLineX = useMemo(() => {
     const xs = MEDIAPIPE_CENTERLINE_KEYS
       .map(key => getScreenLandmarkPoint(latestMediaPipe?.screenLandmarks?.[key]))
@@ -513,18 +526,27 @@ export function CameraFaceCaptureScreen({
         ? greenlightReport.message
         : shouldBlockForPitch
           ? FACE_PITCH_GATE_MESSAGE
-          : null
+          : shouldBlockForColorLighting
+            ? colorLightingReport.message
+            : null
       : guidance.status === 'blocked'
         ? guidance.message
         : null;
-  guidanceMessageTargetRef.current = rawGuidanceMessage;
+  // 렌더 단계에서 ref.current를 직접 수정하면 렌더 순수성을 해치므로, 값이 바뀔 때만
+  // effect로 안전하게 갱신한다. 표시는 위 interval이 이 ref를 읽어 제한 갱신한다.
+  useEffect(() => {
+    guidanceMessageTargetRef.current = rawGuidanceMessage;
+  }, [rawGuidanceMessage]);
   const captureMessage =
     uploadError ??
     (isUploading
       ? '사진을 업로드하는 중이에요'
       : captureValidationMessage ?? stableGuidanceMessage);
   const isCaptureDisabled =
-    isUploading || shouldBlockForGreenlight || shouldBlockForPitch;
+    isUploading ||
+    shouldBlockForGreenlight ||
+    shouldBlockForPitch ||
+    shouldBlockForColorLighting;
   const shouldUseBackendUpload = Boolean(getBackendApiBaseUrl());
   const foreheadDot = useMemo(
     () => {
@@ -578,7 +600,8 @@ export function CameraFaceCaptureScreen({
           !isCameraReady ||
           shouldBlockForScreenGuide ||
           shouldBlockForGreenlight ||
-          shouldBlockForPitch
+          shouldBlockForPitch ||
+          shouldBlockForColorLighting
       ? colors.danger
       : requireGreenlight
         ? colors.guideReady
@@ -960,6 +983,13 @@ export function CameraFaceCaptureScreen({
 
       if (requirePitchGate && !pitchGate.pitchOk) {
         triggerBlockedCaptureFeedback(FACE_PITCH_GATE_MESSAGE);
+        return;
+      }
+
+      if (requireColorLighting && !colorLightingReport.hardBlockClear) {
+        triggerBlockedCaptureFeedback(
+          colorLightingReport.message ?? '카메라가 조명을 맞추는 중이에요. 잠시만요.',
+        );
         return;
       }
 
