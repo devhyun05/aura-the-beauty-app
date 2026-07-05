@@ -3148,7 +3148,7 @@ public sealed class RNBridge : MonoBehaviour
         // Mode 12 is a shader-only asymmetric basic-mask test. Modes 13-16
         // test clockwise/counter-clockwise 90-degree display rotations. Mode
         // 19 is a shader-path confirmation fill.
-        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 24) : 0;
+        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 42) : 0;
     }
 
     private static string FirstNonBlank(params string[] values)

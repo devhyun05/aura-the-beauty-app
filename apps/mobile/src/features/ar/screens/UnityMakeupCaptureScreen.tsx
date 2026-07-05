@@ -185,6 +185,11 @@ const FOUNDATION_FINISH_OPTIONS = [
 const FOUNDATION_DEBUG_MODE_OPTIONS = [
   {label: '끄기', mode: 0},
   {label: '경로확인', mode: 23},
+  // 마스크 흔들림 라이브 튜닝: 마스크가 얼굴보다 앞서가면 지연55/지연90,
+  // 뒤따라오면 예측35. 화면은 정상 파운데이션으로 보이고 투영 타이밍만 바뀜.
+  {label: '지연55', mode: 40},
+  {label: '예측35', mode: 41},
+  {label: '지연90', mode: 42},
   {label: '표면(CB)', mode: 1},
   {label: '최종(CB)', mode: 3},
   {label: '강제색(CB)', mode: 5},
