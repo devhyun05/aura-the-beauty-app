@@ -75,6 +75,10 @@ type ScreenGuideBounds = {
   width: number;
 };
 
+type FaceCaptureUploadHandler = (
+  imageInput: FaceCaptureImageInput,
+) => Promise<FaceCaptureUploadResult>;
+
 export type CameraFaceCaptureMode = 'face' | 'reference';
 
 type CameraFaceCaptureScreenProps = {
@@ -89,6 +93,8 @@ type CameraFaceCaptureScreenProps = {
   onClose?: () => void;
   onPickImage?: () => void;
   onToggleCamera?: (direction: CameraDirection) => void;
+  // 실험용(face-capture lab)에서 backend 업로드를 로컬 스텁으로 대체할 때만 주입한다.
+  uploadImage?: FaceCaptureUploadHandler;
 };
 
 export function getCameraFaceCaptureCameraMode(): 'live-camera' {
@@ -343,6 +349,7 @@ export function CameraFaceCaptureScreen({
   onClose,
   onPickImage,
   onToggleCamera,
+  uploadImage = uploadFaceCaptureImage,
 }: CameraFaceCaptureScreenProps) {
   const shouldValidateFace = shouldValidateCameraFaceCapture(captureMode);
   const {height, width} = useWindowDimensions();
@@ -949,7 +956,7 @@ export function CameraFaceCaptureScreen({
       let result: FaceCaptureUploadResult;
 
       try {
-        result = await uploadFaceCaptureImage(imageInput);
+        result = await uploadImage(imageInput);
       } catch (error) {
         setUploadError(
           error instanceof Error
@@ -1017,7 +1024,7 @@ export function CameraFaceCaptureScreen({
       let result: FaceCaptureUploadResult;
 
       try {
-        result = await uploadFaceCaptureImage(imageInput);
+        result = await uploadImage(imageInput);
       } catch (error) {
         setUploadError(
           error instanceof Error
