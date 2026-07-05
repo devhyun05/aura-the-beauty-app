@@ -205,14 +205,23 @@ static VNFaceObservation *E7LargestFace(NSArray<VNFaceObservation *> *faces)
 
 // Shared landmark core: runs Vision on the given image and returns the
 // boundary JSON (ok or failure payload). The caller owns the image.
-static NSString *E7RunLipBoundaryJson(CGImageRef image)
+// cgOrientation is a CGImagePropertyOrientation value; landmark points and
+// reported dimensions are in the ORIENTED (upright) space.
+static NSString *E7RunLipBoundaryJsonOriented(CGImageRef image, int cgOrientation)
 {
   @autoreleasepool {
-    int width = (int)CGImageGetWidth(image);
-    int height = (int)CGImageGetHeight(image);
+    if (cgOrientation < 1 || cgOrientation > 8) {
+      cgOrientation = kCGImagePropertyOrientationUp;
+    }
+
+    int rawWidth = (int)CGImageGetWidth(image);
+    int rawHeight = (int)CGImageGetHeight(image);
+    bool swapsDimensions = cgOrientation >= 5; // Left/Right families
+    int width = swapsDimensions ? rawHeight : rawWidth;
+    int height = swapsDimensions ? rawWidth : rawHeight;
     VNDetectFaceLandmarksRequest *request = [[VNDetectFaceLandmarksRequest alloc] init];
     VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image
-                                                                        orientation:kCGImagePropertyOrientationUp
+                                                                        orientation:(CGImagePropertyOrientation)cgOrientation
                                                                             options:@{}];
     NSError *error = nil;
     BOOL performed = [handler performRequests:@[request] error:&error];
@@ -316,7 +325,7 @@ const char *E7VisionDetectLipBoundaryPng(
       return E7CopyCString(E7FailureJson(@"decode_failed", @"cg_image_null", imageWidth, imageHeight));
     }
 
-    NSString *json = E7RunLipBoundaryJson(image);
+    NSString *json = E7RunLipBoundaryJsonOriented(image, kCGImagePropertyOrientationUp);
     CGImageRelease(image);
     return E7CopyCString(json);
   }
@@ -331,7 +340,8 @@ int E7VisionLipBoundarySubmitRgba(
   int height,
   int strideBytes,
   int rowsBottomUp,
-  int swapRedBlue)
+  int swapRedBlue,
+  int cgOrientation)
 {
   if (rgba == NULL || width <= 0 || height <= 0 || strideBytes < width * 4) {
     return -1;
@@ -392,7 +402,7 @@ int E7VisionLipBoundarySubmitRgba(
       }
 
       if (image != NULL) {
-        json = E7RunLipBoundaryJson(image);
+        json = E7RunLipBoundaryJsonOriented(image, cgOrientation);
         CGImageRelease(image);
       } else {
         json = E7FailureJson(@"decode_failed", @"cg_image_null_rgba", width, height);
