@@ -320,11 +320,10 @@ export function UnityMakeupCaptureScreen({
 
     setIsPreparingUnity(false);
     setHasStartedMaskFlow(true);
-    setPhase('ready');
-    // Live personalization is active from the first frame (mesh-calibrated
-    // masks + Vision lip boundary); the frontal capture is now an OPTIONAL
-    // refinement instead of a required onboarding step.
-    setNotice('실시간 맞춤 메이크업이 적용 중입니다 · 정면 촬영은 선택 보정입니다');
+    // 'applied' immediately: live personalization is active from the first
+    // frame, so the HUD shows right away and no scan/prepare UI is needed.
+    setPhase('applied');
+    setNotice('실시간 맞춤 메이크업이 적용 중입니다');
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
         activeRegions: getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
@@ -688,34 +687,19 @@ export function UnityMakeupCaptureScreen({
         </Pressable>
 
         <YStack style={styles.headerTitleGroup}>
-          <Text style={styles.headerEyebrow}>맞춤 생성</Text>
-          <Text style={styles.headerTitle}>개인 마스크 적용</Text>
+          <Text style={styles.headerEyebrow}>실시간 맞춤</Text>
+          <Text style={styles.headerTitle}>메이크업 AR</Text>
         </YStack>
 
         <View style={styles.headerSpacer} />
       </XStack>
 
       <YStack style={styles.cameraStage}>
-        <View style={[styles.unityMountPoint, !hasStartedMaskFlow && styles.maskIntroStage]}>
-          {hasStartedMaskFlow && shouldUseUnityPreview ? (
+        {/* 스캔/인트로 단계 제거: 마스크가 런타임에서 실시간 개인화되므로
+            진입 즉시 카메라(Unity 뷰)를 마운트한다. */}
+        <View style={styles.unityMountPoint}>
+          {shouldUseUnityPreview ? (
             <UnityMakeupNativeView />
-          ) : !hasStartedMaskFlow ? (
-            <YStack style={styles.maskIntroContent}>
-              <View style={styles.maskIntroFace}>
-                <View style={[styles.regionPreview, styles.introLipPreview, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introCheekPreviewLeft, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introCheekPreviewRight, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introBrowPreviewLeft, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introBrowPreviewRight, styles.regionPreviewActive]} />
-              </View>
-              <YStack style={styles.maskIntroCopy}>
-                <Text style={styles.maskIntroEyebrow}>개인 마스크</Text>
-                <Text style={styles.maskIntroTitle}>개인 마스크 만들기</Text>
-                <Text style={styles.maskIntroDescription}>
-                  얼굴 기준 마스크를 만든 뒤 립, 볼, 눈썹을 같은 위치에 적용합니다.
-                </Text>
-              </YStack>
-            </YStack>
           ) : (
             <View style={styles.faceGuide} />
           )}
@@ -729,7 +713,7 @@ export function UnityMakeupCaptureScreen({
         ) : null}
       </YStack>
 
-      {phase === 'applied' && generatedPackage ? (
+      {phase === 'applied' ? (
         <ArBlushRuntimeHud
           activeRegion={activeHudRegion}
           companionControls={companionMakeupControls}
@@ -741,83 +725,11 @@ export function UnityMakeupCaptureScreen({
           onDisableActiveRegion={handleDisableHudRegion}
           onResetMakeup={handleResetMakeupSelections}
         />
-      ) : (
-        <YStack style={styles.controlPanel}>
-          <ScrollView
-            contentContainerStyle={styles.maskFlowStepRow}
-            horizontal
-            showsHorizontalScrollIndicator={false}>
-            {MASK_FLOW_STEPS.map(step => {
-              const state = getMaskFlowStepState(step.id, activeMaskFlowStep);
+      ) : null}
 
-              return (
-                <View
-                  key={step.id}
-                  style={[
-                    styles.maskFlowStepChip,
-                    state === 'active' && styles.maskFlowStepChipActive,
-                    state === 'done' && styles.maskFlowStepChipDone,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.maskFlowStepText,
-                      state !== 'pending' && styles.maskFlowStepTextActive,
-                    ]}>
-                    {step.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-
-          <XStack style={styles.scanRegionRow}>
-            {PERSONAL_MASK_REGIONS.map(region => {
-              const isScanned = Boolean(sourceFrameMetadata);
-              const isScanning = phase === 'capturing' || phase === 'generating';
-
-              return (
-                <View
-                  key={region.id}
-                  style={[
-                    styles.scanRegionCard,
-                    isScanning && styles.scanRegionCardActive,
-                    isScanned && styles.scanRegionCardDone,
-                  ]}>
-                  <Text style={styles.scanRegionLabel}>{region.label}</Text>
-                  <Text style={styles.scanRegionMeta}>
-                    {isScanned ? '스캔됨' : isScanning ? '스캔 중' : region.guidance}
-                  </Text>
-                </View>
-              );
-            })}
-          </XStack>
-
-        </YStack>
-      )}
-
-      <XStack style={styles.bottomActions}>
-        {!hasStartedMaskFlow ? (
-          <Pressable
-            accessibilityLabel="개인 마스크 만들기 시작"
-            accessibilityRole="button"
-            disabled={isPreparingUnity}
-            onPress={handleStartMaskFlow}
-            style={({pressed}) => [
-              styles.startButton,
-              isPreparingUnity && styles.captureButtonDisabled,
-              pressed && styles.pressed,
-            ]}>
-            <Sparkles color={colors.black} size={iconSize.sm} strokeWidth={2} />
-            <Text style={styles.startButtonText}>
-              {isPreparingUnity ? '준비 중' : '개인 마스크 만들기'}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {/* 개인 마스크 촬영 버튼 제거: 마스크는 런타임에서 실시간
-            개인화되므로 촬영 단계가 더 이상 필요 없다 (handleCapturePress
-            플로우는 추후 "정밀 보정" 기능으로 재노출할 수 있게 유지). */}
-      </XStack>
+      {/* 스캔 단계 칩·스캔 상태 카드·시작 버튼 제거: 진입 즉시 라이브
+          메이크업이 적용되므로 준비 UI가 필요 없다 (촬영 기반 정밀 보정
+          플로우 코드는 유지 — 추후 옵션 기능으로 재노출 가능). */}
     </YStack>
   );
 }
