@@ -205,38 +205,85 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 return 1.0 - smoothstep(radius, radius * 1.85, dist);
             }
 
+            float3 RgbToHsv(float3 c)
+            {
+                float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
+                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                float e = 1.0e-6;
+                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+            }
+
+            float3 HsvToRgb(float3 c)
+            {
+                float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
+            }
+
+            float WrappedHueDelta(float target, float source)
+            {
+                float delta = target - source;
+                return delta - round(delta); // shortest path on the hue circle
+            }
+
             float3 CorrectCameraColor(float3 cameraColor, float visibleSkin)
             {
+                // HSV tone correction, modeled on how real foundation shades
+                // work (see docs/guide):
+                //   V add  = 호수 (21호 lifts brightness, 23호 keeps it)
+                //   H shift = 쿨톤/웜톤 (small, hard-clamped)
+                //   S scale = 맑기/차분함
+                // Every offset is a smooth, clamped transform of the camera
+                // pixel itself — pores and shading (high-frequency detail)
+                // ride along untouched, only the low-frequency tone moves.
+                // The previous RGB channel-ratio filter re-normalized the
+                // result back to the camera's luminance, so a lighter shade
+                // could never actually brighten the face, and high coverage
+                // pulled every pixel toward one flat color.
                 float3 userSkin = max(saturate(_UserSkinBaseColor.rgb), float3(0.075, 0.075, 0.075));
                 float3 foundation = max(saturate(_FoundationColor.rgb), float3(0.075, 0.075, 0.075));
-                float3 chromaRatio = foundation / userSkin;
-                float chromaRatioLum = max(FoundationLuma(chromaRatio), 0.08);
-                chromaRatio /= chromaRatioLum;
+                float3 skinHsv = RgbToHsv(userSkin);
+                float3 foundationHsv = RgbToHsv(foundation);
+                float3 cameraHsv = RgbToHsv(cameraColor);
 
-                float userLum = max(FoundationLuma(userSkin), 0.08);
-                float foundationLum = FoundationLuma(foundation);
-                float lumShift = clamp(foundationLum - userLum, -0.12, 0.12) * saturate(_FoundationLuminanceInfluence);
-                float3 targetFilter = chromaRatio + lumShift;
-                targetFilter = lerp(float3(1.0, 1.0, 1.0), targetFilter, saturate(_FoundationCoverage));
-                targetFilter = lerp(targetFilter, saturate((targetFilter + FoundationLuma(targetFilter)) * 0.5), saturate(_FoundationEvenness) * 0.12);
+                float coverage = saturate(_FoundationCoverage);
                 float amount = saturate(_FoundationIntensity) * visibleSkin;
-                float cameraLum = FoundationLuma(cameraColor);
-                float3 filtered = saturate(cameraColor * max(targetFilter, float3(0.05, 0.05, 0.05)));
-                float filteredLum = max(FoundationLuma(filtered), 0.001);
-                float3 lumaPreserved = saturate(filtered * (cameraLum / filteredLum));
-                float safeFoundationLum = max(foundationLum, 0.001);
-                float3 lumaMatchedFoundation = saturate(foundation * (cameraLum / safeFoundationLum));
-                // Luminance-preserving blend: the camera pixel's luma (shadows,
-                // pores, nose shading) passes through untouched; only the
-                // foundation's chroma mixes in. lumaMatchedFoundation is the
-                // foundation color rescaled to the camera pixel's luminance,
-                // so even at high coverage the skin texture stays visible.
-                float3 corrected = lerp(
-                    lumaPreserved,
-                    lumaMatchedFoundation,
-                    saturate(_FoundationCoverage) * 0.55);
-                float visibleAmount = saturate(amount);
-                return lerp(cameraColor, corrected, visibleAmount);
+
+                // 쿨/웜: ease toward the foundation hue, clamped to +-0.03 so
+                // the face can never flip color families.
+                float hueShift = clamp(
+                    WrappedHueDelta(foundationHsv.x, skinHsv.x), -0.03, 0.03) * coverage;
+
+                // 맑기: saturation ratio between shade and skin, kept near 1.
+                float satScale = lerp(
+                    1.0,
+                    clamp(foundationHsv.y / max(skinHsv.y, 0.05), 0.85, 1.15),
+                    coverage);
+
+                // 호수: ADDITIVE brightness — what the old multiply filter
+                // could never do. Clamped to +0.12 so the face brightens
+                // without flattening into the "달걀귀신" look.
+                float valueAdd = clamp(foundationHsv.z - skinHsv.z, -0.04, 0.12)
+                    * lerp(0.55, 1.0, coverage)
+                    * saturate(_FoundationLuminanceInfluence * 2.5);
+
+                float3 adjusted;
+                adjusted.x = frac(cameraHsv.x + hueShift + 1.0);
+                adjusted.y = saturate(cameraHsv.y * satScale);
+                adjusted.z = saturate(cameraHsv.z + valueAdd);
+
+                // Evenness: lift only the darker pixels toward the midtone so
+                // blotches and shadows flatten a little, while highlights and
+                // overall depth stay (the old grey-average killed saturation).
+                float evenLift = saturate(_FoundationEvenness);
+                float shadowWeight = 1.0 - smoothstep(0.15, 0.75, adjusted.z);
+                adjusted.z = saturate(adjusted.z + evenLift * shadowWeight * 0.10);
+                adjusted.y = saturate(adjusted.y * (1.0 - evenLift * shadowWeight * 0.08));
+
+                float3 correctedRgb = saturate(HsvToRgb(adjusted));
+                return lerp(cameraColor, correctedRgb, saturate(amount));
             }
 
             fixed4 frag(v2f input) : SV_Target
@@ -385,15 +432,25 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 maskUv.y = _MaskFaceCenterY
                     + (maskUv.y - _MaskFaceCenterY) / max(_MaskSampleScaleY, 0.5);
 
-                // Feathering: 5-tap tent sample of the mask softens the hard
+                // Feathering: 9-tap tent sample of the mask softens the hard
                 // mesh silhouette (jawline, face contour) so the foundation
                 // fades out naturally instead of clipping at the mesh edge.
-                float2 featherTexel = _SkinMaskTex_TexelSize.xy * 1.5;
-                float4 maskSample = tex2D(_SkinMaskTex, maskUv) * 0.44
-                    + tex2D(_SkinMaskTex, maskUv + float2(featherTexel.x, 0.0)) * 0.14
-                    + tex2D(_SkinMaskTex, maskUv - float2(featherTexel.x, 0.0)) * 0.14
-                    + tex2D(_SkinMaskTex, maskUv + float2(0.0, featherTexel.y)) * 0.14
-                    + tex2D(_SkinMaskTex, maskUv - float2(0.0, featherTexel.y)) * 0.14;
+                // _FoundationMaskFeather widens the blur radius — at the
+                // 256px mask RT one texel is ~4-5 screen px, so the fade band
+                // grows from ~7px (feather 0) to ~25px (feather 1).
+                float featherAmount = saturate(_FoundationMaskFeather);
+                float2 featherTexel =
+                    _SkinMaskTex_TexelSize.xy * lerp(1.5, 5.5, featherAmount);
+                float2 featherDiag = featherTexel * 0.7071;
+                float4 maskSample = tex2D(_SkinMaskTex, maskUv) * 0.28
+                    + (tex2D(_SkinMaskTex, maskUv + float2(featherTexel.x, 0.0))
+                        + tex2D(_SkinMaskTex, maskUv - float2(featherTexel.x, 0.0))
+                        + tex2D(_SkinMaskTex, maskUv + float2(0.0, featherTexel.y))
+                        + tex2D(_SkinMaskTex, maskUv - float2(0.0, featherTexel.y))) * 0.115
+                    + (tex2D(_SkinMaskTex, maskUv + featherDiag)
+                        + tex2D(_SkinMaskTex, maskUv - featherDiag)
+                        + tex2D(_SkinMaskTex, maskUv + float2(featherDiag.x, -featherDiag.y))
+                        + tex2D(_SkinMaskTex, maskUv + float2(-featherDiag.x, featherDiag.y))) * 0.065;
                 float exclusionMask = saturate(maskSample.g);
                 float rawSkinMask = saturate(maskSample.b);
                 float baseFaceSurfaceMask = saturate(maskSample.a);
@@ -404,11 +461,11 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                     * handVisibility;
                 float surfaceMask = saturate(baseFaceSurfaceMask * max(_FoundationMaskStrength, 0.0))
                     * handVisibility;
-                if (_FoundationMaskFeather > 0.0001)
-                {
-                    finalMask = smoothstep(_FoundationMaskFeather, 1.0, finalMask);
-                    surfaceMask = smoothstep(_FoundationMaskFeather, 1.0, surfaceMask);
-                }
+                // NOTE: the old smoothstep(feather, 1, mask) here RAISED the
+                // alpha floor — it cut away the blur tail and made the edge
+                // HARDER as feather grew (the opposite of feathering). The
+                // widened tent blur above is the actual softener, so the mask
+                // passes through linearly.
 
                 // SODA-style neck / edge handling. Pixels covered by the extended
                 // surface (alpha) but without projected face-skin weights (blue)

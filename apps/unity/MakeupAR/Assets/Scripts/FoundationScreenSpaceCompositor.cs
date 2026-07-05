@@ -198,16 +198,21 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
 
         AttachCommandBuffer(arCamera);
 
-        // Sampling-side compensation: the mask is drawn at the (laggy)
-        // anchor position with perfect camera sync; the composite shifts and
-        // vertically rescales the LOOKUP to match the camera image.
+        // Geometry-locked sampling: the mask is drawn inside this camera's
+        // own render pass, so it is already synchronized with the frame by
+        // construction. Sampling-side corrections (velocity shift, Vision
+        // vertical rescale) move an aligned mask AWAY from the face — the
+        // Vision scale in particular is measured against 150-300ms-old
+        // observations and rescales around a per-frame pivot, which made the
+        // mask visibly swim while the phone moved. Shift and scale both stay
+        // identity; visionScaleY is still measured for diagnostics only.
         Vector2 shift = ComputeTotalShiftUv();
         compositeMaterial.SetTexture("_SkinMaskTex", maskTexture);
         compositeMaterial.SetFloat("_ScreenSpaceUvFlip", MaskSampleFlipY ? 1.0f : 0.0f);
         compositeMaterial.SetVector(
             "_MaskSampleShift",
             new Vector4(shift.x, shift.y, 0.0f, 0.0f));
-        compositeMaterial.SetFloat("_MaskSampleScaleY", visionScaleY);
+        compositeMaterial.SetFloat("_MaskSampleScaleY", 1.0f);
         compositeMaterial.SetFloat(
             "_MaskFaceCenterY",
             hasPreviousFaceCenterUv ? previousFaceCenterUv.y : 0.5f);

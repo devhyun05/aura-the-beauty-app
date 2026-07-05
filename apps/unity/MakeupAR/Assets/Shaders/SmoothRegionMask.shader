@@ -63,6 +63,7 @@ Shader "MakeupAR/SmoothRegionMask"
         _BlushIntensity ("Blush Intensity", Range(0, 1)) = 0.5
         _LipStyleMode ("Lip Style Mode", Float) = -1
         [HideInInspector] _CheekBlushMode ("Cheek Blush Mode", Float) = 0
+        [HideInInspector] _EyelinerMode ("Eyeliner Mode", Float) = 0
         [HideInInspector] _CheekUvTransform ("Cheek UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartUvTransform ("Cheek Part UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartBlend ("Cheek Part Blend", Float) = 0
@@ -168,6 +169,7 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BlushIntensity;
             float _LipStyleMode;
             float _CheekBlushMode;
+            float _EyelinerMode;
             float4 _CheekUvTransform;
             float4 _CheekPartUvTransform;
             float _CheekPartBlend;
@@ -800,8 +802,28 @@ Shader "MakeupAR/SmoothRegionMask"
                     }
                 }
 
+                if (_EyelinerMode > 0.5)
+                {
+                    // Eyeliner is a thin drawn line, not a diffuse stain: the
+                    // generic path (blurred fullSoft * 0.54) can never get
+                    // darker than ~40% alpha, which reads as a gray smudge.
+                    // Sample the RAW mask so the line stays crisp, weight the
+                    // core near full strength, and let coverage only trim the
+                    // strength gently instead of scaling it to nothing.
+                    float linerCore = CoreMaskAlpha(mask.r, _Threshold, _Feather * 0.6);
+                    float linerSoft = SoftMaskAlpha(mask.r, _Threshold, _Feather);
+                    // Modulate by the raw mask value so authored sub-full
+                    // weights (e.g. the doll style's 55% under-eye shading)
+                    // keep their intended density instead of being pushed to
+                    // full strength by the smoothstep.
+                    float linerDensity = saturate(mask.r * 1.06);
+                    maskStrength = saturate(linerCore * linerDensity * 0.92 + linerSoft * 0.20)
+                        * lerp(0.75, 1.0, coverage);
+                }
+
                 float detailAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
-                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && detailAmount > 0.001)
+                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && _EyelinerMode < 0.5
+                    && detailAmount > 0.001)
                 {
                     float rawHairDetail = saturate(mask.b * fullSoft);
                     float softHairDetail = saturate(softMask.b * fullSoft);

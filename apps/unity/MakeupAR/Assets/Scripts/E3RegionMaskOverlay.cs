@@ -3852,6 +3852,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     : 0.0f);
         }
 
+        if (material.HasProperty("_EyelinerMode"))
+        {
+            // Thin-line alpha path: raw mask sampling + near-full core
+            // strength so the liner reads as a drawn line, not a soft stain.
+            material.SetFloat(
+                "_EyelinerMode",
+                recipe.Region == "eyeliner" ? 1.0f : 0.0f);
+        }
+
         MaybeLogFoundationDiagnostics(material, mask, maskTexture, materialColor, recipe, foundationRegion);
     }
 
@@ -4225,6 +4234,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 sampleAlphaScale = Mathf.Lerp(0.52f, 0.76f, recipe.Intensity);
                 brightnessScale = 0.9f;
                 break;
+        }
+
+        if (recipe.Region == "eyeliner" && recipe.TextureSample != "shimmer_eye")
+        {
+            // A drawn liner needs near-opaque pigment: the generic 0.52-0.76
+            // scale (times the mask strength) leaves it a translucent gray
+            // smudge on device instead of a defined line.
+            sampleAlphaScale = Mathf.Lerp(0.74f, 0.96f, recipe.Intensity);
+            brightnessScale = 0.9f;
         }
 
         float materialAlpha = Mathf.Clamp01(recipe.Opacity * sampleAlphaScale);
@@ -5057,6 +5075,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static readonly Dictionary<string, Texture2D> GeneratedEyelinerMaskTextures =
         new Dictionary<string, Texture2D>();
 
+    // The calibrated eye zone is a foundation-EXCLUSION ellipse padded past
+    // the eye opening, so its top edge sits above the real lash line. This
+    // scales the vertical radius of the drawn lid curve down to pull the
+    // liner onto the lashes. Tune on device if the line still floats.
+    private const float EyelinerLidBias = 0.90f;
+
     private static bool IsGeneratedEyelinerMaskTextureId(string maskTextureId)
     {
         return !string.IsNullOrWhiteSpace(maskTextureId)
@@ -5140,7 +5164,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             WingLength = 0.028f,
             WingAngleDeg = 18.0f,
             WingCurl = 0.08f,
-            WingRootThickness = 0.009f,
+            WingRootThickness = 0.0045f,
             WingSoftness = 0.0055f
         };
 
@@ -5156,7 +5180,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 style.WingLength = 0.042f;
                 style.WingAngleDeg = 52.0f;
                 style.WingCurl = 0.22f;
-                style.WingRootThickness = 0.009f;
+                style.WingRootThickness = 0.0045f;
                 style.WingSoftness = 0.0035f;
                 break;
             case "e7-eyeliner-gen-puppy-v2":
@@ -5169,7 +5193,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 style.WingLength = 0.048f;
                 style.WingAngleDeg = -22.0f;
                 style.WingCurl = -0.12f;
-                style.WingRootThickness = 0.012f;
+                style.WingRootThickness = 0.006f;
                 style.WingSoftness = 0.0065f;
                 break;
             case "e7-eyeliner-gen-sexy-v2":
@@ -5183,7 +5207,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 style.WingLength = 0.085f;
                 style.WingAngleDeg = 8.0f;
                 style.WingCurl = 0.06f;
-                style.WingRootThickness = 0.015f;
+                style.WingRootThickness = 0.0075f;
                 style.WingSoftness = 0.0040f;
                 style.InnerExtLength = 0.022f;
                 style.InnerExtThickness = 0.0055f;
@@ -5200,7 +5224,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 style.WingLength = 0.062f;
                 style.WingAngleDeg = 30.0f;
                 style.WingCurl = 0.10f;
-                style.WingRootThickness = 0.020f;
+                style.WingRootThickness = 0.010f;
                 style.WingSoftness = 0.0028f;
                 break;
             case "e7-eyeliner-gen-doll-v2":
@@ -5214,7 +5238,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 style.WingLength = 0.018f;
                 style.WingAngleDeg = 8.0f;
                 style.WingCurl = 0.0f;
-                style.WingRootThickness = 0.007f;
+                style.WingRootThickness = 0.0035f;
                 style.WingSoftness = 0.0090f;
                 style.LowerStart = 0.0f;
                 style.LowerEnd = 1.05f;
@@ -5247,11 +5271,17 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         // Wing bezier -> short polyline with per-point half-widths. The x
         // component mirrors with outerSign; the curl perpendicular keeps its
-        // vertical sense so both wings bow the same way (up or down).
+        // vertical sense so both wings bow the same way (up or down). The
+        // root sits centred in the band at the outer corner (lid height at
+        // t=0.97 plus half the band thickness) so the wing grows out of the
+        // lash line instead of sagging below it.
         const int wingSamples = 11;
+        // Root on the band centreline (the band straddles the lid curve).
+        float lidAtCorner =
+            geo.Center.y + geo.Ry * EyelinerLidBias * 0.2431f; // sqrt(1 - 0.97^2)
         Vector2 wingRoot = new Vector2(
             geo.Center.x + outerSign * geo.Rx * 0.97f,
-            geo.Center.y + geo.Ry * 0.30f);
+            lidAtCorner);
         float theta = style.WingAngleDeg * Mathf.Deg2Rad;
         Vector2 chord = new Vector2(outerSign * Mathf.Cos(theta), Mathf.Sin(theta));
         Vector2 wingTip = wingRoot + style.WingLength * chord;
@@ -5382,11 +5412,15 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         // Upper lash band along the lid curve, thickness following a
         // quadratic profile that passes through MidThickness at eye centre.
-        if (t > style.InnerStart && t < 1.05f)
+        // The lid ellipse turns vertical at |t|=1, which would smear a spike
+        // below the corner, so the curve height is clamped at |t|=0.97 (the
+        // wing root) and the band stops at the corner itself.
+        if (t > style.InnerStart && t < 1.0f)
         {
-            float clamped = Mathf.Clamp(t, -1.0f, 1.0f);
+            float clamped = Mathf.Clamp(t, -0.97f, 0.97f);
             float lid = geo.Center.y
-                + geo.Ry * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
+                + geo.Ry * EyelinerLidBias
+                    * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
             float s = Mathf.Clamp01((t + 1.0f) * 0.5f);
             float midControl =
                 (4.0f * style.MidThickness - style.InnerThickness - style.OuterThickness) * 0.5f;
@@ -5396,11 +5430,19 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     + 2.0f * inv * s * midControl
                     + s * s * style.OuterThickness,
                 0.0f);
-            float distance = v < lid
-                ? lid - v
-                : (v > lid + bandThickness ? v - (lid + bandThickness) : 0.0f);
+            // Straddle the lash line instead of growing up from it: the face
+            // mesh has a hole for the eye opening, so the lower half of the
+            // band is clipped at render time and the visible line hugs the
+            // lashes (like a real liner) rather than floating on the lid.
+            float bandTop = lid + bandThickness * 0.45f;
+            float bandBottom = lid - bandThickness * 0.55f;
+            float distance = v > bandTop
+                ? v - bandTop
+                : (v < bandBottom ? bandBottom - v : 0.0f);
+            // Outer fade is short: the wing root takes over right at the
+            // corner, so a long fade would gray the line before the flick.
             float innerFade = Mathf.Clamp01((t - style.InnerStart) / 0.25f);
-            float outerFade = Mathf.Clamp01((1.05f - t) / 0.18f);
+            float outerFade = Mathf.Clamp01((1.0f - t) / 0.05f);
             weight = Mathf.Clamp01(1.0f - distance / bandSoft) * innerFade * outerFade;
         }
 
@@ -5453,9 +5495,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (style.LowerEnd > style.LowerStart
             && t > style.LowerStart && t < style.LowerEnd)
         {
-            float clamped = Mathf.Clamp(t, -1.0f, 1.0f);
+            // Same corner clamp and lid bias as the upper band.
+            float clamped = Mathf.Clamp(t, -0.97f, 0.97f);
             float lidLow = geo.Center.y
-                - geo.Ry * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
+                - geo.Ry * EyelinerLidBias
+                    * Mathf.Sqrt(Mathf.Max(0.0f, 1.0f - clamped * clamped));
             float distance = v > lidLow
                 ? v - lidLow
                 : (v < lidLow - style.LowerThickness

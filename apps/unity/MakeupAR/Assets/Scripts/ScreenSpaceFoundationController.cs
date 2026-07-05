@@ -768,7 +768,10 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         };
         material.renderQueue = FoundationRenderQueue;
         material.SetFloat("_FoundationMaskStrength", 1.0f);
-        material.SetFloat("_FoundationMaskFeather", 0.0f);
+        // Widens the silhouette blur in the composite shader (~15px fade
+        // band) so the face outline reads as painted skin, not a pasted-on
+        // mask edge.
+        material.SetFloat("_FoundationMaskFeather", 0.35f);
         material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
         material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
         material.SetFloat(ActiveRendererModeId, 0.0f);
