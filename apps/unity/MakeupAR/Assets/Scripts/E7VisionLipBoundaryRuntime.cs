@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -93,10 +94,18 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     private const string RuntimeSource = "apple_vision_runtime_lip_landmarks";
     private const string CoordinateMode = "raw-y";
 
+    private const int CaptureWidth = 384;
+
     private bool runtimeRequested;
     private bool captureInProgress;
     private float nextCaptureAt;
     private int sequence;
+    private RenderTexture captureTexture;
+    private byte[] frameUploadBuffer;
+    private FaceScreenBounds pendingSubmittedFaceBounds;
+    private bool captureRowsBottomUp;
+    private bool captureFlipLocked;
+    private int noFaceFetchesSinceToggle;
     private BoundarySnapshot latestSnapshot;
     private BoundarySnapshot transitionFromSnapshot;
     private BoundarySnapshot transitionToSnapshot;
@@ -108,11 +117,15 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
 #if UNITY_IOS && !UNITY_EDITOR
     [DllImport("__Internal")]
-    private static extern IntPtr E7VisionDetectLipBoundaryPng(
-        byte[] pngBytes,
-        int byteCount,
-        int imageWidth,
-        int imageHeight);
+    private static extern int E7VisionLipBoundarySubmitRgba(
+        byte[] rgba,
+        int width,
+        int height,
+        int strideBytes,
+        int rowsBottomUp);
+
+    [DllImport("__Internal")]
+    private static extern IntPtr E7VisionLipBoundaryTryFetchJson();
 
     [DllImport("__Internal")]
     private static extern void E7VisionReleaseCString(IntPtr pointer);
@@ -225,6 +238,10 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
     private void Update()
     {
+#if UNITY_IOS && !UNITY_EDITOR
+        PollBackgroundBoundary();
+#endif
+
         if (!runtimeRequested || captureInProgress || Time.realtimeSinceStartup < nextCaptureAt)
         {
             return;
@@ -233,87 +250,176 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         StartCoroutine(CaptureAndDetectRoutine());
     }
 
+    // Capture v2 (hitch- and flicker-free): the old path did a full-screen
+    // ReadPixels + main-thread PNG encode + main-thread Vision inference
+    // every 0.2s (visible lag while the phone moved), and hid ALL makeup
+    // overlays around each capture so they would not appear in the grab —
+    // which blinked every rendered region (lips/cheeks) at the capture
+    // cadence. Now: GPU-downscaled blit + AsyncGPUReadback, background
+    // Vision via the native submit/fetch queue, and no overlay suppression
+    // (Vision lip landmarks are robust to rendered lip tint).
     private IEnumerator CaptureAndDetectRoutine()
     {
         captureInProgress = true;
         RefreshSceneReferences();
-        bool originalDebugOverlayVisible = statusReporter != null && statusReporter.DebugOverlayVisible;
+        nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
 
-        if (regionMaskOverlay != null)
+#if UNITY_IOS && !UNITY_EDITOR
+        EnsureCaptureBuffers();
+        if (captureTexture == null)
         {
-            regionMaskOverlay.SetVisionCaptureSuppressed(true);
+            captureInProgress = false;
+            yield break;
         }
 
-        if (statusReporter != null)
-        {
-            statusReporter.SetDebugOverlayVisible(false);
-        }
-
+        pendingSubmittedFaceBounds = CaptureCurrentFaceBounds();
+        ScreenCapture.CaptureScreenshotIntoRenderTexture(captureTexture);
         yield return new WaitForEndOfFrame();
 
-        int width = Screen.width;
-        int height = Screen.height;
-        string status = "unknown";
-        string detail = "none";
-        Texture2D frameTexture = null;
+        AsyncGPUReadback.Request(
+            captureTexture, 0, TextureFormat.RGBA32, OnCaptureReadback);
+#else
+        captureInProgress = false;
+        yield break;
+#endif
+    }
 
+#if UNITY_IOS && !UNITY_EDITOR
+    private void OnCaptureReadback(AsyncGPUReadbackRequest request)
+    {
         try
         {
-            if (width <= 0 || height <= 0)
+            if (request.hasError || captureTexture == null)
             {
-                status = "invalid_screen_size";
-                detail = "screen_width_or_height_zero";
-                ApplyBoundaryPayload(BuildFailurePayload(status, detail, width, height), default);
-                yield break;
+                return;
             }
 
-            FaceScreenBounds faceBounds = CaptureCurrentFaceBounds();
-            frameTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
-            frameTexture.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
-            frameTexture.Apply(false, false);
-            byte[] pngBytes = EncodeRgbPngTopLeft(frameTexture);
+            int width = request.width;
+            int height = request.height;
+            int stride = request.layerDataSize > 0 && height > 0
+                ? request.layerDataSize / height
+                : width * 4;
+            var data = request.GetData<byte>();
+            int required = stride * height;
+            if (data.Length < required
+                || frameUploadBuffer == null
+                || frameUploadBuffer.Length < required)
+            {
+                return;
+            }
 
-            string json = DetectLipBoundaryJson(pngBytes, width, height);
-            VisionBoundaryPayload payload = JsonUtility.FromJson<VisionBoundaryPayload>(json);
-            if (payload == null)
-            {
-                ApplyBoundaryPayload(BuildFailurePayload(
-                    "parse_failed",
-                    "native_vision_json_empty",
-                    width,
-                    height),
-                    faceBounds);
-            }
-            else
-            {
-                ApplyBoundaryPayload(payload, faceBounds);
-            }
-        }
-        catch (Exception exception)
-        {
-            status = "exception";
-            detail = exception.GetType().Name + ":" + exception.Message;
-            ApplyBoundaryPayload(BuildFailurePayload(status, detail, width, height), default);
+            Unity.Collections.NativeArray<byte>.Copy(data, 0, frameUploadBuffer, 0, required);
+            E7VisionLipBoundarySubmitRgba(
+                frameUploadBuffer,
+                width,
+                height,
+                stride,
+                captureRowsBottomUp ? 1 : 0);
         }
         finally
         {
-            if (frameTexture != null)
-            {
-                Destroy(frameTexture);
-            }
-
-            if (regionMaskOverlay != null)
-            {
-                regionMaskOverlay.SetVisionCaptureSuppressed(false);
-            }
-
-            if (statusReporter != null)
-            {
-                statusReporter.SetDebugOverlayVisible(originalDebugOverlayVisible);
-            }
-
-            nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
             captureInProgress = false;
+        }
+    }
+
+    private void PollBackgroundBoundary()
+    {
+        IntPtr resultPointer = E7VisionLipBoundaryTryFetchJson();
+        if (resultPointer == IntPtr.Zero)
+        {
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = Marshal.PtrToStringAnsi(resultPointer) ?? string.Empty;
+        }
+        finally
+        {
+            E7VisionReleaseCString(resultPointer);
+        }
+
+        VisionBoundaryPayload payload = null;
+        try
+        {
+            payload = JsonUtility.FromJson<VisionBoundaryPayload>(json);
+        }
+        catch (Exception)
+        {
+            payload = null;
+        }
+
+        if (payload == null)
+        {
+            ApplyBoundaryPayload(
+                BuildFailurePayload("parse_failed", "native_vision_json_empty", 0, 0),
+                pendingSubmittedFaceBounds);
+            return;
+        }
+
+        // Auto-detect the readback row order: persistent "no_face" while a
+        // face is on screen means the rows are vertically flipped for this
+        // GPU path. Counted per completed job; locked after first success.
+        if (!captureFlipLocked)
+        {
+            if (payload.status == "no_face")
+            {
+                noFaceFetchesSinceToggle++;
+                if (noFaceFetchesSinceToggle >= 6)
+                {
+                    noFaceFetchesSinceToggle = 0;
+                    captureRowsBottomUp = !captureRowsBottomUp;
+                    Debug.Log(
+                        "[E7] vision_lip_boundary_flip_toggle rowsBottomUp="
+                        + captureRowsBottomUp.ToString().ToLowerInvariant());
+                }
+            }
+            else if (payload.status == "ok")
+            {
+                captureFlipLocked = true;
+                noFaceFetchesSinceToggle = 0;
+            }
+        }
+
+        ApplyBoundaryPayload(payload, pendingSubmittedFaceBounds);
+    }
+
+    private void EnsureCaptureBuffers()
+    {
+        int screenWidth = Mathf.Max(1, Screen.width);
+        int screenHeight = Mathf.Max(1, Screen.height);
+        int captureHeight = Mathf.Clamp(
+            Mathf.RoundToInt(CaptureWidth * (float)screenHeight / screenWidth),
+            320,
+            1024);
+        if (captureTexture == null
+            || captureTexture.width != CaptureWidth
+            || captureTexture.height != captureHeight)
+        {
+            if (captureTexture != null)
+            {
+                captureTexture.Release();
+                Destroy(captureTexture);
+            }
+
+            captureTexture = new RenderTexture(
+                CaptureWidth, captureHeight, 0, RenderTextureFormat.ARGB32)
+            {
+                name = "VisionLipBoundaryCapture"
+            };
+            captureTexture.Create();
+            frameUploadBuffer = new byte[CaptureWidth * captureHeight * 4 + captureHeight * 64];
+        }
+    }
+#endif
+
+    private void OnDestroy()
+    {
+        if (captureTexture != null)
+        {
+            captureTexture.Release();
+            Destroy(captureTexture);
         }
     }
 
@@ -338,44 +444,6 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         {
             faceManager = FindFirstObjectByType<ARFaceManager>();
         }
-    }
-
-    private string DetectLipBoundaryJson(byte[] pngBytes, int width, int height)
-    {
-#if UNITY_IOS && !UNITY_EDITOR
-        IntPtr resultPointer = E7VisionDetectLipBoundaryPng(
-            pngBytes,
-            pngBytes != null ? pngBytes.Length : 0,
-            width,
-            height);
-        if (resultPointer == IntPtr.Zero)
-        {
-            return "{\"status\":\"native_result_null\",\"source\":\""
-                + RuntimeSource
-                + "\",\"coordinateMode\":\""
-                + CoordinateMode
-                + "\"}";
-        }
-
-        try
-        {
-            return Marshal.PtrToStringAnsi(resultPointer) ?? string.Empty;
-        }
-        finally
-        {
-            E7VisionReleaseCString(resultPointer);
-        }
-#else
-        return "{\"status\":\"unsupported_platform\",\"detail\":\"requires_ios_device_runtime\",\"source\":\""
-            + RuntimeSource
-            + "\",\"coordinateMode\":\""
-            + CoordinateMode
-            + "\",\"imageWidth\":"
-            + width.ToString(CultureInfo.InvariantCulture)
-            + ",\"imageHeight\":"
-            + height.ToString(CultureInfo.InvariantCulture)
-            + ",\"faceCount\":0,\"outerPointCount\":0,\"innerPointCount\":0,\"outer\":[],\"inner\":[]}";
-#endif
     }
 
     private void ApplyBoundaryPayload(VisionBoundaryPayload payload, FaceScreenBounds faceBounds)

@@ -203,31 +203,11 @@ static VNFaceObservation *E7LargestFace(NSArray<VNFaceObservation *> *faces)
   return largest;
 }
 
-extern "C" {
-
-const char *E7VisionDetectLipBoundaryPng(
-  const unsigned char *pngBytes,
-  int byteCount,
-  int imageWidth,
-  int imageHeight)
+// Shared landmark core: runs Vision on the given image and returns the
+// boundary JSON (ok or failure payload). The caller owns the image.
+static NSString *E7RunLipBoundaryJson(CGImageRef image)
 {
   @autoreleasepool {
-    if (pngBytes == NULL || byteCount <= 0) {
-      return E7CopyCString(E7FailureJson(@"invalid_input", @"png_bytes_empty", imageWidth, imageHeight));
-    }
-
-    NSData *data = [NSData dataWithBytes:pngBytes length:(NSUInteger)byteCount];
-    CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
-    if (imageSource == NULL) {
-      return E7CopyCString(E7FailureJson(@"decode_failed", @"cg_image_source_null", imageWidth, imageHeight));
-    }
-
-    CGImageRef image = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
-    CFRelease(imageSource);
-    if (image == NULL) {
-      return E7CopyCString(E7FailureJson(@"decode_failed", @"cg_image_null", imageWidth, imageHeight));
-    }
-
     int width = (int)CGImageGetWidth(image);
     int height = (int)CGImageGetHeight(image);
     VNDetectFaceLandmarksRequest *request = [[VNDetectFaceLandmarksRequest alloc] init];
@@ -236,24 +216,23 @@ const char *E7VisionDetectLipBoundaryPng(
                                                                             options:@{}];
     NSError *error = nil;
     BOOL performed = [handler performRequests:@[request] error:&error];
-    CGImageRelease(image);
 
     if (!performed || error != nil) {
       NSString *detail = error != nil ? error.localizedDescription : @"perform_request_failed";
-      return E7CopyCString(E7FailureJson(@"vision_request_failed", detail, width, height));
+      return E7FailureJson(@"vision_request_failed", detail, width, height);
     }
 
     NSArray<VNFaceObservation *> *faces = request.results;
     VNFaceObservation *face = E7LargestFace(faces);
     if (face == nil) {
-      return E7CopyCString(E7FailureJson(@"no_face", @"no_face_observation", width, height));
+      return E7FailureJson(@"no_face", @"no_face_observation", width, height);
     }
 
     VNFaceLandmarks2D *landmarks = face.landmarks;
     VNFaceLandmarkRegion2D *outerLips = landmarks.outerLips;
     VNFaceLandmarkRegion2D *innerLips = landmarks.innerLips;
     if (outerLips == nil || innerLips == nil || outerLips.pointCount < 3 || innerLips.pointCount < 3) {
-      return E7CopyCString(E7FailureJson(@"lip_landmarks_missing", @"outer_or_inner_lips_missing", width, height));
+      return E7FailureJson(@"lip_landmarks_missing", @"outer_or_inner_lips_missing", width, height);
     }
 
     CGSize imageSize = CGSizeMake(width, height);
@@ -280,8 +259,162 @@ const char *E7VisionDetectLipBoundaryPng(
       lipBounds.size.height,
       outerJson,
       innerJson];
+    return json;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Async raw-RGBA pipeline (mirrors E7VisionFaceParsing): Submit copies the
+// frame and runs the landmark core on a serial background queue; Unity polls
+// TryFetchJson per frame. This removed the main-thread ReadPixels + PNG
+// encode + inference stalls that hitched the camera during device motion.
+// ---------------------------------------------------------------------------
+
+static NSLock *E7LipBoundaryLock(void)
+{
+  static NSLock *lock = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ lock = [[NSLock alloc] init]; });
+  return lock;
+}
+
+static dispatch_queue_t E7LipBoundaryQueue(void)
+{
+  static dispatch_queue_t queue = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    queue = dispatch_queue_create("e7.vision.lipboundary", DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
+static bool gE7LipJobActive = false;
+static NSString *gE7LipResultJson = nil;
+
+extern "C" {
+
+const char *E7VisionDetectLipBoundaryPng(
+  const unsigned char *pngBytes,
+  int byteCount,
+  int imageWidth,
+  int imageHeight)
+{
+  @autoreleasepool {
+    if (pngBytes == NULL || byteCount <= 0) {
+      return E7CopyCString(E7FailureJson(@"invalid_input", @"png_bytes_empty", imageWidth, imageHeight));
+    }
+
+    NSData *data = [NSData dataWithBytes:pngBytes length:(NSUInteger)byteCount];
+    CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+    if (imageSource == NULL) {
+      return E7CopyCString(E7FailureJson(@"decode_failed", @"cg_image_source_null", imageWidth, imageHeight));
+    }
+
+    CGImageRef image = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
+    CFRelease(imageSource);
+    if (image == NULL) {
+      return E7CopyCString(E7FailureJson(@"decode_failed", @"cg_image_null", imageWidth, imageHeight));
+    }
+
+    NSString *json = E7RunLipBoundaryJson(image);
+    CGImageRelease(image);
     return E7CopyCString(json);
   }
+}
+
+// Accepts one RGBA frame; rowsBottomUp=1 means row 0 is the image bottom
+// (Unity readback convention) and the copy re-orders to top-down. Returns
+// 0 = accepted, 1 = busy (previous frame still parsing), -1 = invalid.
+int E7VisionLipBoundarySubmitRgba(
+  const unsigned char *rgba,
+  int width,
+  int height,
+  int strideBytes,
+  int rowsBottomUp)
+{
+  if (rgba == NULL || width <= 0 || height <= 0 || strideBytes < width * 4) {
+    return -1;
+  }
+
+  NSLock *lock = E7LipBoundaryLock();
+  [lock lock];
+  if (gE7LipJobActive) {
+    [lock unlock];
+    return 1;
+  }
+
+  gE7LipJobActive = true;
+  [lock unlock];
+
+  size_t tightStride = (size_t)width * 4;
+  unsigned char *frameCopy = (unsigned char *)malloc(tightStride * (size_t)height);
+  if (frameCopy == NULL) {
+    [lock lock];
+    gE7LipJobActive = false;
+    [lock unlock];
+    return -1;
+  }
+
+  for (int y = 0; y < height; y++) {
+    int sourceY = rowsBottomUp != 0 ? (height - 1 - y) : y;
+    memcpy(
+      frameCopy + (size_t)y * tightStride,
+      rgba + (size_t)sourceY * (size_t)strideBytes,
+      tightStride);
+  }
+
+  dispatch_async(E7LipBoundaryQueue(), ^{
+    @autoreleasepool {
+      NSString *json = nil;
+      CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
+      CGDataProviderRef provider = CGDataProviderCreateWithData(
+        NULL, frameCopy, tightStride * (size_t)height, NULL);
+      CGImageRef image = NULL;
+      if (rgb != NULL && provider != NULL) {
+        image = CGImageCreate(
+          (size_t)width, (size_t)height, 8, 32, tightStride, rgb,
+          (CGBitmapInfo)kCGImageAlphaNoneSkipLast | (CGBitmapInfo)kCGBitmapByteOrder32Big,
+          provider, NULL, false, kCGRenderingIntentDefault);
+      }
+
+      if (image != NULL) {
+        json = E7RunLipBoundaryJson(image);
+        CGImageRelease(image);
+      } else {
+        json = E7FailureJson(@"decode_failed", @"cg_image_null_rgba", width, height);
+      }
+
+      if (provider != NULL) {
+        CGDataProviderRelease(provider);
+      }
+
+      if (rgb != NULL) {
+        CGColorSpaceRelease(rgb);
+      }
+
+      NSLock *jobLock = E7LipBoundaryLock();
+      [jobLock lock];
+      gE7LipResultJson = json;
+      gE7LipJobActive = false;
+      [jobLock unlock];
+
+      free(frameCopy);
+    }
+  });
+
+  return 0;
+}
+
+// Returns the newest completed boundary JSON (caller frees it via
+// E7VisionReleaseCString) or NULL when nothing new is ready.
+const char *E7VisionLipBoundaryTryFetchJson(void)
+{
+  NSLock *lock = E7LipBoundaryLock();
+  [lock lock];
+  NSString *json = gE7LipResultJson;
+  gE7LipResultJson = nil;
+  [lock unlock];
+  return json != nil ? E7CopyCString(json) : NULL;
 }
 
 void E7VisionReleaseCString(const char *pointer)
