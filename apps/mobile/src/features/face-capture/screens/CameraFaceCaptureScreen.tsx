@@ -29,9 +29,15 @@ import {
   RealtimeFaceCaptureNativeView,
   isRealtimeFaceCaptureAvailable,
   type RealtimeFaceCaptureLandmarkPayload,
+  type RealtimeCameraStabilityPayload,
   type RealtimeFaceCaptureNativeViewHandle,
   type RealtimeFaceCaptureScreenPoint,
+  type RealtimeMediaPipePayload,
 } from '../components/RealtimeFaceCaptureNativeView';
+import {
+  evaluateFaceCaptureGreenlight,
+  type FaceCaptureGreenlightReport,
+} from '../services/faceCaptureGreenlight';
 import {
   detectFaceLandmarksFromImage,
   isFaceLandmarkDetectorAvailable,
@@ -76,7 +82,10 @@ type CameraFaceCaptureScreenProps = {
   captureMode?: CameraFaceCaptureMode;
   captureType?: FaceCaptureUploadCaptureType;
   checks?: FaceCaptureCheckState;
-  onCapture?: (result?: FaceCaptureUploadResult) => void;
+  onCapture?: (
+    result?: FaceCaptureUploadResult,
+    greenlightReport?: FaceCaptureGreenlightReport,
+  ) => void;
   onClose?: () => void;
   onPickImage?: () => void;
   onToggleCamera?: (direction: CameraDirection) => void;
@@ -97,6 +106,13 @@ export function getCameraFaceCaptureCloseButtonPosition(safeAreaTop: number) {
 export function shouldValidateCameraFaceCapture(mode: CameraFaceCaptureMode): boolean {
   return mode === 'face';
 }
+
+const MEDIAPIPE_CENTERLINE_KEYS = [
+  'forehead',
+  'noseBridge',
+  'noseTip',
+  'chin',
+] as const;
 
 const FACE_LANDMARK_SCAN_INITIAL_DELAY_MS = 250;
 const FACE_LANDMARK_SCAN_INTERVAL_MS = 450;
@@ -298,6 +314,7 @@ function getScreenLandmarkPoint(
 function createLocalFaceCaptureResult({
   contentType,
   height,
+  semanticMattes,
   source,
   uri,
   width,
@@ -312,6 +329,7 @@ function createLocalFaceCaptureResult({
     mediaId: localId,
     objectKey: uri,
     photoCaptureId: localId,
+    semanticMattes,
     source,
   };
 }
@@ -343,6 +361,10 @@ export function CameraFaceCaptureScreen({
     useState<NativeFaceLandmarkDetectionResult | null>(null);
   const [liveCaptureChecks, setLiveCaptureChecks] =
     useState<FaceCaptureCheckState | null>(null);
+  const [latestCameraStability, setLatestCameraStability] =
+    useState<RealtimeCameraStabilityPayload | undefined>();
+  const [latestMediaPipe, setLatestMediaPipe] =
+    useState<RealtimeMediaPipePayload | undefined>();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const landmarkScanInFlightRef = useRef(false);
   const lastRealtimeLogAtRef = useRef(0);
@@ -356,6 +378,11 @@ export function CameraFaceCaptureScreen({
     () => shouldValidateFace && !realtimeCaptureAvailable && isFaceLandmarkDetectorAvailable(),
     [realtimeCaptureAvailable, shouldValidateFace],
   );
+  // greenlight 게이트는 face 모드 + realtime 네이티브 뷰가 있을 때만 활성화한다.
+  // realtime 뷰 없이는 mediaPipe/cameraStability 입력이 오지 않아 영구 차단되기 때문.
+  const requireGreenlight = shouldValidateFace && realtimeCaptureAvailable;
+  // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
+  const semanticMatteCapture = requireGreenlight && captureType === 'face_analysis';
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   const guideWidth = Math.min(Math.max(width * 0.58, 210), 256);
   const guideHeight = guideWidth * 1.34;
@@ -391,6 +418,7 @@ export function CameraFaceCaptureScreen({
     : mockReadyFaceCaptureChecks;
   const hasLiveCaptureChecks =
     shouldValidateFace &&
+    !requireGreenlight &&
     (checks !== undefined ||
       liveCaptureChecks !== null ||
       landmarkDetectorAvailable ||
@@ -399,6 +427,31 @@ export function CameraFaceCaptureScreen({
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
   );
+  const greenlightReport = useMemo(
+    () => evaluateFaceCaptureGreenlight({
+      cameraStability: latestCameraStability,
+      guide: screenGuideBounds,
+      mediaPipe: latestMediaPipe,
+    }),
+    [latestCameraStability, latestMediaPipe, screenGuideBounds],
+  );
+  const shouldBlockForGreenlight =
+    requireGreenlight && !greenlightReport.finalCaptureGreenlight;
+  const mediaPipeCenterLineX = useMemo(() => {
+    const xs = MEDIAPIPE_CENTERLINE_KEYS
+      .map(key => getScreenLandmarkPoint(latestMediaPipe?.screenLandmarks?.[key]))
+      .filter(Boolean)
+      .map(point => (point as ScreenLandmarkPoint).left);
+
+    if (xs.length !== MEDIAPIPE_CENTERLINE_KEYS.length) {
+      return null;
+    }
+
+    return xs.reduce((sum, x) => sum + x, 0) / xs.length;
+  }, [latestMediaPipe]);
+  const isMediaPipeCenterAligned =
+    mediaPipeCenterLineX !== null &&
+    !greenlightReport.failureReasons.includes('not_centered');
   const controlsBottom = Math.max(insets.bottom + 64, height * 0.1);
   const errorBottom = controlsBottom + 98;
   const captureMessage =
@@ -406,9 +459,10 @@ export function CameraFaceCaptureScreen({
     (isUploading
       ? '사진을 업로드하는 중이에요'
       : shouldValidateFace
-        ? captureValidationMessage ?? guidance.message
+        ? captureValidationMessage ??
+          (requireGreenlight ? greenlightReport.message : guidance.message)
         : captureValidationMessage);
-  const isCaptureDisabled = isUploading;
+  const isCaptureDisabled = isUploading || shouldBlockForGreenlight;
   const shouldUseBackendUpload = Boolean(getBackendApiBaseUrl());
   const foreheadDot = useMemo(
     () => {
@@ -450,6 +504,7 @@ export function CameraFaceCaptureScreen({
   const hasScreenLandmarks = Boolean(foreheadDot && chinDot);
   const shouldBlockForScreenGuide =
     shouldValidateFace &&
+    !requireGreenlight &&
     (landmarkDetectorAvailable || realtimeCaptureAvailable) &&
     (!hasScreenLandmarks || !areScreenLandmarksInsideGuide);
   const captureTintColor =
@@ -457,9 +512,11 @@ export function CameraFaceCaptureScreen({
       ? uploadError || !isCameraReady
         ? colors.danger
         : colors.white
-      : uploadError || !isCameraReady || shouldBlockForScreenGuide
+      : uploadError || !isCameraReady || shouldBlockForScreenGuide || shouldBlockForGreenlight
       ? colors.danger
-      : guidance.tintColor;
+      : requireGreenlight
+        ? colors.guideReady
+        : guidance.tintColor;
 
   useEffect(() => {
     if (realtimeCaptureAvailable) {
@@ -562,12 +619,19 @@ export function CameraFaceCaptureScreen({
       );
       setLandmarkDetection(detection);
       setLiveCaptureChecks(nextChecks);
+      setLatestCameraStability(nativeEvent.cameraStability);
+      setLatestMediaPipe(nativeEvent.mediaPipe);
 
       const now = Date.now();
       if (now - lastRealtimeLogAtRef.current > 500) {
         lastRealtimeLogAtRef.current = now;
         const chinScreenPoint = formatScreenLandmarkPoint(nextChinDot);
         const foreheadScreenPoint = formatScreenLandmarkPoint(nextForeheadDot);
+        const frameGreenlight = evaluateFaceCaptureGreenlight({
+          cameraStability: nativeEvent.cameraStability,
+          guide: screenGuideBounds,
+          mediaPipe: nativeEvent.mediaPipe,
+        });
 
         console.info('[aura:face-capture] realtime-landmark-frame', {
           checks: nextChecks,
@@ -584,6 +648,24 @@ export function CameraFaceCaptureScreen({
             foreheadX: foreheadScreenPoint?.x ?? null,
             foreheadY: foreheadScreenPoint?.y ?? null,
           },
+          cameraStability: nativeEvent.cameraStability ?? null,
+          greenlight: {
+            cameraStabilityGreenlight: frameGreenlight.cameraStabilityGreenlight,
+            failureReasons: frameGreenlight.failureReasons,
+            finalCaptureGreenlight: frameGreenlight.finalCaptureGreenlight,
+            mediaPipeAlignmentGreenlight: frameGreenlight.mediaPipeAlignmentGreenlight,
+            metrics: frameGreenlight.metrics,
+          },
+          mediaPipe: nativeEvent.mediaPipe
+            ? {
+                faceWidthRatio: nativeEvent.mediaPipe.faceWidthRatio,
+                pitchDeg: nativeEvent.mediaPipe.pitchDeg,
+                poseSource: nativeEvent.mediaPipe.poseSource,
+                rollDeg: nativeEvent.mediaPipe.rollDeg,
+                status: nativeEvent.mediaPipe.status,
+                yawDeg: nativeEvent.mediaPipe.yawDeg,
+              }
+            : null,
           screenInsideGuide: nextScreenInsideGuide,
           sequence: nativeEvent.sequence,
           status: nativeEvent.status,
@@ -787,6 +869,8 @@ export function CameraFaceCaptureScreen({
     setIsCameraReady(false);
     setLandmarkDetection(null);
     setLiveCaptureChecks(null);
+    setLatestCameraStability(undefined);
+    setLatestMediaPipe(undefined);
     setCaptureValidationMessage(null);
     setUploadError(null);
     onToggleCamera?.(nextDirection);
@@ -803,17 +887,22 @@ export function CameraFaceCaptureScreen({
     }
 
     if (shouldValidateFace) {
+      if (requireGreenlight && !greenlightReport.finalCaptureGreenlight) {
+        triggerBlockedCaptureFeedback(greenlightReport.message);
+        return;
+      }
+
       if (!realtimeCaptureAvailable && landmarkScanInFlightRef.current) {
         triggerBlockedCaptureFeedback('얼굴 위치를 확인 중이에요. 잠시 후 다시 촬영해 주세요.');
         return;
       }
 
-      if (shouldBlockForScreenGuide) {
+      if (!requireGreenlight && shouldBlockForScreenGuide) {
         triggerBlockedCaptureFeedback(FACE_CAPTURE_ALIGNMENT_MESSAGE);
         return;
       }
 
-      if (hasLiveCaptureChecks && !guidance.isCaptureEnabled) {
+      if (!requireGreenlight && hasLiveCaptureChecks && !guidance.isCaptureEnabled) {
         triggerBlockedCaptureFeedback(guidance.message ?? FACE_CAPTURE_ALIGNMENT_MESSAGE);
         return;
       }
@@ -835,9 +924,24 @@ export function CameraFaceCaptureScreen({
         throw new Error('Camera did not return an image file.');
       }
 
+      const nativeCameraMetadata =
+        'cameraMetadata' in picture ? picture.cameraMetadata : undefined;
+      const pictureFormat = 'format' in picture ? picture.format : undefined;
+      const semanticMattes =
+        'semanticMattes' in picture ? picture.semanticMattes : undefined;
+      const captureGreenlightReport = requireGreenlight
+        ? evaluateFaceCaptureGreenlight({
+            cameraStability: latestCameraStability,
+            guide: screenGuideBounds,
+            mediaPipe: latestMediaPipe,
+            nativeCameraMetadata,
+          })
+        : undefined;
       const imageInput: FaceCaptureImageInput = {
         captureType,
+        contentType: pictureFormat === 'heic' ? 'image/heic' : undefined,
         height: picture.height,
+        semanticMattes,
         source: 'camera',
         uri: picture.uri,
         width: picture.width,
@@ -860,7 +964,7 @@ export function CameraFaceCaptureScreen({
         result = createLocalFaceCaptureResult(imageInput);
       }
 
-      onCapture?.(result);
+      onCapture?.(result, captureGreenlightReport);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
     } finally {
@@ -967,6 +1071,7 @@ export function CameraFaceCaptureScreen({
             facing={cameraDirection}
             onLandmarksDetected={handleRealtimeLandmarksDetected}
             ref={realtimeCameraRef}
+            semanticMatteCapture={semanticMatteCapture}
             style={StyleSheet.absoluteFill}
           />
         ) : (
@@ -1011,7 +1116,39 @@ export function CameraFaceCaptureScreen({
         />
       ) : null}
 
+      {requireGreenlight ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.guideCenterLine,
+            {
+              height: guideHeight,
+              left: guideCenterX - StyleSheet.hairlineWidth,
+              top: guideCenterY - guideHeight / 2,
+            },
+          ]}
+        />
+      ) : null}
+
+      {requireGreenlight && mediaPipeCenterLineX !== null ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.faceCenterLine,
+            {
+              backgroundColor: isMediaPipeCenterAligned
+                ? colors.guideReady
+                : colors.danger,
+              height: guideHeight,
+              left: mediaPipeCenterLineX - 1,
+              top: guideCenterY - guideHeight / 2,
+            },
+          ]}
+        />
+      ) : null}
+
       {(shouldValidateFace && hasLiveCaptureChecks && guidance.status === 'blocked') ||
+      shouldBlockForGreenlight ||
       captureValidationMessage ||
       uploadError ? (
         <View pointerEvents="none" style={[styles.errorBar, {bottom: errorBottom}]}>
@@ -1026,7 +1163,11 @@ export function CameraFaceCaptureScreen({
         centerSlot={
           <CameraCaptureButton
             accessibilityLabel={
-              isCaptureDisabled ? '촬영 처리 중' : '사진 촬영'
+              isUploading
+                ? '촬영 처리 중'
+                : shouldBlockForGreenlight
+                  ? '촬영 조건 확인 중'
+                  : '사진 촬영'
             }
             disabled={isCaptureDisabled}
             innerColor={captureTintColor}
@@ -1078,6 +1219,11 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
     textAlign: 'center',
   },
+  faceCenterLine: {
+    opacity: 0.85,
+    position: 'absolute',
+    width: 2,
+  },
   faceGuide: {
     alignItems: 'center',
     backgroundColor: colors.guideSurface,
@@ -1088,6 +1234,12 @@ const styles = StyleSheet.create({
     shadowOffset: shadows.guideGlow.shadowOffset,
     shadowOpacity: shadows.guideGlow.shadowOpacity,
     shadowRadius: shadows.guideGlow.shadowRadius,
+  },
+  guideCenterLine: {
+    backgroundColor: colors.white,
+    opacity: 0.45,
+    position: 'absolute',
+    width: StyleSheet.hairlineWidth * 2,
   },
   closeButtonWrap: {
     zIndex: 20,
