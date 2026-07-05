@@ -29,6 +29,11 @@ import type {
 } from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
 import {
+  PhotoStage,
+  VerticalThirdsOverlay,
+} from '../../face-ratio/components/VerticalThirdsOverlay';
+import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import {
   faceAnalysisReportCreateFilterButtonAccessibilityLabels,
   faceAnalysisReportLiquidGlassButtonStyle,
   getFaceAnalysisReportPointGuideItems,
@@ -53,6 +58,9 @@ type FaceAnalysisReportDetailScreenProps = {
   onBack?: () => void;
   onCreateARFilter?: () => void;
   onHeaderShareActionChange?: (action: FaceAnalysisReportShareAction | null) => void;
+  // 세션 내 촬영에서 온디바이스로 계산한 얼굴 세로 비율.
+  // 과거 보고서(id 조회)에는 없으므로 null이면 섹션을 렌더하지 않는다.
+  verticalThirds?: FaceVerticalThirdsResult | null;
 };
 
 type FaceAnalysisReportShareAction = () => void;
@@ -201,6 +209,7 @@ export function FaceAnalysisReportDetailScreen({
   reportId,
   onCreateARFilter,
   onHeaderShareActionChange,
+  verticalThirds,
 }: FaceAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
     useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
@@ -458,6 +467,18 @@ export function FaceAnalysisReportDetailScreen({
         <ReportSection title={"분석 요약"}>
           <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
         </ReportSection>
+
+        {verticalThirds &&
+        (verticalThirds.status === 'full_success' ||
+          verticalThirds.status === 'partial_success') ? (
+          <ReportSection title={"얼굴 세로 비율"}>
+            <PhotoStage
+              imageUri={verticalThirds.sourceImage.uri}
+              result={verticalThirds}>
+              <VerticalThirdsOverlay result={verticalThirds} />
+            </PhotoStage>
+          </ReportSection>
+        ) : null}
 
         {primaryMakeupRecommendation ? (
           <PrimaryMakeupRecommendationCard recommendation={primaryMakeupRecommendation} />
