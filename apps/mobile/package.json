@@ -11,6 +11,7 @@
     "ios:face-capture-lab": "EXPO_PUBLIC_AURA_EXPERIMENT_APP=face-capture-lab LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
     "start:face-capture-lab": "EXPO_PUBLIC_AURA_EXPERIMENT_APP=face-capture-lab expo start",
     "test:generated-brow": "node ../../scripts/mobile/run-generated-brow-contract.mjs",
+    "test:face-ratio-distortion": "node ../../scripts/mobile/run-face-ratio-distortion-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
