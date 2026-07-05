@@ -175,11 +175,11 @@ export function ReferenceMakeupExtractionResultScreen({
             <Text style={styles.secondaryButtonText}>다시 선택</Text>
           </Pressable>
           <Pressable
-            accessibilityLabel="레퍼런스 메이크업 기반 AR 필터 보기"
+            accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
             accessibilityRole="button"
             onPress={onOpenARFilter}
             style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>AR 필터로 보기</Text>
+            <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
             <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
           </Pressable>
         </XStack>

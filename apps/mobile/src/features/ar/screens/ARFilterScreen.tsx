@@ -24,6 +24,7 @@ import {
 import {FullFaceMakeupEditPanel} from '../components/FullFaceMakeupEditPanel';
 import {ARFilterBottomActions} from '../components/ARFilterBottomActions';
 import {
+  AR_FILTER_COMPARISON_DIVIDER_TOP,
   ARFilterCameraPreview,
   getARFilterCameraMode,
   getMakeupPreviewBadgeContent,
@@ -38,6 +39,7 @@ import {
 import {ARFilterMakeupAreaTabs} from '../components/ARFilterMakeupAreaTabs';
 import {
   ARFilterModeTabs,
+  getARFilterGuideModeControlBottomOffset,
   getARFilterComparisonTabs as getARFilterComparisonTabsForData,
   getARFilterModeTabHeight,
   getARFilterSelectedTabOpacity,
@@ -87,14 +89,42 @@ const AR_FILTER_FALLBACK_COLOR = {
   label: '기본',
 };
 
-export const AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET = spacing.md;
+export const AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET = 0;
 export const AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT = 'aboveSheet';
+export const AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE = 36;
+export const AR_FILTER_BOTTOM_SHEET_PADDING = spacing.sm;
+export const AR_FILTER_SHEET_TOGGLE_BACKGROUND_COLOR = colors.arFilterBottomSheetSurface;
+export const AR_FILTER_BOTTOM_ACTIONS_PLACEMENT = 'aboveSheet' as const;
+export const AR_FILTER_FLOATING_SHEET_CONTROLS_GAP = spacing.xs;
+export const AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING =
+  AR_FILTER_BOTTOM_SHEET_PADDING;
+export const AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX = 1;
+export const AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE =
+  spacing.xxl * 5;
+export const AR_FILTER_CAMERA_CONTROLS_BOTTOM_POSITION = 'raised' as const;
+export const AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING =
+  AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE;
+export const AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING = AR_FILTER_BOTTOM_SHEET_PADDING;
+export const AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING = AR_FILTER_BOTTOM_SHEET_PADDING;
+export const AR_FILTER_SHEET_TOGGLE_MARGIN_SOURCE = 'bottomSheetPadding' as const;
+export const AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET = AR_FILTER_BOTTOM_SHEET_PADDING;
+export const AR_FILTER_SHEET_TOGGLE_ALIGNMENT = 'sheetContentStart' as const;
+export const AR_FILTER_BOTTOM_SHEET_PANEL_GAP = spacing.xs;
+export const AR_FILTER_BOTTOM_SHEET_CONTENT_GAP = spacing.sm;
+export const AR_FILTER_BOTTOM_SHEET_CONTENT_BOTTOM_PADDING = AR_FILTER_BOTTOM_SHEET_PADDING;
+export const AR_FILTER_BOTTOM_SHEET_BACKGROUND_COLOR = colors.arFilterBottomSheetSurface;
+export const AR_FILTER_BOTTOM_SHEET_PANEL_MAX_HEIGHT = 640;
+export const AR_FILTER_BOTTOM_SHEET_SCROLL_MAX_HEIGHT = 380;
+export const AR_FILTER_BOTTOM_SHEET_SCROLL_POLICY =
+  'fitsDefaultFilterControls' as const;
 
 export {
   getARFilterCameraMode,
   getARFilterCaptureButtonMetrics,
   getARFilterCategoryTitle,
   getARFilterInitialColorId,
+  AR_FILTER_COMPARISON_DIVIDER_TOP,
+  getARFilterGuideModeControlBottomOffset,
   getARFilterModeTabHeight,
   getARFilterOptionGroupLabels,
   getARFilterOriginalCardLabel,
@@ -182,6 +212,20 @@ export function ARFilterScreen({
     setCameraFacing(currentFacing => (currentFacing === 'front' ? 'back' : 'front'));
   };
 
+  const handleOpenShapeAdjust = () => {
+    onOpenShapeAdjust?.(
+      arFilterSelectionState.selectedTotalMakeupLookId ??
+        arFilterSelectionState.selectedMakeupFilter.id,
+    );
+  };
+
+  const handleSave = () => {
+    onSave?.(
+      arFilterSelectionState.selectedTotalMakeupLookId ??
+        arFilterSelectionState.selectedMakeupFilter.id,
+    );
+  };
+
   useEffect(() => {
     if (isFullFaceMode) {
       return;
@@ -238,6 +282,7 @@ export function ARFilterScreen({
       <ARFilterCameraPreview
         active={cameraSessionActive}
         cameraFacing={cameraFacing}
+        comparisonDividerTopOffset={getARFilterGuideModeControlBottomOffset(insets.top)}
         guideMode={arFilterSelectionState.guideMode}
         previewColorHex={previewColorHex}
         selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
@@ -254,28 +299,43 @@ export function ARFilterScreen({
       />
 
       <View pointerEvents="box-none" style={styles.bottomSheetHost}>
-        {AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT === 'aboveSheet' ? (
-          <Button
-            accessibilityLabel={
-              isFilterSheetExpanded ? '필터 선택 바텀시트 접기' : '필터 선택 바텀시트 펼치기'
-            }
-            accessibilityRole="button"
-            accessibilityState={{expanded: isFilterSheetExpanded}}
-            onPress={() => setIsFilterSheetExpanded(currentValue => !currentValue)}
-            pressStyle={{scale: 0.96}}
-            style={styles.sheetToggleButton}
-            unstyled>
-            {isFilterSheetExpanded ? (
-              <ChevronDown color={colors.textPrimary} size={iconSize.sm} />
-            ) : (
-              <ChevronUp color={colors.textPrimary} size={iconSize.sm} />
-            )}
-          </Button>
-        ) : null}
+        <View pointerEvents="box-none" style={styles.aboveSheetControls}>
+          {AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT === 'aboveSheet' ? (
+            <Button
+              accessibilityLabel={
+                isFilterSheetExpanded ? '필터 선택 바텀시트 접기' : '필터 선택 바텀시트 펼치기'
+              }
+              accessibilityRole="button"
+              accessibilityState={{expanded: isFilterSheetExpanded}}
+              onPress={() => setIsFilterSheetExpanded(currentValue => !currentValue)}
+              pressStyle={{scale: 0.96}}
+              style={styles.sheetToggleButton}
+              unstyled>
+              {isFilterSheetExpanded ? (
+                <ChevronDown color={colors.textPrimary} size={iconSize.sm} />
+              ) : (
+                <ChevronUp color={colors.textPrimary} size={iconSize.sm} />
+              )}
+            </Button>
+          ) : null}
+
+          {isFilterSheetExpanded && AR_FILTER_BOTTOM_ACTIONS_PLACEMENT === 'aboveSheet' ? (
+            <View style={styles.floatingSheetActions}>
+              <ARFilterBottomActions
+                hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}
+                onOpenShapeAdjust={handleOpenShapeAdjust}
+                onSave={handleSave}
+              />
+            </View>
+          ) : null}
+        </View>
 
         <BottomOverlayPanel
           variant="sheet"
-          style={[styles.controlsPanel, {paddingBottom: insets.bottom + spacing.md}]}>
+          style={[
+            styles.controlsPanel,
+            {paddingBottom: insets.bottom + AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING},
+          ]}>
           {isFilterSheetExpanded ? (
             <ScrollView
               contentContainerStyle={styles.panelContent}
@@ -322,22 +382,6 @@ export function ARFilterScreen({
                   />
                 </>
               )}
-
-              <ARFilterBottomActions
-                hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}
-                onOpenShapeAdjust={() =>
-                  onOpenShapeAdjust?.(
-                    arFilterSelectionState.selectedTotalMakeupLookId ??
-                      arFilterSelectionState.selectedMakeupFilter.id,
-                  )
-                }
-                onSave={() =>
-                  onSave?.(
-                    arFilterSelectionState.selectedTotalMakeupLookId ??
-                      arFilterSelectionState.selectedMakeupFilter.id,
-                  )
-                }
-              />
             </ScrollView>
           ) : null}
 
@@ -362,32 +406,41 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 4,
   },
+  aboveSheetControls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: AR_FILTER_FLOATING_SHEET_CONTROLS_GAP,
+    marginBottom: spacing.xs,
+    paddingRight: AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
+  },
+  floatingSheetActions: {
+    flex: AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX,
+  },
   controlsPanel: {
-    gap: spacing.sm,
-    maxHeight: 392,
-    paddingHorizontal: 0,
-    paddingTop: spacing.sm,
+    backgroundColor: AR_FILTER_BOTTOM_SHEET_BACKGROUND_COLOR,
+    gap: AR_FILTER_BOTTOM_SHEET_PANEL_GAP,
+    maxHeight: AR_FILTER_BOTTOM_SHEET_PANEL_MAX_HEIGHT,
+    paddingHorizontal: AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING,
+    paddingTop: AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING,
   },
   panelScroll: {
-    maxHeight: 236,
+    maxHeight: AR_FILTER_BOTTOM_SHEET_SCROLL_MAX_HEIGHT,
     paddingHorizontal: 0,
   },
   panelContent: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    gap: AR_FILTER_BOTTOM_SHEET_CONTENT_GAP,
+    paddingBottom: AR_FILTER_BOTTOM_SHEET_CONTENT_BOTTOM_PADDING,
+    paddingHorizontal: 0,
   },
   sheetToggleButton: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.bottomSheetControlSurface,
+    backgroundColor: AR_FILTER_SHEET_TOGGLE_BACKGROUND_COLOR,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 30,
+    height: AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE,
     justifyContent: 'center',
-    marginBottom: spacing.xs,
-    marginLeft: spacing.sm,
-    width: 44,
+    marginLeft: AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET,
+    width: AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE,
   },
 });

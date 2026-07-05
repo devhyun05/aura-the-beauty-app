@@ -16,7 +16,6 @@ export {
 } from './CameraCaptureButton';
 export {
   CommunityFooterIcon,
-  ConsultingFooterIcon,
   FloatingActionFooterIcon,
   HomeFooterIcon,
   ProfileFooterIcon,

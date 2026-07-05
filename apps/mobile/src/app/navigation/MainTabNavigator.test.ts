@@ -32,11 +32,6 @@ expectEqual(
   'filter store floating action navigates directly',
 );
 expectEqual(
-  getFloatingActionPresentation('magazine'),
-  'route',
-  'magazine floating action navigates directly',
-);
-expectEqual(
   getMainTabBarMinHostHeight(18),
   272,
   'main tab bar minimum host height includes footer and floating action space',

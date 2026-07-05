@@ -1,5 +1,6 @@
 import React from 'react';
 import {Image, ScrollView, StyleSheet} from 'react-native';
+import {CircleOff} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
@@ -40,6 +41,30 @@ type ARFilterOptionCardListProps = {
   selectedTypeId: string;
   shapeOptions: readonly ShapeOption[];
 };
+
+export const AR_FILTER_OPTION_CARD_ASPECT_RATIO = 0.78;
+export const AR_FILTER_OPTION_CARD_COPY_PLACEMENT = 'bottomScrim' as const;
+export const AR_FILTER_OPTION_CARD_META_PLACEMENT = 'none' as const;
+export const AR_FILTER_OPTION_CARD_ACTIVE_INDICATOR = 'pressedInset' as const;
+export const AR_FILTER_OPTION_CARD_ACTIVE_DEPTH_EFFECT = 'insetShadow' as const;
+export const AR_FILTER_OPTION_CARD_ACTIVE_EDGE_TREATMENT = 'shadowOnly' as const;
+export const AR_FILTER_OPTION_CARD_ACTIVE_OUTLINE_VISIBILITY = 'hidden' as const;
+export const AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY =
+  'accessibilityOnly' as const;
+export const AR_FILTER_OPTION_CARD_PREVIEW_KINDS = [
+  'makeupLook',
+  'color',
+  'type',
+  'texture',
+  'shape',
+  'original',
+] as const;
+
+export const AR_FILTER_OPTION_CARD_WIDTH = 84;
+export const AR_FILTER_OPTION_PICKER_MIN_HEIGHT = 112;
+export const AR_FILTER_ORIGINAL_OPTION_ICON_SOURCE = 'lucide-react-native' as const;
+export const AR_FILTER_ORIGINAL_OPTION_ICON_LIBRARY_NAME = 'CircleOff' as const;
+export const AR_FILTER_ORIGINAL_OPTION_ICON_SIZE = iconSize.lg;
 
 export function getARFilterCategoryTitle(): null {
   return null;
@@ -277,20 +302,24 @@ function OptionCard({
           children
         )}
       </View>
-      <Text
-        numberOfLines={1}
-        style={[styles.optionCardTitle, isActive ? styles.optionCardTitleActive : undefined]}>
-        {label}
-      </Text>
+      <View style={styles.optionCardCopy}>
+        <Text numberOfLines={1} style={styles.optionCardTitle}>
+          {label}
+        </Text>
+      </View>
+      {isActive ? <View pointerEvents="none" style={styles.optionCardActiveOverlay} /> : null}
     </Button>
   );
 }
 
 function OriginalOptionPreview() {
   return (
-    <View style={styles.originalPreview}>
-      <View style={styles.originalPreviewLine} />
-    </View>
+    <CircleOff
+      color={colors.textSecondary}
+      pointerEvents="none"
+      size={AR_FILTER_ORIGINAL_OPTION_ICON_SIZE}
+      strokeWidth={1.9}
+    />
   );
 }
 
@@ -347,78 +376,92 @@ const styles = StyleSheet.create({
   optionPickerList: {
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 92,
+    minHeight: AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
     paddingRight: spacing.sm,
   },
   optionCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
+    alignItems: 'stretch',
+    aspectRatio: AR_FILTER_OPTION_CARD_ASPECT_RATIO,
+    backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    gap: spacing.xs,
-    justifyContent: 'center',
-    minHeight: 92,
     overflow: 'hidden',
-    padding: spacing.xs,
-    width: 74,
+    position: 'relative',
+    width: AR_FILTER_OPTION_CARD_WIDTH,
   },
   optionCardActive: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    borderColor: 'transparent',
+    borderWidth: 1,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
+    transform: [{scale: 0.98}],
+  },
+  optionCardActiveOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.10)',
+    borderRadius: radius.lg,
+    bottom: 4,
+    left: 4,
+    position: 'absolute',
+    right: 4,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.34,
+    shadowRadius: 10,
+    top: 4,
+    zIndex: 2,
   },
   optionCardPreview: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.sm,
-    height: 54,
+    bottom: 0,
     justifyContent: 'center',
+    left: 0,
     overflow: 'hidden',
-    width: 62,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   optionCardImage: {
     height: '100%',
     width: '100%',
   },
+  optionCardCopy: {
+    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    position: 'absolute',
+    right: 0,
+    zIndex: 1,
+  },
   optionCardTitle: {
-    color: colors.textPrimary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
-  optionCardTitleActive: {
-    color: colors.white,
-  },
-  originalPreview: {
-    alignItems: 'center',
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: iconSize.md,
-    justifyContent: 'center',
-    width: iconSize.md,
-  },
-  originalPreviewLine: {
-    backgroundColor: colors.textSecondary,
-    height: 1,
-    opacity: 0.8,
-    transform: [{rotate: '-28deg'}],
-    width: iconSize.sm,
+    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 7,
   },
   colorPreview: {
-    borderColor: colors.white,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    height: iconSize.lg,
-    width: iconSize.lg,
+    height: '100%',
+    opacity: 0.92,
+    width: '100%',
   },
   textualPreview: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.34)',
+    borderRadius: radius.lg,
     gap: spacing.xs,
-    width: '100%',
+    justifyContent: 'center',
+    minHeight: 58,
+    width: 68,
   },
   typePreviewLineStrong: {
     backgroundColor: colors.textPrimary,

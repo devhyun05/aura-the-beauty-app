@@ -90,8 +90,8 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
-  if (routeName === 'Magazine') {
-    navigation.navigate('Magazine');
+  if (routeName === 'Consulting') {
+    navigation.navigate('Consulting');
     return;
   }
 

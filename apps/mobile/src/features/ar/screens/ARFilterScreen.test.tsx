@@ -1,8 +1,30 @@
 import React from 'react';
 
 import {
+  AR_FILTER_BOTTOM_SHEET_BACKGROUND_COLOR,
   AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET,
+  AR_FILTER_BOTTOM_SHEET_CONTENT_BOTTOM_PADDING,
+  AR_FILTER_BOTTOM_SHEET_CONTENT_GAP,
+  AR_FILTER_BOTTOM_SHEET_PANEL_MAX_HEIGHT,
+  AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PANEL_GAP,
+  AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  AR_FILTER_BOTTOM_SHEET_SCROLL_MAX_HEIGHT,
+  AR_FILTER_BOTTOM_SHEET_SCROLL_POLICY,
+  AR_FILTER_BOTTOM_ACTIONS_PLACEMENT,
+  AR_FILTER_CAMERA_CONTROLS_BOTTOM_POSITION,
+  AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE,
+  AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING,
+  AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX,
+  AR_FILTER_FLOATING_SHEET_CONTROLS_GAP,
+  AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
   AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,
+  AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE,
+  AR_FILTER_SHEET_TOGGLE_ALIGNMENT,
+  AR_FILTER_SHEET_TOGGLE_BACKGROUND_COLOR,
+  AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET,
+  AR_FILTER_SHEET_TOGGLE_MARGIN_SOURCE,
   ARFilterScreen,
   getARFilterCameraMode,
   getARFilterCaptureButtonMetrics,
@@ -150,13 +172,118 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_BOTTOM_OFFSET,
-  spacing.md,
-  'AR filter bottom sheet floats above screen bottom',
+  0,
+  'AR filter bottom sheet is flush with screen bottom',
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT,
   'aboveSheet',
   'AR filter bottom sheet toggle placement',
+);
+expectEqual(
+  AR_FILTER_SHEET_TOGGLE_BUTTON_SIZE,
+  36,
+  'AR filter bottom sheet toggle button is circular',
+);
+expectEqual(
+  AR_FILTER_SHEET_TOGGLE_BACKGROUND_COLOR,
+  colors.arFilterBottomSheetSurface,
+  'AR filter bottom sheet toggle button is translucent',
+);
+expectEqual(
+  AR_FILTER_SHEET_TOGGLE_LEFT_OFFSET,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter bottom sheet toggle uses the sheet padding as its left margin',
+);
+expectEqual(
+  AR_FILTER_SHEET_TOGGLE_MARGIN_SOURCE,
+  'bottomSheetPadding',
+  'AR filter bottom sheet toggle margin source',
+);
+expectEqual(
+  AR_FILTER_SHEET_TOGGLE_ALIGNMENT,
+  'sheetContentStart',
+  'AR filter bottom sheet toggle follows sheet content start alignment',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_ACTIONS_PLACEMENT,
+  'aboveSheet',
+  'AR filter shape and save actions float above the bottom sheet',
+);
+expectEqual(
+  AR_FILTER_FLOATING_SHEET_CONTROLS_GAP,
+  spacing.xs,
+  'AR filter floating sheet controls use compact spacing',
+);
+expectEqual(
+  AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter floating sheet controls right padding matches the bottom sheet padding',
+);
+expectEqual(
+  AR_FILTER_FLOATING_SHEET_ACTIONS_FLEX,
+  1,
+  'AR filter floating shape and save actions fill the row beside the sheet toggle',
+);
+expectEqual(
+  AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING,
+  AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE,
+  'AR filter camera controls use home indicator clearance',
+);
+expectEqual(
+  AR_FILTER_CAMERA_CONTROLS_HOME_INDICATOR_CLEARANCE,
+  spacing.xxl * 5,
+  'AR filter camera controls are clearly raised from the screen bottom',
+);
+expectEqual(
+  AR_FILTER_CAMERA_CONTROLS_BOTTOM_POSITION,
+  'raised',
+  'AR filter camera controls are not attached to the bottom edge',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter bottom sheet panel top padding matches sheet padding',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter bottom sheet horizontal padding matches sheet padding',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_PANEL_GAP,
+  spacing.xs,
+  'AR filter bottom sheet action-to-camera gap is compact',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_CONTENT_GAP,
+  spacing.sm,
+  'AR filter bottom sheet content gap is compact',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_CONTENT_BOTTOM_PADDING,
+  AR_FILTER_BOTTOM_SHEET_PADDING,
+  'AR filter bottom sheet content bottom padding matches sheet padding',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_BACKGROUND_COLOR,
+  colors.arFilterBottomSheetSurface,
+  'AR filter bottom sheet uses translucent AR surface',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_PANEL_MAX_HEIGHT,
+  640,
+  'AR filter bottom sheet is tall enough for filter controls',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_SCROLL_MAX_HEIGHT,
+  380,
+  'AR filter bottom sheet avoids default filter control scrolling',
+);
+expectEqual(
+  AR_FILTER_BOTTOM_SHEET_SCROLL_POLICY,
+  'fitsDefaultFilterControls',
+  'AR filter bottom sheet default controls fit without scrolling',
 );
 
 <ARFilterScreen

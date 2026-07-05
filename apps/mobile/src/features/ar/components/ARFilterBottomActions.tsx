@@ -11,6 +11,8 @@ type ARFilterBottomActionsProps = {
   onSave?: () => void;
 };
 
+export const AR_FILTER_BOTTOM_ACTION_BUTTON_GAP = spacing.sm;
+
 export function getARFilterSaveButtonLabel(): string {
   return '저장';
 }
@@ -65,7 +67,7 @@ export function ARFilterBottomActions({
 
 const styles = StyleSheet.create({
   makeupActionRow: {
-    gap: spacing.md,
+    gap: AR_FILTER_BOTTOM_ACTION_BUTTON_GAP,
   },
   shapeEditButton: {
     alignItems: 'center',

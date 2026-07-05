@@ -7,11 +7,13 @@ import {
 import {
   getFaceAnalysisReportCreateFilterButtonPlacements,
   getFaceAnalysisReportAvoidedMakeupRailPresentation,
+  getFaceAnalysisReportEditorialPresentation,
   getFaceAnalysisReportLiquidGlassPresentation,
   getFaceAnalysisReportPointGuideItems,
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSubtitleTextStyle,
   getFaceAnalysisReportSummaryItems,
+  faceAnalysisReportCreateFilterButtonAccessibilityLabels,
 } from '../services/faceAnalysisReportDetailModel';
 import {faceAnalysisReportsMock} from '../../../shared/mocks/faceAnalysis.mock';
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
@@ -33,6 +35,7 @@ type ExpectType<Condition extends true> = Condition;
 const createFilterButtonPlacements =
   getFaceAnalysisReportCreateFilterButtonPlacements();
 const liquidGlassPresentation = getFaceAnalysisReportLiquidGlassPresentation();
+const editorialPresentation = getFaceAnalysisReportEditorialPresentation();
 const screenFramePresentation = getFaceAnalysisReportScreenFramePresentation();
 const subtitleTextStyle = getFaceAnalysisReportSubtitleTextStyle();
 const report = faceAnalysisReportsMock[0];
@@ -64,6 +67,11 @@ expectEqual(
   'image analysis report floating bottom create filter button placement',
 );
 expectEqual(
+  faceAnalysisReportCreateFilterButtonAccessibilityLabels['floating-bottom'],
+  '메이크업 필터 만들기',
+  'image analysis report create filter button copy',
+);
+expectEqual(
   screenFramePresentation.headerPlacement,
   'route-level',
   'image analysis report header placement',
@@ -79,14 +87,34 @@ expectEqual(
   'image analysis report content starts below fixed header',
 );
 expectEqual(
-  liquidGlassPresentation.cardTargets.includes('summary'),
-  true,
-  'image analysis report summary cards use liquid glass',
+  (liquidGlassPresentation.cardTargets as readonly string[]).includes('summary'),
+  false,
+  'image analysis report summary avoids liquid glass cards',
 );
 expectEqual(
   liquidGlassPresentation.cardTargets.includes('makeup'),
   true,
   'image analysis report makeup cards use liquid glass',
+);
+expectEqual(
+  editorialPresentation.heroTreatment,
+  'full-bleed-photo-report',
+  'image analysis report uses an editorial photo hero',
+);
+expectEqual(
+  editorialPresentation.summaryTreatment,
+  'dark-ribbon-metrics',
+  'image analysis report summary uses a dark ribbon treatment',
+);
+expectEqual(
+  editorialPresentation.sectionTreatment,
+  'cardless-divided-sections',
+  'image analysis report sections avoid stacked card clutter',
+);
+expectEqual(
+  editorialPresentation.heroMinimumHeight,
+  420,
+  'image analysis report hero keeps a strong visual anchor',
 );
 expectEqual(
   liquidGlassPresentation.buttonTargets.includes('create-filter'),

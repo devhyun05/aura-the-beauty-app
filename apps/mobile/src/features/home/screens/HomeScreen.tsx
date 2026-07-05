@@ -14,8 +14,8 @@ import {
 import {
   ArrowRight,
   ChevronUp,
+  Compass,
   Heart,
-  Newspaper,
   PackageSearch,
   ScanFace,
   Store,
@@ -40,7 +40,7 @@ export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractio
 
 type HomeScreenProps = {
   onPressFaceDiagnosis?: () => void;
-  onPressMagazine?: () => void;
+  onPressConsulting?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
@@ -54,7 +54,7 @@ type HomeScreenProps = {
 export function HomeScreen({
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
-  onPressMagazine,
+  onPressConsulting,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
@@ -166,7 +166,7 @@ export function HomeScreen({
 
             <QuickActionSection
               onPressFaceDiagnosis={onPressFaceDiagnosis}
-              onPressMagazine={onPressMagazine}
+              onPressConsulting={onPressConsulting}
               onPressProductRecommendations={onPressProductRecommendations}
               onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
@@ -506,7 +506,7 @@ function HeroBannerCard({
 }
 
 export const HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME = 'Store';
-export const HOME_MAGAZINE_QUICK_ACTION_ICON_NAME = 'Newspaper';
+export const HOME_CONSULTING_QUICK_ACTION_ICON_NAME = 'Compass';
 
 const quickActions = [
   {
@@ -514,14 +514,6 @@ const quickActions = [
     label: '얼굴\n분석',
     accessibilityLabel: '얼굴 분석 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'recommendation',
-    label: '\uCD94\uCC9C\n\uC81C\uD488',
-    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
-    icon: (color: string) => (
-      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
   },
   {
     id: 'filterStore',
@@ -532,11 +524,19 @@ const quickActions = [
     ),
   },
   {
-    id: 'magazine',
-    label: '\uB9E4\uAC70\uC9C4',
-    accessibilityLabel: '\uB9E4\uAC70\uC9C4 \uBCF4\uAE30',
+    id: 'recommendation',
+    label: '\uCD94\uCC9C\n\uC81C\uD488',
+    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
     icon: (color: string) => (
-      <Newspaper color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'consulting',
+    label: '\uCEE8\uC124\uD305',
+    accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
+    icon: (color: string) => (
+      <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
 ] as const;
@@ -544,8 +544,8 @@ const quickActions = [
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
+  onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
 };
@@ -553,8 +553,8 @@ type HomeQuickActionHandlers = {
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
+    onPressConsulting,
     onPressFaceDiagnosis,
-    onPressMagazine,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   }: HomeQuickActionHandlers,
@@ -571,8 +571,8 @@ export function getHomeQuickActionPressHandler(
     return onPressRecommendedFilterMore;
   }
 
-  if (actionId === 'magazine') {
-    return onPressMagazine;
+  if (actionId === 'consulting') {
+    return onPressConsulting;
   }
 
   return undefined;
@@ -583,14 +583,14 @@ export function getHomeQuickActionLabels(): readonly string[] {
 }
 
 function QuickActionSection({
+  onPressConsulting,
   onPressFaceDiagnosis,
-  onPressMagazine,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
+    onPressConsulting,
     onPressFaceDiagnosis,
-    onPressMagazine,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   };

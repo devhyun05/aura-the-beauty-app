@@ -14,6 +14,7 @@ import {
   floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   getFloatingActionButtonScale,
+  getFloatingActionDefinition,
   getFloatingActionMenuTarget,
   getFloatingActionReleaseOutcome,
   getFloatingActionSelectedSlotNumber,
@@ -78,6 +79,7 @@ const customOrderedFloatingActions: readonly FloatingActionId[] = [
   'arFilter',
   'makeupExtraction',
 ];
+const arFilterFloatingActionDefinition = getFloatingActionDefinition('arFilter');
 
 expectEqual(FLOATING_ACTION_MAX_ITEM_COUNT, 3, 'floating action max item count');
 expectEqual(FLOATING_ACTION_MAIN_ICON_SIZE, 20, 'floating action main icon size');
@@ -90,6 +92,16 @@ expectEqual(
   defaultFloatingActions.join(','),
   'arFilter,makeupExtraction,makeupFeedback',
   'default floating action ids',
+);
+expectEqual(
+  arFilterFloatingActionDefinition.label,
+  '메이크업 필터',
+  'AR floating action display label uses makeup filter copy',
+);
+expectEqual(
+  arFilterFloatingActionDefinition.accessibilityLabel,
+  '메이크업 필터 열기',
+  'AR floating action accessibility label uses makeup filter copy',
 );
 expectEqual(
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
@@ -127,11 +139,6 @@ expectEqual(
   'filter store icon library name',
 );
 expectEqual(
-  FLOATING_ACTION_ICON_LIBRARY_NAMES.magazine,
-  'Newspaper',
-  'magazine icon library name',
-);
-expectEqual(
   FLOATING_ACTION_ICON_LIBRARY_NAMES.makeupFeedback,
   'MessageSquareText',
   'makeup feedback icon library name',
@@ -152,15 +159,15 @@ expectEqual(inlineTopSlot.x, -46, 'inline floating action AR slot x offset');
 expectEqual(inlineTopSlot.y, -66, 'inline floating action AR slot y offset');
 expectEqual(inlineLeftSlot.x, -78, 'inline floating action extraction slot x offset');
 expectEqual(inlineLeftSlot.y, 0, 'inline floating action extraction slot y offset');
-expectEqual(inlineRightSlot.x, 30, 'inline floating action feedback slot x offset stays inside screen');
+expectEqual(inlineRightSlot.x, -110, 'inline floating action feedback slot x offset stays inside right corner');
 expectEqual(inlineRightSlot.y, -66, 'inline floating action feedback slot y offset');
 expectEqual(inlineArFilterSlot.x, -46, 'inline AR filter sits at 11 o clock');
 expectEqual(inlineArFilterSlot.y, -66, 'inline AR filter moves closer to the star');
 expectEqual(inlineMakeupExtractionSlot.x, -78, 'inline makeup extraction sits closer at 9 o clock');
 expectEqual(inlineMakeupExtractionSlot.y, 0, 'inline makeup extraction aligns horizontally');
-expectEqual(inlineMakeupFeedbackSlot.x, 30, 'inline makeup feedback sits closer at 1 o clock');
+expectEqual(inlineMakeupFeedbackSlot.x, -110, 'inline makeup feedback fans inward from the right corner');
 expectEqual(inlineMakeupFeedbackSlot.y, -66, 'inline makeup feedback moves closer to the star');
-expectEqual(inlineSettingsSlot.x, 58, 'inline settings keeps a small gap from the star');
+expectEqual(inlineSettingsSlot.x, -58, 'inline settings opens inward from the right corner');
 expectEqual(inlineSettingsSlot.y, 0, 'inline settings aligns horizontally');
 expectEqual(
   inlineLeftPositionTopSlot.x,
@@ -184,8 +191,8 @@ expectEqual(
 );
 expectEqual(
   inlineLeftPositionEndSlot.x,
-  -30,
-  'left-position inline slot 3 stays near the screen edge',
+  110,
+  'left-position inline slot 3 fans inward from the left corner',
 );
 expectEqual(
   inlineLeftPositionEndSlot.y,
@@ -194,8 +201,8 @@ expectEqual(
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.x,
-  -58,
-  'left-position settings sits to the left of the star',
+  58,
+  'left-position settings opens inward from the left corner',
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.y,
@@ -252,12 +259,12 @@ expectEqual(
 );
 expectEqual(
   getFloatingActionMenuTarget(
-    {translationX: 30, translationY: -66},
+    {translationX: -110, translationY: -66},
     defaultFloatingActions,
     'inline',
   ),
   'makeupFeedback',
-  'inline dragging upper-right selects makeup feedback without leaving the screen',
+  'inline dragging inward-left selects makeup feedback without leaving the screen',
 );
 expectEqual(
   getFloatingActionMenuTarget(
@@ -279,7 +286,7 @@ expectEqual(
 );
 expectEqual(
   getFloatingActionMenuTarget(
-    {translationX: 30, translationY: -66},
+    {translationX: -110, translationY: -66},
     customOrderedFloatingActions,
     'inline',
   ),
@@ -308,7 +315,7 @@ expectEqual(
 );
 expectEqual(
   getFloatingActionMenuTarget(
-    {translationX: -30, translationY: -66},
+    {translationX: 110, translationY: -66},
     customOrderedFloatingActions,
     'inline',
     'left',
@@ -328,26 +335,14 @@ expectEqual(
   getFloatingActionReleaseOutcome(
     {translationX: 8, translationY: -12},
     defaultFloatingActions,
-    false,
-    'inline',
-  ).kind,
-  'open',
-  'short release from collapsed menu keeps fallback menu open',
-);
-expectEqual(
-  getFloatingActionReleaseOutcome(
-    {translationX: 8, translationY: -12},
-    defaultFloatingActions,
-    true,
     'inline',
   ).kind,
   'close',
-  'short release from expanded menu closes fallback menu',
+  'short drag release from collapsed menu folds the quick action menu back',
 );
 const inlineFeedbackRelease = getFloatingActionReleaseOutcome(
-  {translationX: 30, translationY: -66},
+  {translationX: -110, translationY: -66},
   defaultFloatingActions,
-  false,
   'inline',
   null,
 );
@@ -358,9 +353,8 @@ expectEqual(
   'inline release selects makeup feedback',
 );
 const inlineFeedbackFlickRelease = getFloatingActionReleaseOutcome(
-  {translationX: 50, translationY: -100},
+  {translationX: -142, translationY: -100},
   defaultFloatingActions,
-  false,
   'inline',
   'makeupFeedback',
 );
@@ -378,7 +372,6 @@ expectEqual(
   getFloatingActionReleaseOutcome(
     {translationX: 88, translationY: -44},
     defaultFloatingActions,
-    false,
     'inline',
     null,
   ).kind,

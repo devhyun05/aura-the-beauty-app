@@ -5,7 +5,6 @@ import {Button, Text, XStack, YStack} from 'tamagui';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
 import {
   CommunityFooterIcon,
-  ConsultingFooterIcon,
   HomeFooterIcon,
   ProfileFooterIcon,
 } from './FooterIcons';
@@ -14,7 +13,12 @@ import {
   type FloatingActionButtonPosition,
 } from './FloatingActionMenu';
 
-export type FooterTabKey = 'home' | 'profile' | 'community' | 'consulting';
+export type FooterTabKey = 'home' | 'profile' | 'community';
+export const APP_FOOTER_TAB_ORDER = [
+  'home',
+  'community',
+  'profile',
+] as const satisfies readonly FooterTabKey[];
 
 export const APP_FOOTER_HORIZONTAL_PADDING = spacing.xl;
 export const APP_FOOTER_BAR_HEIGHT = 64;
@@ -22,6 +26,7 @@ export const APP_FOOTER_TAB_HEIGHT = 42;
 export const APP_FOOTER_ACTIVE_TAB_BACKGROUND = 'rgba(43, 43, 43, 0.62)';
 export const APP_FOOTER_ACTION_BUBBLE_SIZE = APP_FOOTER_BAR_HEIGHT;
 export const APP_FOOTER_ACTION_SLOT_WIDTH = APP_FOOTER_BAR_HEIGHT;
+export const APP_FOOTER_ACTION_SLOT_CORNER_INSET = spacing.sm;
 export const APP_FOOTER_ICON_SIZE = iconSize.sm;
 export const APP_FOOTER_ACTION_ICON_SIZE = iconSize.lg;
 export const APP_FOOTER_BAR_OVERFLOW = 'visible';
@@ -53,37 +58,43 @@ type AppFooterProps = {
   showLabels?: boolean;
 };
 
-const footerItems: FooterTabItem[] = [
-  {
+const footerItemByKey = {
+  home: {
     key: 'home',
     label: '홈',
     accessibilityLabel: '홈으로 이동',
     icon: color => <HomeFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
-  {
-    key: 'profile',
-    label: '프로필',
-    accessibilityLabel: '프로필로 이동',
-    icon: color => <ProfileFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
-  },
-  {
+  community: {
     key: 'community',
     label: '커뮤니티',
     accessibilityLabel: '커뮤니티로 이동',
     icon: color => <CommunityFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
-  {
-    key: 'consulting',
-    label: '컨설팅',
-    accessibilityLabel: '컨설팅으로 이동',
-    icon: color => <ConsultingFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+  profile: {
+    key: 'profile',
+    label: '프로필',
+    accessibilityLabel: '프로필로 이동',
+    icon: color => <ProfileFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
-];
+} as const satisfies Record<FooterTabKey, FooterTabItem>;
+
+const footerItems: FooterTabItem[] = APP_FOOTER_TAB_ORDER.map(
+  tabKey => footerItemByKey[tabKey],
+);
 
 export function getAppFooterActionSlotOrder(
   actionSlotPosition: FloatingActionButtonPosition,
 ): readonly AppFooterActionSlotItem[] {
   return actionSlotPosition === 'left' ? ['action', 'tabs'] : ['tabs', 'action'];
+}
+
+export function getAppFooterActionSlotCornerStyle(
+  actionSlotPosition: FloatingActionButtonPosition,
+) {
+  return actionSlotPosition === 'left'
+    ? {left: APP_FOOTER_ACTION_SLOT_CORNER_INSET}
+    : {right: APP_FOOTER_ACTION_SLOT_CORNER_INSET};
 }
 
 export function AppFooter({
@@ -133,13 +144,16 @@ export function AppFooter({
     </XStack>
   );
   const actionSlotElement = actionSlot ? (
-    <YStack key="action" style={styles.actionSlot}>
+    <YStack
+      key="action"
+      style={[
+        styles.actionSlot,
+        getAppFooterActionSlotCornerStyle(actionSlotPosition),
+        {bottom: Math.max(bottomInset, spacing.md)},
+      ]}>
       {actionSlot}
     </YStack>
   ) : null;
-  const footerContent = getAppFooterActionSlotOrder(actionSlotPosition).map(item =>
-    item === 'action' ? actionSlotElement : footerBar,
-  );
 
   return (
     <YStack
@@ -152,15 +166,15 @@ export function AppFooter({
         },
       ]}>
       <XStack style={styles.footerRow}>
-        {footerContent}
+        {footerBar}
       </XStack>
+      {actionSlotElement}
     </YStack>
   );
 }
 
 const styles = StyleSheet.create({
   footerArea: {
-    paddingHorizontal: APP_FOOTER_HORIZONTAL_PADDING,
     paddingTop: spacing.md,
   },
   dockedFooterArea: {
@@ -222,6 +236,7 @@ const styles = StyleSheet.create({
     height: APP_FOOTER_ACTION_BUBBLE_SIZE,
     justifyContent: 'center',
     overflow: 'visible',
+    position: 'absolute',
     width: APP_FOOTER_ACTION_SLOT_WIDTH,
   },
   tabContent: {

@@ -5,6 +5,7 @@ import {
   APP_FOOTER_BAR_OVERFLOW,
   APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   APP_FOOTER_ACTION_BUBBLE_SIZE,
+  APP_FOOTER_ACTION_SLOT_CORNER_INSET,
   APP_FOOTER_ACTION_SLOT_WIDTH,
   APP_FOOTER_ACTION_ICON_SIZE,
   APP_FOOTER_FLOATING_HOST_BASE_HEIGHT,
@@ -16,8 +17,10 @@ import {
   APP_FOOTER_ICON_SIZE,
   APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
   APP_FOOTER_SIDE_TAB_WIDTH,
+  APP_FOOTER_TAB_ORDER,
   APP_FOOTER_TAB_HEIGHT,
   AppFooter,
+  getAppFooterActionSlotCornerStyle,
   getAppFooterActionSlotOrder,
 } from './AppFooter';
 import {CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND} from './CameraCaptureButton';
@@ -28,11 +31,14 @@ const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
   APP_FOOTER_ACTIVE_TAB_BACKGROUND;
 const footerActionBubbleSize: 64 = APP_FOOTER_ACTION_BUBBLE_SIZE;
 const footerActionSlotWidth: 64 = APP_FOOTER_ACTION_SLOT_WIDTH;
+const footerActionSlotCornerInset: 8 = APP_FOOTER_ACTION_SLOT_CORNER_INSET;
 const footerHorizontalPadding: 20 = APP_FOOTER_HORIZONTAL_PADDING;
 const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;
 const footerActionIconSize: 28 = APP_FOOTER_ACTION_ICON_SIZE;
 const footerFloatingHostBaseHeight: 76 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
 const footerSideTabWidth: 58 = APP_FOOTER_SIDE_TAB_WIDTH;
+const footerTabOrder: readonly ['home', 'community', 'profile'] =
+  APP_FOOTER_TAB_ORDER;
 const footerBarOverflow: 'visible' = APP_FOOTER_BAR_OVERFLOW;
 const footerGlassBackground: 'rgba(255, 255, 255, 0.72)' =
   APP_FOOTER_GLASS_BACKGROUND;
@@ -54,6 +60,14 @@ if (getAppFooterActionSlotOrder('right').join(',') !== 'tabs,action') {
 
 if (getAppFooterActionSlotOrder('left').join(',') !== 'action,tabs') {
   throw new Error('left action slot order: expected action,tabs');
+}
+
+if (getAppFooterActionSlotCornerStyle('right').right !== APP_FOOTER_ACTION_SLOT_CORNER_INSET) {
+  throw new Error('right action slot corner: expected right inset');
+}
+
+if (getAppFooterActionSlotCornerStyle('left').left !== APP_FOOTER_ACTION_SLOT_CORNER_INSET) {
+  throw new Error('left action slot corner: expected left inset');
 }
 
 <AppFooter

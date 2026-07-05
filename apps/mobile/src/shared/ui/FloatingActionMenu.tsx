@@ -17,7 +17,6 @@ import {
 import {
   Camera,
   MessageSquareText,
-  Newspaper,
   PackageSearch,
   ScanFace,
   ScanSearch,
@@ -35,8 +34,7 @@ export type FloatingActionId =
   | 'makeupFeedback'
   | 'faceAnalysis'
   | 'productRecommendation'
-  | 'filterStore'
-  | 'magazine';
+  | 'filterStore';
 
 export type FloatingActionDefinition = {
   accessibilityLabel: string;
@@ -62,7 +60,6 @@ export type FloatingActionButtonPosition = 'right' | 'left';
 
 export type FloatingActionReleaseOutcome =
   | {kind: 'select'; actionId: FloatingActionId}
-  | {kind: 'open'}
   | {kind: 'close'};
 
 export type FloatingActionInteractionModeOption = {
@@ -133,17 +130,16 @@ export const floatingActionButtonPositionOptions = [
 export const FLOATING_ACTION_ICON_LIBRARY_NAMES = {
   arFilter: 'Camera',
   filterStore: 'Store',
-  magazine: 'Newspaper',
   makeupFeedback: 'MessageSquareText',
 } as const;
 
 export const floatingActionDefinitions = [
   {
-    accessibilityLabel: 'AR Filter 열기',
+    accessibilityLabel: '메이크업 필터 열기',
     description: '추천 필터를 바로 얼굴에 적용해요.',
     icon: (color: string) => <Camera color={color} size={iconSize.sm} strokeWidth={2.1} />,
     id: 'arFilter',
-    label: 'AR Filter',
+    label: '메이크업 필터',
   },
   {
     accessibilityLabel: '메이크업 추출 시작',
@@ -181,13 +177,6 @@ export const floatingActionDefinitions = [
     icon: (color: string) => <Store color={color} size={iconSize.sm} strokeWidth={2} />,
     id: 'filterStore',
     label: '필터 스토어',
-  },
-  {
-    accessibilityLabel: '매거진 보기',
-    description: '뷰티 영상과 기사를 확인해요.',
-    icon: (color: string) => <Newspaper color={color} size={iconSize.sm} strokeWidth={2} />,
-    id: 'magazine',
-    label: '매거진',
   },
 ] as const satisfies readonly FloatingActionDefinition[];
 
@@ -265,15 +254,17 @@ export function getFloatingActionSlotOffset(
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
 ): FloatingActionSlotOffset {
   if (placement === 'inline') {
-    const resolveInlineOffset = (offset: FloatingActionSlotOffset) =>
-      buttonPosition === 'left' ? {x: -offset.x, y: offset.y} : offset;
+    const resolveInlineOffset = (rightCornerOffset: FloatingActionSlotOffset) =>
+      buttonPosition === 'left'
+        ? {x: -rightCornerOffset.x, y: rightCornerOffset.y}
+        : rightCornerOffset;
 
     if (itemCount <= 1) {
       return resolveInlineOffset(FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET);
     }
 
     if (itemCount === 2) {
-      return resolveInlineOffset(index === 0 ? {x: -78, y: 0} : {x: 30, y: -66});
+      return resolveInlineOffset(index === 0 ? {x: -78, y: 0} : {x: -46, y: -66});
     }
 
     if (index === 0) {
@@ -284,7 +275,7 @@ export function getFloatingActionSlotOffset(
       return resolveInlineOffset({x: -78, y: 0});
     }
 
-    return resolveInlineOffset({x: 30, y: -66});
+    return resolveInlineOffset({x: -110, y: -66});
   }
 
   if (itemCount <= 1) {
@@ -328,7 +319,7 @@ export function getFloatingActionSettingsSlotOffset(
     return {x: 120, y: 0};
   }
 
-  return buttonPosition === 'left' ? {x: -58, y: 0} : {x: 58, y: 0};
+  return buttonPosition === 'left' ? {x: 58, y: 0} : {x: -58, y: 0};
 }
 
 export function getFloatingActionButtonScale(isActive: boolean): number {
@@ -430,7 +421,6 @@ export function getFloatingActionMenuTarget(
 export function getFloatingActionReleaseOutcome(
   dragPoint: FloatingActionDragPoint,
   actionIds: readonly FloatingActionId[],
-  wasExpandedAtGestureStart: boolean,
   placement: FloatingActionPlacement = 'floating',
   activeActionId: FloatingActionId | null = null,
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
@@ -457,12 +447,6 @@ export function getFloatingActionReleaseOutcome(
     )
   ) {
     return {kind: 'select', actionId: activeActionId};
-  }
-
-  const dragDistance = Math.hypot(dragPoint.translationX, dragPoint.translationY);
-
-  if (dragDistance < FLOATING_ACTION_MIN_DRAG_DISTANCE) {
-    return wasExpandedAtGestureStart ? {kind: 'close'} : {kind: 'open'};
   }
 
   return {kind: 'close'};
@@ -497,7 +481,6 @@ export function FloatingActionMenu({
   const isExpandedRef = useRef(isExpanded);
   const [activeActionId, setActiveActionId] = useState<FloatingActionId | null>(null);
   const activeActionIdRef = useRef<FloatingActionId | null>(null);
-  const wasExpandedAtGestureStartRef = useRef(false);
   const visibleDefinitions = visibleActionIds.map(getFloatingActionDefinition);
 
   isExpandedRef.current = isExpanded;
@@ -539,7 +522,6 @@ export function FloatingActionMenu({
       onMoveShouldSetPanResponder: () => interactionMode === 'drag',
       onMoveShouldSetPanResponderCapture: () => interactionMode === 'drag',
       onPanResponderGrant: () => {
-        wasExpandedAtGestureStartRef.current = isExpandedRef.current;
         setExpanded(true);
       },
       onPanResponderMove: (
@@ -587,7 +569,6 @@ export function FloatingActionMenu({
             translationY: gestureState.dy,
           },
           visibleActionIds,
-          wasExpandedAtGestureStartRef.current,
           placement,
           activeActionIdRef.current,
           buttonPosition,
@@ -595,13 +576,6 @@ export function FloatingActionMenu({
 
         if (releaseOutcome.kind === 'select') {
           selectAction(releaseOutcome.actionId);
-          return;
-        }
-
-        if (releaseOutcome.kind === 'open') {
-          setExpanded(true);
-          setActiveActionId(null);
-          activeActionIdRef.current = null;
           return;
         }
 

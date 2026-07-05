@@ -33,7 +33,7 @@ expectEqual(
 
 expectEqual(
   getFloatingActionCandidateLabels().join(','),
-  'AR Filter,메이크업 추출,메이크업 피드백,얼굴 분석,추천 제품,필터 스토어,매거진',
+  '메이크업 필터,메이크업 추출,메이크업 피드백,얼굴 분석,추천 제품,필터 스토어',
   'floating action candidate labels',
 );
 

@@ -26,6 +26,16 @@ const CAPTURE_BUTTON_METRICS = {
 } as const;
 const CONTROL_SIDE_SLOT_WIDTH = CAPTURE_BUTTON_METRICS.outerSize + spacing.xxl * 2;
 const CAMERA_SWITCH_BUTTON_SIZE = iconSize.xl + spacing.md;
+export const AR_FILTER_CAMERA_BUTTON_SURFACE_VARIANT = 'liquidGlass' as const;
+export const AR_FILTER_CAMERA_BUTTON_INNER_COLOR = 'transparent';
+export const AR_FILTER_CAMERA_BUTTON_INNER_TREATMENT = 'transparent' as const;
+export const AR_FILTER_CAMERA_CONTROL_DESIGN_TONE = 'bottomSheetGlass' as const;
+export const AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT = spacing.md;
+export const AR_FILTER_CAMERA_CONTROL_ROW_TOP_PADDING = spacing.xs;
+export const AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING = 0;
+export const AR_FILTER_CAMERA_MODE_ACTIVE_BACKGROUND_COLOR = colors.textSecondary;
+export const AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR = colors.white;
+export const AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR = colors.textSecondary;
 
 export function getARFilterCaptureButtonMetrics(): typeof CAPTURE_BUTTON_METRICS {
   return CAPTURE_BUTTON_METRICS;
@@ -49,7 +59,11 @@ export function ARFilterCaptureControls({
             accessibilityLabel="사진 모드"
             icon={
               <Camera
-                color={captureMode === 'photo' ? colors.black : colors.white}
+                color={
+                  captureMode === 'photo'
+                    ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
+                    : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
+                }
                 size={iconSize.sm}
               />
             }
@@ -60,7 +74,11 @@ export function ARFilterCaptureControls({
             accessibilityLabel="동영상 모드"
             icon={
               <Video
-                color={captureMode === 'video' ? colors.black : colors.white}
+                color={
+                  captureMode === 'video'
+                    ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
+                    : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
+                }
                 size={iconSize.sm}
               />
             }
@@ -77,7 +95,9 @@ export function ARFilterCaptureControls({
               ? 'AR 사진 촬영 후 홈으로 이동'
               : 'AR 동영상 촬영 후 홈으로 이동'
           }
+          innerColor={AR_FILTER_CAMERA_BUTTON_INNER_COLOR}
           onPress={onComplete}
+          variant={AR_FILTER_CAMERA_BUTTON_SURFACE_VARIANT}
         />
       </View>
 
@@ -89,7 +109,7 @@ export function ARFilterCaptureControls({
           pressStyle={{scale: 0.96}}
           style={styles.cameraSwitchButton}
           unstyled>
-          <SwitchCamera color={colors.white} size={iconSize.sm} />
+          <SwitchCamera color={colors.textPrimary} size={iconSize.sm} />
         </Button>
       </View>
     </XStack>
@@ -121,19 +141,26 @@ function IconModeButton({accessibilityLabel, icon, isActive, onPress}: IconModeB
 const styles = StyleSheet.create({
   captureRow: {
     alignItems: 'center',
-    borderTopColor: colors.divider,
+    borderTopColor: colors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    marginBottom: AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT,
+    paddingHorizontal: AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING,
+    paddingTop: AR_FILTER_CAMERA_CONTROL_ROW_TOP_PADDING,
   },
   cameraSwitchButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.bottomSheetControlSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
+    borderWidth: 1,
     height: CAMERA_SWITCH_BUTTON_SIZE,
     justifyContent: 'center',
+    shadowColor: colors.white,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
     width: CAMERA_SWITCH_BUTTON_SIZE,
   },
   captureButtonSlot: {
@@ -142,8 +169,10 @@ const styles = StyleSheet.create({
     width: CAPTURE_BUTTON_METRICS.outerSize,
   },
   captureModeToggle: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.bottomSheetControlSurface,
+    borderColor: colors.white,
     borderRadius: radius.pill,
+    borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.xs,
   },
@@ -165,6 +194,6 @@ const styles = StyleSheet.create({
     width: 38,
   },
   modeButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: AR_FILTER_CAMERA_MODE_ACTIVE_BACKGROUND_COLOR,
   },
 });

@@ -15,6 +15,7 @@ export const colors = {
   guideReady: '#31D06F',
   glassSurface: 'rgba(255, 255, 255, 0.13)',
   bottomSheetSurface: 'rgba(255, 255, 255, 0.92)',
+  arFilterBottomSheetSurface: 'rgba(255, 255, 255, 0.78)',
   bottomSheetControlSurface: 'rgba(255, 255, 255, 0.68)',
   bottomSheetMutedSurface: 'rgba(247, 247, 247, 0.60)',
   liquidGlassBorder: 'rgba(255, 255, 255, 0.92)',

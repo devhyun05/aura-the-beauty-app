@@ -10,6 +10,7 @@ import {
   useUnityMakeupNativeViewReady,
   UnityMakeupNativeView,
 } from './UnityMakeupNativeView';
+import {AR_FILTER_GUIDE_MODE_CONTROL_BOTTOM_OFFSET} from './ARFilterModeTabs';
 
 type MakeupPreviewColorOverlayLayer = {
   id: string;
@@ -20,6 +21,7 @@ type ARFilterCameraPreviewProps = {
   active?: boolean;
   cameraFacing: CameraType;
   guideMode: GuideMode;
+  comparisonDividerTopOffset?: number;
   previewColorHex: string;
   selectedComparisonMode: ComparisonMode;
 };
@@ -36,23 +38,36 @@ export function getARFilterCameraMode(): 'live-camera' {
   return 'live-camera';
 }
 
+export const AR_FILTER_COMPARISON_DIVIDER_WIDTH = StyleSheet.hairlineWidth;
+export const AR_FILTER_COMPARISON_DIVIDER_VERTICAL_SPAN =
+  'guideModeControlToBottom' as const;
+export const AR_FILTER_COMPARISON_DIVIDER_TOP =
+  AR_FILTER_GUIDE_MODE_CONTROL_BOTTOM_OFFSET;
+export const AR_FILTER_COMPARISON_DIVIDER_BOTTOM = 0;
+export const AR_FILTER_MOCK_MAKEUP_OVERLAY_VISIBILITY = 'hidden' as const;
+export const AR_FILTER_HALF_GUIDE_SIDE_SHADE_VISIBILITY = 'hidden' as const;
+
 export function shouldShowARFilterHeaderCopy(): false {
+  return false;
+}
+
+export function shouldShowARFilterMockMakeupOverlays(): false {
+  return false;
+}
+
+export function shouldShowARFilterComparisonSideShade(): false {
   return false;
 }
 
 export function ARFilterCameraPreview({
   active = true,
   cameraFacing,
+  comparisonDividerTopOffset = AR_FILTER_COMPARISON_DIVIDER_TOP,
   guideMode,
-  previewColorHex,
   selectedComparisonMode,
 }: ARFilterCameraPreviewProps) {
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
-  const shouldShowLeftCheekOverlay =
-    guideMode !== 'half' || selectedComparisonMode !== 'right';
-  const shouldShowRightCheekOverlay =
-    guideMode !== 'half' || selectedComparisonMode !== 'left';
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
   const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 
@@ -64,45 +79,22 @@ export function ARFilterCameraPreview({
         <>
           <LiveCameraLayer active={active} facing={cameraFacing} />
           <View style={styles.previewDim} />
-          <View style={[styles.eyePreviewOverlay, {backgroundColor: previewColorHex}]} />
-          {shouldShowLeftCheekOverlay ? (
-            <View
-              style={[
-                styles.cheekPreviewOverlayLeft,
-                {backgroundColor: previewColorHex},
-              ]}
-            />
-          ) : null}
-          {shouldShowRightCheekOverlay ? (
-            <View
-              style={[
-                styles.cheekPreviewOverlayRight,
-                {backgroundColor: previewColorHex},
-              ]}
-            />
-          ) : null}
-          <View style={[styles.lipPreviewOverlay, {backgroundColor: previewColorHex}]} />
           {previewColorOverlayLayers.map(layer => (
             <View
               key={layer.id}
-              style={[layer.style, {backgroundColor: previewColorHex}]}
+              style={layer.style}
             />
           ))}
         </>
       )}
       {guideMode === 'half' ? (
         <>
-          {selectedComparisonMode !== 'full' ? (
-            <View
-              style={[
-                styles.comparisonShade,
-                selectedComparisonMode === 'left'
-                  ? styles.comparisonShadeRight
-                  : styles.comparisonShadeLeft,
-              ]}
-            />
-          ) : null}
-          <View style={styles.comparisonDivider} />
+          <View
+            style={[
+              styles.comparisonDivider,
+              {top: comparisonDividerTopOffset},
+            ]}
+          />
           <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
             {leftComparisonLabel}
           </Text>
@@ -125,66 +117,14 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  eyePreviewOverlay: {
-    borderRadius: radius.pill,
-    height: 34,
-    left: '27%',
-    opacity: 0.16,
-    position: 'absolute',
-    right: '27%',
-    top: '38%',
-  },
-  cheekPreviewOverlayLeft: {
-    borderRadius: radius.pill,
-    height: 54,
-    left: '20%',
-    opacity: 0.18,
-    position: 'absolute',
-    top: '52%',
-    transform: [{rotate: '-14deg'}],
-    width: 92,
-  },
-  cheekPreviewOverlayRight: {
-    borderRadius: radius.pill,
-    height: 54,
-    opacity: 0.18,
-    position: 'absolute',
-    right: '20%',
-    top: '52%',
-    transform: [{rotate: '14deg'}],
-    width: 92,
-  },
-  lipPreviewOverlay: {
-    borderRadius: radius.pill,
-    bottom: '24%',
-    height: 24,
-    left: '39%',
-    opacity: 0.4,
-    position: 'absolute',
-    width: 82,
-  },
-  comparisonShade: {
-    backgroundColor: colors.black,
-    bottom: 0,
-    opacity: 0.34,
-    position: 'absolute',
-    top: 0,
-    width: '50%',
-  },
-  comparisonShadeLeft: {
-    left: 0,
-  },
-  comparisonShadeRight: {
-    right: 0,
-  },
   comparisonDivider: {
     backgroundColor: colors.white,
-    bottom: '28%',
+    bottom: AR_FILTER_COMPARISON_DIVIDER_BOTTOM,
     left: '50%',
-    opacity: 0.86,
+    opacity: 0.72,
     position: 'absolute',
-    top: '24%',
-    width: 2,
+    top: AR_FILTER_COMPARISON_DIVIDER_TOP,
+    width: AR_FILTER_COMPARISON_DIVIDER_WIDTH,
   },
   comparisonLabel: {
     backgroundColor: colors.glassSurface,

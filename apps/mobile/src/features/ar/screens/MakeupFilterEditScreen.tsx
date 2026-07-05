@@ -209,7 +209,7 @@ export function MakeupFilterEditScreen({
           eyebrow={isFullFaceMode ? '맞춤 설정' : '필터 설정'}
           leftSlot={
             <OverlayIconButton
-              accessibilityLabel="AR 필터 화면으로 돌아가기"
+              accessibilityLabel="메이크업 필터 화면으로 돌아가기"
               onPress={onBack}>
               <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
             </OverlayIconButton>

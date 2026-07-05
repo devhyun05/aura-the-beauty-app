@@ -31,6 +31,7 @@ import {AppScreen} from '../../../shared/ui';
 import {
   faceAnalysisReportCreateFilterButtonAccessibilityLabels,
   faceAnalysisReportLiquidGlassButtonStyle,
+  getFaceAnalysisReportEditorialPresentation,
   getFaceAnalysisReportPointGuideItems,
   getFaceAnalysisReportPrimaryMakeupRecommendation,
   getFaceAnalysisReportScreenFramePresentation,
@@ -78,6 +79,8 @@ const faceAnalysisReportScreenFramePresentation =
   getFaceAnalysisReportScreenFramePresentation();
 const faceAnalysisReportSubtitleTextStyle =
   getFaceAnalysisReportSubtitleTextStyle();
+const faceAnalysisReportEditorialPresentation =
+  getFaceAnalysisReportEditorialPresentation();
 
 export function resolveFaceAnalysisReportHeroImageSource(
   capturedPhotoUri?: string,
@@ -436,24 +439,13 @@ export function FaceAnalysisReportDetailScreen({
         options={REPORT_CAPTURE_OPTIONS}
         style={styles.captureArea}
       >
-        <Text style={styles.subtitle}>
-          {formatReportDate(report.analyzedAt, profile?.name)}
-        </Text>
-
-        <View style={styles.heroCard}>
-          <Image
-            resizeMode="cover"
-            source={heroImageSource}
-            style={styles.heroImage}
-            testID="face-analysis-report-hero-image"
-          />
-        </View>
-
-        <View style={styles.summaryGrid}>
-          {summaryItems.map((item) => (
-            <SummaryItem key={item.label} label={item.label} value={item.value} />
-          ))}
-        </View>
+        <ReportHero
+          analyzedAt={report.analyzedAt}
+          heroImageSource={heroImageSource}
+          profileName={profile?.name}
+          report={report}
+          summaryItems={summaryItems}
+        />
 
         <ReportSection title={"분석 요약"}>
           <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
@@ -478,6 +470,57 @@ export function FaceAnalysisReportDetailScreen({
         onPressShareAction={handleShareAction}
       />
     </FaceAnalysisReportScaffold>
+  );
+}
+
+function ReportHero({
+  analyzedAt,
+  heroImageSource,
+  profileName,
+  report,
+  summaryItems,
+}: {
+  analyzedAt: string;
+  heroImageSource: ReturnType<typeof resolveFaceAnalysisReportHeroImageSource>;
+  profileName?: string;
+  report: FaceAnalysisReport;
+  summaryItems: ReturnType<typeof getFaceAnalysisReportSummaryItems>;
+}) {
+  const {width} = useWindowDimensions();
+  const heroHeight = Math.min(
+    540,
+    Math.max(faceAnalysisReportEditorialPresentation.heroMinimumHeight, width * 1.06),
+  );
+
+  return (
+    <View style={styles.reportHero}>
+      <View style={styles.reportHeroImageStage}>
+        <Image
+          resizeMode="cover"
+          source={heroImageSource}
+          style={[styles.reportHeroImage, {height: heroHeight}]}
+          testID="face-analysis-report-hero-image"
+        />
+        <View style={styles.reportHeroScrim} />
+        <View style={styles.reportHeroCopy}>
+          <Text style={styles.reportHeroEyebrow}>
+            PERSONAL BEAUTY REPORT
+          </Text>
+          <Text numberOfLines={2} style={styles.reportHeroTitle}>
+            {report.recommendedMood}
+          </Text>
+          <Text style={styles.reportHeroSubtitle}>
+            {formatReportDate(analyzedAt, profileName)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.summaryRibbon}>
+        {summaryItems.map((item) => (
+          <SummaryItem key={item.label} label={item.label} value={item.value} />
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -586,7 +629,7 @@ function CreateFilterButton({
       unstyled
     >
       <WandSparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-      <Text style={styles.createFilterButtonText}>AR 필터 만들기</Text>
+      <Text style={styles.createFilterButtonText}>메이크업 필터 만들기</Text>
     </Button>
   );
 }
@@ -783,17 +826,14 @@ const styles = StyleSheet.create({
   },
   captureArea: {
     backgroundColor: REPORT_BACKGROUND_COLOR,
-    gap: spacing.xl,
+    gap: spacing.xxl,
   },
   analysisSummaryCard: {
-    backgroundColor: colors.surface,
-    borderColor: REPORT_CARD_BORDER,
+    backgroundColor: 'transparent',
     borderLeftColor: REPORT_TEXT_PRIMARY,
-    borderLeftWidth: 3,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    borderLeftWidth: 2,
+    paddingLeft: spacing.lg,
+    paddingVertical: spacing.xs,
   },
   analysisSummaryText: {
     color: REPORT_TEXT_BODY,
@@ -825,24 +865,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.md,
-  },
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderColor: REPORT_CARD_BORDER,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    elevation: 3,
-    padding: spacing.xs,
-    shadowColor: colors.black,
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-  },
-  heroImage: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    height: 360,
-    width: '100%',
   },
   makeupBody: {
     backgroundColor: colors.surface,
@@ -989,10 +1011,9 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   pointGuideBoard: {
-    backgroundColor: colors.surface,
-    borderColor: REPORT_CARD_BORDER,
-    borderRadius: radius.lg,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderTopColor: REPORT_TEXT_PRIMARY,
+    borderTopWidth: 1,
     overflow: 'hidden',
   },
   pointGuideBubble: {
@@ -1023,24 +1044,24 @@ const styles = StyleSheet.create({
   pointGuideItem: {
     borderBottomColor: REPORT_CARD_BORDER,
     borderBottomWidth: 1,
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
   },
   pointGuideItemLast: {
     borderBottomWidth: 0,
   },
   pointGuideLabel: {
     color: REPORT_TEXT_PRIMARY,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.xs,
+    textTransform: 'uppercase',
   },
   pointGuidePoint: {
     color: REPORT_TEXT_BODY,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.md,
   },
   pointGuideRow: {
     alignItems: 'flex-start',
@@ -1063,9 +1084,57 @@ const styles = StyleSheet.create({
     backgroundColor: REPORT_BACKGROUND_COLOR,
   },
   reportContent: {
-    gap: spacing.xl,
+    gap: spacing.xxl,
     paddingHorizontal: spacing.screenX,
     paddingTop: faceAnalysisReportScreenFramePresentation.contentTopPadding,
+  },
+  reportHero: {
+    backgroundColor: colors.black,
+    marginHorizontal: -spacing.screenX,
+    marginTop: -faceAnalysisReportScreenFramePresentation.contentTopPadding,
+  },
+  reportHeroCopy: {
+    bottom: spacing.xxl,
+    gap: spacing.xs,
+    left: spacing.screenX,
+    maxWidth: '78%',
+    position: 'absolute',
+    right: spacing.screenX,
+  },
+  reportHeroEyebrow: {
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  reportHeroImage: {
+    backgroundColor: colors.black,
+    width: '100%',
+  },
+  reportHeroImageStage: {
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  reportHeroScrim: {
+    backgroundColor: 'rgba(0, 0, 0, 0.34)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  reportHeroSubtitle: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  reportHeroTitle: {
+    color: colors.white,
+    fontSize: typography.fontSize.xxl,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xxl,
   },
   scrollBody: {
     backgroundColor: REPORT_BACKGROUND_COLOR,
@@ -1074,8 +1143,8 @@ const styles = StyleSheet.create({
   section: {
     borderTopColor: REPORT_CARD_BORDER,
     borderTopWidth: 1,
-    gap: spacing.md,
-    paddingTop: spacing.lg,
+    gap: spacing.lg,
+    paddingTop: spacing.xl,
   },
   sectionHeader: {
     alignItems: 'center',
@@ -1132,36 +1201,29 @@ const styles = StyleSheet.create({
     lineHeight: faceAnalysisReportSubtitleTextStyle.lineHeight,
     textAlign: 'center',
   },
-  summaryGrid: {
+  summaryRibbon: {
+    backgroundColor: colors.black,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.md,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.screenX,
+    rowGap: spacing.lg,
   },
   summaryItem: {
-    backgroundColor: colors.surface,
-    borderColor: REPORT_CARD_BORDER,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    elevation: 3,
     flexGrow: 1,
     gap: spacing.xs,
-    minHeight: 84,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
-    shadowColor: colors.black,
-    shadowOffset: {height: 8, width: 0},
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    minHeight: 58,
+    paddingRight: spacing.md,
     width: '47%',
   },
   summaryLabel: {
-    color: REPORT_TEXT_PRIMARY,
+    color: 'rgba(255, 255, 255, 0.54)',
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xs,
   },
   summaryValue: {
-    color: REPORT_TEXT_PRIMARY,
+    color: colors.white,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,

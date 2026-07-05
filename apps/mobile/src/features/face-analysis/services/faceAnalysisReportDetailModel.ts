@@ -49,7 +49,7 @@ export const faceAnalysisReportCreateFilterButtonAccessibilityLabels: Record<
   FaceAnalysisReportCreateFilterButtonPlacement,
   string
 > = {
-  'floating-bottom': 'AR 필터 만들기',
+  'floating-bottom': '메이크업 필터 만들기',
 };
 
 const faceAnalysisReportAvoidedMakeupRailPresentation = {
@@ -66,6 +66,13 @@ const faceAnalysisReportScreenFramePresentation = {
   contentTopPadding: spacing.xl,
   headerPlacement: 'route-level',
   headerUsesTopInset: true,
+} as const;
+
+const faceAnalysisReportEditorialPresentation = {
+  heroMinimumHeight: 420,
+  heroTreatment: 'full-bleed-photo-report',
+  sectionTreatment: 'cardless-divided-sections',
+  summaryTreatment: 'dark-ribbon-metrics',
 } as const;
 
 export const faceAnalysisReportLiquidGlassSurfaceStyle = {
@@ -92,7 +99,6 @@ const faceAnalysisReportLiquidGlassPresentation = {
   ] as const satisfies readonly FaceAnalysisReportLiquidGlassButtonTarget[],
   cardTargets: [
     'hero',
-    'summary',
     'makeup',
   ] as const satisfies readonly FaceAnalysisReportLiquidGlassCardTarget[],
   shadowRadius: faceAnalysisReportLiquidGlassSurfaceStyle.shadowRadius,
@@ -117,6 +123,10 @@ export function getFaceAnalysisReportScreenFramePresentation() {
 
 export function getFaceAnalysisReportLiquidGlassPresentation() {
   return faceAnalysisReportLiquidGlassPresentation;
+}
+
+export function getFaceAnalysisReportEditorialPresentation() {
+  return faceAnalysisReportEditorialPresentation;
 }
 
 export function getFaceAnalysisReportSummaryItems(
