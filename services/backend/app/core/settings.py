@@ -1,6 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = BACKEND_ROOT.parents[1]
+ENV_FILES = (REPO_ROOT / ".env", BACKEND_ROOT / ".env")
 
 
 class Settings(BaseSettings):
@@ -17,6 +24,7 @@ class Settings(BaseSettings):
   dev_user_name: str = "Local Dev"
 
   aws_region: str = "ap-northeast-2"
+  aws_profile_name: str | None = None
   aws_access_key_id: str | None = None
   aws_secret_access_key: str | None = None
   aws_use_iam_role: bool = False
@@ -31,6 +39,19 @@ class Settings(BaseSettings):
   bedrock_embedding_model_id: str | None = "amazon.titan-embed-text-v2:0"
   bedrock_embedding_region: str | None = None
   embedding_dimension: int = 1024
+
+  auradin_retrieval_backend: str = "auto"
+  auradin_vector_index_path: str | None = None
+  auradin_vector_index_autobuild: bool = False
+  auradin_session_store: str = "memory"
+  auradin_session_ttl_seconds: int = 15 * 60
+  # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
+  auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
+  auradin_floor_semantic: float = 0.5  # floor 게이트 semantic 문턱
+  # 점수갭 즉답 종료 임계 (하드 조건 + raw #1-#2 갭≥θ → 질문 스킵).
+  # 근거 완비 카탈로그는 상위가 뭉쳐 갭이 작다(관측 0.000~0.046) — θ=0.04는
+  # 동점 상위(≤0.011)와 확연히 앞선 질의(≥0.041)를 가르는 자연 경계. 데이터 기준 캘리브레이션.
+  auradin_score_gap_threshold: float = 0.04
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None
@@ -54,6 +75,14 @@ class Settings(BaseSettings):
   cors_allow_origins: str = ""
 
   model_config = SettingsConfigDict(extra="ignore")
+
+  @field_validator("debug", mode="before")
+  @classmethod
+  def normalize_debug(cls, value: object) -> object:
+    if isinstance(value, str) and value.strip().lower() in {"release", "prod", "production"}:
+      return False
+
+    return value
 
   @property
   def analysis_provider(self) -> str:
@@ -116,10 +145,17 @@ class Settings(BaseSettings):
 
   @property
   def aws_credentials_configured(self) -> bool:
-    return bool((self.aws_access_key_id and self.aws_secret_access_key) or self.aws_use_iam_role)
+    return bool(
+      self.aws_profile_name
+      or (self.aws_access_key_id and self.aws_secret_access_key)
+      or self.aws_use_iam_role
+    )
 
   @property
   def aws_credential_source(self) -> str:
+    if self.aws_profile_name:
+      return "profile"
+
     if self.aws_use_iam_role:
       return "iam_role"
 
@@ -204,7 +240,17 @@ class Settings(BaseSettings):
       "awsCredentialsOrRole": {
         "configured": self.aws_credentials_configured,
         "source": self.aws_credential_source,
-        "requiredWhen": "Local AWS SDK calls use access keys. ECS should set AWS_USE_IAM_ROLE=true and use a task role.",
+        "requiredWhen": "Local AWS SDK calls use AWS_PROFILE_NAME or access keys. ECS should set AWS_USE_IAM_ROLE=true and use a task role.",
+      },
+      "auradinSessionStore": {
+        "configured": self.auradin_session_store in {"memory", "postgres"},
+        "requiredWhen": "Auradin search sessions are used.",
+        "value": self.auradin_session_store,
+      },
+      "auradinRetrievalBackend": {
+        "configured": self.auradin_retrieval_backend in {"auto", "lexical", "embedding"},
+        "requiredWhen": "Auradin search sessions are used.",
+        "value": self.auradin_retrieval_backend,
       },
     }
     missing = [name for name, item in items.items() if not item["configured"]]
@@ -217,6 +263,8 @@ class Settings(BaseSettings):
       "analysisModel": self.effective_analysis_model_id,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,
+      "auradinRetrievalBackend": self.auradin_retrieval_backend,
+      "auradinSessionStore": self.auradin_session_store,
       "imageGenerationProvider": image_generation_provider,
       "imageGenerationModel": self.openai_image_model_id if image_generation_provider == "openai" else None,
       "items": items,
@@ -226,4 +274,4 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-  return Settings(_env_file=".env", _env_file_encoding="utf-8")
+  return Settings(_env_file=ENV_FILES, _env_file_encoding="utf-8")

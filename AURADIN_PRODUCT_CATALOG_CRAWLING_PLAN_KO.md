@@ -6,9 +6,40 @@
 
 ---
 
+## 2026-07-03 최신 수정: 제한 상세 수집 스코프
+
+기존 `brand_category_top10` 결과는 상세 catalog 완성본이 아니라 **브랜드 x 카테고리별 Naver 후보 Top10 목록**이다. 따라서 다음 수집은 넓은 상세페이지 크롤링이 아니라, 아우라딘 검색 품질에 직접 필요한 아래 7개 필드군만 보강한다.
+
+```txt
+1. 색상/호수/옵션
+2. colorFamily / undertone / intensity
+3. finish / texture
+4. suitableFor / sellingPoints
+5. 가격 / 구매 URL / 이미지
+6. 올리브영·백화점 입점 여부
+7. 브랜드/제조국 정보
+```
+
+이번 스코프에서 제외한다.
+
+```txt
+- 리뷰 원문, 리뷰 요약, 리뷰 점수
+- 전성분, 성분 위험도, 의학적 효능
+- colorHex/colorLab 정밀 추출
+- 상세 이미지 원본 저장 또는 이미지 다운로드
+- productLine, containerType, coverage, claims 등 보조 필드
+- 로그인/캡차/차단 우회/장바구니/주문/마이페이지 접근
+```
+
+근거와 상태 정보(`sourceUrl`, `rawText`, `confidence`, `collectionStatus`, `failureReason`, `fetchedAt`, `parserVersion`)는 수집 목표가 아니라 위 7개 필드군을 검증하기 위한 부속 metadata로만 남긴다.
+
+이 섹션은 아래 과거 섹션의 넓은 필드 정의보다 우선한다. 문서 후반에 남아 있는 `colorHex/colorLab`, 리뷰, 전성분, `coverage`, `containerType`, `claims`, `productLine` 관련 내용은 역사적 검토 메모로만 보고, 이번 실행 대상에 포함하지 않는다.
+
+---
+
 ## 0. 한 줄 결론
 
-**네이버 쇼핑 API는 후보 상품·가격·이미지·구매 링크를 가져오는 용도로 쓰고, 색상·질감·피부타입·호수·마감감 같은 추천 판단용 세부 속성은 `ProductCatalogItem` 형태로 별도 보강한다.**
+**네이버 쇼핑 API는 후보 상품·가격·이미지·구매 링크를 가져오는 용도로 쓰고, 색상/호수/옵션, 톤, 마감, 제형, 적합 대상, 소구점, 입점/제조국처럼 검색 판단에 필요한 7개 필드군만 `ProductCatalogItem` 형태로 별도 보강한다.**
 
 대량 상세페이지 크롤링부터 시작하지 않는다.
 
@@ -60,11 +91,10 @@ ProductCatalogItem 승격
 - finish: matte, glossy, satin, velvet, shimmer 등
 - texture: tint, balm, powder, cream, cushion, pencil 등
 - intensity: sheer, medium, bold
-- 피부타입: dry, oily, combination, sensitive 등
 - 주요 특징: long-lasting, moisturizing, blur, coverage 등
-- 컬러칩 / colorHex / colorLab
-- 공식 상세 설명
-- 리뷰 기반 키워드
+- suitableFor: 쿨톤, 웜톤, 데일리, 민감성 등
+- 올리브영·백화점 입점 여부
+- 브랜드/제조국 정보
 ```
 
 현재 소스의 `_extract_product_specs`는 대부분 `title`, `category`, `brand`, `maker` 텍스트에서 키워드를 찾아 `colors`, `effects`, `tones`, `features` 등을 추론한다. 이 방식은 빠르지만, 상품명에 세부 단서가 없으면 추천 품질이 불안정하다.
@@ -1728,143 +1758,134 @@ blocked 56개는 이번 본 작업의 자동 수집 대상이 아니다. 다만 
 
 ### 21.3 수집 필드 최종 계약
 
-필드는 제품 단위와 옵션/호수 단위로 나눈다. 모든 필드는 "페이지에 있으면 채우고, 없으면 비운다"가 기본 원칙이다.
+최신 기준은 제품 상세를 넓게 채우는 것이 아니라 **아래 7개 필드군만 채우는 것**이다. 모든 필드는 "근거가 있으면 채우고, 없으면 `null` 또는 빈 배열로 둔다"가 기본 원칙이다. 근거 없는 추정은 `confidence < 0.65`로 표시하고, 추천 hard filter에는 쓰지 않는다.
 
-#### 제품 단위 필드
+#### 1. 색상/호수/옵션
 
 ```ts
-interface CollectedProductCore {
-  candidateId: string;
-  brand: string | null;
-  productName: string | null;
-  category: 'lip' | 'cheek' | 'shadow' | 'liner' | 'base' | 'brow' | 'other' | null;
-  productLine: string | null;
-
-  textureType: string | null;
-  finish: string | null;
-  claims: string[];
-  sellingPoints: string[];
-  suitableFor: string[];
-
-  skinTypeHints: string[];
-  price: number | null;
-  imageUrl: string | null;
-  purchaseUrl: string;
-  sourceUrl: string;
+interface LimitedShadeOption {
+  optionName: string | null;
+  shadeName: string | null;
+  shadeNumber: string | null;
+  rawOptionText: string | null;
 }
 ```
 
-`sellingPoints` 예시:
+한 제품에 옵션/호수가 여러 개 있으면 가능한 범위에서 모두 저장한다. 옵션명이 보이는데 색상군/언더톤을 확정할 수 없으면 옵션명만 저장하고 정규화 필드는 비운다.
 
-```txt
-지속력, 보습, 밀착, 광택, 블러, 커버, 워터프루프, 번짐 방지, 가벼움, 고발색, 저자극, 비건, 휴대성
+#### 2. colorFamily / undertone / intensity
+
+```ts
+interface LimitedColorProfile {
+  colorFamily: 'pink' | 'rose' | 'coral' | 'red' | 'orange' | 'mauve' | 'brown' | 'nude' | 'peach' | 'burgundy' | 'plum' | 'beige' | 'unknown' | null;
+  undertone: 'warm' | 'cool' | 'neutral' | 'unknown' | null;
+  intensity: 'sheer' | 'medium' | 'bold' | 'unknown' | null;
+}
+```
+
+`colorHex`와 `colorLab`는 이번 범위에서 수집하지 않는다. 이미지에서 임의 추출하지 않고, 텍스트 근거가 있을 때만 정규화한다.
+
+#### 3. finish / texture
+
+```ts
+interface LimitedFinishTexture {
+  finish: 'matte' | 'glossy' | 'satin' | 'velvet' | 'shimmer' | 'sheer' | 'dewy' | 'unknown' | null;
+  texture: 'tint' | 'balm' | 'lipstick' | 'gloss' | 'cream' | 'powder' | 'pencil' | 'liquid' | 'cushion' | 'unknown' | null;
+}
+```
+
+#### 4. suitableFor / sellingPoints
+
+```ts
+interface LimitedSuitabilityClaims {
+  suitableFor: string[];
+  sellingPoints: string[];
+}
 ```
 
 `suitableFor` 예시:
 
 ```txt
-쿨톤, 웜톤, 봄웜, 여름쿨, 가을웜, 겨울쿨, 건성, 지성, 민감성, 데일리 메이크업, 자연스러운 발색 선호
+쿨톤, 웜톤, 봄웜, 여름쿨, 가을웜, 겨울쿨, 데일리 메이크업, 자연스러운 발색 선호, 민감성
 ```
 
-#### 옵션/호수 단위 필드
-
-```ts
-interface CollectedShadeOption {
-  optionName: string | null;
-  shadeName: string | null;
-  shadeNumber: string | null;
-  rawOptionText: string | null;
-
-  colorFamily: string | null;
-  undertone: string | null;
-  depth: 'light' | 'medium' | 'deep' | null;
-  saturation: 'muted' | 'clear' | 'vivid' | null;
-  intensity: 'sheer' | 'medium' | 'bold' | null;
-
-  colorHex: string | null;
-  colorLab: { l: number; a: number; b: number } | null;
-  finishOverride: string | null;
-
-  recommendedToneTags: string[];
-  avoidToneTags: string[];
-}
-```
-
-한 제품에 옵션/호수가 여러 개 있으면 `CollectedShadeOption[]`로 모두 저장한다. 옵션명이 보이는데 색상군/언더톤을 확정할 수 없으면 옵션명은 저장하고, 정규화 필드는 `null`로 둔다.
-
-#### 입점/유통 필드
-
-```ts
-interface RetailPresence {
-  oliveYoung: {
-    status: 'listed' | 'not_found' | 'unknown';
-    sourceUrl: string | null;
-    evidence: string | null;
-  };
-  departmentStore: {
-    status: 'listed' | 'not_found' | 'unknown';
-    retailers: string[];
-    sourceUrl: string | null;
-    evidence: string | null;
-  };
-}
-```
-
-판정 기준:
+`sellingPoints` 예시:
 
 ```txt
-- Olive Young URL, mallName, 페이지 텍스트에서 명시 확인되면 oliveYoung.status = listed
-- 롯데백화점, 신세계백화점, 현대백화점, 백화점몰 등 명시 확인되면 departmentStore.status = listed
-- 단순 롯데ON, Hmall, CJ온스타일, GSSHOP 등은 백화점 입점으로 단정하지 않는다
-- 명시적 검색/페이지 확인 후 없으면 not_found
-- 확인하지 못했거나 근거가 애매하면 unknown
+지속력, 보습, 밀착, 광택, 블러, 커버, 워터프루프, 번짐 방지, 가벼움, 고발색, 저자극, 비건
 ```
 
-#### 브랜드/제조 국적 필드
+의학적 효능, 치료 효과, 전성분 기반 안전성 평가는 이번 범위가 아니다.
+
+#### 5. 가격 / 구매 URL / 이미지
 
 ```ts
-interface BrandOrigin {
+interface LimitedLiveOffer {
+  price: number | null;
+  imageUrl: string | null;
+  purchaseUrl: string | null;
+  mallName: string | null;
+  fetchedAt: string;
+  ttlSeconds: number;
+}
+```
+
+가격/구매 URL/이미지는 Naver Shopping API 또는 허용된 공개 metadata를 우선한다. 이미지 원본 파일은 다운로드하지 않고 URL만 저장한다.
+
+#### 6. 올리브영·백화점 입점 여부
+
+```ts
+interface LimitedRetailPresence {
+  oliveYoungStatus: 'listed' | 'not_found' | 'unknown';
+  oliveYoungEvidenceUrl: string | null;
+  departmentStoreStatus: 'listed' | 'not_found' | 'unknown';
+  departmentStoreRetailers: string[];
+  departmentStoreEvidenceUrl: string | null;
+}
+```
+
+단순 쇼핑몰 입점과 백화점 입점을 섞지 않는다. 롯데백화점, 신세계백화점, 현대백화점, 백화점몰 등 명시 근거가 있을 때만 `listed`로 둔다.
+
+#### 7. 브랜드/제조국 정보
+
+```ts
+interface LimitedBrandOrigin {
   brandCountry: string | null;
-  brandOwnerCompany: string | null;
-  manufacturerName: string | null;
   manufacturerCountry: string | null;
   madeInCountry: string | null;
 }
 ```
 
-브랜드 국적, 제조사, 제조국은 서로 다르므로 분리한다. 예를 들어 한국 브랜드라도 제조국이 이탈리아일 수 있고, 해외 브랜드라도 국내 유통사가 따로 있을 수 있다.
+브랜드 국적과 제조국은 분리한다. `brandOwnerCompany`, `manufacturerName`은 이번 필수 수집 대상이 아니다.
 
-#### 근거와 상태 필드
+#### 통합 결과
 
 ```ts
 interface CollectionEvidence {
   field: string;
   value: unknown;
   sourceUrl: string;
-  sourceType: 'source_html' | 'json_ld' | 'meta' | 'option_dom' | 'visible_text' | 'structured_extraction' | 'manual_note';
+  sourceType: 'json_ld' | 'meta' | 'option_dom' | 'visible_text' | 'structured_extraction' | 'manual_note' | 'naver_api';
   rawText: string;
   confidence: number;
 }
 
-interface DetailCollectionResult {
+interface LimitedDetailCollectionResult {
   candidateId: string;
-  collectionStatus:
-    | 'collected_complete'
-    | 'collected_partial'
-    | 'failed_fetch'
-    | 'failed_playwright'
-    | 'blocked_explicit'
-    | 'login_or_captcha_required'
-    | 'not_found'
-    | 'no_useful_data'
-    | 'parser_empty';
-  failureReason: string | null;
-  product: CollectedProductCore;
-  shadeOptions: CollectedShadeOption[];
-  retailPresence: RetailPresence;
-  brandOrigin: BrandOrigin;
+  brand: string | null;
+  productName: string | null;
+  category: 'lip' | 'cheek' | 'shadow' | 'liner' | 'base' | 'brow' | 'other' | null;
+  shadeOptions: LimitedShadeOption[];
+  colorProfile: LimitedColorProfile;
+  finishTexture: LimitedFinishTexture;
+  suitabilityClaims: LimitedSuitabilityClaims;
+  liveOffer: LimitedLiveOffer;
+  retailPresence: LimitedRetailPresence;
+  brandOrigin: LimitedBrandOrigin;
   evidence: CollectionEvidence[];
   confidence: Record<string, number>;
+  collectionStatus: 'collected_complete' | 'collected_partial' | 'blocked_explicit' | 'failed' | 'no_useful_data';
+  failureReason: string | null;
   fetchedAt: string;
   parserVersion: string;
 }
@@ -2073,19 +2094,19 @@ catalogItemId + shadeKey + docType
 
 ```txt
 catalog_core:
-  브랜드, 제품명, 카테고리, 제품 라인, 핵심 속성 요약
+  브랜드, 제품명, 카테고리, 가격, 구매 URL, 이미지 URL
 
 shade_profile:
-  호수명, 옵션명, 색상군, 언더톤, 명도, 채도, 발색 강도
+  호수명, 옵션명, 원문 옵션 텍스트, 색상군, 언더톤, 발색 강도
 
 finish_texture:
-  제형, 마감, 사용감, 피부 표현, 카테고리별 질감 정보
+  제형, 마감, 사용감
 
 suitability_claims:
-  누구에게 어울리는지, 피부타입, 톤 추천, 소구점, 공식 클레임
+  누구에게 어울리는지, 톤 추천, 소구점
 
 retail_origin:
-  올리브영/백화점 입점 여부, 브랜드 국적, 제조사, 제조국, 구매 가능 출처
+  올리브영/백화점 입점 여부, 브랜드 국적, 제조국, 구매 가능 출처
 ```
 
 기본 문서 형태:
