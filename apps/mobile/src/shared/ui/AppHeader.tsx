@@ -192,8 +192,8 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.headerControlSurface,
+    borderColor: colors.headerControlBorder,
     borderRadius: radius.pill,
     borderWidth: 1,
     height: APP_HEADER_ACTION_BUTTON_SIZE,
@@ -201,8 +201,8 @@ const styles = StyleSheet.create({
     padding: 0,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     width: APP_HEADER_ACTION_BUTTON_SIZE,
   },
   centeredContainer: {

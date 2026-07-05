@@ -1,9 +1,11 @@
 const bottomSheetSurface = 'rgba(255, 255, 255, 0.92)';
 const blackSurface = 'rgba(43, 43, 43, 0.62)';
 const liquidGlassBorder = 'rgba(255, 255, 255, 0.92)';
-const headerSurface = 'rgba(255, 255, 255, 0.34)';
+const headerSurface = 'rgba(255, 255, 255, 0.24)';
 const headerOverlaySurface = headerSurface;
 const headerOverlayBorder = 'rgba(17, 17, 17, 0.05)';
+const headerControlSurface = 'rgba(255, 255, 255, 0.46)';
+const headerControlBorder = 'rgba(17, 17, 17, 0.07)';
 const liquidGlassSurface = 'rgba(255, 255, 255, 0.74)';
 const liquidGlassMutedSurface = 'rgba(247, 247, 247, 0.60)';
 
@@ -13,6 +15,8 @@ export const colors = {
   headerSurface,
   headerOverlaySurface,
   headerOverlayBorder,
+  headerControlSurface,
+  headerControlBorder,
   surface: liquidGlassSurface,
   surfaceMuted: liquidGlassMutedSurface,
   textPrimary: '#111111',
