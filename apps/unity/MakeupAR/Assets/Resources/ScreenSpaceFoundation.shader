@@ -21,6 +21,11 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _MaskSampleShift ("Mask Sample Shift", Vector) = (0, 0, 0, 0)
         _MaskSampleScaleY ("Mask Sample Scale Y", Float) = 1
         _MaskFaceCenterY ("Mask Face Center Y", Float) = 0.5
+        [HideInInspector] _SegHairTex ("Seg Hair Mask", 2D) = "black" {}
+        [HideInInspector] _SegHairValid ("Seg Hair Valid", Float) = 0
+        [HideInInspector] _SegBrowTex ("Seg Brow Mask", 2D) = "black" {}
+        [HideInInspector] _SegBrowValid ("Seg Brow Valid", Float) = 0
+        [HideInInspector] _FaceChromaGate ("Face Chroma Gate", Range(0, 1)) = 0
         _HandOcclusionMaskTex ("Hand Occlusion Mask", 2D) = "black" {}
         _HandOcclusionEnabled ("Hand Occlusion Enabled", Float) = 0
         _HandOcclusionUseRect ("Hand Occlusion Use Rect", Float) = 0
@@ -115,6 +120,13 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
             float4 _MaskSampleShift;
             float _MaskSampleScaleY;
             float _MaskFaceCenterY;
+            sampler2D _SegHairTex;
+            float4 _SegHairTex_TexelSize;
+            float _SegHairValid;
+            sampler2D _SegBrowTex;
+            float4 _SegBrowTex_TexelSize;
+            float _SegBrowValid;
+            float _FaceChromaGate;
             float4 _FoundationDebugLeftCheek;
             float4 _FoundationDebugRightCheek;
             float4 _FoundationDebugNose;
@@ -467,6 +479,38 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // widened tent blur above is the actual softener, so the mask
                 // passes through linearly.
 
+                // Vision face-parsing exclusions (hair/brow classes). The
+                // masks are screen grabs in the same orientation as the
+                // displayed camera image, so they sample with the raw quad uv
+                // (like the camera itself), NOT the flip-corrected screenUv.
+                // Bangs/sideburns/brow hair never take foundation; an exposed
+                // forehead has no hair pixels over it and keeps coverage.
+                if (_SegHairValid > 0.5)
+                {
+                    float2 segTexel = _SegHairTex_TexelSize.xy;
+                    float hairMask = tex2D(_SegHairTex, input.uv).r;
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv + float2(segTexel.x, 0.0)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv - float2(segTexel.x, 0.0)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv + float2(0.0, segTexel.y)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv - float2(0.0, segTexel.y)).r);
+                    float hairKeep = 1.0 - smoothstep(0.22, 0.58, hairMask);
+                    finalMask *= hairKeep;
+                    surfaceMask *= hairKeep;
+                }
+
+                if (_SegBrowValid > 0.5)
+                {
+                    float2 browTexel = _SegBrowTex_TexelSize.xy;
+                    float browMask = tex2D(_SegBrowTex, input.uv).r;
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv + float2(browTexel.x, 0.0)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv - float2(browTexel.x, 0.0)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv + float2(0.0, browTexel.y)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv - float2(0.0, browTexel.y)).r);
+                    float browKeep = 1.0 - smoothstep(0.25, 0.62, browMask);
+                    finalMask *= browKeep;
+                    surfaceMask *= browKeep;
+                }
+
                 // SODA-style neck / edge handling. Pixels covered by the extended
                 // surface (alpha) but without projected face-skin weights (blue)
                 // are neck-strip or hull-edge pixels. Gate them by chroma
@@ -517,6 +561,63 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                         saturate(_NeckChromaGate) * neckness);
                     surfaceMask *= gate;
                     finalMask *= gate;
+                }
+
+                // Face-wide live skin gate: the same chroma test, applied
+                // gently to the WHOLE mask. Evaluated on the CURRENT camera
+                // pixel, so the visible boundary locks to the image itself —
+                // it cannot tremble with anchor-projection error — and bangs
+                // hanging INSIDE the face region (which the person-seg hair
+                // mask misses by construction) are rejected as non-skin,
+                // as are glasses frames and background at the silhouette.
+                if (_FaceChromaGate > 0.0001 && _CameraTextureMode > 0.5)
+                {
+                    float3 faceSkinRef = float3(0.0, 0.0, 0.0);
+                    float faceRefWeight = 0.0;
+                    if (_FoundationDebugLeftCheek.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugLeftCheek.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugRightCheek.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugRightCheek.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugChin.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugChin.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    faceSkinRef = faceRefWeight > 0.5
+                        ? faceSkinRef / faceRefWeight
+                        : max(saturate(_UserSkinBaseColor.rgb), float3(0.075, 0.075, 0.075));
+                    float faceRefLum = max(FoundationLuma(faceSkinRef), 0.05);
+                    float faceCamLum = max(FoundationLuma(cameraColor), 0.05);
+                    float2 faceRefChroma = faceSkinRef.rb / faceRefLum;
+                    float2 faceCamChroma = cameraColor.rb / faceCamLum;
+                    float faceChromaDist = length(faceCamChroma - faceRefChroma);
+                    // Wider tolerance than the neck: facial shadows and nose
+                    // highlights must survive; only clearly-non-skin chroma
+                    // (hair, frames, background) gets cut.
+                    float faceSkinGate = 1.0 - smoothstep(
+                        _NeckChromaTolerance * 1.45,
+                        _NeckChromaTolerance * 3.0,
+                        faceChromaDist);
+                    // Dark cut backs the chroma test up for near-skin-toned
+                    // dark hair; bright cut avoids painting blown highlights.
+                    float faceLumRatio = faceCamLum / faceRefLum;
+                    float faceDarkGate = smoothstep(0.20, 0.44, faceLumRatio);
+                    float faceBrightGate = 1.0 - smoothstep(2.1, 3.0, faceLumRatio);
+                    float faceGate = lerp(
+                        1.0,
+                        saturate(faceSkinGate * faceDarkGate * faceBrightGate),
+                        saturate(_FaceChromaGate) * saturate(1.0 - neckness));
+                    finalMask *= faceGate;
+                    surfaceMask *= faceGate;
                 }
 
                 if (_CameraTextureMode < 0.5)

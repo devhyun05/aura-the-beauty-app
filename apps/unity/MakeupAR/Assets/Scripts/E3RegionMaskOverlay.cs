@@ -665,7 +665,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             PreserveDetail = preserveDetail,
             FoundationMode = NormalizeFoundationMode(region, foundationMode),
             FoundationFallbackMode = NormalizeFoundationFallbackMode(foundationFallbackMode),
-            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 30)
+            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 42)
         };
 
         return ApplyRegionToTrackedFaces(region, true);
@@ -5628,6 +5628,30 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         return Mathf.Max(sample.a, sample.r * sample.a);
     }
 
+    // Set by the screen-space controller while the Vision hair mask is live:
+    // the per-frame semantic exclusion then owns bangs/hairline, so the
+    // static UV fade narrows and an exposed forehead keeps full coverage.
+    private static bool foundationSemanticHairActive;
+
+    public static void SetFoundationSemanticHairActive(bool active)
+    {
+        if (foundationSemanticHairActive == active)
+        {
+            return;
+        }
+
+        foundationSemanticHairActive = active;
+        if (foundationGeneratedSkinMaskTexture != null)
+        {
+            UnityEngine.Object.Destroy(foundationGeneratedSkinMaskTexture);
+            foundationGeneratedSkinMaskTexture = null;
+        }
+
+        Debug.Log(
+            "[E7] foundation_semantic_hair_active="
+            + active.ToString().ToLowerInvariant());
+    }
+
     private static Texture2D GetFoundationSkinMaskTexture()
     {
         if (foundationGeneratedSkinMaskTexture != null)
@@ -5649,6 +5673,18 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         float topV = foundationCalUvMax.y;
         float sideFadeWidth = Mathf.Max(0.06f, (maxU - minU) * 0.10f);
 
+        // Device feedback: the calibrated eye zones are wide enough that the
+        // skin at the inner/outer eye corners stayed unpainted on some faces.
+        // Shrink the exclusion HORIZONTALLY for the foundation mask only —
+        // the shared calibrated zones also drive the eyeliner shapes and
+        // must stay untouched.
+        FoundationMaskZone leftEyeExclusion = foundationCalLeftEye;
+        leftEyeExclusion.Radius = new Vector2(
+            leftEyeExclusion.Radius.x * 0.80f, leftEyeExclusion.Radius.y);
+        FoundationMaskZone rightEyeExclusion = foundationCalRightEye;
+        rightEyeExclusion.Radius = new Vector2(
+            rightEyeExclusion.Radius.x * 0.80f, rightEyeExclusion.Radius.y);
+
         for (int y = 0; y < size; y++)
         {
             float v = (y + 0.5f) / size;
@@ -5662,16 +5698,21 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     * (1.0f - FoundationMaskSmooth01(maxU - 0.010f - sideFadeWidth, maxU - 0.010f, u));
                 float bottomFade = FoundationMaskSmooth01(0.0f, 0.05f, v);
                 // Forehead stays covered; only the band near the measured mesh
-                // top (hairline/bangs) fades out so hair is not tinted.
-                float hairlineFade = 1.0f - FoundationMaskSmooth01(topV - 0.155f, topV - 0.015f, v);
+                // top (hairline/bangs) fades out so hair is not tinted. When
+                // the Vision hair mask is live it owns the hair exclusion per
+                // frame, so the static band narrows and an exposed forehead
+                // keeps coverage almost to the mesh top.
+                float hairlineFade = foundationSemanticHairActive
+                    ? 1.0f - FoundationMaskSmooth01(topV - 0.055f, topV - 0.008f, v)
+                    : 1.0f - FoundationMaskSmooth01(topV - 0.155f, topV - 0.015f, v);
                 float baseWeight = edgeX * bottomFade * hairlineFade;
 
                 // Calibrated exclusions: eyes and brows stay tight so base
                 // foundation remains on the nose bridge and surrounding skin;
                 // mouth remains lips-only so the philtrum stays covered.
                 float eyes = Mathf.Max(
-                    FoundationMaskZoneEllipse(u, v, foundationCalLeftEye, 0.10f),
-                    FoundationMaskZoneEllipse(u, v, foundationCalRightEye, 0.10f));
+                    FoundationMaskZoneEllipse(u, v, leftEyeExclusion, 0.08f),
+                    FoundationMaskZoneEllipse(u, v, rightEyeExclusion, 0.08f));
                 float brows = Mathf.Max(
                     FoundationMaskZoneEllipse(u, v, foundationCalLeftBrow, 0.14f),
                     FoundationMaskZoneEllipse(u, v, foundationCalRightBrow, 0.14f));

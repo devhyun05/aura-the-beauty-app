@@ -119,8 +119,8 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
   foundation: {
     candidateId: 'foundation-skin-tone-relative-v1',
     colorHex: REGION_COLOR_OPTIONS.foundation[0].hex,
-    coverage: 1,
-    evenness: 0.42,
+    coverage: 0.5,
+    evenness: 0.5,
     // Foundation must never paint the face mesh / uvMask overlay directly:
     // the final color composite happens only in the screen-space camera
     // post-process. If the semantic mask is not ready, show nothing rather
@@ -128,7 +128,7 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     fallbackMode: 'off',
     finish: 'natural',
     debugMaskMode: 0,
-    intensity: 1,
+    intensity: 0.5,
     luminanceInfluence: 0.52,
     maskTextureId: 'foundation-skin-mask-v1',
     // screenSpace: the final color composite happens in the screen-space
@@ -136,7 +136,7 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     // mask (with calibrated eye/lip/brow exclusions). Never painted on the
     // face mesh / uvMask overlay directly.
     mode: 'screenSpace',
-    opacity: 1,
+    opacity: 0.5,
   },
   blush: {
     candidateId: 'blush-session-1-v1',

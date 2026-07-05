@@ -56,6 +56,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private const float NeckChromaGate = 0.85f;
     private const float NeckChromaTolerance = 0.16f;
     private const float NeckMaskStrength = 0.90f;
+    private const float FaceChromaGate = 0.85f;
     private const float DefaultScreenSpaceUvFlip = 0.0f;
     private const float DefaultScreenSpaceUvFlipX = 0.0f;
     private static readonly int CameraTextureModeId = Shader.PropertyToID("_CameraTextureMode");
@@ -68,6 +69,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private FoundationMaskRuntime maskRuntime;
     private FoundationSemanticMaskCompositor semanticCompositor;
     private FoundationScreenSpaceCompositor screenSpaceCompositor;
+    private VisionFaceParsingProvider visionParsingProvider;
     private E7VisionLipBoundaryRuntime visionStabilizerRuntime;
     private E7HandOcclusionRuntime handOcclusionRuntime;
     private int lastVisionStabilizerSequence = -1;
@@ -146,7 +148,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         // mask so we can distinguish display-path flips from mask-generation
         // flips. Modes 13-16 are 90-degree orientation probes. Mode 19 is a
         // shader-path confirmation fill.
-        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 30);
+        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 42);
         state.Intensity = Mathf.Clamp01(intensity) * Mathf.Clamp01(opacity);
         state.Coverage = Mathf.Clamp01(coverage);
         state.Evenness = Mathf.Clamp01(evenness);
@@ -261,6 +263,43 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
         else
         {
+            // Vision face-parsing exclusions (async v2): the provider now
+            // captures via a downscaled RT + AsyncGPUReadback and runs
+            // Vision on a background queue, so requesting it here costs no
+            // main-thread time (the old PNG path stalled the GPU pipeline
+            // and encoded on the main thread — visible hitches). Hair/brow
+            // masks land in the composite as exclusions; an exposed
+            // forehead carries no hair pixels and stays painted.
+            EnsureVisionParsingProvider();
+            if (visionParsingProvider != null)
+            {
+                visionParsingProvider.RequestCapture();
+            }
+
+            bool segmentationActive = FoundationSegmentationRegistry.TryGetResult(
+                arCamera, out FoundationSegmentationResult segmentation);
+            bool hairMaskValid = segmentationActive
+                && segmentation.HasHairClass
+                && segmentation.HairMask != null;
+            bool browMaskValid = segmentationActive
+                && segmentation.HasEyebrowClass
+                && segmentation.EyebrowMask != null;
+            material.SetFloat("_SegHairValid", hairMaskValid ? 1.0f : 0.0f);
+            if (hairMaskValid)
+            {
+                material.SetTexture("_SegHairTex", segmentation.HairMask);
+            }
+
+            material.SetFloat("_SegBrowValid", browMaskValid ? 1.0f : 0.0f);
+            if (browMaskValid)
+            {
+                material.SetTexture("_SegBrowTex", segmentation.EyebrowMask);
+            }
+
+            // With live hair exclusion the static UV hairline fade narrows so
+            // the upper forehead keeps coverage (the semantic mask owns hair).
+            E3RegionMaskOverlay.SetFoundationSemanticHairActive(hairMaskValid);
+
             // Screen-space mode: project the calibrated canonical-UV skin
             // mask (tight eye openings, lip-texture lips, brow bands,
             // hairline fade) through the face UVs so the screen-space mask
@@ -748,6 +787,20 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
     }
 
+    private void EnsureVisionParsingProvider()
+    {
+        if (visionParsingProvider != null)
+        {
+            return;
+        }
+
+        visionParsingProvider = FindFirstObjectByType<VisionFaceParsingProvider>();
+        if (visionParsingProvider == null)
+        {
+            visionParsingProvider = gameObject.AddComponent<VisionFaceParsingProvider>();
+        }
+    }
+
     private void EnsureMaterial()
     {
         if (material != null)
@@ -778,6 +831,10 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_NeckChromaGate", NeckChromaGate);
         material.SetFloat("_NeckChromaTolerance", NeckChromaTolerance);
         material.SetFloat("_NeckMaskStrength", NeckMaskStrength);
+        // Per-pixel live skin gate over the whole face: locks the visible
+        // foundation boundary to the camera image (no anchor-jitter shake)
+        // and keeps bangs/glasses/background clean between Vision updates.
+        material.SetFloat("_FaceChromaGate", FaceChromaGate);
     }
 
     private void EnsureQuad(Camera arCamera)
