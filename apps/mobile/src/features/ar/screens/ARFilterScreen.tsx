@@ -2,16 +2,16 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
 import type {CameraType} from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import {ChevronDown, ChevronUp} from 'lucide-react-native';
+import {ChevronDown, ChevronUp, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Button} from 'tamagui';
+import {Button, Text} from 'tamagui';
 
 import {
   getDefaultMakeupFilter,
   getARMakeupGuideData,
 } from '../../../shared/services/makeupGuideService';
 import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
-import {colors, iconSize, radius, spacing} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
   ARFilterLaunchSource,
   ComparisonMode,
@@ -91,6 +91,7 @@ type ARFilterScreenProps = {
   onBack?: () => void;
   onComplete?: () => void;
   onOpenDetailEdit?: (selectedMakeupFilterId?: string) => void;
+  onOpenPersonalizedMakeup?: () => void;
   onOpenShapeAdjust?: (selectedMakeupFilterId?: string) => void;
   onSave?: (selectedMakeupFilterId?: string) => void;
 };
@@ -191,6 +192,7 @@ export function ARFilterScreen({
   onBack,
   onComplete,
   onOpenDetailEdit,
+  onOpenPersonalizedMakeup,
   onOpenShapeAdjust,
   onSave,
 }: ARFilterScreenProps) {
@@ -377,6 +379,19 @@ export function ARFilterScreen({
         topInset={insets.top}
       />
 
+      {onOpenPersonalizedMakeup ? (
+        <Button
+          accessibilityLabel="개인화 메이크업 열기"
+          accessibilityRole="button"
+          onPress={onOpenPersonalizedMakeup}
+          pressStyle={{scale: 0.96, opacity: 0.85}}
+          style={[styles.personalizedMakeupButton, {top: insets.top + spacing.md}]}
+          unstyled>
+          <Sparkles color={colors.white} size={iconSize.sm} />
+          <Text style={styles.personalizedMakeupButtonLabel}>개인화 메이크업</Text>
+        </Button>
+      ) : null}
+
       <View pointerEvents="box-none" style={styles.bottomSheetHost}>
         <View pointerEvents="box-none" style={styles.aboveSheetControls}>
           {AR_FILTER_BOTTOM_SHEET_TOGGLE_PLACEMENT === 'aboveSheet' ? (
@@ -487,6 +502,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     zIndex: 4,
+  },
+  personalizedMakeupButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 22, 0.6)',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    position: 'absolute',
+    right: spacing.md,
+    zIndex: 6,
+  },
+  personalizedMakeupButtonLabel: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
   },
   aboveSheetControls: {
     alignItems: 'center',
