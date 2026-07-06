@@ -230,7 +230,10 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   lip: {
     region: 'lip',
     candidateId: 'lip-balanced-gold-v0',
-    maskTextureId: 'e7-lip-balanced-uv-v0',
+    // Mesh-locked canonical-UV atlas (E3). The previous 'e7-lip-balanced-uv-v0'
+    // routes to the E7 screen-UV path, which is blocked at runtime with
+    // arface_uv_unavailable, so lips never rendered from combined recipes.
+    maskTextureId: 'lip-drawn-style-atlas-v1',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -245,8 +248,13 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   },
   brow: {
     region: 'brow',
-    candidateId: 'brow-psd-semi-arch-v1',
-    maskTextureId: 'psd-arcore-brow-semi-arch-v1',
+    // The psd-arcore-brow-semi-arch mask is doubly malformed: its shape lived in
+    // the alpha channel (shader reads red -> whole face painted) AND it sits at
+    // ~0.30 of texture height (eye/lash level, cy/H) instead of the eyebrow band
+    // (~0.22), so it read like eyeliner on the eyes. Use the correctly-authored
+    // natural-hair brow mask (shape in RGB, positioned on the brows).
+    candidateId: 'brow-png-natural-hair-v1',
+    maskTextureId: 'brow-png-natural-hair-v1',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -267,11 +275,9 @@ export const REGION_COLOR_OPTIONS: Record<
 > = {
   foundation: [
     {id: 'porcelain-cool-110c', label: '포슬린 쿨', hex: '#F0E7DB'},
-    {id: 'light-warm-beige-200w', label: '라이트 웜베이지', hex: '#EDCAA1'},
     {id: 'golden-sand-260n', label: '골든 샌드', hex: '#D9AD7E'},
     {id: 'rosy-medium-320n', label: '로지 미디엄', hex: '#B88C6A'},
     {id: 'caramel-tan-400n', label: '카라멜 탠', hex: '#8E5A31'},
-    {id: 'deep-cocoa-500c', label: '딥 코코아', hex: '#613920'},
   ],
   lip: [
     {id: 'rose', label: '로즈', hex: '#C76B74'},

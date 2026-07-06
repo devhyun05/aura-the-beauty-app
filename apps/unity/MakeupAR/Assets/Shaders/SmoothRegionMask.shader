@@ -67,6 +67,8 @@ Shader "MakeupAR/SmoothRegionMask"
         _LipStyleMode ("Lip Style Mode", Float) = -1
         [HideInInspector] _CheekBlushMode ("Cheek Blush Mode", Float) = 0
         [HideInInspector] _EyelinerMode ("Eyeliner Mode", Float) = 0
+        [HideInInspector] _BrowGateTex ("Brow Gate", 2D) = "white" {}
+        [HideInInspector] _BrowGateValid ("Brow Gate Valid", Float) = 0
         [HideInInspector] _CheekUvTransform ("Cheek UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartUvTransform ("Cheek Part UV Transform", Vector) = (1, 1, 0, 0)
         [HideInInspector] _CheekPartBlend ("Cheek Part Blend", Float) = 0
@@ -101,10 +103,12 @@ Shader "MakeupAR/SmoothRegionMask"
             "IgnoreProjector" = "True"
         }
 
-        // Capture the live camera feed (rendered before this transparent overlay)
-        // so the generated-brow pass can neutralize the user's real eyebrow by
-        // painting surrounding skin over it.
-        GrabPass { "_BrowBackgroundTexture" }
+        // NOTE: A GrabPass was removed here. It captured the full camera frame
+        // every frame for EVERY region sharing this shader (foundation, lip,
+        // cheek, brow, eyeliner), which caused a per-frame full-screen grab and
+        // visible camera flicker. Its only consumer was the generated-brow
+        // "real-brow neutralize" inpaint, an enhancement that has been dropped;
+        // the generated brow now composites its core+strand pigment directly.
 
         Pass
         {
@@ -171,8 +175,6 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BrowGeneratedMode;
             float _BrowCleanupStrength;
             float _BrowNeutralizeStrength;
-            sampler2D _BrowBackgroundTexture;
-            float4 _BrowBackgroundTexture_TexelSize;
             float _PreserveDetail;
             float _DensityPower;
             float _EdgeSoftness;
@@ -183,6 +185,8 @@ Shader "MakeupAR/SmoothRegionMask"
             float _LipStyleMode;
             float _CheekBlushMode;
             float _EyelinerMode;
+            sampler2D _BrowGateTex;
+            float _BrowGateValid;
             float4 _CheekUvTransform;
             float4 _CheekPartUvTransform;
             float _CheekPartBlend;
@@ -326,11 +330,10 @@ Shader "MakeupAR/SmoothRegionMask"
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float4 clipPos : TEXCOORD1;
-                float4 grabPos : TEXCOORD2;
                 // How directly this surface faces the camera (1 = head-on,
                 // ~0 = edge-on). Used to fade the brow tail as the face turns to
                 // profile, where the UV-glued mask would otherwise smear/stretch.
-                float facing : TEXCOORD3;
+                float facing : TEXCOORD2;
             };
 
             v2f vert(appdata input)
@@ -338,7 +341,6 @@ Shader "MakeupAR/SmoothRegionMask"
                 v2f output;
                 output.vertex = UnityObjectToClipPos(input.vertex);
                 output.clipPos = output.vertex;
-                output.grabPos = ComputeGrabScreenPos(output.vertex);
                 output.uv = input.uv;
                 float3 worldNormal = UnityObjectToWorldNormal(input.normal);
                 float3 worldPos = mul(unity_ObjectToWorld, input.vertex).xyz;
@@ -844,6 +846,7 @@ Shader "MakeupAR/SmoothRegionMask"
                     maskStrength = saturate(linerCore * linerDensity * 0.92 + linerSoft * 0.20)
                         * lerp(0.75, 1.0, coverage);
                 }
+
                 if (_BrowGeneratedMode > 0.5)
                 {
                     float desiredSoft = SoftMaskAlpha(max(softMask.g, mask.g), _Threshold, _Feather);
@@ -892,75 +895,18 @@ Shader "MakeupAR/SmoothRegionMask"
                     // Makeup layer obeys the opacity slider.
                     float makeupAlpha = saturate(browAlpha * browOpacity * facingFade);
 
-                    // Neutralize layer: red channel marks the user's real brow.
-                    // Paint surrounding skin over it (independent of the makeup
-                    // opacity slider) so the real brow does not stick out.
-                    float neutralizeCov = SoftMaskAlpha(max(softMask.r, mask.r), _Threshold, _Feather);
-                    float neutralizeAlpha = saturate(
-                        neutralizeCov * saturate(_BrowNeutralizeStrength) * saturate(_VisibilityAlpha) * facingFade);
-
-                    // Camera pixel behind this fragment (grabbed pre-overlay).
-                    float2 grabUv = input.grabPos.xy / max(input.grabPos.w, 0.00001);
-                    float3 cameraHere = tex2D(_BrowBackgroundTexture, grabUv).rgb;
-                    float2 grabTexel = _BrowBackgroundTexture_TexelSize.xy;
-                    grabTexel = grabTexel.x > 0.0 ? grabTexel : (1.0 / max(_ScreenParams.xy, float2(1.0, 1.0)));
-                    // Reconstruct skin by a brightness-weighted blur instead of a
-                    // single flat color: the brow is a horizontal band, so blur
-                    // mostly VERTICALLY (reaching the skin above/below) and weight
-                    // bright pixels heavily so the dark brow hair barely counts.
-                    // This continues the real forehead->under-brow skin gradient
-                    // across the brow — an inpaint, not a pasted patch.
-                    float3 lumW = float3(0.299, 0.587, 0.114);
-                    float3 skinAcc = float3(0.0, 0.0, 0.0);
-                    float skinWsum = 0.0001;
-                    [unroll]
-                    for (int vy = -12; vy <= 12; vy++)
-                    {
-                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(0.0, float(vy)) * grabTexel * 2.4).rgb;
-                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0);
-                        skinAcc += s * w;
-                        skinWsum += w;
-                    }
-                    [unroll]
-                    for (int hx = -5; hx <= 5; hx++)
-                    {
-                        float3 s = tex2D(_BrowBackgroundTexture, grabUv + float2(float(hx), 0.0) * grabTexel * 2.4).rgb;
-                        float w = pow(saturate(dot(s, lumW) + 0.04), 4.0) * 0.5;
-                        skinAcc += s * w;
-                        skinWsum += w;
-                    }
-                    float3 skin = skinAcc / skinWsum;
-
-                    // Compose over the neutralized skin. The soft tint rim
-                    // STAINS the skin (multiply: base * pigment) so its edge melts
-                    // into skin instead of ending in a hard line, while the dense
-                    // hair core leans toward opaque PAINT so the body stays
-                    // defined. Blending the two by how "core" the fragment is
-                    // removes the rim/core seam the flat alpha-blend produced.
-                    float3 neutralized = lerp(cameraHere, skin, neutralizeAlpha);
-                    float coreWeight = browAlpha > 0.0001
-                        ? saturate(hairAlpha / browAlpha)
-                        : 0.0;
-                    float3 stain = neutralized * lerp(float3(1.0, 1.0, 1.0), browPigment, makeupAlpha);
-                    float3 paint = lerp(neutralized, browPigment, makeupAlpha);
-                    float3 composited = lerp(stain, paint, coreWeight);
-                    float coverageOut = saturate(neutralizeAlpha + makeupAlpha * (1.0 - neutralizeAlpha));
-
-                    // We folded the camera into `composited`; invert the alpha
-                    // blend so the framebuffer ends up exactly `composited`.
-                    float3 outColor = coverageOut > 0.0001
-                        ? saturate((composited - cameraHere * (1.0 - coverageOut)) / coverageOut)
-                        : browPigment;
-                    return fixed4(outColor, coverageOut);
+                    // The "real-brow neutralize" inpaint that used the grabbed
+                    // camera frame (_BrowBackgroundTexture) was removed to stop
+                    // the per-frame full-screen GrabPass flicker. The generated
+                    // brow now composites its core+strand pigment directly via the
+                    // standard alpha blend (Blend [_SrcBlend] [_DstBlend]).
+                    return fixed4(browPigment, makeupAlpha);
                   }
                 }
 
                 float detailAmount = saturate(_DetailAmount) * saturate(_PreserveDetail);
-                if (_LipStyleMode < -0.5
-                    && _CheekBlushMode < 0.5
-                    && _EyelinerMode < 0.5
-                    && _BrowGeneratedMode < 0.5
-                    && detailAmount > 0.001)
+                if (_LipStyleMode < -0.5 && _CheekBlushMode < 0.5 && _EyelinerMode < 0.5
+                    && _BrowGeneratedMode < 0.5 && detailAmount > 0.001)
                 {
                     float rawHairDetail = saturate(mask.b * fullSoft);
                     float softHairDetail = saturate(softMask.b * fullSoft);
@@ -975,6 +921,21 @@ Shader "MakeupAR/SmoothRegionMask"
                         pigmentColor * 0.52,
                         hairContrast * detailAmount * 0.82));
                     alphaColor = pigmentColor;
+                }
+
+                // Per-person brow gate: the Vision landmark polygon of the
+                // USER'S eyebrow (screen-space band from the parsing
+                // provider) clips the styled brow mask so it hugs their
+                // actual brow instead of the canonical-UV guess. The wide
+                // smoothstep keeps edges soft at the 192px mask resolution;
+                // when the mask is stale/absent the gate stays off and the
+                // styled mask renders unchanged.
+                if (_BrowGateValid > 0.5)
+                {
+                    float2 browNdc = input.clipPos.xy / max(input.clipPos.w, 0.00001);
+                    float2 browUv = saturate(browNdc * 0.5 + 0.5);
+                    float browBand = tex2D(_BrowGateTex, browUv).r;
+                    maskStrength *= smoothstep(0.02, 0.30, browBand);
                 }
 
                 float preserveScale = lerp(1.0, 0.92, saturate(_PreserveDetail));
@@ -1104,9 +1065,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float _LowerLipHighlightWeight;
             float _UpperLipHighlightWeight;
             float _LipStyleMode;
+            float _BrowGeneratedMode;
             float _UseScreenSpaceMask;
             float _DebugMaskMode;
-            float _BrowGeneratedMode;
 
             struct appdata
             {
@@ -1119,7 +1080,6 @@ Shader "MakeupAR/SmoothRegionMask"
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float4 clipPos : TEXCOORD1;
-                float4 grabPos : TEXCOORD2;
             };
 
             v2f vert(appdata input)
@@ -1127,7 +1087,6 @@ Shader "MakeupAR/SmoothRegionMask"
                 v2f output;
                 output.vertex = UnityObjectToClipPos(input.vertex);
                 output.clipPos = output.vertex;
-                output.grabPos = ComputeGrabScreenPos(output.vertex);
                 output.uv = input.uv;
                 return output;
             }

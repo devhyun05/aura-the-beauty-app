@@ -124,32 +124,15 @@ static void E7FillLandmarkPolygon(E7GrayCanvas *canvas, VNFaceLandmarkRegion2D *
   E7FillPolygon(canvas, points, landmark.pointCount);
 }
 
-extern "C" {
-
-int E7VisionFaceParsingPng(
-  const unsigned char *pngBytes,
-  int byteCount,
+// Shared Vision + composition core. Takes ownership of nothing; the caller
+// releases the image. Writes the five bottom-up class masks into outMasks.
+static int E7RunFaceParsing(
+  CGImageRef image,
   int maskWidth,
   int maskHeight,
   unsigned char *outMasks)
 {
   @autoreleasepool {
-    if (pngBytes == NULL || byteCount <= 0 || outMasks == NULL || maskWidth <= 0 || maskHeight <= 0) {
-      return -1;
-    }
-
-    NSData *data = [NSData dataWithBytes:pngBytes length:(NSUInteger)byteCount];
-    CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
-    if (imageSource == NULL) {
-      return -2;
-    }
-
-    CGImageRef image = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
-    CFRelease(imageSource);
-    if (image == NULL) {
-      return -2;
-    }
-
     VNDetectFaceLandmarksRequest *landmarksRequest = [[VNDetectFaceLandmarksRequest alloc] init];
     NSMutableArray<VNRequest *> *requests = [NSMutableArray arrayWithObject:landmarksRequest];
 
@@ -166,7 +149,6 @@ int E7VisionFaceParsingPng(
                                                                             options:@{}];
     NSError *error = nil;
     BOOL performed = [handler performRequests:requests error:&error];
-    CGImageRelease(image);
     if (!performed || error != nil) {
       return -3;
     }
@@ -348,6 +330,230 @@ int E7VisionFaceParsingPng(
     E7ReleaseGrayCanvas(&browCanvas);
     return 0;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Async raw-RGBA pipeline. The PNG entry point below runs Vision on the
+// CALLING thread and needs a PNG round-trip — both caused visible frame
+// hitches. The Submit/TryFetch pair instead accepts raw RGBA rows (from
+// AsyncGPUReadback of a downscaled RT), copies them, and runs the same
+// parsing core on a serial background queue; Unity polls TryFetch per frame.
+// ---------------------------------------------------------------------------
+
+static NSLock *E7ParsingLock(void)
+{
+  static NSLock *lock = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ lock = [[NSLock alloc] init]; });
+  return lock;
+}
+
+static dispatch_queue_t E7ParsingQueue(void)
+{
+  static dispatch_queue_t queue = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    queue = dispatch_queue_create("e7.vision.faceparsing", DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
+static bool gE7JobActive = false;
+static bool gE7ResultReady = false;
+static int gE7ResultWidth = 0;
+static int gE7ResultHeight = 0;
+static int gE7LastStatus = 0;
+static int gE7CompletedJobs = 0;
+static unsigned char *gE7ResultMasks = NULL;
+
+extern "C" {
+
+int E7VisionFaceParsingPng(
+  const unsigned char *pngBytes,
+  int byteCount,
+  int maskWidth,
+  int maskHeight,
+  unsigned char *outMasks)
+{
+  @autoreleasepool {
+    if (pngBytes == NULL || byteCount <= 0 || outMasks == NULL || maskWidth <= 0 || maskHeight <= 0) {
+      return -1;
+    }
+
+    NSData *data = [NSData dataWithBytes:pngBytes length:(NSUInteger)byteCount];
+    CGImageSourceRef imageSource = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
+    if (imageSource == NULL) {
+      return -2;
+    }
+
+    CGImageRef image = CGImageSourceCreateImageAtIndex(imageSource, 0, NULL);
+    CFRelease(imageSource);
+    if (image == NULL) {
+      return -2;
+    }
+
+    int status = E7RunFaceParsing(image, maskWidth, maskHeight, outMasks);
+    CGImageRelease(image);
+    return status;
+  }
+}
+
+// Accepts one RGBA frame (4 bytes/pixel). rowsBottomUp=1 means row 0 is the
+// image bottom (Unity texture convention); the copy re-orders to top-down
+// for CoreGraphics. Returns 0 = accepted, 1 = busy (previous frame still
+// parsing; caller just skips this frame), -1 = invalid input.
+int E7VisionFaceParsingSubmitRgba(
+  const unsigned char *rgba,
+  int width,
+  int height,
+  int strideBytes,
+  int rowsBottomUp,
+  int maskWidth,
+  int maskHeight)
+{
+  if (rgba == NULL || width <= 0 || height <= 0 || maskWidth <= 0 || maskHeight <= 0
+      || strideBytes < width * 4) {
+    return -1;
+  }
+
+  NSLock *lock = E7ParsingLock();
+  [lock lock];
+  if (gE7JobActive) {
+    [lock unlock];
+    return 1;
+  }
+
+  gE7JobActive = true;
+  [lock unlock];
+
+  size_t tightStride = (size_t)width * 4;
+  unsigned char *frameCopy = (unsigned char *)malloc(tightStride * (size_t)height);
+  if (frameCopy == NULL) {
+    [lock lock];
+    gE7JobActive = false;
+    [lock unlock];
+    return -1;
+  }
+
+  for (int y = 0; y < height; y++) {
+    int sourceY = rowsBottomUp != 0 ? (height - 1 - y) : y;
+    memcpy(
+      frameCopy + (size_t)y * tightStride,
+      rgba + (size_t)sourceY * (size_t)strideBytes,
+      tightStride);
+  }
+
+  dispatch_async(E7ParsingQueue(), ^{
+    @autoreleasepool {
+      int status = -2;
+      unsigned char *masks =
+        (unsigned char *)malloc((size_t)maskWidth * (size_t)maskHeight * kE7ParsingMaskCount);
+      CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
+      CGDataProviderRef provider = CGDataProviderCreateWithData(
+        NULL, frameCopy, tightStride * (size_t)height, NULL);
+      CGImageRef image = NULL;
+      if (masks != NULL && rgb != NULL && provider != NULL) {
+        image = CGImageCreate(
+          (size_t)width, (size_t)height, 8, 32, tightStride, rgb,
+          (CGBitmapInfo)kCGImageAlphaNoneSkipLast | (CGBitmapInfo)kCGBitmapByteOrder32Big,
+          provider, NULL, false, kCGRenderingIntentDefault);
+      }
+
+      if (image != NULL) {
+        status = E7RunFaceParsing(image, maskWidth, maskHeight, masks);
+        CGImageRelease(image);
+      }
+
+      if (provider != NULL) {
+        CGDataProviderRelease(provider);
+      }
+
+      if (rgb != NULL) {
+        CGColorSpaceRelease(rgb);
+      }
+
+      NSLock *jobLock = E7ParsingLock();
+      [jobLock lock];
+      gE7LastStatus = status;
+      gE7CompletedJobs++;
+      if (status == 0 && masks != NULL) {
+        if (gE7ResultMasks != NULL) {
+          free(gE7ResultMasks);
+        }
+
+        gE7ResultMasks = masks;
+        masks = NULL;
+        gE7ResultWidth = maskWidth;
+        gE7ResultHeight = maskHeight;
+        gE7ResultReady = true;
+      }
+
+      gE7JobActive = false;
+      [jobLock unlock];
+
+      if (masks != NULL) {
+        free(masks);
+      }
+
+      free(frameCopy);
+    }
+  });
+
+  return 0;
+}
+
+// Copies the newest completed mask set into outMasks. Returns 1 when a new
+// result was delivered, 0 when nothing new is ready or dimensions mismatch.
+int E7VisionFaceParsingTryFetch(
+  unsigned char *outMasks,
+  int maskWidth,
+  int maskHeight)
+{
+  if (outMasks == NULL || maskWidth <= 0 || maskHeight <= 0) {
+    return 0;
+  }
+
+  NSLock *lock = E7ParsingLock();
+  [lock lock];
+  bool delivered = false;
+  if (gE7ResultReady
+      && gE7ResultMasks != NULL
+      && gE7ResultWidth == maskWidth
+      && gE7ResultHeight == maskHeight) {
+    memcpy(
+      outMasks,
+      gE7ResultMasks,
+      (size_t)maskWidth * (size_t)maskHeight * kE7ParsingMaskCount);
+    gE7ResultReady = false;
+    delivered = true;
+  }
+
+  [lock unlock];
+  return delivered ? 1 : 0;
+}
+
+// Status of the most recent background job (0 ok, negative = parsing error
+// codes above). Lets the C# side detect a vertically-flipped capture
+// (persistent -4 "no face") and toggle the row order automatically.
+int E7VisionFaceParsingLastStatus(void)
+{
+  NSLock *lock = E7ParsingLock();
+  [lock lock];
+  int status = gE7LastStatus;
+  [lock unlock];
+  return status;
+}
+
+// Total background jobs completed since launch. The C# auto-flip logic
+// counts JOBS (not frames) so it only toggles after several full inference
+// attempts actually failed with "no face".
+int E7VisionFaceParsingCompletedJobs(void)
+{
+  NSLock *lock = E7ParsingLock();
+  [lock lock];
+  int jobs = gE7CompletedJobs;
+  [lock unlock];
+  return jobs;
 }
 
 }
