@@ -82,7 +82,26 @@ def run_slice(prompt: str, *, lambda_: float = 0.7, s_floor: float = 0.5) -> dic
   }
 
 
+# §11 5단계 골든 스위트 — 의도 보존 회귀망의 단일 질의 목록 (tests/test_auradin_golden.py와 공유).
+GOLDEN_QUERIES = (
+  "글리터 추천해줘",
+  "플럼 립 추천해줘",
+  "올리브영에서 살 수 있는 매트 립",
+  "데일리로 쓸 만한 블러셔 추천해줘",
+  "2만원 이하 촉촉한 립 틴트",
+  "은은한 쉬머 아이섀도우 팔레트",
+)
+
+
+def run_golden(queries: tuple[str, ...] = GOLDEN_QUERIES, **kwargs) -> list[dict]:
+  """멀티쿼리 골든 러너 — 질의 리스트를 §5/§6 파이프에 통과시켜 구조화 근거 스냅샷을 만든다."""
+  return [run_slice(prompt, **kwargs) for prompt in queries]
+
+
 def main() -> None:
+  if len(sys.argv) > 1 and sys.argv[1] == "--golden":
+    print(json.dumps(run_golden(), ensure_ascii=False, indent=2))
+    return
   prompt = sys.argv[1] if len(sys.argv) > 1 else "글리터 추천해줘"
   result = run_slice(prompt)
   print(json.dumps(result, ensure_ascii=False, indent=2))
