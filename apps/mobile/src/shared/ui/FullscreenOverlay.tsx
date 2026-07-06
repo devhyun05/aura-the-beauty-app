@@ -1,6 +1,12 @@
 import type {ReactNode} from 'react';
-import {StyleSheet, type StyleProp, type TextStyle, type ViewStyle} from 'react-native';
+import {
+  StyleSheet,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {Image as ImageIcon, RefreshCw} from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {
@@ -18,6 +24,11 @@ export const FULLSCREEN_OVERLAY_CONTROL_BUTTON_SIZE = iconSize.xl + spacing.xxl;
 export const FULLSCREEN_OVERLAY_FLOATING_TOP_OFFSET = spacing.lg;
 export const FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY = 0.62;
 export const FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_BACKGROUND = `rgba(255, 255, 255, ${FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_OPACITY})`;
+export const FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND = colors.blackSurface;
+export const CAMERA_UTILITY_ICON_SIZE = iconSize.lg;
+export const CAMERA_UTILITY_ICON_STROKE_WIDTH = 2.1;
+export const CAMERA_GALLERY_BUTTON_ICON_NAME = 'Image' as const;
+export const CAMERA_FACING_TOGGLE_BUTTON_ICON_NAME = 'RefreshCw' as const;
 
 type FullscreenOverlayScreenProps = {
   children: ReactNode;
@@ -395,6 +406,71 @@ export function CameraUtilityButton({
   );
 }
 
+type CameraGalleryButtonProps = Omit<CameraUtilityButtonProps, 'children'> & {
+  iconColor?: string;
+};
+
+export function CameraGalleryButton({
+  accessibilityLabel,
+  disabled,
+  iconColor = colors.white,
+  onPress,
+  size,
+  style,
+}: CameraGalleryButtonProps) {
+  return (
+    <CameraUtilityButton
+      accessibilityLabel={accessibilityLabel}
+      disabled={disabled}
+      onPress={onPress}
+      size={size}
+      style={style}>
+      <ImageIcon
+        color={iconColor}
+        size={CAMERA_UTILITY_ICON_SIZE}
+        strokeWidth={CAMERA_UTILITY_ICON_STROKE_WIDTH}
+      />
+    </CameraUtilityButton>
+  );
+}
+
+type CameraFacingToggleButtonProps = Omit<
+  CameraUtilityButtonProps,
+  'accessibilityLabel' | 'children'
+> & {
+  accessibilityLabel?: string;
+  cameraFacing: 'front' | 'back';
+  iconColor?: string;
+};
+
+export function CameraFacingToggleButton({
+  accessibilityLabel,
+  cameraFacing,
+  disabled,
+  iconColor = colors.white,
+  onPress,
+  size,
+  style,
+}: CameraFacingToggleButtonProps) {
+  return (
+    <CameraUtilityButton
+      accessibilityLabel={
+        accessibilityLabel ??
+        (cameraFacing === 'front' ? '후면 카메라로 전환' : '전면 카메라로 전환')
+      }
+      disabled={disabled}
+      onPress={onPress}
+      size={size}
+      style={style}>
+      <RefreshCw
+        color={iconColor}
+        size={CAMERA_UTILITY_ICON_SIZE}
+        strokeWidth={CAMERA_UTILITY_ICON_STROKE_WIDTH}
+      />
+    </CameraUtilityButton>
+  );
+}
+
 type CameraCaptureControlRowProps = {
   bottom: number;
   centerSlot: ReactNode;
@@ -473,7 +549,7 @@ export function CameraModeSwitch({
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: colors.black,
+    backgroundColor: FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND,
     flex: 1,
     overflow: 'hidden',
   },
@@ -481,7 +557,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   layer: {
-    backgroundColor: colors.black,
+    backgroundColor: FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND,
     bottom: 0,
     left: 0,
     overflow: 'hidden',
@@ -515,7 +591,7 @@ const styles = StyleSheet.create({
     backgroundColor: FULLSCREEN_OVERLAY_SEGMENT_ACTIVE_BACKGROUND,
   },
   segmentButtonSolidActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND,
   },
   segmentText: {
     fontFamily: typography.fontFamily.bold,
@@ -545,8 +621,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipButtonActive: {
-    backgroundColor: colors.black,
-    borderColor: colors.black,
+    backgroundColor: FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND,
+    borderColor: colors.transparent,
   },
   chipText: {
     color: colors.textSecondary,
@@ -634,7 +710,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: FULLSCREEN_OVERLAY_BLACK_SURFACE_BACKGROUND,
     borderRadius: radius.pill,
     height: 52,
     justifyContent: 'center',
@@ -683,7 +759,9 @@ const styles = StyleSheet.create({
   },
   cameraModeActive: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
+    borderColor: colors.liquidGlassBorder,
+    borderWidth: 1,
     borderRadius: radius.pill,
     flex: 1,
     height: 36,

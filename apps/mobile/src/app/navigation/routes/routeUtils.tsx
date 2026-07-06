@@ -90,8 +90,8 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
-  if (routeName === 'Magazine') {
-    navigation.navigate('Magazine');
+  if (routeName === 'Consulting') {
+    navigation.navigate('Consulting');
     return;
   }
 
@@ -173,11 +173,14 @@ export function MainTabChrome({
         title={headerCopy.title}
         titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
         topInset={insets.top}
-        containerProps={
-          headerBorderWidth === undefined
-            ? undefined
-            : {style: {borderBottomWidth: headerBorderWidth}}
-        }
+        containerProps={{
+          style: [
+            styles.overlayHeader,
+            headerBorderWidth === undefined
+              ? null
+              : {borderBottomWidth: headerBorderWidth},
+          ],
+        }}
         onProfilePress={handleOpenFeatureMenu}
       />
       <YStack style={styles.body}>
@@ -185,11 +188,13 @@ export function MainTabChrome({
           <AppScreen
             bottomPadding="floatingFooter"
             contentGap={contentGap}
-            topPadding="belowShellHeader">
+            topPadding="belowOverlayHeader">
             {children}
           </AppScreen>
         ) : (
-          children
+          <YStack style={styles.customBody}>
+            {children}
+          </YStack>
         )}
       </YStack>
       <AppFeatureMenuSheet
@@ -204,6 +209,17 @@ export function MainTabChrome({
 const styles = StyleSheet.create({
   body: {
     flex: 1,
+  },
+  customBody: {
+    flex: 1,
+  },
+  overlayHeader: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 30,
   },
   screen: {
     backgroundColor: colors.background,

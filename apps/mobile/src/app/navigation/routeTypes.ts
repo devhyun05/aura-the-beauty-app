@@ -36,7 +36,6 @@ export type RootStackParamList = {
   AppSettings: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
-  Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   // prompt: 딥링크로 검색 자동 시작(리포트→검색 연결). open/dial: QA·데모 드라이브 훅.
@@ -84,7 +83,6 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ProfileTab: undefined;
   CommunityTab: undefined;
-  ConsultingTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -107,7 +105,6 @@ export const rootStackRoutes = [
   'AppSettings',
   'ProfileEdit',
   'HomeFilterStore',
-  'Magazine',
   'SavedMakeupList',
   'ProductRecommendation',
   'AuradinSearch',
@@ -141,7 +138,6 @@ export const mainTabRoutes = [
   'HomeTab',
   'ProfileTab',
   'CommunityTab',
-  'ConsultingTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

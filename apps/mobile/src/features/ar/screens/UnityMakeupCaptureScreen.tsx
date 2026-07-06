@@ -2366,7 +2366,7 @@ const styles = StyleSheet.create({
   arBlushShowButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.58)',
+    backgroundColor: colors.blackSurface,
     borderColor: 'rgba(255, 255, 255, 0.20)',
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -2383,7 +2383,7 @@ const styles = StyleSheet.create({
   arBlushCloseButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    backgroundColor: colors.blackSurface,
     borderColor: 'rgba(255, 255, 255, 0.18)',
     borderRadius: 12,
     borderWidth: 1,
@@ -2424,7 +2424,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   arBlushControlsPanel: {
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    backgroundColor: colors.blackSurface,
     borderColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 12,
     borderWidth: 1,
@@ -2525,7 +2525,7 @@ const styles = StyleSheet.create({
   },
   arBlushModeButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+    backgroundColor: colors.blackSurface,
     borderColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 8,
     borderWidth: 1,
@@ -2534,7 +2534,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arBlushModeButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
   },
   arBlushModeRow: {
     flexDirection: 'row',
@@ -2591,7 +2591,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   arBlushOptionButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: '#FFE978',
     borderWidth: 2,
   },
@@ -2674,7 +2674,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arBlushRegionButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: '#FFE978',
     borderWidth: 2,
   },
@@ -2736,7 +2736,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   arBlushSliderThumb: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: '#182235',
     borderRadius: 9,
     borderWidth: 2,
@@ -2804,7 +2804,7 @@ const styles = StyleSheet.create({
   },
   captureButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: 'rgba(255, 255, 255, 0.34)',
     borderRadius: radius.pill,
     borderWidth: 5,
@@ -2816,7 +2816,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(38, 214, 121, 0.58)',
   },
   captureButtonInner: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 54,
     width: 54,
@@ -3042,7 +3042,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   maskFlowStepChipActive: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
   },
   maskFlowStepChipDone: {
     backgroundColor: 'rgba(38, 214, 121, 0.28)',
@@ -3074,7 +3074,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   regionButtonActive: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
   },
   regionButtonText: {
     color: colors.white,
@@ -3098,7 +3098,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   screen: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     flex: 1,
     gap: spacing.lg,
     paddingHorizontal: spacing.xl,
@@ -3180,7 +3180,7 @@ const styles = StyleSheet.create({
   },
   startButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,

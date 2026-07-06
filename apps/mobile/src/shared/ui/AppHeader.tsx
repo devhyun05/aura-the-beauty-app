@@ -10,6 +10,7 @@ import {MenuHeaderIcon} from './HeaderIcons';
 export const APP_HEADER_BASE_HEIGHT = 56;
 export const APP_HEADER_VERTICAL_PADDING = spacing.sm;
 export const APP_HEADER_ACTION_BUTTON_SIZE = 40;
+export const APP_HEADER_BACKGROUND_COLOR = colors.headerSurface;
 export const APP_HEADER_SIDE_SIZE = 40;
 export const APP_HEADER_CENTER_TITLE_FONT_SIZE = typography.title.fontSize;
 export const APP_HEADER_CONTEXT_TITLE_LEFT_MARGIN = spacing.xs;
@@ -191,8 +192,8 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.headerControlSurface,
+    borderColor: colors.headerControlBorder,
     borderRadius: radius.pill,
     borderWidth: 1,
     height: APP_HEADER_ACTION_BUTTON_SIZE,
@@ -200,8 +201,8 @@ const styles = StyleSheet.create({
     padding: 0,
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: shadows.soft.shadowOpacity,
-    shadowRadius: shadows.soft.shadowRadius,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     width: APP_HEADER_ACTION_BUTTON_SIZE,
   },
   centeredContainer: {
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   },
   container: {
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: APP_HEADER_BACKGROUND_COLOR,
     flexDirection: 'row',
     gap: spacing.lg,
     justifyContent: 'space-between',

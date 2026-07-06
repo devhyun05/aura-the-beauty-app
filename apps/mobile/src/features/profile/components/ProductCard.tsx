@@ -64,8 +64,8 @@ const styles = StyleSheet.create({
   },
   heartBadge: {
     alignItems: 'center',
-    backgroundColor: colors.white,
-    borderColor: colors.borderStrong,
+    backgroundColor: colors.liquidGlassSurface,
+    borderColor: colors.liquidGlassBorder,
     borderRadius: 14,
     borderWidth: 1,
     height: 28,

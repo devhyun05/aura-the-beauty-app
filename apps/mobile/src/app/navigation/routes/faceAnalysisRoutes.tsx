@@ -311,6 +311,7 @@ export function FaceAnalysisReportsListRouteScreen({
 }: RootScreenProps<'FaceAnalysisReportsList'>) {
   return (
     <DetailRouteChrome
+      reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportsList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <FaceAnalysisReportsListScreen
@@ -342,8 +343,8 @@ export function FaceAnalysisReportDetailRouteScreen({
   return (
     <DetailRouteChrome
       backgroundColor={colors.surfaceMuted}
-      headerBackgroundColor={colors.surfaceMuted}
-      headerBorderColor={colors.surfaceMuted}
+      headerMode="overlay"
+      reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportDetail"
       onOpenDocumentList={() => navigation.navigate('FaceAnalysisReportsList')}
       onShare={shareAction?.cb}

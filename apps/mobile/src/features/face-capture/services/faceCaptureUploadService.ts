@@ -6,7 +6,8 @@ export type FaceCaptureUploadCaptureType =
   | 'face_analysis'
   | 'makeup_feedback'
   | 'filter_extraction'
-  | 'ar_try_on';
+  | 'ar_try_on'
+  | 'personal_color';
 
 export type FaceCaptureImageInput = {
   captureType?: FaceCaptureUploadCaptureType;

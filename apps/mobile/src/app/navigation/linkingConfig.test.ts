@@ -38,9 +38,6 @@ type MakeupLookListPathContract = ExpectType<
 type HomeFilterStorePathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.HomeFilterStore, 'filter-store'>
 >;
-type MagazinePathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.Magazine, 'magazine'>
->;
 type SavedMakeupListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
 >;
@@ -131,6 +128,11 @@ expectEqual(
   'linking config has no unknown root stack routes',
 );
 expectEqual(
+  Object.keys(rootStackLinkingScreens).includes('Magazine'),
+  false,
+  'linking config excludes magazine path',
+);
+expectEqual(
   getMissingMainTabLinkingRoutes().join(','),
   '',
   'all main tab routes have linking paths',
@@ -159,11 +161,6 @@ expectEqual(
   navigationLinking.config?.screens?.HomeFilterStore,
   'filter-store',
   'filter store path uses home store naming',
-);
-expectEqual(
-  navigationLinking.config?.screens?.Magazine,
-  'magazine',
-  'magazine path uses magazine naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.SavedMakeupList,
