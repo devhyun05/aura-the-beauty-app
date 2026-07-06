@@ -1,4 +1,6 @@
 import {
+  FLOATING_ACTION_SETTINGS_SCREEN_SCROLL_ENABLED,
+  FLOATING_ACTION_SETTINGS_SCREEN_TOP_PADDING,
   getFloatingActionButtonPositionLabels,
   getFloatingActionCandidateLabels,
   getFloatingActionInteractionModeLabels,
@@ -59,4 +61,16 @@ expectEqual(
   getFloatingActionSelectionBadgeLabel(['makeupExtraction', 'arFilter'], 'makeupFeedback'),
   '',
   'unselected floating action badge label',
+);
+
+expectEqual(
+  FLOATING_ACTION_SETTINGS_SCREEN_SCROLL_ENABLED,
+  true,
+  'floating action settings screen scrolls long content',
+);
+
+expectEqual(
+  FLOATING_ACTION_SETTINGS_SCREEN_TOP_PADDING,
+  'belowOverlayHeader',
+  'floating action settings screen starts below overlay header',
 );

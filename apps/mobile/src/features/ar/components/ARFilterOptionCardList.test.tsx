@@ -13,6 +13,8 @@ import {
   AR_FILTER_OPTION_CARD_SELECTED_BADGE,
   AR_FILTER_OPTION_CARD_SELECTED_EFFECT,
   AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY,
+  AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET,
+  AR_FILTER_OPTION_CARD_SURFACE_OVERFLOW,
   AR_FILTER_OPTION_CARD_WIDTH,
   AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
   AR_FILTER_CATEGORY_SELECTOR_ACTIVE_INDICATOR,
@@ -27,6 +29,11 @@ import {
 import {getARMakeupGuideData, getDefaultMakeupFilter} from '../../../shared/services/makeupGuideService';
 import {getARFilterShapeOptions} from '../services/arFilterOptionRules';
 
+type TypeEquals<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends
+  (<T>() => T extends B ? 1 : 2) ? true : false;
+type ExpectType<T extends true> = T;
+
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
@@ -39,18 +46,18 @@ const shapeOptions = getARFilterShapeOptions('all');
 
 expectEqual(
   AR_FILTER_OPTION_CARD_ASPECT_RATIO,
-  0.78,
-  'AR filter option card uses home filter card aspect ratio',
+  1,
+  'AR filter option card is square',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_COPY_PLACEMENT,
-  'bottomScrim',
-  'AR filter option card copy placement matches home filter card',
+  'outsideBelow',
+  'AR filter option card labels sit outside the card',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT,
   'center',
-  'AR filter option card labels are centered inside the bottom scrim',
+  'AR filter option card labels stay centered below the card',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_META_PLACEMENT,
@@ -64,13 +71,18 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_WIDTH,
-  84,
-  'AR filter option card width is compact',
+  72,
+  'AR filter option card width is reduced',
 );
 expectEqual(
   AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
-  112,
-  'AR filter option picker height follows compact cards',
+  104,
+  'AR filter option picker height allows outside labels',
+);
+expectEqual(
+  AR_FILTER_OPTION_CARD_SURFACE_OVERFLOW,
+  'hidden',
+  'AR filter option card surface clips image content',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_ACTIVE_INDICATOR,
@@ -99,8 +111,13 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_SELECTED_BADGE,
-  'topRightCheck',
-  'AR filter option card selected state shows a compact check badge',
+  'topRightInsetCheck',
+  'AR filter option card selected badge is inset from the inner border',
+);
+expectEqual(
+  AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET,
+  8,
+  'AR filter option card selected badge clears the active inner border',
 );
 expectEqual(
   AR_FILTER_OPTION_CARD_SELECTED_EFFECT,
@@ -142,6 +159,22 @@ expectEqual(
   'CircleOff',
   'AR filter original option card uses a library icon',
 );
+
+type OptionCardAspectRatioContract = ExpectType<
+  TypeEquals<typeof AR_FILTER_OPTION_CARD_ASPECT_RATIO, 1>
+>;
+type OptionCardCopyPlacementContract = ExpectType<
+  TypeEquals<typeof AR_FILTER_OPTION_CARD_COPY_PLACEMENT, 'outsideBelow'>
+>;
+type OptionCardWidthContract = ExpectType<
+  TypeEquals<typeof AR_FILTER_OPTION_CARD_WIDTH, 72>
+>;
+type OptionCardSelectedBadgeContract = ExpectType<
+  TypeEquals<typeof AR_FILTER_OPTION_CARD_SELECTED_BADGE, 'topRightInsetCheck'>
+>;
+type OptionCardBadgeOffsetContract = ExpectType<
+  TypeEquals<typeof AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET, 8>
+>;
 
 <ARFilterOptionCardList
   arGuideData={arGuideData}
