@@ -31,6 +31,8 @@ export function AppRoot() {
     [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
     [typography.fontFamily.semibold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
     [typography.fontFamily.bold]: require('../assets/fonts/Pretendard-Bold.otf'),
+    // AURADIN 히어로 세리프 (features/recommendation DS 전용 — auradinTokens.auType.serif)
+    Lora: require('../assets/fonts/Lora-Regular.ttf'),
   });
 
   const syncStatusBarStyle = useCallback(

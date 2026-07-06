@@ -39,6 +39,7 @@ export type RootStackParamList = {
   Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
+  AuradinSearch: undefined;
   Community: undefined;
   Consulting: undefined;
   MakeupLookList: undefined;
@@ -108,6 +109,7 @@ export const rootStackRoutes = [
   'Magazine',
   'SavedMakeupList',
   'ProductRecommendation',
+  'AuradinSearch',
   'Community',
   'Consulting',
   'MakeupLookList',

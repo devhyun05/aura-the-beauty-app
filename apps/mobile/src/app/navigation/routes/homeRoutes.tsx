@@ -118,7 +118,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
         onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
         onPressMagazine={() => rootNavigation?.navigate('Magazine')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
-        onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
+        onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
         onPressRecommendedFilterMore={() =>
           rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
         }

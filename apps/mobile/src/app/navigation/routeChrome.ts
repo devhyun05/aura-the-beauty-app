@@ -189,6 +189,12 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '추천 제품',
   },
+  AuradinSearch: {
+    category: 'list',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
   Community: {
     category: 'list',
     contextLabel: 'COMMUNITY',

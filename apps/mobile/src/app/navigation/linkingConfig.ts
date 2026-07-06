@@ -61,6 +61,7 @@ export const rootStackLinkingScreens = {
   Magazine: 'magazine',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
+  AuradinSearch: 'auradin-search',
   Community: 'community',
   Consulting: 'consulting',
   MakeupLookList: 'makeup-look-list',
