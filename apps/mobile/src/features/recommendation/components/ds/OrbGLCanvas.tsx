@@ -14,6 +14,7 @@
 // The ripple/drag uniforms exist in the shader (web parity) but stay at rest —
 // the persistent orb is pointerEvents="none".
 import * as React from 'react';
+import { Animated } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { GLView } from 'expo-gl';
 import type { ExpoWebGLRenderingContext } from 'expo-gl';
@@ -48,6 +49,9 @@ type Handle = {
 };
 
 export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasProps): React.JSX.Element {
+  const frameCountRef = React.useRef(0);
+  const liveRef = React.useRef(false);
+  const liveOpacity = React.useRef(new Animated.Value(0)).current;
   const handleRef = React.useRef<Handle | null>(null);
   const glowRef = React.useRef(glowTarget);
   const pausedRef = React.useRef(paused);
@@ -84,6 +88,16 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
     h.blob.rotation.y = t * A.ROTATE_SPEED;
 
     h.renderer.render(h.scene, h.camera);
+    frameCountRef.current += 1;
+    if (!liveRef.current && frameCountRef.current >= 2) {
+      // 두 번째 프레임까지 화면 도달(동기 플러시) 확인 → 부드럽게 페이드인.
+      // 앱 시작 직후 JS 스레드 혼잡으로 첫 표시가 수 초 늦을 수 있어, 팝 대신 페이드.
+      liveRef.current = true;
+      Animated.timing(liveOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    }
+    // 동기 GL 호출로 커맨드 큐 강제 플러시 — 이것 없이는 EXGL이 three의 프레임을
+    // 화면 버퍼로 옮기지 못하는 레이스가 있다 (probe7 성공/실패 전수 대조로 특정).
+    h.gl.getError();
     h.gl.endFrameEXP();
   }, []);
 
@@ -137,12 +151,29 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
         if (!glWithCanvas.canvas) {
           glWithCanvas.canvas = canvasStub;
         }
-        const renderer = new THREE.WebGLRenderer({
-          canvas: canvasStub,
-          context: gl as unknown as WebGLRenderingContext,
-          antialias: true,
-          alpha: true,
-        });
+        // Force three's WebGL1 path. r128 detects WebGL2 via
+        // `gl instanceof WebGL2RenderingContext` (three.module.js:14495) — the
+        // WebGL1Renderer class does NOT override it — and expo-gl registers that
+        // global, so three takes its WebGL2 path, which EXGL half-supports →
+        // GL_INVALID_OPERATION → empty frames. Hiding the global for the
+        // constructor call flips the check; the DS orb test rig (_orbtest.html)
+        // forces WebGL1 for the same reason.
+        const g = globalThis as { WebGL2RenderingContext?: unknown };
+        const savedWebGL2 = g.WebGL2RenderingContext;
+        delete g.WebGL2RenderingContext;
+        let renderer: THREE.WebGLRenderer;
+        try {
+          renderer = new THREE.WebGL1Renderer({
+            canvas: canvasStub,
+            context: gl as unknown as WebGLRenderingContext,
+            antialias: true,
+            alpha: true,
+          });
+        } finally {
+          if (savedWebGL2 !== undefined) {
+            g.WebGL2RenderingContext = savedWebGL2;
+          }
+        }
         renderer.setPixelRatio(1);
         renderer.setSize(w, hpx, false);
         renderer.setClearColor(0x000000, 0); // transparent — halos/ground show through
@@ -242,5 +273,9 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
     };
   }, [stopLoop]);
 
-  return <GLView style={style} msaaSamples={4} onContextCreate={onContextCreate} />;
+  return (
+    <Animated.View style={[style, { opacity: liveOpacity }]}>
+      <GLView style={{ flex: 1 }} onContextCreate={onContextCreate} />
+    </Animated.View>
+  );
 }

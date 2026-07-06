@@ -127,7 +127,7 @@ export const ORB_ANIM = {
   CAMERA_FOV: 35,
   CAMERA_Z: 3, // box framing — the Animated PersistentOrb container does phase scaling
   BLOB_RADIUS: 0.43,
-  BLOB_DETAIL: 48, // ~48k faces; drop to 32 for low-end Android
+  BLOB_DETAIL: 32, // ~20k faces — 웜업(첫 표시 지연) 단축; 155px 박스에선 48과 시각차 없음
   GLOW_LERP: 0.04,
   ROTATE_SPEED: 0.07, // rad/s around y
   FLOAT_FREQ: 0.7,
