@@ -37,6 +37,7 @@ import {
   MakeupCorrectionTipRouteScreen,
 } from './routes/makeupFeedbackRoutes';
 import {
+  AuradinSearchRouteScreen,
   LikedProductListRouteScreen,
   MakeupLookListRouteScreen,
   ProductRecommendationRouteScreen,
@@ -96,6 +97,7 @@ export function RootNavigator() {
       <Stack.Screen name="Magazine" component={MagazineRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
+      <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
       <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
       <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />

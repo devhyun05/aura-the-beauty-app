@@ -1,3 +1,12 @@
+// ─────────────────────────────────────────────────────────────────────────
+// 전역 테마 색상 — 앱 전체(다수 화면: home · face-analysis · auth · navigation · AR …)가
+// 공유합니다. 여기를 바꾸면 앱 전체 색이 바뀝니다.
+//
+// ⚠️ AURADIN 추천 화면 재디자인 색(꿈꾸는 블루 + 솜사탕 핑크 + 마젠타)을 여기에
+//    추가하지 마세요. AURADIN 전용 색은 features/recommendation 로컬 토큰으로 둡니다.
+//    참고: "# AURADIN 첫 진입 화면 디자인/DESIGN.md"
+//    가드:  npm run test:auradin-theme-scope
+// ─────────────────────────────────────────────────────────────────────────
 export const colors = {
   background: '#FFFFFF',
   surface: '#FFFFFF',

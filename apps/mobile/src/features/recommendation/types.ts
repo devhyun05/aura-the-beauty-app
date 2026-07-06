@@ -101,6 +101,16 @@ export type AuradinQuestion = {
   options: AuradinQuestionOption[];
 };
 
+// §6 구조화 근거 (matchedOn/inferred/caveat). 시각화는 이후 단계(3역할·근거 UI),
+// 지금은 데이터만 관통시켜 둔다.
+export type AuradinReason = {
+  matchedOn: string[];
+  inferred: string[];
+  caveat: string[];
+};
+
+export type AuradinProductRole = 'anchor' | 'diverse' | 'discovery';
+
 export type AuradinCandidateProduct = {
   id: string;
   brandName: string;
@@ -111,6 +121,28 @@ export type AuradinCandidateProduct = {
   palette: string[];
   tags: string[];
   imageSource: ImageSourcePropType;
+  // 백엔드 서빙 필드 (옵셔널 — mock 후보는 없이도 동작). 3역할·근거 UI에서 소비 예정.
+  role?: AuradinProductRole;
+  source?: 'curated' | 'live_naver';
+  reason?: AuradinReason;
+  reasonCopy?: string; // §6 가산 카피 — 구조화 reason이 권위값, 카피는 읽기용
+  matchRate?: number;
+  purchaseUrl?: string;
+  imageUrl?: string;
+  category?: string;
+};
+
+export type AuradinSearchPhase = 'searching' | 'question' | 'results' | 'failed' | 'expired';
+
+// 백엔드 SearchTurn을 화면이 소비하는 형태로 매핑한 결과.
+export type AuradinSearchTurn = {
+  sessionId: string;
+  phase: AuradinSearchPhase;
+  thinking: AuradinThinkingStep[];
+  question?: AuradinQuestion;
+  candidates: AuradinCandidateProduct[];
+  headerLabel?: string;
+  error?: {code?: string; message?: string; recoverable?: boolean} | null;
 };
 
 export type AuradinDraftData = {
