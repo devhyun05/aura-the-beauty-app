@@ -34,6 +34,7 @@ import {
 } from '../services/arFilterOptionRules';
 
 const DEFAULT_VISIBLE_MAKEUP_AREA: MakeupArea = 'lip';
+const UNSELECTED_OPTION_ID = '';
 
 type ARFilterSelectionStatesByArea = Partial<Record<MakeupArea, ARFilterSelectionState>>;
 
@@ -46,7 +47,7 @@ type UseARFilterSelectionStateParams = {
   initialSource?: ARFilterLaunchSource;
 };
 
-function createInitialARFilterSelectionState(
+export function getInitialARFilterSelectionStateForLaunch(
   initialMakeupFilter?: RecommendedMakeupFilter,
   initialSource?: ARFilterLaunchSource,
 ): ARFilterSelectionState {
@@ -73,12 +74,12 @@ function createInitialARFilterSelectionState(
   }
 
   return {
-    selectedTotalMakeupLookId: ORIGINAL_OPTION_CARD_ID,
-    selectedPointMakeupLookId: ORIGINAL_OPTION_CARD_ID,
-    selectedColorId: ORIGINAL_OPTION_CARD_ID,
-    selectedTypeId: ORIGINAL_OPTION_CARD_ID,
-    selectedTextureId: ORIGINAL_OPTION_CARD_ID,
-    selectedShapeId: ORIGINAL_OPTION_CARD_ID,
+    selectedTotalMakeupLookId: null,
+    selectedPointMakeupLookId: UNSELECTED_OPTION_ID,
+    selectedColorId: UNSELECTED_OPTION_ID,
+    selectedTypeId: UNSELECTED_OPTION_ID,
+    selectedTextureId: UNSELECTED_OPTION_ID,
+    selectedShapeId: UNSELECTED_OPTION_ID,
     hasUnsavedMakeupChanges: false,
   };
 }
@@ -93,14 +94,14 @@ function createInitialSelectionStatesByArea(
       ...selectionStates,
       [makeupArea.id]:
         makeupArea.id === 'all'
-          ? createInitialARFilterSelectionState(
+          ? getInitialARFilterSelectionStateForLaunch(
               initialMakeupFilter,
               initialSource,
             )
-          : createInitialARFilterSelectionState(),
+          : getInitialARFilterSelectionStateForLaunch(),
     }),
     {
-      all: createInitialARFilterSelectionState(
+      all: getInitialARFilterSelectionStateForLaunch(
         initialMakeupFilter,
         initialSource,
       ),
@@ -153,7 +154,7 @@ export function useARFilterSelectionState({
       ),
     );
   const getSelectionStateForMakeupArea = (makeupArea: MakeupArea) =>
-    selectionStatesByArea[makeupArea] ?? createInitialARFilterSelectionState();
+    selectionStatesByArea[makeupArea] ?? getInitialARFilterSelectionStateForLaunch();
   const selectionState = getSelectionStateForMakeupArea(selectedMakeupArea);
 
   const selectedMakeupFilter = getARFilterSelectedMakeupFilter({
@@ -175,7 +176,7 @@ export function useARFilterSelectionState({
   ) => {
     setSelectionStatesByArea(currentStates => {
       const currentState =
-        currentStates[selectedMakeupArea] ?? createInitialARFilterSelectionState();
+        currentStates[selectedMakeupArea] ?? getInitialARFilterSelectionStateForLaunch();
 
       return {
         ...currentStates,
@@ -199,7 +200,7 @@ export function useARFilterSelectionState({
   const handleMakeupFilterPress = (makeupFilter: MakeupFilter) => {
     setSelectionStatesByArea(currentStates => {
       const currentState =
-        currentStates[selectedMakeupArea] ?? createInitialARFilterSelectionState();
+        currentStates[selectedMakeupArea] ?? getInitialARFilterSelectionStateForLaunch();
 
       return {
         ...currentStates,
@@ -232,7 +233,7 @@ export function useARFilterSelectionState({
   const handleOriginalOptionPress = () => {
     setSelectionStatesByArea(currentStates => {
       const currentState =
-        currentStates[selectedMakeupArea] ?? createInitialARFilterSelectionState();
+        currentStates[selectedMakeupArea] ?? getInitialARFilterSelectionStateForLaunch();
 
       return {
         ...currentStates,

@@ -9,6 +9,7 @@ import {
   CAMERA_FACING_TOGGLE_BUTTON_ICON_NAME,
   CAMERA_GALLERY_BUTTON_ICON_NAME,
   CAMERA_CAPTURE_BUTTON_METRICS,
+  CameraCaptureControlRow,
   CameraCaptureButton,
   CameraFacingToggleButton,
   CameraGalleryButton,
@@ -46,6 +47,7 @@ export const AR_FILTER_CAMERA_FACING_TOGGLE_ICON_SOURCE =
 export const AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT = spacing.md;
 export const AR_FILTER_CAMERA_CONTROL_ROW_TOP_PADDING = spacing.xs;
 export const AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING = 0;
+export const AR_FILTER_CAMERA_CONTROL_ROW_COMPONENT = 'CameraCaptureControlRow' as const;
 export const AR_FILTER_CAMERA_MODE_ACTIVE_BACKGROUND_COLOR = colors.liquidGlassSurface;
 export const AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR = colors.black;
 export const AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR = colors.white;
@@ -64,50 +66,9 @@ export function ARFilterCaptureControls({
   onOpenGallery,
 }: ARFilterCaptureControlsProps) {
   return (
-    <XStack style={styles.captureRow}>
-      <View style={styles.controlSideLeft}>
-        <XStack style={styles.leftControlCluster}>
-          <CameraGalleryButton
-            accessibilityLabel="갤러리에서 사진 선택"
-            disabled={isGalleryDisabled || !onOpenGallery}
-            onPress={onOpenGallery}
-          />
-          <XStack style={styles.captureModeToggle}>
-            <IconModeButton
-              accessibilityLabel="사진 모드"
-              icon={
-                <Camera
-                  color={
-                    captureMode === 'photo'
-                      ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
-                      : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
-                  }
-                  size={iconSize.sm}
-                />
-              }
-              isActive={captureMode === 'photo'}
-              onPress={() => onCaptureModeChange('photo')}
-            />
-            <IconModeButton
-              accessibilityLabel="동영상 모드"
-              icon={
-                <Video
-                  color={
-                    captureMode === 'video'
-                      ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
-                      : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
-                  }
-                  size={iconSize.sm}
-                />
-              }
-              isActive={captureMode === 'video'}
-              onPress={() => onCaptureModeChange('video')}
-            />
-          </XStack>
-        </XStack>
-      </View>
-
-      <View style={styles.captureButtonSlot}>
+    <CameraCaptureControlRow
+      bottom={0}
+      centerSlot={
         <CameraCaptureButton
           accessibilityLabel={
             captureMode === 'photo'
@@ -118,17 +79,64 @@ export function ARFilterCaptureControls({
           onPress={onComplete}
           variant={AR_FILTER_CAMERA_BUTTON_SURFACE_VARIANT}
         />
-      </View>
-
-      <View style={styles.controlSideRight}>
-        <CameraFacingToggleButton
-          cameraFacing={cameraFacing}
-          onPress={onCameraFacingToggle}
-          size={CAMERA_SWITCH_BUTTON_SIZE}
-          style={styles.cameraSwitchButton}
-        />
-      </View>
-    </XStack>
+      }
+      horizontalPadding={AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING}
+      leftSlot={
+        <View style={styles.leftControlSlot}>
+          <XStack style={styles.leftControlCluster}>
+            <CameraGalleryButton
+              accessibilityLabel="갤러리에서 사진 선택"
+              disabled={isGalleryDisabled || !onOpenGallery}
+              onPress={onOpenGallery}
+            />
+            <XStack style={styles.captureModeToggle}>
+              <IconModeButton
+                accessibilityLabel="사진 모드"
+                icon={
+                  <Camera
+                    color={
+                      captureMode === 'photo'
+                        ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
+                        : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
+                    }
+                    size={iconSize.sm}
+                  />
+                }
+                isActive={captureMode === 'photo'}
+                onPress={() => onCaptureModeChange('photo')}
+              />
+              <IconModeButton
+                accessibilityLabel="동영상 모드"
+                icon={
+                  <Video
+                    color={
+                      captureMode === 'video'
+                        ? AR_FILTER_CAMERA_MODE_ACTIVE_ICON_COLOR
+                        : AR_FILTER_CAMERA_MODE_INACTIVE_ICON_COLOR
+                    }
+                    size={iconSize.sm}
+                  />
+                }
+                isActive={captureMode === 'video'}
+                onPress={() => onCaptureModeChange('video')}
+              />
+            </XStack>
+          </XStack>
+        </View>
+      }
+      rightSlot={
+        <View style={styles.rightControlSlot}>
+          <CameraFacingToggleButton
+            cameraFacing={cameraFacing}
+            onPress={onCameraFacingToggle}
+            size={CAMERA_SWITCH_BUTTON_SIZE}
+            style={styles.cameraSwitchButton}
+          />
+        </View>
+      }
+      sideSlotSize={CONTROL_SIDE_SLOT_WIDTH}
+      style={styles.captureRow}
+    />
   );
 }
 
@@ -156,21 +164,14 @@ function IconModeButton({accessibilityLabel, icon, isActive, onPress}: IconModeB
 
 const styles = StyleSheet.create({
   captureRow: {
-    alignItems: 'center',
     borderTopWidth: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: AR_FILTER_CAMERA_CONTROL_ROW_BOTTOM_LIFT,
-    paddingHorizontal: AR_FILTER_CAMERA_CONTROL_ROW_HORIZONTAL_PADDING,
     paddingTop: AR_FILTER_CAMERA_CONTROL_ROW_TOP_PADDING,
+    position: 'relative',
+    width: '100%',
   },
   cameraSwitchButton: {
     borderRadius: radius.pill,
-  },
-  captureButtonSlot: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: CAPTURE_BUTTON_METRICS.outerSize,
   },
   captureModeToggle: {
     backgroundColor: colors.glassSurface,
@@ -179,16 +180,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.xs,
     padding: spacing.xs,
-  },
-  controlSideLeft: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    width: CONTROL_SIDE_SLOT_WIDTH,
-  },
-  controlSideRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    width: CONTROL_SIDE_SLOT_WIDTH,
   },
   modeButton: {
     alignItems: 'center',
@@ -204,5 +195,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  leftControlSlot: {
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  rightControlSlot: {
+    alignItems: 'flex-end',
+    width: '100%',
   },
 });

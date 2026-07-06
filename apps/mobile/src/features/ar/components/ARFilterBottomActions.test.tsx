@@ -22,8 +22,8 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(
   AR_FILTER_BOTTOM_ACTION_BUTTON_GAP,
-  spacing.xs,
-  'AR filter bottom action icon buttons use tight spacing',
+  spacing.sm,
+  'AR filter bottom action icon buttons leave extra space',
 );
 expectEqual(
   AR_FILTER_BOTTOM_ACTION_ICON_BUTTON_SIZE,

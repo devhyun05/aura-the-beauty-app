@@ -10,6 +10,8 @@ import {
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
   getHomeMakeupExtractionActionLabels,
+  getHomeMakeupFeedbackActionLabels,
+  getHomeServiceShortcutPresentation,
   heroCtaLabel,
   getHomeServiceShortcutPressHandler,
   getHomeServiceShortcutLabels,
@@ -97,6 +99,7 @@ const expectedHomeServiceShortcutFirstRowLabels =
 const expectedHomeServiceShortcutSecondRowLabels =
   '메이크업 추출,필터 스토어,추천 제품,메이크업 피드백';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
+const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
 const expectedInitialRecommendedFiltersToRender: 6 =
@@ -237,6 +240,21 @@ expectEqual(
   makeupExtractionActionLabels.join(','),
   '카메라 촬영,사진 업로드',
   'home makeup extraction sheet actions',
+);
+expectEqual(
+  makeupFeedbackActionLabels.join(','),
+  '카메라 촬영,사진 업로드',
+  'home makeup feedback sheet actions',
+);
+expectEqual(
+  getHomeServiceShortcutPresentation('makeupExtraction'),
+  'makeupExtractionSheet',
+  'home makeup extraction shortcut opens a bottom sheet',
+);
+expectEqual(
+  getHomeServiceShortcutPresentation('makeupFeedback'),
+  'makeupFeedbackSheet',
+  'home makeup feedback shortcut opens a bottom sheet',
 );
 expectEqual(
   getRecommendedFilterGridColumnCount(),

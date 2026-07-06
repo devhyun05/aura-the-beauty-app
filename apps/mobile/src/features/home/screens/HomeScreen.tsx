@@ -43,6 +43,7 @@ import type {
 } from '../types';
 
 export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
+export {getHomeMakeupFeedbackActionLabels} from '../components/MakeupFeedbackActionSheet';
 
 type HomeScreenProps = {
   onPressArFilter?: () => void;
@@ -642,6 +643,11 @@ const homeServiceShortcuts = homeServiceShortcutRows.flat();
 
 type HomeServiceShortcutId = (typeof homeServiceShortcuts)[number]['id'];
 
+export type HomeServiceShortcutPresentation =
+  | 'route'
+  | 'makeupExtractionSheet'
+  | 'makeupFeedbackSheet';
+
 type HomeServiceShortcutHandlers = {
   onPressArFilter?: () => void;
   onPressCommunity?: () => void;
@@ -711,6 +717,20 @@ export function getHomeServiceShortcutPressHandler(
   }
 
   return undefined;
+}
+
+export function getHomeServiceShortcutPresentation(
+  actionId: HomeServiceShortcutId,
+): HomeServiceShortcutPresentation {
+  if (actionId === 'makeupExtraction') {
+    return 'makeupExtractionSheet';
+  }
+
+  if (actionId === 'makeupFeedback') {
+    return 'makeupFeedbackSheet';
+  }
+
+  return 'route';
 }
 
 export function getHomeServiceShortcutLabels(): readonly string[] {
