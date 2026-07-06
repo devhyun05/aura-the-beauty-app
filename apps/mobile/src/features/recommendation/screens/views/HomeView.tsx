@@ -1,6 +1,8 @@
 // AURADIN — Home (entry). Serif hero + orb zone + bottom glass sheet
-// (composer + suggestion chips + terminal meta). Recreated from
-// AURADIN Entry v2.dc.html.
+// (composer + suggestion chips + terminal meta). Recreated from the
+// AppScreen entry-v3 redesign: clean-gradient ground (no photo), milk-glass
+// sheet/composer, UNIFORM chips (the violet `hl` tint was retired — no
+// iridescent rims on home; the send gem is the screen's one emphasis).
 import * as React from 'react';
 import {
   Animated,
@@ -103,11 +105,10 @@ export function HomeView({
         <GlassSheet style={{ marginHorizontal: -layout.sheetBleed }}>
           <Composer value={query} onChangeText={setQuery} onSend={onSubmit} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {SUGGESTIONS.map((label, i) => (
+            {SUGGESTIONS.map((label) => (
               <Chip
                 key={label}
                 label={label}
-                hl={i === 0}
                 on={query === label}
                 onPress={() => onPickSuggestion(label)}
               />

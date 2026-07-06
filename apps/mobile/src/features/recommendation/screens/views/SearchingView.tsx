@@ -57,11 +57,13 @@ export function SearchingView({ query, answering, onHome }: SearchingViewProps):
         <Wordmark dark onHome={onHome} />
       </View>
 
-      {/* query echo pill */}
+      {/* query echo — iridescent mount 1 of 2 app-wide (the other: results hero).
+          The soap-film rim is this screen's one emphasis. */}
       <View style={{ marginTop: 26, alignItems: 'center' }}>
         <GlassBase
           tier="dark"
           radius={999}
+          iridescent
           style={{ maxWidth: '100%' }}
           contentStyle={{
             flexDirection: 'row',

@@ -1,6 +1,6 @@
-// AURADIN — THE ORB. The agent itself: a small near-perfect iridescent glass
-// sphere (deep-violet core; lavender #C7B8FA / pink #F273CC / teal #73EBD1 /
-// cyan #73CCFA / gold #FAD994), breathing scale + slow float.
+// AURADIN — THE ORB. The agent itself: an irregular soap-bubble membrane
+// (thin-film interference rim · liquid sheen · curved reflections · caustic
+// ring · two floating satellite bubbles), breathing scale + slow float.
 //
 // SHARED ELEMENT: mount exactly ONE PersistentOrb per app, above <AuradinGround>
 // and below the screen view. Phase changes only MORPH position/scale/glow —
@@ -11,10 +11,12 @@
 //     {currentView}
 //   </AuradinGround>
 //
-// No WebGL in this stack — the sphere is layered react-native-svg radial
-// gradients: soft ambient halo → magenta thinking-glow (searching) → core →
-// five iridescent tints → fresnel rim → speculars. Never a flat solid disc,
-// never a hard-edged circle.
+// Rendering: expo-gl + three@0.128 (shaders in orbShaders.ts, scene in
+// OrbGLCanvas.tsx). The magenta thinking glow is a TARGET the GL loop lerps a
+// uniform toward; the big soft halo aura stays SVG behind the canvas. If GL
+// init/render fails, the orb swaps to the layered-SVG artwork below — same
+// footprint, same morphs, never a blank. paused / reduced-motion freeze every
+// loop (GL RAF included) on a stable frame.
 // On results/detail/saved it recedes to a small top-right aura so it can't
 // overlap the title on small screens.
 import * as React from 'react';
@@ -24,6 +26,7 @@ import Svg, { Circle, ClipPath, Defs, Ellipse, G, RadialGradient, Stop } from 'r
 import { color, motion } from '../../theme/auradinTokens';
 import type { AuradinPhase } from '../../types';
 import { useReducedMotion } from './motion';
+import { OrbGLCanvas } from './OrbGLCanvas';
 
 type OrbPhaseSpec = {
   /** center, as fraction of screen width/height */
@@ -37,7 +40,7 @@ type OrbPhaseSpec = {
 
 /** Morph targets per phase (mirrors the web kit's ORB_BY_PHASE). */
 export const ORB_BY_PHASE: Record<AuradinPhase, OrbPhaseSpec> = {
-  home: { cx: 0.5, cy: 0.56, scale: 1, glow: 0, opacity: 1 },
+  home: { cx: 0.5, cy: 0.51, scale: 1, glow: 0, opacity: 1 }, // entry v3: optically mid, between headline and sheet
   searching: { cx: 0.5, cy: 0.44, scale: 1.18, glow: 1, opacity: 1 },
   question: { cx: 0.5, cy: 0.22, scale: 0.5, glow: 0, opacity: 0.95 },
   results: { cx: 0.84, cy: 0.1, scale: 0.42, glow: 0, opacity: 0.9 },
@@ -46,11 +49,14 @@ export const ORB_BY_PHASE: Record<AuradinPhase, OrbPhaseSpec> = {
   failed: { cx: 0.5, cy: 0.4, scale: 0.62, glow: 0.25, opacity: 1 },
 };
 
-// SVG canvas: sphere Ø196 centered in a 430 box (room for the soft halo).
+// Canvas/artwork box: sphere Ø196 centered in a 430 box (room for halo,
+// caustic ring and the satellite bubbles). OrbGLCanvas' camera is proportioned
+// to the same 196/430 footprint, so GL and SVG fallback morph identically.
 const BOX = 430;
 const C = BOX / 2; // 215
 const R = 98;
 
+/** Layered-SVG fallback artwork (pre-GL orb) — used only when GL fails. */
 function OrbArtwork(): React.JSX.Element {
   return (
     <Svg width="100%" height="100%" viewBox={`0 0 ${BOX} ${BOX}`}>
@@ -163,14 +169,21 @@ export type PersistentOrbProps = {
   phase: AuradinPhase;
   /** sphere diameter at scale 1 (default: half the screen width, ≤210) */
   diameter?: number;
+  /** host pause (e.g. AppState background) — freezes GL + idle loops */
+  paused?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export function PersistentOrb({ phase, diameter, style }: PersistentOrbProps): React.JSX.Element {
+export function PersistentOrb({ phase, diameter, paused = false, style }: PersistentOrbProps): React.JSX.Element {
   const { width: W, height: H } = useWindowDimensions();
   const reduced = useReducedMotion();
+  const frozen = reduced || paused;
   const dia = diameter ?? Math.min(W * 0.5, 210);
-  const box = dia * (BOX / (R * 2)); // halo box in px
+  const box = dia * (BOX / (R * 2)); // halo/canvas box in px
+
+  // GL failure → layered-SVG fallback (kept for the app's lifetime)
+  const [glFailed, setGlFailed] = React.useState(false);
+  const onGlFail = React.useCallback(() => setGlFailed(true), []);
 
   const spec = ORB_BY_PHASE[phase];
   const tx = React.useRef(new Animated.Value(spec.cx * W - box / 2)).current;
@@ -195,9 +208,10 @@ export function PersistentOrb({ phase, diameter, style }: PersistentOrbProps): R
     ]).start();
   }, [W, H, box, glow, opacity, phase, reduced, scale, tx, ty]);
 
-  // Idle life: breathing scale + slow float + glow pulse (frozen when reduced).
+  // Idle life: breathing scale + slow float + halo glow pulse (frozen on
+  // reduced motion or host pause — the GL loop freezes via the same flag).
   React.useEffect(() => {
-    if (reduced) {
+    if (frozen) {
       breath.setValue(1);
       float.setValue(0);
       glowPulse.setValue(1);
@@ -225,7 +239,7 @@ export function PersistentOrb({ phase, diameter, style }: PersistentOrbProps): R
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [breath, float, glowPulse, reduced]);
+  }, [breath, float, frozen, glowPulse]);
 
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -246,7 +260,16 @@ export function PersistentOrb({ phase, diameter, style }: PersistentOrbProps): R
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: Animated.multiply(glow, glowPulse) }]}>
           <Halo kind="glow" />
         </Animated.View>
-        <OrbArtwork />
+        {glFailed ? (
+          <OrbArtwork />
+        ) : (
+          <OrbGLCanvas
+            glowTarget={spec.glow}
+            paused={frozen}
+            onFail={onGlFail}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
       </Animated.View>
     </View>
   );

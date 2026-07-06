@@ -1,15 +1,16 @@
-// AURADIN ground — the screen's base: sky→cotton-candy gradient, soft haze
-// blobs, the entry-only background photo slot, and the deep-navy veil that
+// AURADIN ground — the screen's base: powder-blue → lilac → orchid-pink
+// gradient (entry v3: the entry screen is a CLEAN GRADIENT — no photo), soft
+// haze blobs, an opt-in legacy photo slot, and the deep-navy veil that
 // descends for the searching immersion and lifts back to light.
 //
 // Mount ONE per app and swap only its props; children (orb + view) render
 // above the veil:
-//   <AuradinGround dark={phase === 'searching'}
-//                  photoSource={require('../assets/bubble-background-desaturated.jpg')}
-//                  photoVisible={phase === 'home'}>…</AuradinGround>
+//   <AuradinGround dark={phase === 'searching'}>…</AuradinGround>
 //
-// Photo slot: the web entry screen used opacity .22 + mix-blend-mode:luminosity;
-// RN has no blend modes, so pass a PRE-DESATURATED asset (one ships in assets/).
+// Photo slot (LEGACY, opt-in): the v2 entry used a photo at opacity .22 +
+// mix-blend-mode:luminosity; v3 dropped it for the clean gradient. Hosts that
+// still want it pass photoSource (pre-desaturated asset ships in assets/) +
+// photoVisible — behavior is unchanged.
 // Haze blobs are SVG radial fades — soft-edged, never hard circles.
 import * as React from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
@@ -52,7 +53,7 @@ function HazeBlob({
 export type AuradinGroundProps = {
   /** deep-navy immersion — the searching screen ONLY */
   dark?: boolean;
-  /** pre-desaturated brand photo (entry screen only) */
+  /** LEGACY opt-in: pre-desaturated brand photo (v3 entry is a clean gradient) */
   photoSource?: ImageSourcePropType;
   photoVisible?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -86,7 +87,7 @@ export function AuradinGround({
 
   return (
     <View style={[{ flex: 1, overflow: 'hidden' }, style]}>
-      {/* ground: 178° sky → cotton-candy pink */}
+      {/* ground: 178° powder-blue → lilac → orchid-pink (entry v3) */}
       <LinearGradient
         colors={gradient.ground.colors}
         locations={gradient.ground.locations}
@@ -94,7 +95,7 @@ export function AuradinGround({
         end={gradPoints.deg178.end}
         style={StyleSheet.absoluteFill}
       />
-      {/* entry-only background photo (pre-desaturated, opacity .22) */}
+      {/* legacy opt-in background photo (pre-desaturated, opacity .22) */}
       {photoSource ? (
         <Animated.Image
           source={photoSource}

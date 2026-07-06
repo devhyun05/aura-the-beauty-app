@@ -2,7 +2,7 @@
 //
 // AURADIN 컨트롤러 — phase 머신·세션 API·refine·보관함·데모 드라이브(로직)만 담당한다.
 // 프리젠테이션은 auradin-rn DS 포팅(components/ds + screens/views, 디자인 세션 산출물)이 담당:
-//   <AuradinGround dark>  ── 지반(라이트 sky→pink / searching 다크 몰입) + entry 버블 사진
+//   <AuradinGround dark>  ── 지반(라이트 클린 그라디언트 / searching 다크 몰입)
 //     <PersistentOrb phase> ── 단일 오브 인스턴스, phase별 위치·크기·글로만 모프 (§9 ③)
 //     {phase별 View}        ── 콜백 props로만 연결 (네트워크·상태 없음)
 //
@@ -33,8 +33,6 @@ import type {
   AuradinSearchTurn,
   RefineDial,
 } from '../types';
-
-const bubblePhoto = require('../assets/bubble-background-desaturated.jpg');
 
 // 칩 라벨 → 실제 질의 (HomeView는 라벨만 넘긴다)
 const SUGGESTION_QUERIES: Record<string, string> = {
@@ -219,10 +217,7 @@ export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) 
 
   return (
     <View style={styles.shell}>
-      <AuradinGround
-        dark={phase === 'searching'}
-        photoSource={bubblePhoto}
-        photoVisible={phase === 'home'}>
+      <AuradinGround dark={phase === 'searching'}>
         <PersistentOrb phase={phase} />
 
         {phase === 'home' ? (

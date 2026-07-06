@@ -121,9 +121,12 @@ export function ResultsView({
         </Text>
 
         {top ? (
+          // iridescent mount 2 of 2 app-wide (the other: searching QUERY echo) —
+          // the hero pick is this screen's one emphasis; alt rows stay plain glass.
           <GlassCard
             radius={22}
             glare
+            iridescent
             onPress={() => onOpen(top)}
             accessibilityLabel={`${top.brandName} ${top.productName} ${top.shadeName}`}
             style={{ marginTop: 16 }}

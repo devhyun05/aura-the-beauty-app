@@ -8,12 +8,14 @@ import type { TextStyle, ViewStyle } from 'react-native';
 
 /* ─ Color (tokens/colors.css) ─ */
 export const color = {
-  // Ground: sky → cotton-candy pink vertical gradient
-  skyHi: '#CFE6FB',
-  sky: '#A8CEF5',
-  mid: '#CBD8F2',
-  pink: '#F6CFE0',
-  pinkHi: '#FBE3EE',
+  // Ground: powder-blue → lilac → orchid-pink vertical gradient
+  // (entry v3 — CLEAN GRADIENT, sampled from the AppScreen redesign; the
+  //  entry photo slot is now opt-in legacy, see AuradinGround)
+  skyHi: '#CBE2FA',
+  sky: '#B4D2F4',
+  mid: '#D5DAF2',
+  pink: '#EFD1E5',
+  pinkHi: '#EED2EA', // bottom orchid — deeper than v2, per the redesign
   white: '#FDFDFE',
 
   // Dark immersion (searching screen ONLY)
@@ -58,7 +60,7 @@ export type GradientLocations = readonly [number, number, ...number[]];
 export const gradient = {
   ground: {
     colors: [color.skyHi, color.sky, color.mid, color.pink, color.pinkHi] as GradientStops,
-    locations: [0, 0.3, 0.52, 0.76, 1] as GradientLocations,
+    locations: [0, 0.26, 0.5, 0.78, 1] as GradientLocations,
   },
   navy: {
     colors: [color.navyHi, color.navy] as GradientStops,
@@ -106,16 +108,16 @@ export const tracking = (fontSize: number, em: number): number =>
   Math.round(fontSize * em * 100) / 100;
 
 export const text = {
-  /** Hero (Lora 400 · 53 · lh 1.08 · −.035em · white top-shadow) */
+  /** Hero (Lora 400 · 53 · lh 1.08 · −.035em · soft white emboss — entry v3) */
   hero: {
     fontFamily: font.serif,
     fontSize: 53,
     lineHeight: 57,
     letterSpacing: tracking(53, -0.035),
     color: color.ink,
-    textShadowColor: 'rgba(255,255,255,0.6)',
+    textShadowColor: 'rgba(255,255,255,0.65)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
+    textShadowRadius: 2,
   } as TextStyle,
   /** Hero sub (sans 300 → closest loaded weight Regular · 12.5 · lh 1.7 · .07em) */
   heroSub: {
@@ -231,10 +233,27 @@ export const shadows = {
   chipOn: mkShadow(color.magenta, 0.4, 12, 6, 6),
   /** glowing 6px status dot */
   glowDot: mkShadow(color.magenta, 0.7, 4, 0, 2),
+  /** pastel aura behind an iridescent-rimmed surface */
+  iridescent: mkShadow('#B06CF0', 0.34, 18, 8, 8),
+} as const;
+
+/* ─ Iridescent rim — the soap-film gradient border (entry-v3 membrane grammar).
+     EXACTLY TWO mounts app-wide: the searching QUERY echo block and the
+     results #1 hero card — one emphasis per screen. Never on chips, badges,
+     composer, sheet, or detail cards (those get the plain milk-glass edge). ─ */
+export const iridescent = {
+  rim: ['#9BE0FF', '#C7B8FA', '#F9A8D4', '#FAD994', '#8FEBDD', '#9BE0FF'] as GradientStops,
+  rimLocations: [0, 0.22, 0.46, 0.66, 0.85, 1] as GradientLocations,
+  /** rim thickness in px (gradient border via padded wrapper) */
+  width: 1.4,
 } as const;
 
 /* ─ Liquid-glass tiers (tokens/glass.css) — BlurView approximates
-     backdrop-filter: blur(26px) saturate(1.7); chips blur(12) 1.4. ─ */
+     backdrop-filter: blur(26px) saturate(1.7); chips blur(12) 1.4.
+     Entry-v3 "milk glass": brighter fills, luminous top interior (innerGlow),
+     and a refracted bottom hairline (bottomCatch) so every surface reads
+     embossed — the composer/chip grain of the redesigned first screen,
+     applied to ALL screens. ─ */
 export type GlassTierName = 'sheet' | 'card' | 'composer' | 'chip' | 'dark';
 type GlassTierSpec = {
   intensity: number;
@@ -246,64 +265,76 @@ type GlassTierSpec = {
   base: string;
   lightCatch: string; // 1px top light-catch
   bottomLight: string; // inset bottom fill-light
+  innerGlow: string; // luminous top-interior wash (upper ~45%)
+  bottomCatch: string; // 1px bottom refracted-light hairline
   shadow: ViewStyle;
 };
 
 export const glassTiers: Record<GlassTierName, GlassTierSpec> = {
   sheet: {
-    intensity: 50,
+    intensity: 60,
     tint: 'light',
-    fill: ['rgba(255,255,255,0.44)', 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.34)'],
-    fillLocations: [0, 0.48, 1],
-    border: 'rgba(255,255,255,0.55)',
-    base: 'rgba(255,255,255,0.08)',
-    lightCatch: 'rgba(255,255,255,0.9)',
-    bottomLight: 'rgba(255,255,255,0.16)',
+    fill: ['rgba(255,255,255,0.60)', 'rgba(255,255,255,0.30)', 'rgba(255,255,255,0.48)'],
+    fillLocations: [0, 0.5, 1],
+    border: 'rgba(255,255,255,0.72)',
+    base: 'rgba(255,255,255,0.10)',
+    lightCatch: 'rgba(255,255,255,0.98)',
+    bottomLight: 'rgba(255,255,255,0.26)',
+    innerGlow: 'rgba(255,255,255,0.30)',
+    bottomCatch: 'rgba(255,255,255,0.50)',
     shadow: shadows.glass,
   },
   card: {
-    intensity: 50,
+    intensity: 55,
     tint: 'light',
-    fill: ['rgba(255,255,255,0.44)', 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0.34)'],
-    fillLocations: [0, 0.48, 1],
-    border: 'rgba(255,255,255,0.55)',
-    base: 'rgba(255,255,255,0.06)',
-    lightCatch: 'rgba(255,255,255,0.9)',
-    bottomLight: 'rgba(255,255,255,0.14)',
+    fill: ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.26)', 'rgba(255,255,255,0.42)'],
+    fillLocations: [0, 0.5, 1],
+    border: 'rgba(255,255,255,0.66)',
+    base: 'rgba(255,255,255,0.08)',
+    lightCatch: 'rgba(255,255,255,0.95)',
+    bottomLight: 'rgba(255,255,255,0.22)',
+    innerGlow: 'rgba(255,255,255,0.24)',
+    bottomCatch: 'rgba(255,255,255,0.42)',
     shadow: shadows.glass,
   },
   composer: {
-    intensity: 50,
+    intensity: 60,
     tint: 'light',
-    fill: ['rgba(255,255,255,0.50)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0.40)'],
+    fill: ['rgba(255,255,255,0.66)', 'rgba(255,255,255,0.36)', 'rgba(255,255,255,0.52)'],
     fillLocations: [0, 0.55, 1],
-    border: 'rgba(255,255,255,0.60)',
-    base: 'rgba(255,255,255,0.08)',
-    lightCatch: 'rgba(255,255,255,0.95)',
-    bottomLight: 'rgba(255,255,255,0.14)',
+    border: 'rgba(255,255,255,0.78)',
+    base: 'rgba(255,255,255,0.10)',
+    lightCatch: 'rgba(255,255,255,0.98)',
+    bottomLight: 'rgba(255,255,255,0.22)',
+    innerGlow: 'rgba(255,255,255,0.32)',
+    bottomCatch: 'rgba(255,255,255,0.55)',
     shadow: shadows.glass,
   },
   chip: {
-    intensity: 25,
+    intensity: 30,
     tint: 'light',
-    fill: ['rgba(255,255,255,0.50)', 'rgba(255,255,255,0.26)'],
+    fill: ['rgba(255,255,255,0.62)', 'rgba(255,255,255,0.36)'],
     fillLocations: [0, 1],
-    border: 'rgba(255,255,255,0.60)',
-    base: 'rgba(255,255,255,0.05)',
-    lightCatch: 'rgba(255,255,255,0.9)',
-    bottomLight: 'rgba(255,255,255,0.10)',
+    border: 'rgba(255,255,255,0.72)',
+    base: 'rgba(255,255,255,0.06)',
+    lightCatch: 'rgba(255,255,255,0.95)',
+    bottomLight: 'rgba(255,255,255,0.16)',
+    innerGlow: 'rgba(255,255,255,0.22)',
+    bottomCatch: 'rgba(255,255,255,0.45)',
     shadow: shadows.chip,
   },
-  /** dark-screen glass (searching query pill) */
+  /** dark-screen glass (searching query echo) */
   dark: {
     intensity: 30,
     tint: 'dark',
-    fill: ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)'],
+    fill: ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.07)'],
     fillLocations: [0, 1],
-    border: 'rgba(255,255,255,0.22)',
+    border: 'rgba(255,255,255,0.26)',
     base: 'rgba(19,26,56,0.2)',
-    lightCatch: 'rgba(255,255,255,0.25)',
-    bottomLight: 'rgba(255,255,255,0.04)',
+    lightCatch: 'rgba(255,255,255,0.28)',
+    bottomLight: 'rgba(255,255,255,0.05)',
+    innerGlow: 'rgba(255,255,255,0.10)',
+    bottomCatch: 'rgba(255,255,255,0.14)',
     shadow: shadows.darkGlass,
   },
 };

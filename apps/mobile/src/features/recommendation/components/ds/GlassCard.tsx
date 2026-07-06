@@ -12,6 +12,8 @@ export type GlassCardProps = {
   radius?: number;
   padding?: number;
   glare?: boolean;
+  /** soap-film gradient rim — results #1 hero card ONLY (two mounts app-wide, see GlassBase) */
+  iridescent?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -22,6 +24,7 @@ export function GlassCard({
   radius = r.card,
   padding = space.pad,
   glare = false,
+  iridescent = false,
   onPress,
   accessibilityLabel,
   style,
@@ -29,7 +32,7 @@ export function GlassCard({
 }: GlassCardProps): React.JSX.Element {
   const { pressStyle, onPressIn, onPressOut } = usePressScale(0.97, 0.92);
   const surface = (
-    <GlassBase tier="card" radius={radius} glare={glare} contentStyle={{ padding }}>
+    <GlassBase tier="card" radius={radius} glare={glare} iridescent={iridescent} contentStyle={{ padding }}>
       {children}
     </GlassBase>
   );
