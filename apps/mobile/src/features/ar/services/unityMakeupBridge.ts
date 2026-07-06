@@ -86,7 +86,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     finish: 'natural-foundation',
     label: PRODUCT_REGION_LABELS.foundation,
     maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,
-    opacity: 0.65,
+    opacity: 0.38,
     region: 'foundation',
     texture: 'foundation_natural',
   },
@@ -96,7 +96,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     finish: 'gradient-lip',
     label: PRODUCT_REGION_LABELS.lip,
     maskTextureId: 'lip-drawn-style-atlas-v1',
-    opacity: 0.95,
+    opacity: 0.85,
     region: 'lip',
     texture: 'gradient_lip',
   },
@@ -106,7 +106,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     finish: 'powder-blush',
     label: PRODUCT_REGION_LABELS.blush,
     maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
-    opacity: 0.78,
+    opacity: 0.38,
     region: 'blush',
     texture: 'soft_blush',
   },
@@ -126,7 +126,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     finish: 'soft-powder-brow',
     label: PRODUCT_REGION_LABELS.brow,
     maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId,
-    opacity: 0.92,
+    opacity: 0.72,
     region: 'brow',
     texture: 'natural_brow',
   },
@@ -142,6 +142,23 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   eyeliner: UNITY_MAKEUP_LAYER_PRESETS.eyeliner,
   lip: UNITY_MAKEUP_LAYER_PRESETS.lip,
 };
+
+// Brow 형태(shape) tab -> a distinct, correctly-authored brow mask. Every mask
+// here has its shape in RGB and sits on the eyebrow band (unlike the malformed
+// psd-arcore-brow-semi-arch, which was retired). candidateId == maskTextureId;
+// both pass the Unity whitelist (region=='brow' accepts a 'brow-' prefix).
+const BROW_SHAPE_MASKS: Record<string, string> = {
+  'brow-natural': 'brow-png-natural-hair-v1',
+  'brow-daily': 'brow-png-daily-hair-v1',
+  'brow-soft-arch': 'brow-soft-arch-fine-hair-v1',
+  'brow-arch': 'brow-back-arch-soft-mix-v1',
+  'brow-straight': 'brow-png-dailyflat-hair-v1',
+  'brow-slim': 'brow-png-narrow-hair-v1',
+};
+
+function resolveBrowMaskForShape(selectedShapeId: string): string {
+  return BROW_SHAPE_MASKS[selectedShapeId] ?? FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId;
+}
 
 export function getUnityMakeupLayerRegionsForMakeupArea(
   selectedMakeupArea: MakeupArea,
@@ -314,6 +331,12 @@ function createUnityMakeupControlsForRegions({
     params.coverage = resolveCoverageForRegion(region, selectedShapeId);
     params.feather = resolveFeatherForRegion(region, selectedShapeId);
     params.maskThreshold = resolveMaskThresholdForRegion(region);
+    if (region === 'brow') {
+      // The UV-locked brow sits well below the real brows; a positive
+      // verticalOffset raises it (wired to _MaskOffset.y in E3, effect =
+      // value * 0.10 in UV). Tune sign/magnitude here after the rebuild.
+      params.verticalOffset = 0.5;
+    }
 
     return {
       ...controls,
@@ -324,6 +347,30 @@ function createUnityMakeupControlsForRegions({
         opacity: resolveOpacityForRegion(region, selectedTextureId, selectedTypeId),
         intensity: activeRegionSet.has(region) ? 1 : 0,
         params,
+        // Brow 형태 selection maps to a distinct brow mask; other regions keep
+        // their default mask.
+        ...(region === 'brow'
+          ? {
+              maskTextureId: resolveBrowMaskForShape(selectedShapeId),
+              candidateId: resolveBrowMaskForShape(selectedShapeId),
+            }
+          : {}),
+        // Foundation must render through OUR screen-space compositor (live HSV
+        // tone correction on the camera) — the same path the working makeup
+        // screen uses. Without this the recipe defaults to uvMask, which paints
+        // a near-invisible mesh overlay (a light shade × multiply ≈ no change),
+        // so the base looked like it "did nothing".
+        ...(region === 'foundation'
+          ? {
+              foundationMode: 'screenSpace' as const,
+              foundationFallbackMode: 'off' as const,
+              // Skin-smoothing (잡티 제거) strength rides the unused foundation
+              // specular field (same transport as the capture screen's blemish
+              // control). The finish-preset specular is ~0, which is why the
+              // AR filter base showed no blur at all.
+              specular: 0.32,
+            }
+          : {}),
       },
     };
   }, {} as FullFaceRegionControls);
@@ -369,7 +416,7 @@ function resolveOpacityForRegion(
   const defaultOpacity = UNITY_MAKEUP_LAYER_PRESETS[region].opacity;
 
   if (region === 'lip' && includesAny(selectedTextureId, ['glass', 'glow', 'balmy'])) {
-    return 0.86;
+    return 0.78;
   }
 
   if (region === 'eyeliner' && includesAny(selectedTypeId, ['liner'])) {
@@ -377,7 +424,7 @@ function resolveOpacityForRegion(
   }
 
   if (region === 'foundation') {
-    return 0.65;
+    return 0.38;
   }
 
   return defaultOpacity;
@@ -427,7 +474,10 @@ function resolveFeatherForRegion(
 
 function resolveMaskThresholdForRegion(region: UnityMakeupLayerRegion): number {
   if (region === 'lip') {
-    return 0.35;
+    // 0.35 over-tightened the paint (lip covered smaller than the real lips);
+    // 0.025 (the old default) haloed outside them. 0.15 reaches the vermilion
+    // border without spilling past it.
+    return 0.15;
   }
 
   if (region === 'blush') {

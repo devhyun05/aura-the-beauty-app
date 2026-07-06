@@ -15,6 +15,7 @@ import {
   ORIGINAL_OPTION_CARD_ID,
   ORIGINAL_OPTION_CARD_LABEL,
   isTotalMakeupArea,
+  resolveAreaColorOptions,
   type ARMakeupOptionGroupId,
   type ShapeOption,
 } from '../services/arFilterOptionRules';
@@ -167,7 +168,10 @@ export function ARFilterOptionCardList({
           onPress={onOriginalOptionPress}>
           <OriginalOptionPreview />
         </OptionCard>
-        {selectedMakeupFilter.colorOptions.map(option => (
+        {resolveAreaColorOptions(
+          selectedMakeupArea,
+          selectedMakeupFilter.colorOptions,
+        ).map(option => (
           <OptionCard
             key={option.id}
             accessibilityLabel={`${option.label} 컬러 선택`}

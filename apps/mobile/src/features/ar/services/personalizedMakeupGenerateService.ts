@@ -85,6 +85,8 @@ export type PersonalizedCompanionMakeupRegionControl = {
   mode?: 'uvMask' | 'screenSpace' | 'semantic' | undefined;
   opacity: number;
   evenness?: number | undefined;
+  // 잡티 제거(blemish smoothing) strength [0,1]; foundation only.
+  blemish?: number | undefined;
 };
 
 export type PersonalizedCompanionMakeupControls = {
@@ -92,6 +94,7 @@ export type PersonalizedCompanionMakeupControls = {
   brow: PersonalizedCompanionMakeupRegionControl;
   eyeliner: PersonalizedCompanionMakeupRegionControl;
   foundation: PersonalizedCompanionMakeupRegionControl;
+  lip: PersonalizedCompanionMakeupRegionControl;
 };
 
 export type PersonalizedCompanionMakeupActiveRegion =
@@ -99,6 +102,7 @@ export type PersonalizedCompanionMakeupActiveRegion =
   | 'brow'
   | 'eyeliner'
   | 'foundation'
+  | 'lip'
   | 'all'
   | 'none';
 
@@ -138,8 +142,8 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
   foundation: {
     candidateId: 'foundation-skin-tone-relative-v1',
     colorHex: REGION_COLOR_OPTIONS.foundation[0].hex,
-    coverage: 1,
-    evenness: 0.42,
+    coverage: 0.5,
+    evenness: 0.5,
     // Foundation must never paint the face mesh / uvMask overlay directly:
     // the final color composite happens only in the screen-space camera
     // post-process. If the semantic mask is not ready, show nothing rather
@@ -147,7 +151,7 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     fallbackMode: 'off',
     finish: 'natural',
     debugMaskMode: 0,
-    intensity: 1,
+    intensity: 0.5,
     luminanceInfluence: 0.52,
     maskTextureId: 'foundation-skin-mask-v1',
     // screenSpace: the final color composite happens in the screen-space
@@ -155,7 +159,10 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     // mask (with calibrated eye/lip/brow exclusions). Never painted on the
     // face mesh / uvMask overlay directly.
     mode: 'screenSpace',
-    opacity: 1,
+    opacity: 0.5,
+    // 잡티 제거 on by default at a gentle level; users can drag to 0 (off) or
+    // up to 1.0 for a heavy, over-smoothed look.
+    blemish: 0.38,
   },
   blush: {
     candidateId: 'blush-session-1-v1',
@@ -176,6 +183,20 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     colorHex: '#40303F',
     intensity: 0.5,
     maskTextureId: 'eye-smooth-mask-v1',
+    opacity: 0.5,
+  },
+  // Mesh-locked lip: the canonical-UV lip atlas is sampled through the LIVE
+  // ARKit face UVs (E3 "lip_style_atlas_v1_uv_back_projection"), so it is
+  // rigidly attached to the face mesh and cannot float/drift with head or
+  // phone motion — the SNOW/YouCam-stable behavior. The prior
+  // 'lip-vision-boundary-v1' was a lagging screen-space Vision polygon rebased
+  // onto a stale face-bounds reference, which drifted off the lips under
+  // motion and dropped out when calibration/latency went wrong.
+  lip: {
+    candidateId: 'lip-drawn-style-atlas-v1',
+    colorHex: '#C96A6E',
+    intensity: 0.5,
+    maskTextureId: 'lip-drawn-style-atlas-v1',
     opacity: 0.5,
   },
 };
@@ -293,16 +314,16 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
   options: {
     activeRegion?: PersonalizedCompanionMakeupActiveRegion;
     activeRegions?: readonly PersonalizedCompanionMakeupActiveRegion[];
-    includeBrowLayer?: boolean;
     useCheekRegionAlias?: boolean;
   } = {},
 ): FullFaceMakeupRecipe {
   const activeRegion = options.activeRegion ?? 'all';
   const hasExplicitActiveRegions = options.activeRegions !== undefined;
   const activeRegionSet = new Set(options.activeRegions ?? []);
-  const shouldIncludeBrowLayer = options.includeBrowLayer ?? true;
   const shouldUseCheekRegionAlias = options.useCheekRegionAlias ?? true;
-  const isRegionEnabled = (region: 'blush' | 'brow' | 'foundation' | 'eyeliner') =>
+  const isRegionEnabled = (
+    region: 'blush' | 'brow' | 'foundation' | 'eyeliner' | 'lip',
+  ) =>
     hasExplicitActiveRegions
       ? activeRegionSet.has(region)
       : activeRegion === 'all' || activeRegion === region;
@@ -324,10 +345,12 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       roughness:
         companionControls.foundation.luminanceInfluence ??
         DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.roughness,
-      specular:
-        companionControls.foundation.finish === 'glow'
-          ? 0.08
-          : DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.specular,
+      // 잡티 제거(skin-smoothing) strength rides the foundation-unused Specular
+      // field end-to-end to Unity (E3 -> ScreenSpaceFoundationController ->
+      // _SkinSmoothStrength). Foundation never renders a mesh gloss, so reusing
+      // Specular avoids threading a new positional arg through the whole recipe
+      // chain. Default 0 keeps the feature off (bit-identical base).
+      specular: companionControls.foundation.blemish ?? 0,
       textureAmount:
         companionControls.foundation.evenness ??
         DEFAULT_FULL_FACE_REGION_CONTROLS.foundation.textureAmount,
@@ -365,9 +388,16 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       maskTextureId: companionControls.eyeliner.maskTextureId,
       opacity: companionControls.eyeliner.opacity,
     },
+    // Live-personalized lips: the vision-boundary mask makes Unity track the
+    // user's actual lip contour per frame — no reference capture required.
     lip: {
       ...DEFAULT_FULL_FACE_REGION_CONTROLS.lip,
-      enabled: false,
+      candidateId: companionControls.lip.candidateId,
+      colorHex: companionControls.lip.colorHex,
+      enabled: isRegionEnabled('lip'),
+      intensity: companionControls.lip.intensity,
+      maskTextureId: companionControls.lip.maskTextureId,
+      opacity: companionControls.lip.opacity,
     },
   };
   const recipe = buildFullFaceMakeupRecipe({
@@ -381,8 +411,9 @@ export function buildCheekBrowRecipeAfterGeneratedLip(
       layer =>
         layer.region === 'foundation' ||
         layer.region === 'blush' ||
-        (shouldIncludeBrowLayer && layer.region === 'brow') ||
-        layer.region === 'eyeliner',
+        layer.region === 'brow' ||
+        layer.region === 'eyeliner' ||
+        layer.region === 'lip',
     )
     .map(layer =>
       shouldUseCheekRegionAlias && layer.region === 'blush'

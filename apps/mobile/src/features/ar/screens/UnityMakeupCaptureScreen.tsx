@@ -8,13 +8,11 @@ import {
   StyleSheet,
   View as RNView,
 } from 'react-native';
-import {Sparkles} from 'lucide-react-native';
+import {ChevronLeft, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {AppHeader} from '../../../shared/ui';
 import {
   buildFullFaceCaptureBundleFromEvent,
   buildFullFaceMakeupSourceInput,
@@ -55,10 +53,6 @@ import {
   type PersonalizedMakeupGenerateResult,
   isPersonalizedMakeupGenerateAvailable,
 } from '../services/personalizedMakeupGenerateService';
-import {
-  summarizeGeneratedBrowRuntimeDiagnostics,
-  type GeneratedBrowRuntimeDiagnosticEvent,
-} from '../services/browRuntimeDiagnostics';
 
 type UnityMakeupCaptureScreenProps = {
   onBack?: () => void;
@@ -105,22 +99,10 @@ const FOUNDATION_VALIDATION_COLORS = [
     color: option.hex,
   })),
 ];
-const GENERATED_BROW_VALIDATION_COLORS = [
-  {name: '블랙', color: '#17120F', secondaryColor: '#302721'},
-  {name: '브라운', color: '#4A342B', secondaryColor: '#6A4A3B'},
-  {name: '라이트브라운', color: '#8A5A3D', secondaryColor: '#B07A52'},
-  {name: '와인', color: '#5A2432', secondaryColor: '#7F3448'},
-] as const;
 const INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS: GeneratedMaskControls = {
   ...DEFAULT_GENERATED_MASK_CONTROLS,
   intensity: 0,
   maskVisible: true,
-  opacity: 0,
-};
-const INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
-  ...DEFAULT_GENERATED_BROW_CONTROLS,
-  enabled: false,
-  intensity: 0,
   opacity: 0,
 };
 const GENERATED_MASK_FINISH_OPTIONS = [
@@ -182,6 +164,38 @@ const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
   {label: '내추럴', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},
   {label: '슬림', candidateId: 'brow-slim-tail-fine-hair-v1', maskTextureId: 'brow-slim-tail-fine-hair-v1'},
 ] as const;
+// 결(strand hair texture)은 슬라이더 없이 항상 이 값으로 고정 유지한다.
+const BROW_STRAND_TEXTURE_AMOUNT = 0.9;
+const GENERATED_BROW_SHAPE_OPTIONS = [
+  {label: '일자', shapeId: 'straight'},
+  {label: '세미아치', shapeId: 'soft-arch'},
+  {label: '아치', shapeId: 'slim-tail'},
+] as const satisfies ReadonlyArray<{
+  label: string;
+  shapeId: GeneratedBrowControls['shapeId'];
+}>;
+const GENERATED_BROW_DEBUG_OPTIONS = [
+  {debugExaggerate: false, debugMode: 0, debugShowLeftRight: false, label: '일반'},
+  {debugExaggerate: true, debugMode: 5, debugShowLeftRight: false, label: '마스크 확인'},
+  {debugExaggerate: false, debugMode: 6, debugShowLeftRight: true, label: '좌우 확인'},
+] as const satisfies ReadonlyArray<{
+  debugExaggerate: boolean;
+  debugMode: GeneratedBrowControls['debugMode'];
+  debugShowLeftRight: boolean;
+  label: string;
+}>;
+const GENERATED_BROW_VALIDATION_COLORS = [
+  {name: '블랙', color: '#17120F', secondaryColor: '#302721'},
+  {name: '브라운', color: '#4A342B', secondaryColor: '#6A4A3B'},
+  {name: '라이트브라운', color: '#8A5A3D', secondaryColor: '#B07A52'},
+  {name: '와인', color: '#5A2432', secondaryColor: '#7F3448'},
+] as const;
+const INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
+  ...DEFAULT_GENERATED_BROW_CONTROLS,
+  enabled: false,
+  intensity: 0,
+  opacity: 0,
+};
 // 사람별 실측 눈 존에서 Unity가 런타임 생성하는 절차적 아이라이너 모양들.
 // 참고 차트(v2) 6종. 컬러드는 형태보다 색이 정체성이라 선택 시 버건디를
 // 기본 적용한다 (colorHex — 이후 색상 변경 가능).
@@ -209,6 +223,11 @@ const FOUNDATION_FINISH_OPTIONS = [
 const FOUNDATION_DEBUG_MODE_OPTIONS = [
   {label: '끄기', mode: 0},
   {label: '경로확인', mode: 23},
+  // 마스크 흔들림 라이브 튜닝: 마스크가 얼굴보다 앞서가면 지연55/지연90,
+  // 뒤따라오면 예측35. 화면은 정상 파운데이션으로 보이고 투영 타이밍만 바뀜.
+  {label: '지연55', mode: 40},
+  {label: '예측35', mode: 41},
+  {label: '지연90', mode: 42},
   {label: '표면(CB)', mode: 1},
   {label: '최종(CB)', mode: 3},
   {label: '강제색(CB)', mode: 5},
@@ -237,39 +256,12 @@ const FOUNDATION_DEBUG_MODE_OPTIONS = [
   {label: '정밀D', mode: 22},
   {label: 'CB합성', mode: 24},
 ] as const;
-// 결(strand hair texture)은 슬라이더 없이 항상 이 값으로 고정 유지한다.
-const BROW_STRAND_TEXTURE_AMOUNT = 0.9;
-const GENERATED_BROW_SHAPE_OPTIONS = [
-  {label: '일자', shapeId: 'straight'},
-  {label: '세미아치', shapeId: 'soft-arch'},
-  {label: '아치', shapeId: 'slim-tail'},
-] as const satisfies ReadonlyArray<{
-  label: string;
-  shapeId: GeneratedBrowControls['shapeId'];
-}>;
-const GENERATED_BROW_DEBUG_OPTIONS = [
-  {debugExaggerate: false, debugMode: 0, debugShowLeftRight: false, label: '일반'},
-  {debugExaggerate: true, debugMode: 5, debugShowLeftRight: false, label: '마스크 확인'},
-  {debugExaggerate: false, debugMode: 6, debugShowLeftRight: true, label: '좌우 확인'},
-] as const satisfies ReadonlyArray<{
-  debugExaggerate: boolean;
-  debugMode: GeneratedBrowControls['debugMode'];
-  debugShowLeftRight: boolean;
-  label: string;
-}>;
 
 type ArBlushHudRegion = (typeof AR_BLUSH_HUD_REGIONS)[number]['id'];
 type CompanionHudRegion = Exclude<ArBlushHudRegion, 'lip'>;
 type CompanionRegionKey = keyof PersonalizedCompanionMakeupControls;
 type EnabledHudRegions = Record<ArBlushHudRegion, boolean>;
-type RuntimeMakeupSnapshot = {
-  activeHudRegion: ArBlushHudRegion;
-  companionMakeupControls: PersonalizedCompanionMakeupControls;
-  enabledHudRegions: EnabledHudRegions;
-  generatedBrowControls: GeneratedBrowControls;
-  generatedMaskControls: GeneratedMaskControls;
-};
-type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
+type UnityGeneratedBrowAppliedEvent = {
   anchorStabilizationMode?: string;
   applied?: boolean;
   applyTrigger?: string;
@@ -327,7 +319,6 @@ type UnityGeneratedMaskAppliedEvent = UnitySynchronizedCaptureEvent & {
   surroundAnchorPointCount?: number;
   templeAnchorPointCount?: number;
   trackingState?: string;
-  type?: string;
   upperEyelidAnchorPointCount?: number;
   uvAvailable?: boolean;
 };
@@ -339,29 +330,16 @@ const INITIAL_ENABLED_HUD_REGIONS: EnabledHudRegions = {
   eyeliner: false,
   lip: false,
 };
-export const UNITY_GENERATED_LIP_RETRY_USES_LATEST_COMPANION_CONTROLS = true;
-
-export function isCurrentUnityCaptureRequest(
-  pendingRequest: UnitySynchronizedCaptureRequest | null | undefined,
-  capturePairId: string,
-) {
-  return pendingRequest?.capturePairId === capturePairId;
-}
-
-export function getUnityHudSliderPanResponderInitMode(): 'lazy-ref' {
-  return 'lazy-ref';
-}
 
 export function UnityMakeupCaptureScreen({
   onBack,
 }: UnityMakeupCaptureScreenProps) {
   const insets = useSafeAreaInsets();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
-  const cameraSessionActive = useCameraSessionActive();
   const [hasStartedMaskFlow, setHasStartedMaskFlow] = useState(false);
   const [isPreparingUnity, setIsPreparingUnity] = useState(false);
   const [phase, setPhase] = useState<CapturePhase>('ready');
-  const [notice, setNotice] = useState('개인 마스크를 먼저 만든 뒤 립, 볼, 눈썹, 아이라이너를 적용합니다');
+  const [notice, setNotice] = useState('실시간 맞춤 메이크업을 준비하는 중입니다');
   const [sourceFrameMetadata, setSourceFrameMetadata] =
     useState<FullFaceMakeupSourceInput | null>(null);
   const [generatedPackage, setGeneratedPackage] =
@@ -372,8 +350,6 @@ export function UnityMakeupCaptureScreen({
     useState<GeneratedMaskControls>(DEFAULT_GENERATED_MASK_CONTROLS);
   const [generatedBrowControls, setGeneratedBrowControls] =
     useState<GeneratedBrowControls>(DEFAULT_GENERATED_BROW_CONTROLS);
-  const [lastGeneratedBrowRuntimeEvent, setLastGeneratedBrowRuntimeEvent] =
-    useState<GeneratedBrowRuntimeDiagnosticEvent | null>(null);
   const [companionMakeupControls, setCompanionMakeupControls] =
     useState<PersonalizedCompanionMakeupControls>(
       DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
@@ -397,11 +373,8 @@ export function UnityMakeupCaptureScreen({
   const browPackageCacheRef = useRef<
     Partial<Record<GeneratedBrowControls['shapeId'], GeneratedBrowPackage>>
   >({});
-  const latestCompanionMakeupControlsRef =
-    useRef<PersonalizedCompanionMakeupControls>(companionMakeupControls);
   const generatedMaskControlRevisionRef = useRef(0);
   const generatedBrowControlRevisionRef = useRef(0);
-  const captureRestoreSnapshotRef = useRef<RuntimeMakeupSnapshot | null>(null);
   const preparePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -414,17 +387,20 @@ export function UnityMakeupCaptureScreen({
   }, []);
 
   useEffect(() => {
-    latestCompanionMakeupControlsRef.current = companionMakeupControls;
-  }, [companionMakeupControls]);
-
-  useEffect(() => {
     const subscription = addUnityMakeupEventListener(event => {
       if (!event.message) {
         return;
       }
 
       try {
-        const payload = JSON.parse(event.message) as UnityGeneratedMaskAppliedEvent;
+        const payload = JSON.parse(event.message) as UnitySynchronizedCaptureEvent & {
+          applied?: boolean;
+          generatedMaskId?: string;
+          maskTriangles?: number;
+          status?: string;
+          type?: string;
+          uvAvailable?: boolean;
+        };
 
         if (payload.type === 'e7_reference_capture') {
           handleReferenceCaptureEvent(payload);
@@ -437,7 +413,7 @@ export function UnityMakeupCaptureScreen({
         }
 
         if (payload.type === 'generated_brow_mask_applied') {
-          handleGeneratedBrowAppliedEvent(payload);
+          handleGeneratedBrowAppliedEvent(payload as UnityGeneratedBrowAppliedEvent);
         }
       } catch {
         // Unity can emit non-JSON diagnostic logs through the same bridge.
@@ -448,12 +424,6 @@ export function UnityMakeupCaptureScreen({
       subscription.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!cameraSessionActive) {
-      hideUnityMakeupView();
-    }
-  }, [cameraSessionActive]);
 
   const handleBack = () => {
     if (preparePollTimerRef.current) {
@@ -472,19 +442,20 @@ export function UnityMakeupCaptureScreen({
 
     setIsPreparingUnity(false);
     setHasStartedMaskFlow(true);
-    setPhase('ready');
-    setNotice('정면 사진을 촬영해 입술, 볼, 눈썹 기준 마스크를 만듭니다');
+    // 'applied' immediately: live personalization is active from the first
+    // frame, so the HUD shows right away and no scan/prepare UI is needed.
+    setPhase('applied');
+    setNotice('실시간 맞춤 메이크업이 적용 중입니다');
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
-        activeRegions: [],
-        includeBrowLayer: false,
+        activeRegions: getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
       }),
     );
     postUnityRegionOverlayVisibility({
       guideOverlayVisible: false,
-      maskOverlayVisible: false,
-      reason: 'personalized_mask_entry_inactive',
-      visible: false,
+      maskOverlayVisible: true,
+      reason: 'personalized_live_makeup_entry',
+      visible: true,
     });
   };
 
@@ -509,6 +480,13 @@ export function UnityMakeupCaptureScreen({
       }
     }, 160);
   };
+
+  useEffect(() => {
+    // Auto-start: masks personalize live at runtime, so there is nothing to
+    // wait for — skip the intro gate and show makeup immediately on entry.
+    handleStartMaskFlow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleReferenceCaptureEvent = async (event: UnitySynchronizedCaptureEvent) => {
     const pendingRequest = pendingCaptureRequestRef.current;
@@ -535,48 +513,13 @@ export function UnityMakeupCaptureScreen({
       const result = await generatePersonalizedLipMakeup({
         sourceFrameMetadata: nextSourceFrameMetadata,
       });
-      const restoreSnapshot = captureRestoreSnapshotRef.current;
-      captureRestoreSnapshotRef.current = null;
-      const nextGeneratedMaskControls =
-        restoreSnapshot?.generatedMaskControls ?? DEFAULT_GENERATED_MASK_CONTROLS;
-      const nextGeneratedBrowControls =
-        restoreSnapshot?.generatedBrowControls ?? DEFAULT_GENERATED_BROW_CONTROLS;
-      const nextCompanionMakeupControls =
-        restoreSnapshot?.companionMakeupControls ??
-        DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS;
-      const nextEnabledHudRegions =
-        restoreSnapshot?.enabledHudRegions ?? INITIAL_ENABLED_HUD_REGIONS;
-      const nextActiveHudRegion = restoreSnapshot?.activeHudRegion ?? 'lip';
-      const initialLipControls = nextEnabledHudRegions.lip
-        ? clampGeneratedMaskControls({
-            ...nextGeneratedMaskControls,
-            maskVisible: true,
-          })
-        : INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS;
-      const initialBrowControls = nextEnabledHudRegions.eyebrow
-        ? clampGeneratedBrowControls({
-            ...nextGeneratedBrowControls,
-            enabled: true,
-          })
-        : INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS;
-
-      if (
-        !isCurrentUnityCaptureRequest(
-          pendingCaptureRequestRef.current,
-          pendingRequest.capturePairId,
-        )
-      ) {
-        return;
-      }
 
       pendingGeneratedMaskIdRef.current = result.generatedPackage.generatedMaskId;
-      pendingGeneratedBrowMaskIdRef.current = initialBrowControls.enabled
-        ? result.generatedBrowPackage.generatedMaskId
-        : null;
+      pendingGeneratedBrowMaskIdRef.current = null;
       const unityApplyPayload = JSON.stringify(
         buildGeneratedMaskUnityPayload(
           result.generatedPackage,
-          initialLipControls,
+          INITIAL_INVISIBLE_GENERATED_MASK_CONTROLS,
           {
             includeTexture: true,
           },
@@ -585,7 +528,7 @@ export function UnityMakeupCaptureScreen({
       const browUnityApplyPayload = JSON.stringify(
         buildGeneratedBrowMaskUnityPayload(
           result.generatedBrowPackage,
-          initialBrowControls,
+          INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS,
           {
             includeTexture: true,
           },
@@ -624,13 +567,11 @@ export function UnityMakeupCaptureScreen({
       }, 900);
       setGeneratedPackage(result.generatedPackage);
       setGeneratedBrowPackage(result.generatedBrowPackage);
-      setGeneratedMaskControls(nextGeneratedMaskControls);
-      setGeneratedBrowControls(nextGeneratedBrowControls);
-      setLastGeneratedBrowRuntimeEvent(null);
-      setCompanionMakeupControls(nextCompanionMakeupControls);
-      latestCompanionMakeupControlsRef.current = nextCompanionMakeupControls;
-      setActiveHudRegion(nextActiveHudRegion);
-      setEnabledHudRegions(nextEnabledHudRegions);
+      setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
+      setGeneratedBrowControls(DEFAULT_GENERATED_BROW_CONTROLS);
+      setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
+      setActiveHudRegion('lip');
+      setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
       setPhase('applying');
       setNotice('개인 마스크를 화면에 등록하는 중입니다');
 
@@ -645,23 +586,17 @@ export function UnityMakeupCaptureScreen({
       postUnityMakeupRecipe(
         buildCheekBrowRecipeAfterGeneratedLip(
           Date.now(),
-          nextCompanionMakeupControls,
+          DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS,
           {
-            activeRegions: getEnabledCompanionRegions(nextEnabledHudRegions),
-            includeBrowLayer: false,
+            // The generated brow replaces the companion brow layer, so the
+            // recipe must exclude 'brow' (branch used includeBrowLayer: false).
+            activeRegions: excludeCompanionBrowRegion(
+              getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
+            ),
           },
         ),
       );
     } catch (error) {
-      captureRestoreSnapshotRef.current = null;
-      if (
-        !isCurrentUnityCaptureRequest(
-          pendingCaptureRequestRef.current,
-          pendingRequest.capturePairId,
-        )
-      ) {
-        return;
-      }
       setPhase('error');
       setNotice(
         error instanceof Error
@@ -671,7 +606,13 @@ export function UnityMakeupCaptureScreen({
     }
   };
 
-  const handleGeneratedLipAppliedEvent = (event: UnityGeneratedMaskAppliedEvent) => {
+  const handleGeneratedLipAppliedEvent = (event: {
+    applied?: boolean;
+    generatedMaskId?: string;
+    maskTriangles?: number;
+    status?: string;
+    uvAvailable?: boolean;
+  }) => {
     const pendingGeneratedMaskId = pendingGeneratedMaskIdRef.current;
 
     if (
@@ -707,20 +648,19 @@ export function UnityMakeupCaptureScreen({
           postUnityGeneratedBrowMaskPayload(latestGeneratedBrowApplyPayloadRef.current);
         }
         postUnityMakeupRecipe(
-          buildCheekBrowRecipeAfterGeneratedLip(
-            Date.now(),
-            latestCompanionMakeupControlsRef.current,
-            {
-              activeRegions: [],
-              includeBrowLayer: false,
-            },
-          ),
+          buildCheekBrowRecipeAfterGeneratedLip(Date.now(), companionMakeupControls, {
+            activeRegions: latestGeneratedBrowApplyPayloadRef.current
+              ? excludeCompanionBrowRegion(
+                  getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
+                )
+              : getEnabledCompanionRegions(INITIAL_ENABLED_HUD_REGIONS),
+          }),
         );
       }, 800);
     }
   };
 
-  const handleGeneratedBrowAppliedEvent = (event: UnityGeneratedMaskAppliedEvent) => {
+  const handleGeneratedBrowAppliedEvent = (event: UnityGeneratedBrowAppliedEvent) => {
     const pendingGeneratedBrowMaskId = pendingGeneratedBrowMaskIdRef.current;
 
     if (
@@ -732,7 +672,6 @@ export function UnityMakeupCaptureScreen({
     }
 
     logGeneratedBrowAppliedEvent(event);
-    setLastGeneratedBrowRuntimeEvent(event);
 
     const isApplied =
       (event.status === 'partial' || event.status === 'ready') &&
@@ -778,28 +717,18 @@ export function UnityMakeupCaptureScreen({
     const captureRequest = buildUnitySynchronizedCaptureRequest({
       requestedAtMs: Date.now(),
     });
-    const shouldRestoreRuntimeMakeup =
-      phase === 'applied' || Boolean(generatedPackage) || Boolean(generatedBrowPackage);
-    captureRestoreSnapshotRef.current = shouldRestoreRuntimeMakeup
-      ? {
-          activeHudRegion,
-          companionMakeupControls,
-          enabledHudRegions,
-          generatedBrowControls,
-          generatedMaskControls,
-        }
-      : null;
 
     pendingCaptureRequestRef.current = captureRequest;
     pendingGeneratedMaskIdRef.current = null;
     pendingGeneratedBrowMaskIdRef.current = null;
     latestGeneratedApplyPayloadRef.current = null;
     latestGeneratedBrowApplyPayloadRef.current = null;
+    nativeBrowSourceRef.current = null;
+    browPackageCacheRef.current = {};
     setGeneratedPackage(null);
     setGeneratedBrowPackage(null);
     setGeneratedMaskControls(DEFAULT_GENERATED_MASK_CONTROLS);
     setGeneratedBrowControls(DEFAULT_GENERATED_BROW_CONTROLS);
-    setLastGeneratedBrowRuntimeEvent(null);
     setCompanionMakeupControls(DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS);
     setActiveHudRegion('lip');
     setEnabledHudRegions(INITIAL_ENABLED_HUD_REGIONS);
@@ -808,7 +737,6 @@ export function UnityMakeupCaptureScreen({
     postUnityMakeupRecipe(
       buildCheekBrowRecipeAfterGeneratedLip(Date.now(), DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS, {
         activeRegions: [],
-        includeBrowLayer: false,
       }),
     );
     postUnityRegionOverlayVisibility({
@@ -827,10 +755,8 @@ export function UnityMakeupCaptureScreen({
   };
 
   const handleGeneratedMaskControlChange = (patch: Partial<GeneratedMaskControls>) => {
-    if (!generatedPackage) {
-      return;
-    }
-
+    // Live personalization: the lip layer works without a generated package
+    // (postRuntimeMakeup skips only the photo-refined texture payload).
     const nextControls = clampGeneratedMaskControls({
       ...generatedMaskControls,
       ...patch,
@@ -842,12 +768,7 @@ export function UnityMakeupCaptureScreen({
       lip: true,
     };
     setEnabledHudRegions(nextEnabledRegions);
-    postRuntimeMakeup(
-      nextControls,
-      companionMakeupControls,
-      generatedBrowControls,
-      nextEnabledRegions,
-    );
+    postRuntimeMakeup(nextControls, companionMakeupControls, generatedBrowControls, nextEnabledRegions);
   };
 
   const handleGeneratedBrowControlChange = (patch: Partial<GeneratedBrowControls>) => {
@@ -912,18 +833,12 @@ export function UnityMakeupCaptureScreen({
     });
 
     setCompanionMakeupControls(nextControls);
-    latestCompanionMakeupControlsRef.current = nextControls;
     const nextEnabledRegions = {
       ...enabledHudRegions,
       [getHudRegionFromCompanionRegionKey(region)]: true,
     };
     setEnabledHudRegions(nextEnabledRegions);
-    postRuntimeMakeup(
-      generatedMaskControls,
-      nextControls,
-      generatedBrowControls,
-      nextEnabledRegions,
-    );
+    postRuntimeMakeup(generatedMaskControls, nextControls, generatedBrowControls, nextEnabledRegions);
   };
 
   const handleChangeActiveHudRegion = (region: ArBlushHudRegion) => {
@@ -965,11 +880,11 @@ export function UnityMakeupCaptureScreen({
       [region]: false,
     };
     const nextGeneratedBrowControls =
-      region === 'eyebrow'
+      region === 'eyebrow' && generatedBrowPackage
         ? clampGeneratedBrowControls({...generatedBrowControls, enabled: false})
         : generatedBrowControls;
 
-    if (region === 'eyebrow') {
+    if (region === 'eyebrow' && generatedBrowPackage) {
       generatedBrowControlRevisionRef.current += 1;
       setGeneratedBrowControls(nextGeneratedBrowControls);
     }
@@ -992,7 +907,6 @@ export function UnityMakeupCaptureScreen({
     setGeneratedMaskControls(nextGeneratedControls);
     setGeneratedBrowControls(nextGeneratedBrowControls);
     setCompanionMakeupControls(nextCompanionControls);
-    latestCompanionMakeupControlsRef.current = nextCompanionControls;
     setEnabledHudRegions(nextEnabledRegions);
     generatedBrowControlRevisionRef.current += 1;
     postRuntimeMakeup(
@@ -1013,20 +927,21 @@ export function UnityMakeupCaptureScreen({
       browPackageOverride?: GeneratedBrowPackage;
     } = {},
   ) {
-    if (!generatedPackage) {
-      console.info('[aura:foundation-ar] post-runtime-makeup skipped', {
-        reason: 'generated_package_missing',
-        enabledHudRegions: nextEnabledRegions,
-        foundation: nextCompanionControls.foundation,
-      });
-      return;
-    }
-
+    // Live personalization: the companion recipe (mesh-calibrated masks +
+    // per-frame Vision lip boundary) works with NO reference capture, so a
+    // missing generated package no longer blocks the HUD — it only skips
+    // the photo-refined lip texture payload below.
     const lipControls = {
       ...nextGeneratedControls,
       maskVisible: nextEnabledRegions.lip,
     };
-    const companionActiveRegions = getEnabledCompanionRegions(nextEnabledRegions);
+    const activeBrowPackage = options.browPackageOverride ?? generatedBrowPackage;
+    // While a generated brow package is active it fully replaces the companion
+    // brow layer, so the recipe must exclude 'brow' (branch: includeBrowLayer
+    // false). Without a package the classic companion brow keeps working.
+    const companionActiveRegions = activeBrowPackage
+      ? excludeCompanionBrowRegion(getEnabledCompanionRegions(nextEnabledRegions))
+      : getEnabledCompanionRegions(nextEnabledRegions);
     const companionRecipe = buildCheekBrowRecipeAfterGeneratedLip(
       Date.now(),
       nextCompanionControls,
@@ -1060,15 +975,17 @@ export function UnityMakeupCaptureScreen({
         : null,
     });
 
-    postUnityGeneratedLipMaskPayload(
-      JSON.stringify(
-        buildGeneratedMaskUnityPayload(generatedPackage, lipControls, {
-          controlRevision: generatedMaskControlRevisionRef.current,
-          includeTexture: false,
-        }),
-      ),
-    );
-    const activeBrowPackage = options.browPackageOverride ?? generatedBrowPackage;
+    if (generatedPackage) {
+      postUnityGeneratedLipMaskPayload(
+        JSON.stringify(
+          buildGeneratedMaskUnityPayload(generatedPackage, lipControls, {
+            controlRevision: generatedMaskControlRevisionRef.current,
+            includeTexture: false,
+          }),
+        ),
+      );
+    }
+
     if (activeBrowPackage) {
       const browControls = clampGeneratedBrowControls({
         ...nextGeneratedBrowControls,
@@ -1086,6 +1003,7 @@ export function UnityMakeupCaptureScreen({
       latestGeneratedBrowApplyPayloadRef.current = browPayload;
       postUnityGeneratedBrowMaskPayload(browPayload);
     }
+
     postUnityMakeupRecipe(companionRecipe);
   };
 
@@ -1106,36 +1024,30 @@ export function UnityMakeupCaptureScreen({
           paddingTop: Math.max(insets.top, spacing.lg),
         },
       ]}>
-      <AppHeader
-        containerProps={{style: styles.immersiveHeader}}
-        contextLabel="PERSONAL MASK"
-        onBack={handleBack}
-        title="개인 마스크 적용"
-        topInset={0}
-        variant="immersive"
-      />
+      <XStack style={styles.header}>
+        <Pressable
+          accessibilityLabel="홈으로 돌아가기"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={handleBack}
+          style={({pressed}) => [styles.iconButton, pressed && styles.pressed]}>
+          <ChevronLeft color={colors.white} size={iconSize.md} strokeWidth={2} />
+        </Pressable>
+
+        <YStack style={styles.headerTitleGroup}>
+          <Text style={styles.headerEyebrow}>실시간 맞춤</Text>
+          <Text style={styles.headerTitle}>메이크업 AR</Text>
+        </YStack>
+
+        <View style={styles.headerSpacer} />
+      </XStack>
 
       <YStack style={styles.cameraStage}>
-        <View style={[styles.unityMountPoint, !hasStartedMaskFlow && styles.maskIntroStage]}>
-          {hasStartedMaskFlow && shouldUseUnityPreview && cameraSessionActive ? (
+        {/* 스캔/인트로 단계 제거: 마스크가 런타임에서 실시간 개인화되므로
+            진입 즉시 카메라(Unity 뷰)를 마운트한다. */}
+        <View style={styles.unityMountPoint}>
+          {shouldUseUnityPreview ? (
             <UnityMakeupNativeView />
-          ) : !hasStartedMaskFlow ? (
-            <YStack style={styles.maskIntroContent}>
-              <View style={styles.maskIntroFace}>
-                <View style={[styles.regionPreview, styles.introLipPreview, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introCheekPreviewLeft, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introCheekPreviewRight, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introBrowPreviewLeft, styles.regionPreviewActive]} />
-                <View style={[styles.regionPreview, styles.introBrowPreviewRight, styles.regionPreviewActive]} />
-              </View>
-              <YStack style={styles.maskIntroCopy}>
-                <Text style={styles.maskIntroEyebrow}>개인 마스크</Text>
-                <Text style={styles.maskIntroTitle}>개인 마스크 만들기</Text>
-                <Text style={styles.maskIntroDescription}>
-                  얼굴 기준 마스크를 만든 뒤 립, 볼, 눈썹을 같은 위치에 적용합니다.
-                </Text>
-              </YStack>
-            </YStack>
           ) : (
             <View style={styles.faceGuide} />
           )}
@@ -1149,14 +1061,14 @@ export function UnityMakeupCaptureScreen({
         ) : null}
       </YStack>
 
-      {phase === 'applied' && generatedPackage && generatedBrowPackage ? (
+      {phase === 'applied' ? (
         <ArBlushRuntimeHud
           activeRegion={activeHudRegion}
           browControls={generatedBrowControls}
           companionControls={companionMakeupControls}
           controls={generatedMaskControls}
           enabledRegions={enabledHudRegions}
-          lastBrowRuntimeEvent={lastGeneratedBrowRuntimeEvent}
+          hasGeneratedBrowPackage={Boolean(generatedBrowPackage)}
           onChangeActiveRegion={handleChangeActiveHudRegion}
           onChangeBrowControls={handleGeneratedBrowControlChange}
           onChangeCompanionControls={handleCompanionMakeupControlChange}
@@ -1164,95 +1076,11 @@ export function UnityMakeupCaptureScreen({
           onDisableActiveRegion={handleDisableHudRegion}
           onResetMakeup={handleResetMakeupSelections}
         />
-      ) : (
-        <YStack style={styles.controlPanel}>
-          <ScrollView
-            contentContainerStyle={styles.maskFlowStepRow}
-            horizontal
-            showsHorizontalScrollIndicator={false}>
-            {MASK_FLOW_STEPS.map(step => {
-              const state = getMaskFlowStepState(step.id, activeMaskFlowStep);
+      ) : null}
 
-              return (
-                <View
-                  key={step.id}
-                  style={[
-                    styles.maskFlowStepChip,
-                    state === 'active' && styles.maskFlowStepChipActive,
-                    state === 'done' && styles.maskFlowStepChipDone,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.maskFlowStepText,
-                      state !== 'pending' && styles.maskFlowStepTextActive,
-                    ]}>
-                    {step.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-
-          <XStack style={styles.scanRegionRow}>
-            {PERSONAL_MASK_REGIONS.map(region => {
-              const isScanned = Boolean(sourceFrameMetadata);
-              const isScanning = phase === 'capturing' || phase === 'generating';
-
-              return (
-                <View
-                  key={region.id}
-                  style={[
-                    styles.scanRegionCard,
-                    isScanning && styles.scanRegionCardActive,
-                    isScanned && styles.scanRegionCardDone,
-                  ]}>
-                  <Text style={styles.scanRegionLabel}>{region.label}</Text>
-                  <Text style={styles.scanRegionMeta}>
-                    {isScanned ? '스캔됨' : isScanning ? '스캔 중' : region.guidance}
-                  </Text>
-                </View>
-              );
-            })}
-          </XStack>
-
-        </YStack>
-      )}
-
-      <XStack style={styles.bottomActions}>
-        {!hasStartedMaskFlow ? (
-          <Pressable
-            accessibilityLabel="개인 마스크 만들기 시작"
-            accessibilityRole="button"
-            disabled={isPreparingUnity}
-            onPress={handleStartMaskFlow}
-            style={({pressed}) => [
-              styles.startButton,
-              isPreparingUnity && styles.captureButtonDisabled,
-              pressed && styles.pressed,
-            ]}>
-            <Sparkles color={colors.black} size={iconSize.sm} strokeWidth={2} />
-            <Text style={styles.startButtonText}>
-              {isPreparingUnity ? '준비 중' : '개인 마스크 만들기'}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {hasStartedMaskFlow ? (
-          <Pressable
-            accessibilityLabel={captureButtonLabel}
-            accessibilityRole="button"
-            disabled={isBusy}
-            onPress={handleCapturePress}
-            style={({pressed}) => [
-              styles.captureButton,
-              isBusy && styles.captureButtonDisabled,
-              phase === 'applied' && styles.captureButtonApplied,
-              pressed && styles.capturePressed,
-            ]}>
-            <View style={styles.captureButtonInner} />
-          </Pressable>
-        ) : null}
-      </XStack>
+      {/* 스캔 단계 칩·스캔 상태 카드·시작 버튼 제거: 진입 즉시 라이브
+          메이크업이 적용되므로 준비 UI가 필요 없다 (촬영 기반 정밀 보정
+          플로우 코드는 유지 — 추후 옵션 기능으로 재노출 가능). */}
     </YStack>
   );
 }
@@ -1312,7 +1140,7 @@ function ArBlushRuntimeHud({
   companionControls,
   controls,
   enabledRegions,
-  lastBrowRuntimeEvent,
+  hasGeneratedBrowPackage,
   onChangeActiveRegion,
   onChangeBrowControls,
   onChangeCompanionControls,
@@ -1325,7 +1153,7 @@ function ArBlushRuntimeHud({
   companionControls: PersonalizedCompanionMakeupControls;
   controls: GeneratedMaskControls;
   enabledRegions: EnabledHudRegions;
-  lastBrowRuntimeEvent: GeneratedBrowRuntimeDiagnosticEvent | null;
+  hasGeneratedBrowPackage: boolean;
   onChangeActiveRegion: (region: ArBlushHudRegion) => void;
   onChangeBrowControls: (patch: Partial<GeneratedBrowControls>) => void;
   onChangeCompanionControls: (
@@ -1337,21 +1165,29 @@ function ArBlushRuntimeHud({
   onResetMakeup: () => void;
 }) {
   const [isHudHidden, setIsHudHidden] = useState(false);
-  const activeValues = getHudRegionValues(
-    activeRegion,
-    controls,
-    companionControls,
-    browControls,
-  );
+  const isGeneratedBrowRegion = activeRegion === 'eyebrow' && hasGeneratedBrowPackage;
+  const activeValues = isGeneratedBrowRegion
+    ? {
+        colorHex: browControls.colorHex,
+        colorName: getColorName(browControls.colorHex),
+        intensity: browControls.intensity,
+        opacity: browControls.opacity,
+        styleLabel:
+          GENERATED_BROW_SHAPE_OPTIONS.find(
+            option => option.shapeId === browControls.shapeId,
+          )?.label ?? '소프트 아치',
+        textureLabel: 'natural_brow',
+      }
+    : getHudRegionValues(activeRegion, controls, companionControls);
   const isActiveRegionEnabled = enabledRegions[activeRegion];
   const isFoundationPalette = activeRegion === 'foundation';
   const colorOptions =
     isFoundationPalette
       ? FOUNDATION_VALIDATION_COLORS
-      : activeRegion === 'eyebrow'
-      ? GENERATED_BROW_VALIDATION_COLORS
       : activeRegion === 'eyeliner'
       ? EYELINER_VALIDATION_COLORS
+      : isGeneratedBrowRegion
+      ? GENERATED_BROW_VALIDATION_COLORS
       : GENERATED_MASK_VALIDATION_COLORS;
 
   const handleColorPress = (color: {
@@ -1360,14 +1196,15 @@ function ArBlushRuntimeHud({
     secondaryColor?: string;
   }) => {
     if (activeRegion === 'lip') {
+      // Keep the optional photo-refined lip payload in sync when it exists,
+      // but the live vision-boundary lip layer is driven by companion controls.
       onChangeControls({
         colorHex: color.color,
         secondaryColorHex: color.secondaryColor ?? color.color,
       });
-      return;
     }
 
-    if (activeRegion === 'eyebrow') {
+    if (isGeneratedBrowRegion) {
       onChangeBrowControls({
         colorHex: color.color,
       });
@@ -1382,10 +1219,9 @@ function ArBlushRuntimeHud({
   const handleIntensityChange = (value: number) => {
     if (activeRegion === 'lip') {
       onChangeControls({intensity: value});
-      return;
     }
 
-    if (activeRegion === 'eyebrow') {
+    if (isGeneratedBrowRegion) {
       onChangeBrowControls({intensity: value});
       return;
     }
@@ -1399,10 +1235,9 @@ function ArBlushRuntimeHud({
   const handleOpacityChange = (value: number) => {
     if (activeRegion === 'lip') {
       onChangeControls({opacity: value});
-      return;
     }
 
-    if (activeRegion === 'eyebrow') {
+    if (isGeneratedBrowRegion) {
       onChangeBrowControls({opacity: value});
       return;
     }
@@ -1422,6 +1257,12 @@ function ArBlushRuntimeHud({
   const handleFoundationEvennessChange = (value: number) => {
     onChangeCompanionControls('foundation', {
       evenness: value,
+    });
+  };
+
+  const handleFoundationBlemishChange = (value: number) => {
+    onChangeCompanionControls('foundation', {
+      blemish: value,
     });
   };
 
@@ -1580,6 +1421,7 @@ function ArBlushRuntimeHud({
             browControls={browControls}
             companionControls={companionControls}
             controls={controls}
+            hasGeneratedBrowPackage={hasGeneratedBrowPackage}
             onChangeBrowControls={onChangeBrowControls}
             onChangeCompanionControls={onChangeCompanionControls}
             onChangeControls={onChangeControls}
@@ -1599,9 +1441,6 @@ function ArBlushRuntimeHud({
           onChange={handleOpacityChange}
           value={activeValues.opacity}
         />
-        {activeRegion === 'eyebrow' && __DEV__ ? (
-          <GeneratedBrowRuntimeDiagnosticCard event={lastBrowRuntimeEvent} />
-        ) : null}
 
         {activeRegion === 'foundation' ? (
           <>
@@ -1651,30 +1490,16 @@ function ArBlushRuntimeHud({
               onChange={handleFoundationEvennessChange}
               value={companionControls.foundation.evenness ?? 0.3}
             />
+            <HudSliderControl
+              colorHex={activeValues.colorHex}
+              label="잡티 제거"
+              onChange={handleFoundationBlemishChange}
+              value={companionControls.foundation.blemish ?? 0.38}
+            />
           </>
         ) : null}
 
       </YStack>
-    </YStack>
-  );
-}
-
-function GeneratedBrowRuntimeDiagnosticCard({
-  event,
-}: {
-  event: GeneratedBrowRuntimeDiagnosticEvent | null;
-}) {
-  const summary = summarizeGeneratedBrowRuntimeDiagnostics(event);
-
-  return (
-    <YStack
-      style={[
-        styles.generatedBrowRuntimeCard,
-        summary.status === 'ready' && styles.generatedBrowRuntimeCardReady,
-        summary.status === 'blocked' && styles.generatedBrowRuntimeCardBlocked,
-      ]}>
-      <Text style={styles.generatedBrowRuntimeTitle}>{summary.titleText}</Text>
-      <Text style={styles.generatedBrowRuntimeDetail}>{summary.detailText}</Text>
     </YStack>
   );
 }
@@ -1685,6 +1510,7 @@ function HudRegionOptions({
   browControls,
   companionControls,
   controls,
+  hasGeneratedBrowPackage,
   onChangeBrowControls,
   onChangeCompanionControls,
   onChangeControls,
@@ -1695,6 +1521,7 @@ function HudRegionOptions({
   browControls: GeneratedBrowControls;
   companionControls: PersonalizedCompanionMakeupControls;
   controls: GeneratedMaskControls;
+  hasGeneratedBrowPackage: boolean;
   onChangeBrowControls: (patch: Partial<GeneratedBrowControls>) => void;
   onChangeCompanionControls: (
     region: CompanionRegionKey,
@@ -1703,6 +1530,86 @@ function HudRegionOptions({
   onChangeControls: (patch: Partial<GeneratedMaskControls>) => void;
   onDisableActiveRegion: () => void;
 }) {
+  if (activeRegion === 'eyebrow' && hasGeneratedBrowPackage) {
+    return (
+      <>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{selected: !activeRegionEnabled}}
+          onPress={onDisableActiveRegion}
+          style={[
+            styles.arBlushOptionButton,
+            styles.arBlushNoneOptionButton,
+            !activeRegionEnabled && styles.arBlushNoneOptionButtonActive,
+          ]}>
+          <Text style={styles.arBlushNoneOptionText}>
+            선택 안함
+          </Text>
+        </Pressable>
+        {GENERATED_BROW_SHAPE_OPTIONS.map(option => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{
+              selected: activeRegionEnabled && browControls.shapeId === option.shapeId,
+            }}
+            key={option.shapeId}
+            onPress={() => onChangeBrowControls({shapeId: option.shapeId})}
+            style={[
+              styles.arBlushOptionButton,
+              activeRegionEnabled &&
+                browControls.shapeId === option.shapeId &&
+                styles.arBlushOptionButtonActive,
+            ]}>
+            <Text
+              style={[
+                styles.arBlushOptionText,
+                activeRegionEnabled &&
+                  browControls.shapeId === option.shapeId &&
+                  styles.arBlushOptionTextActive,
+              ]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+        {__DEV__
+          ? GENERATED_BROW_DEBUG_OPTIONS.map(option => {
+              const isSelected =
+                activeRegionEnabled &&
+                browControls.debugMode === option.debugMode &&
+                browControls.debugShowLeftRight === option.debugShowLeftRight &&
+                browControls.debugExaggerate === option.debugExaggerate;
+
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{selected: isSelected}}
+                  key={`debug-${option.debugMode}`}
+                  onPress={() =>
+                    onChangeBrowControls({
+                      debugExaggerate: option.debugExaggerate,
+                      debugMode: option.debugMode,
+                      debugShowLeftRight: option.debugShowLeftRight,
+                    })
+                  }
+                  style={[
+                    styles.arBlushOptionButton,
+                    isSelected && styles.arBlushOptionButtonActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.arBlushOptionText,
+                      isSelected && styles.arBlushOptionTextActive,
+                    ]}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })
+          : null}
+      </>
+    );
+  }
+
   if (activeRegion === 'lip') {
     return (
       <>
@@ -1812,86 +1719,6 @@ function HudRegionOptions({
     );
   }
 
-  if (activeRegion === 'eyebrow') {
-    return (
-      <>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{selected: !activeRegionEnabled}}
-          onPress={onDisableActiveRegion}
-          style={[
-            styles.arBlushOptionButton,
-            styles.arBlushNoneOptionButton,
-            !activeRegionEnabled && styles.arBlushNoneOptionButtonActive,
-          ]}>
-          <Text style={styles.arBlushNoneOptionText}>
-            선택 안함
-          </Text>
-        </Pressable>
-        {GENERATED_BROW_SHAPE_OPTIONS.map(option => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{
-              selected: activeRegionEnabled && browControls.shapeId === option.shapeId,
-            }}
-            key={option.shapeId}
-            onPress={() => onChangeBrowControls({shapeId: option.shapeId})}
-            style={[
-              styles.arBlushOptionButton,
-              activeRegionEnabled &&
-                browControls.shapeId === option.shapeId &&
-                styles.arBlushOptionButtonActive,
-            ]}>
-            <Text
-              style={[
-                styles.arBlushOptionText,
-                activeRegionEnabled &&
-                  browControls.shapeId === option.shapeId &&
-                  styles.arBlushOptionTextActive,
-              ]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
-        {__DEV__
-          ? GENERATED_BROW_DEBUG_OPTIONS.map(option => {
-              const isSelected =
-                activeRegionEnabled &&
-                browControls.debugMode === option.debugMode &&
-                browControls.debugShowLeftRight === option.debugShowLeftRight &&
-                browControls.debugExaggerate === option.debugExaggerate;
-
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{selected: isSelected}}
-                  key={`debug-${option.debugMode}`}
-                  onPress={() =>
-                    onChangeBrowControls({
-                      debugExaggerate: option.debugExaggerate,
-                      debugMode: option.debugMode,
-                      debugShowLeftRight: option.debugShowLeftRight,
-                    })
-                  }
-                  style={[
-                    styles.arBlushOptionButton,
-                    isSelected && styles.arBlushOptionButtonActive,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.arBlushOptionText,
-                      isSelected && styles.arBlushOptionTextActive,
-                    ]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })
-          : null}
-      </>
-    );
-  }
-
   const regionKey = getCompanionRegionKey(activeRegion);
   const options =
     activeRegion === 'cheek'
@@ -1928,6 +1755,7 @@ function HudRegionOptions({
             onChangeCompanionControls(regionKey, {
               candidateId: option.candidateId,
               maskTextureId: option.maskTextureId,
+              // 스타일이 기본색을 지정하면(예: 컬러드 → 버건디) 함께 적용.
               ...('colorHex' in option ? {colorHex: option.colorHex} : {}),
             })
           }
@@ -1987,9 +1815,8 @@ function HudSliderControl({
     onChangeRef.current(Number(nextValue.toFixed(3)));
   };
 
-  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
-  if (!panResponderRef.current) {
-    panResponderRef.current = PanResponder.create({
+  const panResponderRef = useRef(
+    PanResponder.create({
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: event => {
@@ -2001,9 +1828,8 @@ function HudSliderControl({
       onPanResponderMove: updateValueFromEvent,
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
-    });
-  }
-  const panHandlers = panResponderRef.current.panHandlers;
+    }),
+  );
 
   const handleTrackLayout = (event: LayoutChangeEvent) => {
     trackWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
@@ -2021,7 +1847,7 @@ function HudSliderControl({
         accessibilityRole="adjustable"
         onLayout={handleTrackLayout}
         style={styles.arBlushSliderTrack}
-        {...panHandlers}>
+        {...panResponderRef.current.panHandlers}>
         <RNView
           pointerEvents="none"
           style={[
@@ -2045,30 +1871,18 @@ function getHudRegionValues(
   activeRegion: ArBlushHudRegion,
   controls: GeneratedMaskControls,
   companionControls: PersonalizedCompanionMakeupControls,
-  browControls: GeneratedBrowControls,
 ) {
   if (activeRegion === 'lip') {
+    // Live vision-boundary lip layer is driven by companion controls; the
+    // generated controls only carry the optional photo-refined finish/texture.
+    const lipControls = companionControls.lip;
     return {
-      colorHex: controls.colorHex,
-      colorName: getColorName(controls.colorHex),
-      intensity: controls.intensity,
-      opacity: controls.opacity,
+      colorHex: lipControls.colorHex,
+      colorName: getColorName(lipControls.colorHex),
+      intensity: lipControls.intensity,
+      opacity: lipControls.opacity,
       styleLabel: controls.finish,
       textureLabel: controls.texture,
-    };
-  }
-
-  if (activeRegion === 'eyebrow') {
-    return {
-      colorHex: browControls.colorHex,
-      colorName: getColorName(browControls.colorHex),
-      intensity: browControls.intensity,
-      opacity: browControls.opacity,
-      styleLabel:
-        GENERATED_BROW_SHAPE_OPTIONS.find(
-          option => option.shapeId === browControls.shapeId,
-        )?.label ?? '소프트 아치',
-      textureLabel: 'natural_brow',
     };
   }
 
@@ -2080,14 +1894,7 @@ function getHudRegionValues(
     intensity: regionControls.intensity,
     opacity: regionControls.opacity,
     styleLabel: getCompanionStyleLabel(activeRegion, regionControls.maskTextureId),
-    textureLabel:
-      activeRegion === 'foundation'
-        ? 'screen_space_foundation'
-        : activeRegion === 'cheek'
-          ? 'soft_blush'
-          : activeRegion === 'eyeliner'
-            ? 'procedural_eyeliner'
-            : 'soft_brow',
+    textureLabel: activeRegion === 'cheek' ? 'soft_blush' : 'soft_brow',
   };
 }
 
@@ -2097,14 +1904,11 @@ function getColorName(colorHex: string): string {
       ...FOUNDATION_VALIDATION_COLORS,
       ...GENERATED_MASK_VALIDATION_COLORS,
       ...GENERATED_BROW_VALIDATION_COLORS,
-      ...EYELINER_VALIDATION_COLORS,
-    ].find(
-      color => color.color === colorHex,
-    )?.name ?? '사용자 지정'
+    ].find(color => color.color === colorHex)?.name ?? '사용자 지정'
   );
 }
 
-function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
+function getCompanionRegionKey(region: ArBlushHudRegion): CompanionRegionKey {
   if (region === 'foundation') {
     return 'foundation';
   }
@@ -2117,10 +1921,14 @@ function getCompanionRegionKey(region: CompanionHudRegion): CompanionRegionKey {
     return 'eyeliner';
   }
 
+  if (region === 'lip') {
+    return 'lip';
+  }
+
   return 'brow';
 }
 
-function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): CompanionHudRegion {
+function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): ArBlushHudRegion {
   if (region === 'foundation') {
     return 'foundation';
   }
@@ -2133,6 +1941,10 @@ function getHudRegionFromCompanionRegionKey(region: CompanionRegionKey): Compani
     return 'eyeliner';
   }
 
+  if (region === 'lip') {
+    return 'lip';
+  }
+
   return 'eyebrow';
 }
 
@@ -2142,8 +1954,101 @@ function getEnabledCompanionRegions(
   return [
     enabledRegions.foundation ? 'foundation' : null,
     enabledRegions.cheek ? 'blush' : null,
+    enabledRegions.eyebrow ? 'brow' : null,
     enabledRegions.eyeliner ? 'eyeliner' : null,
+    enabledRegions.lip ? 'lip' : null,
   ].filter((region): region is CompanionRegionKey => Boolean(region));
+}
+
+// When the generated (photo-personalized) brow mask is active it fully
+// replaces the companion brow layer in Unity, so the companion recipe must
+// never include 'brow' alongside it (the branch API used includeBrowLayer:
+// false; the current recipe builder takes activeRegions instead).
+function excludeCompanionBrowRegion(
+  regions: readonly CompanionRegionKey[],
+): readonly CompanionRegionKey[] {
+  return regions.filter(region => region !== 'brow');
+}
+
+function getCompanionOptions(region: CompanionHudRegion) {
+  if (region === 'foundation') {
+    return FOUNDATION_FINISH_OPTIONS;
+  }
+
+  if (region === 'cheek') {
+    return AR_BLUSH_CHEEK_REGION_OPTIONS;
+  }
+
+  if (region === 'eyeliner') {
+    return AR_BLUSH_EYELINER_REGION_OPTIONS;
+  }
+
+  return AR_BLUSH_EYEBROW_REGION_OPTIONS;
+}
+
+function getCompanionStyleLabel(region: CompanionHudRegion, maskTextureId: string): string {
+  if (region === 'foundation') {
+    return '베이스';
+  }
+
+  const options =
+    region === 'cheek'
+      ? AR_BLUSH_CHEEK_REGION_OPTIONS
+      : AR_BLUSH_EYEBROW_REGION_OPTIONS;
+  const option = options.find(candidate => candidate.maskTextureId === maskTextureId);
+  return option?.label ?? '사용자 지정';
+}
+
+function getHudOptionSectionLabel(region: ArBlushHudRegion): string {
+  if (region === 'foundation') {
+    return '베이스 마무리';
+  }
+
+  if (region === 'lip') {
+    return '립 마무리';
+  }
+
+  if (region === 'cheek') {
+    return '치크 영역';
+  }
+
+  return '눈썹 모양';
+}
+
+function clampGeneratedMaskControls(
+  controls: GeneratedMaskControls,
+): GeneratedMaskControls {
+  return {
+    ...controls,
+    coverage: Math.max(0, Math.min(1, controls.coverage)),
+    glossBoost: Math.max(0, Math.min(1, controls.glossBoost)),
+    gradientAmount: Math.max(0, Math.min(1, controls.gradientAmount)),
+    intensity: Math.max(0, Math.min(1, controls.intensity)),
+    opacity: Math.max(0, Math.min(1, controls.opacity)),
+    roughness: Math.max(0, Math.min(1, controls.roughness)),
+    specular: Math.max(0, Math.min(1, controls.specular)),
+    specularPower: Math.max(1, Math.min(128, controls.specularPower)),
+    textureAmount: Math.max(0, Math.min(1, controls.textureAmount)),
+  };
+}
+
+function clampGeneratedBrowControls(
+  controls: GeneratedBrowControls,
+): GeneratedBrowControls {
+  return {
+    ...controls,
+    cleanupStrength: 0,
+    coverage: Math.max(0, Math.min(1, controls.coverage)),
+    debugExaggerate: Boolean(controls.debugExaggerate),
+    debugMode: Math.max(0, Math.min(6, controls.debugMode)) as GeneratedBrowControls['debugMode'],
+    debugShowLeftRight: Boolean(controls.debugShowLeftRight),
+    intensity: Math.max(0, Math.min(1, controls.intensity)),
+    neutralizeStrength: 0,
+    opacity: Math.max(0, Math.min(1, controls.opacity)),
+    // 결(strand hair texture)은 항상 살아있도록 고정한다. UI 슬라이더를 제거했고,
+    // 어떤 상태값이 들어와도 강하게 유지.
+    strandTextureAmount: BROW_STRAND_TEXTURE_AMOUNT,
+  };
 }
 
 function formatGeneratedBrowBlockedReason(reason: string | undefined): string {
@@ -2168,7 +2073,7 @@ function formatGeneratedBrowBlockedReason(reason: string | undefined): string {
   return labels[reason] ?? reason;
 }
 
-function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
+function logGeneratedBrowAppliedEvent(event: UnityGeneratedBrowAppliedEvent) {
   if (typeof __DEV__ !== 'undefined' && !__DEV__) {
     return;
   }
@@ -2243,93 +2148,6 @@ function logGeneratedBrowAppliedEvent(event: UnityGeneratedMaskAppliedEvent) {
   console.info('[aura:brow] generated-brow-mask:applied-event', logPayload);
 }
 
-function getCompanionOptions(region: CompanionHudRegion) {
-  if (region === 'foundation') {
-    return FOUNDATION_FINISH_OPTIONS;
-  }
-
-  if (region === 'cheek') {
-    return AR_BLUSH_CHEEK_REGION_OPTIONS;
-  }
-
-  if (region === 'eyeliner') {
-    return AR_BLUSH_EYELINER_REGION_OPTIONS;
-  }
-
-  return AR_BLUSH_EYEBROW_REGION_OPTIONS;
-}
-
-function getCompanionStyleLabel(region: CompanionHudRegion, maskTextureId: string): string {
-  if (region === 'foundation') {
-    return '베이스';
-  }
-
-  const options =
-    region === 'cheek'
-      ? AR_BLUSH_CHEEK_REGION_OPTIONS
-      : region === 'eyeliner'
-        ? AR_BLUSH_EYELINER_REGION_OPTIONS
-      : AR_BLUSH_EYEBROW_REGION_OPTIONS;
-  const option = options.find(candidate => candidate.maskTextureId === maskTextureId);
-  return option?.label ?? '사용자 지정';
-}
-
-function getHudOptionSectionLabel(region: ArBlushHudRegion): string {
-  if (region === 'foundation') {
-    return '베이스 마무리';
-  }
-
-  if (region === 'lip') {
-    return '립 마무리';
-  }
-
-  if (region === 'cheek') {
-    return '치크 영역';
-  }
-
-  if (region === 'eyeliner') {
-    return '아이라이너 모양';
-  }
-
-  return '눈썹 모양';
-}
-
-function clampGeneratedMaskControls(
-  controls: GeneratedMaskControls,
-): GeneratedMaskControls {
-  return {
-    ...controls,
-    coverage: Math.max(0, Math.min(1, controls.coverage)),
-    glossBoost: Math.max(0, Math.min(1, controls.glossBoost)),
-    gradientAmount: Math.max(0, Math.min(1, controls.gradientAmount)),
-    intensity: Math.max(0, Math.min(1, controls.intensity)),
-    opacity: Math.max(0, Math.min(1, controls.opacity)),
-    roughness: Math.max(0, Math.min(1, controls.roughness)),
-    specular: Math.max(0, Math.min(1, controls.specular)),
-    specularPower: Math.max(1, Math.min(128, controls.specularPower)),
-    textureAmount: Math.max(0, Math.min(1, controls.textureAmount)),
-  };
-}
-
-function clampGeneratedBrowControls(
-  controls: GeneratedBrowControls,
-): GeneratedBrowControls {
-  return {
-    ...controls,
-    cleanupStrength: 0,
-    coverage: Math.max(0, Math.min(1, controls.coverage)),
-    debugExaggerate: Boolean(controls.debugExaggerate),
-    debugMode: Math.max(0, Math.min(6, controls.debugMode)) as GeneratedBrowControls['debugMode'],
-    debugShowLeftRight: Boolean(controls.debugShowLeftRight),
-    intensity: Math.max(0, Math.min(1, controls.intensity)),
-    neutralizeStrength: 0,
-    opacity: Math.max(0, Math.min(1, controls.opacity)),
-    // 결(strand hair texture)은 항상 살아있도록 고정한다. UI 슬라이더를 제거했고,
-    // 어떤 상태값이 들어와도 강하게 유지.
-    strandTextureAmount: BROW_STRAND_TEXTURE_AMOUNT,
-  };
-}
-
 function clampCompanionMakeupControls(
   controls: PersonalizedCompanionMakeupControls,
 ): PersonalizedCompanionMakeupControls {
@@ -2338,6 +2156,7 @@ function clampCompanionMakeupControls(
     brow: clampCompanionMakeupRegionControl(controls.brow),
     eyeliner: clampCompanionMakeupRegionControl(controls.eyeliner),
     foundation: clampCompanionMakeupRegionControl(controls.foundation),
+    lip: clampCompanionMakeupRegionControl(controls.lip),
   };
 }
 
@@ -2366,7 +2185,7 @@ const styles = StyleSheet.create({
   arBlushShowButton: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(0, 0, 0, 0.58)',
     borderColor: 'rgba(255, 255, 255, 0.20)',
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -2383,7 +2202,7 @@ const styles = StyleSheet.create({
   arBlushCloseButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     borderColor: 'rgba(255, 255, 255, 0.18)',
     borderRadius: 12,
     borderWidth: 1,
@@ -2424,7 +2243,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   arBlushControlsPanel: {
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     borderColor: 'rgba(255, 255, 255, 0.22)',
     borderRadius: 12,
     borderWidth: 1,
@@ -2525,7 +2344,7 @@ const styles = StyleSheet.create({
   },
   arBlushModeButton: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
     borderColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 8,
     borderWidth: 1,
@@ -2534,7 +2353,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arBlushModeButtonActive: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
   },
   arBlushModeRow: {
     flexDirection: 'row',
@@ -2591,7 +2410,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   arBlushOptionButtonActive: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
     borderColor: '#FFE978',
     borderWidth: 2,
   },
@@ -2637,33 +2456,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.sm,
   },
-  generatedBrowRuntimeCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 2,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  generatedBrowRuntimeCardBlocked: {
-    borderColor: 'rgba(255, 91, 84, 0.52)',
-  },
-  generatedBrowRuntimeCardReady: {
-    borderColor: 'rgba(38, 214, 121, 0.52)',
-  },
-  generatedBrowRuntimeDetail: {
-    color: 'rgba(255, 255, 255, 0.68)',
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  generatedBrowRuntimeTitle: {
-    color: '#BEEFFF',
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
   arBlushRegionButton: {
     alignItems: 'center',
     borderColor: 'rgba(255, 255, 255, 0.24)',
@@ -2674,7 +2466,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arBlushRegionButtonActive: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
     borderColor: '#FFE978',
     borderWidth: 2,
   },
@@ -2736,7 +2528,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   arBlushSliderThumb: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
     borderColor: '#182235',
     borderRadius: 9,
     borderWidth: 2,
@@ -2804,7 +2596,7 @@ const styles = StyleSheet.create({
   },
   captureButton: {
     alignItems: 'center',
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
     borderColor: 'rgba(255, 255, 255, 0.34)',
     borderRadius: radius.pill,
     borderWidth: 5,
@@ -2816,7 +2608,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(38, 214, 121, 0.58)',
   },
   captureButtonInner: {
-    backgroundColor: colors.blackSurface,
+    backgroundColor: colors.black,
     borderRadius: radius.pill,
     height: 54,
     width: 54,
@@ -2979,8 +2771,43 @@ const styles = StyleSheet.create({
     top: '66%',
     width: 68,
   },
-  immersiveHeader: {
-    paddingHorizontal: 0,
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 48,
+  },
+  headerEyebrow: {
+    color: 'rgba(255, 255, 255, 0.62)',
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    height: 42,
+    width: 42,
+  },
+  headerTitle: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
+    textAlign: 'center',
+  },
+  headerTitleGroup: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 2,
+  },
+  iconButton: {
+    alignItems: 'center',
+    backgroundColor: colors.glassSurface,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
   },
   maskIntroContent: {
     alignItems: 'center',
@@ -3042,7 +2869,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   maskFlowStepChipActive: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
   },
   maskFlowStepChipDone: {
     backgroundColor: 'rgba(38, 214, 121, 0.28)',
@@ -3074,7 +2901,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   regionButtonActive: {
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
   },
   regionButtonText: {
     color: colors.white,
@@ -3098,7 +2925,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   screen: {
-    backgroundColor: colors.blackSurface,
+    backgroundColor: colors.black,
     flex: 1,
     gap: spacing.lg,
     paddingHorizontal: spacing.xl,
@@ -3155,13 +2982,14 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     alignItems: 'center',
-    alignSelf: 'stretch',
+    alignSelf: 'center',
     backgroundColor: colors.glassSurface,
     borderColor: 'rgba(255, 255, 255, 0.14)',
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.sm,
+    maxWidth: '94%',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
@@ -3171,7 +2999,6 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: colors.white,
-    flex: 1,
     flexShrink: 1,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
@@ -3180,7 +3007,7 @@ const styles = StyleSheet.create({
   },
   startButton: {
     alignItems: 'center',
-    backgroundColor: colors.liquidGlassSurface,
+    backgroundColor: colors.white,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -93,10 +94,33 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     private const string RuntimeSource = "apple_vision_runtime_lip_landmarks";
     private const string CoordinateMode = "raw-y";
 
+    private const int CaptureWidth = 384;
+
     private bool runtimeRequested;
     private bool captureInProgress;
     private float nextCaptureAt;
     private int sequence;
+    private RenderTexture captureTexture;
+    private byte[] frameUploadBuffer;
+    private FaceScreenBounds pendingSubmittedFaceBounds;
+    // Capture-format auto-probe: Metal readbacks vary in row order AND may
+    // deliver BGRA instead of RGBA (a blue face defeats Vision's detector),
+    // so persistent no_face cycles through the four combinations and locks
+    // on the first success.
+    private const string CaptureFormatPrefKey = "e7.lip.captureOrientationV2";
+    // Detection runs on the ARKit camera CPU image (SNOW-style: never the
+    // rendered screen — screen captures interfered with the present loop
+    // and flickered the camera). The only unknown is the display rotation;
+    // Vision handles it via CGImagePropertyOrientation, probed from these
+    // candidates and locked+persisted on first success. Front camera in
+    // portrait usually lands on Right(6).
+    private static readonly int[] OrientationCandidates = {6, 1, 3, 8};
+    private int captureFormatCombo;
+    private bool captureFormatLocked;
+    private int noFaceFetchesSinceCombo;
+    private bool wroteDebugCapture;
+    private bool loadedCaptureFormatPref;
+    private ARCameraManager cameraManager;
     private BoundarySnapshot latestSnapshot;
     private BoundarySnapshot transitionFromSnapshot;
     private BoundarySnapshot transitionToSnapshot;
@@ -108,11 +132,17 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
 #if UNITY_IOS && !UNITY_EDITOR
     [DllImport("__Internal")]
-    private static extern IntPtr E7VisionDetectLipBoundaryPng(
-        byte[] pngBytes,
-        int byteCount,
-        int imageWidth,
-        int imageHeight);
+    private static extern int E7VisionLipBoundarySubmitRgba(
+        byte[] rgba,
+        int width,
+        int height,
+        int strideBytes,
+        int rowsBottomUp,
+        int swapRedBlue,
+        int cgOrientation);
+
+    [DllImport("__Internal")]
+    private static extern IntPtr E7VisionLipBoundaryTryFetchJson();
 
     [DllImport("__Internal")]
     private static extern void E7VisionReleaseCString(IntPtr pointer);
@@ -225,6 +255,10 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
     private void Update()
     {
+#if UNITY_IOS && !UNITY_EDITOR
+        PollBackgroundBoundary();
+#endif
+
         if (!runtimeRequested || captureInProgress || Time.realtimeSinceStartup < nextCaptureAt)
         {
             return;
@@ -232,88 +266,199 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
         StartCoroutine(CaptureAndDetectRoutine());
     }
-
+    // Capture v3 (SNOW-style source): detection runs on the ARKit camera
+    // CPU image via TryAcquireLatestCpuImage — never on the rendered screen.
+    // The prior ScreenCapture path interfered with the Metal present loop
+    // (visible camera flicker) and captured rendered makeup. The CPU image
+    // is converted to a small RGBA frame on the main thread (cheap at 384px)
+    // and Vision runs on the native background queue; display rotation is
+    // resolved by the orientation probe and locked+persisted.
     private IEnumerator CaptureAndDetectRoutine()
     {
         captureInProgress = true;
         RefreshSceneReferences();
-        bool originalDebugOverlayVisible = statusReporter != null && statusReporter.DebugOverlayVisible;
+        nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
 
-        if (regionMaskOverlay != null)
+#if UNITY_IOS && !UNITY_EDITOR
+        LoadPersistedOrientation();
+        if (cameraManager == null
+            || !cameraManager.TryAcquireLatestCpuImage(out XRCpuImage cpuImage))
         {
-            regionMaskOverlay.SetVisionCaptureSuppressed(true);
+            captureInProgress = false;
+            yield break;
         }
 
-        if (statusReporter != null)
-        {
-            statusReporter.SetDebugOverlayVisible(false);
-        }
-
-        yield return new WaitForEndOfFrame();
-
-        int width = Screen.width;
-        int height = Screen.height;
-        string status = "unknown";
-        string detail = "none";
-        Texture2D frameTexture = null;
-
+        int outputWidth = 0;
+        int outputHeight = 0;
+        bool converted = false;
         try
         {
-            if (width <= 0 || height <= 0)
+            float scale = Mathf.Min(1.0f, CaptureWidth / (float)Mathf.Max(1, cpuImage.width));
+            outputWidth = Mathf.Max(64, Mathf.RoundToInt(cpuImage.width * scale));
+            outputHeight = Mathf.Max(64, Mathf.RoundToInt(cpuImage.height * scale));
+            var conversionParams = new XRCpuImage.ConversionParams
             {
-                status = "invalid_screen_size";
-                detail = "screen_width_or_height_zero";
-                ApplyBoundaryPayload(BuildFailurePayload(status, detail, width, height), default);
-                yield break;
+                inputRect = new RectInt(0, 0, cpuImage.width, cpuImage.height),
+                outputDimensions = new Vector2Int(outputWidth, outputHeight),
+                outputFormat = TextureFormat.RGBA32,
+                transformation = XRCpuImage.Transformation.MirrorY
+            };
+            int dataSize = cpuImage.GetConvertedDataSize(conversionParams);
+            if (frameUploadBuffer == null || frameUploadBuffer.Length < dataSize)
+            {
+                frameUploadBuffer = new byte[dataSize];
             }
 
-            FaceScreenBounds faceBounds = CaptureCurrentFaceBounds();
-            frameTexture = new Texture2D(width, height, TextureFormat.RGB24, false);
-            frameTexture.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
-            frameTexture.Apply(false, false);
-            byte[] pngBytes = EncodeRgbPngTopLeft(frameTexture);
+            using (var buffer = new Unity.Collections.NativeArray<byte>(
+                dataSize, Unity.Collections.Allocator.Temp))
+            {
+                cpuImage.Convert(conversionParams, new Unity.Collections.NativeSlice<byte>(buffer));
+                Unity.Collections.NativeArray<byte>.Copy(buffer, 0, frameUploadBuffer, 0, dataSize);
+            }
 
-            string json = DetectLipBoundaryJson(pngBytes, width, height);
-            VisionBoundaryPayload payload = JsonUtility.FromJson<VisionBoundaryPayload>(json);
-            if (payload == null)
-            {
-                ApplyBoundaryPayload(BuildFailurePayload(
-                    "parse_failed",
-                    "native_vision_json_empty",
-                    width,
-                    height),
-                    faceBounds);
-            }
-            else
-            {
-                ApplyBoundaryPayload(payload, faceBounds);
-            }
+            converted = true;
         }
         catch (Exception exception)
         {
-            status = "exception";
-            detail = exception.GetType().Name + ":" + exception.Message;
-            ApplyBoundaryPayload(BuildFailurePayload(status, detail, width, height), default);
+            Debug.LogWarning(
+                "[E7] vision_lip_boundary_capture_failed error=" + exception.GetType().Name);
         }
         finally
         {
-            if (frameTexture != null)
+            cpuImage.Dispose();
+        }
+
+        if (converted)
+        {
+            // Face bounds pair with this detection so the stabilizer can
+            // rebase the polygon onto the CURRENT face. They are measured in
+            // SCREEN pixels but the landmark points arrive in CAPTURE-image
+            // pixels — every snapshot field must share one coordinate system
+            // or the downstream uniform rescale (TryGetLatestBoundary) blows
+            // the bounds up by the screen/image ratio and the stabilizer
+            // displaces the polygon off the face (empty UV bake, no lips).
+            FaceScreenBounds submitBounds = CaptureCurrentFaceBounds();
+            if (submitBounds.Available)
             {
-                Destroy(frameTexture);
+                float scaleToCaptureX = outputWidth / (float)Mathf.Max(1, Screen.width);
+                float scaleToCaptureY = outputHeight / (float)Mathf.Max(1, Screen.height);
+                submitBounds.Center = new Vector2(
+                    submitBounds.Center.x * scaleToCaptureX,
+                    submitBounds.Center.y * scaleToCaptureY);
+                submitBounds.Size = new Vector2(
+                    submitBounds.Size.x * scaleToCaptureX,
+                    submitBounds.Size.y * scaleToCaptureY);
             }
 
-            if (regionMaskOverlay != null)
-            {
-                regionMaskOverlay.SetVisionCaptureSuppressed(false);
-            }
+            pendingSubmittedFaceBounds = submitBounds;
+            E7VisionLipBoundarySubmitRgba(
+                frameUploadBuffer,
+                outputWidth,
+                outputHeight,
+                outputWidth * 4,
+                0,
+                0,
+                OrientationCandidates[captureFormatCombo % OrientationCandidates.Length]);
+        }
 
-            if (statusReporter != null)
-            {
-                statusReporter.SetDebugOverlayVisible(originalDebugOverlayVisible);
-            }
+        captureInProgress = false;
+        yield break;
+#else
+        captureInProgress = false;
+        yield break;
+#endif
+    }
 
-            nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
-            captureInProgress = false;
+#if UNITY_IOS && !UNITY_EDITOR
+    private void LoadPersistedOrientation()
+    {
+        if (loadedCaptureFormatPref)
+        {
+            return;
+        }
+
+        loadedCaptureFormatPref = true;
+        captureFormatCombo = Mathf.Clamp(
+            PlayerPrefs.GetInt(CaptureFormatPrefKey, 0),
+            0,
+            OrientationCandidates.Length - 1);
+    }
+
+    private void PollBackgroundBoundary()
+    {
+        IntPtr resultPointer = E7VisionLipBoundaryTryFetchJson();
+        if (resultPointer == IntPtr.Zero)
+        {
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = Marshal.PtrToStringAnsi(resultPointer) ?? string.Empty;
+        }
+        finally
+        {
+            E7VisionReleaseCString(resultPointer);
+        }
+
+        VisionBoundaryPayload payload = null;
+        try
+        {
+            payload = JsonUtility.FromJson<VisionBoundaryPayload>(json);
+        }
+        catch (Exception)
+        {
+            payload = null;
+        }
+
+        if (payload == null)
+        {
+            ApplyBoundaryPayload(
+                BuildFailurePayload("parse_failed", "native_vision_json_empty", 0, 0),
+                pendingSubmittedFaceBounds);
+            return;
+        }
+
+        // Orientation probe: persistent no_face while ARKit tracks a face
+        // means the rotation hint is wrong for this camera path — advance to
+        // the next candidate per six failed jobs and lock on first success.
+        if (!captureFormatLocked)
+        {
+            if (payload.status == "no_face")
+            {
+                noFaceFetchesSinceCombo++;
+                if (noFaceFetchesSinceCombo >= 6)
+                {
+                    noFaceFetchesSinceCombo = 0;
+                    captureFormatCombo = (captureFormatCombo + 1) % OrientationCandidates.Length;
+                    Debug.Log(
+                        "[E7] vision_lip_boundary_orientation_probe combo=" + captureFormatCombo
+                        + " cgOrientation=" + OrientationCandidates[captureFormatCombo]);
+                }
+            }
+            else if (payload.status == "ok")
+            {
+                captureFormatLocked = true;
+                noFaceFetchesSinceCombo = 0;
+                PlayerPrefs.SetInt(CaptureFormatPrefKey, captureFormatCombo);
+                Debug.Log(
+                    "[E7] vision_lip_boundary_orientation_locked combo=" + captureFormatCombo
+                    + " cgOrientation=" + OrientationCandidates[captureFormatCombo]);
+            }
+        }
+
+        ApplyBoundaryPayload(payload, pendingSubmittedFaceBounds);
+    }
+#endif
+
+
+    private void OnDestroy()
+    {
+        if (captureTexture != null)
+        {
+            captureTexture.Release();
+            Destroy(captureTexture);
         }
     }
 
@@ -338,44 +483,11 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         {
             faceManager = FindFirstObjectByType<ARFaceManager>();
         }
-    }
 
-    private string DetectLipBoundaryJson(byte[] pngBytes, int width, int height)
-    {
-#if UNITY_IOS && !UNITY_EDITOR
-        IntPtr resultPointer = E7VisionDetectLipBoundaryPng(
-            pngBytes,
-            pngBytes != null ? pngBytes.Length : 0,
-            width,
-            height);
-        if (resultPointer == IntPtr.Zero)
+        if (cameraManager == null)
         {
-            return "{\"status\":\"native_result_null\",\"source\":\""
-                + RuntimeSource
-                + "\",\"coordinateMode\":\""
-                + CoordinateMode
-                + "\"}";
+            cameraManager = FindFirstObjectByType<ARCameraManager>();
         }
-
-        try
-        {
-            return Marshal.PtrToStringAnsi(resultPointer) ?? string.Empty;
-        }
-        finally
-        {
-            E7VisionReleaseCString(resultPointer);
-        }
-#else
-        return "{\"status\":\"unsupported_platform\",\"detail\":\"requires_ios_device_runtime\",\"source\":\""
-            + RuntimeSource
-            + "\",\"coordinateMode\":\""
-            + CoordinateMode
-            + "\",\"imageWidth\":"
-            + width.ToString(CultureInfo.InvariantCulture)
-            + ",\"imageHeight\":"
-            + height.ToString(CultureInfo.InvariantCulture)
-            + ",\"faceCount\":0,\"outerPointCount\":0,\"innerPointCount\":0,\"outer\":[],\"inner\":[]}";
-#endif
     }
 
     private void ApplyBoundaryPayload(VisionBoundaryPayload payload, FaceScreenBounds faceBounds)
@@ -385,6 +497,15 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         string status = NormalizeOptional(payload.status, "unknown");
         Vector2[] outerPoints = ConvertPoints(payload.outer);
         Vector2[] innerPoints = ConvertPoints(payload.inner);
+        if (payload.imageWidth > 0 && payload.imageHeight > 0 && outerPoints.Length >= 3)
+        {
+            int transformIndex = ResolvePointTransformIndex(
+                outerPoints, payload.imageWidth, payload.imageHeight, faceBounds);
+            outerPoints = ApplyPointTransform(
+                outerPoints, payload.imageWidth, payload.imageHeight, transformIndex);
+            innerPoints = ApplyPointTransform(
+                innerPoints, payload.imageWidth, payload.imageHeight, transformIndex);
+        }
         bool available = status == "ok"
             && outerPoints.Length >= 3
             && innerPoints.Length >= 3;
@@ -563,6 +684,141 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             outer = new VisionPointPayload[0],
             inner = new VisionPointPayload[0]
         };
+    }
+
+    // ---- Point-transform auto-calibration -------------------------------
+    // The camera CPU image reaches Vision through a chain of conventions
+    // (sensor rotation, MirrorY conversion, Vision orientation hint, raw-y)
+    // whose net 2D effect is one of eight axis transforms. Instead of
+    // deriving it analytically, each detection scores every candidate
+    // against the ARKit-known mouth position (from the paired face bounds)
+    // and a lips-are-wide sanity check; consistent votes lock the index and
+    // persist it. This is the same empirical strategy the hand-occlusion
+    // runtime uses for its landmark transforms.
+    private const string PointTransformPrefKey = "e7.lip.pointTransformV1";
+    private const int PointTransformVotesToLock = 8;
+    private int lockedPointTransform = -1;
+    private int pointTransformCandidate = -1;
+    private int pointTransformVotes;
+    private bool loadedPointTransformPref;
+
+    private static Vector2 TransformNormalizedPoint(Vector2 p, int index)
+    {
+        float u = p.x;
+        float v = p.y;
+        bool swap = index >= 4;
+        if (swap)
+        {
+            float t = u;
+            u = v;
+            v = t;
+        }
+
+        if ((index & 1) != 0)
+        {
+            u = 1.0f - u;
+        }
+
+        if ((index & 2) != 0)
+        {
+            v = 1.0f - v;
+        }
+
+        return new Vector2(u, v);
+    }
+
+    private static Vector2[] ApplyPointTransform(
+        Vector2[] points, int width, int height, int index)
+    {
+        if (index <= 0 || points == null || points.Length == 0)
+        {
+            return points;
+        }
+
+        Vector2[] result = new Vector2[points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector2 normalized = new Vector2(points[i].x / width, points[i].y / height);
+            Vector2 transformed = TransformNormalizedPoint(normalized, index);
+            result[i] = new Vector2(transformed.x * width, transformed.y * height);
+        }
+
+        return result;
+    }
+
+    private int ResolvePointTransformIndex(
+        Vector2[] outerPoints, int width, int height, FaceScreenBounds faceBounds)
+    {
+        if (!loadedPointTransformPref)
+        {
+            loadedPointTransformPref = true;
+            lockedPointTransform = PlayerPrefs.GetInt(PointTransformPrefKey, -1);
+        }
+
+        if (lockedPointTransform >= 0)
+        {
+            return lockedPointTransform;
+        }
+
+        if (!faceBounds.Available || faceBounds.Size.x <= 1.0f || faceBounds.Size.y <= 1.0f)
+        {
+            return 0;
+        }
+
+        // Expected mouth centre in normalized capture space (top-down):
+        // slightly below the face-bounds centre.
+        Vector2 expected = new Vector2(
+            faceBounds.Center.x / width,
+            (faceBounds.Center.y + faceBounds.Size.y * 0.22f) / height);
+
+        int best = 0;
+        float bestScore = float.MaxValue;
+        for (int index = 0; index < 8; index++)
+        {
+            Vector2 sum = Vector2.zero;
+            Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
+            Vector2 max = new Vector2(float.MinValue, float.MinValue);
+            for (int i = 0; i < outerPoints.Length; i++)
+            {
+                Vector2 n = TransformNormalizedPoint(
+                    new Vector2(outerPoints[i].x / width, outerPoints[i].y / height), index);
+                sum += n;
+                min = Vector2.Min(min, n);
+                max = Vector2.Max(max, n);
+            }
+
+            Vector2 centre = sum / outerPoints.Length;
+            float distance = Vector2.Distance(centre, expected);
+            float widthN = Mathf.Max(1e-4f, max.x - min.x);
+            float heightN = Mathf.Max(1e-4f, max.y - min.y);
+            // Lips are wider than tall; punish portrait-shaped candidates.
+            float aspectPenalty = heightN > widthN ? 0.35f : 0.0f;
+            float score = distance + aspectPenalty;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                best = index;
+            }
+        }
+
+        if (best == pointTransformCandidate)
+        {
+            pointTransformVotes++;
+            if (pointTransformVotes >= PointTransformVotesToLock)
+            {
+                lockedPointTransform = best;
+                PlayerPrefs.SetInt(PointTransformPrefKey, best);
+                Debug.Log(
+                    "[E7] vision_lip_boundary_point_transform_locked index=" + best);
+            }
+        }
+        else
+        {
+            pointTransformCandidate = best;
+            pointTransformVotes = 1;
+        }
+
+        return best;
     }
 
     private static Vector2[] ConvertPoints(VisionPointPayload[] points)
