@@ -1,0 +1,7 @@
+batch,range,enrichedRows,reviewRows,blocked,manualReviewRequired,robotsDisallowed,robotsFetchFailedRequiresManualReview,termsFetchFailedRequiresManualReview,termsNotConfigured,detailFetchStarted,rawPayloadFields,rowsWithEvidence,rowsWithConfidence,rowsWithSourceUrls,rowsWithFetchedAt,rowsWithParserVersion
+batch01,1-20,20,20,8,12,8,0,10,2,False,0,20,20,20,20,20
+batch02,21-40,20,20,8,12,8,6,0,6,False,0,20,20,20,20,20
+batch03,41-60,20,20,10,10,10,8,0,2,False,0,20,20,20,20,20
+batch04,61-80,20,20,7,13,7,12,0,1,False,0,20,20,20,20,20
+batch05,81-100,20,20,10,10,10,7,0,3,False,0,20,20,20,20,20
+batch06,101-120,20,20,13,7,13,4,0,3,False,0,20,20,20,20,20

@@ -59,6 +59,7 @@ export const rootStackLinkingScreens = {
   HomeFilterStore: 'filter-store',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
+  AuradinSearch: 'auradin-search',
   Community: 'community',
   Consulting: 'consulting',
   ConsultingExpertList: 'consulting-experts',

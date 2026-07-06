@@ -296,6 +296,29 @@ def test_s3_client_omits_credentials_for_iam_role_chain(monkeypatch: pytest.Monk
   assert captured["kwargs"]["config"].signature_version == "s3v4"
 
 
+def test_s3_client_uses_named_aws_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured = {}
+
+  class FakeSession:
+    def __init__(self, profile_name: str):
+      captured["profile_name"] = profile_name
+
+    def client(self, service_name: str, **kwargs):
+      captured["service_name"] = service_name
+      captured["kwargs"] = kwargs
+      return object()
+
+  monkeypatch.setattr("app.services.s3.boto3.Session", FakeSession)
+
+  S3Service(Settings(aws_profile_name="aura-dev", aws_region="ap-northeast-2"))._client()
+
+  assert captured["profile_name"] == "aura-dev"
+  assert captured["service_name"] == "s3"
+  assert captured["kwargs"]["region_name"] == "ap-northeast-2"
+  assert "aws_access_key_id" not in captured["kwargs"]
+  assert "aws_secret_access_key" not in captured["kwargs"]
+
+
 def test_naver_shopping_item_uses_product_detail_link_and_korean_title() -> None:
   product = _map_naver_item(
     {

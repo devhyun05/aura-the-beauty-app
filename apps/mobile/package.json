@@ -18,6 +18,7 @@
     "test:personal-color": "node ../../scripts/mobile/run-personal-color-contract.mjs",
     "test:face-ratio-distortion": "node ../../scripts/mobile/run-face-ratio-distortion-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
+    "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,11 +28,13 @@
     "@tamagui/config": "^2.3.2",
     "expo": "~56.0.12",
     "expo-auth-session": "~56.0.14",
+    "expo-blur": "~56.0.3",
     "expo-camera": "~56.0.8",
     "expo-file-system": "~56.0.8",
     "expo-font": "~56.0.7",
     "expo-image": "~56.0.8",
     "expo-image-picker": "~56.0.18",
+    "expo-linear-gradient": "~56.0.4",
     "expo-media-library": "~56.0.8",
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.19",

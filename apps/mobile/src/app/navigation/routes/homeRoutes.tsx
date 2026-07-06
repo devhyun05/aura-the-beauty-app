@@ -161,7 +161,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
         onPressMakeupExtraction={handleMakeupExtractionPress}
         onPressMakeupFeedback={handleMakeupFeedbackPress}
         onPressMakeupFilter={handleMakeupFilterPress}
-        onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
+        onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
         onPressRecommendedFilterMore={() =>
           rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
         }
