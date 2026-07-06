@@ -1,9 +1,9 @@
-// AURADIN — GL orb canvas: the soap-bubble membrane rendered with three r128
-// on expo-gl. Layers INSIDE the GL scene: caustic ring (floor plane) → main
-// blob → two floating satellite bubbles. Transparent clear color — the SVG
-// halos + AuradinGround show through.
+// AURADIN — GL orb canvas: the squishy iridescent blob (DS web original,
+// "AppScreen copy copy" entry) rendered with three r128 on expo-gl.
+// Simplex-noise displacement + fresnel iridescence; transparent clear color so
+// the SVG halos + AuradinGround show through.
 //
-// Contract (kept from the SVG orb):
+// Contract (unchanged):
 // · glowTarget is a TARGET — the loop lerps uGlow toward it every frame
 //   (ORB_ANIM.GLOW_LERP); paused mode snaps it.
 // · paused=true (reduced motion / host pause) cancels the RAF loop and leaves
@@ -11,22 +11,14 @@
 // · Any GL/three failure calls onFail() exactly once → PersistentOrb swaps to
 //   the layered-SVG fallback artwork.
 //
-// No DOM, no window, no CDN: the only web-shaped object is the inert canvas
-// stub three's constructor wants for size bookkeeping.
+// The ripple/drag uniforms exist in the shader (web parity) but stay at rest —
+// the persistent orb is pointerEvents="none".
 import * as React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { GLView } from 'expo-gl';
 import type { ExpoWebGLRenderingContext } from 'expo-gl';
 import * as THREE from 'three';
-import { color } from '../../theme/auradinTokens';
-import {
-  BLOB_FRAG,
-  BLOB_VERT,
-  CAUSTIC_FRAG,
-  CAUSTIC_VERT,
-  NOISE,
-  ORB_ANIM as A,
-} from './orbShaders';
+import { BLOB_FRAG, BLOB_VERT, NOISE, ORB_ANIM as A } from './orbShaders';
 
 export type OrbGLCanvasProps = {
   /** ORB_BY_PHASE glow for the current phase — lerped, never snapped (unless paused) */
@@ -46,9 +38,7 @@ type Handle = {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   blob: THREE.Mesh;
-  bubbles: THREE.Mesh[];
-  membraneUniforms: UniformMap[]; // blob + bubbles (share the shader pair)
-  causticUniforms: UniformMap;
+  uniforms: UniformMap;
   geometries: THREE.BufferGeometry[];
   materials: THREE.ShaderMaterial[];
   raf: number | null;
@@ -56,25 +46,6 @@ type Handle = {
   last: number; // wall-clock of previous frame (s)
   glow: number; // current lerped uGlow
 };
-
-function membraneUniforms(seed: number, amp: number, freq: number, alphaBase: number, alphaRim: number): UniformMap {
-  return {
-    uTime: { value: 0 },
-    uFlow: { value: A.NOISE_FLOW },
-    uAmp: { value: amp },
-    uFreq: { value: freq },
-    uSeed: { value: seed },
-    uBoingT: { value: 0 },
-    uBoingAmp: { value: A.BOING_AMP },
-    uRimT: { value: 0 },
-    uSheenT: { value: 0 },
-    uGlow: { value: 0 },
-    uGlowColor: { value: new THREE.Color(color.magenta) },
-    uAlphaBase: { value: alphaBase },
-    uAlphaRim: { value: alphaRim },
-    uOpacity: { value: 1 },
-  };
-}
 
 export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasProps): React.JSX.Element {
   const handleRef = React.useRef<Handle | null>(null);
@@ -96,44 +67,21 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
     }
     h.last = now;
     const t = h.t;
-    const boingT = (t * A.TAU) / A.BOING_PERIOD_S;
-    const rimT = (t * A.TAU) / A.RIM_HUE_PERIOD_S;
-    const sheenT = (t * A.TAU) / A.SHEEN_PERIOD_S;
 
-    // glow: uniform lerp toward target (+ soft pulse while lit); paused snaps
+    // glow: uniform lerp toward target; paused snaps
     if (advance) {
       h.glow += (glowRef.current - h.glow) * A.GLOW_LERP;
     } else {
       h.glow = glowRef.current;
     }
-    const pulse = 1 - A.GLOW_PULSE_AMP * (0.5 + 0.5 * Math.sin((t * A.TAU) / A.GLOW_PULSE_PERIOD_S));
-    const glow = h.glow * pulse;
+    h.uniforms.uTime.value = t;
+    h.uniforms.uGlow.value = h.glow;
 
-    h.membraneUniforms.forEach((u, i) => {
-      u.uTime.value = t;
-      u.uBoingT.value = boingT;
-      u.uRimT.value = rimT;
-      u.uSheenT.value = sheenT;
-      u.uGlow.value = i === 0 ? glow : glow * 0.6; // satellites glow softer
-    });
-    h.causticUniforms.uTime.value = t;
-    h.causticUniforms.uGlow.value = glow;
-
-    h.blob.rotation.y = (t * A.TAU) / A.ROTATE_PERIOD_S;
-    h.blob.rotation.x = Math.sin((t * A.TAU) / A.TILT_PERIOD_S) * A.TILT_AMP_RAD;
-    h.blob.rotation.z = Math.cos(((t * A.TAU) / A.TILT_PERIOD_S) * 0.8) * A.TILT_AMP_RAD * 0.6;
-
-    A.BUBBLES.forEach((b, i) => {
-      const m = h.bubbles[i];
-      if (!m) return;
-      const oa = (t * A.TAU) / b.orbitPeriodS + b.phase;
-      m.position.set(
-        Math.cos(oa) * b.orbitR,
-        b.yOffset + Math.sin((t * A.TAU) / b.bobPeriodS + b.phase) * b.bobAmp,
-        Math.sin(oa) * b.orbitR * b.orbitTiltZ
-      );
-      m.rotation.y = -t * 0.5;
-    });
+    // jelly boing (volume-preserving squash) + slow float + spin — web parity
+    const boing = Math.sin(t * A.BOING_A.freq) * A.BOING_A.amp + Math.sin(t * A.BOING_B.freq) * A.BOING_B.amp;
+    h.blob.scale.set(1 - boing * 0.6, 1 + boing, 1 - boing * 0.6);
+    h.blob.position.y = Math.sin(t * A.FLOAT_FREQ) * A.FLOAT_AMP;
+    h.blob.rotation.y = t * A.ROTATE_SPEED;
 
     h.renderer.render(h.scene, h.camera);
     h.gl.endFrameEXP();
@@ -157,7 +105,8 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
       try {
         step(hh, true);
         hh.raf = requestAnimationFrame(frame);
-      } catch {
+      } catch (e) {
+        console.warn('[OrbGL:step]', e);
         stopLoop();
         fail();
       }
@@ -181,6 +130,13 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
           removeEventListener: (): void => {},
           getContext: (): ExpoWebGLRenderingContext => gl,
         } as unknown as HTMLCanvasElement;
+        // three r128 reads gl.canvas.width inside WebGLState — expo-gl contexts
+        // have no canvas, so attach the stub to the CONTEXT too (what expo-three
+        // does); passing it to the renderer alone is not enough.
+        const glWithCanvas = gl as unknown as { canvas?: HTMLCanvasElement };
+        if (!glWithCanvas.canvas) {
+          glWithCanvas.canvas = canvasStub;
+        }
         const renderer = new THREE.WebGLRenderer({
           canvas: canvasStub,
           context: gl as unknown as WebGLRenderingContext,
@@ -193,74 +149,28 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(A.CAMERA_FOV, w / hpx, 0.1, 40);
-        camera.position.set(A.CAMERA_POS[0], A.CAMERA_POS[1], A.CAMERA_POS[2]);
+        camera.position.set(0, 0, A.CAMERA_Z);
         camera.lookAt(0, 0, 0);
 
-        const geometries: THREE.BufferGeometry[] = [];
-        const materials: THREE.ShaderMaterial[] = [];
-        const membranes: UniformMap[] = [];
-
-        // caustic ring — floor plane under the blob, additive
-        const causticUniforms: UniformMap = {
+        const uniforms: UniformMap = {
           uTime: { value: 0 },
           uGlow: { value: 0 },
-          uGlowColor: { value: new THREE.Color(color.magenta) },
-          uOpacity: { value: A.CAUSTIC_OPACITY },
+          uPointer: { value: new THREE.Vector2(0, 0) },
+          uStrength: { value: 0 },
+          uDrag: { value: new THREE.Vector2(0, 0) },
+          uRipples: { value: [0, 0, 0, 0].map(() => new THREE.Vector4(0, 0, 0, -10)) },
+          uGrab: { value: new THREE.Vector3(0, 0, 1) },
+          uDragL: { value: new THREE.Vector3(0, 0, 0) },
         };
-        const causticGeo = new THREE.PlaneGeometry(A.CAUSTIC_SIZE, A.CAUSTIC_SIZE);
-        const causticMat = new THREE.ShaderMaterial({
-          vertexShader: CAUSTIC_VERT,
-          fragmentShader: NOISE + CAUSTIC_FRAG,
-          uniforms: causticUniforms,
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        });
-        const caustic = new THREE.Mesh(causticGeo, causticMat);
-        caustic.rotation.x = -Math.PI / 2;
-        caustic.position.y = A.CAUSTIC_Y;
-        caustic.renderOrder = 0;
-        scene.add(caustic);
-        geometries.push(causticGeo);
-        materials.push(causticMat);
-
-        // main blob membrane
-        const blobUniforms = membraneUniforms(0, A.BLOB_AMP, A.BLOB_FREQ, A.BLOB_ALPHA.base, A.BLOB_ALPHA.rim);
-        const blobGeo = new THREE.IcosahedronGeometry(1, A.BLOB_DETAIL);
+        const blobGeo = new THREE.IcosahedronGeometry(A.BLOB_RADIUS, A.BLOB_DETAIL);
         const blobMat = new THREE.ShaderMaterial({
           vertexShader: NOISE + BLOB_VERT,
           fragmentShader: NOISE + BLOB_FRAG,
-          uniforms: blobUniforms,
+          uniforms,
           transparent: true,
-          depthWrite: true, // mostly-opaque membrane occludes passing bubbles
         });
         const blob = new THREE.Mesh(blobGeo, blobMat);
-        blob.renderOrder = 1;
         scene.add(blob);
-        geometries.push(blobGeo);
-        materials.push(blobMat);
-        membranes.push(blobUniforms);
-
-        // two floating satellite bubbles — same membrane shader, thinner film
-        const bubbles: THREE.Mesh[] = A.BUBBLES.map((b, i) => {
-          const u = membraneUniforms(b.seed, b.amp, b.freq, A.BUBBLE_ALPHA.base, A.BUBBLE_ALPHA.rim);
-          u.uBoingAmp.value = A.BOING_AMP * 0.4;
-          const geo = new THREE.IcosahedronGeometry(b.radius, A.BUBBLE_DETAIL);
-          const mat = new THREE.ShaderMaterial({
-            vertexShader: NOISE + BLOB_VERT,
-            fragmentShader: NOISE + BLOB_FRAG,
-            uniforms: u,
-            transparent: true,
-            depthWrite: false,
-          });
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.renderOrder = 2 + i;
-          scene.add(mesh);
-          geometries.push(geo);
-          materials.push(mat);
-          membranes.push(u);
-          return mesh;
-        });
 
         handleRef.current = {
           gl,
@@ -268,11 +178,9 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
           scene,
           camera,
           blob,
-          bubbles,
-          membraneUniforms: membranes,
-          causticUniforms,
-          geometries,
-          materials,
+          uniforms,
+          geometries: [blobGeo],
+          materials: [blobMat],
           raf: null,
           t: 0,
           last: Date.now() / 1000,
@@ -284,7 +192,8 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
         } else {
           startLoop();
         }
-      } catch {
+      } catch (e) {
+        console.warn('[OrbGL:create]', e, (e as Error)?.stack?.split('\n').slice(0, 6).join(' | '));
         fail();
       }
     },

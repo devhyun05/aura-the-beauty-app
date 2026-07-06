@@ -6,6 +6,7 @@
 import * as React from 'react';
 import {
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -99,10 +100,11 @@ export function HomeView({
           색·질감·예산 — 편하게 말하면 아우라딘이 찾아드려요.
         </Text>
 
-        {/* orb zone — the PersistentOrb (mounted by the host) floats here on home */}
-        <View style={{ flex: 1, minHeight: 180 }} />
+        {/* orb zone — the PersistentOrb (mounted by the host) floats here on home.
+            Tapping the open ground dismisses the keyboard. */}
+        <Pressable style={{ flex: 1, minHeight: 180 }} onPress={Keyboard.dismiss} accessible={false} />
 
-        <GlassSheet style={{ marginHorizontal: -layout.sheetBleed }}>
+        <GlassSheet iridescent style={{ marginHorizontal: -layout.sheetBleed }}>
           <Composer value={query} onChangeText={setQuery} onSend={onSubmit} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             {SUGGESTIONS.map((label) => (

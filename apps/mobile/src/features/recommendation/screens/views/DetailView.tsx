@@ -116,14 +116,14 @@ export function DetailView({
           enter,
         ]}
       >
-        <View
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-        >
+        {/* back left (absolute) + wordmark centered — the orb parks top-center behind it */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
           <Pressable
             onPress={onBack}
             accessibilityRole="button"
             accessibilityLabel="결과로 돌아가기"
             hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
+            style={{ position: 'absolute', left: 0, zIndex: 1 }}
           >
             <Text
               style={{

@@ -25,6 +25,7 @@
     "@react-navigation/bottom-tabs": "^7.18.3",
     "@react-navigation/native": "^7.3.4",
     "@react-navigation/native-stack": "^7.17.6",
+    "@shopify/react-native-skia": "2.6.2",
     "@tamagui/config": "^2.3.2",
     "expo": "~56.0.12",
     "expo-auth-session": "~56.0.14",

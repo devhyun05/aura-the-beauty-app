@@ -43,9 +43,9 @@ export const ORB_BY_PHASE: Record<AuradinPhase, OrbPhaseSpec> = {
   home: { cx: 0.5, cy: 0.51, scale: 1, glow: 0, opacity: 1 }, // entry v3: optically mid, between headline and sheet
   searching: { cx: 0.5, cy: 0.44, scale: 1.18, glow: 1, opacity: 1 },
   question: { cx: 0.5, cy: 0.22, scale: 0.5, glow: 0, opacity: 0.95 },
-  results: { cx: 0.84, cy: 0.1, scale: 0.42, glow: 0, opacity: 0.9 },
-  detail: { cx: 0.84, cy: 0.1, scale: 0.4, glow: 0, opacity: 0.85 },
-  saved: { cx: 0.84, cy: 0.1, scale: 0.45, glow: 0, opacity: 0.9 },
+  results: { cx: 0.5, cy: 0.1, scale: 0.42, glow: 0, opacity: 0.9 },
+  detail: { cx: 0.5, cy: 0.1, scale: 0.4, glow: 0, opacity: 0.85 },
+  saved: { cx: 0.5, cy: 0.1, scale: 0.45, glow: 0, opacity: 0.9 },
   failed: { cx: 0.5, cy: 0.4, scale: 0.62, glow: 0.25, opacity: 1 },
 };
 
@@ -167,7 +167,7 @@ function Halo({ kind }: { kind: 'ambient' | 'glow' }): React.JSX.Element {
 
 export type PersistentOrbProps = {
   phase: AuradinPhase;
-  /** sphere diameter at scale 1 (default: half the screen width, ≤210) */
+  /** blob diameter at scale 1 (default: 36% of screen width, ≤155 — AppScreen framing) */
   diameter?: number;
   /** host pause (e.g. AppState background) — freezes GL + idle loops */
   paused?: boolean;
@@ -178,7 +178,7 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
   const { width: W, height: H } = useWindowDimensions();
   const reduced = useReducedMotion();
   const frozen = reduced || paused;
-  const dia = diameter ?? Math.min(W * 0.5, 210);
+  const dia = diameter ?? Math.min(W * 0.36, 155);
   const box = dia * (BOX / (R * 2)); // halo/canvas box in px
 
   // GL failure → layered-SVG fallback (kept for the app's lifetime)
