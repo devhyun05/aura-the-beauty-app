@@ -14,7 +14,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
 import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
-import {Download, Share2, WandSparkles} from 'lucide-react-native';
+import {Download, Share2, ShoppingBag, Trash2, WandSparkles} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
 import {
@@ -57,7 +57,9 @@ type FaceAnalysisReportDetailScreenProps = {
   reportId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
+  onDeleteReport?: (reportId: string) => Promise<void> | void;
   onHeaderShareActionChange?: (action: FaceAnalysisReportShareAction | null) => void;
+  onPressProducts?: (reportId: string) => void;
   // 세션 내 촬영에서 온디바이스로 계산한 얼굴 세로 비율.
   // 과거 보고서(id 조회)에는 없으므로 null이면 섹션을 렌더하지 않는다.
   verticalThirds?: FaceVerticalThirdsResult | null;
@@ -66,6 +68,9 @@ type FaceAnalysisReportDetailScreenProps = {
 type FaceAnalysisReportShareAction = () => void;
 type FaceAnalysisReportShareTarget = 'save-image' | 'share-report';
 type FaceAnalysisReportShareFeedback = {
+  message: string;
+};
+type FaceAnalysisReportDetailActionFeedback = {
   message: string;
 };
 
@@ -110,6 +115,17 @@ const shareTargetLabels: Record<FaceAnalysisReportShareTarget, string> = {
   'save-image': "이미지 저장",
   'share-report': "공유하기",
 };
+export const faceAnalysisReportDetailActionLabels = {
+  delete: "삭제",
+  deleting: "삭제 중",
+  products: "추천 제품",
+} as const;
+export const faceAnalysisReportDeleteConfirmationCopy = {
+  cancel: "취소",
+  confirm: "삭제",
+  message: "삭제한 맞춤 분석 보고서는 되돌릴 수 없어요.",
+  title: "보고서 삭제",
+} as const;
 
 function isMakeupImagePending(item?: FaceAnalysisMakeupCard | null) {
   return item?.imageStatus === 'pending';
@@ -210,7 +226,9 @@ export function FaceAnalysisReportDetailScreen({
   headerTitle = '맞춤 분석 보고서',
   reportId,
   onCreateARFilter,
+  onDeleteReport,
   onHeaderShareActionChange,
+  onPressProducts,
   verticalThirds,
 }: FaceAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
@@ -219,6 +237,9 @@ export function FaceAnalysisReportDetailScreen({
     useState<FaceAnalysisReportShareTarget | null>(null);
   const [shareFeedback, setShareFeedback] =
     useState<FaceAnalysisReportShareFeedback | null>(null);
+  const [isDeletingReport, setIsDeletingReport] = useState(false);
+  const [actionFeedback, setActionFeedback] =
+    useState<FaceAnalysisReportDetailActionFeedback | null>(null);
   const reportCaptureRef = useRef<ViewShotRef | null>(null);
 
   useEffect(() => {
@@ -404,6 +425,57 @@ export function FaceAnalysisReportDetailScreen({
     ]);
   }, [activeShareTarget, handleShareAction, report]);
 
+  const handlePressProducts = useCallback(() => {
+    if (report) {
+      onPressProducts?.(report.id);
+    }
+  }, [onPressProducts, report]);
+
+  const handleConfirmDeleteReport = useCallback(async () => {
+    if (!report || !onDeleteReport || isDeletingReport) {
+      return;
+    }
+
+    setIsDeletingReport(true);
+    setActionFeedback(null);
+
+    try {
+      await onDeleteReport(report.id);
+    } catch (error) {
+      console.info('[aura:analysis] report-detail:delete-failed', {
+        message: error instanceof Error ? error.message : String(error),
+        reportId: report.id,
+      });
+      const message = "보고서를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.";
+
+      setActionFeedback({message});
+      Alert.alert("삭제 실패", message);
+    } finally {
+      setIsDeletingReport(false);
+    }
+  }, [isDeletingReport, onDeleteReport, report]);
+
+  const handlePressDeleteReport = useCallback(() => {
+    if (!report || !onDeleteReport || isDeletingReport) {
+      return;
+    }
+
+    Alert.alert(
+      faceAnalysisReportDeleteConfirmationCopy.title,
+      faceAnalysisReportDeleteConfirmationCopy.message,
+      [
+        {text: faceAnalysisReportDeleteConfirmationCopy.cancel, style: 'cancel'},
+        {
+          text: faceAnalysisReportDeleteConfirmationCopy.confirm,
+          onPress: () => {
+            void handleConfirmDeleteReport();
+          },
+          style: 'destructive',
+        },
+      ],
+    );
+  }, [handleConfirmDeleteReport, isDeletingReport, onDeleteReport, report]);
+
   useEffect(() => {
     if (!report) {
       onHeaderShareActionChange?.(null);
@@ -483,6 +555,13 @@ export function FaceAnalysisReportDetailScreen({
           분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.
         </Text>
       </ViewShot>
+
+      <ReportDetailActions
+        feedback={actionFeedback}
+        isDeleting={isDeletingReport}
+        onPressDelete={onDeleteReport ? handlePressDeleteReport : undefined}
+        onPressProducts={onPressProducts ? handlePressProducts : undefined}
+      />
 
       <ReportShareActions
         activeTarget={activeShareTarget}
@@ -784,6 +863,73 @@ function PrimaryMakeupRecommendationCard({
         </View>
       </View>
     </ReportSection>
+  );
+}
+
+function ReportDetailActions({
+  feedback,
+  isDeleting,
+  onPressDelete,
+  onPressProducts,
+}: {
+  feedback: FaceAnalysisReportDetailActionFeedback | null;
+  isDeleting: boolean;
+  onPressDelete?: () => void;
+  onPressProducts?: () => void;
+}) {
+  if (!onPressProducts && !onPressDelete) {
+    return null;
+  }
+
+  return (
+    <View style={styles.reportDetailActionArea}>
+      <View style={styles.reportDetailActionRow}>
+        {onPressProducts ? (
+          <Button
+            accessibilityLabel={faceAnalysisReportDetailActionLabels.products}
+            accessibilityRole="button"
+            onPress={onPressProducts}
+            pressStyle={{opacity: 0.72}}
+            style={[styles.reportDetailActionButton, styles.reportProductsButton]}
+            unstyled>
+            <ShoppingBag color={colors.white} size={iconSize.xs} strokeWidth={2} />
+            <Text style={styles.reportProductsButtonText}>
+              {faceAnalysisReportDetailActionLabels.products}
+            </Text>
+          </Button>
+        ) : null}
+
+        {onPressDelete ? (
+          <Button
+            accessibilityLabel="맞춤 분석 보고서 삭제"
+            accessibilityRole="button"
+            accessibilityState={{busy: isDeleting, disabled: isDeleting}}
+            disabled={isDeleting}
+            disabledStyle={styles.reportDeleteButtonDisabled}
+            onPress={onPressDelete}
+            pressStyle={{opacity: 0.72}}
+            style={[styles.reportDetailActionButton, styles.reportDeleteButton]}
+            unstyled>
+            {isDeleting ? (
+              <ActivityIndicator color={colors.danger} size="small" />
+            ) : (
+              <Trash2 color={colors.danger} size={iconSize.xs} strokeWidth={2} />
+            )}
+            <Text style={styles.reportDeleteButtonText}>
+              {isDeleting
+                ? faceAnalysisReportDetailActionLabels.deleting
+                : faceAnalysisReportDetailActionLabels.delete}
+            </Text>
+          </Button>
+        ) : null}
+      </View>
+
+      {feedback ? (
+        <Text accessibilityLiveRegion="polite" style={styles.reportDetailActionFeedback}>
+          {feedback.message}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -1178,6 +1324,44 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xl,
   },
+  reportDeleteButton: {
+    backgroundColor: REPORT_PANEL_COLOR,
+    borderColor: 'rgba(220, 38, 38, 0.28)',
+  },
+  reportDeleteButtonDisabled: {
+    opacity: 0.58,
+  },
+  reportDeleteButtonText: {
+    color: colors.danger,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  reportDetailActionArea: {
+    gap: spacing.xs,
+  },
+  reportDetailActionButton: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  reportDetailActionFeedback: {
+    color: colors.danger,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  reportDetailActionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   scrollBody: {
     backgroundColor: REPORT_BACKGROUND_COLOR,
     flex: 1,
@@ -1209,6 +1393,16 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
+  },
+  reportProductsButton: {
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.textPrimary,
+  },
+  reportProductsButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
   },
   shareActionArea: {
     alignItems: 'center',

@@ -15,6 +15,7 @@ import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types'
 import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
+import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {colors} from '../../../shared/theme';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -318,9 +319,6 @@ export function FaceAnalysisReportsListRouteScreen({
         onPressReport={reportId =>
           navigation.navigate('FaceAnalysisReportDetail', {reportId})
         }
-        onPressProducts={reportId =>
-          navigation.navigate('ProductRecommendation', {reportId})
-        }
       />
     </DetailRouteChrome>
   );
@@ -331,13 +329,27 @@ export function FaceAnalysisReportDetailRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
-  const {selectedFaceAnalysisReport, selectedFaceCapture, selectedFaceVerticalThirds} =
-    useNavigationFlowState();
+  const {
+    selectedFaceAnalysisReport,
+    selectedFaceCapture,
+    selectedFaceVerticalThirds,
+    setSelectedFaceAnalysisReport,
+  } = useNavigationFlowState();
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
       setShareAction(nextShareAction ? {cb: nextShareAction} : null);
     },
     [],
+  );
+  const handleDeleteReport = React.useCallback(
+    async (reportId: string) => {
+      await deleteFaceAnalysisReport(reportId);
+      setSelectedFaceAnalysisReport(currentReport =>
+        currentReport?.id === reportId ? null : currentReport,
+      );
+      navigation.navigate('FaceAnalysisReportsList');
+    },
+    [navigation, setSelectedFaceAnalysisReport],
   );
 
   return (
@@ -355,7 +367,11 @@ export function FaceAnalysisReportDetailRouteScreen({
         onCreateARFilter={() =>
           navigation.navigate('MakeupFilterEdit', {backRoute: 'FaceAnalysisReportDetail'})
         }
+        onDeleteReport={handleDeleteReport}
         onHeaderShareActionChange={handleHeaderShareActionChange}
+        onPressProducts={reportId =>
+          navigation.navigate('ProductRecommendation', {reportId})
+        }
         reportId={route.params?.reportId ?? null}
         verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
       />

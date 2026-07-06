@@ -64,9 +64,6 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
         onPressMakeupLook={handleMakeupLookPress}
         onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
-        onPressProductRecommendationForReport={reportId =>
-          rootNavigation?.navigate('ProductRecommendation', {reportId})
-        }
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
         likedMakeupLooks={savedAndLikedMakeupLooks}
       />

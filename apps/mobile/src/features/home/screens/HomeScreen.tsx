@@ -30,6 +30,7 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
+import {SectionMoreButton} from '../../../shared/ui';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -817,14 +818,11 @@ function SectionHeader({
         ) : null}
       </YStack>
       {actionLabel && onPressAction ? (
-        <Pressable
+        <SectionMoreButton
           accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
-          accessibilityRole="button"
+          label={actionLabel}
           onPress={onPressAction}
-          style={({pressed}) => [styles.sectionMoreButton, pressed && styles.pressed]}>
-          <Text style={styles.sectionMoreText}>{actionLabel}</Text>
-          <ArrowRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-        </Pressable>
+        />
       ) : null}
     </XStack>
   );
@@ -1187,24 +1185,5 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     minWidth: 0,
-  },
-  sectionMoreButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-  },
-  sectionMoreText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
   },
 });
