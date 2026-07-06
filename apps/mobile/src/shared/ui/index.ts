@@ -96,3 +96,4 @@ export {
   SectionMoreButton,
 } from './SectionMoreButton';
 export {SectionHeader} from './SectionHeader';
+export {useTransientToast} from './TransientToast';

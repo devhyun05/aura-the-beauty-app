@@ -7,8 +7,16 @@ import {
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
+import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
+import {
+  CommunityCreateThreadScreen,
+  CommunityHomeScreen,
+  CommunityThreadDetailScreen,
+  CommunityUserProfileScreen,
+} from '../../../features/community';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -62,6 +70,8 @@ export function getHomeRecommendedFilterMoreRouteName(): 'HomeFilterStore' {
 
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
+  const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
+  const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
   const {
     likedMakeupFilterIds,
     setMakeupFeedbackResult,
@@ -97,25 +107,56 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     });
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
-  const handleMakeupExtractionPress = React.useCallback(() => {
+  const closeExtractionSheet = React.useCallback(() => {
+    setIsExtractionSheetVisible(false);
+  }, []);
+
+  const closeFeedbackSheet = React.useCallback(() => {
+    setIsFeedbackSheetVisible(false);
+  }, []);
+
+  const startMakeupExtraction = React.useCallback((initialSource: 'camera' | 'gallery') => {
+    setIsExtractionSheetVisible(false);
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
-    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
+
+    requestAnimationFrame(() => {
+      rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    });
   }, [
     rootNavigation,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   ]);
 
-  const handleMakeupFeedbackPress = React.useCallback(() => {
+  const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
+    setIsFeedbackSheetVisible(false);
     setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
-    rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+    setSelectedMakeupFeedbackPhoto({photoSource});
+
+    requestAnimationFrame(() => {
+      if (photoSource === 'camera') {
+        rootNavigation?.navigate('MakeupFeedbackCapture');
+        return;
+      }
+
+      rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+    });
   }, [
     rootNavigation,
     setMakeupFeedbackResult,
     setSelectedMakeupFeedbackPhoto,
   ]);
+
+  const handleMakeupExtractionPress = React.useCallback(() => {
+    setIsFeedbackSheetVisible(false);
+    setIsExtractionSheetVisible(true);
+  }, []);
+
+  const handleMakeupFeedbackPress = React.useCallback(() => {
+    setIsExtractionSheetVisible(false);
+    setIsFeedbackSheetVisible(true);
+  }, []);
 
   const handleBeautyJourneyGuideConfirm = React.useCallback(() => {
     setShouldShowBeautyJourneyGuide(false);
@@ -151,26 +192,40 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       navigation={navigation}
       routeName="HomeTab"
       wrapContentInScreen={false}>
-      <HomeScreen
-        onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
-        onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
-        onPressCommunity={() => navigation.navigate('CommunityTab')}
-        onPressConsulting={() => rootNavigation?.navigate('Consulting')}
-        onPressHalfMakeup={handleHalfMakeupPress}
-        onPressHeroTrendFilter={handleHeroTrendFilterPress}
-        onPressMakeupExtraction={handleMakeupExtractionPress}
-        onPressMakeupFeedback={handleMakeupFeedbackPress}
-        onPressMakeupFilter={handleMakeupFilterPress}
-        onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
-        onPressRecommendedFilterMore={() =>
-          rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
-        }
-        onPressRecommendedFilter={handleRecommendedFilterPress}
-        isMakeupFilterLiked={isMakeupFilterLiked}
-        onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
-        showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
-        onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
-      />
+      <>
+        <HomeScreen
+          onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
+          onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
+          onPressCommunity={() => navigation.navigate('CommunityTab')}
+          onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+          onPressHalfMakeup={handleHalfMakeupPress}
+          onPressHeroTrendFilter={handleHeroTrendFilterPress}
+          onPressMakeupExtraction={handleMakeupExtractionPress}
+          onPressMakeupFeedback={handleMakeupFeedbackPress}
+          onPressMakeupFilter={handleMakeupFilterPress}
+          onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
+          onPressRecommendedFilterMore={() =>
+            rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
+          }
+          onPressRecommendedFilter={handleRecommendedFilterPress}
+          isMakeupFilterLiked={isMakeupFilterLiked}
+          onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
+          showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
+          onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
+        />
+        <MakeupExtractionActionSheet
+          isVisible={isExtractionSheetVisible}
+          onClose={closeExtractionSheet}
+          onPressCamera={() => startMakeupExtraction('camera')}
+          onPressUpload={() => startMakeupExtraction('gallery')}
+        />
+        <MakeupFeedbackActionSheet
+          isVisible={isFeedbackSheetVisible}
+          onClose={closeFeedbackSheet}
+          onPressCamera={() => startMakeupFeedback('camera')}
+          onPressUpload={() => startMakeupFeedback('gallery')}
+        />
+      </>
     </MainTabChrome>
   );
 }
@@ -259,15 +314,85 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
     <DetailRouteChrome
       routeName="Community"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="커뮤니티 기능을 준비 중이에요."
-        showHeader={false}
-        title="커뮤니티"
+      <CommunityHomeScreen
+        onPressCreate={() => navigation.navigate('CommunityThreadCreate')}
+        onPressEditProfile={() => navigation.navigate('ProfileEdit')}
+        onPressThread={threadId => navigation.navigate('CommunityThreadDetail', {threadId})}
       />
     </DetailRouteChrome>
   );
 }
 
+export function CommunityThreadDetailRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityThreadDetail'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadDetail"
+      onBack={() => navigation.navigate('Community')}>
+      <CommunityThreadDetailScreen
+        threadId={route.params.threadId}
+        onDeleted={() => navigation.navigate('Community')}
+        onPressEditThread={thread => navigation.navigate('CommunityThreadEdit', {threadId: thread.id})}
+        onPressAuthor={author => navigation.navigate('CommunityUserProfile', {
+          avatarUrl: author.avatarUrl,
+          nickname: author.nickname,
+          userId: author.id,
+        })}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityThreadEditRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityThreadEdit'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadEdit"
+      onBack={() => navigation.navigate('CommunityThreadDetail', {threadId: route.params.threadId})}>
+      <CommunityCreateThreadScreen
+        mode="edit"
+        threadId={route.params.threadId}
+        onUpdated={thread => navigation.navigate('CommunityThreadDetail', {threadId: thread.id})}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityUserProfileRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityUserProfile'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityUserProfile"
+      onBack={() => navigation.goBack()}>
+      <CommunityUserProfileScreen
+        avatarUrl={route.params.avatarUrl}
+        nickname={route.params.nickname}
+        userId={route.params.userId}
+        onPressThread={threadId => navigation.navigate('CommunityThreadDetail', {threadId})}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityThreadCreateRouteScreen({
+  navigation,
+}: RootScreenProps<'CommunityThreadCreate'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadCreate"
+      onBack={() => navigation.navigate('Community')}>
+      <CommunityCreateThreadScreen
+        onCreated={thread => navigation.navigate('CommunityThreadDetail', {threadId: thread.id})}
+      />
+    </DetailRouteChrome>
+  );
+}
 export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'>) {
   return (
     <DetailRouteChrome

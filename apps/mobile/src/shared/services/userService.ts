@@ -160,6 +160,10 @@ function getProfileEditFieldsForProfile(profile: UserProfile): ProfileEditField[
     }));
 }
 
+export function getUserProfileAvatarUri(profile: Pick<UserProfile, 'avatarSource'>): string | null {
+  return getAvatarUri(profile.avatarSource);
+}
+
 function getAvatarUri(source: ImageSourcePropType | undefined) {
   if (!source || typeof source === 'number') {
     return null;

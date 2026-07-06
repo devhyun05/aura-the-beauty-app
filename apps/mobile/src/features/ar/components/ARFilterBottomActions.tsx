@@ -34,7 +34,7 @@ const AR_FILTER_EDIT_ACTION_OPTIONS = [
   },
 ] as const satisfies readonly ARFilterEditActionOption[];
 
-export const AR_FILTER_BOTTOM_ACTION_BUTTON_GAP = spacing.xs;
+export const AR_FILTER_BOTTOM_ACTION_BUTTON_GAP = spacing.sm;
 export const AR_FILTER_BOTTOM_ACTION_ICON_BUTTON_SIZE = 36;
 export const AR_FILTER_BOTTOM_ACTION_ICON_BUTTON_BACKGROUND_COLOR =
   colors.arFilterBottomSheetSurface;

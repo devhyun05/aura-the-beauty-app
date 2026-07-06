@@ -45,6 +45,13 @@ async def complete_upload(
       bucket,
       object_key,
       cdn_url,
+      thumbnail_bucket,
+      thumbnail_object_key,
+      thumbnail_cdn_url,
+      thumbnail_content_type,
+      thumbnail_byte_size,
+      thumbnail_width,
+      thumbnail_height,
       content_type,
       byte_size,
       width,
@@ -52,7 +59,7 @@ async def complete_upload(
       checksum_sha256,
       original_filename
     )
-    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     returning *
     """,
     user["id"],
@@ -61,6 +68,13 @@ async def complete_upload(
     payload.bucket,
     payload.object_key,
     payload.cdn_url,
+    payload.thumbnail_bucket,
+    payload.thumbnail_object_key,
+    payload.thumbnail_cdn_url,
+    payload.thumbnail_content_type,
+    payload.thumbnail_byte_size,
+    payload.thumbnail_width,
+    payload.thumbnail_height,
     payload.content_type,
     payload.byte_size,
     payload.width,

@@ -234,13 +234,13 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_FLOATING_SHEET_CONTROLS_RIGHT_PADDING,
-  AR_FILTER_BOTTOM_SHEET_PADDING,
-  'AR filter floating sheet controls right padding matches the bottom sheet padding',
+  spacing.md,
+  'AR filter floating sheet controls give the save button more right breathing room',
 );
 expectEqual(
   AR_FILTER_FLOATING_SHEET_CONTROLS_LEFT_PADDING,
-  AR_FILTER_BOTTOM_SHEET_PADDING,
-  'AR filter floating sheet controls left padding matches the bottom sheet padding',
+  spacing.md,
+  'AR filter floating sheet controls give the sheet toggle more left breathing room',
 );
 expectEqual(
   AR_FILTER_FLOATING_SHEET_CONTROLS_JUSTIFY_CONTENT,
@@ -284,8 +284,8 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_PANEL_TOP_PADDING,
-  spacing.xl,
-  'AR filter bottom sheet panel top padding gives controls more breathing room',
+  spacing.xl + 2,
+  'AR filter bottom sheet panel top padding is nudged down slightly',
 );
 expectEqual(
   AR_FILTER_BOTTOM_SHEET_PANEL_HORIZONTAL_PADDING,

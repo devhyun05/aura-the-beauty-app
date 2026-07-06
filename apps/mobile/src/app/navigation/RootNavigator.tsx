@@ -7,6 +7,10 @@ import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './
 import {
   ConsultingRouteScreen,
   CommunityRouteScreen,
+  CommunityThreadCreateRouteScreen,
+  CommunityThreadDetailRouteScreen,
+  CommunityThreadEditRouteScreen,
+  CommunityUserProfileRouteScreen,
   FloatingActionSettingsRouteScreen,
   HomeFilterStoreRouteScreen,
   SavedMakeupListRouteScreen,
@@ -109,6 +113,10 @@ export function RootNavigator() {
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
+      <Stack.Screen name="CommunityThreadDetail" component={CommunityThreadDetailRouteScreen} />
+      <Stack.Screen name="CommunityThreadCreate" component={CommunityThreadCreateRouteScreen} />
+      <Stack.Screen name="CommunityThreadEdit" component={CommunityThreadEditRouteScreen} />
+      <Stack.Screen name="CommunityUserProfile" component={CommunityUserProfileRouteScreen} />
       <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
       <Stack.Screen
         name="ConsultingExpertList"

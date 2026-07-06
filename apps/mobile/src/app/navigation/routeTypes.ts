@@ -47,6 +47,10 @@ export type RootStackParamList = {
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
     | undefined;
   Community: undefined;
+  CommunityThreadDetail: {threadId: string};
+  CommunityThreadCreate: undefined;
+  CommunityThreadEdit: {threadId: string};
+  CommunityUserProfile: {avatarUrl?: string | null; nickname: string; userId: string};
   Consulting: undefined;
   ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
   ConsultingExpertProfile: {expertId: string};
@@ -124,6 +128,10 @@ export const rootStackRoutes = [
   'ProductRecommendation',
   'AuradinSearch',
   'Community',
+  'CommunityThreadDetail',
+  'CommunityThreadCreate',
+  'CommunityThreadEdit',
+  'CommunityUserProfile',
   'Consulting',
   'ConsultingExpertList',
   'ConsultingExpertProfile',

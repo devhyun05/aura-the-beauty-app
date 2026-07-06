@@ -36,6 +36,19 @@ export const profileTypography = {
   caption: 12,
 } as const;
 
+export const communityColors = {
+  surfaceWarm: '#FBF8F6',
+  accent: '#7B3F4E',
+  accentSoft: '#F7ECEF',
+  overlayPill: 'rgba(17, 17, 17, 0.45)',
+  scrimEnd: 'rgba(17, 17, 17, 0.65)',
+  threadLine: '#E6E6E6',
+  swatchBase: '#F4ECE6',
+  swatchEye: '#C9B8A8',
+  swatchCheek: '#F2C4C4',
+  swatchLip: '#C96A6A',
+} as const;
+
 export const feedbackColors = {
   background: '#F6F6F6',
   surface: colors.liquidGlassSurface,

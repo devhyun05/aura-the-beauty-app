@@ -4,6 +4,8 @@
 
 create extension if not exists pgcrypto;
 create extension if not exists citext;
+create extension if not exists vector;
+create extension if not exists pg_trgm;
 
 -- -----------------------------------------------------------------------------
 -- Enum types
@@ -86,6 +88,13 @@ create table if not exists media_assets (
   bucket text,
   object_key text,
   cdn_url text,
+  thumbnail_bucket text,
+  thumbnail_object_key text,
+  thumbnail_cdn_url text,
+  thumbnail_content_type text,
+  thumbnail_byte_size bigint,
+  thumbnail_width integer,
+  thumbnail_height integer,
   content_type text,
   byte_size bigint,
   width integer,
@@ -98,8 +107,11 @@ create table if not exists media_assets (
   deleted_at timestamptz,
   constraint uq_media_assets_bucket_object_key unique (bucket, object_key),
   constraint chk_media_assets_byte_size check (byte_size is null or byte_size >= 0),
+  constraint chk_media_assets_thumbnail_byte_size check (thumbnail_byte_size is null or thumbnail_byte_size >= 0),
   constraint chk_media_assets_width check (width is null or width > 0),
-  constraint chk_media_assets_height check (height is null or height > 0)
+  constraint chk_media_assets_height check (height is null or height > 0),
+  constraint chk_media_assets_thumbnail_width check (thumbnail_width is null or thumbnail_width > 0),
+  constraint chk_media_assets_thumbnail_height check (thumbnail_height is null or thumbnail_height > 0)
 );
 
 comment on table media_assets is 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.';
@@ -144,6 +156,7 @@ create table if not exists analysis_reports (
   base_makeup_guide text,
   tags text[],
   detail_payload jsonb not null default '{}'::jsonb,
+  embedding vector(1024),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -409,6 +422,134 @@ create table if not exists audit_logs (
 comment on table audit_logs is 'Operational audit trail for sensitive media and AI analysis data.';
 
 -- -----------------------------------------------------------------------------
+-- Community look feed
+-- -----------------------------------------------------------------------------
+create table if not exists community_threads (
+  id uuid primary key default gen_random_uuid(),
+  author_user_id uuid not null,
+  category text not null,
+  title text not null,
+  body text not null default '',
+  mood_tags text[] not null default '{}',
+  situation_tags text[] not null default '{}',
+  difficulty text,
+  duration_minutes integer,
+  product_usage jsonb not null default '{"base": [], "eye": [], "cheek": [], "lip": []}',
+  like_count integer not null default 0,
+  reply_count integer not null default 0,
+  save_count integer not null default 0,
+  view_count integer not null default 0,
+  status text not null default 'active',
+  embedding vector(1024),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint chk_community_threads_category check (category in ('lookbook', 'question', 'product_combo', 'before_after')),
+  constraint chk_community_threads_title check (char_length(trim(title)) between 1 and 30),
+  constraint chk_community_threads_difficulty check (difficulty is null or difficulty in ('easy', 'medium', 'hard')),
+  constraint chk_community_threads_duration check (duration_minutes is null or duration_minutes between 1 and 240),
+  constraint chk_community_threads_counts check (like_count >= 0 and reply_count >= 0 and save_count >= 0 and view_count >= 0),
+  constraint chk_community_threads_status check (status in ('active', 'hidden', 'deleted'))
+);
+
+comment on table community_threads is 'Look-first community feed posts. Trending is derived by sort, not stored as a category.';
+
+create table if not exists community_thread_media (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null,
+  media_id uuid not null,
+  sort_order integer not null,
+  created_at timestamptz not null default now(),
+  constraint chk_community_thread_media_sort_order check (sort_order between 0 and 3),
+  constraint uq_community_thread_media_thread_media unique (thread_id, media_id),
+  constraint uq_community_thread_media_thread_sort unique (thread_id, sort_order)
+);
+
+comment on table community_thread_media is 'Ordered 1-4 community thread images. sort_order 0 is the feed cover image.';
+
+create table if not exists community_replies (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null,
+  parent_reply_id uuid,
+  author_user_id uuid not null,
+  body text not null,
+  like_count integer not null default 0,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint chk_community_replies_body check (char_length(trim(body)) between 1 and 1000),
+  constraint chk_community_replies_like_count check (like_count >= 0),
+  constraint chk_community_replies_status check (status in ('active', 'hidden', 'deleted'))
+);
+
+comment on table community_replies is 'Community comments with one-level nested replies enforced by API validation.';
+
+create table if not exists community_thread_likes (
+  user_id uuid not null,
+  thread_id uuid not null,
+  liked_at timestamptz not null default now(),
+  primary key (user_id, thread_id)
+);
+
+create table if not exists community_thread_saves (
+  user_id uuid not null,
+  thread_id uuid not null,
+  saved_at timestamptz not null default now(),
+  primary key (user_id, thread_id)
+);
+
+create table if not exists community_reply_likes (
+  user_id uuid not null,
+  reply_id uuid not null,
+  liked_at timestamptz not null default now(),
+  primary key (user_id, reply_id)
+);
+
+create table if not exists community_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_user_id uuid not null,
+  target_type text not null,
+  target_thread_id uuid,
+  target_reply_id uuid,
+  reason text not null,
+  detail text,
+  created_at timestamptz not null default now(),
+  constraint chk_community_reports_target_type check (target_type in ('thread', 'reply')),
+  constraint chk_community_reports_reason check (reason in ('spam', 'abuse', 'privacy', 'other')),
+  constraint chk_community_reports_target check (
+    (target_type = 'thread' and target_thread_id is not null and target_reply_id is null)
+    or (target_type = 'reply' and target_reply_id is not null and target_thread_id is null)
+  ),
+  constraint uq_community_reports_reporter_thread unique (reporter_user_id, target_thread_id),
+  constraint uq_community_reports_reporter_reply unique (reporter_user_id, target_reply_id)
+);
+
+comment on table community_reports is 'Duplicate-safe moderation reports for community threads and replies.';
+create table if not exists community_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  thread_id uuid,
+  event_type text not null,
+  search_query text,
+  dwell_ms integer,
+  created_at timestamptz not null default now(),
+  constraint chk_community_events_type check (
+    event_type in ('impression', 'view', 'revisit', 'dwell', 'like', 'save', 'reply', 'slider', 'search')
+  ),
+  constraint chk_community_events_target check (
+    (event_type = 'search' and search_query is not null)
+    or (event_type <> 'search' and thread_id is not null)
+  ),
+  constraint chk_community_events_dwell_ms check (dwell_ms is null or dwell_ms >= 0)
+);
+
+comment on table community_events is 'Community behavior events for look recommendation signals.';
+
+-- Embedding columns are repeated as idempotent alters so existing v1 databases are upgraded.
+alter table community_threads add column if not exists embedding vector(1024);
+alter table analysis_reports add column if not exists embedding vector(1024);
+-- -----------------------------------------------------------------------------
 -- Foreign keys
 -- -----------------------------------------------------------------------------
 alter table users
@@ -525,6 +666,55 @@ alter table home_recommended_looks
   add constraint fk_home_recommended_looks_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
+alter table community_threads
+  add constraint fk_community_threads_author
+  foreign key (author_user_id) references users(id) on delete cascade;
+
+alter table community_thread_media
+  add constraint fk_community_thread_media_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_thread_media_media
+  foreign key (media_id) references media_assets(id) on delete restrict;
+
+alter table community_replies
+  add constraint fk_community_replies_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_replies_parent
+  foreign key (parent_reply_id) references community_replies(id) on delete cascade,
+  add constraint fk_community_replies_author
+  foreign key (author_user_id) references users(id) on delete cascade;
+
+alter table community_thread_likes
+  add constraint fk_community_thread_likes_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_thread_likes_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
+
+alter table community_thread_saves
+  add constraint fk_community_thread_saves_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_thread_saves_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
+
+alter table community_reply_likes
+  add constraint fk_community_reply_likes_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_reply_likes_reply
+  foreign key (reply_id) references community_replies(id) on delete cascade;
+
+alter table community_reports
+  add constraint fk_community_reports_reporter
+  foreign key (reporter_user_id) references users(id) on delete cascade,
+  add constraint fk_community_reports_thread
+  foreign key (target_thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_reports_reply
+  foreign key (target_reply_id) references community_replies(id) on delete cascade;
+
+alter table community_events
+  add constraint fk_community_events_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_events_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
 alter table user_consents
   add constraint fk_user_consents_user
   foreign key (user_id) references users(id) on delete cascade;
@@ -573,6 +763,19 @@ create index if not exists idx_data_deletion_requests_user_requested on data_del
 create index if not exists idx_audit_logs_entity on audit_logs (entity_type, entity_id);
 create index if not exists idx_audit_logs_actor_created on audit_logs (actor_user_id, created_at desc);
 
+create index if not exists idx_community_threads_category_created on community_threads (category, created_at desc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_popular on community_threads ((like_count + save_count * 2 + reply_count), created_at desc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_title_trgm on community_threads using gin (title gin_trgm_ops) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_body_trgm on community_threads using gin (body gin_trgm_ops) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_embedding on community_threads using hnsw (embedding vector_cosine_ops) where embedding is not null and deleted_at is null and status = 'active';
+create index if not exists idx_community_thread_media_thread_order on community_thread_media (thread_id, sort_order);
+create index if not exists idx_community_replies_thread_created on community_replies (thread_id, created_at asc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_thread_likes_thread on community_thread_likes (thread_id, liked_at desc);
+create index if not exists idx_community_thread_saves_thread on community_thread_saves (thread_id, saved_at desc);
+create index if not exists idx_community_reply_likes_reply on community_reply_likes (reply_id);
+create index if not exists idx_community_reports_thread on community_reports (target_thread_id) where target_thread_id is not null;
+create index if not exists idx_community_reports_reply on community_reports (target_reply_id) where target_reply_id is not null;
+create index if not exists idx_community_events_user_time on community_events (user_id, created_at desc);
 -- -----------------------------------------------------------------------------
 -- updated_at trigger helper
 -- -----------------------------------------------------------------------------
@@ -632,4 +835,14 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_home_recommended_looks_updated_at on home_recommended_looks;
 create trigger trg_home_recommended_looks_updated_at
 before update on home_recommended_looks
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_community_threads_updated_at on community_threads;
+create trigger trg_community_threads_updated_at
+before update on community_threads
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_community_replies_updated_at on community_replies;
+create trigger trg_community_replies_updated_at
+before update on community_replies
 for each row execute function set_updated_at();
