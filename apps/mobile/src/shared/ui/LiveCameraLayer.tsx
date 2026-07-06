@@ -184,7 +184,7 @@ export const LiveCameraLayer = React.forwardRef<CameraView, LiveCameraLayerProps
 
 const styles = StyleSheet.create({
   fallbackLayer: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -203,7 +203,9 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   permissionButton: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
+    borderColor: colors.liquidGlassBorder,
+    borderWidth: 1,
     borderRadius: radius.pill,
     marginTop: spacing.lg,
     paddingHorizontal: spacing.xl,
@@ -230,7 +232,7 @@ const styles = StyleSheet.create({
   },
   permissionLayer: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     justifyContent: 'center',
     left: 0,

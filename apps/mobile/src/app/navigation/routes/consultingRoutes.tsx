@@ -17,7 +17,6 @@ import {
 } from '../../../features/consulting';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {
-  navigateMainTab,
   type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
@@ -56,7 +55,7 @@ function goBackToConsulting(navigation: RootNavigation) {
     return;
   }
 
-  navigateMainTab(navigation, 'ConsultingTab');
+  navigation.navigate('Consulting');
 }
 
 export function ConsultingExpertListRouteScreen({
@@ -152,7 +151,7 @@ export function ConsultingBookingCompleteRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingBookingComplete"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={() => navigation.navigate('Consulting')}>
       <ConsultingBookingCompleteScreen
         draft={draft}
         expert={expert}
@@ -163,7 +162,7 @@ export function ConsultingBookingCompleteRouteScreen({
           })
         }
         onGoToConsultingHome={() =>
-          navigateMainTab(navigation, 'ConsultingTab')
+          navigation.navigate('Consulting')
         }
       />
     </DetailRouteChrome>
@@ -205,7 +204,7 @@ export function ConsultingSummaryRouteScreen({
         heroTitle={record ? '상담 요약 리포트' : undefined}
         summary={record?.summary}
         onGoToConsultingHome={() =>
-          navigateMainTab(navigation, 'ConsultingTab')
+          navigation.navigate('Consulting')
         }
         onPressHistory={() => navigation.navigate('ConsultingHistory')}
       />

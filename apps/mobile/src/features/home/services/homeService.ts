@@ -108,7 +108,7 @@ function mapFilterStoreItem(
     id: firstText(item.id, fallbackItem?.id) ?? `filter-store-${index}`,
     title: firstText(item.title, fallbackItem?.title) ?? '추천 필터',
     description: firstText(item.description, fallbackItem?.description) ?? '',
-    category: firstText(item.category, fallbackItem?.category) ?? 'AR Filter',
+    category: firstText(item.category, fallbackItem?.category) ?? '메이크업 필터',
     imageSource: imageSourceFromUrl(item.imageUrl, fallbackItem?.imageSource ?? homeMock.hero.imageSource),
   };
 }

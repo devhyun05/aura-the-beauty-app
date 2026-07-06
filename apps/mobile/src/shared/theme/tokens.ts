@@ -1,14 +1,16 @@
+import {colors} from './colors';
+
 export const profileColors = {
   background: '#FFFFFF',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F6F6F6',
+  surface: colors.liquidGlassSurface,
+  surfaceMuted: colors.bottomSheetMutedSurface,
   text: '#111111',
   textMuted: '#5F5F5F',
   textSoft: '#8A8A8A',
   border: '#111111',
-  borderSubtle: '#DCDCDC',
+  borderSubtle: colors.liquidGlassBorder,
   accent: '#111111',
-  accentSoft: '#F2F2F2',
+  accentSoft: colors.bottomSheetMutedSurface,
   accentMuted: '#6F6F6F',
   shadow: '#000000',
   divider: '#E9E9E9',
@@ -36,20 +38,20 @@ export const profileTypography = {
 
 export const feedbackColors = {
   background: '#F6F6F6',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F8F8F8',
+  surface: colors.liquidGlassSurface,
+  surfaceMuted: colors.bottomSheetMutedSurface,
   overlay: 'rgba(255, 255, 255, 0.22)',
-  overlayStrong: 'rgba(255, 255, 255, 0.78)',
+  overlayStrong: colors.liquidGlassSurface,
   text: '#1F1B1B',
   textMuted: '#746E6E',
   textSoft: '#B7B2B2',
-  border: '#D9D9D9',
-  borderSoft: '#ECECEC',
+  border: colors.liquidGlassBorder,
+  borderSoft: colors.liquidGlassBorder,
   accent: '#111111',
-  accentSoft: '#F2F2F2',
+  accentSoft: colors.bottomSheetMutedSurface,
   accentMuted: '#7A7A7A',
   shadow: '#111111',
-  scrim: 'rgba(255, 255, 255, 0.72)',
+  scrim: colors.liquidGlassSurface,
 } as const;
 
 export const feedbackSpacing = {

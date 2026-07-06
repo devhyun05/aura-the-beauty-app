@@ -117,7 +117,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       wrapContentInScreen={false}>
       <HomeScreen
         onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
-        onPressMagazine={() => rootNavigation?.navigate('Magazine')}
+        onPressConsulting={() => rootNavigation?.navigate('Consulting')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
         onPressRecommendedFilterMore={() =>
@@ -143,19 +143,6 @@ export function CommunityTabRouteScreen({navigation}: MainTabScreenProps<'Commun
         showHeader={false}
         title="커뮤니티"
       />
-    </MainTabChrome>
-  );
-}
-
-export function ConsultingTabRouteScreen({navigation}: MainTabScreenProps<'ConsultingTab'>) {
-  const rootNavigation = navigation.getParent<RootNavigation>();
-
-  return (
-    <MainTabChrome
-      navigation={navigation}
-      routeName="ConsultingTab"
-      wrapContentInScreen={false}>
-      {rootNavigation ? renderConsultingHome(rootNavigation) : null}
     </MainTabChrome>
   );
 }
@@ -197,20 +184,6 @@ export function HomeFilterStoreRouteScreen({
         isFilterLiked={isMakeupFilterLiked}
         onApplyFilter={handleApplyFilter}
         onToggleFilterLike={handleToggleMakeupFilterLike}
-      />
-    </DetailRouteChrome>
-  );
-}
-
-export function MagazineRouteScreen({navigation}: RootScreenProps<'Magazine'>) {
-  return (
-    <DetailRouteChrome
-      routeName="Magazine"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="메이크업, 퍼스널 컬러, 헤어, 패션 매거진 콘텐츠를 준비 중이에요."
-        showHeader={false}
-        title="매거진"
       />
     </DetailRouteChrome>
   );

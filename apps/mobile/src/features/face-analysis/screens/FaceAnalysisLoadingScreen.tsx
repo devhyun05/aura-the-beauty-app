@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   previewDim: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     left: 0,
     opacity: 0.12,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     alignItems: 'center',
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1,
     justifyContent: 'center',

@@ -1,4 +1,5 @@
 import { faceAnalysisReportsMock } from '../mocks/faceAnalysis.mock';
+import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import type {
   FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
@@ -671,6 +672,7 @@ export const deleteFaceAnalysisRecommendedMakeup = async ({
 
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
+  faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
@@ -678,6 +680,7 @@ export async function createFaceAnalysisReportFromCapture(
   console.info('[aura:analysis] create-report:start', {
     hasBackendApiBaseUrl,
     hasBucket: Boolean(capture?.bucket),
+    hasFaceVerticalThirds: Boolean(faceVerticalThirds),
     hasObjectKey: Boolean(capture?.objectKey),
     mediaId: capture?.mediaId ?? null,
     photoCaptureId: capture?.photoCaptureId ?? null,
@@ -713,6 +716,8 @@ export async function createFaceAnalysisReportFromCapture(
         bucket: capture.bucket ?? null,
         cdnUrl: capture.cdnUrl ?? null,
         contentType: capture.contentType ?? 'image/jpeg',
+        // 온디바이스 얼굴 세로 3분할 실측값 — backend가 요청 메타데이터로 AI 프롬프트에 포함한다.
+        ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
         imageUrl: capture.cdnUrl ?? null,
         objectKey: capture.objectKey ?? null,
         source: capture.source ?? 'camera',

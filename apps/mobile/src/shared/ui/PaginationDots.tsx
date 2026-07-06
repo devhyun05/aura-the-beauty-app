@@ -26,7 +26,7 @@ export function PaginationDots({activeIndex = 0, count}: PaginationDotsProps) {
 
 const styles = StyleSheet.create({
   activeDot: {
-    backgroundColor: colors.black,
+    backgroundColor: colors.blackSurface,
   },
   container: {
     alignItems: 'center',

@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   },
   heartBadge: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: colors.border,
     borderRadius: 14,
     borderWidth: 1,

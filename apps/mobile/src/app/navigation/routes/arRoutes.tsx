@@ -6,6 +6,7 @@ import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterE
 import {UnityMakeupCaptureScreen} from '../../../features/ar/screens/UnityMakeupCaptureScreen';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {useNavigationFlowState} from '../flowState';
+import {getARFilterDetailEditRouteParams} from './arRouteActions';
 import {navigateARBack, navigateMainTab, type RootScreenProps} from './routeUtils';
 
 const DEFAULT_AR_GUIDE_MODE: GuideMode = 'basic';
@@ -21,22 +22,28 @@ export function ARFilterRouteScreen({
     route.params?.initialGuideMode ??
     (initialSource === 'recommendedFilter' ? 'half' : DEFAULT_AR_GUIDE_MODE);
 
-  const handleOpenShapeAdjust = (selectedMakeupFilterId?: string) => {
+  const rememberSelectedRecommendedFilter = (selectedMakeupFilterId?: string) => {
     if (initialSource === 'recommendedFilter') {
       setSelectedRecommendedMakeupFilterId(
         selectedMakeupFilterId ?? initialMakeupFilterId ?? null,
       );
     }
+  };
+
+  const handleOpenDetailEdit = (selectedMakeupFilterId?: string) => {
+    rememberSelectedRecommendedFilter(selectedMakeupFilterId);
+
+    navigation.navigate('MakeupFilterEdit', getARFilterDetailEditRouteParams());
+  };
+
+  const handleOpenShapeAdjust = (selectedMakeupFilterId?: string) => {
+    rememberSelectedRecommendedFilter(selectedMakeupFilterId);
 
     navigation.navigate('ARFilterShapeAdjust');
   };
 
   const handleSave = (selectedMakeupFilterId?: string) => {
-    if (initialSource === 'recommendedFilter') {
-      setSelectedRecommendedMakeupFilterId(
-        selectedMakeupFilterId ?? initialMakeupFilterId ?? null,
-      );
-    }
+    rememberSelectedRecommendedFilter(selectedMakeupFilterId);
 
     navigation.navigate('MakeupFilterSave');
   };
@@ -49,6 +56,7 @@ export function ARFilterRouteScreen({
       initialSource={initialSource}
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
+      onOpenDetailEdit={handleOpenDetailEdit}
       onOpenShapeAdjust={handleOpenShapeAdjust}
       onSave={handleSave}
     />

@@ -13,7 +13,6 @@ export type ScreenCategory =
   | 'main-home'
   | 'main-profile'
   | 'main-community'
-  | 'main-consulting'
   | 'feature-entry'
   | 'list'
   | 'detail-report'
@@ -164,14 +163,6 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '필터 스토어',
-  },
-  Magazine: {
-    category: 'list',
-    contextLabel: 'MAGAZINE',
-    depth: 'sub',
-    kind: 'detail',
-    statusBarStyle: 'dark',
-    title: '매거진',
   },
   SavedMakeupList: {
     category: 'list',
@@ -464,14 +455,6 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
-  ConsultingTab: {
-    category: 'main-consulting',
-    depth: 'main',
-    footerTab: 'consulting',
-    headerVariant: 'home',
-    kind: 'mainTab',
-    statusBarStyle: 'dark',
-  },
 } as const satisfies Record<RouteName, RouteChrome>;
 
 export function getRouteChrome(route: RouteName): RouteChrome {
@@ -505,10 +488,6 @@ export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
 
   if (tab === 'community') {
     return 'CommunityTab';
-  }
-
-  if (tab === 'consulting') {
-    return 'ConsultingTab';
   }
 
   return 'HomeTab';

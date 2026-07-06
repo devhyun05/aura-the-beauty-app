@@ -7,10 +7,83 @@
 #import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
+#import <MediaPipeTasksVision/MediaPipeTasksVision.h>
+
+static void *AURARealtimeCameraStabilityContext = &AURARealtimeCameraStabilityContext;
+
+static NSTimeInterval const AURARealtimeCameraStableThresholdMs = 400.0;
+
+// Continuous auto exposure/white-balance on the front camera flips the
+// adjusting flags in short bursts even when the scene is steady. Only treat
+// the camera as unstable when an adjusting episode persists past this grace
+// window, so momentary blips do not reset the stability timer.
+static NSTimeInterval const AURARealtimeCameraAdjustingGraceMs = 250.0;
 
 static CGFloat AURARealtimeClamp(CGFloat value)
 {
   return fmax(0.0, fmin(1.0, value));
+}
+
+static BOOL AURARealtimeSemanticMatteTypesContain(
+    NSArray<AVSemanticSegmentationMatteType> *types,
+    AVSemanticSegmentationMatteType type)
+{
+  return [types containsObject:type];
+}
+
+static NSArray<NSString *> *AURARealtimeSemanticMatteTypeNames(
+    NSArray<AVSemanticSegmentationMatteType> *types)
+{
+  NSMutableArray<NSString *> *names = [NSMutableArray arrayWithCapacity:types.count];
+
+  for (AVSemanticSegmentationMatteType type in types) {
+    if ([type isEqualToString:AVSemanticSegmentationMatteTypeHair]) {
+      [names addObject:@"hair"];
+    } else if ([type isEqualToString:AVSemanticSegmentationMatteTypeSkin]) {
+      [names addObject:@"skin"];
+    } else if ([type isEqualToString:AVSemanticSegmentationMatteTypeTeeth]) {
+      [names addObject:@"teeth"];
+    } else {
+      [names addObject:type.description ?: @"unknown"];
+    }
+  }
+
+  return names;
+}
+
+static NSDictionary *AURARealtimeSemanticMatteAvailability(
+    BOOL requested,
+    BOOL hairAvailable,
+    BOOL skinAvailable)
+{
+  return @{
+    @"hair": @(hairAvailable),
+    @"requested": @(requested),
+    @"skin": @(skinAvailable),
+  };
+}
+
+static NSDictionary *AURARealtimeEmbeddedSemanticMatteAvailability(NSURL *url)
+{
+  CGImageSourceRef source = CGImageSourceCreateWithURL((__bridge CFURLRef)url, NULL);
+  if (!source) {
+    return AURARealtimeSemanticMatteAvailability(NO, NO, NO);
+  }
+
+  NSDictionary *hairInfo = CFBridgingRelease(CGImageSourceCopyAuxiliaryDataInfoAtIndex(
+      source,
+      0,
+      kCGImageAuxiliaryDataTypeSemanticSegmentationHairMatte));
+  NSDictionary *skinInfo = CFBridgingRelease(CGImageSourceCopyAuxiliaryDataInfoAtIndex(
+      source,
+      0,
+      kCGImageAuxiliaryDataTypeSemanticSegmentationSkinMatte));
+  CFRelease(source);
+
+  return AURARealtimeSemanticMatteAvailability(
+      hairInfo != nil || skinInfo != nil,
+      hairInfo != nil,
+      skinInfo != nil);
 }
 
 static NSDictionary *AURARealtimePoint(CGFloat x, CGFloat y)
@@ -304,12 +377,171 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
       : kCGImagePropertyOrientationRight;
 }
 
+static UIImageOrientation AURARealtimeMediaPipeImageOrientation(AVCaptureDevicePosition position)
+{
+  return position == AVCaptureDevicePositionFront
+      ? UIImageOrientationLeft
+      : UIImageOrientationRight;
+}
+
+static CGFloat AURARealtimeDegrees(CGFloat radians)
+{
+  return radians * 180.0 / M_PI;
+}
+
+static NSDictionary *AURARealtimeMediaPipePoint(MPPNormalizedLandmark *landmark)
+{
+  if (!landmark) {
+    return nil;
+  }
+
+  return @{
+    @"x": @(AURARealtimeClamp(landmark.x)),
+    @"y": @(AURARealtimeClamp(landmark.y)),
+    @"z": @(landmark.z),
+  };
+}
+
+static MPPNormalizedLandmark *AURARealtimeMediaPipeLandmarkAtIndex(
+    NSArray<MPPNormalizedLandmark *> *landmarks,
+    NSUInteger index)
+{
+  return index < landmarks.count ? landmarks[index] : nil;
+}
+
+static NSDictionary *AURARealtimeAverageMediaPipePoint(
+    NSArray<MPPNormalizedLandmark *> *landmarks,
+    NSArray<NSNumber *> *indices)
+{
+  CGFloat sumX = 0.0;
+  CGFloat sumY = 0.0;
+  CGFloat sumZ = 0.0;
+  NSUInteger count = 0;
+
+  for (NSNumber *index in indices) {
+    MPPNormalizedLandmark *landmark =
+        AURARealtimeMediaPipeLandmarkAtIndex(landmarks, index.unsignedIntegerValue);
+
+    if (!landmark) {
+      continue;
+    }
+
+    sumX += landmark.x;
+    sumY += landmark.y;
+    sumZ += landmark.z;
+    count += 1;
+  }
+
+  if (count == 0) {
+    return nil;
+  }
+
+  return @{
+    @"x": @(AURARealtimeClamp(sumX / count)),
+    @"y": @(AURARealtimeClamp(sumY / count)),
+    @"z": @(sumZ / count),
+  };
+}
+
+static CGFloat AURARealtimeNumberFromPoint(NSDictionary *point, NSString *key)
+{
+  NSNumber *number = point[key];
+  return [number respondsToSelector:@selector(doubleValue)] ? number.doubleValue : 0.0;
+}
+
+static NSDictionary *AURARealtimePoseFromMatrix(MPPTransformMatrix *matrix)
+{
+  if (!matrix || matrix.rows < 3 || matrix.columns < 3) {
+    return nil;
+  }
+
+  CGFloat r00 = [matrix valueAtRow:0 column:0];
+  CGFloat r10 = [matrix valueAtRow:1 column:0];
+  CGFloat r20 = [matrix valueAtRow:2 column:0];
+  CGFloat r21 = [matrix valueAtRow:2 column:1];
+  CGFloat r22 = [matrix valueAtRow:2 column:2];
+  CGFloat sy = sqrt(r00 * r00 + r10 * r10);
+  CGFloat pitch = 0.0;
+  CGFloat yaw = 0.0;
+  CGFloat roll = 0.0;
+
+  if (sy >= 1e-6) {
+    pitch = atan2(r21, r22);
+    yaw = atan2(-r20, sy);
+    roll = atan2(r10, r00);
+  } else {
+    CGFloat r01 = [matrix valueAtRow:0 column:1];
+    CGFloat r11 = [matrix valueAtRow:1 column:1];
+    pitch = atan2(-r11, r01);
+    yaw = atan2(-r20, sy);
+  }
+
+  return @{
+    @"pitchDeg": @(AURARealtimeDegrees(pitch)),
+    @"yawDeg": @(AURARealtimeDegrees(yaw)),
+    @"rollDeg": @(AURARealtimeDegrees(roll)),
+    @"poseSource": @"matrix",
+  };
+}
+
+static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
+{
+  NSDictionary *leftEye = landmarks[@"leftEye"];
+  NSDictionary *rightEye = landmarks[@"rightEye"];
+  NSDictionary *noseTip = landmarks[@"noseTip"];
+  NSDictionary *mouthLeft = landmarks[@"mouthLeft"];
+  NSDictionary *mouthRight = landmarks[@"mouthRight"];
+
+  if (!leftEye || !rightEye || !noseTip) {
+    return @{
+      @"pitchDeg": @0,
+      @"yawDeg": @0,
+      @"rollDeg": @0,
+      @"poseSource": @"geometry_unavailable",
+    };
+  }
+
+  CGFloat leftX = AURARealtimeNumberFromPoint(leftEye, @"x");
+  CGFloat leftY = AURARealtimeNumberFromPoint(leftEye, @"y");
+  CGFloat rightX = AURARealtimeNumberFromPoint(rightEye, @"x");
+  CGFloat rightY = AURARealtimeNumberFromPoint(rightEye, @"y");
+  CGFloat noseX = AURARealtimeNumberFromPoint(noseTip, @"x");
+  CGFloat noseY = AURARealtimeNumberFromPoint(noseTip, @"y");
+  CGFloat eyeCenterX = (leftX + rightX) / 2.0;
+  CGFloat eyeCenterY = (leftY + rightY) / 2.0;
+  CGFloat eyeDistance = fmax(fabs(rightX - leftX), 0.001);
+  CGFloat rollDeg = AURARealtimeDegrees(atan2(rightY - leftY, rightX - leftX));
+  CGFloat yawDeg = (noseX - eyeCenterX) / eyeDistance * 42.0;
+  CGFloat pitchDeg = 0.0;
+
+  if (mouthLeft && mouthRight) {
+    CGFloat mouthCenterY =
+        (AURARealtimeNumberFromPoint(mouthLeft, @"y") +
+         AURARealtimeNumberFromPoint(mouthRight, @"y")) /
+        2.0;
+    CGFloat verticalSpan = fmax(mouthCenterY - eyeCenterY, 0.001);
+    CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
+    pitchDeg = (noseRatio - 0.48) * 28.0;
+  }
+
+  return @{
+    @"pitchDeg": @(pitchDeg),
+    @"yawDeg": @(yawDeg),
+    @"rollDeg": @(rollDeg),
+    @"poseSource": @"geometry",
+  };
+}
+
 @interface AURARealtimeFaceCaptureView : UIView <AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate>
 
 @property (nonatomic, copy) RCTDirectEventBlock onLandmarksDetected;
 @property (nonatomic, copy) NSString *facing;
+@property (nonatomic, assign) BOOL semanticMatteCapture;
 
 - (void)captureWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
+- (void)restoreCameraAutoModes;
+- (void)startCameraStabilityMonitoringForDevice:(AVCaptureDevice *)device;
+- (void)stopCameraStabilityMonitoring;
 
 @end
 
@@ -319,17 +551,30 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   AVCaptureVideoDataOutput *_videoOutput;
   AVCapturePhotoOutput *_photoOutput;
   AVCaptureVideoPreviewLayer *_previewLayer;
+  AVCaptureDevice *_observedCameraDevice;
   dispatch_queue_t _sessionQueue;
   dispatch_queue_t _visionQueue;
   BOOL _isProcessingFrame;
   BOOL _isSessionConfigured;
   BOOL _isSessionRunning;
   BOOL _hasPendingCapture;
+  BOOL _hasCameraStabilityObservers;
+  BOOL _semanticMatteCapture;
+  BOOL _semanticMatteRequiresHeic;
   CGSize _latestViewSize;
   NSDictionary *_lastScreenLandmarks;
+  NSDictionary *_matteCapability;
+  NSDictionary *_pendingCaptureCameraMetadata;
+  NSDictionary *_pendingSemanticMattes;
+  NSString *_pendingCaptureFormat;
+  MPPFaceLandmarker *_faceLandmarker;
+  NSString *_faceLandmarkerInitError;
+  CFTimeInterval _cameraStableSince;
+  CFTimeInterval _cameraAdjustingSince;
   CFTimeInterval _lastScreenLandmarksTimestamp;
   CFTimeInterval _lastFrameTimestamp;
   NSInteger _sequence;
+  NSInteger _lastMediaPipeTimestampMs;
   RCTPromiseResolveBlock _captureResolve;
   RCTPromiseRejectBlock _captureReject;
 }
@@ -349,6 +594,12 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
     _latestViewSize = frame.size;
   }
   return self;
+}
+
+- (void)dealloc
+{
+  [self stopCameraStabilityMonitoring];
+  [self restoreCameraAutoModes];
 }
 
 - (void)layoutSubviews
@@ -382,6 +633,37 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   if (self.window != nil) {
     [self startCameraIfPermitted];
   }
+}
+
+- (void)setSemanticMatteCapture:(BOOL)semanticMatteCapture
+{
+  if (_semanticMatteCapture == semanticMatteCapture) {
+    return;
+  }
+
+  _semanticMatteCapture = semanticMatteCapture;
+  _matteCapability = nil;
+  _isSessionConfigured = NO;
+
+  if (self.window == nil) {
+    return;
+  }
+
+  dispatch_async(_sessionQueue, ^{
+    BOOL shouldRestart = self->_session.isRunning || self->_isSessionRunning;
+    if (self->_session.isRunning) {
+      [self->_session stopRunning];
+    }
+
+    if (![self configureSession]) {
+      return;
+    }
+
+    if (shouldRestart) {
+      [self->_session startRunning];
+    }
+    self->_isSessionRunning = self->_session.isRunning;
+  });
 }
 
 - (AVCaptureDevicePosition)devicePosition
@@ -438,10 +720,95 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   });
 }
 
+- (NSDictionary *)semanticMatteCapabilityForRung:(NSInteger)rung
+                                          device:(AVCaptureDevice *)device
+                                       supported:(BOOL)supported
+{
+  NSArray<AVSemanticSegmentationMatteType> *availableTypes =
+      _photoOutput.availableSemanticSegmentationMatteTypes ?: @[];
+  BOOL depthSupported = _photoOutput.depthDataDeliverySupported;
+
+  return @{
+    @"availableTypes": AURARealtimeSemanticMatteTypeNames(availableTypes),
+    @"depthEnabled": @(_photoOutput.isDepthDataDeliveryEnabled),
+    @"depthSupported": @(depthSupported),
+    @"device": device.deviceType ?: @"unknown",
+    @"preset": _session.sessionPreset ?: @"unknown",
+    @"requestedTypes": supported ? @[@"hair", @"skin"] : @[],
+    @"rung": @(rung),
+    @"supported": @(supported),
+  };
+}
+
+- (BOOL)semanticMatteTypesIncludeHairAndSkin:
+    (NSArray<AVSemanticSegmentationMatteType> *)availableTypes
+{
+  return AURARealtimeSemanticMatteTypesContain(availableTypes, AVSemanticSegmentationMatteTypeHair) &&
+      AURARealtimeSemanticMatteTypesContain(availableTypes, AVSemanticSegmentationMatteTypeSkin);
+}
+
+- (NSDictionary *)configureSemanticMatteDeliveryForDevice:(AVCaptureDevice *)device
+{
+  if (!_photoOutput || !_semanticMatteCapture || [self devicePosition] != AVCaptureDevicePositionFront) {
+    return nil;
+  }
+
+  if (_photoOutput.depthDataDeliverySupported) {
+    _photoOutput.depthDataDeliveryEnabled = YES;
+  }
+
+  NSArray<AVSemanticSegmentationMatteType> *availableTypes =
+      _photoOutput.availableSemanticSegmentationMatteTypes ?: @[];
+  BOOL supported = [self semanticMatteTypesIncludeHairAndSkin:availableTypes];
+  NSDictionary *capability =
+      [self semanticMatteCapabilityForRung:1 device:device supported:supported];
+  NSLog(@"[aura:face-capture] matte:capability rung=%@ device=%@ preset=%@ depthSupported=%@ depthEnabled=%@ availableTypes=%@",
+        capability[@"rung"],
+        capability[@"device"],
+        capability[@"preset"],
+        capability[@"depthSupported"],
+        capability[@"depthEnabled"],
+        capability[@"availableTypes"]);
+
+  // SSM 생성은 depth 파이프라인에 의존하므로 matte type이 있어도 depth delivery가
+  // 미지원인 포맷(720p 등)에서는 matte가 나오지 않을 수 있다 → Photo 프리셋으로 승격.
+  if ((!supported || !_photoOutput.depthDataDeliverySupported) &&
+      [_session canSetSessionPreset:AVCaptureSessionPresetPhoto]) {
+    _session.sessionPreset = AVCaptureSessionPresetPhoto;
+    if (_photoOutput.depthDataDeliverySupported) {
+      _photoOutput.depthDataDeliveryEnabled = YES;
+    }
+
+    availableTypes = _photoOutput.availableSemanticSegmentationMatteTypes ?: @[];
+    supported = [self semanticMatteTypesIncludeHairAndSkin:availableTypes];
+    capability = [self semanticMatteCapabilityForRung:2 device:device supported:supported];
+    NSLog(@"[aura:face-capture] matte:capability rung=%@ device=%@ preset=%@ depthSupported=%@ depthEnabled=%@ availableTypes=%@",
+          capability[@"rung"],
+          capability[@"device"],
+          capability[@"preset"],
+          capability[@"depthSupported"],
+          capability[@"depthEnabled"],
+          capability[@"availableTypes"]);
+  }
+
+  if (supported) {
+    _photoOutput.enabledSemanticSegmentationMatteTypes = @[
+      AVSemanticSegmentationMatteTypeHair,
+      AVSemanticSegmentationMatteTypeSkin,
+    ];
+  } else {
+    _photoOutput.enabledSemanticSegmentationMatteTypes = @[];
+  }
+
+  return capability;
+}
+
 - (BOOL)configureSession
 {
   [_session beginConfiguration];
   _session.sessionPreset = AVCaptureSessionPreset1280x720;
+  _matteCapability = nil;
+  [self stopCameraStabilityMonitoring];
 
   if (_videoInput) {
     [_session removeInput:_videoInput];
@@ -474,6 +841,7 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   if ([_session canAddInput:input]) {
     [_session addInput:input];
     _videoInput = input;
+    [self startCameraStabilityMonitoringForDevice:device];
   }
 
   AVCaptureVideoDataOutput *videoOutput = [AVCaptureVideoDataOutput new];
@@ -494,6 +862,10 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
     _photoOutput = photoOutput;
   }
 
+  if (_semanticMatteCapture) {
+    _matteCapability = [self configureSemanticMatteDeliveryForDevice:device];
+  }
+
   [_session commitConfiguration];
   _isSessionConfigured = YES;
   [self updateOutputConnections];
@@ -503,13 +875,234 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
 
 - (AVCaptureDevice *)cameraDeviceForPosition:(AVCaptureDevicePosition)position
 {
+  NSArray<AVCaptureDeviceType> *deviceTypes =
+      _semanticMatteCapture && position == AVCaptureDevicePositionFront
+          ? @[
+              AVCaptureDeviceTypeBuiltInTrueDepthCamera,
+              AVCaptureDeviceTypeBuiltInWideAngleCamera,
+            ]
+          : @[
+              AVCaptureDeviceTypeBuiltInWideAngleCamera,
+            ];
   AVCaptureDeviceDiscoverySession *discovery = [AVCaptureDeviceDiscoverySession
-      discoverySessionWithDeviceTypes:@[
-        AVCaptureDeviceTypeBuiltInWideAngleCamera,
-      ]
+      discoverySessionWithDeviceTypes:deviceTypes
                             mediaType:AVMediaTypeVideo
                              position:position];
   return discovery.devices.firstObject;
+}
+
+- (void)startCameraStabilityMonitoringForDevice:(AVCaptureDevice *)device
+{
+  [self stopCameraStabilityMonitoring];
+  _observedCameraDevice = device;
+  _cameraStableSince = 0;
+  _cameraAdjustingSince = 0;
+
+  if (!device) {
+    return;
+  }
+
+  NSArray<NSString *> *keyPaths = @[
+    @"adjustingExposure",
+    @"adjustingWhiteBalance",
+    @"adjustingFocus",
+  ];
+
+  @try {
+    for (NSString *keyPath in keyPaths) {
+      [device addObserver:self
+               forKeyPath:keyPath
+                  options:NSKeyValueObservingOptionNew
+                  context:AURARealtimeCameraStabilityContext];
+    }
+    _hasCameraStabilityObservers = YES;
+  } @catch (__unused NSException *exception) {
+    _hasCameraStabilityObservers = NO;
+  }
+
+  [self refreshCameraStableSinceForDevice:device];
+}
+
+- (void)stopCameraStabilityMonitoring
+{
+  if (!_observedCameraDevice || !_hasCameraStabilityObservers) {
+    _observedCameraDevice = nil;
+    _hasCameraStabilityObservers = NO;
+    return;
+  }
+
+  NSArray<NSString *> *keyPaths = @[
+    @"adjustingExposure",
+    @"adjustingWhiteBalance",
+    @"adjustingFocus",
+  ];
+
+  @try {
+    for (NSString *keyPath in keyPaths) {
+      [_observedCameraDevice removeObserver:self
+                                 forKeyPath:keyPath
+                                    context:AURARealtimeCameraStabilityContext];
+    }
+  } @catch (__unused NSException *exception) {
+  }
+
+  _observedCameraDevice = nil;
+  _hasCameraStabilityObservers = NO;
+}
+
+- (BOOL)isCameraDeviceAdjusting:(AVCaptureDevice *)device
+{
+  if (!device) {
+    return YES;
+  }
+
+  BOOL focusAdjusting =
+      [device isFocusModeSupported:AVCaptureFocusModeContinuousAutoFocus] && device.isAdjustingFocus;
+
+  return device.isAdjustingExposure || device.isAdjustingWhiteBalance || focusAdjusting;
+}
+
+- (void)refreshCameraStableSinceForDevice:(AVCaptureDevice *)device
+{
+  CFTimeInterval now = CACurrentMediaTime();
+
+  if ([self isCameraDeviceAdjusting:device]) {
+    if (_cameraAdjustingSince <= 0) {
+      _cameraAdjustingSince = now;
+    }
+    if ((now - _cameraAdjustingSince) * 1000.0 >= AURARealtimeCameraAdjustingGraceMs) {
+      _cameraStableSince = 0;
+    }
+    return;
+  }
+
+  _cameraAdjustingSince = 0;
+
+  if (_cameraStableSince <= 0) {
+    _cameraStableSince = now;
+  }
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary<NSKeyValueChangeKey, id> *)change
+                       context:(void *)context
+{
+  if (context == AURARealtimeCameraStabilityContext) {
+    [self refreshCameraStableSinceForDevice:(AVCaptureDevice *)object];
+    return;
+  }
+
+  [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+}
+
+- (NSDictionary *)cameraStabilityPayload
+{
+  AVCaptureDevice *device = _videoInput.device;
+  [self refreshCameraStableSinceForDevice:device];
+
+  BOOL adjustingExposure = device ? device.isAdjustingExposure : YES;
+  BOOL adjustingWhiteBalance = device ? device.isAdjustingWhiteBalance : YES;
+  BOOL focusSupported =
+      device ? [device isFocusModeSupported:AVCaptureFocusModeContinuousAutoFocus] : NO;
+  BOOL adjustingFocus = device && focusSupported ? device.isAdjustingFocus : NO;
+  CFTimeInterval stableDurationMs =
+      _cameraStableSince > 0 ? (CACurrentMediaTime() - _cameraStableSince) * 1000.0 : 0.0;
+  AVCaptureWhiteBalanceGains gains = device ? device.deviceWhiteBalanceGains
+                                            : (AVCaptureWhiteBalanceGains){0, 0, 0};
+
+  return @{
+    @"status": device ? @"ok" : @"camera_unavailable",
+    @"adjustingExposure": @(adjustingExposure),
+    @"adjustingWhiteBalance": @(adjustingWhiteBalance),
+    @"adjustingFocus": @(adjustingFocus),
+    @"focusSupported": @(focusSupported),
+    @"isStable": @(stableDurationMs >= AURARealtimeCameraStableThresholdMs),
+    @"stableDurationMs": @(stableDurationMs),
+    @"stableThresholdMs": @(AURARealtimeCameraStableThresholdMs),
+    @"iso": @(device ? device.ISO : 0),
+    @"exposureDurationMs": @(device ? CMTimeGetSeconds(device.exposureDuration) * 1000.0 : 0),
+    @"lensPosition": @(device ? device.lensPosition : 0),
+    @"whiteBalanceGains": @{
+      @"red": @(gains.redGain),
+      @"green": @(gains.greenGain),
+      @"blue": @(gains.blueGain),
+    },
+  };
+}
+
+- (NSDictionary *)lockCameraForCaptureAndCreateMetadata
+{
+  AVCaptureDevice *device = _videoInput.device;
+  NSMutableDictionary *metadata = [[self cameraStabilityPayload] mutableCopy];
+  metadata[@"captureLockedAtMs"] = @([[NSDate date] timeIntervalSince1970] * 1000.0);
+
+  if (!device) {
+    metadata[@"lockError"] = @"camera_unavailable";
+    metadata[@"exposureLocked"] = @NO;
+    metadata[@"whiteBalanceLocked"] = @NO;
+    metadata[@"focusLocked"] = @NO;
+    return metadata;
+  }
+
+  NSError *lockError = nil;
+  BOOL exposureLocked = NO;
+  BOOL whiteBalanceLocked = NO;
+  BOOL focusLocked = NO;
+
+  if (![device lockForConfiguration:&lockError]) {
+    metadata[@"lockError"] = lockError.localizedDescription ?: @"lock_failed";
+    metadata[@"exposureLocked"] = @NO;
+    metadata[@"whiteBalanceLocked"] = @NO;
+    metadata[@"focusLocked"] = @NO;
+    return metadata;
+  }
+
+  if ([device isExposureModeSupported:AVCaptureExposureModeLocked]) {
+    device.exposureMode = AVCaptureExposureModeLocked;
+    exposureLocked = YES;
+  }
+  if ([device isWhiteBalanceModeSupported:AVCaptureWhiteBalanceModeLocked]) {
+    device.whiteBalanceMode = AVCaptureWhiteBalanceModeLocked;
+    whiteBalanceLocked = YES;
+  }
+  if ([device isFocusModeSupported:AVCaptureFocusModeLocked]) {
+    device.focusMode = AVCaptureFocusModeLocked;
+    focusLocked = YES;
+  }
+
+  [device unlockForConfiguration];
+  metadata[@"exposureLocked"] = @(exposureLocked);
+  metadata[@"whiteBalanceLocked"] = @(whiteBalanceLocked);
+  metadata[@"focusLocked"] = @(focusLocked);
+  metadata[@"lockError"] = [NSNull null];
+  return metadata;
+}
+
+- (void)restoreCameraAutoModes
+{
+  AVCaptureDevice *device = _videoInput.device;
+  if (!device) {
+    return;
+  }
+
+  NSError *lockError = nil;
+  if (![device lockForConfiguration:&lockError]) {
+    return;
+  }
+
+  if ([device isExposureModeSupported:AVCaptureExposureModeContinuousAutoExposure]) {
+    device.exposureMode = AVCaptureExposureModeContinuousAutoExposure;
+  }
+  if ([device isWhiteBalanceModeSupported:AVCaptureWhiteBalanceModeContinuousAutoWhiteBalance]) {
+    device.whiteBalanceMode = AVCaptureWhiteBalanceModeContinuousAutoWhiteBalance;
+  }
+  if ([device isFocusModeSupported:AVCaptureFocusModeContinuousAutoFocus]) {
+    device.focusMode = AVCaptureFocusModeContinuousAutoFocus;
+  }
+
+  [device unlockForConfiguration];
+  [self refreshCameraStableSinceForDevice:device];
 }
 
 - (void)updatePreviewConnection
@@ -574,6 +1167,196 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   });
 }
 
+- (MPPFaceLandmarker *)faceLandmarker
+{
+  if (_faceLandmarker || _faceLandmarkerInitError) {
+    return _faceLandmarker;
+  }
+
+  NSString *modelPath = [NSBundle.mainBundle pathForResource:@"face_landmarker" ofType:@"task"];
+  if (!modelPath) {
+    _faceLandmarkerInitError = @"face_landmarker.task is missing from the app bundle.";
+    return nil;
+  }
+
+  MPPBaseOptions *baseOptions = [MPPBaseOptions new];
+  baseOptions.modelAssetPath = modelPath;
+  MPPFaceLandmarkerOptions *options = [MPPFaceLandmarkerOptions new];
+  options.baseOptions = baseOptions;
+  options.runningMode = MPPRunningModeVideo;
+  options.numFaces = 1;
+  options.minFaceDetectionConfidence = 0.5;
+  options.minFacePresenceConfidence = 0.5;
+  options.minTrackingConfidence = 0.5;
+  options.outputFacialTransformationMatrixes = YES;
+
+  NSError *error = nil;
+  _faceLandmarker = [[MPPFaceLandmarker alloc] initWithOptions:options error:&error];
+  if (!_faceLandmarker || error) {
+    _faceLandmarkerInitError =
+        error.localizedDescription ?: @"MediaPipe FaceLandmarker initialization failed.";
+  }
+
+  return _faceLandmarker;
+}
+
+- (NSInteger)mediaPipeTimestampMsForSampleBuffer:(CMSampleBufferRef)sampleBuffer
+{
+  CMTime presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
+  NSTimeInterval seconds = CMTIME_IS_VALID(presentationTime)
+      ? CMTimeGetSeconds(presentationTime)
+      : CACurrentMediaTime();
+  NSInteger timestampMs = (NSInteger)llround(seconds * 1000.0);
+
+  if (timestampMs <= _lastMediaPipeTimestampMs) {
+    timestampMs = _lastMediaPipeTimestampMs + 1;
+  }
+
+  _lastMediaPipeTimestampMs = timestampMs;
+  return timestampMs;
+}
+
+- (NSMutableDictionary *)mediaPipeLandmarksPayloadFromLandmarks:
+    (NSArray<MPPNormalizedLandmark *> *)faceLandmarks
+{
+  NSMutableDictionary *landmarks = [NSMutableDictionary dictionary];
+  NSDictionary *forehead =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 10));
+  NSDictionary *noseBridge =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 168));
+  NSDictionary *noseTip =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 1));
+  NSDictionary *chin =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 152));
+  NSDictionary *leftEye =
+      AURARealtimeAverageMediaPipePoint(faceLandmarks, @[@33, @133]);
+  NSDictionary *rightEye =
+      AURARealtimeAverageMediaPipePoint(faceLandmarks, @[@362, @263]);
+  NSDictionary *mouthLeft =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 61));
+  NSDictionary *mouthRight =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 291));
+  NSDictionary *upperLip =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 13));
+  NSDictionary *lowerLip =
+      AURARealtimeMediaPipePoint(AURARealtimeMediaPipeLandmarkAtIndex(faceLandmarks, 14));
+
+  if (forehead) {
+    landmarks[@"forehead"] = forehead;
+  }
+  if (noseBridge) {
+    landmarks[@"noseBridge"] = noseBridge;
+  }
+  if (noseTip) {
+    landmarks[@"noseTip"] = noseTip;
+  }
+  if (chin) {
+    landmarks[@"chin"] = chin;
+  }
+  if (leftEye) {
+    landmarks[@"leftEye"] = leftEye;
+  }
+  if (rightEye) {
+    landmarks[@"rightEye"] = rightEye;
+  }
+  if (mouthLeft) {
+    landmarks[@"mouthLeft"] = mouthLeft;
+  }
+  if (mouthRight) {
+    landmarks[@"mouthRight"] = mouthRight;
+  }
+  if (upperLip) {
+    landmarks[@"upperLip"] = upperLip;
+  }
+  if (lowerLip) {
+    landmarks[@"lowerLip"] = lowerLip;
+  }
+
+  return landmarks;
+}
+
+- (NSNumber *)mediaPipeFaceWidthRatioFromLandmarks:(NSDictionary *)landmarks
+{
+  NSDictionary *leftEye = landmarks[@"leftEye"];
+  NSDictionary *rightEye = landmarks[@"rightEye"];
+  NSDictionary *mouthLeft = landmarks[@"mouthLeft"];
+  NSDictionary *mouthRight = landmarks[@"mouthRight"];
+
+  if (leftEye && rightEye && mouthLeft && mouthRight) {
+    CGFloat eyeWidth =
+        fabs(AURARealtimeNumberFromPoint(rightEye, @"x") -
+             AURARealtimeNumberFromPoint(leftEye, @"x"));
+    CGFloat mouthWidth =
+        fabs(AURARealtimeNumberFromPoint(mouthRight, @"x") -
+             AURARealtimeNumberFromPoint(mouthLeft, @"x"));
+    return @(fmax(eyeWidth * 2.35, mouthWidth * 2.15));
+  }
+
+  return nil;
+}
+
+- (NSDictionary *)mediaPipePayloadForSampleBuffer:(CMSampleBufferRef)sampleBuffer
+{
+  MPPFaceLandmarker *landmarker = [self faceLandmarker];
+  if (!landmarker) {
+    return @{
+      @"status": @"landmark_missing",
+      @"error": _faceLandmarkerInitError ?: @"MediaPipe FaceLandmarker is unavailable.",
+    };
+  }
+
+  NSError *imageError = nil;
+  MPPImage *image =
+      [[MPPImage alloc] initWithSampleBuffer:sampleBuffer
+                                 orientation:AURARealtimeMediaPipeImageOrientation([self devicePosition])
+                                       error:&imageError];
+  if (!image || imageError) {
+    return @{
+      @"status": @"landmark_missing",
+      @"error": imageError.localizedDescription ?: @"MediaPipe image conversion failed.",
+    };
+  }
+
+  NSError *detectError = nil;
+  MPPFaceLandmarkerResult *result =
+      [landmarker detectVideoFrame:image
+           timestampInMilliseconds:[self mediaPipeTimestampMsForSampleBuffer:sampleBuffer]
+                              error:&detectError];
+  if (!result || detectError) {
+    return @{
+      @"status": @"landmark_missing",
+      @"error": detectError.localizedDescription ?: @"MediaPipe detection failed.",
+    };
+  }
+
+  NSArray<MPPNormalizedLandmark *> *faceLandmarks = result.faceLandmarks.firstObject;
+  if (faceLandmarks.count == 0) {
+    return @{
+      @"status": @"no_face",
+      @"landmarkCount": @0,
+    };
+  }
+
+  NSMutableDictionary *landmarks =
+      [self mediaPipeLandmarksPayloadFromLandmarks:faceLandmarks];
+  NSMutableDictionary *payload = [@{
+    @"status": @"ok",
+    @"landmarkCount": @(faceLandmarks.count),
+    @"landmarks": landmarks,
+  } mutableCopy];
+  NSDictionary *matrixPose =
+      AURARealtimePoseFromMatrix(result.facialTransformationMatrixes.firstObject);
+  NSDictionary *pose = matrixPose ?: AURARealtimePoseFromGeometry(landmarks);
+  NSNumber *faceWidthRatio = [self mediaPipeFaceWidthRatioFromLandmarks:landmarks];
+
+  [payload addEntriesFromDictionary:pose];
+  if (faceWidthRatio) {
+    payload[@"faceWidthRatio"] = faceWidthRatio;
+  }
+
+  return payload;
+}
+
 - (void)captureOutput:(AVCaptureOutput *)output
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection
@@ -595,6 +1378,8 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   CGSize imageSize = CGSizeMake(
       CVPixelBufferGetWidth(imageBuffer),
       CVPixelBufferGetHeight(imageBuffer));
+  NSDictionary *mediaPipePayload = [self mediaPipePayloadForSampleBuffer:sampleBuffer];
+  NSDictionary *cameraStabilityPayload = [self cameraStabilityPayload];
   CGImagePropertyOrientation orientation = AURARealtimeVideoOrientation([self devicePosition]);
   VNDetectFaceLandmarksRequest *request = [[VNDetectFaceLandmarksRequest alloc] init];
   VNImageRequestHandler *handler =
@@ -605,13 +1390,24 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   BOOL success = [handler performRequests:@[request] error:&error];
 
   if (!success || error) {
-    [self emitCameraError:@"detection_failed"];
+    [self emitPayload:@{
+      @"status": @"detection_failed",
+      @"faceCount": @0,
+      @"imageWidth": @(imageSize.width),
+      @"imageHeight": @(imageSize.height),
+      @"sequence": @(_sequence++),
+      @"mediaPipe": mediaPipePayload,
+      @"cameraStability": cameraStabilityPayload,
+    }];
     _isProcessingFrame = NO;
     return;
   }
 
   NSArray<VNFaceObservation *> *faces = request.results ?: @[];
-  NSDictionary *payload = [self payloadForFaces:faces imageSize:imageSize];
+  NSMutableDictionary *payload =
+      [[self payloadForFaces:faces imageSize:imageSize] mutableCopy];
+  payload[@"mediaPipe"] = mediaPipePayload;
+  payload[@"cameraStability"] = cameraStabilityPayload;
   [self emitPayload:payload];
   _isProcessingFrame = NO;
 }
@@ -690,6 +1486,47 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   return screenLandmarks;
 }
 
+- (void)attachMediaPipeScreenLandmarksToPayload:(NSMutableDictionary *)payload
+{
+  NSDictionary *mediaPipe = payload[@"mediaPipe"];
+  if (![mediaPipe isKindOfClass:[NSDictionary class]]) {
+    return;
+  }
+
+  NSDictionary *landmarks = mediaPipe[@"landmarks"];
+  if (![landmarks isKindOfClass:[NSDictionary class]]) {
+    return;
+  }
+
+  NSArray<NSString *> *screenPointKeys = @[
+    @"forehead",
+    @"noseBridge",
+    @"noseTip",
+    @"chin",
+    @"leftEye",
+    @"rightEye",
+    @"mouthLeft",
+    @"mouthRight",
+  ];
+  NSMutableDictionary *screenLandmarks = [NSMutableDictionary dictionary];
+
+  for (NSString *key in screenPointKeys) {
+    NSDictionary *point = landmarks[key];
+    NSDictionary *screenPoint = [self screenPointFromNormalizedPoint:point];
+    if (screenPoint) {
+      screenLandmarks[key] = screenPoint;
+    }
+  }
+
+  if (screenLandmarks.count == 0) {
+    return;
+  }
+
+  NSMutableDictionary *nextMediaPipe = [mediaPipe mutableCopy];
+  nextMediaPipe[@"screenLandmarks"] = screenLandmarks;
+  payload[@"mediaPipe"] = nextMediaPipe;
+}
+
 - (CGPoint)captureDevicePointFromVisionPoint:(NSDictionary *)point
 {
   CGFloat x = AURARealtimeClamp([point[@"x"] doubleValue]);
@@ -725,6 +1562,7 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   dispatch_async(dispatch_get_main_queue(), ^{
     NSMutableDictionary *payloadWithScreenPoints = [payload mutableCopy];
     [self attachScreenLandmarksToPayload:payloadWithScreenPoints];
+    [self attachMediaPipeScreenLandmarksToPayload:payloadWithScreenPoints];
 
     if (self.onLandmarksDetected) {
       self.onLandmarksDetected(payloadWithScreenPoints);
@@ -748,10 +1586,41 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
     self->_hasPendingCapture = YES;
     self->_captureResolve = resolve;
     self->_captureReject = reject;
+    self->_pendingCaptureCameraMetadata = [self lockCameraForCaptureAndCreateMetadata];
 
     [self updateOutputConnections];
-    AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
+    NSArray<AVSemanticSegmentationMatteType> *enabledMatteTypes =
+        self->_semanticMatteCapture
+            ? (self->_photoOutput.enabledSemanticSegmentationMatteTypes ?: @[])
+            : @[];
+    BOOL requestsSemanticMattes = enabledMatteTypes.count > 0;
+    BOOL supportsHeic =
+        [self->_photoOutput.availablePhotoCodecTypes containsObject:AVVideoCodecTypeHEVC];
+    BOOL useHeic = requestsSemanticMattes && self->_semanticMatteRequiresHeic && supportsHeic;
+    AVCapturePhotoSettings *settings = useHeic
+        ? [AVCapturePhotoSettings photoSettingsWithFormat:@{AVVideoCodecKey: AVVideoCodecTypeHEVC}]
+        : [AVCapturePhotoSettings photoSettings];
     settings.flashMode = AVCaptureFlashModeOff;
+    self->_pendingCaptureFormat = useHeic ? @"heic" : @"jpg";
+    self->_pendingSemanticMattes =
+        AURARealtimeSemanticMatteAvailability(requestsSemanticMattes, NO, NO);
+
+    if (requestsSemanticMattes) {
+      settings.enabledSemanticSegmentationMatteTypes = enabledMatteTypes;
+      settings.embedsSemanticSegmentationMattesInPhoto = YES;
+      // SSM은 depth/portrait 처리 파이프라인에서 생성되므로 per-photo depth delivery가
+      // 꺼져 있으면 matte가 조용히 생략된다(AVCam 샘플과 동일한 gating). depth 자체는
+      // 파일에 임베드하지 않아 용량 증가를 피한다.
+      if (self->_photoOutput.isDepthDataDeliveryEnabled) {
+        settings.depthDataDeliveryEnabled = YES;
+        settings.embedsDepthDataInPhoto = NO;
+      }
+      NSLog(@"[aura:face-capture] matte:capture-settings depthEnabled=%d embedsMattes=%d format=%@",
+            settings.isDepthDataDeliveryEnabled,
+            settings.embedsSemanticSegmentationMattesInPhoto,
+            self->_pendingCaptureFormat);
+    }
+
     [self->_photoOutput capturePhotoWithSettings:settings delegate:self];
   });
 }
@@ -763,9 +1632,16 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
   dispatch_async(_sessionQueue, ^{
     RCTPromiseResolveBlock resolve = self->_captureResolve;
     RCTPromiseRejectBlock reject = self->_captureReject;
+    NSDictionary *cameraMetadata = self->_pendingCaptureCameraMetadata;
+    NSDictionary *pendingSemanticMattes = self->_pendingSemanticMattes;
+    NSString *pendingFormat = self->_pendingCaptureFormat ?: @"jpg";
     self->_captureResolve = nil;
     self->_captureReject = nil;
+    self->_pendingCaptureCameraMetadata = nil;
+    self->_pendingSemanticMattes = nil;
+    self->_pendingCaptureFormat = nil;
     self->_hasPendingCapture = NO;
+    [self restoreCameraAutoModes];
 
     if (!resolve || !reject) {
       return;
@@ -782,7 +1658,8 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
       return;
     }
 
-    NSString *fileName = [NSString stringWithFormat:@"aura-face-%@.jpg", NSUUID.UUID.UUIDString];
+    NSString *fileName =
+        [NSString stringWithFormat:@"aura-face-%@.%@", NSUUID.UUID.UUIDString, pendingFormat];
     NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
     NSURL *url = [NSURL fileURLWithPath:path];
     NSError *writeError = nil;
@@ -792,13 +1669,56 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
       return;
     }
 
+    BOOL requestedSemanticMattes = [pendingSemanticMattes[@"requested"] boolValue];
+    BOOL deliveredHairMatte = NO;
+    BOOL deliveredSkinMatte = NO;
+    BOOL embeddedHairMatte = NO;
+    BOOL embeddedSkinMatte = NO;
+
+    if (requestedSemanticMattes) {
+      deliveredHairMatte =
+          [photo semanticSegmentationMatteForType:AVSemanticSegmentationMatteTypeHair] != nil;
+      deliveredSkinMatte =
+          [photo semanticSegmentationMatteForType:AVSemanticSegmentationMatteTypeSkin] != nil;
+      NSDictionary *embeddedAvailability = AURARealtimeEmbeddedSemanticMatteAvailability(url);
+      embeddedHairMatte = [embeddedAvailability[@"hair"] boolValue];
+      embeddedSkinMatte = [embeddedAvailability[@"skin"] boolValue];
+
+      NSLog(@"[aura:face-capture] matte:embedded hair=%d skin=%d deliveredHair=%d deliveredSkin=%d format=%@",
+            embeddedHairMatte,
+            embeddedSkinMatte,
+            deliveredHairMatte,
+            deliveredSkinMatte,
+            pendingFormat);
+
+      if (![pendingFormat isEqualToString:@"heic"] &&
+          (deliveredHairMatte || deliveredSkinMatte) &&
+          (!embeddedHairMatte || !embeddedSkinMatte)) {
+        self->_semanticMatteRequiresHeic = YES;
+        NSLog(@"[aura:face-capture] matte:heic-fallback-enabled reason=jpeg_roundtrip_failed");
+      }
+    }
+
     UIImage *image = [UIImage imageWithData:imageData];
-    resolve(@{
+    NSMutableDictionary *payload = [@{
       @"uri": url.absoluteString,
       @"width": @(image.size.width),
       @"height": @(image.size.height),
-      @"format": @"jpg",
-    });
+      @"format": pendingFormat,
+      @"cameraMetadata": cameraMetadata ?: @{},
+    } mutableCopy];
+
+    if (self->_semanticMatteCapture || pendingSemanticMattes) {
+      payload[@"semanticMattes"] = AURARealtimeSemanticMatteAvailability(
+          requestedSemanticMattes,
+          requestedSemanticMattes ? deliveredHairMatte : NO,
+          requestedSemanticMattes ? deliveredSkinMatte : NO);
+      if (self->_matteCapability) {
+        payload[@"matteCapability"] = self->_matteCapability;
+      }
+    }
+
+    resolve(payload);
   });
 }
 
@@ -812,6 +1732,7 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
 RCT_EXPORT_MODULE(AURARealtimeFaceCaptureView)
 RCT_EXPORT_VIEW_PROPERTY(facing, NSString)
 RCT_EXPORT_VIEW_PROPERTY(onLandmarksDetected, RCTDirectEventBlock)
+RCT_EXPORT_VIEW_PROPERTY(semanticMatteCapture, BOOL)
 
 + (BOOL)requiresMainQueueSetup
 {

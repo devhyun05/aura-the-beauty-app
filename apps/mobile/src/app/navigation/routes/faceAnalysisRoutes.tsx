@@ -9,6 +9,9 @@ import {
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
+import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
+import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types';
 import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
@@ -22,6 +25,8 @@ type HeaderShareAction = {
 };
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
+// 세로 비율 온디바이스 분석이 이 시간 안에 끝나지 않으면 비율 없이 보고서 생성을 진행한다.
+const VERTICAL_THIRDS_WAIT_TIMEOUT_MS = 8000;
 const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
   '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
 const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
@@ -116,16 +121,60 @@ export function FaceAnalysisLoadingRouteScreen({
   const {
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
+    setSelectedFaceVerticalThirds,
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
+  const verticalThirdsPromiseRef =
+    React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  // 얼굴 세로 비율은 캡처당 1회만 온디바이스로 계산한다.
+  // 보고서 재시도(analysisRequestKey)와 분리해 재계산을 막고,
+  // 실패는 null로 격리해 보고서 생성 흐름에 영향을 주지 않는다.
+  React.useEffect(() => {
+    setSelectedFaceVerticalThirds(null);
+    verticalThirdsPromiseRef.current = null;
+
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    const captureId = selectedFaceCapture.photoCaptureId;
+
+    verticalThirdsPromiseRef.current = analyzeFaceVerticalThirds({
+      captureId,
+      createdAt: new Date().toISOString(),
+      imageUri: selectedFaceCapture.imageUri,
+      semanticMattes: selectedFaceCapture.semanticMattes,
+      sessionId: captureId,
+    })
+      .then(result => {
+        if (isMounted) {
+          setSelectedFaceVerticalThirds(result);
+        }
+
+        return result;
+      })
+      .catch(error => {
+        console.info('[aura:face-ratio] analysis:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        return null;
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedFaceCapture, setSelectedFaceVerticalThirds]);
 
   React.useEffect(() => {
     setIsAnalysisReady(false);
@@ -139,7 +188,20 @@ export function FaceAnalysisLoadingRouteScreen({
     let isMounted = true;
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    createFaceAnalysisReportFromCapture(selectedFaceCapture)
+    const waitForVerticalThirds = Promise.race([
+      verticalThirdsPromiseRef.current ?? Promise.resolve(null),
+      new Promise<null>(resolve => {
+        setTimeout(() => resolve(null), VERTICAL_THIRDS_WAIT_TIMEOUT_MS);
+      }),
+    ]);
+
+    waitForVerticalThirds
+      .then(verticalThirds =>
+        createFaceAnalysisReportFromCapture(
+          selectedFaceCapture,
+          buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
+        ),
+      )
       .then(report => {
         if (!isMounted) {
           return;
@@ -249,6 +311,7 @@ export function FaceAnalysisReportsListRouteScreen({
 }: RootScreenProps<'FaceAnalysisReportsList'>) {
   return (
     <DetailRouteChrome
+      reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportsList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <FaceAnalysisReportsListScreen
@@ -268,7 +331,8 @@ export function FaceAnalysisReportDetailRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
-  const {selectedFaceAnalysisReport, selectedFaceCapture} = useNavigationFlowState();
+  const {selectedFaceAnalysisReport, selectedFaceCapture, selectedFaceVerticalThirds} =
+    useNavigationFlowState();
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
       setShareAction(nextShareAction ? {cb: nextShareAction} : null);
@@ -279,8 +343,8 @@ export function FaceAnalysisReportDetailRouteScreen({
   return (
     <DetailRouteChrome
       backgroundColor={colors.surfaceMuted}
-      headerBackgroundColor={colors.surfaceMuted}
-      headerBorderColor={colors.surfaceMuted}
+      headerMode="overlay"
+      reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportDetail"
       onOpenDocumentList={() => navigation.navigate('FaceAnalysisReportsList')}
       onShare={shareAction?.cb}
@@ -293,6 +357,7 @@ export function FaceAnalysisReportDetailRouteScreen({
         }
         onHeaderShareActionChange={handleHeaderShareActionChange}
         reportId={route.params?.reportId ?? null}
+        verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
       />
     </DetailRouteChrome>
   );

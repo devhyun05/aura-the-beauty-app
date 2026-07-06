@@ -1,9 +1,10 @@
 import {useState} from 'react';
-import {StyleSheet} from 'react-native';
+import {Modal, StyleSheet} from 'react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {PrivacyPolicyScreen} from '../../legal/screens/PrivacyPolicyScreen';
 import {AuraLogo} from '../components/AuraLogo';
 import {SocialLoginButton} from '../components/SocialLoginButton';
 import {socialLoginProviders} from '../mocks/socialLoginProviders.mock';
@@ -23,6 +24,7 @@ type LoginScreenProps = {
 export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: LoginScreenProps) {
   const [feedback, setFeedback] = useState<LoginFeedback | null>(null);
   const [loadingProvider, setLoadingProvider] = useState<SocialLoginProvider | null>(null);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
 
   const handleSocialLogin = async (provider: SocialLoginProvider) => {
     if (loadingProvider !== null) {
@@ -99,10 +101,21 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
             style={styles.termsText}
           >
             가입 시 <Text style={styles.termsLink}>이용약관</Text> 및{' '}
-            <Text style={styles.termsLink}>개인정보처리방침</Text>에 동의하게 됩니다
+            <Text style={styles.termsLink} onPress={() => setShowPrivacyPolicy(true)}>
+              개인정보처리방침
+            </Text>
+            에 동의하게 됩니다
           </Text>
         </YStack>
       </YStack>
+
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowPrivacyPolicy(false)}
+        presentationStyle="pageSheet"
+        visible={showPrivacyPolicy}>
+        <PrivacyPolicyScreen onClose={() => setShowPrivacyPolicy(false)} />
+      </Modal>
     </AppScreen>
   );
 }

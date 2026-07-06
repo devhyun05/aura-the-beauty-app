@@ -175,11 +175,11 @@ export function ReferenceMakeupExtractionResultScreen({
             <Text style={styles.secondaryButtonText}>다시 선택</Text>
           </Pressable>
           <Pressable
-            accessibilityLabel="레퍼런스 메이크업 기반 AR 필터 보기"
+            accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
             accessibilityRole="button"
             onPress={onOpenARFilter}
             style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>AR 필터로 보기</Text>
+            <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
             <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
           </Pressable>
         </XStack>
@@ -566,8 +566,8 @@ const styles = StyleSheet.create({
   },
   areaTabActive: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
     borderRadius: radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
   },
   introSparkleBadge: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 2,
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1.35,
     flexDirection: 'row',
@@ -819,8 +819,8 @@ const styles = StyleSheet.create({
     width: 30,
   },
   productReasonButtonActive: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   productReasonLabel: {
     color: colors.textPrimary,

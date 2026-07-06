@@ -36,7 +36,6 @@ export const mainTabLinkingScreens = {
   HomeTab: 'home',
   ProfileTab: 'profile',
   CommunityTab: 'community-tab',
-  ConsultingTab: 'consulting-tab',
 } as const satisfies Record<MainTabRouteName, MainTabLinkingScreenConfig>;
 
 export const rootStackLinkingScreens = {
@@ -58,7 +57,6 @@ export const rootStackLinkingScreens = {
   AppSettings: 'app-settings',
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
-  Magazine: 'magazine',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
   Community: 'community',

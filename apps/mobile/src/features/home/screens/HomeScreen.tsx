@@ -13,8 +13,8 @@ import {
 import {
   ArrowRight,
   ChevronUp,
+  Compass,
   Heart,
-  Newspaper,
   PackageSearch,
   ScanFace,
   Store,
@@ -40,7 +40,7 @@ export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractio
 
 type HomeScreenProps = {
   onPressFaceDiagnosis?: () => void;
-  onPressMagazine?: () => void;
+  onPressConsulting?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
@@ -54,7 +54,7 @@ type HomeScreenProps = {
 export function HomeScreen({
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
-  onPressMagazine,
+  onPressConsulting,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
@@ -171,7 +171,7 @@ export function HomeScreen({
 
             <QuickActionSection
               onPressFaceDiagnosis={onPressFaceDiagnosis}
-              onPressMagazine={onPressMagazine}
+              onPressConsulting={onPressConsulting}
               onPressProductRecommendations={onPressProductRecommendations}
               onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
@@ -511,37 +511,45 @@ function HeroBannerCard({
 }
 
 export const HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME = 'Store';
-export const HOME_MAGAZINE_QUICK_ACTION_ICON_NAME = 'Newspaper';
+export const HOME_CONSULTING_QUICK_ACTION_ICON_NAME = 'Compass';
+export const HOME_QUICK_ACTION_LABELS = [
+  '얼굴 분석',
+  '필터 스토어',
+  '추천 제품',
+  '컨설팅',
+] as const;
+export const HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES = 1;
+export const HOME_QUICK_ACTION_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
 
 const quickActions = [
   {
     id: 'diagnosis',
-    label: '얼굴\n분석',
+    label: HOME_QUICK_ACTION_LABELS[0],
     accessibilityLabel: '얼굴 분석 시작',
     icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
   },
   {
-    id: 'recommendation',
-    label: '\uCD94\uCC9C\n\uC81C\uD488',
-    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
-    icon: (color: string) => (
-      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
     id: 'filterStore',
-    label: '\uD544\uD130\n\uC2A4\uD1A0\uC5B4',
+    label: HOME_QUICK_ACTION_LABELS[1],
     accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
     icon: (color: string) => (
       <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
   {
-    id: 'magazine',
-    label: '\uB9E4\uAC70\uC9C4',
-    accessibilityLabel: '\uB9E4\uAC70\uC9C4 \uBCF4\uAE30',
+    id: 'recommendation',
+    label: HOME_QUICK_ACTION_LABELS[2],
+    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
     icon: (color: string) => (
-      <Newspaper color={color} size={iconSize.lg} strokeWidth={1.9} />
+      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
+    ),
+  },
+  {
+    id: 'consulting',
+    label: HOME_QUICK_ACTION_LABELS[3],
+    accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
+    icon: (color: string) => (
+      <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
     ),
   },
 ] as const;
@@ -549,8 +557,8 @@ const quickActions = [
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
+  onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressMagazine?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
 };
@@ -558,8 +566,8 @@ type HomeQuickActionHandlers = {
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
+    onPressConsulting,
     onPressFaceDiagnosis,
-    onPressMagazine,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   }: HomeQuickActionHandlers,
@@ -576,26 +584,26 @@ export function getHomeQuickActionPressHandler(
     return onPressRecommendedFilterMore;
   }
 
-  if (actionId === 'magazine') {
-    return onPressMagazine;
+  if (actionId === 'consulting') {
+    return onPressConsulting;
   }
 
   return undefined;
 }
 
 export function getHomeQuickActionLabels(): readonly string[] {
-  return quickActions.map(action => action.label);
+  return HOME_QUICK_ACTION_LABELS;
 }
 
 function QuickActionSection({
+  onPressConsulting,
   onPressFaceDiagnosis,
-  onPressMagazine,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
+    onPressConsulting,
     onPressFaceDiagnosis,
-    onPressMagazine,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   };
@@ -612,7 +620,9 @@ function QuickActionSection({
           <View style={styles.quickActionCircle}>
             {action.icon(colors.textPrimary)}
           </View>
-          <Text numberOfLines={2} style={styles.quickActionLabel}>
+          <Text
+            numberOfLines={HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES}
+            style={styles.quickActionLabel}>
             {action.label}
           </Text>
         </Pressable>
@@ -851,7 +861,7 @@ const styles = StyleSheet.create({
   heroBadge: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -900,7 +910,7 @@ const styles = StyleSheet.create({
   heroButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     bottom: spacing.xl,
     borderRadius: radius.pill,
     flexDirection: 'row',
@@ -962,7 +972,7 @@ const styles = StyleSheet.create({
   },
   dialogButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 54,
@@ -1013,8 +1023,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   recommendedFilterCategoryChipSelected: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
   },
   recommendedFilterCategoryList: {
     gap: spacing.sm,
@@ -1030,7 +1040,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   recommendedFilterCopy: {
-    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    backgroundColor: colors.blackSurface,
     bottom: 0,
     gap: 2,
     left: 0,
@@ -1055,7 +1065,7 @@ const styles = StyleSheet.create({
   },
   recommendedFilterFavoriteButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 32,
     justifyContent: 'center',
@@ -1066,7 +1076,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   recommendedFilterFavoriteButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   recommendedFilterMetaRow: {
     flexDirection: 'row',
@@ -1078,7 +1088,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   recommendedFilterPillText: {
-    backgroundColor: 'rgba(17, 17, 17, 0.70)',
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     color: colors.white,
     overflow: 'hidden',
@@ -1130,9 +1140,10 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
-    minHeight: typography.lineHeight.xs * 2,
     lineHeight: typography.lineHeight.xs,
+    minHeight: HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
     textAlign: 'center',
+    width: '100%',
   },
   quickActionList: {
     flexDirection: 'row',
@@ -1141,7 +1152,7 @@ const styles = StyleSheet.create({
   },
   scrollTopButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: scrollTopButtonSize,
     justifyContent: 'center',
