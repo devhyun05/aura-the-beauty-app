@@ -98,6 +98,22 @@ def test_category_hard_filter_contributes_to_score() -> None:
   assert anchor_product["matchRate"] >= 85  # before: 40
 
 
+def test_blusher_prompt_does_not_self_inject_velvet_finish() -> None:
+  """실버그 회귀: '블러'(velvet 단서)가 '블러셔/블러쉬' 안에서 오탐되면 안 된다.
+
+  치크 질의마다 finish=velvet 소프트 선호가 자동 주입돼 랭킹·발견 질의를 오염시켰다.
+  """
+  for prompt in ("데일리로 쓸 만한 블러셔 추천해줘", "피치 크림 블러쉬"):
+    intent = parse_intent(prompt)
+    finish_prefs = [s for s in intent["softPreferences"] if s["attribute"] == "finish"]
+    assert not any("velvet" in s["values"] for s in finish_prefs), prompt
+
+  # 진짜 벨벳/블러 의도는 계속 잡힌다
+  intent = parse_intent("블러 처리된 벨벳 립")
+  finish_prefs = [s for s in intent["softPreferences"] if s["attribute"] == "finish"]
+  assert any("velvet" in s["values"] for s in finish_prefs)
+
+
 def test_plum_query_now_matches_catalog() -> None:
   """실버그 회귀: '플럼'이 burgundy(0개)가 아니라 plum(카탈로그 존재)으로 매칭된다."""
   intent = parse_intent("플럼 립 추천")

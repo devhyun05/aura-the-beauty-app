@@ -133,6 +133,12 @@ def _append_soft_matches(text: str, mapping: dict[str, tuple[str, ...]], attribu
     output.append(_soft(attribute, values, weight=weight))
 
 
+def _finish_safe_text(text: str) -> str:
+  # 실버그 가드: '블러'(velvet 단서)가 '블러셔/블러쉬/블러시'(치크 카테고리어) 안에서
+  # 오탐되지 않게, finish 매칭용 텍스트에서 카테고리어를 마스킹한다.
+  return re.sub(r"블러[셔쉬시]", " ", text)
+
+
 def parse_intent(
   prompt: str,
   *,
@@ -160,7 +166,7 @@ def parse_intent(
 
   _append_soft_matches(text, COLOR_TERMS, "colorFamily", soft_preferences, weight=0.9)
   _append_soft_matches(text, UNDERTONE_TERMS, "undertone", soft_preferences, weight=0.6)
-  _append_soft_matches(text, FINISH_TERMS, "finish", soft_preferences, weight=0.9)
+  _append_soft_matches(_finish_safe_text(text), FINISH_TERMS, "finish", soft_preferences, weight=0.9)
   _append_soft_matches(text, TEXTURE_TERMS, "texture", soft_preferences, weight=0.75)
   _append_soft_matches(text, INTENSITY_TERMS, "intensity", soft_preferences, weight=0.7)
   _append_soft_matches(text, OCCASION_TERMS, "occasion", soft_preferences, weight=0.65)
