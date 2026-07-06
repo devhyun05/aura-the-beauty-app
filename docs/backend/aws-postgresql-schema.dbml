@@ -175,6 +175,7 @@ Table analysis_reports {
   base_makeup_guide text
   tags text[]
   detail_payload jsonb [not null, default: '{}']
+  embedding vector(1024)
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
@@ -460,6 +461,139 @@ Table home_recommended_looks {
 
   Note: 'HomeData.recommendedLooks. Home recommended makeup look cards.'
 }
+Table community_threads {
+  id uuid [pk, default: `gen_random_uuid()`]
+  author_user_id uuid [not null]
+  category text [not null, note: 'lookbook | question | product_combo | before_after']
+  title text [not null]
+  body text [not null, default: '']
+  mood_tags text[] [not null, default: '{}']
+  situation_tags text[] [not null, default: '{}']
+  difficulty text [note: 'easy | medium | hard']
+  duration_minutes integer
+  product_usage jsonb [not null, default: '{"base": [], "eye": [], "cheek": [], "lip": []}']
+  like_count integer [not null, default: 0]
+  reply_count integer [not null, default: 0]
+  save_count integer [not null, default: 0]
+  view_count integer [not null, default: 0]
+  status text [not null, default: 'active']
+  embedding vector(1024)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (category, created_at)
+    ((like_count + save_count * 2 + reply_count), created_at)
+    (title)
+    (body)
+  }
+
+  Note: 'Look-first community feed posts. Trending is derived by sort, not stored.'
+}
+
+Table community_thread_media {
+  id uuid [pk, default: `gen_random_uuid()`]
+  thread_id uuid [not null]
+  media_id uuid [not null]
+  sort_order integer [not null, note: '0..3; 0 is cover']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (thread_id, media_id) [unique]
+    (thread_id, sort_order) [unique]
+    (thread_id, sort_order)
+  }
+
+  Note: 'Ordered 1-4 images for a community thread.'
+}
+
+Table community_replies {
+  id uuid [pk, default: `gen_random_uuid()`]
+  thread_id uuid [not null]
+  parent_reply_id uuid
+  author_user_id uuid [not null]
+  body text [not null]
+  like_count integer [not null, default: 0]
+  status text [not null, default: 'active']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (thread_id, created_at)
+  }
+
+  Note: 'Thread replies with one-level nesting enforced by API.'
+}
+
+Table community_thread_likes {
+  user_id uuid [not null]
+  thread_id uuid [not null]
+  liked_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, thread_id) [pk]
+    (thread_id, liked_at)
+  }
+}
+
+Table community_thread_saves {
+  user_id uuid [not null]
+  thread_id uuid [not null]
+  saved_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, thread_id) [pk]
+    (thread_id, saved_at)
+  }
+}
+
+Table community_reply_likes {
+  user_id uuid [not null]
+  reply_id uuid [not null]
+  liked_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, reply_id) [pk]
+    (reply_id)
+  }
+}
+
+Table community_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  reporter_user_id uuid [not null]
+  target_type text [not null, note: 'thread | reply']
+  target_thread_id uuid
+  target_reply_id uuid
+  reason text [not null, note: 'spam | abuse | privacy | other']
+  detail text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (reporter_user_id, target_thread_id) [unique]
+    (reporter_user_id, target_reply_id) [unique]
+    (target_thread_id)
+    (target_reply_id)
+  }
+
+  Note: 'Duplicate-safe moderation reports for threads and replies.'
+}
+Table community_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  thread_id uuid
+  event_type text [not null, note: 'impression | view | revisit | dwell | like | save | reply | slider | search']
+  search_query text
+  dwell_ms integer
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+  }
+
+  Note: 'Behavior events for community recommendation signals.'
+}
 Table user_consents {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
@@ -560,6 +694,23 @@ Ref: home_filter_store_items.product_id > products.id
 Ref: home_filter_store_items.ar_filter_id > ar_filters.id
 Ref: home_recommended_looks.saved_makeup_style_id > saved_makeup_styles.id
 Ref: home_recommended_looks.image_media_id > media_assets.id
+Ref: community_threads.author_user_id > users.id
+Ref: community_thread_media.thread_id > community_threads.id
+Ref: community_thread_media.media_id > media_assets.id
+Ref: community_replies.thread_id > community_threads.id
+Ref: community_replies.parent_reply_id > community_replies.id
+Ref: community_replies.author_user_id > users.id
+Ref: community_thread_likes.user_id > users.id
+Ref: community_thread_likes.thread_id > community_threads.id
+Ref: community_thread_saves.user_id > users.id
+Ref: community_thread_saves.thread_id > community_threads.id
+Ref: community_reply_likes.user_id > users.id
+Ref: community_reply_likes.reply_id > community_replies.id
+Ref: community_reports.reporter_user_id > users.id
+Ref: community_reports.target_thread_id > community_threads.id
+Ref: community_reports.target_reply_id > community_replies.id
+Ref: community_events.user_id > users.id
+Ref: community_events.thread_id > community_threads.id
 Ref: user_consents.user_id > users.id
 Ref: data_deletion_requests.user_id > users.id
 Ref: audit_logs.actor_user_id > users.id

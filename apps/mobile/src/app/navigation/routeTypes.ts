@@ -45,6 +45,10 @@ export type RootStackParamList = {
   // prompt: 딥링크로 검색 자동 시작(리포트→검색 연결). open/dial: QA·데모 드라이브 훅.
   AuradinSearch: {prompt?: string; open?: string; dial?: string; ts?: string} | undefined;
   Community: undefined;
+  CommunityThreadDetail: {threadId: string};
+  CommunityThreadCreate: undefined;
+  CommunityThreadEdit: {threadId: string};
+  CommunityUserProfile: {avatarUrl?: string | null; nickname: string; userId: string};
   Consulting: undefined;
   ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
   ConsultingExpertProfile: {expertId: string};
@@ -122,6 +126,10 @@ export const rootStackRoutes = [
   'ProductRecommendation',
   'AuradinSearch',
   'Community',
+  'CommunityThreadDetail',
+  'CommunityThreadCreate',
+  'CommunityThreadEdit',
+  'CommunityUserProfile',
   'Consulting',
   'ConsultingExpertList',
   'ConsultingExpertProfile',

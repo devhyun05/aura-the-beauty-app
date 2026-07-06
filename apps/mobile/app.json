@@ -5,7 +5,8 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "platforms": [
-      "ios"
+      "ios",
+      "android"
     ],
     "scheme": "aiarmakeup",
     "userInterfaceStyle": "light",
@@ -18,6 +19,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aura.mobile",
       "appleTeamId": "BRA7W3G4QS"
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
       "expo-status-bar",
