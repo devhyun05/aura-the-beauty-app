@@ -6,7 +6,7 @@ export function mapFaceAnalysisReportsToMakeupLooks(
   reports: readonly FaceAnalysisReport[],
 ): MakeupLook[] {
   return reports.flatMap(report =>
-    report.recommendedMakeups.slice(0, 3).map((makeup, index) => ({
+    report.recommendedMakeups.slice(0, 1).map((makeup, index) => ({
       id: `${report.id}-${makeup.id}-${index}`,
       title: makeup.title,
       moodLabel: makeup.subtitle || report.recommendedMood,

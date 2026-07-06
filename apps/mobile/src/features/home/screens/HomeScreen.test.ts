@@ -400,28 +400,12 @@ const completeReport: FaceAnalysisReport = {
   personalColor: '봄웜',
   recommendedMakeups: [
     {
-      description: '첫 번째 추천',
+      description: '데일리 추천',
       id: 'look-1',
       imageSource: {uri: 'https://example.com/look-1.png'},
       subtitle: '맑은 코랄',
       tags: [],
-      title: '추천 룩 1',
-    },
-    {
-      description: '두 번째 추천',
-      id: 'look-2',
-      imageSource: {uri: 'https://example.com/look-2.png'},
-      subtitle: '로지 데일리',
-      tags: [],
-      title: '추천 룩 2',
-    },
-    {
-      description: '세 번째 추천',
-      id: 'look-3',
-      imageSource: {uri: 'https://example.com/look-3.png'},
-      subtitle: '브라운 무드',
-      tags: [],
-      title: '추천 룩 3',
+      title: '데일리 추천 룩',
     },
   ],
   recommendedMood: '맑은 코랄 글로우',
@@ -437,17 +421,16 @@ const completeReport: FaceAnalysisReport = {
 const partialReport: FaceAnalysisReport = {
   ...completeReport,
   id: 'analysis-partial',
-  recommendedMakeups: completeReport.recommendedMakeups.slice(0, 2),
 };
 const savedHomeMakeupLooks = mapFaceAnalysisReportsToHomeSavedMakeupLooks([
   completeReport,
   partialReport,
 ]);
 
-expectEqual(savedHomeMakeupLooks.length, 5, 'home saved makeup keeps remaining saved cards');
-expectEqual(savedHomeMakeupLooks[0].title, '추천 룩 1', 'home saved makeup uses AI title');
+expectEqual(savedHomeMakeupLooks.length, 2, 'home saved makeup keeps one daily card per report');
+expectEqual(savedHomeMakeupLooks[0].title, '데일리 추천 룩', 'home saved makeup uses AI title');
 expectEqual(
   savedHomeMakeupLooks[1].description,
-  '로지 데일리',
-  'home saved makeup uses AI subtitle',
+  '맑은 코랄',
+  'home saved makeup uses one daily card from each report',
 );
