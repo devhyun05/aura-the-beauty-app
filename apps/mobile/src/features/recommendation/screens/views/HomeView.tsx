@@ -258,7 +258,7 @@ function MenuRow({
 }): React.JSX.Element {
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ disabled: Boolean(disabled) }}
       style={({ pressed }) => [styles.menuRow, pressed && !disabled && { opacity: 0.6 }]}

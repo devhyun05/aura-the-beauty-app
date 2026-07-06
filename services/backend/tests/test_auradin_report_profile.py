@@ -8,7 +8,7 @@ from app.services.auradin_agent.report_profile import (
   infer_undertone,
   personal_color_to_soft_preferences,
 )
-from app.services.auradin_agent.session_manager import clear_sessions
+from app.services.auradin_agent.session_manager import clear_sessions, get_session
 
 
 def test_infer_undertone_maps_korean_personal_color() -> None:
@@ -82,6 +82,28 @@ def test_report_tone_lifts_matching_candidate_without_dropping_any() -> None:
   # 결과 칩에 "쿨톤 참고"가 source=report로 노출.
   labels = [(f["label"], f["source"]) for f in rep_turn["appliedFilters"]]
   assert ("쿨톤 참고", "report") in labels
+
+
+def test_report_attachment_does_not_change_question_behavior() -> None:
+  """구체 프롬프트에 리포트를 얹어도 질문 동작이 바뀌면 안 된다 — 리포트는 재랭킹만.
+
+  phase 비교만으로는 부족하다(모호성 경로로 어차피 질문이 뜰 수 있음) —
+  파서가 정한 requiresQuestion을 리포트 병합이 뒤집지 않는 것 자체를 확인한다.
+  """
+  prompt = "립 2만원 이하 올리브영에서 추천해줘"
+  client = _client()
+  base_id = _create(client, prompt)
+  base_turn = _turn(client, base_id)
+  base_intent = get_session(base_id)["intent"]
+
+  client2 = _client()
+  rep_id = _create(client2, prompt, context={"personalColor": "여름 쿨"})
+  rep_turn = _turn(client2, rep_id)
+  rep_intent = get_session(rep_id)["intent"]
+
+  assert rep_intent["requiresQuestion"] == base_intent["requiresQuestion"]
+  assert rep_intent["broad"] == base_intent["broad"]
+  assert rep_turn["phase"] == base_turn["phase"]
 
 
 def test_report_only_empty_prompt_asks_category_scope_question() -> None:

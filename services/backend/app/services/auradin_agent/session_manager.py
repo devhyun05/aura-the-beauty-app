@@ -306,8 +306,9 @@ def create_session(
   if personal_color:
     report_prefs = personal_color_to_soft_preferences(personal_color)
     if report_prefs:
+      # 리포트 선호는 재랭킹에만 참여한다 — requiresQuestion 등 질문 동작은 프롬프트가
+      # 정한 그대로 둔다. 구체 프롬프트에 리포트를 얹었다고 질문을 강제하면 안 됨.
       intent["softPreferences"] = [*intent.get("softPreferences", []), *report_prefs]
-      intent["requiresQuestion"] = bool(intent.get("broad")) or bool(intent["softPreferences"])
   state = {
     "sessionId": session_id,
     "phase": "searching",

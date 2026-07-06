@@ -160,7 +160,13 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
         // forces WebGL1 for the same reason.
         const g = globalThis as { WebGL2RenderingContext?: unknown };
         const savedWebGL2 = g.WebGL2RenderingContext;
-        delete g.WebGL2RenderingContext;
+        try {
+          delete g.WebGL2RenderingContext;
+        } catch {
+          // Engines may define the global non-configurable (delete throws in strict
+          // mode). three r128 gates on `typeof`, so `undefined` flips it just as well.
+          g.WebGL2RenderingContext = undefined;
+        }
         let renderer: THREE.WebGLRenderer;
         try {
           renderer = new THREE.WebGL1Renderer({

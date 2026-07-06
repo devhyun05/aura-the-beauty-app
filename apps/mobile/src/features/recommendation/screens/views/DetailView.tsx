@@ -90,9 +90,9 @@ export function DetailView({
       const t = setTimeout(() => setToast(false), 1600);
       return () => clearTimeout(t);
     }
-    prevLiked.current = liked;
     return undefined;
   }, [liked]);
+  // prev 추적은 여기 한 곳에서만 — 위 effect의 조기 return 경로와 무관하게 항상 최신.
   React.useEffect(() => {
     prevLiked.current = liked;
   });
