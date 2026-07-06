@@ -134,6 +134,22 @@ export type AuradinCandidateProduct = {
 
 export type AuradinSearchPhase = 'searching' | 'question' | 'results' | 'failed' | 'expired';
 
+// ── auradin-rn DS 포팅(프리젠테이션 레이어)이 소비하는 타입 ──
+// 화면 phase — 단일 PersistentOrb 모프 + 지반 다크 여부를 구동 (§9 ③).
+export type AuradinPhase =
+  | 'home'
+  | 'searching'
+  | 'question'
+  | 'results'
+  | 'detail'
+  | 'saved'
+  | 'failed';
+
+export type ThinkingStepState = 'done' | 'active' | 'pending';
+export type ThinkingStep = {label: string; state: ThinkingStepState};
+
+export type RefineDial = 'more_similar' | 'more_diverse';
+
 // 백엔드 SearchTurn을 화면이 소비하는 형태로 매핑한 결과.
 export type AuradinSearchTurn = {
   sessionId: string;
