@@ -301,7 +301,7 @@ export function ARFilterShapeAdjustScreen({
           variant="immersive"
         />
 
-        <XStack style={styles.quickActions}>
+        <XStack style={styles.shapeAdjustmentActions}>
           <ActionPill
             icon={<RotateCcw color={colors.white} size={iconSize.xs} strokeWidth={2} />}
             label="전체 점 초기화"
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
     transform: [{scale: 1.18}],
   },
-  quickActions: {
+  shapeAdjustmentActions: {
     gap: spacing.sm,
     justifyContent: 'flex-end',
   },
