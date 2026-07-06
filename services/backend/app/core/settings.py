@@ -64,6 +64,11 @@ class Settings(BaseSettings):
   auradin_score_gap_threshold: float = 0.04
   # §7 refine 다이얼: more_similar → λ+step, more_diverse → λ−step (세션별 λ에 누적).
   auradin_refine_lambda_step: float = 0.15
+  # §11 6/7단계 비동기 enrich — 자격증명 있으면 자동 ON, 없으면 graceful fallback (턴키).
+  auradin_copy_enabled: bool = True  # Bedrock reasonCopy (구조화 근거 → 자연 카피, 가산 필드)
+  auradin_live_discovery_enabled: bool = True  # 발견 슬롯 라이브 Naver broaden (§2 Tier2)
+  auradin_live_discovery_min_pool: int = 8  # floor 통과 후보가 이보다 얇으면 Tier2 broaden
+  auradin_enrich_timeout_seconds: float = 12.0  # enrich 전체 상한 — 초과 시 fallback으로 서빙
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None

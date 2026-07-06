@@ -9,6 +9,7 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database
 
 from .catalog_loader import get_catalog
+from .enrichment import enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
 from .ranking import build_slice_result
@@ -526,6 +527,12 @@ def clear_sessions() -> None:
   _SESSIONS.clear()
 
 
+async def _enrich_if_results(state: dict[str, Any] | None, settings: Settings) -> None:
+  # §11 6/7단계: 랭킹(동기·순수) 뒤 비동기 enrich — 라이브 Naver 발견 + reasonCopy (가산).
+  if state and state.get("phase") == "results":
+    await enrich_results(state, settings=settings, extra_caveats=_interpretation_caveats(state))
+
+
 def _postgres_enabled(settings: Settings, db: Database | None) -> bool:
   return bool(settings.auradin_session_store == "postgres" and db and db.is_connected)
 
@@ -606,6 +613,7 @@ async def create_session_persisted(
     context=context,
     settings=settings,
   )
+  await _enrich_if_results(state, settings)
   if _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
@@ -646,6 +654,7 @@ async def answer_session_persisted(
     return None
 
   state = answer_session(session_id, question_id=question_id, option_id=option_id, settings=settings)
+  await _enrich_if_results(state, settings)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
@@ -666,6 +675,7 @@ async def refine_session_persisted(
     return None
 
   state = refine_session(session_id, prompt=prompt, dial=dial, settings=settings)
+  await _enrich_if_results(state, settings)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
