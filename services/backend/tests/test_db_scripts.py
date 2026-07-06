@@ -16,7 +16,7 @@ def test_seed_path_exists() -> None:
 
   assert path.name == "seed.sql"
   assert path.exists()
-  assert SEED_VERSION == "seed.sql:v1"
+  assert SEED_VERSION == "seed.sql:v2"
 
 
 def test_schema_report_passes_when_expected_tables_and_schema_marker_exist() -> None:

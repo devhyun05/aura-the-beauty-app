@@ -17,6 +17,10 @@ from .retrieval_service import retrieve_and_rank
 
 SESSION_TTL_SECONDS = 15 * 60
 MAX_RESULTS = 6
+# §7 refine 다이얼 λ 안전 범위 — 0/1 극단은 MMR을 무력화하므로 클램프.
+LAMBDA_MIN = 0.05
+LAMBDA_MAX = 0.95
+REFINE_DIALS = {"more_similar", "more_diverse"}
 # '글리터'는 카탈로그에 없는 마감 → 아이섀도우·쉬머로 해석했음을 근거에 투명 노출 (§6/§9).
 GLITTER_TERMS = ("글리터", "반짝", "스파클", "glitter", "sparkle")
 
@@ -114,6 +118,44 @@ def _interpretation_caveats(state: dict[str, Any]) -> list[str] | None:
   return None
 
 
+def _session_lambda(state: dict[str, Any], settings: Settings) -> float:
+  # §7: refine 다이얼이 세션별 λ를 누적 조절 — 없으면 settings 기본값.
+  value = state.get("mmrLambda")
+  if value is None:
+    return float(settings.auradin_mmr_lambda)
+  return float(value)
+
+
+def _ranked_cache(ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  # §7 dial refine이 재검색 없이 재랭킹하도록 점수·성분만 담는 컴팩트 캐시 (item은 카탈로그 join).
+  return [
+    {
+      "id": row["item"]["id"],
+      "score": row["score"],
+      "components": row.get("components") or {},
+      "matchedLabels": row.get("matchedLabels") or [],
+    }
+    for row in ranked
+  ]
+
+
+def _ranked_from_cache(state: dict[str, Any]) -> list[dict[str, Any]]:
+  catalog = get_catalog()
+  rows: list[dict[str, Any]] = []
+  for cached in state.get("rankedCache") or []:
+    item = catalog.get(str(cached.get("id") or ""))
+    if item:
+      rows.append(
+        {
+          "item": item,
+          "score": cached.get("score"),
+          "components": cached.get("components") or {},
+          "matchedLabels": cached.get("matchedLabels") or [],
+        },
+      )
+  return rows
+
+
 def _build_result(
   state: dict[str, Any],
   ranked: list[dict[str, Any]],
@@ -122,7 +164,7 @@ def _build_result(
   # §5/§6: floor → MMR → 3역할 → 구조화 근거. 단일 shape = Top3 (§4). 세트/비교는 이후 단계.
   slice_result = build_slice_result(
     ranked,
-    lambda_=float(settings.auradin_mmr_lambda),
+    lambda_=_session_lambda(state, settings),
     s_floor=float(settings.auradin_floor_semantic),
     hard_filters=state.get("hardFilters", []),
     extra_caveats=_interpretation_caveats(state),
@@ -170,12 +212,21 @@ def _advance(
     return
 
   catalog = get_catalog()
-  retrieval = retrieve_and_rank(catalog, intent, state.get("answers", []), settings=settings)
+  retrieval = retrieve_and_rank(
+    catalog,
+    intent,
+    state.get("answers", []),
+    settings=settings,
+    extra_hard_filters=state.get("refineHardFilters") or [],
+    extra_soft_preferences=state.get("refineSoftPreferences") or [],
+    extra_query_text=state.get("refinePrompt"),
+  )
   ranked = retrieval["ranked"]
   state["hardFilters"] = retrieval["hardFilters"]
   state["softPreferences"] = retrieval["softPreferences"]
   state["currentCandidateIds"] = [row["item"]["id"] for row in ranked]
   state["rankedCandidateIds"] = [row["item"]["id"] for row in ranked]
+  state["rankedCache"] = _ranked_cache(ranked)
 
   if answer_delta and state.get("logs"):
     state["logs"][-1]["answer"] = answer_delta
@@ -322,6 +373,139 @@ def answer_session(
   return state
 
 
+def _refine_header(prompt: str, dial: str | None) -> str:
+  if prompt:
+    return "추가 조건을 반영해 다시 골랐어요"
+  if dial == "more_similar":
+    return "1위와 더 비슷한 결로 다시 정렬했어요"
+  return "더 다양한 결로 다시 정렬했어요"
+
+
+def _refine_recovery(state: dict[str, Any], prompt: str) -> dict[str, Any]:
+  # §7: 후보 0이어도 조용히 완화 금지 — 이전 결과 유지 + 복구 옵션 제시.
+  return {
+    "message": "요청한 조건을 지키면 보여줄 후보가 없어요. 조건을 조용히 풀지 않고 이전 결과를 유지할게요.",
+    "rejectedPrompt": prompt or None,
+    "recoveryOptions": [
+      {"label": "조건 없이 다시 검색", "prompt": state.get("prompt", "")},
+      {"label": "가격 조건 올려서 다시", "prompt": f"{state.get('prompt', '')} 3만원 이하"},
+    ],
+  }
+
+
+def refine_session(
+  session_id: str,
+  *,
+  prompt: str | None = None,
+  dial: str | None = None,
+  settings: Settings | None = None,
+) -> dict[str, Any] | None:
+  """§7 refine — dial은 캐시된 후보를 λ만 바꿔 재랭킹(재검색 X), prompt는 §3 파서로 hard/soft 병합.
+
+  같은 attribute는 refine-출처 필터끼리만 교체한다. 원 프롬프트/질문 답변 출처는 불변(§9).
+  후보 0이면 이전 결과를 유지하고 recoveryOptions를 싣는다 — 조용한 완화 금지.
+  """
+  settings = settings or get_settings()
+  state = get_session(session_id)
+  if not state or state.get("phase") == "expired":
+    return state
+
+  prompt = str(prompt or "").strip()
+  dial = str(dial or "").strip() or None
+  snapshot = {
+    "result": state.get("result"),
+    "phase": state.get("phase"),
+    "mmrLambda": state.get("mmrLambda"),
+    "refineHardFilters": list(state.get("refineHardFilters") or []),
+    "refineSoftPreferences": list(state.get("refineSoftPreferences") or []),
+    "refinePrompt": state.get("refinePrompt"),
+    "hardFilters": state.get("hardFilters"),
+    "softPreferences": state.get("softPreferences"),
+  }
+
+  if dial in REFINE_DIALS:
+    step = float(settings.auradin_refine_lambda_step)
+    current = _session_lambda(state, settings)
+    adjusted = current + (step if dial == "more_similar" else -step)
+    state["mmrLambda"] = round(min(LAMBDA_MAX, max(LAMBDA_MIN, adjusted)), 4)
+
+  used_cache = False
+  if prompt:
+    parsed = parse_intent(prompt)
+    refined_hard = [{**f, "source": "refine"} for f in parsed["lockedFilters"]]
+    refined_soft = [{**p, "source": "refine"} for p in parsed["softPreferences"]]
+    hard_attrs = {f.get("attribute") for f in refined_hard}
+    soft_attrs = {p.get("attribute") for p in refined_soft}
+    state["refineHardFilters"] = [
+      f for f in state.get("refineHardFilters") or [] if f.get("attribute") not in hard_attrs
+    ] + refined_hard
+    state["refineSoftPreferences"] = [
+      p for p in state.get("refineSoftPreferences") or [] if p.get("attribute") not in soft_attrs
+    ] + refined_soft
+    state["refinePrompt"] = prompt
+
+    retrieval = retrieve_and_rank(
+      get_catalog(),
+      state["intent"],
+      state.get("answers", []),
+      settings=settings,
+      extra_hard_filters=state["refineHardFilters"],
+      extra_soft_preferences=state["refineSoftPreferences"],
+      extra_query_text=prompt,
+    )
+    ranked = retrieval["ranked"]
+    state["hardFilters"] = retrieval["hardFilters"]
+    state["softPreferences"] = retrieval["softPreferences"]
+  else:
+    ranked = _ranked_from_cache(state)
+    used_cache = bool(ranked)
+    if not used_cache:
+      # 캐시 소실(프로세스 재시작 등) → 동일 조건 재랭킹 폴백. 조건은 그대로라 완화 아님.
+      retrieval = retrieve_and_rank(
+        get_catalog(),
+        state["intent"],
+        state.get("answers", []),
+        settings=settings,
+        extra_hard_filters=state.get("refineHardFilters") or [],
+        extra_soft_preferences=state.get("refineSoftPreferences") or [],
+        extra_query_text=state.get("refinePrompt"),
+      )
+      ranked = retrieval["ranked"]
+
+  state.setdefault("logs", []).append(
+    {
+      "refine": {
+        "dial": dial,
+        "prompt": prompt or None,
+        "lambda": _session_lambda(state, settings),
+        "usedCache": used_cache,
+        "candidateCount": len(ranked),
+      },
+    },
+  )
+
+  result = _build_result(state, ranked, settings) if ranked else None
+  if not result or not result["products"]:
+    # 실패한 refine은 필터·λ까지 되돌린다 — 다음 refine이 오염된 조건 위에서 돌지 않게.
+    for key, value in snapshot.items():
+      state[key] = value
+    if snapshot["result"]:
+      state["result"] = {**snapshot["result"], "refineNotice": _refine_recovery(state, prompt)}
+      state["phase"] = "results"
+    state["updatedAt"] = _now()
+    return state
+
+  result["headerLabel"] = _refine_header(prompt, dial)
+  state["rankedCache"] = _ranked_cache(ranked)
+  state["currentCandidateIds"] = [row["item"]["id"] for row in ranked]
+  state["rankedCandidateIds"] = [row["item"]["id"] for row in ranked]
+  state["result"] = result
+  state["phase"] = "results"
+  state["lastQuestion"] = None
+  state["updatedAt"] = _now()
+  return state
+
+
 def to_search_turn(state: dict[str, Any]) -> dict[str, Any]:
   phase = state.get("phase", "failed")
   return {
@@ -462,6 +646,26 @@ async def answer_session_persisted(
     return None
 
   state = answer_session(session_id, question_id=question_id, option_id=option_id, settings=settings)
+  if state and _postgres_enabled(settings, db):
+    await _save_postgres_session(db, state)
+
+  return state
+
+
+async def refine_session_persisted(
+  session_id: str,
+  *,
+  prompt: str | None = None,
+  dial: str | None = None,
+  settings: Settings | None = None,
+  db: Database | None = None,
+) -> dict[str, Any] | None:
+  settings = settings or get_settings()
+  state = await get_session_persisted(session_id, settings=settings, db=db)
+  if not state:
+    return None
+
+  state = refine_session(session_id, prompt=prompt, dial=dial, settings=settings)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
