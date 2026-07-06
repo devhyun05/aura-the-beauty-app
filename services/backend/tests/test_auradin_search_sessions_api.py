@@ -45,6 +45,40 @@ def test_search_session_api_returns_question_then_results() -> None:
     assert product["priceKrw"] > 0
 
 
+def test_question_answer_applied_filter_chips_use_option_labels() -> None:
+  """질문 답변으로 생긴 칩은 선택지 한국어 라벨을 써야 한다 — 'priceTier: under_15k' 같은 원시 노출 금지."""
+  clear_sessions()
+  client = TestClient(create_app(Settings(database_url=None)))
+
+  created = client.post("/api/search/sessions", json={"prompt": "립 추천해줘"})
+  session_id = created.json()["data"]["sessionId"]
+  turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
+
+  answered_labels: list[str] = []
+  for _ in range(3):
+    if turn["phase"] != "question":
+      break
+    question = turn["question"]
+    option = next(
+      option for option in question["options"] if option["filterDelta"]["op"] != "noop"
+    )
+    answered_labels.append(option["label"])
+    client.post(
+      f"/api/search/sessions/{session_id}/answer",
+      json={"questionId": question["id"], "optionId": option["id"]},
+    )
+    turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
+
+  assert answered_labels, "질문이 하나도 안 나오면 이 테스트는 시나리오를 못 덮는다"
+  chip_labels = [chip["label"] for chip in turn["appliedFilters"]]
+  for label in answered_labels:
+    assert label in chip_labels
+  for chip in chip_labels:
+    assert not chip.split(":")[0].strip().isascii() or ":" not in chip, (
+      f"원시 attribute 라벨이 칩에 노출됨: {chip!r}"
+    )
+
+
 def test_search_session_api_reports_unsupported_category() -> None:
   clear_sessions()
   client = TestClient(create_app(Settings(database_url=None)))

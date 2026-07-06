@@ -42,8 +42,10 @@ export type RootStackParamList = {
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
-  // prompt: 딥링크로 검색 자동 시작(리포트→검색 연결). open/dial: QA·데모 드라이브 훅.
-  AuradinSearch: {prompt?: string; open?: string; dial?: string; ts?: string} | undefined;
+  // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
+  AuradinSearch:
+    | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
+    | undefined;
   Community: undefined;
   CommunityThreadDetail: {threadId: string};
   CommunityThreadCreate: undefined;
