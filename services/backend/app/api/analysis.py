@@ -15,6 +15,7 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate
+from app.services.embeddings import embed_text, format_pgvector, report_embedding_text
 from app.services.media_deletion import (
   collect_report_media_refs,
   enqueue_unreferenced_report_media_deletions,
@@ -29,6 +30,20 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
 analysis_image_tasks: set[asyncio.Task] = set()
 
+async def update_analysis_report_embedding(db: Database, report: dict) -> bool:
+  embedding = await asyncio.to_thread(embed_text, report_embedding_text(report))
+  if embedding is None:
+    return False
+
+  try:
+    await db.execute(
+      "update analysis_reports set embedding = $2::vector where id = $1",
+      report["id"],
+      format_pgvector(embedding),
+    )
+  except Exception:
+    return False
+  return True
 
 def decode_json_object(value: object) -> dict:
   if isinstance(value, dict):
@@ -403,6 +418,8 @@ async def run_analysis_job_background(
     )
     return
 
+  await update_analysis_report_embedding(database, report)
+
   if generates_images:
     prepared_source: tuple[bytes, str] | None = None
 
@@ -416,7 +433,6 @@ async def run_analysis_job_background(
           exc_info=True,
         )
         prepared_source = None
-
     schedule_analysis_images_background(
       report_id,
       payload,

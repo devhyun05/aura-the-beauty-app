@@ -1,38 +1,41 @@
-# Project Guidelines
+﻿# Project Guidelines
 
-## Required Reading
-- For all mobile frontend work under `apps/mobile`, read `docs/mobile/FRONTEND_WORK_GUIDE.md` first.
-- Treat `docs/spec.md` as the product spec for the recommended makeup filter panel.
+## Source Of Truth
+- Treat `docs/spec.md` as the product spec for 룩톡, the look-first community feature.
 - Treat `docs/plan.md` as the implementation order and priority guide.
+- For mobile frontend work, read `docs/mobile/FRONTEND_WORK_GUIDE.md` first.
 
-## Mobile Frontend Rules
-- Work in `apps/mobile/src` using the existing React Native, TypeScript, React Navigation, and Tamagui stack.
-- Do not add a new UI library or icon library without team agreement.
-- Use mock data and service layers for unimplemented backend, AI, Unity, ARKit, or ARCore behavior.
-- Keep reusable UI in `shared/ui`, tokens in `shared/theme`, mocks in `shared/mocks`, and feature code in `features`.
+## Product Direction
+- 룩톡 is not a text 게시판; it is a beauty look discovery feed.
+- Keep `HomeTab` as home and use the existing Community entry action.
+- UI copy may say `룩톡`; internal route/API/DB names should use `Community` or `community_*`.
+- Prioritize image, mood tags, product usage, save, and lightweight replies.
 
-## Design Tokens
-- Use Pretendard through `shared/theme/typography.ts`.
-- Do not hardcode repeated font sizes, font weights, spacing, radius, colors, shadows, or icon sizes in screens.
-- Use Tamagui for common UI.
-- Use Lucide icons or the shared icon system; do not use text characters as icons.
+## Mobile Rules
+- Work in `apps/mobile/src` with Expo React Native, TypeScript, React Navigation, and Tamagui.
+- Do not add a new UI or icon library.
+- Use existing theme tokens for colors, spacing, typography, radius, shadows, and icon sizes.
+- Keep feature code under `features/community` unless a truly shared component belongs in `shared/ui`.
+- Use `requestBackendJson` for backend calls and `uploadMediaAsset` for community images.
+- Use `mediaKind: "community-thread"` for 룩톡 uploaded images.
+- Preserve loading, empty, error, refresh, keyboard, and safe-area states.
 
-## Recommended Filter Safety
-- Do not use real celebrity, influencer, or actor photos, names, lookalikes, SNS handles, logos, or watermarks.
-- Recommended filter images must use fictional models or clearly licensed assets.
-- Do not reuse the same model face across multiple recommended filters.
-- Treat trend names such as Kuro-Gyaru, Jirai Kei, Soft Goth, and Grunge as makeup/fashion styles only; avoid caricature, self-harm, violence, or medicalized styling.
-- Render filter names and mood copy in the app UI, not baked into images.
+## Backend Rules
+- Use FastAPI route files under `services/backend/app/api`.
+- Use the existing `success()` envelope and camelCase response behavior.
+- Writes require auth and DB; reads should return safe empty fallback when DB is unavailable where practical.
+- Validate media ownership before attaching images to community threads.
+- Keep reply depth to one nested level.
 
-## Code Quality
+## DB Rules
+- Update both `docs/backend/schema.sql` and `docs/backend/aws-postgresql-schema.dbml` for schema changes.
+- Keep schema SQL idempotent with existing `create table if not exists` style.
+- Add FKs, checks, indexes, and duplicate-prevention constraints for likes, saves, reports, and media order.
+- Prefer JSONB for MVP product usage, leaving room for later product DB linking.
+
+## Quality
 - Prefer existing patterns and helpers over new abstractions.
-- Keep API-replaceable logic in services, not directly inside screens.
-- Avoid `any`, unused code, temporary logs, and broad refactors unrelated to the task.
-- Add focused tests for new data mapping, recommendation sorting, navigation params, and save behavior.
-- Run `npm run typecheck` in `apps/mobile` when mobile code changes.
-
-## Git And Commits
+- Avoid unrelated refactors, temporary logs, broad `any`, and unused code.
+- Add focused tests for route contracts, API behavior, service mapping, validation, and navigation.
+- Run mobile typecheck when mobile code changes.
 - Do not revert user changes unless explicitly asked.
-- Commit messages must follow `type: 한국어 설명`.
-- Allowed types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`.
-- Choose the type automatically when the scope is clear and keep the header under 72 characters.

@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api import (
   analysis,
   ar,
+  community,
   feedback,
   filter_extractions,
   health,
@@ -19,6 +20,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(users.router)
 api_router.include_router(home.router)
+api_router.include_router(community.router)
 api_router.include_router(media.router)
 api_router.include_router(analysis.router)
 api_router.include_router(products.router)

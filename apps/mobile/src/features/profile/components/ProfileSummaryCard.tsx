@@ -1,19 +1,19 @@
-import { StyleSheet } from 'react-native';
-import { Text, View } from 'tamagui';
+import {StyleSheet} from 'react-native';
+import {Text, View} from 'tamagui';
 
-import { colors, radius, spacing, typography } from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {
   AppCard,
-  PencilIcon,
   IconButton,
   ImagePlaceholder,
+  PencilIcon,
   ProfileHeaderIcon,
 } from '../../../shared/ui';
-import type { BeautyProfile, UserProfile } from '../../../shared/types/profile';
+import type {BeautyProfile, UserProfile} from '../../../shared/types/profile';
 
 type ProfileSummaryCardProps = {
-  profile: UserProfile;
   beautyProfile: BeautyProfile;
+  profile: UserProfile;
   onPressSettings?: () => void;
 };
 
@@ -22,7 +22,7 @@ export function ProfileSummaryCard({
   profile,
   onPressSettings,
 }: ProfileSummaryCardProps) {
-  const visibleTags = beautyProfile.tags.slice(0, 3);
+  const visibleTags = (beautyProfile.tags ?? []).slice(0, 3);
 
   return (
     <AppCard style={styles.card}>
@@ -46,11 +46,11 @@ export function ProfileSummaryCard({
           </View>
 
           <View style={styles.info}>
-            <Text numberOfLines={1} style={styles.kicker}>
-              내 프로필
+            <Text numberOfLines={1} style={styles.realName}>
+              {profile.name}
             </Text>
             <Text numberOfLines={1} style={styles.name}>
-              {profile.name} 님
+              {profile.nickname} 님
             </Text>
             {visibleTags.length > 0 ? (
               <View style={styles.tags}>
@@ -132,12 +132,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minWidth: 0,
   },
-  kicker: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.xs,
-  },
   name: {
     color: colors.textPrimary,
     fontSize: typography.fontSize.xl,
@@ -150,6 +144,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     minWidth: 0,
+  },
+  realName: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
   },
   tag: {
     backgroundColor: colors.surfaceMuted,

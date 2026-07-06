@@ -56,6 +56,18 @@ type AppSettingsPathContract = ExpectType<
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
 >;
+type CommunityThreadDetailPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.CommunityThreadDetail, 'community/thread/:threadId'>
+>;
+type CommunityUserProfilePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.CommunityUserProfile, 'community/user/:userId'>
+>;
+type CommunityThreadCreatePathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.CommunityThreadCreate, 'community/create'>
+>;
+type CommunityThreadEditPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.CommunityThreadEdit, 'community/thread/:threadId/edit'>
+>;
 type ConsultingPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Consulting, 'consulting'>
 >;
@@ -191,6 +203,21 @@ expectEqual(
   navigationLinking.config?.screens?.Community,
   'community',
   'community path uses community naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.CommunityThreadDetail,
+  'community/thread/:threadId',
+  'community thread detail path preserves required thread id',
+);
+expectEqual(
+  navigationLinking.config?.screens?.CommunityThreadCreate,
+  'community/create',
+  'community create path uses create naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.CommunityThreadEdit,
+  'community/thread/:threadId/edit',
+  'community thread edit path preserves required thread id',
 );
 expectEqual(
   navigationLinking.config?.screens?.Consulting,
