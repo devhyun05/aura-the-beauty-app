@@ -1,4 +1,8 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {
+  ConsultingBookingDraft,
+  ConsultingCategoryId,
+} from '../../features/consulting/types';
 import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
 import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
 import type {
@@ -41,6 +45,15 @@ export type RootStackParamList = {
   ProductRecommendation: {reportId?: string} | undefined;
   Community: undefined;
   Consulting: undefined;
+  ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
+  ConsultingExpertProfile: {expertId: string};
+  ConsultingBooking: {expertId: string; durationId: string};
+  ConsultingPayment: {draft: ConsultingBookingDraft};
+  ConsultingBookingComplete: {draft: ConsultingBookingDraft};
+  ConsultingCall: {expertId: string; durationId: string};
+  ConsultingSummary: {expertId: string; recordId?: string};
+  ConsultingHistory: undefined;
+  ConsultingMembership: undefined;
   MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter:
@@ -110,6 +123,15 @@ export const rootStackRoutes = [
   'ProductRecommendation',
   'Community',
   'Consulting',
+  'ConsultingExpertList',
+  'ConsultingExpertProfile',
+  'ConsultingBooking',
+  'ConsultingPayment',
+  'ConsultingBookingComplete',
+  'ConsultingCall',
+  'ConsultingSummary',
+  'ConsultingHistory',
+  'ConsultingMembership',
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',
