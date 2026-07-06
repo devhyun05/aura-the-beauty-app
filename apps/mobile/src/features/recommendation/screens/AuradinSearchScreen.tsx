@@ -72,7 +72,14 @@ const ORB_BY_PHASE: Record<Phase, {y: number; scale: number; glow: number}> = {
   failed: {glow: 0.25, scale: 0.6, y: 150},
 };
 
-export function AuradinSearchScreen() {
+export type AuradinDriveParams = {
+  prompt?: string; // 딥링크 검색 자동 시작 (예: 리포트 화면 → aiarmakeup://auradin-search?prompt=…)
+  open?: string; // QA·데모: results에서 role(anchor|diverse|discovery) 카드 상세 열기
+  dial?: string; // QA·데모: refine 다이얼 (more_similar|more_diverse)
+  ts?: string; // 같은 명령 반복용 nonce
+};
+
+export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) {
   const [phase, setPhase] = useState<Phase>('home');
   const [query, setQuery] = useState(DEFAULT_QUERY);
   const [turn, setTurn] = useState<AuradinSearchTurn | null>(null);
@@ -230,6 +237,39 @@ export function AuradinSearchScreen() {
   const question = turn?.question;
   const candidates = turn?.candidates ?? [];
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+
+  // 딥링크·QA 드라이브: prompt=검색 자동 시작, open=상세 열기, dial=refine.
+  // 탭과 동일한 핸들러(submit/openDetail/refine)를 그대로 태운다.
+  const driveKey = JSON.stringify(drive ?? {});
+  const handledDriveRef = useRef('');
+  useEffect(() => {
+    if (!drive || handledDriveRef.current === driveKey) {
+      return;
+    }
+    if (drive.prompt?.trim()) {
+      handledDriveRef.current = driveKey;
+      submit(drive.prompt);
+      return;
+    }
+    if (drive.open && turn?.phase === 'results') {
+      const target = candidates.find((candidate) => candidate.role === drive.open) ?? candidates[0];
+      if (target) {
+        handledDriveRef.current = driveKey;
+        openDetail(target);
+      }
+      return;
+    }
+    if (drive.dial === 'more_similar' || drive.dial === 'more_diverse') {
+      if (turn?.phase === 'results') {
+        handledDriveRef.current = driveKey;
+        if (phase !== 'results') {
+          setPhase('results');
+        }
+        refine(drive.dial);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveKey, phase, turn]);
 
   return (
     <View style={styles.shell}>

@@ -46,8 +46,8 @@ export function ProductRecommendationRouteScreen({
 }
 
 // AURADIN 검색 — 자체 글라스 지반·워드마크를 갖는 풀스크린 경험 (DetailRouteChrome 미사용).
-export function AuradinSearchRouteScreen(_props: RootScreenProps<'AuradinSearch'>) {
-  return <AuradinSearchScreen />;
+export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch'>) {
+  return <AuradinSearchScreen drive={route.params} />;
 }
 
 export function MakeupLookListRouteScreen({
