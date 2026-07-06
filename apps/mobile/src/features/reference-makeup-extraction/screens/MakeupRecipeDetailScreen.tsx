@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   },
   guideNumber: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderColor: colors.white,
     borderRadius: radius.pill,
     borderWidth: 2,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   mainTabIndicatorActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 3,
     width: '100%',
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   },
   numberBadge: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 30,
     justifyContent: 'center',
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   subTabButtonActive: {
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
   },
   subTabList: {
     gap: spacing.sm,

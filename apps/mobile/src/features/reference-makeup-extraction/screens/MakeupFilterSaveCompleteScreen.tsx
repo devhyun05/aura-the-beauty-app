@@ -62,7 +62,7 @@ export function MakeupFilterSaveCompleteScreen({
 const styles = StyleSheet.create({
   checkCircle: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     height: 118,
     justifyContent: 'center',
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     justifyContent: 'center',
     minHeight: 58,

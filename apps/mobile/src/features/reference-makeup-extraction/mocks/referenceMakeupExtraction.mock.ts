@@ -49,7 +49,7 @@ export const referenceMakeupExtractionMock: ReferenceMakeupExtractionData = {
     },
     {
       id: 'ar-filter-ready',
-      label: 'AR 필터 연결 준비',
+      label: '메이크업 필터 연결 준비',
       status: 'waiting',
     },
   ],

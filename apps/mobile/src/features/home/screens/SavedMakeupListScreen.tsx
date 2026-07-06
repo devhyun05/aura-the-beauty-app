@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.liquidGlassSurface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,

@@ -30,7 +30,7 @@ expectEqual(
 
 expectEqual(
   getInitialNavigationFlowState().floatingActionInteractionMode,
-  'tap',
+  'drag',
   'initial floating action interaction mode',
 );
 
@@ -104,7 +104,7 @@ expectEqual(
 
 expectEqual(
   demoState.floatingActionInteractionMode,
-  'tap',
+  'drag',
   'demo floating action interaction mode',
 );
 

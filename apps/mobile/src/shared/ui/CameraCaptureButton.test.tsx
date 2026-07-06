@@ -1,10 +1,12 @@
 import React from 'react';
 
 import {
+  CAMERA_CAPTURE_BUTTON_BACKGROUND,
   CAMERA_CAPTURE_BUTTON_METRICS,
   CameraCaptureButton,
 } from './CameraCaptureButton';
 import {APP_FOOTER_ACTION_BUBBLE_SIZE} from './AppFooter';
+import {colors} from '../theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -31,6 +33,11 @@ expectEqual(
   CAMERA_CAPTURE_BUTTON_METRICS.innerScale,
   0.56,
   'camera capture button inner scale',
+);
+expectEqual(
+  CAMERA_CAPTURE_BUTTON_BACKGROUND,
+  colors.blackSurface,
+  'camera capture button uses translucent black surface',
 );
 
 <CameraCaptureButton

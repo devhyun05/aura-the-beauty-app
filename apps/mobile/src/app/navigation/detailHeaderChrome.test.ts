@@ -1,8 +1,11 @@
 import {
+  DETAIL_ROUTE_DEFAULT_HEADER_MODE,
+  DETAIL_ROUTE_OVERLAY_HEADER_BACKGROUND_COLOR,
   getDetailHeaderPresentation,
   getDetailHeaderRightActions,
 } from './detailHeaderChrome';
 import {routeChromeByRoute} from './routeChrome';
+import {colors} from '../../shared/theme';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -79,4 +82,14 @@ expectEqual(
   getDetailHeaderRightActions('MakeupRecipeDetail').join(','),
   'share',
   'makeup recipe detail route header actions',
+);
+expectEqual(
+  DETAIL_ROUTE_DEFAULT_HEADER_MODE,
+  'overlay',
+  'detail route headers default to overlay presentation',
+);
+expectEqual(
+  DETAIL_ROUTE_OVERLAY_HEADER_BACKGROUND_COLOR,
+  colors.headerOverlaySurface,
+  'overlay detail route header uses translucent overlay surface',
 );
