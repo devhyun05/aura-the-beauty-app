@@ -12,7 +12,28 @@ from .knowledge_chunk_builder import build_knowledge_chunks, build_mvp_catalog
 # Refined seed (deduped to unique products, calibrated hard-filter attributes).
 # Override with AURADIN_RUN_DATE to serve a different snapshot (e.g. 20260703).
 RUN_DATE = os.environ.get("AURADIN_RUN_DATE", "20260706")
-REPO_ROOT = Path(__file__).resolve().parents[5]
+
+
+def _resolve_data_root() -> Path:
+  """`data/auradin`를 담은 루트를 찾는다 — 체크아웃 깊이·컨테이너 레이아웃 무관.
+
+  기존 `parents[5]`는 repo 레이아웃 깊이에 하드코딩돼 컨테이너(`/app/app/...`)에서
+  IndexError로 import를 깨뜨렸다(로컬만 통과, 배포는 검색 전멸). 이제:
+  1) `AURADIN_DATA_ROOT` env가 있으면 그 밑(`<root>/data/auradin`)을 쓴다 (Docker에서 지정).
+  2) 없으면 이 파일에서 위로 올라가며 `data/auradin`이 있는 첫 디렉터리를 repo root로 삼는다.
+  """
+  env_root = os.environ.get("AURADIN_DATA_ROOT")
+  if env_root:
+    return Path(env_root)
+  here = Path(__file__).resolve()
+  for parent in here.parents:
+    if (parent / "data" / "auradin").is_dir():
+      return parent
+  # 폴백: services/backend/app/services/auradin_agent → services/backend 위(=repo)로 근사.
+  return here.parents[min(5, len(here.parents) - 1)]
+
+
+REPO_ROOT = _resolve_data_root()
 SEED_CATALOG_PATH = REPO_ROOT / "data" / "auradin" / "catalog" / f"catalog_items_seed_{RUN_DATE}.jsonl"
 MVP_CATALOG_PATH = REPO_ROOT / "data" / "auradin" / "catalog" / f"catalog_items_mvp_{RUN_DATE}.jsonl"
 MVP_CHUNK_PATH = (
