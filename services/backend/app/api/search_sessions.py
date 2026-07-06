@@ -9,9 +9,11 @@ from app.core.responses import success
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, get_database
 from app.services.auradin_agent.session_manager import (
+  REFINE_DIALS,
   answer_session_persisted,
   create_session_persisted,
   get_session_persisted,
+  refine_session_persisted,
   to_search_turn,
 )
 
@@ -76,6 +78,40 @@ async def answer_search_session(
     session_id,
     question_id=question_id,
     option_id=option_id,
+    settings=settings,
+    db=db,
+  )
+  if not state:
+    raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
+
+  return success(
+    {
+      "sessionId": session_id,
+      "phase": "searching",
+      "retryAfterMs": 350,
+    },
+  )
+
+
+@router.post("/{session_id}/refine")
+async def refine_search_session(
+  session_id: str,
+  payload: dict[str, Any] = Body(default_factory=dict),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(get_database),
+) -> dict:
+  # §7: dial은 기존 후보 재랭킹(λ 조절)만, prompt는 §3 파서로 hard/soft 병합.
+  prompt = str(payload.get("prompt") or "").strip()
+  dial = str(payload.get("dial") or "").strip() or None
+  if dial and dial not in REFINE_DIALS:
+    raise AppError(400, "INVALID_DIAL", "dial must be 'more_similar' or 'more_diverse'.")
+  if not prompt and not dial:
+    raise AppError(400, "REFINE_REQUIRED", "prompt or dial is required.")
+
+  state = await refine_session_persisted(
+    session_id,
+    prompt=prompt or None,
+    dial=dial,
     settings=settings,
     db=db,
   )

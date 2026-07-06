@@ -127,15 +127,22 @@ def retrieve_and_rank(
   intent: dict[str, Any],
   answers: list[dict[str, Any]] | None = None,
   settings: Settings | None = None,
+  *,
+  extra_hard_filters: list[dict[str, Any]] | None = None,
+  extra_soft_preferences: list[dict[str, Any]] | None = None,
+  extra_query_text: str | None = None,
 ) -> dict[str, Any]:
   answers = answers or []
   settings = settings or get_settings()
   answer_hard_filters, answer_soft_preferences = split_answer_deltas(answers)
-  hard_filters = [*intent.get("lockedFilters", []), *answer_hard_filters]
-  soft_preferences = [*intent.get("softPreferences", []), *answer_soft_preferences]
+  # §7 refine 출처 필터는 원 프롬프트/답변 출처 뒤에 가산 — 원 출처는 불변.
+  hard_filters = [*intent.get("lockedFilters", []), *answer_hard_filters, *(extra_hard_filters or [])]
+  soft_preferences = [*intent.get("softPreferences", []), *answer_soft_preferences, *(extra_soft_preferences or [])]
   candidates_before = list(catalog.items)
   candidates = apply_hard_filters(candidates_before, hard_filters)
   query_text = build_query_text(intent, answers)
+  if _clean(extra_query_text):
+    query_text = f"{query_text} 추가 요청: {_clean(extra_query_text)}"
   semantic_scores, retrieval_backend = build_semantic_scores(catalog, query_text, settings=settings)
   ranked = rank_candidates(
     candidates,

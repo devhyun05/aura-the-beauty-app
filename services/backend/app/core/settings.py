@@ -62,6 +62,8 @@ class Settings(BaseSettings):
   # 근거 완비 카탈로그는 상위가 뭉쳐 갭이 작다(관측 0.000~0.046) — θ=0.04는
   # 동점 상위(≤0.011)와 확연히 앞선 질의(≥0.041)를 가르는 자연 경계. 데이터 기준 캘리브레이션.
   auradin_score_gap_threshold: float = 0.04
+  # §7 refine 다이얼: more_similar → λ+step, more_diverse → λ−step (세션별 λ에 누적).
+  auradin_refine_lambda_step: float = 0.15
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None
