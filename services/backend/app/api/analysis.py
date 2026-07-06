@@ -88,11 +88,11 @@ def require_complete_makeup_recommendations(result: dict | None) -> None:
   recommended_count = len(recommended_makeups) if isinstance(recommended_makeups, list) else 0
   generated_image_count = count_generated_makeup_images(result)
 
-  if recommended_count != 3 or generated_image_count != 3:
+  if recommended_count != 1 or generated_image_count != 1:
     raise AppError(
       502,
       "RECOMMENDED_MAKEUP_IMAGES_REQUIRED",
-      "Analysis cannot be completed until exactly 3 recommended makeup images are generated.",
+      "Analysis cannot be completed until exactly 1 recommended makeup image is generated.",
       details={
         "recommendedCount": recommended_count,
         "generatedImageCount": generated_image_count,
@@ -140,6 +140,7 @@ async def generate_analysis_images_background(
   payload: AnalysisJobCreate,
   initial_result: dict,
   settings: Settings,
+  prepared_source: tuple[bytes, str] | None = None,
 ) -> None:
   service = OpenAIAnalysisService(settings)
 
@@ -157,6 +158,7 @@ async def generate_analysis_images_background(
       payload.request_payload,
       initial_result,
       on_card_generated=on_card_generated,
+      prepared_source=prepared_source,
     )
   except AppError as exc:
     logger.warning(
@@ -228,9 +230,16 @@ def schedule_analysis_images_background(
   payload: AnalysisJobCreate,
   initial_result: dict,
   settings: Settings,
+  prepared_source: tuple[bytes, str] | None = None,
 ) -> None:
   task = asyncio.create_task(
-    generate_analysis_images_background(report_id, payload, initial_result, settings),
+    generate_analysis_images_background(
+      report_id,
+      payload,
+      initial_result,
+      settings,
+      prepared_source,
+    ),
   )
   analysis_image_tasks.add(task)
 
@@ -290,8 +299,18 @@ async def run_analysis_job_background(
     report_id,
   )
 
+  analysis_service = OpenAIAnalysisService(settings)
+  generates_images = settings.image_generation_provider_normalized == "openai"
+  prepare_source_task: asyncio.Task | None = None
+
+  if generates_images:
+    # Warm the generation source (S3 read + downscale) while the slower text
+    # analysis runs, so image generation starts without that work on its path.
+    prepare_source_task = asyncio.create_task(
+      analysis_service.prepare_generation_source(payload.request_payload),
+    )
+
   try:
-    analysis_service = OpenAIAnalysisService(settings)
     logger.info(
       "[aura:analysis-api] text:start reportId=%s provider=%s model=%s",
       report_id,
@@ -301,7 +320,7 @@ async def run_analysis_job_background(
     result = await analysis_service.analyze_text(payload.request_payload)
     image_generation_status = (
       "processing"
-      if settings.image_generation_provider_normalized == "openai"
+      if generates_images
       else "disabled"
     )
     result["imageGenerationStatus"] = image_generation_status
@@ -317,6 +336,8 @@ async def run_analysis_job_background(
       round((time.monotonic() - started_at) * 1000),
     )
   except AppError as exc:
+    if prepare_source_task is not None:
+      prepare_source_task.cancel()
     logger.warning(
       "[aura:analysis-api] text:app-error reportId=%s code=%s details=%s",
       report_id,
@@ -326,6 +347,8 @@ async def run_analysis_job_background(
     await mark_analysis_failed(database, report_id, exc.message, payload, exc.details)
     return
   except Exception as exc:
+    if prepare_source_task is not None:
+      prepare_source_task.cancel()
     message = "AI analysis invocation failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
@@ -372,18 +395,34 @@ async def run_analysis_job_background(
   )
 
   if report is None:
+    if prepare_source_task is not None:
+      prepare_source_task.cancel()
     logger.warning(
       "[aura:analysis-api] background:missing-report reportId=%s",
       report_id,
     )
     return
 
-  if settings.image_generation_provider_normalized == "openai":
+  if generates_images:
+    prepared_source: tuple[bytes, str] | None = None
+
+    if prepare_source_task is not None:
+      try:
+        prepared_source = await prepare_source_task
+      except Exception:  # noqa: BLE001 - fall back to reading inside generation.
+        logger.warning(
+          "[aura:analysis-api] image-source:prepare-failed reportId=%s",
+          report_id,
+          exc_info=True,
+        )
+        prepared_source = None
+
     schedule_analysis_images_background(
       report_id,
       payload,
       result,
       settings,
+      prepared_source,
     )
     return
 

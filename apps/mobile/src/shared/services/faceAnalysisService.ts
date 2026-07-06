@@ -318,7 +318,7 @@ function mergeMakeupCards(
     : [];
 
   if (!useFallback) {
-    return [0, 1, 2].map((index) => {
+    return [0].map((index) => {
       const aiCard = normalizedAiCards[index];
       const fallbackCard = fallbackCards[index] ?? fallbackCards[0];
       const generatedImageUrl = resolveMakeupImageUrl(aiCard);
@@ -339,7 +339,7 @@ function mergeMakeupCards(
     });
   }
 
-  const cards = fallbackCards.slice(0, 3);
+  const cards = fallbackCards.slice(0, 1);
 
   return cards.map((fallbackCard, index) => {
     const aiCard = normalizedAiCards[index];
@@ -388,7 +388,7 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
 
   return Boolean(
     result &&
-      getRecommendedMakeupCount(job) === 3 &&
+      getRecommendedMakeupCount(job) === 1 &&
       firstText(
         result.shortSummary,
         result.summary,

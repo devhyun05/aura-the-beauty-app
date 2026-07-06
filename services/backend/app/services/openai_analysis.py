@@ -1,6 +1,7 @@
 import asyncio
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
 import json
 import logging
 import re
@@ -20,18 +21,26 @@ except ImportError:  # pragma: no cover - only hit before backend deps are insta
   OpenAI = None
   OpenAIError = Exception
 
+try:
+  from PIL import Image, ImageOps, UnidentifiedImageError
+except ImportError:  # pragma: no cover - fallback keeps local setup usable before deps install.
+  Image = None
+  ImageOps = None
+  UnidentifiedImageError = Exception
+
 from app.core.errors import AppError
 from app.core.settings import Settings
 
 
 logger = logging.getLogger(__name__)
+RECOMMENDED_MAKEUP_COUNT = 1
 
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "Top-level JSON keys: personalColor, faceShape, skinType, toneSummary, "
   "recommendedMood, tags, summary, shortSummary, skinAnalysisSummary, "
   "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
-  "recommendedMakeups must be exactly 3 objects. Each object keys: title, "
+  "recommendedMakeups must be exactly 1 object. The object keys: title, "
   "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
@@ -136,6 +145,151 @@ class OpenAIAnalysisService:
 
     return ".jpg"
 
+  def _clamp_image_quality(self, value: int | None, fallback: int = 82) -> int:
+    try:
+      quality = int(value if value is not None else fallback)
+    except (TypeError, ValueError):
+      quality = fallback
+
+    return max(1, min(100, quality))
+
+  def _clamp_image_max_edge(self, value: int | None) -> int:
+    try:
+      max_edge = int(value if value is not None else 0)
+    except (TypeError, ValueError):
+      return 0
+
+    return max(0, max_edge)
+
+  def _convert_image_for_speed(
+    self,
+    image_bytes: bytes,
+    *,
+    source_content_type: str,
+    output_format: str,
+    max_edge: int,
+    quality: int,
+    context: str,
+  ) -> tuple[bytes, str]:
+    if Image is None or ImageOps is None:
+      logger.warning("[aura:openai] image-optimization:skipped context=%s reason=pillow-missing", context)
+      return image_bytes, source_content_type
+
+    normalized_output_format = output_format.strip().lower()
+
+    if normalized_output_format == "jpg":
+      normalized_output_format = "jpeg"
+
+    if normalized_output_format not in {"jpeg", "png", "webp"}:
+      normalized_output_format = "jpeg"
+
+    output_content_type = f"image/{normalized_output_format}"
+    max_edge = self._clamp_image_max_edge(max_edge)
+    quality = self._clamp_image_quality(quality)
+    started_at = time.monotonic()
+
+    try:
+      with Image.open(BytesIO(image_bytes)) as opened_image:
+        image = ImageOps.exif_transpose(opened_image)
+        original_width, original_height = image.size
+        resized = False
+
+        if max_edge and max(original_width, original_height) > max_edge:
+          scale = max_edge / max(original_width, original_height)
+          next_size = (
+            max(1, round(original_width * scale)),
+            max(1, round(original_height * scale)),
+          )
+          resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+          image = image.resize(next_size, resampling)
+          resized = True
+
+        if normalized_output_format in {"jpeg", "webp"}:
+          if image.mode in {"RGBA", "LA"} or (
+            image.mode == "P" and "transparency" in image.info
+          ):
+            rgba_image = image.convert("RGBA")
+            background = Image.new("RGB", rgba_image.size, (255, 255, 255))
+            background.paste(rgba_image, mask=rgba_image.getchannel("A"))
+            image = background
+          elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        output_buffer = BytesIO()
+
+        if normalized_output_format == "jpeg":
+          image.save(
+            output_buffer,
+            format="JPEG",
+            quality=quality,
+            optimize=True,
+            progressive=True,
+          )
+        elif normalized_output_format == "webp":
+          image.save(output_buffer, format="WEBP", quality=quality, method=4)
+        else:
+          image.save(output_buffer, format="PNG", optimize=True)
+
+      optimized_bytes = output_buffer.getvalue()
+
+      if (
+        not resized
+        and output_content_type == source_content_type
+        and len(optimized_bytes) >= len(image_bytes)
+      ):
+        return image_bytes, source_content_type
+
+      logger.info(
+        "[aura:openai] image-optimization:success context=%s format=%s maxEdge=%s quality=%s size=%sx%s->%sx%s bytes=%s->%s durationMs=%s",
+        context,
+        normalized_output_format,
+        max_edge or "original",
+        quality,
+        original_width,
+        original_height,
+        image.size[0],
+        image.size[1],
+        len(image_bytes),
+        len(optimized_bytes),
+        round((time.monotonic() - started_at) * 1000),
+      )
+
+      return optimized_bytes, output_content_type
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+      logger.warning(
+        "[aura:openai] image-optimization:skipped context=%s reason=%s",
+        context,
+        exc.__class__.__name__,
+      )
+      return image_bytes, source_content_type
+
+  def _prepare_source_image_for_generation(
+    self,
+    image_bytes: bytes,
+    source_content_type: str,
+  ) -> tuple[bytes, str]:
+    return self._convert_image_for_speed(
+      image_bytes,
+      source_content_type=source_content_type,
+      output_format="jpeg",
+      max_edge=self.settings.openai_image_input_max_edge,
+      quality=self.settings.openai_image_input_quality,
+      context="source-input",
+    )
+
+  def _optimize_generated_image_for_upload(self, image_bytes: bytes) -> bytes:
+    output_format, output_compression, _, content_type = self._resolve_makeup_image_output()
+    optimized_bytes, _ = self._convert_image_for_speed(
+      image_bytes,
+      source_content_type=content_type,
+      output_format=output_format,
+      max_edge=self.settings.openai_image_output_max_edge,
+      quality=output_compression if output_compression is not None else 82,
+      context="generated-output",
+    )
+
+    return optimized_bytes
+
   def _read_source_image_bytes(self, payload: dict[str, Any]) -> bytes:
     image_url = self._extract_remote_image_url(payload)
 
@@ -197,11 +351,10 @@ class OpenAIAnalysisService:
       "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
       "beautyGuide에는 bestColors, bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, hairstyleDirection, finalFormula를 포함해. "
       "각 beautyGuide 값은 앱이나 문서에서 시각화하기 쉬운 짧은 배열 또는 짧은 문장으로 작성해. "
-      "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 3개만 작성해. "
-      "recommendedMakeups는 단순 텍스트 추천이 아니라, 이후 같은 사용자 얼굴 사진에 메이크업을 적용한 업데이트 이미지 3장의 콘셉트가 되어야 해. "
-      "각 recommendedMakeups 항목은 보고서의 어떤 판단 때문에 그 룩이 어울리는지 description에 명확히 반영해. "
-      "각 추천은 서로 다른 새 사진 결과가 나오도록 색감, 질감, 분위기, 립/아이/블러셔 포인트가 분명히 구분되어야 해. "
-      "각 추천은 민낯이나 기본 보정 사진처럼 보이면 안 되지만, 사용자의 성별 표현과 일상 스타일에 맞는 자연스러운 강도여야 해. "
+      "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "
+      "recommendedMakeups는 단순 텍스트 추천이 아니라, 이후 같은 사용자 얼굴 사진에 적용할 데일리 메이크업 이미지 1장의 콘셉트가 되어야 해. "
+      "recommendedMakeups 항목은 보고서의 어떤 판단 때문에 그 데일리 룩이 어울리는지 description에 명확히 반영해. "
+      "추천은 민낯이나 기본 보정 사진처럼 보이면 안 되지만, 사용자의 성별 표현과 일상 스타일에 맞는 자연스러운 데일리 강도여야 해. "
       "남성 사용자라면 피부 톤 보정, 눈썹 결 정리, 자연스러운 음영, 립밤/톤 보정, 유분 정돈처럼 남성 그루밍에 어울리는 방식으로 작성해. "
       "여성 사용자라면 퍼스널 컬러에 맞춘 베이스, 아이, 블러셔, 립 포인트를 자연스럽게 제안해. "
       "다른 사람이나 일반 모델 기준이 아니라 업로드된 사용자 얼굴에 어울리는 추천으로만 작성해. "
@@ -341,12 +494,12 @@ class OpenAIAnalysisService:
     if isinstance(recommended_makeups, list):
       cards = [card for card in recommended_makeups if isinstance(card, dict)]
 
-    while len(cards) < 3:
+    while len(cards) < RECOMMENDED_MAKEUP_COUNT:
       cards.append(self._default_recommended_makeup_card(result, len(cards)))
 
     normalized_cards: list[dict[str, Any]] = []
 
-    for index, card in enumerate(cards[:3]):
+    for index, card in enumerate(cards[:RECOMMENDED_MAKEUP_COUNT]):
       fallback = self._default_recommended_makeup_card(result, index)
       raw_tags = card.get("tags")
       tags = [
@@ -643,6 +796,7 @@ class OpenAIAnalysisService:
       Key=object_key,
       Body=image_bytes,
       ContentType=content_type,
+      CacheControl="public, max-age=31536000, immutable",
     )
     cdn_base_url = self.settings.effective_cdn_base_url
 
@@ -697,6 +851,7 @@ class OpenAIAnalysisService:
       )
 
     generated_image_bytes = base64.b64decode(image_base64)
+    generated_image_bytes = self._optimize_generated_image_for_upload(generated_image_bytes)
     upload = self._upload_generated_image(generated_image_bytes, index + 1)
     duration_ms = round((time.monotonic() - started_at) * 1000)
     logger.info(
@@ -732,27 +887,31 @@ class OpenAIAnalysisService:
 
     cards = [
       card
-      for card in recommended_makeups[:3]
+      for card in recommended_makeups[:RECOMMENDED_MAKEUP_COUNT]
       if isinstance(card, dict)
     ]
 
-    if len(cards) < 3:
+    if len(cards) < RECOMMENDED_MAKEUP_COUNT:
       raise AppError(
         502,
         "RECOMMENDED_MAKEUPS_INCOMPLETE",
-        "AI analysis must return exactly 3 recommended makeup cards.",
+        "AI analysis must return exactly 1 recommended makeup card.",
       )
 
     started_at = time.monotonic()
     source_content_type = self._infer_content_type(payload)
-    generated_cards: list[dict[str, Any] | None] = [None, None, None]
+    source_image_bytes, source_content_type = self._prepare_source_image_for_generation(
+      source_image_bytes,
+      source_content_type,
+    )
+    generated_cards: list[dict[str, Any] | None] = [None] * len(cards)
     logger.info(
       "[aura:openai] image-generation:batch-start count=%s model=%s",
       len(cards),
       self.settings.openai_image_model_id,
     )
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=len(cards)) as executor:
       futures = {
         executor.submit(
           self._generate_single_makeup_image,
@@ -779,7 +938,7 @@ class OpenAIAnalysisService:
       raise AppError(
         502,
         "RECOMMENDED_MAKEUP_IMAGES_INCOMPLETE",
-        "Recommended makeup image generation must return exactly 3 image URLs.",
+        "Recommended makeup image generation must return exactly 1 image URL.",
         details={"missingIndexes": missing_image_indexes},
       )
 
@@ -815,11 +974,14 @@ class OpenAIAnalysisService:
   def _validate_completed_analysis_result(self, result: dict[str, Any]) -> None:
     recommended_makeups = result.get("recommendedMakeups")
 
-    if not isinstance(recommended_makeups, list) or len(recommended_makeups) != 3:
+    if (
+      not isinstance(recommended_makeups, list)
+      or len(recommended_makeups) != RECOMMENDED_MAKEUP_COUNT
+    ):
       raise AppError(
         502,
         "RECOMMENDED_MAKEUPS_REQUIRED",
-        "Completed analysis must include exactly 3 recommended makeup cards.",
+        "Completed analysis must include exactly 1 recommended makeup card.",
         details={
           "receivedCount": len(recommended_makeups) if isinstance(recommended_makeups, list) else 0,
         },
@@ -835,7 +997,7 @@ class OpenAIAnalysisService:
       raise AppError(
         502,
         "RECOMMENDED_MAKEUP_IMAGES_REQUIRED",
-        "Completed analysis must include 3 generated makeup image URLs.",
+        "Completed analysis must include 1 generated makeup image URL.",
         details={"missingIndexes": missing_image_indexes},
       )
 
@@ -893,11 +1055,36 @@ class OpenAIAnalysisService:
         details={"reason": exc.__class__.__name__},
       ) from exc
 
+  async def prepare_generation_source(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes | None = None,
+  ) -> tuple[bytes, str]:
+    """Read the source photo (if not already supplied) and downscale/re-encode
+    it for image generation.
+
+    This is safe to run concurrently with text analysis so the slow OpenAI
+    image edit can start as soon as the report text is ready, instead of paying
+    for the S3 read and resize on the image-generation critical path.
+    """
+    if source_image_bytes is None:
+      source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
+
+    source_content_type = self._infer_content_type(payload)
+
+    return await asyncio.to_thread(
+      self._prepare_source_image_for_generation,
+      source_image_bytes,
+      source_content_type,
+    )
+
   async def generate_recommended_makeup_images(
     self,
     payload: dict[str, Any],
     analysis_result: dict[str, Any],
     on_card_generated: Any | None = None,
+    *,
+    prepared_source: tuple[bytes, str] | None = None,
   ) -> dict[str, Any]:
     if self.settings.image_generation_provider_normalized != "openai":
       raise AppError(
@@ -906,9 +1093,6 @@ class OpenAIAnalysisService:
         "Only OpenAI image generation is currently supported.",
       )
 
-    source_read_started_at = time.monotonic()
-    source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
-    image_source_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
     recommended_makeups = analysis_result.get("recommendedMakeups")
 
     if not isinstance(recommended_makeups, list) or not recommended_makeups:
@@ -918,17 +1102,40 @@ class OpenAIAnalysisService:
         "AI analysis must return recommendedMakeups before image generation.",
       )
 
-    cards = [card for card in recommended_makeups[:3] if isinstance(card, dict)]
+    cards = [
+      card
+      for card in recommended_makeups[:RECOMMENDED_MAKEUP_COUNT]
+      if isinstance(card, dict)
+    ]
 
-    if len(cards) < 3:
+    if len(cards) < RECOMMENDED_MAKEUP_COUNT:
       raise AppError(
         502,
         "RECOMMENDED_MAKEUPS_INCOMPLETE",
-        "AI analysis must return exactly 3 recommended makeup cards.",
+        "AI analysis must return exactly 1 recommended makeup card.",
       )
 
     started_at = time.monotonic()
-    source_content_type = self._infer_content_type(payload)
+
+    if prepared_source is not None:
+      # Source was read and downscaled ahead of time (overlapped with text
+      # analysis), so image generation starts without extra S3/CPU work.
+      source_image_bytes, source_content_type = prepared_source
+      image_source_read_ms = 0
+      image_source_prepare_ms = 0
+    else:
+      source_read_started_at = time.monotonic()
+      source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
+      image_source_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
+      source_content_type = self._infer_content_type(payload)
+      source_prepare_started_at = time.monotonic()
+      source_image_bytes, source_content_type = await asyncio.to_thread(
+        self._prepare_source_image_for_generation,
+        source_image_bytes,
+        source_content_type,
+      )
+      image_source_prepare_ms = round((time.monotonic() - source_prepare_started_at) * 1000)
+
     generated_cards: list[dict[str, Any]] = [dict(card) for card in cards]
     image_generation_items: list[dict[str, Any]] = []
     image_generation_errors: list[dict[str, Any]] = []
@@ -995,6 +1202,7 @@ class OpenAIAnalysisService:
             else {}
           ),
           "imageSourceReadMs": image_source_read_ms,
+          "imageSourcePrepareMs": image_source_prepare_ms,
           "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
           "imageGenerationStatus": "processing",
         },
@@ -1016,6 +1224,7 @@ class OpenAIAnalysisService:
           else {}
         ),
         "imageSourceReadMs": image_source_read_ms,
+        "imageSourcePrepareMs": image_source_prepare_ms,
         "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
         "imageGenerationStatus": image_generation_status,
         "imageGenerationTotalMs": image_generation_total_ms,
