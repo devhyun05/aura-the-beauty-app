@@ -34,7 +34,7 @@ export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
   {
     id: 'mood',
     title: '추천 메이크업을 생성하고 있어요',
-    description: '촬영 사진 기준으로 보고서와 추천 룩 3개를 준비합니다.',
+    description: '촬영 사진 기준으로 보고서와 데일리 추천 룩 1개를 준비합니다.',
   },
 ];
 

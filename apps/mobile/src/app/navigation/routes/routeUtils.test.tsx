@@ -15,6 +15,11 @@ expectEqual(
 );
 expectEqual(
   getMainTabHeaderBorderWidth('ProfileTab'),
-  undefined,
-  'profile tab header keeps default border',
+  0,
+  'profile tab header border is hidden',
+);
+expectEqual(
+  getMainTabHeaderBorderWidth('CommunityTab'),
+  0,
+  'community tab header border is hidden',
 );

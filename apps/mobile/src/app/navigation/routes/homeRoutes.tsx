@@ -12,6 +12,7 @@ import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
+import {renderConsultingHome} from './consultingRoutes';
 import {
   MainTabChrome,
   navigateMainTab,
@@ -63,8 +64,11 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const {
     likedMakeupFilterIds,
+    setMakeupFeedbackResult,
     setLikedMakeupFilterIds,
+    setSelectedMakeupFeedbackPhoto,
     setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
     setShouldShowBeautyJourneyGuide,
     shouldShowBeautyJourneyGuide,
   } = useNavigationFlowState();
@@ -79,6 +83,39 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     setSelectedRecommendedMakeupFilterId(filterId);
     rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleMakeupFilterPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    rootNavigation?.navigate('ARFilter', {source: 'homeServiceShortcut'});
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleHalfMakeupPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    rootNavigation?.navigate('ARFilter', {
+      initialGuideMode: 'half',
+      source: 'homeServiceShortcut',
+    });
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleMakeupExtractionPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
+  }, [
+    rootNavigation,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  ]);
+
+  const handleMakeupFeedbackPress = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
+    rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+  }, [
+    rootNavigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   const handleBeautyJourneyGuideConfirm = React.useCallback(() => {
     setShouldShowBeautyJourneyGuide(false);
@@ -117,8 +154,13 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       <HomeScreen
         onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
+        onPressCommunity={() => navigation.navigate('CommunityTab')}
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+        onPressHalfMakeup={handleHalfMakeupPress}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
+        onPressMakeupExtraction={handleMakeupExtractionPress}
+        onPressMakeupFeedback={handleMakeupFeedbackPress}
+        onPressMakeupFilter={handleMakeupFilterPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
         onPressRecommendedFilterMore={() =>
           rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
@@ -231,11 +273,7 @@ export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'
     <DetailRouteChrome
       routeName="Consulting"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="전문가에게 퍼스널 컬러, 체형, 헤어, 패션 컨설팅을 받을 수 있는 기능을 준비 중이에요."
-        showHeader={false}
-        title="컨설팅"
-      />
+      {renderConsultingHome(navigation)}
     </DetailRouteChrome>
   );
 }

@@ -73,7 +73,7 @@ export type MakeupFilterPresetValues = {
 };
 
 export type ARFilterLaunchSource =
-  | 'quickAction'
+  | 'homeServiceShortcut'
   | 'recommendedFilter'
   | 'savedLook';
 

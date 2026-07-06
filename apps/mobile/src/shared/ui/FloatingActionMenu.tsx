@@ -97,6 +97,7 @@ export const FLOATING_ACTION_SETTINGS_SELECTION_RADIUS =
   FLOATING_ACTION_SETTINGS_SIZE / 2 + spacing.sm;
 export const FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND = colors.liquidGlassSurface;
 export const FLOATING_ACTION_SETTINGS_BACKGROUND = colors.bottomSheetControlSurface;
+export const FLOATING_ACTION_ACTIVE_BORDER_COLOR = colors.transparent;
 export const FLOATING_ACTION_HOST_EXTRA_HEIGHT = 178;
 export const FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET: FloatingActionSlotOffset = {
   x: 0,
@@ -338,7 +339,7 @@ export function getFloatingActionSettingsVisualState(
 ): FloatingActionSettingsVisualState {
   return {
     backgroundColor: isActive ? colors.blackSurface : FLOATING_ACTION_SETTINGS_BACKGROUND,
-    borderColor: isActive ? colors.textPrimary : colors.borderStrong,
+    borderColor: isActive ? FLOATING_ACTION_ACTIVE_BORDER_COLOR : colors.borderStrong,
     iconColor: isActive ? colors.white : colors.textPrimary,
   };
 }
@@ -885,7 +886,7 @@ const styles = StyleSheet.create({
   },
   actionButtonActive: {
     backgroundColor: colors.blackSurface,
-    borderColor: colors.textPrimary,
+    borderColor: FLOATING_ACTION_ACTIVE_BORDER_COLOR,
     shadowOpacity: 0.24,
   },
   actionButtonPressable: {
@@ -955,7 +956,7 @@ const styles = StyleSheet.create({
   },
   mainButtonExpanded: {
     backgroundColor: colors.blackSurface,
-    borderColor: colors.textPrimary,
+    borderColor: FLOATING_ACTION_ACTIVE_BORDER_COLOR,
   },
   pressed: {
     opacity: 0.82,

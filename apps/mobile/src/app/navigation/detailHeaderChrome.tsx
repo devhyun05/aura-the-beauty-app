@@ -6,6 +6,7 @@ import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, spacing, typography} from '../../shared/theme';
 import {XIcon} from '../../shared/ui';
+import {AppScreenOverlayHeaderHeightProvider} from '../../shared/ui/AppScreen';
 import {APP_HEADER_BASE_HEIGHT, AppHeader} from '../../shared/ui/AppHeader';
 import {
   getDetailRouteContextLabel,
@@ -150,16 +151,12 @@ export function DetailRouteChrome({
   return (
     <YStack style={[styles.screen, {backgroundColor}]}>
       {isOverlayHeader ? null : header}
-      <YStack
-        style={[
-          styles.body,
-          {backgroundColor},
-          isOverlayHeader && reserveOverlayHeaderSpace
-            ? {paddingTop: overlayHeaderHeight}
-            : undefined,
-        ]}>
-        {children}
-      </YStack>
+      <AppScreenOverlayHeaderHeightProvider
+        headerHeight={isOverlayHeader && reserveOverlayHeaderSpace ? overlayHeaderHeight : 0}>
+        <YStack style={[styles.body, {backgroundColor}]}>
+          {children}
+        </YStack>
+      </AppScreenOverlayHeaderHeightProvider>
       {isOverlayHeader ? header : null}
     </YStack>
   );

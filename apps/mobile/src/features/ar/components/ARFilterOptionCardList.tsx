@@ -43,8 +43,8 @@ type ARFilterOptionCardListProps = {
   shapeOptions: readonly ShapeOption[];
 };
 
-export const AR_FILTER_OPTION_CARD_ASPECT_RATIO = 0.78;
-export const AR_FILTER_OPTION_CARD_COPY_PLACEMENT = 'bottomScrim' as const;
+export const AR_FILTER_OPTION_CARD_ASPECT_RATIO = 1;
+export const AR_FILTER_OPTION_CARD_COPY_PLACEMENT = 'outsideBelow' as const;
 export const AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT = 'center' as const;
 export const AR_FILTER_OPTION_CARD_META_PLACEMENT = 'none' as const;
 export const AR_FILTER_OPTION_CARD_ACTIVE_INDICATOR = 'pressedInset' as const;
@@ -53,9 +53,11 @@ export const AR_FILTER_OPTION_CARD_ACTIVE_EDGE_TREATMENT = 'shadowOnly' as const
 export const AR_FILTER_OPTION_CARD_ACTIVE_OUTLINE_VISIBILITY = 'hidden' as const;
 export const AR_FILTER_OPTION_CARD_SELECTED_LABEL_VISIBILITY =
   'accessibilityOnly' as const;
-export const AR_FILTER_OPTION_CARD_SELECTED_BADGE = 'topRightCheck' as const;
+export const AR_FILTER_OPTION_CARD_SELECTED_BADGE = 'topRightInsetCheck' as const;
+export const AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET = spacing.sm;
 export const AR_FILTER_OPTION_CARD_SELECTED_EFFECT =
   'innerGlowAndPressedDepth' as const;
+export const AR_FILTER_OPTION_CARD_SURFACE_OVERFLOW = 'hidden' as const;
 export const AR_FILTER_OPTION_CARD_PREVIEW_KINDS = [
   'makeupLook',
   'color',
@@ -65,8 +67,8 @@ export const AR_FILTER_OPTION_CARD_PREVIEW_KINDS = [
   'original',
 ] as const;
 
-export const AR_FILTER_OPTION_CARD_WIDTH = 84;
-export const AR_FILTER_OPTION_PICKER_MIN_HEIGHT = 112;
+export const AR_FILTER_OPTION_CARD_WIDTH = 72;
+export const AR_FILTER_OPTION_PICKER_MIN_HEIGHT = 104;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_SOURCE = 'lucide-react-native' as const;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_LIBRARY_NAME = 'CircleOff' as const;
 export const AR_FILTER_ORIGINAL_OPTION_ICON_SIZE = iconSize.lg;
@@ -343,27 +345,31 @@ function OptionCard({
       pressStyle={{scale: 0.98}}
       style={[styles.optionCard, isActive ? styles.optionCardActive : undefined]}
       unstyled>
-      <View style={styles.optionCardPreview}>
-        {imageSource ? (
-          <Image resizeMode="cover" source={imageSource} style={styles.optionCardImage} />
-        ) : (
-          children
-        )}
+      <View
+        style={[
+          styles.optionCardSurface,
+          isActive ? styles.optionCardSurfaceActive : undefined,
+        ]}>
+        <View style={styles.optionCardPreview}>
+          {imageSource ? (
+            <Image resizeMode="cover" source={imageSource} style={styles.optionCardImage} />
+          ) : (
+            children
+          )}
+        </View>
+        {isActive ? <View pointerEvents="none" style={styles.optionCardActiveOverlay} /> : null}
       </View>
       <View style={[styles.optionCardCopy, isActive ? styles.optionCardCopyActive : undefined]}>
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={[styles.optionCardTitle, isActive ? styles.optionCardTitleActive : undefined]}>
           {label}
         </Text>
       </View>
       {isActive ? (
-        <>
-          <View pointerEvents="none" style={styles.optionCardActiveOverlay} />
-          <View pointerEvents="none" style={styles.optionCardSelectedBadge}>
-            <Check color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.4} />
-          </View>
-        </>
+        <View pointerEvents="none" style={styles.optionCardSelectedBadge}>
+          <Check color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.4} />
+        </View>
       ) : null}
     </Button>
   );
@@ -462,30 +468,39 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
   },
   optionPickerList: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     minHeight: AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
     paddingRight: spacing.sm,
   },
   optionCard: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    overflow: 'visible',
+    position: 'relative',
+    width: AR_FILTER_OPTION_CARD_WIDTH,
+  },
+  optionCardActive: {
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
+    transform: [{scale: 0.98}],
+  },
+  optionCardSurface: {
     alignItems: 'stretch',
     aspectRatio: AR_FILTER_OPTION_CARD_ASPECT_RATIO,
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: AR_FILTER_OPTION_CARD_SURFACE_OVERFLOW,
     position: 'relative',
-    width: AR_FILTER_OPTION_CARD_WIDTH,
+    width: '100%',
   },
-  optionCardActive: {
+  optionCardSurfaceActive: {
     borderColor: 'transparent',
     borderWidth: 1,
-    shadowColor: colors.black,
-    shadowOffset: {width: 0, height: 5},
-    shadowOpacity: 0.24,
-    shadowRadius: 9,
-    transform: [{scale: 0.96}],
   },
   optionCardActiveOverlay: {
     backgroundColor: 'rgba(255, 255, 255, 0.13)',
@@ -512,12 +527,12 @@ const styles = StyleSheet.create({
     height: 20,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.xs,
+    right: AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET,
     shadowColor: colors.black,
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.16,
     shadowRadius: 6,
-    top: spacing.xs,
+    top: AR_FILTER_OPTION_CARD_SELECTED_BADGE_OFFSET,
     width: 20,
     zIndex: 4,
   },
@@ -538,36 +553,27 @@ const styles = StyleSheet.create({
   },
   optionCardCopy: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
-    bottom: 0,
     justifyContent: 'center',
-    left: 0,
-    minHeight: 34,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    position: 'absolute',
-    right: 0,
-    zIndex: 3,
+    minHeight: typography.lineHeight.xs * 2,
+    paddingHorizontal: 0,
   },
   optionCardCopyActive: {
-    backgroundColor: 'rgba(17, 17, 17, 0.72)',
+    opacity: 1,
   },
   optionCardTitle: {
     alignSelf: 'stretch',
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
+    fontWeight: typography.fontWeight.semibold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
     textAlign: AR_FILTER_OPTION_CARD_LABEL_ALIGNMENT,
-    textShadowColor: 'rgba(0, 0, 0, 0.65)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 7,
   },
   optionCardTitleActive: {
-    textShadowColor: 'rgba(0, 0, 0, 0.82)',
-    textShadowRadius: 10,
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontWeight: typography.fontWeight.bold,
   },
   colorPreview: {
     height: '100%',

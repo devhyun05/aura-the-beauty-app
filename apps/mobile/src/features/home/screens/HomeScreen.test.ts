@@ -11,17 +11,18 @@ import {
   getRecommendedFilterRouteParams,
   getHomeMakeupExtractionActionLabels,
   heroCtaLabel,
-  getHomeQuickActionPressHandler,
-  getHomeQuickActionLabels,
+  getHomeServiceShortcutPressHandler,
+  getHomeServiceShortcutLabels,
+  getHomeServiceShortcutRowLabels,
   getHeroTrendHeadline,
   homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
-  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
-  HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
-  HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
-  HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES,
-  HOME_QUICK_ACTION_LABELS,
+  HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME,
+  HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME,
+  HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
+  HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES,
+  HOME_SERVICE_SHORTCUT_LABELS,
   HOME_SCROLL_TOP_VISIBLE_OFFSET,
   recommendedFilterCopyVerticalPadding,
   recommendedFilterListVirtualizationConfig,
@@ -78,13 +79,23 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
   recommendedFilters,
   'red',
 );
-const quickActionLabels = getHomeQuickActionLabels();
-const expectedQuickActionLabels: readonly [
+const homeServiceShortcutLabels = getHomeServiceShortcutLabels();
+const expectedHomeServiceShortcutLabels: readonly [
   '얼굴 분석',
+  '메이크업 필터',
+  '컨설팅',
+  '반반메이크업',
+  '커뮤니티',
+  '메이크업 추출',
   '필터 스토어',
   '추천 제품',
-  '컨설팅',
-] = HOME_QUICK_ACTION_LABELS;
+  '메이크업 피드백',
+] = HOME_SERVICE_SHORTCUT_LABELS;
+const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
+const expectedHomeServiceShortcutFirstRowLabels =
+  '얼굴 분석,메이크업 필터,컨설팅,반반메이크업,커뮤니티';
+const expectedHomeServiceShortcutSecondRowLabels =
+  '메이크업 추출,필터 스토어,추천 제품,메이크업 피드백';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
@@ -183,34 +194,44 @@ expectEqual(
   'recommended filter red category includes Wanghong filter',
 );
 expectEqual(
-  quickActionLabels.join(','),
-  expectedQuickActionLabels.join(','),
-  'home quick action order',
+  homeServiceShortcutLabels.join(','),
+  expectedHomeServiceShortcutLabels.join(','),
+  'home service shortcut order',
 );
 expectEqual(
-  HOME_QUICK_ACTION_LABELS.some(label => label.includes('\n')),
+  homeServiceShortcutRowLabels[0]?.join(','),
+  expectedHomeServiceShortcutFirstRowLabels,
+  'home service shortcut first row order',
+);
+expectEqual(
+  homeServiceShortcutRowLabels[1]?.join(','),
+  expectedHomeServiceShortcutSecondRowLabels,
+  'home service shortcut second row order',
+);
+expectEqual(
+  HOME_SERVICE_SHORTCUT_LABELS.some(label => label.includes('\n')),
   false,
-  'home quick action labels do not contain manual line breaks',
+  'home service shortcut labels do not contain manual line breaks',
 );
 expectEqual(
-  HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES,
+  HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES,
   1,
-  'home quick action labels render on one line',
+  'home service shortcut labels render on one line',
 );
 expectEqual(
-  HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
+  HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
   typography.lineHeight.xs,
-  'home quick action label min height is one line',
+  'home service shortcut label min height is one line',
 );
 expectEqual(
-  HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME,
+  HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME,
   'Store',
-  'home filter store quick action icon name',
+  'home filter store service shortcut icon name',
 );
 expectEqual(
-  HOME_CONSULTING_QUICK_ACTION_ICON_NAME,
+  HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME,
   'Compass',
-  'home consulting quick action icon name',
+  'home consulting service shortcut icon name',
 );
 expectEqual(
   makeupExtractionActionLabels.join(','),
@@ -323,63 +344,143 @@ expectEqual(
   'recommended filter route source',
 );
 
-let selectedQuickAction: 'consulting' | 'diagnosis' | 'filterStore' | 'recommendation' | null = null;
+let selectedHomeServiceShortcut:
+  | 'arFilter'
+  | 'community'
+  | 'consulting'
+  | 'diagnosis'
+  | 'filterStore'
+  | 'halfMakeup'
+  | 'makeupExtraction'
+  | 'makeupFeedback'
+  | 'recommendation'
+  | null = null;
 
-const diagnosisPressHandler = getHomeQuickActionPressHandler('diagnosis', {
+const diagnosisPressHandler = getHomeServiceShortcutPressHandler('diagnosis', {
   onPressFaceDiagnosis: () => {
-    selectedQuickAction = 'diagnosis';
+    selectedHomeServiceShortcut = 'diagnosis';
   },
 });
 
 if (!diagnosisPressHandler) {
-  throw new Error('face analysis quick action should have a press handler');
+  throw new Error('face analysis service shortcut should have a press handler');
 }
 
 diagnosisPressHandler();
 
-expectEqual(selectedQuickAction, 'diagnosis', 'face analysis quick action target');
+expectEqual(selectedHomeServiceShortcut, 'diagnosis', 'face analysis service shortcut target');
 
-const recommendationPressHandler = getHomeQuickActionPressHandler('recommendation', {
+const arFilterPressHandler = getHomeServiceShortcutPressHandler('arFilter', {
+  onPressMakeupFilter: () => {
+    selectedHomeServiceShortcut = 'arFilter';
+  },
+});
+
+if (!arFilterPressHandler) {
+  throw new Error('makeup filter service shortcut should have a press handler');
+}
+
+arFilterPressHandler();
+
+expectEqual(selectedHomeServiceShortcut, 'arFilter', 'makeup filter service shortcut target');
+
+const halfMakeupPressHandler = getHomeServiceShortcutPressHandler('halfMakeup', {
+  onPressHalfMakeup: () => {
+    selectedHomeServiceShortcut = 'halfMakeup';
+  },
+});
+
+if (!halfMakeupPressHandler) {
+  throw new Error('half makeup service shortcut should have a press handler');
+}
+
+halfMakeupPressHandler();
+
+expectEqual(selectedHomeServiceShortcut, 'halfMakeup', 'half makeup service shortcut target');
+
+const communityPressHandler = getHomeServiceShortcutPressHandler('community', {
+  onPressCommunity: () => {
+    selectedHomeServiceShortcut = 'community';
+  },
+});
+
+if (!communityPressHandler) {
+  throw new Error('community service shortcut should have a press handler');
+}
+
+communityPressHandler();
+
+expectEqual(selectedHomeServiceShortcut, 'community', 'community service shortcut target');
+
+const makeupExtractionPressHandler = getHomeServiceShortcutPressHandler('makeupExtraction', {
+  onPressMakeupExtraction: () => {
+    selectedHomeServiceShortcut = 'makeupExtraction';
+  },
+});
+
+if (!makeupExtractionPressHandler) {
+  throw new Error('makeup extraction service shortcut should have a press handler');
+}
+
+makeupExtractionPressHandler();
+
+expectEqual(selectedHomeServiceShortcut, 'makeupExtraction', 'makeup extraction service shortcut target');
+
+const recommendationPressHandler = getHomeServiceShortcutPressHandler('recommendation', {
   onPressProductRecommendations: () => {
-    selectedQuickAction = 'recommendation';
+    selectedHomeServiceShortcut = 'recommendation';
   },
 });
 
 if (!recommendationPressHandler) {
-  throw new Error('product recommendation quick action should have a press handler');
+  throw new Error('product recommendation service shortcut should have a press handler');
 }
 
 recommendationPressHandler();
 
-expectEqual(selectedQuickAction, 'recommendation', 'product recommendation quick action target');
+expectEqual(selectedHomeServiceShortcut, 'recommendation', 'product recommendation service shortcut target');
 
-const filterStorePressHandler = getHomeQuickActionPressHandler('filterStore', {
+const filterStorePressHandler = getHomeServiceShortcutPressHandler('filterStore', {
   onPressRecommendedFilterMore: () => {
-    selectedQuickAction = 'filterStore';
+    selectedHomeServiceShortcut = 'filterStore';
   },
 });
 
 if (!filterStorePressHandler) {
-  throw new Error('filter store quick action should have a press handler');
+  throw new Error('filter store service shortcut should have a press handler');
 }
 
 filterStorePressHandler();
 
-expectEqual(selectedQuickAction, 'filterStore', 'filter store quick action target');
+expectEqual(selectedHomeServiceShortcut, 'filterStore', 'filter store service shortcut target');
 
-const consultingPressHandler = getHomeQuickActionPressHandler('consulting', {
+const consultingPressHandler = getHomeServiceShortcutPressHandler('consulting', {
   onPressConsulting: () => {
-    selectedQuickAction = 'consulting';
+    selectedHomeServiceShortcut = 'consulting';
   },
 });
 
 if (!consultingPressHandler) {
-  throw new Error('consulting quick action should have a press handler');
+  throw new Error('consulting service shortcut should have a press handler');
 }
 
 consultingPressHandler();
 
-expectEqual(selectedQuickAction, 'consulting', 'consulting quick action target');
+expectEqual(selectedHomeServiceShortcut, 'consulting', 'consulting service shortcut target');
+
+const makeupFeedbackPressHandler = getHomeServiceShortcutPressHandler('makeupFeedback', {
+  onPressMakeupFeedback: () => {
+    selectedHomeServiceShortcut = 'makeupFeedback';
+  },
+});
+
+if (!makeupFeedbackPressHandler) {
+  throw new Error('makeup feedback service shortcut should have a press handler');
+}
+
+makeupFeedbackPressHandler();
+
+expectEqual(selectedHomeServiceShortcut, 'makeupFeedback', 'makeup feedback service shortcut target');
 
 const completeReport: FaceAnalysisReport = {
   analyzedAt: '2026-06-29T07:00:00.000Z',
@@ -400,28 +501,12 @@ const completeReport: FaceAnalysisReport = {
   personalColor: '봄웜',
   recommendedMakeups: [
     {
-      description: '첫 번째 추천',
+      description: '데일리 추천',
       id: 'look-1',
       imageSource: {uri: 'https://example.com/look-1.png'},
       subtitle: '맑은 코랄',
       tags: [],
-      title: '추천 룩 1',
-    },
-    {
-      description: '두 번째 추천',
-      id: 'look-2',
-      imageSource: {uri: 'https://example.com/look-2.png'},
-      subtitle: '로지 데일리',
-      tags: [],
-      title: '추천 룩 2',
-    },
-    {
-      description: '세 번째 추천',
-      id: 'look-3',
-      imageSource: {uri: 'https://example.com/look-3.png'},
-      subtitle: '브라운 무드',
-      tags: [],
-      title: '추천 룩 3',
+      title: '데일리 추천 룩',
     },
   ],
   recommendedMood: '맑은 코랄 글로우',
@@ -437,17 +522,16 @@ const completeReport: FaceAnalysisReport = {
 const partialReport: FaceAnalysisReport = {
   ...completeReport,
   id: 'analysis-partial',
-  recommendedMakeups: completeReport.recommendedMakeups.slice(0, 2),
 };
 const savedHomeMakeupLooks = mapFaceAnalysisReportsToHomeSavedMakeupLooks([
   completeReport,
   partialReport,
 ]);
 
-expectEqual(savedHomeMakeupLooks.length, 5, 'home saved makeup keeps remaining saved cards');
-expectEqual(savedHomeMakeupLooks[0].title, '추천 룩 1', 'home saved makeup uses AI title');
+expectEqual(savedHomeMakeupLooks.length, 2, 'home saved makeup keeps one daily card per report');
+expectEqual(savedHomeMakeupLooks[0].title, '데일리 추천 룩', 'home saved makeup uses AI title');
 expectEqual(
   savedHomeMakeupLooks[1].description,
-  '로지 데일리',
-  'home saved makeup uses AI subtitle',
+  '맑은 코랄',
+  'home saved makeup uses one daily card from each report',
 );
