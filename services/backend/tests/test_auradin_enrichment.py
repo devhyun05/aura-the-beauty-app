@@ -154,7 +154,6 @@ def test_live_discovery_replaces_slot_with_hedged_naver_pick(monkeypatch) -> Non
   client = _client(
     naver_shopping_client_id="test-id",
     naver_shopping_client_secret="test-secret",
-    auradin_live_discovery_min_pool=10_000,  # 게이트 강제 발동 (테스트 결정성)
   )
   session_id, turn = _results(client, "2만원 이하 글리터 추천해줘")
   assert turn["phase"] == "results"
@@ -191,7 +190,7 @@ def test_live_discovery_replaces_slot_with_hedged_naver_pick(monkeypatch) -> Non
 
 
 def test_live_discovery_no_match_keeps_curated(monkeypatch) -> None:
-  # 전부 가격 초과 → §9 조용한 완화 금지: 교체하지 않고 큐레이션 유지.
+  # 전부 가격 초과 → §9 조용한 완화 금지: 교체하지 않고 큐레이션 발견 유지(폴백).
   _patch_naver(
     monkeypatch,
     [_naver_item(product_id="2001", title="페리페라 팔레트", brand="페리페라", lprice="99000")],
@@ -199,25 +198,23 @@ def test_live_discovery_no_match_keeps_curated(monkeypatch) -> None:
   client = _client(
     naver_shopping_client_id="test-id",
     naver_shopping_client_secret="test-secret",
-    auradin_live_discovery_min_pool=10_000,
   )
   _, turn = _results(client, "2만원 이하 글리터 추천해줘")
   assert turn["result"]["enrichment"]["liveDiscovery"]["status"] == "no_match"
   assert all(p["source"] == "curated" for p in turn["result"]["products"])
 
 
-def test_live_discovery_gate_skips_when_curated_breadth_ok(monkeypatch) -> None:
+def test_live_discovery_disabled_never_calls_naver(monkeypatch) -> None:
   called = []
   _patch_naver(monkeypatch, [], called)
   client = _client(
     naver_shopping_client_id="test-id",
     naver_shopping_client_secret="test-secret",
-    auradin_live_discovery_min_pool=0,  # 게이트 조건 전부 해제 → broaden 불필요
+    auradin_live_discovery_enabled=False,
   )
   _, turn = _results(client, "글리터 추천해줘")
-  status = turn["result"]["enrichment"]["liveDiscovery"]
-  if status["status"] == "skipped_gate":
-    assert not called  # Tier1이 충분하면 Naver를 아예 부르지 않는다 (Tier1-first §2)
+  assert turn["result"]["enrichment"]["liveDiscovery"]["status"] == "disabled"
+  assert not called
 
 
 # ---------------------------------------------------------------------------

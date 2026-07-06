@@ -332,7 +332,12 @@ def _discovery_query(state: dict[str, Any], category: str) -> str:
 
 
 def _needs_live_discovery(result: dict[str, Any], settings: Settings) -> tuple[bool, str]:
-  """§2: Tier1이 얇을 때만 broaden — assign_roles 폴백(전부 같은 브랜드) 조건 재사용."""
+  """§5: 발견 슬롯은 Tier2 라이브가 주력 — 큐레이션 발견은 라이브가 없을 때의 폴백이다.
+
+  (assign_roles docstring: "라이브 Naver가 없는 슬라이스에선 발견 슬롯을 큐레이션 픽으로 대체")
+  그래서 자격증명이 있으면 항상 라이브 교체를 시도하고, 적격 후보가 없으면 큐레이션을 유지한다.
+  retrieval/랭킹(anchor·diverse·질문 퍼널)은 Tier1 우선 그대로다 (§2).
+  """
   products = result.get("products") or []
   if not products:
     return False, "no_products"
@@ -340,14 +345,7 @@ def _needs_live_discovery(result: dict[str, Any], settings: Settings) -> tuple[b
     return False, "already_live"
   if len(products) < 3:
     return True, "missing_discovery_slot"
-  anchor_brand = _clean(products[0].get("brandName"))
-  discovery = next((p for p in products if p.get("role") == "discovery"), None)
-  if discovery is not None and _clean(discovery.get("brandName")) == anchor_brand:
-    return True, "discovery_brand_fallback"
-  floor_count = int((result.get("diagnostics") or {}).get("floorCount") or 0)
-  if floor_count < int(settings.auradin_live_discovery_min_pool):
-    return True, "thin_floor_pool"
-  return False, "curated_breadth_ok"
+  return True, "discovery_slot_default"
 
 
 def _live_catalog_item(
