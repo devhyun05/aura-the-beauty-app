@@ -41,8 +41,10 @@ BANNED_COPY_TERMS = ("공식", "정확한 호수", "퍼스널컬러 매칭 확�
 MAX_COPY_LENGTH = 220
 COPY_CACHE_LIMIT = 30
 
-# 발견 슬롯 Naver 검색어의 카테고리 축 (shopping_products.CATEGORY_CONFIG 질의 미러)
-CATEGORY_SEARCH_TERMS = {"lip": "립 틴트 립스틱", "cheek": "블러셔 치크", "shadow": "아이섀도우 팔레트"}
+# 발견 슬롯 Naver 검색어의 카테고리 축 (shopping_products.CATEGORY_CONFIG 질의 미러).
+# 토큰을 많이 쌓을수록 top-sim이 리셀러 스팸(brand 공란)으로 오염된다 — 짧은 축 + 폴백 사다리.
+CATEGORY_SEARCH_TERMS = {"lip": "립 틴트", "cheek": "블러셔 치크", "shadow": "아이섀도우 팔레트"}
+CATEGORY_FALLBACK_TERMS = {"lip": ("립스틱",), "cheek": ("치크 블러셔",), "shadow": ("아이섀도우",)}
 
 
 def _clean(value: Any) -> str:
@@ -118,6 +120,7 @@ def _copy_prompt(product: dict[str, Any]) -> str:
 규칙 (반드시 지켜):
 - matchedOn(확정 근거)·inferred(추론 단서)·caveat(한계)에 있는 내용만 사용해. 새로운 속성·색상·효능·브랜드를 만들어내지 마.
 - inferred 내용은 "~로 보여요"처럼 추측 표현을 유지하고, 확정처럼 말하지 마.
+- 발색 강도 표현("은은한 발색", "데일리 발색", "선명한 발색")과 색·마감 단어는 위 제품 정보에 그대로 있을 때만 써.
 - "공식", "정확한 호수", "퍼스널컬러 매칭 확정" 같은 보증·확정 표현 금지.
 - 존댓말로, 과장 없이.
 
@@ -266,13 +269,21 @@ async def _enrich_reason_copy(
       missing.append(product)
 
   if client.backend == "bedrock" and missing:
-    copies = await asyncio.gather(*(client.generate(product) for product in missing))
-    for product, copy in zip(missing, copies):
-      if isinstance(copy, str) and copy_is_faithful(copy, product):
-        product["reasonCopy"] = copy
-        product["reasonCopySource"] = "bedrock"
-        cache[product["id"]] = copy
-        status["generated"] += 1
+    # 충실성 게이트 리젝(무근거 발색·마감 라벨 등)은 확률적 — 남은 제품만 1회 재시도.
+    for _attempt in range(2):
+      if not missing:
+        break
+      copies = await asyncio.gather(*(client.generate(product) for product in missing))
+      still_missing: list[dict[str, Any]] = []
+      for product, copy in zip(missing, copies):
+        if isinstance(copy, str) and copy_is_faithful(copy, product):
+          product["reasonCopy"] = copy
+          product["reasonCopySource"] = "bedrock"
+          cache[product["id"]] = copy
+          status["generated"] += 1
+        else:
+          still_missing.append(product)
+      missing = still_missing
 
   while len(cache) > COPY_CACHE_LIMIT:
     cache.pop(next(iter(cache)))
@@ -282,10 +293,15 @@ async def _enrich_reason_copy(
 def _apply_fallback_copies(state: dict[str, Any]) -> None:
   # reasonCopy는 결과 계약에서 항상 존재 — 비활성/실패/타임아웃이면 matchedOn join (§6).
   result = state.get("result") if isinstance(state.get("result"), dict) else {}
+  fallback_count = 0
   for product in result.get("products") or []:
     if not product.get("reasonCopy"):
       product["reasonCopy"] = fallback_copy(product)
       product["reasonCopySource"] = "fallback"
+      fallback_count += 1
+  copy_status = (result.get("enrichment") or {}).get("reasonCopy")
+  if isinstance(copy_status, dict):
+    copy_status["fallback"] = fallback_count
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +335,15 @@ async def _fetch_raw_naver_items(settings: Settings, query: str, *, display: int
     return items if isinstance(items, list) else []
 
 
-def _discovery_query(state: dict[str, Any], category: str) -> str:
-  parts = [CATEGORY_SEARCH_TERMS.get(category, "화장품")]
+def _discovery_queries(state: dict[str, Any], category: str) -> list[str]:
+  """검색어 사다리 — 라벨 포함 질의부터 카테고리 축만 남긴 질의까지 (§2 broaden).
+
+  긴 질의는 리셀러 스팸(브랜드 공란 → whitelist 컷)으로 오염되기 쉬우므로,
+  적격 후보가 나올 때까지 짧은 질의로 물러난다. 조건 완화가 아니다 —
+  하드 필터는 결과 아이템에 그대로 적용된다 (§9).
+  """
+  primary = CATEGORY_SEARCH_TERMS.get(category, "화장품")
+  parts = [primary]
   for preference in state.get("softPreferences") or []:
     attribute = _clean(preference.get("attribute"))
     values = preference.get("values") or []
@@ -328,7 +351,12 @@ def _discovery_query(state: dict[str, Any], category: str) -> str:
       label = ATTRIBUTE_LABELS.get(attribute, {}).get(_clean(values[0]))
       if label and label not in parts:
         parts.append(label)
-  return " ".join(parts[:4])
+  ladder = [" ".join(parts[:3]), primary, *CATEGORY_FALLBACK_TERMS.get(category, ())]
+  deduped: list[str] = []
+  for query in ladder:
+    if query and query not in deduped:
+      deduped.append(query)
+  return deduped
 
 
 def _needs_live_discovery(result: dict[str, Any], settings: Settings) -> tuple[bool, str]:
@@ -432,44 +460,57 @@ async def _enrich_live_discovery(
   if category not in CATEGORY_SEARCH_TERMS:
     return {"status": "unsupported_category", "gate": gate_reason}
 
-  query = _discovery_query(state, category)
+  queries = _discovery_queries(state, category)
   hard_filters = [f for f in state.get("hardFilters") or [] if _clean(f.get("mode")) != "soft"]
   existing_ids = {product.get("id") for product in products}
   anchor_brand = _clean(products[0].get("brandName"))
 
-  cache = state.get("liveDiscoveryCache") if isinstance(state.get("liveDiscoveryCache"), dict) else {}
-  if cache.get("query") == query and isinstance(cache.get("items"), list):
-    catalog_items = cache["items"]
-  else:
-    try:
-      raw_items = await _fetch_raw_naver_items(settings, query)
-    except Exception as exc:  # noqa: BLE001 - 라이브 실패는 큐레이션 결과를 깨지 않는다.
-      logger.warning("[aura:auradin-live] naver fetch failed reason=%s", exc.__class__.__name__)
-      return {"status": "fetch_error", "gate": gate_reason, "query": query}
-    collected_at = datetime.now(UTC).isoformat()
-    catalog_items = [
+  def _eligible(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # §9: 명시 하드 조건은 라이브 후보에도 그대로 — 조용한 완화 금지.
+    return [
       item
-      for rank, raw_item in enumerate(raw_items, start=1)
-      if (
-        item := _live_catalog_item(
-          raw_item,
-          query=query,
-          query_rank=rank,
-          category=category,
-          collected_at=collected_at,
-        )
-      )
+      for item in items
+      if item["id"] not in existing_ids and all(matches_filter(item, f) for f in hard_filters)
     ]
-    state["liveDiscoveryCache"] = {"query": query, "items": catalog_items}
 
-  # §9: 명시 하드 조건은 라이브 후보에도 그대로 — 조용한 완화 금지.
-  eligible = [
-    item
-    for item in catalog_items
-    if item["id"] not in existing_ids and all(matches_filter(item, f) for f in hard_filters)
-  ]
+  cache_key = " | ".join(queries)
+  cache = state.get("liveDiscoveryCache") if isinstance(state.get("liveDiscoveryCache"), dict) else {}
+  if cache.get("key") == cache_key and isinstance(cache.get("items"), list):
+    query = str(cache.get("query") or queries[0])
+    eligible = _eligible(cache["items"])
+    fetched = len(cache["items"])
+  else:
+    eligible = []
+    fetched = 0
+    query = queries[0]
+    for query in queries:  # 사다리: 적격 후보가 나오는 첫 질의에서 멈춘다
+      try:
+        raw_items = await _fetch_raw_naver_items(settings, query, display=30)
+      except Exception as exc:  # noqa: BLE001 - 라이브 실패는 큐레이션 결과를 깨지 않는다.
+        logger.warning("[aura:auradin-live] naver fetch failed reason=%s", exc.__class__.__name__)
+        return {"status": "fetch_error", "gate": gate_reason, "query": query}
+      collected_at = datetime.now(UTC).isoformat()
+      catalog_items = [
+        item
+        for rank, raw_item in enumerate(raw_items, start=1)
+        if (
+          item := _live_catalog_item(
+            raw_item,
+            query=query,
+            query_rank=rank,
+            category=category,
+            collected_at=collected_at,
+          )
+        )
+      ]
+      fetched = len(catalog_items)
+      eligible = _eligible(catalog_items)
+      if eligible:
+        state["liveDiscoveryCache"] = {"items": catalog_items, "key": cache_key, "query": query}
+        break
+
   if not eligible:
-    return {"status": "no_match", "gate": gate_reason, "query": query, "fetched": len(catalog_items)}
+    return {"status": "no_match", "gate": gate_reason, "query": query, "fetched": fetched}
 
   ranked = rank_candidates(
     eligible,
