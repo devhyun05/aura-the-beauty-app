@@ -33,6 +33,7 @@ import type {
   AuradinSearchTurn,
   RefineDial,
 } from '../types';
+import {buildRequestParts, type AuradinAttachment} from '../attachments';
 
 // 칩 라벨 → 실제 질의 (HomeView는 라벨만 넘긴다)
 const SUGGESTION_QUERIES: Record<string, string> = {
@@ -41,20 +42,39 @@ const SUGGESTION_QUERIES: Record<string, string> = {
   '올리브영에서만': '올리브영에서 살 수 있는 데일리 립',
 };
 
-const DEFAULT_QUERY = '쿨톤 글로시 립, 2만원 이하';
+// 첨부만/공백으로 보낼 때의 중립 broad 시드 — 백엔드가 '어느 부위' 스코프 질문을 묻게 한다(§4).
+const BROAD_SEED = '추천해줘';
 const SEARCH_MS = 2300;
 const PICK_MS = 1700;
 
+export type AuradinAvailableReport = {id?: string; personalColor: string};
+
 export type AuradinDriveParams = {
   prompt?: string; // 딥링크 검색 자동 시작 (예: 리포트 화면 → aiarmakeup://auradin-search?prompt=…)
+  reportId?: string; // 첨부: 얼굴분석 리포트 id
+  personalColor?: string; // 첨부: 리포트 톤 (client-relay)
   open?: string; // QA·데모: results에서 role(anchor|diverse|discovery) 카드 상세 열기
   dial?: string; // QA·데모: refine 다이얼 (more_similar|more_diverse)
   ts?: string; // 같은 명령 반복용 nonce
 };
 
-export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) {
+export function AuradinSearchScreen({
+  drive,
+  availableReport,
+}: {drive?: AuradinDriveParams; availableReport?: AuradinAvailableReport | null} = {}) {
   const [phase, setPhase] = useState<AuradinPhase>('home');
-  const [query, setQuery] = useState(DEFAULT_QUERY);
+  // Change D: 컴포저는 빈 값으로 시작(placeholder만) — 첨부만 하고 보내면 broad 스코프 질문.
+  const [query, setQuery] = useState('');
+  // Change C: 확장형 첨부 — 리포트(nav/딥링크로 시드) + 필터. submit이 요청에 합성.
+  const seededReport: AuradinAttachment | null =
+    drive?.personalColor || availableReport?.personalColor
+      ? {
+          kind: 'report',
+          id: drive?.reportId ?? availableReport?.id,
+          personalColor: (drive?.personalColor ?? availableReport?.personalColor) as string,
+        }
+      : null;
+  const [attachments, setAttachments] = useState<AuradinAttachment[]>(seededReport ? [seededReport] : []);
   const [turn, setTurn] = useState<AuradinSearchTurn | null>(null);
   const [answering, setAnswering] = useState(false);
   const [refining, setRefining] = useState(false);
@@ -107,15 +127,36 @@ export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) 
   };
 
   const submit = (raw?: string) => {
-    const prompt = (raw?.trim() ? raw.trim() : query.trim() || DEFAULT_QUERY).trim();
-    setQuery(prompt);
+    const typed = (raw?.trim() ? raw.trim() : query.trim()).trim();
+    const parts = buildRequestParts(attachments);
+    // 타이핑 + 필터 첨부 표준구. 비면(리포트만/공백) broad 시드로 스코프 질문 유도.
+    const effective = [typed, parts.promptSuffix].filter(Boolean).join(' ').trim();
+    const prompt = effective || BROAD_SEED;
+    setQuery(typed); // 표시는 사용자가 친 것만 유지 (첨부는 칩으로 별도 표시)
     setAnswering(false);
     setSelected(null);
+    const context = parts.context.personalColor ? {personalColor: parts.context.personalColor} : undefined;
     void runWithSearching(SEARCH_MS, async () => {
-      const created = await createAuradinSearchSession({prompt});
+      const created = await createAuradinSearchSession({prompt, reportId: parts.reportId, context});
       sessionIdRef.current = created.sessionId;
       return pollAuradinSearchTurn(created.sessionId);
     });
+  };
+
+  // Change C: 첨부 추가/제거 — report는 1개만 유지, filter는 같은 value 중복 방지.
+  const addAttachment = (attachment: AuradinAttachment) => {
+    setAttachments((current) => {
+      if (attachment.kind === 'report') {
+        return [attachment, ...current.filter((a) => a.kind !== 'report')];
+      }
+      const dup = current.some(
+        (a) => a.kind === 'filter' && a.attribute === attachment.attribute && a.value === attachment.value,
+      );
+      return dup ? current : [...current, attachment];
+    });
+  };
+  const removeAttachment = (index: number) => {
+    setAttachments((current) => current.filter((_, i) => i !== index));
   };
 
   const pick = (optionId: string) => {
@@ -222,8 +263,18 @@ export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) 
 
         {phase === 'home' ? (
           <HomeView
+            attachments={attachments}
+            availableReport={
+              availableReport?.personalColor
+                ? availableReport
+                : drive?.personalColor
+                  ? {id: drive.reportId, personalColor: drive.personalColor}
+                  : null
+            }
+            onAddAttachment={addAttachment}
             onOpenSaved={saved.length ? () => setPhase('saved') : undefined}
             onPickSuggestion={(label) => submit(SUGGESTION_QUERIES[label] ?? label)}
+            onRemoveAttachment={removeAttachment}
             onSubmit={() => submit()}
             query={query}
             savedCount={saved.length}
@@ -247,6 +298,7 @@ export function AuradinSearchScreen({drive}: {drive?: AuradinDriveParams} = {}) 
 
         {phase === 'results' ? (
           <ResultsView
+            appliedFilters={turn?.appliedFilters}
             candidates={candidates}
             onHome={reset}
             onOpen={openDetail}

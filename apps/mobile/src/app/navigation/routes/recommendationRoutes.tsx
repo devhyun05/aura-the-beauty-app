@@ -58,6 +58,15 @@ const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> =
 
 export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch'>) {
   const [drive, setDrive] = React.useState(route.params);
+  // 리포트 첨부: nav state의 선택된 얼굴분석 리포트 → availableReport (첨부 트레이가 소비).
+  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const availableReport = React.useMemo(
+    () =>
+      selectedFaceAnalysisReport?.personalColor
+        ? {id: selectedFaceAnalysisReport.id, personalColor: selectedFaceAnalysisReport.personalColor}
+        : null,
+    [selectedFaceAnalysisReport],
+  );
 
   React.useEffect(() => {
     if (route.params) {
@@ -75,7 +84,7 @@ export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  return <AuradinSearchScreen drive={drive} />;
+  return <AuradinSearchScreen availableReport={availableReport} drive={drive} />;
 }
 
 export function MakeupLookListRouteScreen({

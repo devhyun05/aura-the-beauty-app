@@ -111,6 +111,13 @@ export type AuradinReason = {
 
 export type AuradinProductRole = 'anchor' | 'diverse' | 'discovery';
 
+// 결과에 노출되는 적용 조건 칩. source가 하드 조건(prompt/question/refine/fallback)인지
+// 리포트 톤 참고(report)인지 구분 — report는 "참고" 뉘앙스로 렌더한다(§9).
+export type AuradinAppliedFilter = {
+  label: string;
+  source: 'prompt' | 'question' | 'refine' | 'report' | 'fallback' | string;
+};
+
 export type AuradinCandidateProduct = {
   id: string;
   brandName: string;
@@ -158,6 +165,7 @@ export type AuradinSearchTurn = {
   question?: AuradinQuestion;
   candidates: AuradinCandidateProduct[];
   headerLabel?: string;
+  appliedFilters?: AuradinAppliedFilter[];
   error?: {code?: string; message?: string; recoverable?: boolean} | null;
 };
 

@@ -12,6 +12,7 @@ from .catalog_loader import get_catalog
 from .enrichment import enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
+from .report_profile import personal_color_to_soft_preferences
 from .ranking import build_slice_result
 from .retrieval_service import retrieve_and_rank
 
@@ -71,6 +72,9 @@ def _filter_label(filter_delta: dict[str, Any]) -> str:
   return f"{attribute}: {', '.join(values)}"
 
 
+_REPORT_TONE_LABELS = {"cool": "쿨톤 참고", "warm": "웜톤 참고", "neutral": "뉴트럴 참고"}
+
+
 def _applied_filters(state: dict[str, Any]) -> list[dict[str, Any]]:
   filters = []
   for filter_delta in state.get("hardFilters", []):
@@ -83,6 +87,15 @@ def _applied_filters(state: dict[str, Any]) -> list[dict[str, Any]]:
         "confidence": filter_delta.get("confidence"),
       },
     )
+  # §3/§9: 리포트에서 온 undertone 소프트 선호를 "참고" 칩으로 노출 (하드 조건 아님을 source로 구분).
+  for preference in state.get("softPreferences", []):
+    if preference.get("source") != "report" or str(preference.get("attribute") or "").strip() != "undertone":
+      continue
+    values = preference.get("values") or []
+    tone = str(values[0] or "").strip() if values else ""
+    label = _REPORT_TONE_LABELS.get(tone)
+    if label:
+      filters.append({"label": label, "source": "report", "confidence": preference.get("confidence")})
   return filters
 
 
@@ -275,11 +288,21 @@ def create_session(
   report_id: str | None = None,
   source: str | None = None,
   context: dict[str, Any] | None = None,
+  report_context: dict[str, Any] | None = None,
   settings: Settings | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
   session_id = f"auradin-{uuid.uuid4().hex[:16]}"
   now = _now()
+  intent = parse_intent(prompt, report_id=report_id, source=source, context=context)
+  # §3: 얼굴분석 리포트 → undertone 소프트 선호 병합 (§9: soft만, hard 금지).
+  # report_context.personalColor(client-relay) 또는 API가 로드한 리포트에서 온다.
+  personal_color = str((report_context or {}).get("personalColor") or "").strip()
+  if personal_color:
+    report_prefs = personal_color_to_soft_preferences(personal_color)
+    if report_prefs:
+      intent["softPreferences"] = [*intent.get("softPreferences", []), *report_prefs]
+      intent["requiresQuestion"] = bool(intent.get("broad")) or bool(intent["softPreferences"])
   state = {
     "sessionId": session_id,
     "phase": "searching",
@@ -287,9 +310,10 @@ def create_session(
     "context": {
       "reportId": report_id,
       "source": source or "freePrompt",
+      "personalColor": personal_color or None,
       **(context or {}),
     },
-    "intent": parse_intent(prompt, report_id=report_id, source=source, context=context),
+    "intent": intent,
     "answers": [],
     "askedAttributes": [],
     "questionCount": 0,
@@ -602,6 +626,7 @@ async def create_session_persisted(
   report_id: str | None = None,
   source: str | None = None,
   context: dict[str, Any] | None = None,
+  report_context: dict[str, Any] | None = None,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> dict[str, Any]:
@@ -611,6 +636,7 @@ async def create_session_persisted(
     report_id=report_id,
     source=source,
     context=context,
+    report_context=report_context,
     settings=settings,
   )
   await _enrich_if_results(state, settings)

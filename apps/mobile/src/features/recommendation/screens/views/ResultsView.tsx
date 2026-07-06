@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, font, layout, text, tracking } from '../../theme/auradinTokens';
-import type { AuradinCandidateProduct, RefineDial } from '../../types';
+import type { AuradinAppliedFilter, AuradinCandidateProduct, RefineDial } from '../../types';
 import {
+  Badge,
   Chip,
   GlassCard,
   LoaderDots,
@@ -25,6 +26,7 @@ import {
 export type ResultsViewProps = {
   candidates: AuradinCandidateProduct[];
   subtitle?: string;
+  appliedFilters?: AuradinAppliedFilter[];
   refining?: boolean;
   onOpen: (product: AuradinCandidateProduct) => void;
   onRefine: (dial: RefineDial) => void;
@@ -57,6 +59,7 @@ function PaletteDot({ c }: { c?: string }): React.JSX.Element {
 export function ResultsView({
   candidates,
   subtitle,
+  appliedFilters = [],
   refining = false,
   onOpen,
   onRefine,
@@ -68,6 +71,7 @@ export function ResultsView({
   const enter = useEnterTransition(16);
   const top = candidates[0];
   const alts = candidates.slice(1);
+  const chips = appliedFilters.filter((f) => f.label);
 
   return (
     <Animated.View
@@ -119,6 +123,17 @@ export function ResultsView({
         <Text style={{ fontFamily: font.sans, fontSize: 12.5, color: color.inkSoft, marginTop: 2 }}>
           {subtitle ?? '조건에 가까운 제품'}
         </Text>
+
+        {/* 적용 조건 칩 — 하드 조건(prompt/question/refine) + 리포트 톤 참고(report). §9: report는 "참고". */}
+        {chips.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+            {chips.map((chip, index) => (
+              <Badge key={`${chip.label}-${index}`} tone="ink">
+                {chip.source === 'report' ? `◦ ${chip.label}` : chip.label}
+              </Badge>
+            ))}
+          </View>
+        ) : null}
 
         {top ? (
           // iridescent mount 2 of 2 app-wide (the other: searching QUERY echo) —
