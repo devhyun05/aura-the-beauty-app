@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  Camera,
   ChevronUp,
   Compass,
   Heart,
@@ -39,6 +40,7 @@ import type {
 export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
 
 type HomeScreenProps = {
+  onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressConsulting?: () => void;
   onPressProductRecommendations?: () => void;
@@ -52,6 +54,7 @@ type HomeScreenProps = {
 };
 
 export function HomeScreen({
+  onPressArFilter,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
   onPressConsulting,
@@ -165,6 +168,7 @@ export function HomeScreen({
             />
 
             <QuickActionSection
+              onPressArFilter={onPressArFilter}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
               onPressConsulting={onPressConsulting}
               onPressProductRecommendations={onPressProductRecommendations}
@@ -516,7 +520,15 @@ export const HOME_QUICK_ACTION_LABELS = [
 export const HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES = 1;
 export const HOME_QUICK_ACTION_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
 
+export const HOME_AR_FILTER_QUICK_ACTION_LABEL = 'AR 필터';
+
 const quickActions = [
+  {
+    id: 'arFilter',
+    label: HOME_AR_FILTER_QUICK_ACTION_LABEL,
+    accessibilityLabel: 'AR 필터 카메라 열기',
+    icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
+  },
   {
     id: 'diagnosis',
     label: HOME_QUICK_ACTION_LABELS[0],
@@ -552,6 +564,7 @@ const quickActions = [
 type HomeQuickActionId = (typeof quickActions)[number]['id'];
 
 type HomeQuickActionHandlers = {
+  onPressArFilter?: () => void;
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressProductRecommendations?: () => void;
@@ -561,12 +574,17 @@ type HomeQuickActionHandlers = {
 export function getHomeQuickActionPressHandler(
   actionId: HomeQuickActionId,
   {
+    onPressArFilter,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   }: HomeQuickActionHandlers,
 ): (() => void) | undefined {
+  if (actionId === 'arFilter') {
+    return onPressArFilter;
+  }
+
   if (actionId === 'diagnosis') {
     return onPressFaceDiagnosis;
   }
@@ -591,12 +609,14 @@ export function getHomeQuickActionLabels(): readonly string[] {
 }
 
 function QuickActionSection({
+  onPressArFilter,
   onPressConsulting,
   onPressFaceDiagnosis,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
 }: HomeQuickActionHandlers) {
   const quickActionHandlers: HomeQuickActionHandlers = {
+    onPressArFilter,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressProductRecommendations,

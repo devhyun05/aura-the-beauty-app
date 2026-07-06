@@ -1,10 +1,10 @@
 import {StyleSheet} from 'react-native';
-import {Apple} from 'lucide-react-native';
 import {Button, Image, Spinner} from 'tamagui';
 
 import {appAssetUri} from '../../../shared/config/mediaAssets';
 import {colors, iconSize, spacing} from '../../../shared/theme';
 import type {SocialLoginItem, SocialLoginProvider} from '../types';
+import {AppleLogo} from './AppleLogo';
 
 type SocialLoginButtonProps = {
   disabled?: boolean;
@@ -37,7 +37,7 @@ export function SocialLoginButton({
 
 function SocialLoginMark({item}: {item: SocialLoginItem}) {
   if (item.id === 'apple') {
-    return <Apple color={colors.black} size={iconSize.xl} strokeWidth={2.4} />;
+    return <AppleLogo color={colors.black} size={iconSize.xl} />;
   }
 
   if (item.id === 'kakao') {

@@ -17,8 +17,8 @@
 		E5F0A1032F80111100FACE01 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F0A1022F80111100FACE01 /* Vision.framework */; };
 		E5F0A1052F80111100FACE01 /* AURARealtimeFaceCaptureView.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1042F80111100FACE01 /* AURARealtimeFaceCaptureView.m */; };
 		E5F0A1112F80222200FACE01 /* AURAFaceRatioAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1102F80222200FACE01 /* AURAFaceRatioAnalyzer.m */; };
-		E5F0A1212F80333300FACE01 /* AURAFaceRatioHairline.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1202F80333300FACE01 /* AURAFaceRatioHairline.m */; };
 		E5F0A1212F80222200FACE11 /* AURAPersonalColorAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1202F80222200FACE10 /* AURAPersonalColorAnalyzer.m */; };
+		E5F0A1212F80333300FACE01 /* AURAFaceRatioHairline.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1202F80333300FACE01 /* AURAFaceRatioHairline.m */; };
 		E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */; };
 		E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */; };
 		E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */ = {isa = PBXBuildFile; fileRef = E7A110022F81000000E7AAA3 /* face_landmarker.task */; };
@@ -410,7 +410,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9G4K6N63MK;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				ENABLE_BITCODE = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -431,7 +431,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.aura.camera.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -451,7 +451,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9G4K6N63MK;
+				DEVELOPMENT_TEAM = WSLFBT6QHB;
 				INFOPLIST_FILE = AURA/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -466,7 +466,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.aura.camera.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguide.mobile;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

@@ -4,6 +4,30 @@ import type {
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
+import {
+  MAKEUP_REGION_ALIASES,
+  REGION_COLOR_OPTIONS,
+  type MakeupRecipeRegion,
+} from '../../../shared/contracts/fullFaceMakeupRecipe';
+
+// Base/lip/cheek (and eye/brow) color swatches come from OUR branch's region
+// palettes (REGION_COLOR_OPTIONS) instead of the dev filter's flat cosmetic
+// color list, so each makeup-area tab shows the correct palette: base ->
+// foundation shades, lip -> lip colors, cheek -> blush colors. Areas with no
+// region mapping ('all', 'contour') keep the filter's own colorOptions. This
+// MUST be applied at every color read site (swatch render, preview color,
+// recipe-build color lookup) so the shown swatch and the applied colorHex
+// never diverge.
+export function resolveAreaColorOptions(
+  makeupAreaId: MakeupArea,
+  fallbackColorOptions: readonly FilterColorOption[],
+): readonly FilterColorOption[] {
+  const region = (
+    MAKEUP_REGION_ALIASES as Record<string, MakeupRecipeRegion | undefined>
+  )[makeupAreaId];
+  const palette = region ? REGION_COLOR_OPTIONS[region] : undefined;
+  return palette && palette.length > 0 ? palette : fallbackColorOptions;
+}
 
 export type ARMakeupOptionGroupId =
   | 'makeupLook'
@@ -67,9 +91,12 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'eye-under', label: '언더 포인트'},
   ],
   brow: [
-    {id: 'brow-default', label: '기본 눈썹'},
+    {id: 'brow-natural', label: '내추럴'},
+    {id: 'brow-daily', label: '데일리'},
     {id: 'brow-soft-arch', label: '소프트 아치'},
-    {id: 'brow-straight', label: '일자 눈썹'},
+    {id: 'brow-arch', label: '아치'},
+    {id: 'brow-straight', label: '일자'},
+    {id: 'brow-slim', label: '슬림'},
   ],
   lip: [
     {id: 'lip-default', label: '기본 립'},

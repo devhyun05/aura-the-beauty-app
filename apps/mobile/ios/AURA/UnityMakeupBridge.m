@@ -188,20 +188,13 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   }
 
   rootView.userInteractionEnabled = YES;
-  // Reveal-gate: only show the Unity view once the scene is live
-  // (unity_initialized received). Before that the view would show Unity's
-  // splash / a black pre-camera frame — the "loading scene" flash. With the
-  // app-start offscreen preload, _isReady is normally already YES here so the
-  // reveal is instant. If not, keep it hidden (the black container masks the
-  // boot) and let handleUnityMessage reveal it the moment _isReady flips; a
-  // fallback timer reveals anyway so a missed unity_initialized can never
-  // leave a permanently black view.
-  if (_isReady) {
-    rootView.hidden = NO;
-  } else {
-    rootView.hidden = YES;
-    [self scheduleFallbackRevealUnityView];
-  }
+  // A container asking for unityView means a screen wants it ON SCREEN NOW, so
+  // always reveal. The loading-splash flash is already handled by the app-start
+  // offscreen preload (the splash plays while concealed) plus the black
+  // container background, so an _isReady gate here is unnecessary — and it in
+  // fact left the view permanently hidden whenever unity_initialized was not
+  // observed, which is exactly why the AR filter showed no makeup.
+  rootView.hidden = NO;
   [self restoreReactWindowIfNeeded];
 
   return rootView;
@@ -646,6 +639,16 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
 - (void)layoutSubviews
 {
   [super layoutSubviews];
+  // Re-assert ownership every layout: the shared-singleton Unity view can be
+  // concealed / removed from this container by another screen's
+  // hideUnityMakeupView() (ARFilterScreen calls it on focus/nav churn), and
+  // didMoveToWindow does not fire again to re-mount it — so the container goes
+  // black and the makeup renders into a detached view. Re-mounting here (a
+  // no-op when already attached) keeps the live Unity view in whichever
+  // container is currently on screen.
+  if (self.window != nil) {
+    [self mountUnityViewIfNeeded];
+  }
   _unityView.frame = self.bounds;
 }
 
@@ -662,6 +665,8 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
     _unityView.frame = self.bounds;
     _unityView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self addSubview:_unityView];
+    NSLog(@"[aura:unity-native] container re-mounted unity view hidden=%@",
+          _unityView.hidden ? @"YES" : @"NO");
   }
 }
 

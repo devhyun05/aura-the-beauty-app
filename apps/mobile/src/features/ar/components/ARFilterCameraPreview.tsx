@@ -73,6 +73,14 @@ export function ARFilterCameraPreview({
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
   const shouldUseSourceImagePreview = Boolean(sourceImageUri);
+  // TEMP DIAG: which preview branch renders (Unity vs expo LiveCameraLayer).
+  console.info('[arfilter:preview] branch', {
+    shouldUseUnityPreview,
+    active,
+    shouldUseSourceImagePreview,
+    rendersUnity:
+      shouldUseUnityPreview && active && !shouldUseSourceImagePreview,
+  });
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
   const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 

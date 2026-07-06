@@ -115,6 +115,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       routeName="HomeTab"
       wrapContentInScreen={false}>
       <HomeScreen
+        onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
         onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}

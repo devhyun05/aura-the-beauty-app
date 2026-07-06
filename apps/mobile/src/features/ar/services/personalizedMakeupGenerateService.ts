@@ -7,6 +7,12 @@ import {
   type LipMaskProvider,
 } from './lipGenerateCore';
 import {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+  type GeneratedBrowPackage,
+} from './browGenerateCore';
+import {
   buildGeneratedLipCandidateSet,
   type E7NativeBoundaryResult,
 } from './personalizedGenerate/e7PersonalizedGeneratePipeline';
@@ -47,11 +53,24 @@ export type GeneratedMaskControls = {
 };
 
 export type PersonalizedMakeupGenerateResult = {
+  browUnityApplyPayload: string;
+  generatedBrowPackage: GeneratedBrowPackage;
   generatedPackage: LipGeneratePackage;
   nativeResult: E7NativeBoundaryResult;
   savedRecord?: unknown;
   unityApplyPayload: string;
 };
+
+export {
+  buildGeneratedBrowMaskUnityPayload,
+  buildGeneratedBrowPackage,
+  DEFAULT_GENERATED_BROW_CONTROLS,
+};
+
+export type {
+  GeneratedBrowControls,
+  GeneratedBrowPackage,
+} from './browGenerateCore';
 
 export type PersonalizedCompanionMakeupRegionControl = {
   candidateId: string;
@@ -254,6 +273,11 @@ export async function generatePersonalizedLipMakeup({
     throw new Error(generatedCandidate?.blockedReason ?? 'generated_lip_package_missing');
   }
 
+  const generatedBrowPackage = buildGeneratedBrowPackage({
+    controls: DEFAULT_GENERATED_BROW_CONTROLS,
+    nativeResult,
+  });
+
   let savedRecord: unknown;
   if (nativeModule.saveGeneratedPackage) {
     savedRecord = JSON.parse(
@@ -262,6 +286,16 @@ export async function generatePersonalizedLipMakeup({
   }
 
   return {
+    browUnityApplyPayload: JSON.stringify(
+      buildGeneratedBrowMaskUnityPayload(
+        generatedBrowPackage,
+        DEFAULT_GENERATED_BROW_CONTROLS,
+        {
+          includeTexture: true,
+        },
+      ),
+    ),
+    generatedBrowPackage,
     generatedPackage,
     nativeResult,
     savedRecord,

@@ -67,6 +67,7 @@ import {
   getARFilterShapeOptionLabels,
   getARFilterTotalMakeupLookIdAfterOptionEdit,
   isARFilterSaveEnabled,
+  resolveAreaColorOptions,
 } from '../services/arFilterOptionRules';
 import {
   getARFilterDetailEditButtonLabel,
@@ -213,7 +214,10 @@ export function ARFilterScreen({
   const [isGalleryPickerOpen, setIsGalleryPickerOpen] = useState(false);
   const cameraSessionActive = useCameraSessionActive();
   const selectedColor = getARFilterSelectedColor(
-    arFilterSelectionState.selectedMakeupFilter.colorOptions,
+    resolveAreaColorOptions(
+      arFilterSelectionState.selectedMakeupArea,
+      arFilterSelectionState.selectedMakeupFilter.colorOptions,
+    ),
     arFilterSelectionState.selectedColorId,
   );
   const previewColorHex = isFullFaceMode
@@ -315,7 +319,7 @@ export function ARFilterScreen({
 
       return {
         selectedColor: getARFilterSelectedColor(
-          selectedMakeupFilter.colorOptions,
+          resolveAreaColorOptions(makeupArea.id, selectedMakeupFilter.colorOptions),
           selectionState.selectedColorId,
         ),
         selectedColorId: selectionState.selectedColorId,

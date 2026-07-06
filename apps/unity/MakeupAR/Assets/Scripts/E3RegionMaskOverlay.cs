@@ -23,6 +23,24 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int MeshVertexCount;
         public int MeshIndexCount;
         public int MeshUvCount;
+        public bool MaskUvBoundsAvailable;
+        public float MaskUvMinX;
+        public float MaskUvMinY;
+        public float MaskUvMaxX;
+        public float MaskUvMaxY;
+        public string MaskUvSplitMode;
+        public bool MaskNegativeXUvBoundsAvailable;
+        public float MaskNegativeXUvMinX;
+        public float MaskNegativeXUvMinY;
+        public float MaskNegativeXUvMaxX;
+        public float MaskNegativeXUvMaxY;
+        public int MaskNegativeXTriangleCount;
+        public bool MaskPositiveXUvBoundsAvailable;
+        public float MaskPositiveXUvMinX;
+        public float MaskPositiveXUvMinY;
+        public float MaskPositiveXUvMaxX;
+        public float MaskPositiveXUvMaxY;
+        public int MaskPositiveXTriangleCount;
         public string RendererMode;
         public string MaskTextureId;
         public string MaskSource;
@@ -53,6 +71,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float MaskFeatherNearRadiusPx;
         public float MaskFeatherFarRadiusPx;
         public string MaskTextureDiagnosticStatus;
+        public string MaskTextureSampleChannel;
         public int MaskTextureWidth;
         public int MaskTextureHeight;
         public int MaskTextureActivePixelCountGt8;
@@ -83,6 +102,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float OverlaySyncDurationMs;
         public float OverlaySyncWorstDurationMs;
         public bool OverlayTopologyChanged;
+        public string StabilityMode;
+        public float StabilizationDeadZoneMeters;
+        public float StabilizationSnapDistanceMeters;
+        public int BrowDebugMode;
+        public bool BrowDebugShowLeftRight;
+        public bool BrowDebugExaggerate;
     }
 
     private sealed class RegionRecipeState
@@ -108,11 +133,22 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public float Specular = 0.04f;
         public float SpecularPower = 8.0f;
         public float GlossBoost = 0.0f;
+        public float TextureAmount = 0.0f;
         public float GradientAmount = 0.08f;
         public bool PreserveDetail = true;
         public string FoundationMode = "uvMask";
         public string FoundationFallbackMode = "uvMask";
         public int FoundationDebugMaskMode;
+        public int BrowDebugMode;
+        public bool BrowDebugShowLeftRight;
+        public bool BrowDebugExaggerate;
+        // Fit knobs from the extended RN recipe payload. MaskThreshold < 0
+        // means "not provided" and falls back to the mask definition's default.
+        public float MaskThreshold = -1.0f;
+        public float CornerReach;
+        public float UpperLipTightness;
+        public float LowerLipTightness;
+        public float VerticalOffset;
     }
 
     private sealed class FaceOverlayState
@@ -148,6 +184,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int VisionUvMaskWidth;
         public int VisionUvMaskHeight;
         public MaskTextureDiagnostics VisionUvMaskDiagnostics;
+        public Vector3[] SmoothedVertices;
+        public Vector3[] GeneratedBrowStableVertices;
+        public float GeneratedBrowLastStableAtSeconds = -1.0f;
+    }
+
+    private struct MaskUvSplitBounds
+    {
+        public string Mode;
+        public bool NegativeXAvailable;
+        public Vector4 NegativeXBounds;
+        public int NegativeXTriangleCount;
+        public bool PositiveXAvailable;
+        public Vector4 PositiveXBounds;
+        public int PositiveXTriangleCount;
     }
 
     private sealed class MaskDefinition
@@ -176,6 +226,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int MaxValue;
         public float AverageValue;
         public float AverageDensity;
+        public string SampleChannel = "red";
     }
 
     private sealed class FoundationMaskAreaDiagnostics
@@ -208,6 +259,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private sealed class MaskTextureSampleData
     {
         public string Status = "not_run";
+        public string SampleChannel = "red";
         public int Width;
         public int Height;
         public int ThresholdByte;
@@ -255,6 +307,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private const string VisionLipBoundaryRenderer = "apple_vision_lip_landmark_arface_uv_baked";
     private const string VisionBoundaryRuntimeTransform = "flip-y";
     private const string GeneratedLipMaskPrefix = "e7-generated-lip";
+    private const string GeneratedBrowMaskPrefix = "e7-generated-brow";
     private const int VisionScreenMaskMaxDimension = 1024;
     private const int VisionUvMaskSize = 512;
     private const int VisionUvMaskSoftSplatRadius = 3;
@@ -266,6 +319,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private const float FeatherFarRadiusScale = 1.85f;
     private const float VisionFaceMotionMediumThreshold = 0.18f;
     private const float VisionFaceMotionLargeThreshold = 0.32f;
+    private const float GeneratedBrowVertexJitterDeadZoneMeters = 0.00055f;
+    private const float GeneratedBrowVertexSnapDistanceMeters = 0.0065f;
+    private const float GeneratedBrowVertexFollowHz = 48.0f;
     private const float LipCloseupDiagnosticsIntervalSeconds = 0.50f;
     private const float FoundationDiagnosticsIntervalSeconds = 0.75f;
     private const float FoundationVisibleBoost = 1.0f;
@@ -365,6 +421,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         new Dictionary<string, Texture2D>();
     private static readonly Dictionary<string, Texture2D> RuntimeGeneratedLipGlossMaskTextures =
         new Dictionary<string, Texture2D>();
+    private static readonly Dictionary<string, Texture2D> RuntimeGeneratedBrowMaskTextures =
+        new Dictionary<string, Texture2D>();
     private static readonly Dictionary<string, MaskTextureDiagnostics> MaskTextureDiagnosticsCache =
         new Dictionary<string, MaskTextureDiagnostics>();
     private static readonly Dictionary<string, FoundationMaskAreaDiagnostics> FoundationMaskAreaDiagnosticsCache =
@@ -439,6 +497,105 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 + " maskTextureId=" + maskTextureId
                 + " error=" + exception.Message);
             return false;
+        }
+    }
+
+    public bool RegisterGeneratedBrowMaskTexture(
+        string maskTextureId,
+        string rawRgbaBase64,
+        int width,
+        int height)
+    {
+        maskTextureId = NormalizeGeneratedBrowMaskTextureId(maskTextureId);
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
+            int expectedByteCount = width * height * 4;
+            if (rawBytes.Length != expectedByteCount)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_brow_mask_texture_invalid"
+                    + " maskTextureId=" + maskTextureId
+                    + " expectedBytes=" + expectedByteCount.ToString(CultureInfo.InvariantCulture)
+                    + " actualBytes=" + rawBytes.Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
+            // Mipmapped + trilinear so the fine directional hair strokes in the
+            // blue channel do not crawl/shimmer under head motion when the face
+            // minifies (moves away). SetPixelData(mip0) + Apply(updateMipmaps:
+            // true) preserves the raw top-left byte layout (unlike SetPixels32,
+            // which would flip rows) while generating the mip chain — plain
+            // LoadRawTextureData cannot, as it expects the full mip-chain size.
+            // Brow-only: this is RuntimeGeneratedBrowMaskTextures, separate from
+            // the lip VisionUvMaskTexture path.
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, true)
+            {
+                name = "Generated Brow Mask " + maskTextureId,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Trilinear
+            };
+            texture.SetPixelData(rawBytes, 0);
+            texture.Apply(true, false);
+            RuntimeGeneratedBrowMaskTextures[maskTextureId] = texture;
+            RemoveMaskTextureCaches("GeneratedBrowMasks/" + maskTextureId);
+
+            Debug.Log(
+                "[E7] generated_brow_mask_texture_registered"
+                + " maskTextureId=" + maskTextureId
+                + " width=" + width.ToString(CultureInfo.InvariantCulture)
+                + " height=" + height.ToString(CultureInfo.InvariantCulture)
+                + " bytes=" + rawBytes.Length.ToString(CultureInfo.InvariantCulture));
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                "[E7] generated_brow_mask_texture_register_failed"
+                + " maskTextureId=" + maskTextureId
+                + " error=" + exception.Message);
+            return false;
+        }
+    }
+
+    private static void RemoveMaskTextureCaches(string resourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(resourcePath))
+        {
+            return;
+        }
+
+        RemoveCacheEntriesWithResourcePrefix(MaskTextureDiagnosticsCache, resourcePath);
+        RemoveCacheEntriesWithResourcePrefix(MaskTextureSampleCache, resourcePath);
+    }
+
+    private static void RemoveCacheEntriesWithResourcePrefix<TValue>(
+        Dictionary<string, TValue> cache,
+        string resourcePath)
+    {
+        if (cache == null || cache.Count == 0)
+        {
+            return;
+        }
+
+        List<string> keysToRemove = new List<string>();
+        foreach (string key in cache.Keys)
+        {
+            if (key == resourcePath
+                || key.StartsWith(resourcePath + "|", StringComparison.Ordinal))
+            {
+                keysToRemove.Add(key);
+            }
+        }
+
+        foreach (string key in keysToRemove)
+        {
+            cache.Remove(key);
         }
     }
 
@@ -704,9 +861,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         float glossBoost,
         string foundationMode,
         string foundationFallbackMode,
-        int foundationDebugMaskMode)
+        int foundationDebugMaskMode,
+        int browDebugMode = 0,
+        bool browDebugShowLeftRight = false,
+        bool browDebugExaggerate = false)
     {
-        return ApplyRegionRecipe(
+        RegionApplyResult result = ApplyRegionRecipe(
             region,
             colorHex,
             color,
@@ -732,6 +892,29 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             foundationMode,
             foundationFallbackMode,
             foundationDebugMaskMode);
+
+        // The shorter overload has no slots for the extended fit knobs, so wire
+        // them into the stored recipe here instead of silently dropping them
+        // (maskThreshold was falling back to the mask's 0.025 default, painting
+        // the atlas' feather halo well outside the drawn lip contour).
+        string normalizedRegion = NormalizeRegion(region);
+        if (recipes.TryGetValue(normalizedRegion, out RegionRecipeState state))
+        {
+            state.MaskThreshold = maskThreshold > 0.0f ? Mathf.Clamp01(maskThreshold) : -1.0f;
+            state.CornerReach = Mathf.Clamp(cornerReach, -1.0f, 1.0f);
+            state.UpperLipTightness = Mathf.Clamp01(upperLipTightness);
+            state.LowerLipTightness = Mathf.Clamp01(lowerLipTightness);
+            state.VerticalOffset = Mathf.Clamp(verticalOffset, -1.0f, 1.0f);
+            // Generated-brow extras: strand texture amount rides textureAmount,
+            // and the brow debug knobs come straight from the RN payload. The
+            // shorter overload has no slots for them either.
+            state.TextureAmount = Mathf.Clamp01(textureAmount);
+            state.BrowDebugMode = Mathf.Clamp(browDebugMode, 0, 6);
+            state.BrowDebugShowLeftRight = browDebugShowLeftRight;
+            state.BrowDebugExaggerate = browDebugExaggerate;
+        }
+
+        return result;
     }
 
     private RegionApplyResult ApplyRegionToTrackedFaces(string region, bool emitLog)
@@ -888,6 +1071,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             int sourceTriangleCount = 0;
             int culledTriangleCount = 0;
             string meshCullingMode = "none";
+            bool maskUvBoundsAvailable = false;
+            Vector4 maskUvBounds = Vector4.zero;
+            MaskUvSplitBounds maskUvSplitBounds = CreateDefaultMaskUvSplitBounds();
             VisionBoundaryGateInfo visionGateInfo = CreateDefaultVisionGateInfo();
             MaskTextureDiagnostics dynamicMaskDiagnostics = null;
             bool meshApplied = useMeshMasks && TryUpdateFullFaceUvMesh(
@@ -898,6 +1084,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 out sourceTriangleCount,
                 out culledTriangleCount,
                 out meshCullingMode,
+                out maskUvBoundsAvailable,
+                out maskUvBounds,
+                out maskUvSplitBounds,
                 out visionGateInfo,
                 out dynamicMaskDiagnostics);
             result.SourceTriangleCount += sourceTriangleCount;
@@ -905,6 +1094,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             result.MaskTriangleCount += triangleCount;
             result.CulledTriangleCount += culledTriangleCount;
             result.MeshCullingMode = meshCullingMode;
+            MergeMaskUvBounds(ref result, maskUvBoundsAvailable, maskUvBounds);
+            MergeMaskUvSplitBounds(ref result, maskUvSplitBounds);
             ApplyVisionGateInfo(ref result, visionGateInfo);
             ApplyDynamicMaskDiagnostics(ref result, dynamicMaskDiagnostics);
 
@@ -944,6 +1135,24 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MeshVertexCount = 0,
             MeshIndexCount = 0,
             MeshUvCount = 0,
+            MaskUvBoundsAvailable = false,
+            MaskUvMinX = 0.0f,
+            MaskUvMinY = 0.0f,
+            MaskUvMaxX = 0.0f,
+            MaskUvMaxY = 0.0f,
+            MaskUvSplitMode = "none",
+            MaskNegativeXUvBoundsAvailable = false,
+            MaskNegativeXUvMinX = 0.0f,
+            MaskNegativeXUvMinY = 0.0f,
+            MaskNegativeXUvMaxX = 0.0f,
+            MaskNegativeXUvMaxY = 0.0f,
+            MaskNegativeXTriangleCount = 0,
+            MaskPositiveXUvBoundsAvailable = false,
+            MaskPositiveXUvMinX = 0.0f,
+            MaskPositiveXUvMinY = 0.0f,
+            MaskPositiveXUvMaxX = 0.0f,
+            MaskPositiveXUvMaxY = 0.0f,
+            MaskPositiveXTriangleCount = 0,
             RendererMode = RendererMode,
             MaskTextureId = maskTextureId,
             MaskSource = MaskSource,
@@ -974,6 +1183,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MaskFeatherNearRadiusPx = ResolveShaderFeatherNearRadiusPx(mask.FeatherUvNormalized),
             MaskFeatherFarRadiusPx = ResolveShaderFeatherFarRadiusPx(mask.FeatherUvNormalized),
             MaskTextureDiagnosticStatus = "not_run",
+            MaskTextureSampleChannel = ResolveMaskCoverageSampleChannel(mask),
             MaskTextureWidth = 0,
             MaskTextureHeight = 0,
             MaskTextureActivePixelCountGt8 = 0,
@@ -997,6 +1207,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             VisionBoundaryFaceCenterShiftPx = 0.0f,
             VisionBoundaryFaceScaleDelta = 0.0f,
             VisionBoundaryFaceMotionRisk = "none",
+            StabilityMode = "none",
+            StabilizationDeadZoneMeters = 0.0f,
+            StabilizationSnapDistanceMeters = 0.0f,
         };
     }
 
@@ -1018,8 +1231,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         result.GradientAmount = recipe.GradientAmount;
         result.PreserveDetail = recipe.PreserveDetail;
         result.MaskTextureId = recipe.MaskTextureId;
+        result.MaskTextureSampleChannel = ResolveMaskCoverageSampleChannel(mask);
         bool lipStyleAtlas = IsLipStyleAtlasMask(recipe.MaskTextureId);
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
+        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
         bool cheekBlushMask = (recipe.Region == "cheek" || recipe.Region == "blush")
             && IsCheekBlushMask(recipe.MaskTextureId);
         bool lipLogicalMultilayer = lipStyleAtlas || visionLipBoundary;
@@ -1052,6 +1267,16 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             : LegacySoftSampleMode;
         result.MaskFeatherNearRadiusPx = ResolveShaderFeatherNearRadiusPx(result.MaskFeatherUvNormalized);
         result.MaskFeatherFarRadiusPx = ResolveShaderFeatherFarRadiusPx(result.MaskFeatherUvNormalized);
+        if (generatedBrowMask)
+        {
+            result.StabilityMode = "generated_brow_arface_uv_deadband_fast_follow";
+            result.StabilizationDeadZoneMeters = GeneratedBrowVertexJitterDeadZoneMeters;
+            result.StabilizationSnapDistanceMeters = GeneratedBrowVertexSnapDistanceMeters;
+            result.BrowDebugMode = recipe.BrowDebugMode;
+            result.BrowDebugShowLeftRight = recipe.BrowDebugShowLeftRight;
+            result.BrowDebugExaggerate = recipe.BrowDebugExaggerate;
+        }
+
         ApplyMaskTextureDiagnostics(mask, ref result);
     }
 
@@ -1361,6 +1586,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         out int sourceTriangleCount,
         out int culledTriangleCount,
         out string meshCullingMode,
+        out bool maskUvBoundsAvailable,
+        out Vector4 maskUvBounds,
+        out MaskUvSplitBounds maskUvSplitBounds,
         out VisionBoundaryGateInfo visionGateInfo,
         out MaskTextureDiagnostics dynamicMaskDiagnostics)
     {
@@ -1368,6 +1596,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         sourceTriangleCount = 0;
         culledTriangleCount = 0;
         meshCullingMode = "none";
+        maskUvBoundsAvailable = false;
+        maskUvBounds = Vector4.zero;
+        maskUvSplitBounds = CreateDefaultMaskUvSplitBounds();
         visionGateInfo = CreateDefaultVisionGateInfo();
         dynamicMaskDiagnostics = null;
 
@@ -1399,10 +1630,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (shouldCullToMask)
         {
             sampleData = GetMaskTextureSampleData(mask);
-            meshCullingMode = "lip_atlas_threshold_sample";
+            meshCullingMode = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)
+                ? "generated_brow_green_alpha_threshold_sample"
+                : "lip_atlas_threshold_sample";
             if (sampleData == null || sampleData.Status != "ok")
             {
-                meshCullingMode = "lip_atlas_threshold_sample_unavailable";
+                meshCullingMode = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)
+                    ? "generated_brow_green_alpha_threshold_sample_unavailable"
+                    : "lip_atlas_threshold_sample_unavailable";
                 view.Mesh.Clear();
                 return false;
             }
@@ -1470,15 +1705,59 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         bool cheekBlushMask = IsCheekBlushRegion(recipe.Region) && IsCheekBlushMask(recipe.MaskTextureId);
+        bool splitGeneratedBrowByFaceLocalX = IsGeneratedBrowRecipe(recipe);
+        if (splitGeneratedBrowByFaceLocalX)
+        {
+            maskUvSplitBounds.Mode = "face_local_x_sign";
+        }
         List<Vector3> vertices = new List<Vector3>(face.vertices.Length);
         List<Vector2> textureCoordinates = cheekBlushMask
             ? BuildCheekFaceLocalUvCoordinates(face)
             : new List<Vector2>(face.uvs.Length);
         List<int> triangles = new List<int>(face.indices.Length);
 
-        for (int index = 0; index < face.vertices.Length; index++)
+        // ARKit face-mesh vertices carry tracking noise that passes 1:1 into
+        // every UV-locked overlay and reads as trembling — worst when the head
+        // or phone moves. Apply a motion-adaptive per-vertex EMA to ALL smooth-
+        // region-mask regions (lip/brow/cheek/eyeliner), not just the lip:
+        //   - hard DEADZONE below ~0.25mm: hold the vertex completely so an
+        //     idle face has zero shimmer;
+        //   - smooth heavily through the noise band;
+        //   - cap the follow (never fully snap) so even fast motion is damped,
+        //     trading a hair of lag for stability (the user prefers steadiness).
+        // Foundation renders through the screen-space compositor, not this mesh,
+        // so it is unaffected.
         {
-            vertices.Add(face.vertices[index]);
+            var nativeVertices = face.vertices;
+            if (view.SmoothedVertices == null
+                || view.SmoothedVertices.Length != nativeVertices.Length)
+            {
+                view.SmoothedVertices = new Vector3[nativeVertices.Length];
+                for (int index = 0; index < nativeVertices.Length; index++)
+                {
+                    view.SmoothedVertices[index] = nativeVertices[index];
+                }
+            }
+            else
+            {
+                const float deadzoneMeters = 0.00025f;
+                const float motionScaleMeters = 0.004f;
+                for (int index = 0; index < nativeVertices.Length; index++)
+                {
+                    Vector3 current = nativeVertices[index];
+                    Vector3 previous = view.SmoothedVertices[index];
+                    float delta = Vector3.Distance(previous, current);
+                    float follow = delta < deadzoneMeters
+                        ? 0.0f
+                        : Mathf.Lerp(0.12f, 0.82f, Mathf.Clamp01(delta / motionScaleMeters));
+                    view.SmoothedVertices[index] = Vector3.Lerp(previous, current, follow);
+                }
+            }
+
+            for (int index = 0; index < nativeVertices.Length; index++)
+            {
+                vertices.Add(view.SmoothedVertices[index]);
+            }
         }
 
         if (!cheekBlushMask)
@@ -1531,6 +1810,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             triangles.Add(sourceA);
             triangles.Add(sourceB);
             triangles.Add(sourceC);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceA]);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceB]);
+            AccumulateUvBounds(ref maskUvBoundsAvailable, ref maskUvBounds, textureCoordinates[sourceC]);
+            if (splitGeneratedBrowByFaceLocalX)
+            {
+                AccumulateFaceLocalXSplitUvBounds(
+                    ref maskUvSplitBounds,
+                    face.vertices[sourceA],
+                    face.vertices[sourceB],
+                    face.vertices[sourceC],
+                    textureCoordinates[sourceA],
+                    textureCoordinates[sourceB],
+                    textureCoordinates[sourceC]);
+            }
         }
 
         triangleCount = triangles.Count / 3;
@@ -1540,6 +1833,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return false;
         }
 
+        if (IsGeneratedBrowRecipe(recipe))
+        {
+            StabilizeGeneratedBrowVertices(view, vertices);
+        }
+
         view.Mesh.Clear();
         view.Mesh.SetVertices(vertices);
         view.Mesh.SetUVs(0, textureCoordinates);
@@ -1547,6 +1845,206 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         view.Mesh.RecalculateNormals();
         view.Mesh.RecalculateBounds();
         return true;
+    }
+
+    private static void AccumulateUvBounds(
+        ref bool boundsAvailable,
+        ref Vector4 bounds,
+        Vector2 uv)
+    {
+        float x = Mathf.Clamp01(uv.x);
+        float y = Mathf.Clamp01(uv.y);
+        if (!boundsAvailable)
+        {
+            bounds = new Vector4(x, y, x, y);
+            boundsAvailable = true;
+            return;
+        }
+
+        bounds.x = Mathf.Min(bounds.x, x);
+        bounds.y = Mathf.Min(bounds.y, y);
+        bounds.z = Mathf.Max(bounds.z, x);
+        bounds.w = Mathf.Max(bounds.w, y);
+    }
+
+    private static MaskUvSplitBounds CreateDefaultMaskUvSplitBounds()
+    {
+        return new MaskUvSplitBounds
+        {
+            Mode = "none",
+            NegativeXAvailable = false,
+            NegativeXBounds = Vector4.zero,
+            NegativeXTriangleCount = 0,
+            PositiveXAvailable = false,
+            PositiveXBounds = Vector4.zero,
+            PositiveXTriangleCount = 0
+        };
+    }
+
+    private static void AccumulateFaceLocalXSplitUvBounds(
+        ref MaskUvSplitBounds splitBounds,
+        Vector3 vertexA,
+        Vector3 vertexB,
+        Vector3 vertexC,
+        Vector2 uvA,
+        Vector2 uvB,
+        Vector2 uvC)
+    {
+        float centroidX = (vertexA.x + vertexB.x + vertexC.x) / 3.0f;
+        if (centroidX < 0.0f)
+        {
+            splitBounds.NegativeXTriangleCount++;
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvA);
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvB);
+            AccumulateUvBounds(ref splitBounds.NegativeXAvailable, ref splitBounds.NegativeXBounds, uvC);
+            return;
+        }
+
+        splitBounds.PositiveXTriangleCount++;
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvA);
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvB);
+        AccumulateUvBounds(ref splitBounds.PositiveXAvailable, ref splitBounds.PositiveXBounds, uvC);
+    }
+
+    private static void MergeMaskUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskUvBoundsAvailable)
+        {
+            result.MaskUvMinX = bounds.x;
+            result.MaskUvMinY = bounds.y;
+            result.MaskUvMaxX = bounds.z;
+            result.MaskUvMaxY = bounds.w;
+            result.MaskUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskUvMinX = Mathf.Min(result.MaskUvMinX, bounds.x);
+        result.MaskUvMinY = Mathf.Min(result.MaskUvMinY, bounds.y);
+        result.MaskUvMaxX = Mathf.Max(result.MaskUvMaxX, bounds.z);
+        result.MaskUvMaxY = Mathf.Max(result.MaskUvMaxY, bounds.w);
+    }
+
+    private static void MergeMaskUvSplitBounds(
+        ref RegionApplyResult result,
+        MaskUvSplitBounds splitBounds)
+    {
+        if (string.IsNullOrWhiteSpace(splitBounds.Mode) || splitBounds.Mode == "none")
+        {
+            return;
+        }
+
+        result.MaskUvSplitMode = splitBounds.Mode;
+        result.MaskNegativeXTriangleCount += splitBounds.NegativeXTriangleCount;
+        result.MaskPositiveXTriangleCount += splitBounds.PositiveXTriangleCount;
+        MergeMaskNegativeXUvBounds(ref result, splitBounds.NegativeXAvailable, splitBounds.NegativeXBounds);
+        MergeMaskPositiveXUvBounds(ref result, splitBounds.PositiveXAvailable, splitBounds.PositiveXBounds);
+    }
+
+    private static void MergeMaskNegativeXUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskNegativeXUvBoundsAvailable)
+        {
+            result.MaskNegativeXUvMinX = bounds.x;
+            result.MaskNegativeXUvMinY = bounds.y;
+            result.MaskNegativeXUvMaxX = bounds.z;
+            result.MaskNegativeXUvMaxY = bounds.w;
+            result.MaskNegativeXUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskNegativeXUvMinX = Mathf.Min(result.MaskNegativeXUvMinX, bounds.x);
+        result.MaskNegativeXUvMinY = Mathf.Min(result.MaskNegativeXUvMinY, bounds.y);
+        result.MaskNegativeXUvMaxX = Mathf.Max(result.MaskNegativeXUvMaxX, bounds.z);
+        result.MaskNegativeXUvMaxY = Mathf.Max(result.MaskNegativeXUvMaxY, bounds.w);
+    }
+
+    private static void MergeMaskPositiveXUvBounds(
+        ref RegionApplyResult result,
+        bool boundsAvailable,
+        Vector4 bounds)
+    {
+        if (!boundsAvailable)
+        {
+            return;
+        }
+
+        if (!result.MaskPositiveXUvBoundsAvailable)
+        {
+            result.MaskPositiveXUvMinX = bounds.x;
+            result.MaskPositiveXUvMinY = bounds.y;
+            result.MaskPositiveXUvMaxX = bounds.z;
+            result.MaskPositiveXUvMaxY = bounds.w;
+            result.MaskPositiveXUvBoundsAvailable = true;
+            return;
+        }
+
+        result.MaskPositiveXUvMinX = Mathf.Min(result.MaskPositiveXUvMinX, bounds.x);
+        result.MaskPositiveXUvMinY = Mathf.Min(result.MaskPositiveXUvMinY, bounds.y);
+        result.MaskPositiveXUvMaxX = Mathf.Max(result.MaskPositiveXUvMaxX, bounds.z);
+        result.MaskPositiveXUvMaxY = Mathf.Max(result.MaskPositiveXUvMaxY, bounds.w);
+    }
+
+    private static void StabilizeGeneratedBrowVertices(
+        RegionOverlayView view,
+        List<Vector3> vertices)
+    {
+        if (view == null || vertices == null || vertices.Count == 0)
+        {
+            return;
+        }
+
+        float nowSeconds = Time.realtimeSinceStartup;
+        if (view.GeneratedBrowStableVertices == null
+            || view.GeneratedBrowStableVertices.Length != vertices.Count
+            || view.GeneratedBrowLastStableAtSeconds < 0.0f)
+        {
+            view.GeneratedBrowStableVertices = vertices.ToArray();
+            view.GeneratedBrowLastStableAtSeconds = nowSeconds;
+            return;
+        }
+
+        float deltaTime = Mathf.Clamp(
+            nowSeconds - view.GeneratedBrowLastStableAtSeconds,
+            1.0f / 120.0f,
+            1.0f / 20.0f);
+        view.GeneratedBrowLastStableAtSeconds = nowSeconds;
+        float followAlpha = 1.0f - Mathf.Exp(-GeneratedBrowVertexFollowHz * deltaTime);
+
+        for (int index = 0; index < vertices.Count; index++)
+        {
+            Vector3 current = vertices[index];
+            Vector3 stable = view.GeneratedBrowStableVertices[index];
+            Vector3 delta = current - stable;
+            float distance = delta.magnitude;
+
+            if (distance >= GeneratedBrowVertexSnapDistanceMeters)
+            {
+                stable = current;
+            }
+            else if (distance > GeneratedBrowVertexJitterDeadZoneMeters)
+            {
+                stable += delta * followAlpha;
+            }
+
+            view.GeneratedBrowStableVertices[index] = stable;
+            vertices[index] = stable;
+        }
     }
 
     private void EnsureVisionLipBoundaryRuntime()
@@ -2784,6 +3282,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         bool lipStyleAtlas = region == "lip" && IsLipStyleAtlasMask(maskTextureId);
         bool visionLipBoundary = region == "lip" && IsVisionLipBoundaryMask(maskTextureId);
         bool generatedLipMask = region == "lip" && IsGeneratedLipMaskTextureId(maskTextureId);
+        bool generatedBrowMask = region == "brow" && IsGeneratedBrowMaskTextureId(maskTextureId);
         bool cheekBlushMask = (region == "cheek" || region == "blush")
             && IsCheekBlushMask(maskTextureId);
         return new MaskDefinition
@@ -2792,8 +3291,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             MaskTextureId = maskTextureId,
             ResourcePath = generatedLipMask
                 ? "GeneratedLipMasks/" + maskTextureId
+                : generatedBrowMask
+                ? "GeneratedBrowMasks/" + maskTextureId
                 : "SmoothRegionMasks/" + maskTextureId,
-            Threshold = foundationMask || lipStyleAtlas || visionLipBoundary || cheekBlushMask || generatedLipMask ? 0.025f : 0.04f,
+            Threshold = foundationMask || lipStyleAtlas || visionLipBoundary || cheekBlushMask || generatedLipMask || generatedBrowMask ? 0.025f : 0.04f,
             // Eyeliner is a thin line: the default 0.56 feather would blur it
             // into a shadow, so keep its edge tight.
             FeatherUvNormalized = foundationMask
@@ -2806,6 +3307,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 ? 0.34f
                 : generatedLipMask
                 ? 0.26f
+                : generatedBrowMask
+                ? 0.30f
                 : cheekBlushMask
                 ? 0.78f
                 : 0.56f
@@ -2961,6 +3464,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return null;
         }
 
+        if (IsGeneratedBrowMaskTextureId(mask.MaskTextureId))
+        {
+            if (RuntimeGeneratedBrowMaskTextures.TryGetValue(mask.MaskTextureId, out Texture2D generatedBrowTexture))
+            {
+                return generatedBrowTexture;
+            }
+
+            Debug.LogWarning(
+                "[E7] generated_brow_mask_texture_missing"
+                + " maskTextureId=" + mask.MaskTextureId
+                + " resourcePath=" + mask.ResourcePath);
+            return null;
+        }
+
         if (MaskTextures.TryGetValue(mask.ResourcePath, out Texture2D cached))
         {
             return cached;
@@ -3022,6 +3539,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     {
         MaskTextureDiagnostics diagnostics = GetMaskTextureDiagnostics(mask);
         result.MaskTextureDiagnosticStatus = diagnostics.Status;
+        result.MaskTextureSampleChannel = diagnostics.SampleChannel;
         result.MaskTextureWidth = diagnostics.Width;
         result.MaskTextureHeight = diagnostics.Height;
         result.MaskTextureActivePixelCountGt8 = diagnostics.ActivePixelCountGt8;
@@ -3038,8 +3556,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static bool ShouldCullMeshToMask(RegionRecipeState recipe)
     {
         return recipe != null
-            && recipe.Region == "lip"
-            && IsLipStyleAtlasMask(recipe.MaskTextureId);
+            && ((recipe.Region == "lip" && IsLipStyleAtlasMask(recipe.MaskTextureId))
+                || (recipe.Region == "brow" && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId)));
     }
 
     private static bool ShouldCullMeshToVisionBoundary(RegionRecipeState recipe)
@@ -3056,8 +3574,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return null;
         }
 
-        string cacheKey = mask.ResourcePath + "|sampleThreshold="
-            + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
+        string sampleChannel = ResolveMaskCoverageSampleChannel(mask);
+        string cacheKey = mask.ResourcePath
+            + "|sampleChannel=" + sampleChannel
+            + "|sampleThreshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
         if (MaskTextureSampleCache.TryGetValue(cacheKey, out MaskTextureSampleData cached))
         {
             return cached;
@@ -3065,6 +3585,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         MaskTextureSampleData sampleData = new MaskTextureSampleData
         {
+            SampleChannel = sampleChannel,
             ThresholdByte = Mathf.Clamp(Mathf.RoundToInt(mask.Threshold * 255.0f), 0, 255)
         };
         Texture2D texture = GetMaskTexture(mask);
@@ -3142,7 +3663,25 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return 0;
         }
 
-        return sampleData.Pixels[pixelIndex].r;
+        return SampleMaskCoverageByte(sampleData.Pixels[pixelIndex], sampleData.SampleChannel);
+    }
+
+    private static string ResolveMaskCoverageSampleChannel(MaskDefinition mask)
+    {
+        return mask != null && IsGeneratedBrowMaskTextureId(mask.MaskTextureId)
+            ? "generated_brow_green_alpha"
+            : "red";
+    }
+
+    private static int SampleMaskCoverageByte(Color32 pixel, string sampleChannel)
+    {
+        // For generated brow the red channel carries the real-brow neutralize
+        // region, which extends beyond the green makeup fill. Include red so the
+        // mesh keeps the triangles that cover the real brow (where the shader
+        // paints skin), otherwise the neutralize area would be culled away.
+        return sampleChannel == "generated_brow_green_alpha"
+            ? Mathf.Max(pixel.r, Mathf.Max(pixel.g, pixel.a))
+            : pixel.r;
     }
 
     private static MaskTextureDiagnostics GetMaskTextureDiagnostics(MaskDefinition mask)
@@ -3152,13 +3691,17 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             return new MaskTextureDiagnostics { Status = "mask_missing" };
         }
 
-        string cacheKey = mask.ResourcePath + "|threshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
+        string sampleChannel = ResolveMaskCoverageSampleChannel(mask);
+        string cacheKey = mask.ResourcePath
+            + "|sampleChannel=" + sampleChannel
+            + "|threshold=" + mask.Threshold.ToString("0.######", CultureInfo.InvariantCulture);
         if (MaskTextureDiagnosticsCache.TryGetValue(cacheKey, out MaskTextureDiagnostics cached))
         {
             return cached;
         }
 
         MaskTextureDiagnostics diagnostics = new MaskTextureDiagnostics();
+        diagnostics.SampleChannel = sampleChannel;
         Texture2D texture = GetMaskTexture(mask);
         if (texture == null)
         {
@@ -3201,7 +3744,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                         continue;
                     }
 
-                    int value = pixels[pixelIndex].r;
+                    int value = SampleMaskCoverageByte(pixels[pixelIndex], sampleChannel);
                     int densityValue = pixels[pixelIndex].b;
                     valueSum += value;
                     densitySum += densityValue;
@@ -3601,6 +4144,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         ApplyMaterialBlendMode(material, recipe.BlendMode, cheekBlushMask, foundationRegion);
         bool visionLipBoundary = IsVisionLipBoundaryMask(recipe.MaskTextureId);
         bool generatedLipMask = IsGeneratedLipMaskTextureId(recipe.MaskTextureId);
+        bool generatedBrowMask = IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
+        materialColor = ResolveBrowDebugMaterialColor(recipe, materialColor, generatedBrowMask);
 
         if (material.HasProperty("_UseScreenSpaceMask"))
         {
@@ -3626,9 +4171,39 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat("_Opacity", materialColor.a);
         }
 
+        bool lipAtlasFit = recipe.Region == "lip"
+            && recipe.MaskTextureId == LipDrawnStyleAtlasMaskId;
+        bool browFit = recipe.Region == "brow";
+
         if (material.HasProperty("_Threshold"))
         {
-            material.SetFloat("_Threshold", mask.Threshold);
+            // For the drawn lip atlas, honor the RN maskThreshold (paint edge)
+            // while the mesh cull keeps using the low mask default so feathered
+            // edge triangles still exist. Other regions keep the mask default.
+            material.SetFloat(
+                "_Threshold",
+                lipAtlasFit && recipe.MaskThreshold > 0.0f ? recipe.MaskThreshold : mask.Threshold);
+        }
+
+        if (material.HasProperty("_MaskOffset"))
+        {
+            // Shader: maskUv.y -= _MaskOffset.y. Positive shifts the painted band
+            // toward the forehead (up). Brow sits slightly low vs real brows, so a
+            // small positive nudge from recipe.VerticalOffset raises it; tunable
+            // from RN (sign/magnitude) without another rebuild.
+            float maskOffsetY = lipAtlasFit
+                ? recipe.VerticalOffset * 0.05f
+                : browFit
+                ? recipe.VerticalOffset * 0.10f
+                : 0.0f;
+            material.SetVector("_MaskOffset", new Vector4(0.0f, maskOffsetY, 0.0f, 0.0f));
+        }
+
+        if (material.HasProperty("_MaskSpreadX"))
+        {
+            // Shader divides by (1 + _MaskSpreadX): negative widens the painted
+            // lip toward the corners, so cornerReach > 0 maps to negative spread.
+            material.SetFloat("_MaskSpreadX", lipAtlasFit ? -recipe.CornerReach * 0.25f : 0.0f);
         }
 
         if (material.HasProperty("_Feather"))
@@ -3719,6 +4294,32 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (material.HasProperty("_GradientAmount"))
         {
             material.SetFloat("_GradientAmount", recipe.GradientAmount);
+        }
+
+        if (material.HasProperty("_DetailAmount"))
+        {
+            // The blue-channel hair-detail block only makes sense for the
+            // generated brow, whose mask carries a real strand map. Driving it
+            // from TextureAmount for the STATIC psd brow (natural_brow) turned a
+            // clean brow PNG into a flat painted mask. Keep static/other regions
+            // at 0 (HEAD behavior); only the generated brow gets strand detail.
+            material.SetFloat(
+                "_DetailAmount", generatedBrowMask ? recipe.TextureAmount : 0.0f);
+        }
+
+        if (material.HasProperty("_BrowGeneratedMode"))
+        {
+            material.SetFloat("_BrowGeneratedMode", generatedBrowMask ? 1.0f : 0.0f);
+        }
+
+        if (material.HasProperty("_BrowCleanupStrength"))
+        {
+            material.SetFloat("_BrowCleanupStrength", generatedBrowMask ? recipe.GradientAmount : 0.0f);
+        }
+
+        if (material.HasProperty("_BrowNeutralizeStrength"))
+        {
+            material.SetFloat("_BrowNeutralizeStrength", generatedBrowMask ? recipe.GlossBoost : 0.0f);
         }
 
         if (material.HasProperty("_PreserveDetail"))
@@ -6217,7 +6818,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 || maskTextureId == "eye-drawn-mask-v1"))
             || (region == "brow" && (maskTextureId.StartsWith("brow-", StringComparison.Ordinal)
                 || maskTextureId.StartsWith("psd-arcore-brow-", StringComparison.Ordinal)
-                || maskTextureId.StartsWith("e7-brow-", StringComparison.Ordinal)))
+                || maskTextureId.StartsWith("e7-brow-", StringComparison.Ordinal)
+                || IsGeneratedBrowMaskTextureId(maskTextureId)))
             || (region == "eyeliner" && (maskTextureId.StartsWith("e7-eyeliner-", StringComparison.Ordinal)
                 || maskTextureId == "eye-smooth-mask-v1"
                 || maskTextureId == "eye-drawn-mask-v1")))
@@ -6267,6 +6869,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (!IsGeneratedLipMaskTextureId(maskTextureId))
         {
             throw new ArgumentException("Unsupported generated lip mask texture id: " + maskTextureId);
+        }
+
+        return maskTextureId;
+    }
+
+    private static bool IsGeneratedBrowMaskTextureId(string maskTextureId)
+    {
+        maskTextureId = string.IsNullOrWhiteSpace(maskTextureId)
+            ? string.Empty
+            : maskTextureId.Trim();
+
+        return maskTextureId.StartsWith(GeneratedBrowMaskPrefix, StringComparison.Ordinal);
+    }
+
+    private static bool IsGeneratedBrowRecipe(RegionRecipeState recipe)
+    {
+        return recipe != null
+            && recipe.Region == "brow"
+            && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId);
+    }
+
+    private static string NormalizeGeneratedBrowMaskTextureId(string maskTextureId)
+    {
+        maskTextureId = string.IsNullOrWhiteSpace(maskTextureId)
+            ? string.Empty
+            : maskTextureId.Trim();
+
+        if (!IsGeneratedBrowMaskTextureId(maskTextureId))
+        {
+            throw new ArgumentException("Unsupported generated brow mask texture id: " + maskTextureId);
         }
 
         return maskTextureId;
@@ -6475,6 +7107,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " meshVertexCount=" + GetVertexCount(face).ToString(CultureInfo.InvariantCulture)
             + " meshIndexCount=" + GetIndexCount(face).ToString(CultureInfo.InvariantCulture)
             + " meshUvCount=" + GetUvCount(face).ToString(CultureInfo.InvariantCulture)
+            + " browDebugMode=" + recipe.BrowDebugMode.ToString(CultureInfo.InvariantCulture)
+            + " browDebugShowLeftRight=" + recipe.BrowDebugShowLeftRight.ToString().ToLowerInvariant()
+            + " browDebugExaggerate=" + recipe.BrowDebugExaggerate.ToString().ToLowerInvariant()
             + " topologyAuditStatus=" + BuildTopologyAuditStatus(face));
     }
 
@@ -6686,6 +7321,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " meshIndexCount=" + result.MeshIndexCount.ToString(CultureInfo.InvariantCulture)
             + " meshUvCount=" + result.MeshUvCount.ToString(CultureInfo.InvariantCulture)
             + " uvAvailable=" + result.UvAvailable.ToString().ToLowerInvariant()
+            + " maskUvBoundsAvailable=" + result.MaskUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskUvBounds="
+            + result.MaskUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + " maskUvSplitMode=" + result.MaskUvSplitMode
+            + " maskNegativeXTriangles=" + result.MaskNegativeXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + " maskPositiveXTriangles=" + result.MaskPositiveXTriangleCount.ToString(CultureInfo.InvariantCulture)
+            + " maskNegativeXUvBoundsAvailable=" + result.MaskNegativeXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskNegativeXUvBounds="
+            + result.MaskNegativeXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskNegativeXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
+            + " maskPositiveXUvBoundsAvailable=" + result.MaskPositiveXUvBoundsAvailable.ToString().ToLowerInvariant()
+            + " maskPositiveXUvBounds="
+            + result.MaskPositiveXUvMinX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMinY.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMaxX.ToString("0.######", CultureInfo.InvariantCulture)
+            + ","
+            + result.MaskPositiveXUvMaxY.ToString("0.######", CultureInfo.InvariantCulture)
             + " sourceTriangles=" + result.SourceTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " appliedTriangles=" + result.MeshTriangleCount.ToString(CultureInfo.InvariantCulture)
             + " culledTriangles=" + result.CulledTriangleCount.ToString(CultureInfo.InvariantCulture)
@@ -6696,6 +7361,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " maskFeatherNearRadiusPx=" + result.MaskFeatherNearRadiusPx.ToString("0.###", CultureInfo.InvariantCulture)
             + " maskFeatherFarRadiusPx=" + result.MaskFeatherFarRadiusPx.ToString("0.###", CultureInfo.InvariantCulture)
             + " maskTextureDiagnosticStatus=" + result.MaskTextureDiagnosticStatus
+            + " maskTextureSampleChannel=" + result.MaskTextureSampleChannel
             + " maskTextureSize=" + result.MaskTextureWidth.ToString(CultureInfo.InvariantCulture)
             + "x" + result.MaskTextureHeight.ToString(CultureInfo.InvariantCulture)
             + " maskTextureGt8Pixels=" + result.MaskTextureActivePixelCountGt8.ToString(CultureInfo.InvariantCulture)
@@ -6729,9 +7395,30 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             + " glossBoost=" + result.GlossBoost.ToString("0.##", CultureInfo.InvariantCulture)
             + " gradientAmount=" + result.GradientAmount.ToString("0.##", CultureInfo.InvariantCulture)
             + " topologyAuditStatus=" + result.TopologyAuditStatus
+            + " browDebugMode=" + result.BrowDebugMode.ToString(CultureInfo.InvariantCulture)
+            + " browDebugShowLeftRight=" + result.BrowDebugShowLeftRight.ToString().ToLowerInvariant()
+            + " browDebugExaggerate=" + result.BrowDebugExaggerate.ToString().ToLowerInvariant()
             + " regionDecision=smooth_mask_runtime"
             + " smoothing=soft_sdf_multilayer_mask"
-            + " regionsInScope=lip,cheek,eye");
+            + " regionsInScope=lip,cheek,eye,brow");
+    }
+
+    private static Color ResolveBrowDebugMaterialColor(
+        RegionRecipeState recipe,
+        Color materialColor,
+        bool generatedBrowMask)
+    {
+        if (!generatedBrowMask || (recipe.BrowDebugMode < 5 && !recipe.BrowDebugExaggerate))
+        {
+            return materialColor;
+        }
+
+        if (recipe.BrowDebugMode == 6 || recipe.BrowDebugShowLeftRight)
+        {
+            return new Color(0.05f, 0.82f, 1.0f, 0.92f);
+        }
+
+        return new Color(1.0f, 0.88f, 0.05f, 0.92f);
     }
 
     private static string BuildTopologyAuditStatus(ARFace face)
