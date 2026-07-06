@@ -3,6 +3,7 @@ import {
   DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
   FLOATING_ACTION_ACTIVE_SCALE,
+  FLOATING_ACTION_ACTIVE_BORDER_COLOR,
   FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
   FLOATING_ACTION_ICON_LIBRARY_NAMES,
   FLOATING_ACTION_IDLE_SCALE,
@@ -233,8 +234,13 @@ expectEqual(
 );
 expectEqual(
   activeSettingsVisualState.borderColor,
-  '#111111',
-  'active settings uses black border',
+  FLOATING_ACTION_ACTIVE_BORDER_COLOR,
+  'active settings removes black border',
+);
+expectEqual(
+  FLOATING_ACTION_ACTIVE_BORDER_COLOR,
+  colors.transparent,
+  'active floating action buttons use transparent borders',
 );
 expectEqual(
   activeSettingsVisualState.iconColor,

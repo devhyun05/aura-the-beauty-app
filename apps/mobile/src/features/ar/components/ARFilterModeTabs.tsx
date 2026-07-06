@@ -42,6 +42,10 @@ export const AR_FILTER_COMPARISON_MODE_CONTROL_STYLE = 'plainTextToggle' as cons
 export const AR_FILTER_COMPARISON_MODE_ACTIVE_INDICATOR = 'underline' as const;
 export const AR_FILTER_COMPARISON_MODE_CONTAINER_CHROME = 'none' as const;
 export const AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET = -spacing.xs;
+export const AR_FILTER_COMPARISON_MODE_INDICATOR_GAP = spacing.xs / 2;
+export const AR_FILTER_COMPARISON_MODE_INDICATOR_HEIGHT = 2;
+export const AR_FILTER_COMPARISON_MODE_INDICATOR_OPACITY = 1;
+export const AR_FILTER_COMPARISON_MODE_INDICATOR_WIDTH = spacing.xxl;
 
 export function getARFilterModeTabHeight(): number {
   return MODE_TAB_HEIGHT;
@@ -208,7 +212,7 @@ const styles = StyleSheet.create({
   },
   comparisonTextButton: {
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: AR_FILTER_COMPARISON_MODE_INDICATOR_GAP,
     justifyContent: 'center',
     minHeight: MODE_TAB_HEIGHT,
     paddingHorizontal: spacing.xs,
@@ -231,9 +235,9 @@ const styles = StyleSheet.create({
   comparisonTextIndicator: {
     backgroundColor: colors.white,
     borderRadius: radius.pill,
-    height: 1,
-    opacity: 0.9,
-    width: 18,
+    height: AR_FILTER_COMPARISON_MODE_INDICATOR_HEIGHT,
+    opacity: AR_FILTER_COMPARISON_MODE_INDICATOR_OPACITY,
+    width: AR_FILTER_COMPARISON_MODE_INDICATOR_WIDTH,
   },
   comparisonTextIndicatorInactive: {
     opacity: 0,
