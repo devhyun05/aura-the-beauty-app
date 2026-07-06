@@ -61,6 +61,11 @@ def _thinking(phase: str) -> list[dict[str, str]]:
 
 
 def _filter_label(filter_delta: dict[str, Any]) -> str:
+  # 질문 답변에서 온 delta는 선택지의 한국어 라벨을 그대로 쓴다 —
+  # 아니면 finish/priceTier 등 미등록 속성이 "priceTier: under_15k"로 노출된다.
+  display_label = str(filter_delta.get("displayLabel") or "").strip()
+  if display_label:
+    return display_label
   attribute = filter_delta.get("attribute")
   values = filter_delta.get("values") or []
   if attribute == "category" and values:
@@ -375,7 +380,10 @@ def answer_session(
     }
     return state
 
-  filter_delta = option.get("filterDelta") or {}
+  filter_delta = dict(option.get("filterDelta") or {})
+  option_label = str(option.get("label") or "").strip()
+  if option_label and filter_delta.get("op") != "noop":
+    filter_delta.setdefault("displayLabel", option_label)
   state["answers"].append(
     {
       "questionId": question_id,
