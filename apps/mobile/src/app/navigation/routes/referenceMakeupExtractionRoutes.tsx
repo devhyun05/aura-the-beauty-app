@@ -189,7 +189,14 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
     setIsAnalysisReady(false);
     setAnalysisProgress(null);
-    void runReferenceMakeupExtractionSafely(photo, setAnalysisProgress)
+
+    const safeOnProgress = (progress: MakeupExtractionProgressUpdate) => {
+      if (isMounted) {
+        setAnalysisProgress(progress);
+      }
+    };
+
+    void runReferenceMakeupExtractionSafely(photo, safeOnProgress)
       .finally(() => {
         if (isMounted) {
           setIsAnalysisReady(true);
