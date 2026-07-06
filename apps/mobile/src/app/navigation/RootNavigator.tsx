@@ -61,7 +61,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function RootNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      // QA·데모: AURADIN 드라이브 플래그가 있으면 검색 화면에서 시작 (기본은 Login).
+      initialRouteName={process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE ? 'AuradinSearch' : 'Login'}
       screenOptions={{headerShown: false}}>
       <Stack.Screen name="Login" component={LoginRouteScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupRouteScreen} />
