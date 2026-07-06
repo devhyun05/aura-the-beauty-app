@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {ChevronRight, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
@@ -25,6 +26,7 @@ type ProfileScreenProps = {
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
+  onPressConsultingHistory?: () => void;
   likedMakeupLooks?: readonly MakeupLookPreview[];
 };
 
@@ -38,6 +40,7 @@ export function ProfileScreen({
   onPressMakeupLook,
   onPressMakeupLookList,
   onPressLikedProductList,
+  onPressConsultingHistory,
   likedMakeupLooks = [],
 }: ProfileScreenProps) {
   const {width} = useWindowDimensions();
@@ -210,6 +213,31 @@ export function ProfileScreen({
           <EmptySection label="좋아요한 제품이 없어요." />
         )}
       </View>
+
+      {onPressConsultingHistory ? (
+        <View style={styles.section}>
+          <SectionHeader title="전문가 상담" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="상담 내역 보기"
+            onPress={onPressConsultingHistory}
+            style={({pressed}) => [
+              styles.consultingRow,
+              pressed ? styles.consultingRowPressed : null,
+            ]}>
+            <View style={styles.consultingIcon}>
+              <Video color={colors.textPrimary} size={18} />
+            </View>
+            <View style={styles.consultingBody}>
+              <Text style={styles.consultingTitle}>내 상담 내역</Text>
+              <Text numberOfLines={1} style={styles.consultingDescription}>
+                예약과 상담 요약 리포트를 한곳에서 확인해요
+              </Text>
+            </View>
+            <ChevronRight color={colors.textTertiary} size={18} />
+          </Pressable>
+        </View>
+      ) : null}
     </AppScreen>
   );
 }
@@ -256,6 +284,44 @@ function ProfileOverviewItem({label, value}: {label: string; value: number}) {
 }
 
 const styles = StyleSheet.create({
+  consultingBody: {
+    flex: 1,
+  },
+  consultingDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    marginTop: 2,
+  },
+  consultingIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  consultingRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 64,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  consultingRowPressed: {
+    opacity: 0.75,
+  },
+  consultingTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
   empty: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,

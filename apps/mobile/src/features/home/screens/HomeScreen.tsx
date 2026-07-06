@@ -1,7 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
-  Image,
   Modal,
   Pressable,
   ScrollView as NativeScrollView,
@@ -31,6 +30,7 @@ import {colors, iconSize, radius, shadows, spacing, typography} from '../../../s
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {SectionMoreButton} from '../../../shared/ui';
+import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -109,6 +109,10 @@ export function HomeScreen({
     getHomeData().then((data) => {
       if (isMounted) {
         setHomeData(data);
+        prefetchImageSources([
+          data.hero.imageSource,
+          ...data.hero.trends.map((trend) => trend.imageSource),
+        ]);
       }
     });
 
@@ -123,6 +127,7 @@ export function HomeScreen({
     getRecommendedMakeupFiltersFromApi().then((filters) => {
       if (isMounted) {
         setRecommendedMakeupFilters(filters);
+        prefetchImageSources(filters.map((filter) => filter.imageSource));
       }
     });
 
@@ -484,7 +489,7 @@ function HeroBannerCard({
         {height: cardWidth, width: cardWidth},
         pressed && styles.pressed,
       ]}>
-      <Image resizeMode="cover" source={imageSource} style={styles.heroBackgroundImage} />
+      <CachedImage contentFit="cover" source={imageSource} style={styles.heroBackgroundImage} />
       <View style={styles.heroScrim} />
 
       <YStack style={styles.heroCopy}>
@@ -752,8 +757,9 @@ function RecommendedFilterCard({
         {width: cardWidth},
         pressed && styles.pressed,
       ]}>
-      <Image
-        resizeMode="cover"
+      <CachedImage
+        contentFit="cover"
+        recyclingKey={filter.id}
         source={filter.imageSource}
         style={styles.recommendedFilterImage}
       />

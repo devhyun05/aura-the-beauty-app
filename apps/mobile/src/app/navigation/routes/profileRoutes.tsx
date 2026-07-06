@@ -65,6 +65,9 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
         onPressMakeupLook={handleMakeupLookPress}
         onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
+        onPressConsultingHistory={() =>
+          rootNavigation?.navigate('ConsultingHistory')
+        }
         likedMakeupLooks={savedAndLikedMakeupLooks}
       />
     </MainTabChrome>

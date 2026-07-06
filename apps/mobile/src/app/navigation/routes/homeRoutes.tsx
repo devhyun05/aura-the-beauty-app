@@ -12,6 +12,7 @@ import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
+import {renderConsultingHome} from './consultingRoutes';
 import {
   MainTabChrome,
   navigateMainTab,
@@ -230,11 +231,7 @@ export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'
     <DetailRouteChrome
       routeName="Consulting"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="전문가에게 퍼스널 컬러, 체형, 헤어, 패션 컨설팅을 받을 수 있는 기능을 준비 중이에요."
-        showHeader={false}
-        title="컨설팅"
-      />
+      {renderConsultingHome(navigation)}
     </DetailRouteChrome>
   );
 }

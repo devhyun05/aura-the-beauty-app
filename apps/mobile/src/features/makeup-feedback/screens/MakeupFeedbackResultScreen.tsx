@@ -9,12 +9,13 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import * as MediaLibrary from 'expo-media-library/legacy';
-import * as Sharing from 'expo-sharing';
-import ViewShot, {type ViewShotRef} from 'react-native-view-shot';
 import {ChevronDown, ChevronUp, Download, Eye, Heart, Share2, Sparkles} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
+import {
+  loadOptionalMediaLibraryModule,
+  loadOptionalSharingModule,
+} from '../../../shared/services/optionalNativeShareModules';
 import {
   colors,
   feedbackColors,
@@ -26,6 +27,7 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
+import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 import type {
   MakeupFeedbackCorrectionPoint,
@@ -62,7 +64,7 @@ function waitForNextFrame() {
   });
 }
 
-async function captureFeedbackImage(captureRef: {current: ViewShotRef | null}) {
+async function captureFeedbackImage(captureRef: {current: OptionalViewShotRef | null}) {
   const captureTarget = captureRef.current;
   const capture = captureTarget?.capture;
 
@@ -81,10 +83,16 @@ async function captureFeedbackImage(captureRef: {current: ViewShotRef | null}) {
 }
 
 async function requestFeedbackImageSavePermission() {
-  const currentPermission = await MediaLibrary.getPermissionsAsync(true, ['photo']);
+  const mediaLibraryModule = loadOptionalMediaLibraryModule();
+
+  if (!mediaLibraryModule) {
+    throw new Error('현재 설치된 앱에 사진 저장 모듈이 포함되어 있지 않아요. 앱을 새로 설치한 뒤 다시 시도해 주세요.');
+  }
+
+  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, ['photo']);
   const permission = currentPermission.granted
     ? currentPermission
-    : await MediaLibrary.requestPermissionsAsync(true, ['photo']);
+    : await mediaLibraryModule.requestPermissionsAsync(true, ['photo']);
 
   if (!permission.granted) {
     throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
@@ -92,23 +100,32 @@ async function requestFeedbackImageSavePermission() {
 }
 
 async function saveFeedbackImageToLibrary(imageUri: string) {
+  const mediaLibraryModule = loadOptionalMediaLibraryModule();
+
+  if (!mediaLibraryModule) {
+    throw new Error('현재 설치된 앱에 사진 저장 모듈이 포함되어 있지 않아요. 앱을 새로 설치한 뒤 다시 시도해 주세요.');
+  }
+
   try {
-    await MediaLibrary.saveToLibraryAsync(imageUri);
+    await mediaLibraryModule.saveToLibraryAsync(imageUri);
   } catch (error) {
     console.info('[aura:makeup-feedback] share:save-to-library-failed', {
       imageUri,
       message: error instanceof Error ? error.message : String(error),
     });
-    await MediaLibrary.createAssetAsync(imageUri);
+    await mediaLibraryModule.createAssetAsync(imageUri);
   }
 }
 
 async function shareFeedbackImageWithSystemSheet(imageUri: string) {
   const title = 'AI 피드백 리포트';
-  const isSharingAvailable = await Sharing.isAvailableAsync();
+  const sharingModule = loadOptionalSharingModule();
+  const isSharingAvailable = sharingModule
+    ? await sharingModule.isAvailableAsync()
+    : false;
 
-  if (isSharingAvailable) {
-    await Sharing.shareAsync(imageUri, {
+  if (sharingModule && isSharingAvailable) {
+    await sharingModule.shareAsync(imageUri, {
       dialogTitle: title,
       mimeType: 'image/jpeg',
       UTI: 'public.jpeg',
@@ -130,7 +147,7 @@ export function MakeupFeedbackResultScreen({
   result,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
-  const captureRef = useRef<ViewShotRef | null>(null);
+  const captureRef = useRef<OptionalViewShotRef | null>(null);
   const [openPointId, setOpenPointId] = useState<string | null>(result.points[0]?.id ?? null);
   const [openStrengthId, setOpenStrengthId] = useState<string | null>(result.strengths[0]?.id ?? null);
   const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
@@ -211,7 +228,7 @@ export function MakeupFeedbackResultScreen({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <ViewShot
+          <OptionalViewShot
             ref={captureRef}
             options={FEEDBACK_CAPTURE_OPTIONS}
             style={styles.captureArea}>
@@ -262,7 +279,7 @@ export function MakeupFeedbackResultScreen({
                 />
               ))}
             </View>
-          </ViewShot>
+          </OptionalViewShot>
 
           <FeedbackShareActions
             activeTarget={activeShareTarget}

@@ -278,7 +278,7 @@ function mapReportToSavedMakeups(report: FaceAnalysisReport): SavedRecommendedMa
 function getStoredRecommendedMakeups(
   report: FaceAnalysisReport,
 ): FaceAnalysisMakeupCard[] {
-  return report.recommendedMakeups.slice(0, 3);
+  return report.recommendedMakeups.slice(0, 1);
 }
 
 function normalizeSearchText(value: string): string {
@@ -373,7 +373,7 @@ function EmptySavedMakeupState({hasSearchQuery}: {hasSearchQuery: boolean}) {
       <Text style={styles.emptyDescription}>
         {hasSearchQuery
           ? '다른 메이크업 이름이나 무드로 다시 검색해보세요.'
-          : '얼굴 분석을 완료하면 분석마다 생성된 추천 메이크업 3장이 계정에 계속 쌓여요.'}
+          : '얼굴 분석을 완료하면 분석마다 생성된 데일리 추천 메이크업 1장이 계정에 쌓여요.'}
       </Text>
     </YStack>
   );

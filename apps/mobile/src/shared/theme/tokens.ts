@@ -65,3 +65,42 @@ export const feedbackRadius = {
   card: 18,
   chip: 999,
 } as const;
+
+export const consultingColors = {
+  background: '#FFFFFF',
+  surface: '#FFFFFF',
+  surfaceMuted: '#F6F6F6',
+  surfaceSoft: '#FAFAFA',
+  text: '#111111',
+  textMuted: '#5F5F5F',
+  textSoft: '#A3A09E',
+  border: '#E4E4E2',
+  borderSoft: '#EFEFED',
+  accent: '#111111',
+  onAccent: '#FFFFFF',
+  rose: '#C08A84',
+  roseStrong: '#9C6660',
+  roseSoft: '#F6ECEA',
+  roseText: '#7C4A45',
+  gold: '#B99B6B',
+  goldSoft: '#F5EFE4',
+  goldText: '#7A6132',
+  success: '#4B7A5D',
+  successSoft: '#E9F0EB',
+  danger: '#C4463D',
+  dangerSoft: '#F8ECEA',
+  shadow: '#111111',
+} as const;
+
+export const consultingSpacing = {
+  screenX: 20,
+  cardGap: 12,
+  sectionGap: 26,
+} as const;
+
+export const consultingRadius = {
+  sheet: 24,
+  card: 18,
+  chip: 999,
+  pill: 999,
+} as const;
