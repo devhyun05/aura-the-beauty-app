@@ -39,7 +39,8 @@ export type RootStackParamList = {
   Magazine: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
-  AuradinSearch: undefined;
+  // prompt: 딥링크로 검색 자동 시작(리포트→검색 연결). open/dial: QA·데모 드라이브 훅.
+  AuradinSearch: {prompt?: string; open?: string; dial?: string; ts?: string} | undefined;
   Community: undefined;
   Consulting: undefined;
   MakeupLookList: undefined;
