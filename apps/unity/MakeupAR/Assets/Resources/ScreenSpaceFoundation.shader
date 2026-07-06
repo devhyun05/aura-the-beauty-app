@@ -21,6 +21,11 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _MaskSampleShift ("Mask Sample Shift", Vector) = (0, 0, 0, 0)
         _MaskSampleScaleY ("Mask Sample Scale Y", Float) = 1
         _MaskFaceCenterY ("Mask Face Center Y", Float) = 0.5
+        [HideInInspector] _SegHairTex ("Seg Hair Mask", 2D) = "black" {}
+        [HideInInspector] _SegHairValid ("Seg Hair Valid", Float) = 0
+        [HideInInspector] _SegBrowTex ("Seg Brow Mask", 2D) = "black" {}
+        [HideInInspector] _SegBrowValid ("Seg Brow Valid", Float) = 0
+        [HideInInspector] _FaceChromaGate ("Face Chroma Gate", Range(0, 1)) = 0
         _HandOcclusionMaskTex ("Hand Occlusion Mask", 2D) = "black" {}
         _HandOcclusionEnabled ("Hand Occlusion Enabled", Float) = 0
         _HandOcclusionUseRect ("Hand Occlusion Use Rect", Float) = 0
@@ -39,6 +44,8 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _FoundationDebugChin ("Foundation Debug Chin", Vector) = (0, 0, 0, 0)
         _FoundationDebugForehead ("Foundation Debug Forehead", Vector) = (0, 0, 0, 0)
         _FoundationDebugMouth ("Foundation Debug Mouth", Vector) = (0, 0, 0, 0)
+        _SkinSmoothStrength ("Skin Smooth Strength", Range(0, 1)) = 0
+        _SkinGrainStrength ("Skin Grain Strength", Range(0, 0.05)) = 0.012
         [HideInInspector] _SrcBlend ("Source Blend", Float) = 2
         [HideInInspector] _DstBlend ("Destination Blend", Float) = 0
         [HideInInspector] _ZWrite ("ZWrite", Float) = 0
@@ -115,6 +122,13 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
             float4 _MaskSampleShift;
             float _MaskSampleScaleY;
             float _MaskFaceCenterY;
+            sampler2D _SegHairTex;
+            float4 _SegHairTex_TexelSize;
+            float _SegHairValid;
+            sampler2D _SegBrowTex;
+            float4 _SegBrowTex_TexelSize;
+            float _SegBrowValid;
+            float _FaceChromaGate;
             float4 _FoundationDebugLeftCheek;
             float4 _FoundationDebugRightCheek;
             float4 _FoundationDebugNose;
@@ -122,6 +136,8 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
             float4 _FoundationDebugForehead;
             float4 _FoundationDebugMouth;
             float4x4 _UnityDisplayTransform;
+            float _SkinSmoothStrength;
+            float _SkinGrainStrength;
 
             v2f vert(appdata input)
             {
@@ -284,6 +300,61 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
 
                 float3 correctedRgb = saturate(HsvToRgb(adjusted));
                 return lerp(cameraColor, correctedRgb, saturate(amount));
+            }
+
+            // Blemish smoothing (잡티 제거): a 12-tap two-ring JOINT bilateral on
+            // the live camera. Each tap is weighted by BOTH a luma-range term
+            // (so low-contrast pores/blemishes average out while high-contrast
+            // feature edges — lash line, lip vermillion, hairline — collapse the
+            // kernel to the center and survive) AND the skin mask sampled AT the
+            // tap position (so eye/lip/brow/hair/background pixels contribute
+            // exactly zero — no smudged halo bleeds into the skin at exclusion
+            // borders; this is the mask-weighted approach SODA-style apps use).
+            // Called only when _SkinSmoothStrength>0 (uniform branch), so the
+            // extra taps cost nothing while the feature is off.
+            float3 SkinSmoothedCamera(float2 uv, float2 maskUv, float3 centerColor, float centerLuma, float strength)
+            {
+                // Two hex rings (radius 0.6 / 1.0), unit direction offsets.
+                const float2 kOff[12] = {
+                    float2( 0.60,  0.00), float2( 0.30,  0.52), float2(-0.30,  0.52),
+                    float2(-0.60,  0.00), float2(-0.30, -0.52), float2( 0.30, -0.52),
+                    float2( 1.00,  0.00), float2( 0.50,  0.87), float2(-0.50,  0.87),
+                    float2(-1.00,  0.00), float2(-0.50, -0.87), float2( 0.50, -0.87)
+                };
+                float aspect = _ScreenParams.x / max(_ScreenParams.y, 1.0);
+                // Strength scales BOTH the kernel width and the range weight so
+                // the low end is a tight, edge-preserving "결 살리는 예쁜" blur and
+                // the high end is a wide, soft, over-smoothed look for users who
+                // want heavy blur — cranking the slider does far more than the
+                // old fixed kernel (where even 1.0 stayed mild).
+                float radiusScale = 0.7 + 2.3 * strength;            // ~0.7x .. 3.0x
+                float2 radius = float2(0.0090, 0.0090 * aspect) * radiusScale;
+                float rangeSharpness = lerp(150.0, 12.0, strength);  // edge-safe .. heavy
+                // Per-pixel rotation of the sparse ring so a 12-tap kernel does
+                // not band/donut at the wide high-strength radius.
+                float jitter = frac(sin(dot(floor(uv * 480.0),
+                    float2(269.5, 183.3))) * 43758.5453) * 6.2831853;
+                float cj = cos(jitter);
+                float sj = sin(jitter);
+
+                float3 sum = centerColor;
+                float wsum = 1.0;
+                [unroll]
+                for (int i = 0; i < 12; i++)
+                {
+                    float2 b = kOff[i];
+                    float2 rot = float2(b.x * cj - b.y * sj, b.x * sj + b.y * cj);
+                    float2 off = rot * radius;
+                    float3 c = SampleCameraColor(uv + off);
+                    float4 m = tex2D(_SkinMaskTex, maskUv + off);
+                    float tapSkin = saturate(m.a * (1.0 - m.g));
+                    float dl = FoundationLuma(c) - centerLuma;
+                    float w = exp(-(dl * dl) * rangeSharpness) * tapSkin;
+                    sum += c * w;
+                    wsum += w;
+                }
+
+                return sum / max(wsum, 1e-4);
             }
 
             fixed4 frag(v2f input) : SV_Target
@@ -467,6 +538,38 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // widened tent blur above is the actual softener, so the mask
                 // passes through linearly.
 
+                // Vision face-parsing exclusions (hair/brow classes). The
+                // masks are screen grabs in the same orientation as the
+                // displayed camera image, so they sample with the raw quad uv
+                // (like the camera itself), NOT the flip-corrected screenUv.
+                // Bangs/sideburns/brow hair never take foundation; an exposed
+                // forehead has no hair pixels over it and keeps coverage.
+                if (_SegHairValid > 0.5)
+                {
+                    float2 segTexel = _SegHairTex_TexelSize.xy;
+                    float hairMask = tex2D(_SegHairTex, input.uv).r;
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv + float2(segTexel.x, 0.0)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv - float2(segTexel.x, 0.0)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv + float2(0.0, segTexel.y)).r);
+                    hairMask = max(hairMask, tex2D(_SegHairTex, input.uv - float2(0.0, segTexel.y)).r);
+                    float hairKeep = 1.0 - smoothstep(0.22, 0.58, hairMask);
+                    finalMask *= hairKeep;
+                    surfaceMask *= hairKeep;
+                }
+
+                if (_SegBrowValid > 0.5)
+                {
+                    float2 browTexel = _SegBrowTex_TexelSize.xy;
+                    float browMask = tex2D(_SegBrowTex, input.uv).r;
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv + float2(browTexel.x, 0.0)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv - float2(browTexel.x, 0.0)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv + float2(0.0, browTexel.y)).r);
+                    browMask = max(browMask, tex2D(_SegBrowTex, input.uv - float2(0.0, browTexel.y)).r);
+                    float browKeep = 1.0 - smoothstep(0.25, 0.62, browMask);
+                    finalMask *= browKeep;
+                    surfaceMask *= browKeep;
+                }
+
                 // SODA-style neck / edge handling. Pixels covered by the extended
                 // surface (alpha) but without projected face-skin weights (blue)
                 // are neck-strip or hull-edge pixels. Gate them by chroma
@@ -517,6 +620,63 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                         saturate(_NeckChromaGate) * neckness);
                     surfaceMask *= gate;
                     finalMask *= gate;
+                }
+
+                // Face-wide live skin gate: the same chroma test, applied
+                // gently to the WHOLE mask. Evaluated on the CURRENT camera
+                // pixel, so the visible boundary locks to the image itself —
+                // it cannot tremble with anchor-projection error — and bangs
+                // hanging INSIDE the face region (which the person-seg hair
+                // mask misses by construction) are rejected as non-skin,
+                // as are glasses frames and background at the silhouette.
+                if (_FaceChromaGate > 0.0001 && _CameraTextureMode > 0.5)
+                {
+                    float3 faceSkinRef = float3(0.0, 0.0, 0.0);
+                    float faceRefWeight = 0.0;
+                    if (_FoundationDebugLeftCheek.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugLeftCheek.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugRightCheek.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugRightCheek.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    if (_FoundationDebugChin.z > 0.5)
+                    {
+                        faceSkinRef += SampleCameraColor(_FoundationDebugChin.xy);
+                        faceRefWeight += 1.0;
+                    }
+
+                    faceSkinRef = faceRefWeight > 0.5
+                        ? faceSkinRef / faceRefWeight
+                        : max(saturate(_UserSkinBaseColor.rgb), float3(0.075, 0.075, 0.075));
+                    float faceRefLum = max(FoundationLuma(faceSkinRef), 0.05);
+                    float faceCamLum = max(FoundationLuma(cameraColor), 0.05);
+                    float2 faceRefChroma = faceSkinRef.rb / faceRefLum;
+                    float2 faceCamChroma = cameraColor.rb / faceCamLum;
+                    float faceChromaDist = length(faceCamChroma - faceRefChroma);
+                    // Wider tolerance than the neck: facial shadows and nose
+                    // highlights must survive; only clearly-non-skin chroma
+                    // (hair, frames, background) gets cut.
+                    float faceSkinGate = 1.0 - smoothstep(
+                        _NeckChromaTolerance * 1.45,
+                        _NeckChromaTolerance * 3.0,
+                        faceChromaDist);
+                    // Dark cut backs the chroma test up for near-skin-toned
+                    // dark hair; bright cut avoids painting blown highlights.
+                    float faceLumRatio = faceCamLum / faceRefLum;
+                    float faceDarkGate = smoothstep(0.20, 0.44, faceLumRatio);
+                    float faceBrightGate = 1.0 - smoothstep(2.1, 3.0, faceLumRatio);
+                    float faceGate = lerp(
+                        1.0,
+                        saturate(faceSkinGate * faceDarkGate * faceBrightGate),
+                        saturate(_FaceChromaGate) * saturate(1.0 - neckness));
+                    finalMask *= faceGate;
+                    surfaceMask *= faceGate;
                 }
 
                 if (_CameraTextureMode < 0.5)
@@ -639,10 +799,45 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                     return fixed4(exaggerated, 1.0);
                 }
 
+                // Blemish smoothing runs BEFORE tone-correction so the HSV
+                // shade lands on clean low-frequency skin (correcting first
+                // then blurring would smear the corrected tone). Gated by the
+                // uniform so the whole block — the 12 extra camera taps and the
+                // grain hash — is skipped when the slider is at 0 (Metal skips
+                // the untaken side of a uniform branch), making the default
+                // bit-identical and zero-cost.
+                float3 baseColor = cameraColor;
+                // Blend ramps faster than the raw slider so mid settings already
+                // read strong; the additional heaviness past the midpoint comes
+                // from the widening kernel in SkinSmoothedCamera (not just more
+                // blend, which caps at fully replacing the pixel).
+                float blendCurve = saturate(_SkinSmoothStrength * 1.7);
+                float skinWeight = saturate(finalMask * blendCurve);
+                if (_SkinSmoothStrength > 0.0001)
+                {
+                    float centerLuma = FoundationLuma(cameraColor);
+                    float3 smoothed = SkinSmoothedCamera(
+                        input.uv, maskUv, cameraColor, centerLuma, _SkinSmoothStrength);
+                    baseColor = lerp(cameraColor, smoothed, skinWeight);
+                }
+
                 // Weight the correction by the final CommandBuffer mask
                 // channel (R). The generated UV mask keeps the face surface
                 // coverage but removes only lips, eyes and brows.
-                return fixed4(CorrectCameraColor(cameraColor, finalMask), 1.0);
+                float3 corrected = CorrectCameraColor(baseColor, finalMask);
+
+                if (_SkinSmoothStrength > 0.0001)
+                {
+                    // Re-add sub-visible micro-grain so the bilateral doesn't
+                    // read as plastic/rubber skin (the SODA "한 끗"). Screen-uv
+                    // anchored (quantized cells) so it stays put and does not
+                    // crawl frame-to-frame; strictly skin-only via skinWeight.
+                    float g = frac(sin(dot(floor(input.uv * 480.0),
+                        float2(127.1, 311.7))) * 43758.5453) * 2.0 - 1.0;
+                    corrected += g * _SkinGrainStrength * skinWeight;
+                }
+
+                return fixed4(saturate(corrected), 1.0);
             }
             ENDCG
         }

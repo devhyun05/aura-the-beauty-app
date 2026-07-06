@@ -3,6 +3,7 @@ import React from 'react';
 import {
   APP_SCREEN_CONTENT_TOP_PADDING,
   getAppScreenBottomPadding,
+  getAppScreenResolvedTopPadding,
   getAppScreenTopPadding,
   AppScreen,
   type AppScreenBottomPadding,
@@ -36,6 +37,21 @@ expectEqual(
   'safe area app screen top padding',
 );
 expectEqual(getAppScreenTopPadding('none', 47), 0, 'none app screen top padding');
+expectEqual(
+  getAppScreenResolvedTopPadding('none', 47, 103),
+  103,
+  'overlay header height is applied to none app screen top padding',
+);
+expectEqual(
+  getAppScreenResolvedTopPadding('belowShellHeader', 47, 103),
+  103 + APP_SCREEN_CONTENT_TOP_PADDING,
+  'overlay header height is applied to below shell header top padding',
+);
+expectEqual(
+  getAppScreenResolvedTopPadding('belowOverlayHeader', 47, 103),
+  47 + APP_HEADER_BASE_HEIGHT + APP_SCREEN_CONTENT_TOP_PADDING,
+  'overlay header height is not doubled for below overlay header top padding',
+);
 
 expectEqual(
   getAppScreenBottomPadding(undefined, 34),
@@ -49,7 +65,7 @@ expectEqual(
 );
 expectEqual(
   getAppScreenBottomPadding('floatingFooter', 34),
-  98,
+  102,
   'floating footer app screen bottom padding',
 );
 expectEqual(getAppScreenBottomPadding(0, 34), 0, 'custom app screen bottom padding');

@@ -17,6 +17,17 @@ import {
   ARFilterRouteScreen,
   UnityMakeupCaptureRouteScreen,
 } from './routes/arRoutes';
+import {
+  ConsultingBookingCompleteRouteScreen,
+  ConsultingBookingRouteScreen,
+  ConsultingCallRouteScreen,
+  ConsultingExpertListRouteScreen,
+  ConsultingExpertProfileRouteScreen,
+  ConsultingHistoryRouteScreen,
+  ConsultingMembershipRouteScreen,
+  ConsultingPaymentRouteScreen,
+  ConsultingSummaryRouteScreen,
+} from './routes/consultingRoutes';
 import {FaceCaptureConfirmationRouteScreen} from './routes/faceCaptureConfirmationRoutes';
 import {
   FaceAnalysisIntroRouteScreen,
@@ -99,6 +110,28 @@ export function RootNavigator() {
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
       <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
+      <Stack.Screen
+        name="ConsultingExpertList"
+        component={ConsultingExpertListRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingExpertProfile"
+        component={ConsultingExpertProfileRouteScreen}
+      />
+      <Stack.Screen name="ConsultingBooking" component={ConsultingBookingRouteScreen} />
+      <Stack.Screen name="ConsultingPayment" component={ConsultingPaymentRouteScreen} />
+      <Stack.Screen
+        name="ConsultingBookingComplete"
+        component={ConsultingBookingCompleteRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingCall"
+        component={ConsultingCallRouteScreen}
+        options={{gestureEnabled: false}}
+      />
+      <Stack.Screen name="ConsultingSummary" component={ConsultingSummaryRouteScreen} />
+      <Stack.Screen name="ConsultingHistory" component={ConsultingHistoryRouteScreen} />
+      <Stack.Screen name="ConsultingMembership" component={ConsultingMembershipRouteScreen} />
       <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />

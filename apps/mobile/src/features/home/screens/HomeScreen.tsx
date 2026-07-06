@@ -1,7 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
-  Image,
   Modal,
   Pressable,
   ScrollView as NativeScrollView,
@@ -13,12 +12,17 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  Brush,
+  Camera,
   ChevronUp,
   Compass,
   Heart,
+  MessageCircleMore,
   PackageSearch,
   ScanFace,
+  SquareSplitHorizontal,
   Store,
+  Users,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -30,6 +34,8 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
+import {SectionMoreButton} from '../../../shared/ui';
+import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -39,8 +45,14 @@ import type {
 export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractionActionSheet';
 
 type HomeScreenProps = {
+  onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressCommunity?: () => void;
   onPressConsulting?: () => void;
+  onPressHalfMakeup?: () => void;
+  onPressMakeupExtraction?: () => void;
+  onPressMakeupFeedback?: () => void;
+  onPressMakeupFilter?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
@@ -52,9 +64,15 @@ type HomeScreenProps = {
 };
 
 export function HomeScreen({
+  onPressArFilter,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
+  onPressCommunity,
   onPressConsulting,
+  onPressHalfMakeup,
+  onPressMakeupExtraction,
+  onPressMakeupFeedback,
+  onPressMakeupFilter,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
@@ -108,6 +126,10 @@ export function HomeScreen({
     getHomeData().then((data) => {
       if (isMounted) {
         setHomeData(data);
+        prefetchImageSources([
+          data.hero.imageSource,
+          ...data.hero.trends.map((trend) => trend.imageSource),
+        ]);
       }
     });
 
@@ -122,6 +144,7 @@ export function HomeScreen({
     getRecommendedMakeupFiltersFromApi().then((filters) => {
       if (isMounted) {
         setRecommendedMakeupFilters(filters);
+        prefetchImageSources(filters.map((filter) => filter.imageSource));
       }
     });
 
@@ -164,9 +187,15 @@ export function HomeScreen({
               trends={homeData.hero.trends}
             />
 
-            <QuickActionSection
+            <HomeServiceShortcutSection
+              onPressArFilter={onPressArFilter}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
+              onPressCommunity={onPressCommunity}
               onPressConsulting={onPressConsulting}
+              onPressHalfMakeup={onPressHalfMakeup}
+              onPressMakeupExtraction={onPressMakeupExtraction}
+              onPressMakeupFeedback={onPressMakeupFeedback}
+              onPressMakeupFilter={onPressMakeupFilter}
               onPressProductRecommendations={onPressProductRecommendations}
               onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
@@ -483,7 +512,7 @@ function HeroBannerCard({
         {height: cardWidth, width: cardWidth},
         pressed && styles.pressed,
       ]}>
-      <Image resizeMode="cover" source={imageSource} style={styles.heroBackgroundImage} />
+      <CachedImage contentFit="cover" source={imageSource} style={styles.heroBackgroundImage} />
       <View style={styles.heroScrim} />
 
       <YStack style={styles.heroCopy}>
@@ -505,70 +534,164 @@ function HeroBannerCard({
   );
 }
 
-export const HOME_FILTER_STORE_QUICK_ACTION_ICON_NAME = 'Store';
-export const HOME_CONSULTING_QUICK_ACTION_ICON_NAME = 'Compass';
-export const HOME_QUICK_ACTION_LABELS = [
+export const HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME = 'Store';
+export const HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME = 'Compass';
+export const HOME_SERVICE_SHORTCUT_LABELS = [
   '얼굴 분석',
+  '메이크업 필터',
+  '컨설팅',
+  '반반메이크업',
+  '커뮤니티',
+  '메이크업 추출',
   '필터 스토어',
   '추천 제품',
-  '컨설팅',
+  '메이크업 피드백',
 ] as const;
-export const HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES = 1;
-export const HOME_QUICK_ACTION_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
-
-const quickActions = [
-  {
-    id: 'diagnosis',
-    label: HOME_QUICK_ACTION_LABELS[0],
-    accessibilityLabel: '얼굴 분석 시작',
-    icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
-  },
-  {
-    id: 'filterStore',
-    label: HOME_QUICK_ACTION_LABELS[1],
-    accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
-    icon: (color: string) => (
-      <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
-    id: 'recommendation',
-    label: HOME_QUICK_ACTION_LABELS[2],
-    accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
-    icon: (color: string) => (
-      <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
-  {
-    id: 'consulting',
-    label: HOME_QUICK_ACTION_LABELS[3],
-    accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
-    icon: (color: string) => (
-      <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
-    ),
-  },
+export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
+  HOME_SERVICE_SHORTCUT_LABELS.slice(0, 5),
+  HOME_SERVICE_SHORTCUT_LABELS.slice(5),
 ] as const;
+export const HOME_AR_FILTER_QUICK_ACTION_LABEL = 'AR 필터';
+export const HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES = 1;
+export const HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
+export const HOME_SERVICE_SHORTCUT_CIRCLE_SIZE = 52;
 
-type HomeQuickActionId = (typeof quickActions)[number]['id'];
+const homeServiceShortcutRows = [
+  [
+    {
+      id: 'arFilterCamera',
+      label: HOME_AR_FILTER_QUICK_ACTION_LABEL,
+      accessibilityLabel: 'AR 필터 카메라 열기',
+      icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
+    },
+    {
+      id: 'diagnosis',
+      label: HOME_SERVICE_SHORTCUT_LABELS[0],
+      accessibilityLabel: '얼굴 분석 시작',
+      icon: (color: string) => <ScanFace color={color} size={iconSize.lg} strokeWidth={1.9} />,
+    },
+    {
+      id: 'arFilter',
+      label: HOME_SERVICE_SHORTCUT_LABELS[1],
+      accessibilityLabel: '메이크업 필터 열기',
+      icon: (color: string) => (
+        <Brush color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'consulting',
+      label: HOME_SERVICE_SHORTCUT_LABELS[2],
+      accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
+      icon: (color: string) => (
+        <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'halfMakeup',
+      label: HOME_SERVICE_SHORTCUT_LABELS[3],
+      accessibilityLabel: '반반메이크업 열기',
+      icon: (color: string) => (
+        <SquareSplitHorizontal color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'community',
+      label: HOME_SERVICE_SHORTCUT_LABELS[4],
+      accessibilityLabel: '커뮤니티 보기',
+      icon: (color: string) => (
+        <Users color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+  ],
+  [
+    {
+      id: 'makeupExtraction',
+      label: HOME_SERVICE_SHORTCUT_LABELS[5],
+      accessibilityLabel: '메이크업 추출 시작',
+      icon: (color: string) => (
+        <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'filterStore',
+      label: HOME_SERVICE_SHORTCUT_LABELS[6],
+      accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
+      icon: (color: string) => (
+        <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'recommendation',
+      label: HOME_SERVICE_SHORTCUT_LABELS[7],
+      accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
+      icon: (color: string) => (
+        <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'makeupFeedback',
+      label: HOME_SERVICE_SHORTCUT_LABELS[8],
+      accessibilityLabel: '메이크업 피드백 시작',
+      icon: (color: string) => (
+        <MessageCircleMore color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+  ],
+] as const;
+const homeServiceShortcuts = homeServiceShortcutRows.flat();
 
-type HomeQuickActionHandlers = {
+type HomeServiceShortcutId = (typeof homeServiceShortcuts)[number]['id'];
+
+type HomeServiceShortcutHandlers = {
+  onPressArFilter?: () => void;
+  onPressCommunity?: () => void;
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
+  onPressHalfMakeup?: () => void;
+  onPressMakeupExtraction?: () => void;
+  onPressMakeupFeedback?: () => void;
+  onPressMakeupFilter?: () => void;
   onPressProductRecommendations?: () => void;
   onPressRecommendedFilterMore?: () => void;
 };
 
-export function getHomeQuickActionPressHandler(
-  actionId: HomeQuickActionId,
+export function getHomeServiceShortcutPressHandler(
+  actionId: HomeServiceShortcutId,
   {
+    onPressArFilter,
+    onPressCommunity,
     onPressConsulting,
     onPressFaceDiagnosis,
+    onPressHalfMakeup,
+    onPressMakeupExtraction,
+    onPressMakeupFeedback,
+    onPressMakeupFilter,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
-  }: HomeQuickActionHandlers,
+  }: HomeServiceShortcutHandlers,
 ): (() => void) | undefined {
+  if (actionId === 'arFilterCamera') {
+    return onPressArFilter;
+  }
+
   if (actionId === 'diagnosis') {
     return onPressFaceDiagnosis;
+  }
+
+  if (actionId === 'arFilter') {
+    return onPressMakeupFilter;
+  }
+
+  if (actionId === 'halfMakeup') {
+    return onPressHalfMakeup;
+  }
+
+  if (actionId === 'community') {
+    return onPressCommunity;
+  }
+
+  if (actionId === 'makeupExtraction') {
+    return onPressMakeupExtraction;
   }
 
   if (actionId === 'recommendation') {
@@ -583,46 +706,70 @@ export function getHomeQuickActionPressHandler(
     return onPressConsulting;
   }
 
+  if (actionId === 'makeupFeedback') {
+    return onPressMakeupFeedback;
+  }
+
   return undefined;
 }
 
-export function getHomeQuickActionLabels(): readonly string[] {
-  return HOME_QUICK_ACTION_LABELS;
+export function getHomeServiceShortcutLabels(): readonly string[] {
+  return HOME_SERVICE_SHORTCUT_LABELS;
 }
 
-function QuickActionSection({
+export function getHomeServiceShortcutRowLabels(): readonly (readonly string[])[] {
+  return HOME_SERVICE_SHORTCUT_ROW_LABELS;
+}
+
+function HomeServiceShortcutSection({
+  onPressArFilter,
+  onPressCommunity,
   onPressConsulting,
   onPressFaceDiagnosis,
+  onPressHalfMakeup,
+  onPressMakeupExtraction,
+  onPressMakeupFeedback,
+  onPressMakeupFilter,
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
-}: HomeQuickActionHandlers) {
-  const quickActionHandlers: HomeQuickActionHandlers = {
+}: HomeServiceShortcutHandlers) {
+  const homeServiceShortcutHandlers: HomeServiceShortcutHandlers = {
+    onPressArFilter,
+    onPressCommunity,
     onPressConsulting,
     onPressFaceDiagnosis,
+    onPressHalfMakeup,
+    onPressMakeupExtraction,
+    onPressMakeupFeedback,
+    onPressMakeupFilter,
     onPressProductRecommendations,
     onPressRecommendedFilterMore,
   };
 
   return (
-    <XStack style={styles.quickActionList}>
-      {quickActions.map((action) => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={action.accessibilityLabel}
-          key={action.label}
-          onPress={getHomeQuickActionPressHandler(action.id, quickActionHandlers)}
-          style={({pressed}) => [styles.quickActionItem, pressed && styles.pressed]}>
-          <View style={styles.quickActionCircle}>
-            {action.icon(colors.textPrimary)}
-          </View>
-          <Text
-            numberOfLines={HOME_QUICK_ACTION_LABEL_NUMBER_OF_LINES}
-            style={styles.quickActionLabel}>
-            {action.label}
-          </Text>
-        </Pressable>
+    <YStack style={styles.homeServiceShortcutList}>
+      {homeServiceShortcutRows.map((row, rowIndex) => (
+        <XStack key={`home-service-shortcut-row-${rowIndex}`} style={styles.homeServiceShortcutRow}>
+          {row.map((action) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={action.accessibilityLabel}
+              key={action.label}
+              onPress={getHomeServiceShortcutPressHandler(action.id, homeServiceShortcutHandlers)}
+              style={({pressed}) => [styles.homeServiceShortcutItem, pressed && styles.pressed]}>
+              <View style={styles.homeServiceShortcutCircle}>
+                {action.icon(colors.textPrimary)}
+              </View>
+              <Text
+                numberOfLines={HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES}
+                style={styles.homeServiceShortcutLabel}>
+                {action.label}
+              </Text>
+            </Pressable>
+          ))}
+        </XStack>
       ))}
-    </XStack>
+    </YStack>
   );
 }
 
@@ -751,8 +898,9 @@ function RecommendedFilterCard({
         {width: cardWidth},
         pressed && styles.pressed,
       ]}>
-      <Image
-        resizeMode="cover"
+      <CachedImage
+        contentFit="cover"
+        recyclingKey={filter.id}
         source={filter.imageSource}
         style={styles.recommendedFilterImage}
       />
@@ -817,14 +965,11 @@ function SectionHeader({
         ) : null}
       </YStack>
       {actionLabel && onPressAction ? (
-        <Pressable
+        <SectionMoreButton
           accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
-          accessibilityRole="button"
+          label={actionLabel}
           onPress={onPressAction}
-          style={({pressed}) => [styles.sectionMoreButton, pressed && styles.pressed]}>
-          <Text style={styles.sectionMoreText}>{actionLabel}</Text>
-          <ArrowRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-        </Pressable>
+        />
       ) : null}
     </XStack>
   );
@@ -1110,36 +1255,39 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.78,
   },
-  quickActionCircle: {
+  homeServiceShortcutCircle: {
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 64,
+    height: HOME_SERVICE_SHORTCUT_CIRCLE_SIZE,
     justifyContent: 'center',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    width: 64,
+    width: HOME_SERVICE_SHORTCUT_CIRCLE_SIZE,
   },
-  quickActionItem: {
+  homeServiceShortcutItem: {
     alignItems: 'center',
     flex: 1,
     gap: spacing.xs,
     minWidth: 0,
   },
-  quickActionLabel: {
+  homeServiceShortcutLabel: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-    minHeight: HOME_QUICK_ACTION_LABEL_MIN_HEIGHT,
+    minHeight: HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
     textAlign: 'center',
     width: '100%',
   },
-  quickActionList: {
+  homeServiceShortcutList: {
+    gap: spacing.sm,
+  },
+  homeServiceShortcutRow: {
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'space-between',
@@ -1187,24 +1335,5 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     minWidth: 0,
-  },
-  sectionMoreButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-  },
-  sectionMoreText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
   },
 });

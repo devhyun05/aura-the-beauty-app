@@ -46,6 +46,29 @@ def test_database_secret_uses_parameter_connection(monkeypatch: pytest.MonkeyPat
   }
 
 
+def test_blank_database_url_falls_back_to_secret(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  monkeypatch.setattr(
+    connection_config,
+    "get_database_secret",
+    lambda _settings, refresh=False: {"username": "aura_admin", "password": "secret"},
+  )
+
+  config = resolve_database_connection_config(
+    Settings(
+      database_url=" ",
+      database_secret_id="rds-secret",
+      db_host="db.example.com",
+      db_name="postgres",
+    ),
+  )
+
+  assert config is not None
+  assert config.source == "secrets_manager"
+  assert config.asyncpg_kwargs()["host"] == "db.example.com"
+
+
 def test_database_secret_can_supply_host_port_and_database(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:

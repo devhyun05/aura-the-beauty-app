@@ -147,7 +147,7 @@ export function mapFaceAnalysisReportsToHomeSavedMakeupLooks(
   reports: readonly FaceAnalysisReport[],
 ): HomeMakeupLook[] {
   return reports.flatMap((report) => {
-    const recommendedMakeups = report.recommendedMakeups.slice(0, 3);
+    const recommendedMakeups = report.recommendedMakeups.slice(0, 1);
 
     if (recommendedMakeups.length === 0) {
       return [];

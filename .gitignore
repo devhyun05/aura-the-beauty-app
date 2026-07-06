@@ -61,3 +61,7 @@ apps/unity/MakeupAR/*.user
 
 # Eyeliner mask PNG dumps from the Unity editor exporter (debug only)
 tmp-debug/
+
+# Unity XR simulation temp artifacts
+apps/unity/MakeupAR/Assets/XR/Temp/
+apps/unity/MakeupAR/Assets/XR/Temp.meta

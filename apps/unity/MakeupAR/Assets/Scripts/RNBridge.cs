@@ -4128,7 +4128,7 @@ public sealed class RNBridge : MonoBehaviour
         // Mode 12 is a shader-only asymmetric basic-mask test. Modes 13-16
         // test clockwise/counter-clockwise 90-degree display rotations. Mode
         // 19 is a shader-path confirmation fill.
-        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 24) : 0;
+        return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 42) : 0;
     }
 
     private static string FirstNonBlank(params string[] values)
@@ -4395,6 +4395,19 @@ public sealed class RNBridge : MonoBehaviour
 
         if (region == "lip"
             && (value.StartsWith("e7-lip-validation-", StringComparison.Ordinal)
+                // Live-personalized lips: E3 resolves this id to the
+                // per-frame Vision lip boundary; rejecting it here threw and
+                // discarded the ENTIRE recipe (every region went dark).
+                || value == "lip-vision-boundary-v1"
+                // Mesh-locked canonical-UV lip atlas (now the default). E3
+                // accepts these via its own GetDefaultMaskTextureId('lip') /
+                // IsLipStyleAtlasMask; without whitelisting them here the whole
+                // recipe throws and every region goes dark. This also fixes the
+                // pre-existing latent rejection of UNITY_MAKEUP_LAYER_PRESETS.lip
+                // ('lip-drawn-style-atlas-v1') on the full-face preset path.
+                || value == "lip-drawn-style-atlas-v1"
+                || value == "lip-drawn-gradient-density-atlas-v1"
+                || value == "lip-style-atlas-v1"
                 || IsGeneratedLipMaskTextureId(value)))
         {
             return value;

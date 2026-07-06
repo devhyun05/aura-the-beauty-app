@@ -2,8 +2,7 @@ import {StyleSheet} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, typography} from '../theme';
-import {IconButton} from './IconButton';
-import {MenuStackIcon} from './LineIcons';
+import {SectionMoreButton} from './SectionMoreButton';
 
 type SectionHeaderProps = {
   title: string;
@@ -21,13 +20,11 @@ export function SectionHeader({
       <Text style={styles.title}>{title}</Text>
 
       {actionLabel ? (
-        <IconButton
+        <SectionMoreButton
           accessibilityLabel={`${title} ${actionLabel}`}
+          label={actionLabel}
           onPress={onPressAction}
-          size={34}
-        >
-          <MenuStackIcon color={colors.textPrimary} size={21} />
-        </IconButton>
+        />
       ) : null}
     </View>
   );

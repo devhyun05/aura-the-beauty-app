@@ -30,7 +30,15 @@ using UnityEngine.XR.ARSubsystems;
 public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
 {
     private const int MaskLayer = 31;
-    private const int MaskBaseWidth = 256;
+    private const int MaskBaseWidth = 384;
+
+    // Temporal smoothing of the face-local vertices. ARKit face vertices
+    // carry per-frame estimation noise that shows up as silhouette
+    // trembling along the mask edge (jaw, temples). The POSE (transform)
+    // is never smoothed — rigid tracking stays exact — only the local
+    // deformation is low-passed. 0.35 settles in ~2-3 frames: invisible
+    // on real expressions, kills the shimmer.
+    private const float VertexSmoothing = 0.35f;
     private const CameraEvent CompositeEvent = CameraEvent.BeforeForwardAlpha;
     private const string CommandBufferName = "FoundationScreenSpaceComposite";
     private const float DiagnosticsIntervalSeconds = 0.75f;
@@ -96,6 +104,42 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
     private readonly List<Vector3> meshVertices = new List<Vector3>(1280);
     private readonly List<Vector2> meshUvs = new List<Vector2>(1280);
     private readonly List<int> meshTriangles = new List<int>(4096);
+    private Vector3[] smoothedVertices;
+    private TrackableId smoothedFaceId;
+
+    // Camera-pose timing offset for the mask projection, selectable at
+    // runtime through the foundation debug mode so the right value can be
+    // found LIVE on device without a rebuild per guess:
+    //   default       : 0     — current camera matrix (geometry-locked)
+    //   debug mode 40 : +55ms — PAST pose; pick if the mask LEADS the face
+    //                            while the phone moves
+    //   debug mode 41 : -35ms — extrapolated FUTURE pose; pick if the mask
+    //                            TRAILS the face
+    //   debug mode 42 : +90ms — stronger past-pose variant
+    // (25-30 are taken by the mask clip-transform probes.)
+    // Once a winner is confirmed on device, hardcode it as the default.
+    private const int PoseHistoryCapacity = 16;
+    private readonly float[] poseHistoryTimes = new float[PoseHistoryCapacity];
+    private readonly Vector3[] poseHistoryPositions = new Vector3[PoseHistoryCapacity];
+    private readonly Quaternion[] poseHistoryRotations = new Quaternion[PoseHistoryCapacity];
+    private int poseHistoryCount;
+    private int poseHistoryNext;
+    private float activeMaskPoseDelaySeconds;
+
+    private static float ResolveMaskPoseDelaySeconds(int debugMode)
+    {
+        switch (debugMode)
+        {
+            case 40:
+                return 0.055f;
+            case 41:
+                return -0.035f;
+            case 42:
+                return 0.09f;
+            default:
+                return 0.0f;
+        }
+    }
 
     public bool MaskReady { get; private set; }
     public Texture MaskTexture => maskTexture;
@@ -164,7 +208,10 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
             : 0;
         bool renderIntoTexture = ResolveMaskProjectionUsesRtFlip(debugMode);
         Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(arCamera.projectionMatrix, renderIntoTexture);
-        Matrix4x4 maskVp = ResolveMaskClipTransform(debugMode) * gpuProjection * arCamera.worldToCameraMatrix;
+        Matrix4x4 maskVp =
+            ResolveMaskClipTransform(debugMode)
+            * gpuProjection
+            * ResolveDelayedWorldToCamera(arCamera, ResolveMaskPoseDelaySeconds(debugMode));
         lastMaskWriteTransformMode = ResolveMaskWriteTransformMode(debugMode, renderIntoTexture);
         maskWriteFaceMaterial.SetMatrix("_FoundationMaskVP", maskVp);
         maskWriteNeckMaterial.SetMatrix("_FoundationMaskVP", maskVp);
@@ -181,6 +228,7 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
                 + " maskWriteTransform=" + lastMaskWriteTransformMode);
         }
 
+        UpdateSmoothedVertices(face);
         faceMeshReadyThisFrame = UpdateFaceMaskMesh(face);
         bool neckReady = UpdateNeckMaskMesh(face);
         faceMaskObject.SetActive(true);
@@ -233,6 +281,9 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         visionScaleY = 1.0f;
         historyCount = 0;
         historyNext = 0;
+        smoothedVertices = null;
+        poseHistoryCount = 0;
+        poseHistoryNext = 0;
         if (faceMaskObject != null)
         {
             faceMaskObject.SetActive(false);
@@ -434,6 +485,7 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
             + " shift=" + shift.x.ToString("0.####") + "," + shift.y.ToString("0.####")
             + " visionBias=" + (hasVisionBias ? "true" : "false")
             + " scaleY=" + visionScaleY.ToString("0.###")
+            + " poseDelay=" + activeMaskPoseDelaySeconds.ToString("0.###")
             + " sampleFlipY=" + (MaskSampleFlipY ? "true" : "false")
             + " maskWriteTransform=" + lastMaskWriteTransformMode);
     }
@@ -601,6 +653,167 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         return rendererObject;
     }
 
+    // Records the current camera pose every frame and returns the
+    // world-to-camera matrix for the mask write pass, shifted by
+    // delaySeconds: positive = interpolate a PAST pose, negative =
+    // extrapolate a FUTURE pose from the latest velocity, 0 = current.
+    private Matrix4x4 ResolveDelayedWorldToCamera(Camera arCamera, float delaySeconds)
+    {
+        Transform cameraTransform = arCamera.transform;
+        activeMaskPoseDelaySeconds = delaySeconds;
+
+        // Always record, so switching debug modes has warm history.
+        float now = Time.realtimeSinceStartup;
+        poseHistoryTimes[poseHistoryNext] = now;
+        poseHistoryPositions[poseHistoryNext] = cameraTransform.position;
+        poseHistoryRotations[poseHistoryNext] = cameraTransform.rotation;
+        poseHistoryNext = (poseHistoryNext + 1) % PoseHistoryCapacity;
+        poseHistoryCount = Mathf.Min(poseHistoryCount + 1, PoseHistoryCapacity);
+
+        if (Mathf.Abs(delaySeconds) <= 0.0001f)
+        {
+            return arCamera.worldToCameraMatrix;
+        }
+
+        if (delaySeconds < 0.0f)
+        {
+            return ExtrapolatedWorldToCamera(arCamera, -delaySeconds);
+        }
+
+        float targetTime = now - delaySeconds;
+        int olderIndex = -1;
+        int newerIndex = -1;
+        float olderTime = float.NegativeInfinity;
+        float newerTime = float.PositiveInfinity;
+        int oldestIndex = -1;
+        float oldestTime = float.PositiveInfinity;
+        for (int i = 0; i < poseHistoryCount; i++)
+        {
+            float sampleTime = poseHistoryTimes[i];
+            if (sampleTime < oldestTime)
+            {
+                oldestTime = sampleTime;
+                oldestIndex = i;
+            }
+
+            if (sampleTime <= targetTime && sampleTime > olderTime)
+            {
+                olderTime = sampleTime;
+                olderIndex = i;
+            }
+
+            if (sampleTime >= targetTime && sampleTime < newerTime)
+            {
+                newerTime = sampleTime;
+                newerIndex = i;
+            }
+        }
+
+        Vector3 position;
+        Quaternion rotation;
+        if (olderIndex >= 0 && newerIndex >= 0 && newerIndex != olderIndex)
+        {
+            float span = Mathf.Max(newerTime - olderTime, 1e-5f);
+            float blend = Mathf.Clamp01((targetTime - olderTime) / span);
+            position = Vector3.Lerp(
+                poseHistoryPositions[olderIndex], poseHistoryPositions[newerIndex], blend);
+            rotation = Quaternion.Slerp(
+                poseHistoryRotations[olderIndex], poseHistoryRotations[newerIndex], blend);
+        }
+        else if (olderIndex >= 0)
+        {
+            position = poseHistoryPositions[olderIndex];
+            rotation = poseHistoryRotations[olderIndex];
+        }
+        else if (oldestIndex >= 0)
+        {
+            // History shallower than the delay (warm-up): oldest we have.
+            position = poseHistoryPositions[oldestIndex];
+            rotation = poseHistoryRotations[oldestIndex];
+        }
+        else
+        {
+            position = cameraTransform.position;
+            rotation = cameraTransform.rotation;
+        }
+
+        return BuildWorldToCamera(position, rotation);
+    }
+
+    // Predicts the camera pose leadSeconds into the future from the two most
+    // recent samples (linear velocity + angular velocity). Used when the mask
+    // TRAILS the face during motion, i.e. the anchor lags the image.
+    private Matrix4x4 ExtrapolatedWorldToCamera(Camera arCamera, float leadSeconds)
+    {
+        if (poseHistoryCount < 2)
+        {
+            return arCamera.worldToCameraMatrix;
+        }
+
+        int newest = (poseHistoryNext - 1 + PoseHistoryCapacity) % PoseHistoryCapacity;
+        int previous = (poseHistoryNext - 2 + PoseHistoryCapacity) % PoseHistoryCapacity;
+        float dt = poseHistoryTimes[newest] - poseHistoryTimes[previous];
+        if (dt <= 1e-4f)
+        {
+            return arCamera.worldToCameraMatrix;
+        }
+
+        float scale = leadSeconds / dt;
+        Vector3 position = poseHistoryPositions[newest]
+            + (poseHistoryPositions[newest] - poseHistoryPositions[previous]) * scale;
+        Quaternion delta =
+            poseHistoryRotations[newest] * Quaternion.Inverse(poseHistoryRotations[previous]);
+        delta.ToAngleAxis(out float angleDeg, out Vector3 axis);
+        if (angleDeg > 180.0f)
+        {
+            angleDeg -= 360.0f;
+        }
+
+        Quaternion rotation = Mathf.Abs(angleDeg) > 1e-4f && !float.IsNaN(axis.x)
+            ? Quaternion.AngleAxis(angleDeg * scale, axis) * poseHistoryRotations[newest]
+            : poseHistoryRotations[newest];
+        return BuildWorldToCamera(position, rotation);
+    }
+
+    // Unity's worldToCameraMatrix is the inverse rigid transform with a
+    // z flip (camera looks down -z in view space).
+    private static Matrix4x4 BuildWorldToCamera(Vector3 position, Quaternion rotation)
+    {
+        return Matrix4x4.Scale(new Vector3(1.0f, 1.0f, -1.0f))
+            * Matrix4x4.TRS(position, rotation, Vector3.one).inverse;
+    }
+
+    private void UpdateSmoothedVertices(ARFace face)
+    {
+        var vertices = face.vertices;
+        if (!vertices.IsCreated || vertices.Length == 0)
+        {
+            smoothedVertices = null;
+            return;
+        }
+
+        bool reset = smoothedVertices == null
+            || smoothedVertices.Length != vertices.Length
+            || smoothedFaceId != face.trackableId;
+        if (reset)
+        {
+            smoothedVertices = new Vector3[vertices.Length];
+            smoothedFaceId = face.trackableId;
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                smoothedVertices[i] = vertices[i];
+            }
+
+            return;
+        }
+
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            smoothedVertices[i] =
+                Vector3.Lerp(smoothedVertices[i], vertices[i], VertexSmoothing);
+        }
+    }
+
     private bool UpdateFaceMaskMesh(ARFace face)
     {
         if (!face.vertices.IsCreated
@@ -618,12 +831,14 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         faceMaskObject.transform.localRotation = Quaternion.identity;
         faceMaskObject.transform.localScale = Vector3.one;
 
+        bool useSmoothed =
+            smoothedVertices != null && smoothedVertices.Length == face.vertices.Length;
         meshVertices.Clear();
         meshUvs.Clear();
         meshTriangles.Clear();
         for (int i = 0; i < face.vertices.Length; i++)
         {
-            meshVertices.Add(face.vertices[i]);
+            meshVertices.Add(useSmoothed ? smoothedVertices[i] : face.vertices[i]);
             meshUvs.Add(face.uvs[i]);
         }
 
@@ -648,12 +863,18 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         }
 
         var vertices = face.vertices;
+        // The neck skirt hangs off the jawline extracted from the vertices,
+        // so it must read the SAME smoothed buffer as the face mask — a
+        // noisy jaw makes the whole skirt tremble.
+        bool useSmoothed =
+            smoothedVertices != null && smoothedVertices.Length == vertices.Length;
         Vector3 localMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         Vector3 localMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         for (int i = 0; i < vertices.Length; i++)
         {
-            localMin = Vector3.Min(localMin, vertices[i]);
-            localMax = Vector3.Max(localMax, vertices[i]);
+            Vector3 vertex = useSmoothed ? smoothedVertices[i] : vertices[i];
+            localMin = Vector3.Min(localMin, vertex);
+            localMax = Vector3.Max(localMax, vertex);
         }
 
         float faceWidth = localMax.x - localMin.x;
@@ -674,7 +895,7 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         float lowerCut = localMin.y + faceHeight * 0.45f;
         for (int i = 0; i < vertices.Length; i++)
         {
-            Vector3 vertex = vertices[i];
+            Vector3 vertex = useSmoothed ? smoothedVertices[i] : vertices[i];
             if (vertex.y > lowerCut)
             {
                 continue;

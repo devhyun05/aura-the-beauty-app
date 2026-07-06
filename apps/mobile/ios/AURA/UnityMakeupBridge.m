@@ -155,6 +155,16 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     if (!self->_isPresentingUnityView) {
       [self concealUnityView];
       [self scheduleConcealUnityView];
+    } else if (didInitialize) {
+      // The user entered before the scene was live (reveal was gated on
+      // _isReady in unityView). Now that Unity is initialized, reveal the
+      // view so the container flips straight from black to the live camera
+      // instead of showing the splash / a black pre-camera frame.
+      UIView *rootView = [self currentUnityRootView];
+      if (rootView) {
+        rootView.hidden = NO;
+        rootView.userInteractionEnabled = YES;
+      }
     }
 
     [[NSNotificationCenter defaultCenter] postNotificationName:UnityMakeupEventNotification
@@ -177,11 +187,34 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return nil;
   }
 
-  rootView.hidden = NO;
   rootView.userInteractionEnabled = YES;
+  // A container asking for unityView means a screen wants it ON SCREEN NOW, so
+  // always reveal. The loading-splash flash is already handled by the app-start
+  // offscreen preload (the splash plays while concealed) plus the black
+  // container background, so an _isReady gate here is unnecessary — and it in
+  // fact left the view permanently hidden whenever unity_initialized was not
+  // observed, which is exactly why the AR filter showed no makeup.
+  rootView.hidden = NO;
   [self restoreReactWindowIfNeeded];
 
   return rootView;
+}
+
+- (void)scheduleFallbackRevealUnityView
+{
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+        if (!self->_isPresentingUnityView) {
+          return;
+        }
+
+        UIView *rootView = [self currentUnityRootView];
+        if (rootView) {
+          rootView.hidden = NO;
+          rootView.userInteractionEnabled = YES;
+        }
+      });
 }
 
 - (void)detachUnityView
@@ -606,6 +639,16 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
 - (void)layoutSubviews
 {
   [super layoutSubviews];
+  // Re-assert ownership every layout: the shared-singleton Unity view can be
+  // concealed / removed from this container by another screen's
+  // hideUnityMakeupView() (ARFilterScreen calls it on focus/nav churn), and
+  // didMoveToWindow does not fire again to re-mount it — so the container goes
+  // black and the makeup renders into a detached view. Re-mounting here (a
+  // no-op when already attached) keeps the live Unity view in whichever
+  // container is currently on screen.
+  if (self.window != nil) {
+    [self mountUnityViewIfNeeded];
+  }
   _unityView.frame = self.bounds;
 }
 
@@ -622,6 +665,8 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
     _unityView.frame = self.bounds;
     _unityView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self addSubview:_unityView];
+    NSLog(@"[aura:unity-native] container re-mounted unity view hidden=%@",
+          _unityView.hidden ? @"YES" : @"NO");
   }
 }
 

@@ -26,7 +26,7 @@ import {
 import {CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND} from './CameraCaptureButton';
 import {colors} from '../theme';
 
-const footerBarHeight: 60 = APP_FOOTER_BAR_HEIGHT;
+const footerBarHeight: 56 = APP_FOOTER_BAR_HEIGHT;
 const footerTabHeight: 42 = APP_FOOTER_TAB_HEIGHT;
 const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
   APP_FOOTER_ACTIVE_TAB_BACKGROUND;
@@ -37,7 +37,7 @@ const footerActionSlotCornerInset: 8 = APP_FOOTER_ACTION_SLOT_CORNER_INSET;
 const footerHorizontalPadding: 20 = APP_FOOTER_HORIZONTAL_PADDING;
 const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;
 const footerActionIconSize: 28 = APP_FOOTER_ACTION_ICON_SIZE;
-const footerFloatingHostBaseHeight: 72 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
+const footerFloatingHostBaseHeight: 68 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
 const footerSideTabWidth: 58 = APP_FOOTER_SIDE_TAB_WIDTH;
 const footerTabOrder: readonly ['home', 'community', 'profile'] =
   APP_FOOTER_TAB_ORDER;

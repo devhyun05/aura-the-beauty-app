@@ -32,6 +32,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         public float Coverage;
         public float Evenness;
         public float LuminanceInfluence;
+        public float SkinSmoothStrength;
         public float MaskChannelRMax;
         public float MaskAverage;
         public string Mode;
@@ -56,6 +57,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private const float NeckChromaGate = 0.85f;
     private const float NeckChromaTolerance = 0.16f;
     private const float NeckMaskStrength = 0.90f;
+    private const float FaceChromaGate = 0.85f;
     private const float DefaultScreenSpaceUvFlip = 0.0f;
     private const float DefaultScreenSpaceUvFlipX = 0.0f;
     private static readonly int CameraTextureModeId = Shader.PropertyToID("_CameraTextureMode");
@@ -68,6 +70,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private FoundationMaskRuntime maskRuntime;
     private FoundationSemanticMaskCompositor semanticCompositor;
     private FoundationScreenSpaceCompositor screenSpaceCompositor;
+    private VisionFaceParsingProvider visionParsingProvider;
     private E7VisionLipBoundaryRuntime visionStabilizerRuntime;
     private E7HandOcclusionRuntime handOcclusionRuntime;
     private int lastVisionStabilizerSequence = -1;
@@ -134,10 +137,15 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         float opacity,
         float coverage,
         float evenness,
-        float luminanceInfluence)
+        float luminanceInfluence,
+        float skinSmoothStrength)
     {
         state.Requested = true;
-        state.Enabled = enabled && intensity > 0.0001f && opacity > 0.0001f;
+        // 잡티 제거(skin smoothing) can run standalone: enable the screen-space
+        // pass when the base is on OR when only blemish smoothing is requested,
+        // so the slider works even at 0 foundation intensity.
+        state.Enabled = (enabled && intensity > 0.0001f && opacity > 0.0001f)
+            || skinSmoothStrength > 0.0001f;
         state.Mode = NormalizeMode(mode);
         state.FallbackMode = NormalizeFallbackMode(fallbackMode);
         // Modes 8-11 are mask-orientation probes used while calibrating the
@@ -146,11 +154,12 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         // mask so we can distinguish display-path flips from mask-generation
         // flips. Modes 13-16 are 90-degree orientation probes. Mode 19 is a
         // shader-path confirmation fill.
-        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 30);
+        state.DebugMaskMode = Mathf.Clamp(debugMaskMode, 0, 42);
         state.Intensity = Mathf.Clamp01(intensity) * Mathf.Clamp01(opacity);
         state.Coverage = Mathf.Clamp01(coverage);
         state.Evenness = Mathf.Clamp01(evenness);
         state.LuminanceInfluence = Mathf.Clamp01(luminanceInfluence);
+        state.SkinSmoothStrength = Mathf.Clamp01(skinSmoothStrength);
         state.ProviderType = ProviderType;
         state.CameraTextureSource = cameraTextureSource;
 
@@ -170,6 +179,7 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_FoundationCoverage", state.Coverage);
         material.SetFloat("_FoundationEvenness", state.Evenness);
         material.SetFloat("_FoundationLuminanceInfluence", state.LuminanceInfluence);
+        material.SetFloat("_SkinSmoothStrength", state.SkinSmoothStrength);
         material.SetFloat("_FoundationDebugMode", state.DebugMaskMode);
         material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
         material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
@@ -261,6 +271,43 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
         else
         {
+            // Vision face-parsing exclusions (async v2): the provider now
+            // captures via a downscaled RT + AsyncGPUReadback and runs
+            // Vision on a background queue, so requesting it here costs no
+            // main-thread time (the old PNG path stalled the GPU pipeline
+            // and encoded on the main thread — visible hitches). Hair/brow
+            // masks land in the composite as exclusions; an exposed
+            // forehead carries no hair pixels and stays painted.
+            EnsureVisionParsingProvider();
+            if (visionParsingProvider != null)
+            {
+                visionParsingProvider.RequestCapture();
+            }
+
+            bool segmentationActive = FoundationSegmentationRegistry.TryGetResult(
+                arCamera, out FoundationSegmentationResult segmentation);
+            bool hairMaskValid = segmentationActive
+                && segmentation.HasHairClass
+                && segmentation.HairMask != null;
+            bool browMaskValid = segmentationActive
+                && segmentation.HasEyebrowClass
+                && segmentation.EyebrowMask != null;
+            material.SetFloat("_SegHairValid", hairMaskValid ? 1.0f : 0.0f);
+            if (hairMaskValid)
+            {
+                material.SetTexture("_SegHairTex", segmentation.HairMask);
+            }
+
+            material.SetFloat("_SegBrowValid", browMaskValid ? 1.0f : 0.0f);
+            if (browMaskValid)
+            {
+                material.SetTexture("_SegBrowTex", segmentation.EyebrowMask);
+            }
+
+            // With live hair exclusion the static UV hairline fade narrows so
+            // the upper forehead keeps coverage (the semantic mask owns hair).
+            E3RegionMaskOverlay.SetFoundationSemanticHairActive(hairMaskValid);
+
             // Screen-space mode: project the calibrated canonical-UV skin
             // mask (tight eye openings, lip-texture lips, brow bands,
             // hairline fade) through the face UVs so the screen-space mask
@@ -748,6 +795,20 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
     }
 
+    private void EnsureVisionParsingProvider()
+    {
+        if (visionParsingProvider != null)
+        {
+            return;
+        }
+
+        visionParsingProvider = FindFirstObjectByType<VisionFaceParsingProvider>();
+        if (visionParsingProvider == null)
+        {
+            visionParsingProvider = gameObject.AddComponent<VisionFaceParsingProvider>();
+        }
+    }
+
     private void EnsureMaterial()
     {
         if (material != null)
@@ -778,6 +839,10 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_NeckChromaGate", NeckChromaGate);
         material.SetFloat("_NeckChromaTolerance", NeckChromaTolerance);
         material.SetFloat("_NeckMaskStrength", NeckMaskStrength);
+        // Per-pixel live skin gate over the whole face: locks the visible
+        // foundation boundary to the camera image (no anchor-jitter shake)
+        // and keeps bangs/glasses/background clean between Vision updates.
+        material.SetFloat("_FaceChromaGate", FaceChromaGate);
     }
 
     private void EnsureQuad(Camera arCamera)

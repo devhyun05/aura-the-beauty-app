@@ -9,6 +9,7 @@ import {
   floatingActionDefinitions,
   getNextFloatingActionSelection,
   getFloatingActionSelectedSlotNumber,
+  AppScreen,
   type FloatingActionButtonPosition,
   type FloatingActionId,
   type FloatingActionInteractionMode,
@@ -55,6 +56,10 @@ export function getFloatingActionSelectionBadgeLabel(
   return slotNumber ? String(slotNumber) : '';
 }
 
+export const FLOATING_ACTION_SETTINGS_SCREEN_SCROLL_ENABLED = true;
+export const FLOATING_ACTION_SETTINGS_SCREEN_TOP_PADDING =
+  'belowOverlayHeader' as const;
+
 export function FloatingActionSettingsScreen({
   onChangeActionIds,
   onChangeButtonPosition,
@@ -66,7 +71,11 @@ export function FloatingActionSettingsScreen({
   const selectedCount = selectedActionIds.length;
 
   return (
-    <YStack style={styles.screen}>
+    <AppScreen
+      contentGap={spacing.xl}
+      horizontalPadding={spacing.lg}
+      scroll={FLOATING_ACTION_SETTINGS_SCREEN_SCROLL_ENABLED}
+      topPadding={FLOATING_ACTION_SETTINGS_SCREEN_TOP_PADDING}>
       <YStack style={styles.section}>
         <XStack style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>조작 방식</Text>
@@ -236,7 +245,7 @@ export function FloatingActionSettingsScreen({
           })}
         </YStack>
       </YStack>
-    </YStack>
+    </AppScreen>
   );
 }
 
@@ -396,13 +405,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.78,
-  },
-  screen: {
-    backgroundColor: colors.background,
-    flex: 1,
-    gap: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
   },
   section: {
     gap: spacing.sm,

@@ -1,11 +1,10 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {ChevronRight, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
-import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {FaceAnalysisSummaryCard} from '../components/FaceAnalysisSummaryCard';
@@ -24,10 +23,10 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReport?: (reportId: string) => void;
   onPressFaceAnalysisReportsList?: () => void;
-  onPressProductRecommendationForReport?: (reportId: string) => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
+  onPressConsultingHistory?: () => void;
   likedMakeupLooks?: readonly MakeupLookPreview[];
 };
 
@@ -38,10 +37,10 @@ export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReport,
   onPressFaceAnalysisReportsList,
-  onPressProductRecommendationForReport,
   onPressMakeupLook,
   onPressMakeupLookList,
   onPressLikedProductList,
+  onPressConsultingHistory,
   likedMakeupLooks = [],
 }: ProfileScreenProps) {
   const {width} = useWindowDimensions();
@@ -49,9 +48,6 @@ export function ProfileScreen({
   const [loadState, setLoadState] = useState<ProfileLoadState>({
     status: 'loading',
   });
-  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
-  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
-  const [pendingDeleteReportId, setPendingDeleteReportId] = useState<string | null>(null);
   const contentWidth = width - spacing.screenX * 2;
   const previewGap =
     spacing.md * (PROFILE_SCREEN_PREVIEW_COLUMN_COUNT - 1);
@@ -65,8 +61,6 @@ export function ProfileScreen({
   };
 
   const loadProfile = useCallback(() => {
-    setDeleteErrorMessage(null);
-    setPendingDeleteReportId(null);
     setLoadState({status: 'loading'});
 
     resolveProfileLoadState(loadProfileScreenData).then((nextState) => {
@@ -75,50 +69,6 @@ export function ProfileScreen({
       }
     });
   }, []);
-
-  const handleDeleteFaceAnalysisReport = useCallback(async (reportId: string) => {
-    setDeleteErrorMessage(null);
-
-    if (pendingDeleteReportId !== reportId) {
-      setPendingDeleteReportId(reportId);
-      return;
-    }
-
-    setDeletingReportId(reportId);
-
-    try {
-      await deleteFaceAnalysisReport(reportId);
-
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      setLoadState((currentState) => {
-        if (currentState.status !== 'success') {
-          return currentState;
-        }
-
-        return {
-          status: 'success',
-          data: removeFaceAnalysisReport(currentState.data, reportId),
-        };
-      });
-      setPendingDeleteReportId(null);
-    } catch (error) {
-      console.info('[aura:profile] analysis-report:delete-failed', {
-        message: error instanceof Error ? error.message : String(error),
-        reportId,
-      });
-
-      if (isMountedRef.current) {
-        setDeleteErrorMessage('보고서를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setDeletingReportId(null);
-      }
-    }
-  }, [pendingDeleteReportId]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -202,7 +152,7 @@ export function ProfileScreen({
 
       <View style={styles.section}>
         <SectionHeader
-          actionLabel="전체 보기"
+          actionLabel="더보기"
           onPressAction={onPressFaceAnalysisReportsList}
           title="얼굴 분석 결과"
         />
@@ -211,21 +161,10 @@ export function ProfileScreen({
             {faceAnalysisReports.map((report) => (
               <FaceAnalysisSummaryCard
                 key={report.id}
-                isDeleteConfirming={pendingDeleteReportId === report.id}
-                isDeleting={deletingReportId === report.id}
-                onDelete={() => {
-                  void handleDeleteFaceAnalysisReport(report.id);
-                }}
                 onPress={() => onPressFaceAnalysisReport?.(report.id)}
-                onPressProducts={() => onPressProductRecommendationForReport?.(report.id)}
                 report={report}
               />
             ))}
-            {deleteErrorMessage ? (
-              <Text accessibilityLiveRegion="polite" style={styles.deleteErrorText}>
-                {deleteErrorMessage}
-              </Text>
-            ) : null}
           </View>
         ) : (
           <EmptySection label="저장된 얼굴 분석 결과가 없어요." />
@@ -234,7 +173,7 @@ export function ProfileScreen({
 
       <View style={styles.section}>
         <SectionHeader
-          actionLabel="전체 보기"
+          actionLabel="더보기"
           onPressAction={onPressMakeupLookList}
           title="메이크업 룩"
         />
@@ -256,7 +195,7 @@ export function ProfileScreen({
 
       <View style={styles.section}>
         <SectionHeader
-          actionLabel="전체 보기"
+          actionLabel="더보기"
           onPressAction={onPressLikedProductList}
           title="좋아요한 제품"
         />
@@ -274,25 +213,33 @@ export function ProfileScreen({
           <EmptySection label="좋아요한 제품이 없어요." />
         )}
       </View>
+
+      {onPressConsultingHistory ? (
+        <View style={styles.section}>
+          <SectionHeader title="전문가 상담" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="상담 내역 보기"
+            onPress={onPressConsultingHistory}
+            style={({pressed}) => [
+              styles.consultingRow,
+              pressed ? styles.consultingRowPressed : null,
+            ]}>
+            <View style={styles.consultingIcon}>
+              <Video color={colors.textPrimary} size={18} />
+            </View>
+            <View style={styles.consultingBody}>
+              <Text style={styles.consultingTitle}>내 상담 내역</Text>
+              <Text numberOfLines={1} style={styles.consultingDescription}>
+                예약과 상담 요약 리포트를 한곳에서 확인해요
+              </Text>
+            </View>
+            <ChevronRight color={colors.textTertiary} size={18} />
+          </Pressable>
+        </View>
+      ) : null}
     </AppScreen>
   );
-}
-
-function removeFaceAnalysisReport<T extends {
-  faceAnalysisReport: FaceAnalysisReport | null;
-  faceAnalysisReports: FaceAnalysisReport[];
-}>(data: T, reportId: string): T {
-  const nextReports = data.faceAnalysisReports.filter((report) => report.id !== reportId);
-  const nextLatestReport =
-    data.faceAnalysisReport?.id === reportId
-      ? nextReports[0] ?? null
-      : data.faceAnalysisReport;
-
-  return {
-    ...data,
-    faceAnalysisReport: nextLatestReport,
-    faceAnalysisReports: nextReports,
-  };
 }
 
 function EmptySection({label}: {label: string}) {
@@ -337,6 +284,44 @@ function ProfileOverviewItem({label, value}: {label: string; value: number}) {
 }
 
 const styles = StyleSheet.create({
+  consultingBody: {
+    flex: 1,
+  },
+  consultingDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    marginTop: 2,
+  },
+  consultingIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  consultingRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 64,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  consultingRowPressed: {
+    opacity: 0.75,
+  },
+  consultingTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
   empty: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
@@ -350,13 +335,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
-  },
-  deleteErrorText: {
-    color: colors.danger,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-    paddingHorizontal: spacing.xs,
   },
   errorContent: {
     alignItems: 'center',

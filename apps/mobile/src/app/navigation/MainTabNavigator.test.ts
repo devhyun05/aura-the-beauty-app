@@ -33,7 +33,7 @@ expectEqual(
 );
 expectEqual(
   getMainTabBarMinHostHeight(18),
-  268,
+  264,
   'main tab bar minimum host height includes footer and floating action space',
 );
 expectEqual(
@@ -43,7 +43,7 @@ expectEqual(
 );
 expectEqual(
   getMainTabBarHostHeight(220, 18),
-  268,
+  264,
   'main tab bar host keeps minimum footer interaction height',
 );
 expectEqual(

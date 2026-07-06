@@ -19,7 +19,7 @@ import {
 } from '../app/navigation/navigationState';
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
-import {prepareUnityMakeupFramework} from '../features/ar/services/unityMakeupBridge';
+import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
 import {typography} from '../shared/theme';
 
 export function AppRoot() {
@@ -51,7 +51,12 @@ export function AppRoot() {
 
     const preloadAfterInitialRender = InteractionManager.runAfterInteractions(() => {
       preloadTimer = setTimeout(() => {
-        prepareUnityMakeupFramework();
+        // Full offscreen boot at app start (not just the dylib load): this runs
+        // Unity runEmbeddedWithArgc while concealed so the scene loads, the
+        // Unity splash plays offscreen, and the first AR frame is produced
+        // BEFORE the user ever enters the AR screen. Entry then reveals an
+        // already-live scene instead of a splash/black loading flash.
+        prepareUnityMakeupRuntime();
       }, 1000);
     });
 
