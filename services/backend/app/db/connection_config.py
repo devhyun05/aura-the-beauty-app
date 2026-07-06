@@ -59,16 +59,18 @@ def resolve_database_connection_config(
   refresh_secret: bool = False,
 ) -> DatabaseConnectionConfig | None:
   settings = settings or get_settings()
+  database_url = (settings.database_url or "").strip()
+  database_secret_id = (settings.database_secret_id or "").strip()
 
-  if settings.database_url:
-    return DatabaseConnectionConfig(source="database_url", dsn=settings.database_url)
+  if database_url:
+    return DatabaseConnectionConfig(source="database_url", dsn=database_url)
 
-  if not settings.database_secret_id:
+  if not database_secret_id:
     return None
 
   secret = get_database_secret(settings, refresh=refresh_secret)
-  username = get_required_secret_text(secret, "username", secret_id=settings.database_secret_id)
-  password = get_required_secret_text(secret, "password", secret_id=settings.database_secret_id)
+  username = get_required_secret_text(secret, "username", secret_id=database_secret_id)
+  password = get_required_secret_text(secret, "password", secret_id=database_secret_id)
   host = get_optional_secret_text(secret, "host") or settings.db_host
   database = (
     get_optional_secret_text(secret, "dbname")

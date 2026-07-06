@@ -2,6 +2,8 @@ import React from 'react';
 
 import {
   FaceAnalysisReportDetailScreen,
+  faceAnalysisReportDeleteConfirmationCopy,
+  faceAnalysisReportDetailActionLabels,
   resolveFaceAnalysisReportHeroImageSource,
 } from './FaceAnalysisReportDetailScreen';
 import {
@@ -70,6 +72,26 @@ expectEqual(
   faceAnalysisReportCreateFilterButtonAccessibilityLabels['floating-bottom'],
   '메이크업 필터 만들기',
   'image analysis report create filter button copy',
+);
+expectEqual(
+  faceAnalysisReportDetailActionLabels.products,
+  '추천 제품',
+  'image analysis report product action copy',
+);
+expectEqual(
+  faceAnalysisReportDetailActionLabels.delete,
+  '삭제',
+  'image analysis report delete action copy',
+);
+expectEqual(
+  faceAnalysisReportDeleteConfirmationCopy.title,
+  '보고서 삭제',
+  'image analysis report delete confirmation title',
+);
+expectEqual(
+  faceAnalysisReportDeleteConfirmationCopy.confirm,
+  '삭제',
+  'image analysis report delete confirmation action',
 );
 expectEqual(
   screenFramePresentation.headerPlacement,
@@ -201,5 +223,7 @@ expectEqual(
 <FaceAnalysisReportDetailScreen
   onBack={() => undefined}
   onCreateARFilter={() => undefined}
+  onDeleteReport={() => undefined}
+  onPressProducts={() => undefined}
   reportId="analysis-20260622-bare-face"
 />;

@@ -5,6 +5,10 @@ import {
   AR_FILTER_COMPARISON_MODE_ACTIVE_INDICATOR,
   AR_FILTER_COMPARISON_MODE_CONTAINER_CHROME,
   AR_FILTER_COMPARISON_MODE_CONTROL_STYLE,
+  AR_FILTER_COMPARISON_MODE_INDICATOR_GAP,
+  AR_FILTER_COMPARISON_MODE_INDICATOR_HEIGHT,
+  AR_FILTER_COMPARISON_MODE_INDICATOR_OPACITY,
+  AR_FILTER_COMPARISON_MODE_INDICATOR_WIDTH,
   AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET,
   AR_FILTER_GUIDE_MODE_CONTROL_WIDTH,
   AR_FILTER_GUIDE_MODE_PLACEMENT,
@@ -115,6 +119,26 @@ expectEqual(
   AR_FILTER_COMPARISON_MODE_VERTICAL_OFFSET,
   -spacing.xs,
   'AR filter comparison buttons are raised slightly toward the guide mode tabs',
+);
+expectEqual(
+  AR_FILTER_COMPARISON_MODE_INDICATOR_GAP,
+  spacing.xs / 2,
+  'AR filter comparison underline sits closer to the text',
+);
+expectEqual(
+  AR_FILTER_COMPARISON_MODE_INDICATOR_WIDTH,
+  spacing.xxl,
+  'AR filter comparison underline is longer than the previous compact line',
+);
+expectEqual(
+  AR_FILTER_COMPARISON_MODE_INDICATOR_HEIGHT,
+  2,
+  'AR filter comparison underline is thicker for the active side',
+);
+expectEqual(
+  AR_FILTER_COMPARISON_MODE_INDICATOR_OPACITY,
+  1,
+  'AR filter comparison underline is fully opaque',
 );
 expectEqual(
   getARFilterModeTabHeight(),

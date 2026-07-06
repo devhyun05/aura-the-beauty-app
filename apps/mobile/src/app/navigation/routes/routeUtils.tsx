@@ -58,7 +58,11 @@ export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterB
 export function getMainTabHeaderBorderWidth(
   routeName: MainTabRouteName,
 ): 0 | undefined {
-  return routeName === 'HomeTab' ? 0 : undefined;
+  return routeName === 'HomeTab' ||
+    routeName === 'CommunityTab' ||
+    routeName === 'ProfileTab'
+    ? 0
+    : undefined;
 }
 
 function navigateAppFeatureRootRoute(

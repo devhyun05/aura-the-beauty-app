@@ -1,16 +1,22 @@
 import React from 'react';
 import {ScrollView, StyleSheet} from 'react-native';
-import {YStack} from 'tamagui';
+import {Button, Text, View, YStack} from 'tamagui';
 
-import {spacing} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupArea, MakeupAreaOption} from '../../../shared/types/makeupGuide';
-import {OverlayChipButton} from '../../../shared/ui';
 
 type ARFilterMakeupAreaTabsProps = {
   makeupAreas: readonly MakeupAreaOption[];
   onMakeupAreaPress: (makeupArea: MakeupArea) => void;
   selectedMakeupArea: MakeupArea;
 };
+
+export const AR_FILTER_MAKEUP_AREA_SELECTOR_STYLE = 'compactTextTabs' as const;
+export const AR_FILTER_MAKEUP_AREA_SELECTOR_CHROME = 'none' as const;
+export const AR_FILTER_MAKEUP_AREA_SELECTOR_ACTIVE_INDICATOR = 'underline' as const;
+export const AR_FILTER_MAKEUP_AREA_SELECTOR_HEIGHT = spacing.xxl;
+export const AR_FILTER_MAKEUP_AREA_SELECTOR_VERTICAL_FOOTPRINT =
+  AR_FILTER_MAKEUP_AREA_SELECTOR_HEIGHT + spacing.xs;
 
 export function ARFilterMakeupAreaTabs({
   makeupAreas,
@@ -20,17 +26,39 @@ export function ARFilterMakeupAreaTabs({
   return (
     <YStack style={styles.horizontalSection}>
       <ScrollView
-        contentContainerStyle={styles.chipList}
+        contentContainerStyle={styles.tabList}
         horizontal
         showsHorizontalScrollIndicator={false}>
-        {makeupAreas.map(makeupArea => (
-          <OverlayChipButton
-            key={makeupArea.id}
-            isActive={makeupArea.id === selectedMakeupArea}
-            label={makeupArea.label}
-            onPress={() => onMakeupAreaPress(makeupArea.id)}
-          />
-        ))}
+        {makeupAreas.map(makeupArea => {
+          const isActive = makeupArea.id === selectedMakeupArea;
+
+          return (
+            <Button
+              accessibilityLabel={`${makeupArea.label} 메이크업 부위 선택`}
+              accessibilityRole="button"
+              accessibilityState={{selected: isActive}}
+              key={makeupArea.id}
+              onPress={() => onMakeupAreaPress(makeupArea.id)}
+              pressStyle={{opacity: 0.72}}
+              style={styles.textTab}
+              unstyled>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.textTabLabel,
+                  isActive ? styles.textTabLabelActive : undefined,
+                ]}>
+                {makeupArea.label}
+              </Text>
+              <View
+                style={[
+                  styles.textTabIndicator,
+                  !isActive ? styles.textTabIndicatorInactive : undefined,
+                ]}
+              />
+            </Button>
+          );
+        })}
       </ScrollView>
     </YStack>
   );
@@ -38,9 +66,40 @@ export function ARFilterMakeupAreaTabs({
 
 const styles = StyleSheet.create({
   horizontalSection: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  chipList: {
-    gap: spacing.sm,
+  tabList: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    minHeight: AR_FILTER_MAKEUP_AREA_SELECTOR_VERTICAL_FOOTPRINT,
+  },
+  textTab: {
+    alignItems: 'center',
+    gap: spacing.xs / 2,
+    height: AR_FILTER_MAKEUP_AREA_SELECTOR_HEIGHT,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
+  textTabIndicator: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    height: 2,
+    width: 16,
+  },
+  textTabIndicatorInactive: {
+    opacity: 0,
+  },
+  textTabLabel: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  textTabLabelActive: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontWeight: typography.fontWeight.bold,
   },
 });
