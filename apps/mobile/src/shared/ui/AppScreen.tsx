@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import {createContext, type ReactNode, useContext} from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'tamagui';
@@ -15,6 +15,22 @@ export type AppScreenTopPadding =
   | 'none';
 export type AppScreenBottomPadding = number | 'floatingFooter' | 'safeArea';
 export const APP_SCREEN_CONTENT_TOP_PADDING = spacing.lg;
+
+const AppScreenOverlayHeaderHeightContext = createContext(0);
+
+export function AppScreenOverlayHeaderHeightProvider({
+  children,
+  headerHeight,
+}: {
+  children: ReactNode;
+  headerHeight: number;
+}) {
+  return (
+    <AppScreenOverlayHeaderHeightContext.Provider value={headerHeight}>
+      {children}
+    </AppScreenOverlayHeaderHeightContext.Provider>
+  );
+}
 
 export function getAppScreenTopPadding(
   topPadding: AppScreenTopPadding,
@@ -58,6 +74,24 @@ export function getAppScreenBottomPadding(
   return Math.max(bottomInset, spacing.xl) + spacing.xxl;
 }
 
+export function getAppScreenResolvedTopPadding(
+  topPadding: AppScreenTopPadding,
+  topInset: number,
+  overlayHeaderHeight: number,
+) {
+  const baseTopPadding = getAppScreenTopPadding(topPadding, topInset);
+
+  if (overlayHeaderHeight <= 0) {
+    return baseTopPadding;
+  }
+
+  if (topPadding === 'none' || topPadding === 'belowShellHeader') {
+    return overlayHeaderHeight + baseTopPadding;
+  }
+
+  return baseTopPadding;
+}
+
 type AppScreenProps = {
   backgroundColor?: string;
   children: ReactNode;
@@ -78,12 +112,17 @@ export function AppScreen({
   topPadding = 'standalone',
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
+  const overlayHeaderHeight = useContext(AppScreenOverlayHeaderHeightContext);
   const contentStyle = {
     flexGrow: 1,
     gap: contentGap,
     paddingBottom: getAppScreenBottomPadding(bottomPadding, insets.bottom),
     paddingHorizontal: horizontalPadding,
-    paddingTop: getAppScreenTopPadding(topPadding, insets.top),
+    paddingTop: getAppScreenResolvedTopPadding(
+      topPadding,
+      insets.top,
+      overlayHeaderHeight,
+    ),
   };
   if (!scroll) {
     return <View style={[styles.screen, {backgroundColor}, contentStyle]}>{children}</View>;

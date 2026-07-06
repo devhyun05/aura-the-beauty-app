@@ -64,8 +64,11 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const {
     likedMakeupFilterIds,
+    setMakeupFeedbackResult,
     setLikedMakeupFilterIds,
+    setSelectedMakeupFeedbackPhoto,
     setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
     setShouldShowBeautyJourneyGuide,
     shouldShowBeautyJourneyGuide,
   } = useNavigationFlowState();
@@ -80,6 +83,39 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     setSelectedRecommendedMakeupFilterId(filterId);
     rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleMakeupFilterPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    rootNavigation?.navigate('ARFilter', {source: 'homeServiceShortcut'});
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleHalfMakeupPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    rootNavigation?.navigate('ARFilter', {
+      initialGuideMode: 'half',
+      source: 'homeServiceShortcut',
+    });
+  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
+
+  const handleMakeupExtractionPress = React.useCallback(() => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+    rootNavigation?.navigate('ReferenceMakeupExtractionUpload');
+  }, [
+    rootNavigation,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  ]);
+
+  const handleMakeupFeedbackPress = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
+    rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+  }, [
+    rootNavigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   const handleBeautyJourneyGuideConfirm = React.useCallback(() => {
     setShouldShowBeautyJourneyGuide(false);
@@ -117,8 +153,13 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       wrapContentInScreen={false}>
       <HomeScreen
         onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
+        onPressCommunity={() => navigation.navigate('CommunityTab')}
         onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+        onPressHalfMakeup={handleHalfMakeupPress}
         onPressHeroTrendFilter={handleHeroTrendFilterPress}
+        onPressMakeupExtraction={handleMakeupExtractionPress}
+        onPressMakeupFeedback={handleMakeupFeedbackPress}
+        onPressMakeupFilter={handleMakeupFilterPress}
         onPressProductRecommendations={() => rootNavigation?.navigate('ProductRecommendation')}
         onPressRecommendedFilterMore={() =>
           rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())

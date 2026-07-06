@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
 import type {CameraType} from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -195,8 +195,11 @@ export function ARFilterScreen({
 }: ARFilterScreenProps) {
   const insets = useSafeAreaInsets();
   const isFullFaceMode = Boolean(fullFaceEditState);
-  const arGuideData = getARMakeupGuideData();
-  const defaultFilter = getDefaultMakeupFilter(arGuideData);
+  const arGuideData = useMemo(() => getARMakeupGuideData(), []);
+  const defaultFilter = useMemo(
+    () => getDefaultMakeupFilter(arGuideData),
+    [arGuideData],
+  );
   const arFilterSelectionState = useARFilterSelectionState({
     arGuideData,
     defaultFilter,
