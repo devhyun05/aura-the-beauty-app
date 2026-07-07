@@ -192,40 +192,43 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       navigation={navigation}
       routeName="HomeTab"
       wrapContentInScreen={false}>
-      <>
-        <HomeScreen
-          onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
-          onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
-          onPressCommunity={() => navigation.navigate('CommunityTab')}
-          onPressConsulting={() => rootNavigation?.navigate('Consulting')}
-          onPressHalfMakeup={handleHalfMakeupPress}
-          onPressHeroTrendFilter={handleHeroTrendFilterPress}
-          onPressMakeupExtraction={handleMakeupExtractionPress}
-          onPressMakeupFeedback={handleMakeupFeedbackPress}
-          onPressMakeupFilter={handleMakeupFilterPress}
-          onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
-          onPressRecommendedFilterMore={() =>
-            rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
-          }
-          onPressRecommendedFilter={handleRecommendedFilterPress}
-          isMakeupFilterLiked={isMakeupFilterLiked}
-          onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
-          showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
-          onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
-        />
-        <MakeupExtractionActionSheet
-          isVisible={isExtractionSheetVisible}
-          onClose={closeExtractionSheet}
-          onPressCamera={() => startMakeupExtraction('camera')}
-          onPressUpload={() => startMakeupExtraction('gallery')}
-        />
-        <MakeupFeedbackActionSheet
-          isVisible={isFeedbackSheetVisible}
-          onClose={closeFeedbackSheet}
-          onPressCamera={() => startMakeupFeedback('camera')}
-          onPressUpload={() => startMakeupFeedback('gallery')}
-        />
-      </>
+      {({openFeatureMenu}) => (
+        <>
+          <HomeScreen
+            onOpenFeatureMenu={openFeatureMenu}
+            onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
+            onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
+            onPressCommunity={() => navigation.navigate('CommunityTab')}
+            onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+            onPressHalfMakeup={handleHalfMakeupPress}
+            onPressHeroTrendFilter={handleHeroTrendFilterPress}
+            onPressMakeupExtraction={handleMakeupExtractionPress}
+            onPressMakeupFeedback={handleMakeupFeedbackPress}
+            onPressMakeupFilter={handleMakeupFilterPress}
+            onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
+            onPressRecommendedFilterMore={() =>
+              rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
+            }
+            onPressRecommendedFilter={handleRecommendedFilterPress}
+            isMakeupFilterLiked={isMakeupFilterLiked}
+            onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
+            showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
+            onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
+          />
+          <MakeupExtractionActionSheet
+            isVisible={isExtractionSheetVisible}
+            onClose={closeExtractionSheet}
+            onPressCamera={() => startMakeupExtraction('camera')}
+            onPressUpload={() => startMakeupExtraction('gallery')}
+          />
+          <MakeupFeedbackActionSheet
+            isVisible={isFeedbackSheetVisible}
+            onClose={closeFeedbackSheet}
+            onPressCamera={() => startMakeupFeedback('camera')}
+            onPressUpload={() => startMakeupFeedback('gallery')}
+          />
+        </>
+      )}
     </MainTabChrome>
   );
 }
@@ -263,7 +266,6 @@ export function CommunityTabRouteScreen({
     </MainTabChrome>
   );
 }
-
 function navigateCommunityTab(navigation: RootNavigation) {
   navigateMainTab(navigation, 'CommunityTab');
 }

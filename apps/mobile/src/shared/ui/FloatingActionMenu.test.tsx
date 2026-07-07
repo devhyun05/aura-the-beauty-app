@@ -14,6 +14,7 @@ import {
   FLOATING_ACTION_MAX_ITEM_COUNT,
   FLOATING_ACTION_SETTINGS_BACKGROUND,
   FLOATING_ACTION_SETTINGS_SIZE,
+  FLOATING_ACTION_TAP_MAX_DISTANCE,
   floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   getFloatingActionButtonScale,
@@ -120,6 +121,7 @@ const customOrderedFloatingActions: readonly FloatingActionId[] = [
 const arFilterFloatingActionDefinition = getFloatingActionDefinition('arFilter');
 
 expectEqual(FLOATING_ACTION_MAX_ITEM_COUNT, 3, 'floating action max item count');
+expectEqual(FLOATING_ACTION_TAP_MAX_DISTANCE, 10, 'floating action tap distance threshold');
 expectEqual(FLOATING_ACTION_MAIN_ICON_SIZE, 20, 'floating action main icon size');
 expectEqual(
   FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
@@ -205,8 +207,8 @@ expectEqual(inlineMakeupExtractionSlot.x, -52, 'inline makeup extraction follows
 expectEqual(inlineMakeupExtractionSlot.y, -52, 'inline makeup extraction sits on the tighter upper-left arc');
 expectEqual(inlineMakeupFeedbackSlot.x, -74, 'inline makeup feedback continues the tighter arc');
 expectEqual(inlineMakeupFeedbackSlot.y, 0, 'inline makeup feedback sits at 9 o clock');
-expectEqual(inlineSettingsSlot.x, -38, 'inline settings finishes the tighter arc toward 7 o clock');
-expectEqual(inlineSettingsSlot.y, 38, 'inline settings sits closer below-left of the star');
+expectEqual(inlineSettingsSlot.x, -44, 'inline settings finishes the tighter arc toward 7 o clock');
+expectEqual(inlineSettingsSlot.y, 24, 'inline settings sits closer below-left of the star');
 expectGreaterThan(
   inlineSettingsExtractionDistance,
   settingsExtractionMinimumDistance,
@@ -280,12 +282,12 @@ expectEqual(
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.x,
-  38,
+  44,
   'left-position settings finishes the mirrored arc',
 );
 expectEqual(
   inlineLeftPositionSettingsSlot.y,
-  38,
+  24,
   'left-position settings sits below-right of the star',
 );
 expectGreaterThan(

@@ -1,6 +1,15 @@
 import type {ImageSourcePropType} from 'react-native';
 
+export type HomeHeroFeatureId =
+  | 'auradin'
+  | 'consulting'
+  | 'faceDiagnosis'
+  | 'makeupExtraction';
+
 export type HomeTrendItem = {
+  ctaLabel?: string;
+  description?: string;
+  featureId?: HomeHeroFeatureId;
   filterId?: string;
   id: string;
   title: string;

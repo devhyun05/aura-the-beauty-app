@@ -24,9 +24,9 @@ import {
   Sparkles,
   Store,
 } from 'lucide-react-native';
-import {Text, View, YStack} from 'tamagui';
+import {View} from 'tamagui';
 
-import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
+import {colors, iconSize, radius, shadows, spacing} from '../theme';
 
 export type FloatingActionId =
   | 'arFilter'
@@ -82,6 +82,7 @@ export type FloatingActionSettingsVisualState = {
 };
 
 export const FLOATING_ACTION_MAX_ITEM_COUNT = 3;
+export const FLOATING_ACTION_TAP_MAX_DISTANCE = 10;
 export const FLOATING_ACTION_MIN_DRAG_DISTANCE = 48;
 export const FLOATING_ACTION_SELECTION_RADIUS = 54;
 export const FLOATING_ACTION_FLICK_ALIGNMENT = 0.88;
@@ -91,8 +92,8 @@ export const FLOATING_ACTION_ACTIVE_SCALE = 1.2;
 export const FLOATING_ACTION_BUTTON_SIZE = 62;
 export const FLOATING_ACTION_MAIN_ICON_SIZE = iconSize.sm;
 export const FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH = 1.8;
-export const FLOATING_ACTION_ITEM_SIZE = 58;
-export const FLOATING_ACTION_SETTINGS_SIZE = 42;
+export const FLOATING_ACTION_ITEM_SIZE = 52;
+export const FLOATING_ACTION_SETTINGS_SIZE = 44;
 export const FLOATING_ACTION_SETTINGS_SELECTION_RADIUS =
   FLOATING_ACTION_SETTINGS_SIZE / 2 + spacing.sm;
 export const FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND = colors.liquidGlassSurface;
@@ -104,8 +105,8 @@ export const FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET: FloatingActionSlotOff
   y: -74,
 };
 export const FLOATING_ACTION_INLINE_SETTINGS_SLOT_OFFSET: FloatingActionSlotOffset = {
-  x: -38,
-  y: 38,
+  x: -44,
+  y: 24,
 };
 const FLOATING_ACTION_INLINE_ARC_SLOT_OFFSETS = [
   FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET,
@@ -525,6 +526,7 @@ export function FloatingActionMenu({
   const [uncontrolledIsExpanded, setUncontrolledIsExpanded] = useState(false);
   const isExpanded = controlledIsExpanded ?? uncontrolledIsExpanded;
   const isExpandedRef = useRef(isExpanded);
+  const panStartExpandedRef = useRef(false);
   const [activeActionId, setActiveActionId] = useState<FloatingActionId | null>(null);
   const activeActionIdRef = useRef<FloatingActionId | null>(null);
   const [isSettingsActive, setIsSettingsActive] = useState(false);
@@ -573,6 +575,7 @@ export function FloatingActionMenu({
       onMoveShouldSetPanResponder: () => interactionMode === 'drag',
       onMoveShouldSetPanResponderCapture: () => interactionMode === 'drag',
       onPanResponderGrant: () => {
+        panStartExpandedRef.current = isExpandedRef.current;
         setExpanded(true);
       },
       onPanResponderMove: (
@@ -622,6 +625,19 @@ export function FloatingActionMenu({
         _event: GestureResponderEvent,
         gestureState: PanResponderGestureState,
       ) => {
+        const dragDistance = Math.hypot(gestureState.dx, gestureState.dy);
+
+        if (dragDistance <= FLOATING_ACTION_TAP_MAX_DISTANCE) {
+          if (panStartExpandedRef.current) {
+            closeMenu();
+            return;
+          }
+
+          clearActiveTargets();
+          setExpanded(true);
+          return;
+        }
+
         const releaseOutcome = getFloatingActionReleaseOutcome(
           {
             translationX: gestureState.dx,
@@ -802,6 +818,25 @@ function FloatingActionOptionButton({
   slotOffset: FloatingActionSlotOffset;
 }) {
   const scale = useRef(new Animated.Value(getFloatingActionButtonScale(isActive))).current;
+  const entryProgress = useRef(new Animated.Value(0)).current;
+  const entryTranslateX = entryProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-slotOffset.x, 0],
+  });
+  const entryTranslateY = entryProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-slotOffset.y, 0],
+  });
+
+  useEffect(() => {
+    Animated.spring(entryProgress, {
+      damping: 16,
+      mass: 0.7,
+      stiffness: 190,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [entryProgress]);
 
   useEffect(() => {
     Animated.spring(scale, {
@@ -820,7 +855,12 @@ function FloatingActionOptionButton({
         {
           bottom: getFloatingActionItemBottom(slotOffset.y),
           marginLeft: getFloatingActionItemMarginLeft(slotOffset.x),
-          transform: [{scale}],
+          opacity: entryProgress,
+          transform: [
+            {translateX: entryTranslateX},
+            {translateY: entryTranslateY},
+            {scale},
+          ],
         },
         isActive && styles.actionButtonActive,
       ]}>
@@ -830,19 +870,10 @@ function FloatingActionOptionButton({
         onPress={onPress}
         style={({pressed}) => [styles.actionButtonPressable, pressed && styles.pressed]}>
         {definition.icon(isActive ? colors.white : colors.textPrimary)}
-        <Text
-          numberOfLines={2}
-          style={[
-            styles.actionLabel,
-            isActive && styles.actionLabelActive,
-          ]}>
-          {definition.label}
-        </Text>
       </Pressable>
     </Animated.View>
   );
 }
-
 function getFloatingActionItemBottom(slotOffsetY: number) {
   return (
     FLOATING_ACTION_BUTTON_SIZE / 2 -
@@ -872,11 +903,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    gap: 2,
     height: FLOATING_ACTION_ITEM_SIZE,
     justifyContent: 'center',
     left: '50%',
-    paddingHorizontal: spacing.xs,
     position: 'absolute',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: 8},
@@ -892,22 +921,8 @@ const styles = StyleSheet.create({
   actionButtonPressable: {
     alignItems: 'center',
     flex: 1,
-    gap: 2,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
     width: '100%',
-  },
-  actionLabel: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: 9,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: 11,
-    textAlign: 'center',
-  },
-  actionLabelActive: {
-    color: colors.white,
   },
   actionLayer: {
     bottom: 0,

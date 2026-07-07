@@ -5,6 +5,7 @@ import {homeMock} from '../mocks/home.mock';
 import type {
   HomeData,
   HomeFilterStoreItem,
+  HomeHeroFeatureId,
   HomeMakeupLook,
   HomeNotice,
   HomeTrendItem,
@@ -29,6 +30,9 @@ type BackendHomeNotice = {
 };
 
 type BackendHomeTrendItem = BackendImageSource & {
+  ctaLabel?: string | null;
+  description?: string | null;
+  featureId?: string | null;
   id?: string | null;
   title?: string | null;
   tone?: string | null;
@@ -61,6 +65,19 @@ function firstText(...values: Array<string | null | undefined>): string | undefi
   return values.find((value) => Boolean(value?.trim()))?.trim();
 }
 
+function asHomeHeroFeatureId(value: string | null | undefined): HomeHeroFeatureId | undefined {
+  if (
+    value === 'auradin' ||
+    value === 'consulting' ||
+    value === 'faceDiagnosis' ||
+    value === 'makeupExtraction'
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
 function imageSourceFromUrl(
   imageUrl: string | null | undefined,
   fallback: HomeData['hero']['imageSource'],
@@ -90,6 +107,9 @@ function mapTrend(
   const fallbackTrend = fallback ?? homeMock.hero.trends[index % homeMock.hero.trends.length];
 
   return {
+    ctaLabel: firstText(trend.ctaLabel, fallbackTrend?.ctaLabel),
+    description: firstText(trend.description, fallbackTrend?.description),
+    featureId: asHomeHeroFeatureId(trend.featureId) ?? fallbackTrend?.featureId,
     id: firstText(trend.id, fallbackTrend?.id) ?? `trend-${index}`,
     title: firstText(trend.title, fallbackTrend?.title) ?? '추천 룩',
     tone: firstText(trend.tone, fallbackTrend?.tone) ?? '데일리',
@@ -169,24 +189,18 @@ function mapHomeData(response: BackendHomeData): HomeData {
   }
 
   const notices = response.hero.notices ?? response.notices ?? [];
-  const trends = response.hero.trends ?? response.trends ?? [];
 
   return {
     hero: {
-      eyebrow: firstText(response.hero.eyebrow, homeMock.hero.eyebrow) ?? homeMock.hero.eyebrow,
-      title: firstText(response.hero.title, homeMock.hero.title) ?? homeMock.hero.title,
-      description:
-        firstText(response.hero.description, homeMock.hero.description) ??
-        homeMock.hero.description,
-      imageSource: imageSourceFromUrl(response.hero.imageUrl, homeMock.hero.imageSource),
+      eyebrow: homeMock.hero.eyebrow,
+      title: homeMock.hero.title,
+      description: homeMock.hero.description,
+      imageSource: homeMock.hero.imageSource,
       notices:
         notices.length > 0
           ? notices.map((notice, index) => mapNotice(notice, index, homeMock.hero.notices[index]))
           : homeMock.hero.notices,
-      trends:
-        trends.length > 0
-          ? trends.map((trend, index) => mapTrend(trend, index, homeMock.hero.trends[index]))
-          : homeMock.hero.trends,
+      trends: homeMock.hero.trends,
     },
     filterStore:
       response.filterStore && response.filterStore.length > 0
