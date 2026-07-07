@@ -1,0 +1,2993 @@
+{
+  "brands": [
+    "롬앤",
+    "페리페라",
+    "컬러그램",
+    "웨이크메이크",
+    "데이지크",
+    "클리오",
+    "정샘물 뷰티",
+    "3CE",
+    "에뛰드",
+    "더샘",
+    "VDL",
+    "라카",
+    "네이밍",
+    "투쿨포스쿨",
+    "하트퍼센트",
+    "에스쁘아",
+    "뮤드"
+  ],
+  "brandsPerWave": 4,
+  "categories": [
+    "lip",
+    "shadow",
+    "base",
+    "cheek",
+    "liner",
+    "brow"
+  ],
+  "constraints": [
+    "메타데이터만 저장 — 원본 HTML/리뷰/성분/원본 이미지 파일 저장 금지 (quality.py가 차단).",
+    "401/403/429/캡차/로그인 벽 → 'blocked'로 기록하고 우회 금지.",
+    "OliveYoung 상세·스마트스토어(JS)·HTTP 차단 브랜드는 수집 대상에서 제외 (positive 입점 증거만 허용).",
+    "colorHex/colorLab 저장 금지, madeInCountry 신규 수집 금지.",
+    "속성은 신뢰도 ≥0.65 + 결정적 신호일 때만 hard-filter eligible — 제목/오퍼 추론은 ≤0.62.",
+    "미확인 입점은 부정(false)이 아니다 — unknown으로 남긴다.",
+    "브랜드 화이트리스트(17개) 밖은 수집하지 않는다."
+  ],
+  "date": "20260708",
+  "perCategoryTopN": 60,
+  "perSubcategoryMin": 10,
+  "perSubcategoryTarget": 15,
+  "schema": "auradin-crawl-manifest.v1",
+  "slots": [
+    {
+      "brand": "롬앤",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "롬앤 립틴트",
+        "롬앤 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "롬앤 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "롬앤 립글로스",
+        "롬앤 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "롬앤 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "롬앤 아이섀도우 팔레트",
+        "롬앤 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "롬앤 싱글 아이섀도우",
+        "롬앤 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "롬앤 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "롬앤 파운데이션",
+        "롬앤 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "롬앤 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "롬앤 블러셔",
+        "롬앤 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "롬앤 크림 블러셔",
+        "롬앤 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "롬앤 아이라이너",
+        "롬앤 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "롬앤 젤라이너",
+        "롬앤 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "롬앤 아이브로우",
+        "롬앤 브로우 펜슬",
+        "롬앤 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "롬앤",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "롬앤 브로우카라",
+        "롬앤 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "페리페라 립틴트",
+        "페리페라 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "페리페라 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "페리페라 립글로스",
+        "페리페라 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "페리페라 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "페리페라 아이섀도우 팔레트",
+        "페리페라 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "페리페라 싱글 아이섀도우",
+        "페리페라 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "페리페라 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "페리페라 파운데이션",
+        "페리페라 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "페리페라 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "페리페라 블러셔",
+        "페리페라 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "페리페라 크림 블러셔",
+        "페리페라 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "페리페라 아이라이너",
+        "페리페라 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "페리페라 젤라이너",
+        "페리페라 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "페리페라 아이브로우",
+        "페리페라 브로우 펜슬",
+        "페리페라 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "페리페라",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "페리페라 브로우카라",
+        "페리페라 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "컬러그램 립틴트",
+        "컬러그램 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "컬러그램 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "컬러그램 립글로스",
+        "컬러그램 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "컬러그램 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "컬러그램 아이섀도우 팔레트",
+        "컬러그램 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "컬러그램 싱글 아이섀도우",
+        "컬러그램 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "컬러그램 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "컬러그램 파운데이션",
+        "컬러그램 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "컬러그램 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "컬러그램 블러셔",
+        "컬러그램 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "컬러그램 크림 블러셔",
+        "컬러그램 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "컬러그램 아이라이너",
+        "컬러그램 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "컬러그램 젤라이너",
+        "컬러그램 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "컬러그램 아이브로우",
+        "컬러그램 브로우 펜슬",
+        "컬러그램 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "컬러그램",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "컬러그램 브로우카라",
+        "컬러그램 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "웨이크메이크 립틴트",
+        "웨이크메이크 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "웨이크메이크 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "웨이크메이크 립글로스",
+        "웨이크메이크 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "웨이크메이크 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "웨이크메이크 아이섀도우 팔레트",
+        "웨이크메이크 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "웨이크메이크 싱글 아이섀도우",
+        "웨이크메이크 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "웨이크메이크 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "웨이크메이크 파운데이션",
+        "웨이크메이크 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "웨이크메이크 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "웨이크메이크 블러셔",
+        "웨이크메이크 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "웨이크메이크 크림 블러셔",
+        "웨이크메이크 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "웨이크메이크 아이라이너",
+        "웨이크메이크 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "웨이크메이크 젤라이너",
+        "웨이크메이크 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "웨이크메이크 아이브로우",
+        "웨이크메이크 브로우 펜슬",
+        "웨이크메이크 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "웨이크메이크",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "웨이크메이크 브로우카라",
+        "웨이크메이크 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "데이지크 립틴트",
+        "데이지크 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "데이지크 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "데이지크 립글로스",
+        "데이지크 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "데이지크 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "데이지크 아이섀도우 팔레트",
+        "데이지크 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "데이지크 싱글 아이섀도우",
+        "데이지크 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "데이지크 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "데이지크 파운데이션",
+        "데이지크 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "데이지크 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "데이지크 블러셔",
+        "데이지크 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "데이지크 크림 블러셔",
+        "데이지크 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "데이지크 아이라이너",
+        "데이지크 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "데이지크 젤라이너",
+        "데이지크 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "데이지크 아이브로우",
+        "데이지크 브로우 펜슬",
+        "데이지크 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "데이지크",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "데이지크 브로우카라",
+        "데이지크 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "클리오 립틴트",
+        "클리오 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "클리오 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "클리오 립글로스",
+        "클리오 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "클리오 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "클리오 아이섀도우 팔레트",
+        "클리오 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "클리오 싱글 아이섀도우",
+        "클리오 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "클리오 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "클리오 파운데이션",
+        "클리오 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "클리오 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "클리오 블러셔",
+        "클리오 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "클리오 크림 블러셔",
+        "클리오 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "클리오 아이라이너",
+        "클리오 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "클리오 젤라이너",
+        "클리오 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "클리오 아이브로우",
+        "클리오 브로우 펜슬",
+        "클리오 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "클리오",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "클리오 브로우카라",
+        "클리오 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "정샘물 뷰티 립틴트",
+        "정샘물 뷰티 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "정샘물 뷰티 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "정샘물 뷰티 립글로스",
+        "정샘물 뷰티 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "정샘물 뷰티 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "정샘물 뷰티 아이섀도우 팔레트",
+        "정샘물 뷰티 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "정샘물 뷰티 싱글 아이섀도우",
+        "정샘물 뷰티 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "정샘물 뷰티 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "정샘물 뷰티 파운데이션",
+        "정샘물 뷰티 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "정샘물 뷰티 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "정샘물 뷰티 블러셔",
+        "정샘물 뷰티 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "정샘물 뷰티 크림 블러셔",
+        "정샘물 뷰티 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "정샘물 뷰티 아이라이너",
+        "정샘물 뷰티 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "정샘물 뷰티 젤라이너",
+        "정샘물 뷰티 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "정샘물 뷰티 아이브로우",
+        "정샘물 뷰티 브로우 펜슬",
+        "정샘물 뷰티 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "정샘물 뷰티",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "정샘물 뷰티 브로우카라",
+        "정샘물 뷰티 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "3CE 립틴트",
+        "3CE 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "3CE 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "3CE 립글로스",
+        "3CE 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "3CE 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "3CE 아이섀도우 팔레트",
+        "3CE 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "3CE 싱글 아이섀도우",
+        "3CE 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "3CE 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "3CE 파운데이션",
+        "3CE 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "3CE 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "3CE 블러셔",
+        "3CE 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "3CE 크림 블러셔",
+        "3CE 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "3CE 아이라이너",
+        "3CE 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "3CE 젤라이너",
+        "3CE 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "3CE 아이브로우",
+        "3CE 브로우 펜슬",
+        "3CE 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "3CE",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "3CE 브로우카라",
+        "3CE 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "에뛰드 립틴트",
+        "에뛰드 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "에뛰드 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "에뛰드 립글로스",
+        "에뛰드 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "에뛰드 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "에뛰드 아이섀도우 팔레트",
+        "에뛰드 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "에뛰드 싱글 아이섀도우",
+        "에뛰드 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "에뛰드 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "에뛰드 파운데이션",
+        "에뛰드 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "에뛰드 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "에뛰드 블러셔",
+        "에뛰드 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "에뛰드 크림 블러셔",
+        "에뛰드 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "에뛰드 아이라이너",
+        "에뛰드 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "에뛰드 젤라이너",
+        "에뛰드 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "에뛰드 아이브로우",
+        "에뛰드 브로우 펜슬",
+        "에뛰드 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "에뛰드",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "에뛰드 브로우카라",
+        "에뛰드 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "더샘 립틴트",
+        "더샘 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "더샘 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "더샘 립글로스",
+        "더샘 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "더샘 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "더샘 아이섀도우 팔레트",
+        "더샘 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "더샘 싱글 아이섀도우",
+        "더샘 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "더샘 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "더샘 파운데이션",
+        "더샘 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "더샘 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "더샘 블러셔",
+        "더샘 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "더샘 크림 블러셔",
+        "더샘 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "더샘 아이라이너",
+        "더샘 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "더샘 젤라이너",
+        "더샘 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "더샘 아이브로우",
+        "더샘 브로우 펜슬",
+        "더샘 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "더샘",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "더샘 브로우카라",
+        "더샘 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "VDL 립틴트",
+        "VDL 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "VDL 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "VDL 립글로스",
+        "VDL 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "VDL 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "VDL 아이섀도우 팔레트",
+        "VDL 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "VDL 싱글 아이섀도우",
+        "VDL 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "VDL 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "VDL 파운데이션",
+        "VDL 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "VDL 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "VDL 블러셔",
+        "VDL 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "VDL 크림 블러셔",
+        "VDL 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "VDL 아이라이너",
+        "VDL 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "VDL 젤라이너",
+        "VDL 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "VDL 아이브로우",
+        "VDL 브로우 펜슬",
+        "VDL 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "VDL",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "VDL 브로우카라",
+        "VDL 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "라카 립틴트",
+        "라카 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "라카 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "라카 립글로스",
+        "라카 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "라카 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "라카 아이섀도우 팔레트",
+        "라카 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "라카 싱글 아이섀도우",
+        "라카 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "라카 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "라카 파운데이션",
+        "라카 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "라카 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "라카 블러셔",
+        "라카 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "라카 크림 블러셔",
+        "라카 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "라카 아이라이너",
+        "라카 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "라카 젤라이너",
+        "라카 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "라카 아이브로우",
+        "라카 브로우 펜슬",
+        "라카 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "라카",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "라카 브로우카라",
+        "라카 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "네이밍 립틴트",
+        "네이밍 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "네이밍 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "네이밍 립글로스",
+        "네이밍 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "네이밍 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "네이밍 아이섀도우 팔레트",
+        "네이밍 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "네이밍 싱글 아이섀도우",
+        "네이밍 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "네이밍 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "네이밍 파운데이션",
+        "네이밍 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "네이밍 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "네이밍 블러셔",
+        "네이밍 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "네이밍 크림 블러셔",
+        "네이밍 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "네이밍 아이라이너",
+        "네이밍 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "네이밍 젤라이너",
+        "네이밍 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "네이밍 아이브로우",
+        "네이밍 브로우 펜슬",
+        "네이밍 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "네이밍",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "네이밍 브로우카라",
+        "네이밍 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "투쿨포스쿨 립틴트",
+        "투쿨포스쿨 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "투쿨포스쿨 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "투쿨포스쿨 립글로스",
+        "투쿨포스쿨 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "투쿨포스쿨 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "투쿨포스쿨 아이섀도우 팔레트",
+        "투쿨포스쿨 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "투쿨포스쿨 싱글 아이섀도우",
+        "투쿨포스쿨 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "투쿨포스쿨 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "투쿨포스쿨 파운데이션",
+        "투쿨포스쿨 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "투쿨포스쿨 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "투쿨포스쿨 블러셔",
+        "투쿨포스쿨 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "투쿨포스쿨 크림 블러셔",
+        "투쿨포스쿨 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "투쿨포스쿨 아이라이너",
+        "투쿨포스쿨 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "투쿨포스쿨 젤라이너",
+        "투쿨포스쿨 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "투쿨포스쿨 아이브로우",
+        "투쿨포스쿨 브로우 펜슬",
+        "투쿨포스쿨 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "투쿨포스쿨",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "투쿨포스쿨 브로우카라",
+        "투쿨포스쿨 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "하트퍼센트 립틴트",
+        "하트퍼센트 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "하트퍼센트 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "하트퍼센트 립글로스",
+        "하트퍼센트 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "하트퍼센트 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "하트퍼센트 아이섀도우 팔레트",
+        "하트퍼센트 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "하트퍼센트 싱글 아이섀도우",
+        "하트퍼센트 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "하트퍼센트 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "하트퍼센트 파운데이션",
+        "하트퍼센트 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "하트퍼센트 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "하트퍼센트 블러셔",
+        "하트퍼센트 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "하트퍼센트 크림 블러셔",
+        "하트퍼센트 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "하트퍼센트 아이라이너",
+        "하트퍼센트 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "하트퍼센트 젤라이너",
+        "하트퍼센트 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "하트퍼센트 아이브로우",
+        "하트퍼센트 브로우 펜슬",
+        "하트퍼센트 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "하트퍼센트",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "하트퍼센트 브로우카라",
+        "하트퍼센트 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "에스쁘아 립틴트",
+        "에스쁘아 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "에스쁘아 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "에스쁘아 립글로스",
+        "에스쁘아 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "에스쁘아 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "에스쁘아 아이섀도우 팔레트",
+        "에스쁘아 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "에스쁘아 싱글 아이섀도우",
+        "에스쁘아 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "에스쁘아 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "에스쁘아 파운데이션",
+        "에스쁘아 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "에스쁘아 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "에스쁘아 블러셔",
+        "에스쁘아 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "에스쁘아 크림 블러셔",
+        "에스쁘아 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "에스쁘아 아이라이너",
+        "에스쁘아 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "에스쁘아 젤라이너",
+        "에스쁘아 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "에스쁘아 아이브로우",
+        "에스쁘아 브로우 펜슬",
+        "에스쁘아 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "에스쁘아",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "에스쁘아 브로우카라",
+        "에스쁘아 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "lip",
+      "label": "립틴트",
+      "queries": [
+        "뮤드 립틴트",
+        "뮤드 틴트"
+      ],
+      "subcategory": "lip_tint",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "lip",
+      "label": "립스틱",
+      "queries": [
+        "뮤드 립스틱"
+      ],
+      "subcategory": "lip_stick",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "lip",
+      "label": "립글로스",
+      "queries": [
+        "뮤드 립글로스",
+        "뮤드 글로스"
+      ],
+      "subcategory": "lip_gloss",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "lip",
+      "label": "립밤",
+      "queries": [
+        "뮤드 립밤"
+      ],
+      "subcategory": "lip_balm",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "shadow",
+      "label": "섀도우 팔레트",
+      "queries": [
+        "뮤드 아이섀도우 팔레트",
+        "뮤드 아이팔레트"
+      ],
+      "subcategory": "shadow_palette",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "shadow",
+      "label": "싱글 섀도우",
+      "queries": [
+        "뮤드 싱글 아이섀도우",
+        "뮤드 아이섀도우"
+      ],
+      "subcategory": "shadow_single",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "base",
+      "label": "쿠션",
+      "queries": [
+        "뮤드 쿠션"
+      ],
+      "subcategory": "base_cushion",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "base",
+      "label": "파운데이션",
+      "queries": [
+        "뮤드 파운데이션",
+        "뮤드 파데"
+      ],
+      "subcategory": "base_foundation",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "base",
+      "label": "컨실러",
+      "queries": [
+        "뮤드 컨실러"
+      ],
+      "subcategory": "base_concealer",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "cheek",
+      "label": "블러셔",
+      "queries": [
+        "뮤드 블러셔",
+        "뮤드 볼터치"
+      ],
+      "subcategory": "cheek_blush",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "cheek",
+      "label": "크림/리퀴드 블러셔",
+      "queries": [
+        "뮤드 크림 블러셔",
+        "뮤드 리퀴드 블러셔"
+      ],
+      "subcategory": "cheek_cream",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "liner",
+      "label": "리퀴드 아이라이너",
+      "queries": [
+        "뮤드 아이라이너",
+        "뮤드 붓펜 아이라이너"
+      ],
+      "subcategory": "liner_liquid",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "liner",
+      "label": "젤/펜슬 아이라이너",
+      "queries": [
+        "뮤드 젤라이너",
+        "뮤드 펜슬 아이라이너"
+      ],
+      "subcategory": "liner_gel",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "brow",
+      "label": "브로우 펜슬",
+      "queries": [
+        "뮤드 아이브로우",
+        "뮤드 브로우 펜슬",
+        "뮤드 오토브로우"
+      ],
+      "subcategory": "brow_pencil",
+      "target": 15
+    },
+    {
+      "brand": "뮤드",
+      "category": "brow",
+      "label": "브로우 카라/틴트",
+      "queries": [
+        "뮤드 브로우카라",
+        "뮤드 브로우 틴트"
+      ],
+      "subcategory": "brow_cara",
+      "target": 15
+    }
+  ],
+  "subcategories": [
+    {
+      "category": "lip",
+      "id": "lip_tint",
+      "label": "립틴트",
+      "queryTemplates": [
+        "{brand} 립틴트",
+        "{brand} 틴트"
+      ]
+    },
+    {
+      "category": "lip",
+      "id": "lip_stick",
+      "label": "립스틱",
+      "queryTemplates": [
+        "{brand} 립스틱"
+      ]
+    },
+    {
+      "category": "lip",
+      "id": "lip_gloss",
+      "label": "립글로스",
+      "queryTemplates": [
+        "{brand} 립글로스",
+        "{brand} 글로스"
+      ]
+    },
+    {
+      "category": "lip",
+      "id": "lip_balm",
+      "label": "립밤",
+      "queryTemplates": [
+        "{brand} 립밤"
+      ]
+    },
+    {
+      "category": "shadow",
+      "id": "shadow_palette",
+      "label": "섀도우 팔레트",
+      "queryTemplates": [
+        "{brand} 아이섀도우 팔레트",
+        "{brand} 아이팔레트"
+      ]
+    },
+    {
+      "category": "shadow",
+      "id": "shadow_single",
+      "label": "싱글 섀도우",
+      "queryTemplates": [
+        "{brand} 싱글 아이섀도우",
+        "{brand} 아이섀도우"
+      ]
+    },
+    {
+      "category": "base",
+      "id": "base_cushion",
+      "label": "쿠션",
+      "queryTemplates": [
+        "{brand} 쿠션"
+      ]
+    },
+    {
+      "category": "base",
+      "id": "base_foundation",
+      "label": "파운데이션",
+      "queryTemplates": [
+        "{brand} 파운데이션",
+        "{brand} 파데"
+      ]
+    },
+    {
+      "category": "base",
+      "id": "base_concealer",
+      "label": "컨실러",
+      "queryTemplates": [
+        "{brand} 컨실러"
+      ]
+    },
+    {
+      "category": "cheek",
+      "id": "cheek_blush",
+      "label": "블러셔",
+      "queryTemplates": [
+        "{brand} 블러셔",
+        "{brand} 볼터치"
+      ]
+    },
+    {
+      "category": "cheek",
+      "id": "cheek_cream",
+      "label": "크림/리퀴드 블러셔",
+      "queryTemplates": [
+        "{brand} 크림 블러셔",
+        "{brand} 리퀴드 블러셔"
+      ]
+    },
+    {
+      "category": "liner",
+      "id": "liner_liquid",
+      "label": "리퀴드 아이라이너",
+      "queryTemplates": [
+        "{brand} 아이라이너",
+        "{brand} 붓펜 아이라이너"
+      ]
+    },
+    {
+      "category": "liner",
+      "id": "liner_gel",
+      "label": "젤/펜슬 아이라이너",
+      "queryTemplates": [
+        "{brand} 젤라이너",
+        "{brand} 펜슬 아이라이너"
+      ]
+    },
+    {
+      "category": "brow",
+      "id": "brow_pencil",
+      "label": "브로우 펜슬",
+      "queryTemplates": [
+        "{brand} 아이브로우",
+        "{brand} 브로우 펜슬",
+        "{brand} 오토브로우"
+      ]
+    },
+    {
+      "category": "brow",
+      "id": "brow_cara",
+      "label": "브로우 카라/틴트",
+      "queryTemplates": [
+        "{brand} 브로우카라",
+        "{brand} 브로우 틴트"
+      ]
+    }
+  ],
+  "waves": [
+    {
+      "brands": [
+        "롬앤",
+        "페리페라",
+        "컬러그램",
+        "웨이크메이크"
+      ],
+      "command": "python scripts/run_auradin_targeted_slot_collection.py --date 20260708 --brands '롬앤,페리페라,컬러그램,웨이크메이크' --top-n 60 --display 100 --request-delay-seconds 0.5 --naverpay-only",
+      "expectedSlots": 24,
+      "kind": "naver_api",
+      "wave": 1
+    },
+    {
+      "brands": [
+        "데이지크",
+        "클리오",
+        "정샘물 뷰티",
+        "3CE"
+      ],
+      "command": "python scripts/run_auradin_targeted_slot_collection.py --date 20260708 --brands '데이지크,클리오,정샘물 뷰티,3CE' --top-n 60 --display 100 --request-delay-seconds 0.5 --naverpay-only",
+      "expectedSlots": 24,
+      "kind": "naver_api",
+      "wave": 2
+    },
+    {
+      "brands": [
+        "에뛰드",
+        "더샘",
+        "VDL",
+        "라카"
+      ],
+      "command": "python scripts/run_auradin_targeted_slot_collection.py --date 20260708 --brands '에뛰드,더샘,VDL,라카' --top-n 60 --display 100 --request-delay-seconds 0.5 --naverpay-only",
+      "expectedSlots": 24,
+      "kind": "naver_api",
+      "wave": 3
+    },
+    {
+      "brands": [
+        "네이밍",
+        "투쿨포스쿨",
+        "하트퍼센트",
+        "에스쁘아"
+      ],
+      "command": "python scripts/run_auradin_targeted_slot_collection.py --date 20260708 --brands '네이밍,투쿨포스쿨,하트퍼센트,에스쁘아' --top-n 60 --display 100 --request-delay-seconds 0.5 --naverpay-only",
+      "expectedSlots": 24,
+      "kind": "naver_api",
+      "wave": 4
+    },
+    {
+      "brands": [
+        "뮤드"
+      ],
+      "command": "python scripts/run_auradin_targeted_slot_collection.py --date 20260708 --brands '뮤드' --top-n 60 --display 100 --request-delay-seconds 0.5 --naverpay-only",
+      "expectedSlots": 6,
+      "kind": "naver_api",
+      "wave": 5
+    }
+  ]
+}

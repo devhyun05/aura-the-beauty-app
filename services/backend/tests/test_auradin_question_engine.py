@@ -58,9 +58,10 @@ def test_noop_answer_does_not_reduce_candidate_count() -> None:
   assert after == before
 
 
-def test_unsupported_brow_prompt_returns_recoverable_failure() -> None:
+def test_unsupported_perfume_prompt_returns_recoverable_failure() -> None:
+  # base/brow/liner은 이제 서빙 대상 — 향수/네일/스킨케어만 범위 밖.
   clear_sessions()
-  state = create_session(prompt="브로우 추천해줘")
+  state = create_session(prompt="향수 추천해줘")
   turn = to_search_turn(state)
 
   assert turn["phase"] == "failed"

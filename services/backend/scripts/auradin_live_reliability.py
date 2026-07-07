@@ -64,6 +64,7 @@ THRESHOLDS = {
 async def _drive_query(prompt: str, settings) -> dict:
   """세션 생성 → (질문은 noop 통과) → 결과. 실서빙과 동일한 persisted 경로."""
   started = time.monotonic()
+  questions_seen: list[dict] = []
   state = await create_session_persisted(prompt=prompt, settings=settings, db=None)
   for _ in range(4):
     if state.get("phase") != "question":
@@ -72,6 +73,7 @@ async def _drive_query(prompt: str, settings) -> dict:
     options = question.get("options") or []
     if not options:
       break
+    questions_seen.append(question)  # noop으로 넘기기 전, 3-2 questionCopy 적용본을 캡처
     state = await answer_session_persisted(
       state["sessionId"],
       question_id=question["id"],
@@ -80,7 +82,7 @@ async def _drive_query(prompt: str, settings) -> dict:
       db=None,
     )
   elapsed_ms = round((time.monotonic() - started) * 1000)
-  return {"state": state, "elapsedMs": elapsed_ms}
+  return {"state": state, "elapsedMs": elapsed_ms, "questions": questions_seen}
 
 
 def _judge_products(state: dict) -> dict:
@@ -131,6 +133,26 @@ def _judge_products(state: dict) -> dict:
   }
 
 
+def _judge_questions(questions: list[dict]) -> dict:
+  """3-2 questionCopy 신호 — 재작성률 + 표시 텍스트 정직성(금지표현 0).
+
+  enrich_question은 question_copy_is_faithful 통과 시에만 반영하므로 구조 드리프트는
+  서빙 단계에 존재할 수 없다(설계상). 라이브에서 추가로 검증하는 건 §9 금지·보증 표현이
+  재작성 제목·라벨에 새어들지 않는지다 — 하나라도 있으면 정직성 위반.
+  """
+  rewritten = [q for q in questions if q.get("titleSource") == "bedrock"]
+  banned: list[str] = []
+  for question in questions:
+    texts = [question.get("title") or "", *[o.get("label") or "" for o in question.get("options") or []]]
+    if any(term in text for text in texts for term in BANNED_COPY_TERMS):
+      banned.append(question.get("id"))
+  return {
+    "questionTurns": len(questions),
+    "questionRewritten": len(rewritten),
+    "questionBannedHits": banned,
+  }
+
+
 async def run_rounds(rounds: int) -> dict:
   settings = get_settings()
   runs: list[dict] = []
@@ -141,6 +163,7 @@ async def run_rounds(rounds: int) -> dict:
       try:
         driven = await _drive_query(prompt, settings)
         record.update(elapsedMs=driven["elapsedMs"], **_judge_products(driven["state"]))
+        record.update(**_judge_questions(driven.get("questions") or []))
         record["error"] = None if record["phase"] == "results" else f"phase:{record['phase']}"
       except Exception as exc:  # noqa: BLE001 - 하네스는 측정을 계속한다
         record.update(error=f"{exc.__class__.__name__}: {exc}", phase="exception", productCount=0)
@@ -166,6 +189,9 @@ def summarize(runs: list[dict], rounds: int) -> dict:
   live_attempts = [r for r in ok_runs if r.get("liveStatus") not in {None, "disabled", "no_credentials"}]
   live_replaced = [r for r in live_attempts if r.get("liveReplaced")]
   live_violations = [v for r in ok_runs for v in r.get("liveViolations", [])]
+  question_turns = sum(r.get("questionTurns", 0) for r in ok_runs)
+  question_rewritten = sum(r.get("questionRewritten", 0) for r in ok_runs)
+  question_banned = [x for r in ok_runs for x in r.get("questionBannedHits", [])]
 
   def pct(numerator: int, denominator: int) -> float:
     return round(numerator / denominator, 4) if denominator else 0.0
@@ -190,6 +216,10 @@ def summarize(runs: list[dict], rounds: int) -> dict:
       sum(len(r.get("liveViolations", [])) == 0 for r in live_replaced), len(live_replaced),
     ) if live_replaced else 1.0,
     "live_violation_kinds": sorted(set(live_violations)),
+    # 3-2 questionCopy: 되묻기 질문 표시 텍스트 재작성률 + 정직성(금지표현 0)
+    "question_turns": question_turns,
+    "question_rewrite_rate": pct(question_rewritten, question_turns),
+    "question_banned_hits": len(question_banned),
     "latency_ms": {
       "p50": percentile(latencies, 0.50),
       "p95": percentile(latencies, 0.95),
@@ -203,6 +233,7 @@ def summarize(runs: list[dict], rounds: int) -> dict:
     "faithful_rate": metrics["faithful_rate"] >= THRESHOLDS["faithful_rate"],
     "live_attempt_success": metrics["live_attempt_success"] >= THRESHOLDS["live_attempt_success"],
     "live_honesty": metrics["live_honesty"] >= THRESHOLDS["live_honesty"],
+    "question_honesty": metrics["question_banned_hits"] == 0,  # 재작성 질문 텍스트에 금지표현 0
     "error_rate": metrics["error_rate"] < THRESHOLDS["error_rate"],
   }
   return {"metrics": metrics, "verdicts": verdicts, "passed": all(verdicts.values()), "runs": runs}

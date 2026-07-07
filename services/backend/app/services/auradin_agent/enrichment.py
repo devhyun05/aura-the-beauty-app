@@ -31,6 +31,7 @@ from app.services.bedrock_guardrails import build_bedrock_guardrail_invoke_kwarg
 from .knowledge_chunk_builder import build_mvp_catalog_item
 from .ranking import ATTRIBUTE_LABELS, CATEGORY_LABELS, rank_candidates, to_result_product
 from .retrieval_service import matches_filter
+from .title_keyword_extractor import normalize_product_name
 
 
 logger = logging.getLogger(__name__)
@@ -43,8 +44,22 @@ COPY_CACHE_LIMIT = 30
 
 # 발견 슬롯 Naver 검색어의 카테고리 축 (shopping_products.CATEGORY_CONFIG 질의 미러).
 # 토큰을 많이 쌓을수록 top-sim이 리셀러 스팸(brand 공란)으로 오염된다 — 짧은 축 + 폴백 사다리.
-CATEGORY_SEARCH_TERMS = {"lip": "립 틴트", "cheek": "블러셔 치크", "shadow": "아이섀도우 팔레트"}
-CATEGORY_FALLBACK_TERMS = {"lip": ("립스틱",), "cheek": ("치크 블러셔",), "shadow": ("아이섀도우",)}
+CATEGORY_SEARCH_TERMS = {
+  "lip": "립 틴트",
+  "cheek": "블러셔 치크",
+  "shadow": "아이섀도우 팔레트",
+  "base": "쿠션 파운데이션",
+  "brow": "브로우 펜슬",
+  "liner": "아이라이너",
+}
+CATEGORY_FALLBACK_TERMS = {
+  "lip": ("립스틱",),
+  "cheek": ("치크 블러셔",),
+  "shadow": ("아이섀도우",),
+  "base": ("파운데이션", "쿠션"),
+  "brow": ("아이브로우", "눈썹"),
+  "liner": ("아이라이너", "라이너"),
+}
 
 
 def _clean(value: Any) -> str:
@@ -143,7 +158,8 @@ def _extract_output_text(response_payload: dict[str, Any]) -> str:
   return completion.strip() if isinstance(completion, str) else ""
 
 
-def _parse_copy_output(output_text: str) -> str | None:
+def _parse_json_output(output_text: str) -> dict[str, Any] | None:
+  # 펜스(```json ... ```) 제거 후 dict JSON만 파싱 — reasonCopy·questionCopy 공용 파서.
   normalized = output_text.strip()
   fence_match = re.search(r"```(?:json)?\s*(.*?)\s*```", normalized, re.DOTALL)
   if fence_match:
@@ -152,7 +168,12 @@ def _parse_copy_output(output_text: str) -> str | None:
     parsed = json.loads(normalized)
   except json.JSONDecodeError:
     return None
-  if not isinstance(parsed, dict):
+  return parsed if isinstance(parsed, dict) else None
+
+
+def _parse_copy_output(output_text: str) -> str | None:
+  parsed = _parse_json_output(output_text)
+  if parsed is None:
     return None
   return _clean(parsed.get("reasonCopy")) or None
 
@@ -305,6 +326,263 @@ def _apply_fallback_copies(state: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 2c. questionCopy — 되묻기 질문 표시 텍스트 실시간 재작성 (표현만, 구조 불변) (§6/§9)
+# ---------------------------------------------------------------------------
+# reasonCopy와 같은 정직성 계약을 질문에 적용한다: LLM은 제목·선택지 라벨의 '자연어 표현'만
+# 다듬고, 질문/선택지의 구조(id·attribute·filterDelta·expectedCandidateCount)는 절대 바꾸지
+# 않는다. 답변 매칭이 질문 id + 선택지 id에 의존하므로(session_manager.answer_session) 구조가
+# 권위값이다. 충실성 게이트를 통과할 때만 통째로 반영하고, 아니면 결정론적 텍스트를 유지한다.
+
+
+def _question_copy_prompt(question: dict[str, Any], context: dict[str, Any]) -> str:
+  options_view = [
+    {
+      "id": option.get("id"),
+      "currentLabel": option.get("label"),
+      "attribute": (option.get("filterDelta") or {}).get("attribute"),
+      "values": (option.get("filterDelta") or {}).get("values") or [],
+      "isNoop": (option.get("filterDelta") or {}).get("op") == "noop",
+      "expectedCandidateCount": option.get("expectedCandidateCount"),
+    }
+    for option in question.get("options") or []
+  ]
+  payload = {
+    "userPrompt": context.get("prompt"),
+    "previousAnswers": context.get("answers") or [],
+    "candidateCount": question.get("expectedCandidateCount"),
+    "attribute": question.get("attribute"),
+    "currentTitle": question.get("title"),
+    "options": options_view,
+  }
+  return f"""아래는 화장품 검색을 좁히기 위한 '되묻기 질문' 하나야. 사용자 맥락(userPrompt·previousAnswers·후보 분포)에 맞춰 질문 제목과 각 선택지 라벨을 더 자연스럽고 친근한 한국어로 다시 써.
+
+규칙 (반드시 지켜):
+- 각 선택지의 id는 그대로 두고, 그 선택지가 뜻하는 속성·값(attribute/values)을 절대 바꾸지 마. 자연어 표현만 다듬어.
+- 선택지 개수·순서를 그대로 유지해. 새 선택지를 추가하거나 지우지 마.
+- isNoop 선택지(상관 없음)는 "상관없다"는 뜻을 유지해 — 특정 속성값으로 바꾸지 마.
+- 근거에 없는 색·마감·효능·브랜드를 지어내지 마. "공식", "정확한 호수", "100%" 같은 보증·확정 표현 금지.
+- 존댓말로, 과장 없이 짧게. 제목은 한 문장.
+
+질문 정보(읽기 전용):
+{json.dumps(payload, ensure_ascii=False, indent=2)}
+
+JSON만 반환해: {{"title": "...", "options": [{{"id": "...", "label": "..."}}, ...]}}"""
+
+
+def _parse_question_copy_output(output_text: str) -> dict[str, Any] | None:
+  parsed = _parse_json_output(output_text)
+  if parsed is None:
+    return None
+  title = _clean(parsed.get("title"))
+  raw_options = parsed.get("options")
+  if not title or not isinstance(raw_options, list):
+    return None
+  options: list[dict[str, str]] = []
+  for option in raw_options:
+    if not isinstance(option, dict):
+      return None
+    option_id = _clean(option.get("id"))
+    label = _clean(option.get("label"))
+    if not option_id or not label:
+      return None
+    options.append({"id": option_id, "label": label})
+  return {"title": title, "options": options}
+
+
+def question_copy_is_faithful(
+  rewritten: dict[str, Any] | None,
+  original_question: dict[str, Any],
+) -> bool:
+  """§9 질문 카피 충실성 게이트 — 구조(옵션 id·개수·순서)가 원본과 1:1이 아니면 False.
+
+  copy_is_faithful과 같은 계약: LLM은 표현만 다듬고, 어떤 선택지가 어떤 속성/값을 뜻하는지
+  (id·filterDelta)는 절대 바꾸지 않는다. 드리프트가 하나라도 있으면 통째로 리젝 → 결정론적 유지.
+  """
+  if not isinstance(rewritten, dict):
+    return False
+  title = _clean(rewritten.get("title"))
+  rewritten_options = rewritten.get("options")
+  if not title or len(title) > MAX_COPY_LENGTH or not isinstance(rewritten_options, list):
+    return False
+  original_options = original_question.get("options") or []
+  if len(rewritten_options) != len(original_options):
+    return False
+
+  texts = [title]
+  for rewritten_option, original_option in zip(rewritten_options, original_options):
+    if not isinstance(rewritten_option, dict):
+      return False
+    # id·순서 1:1 (드리프트 0) — 답변 매칭이 여기에 의존한다.
+    if _clean(rewritten_option.get("id")) != _clean(original_option.get("id")):
+      return False
+    label = _clean(rewritten_option.get("label"))
+    if not label or len(label) > MAX_COPY_LENGTH:
+      return False
+    texts.append(label)
+    # 라벨이 같은 속성의 '다른 값' 라벨로 바뀌면(핑크→레드) id는 그대로여도 표시가 거짓 → 리젝 (§9).
+    delta = original_option.get("filterDelta") or {}
+    label_map = ATTRIBUTE_LABELS.get(_clean(delta.get("attribute")), {})
+    values = delta.get("values") or []
+    own_value = _clean(values[0]) if values else ""
+    own_label = label_map.get(own_value, "")
+    for sibling_value, sibling_label in label_map.items():
+      if sibling_value == own_value or not sibling_label:
+        continue
+      if own_label and (sibling_label in own_label or own_label in sibling_label):
+        continue  # 부분 문자열 겹침은 오탐 — 스킵
+      if sibling_label in label:
+        return False
+
+  # 금지 표현: 제목·선택지 라벨 어디에도 보증·확정 표현 금지 (reasonCopy와 동일 목록).
+  return not any(term in text for text in texts for term in BANNED_COPY_TERMS)
+
+
+class QuestionCopyClient:
+  """비활성/자격증명 없음 폴백 — generate가 None이면 호출부가 결정론적 질문 텍스트를 유지한다."""
+
+  backend = "fallback"
+
+  async def generate(
+    self,
+    question: dict[str, Any],
+    context: dict[str, Any],
+  ) -> dict[str, Any] | None:
+    return None
+
+
+class BedrockQuestionCopyClient(QuestionCopyClient):
+  backend = "bedrock"
+
+  def __init__(self, settings: Settings) -> None:
+    self.settings = settings
+
+  def _bedrock_runtime_client(self):
+    # BedrockReasonCopyClient와 동일 — enrich는 서빙 경로라 read timeout을 짧게 잡는다.
+    import boto3
+    from botocore.config import Config
+
+    client_kwargs: dict[str, Any] = {
+      "region_name": self.settings.effective_bedrock_analysis_region,
+      "config": Config(connect_timeout=5, read_timeout=15, retries={"max_attempts": 1}),
+    }
+    if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
+      client_kwargs.update(
+        {
+          "aws_access_key_id": self.settings.aws_access_key_id,
+          "aws_secret_access_key": self.settings.aws_secret_access_key,
+        },
+      )
+    return boto3.client("bedrock-runtime", **client_kwargs)
+
+  def _generate_sync(
+    self,
+    question: dict[str, Any],
+    context: dict[str, Any],
+  ) -> dict[str, Any] | None:
+    # §12: Seoul 리전은 apac 크로스리전 추론 프로파일 id가 필요 — effective_analysis_model_id가
+    # inference_id를 우선 반환한다(bare model id → ValidationException). reasonCopy와 동일 경로.
+    model_id = self.settings.effective_analysis_model_id
+    if not model_id:
+      return None
+
+    started_at = time.monotonic()
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(
+        {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 400,
+          "temperature": 0.3,
+          "system": "당신은 화장품 검색 되묻기 질문의 문구를 자연스러운 한국어로 다듬는 에디터입니다. 선택지의 의미(속성·값)는 절대 바꾸지 않고 표현만 손봅니다. 반드시 JSON만 반환합니다.",
+          "messages": [
+            {"role": "user", "content": [{"type": "text", "text": _question_copy_prompt(question, context)}]},
+          ],
+        },
+        ensure_ascii=False,
+      ),
+      accept="application/json",
+      contentType="application/json",
+      # §11 6단계: 가드레일은 LLM 통합에 내장 — 미설정이면 빈 dict (턴키).
+      **build_bedrock_guardrail_invoke_kwargs(self.settings),
+    )
+    response_payload = json.loads(response["body"].read())
+    if response_payload.get("amazon-bedrock-guardrailAction") == "INTERVENED":
+      logger.info("[aura:auradin-question-copy] guardrail intervened — deterministic text kept")
+      return None
+    rewritten = _parse_question_copy_output(_extract_output_text(response_payload))
+    logger.info(
+      "[aura:auradin-question-copy] generate model=%s durationMs=%s ok=%s",
+      model_id,
+      round((time.monotonic() - started_at) * 1000),
+      bool(rewritten),
+    )
+    return rewritten
+
+  async def generate(
+    self,
+    question: dict[str, Any],
+    context: dict[str, Any],
+  ) -> dict[str, Any] | None:
+    try:
+      return await asyncio.to_thread(self._generate_sync, question, context)
+    except Exception as exc:  # noqa: BLE001 - 질문 카피 실패는 서빙을 깨지 않는다 (graceful fallback).
+      logger.warning("[aura:auradin-question-copy] generate failed reason=%s", exc.__class__.__name__)
+      return None
+
+
+def build_question_copy_client(settings: Settings) -> QuestionCopyClient:
+  # build_copy_client 팩토리+fallback 패턴 미러 — 새 게이트 setting + AWS 자격증명에 게이트.
+  if not settings.auradin_question_copy_enabled:
+    return QuestionCopyClient()
+  if settings.analysis_provider != "bedrock":
+    return QuestionCopyClient()
+  if not settings.effective_analysis_model_id or not settings.aws_credentials_configured:
+    return QuestionCopyClient()
+  return BedrockQuestionCopyClient(settings)
+
+
+async def enrich_question(state: dict[str, Any], *, settings: Settings) -> None:
+  """질문 표시 텍스트(제목·선택지 라벨)를 실시간 LLM으로 다듬는다 — 구조는 불변(§9, 가산 폴리시).
+
+  충실성 게이트(question_copy_is_faithful)를 통과할 때만 통째로 반영한다.
+  비활성·자격증명 없음·실패·타임아웃·드리프트이면 결정론적 텍스트를 그대로 유지한다(부분 적용 금지).
+  """
+  if state.get("phase") != "question":
+    return
+  question = state.get("lastQuestion")
+  if not isinstance(question, dict) or not question.get("options"):
+    return
+  client = build_question_copy_client(settings)
+  if client.backend != "bedrock":
+    return
+  context = {
+    "prompt": state.get("prompt"),
+    "answers": [
+      {"label": answer.get("label"), "filterDelta": answer.get("filterDelta")}
+      for answer in state.get("answers") or []
+    ],
+  }
+  try:
+    rewritten = await asyncio.wait_for(
+      client.generate(question, context),
+      timeout=float(settings.auradin_enrich_timeout_seconds),
+    )
+  except TimeoutError:
+    logger.warning("[aura:auradin-question-copy] timed out after %ss", settings.auradin_enrich_timeout_seconds)
+    return
+  except Exception:  # noqa: BLE001 - 질문 카피 실패는 서빙을 깨지 않는다.
+    logger.exception("[aura:auradin-question-copy] enrich failed")
+    return
+  if not question_copy_is_faithful(rewritten, question):
+    return
+  # 충실 → 통째로 반영. id·attribute·filterDelta·expectedCandidateCount는 절대 건드리지 않는다.
+  question["title"] = rewritten["title"]
+  for option, rewritten_option in zip(question["options"], rewritten["options"]):
+    option["label"] = rewritten_option["label"]
+  question["titleSource"] = "bedrock"
+
+
+# ---------------------------------------------------------------------------
 # 2a. 발견 슬롯 라이브 Naver broaden (§2 Tier2 / §5 discovery)
 # ---------------------------------------------------------------------------
 
@@ -440,6 +718,11 @@ def _live_catalog_item(
   return catalog_item
 
 
+def _normalized_key(brand: Any, name: Any) -> str:
+  """정규화 상품명 키 — 같은 상품의 다른 리스팅(다른 id)을 이름으로 중복 판정(#7)."""
+  return normalize_product_name(_clean(name), _clean(brand))
+
+
 async def _enrich_live_discovery(
   state: dict[str, Any],
   settings: Settings,
@@ -517,38 +800,51 @@ async def _enrich_live_discovery(
     hard_filters=hard_filters,
     soft_preferences=state.get("softPreferences") or [],
   )
-  # 발견 슬롯의 결: anchor와 다른 브랜드 우선 (같은 브랜드뿐이면 최상위).
-  row = next(
-    (r for r in ranked if _clean(r["item"].get("brandName")) != anchor_brand),
-    ranked[0],
-  )
+  # 발견 슬롯의 결: anchor와 다른 브랜드 우선 (안정 정렬 → 점수 순서 유지, 같은 브랜드는 뒤로).
+  ranked.sort(key=lambda r: _clean(r["item"].get("brandName")) == anchor_brand)
+
+  # §5 발견 슬롯 = 라이브가 주력: 큐레이션 discovery는 라이브로 교체하고, Top3에 남는 빈 칸은
+  # 라이브로 마저 채운다(빈 '비슷한 후보' 방지). 조건 완화가 아니라 빈 슬롯 채움 — 하드 필터는
+  # _eligible에서 이미 강제. 이름 정규화 중복 제거(#7)로 히어로·후보와 같은 상품 리스팅을 배제.
+  kept = [product for product in products if product.get("role") != "discovery"]
+  seen_names = {
+    _normalized_key(product.get("brandName"), product.get("productName")) for product in kept
+  }
+  kept_roles = {product.get("role") for product in kept}
+  missing_roles = [role for role in ("anchor", "diverse", "discovery") if role not in kept_roles]
+
   caveats = [LIVE_NAVER_CAVEAT, *(extra_caveats or [])]
-  discovery_product = to_result_product(
-    row,
-    2,
-    role="discovery",
-    source="live_naver",
-    hard_filters=hard_filters,
-    extra_caveats=caveats,
-  )
+  picks: list[dict[str, Any]] = []
+  for row in ranked:
+    if not missing_roles:
+      break
+    name_key = _normalized_key(row["item"].get("brandName"), row["item"].get("productName"))
+    if name_key in seen_names:
+      continue  # 이름 중복 — 같은 상품의 다른 리스팅
+    seen_names.add(name_key)
+    picks.append(
+      to_result_product(
+        row,
+        len(kept) + len(picks),
+        role=missing_roles.pop(0),
+        source="live_naver",
+        hard_filters=hard_filters,
+        extra_caveats=caveats,
+      ),
+    )
 
-  discovery_index = next(
-    (index for index, product in enumerate(products) if product.get("role") == "discovery"),
-    None,
-  )
-  if discovery_index is not None:
-    products[discovery_index] = discovery_product
-  elif len(products) < 3:
-    products.append(discovery_product)
-  else:
-    return {"status": "no_slot", "gate": gate_reason, "query": query}
+  if not picks:
+    return {"status": "no_match", "gate": gate_reason, "query": query, "fetched": fetched}
 
+  result["products"] = kept + picks
   return {
-    "status": "replaced",
+    "status": "filled",
     "gate": gate_reason,
     "query": query,
-    "pickedId": discovery_product["id"],
-    "fetched": len(catalog_items),
+    "pickedId": picks[0]["id"],
+    "pickedIds": [product["id"] for product in picks],
+    "filledCount": len(picks),
+    "fetched": fetched,
   }
 
 

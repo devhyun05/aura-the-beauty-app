@@ -79,11 +79,42 @@ def test_question_answer_applied_filter_chips_use_option_labels() -> None:
     )
 
 
+def test_cancel_session_marks_cancelled_and_rejects_further_actions() -> None:
+  """사용자가 검색 도중 이탈 → cancel이 세션을 종료하고 이후 answer/refine을 조용히 무시한다."""
+  clear_sessions()
+  client = TestClient(create_app(Settings(database_url=None)))
+
+  created = client.post("/api/search/sessions", json={"prompt": "립 추천해줘"})
+  session_id = created.json()["data"]["sessionId"]
+  question = client.get(f"/api/search/sessions/{session_id}").json()["data"]["question"]
+
+  cancelled = client.post(f"/api/search/sessions/{session_id}/cancel")
+  assert cancelled.status_code == 200
+  assert cancelled.json()["data"]["phase"] == "cancelled"
+
+  turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
+  assert turn["phase"] == "cancelled"
+  assert turn["error"]["code"] == "cancelled"
+  assert turn["error"]["recoverable"] is True
+
+  # 취소 후 늦게 도착한 답변은 상태를 되살리지 않는다 (조용히 무시).
+  option = next(o for o in question["options"] if o["filterDelta"]["op"] != "noop")
+  client.post(
+    f"/api/search/sessions/{session_id}/answer",
+    json={"questionId": question["id"], "optionId": option["id"]},
+  )
+  assert client.get(f"/api/search/sessions/{session_id}").json()["data"]["phase"] == "cancelled"
+
+  # 존재하지 않는 세션 취소 → 404.
+  assert client.post("/api/search/sessions/does-not-exist/cancel").status_code == 404
+
+
 def test_search_session_api_reports_unsupported_category() -> None:
   clear_sessions()
   client = TestClient(create_app(Settings(database_url=None)))
 
-  created = client.post("/api/search/sessions", json={"prompt": "브로우 추천해줘"})
+  # base/brow/liner은 서빙 대상으로 열렸다 — 향수/네일/스킨케어/헤어만 범위 밖.
+  created = client.post("/api/search/sessions", json={"prompt": "향수 추천해줘"})
   session_id = created.json()["data"]["sessionId"]
   turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
 

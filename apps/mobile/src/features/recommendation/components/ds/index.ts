@@ -20,3 +20,4 @@ export { ThinkingSteps } from './ThinkingSteps';
 export { Toast } from './Toast';
 export { Wordmark } from './Wordmark';
 export { useEnterTransition, usePressScale, useReducedMotion } from './motion';
+export { useHostPause } from './useHostPause';

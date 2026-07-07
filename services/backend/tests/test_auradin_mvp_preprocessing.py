@@ -5,11 +5,11 @@ def test_mvp_preprocessing_outputs_are_purchasable() -> None:
   catalog = read_jsonl(MVP_CATALOG_PATH)
   chunks = read_jsonl(MVP_CHUNK_PATH)
 
-  # 337 unique lip/cheek/shadow products in the refined 20260706 seed (was 501
-  # before variant dedup collapsed 1+1 / mall duplicates of the same product).
-  assert len(catalog) == 337
+  # 618 unique products across all 6 served categories in the enriched 20260708 seed
+  # (official-name attribute extraction folded in; base/brow/liner serving opened).
+  assert len(catalog) == 618
   assert len(chunks) >= len(catalog)
-  assert {item["category"] for item in catalog} == {"lip", "cheek", "shadow"}
+  assert {item["category"] for item in catalog} == {"lip", "cheek", "shadow", "base", "brow", "liner"}
 
   for item in catalog:
     live_offer = item["liveOffer"]

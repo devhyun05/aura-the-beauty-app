@@ -28,6 +28,9 @@ GOLDEN_EXPECTATIONS = {
   "데일리로 쓸 만한 블러셔 추천해줘": {"category": "cheek"},
   "2만원 이하 촉촉한 립 틴트": {"category": "lip", "filterLabels": ["20,000원 이하"], "priceMax": 20000},
   "은은한 쉬머 아이섀도우 팔레트": {"category": "shadow"},
+  "커버 좋은 쿠션 추천해줘": {"category": "base"},
+  "자연스러운 브로우 펜슬 추천해줘": {"category": "brow"},
+  "또렷한 아이라이너 추천해줘": {"category": "liner"},
 }
 
 REASON_KEYS = {"matchedOn", "inferred", "caveat"}

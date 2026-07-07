@@ -10,6 +10,7 @@ from .category_queries import (
   COLLECTABLE_CATEGORIES,
   COSMETIC_CATEGORY_TERMS,
   NON_COSMETIC_EXCLUDE_TERMS,
+  infer_subcategory,
 )
 from .text import clean_text, parse_price
 
@@ -119,6 +120,9 @@ def normalize_naver_item(
   if category == "other" or (category_text and not category_has_cosmetic_hint and not product_has_category_hint):
     return None, "category_not_cosmetic"
 
+  # 세부 카테고리(subcategory) 1급 필드 — 제목 + 수집 질의로 추론 (립_틴트/섀도우_팔레트 등).
+  subcategory = infer_subcategory(category, title, clean_text(query))
+
   return {
     "id": _stable_candidate_id(product_id, link),
     "source": "naver_api",
@@ -133,6 +137,7 @@ def normalize_naver_item(
     "maker": clean_text(item.get("maker")),
     "mallName": clean_text(item.get("mallName")),
     "category": category,
+    "subcategory": subcategory,
     "category1": clean_text(item.get("category1")),
     "category2": clean_text(item.get("category2")),
     "category3": clean_text(item.get("category3")),

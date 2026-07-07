@@ -9,6 +9,10 @@ from app.services.auradin_agent.session_manager import clear_sessions
 
 def _client(**settings_overrides) -> TestClient:
   clear_sessions()
+  # refine 계약은 '이미 서빙된 결과 세션'을 전제로 λ 다이얼/프롬프트 병합을 검증한다.
+  # 20260708 시드에선 '글리터' 상위가 동점이라 기본 θ에선 질문을 타므로, 즉답 종료를 강제(θ=0)해
+  # 결과 세션을 확보한다(refine 로직 자체는 결정성과 무관).
+  settings_overrides.setdefault("auradin_score_gap_threshold", 0.0)
   return TestClient(create_app(Settings(database_url=None, **settings_overrides)))
 
 
@@ -62,6 +66,33 @@ def test_dial_accumulates_lambda_and_clamps() -> None:
     assert response.status_code == 200
   turn = _turn(client, session_id)
   assert _refine_log(turn)["lambda"] == 0.05
+
+
+def test_dial_saturation_is_reported_honestly() -> None:
+  """λ가 클램프 끝에 닿으면 '다시 정렬했어요'는 거짓 — no-op을 정직하게 알린다 (§7)."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  # 먼저 포화까지 밀어붙인 뒤, 한 번 더 눌러 no-op을 유도.
+  for _ in range(10):
+    client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
+
+  saturated = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
+  assert saturated.status_code == 200
+  turn = _turn(client, session_id)
+
+  log = _refine_log(turn)
+  assert log["lambdaMoved"] is False
+  assert turn["result"]["headerLabel"] == "이미 가장 다양한 순서예요"
+  notice = turn["result"].get("refineNotice")
+  assert notice and notice["kind"] == "dial_saturated"
+  assert notice["dial"] == "more_diverse"
+
+  # 반대 방향으로 누르면 다시 움직인다 → 정상 재정렬 헤더 + notice 없음.
+  moved = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_similar"})
+  assert moved.status_code == 200
+  turn = _turn(client, session_id)
+  assert _refine_log(turn)["lambdaMoved"] is True
+  assert turn["result"].get("refineNotice") is None
 
 
 def test_prompt_refine_merges_price_and_keeps_original_category() -> None:

@@ -211,69 +211,74 @@ export function ResultsView({
           </Text>
         )}
 
-        {/* rendered even when alts is empty (per spec) */}
-        <Text
-          style={[
-            monoLabel,
-            {
-              fontSize: 9.5,
-              letterSpacing: tracking(9.5, 0.16),
-              color: color.inkFaint,
-              marginTop: 20,
-              marginBottom: 10,
-            },
-          ]}
-          allowFontScaling={false}
-        >
-          비슷한 후보
-        </Text>
-        <View style={{ gap: 10 }}>
-          {alts.map((p) => (
-            <GlassCard
-              key={p.id}
-              onPress={() => onOpen(p)}
-              accessibilityLabel={`${p.brandName} ${p.productName} ${p.shadeName}`}
+        {/* '비슷한 후보'는 대안이 있을 때만 — 빈 슬롯은 라이브 NAVER로 채워지므로 보통 존재하고,
+            그래도 비면 제목을 숨겨 '고장'처럼 읽히지 않게 한다. */}
+        {alts.length > 0 ? (
+          <>
+            <Text
+              style={[
+                monoLabel,
+                {
+                  fontSize: 9.5,
+                  letterSpacing: tracking(9.5, 0.16),
+                  color: color.inkFaint,
+                  marginTop: 20,
+                  marginBottom: 10,
+                },
+              ]}
+              allowFontScaling={false}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <ProductThumb
-                  imageUrl={p.imageUrl}
-                  palette={p.palette}
-                  width={layout.thumbSize}
-                  height={layout.thumbSize}
-                  radius={16}
-                  alt={p.productName}
-                />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1}>
-                    <Text
-                      style={[
-                        monoLabel,
-                        { fontSize: 9.5, letterSpacing: tracking(9.5, 0.14), color: color.inkSoft },
-                      ]}
-                      allowFontScaling={false}
-                    >
-                      {p.brandName}
-                    </Text>
-                    <Text style={{ fontFamily: font.sansSemiBold, fontSize: 13, color: color.ink }}>
-                      {'  '}
-                      {p.productName} · {p.shadeName}
-                    </Text>
-                  </Text>
-                  <Text
-                    style={{ fontFamily: font.sans, fontSize: 11.5, color: color.inkSoft, marginTop: 4 }}
-                    numberOfLines={1}
-                  >
-                    <Text style={{ fontFamily: font.mono }} allowFontScaling={false}>
-                      {p.priceText}
-                    </Text>
-                    {' · '}
-                    {p.matchSummary}
-                  </Text>
-                </View>
-              </View>
-            </GlassCard>
-          ))}
-        </View>
+              비슷한 후보
+            </Text>
+            <View style={{ gap: 10 }}>
+              {alts.map((p) => (
+                <GlassCard
+                  key={p.id}
+                  onPress={() => onOpen(p)}
+                  accessibilityLabel={`${p.brandName} ${p.productName} ${p.shadeName}`}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <ProductThumb
+                      imageUrl={p.imageUrl}
+                      palette={p.palette}
+                      width={layout.thumbSize}
+                      height={layout.thumbSize}
+                      radius={16}
+                      alt={p.productName}
+                    />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1}>
+                        <Text
+                          style={[
+                            monoLabel,
+                            { fontSize: 9.5, letterSpacing: tracking(9.5, 0.14), color: color.inkSoft },
+                          ]}
+                          allowFontScaling={false}
+                        >
+                          {p.brandName}
+                        </Text>
+                        <Text style={{ fontFamily: font.sansSemiBold, fontSize: 13, color: color.ink }}>
+                          {'  '}
+                          {p.productName} · {p.shadeName}
+                        </Text>
+                      </Text>
+                      <Text
+                        style={{ fontFamily: font.sans, fontSize: 11.5, color: color.inkSoft, marginTop: 4 }}
+                        numberOfLines={1}
+                      >
+                        <Text style={{ fontFamily: font.mono }} allowFontScaling={false}>
+                          {p.priceText}
+                        </Text>
+                        {' · '}
+                        {p.matchSummary}
+                      </Text>
+                    </View>
+                  </View>
+                </GlassCard>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         {/* refine dials */}
         {candidates.length > 0 ? (

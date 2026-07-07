@@ -11,7 +11,7 @@ from .knowledge_chunk_builder import build_knowledge_chunks, build_mvp_catalog
 
 # Refined seed (deduped to unique products, calibrated hard-filter attributes).
 # Override with AURADIN_RUN_DATE to serve a different snapshot (e.g. 20260703).
-RUN_DATE = os.environ.get("AURADIN_RUN_DATE", "20260706")
+RUN_DATE = os.environ.get("AURADIN_RUN_DATE", "20260708")
 
 
 def _resolve_data_root() -> Path:

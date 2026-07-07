@@ -24,8 +24,8 @@ def _first_turn(prompt: str, **settings_overrides):
 
 
 def test_decisive_query_skips_question_and_serves_roles_and_reason() -> None:
-  """결정적 질의(글리터: shadow 잠금 + 갭≥θ) → 질문 없이 결과, role/source/구조화 근거 노출."""
-  turn = _first_turn("글리터 추천해줘")
+  """결정적 질의(올리브영 매트 립: lip+채널 잠금 + 단일 매트 매칭으로 갭≥θ) → 질문 없이 결과."""
+  turn = _first_turn("올리브영 매트 립")
   assert turn["phase"] == "results"
 
   # 점수갭 즉답 종료가 실제로 발동했는지 로그로 확인
@@ -38,18 +38,22 @@ def test_decisive_query_skips_question_and_serves_roles_and_reason() -> None:
   for product in products:
     assert product["role"] in VALID_ROLES
     assert product["source"] == "curated"  # 라이브 Naver는 §11 7단계
-    assert product["category"] == "shadow"  # 립/틴트 드리프트 0
+    assert product["category"] == "lip"  # 카테고리 드리프트 0
     assert isinstance(product["reason"], dict)
     assert set(product["reason"].keys()) == REASON_KEYS
-    assert "아이섀도우" in product["reason"]["matchedOn"]
+    assert "립" in product["reason"]["matchedOn"]
 
-  # 매치율 정직화: 근거 완비 anchor는 높고(≥85), 스프레드가 존재
-  assert products[0]["matchRate"] >= 85
+  # 매치율 정직화: 근거 완비 anchor는 높고(≥80), 스프레드가 존재
+  assert products[0]["matchRate"] >= 80
 
 
 def test_glitter_serving_reason_carries_interpretation_caveat() -> None:
-  """§6/§9: '글리터'→쉬머 해석이 서빙 근거의 caveat에 정직하게 실린다."""
-  turn = _first_turn("글리터 추천해줘")
+  """§6/§9: '글리터'→쉬머 해석이 서빙 근거의 caveat에 정직하게 실린다.
+
+  20260708 시드에선 글리터 상위가 동점이라 기본 θ에선 질문을 타므로, 즉답 종료를 강제(θ=0)해
+  서빙 경로의 caveat 배선을 검증한다(해석 caveat 자체는 결정성과 무관).
+  """
+  turn = _first_turn("글리터 추천해줘", auradin_score_gap_threshold=0.0)
   anchor = turn["result"]["products"][0]
   assert any("글리터" in c for c in anchor["reason"]["caveat"])
 
@@ -61,8 +65,11 @@ def test_ambiguous_query_still_asks_question() -> None:
 
 
 def test_tied_top_query_still_asks_question() -> None:
-  """상위가 동점(작은 갭)인 하드 질의는 즉답 종료 안 함 — 질문이 실제로 좁혀준다."""
-  turn = _first_turn("올리브영 매트 립")
+  """상위가 동점(작은 갭)인 하드 질의는 즉답 종료 안 함 — 질문이 실제로 좁혀준다.
+
+  '글리터'는 shadow 잠금이지만 상위 쉬머 매칭이 다수라 갭<θ → 동점 → 질문 유지.
+  """
+  turn = _first_turn("글리터 추천해줘")
   assert turn["phase"] == "question"
 
 

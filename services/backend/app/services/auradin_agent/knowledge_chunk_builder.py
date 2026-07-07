@@ -11,7 +11,7 @@ from .title_keyword_extractor import (
 )
 
 
-SUPPORTED_CATEGORIES = {"lip", "cheek", "shadow"}
+SUPPORTED_CATEGORIES = {"lip", "cheek", "shadow", "base", "brow", "liner"}
 
 COLOR_PALETTE = {
   "pink": "#EFA3B4",
@@ -30,6 +30,9 @@ DEFAULT_PALETTE_BY_CATEGORY = {
   "lip": ["#B85E68", "#EFA3B4"],
   "cheek": ["#EF8A73", "#F4B3A5"],
   "shadow": ["#8B6A55", "#D7BFA8"],
+  "base": ["#D8A287", "#E8C6A0"],
+  "brow": ["#6E5A4E", "#8B7355"],
+  "liner": ["#2E2A28", "#5A4B42"],
 }
 
 PRICE_TIERS = (

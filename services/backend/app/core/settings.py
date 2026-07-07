@@ -66,6 +66,9 @@ class Settings(BaseSettings):
   auradin_refine_lambda_step: float = 0.15
   # §11 6/7단계 비동기 enrich — 자격증명 있으면 자동 ON, 없으면 graceful fallback (턴키).
   auradin_copy_enabled: bool = True  # Bedrock reasonCopy (구조화 근거 → 자연 카피, 가산 필드)
+  # §11 3-2단계: 되묻기 질문의 표시 텍스트(제목·선택지 라벨)를 실시간 LLM으로 다듬는다.
+  # 구조(id/filterDelta)는 불변 — 충실성 게이트 실패·비활성·드리프트면 결정론적 텍스트 유지(가산 폴리시).
+  auradin_question_copy_enabled: bool = True
   auradin_live_discovery_enabled: bool = True  # 발견 슬롯 = Tier2 라이브 주력 (§5, 큐레이션은 폴백)
   auradin_enrich_timeout_seconds: float = 12.0  # enrich 전체 상한 — 초과 시 fallback으로 서빙
 
