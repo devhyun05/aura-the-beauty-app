@@ -14,6 +14,16 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _FoundationLuminanceInfluence ("Foundation Luminance Influence", Range(0, 1)) = 0.08
         _FoundationDebugMode ("Foundation Debug Mode", Float) = 0
         _FoundationMaskStrength ("Foundation Mask Strength", Range(0, 2)) = 1
+        // Half-face flag carried on this composite material only so the
+        // compositor can read it back and forward it to the mask-write
+        // materials. This shader's own frag ignores it (its maskUv is screen
+        // space, not canonical face UV), so it stays a true no-op here.
+        [HideInInspector] _HalfFaceMode ("Half Face Mode", Float) = 0
+        // Face-following centerline divider for the 반반 half-face look.
+        // 0 = off (frag is an exact no-op), >0.5 = draw the forehead->chin
+        // centerline. Set every frame by ScreenSpaceFoundationController from
+        // halfFaceMode alongside _HalfFaceMode.
+        [HideInInspector] _HalfFaceDivider ("Half Face Divider", Float) = 0
         _FoundationMaskFeather ("Foundation Mask Feather", Range(0, 1)) = 0
         _ScreenSpaceUvFlip ("Screen Space Uv Flip", Float) = 0
         _DisplayProjectionActive ("Display Projection Active", Float) = 0
@@ -46,6 +56,22 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
         _FoundationDebugMouth ("Foundation Debug Mouth", Vector) = (0, 0, 0, 0)
         _SkinSmoothStrength ("Skin Smooth Strength", Range(0, 1)) = 0
         _SkinGrainStrength ("Skin Grain Strength", Range(0, 0.05)) = 0.012
+        // Screen-space lip (Milestone 1). Composited inside this material's
+        // frag from the real camera lip pixels (luma-preserving recolor).
+        [HideInInspector] _LipMaskTex ("Lip Coverage Mask", 2D) = "black" {}
+        _LipColor ("Lip Color", Color) = (0.85, 0.29, 0.45, 1)
+        _LipIntensity ("Lip Intensity", Range(0, 1)) = 0
+        _LipGlossBoost ("Lip Gloss Boost", Range(0, 1)) = 0
+        _LipSpecular ("Lip Specular", Range(0, 1)) = 0
+        _LipGlossThreshold ("Lip Gloss Threshold", Range(0, 1)) = 0.68
+        _LipMatteAmount ("Lip Matte Amount", Range(0, 1)) = 0
+        _LipMicroContrast ("Lip Micro Contrast", Range(0, 1)) = 0.45
+        _LipTextureAmount ("Lip Texture Amount", Range(0, 1)) = 0.40
+        _LipRimShade ("Lip Rim Shade", Range(0, 1)) = 0.22
+        _MouthGapLuma ("Mouth Gap Luma", Range(0, 1)) = 0.10
+        _TeethLuma ("Teeth Luma", Range(0, 1)) = 0.72
+        _TeethSat ("Teeth Sat", Range(0, 1)) = 0.10
+        _LipEnabled ("Lip Enabled", Float) = 0
         [HideInInspector] _SrcBlend ("Source Blend", Float) = 2
         [HideInInspector] _DstBlend ("Destination Blend", Float) = 0
         [HideInInspector] _ZWrite ("ZWrite", Float) = 0
@@ -138,6 +164,26 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
             float4x4 _UnityDisplayTransform;
             float _SkinSmoothStrength;
             float _SkinGrainStrength;
+            float _HalfFaceDivider;
+
+            // Screen-space lip (Milestone 1). _LipMaskTex is the coverage mask
+            // written by FoundationScreenSpaceCompositor (same screen UV space
+            // as _SkinMaskTex). ApplyLipTint does a luma-preserving recolor of
+            // the real camera lip pixels + camera-based open-mouth exclusion.
+            sampler2D _LipMaskTex;
+            float4 _LipColor;
+            float _LipIntensity;
+            float _LipGlossBoost;
+            float _LipSpecular;
+            float _LipGlossThreshold;
+            float _LipMatteAmount;
+            float _LipMicroContrast;
+            float _LipTextureAmount;
+            float _LipRimShade;
+            float _MouthGapLuma;
+            float _TeethLuma;
+            float _TeethSat;
+            float _LipEnabled;
 
             v2f vert(appdata input)
             {
@@ -355,6 +401,114 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 }
 
                 return sum / max(wsum, 1e-4);
+            }
+
+            // Screen-space lip tint (Milestone 1). Luma-preserving recolor: the
+            // lip adopts _LipColor's chroma but KEEPS the real camera lip's
+            // luminance, so vertical striations, crease shadows and wet
+            // highlights ride through the color ("melts into the lips"). Camera
+            // open-mouth exclusion drops the dark inter-lip gap and bright
+            // desaturated teeth from the real image. cameraColor MUST be the RAW
+            // (unsmoothed) camera pixel so the lip texture isn't pre-blurred.
+            //
+            // M2 TODO: live inner-lip vertex-ring cutout for precise open-mouth;
+            // per-frame lip-reference chroma sampling for a stronger edge gate;
+            // 오버립/그라데이션 shape parity and 소프트스모키/얇은라인/뮤트립 type deltas.
+            float3 ApplyLipTint(float3 cameraColor, float3 baseColor, float2 screenUv, float halfGate)
+            {
+                if (_LipEnabled < 0.5) return baseColor;
+                float lipMask = tex2D(_LipMaskTex, screenUv).r * halfGate;   // use SAME screenUv as finalMask
+                if (lipMask < 0.001) return baseColor;
+
+                // Real lip luminance (creases + highlights) and lip-color luma.
+                float lumaCam = max(FoundationLuma(cameraColor), 1e-4);
+                float lumaC   = max(FoundationLuma(_LipColor.rgb), 1e-3);
+
+                // --- DETAIL SEPARATION: estimate the LOW-FREQUENCY lip shading with a
+                // tiny 6-tap mask-weighted ring of camera luma (each tap gated by the
+                // lip mask so the dark mouth-gap / surrounding skin do NOT bleed into
+                // the local mean). residual = lumaCam - lowFreq is the fine striation /
+                // wrinkle / wet speckle. Lip-pixels-only (past the early-out).
+                const float2 kLipRing[6] = {
+                    float2( 1.00,  0.00), float2( 0.50,  0.87), float2(-0.50,  0.87),
+                    float2(-1.00,  0.00), float2(-0.50, -0.87), float2( 0.50, -0.87)
+                };
+                float aspectL = _ScreenParams.x / max(_ScreenParams.y, 1.0);
+                float2 dRad   = float2(0.0026, 0.0026 * aspectL);
+                float lowFreq = lumaCam;
+                float lowW    = 1.0;
+                [unroll]
+                for (int li = 0; li < 6; li++)
+                {
+                    float2 o  = kLipRing[li] * dRad;
+                    float  m  = tex2D(_LipMaskTex, screenUv + o).r;
+                    float  lc = FoundationLuma(SampleCameraColor(screenUv + o));
+                    float  w  = saturate(m);
+                    lowFreq  += lc * w;
+                    lowW     += w;
+                }
+                lowFreq /= max(lowW, 1e-4);
+                // Hard-clamp the residual so camera noise can never bloom into
+                // halos/grain when it is re-injected below.
+                float detail = clamp(lumaCam - lowFreq, -0.05, 0.05);
+
+                // Micro-contrast S-curve on the LOW-FREQ form (pivoted on the local
+                // lip mean): deepen crease shadows and lift plump highlights as
+                // coherent DIMENSION (form, not sharpening). Then re-inject a BOUNDED
+                // amount of the high-freq residual for fine texture (coefficient
+                // capped <= 0.5 so it can never amplify sensor noise into grain).
+                float sPivot  = lerp(0.42, lowFreq, 0.65);
+                float sAmount = saturate(_LipMicroContrast);
+                float shaped  = lowFreq + (lowFreq - sPivot) * (sAmount * 0.85);
+                float texGain = saturate(_LipTextureAmount);
+                float lumaDet = shaped + detail * (0.20 + texGain * 0.30);
+
+                // Ombre / vermillion crease-shadow: darken toward the mask boundary so
+                // the lip reads ROUNDED (fuller center, deeper rim). Mask value is a
+                // cheap edge-distance proxy (low mask = near the edge).
+                float rimDepth = saturate(_LipRimShade);
+                float rimShade = lerp(1.0 - 0.18 * rimDepth, 1.0, smoothstep(0.10, 0.55, lipMask));
+                lumaDet *= rimShade;
+
+                // Chroma-drift guard: cap the luma fed into the recolor so the
+                // brightest channel of _LipColor*(lumaDet/lumaC) never clips past
+                // ~0.97 — otherwise the per-channel saturate() below would shift the
+                // hue toward white on bright highlights. The wet specular (added
+                // later) supplies controlled highlight brightness instead.
+                float lumaMax = 0.97 * lumaC / max(_LipColor.r, max(_LipColor.g, _LipColor.b));
+                lumaDet = clamp(lumaDet, 1e-4, lumaMax);
+
+                // Luma-preserving recolor using the DETAILED luma: adopt the lip
+                // color's chroma, keep the (now dimensionalized) camera lip luminance.
+                float3 recolor = _LipColor.rgb * (lumaDet / lumaC);
+                // Matte deepening (glow keeps luma): pull luma down slightly for matte.
+                recolor *= lerp(1.0, 0.90, saturate(_LipMatteAmount));
+
+                // --- open-mouth exclusion — GENTLE, using RAW lumaCam so gates don't
+                // shift: kill only a CLEARLY dark gap or CLEARLY neutral-bright tooth.
+                float camChroma = length(cameraColor - lumaCam);
+                float darkGate  = smoothstep(_MouthGapLuma, _MouthGapLuma + 0.05, lumaCam);
+                float teethNeutral = 1.0 - smoothstep(_TeethSat * 0.5, _TeethSat, camChroma);
+                float teethBright  = smoothstep(_TeethLuma, _TeethLuma + 0.10, lumaCam);
+                float teethGate = 1.0 - teethNeutral * teethBright;
+                // vermillion melt: soft border so the tint soaks in (no sticker line).
+                float meltEase  = smoothstep(0.06, 0.55, lipMask);
+                // Hand occlusion: don't paint the tint onto a hand over the mouth.
+                float handVis = HandOcclusionVisibility(screenUv);
+                float eff = saturate(lipMask * _LipIntensity * darkGate * teethGate * handVis);
+                float3 tinted = recolor;
+
+                // Wet-plump specular that TRACKS real light: sharpen the real camera
+                // highlight and hold it OFF the vermillion edge (specBody) so it reads
+                // as a rounded wet plump, not a rim glare. Glow finish only.
+                float specBody = meltEase;
+                float specReal = pow(smoothstep(_LipGlossThreshold, 1.0, lumaCam), 1.5);
+                float specMask = specReal * specBody * saturate(_LipGlossBoost) * saturate(_LipSpecular);
+                tinted += specMask * lerp(float3(1,1,1), _LipColor.rgb, 0.15);
+
+                // Guarantee no sticker-black: never let the tint drop luma below 0.35*lumaCam.
+                float3 safe = max(tinted, cameraColor * 0.35);
+                return lerp(baseColor, saturate(safe), eff * meltEase);
             }
 
             fixed4 frag(v2f input) : SV_Target
@@ -837,7 +991,47 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                     corrected += g * _SkinGrainStrength * skinWeight;
                 }
 
-                return fixed4(saturate(corrected), 1.0);
+                // Screen-space lip tint (Milestone 1). cameraColor is the RAW
+                // camera pixel (SampleCameraColor(input.uv) above), so the lip
+                // luma reads the unsmoothed real lip texture even when skin
+                // smoothing has replaced baseColor. screenUv is the SAME
+                // flip-corrected mask UV used for finalMask, so the lip mask
+                // registers with the foundation mask. halfGate = 1.0: the lip
+                // mask's own _HalfFaceMode (in FoundationMaskWrite) already
+                // zeroes the excluded half, so passing 1.0 here avoids
+                // double-gating. Exact no-op when _LipEnabled < 0.5.
+                corrected = ApplyLipTint(cameraColor, corrected, screenUv, 1.0);
+
+                float3 finalColor = saturate(corrected);
+
+                // Face-following half-face divider: draw the forehead->chin
+                // centerline (both anchors already in screenUv space, set
+                // every frame), so the guide line rotates and tracks with the
+                // face instead of sitting statically at screen center. Only
+                // when the feature is on AND both anchors are valid; otherwise
+                // this is a bit-identical no-op (the branch is skipped on
+                // Metal). NOTE: screenUv is non-square, so this plain
+                // uv-distance line has slight width variation across its
+                // length (acceptable for a guide line; not corrected here).
+                if (_HalfFaceDivider > 0.5
+                    && _FoundationDebugForehead.z > 0.5
+                    && _FoundationDebugChin.z > 0.5)
+                {
+                    // A full-height STRAIGHT VERTICAL line at the face center X
+                    // (average of the smoothed forehead/chin X so it tracks the
+                    // face horizontally but spans the whole screen top-to-bottom),
+                    // rendered as a faint DOTTED line.
+                    float centerX = (_FoundationDebugForehead.x + _FoundationDebugChin.x) * 0.5;
+                    float distToLine = abs(screenUv.x - centerX);
+                    const float halfWidth = 0.0045;
+                    float lineCore = 1.0 - smoothstep(halfWidth * 0.5, halfWidth, distToLine);
+                    // Dashed pattern along the vertical axis -> dotted look.
+                    float dash = step(0.5, frac(screenUv.y * 36.0));
+                    float lineAlpha = lineCore * dash * 0.6;
+                    finalColor = lerp(finalColor, float3(1.0, 1.0, 1.0), lineAlpha);
+                }
+
+                return fixed4(finalColor, 1.0);
             }
             ENDCG
         }

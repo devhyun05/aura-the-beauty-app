@@ -1,6 +1,7 @@
 import type {
   FilterCategoryId,
   FilterColorOption,
+  FilterTextOption,
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
@@ -27,6 +28,53 @@ export function resolveAreaColorOptions(
   )[makeupAreaId];
   const palette = region ? REGION_COLOR_OPTIONS[region] : undefined;
   return palette && palette.length > 0 ? palette : fallbackColorOptions;
+}
+
+// Lip 질감(texture/finish) is a FIXED, area-based set (매트/글로우) rather than the
+// per-filter textureOptions, mirroring resolveAreaColorOptions. 매트 => matte
+// finish (no gloss highlight); 글로우 => light-reactive gloss highlight. The ids
+// are consumed by unityMakeupBridge.ts (resolveLipFinishParams) to drive
+// glossBoost/specular/texture. Other areas keep the filter's own textureOptions.
+const TEXTURE_OPTIONS_BY_MAKEUP_AREA: Partial<
+  Record<MakeupArea, readonly FilterTextOption[]>
+> = {
+  lip: [
+    {id: 'lip-matte', label: '매트'},
+    {id: 'lip-glow', label: '글로우'},
+  ],
+};
+
+// Lip 타입(type) is a FIXED, area-based set. 소프트 스모키 => soft darkened smoky
+// gradient; 얇은 라인 => thin inner-lip / lip-line emphasis; 뮤트 립 => muted,
+// blurred, lower-saturation lip. The ids are consumed by unityMakeupBridge.ts
+// (resolveLipTypeParams) to drive opacity/feather/coverage/saturation combos.
+const TYPE_OPTIONS_BY_MAKEUP_AREA: Partial<
+  Record<MakeupArea, readonly FilterTextOption[]>
+> = {
+  lip: [
+    {id: 'lip-soft-smoky', label: '소프트 스모키'},
+    {id: 'lip-thin-line', label: '얇은 라인'},
+    {id: 'lip-mute', label: '뮤트 립'},
+  ],
+};
+
+// Area-based override for 질감 options. Lip gets the fixed 매트/글로우 set; every
+// other area falls back to the selected filter's own textureOptions. MUST be
+// used at both the render site (ARFilterOptionCardList) and the seed/default
+// sites so the shown card set and the applied recipe never diverge.
+export function resolveAreaTextureOptions(
+  makeupAreaId: MakeupArea,
+  fallbackTextureOptions: readonly FilterTextOption[],
+): readonly FilterTextOption[] {
+  return TEXTURE_OPTIONS_BY_MAKEUP_AREA[makeupAreaId] ?? fallbackTextureOptions;
+}
+
+// Area-based override for 타입 options. Same contract as resolveAreaTextureOptions.
+export function resolveAreaTypeOptions(
+  makeupAreaId: MakeupArea,
+  fallbackTypeOptions: readonly FilterTextOption[],
+): readonly FilterTextOption[] {
+  return TYPE_OPTIONS_BY_MAKEUP_AREA[makeupAreaId] ?? fallbackTypeOptions;
 }
 
 export type ARMakeupOptionGroupId =
@@ -99,14 +147,21 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'brow-slim', label: '슬림'},
   ],
   lip: [
-    {id: 'lip-default', label: '기본 립'},
     {id: 'lip-over', label: '오버 립'},
     {id: 'lip-gradient', label: '그라데이션'},
   ],
   cheek: [
-    {id: 'cheek-default', label: '기본 치크'},
-    {id: 'cheek-diagonal', label: '사선 치크'},
-    {id: 'cheek-round', label: '라운드 치크'},
+    {id: 'cheek-daily', label: '데일리'},
+    {id: 'cheek-lovely', label: '러블리'},
+    {id: 'cheek-under', label: '언더'},
+    {id: 'cheek-sunkiss1', label: '선키스 1'},
+    {id: 'cheek-sunkiss2', label: '선키스 2'},
+  ],
+  // 렌즈는 색(COLOR)이 주 선택 수단이라 형태는 최소 세트만 노출합니다. 비비드는
+  // 진한 컬러를 더 선명하게(높은 opacity 프리셋의 색을 선택하도록 안내)하는 표시용.
+  lens: [
+    {id: 'lens-natural', label: '내추럴'},
+    {id: 'lens-vivid', label: '비비드'},
   ],
   contour: [
     {id: 'contour-default', label: '기본 윤곽'},
@@ -248,18 +303,30 @@ export function getARFilterSelectionAfterTotalMakeupLookSelect({
 
 export function getARFilterSelectionAfterPointMakeupLookSelect({
   makeupFilter,
+  selectedMakeupArea,
   selectionState,
 }: {
   makeupFilter: MakeupFilter;
+  selectedMakeupArea?: MakeupArea;
   selectionState: ARFilterSelectionState;
 }): ARFilterSelectionState {
+  // Seed 타입/질감 from the area-based override set (lip => fixed 매트·글로우 /
+  // 소프트 스모키·얇은 라인·뮤트 립) so the seeded id is always a valid card id for
+  // the shown set. Other areas keep the filter's own first option.
+  const typeOptions = selectedMakeupArea
+    ? resolveAreaTypeOptions(selectedMakeupArea, makeupFilter.typeOptions)
+    : makeupFilter.typeOptions;
+  const textureOptions = selectedMakeupArea
+    ? resolveAreaTextureOptions(selectedMakeupArea, makeupFilter.textureOptions)
+    : makeupFilter.textureOptions;
+
   return {
     ...selectionState,
     selectedTotalMakeupLookId: null,
     selectedPointMakeupLookId: makeupFilter.id,
     selectedColorId: getARFilterInitialColorId(makeupFilter.colorOptions),
-    selectedTypeId: makeupFilter.typeOptions[0]?.id ?? '',
-    selectedTextureId: makeupFilter.textureOptions[0]?.id ?? '',
+    selectedTypeId: typeOptions[0]?.id ?? '',
+    selectedTextureId: textureOptions[0]?.id ?? '',
     hasUnsavedMakeupChanges: true,
   };
 }

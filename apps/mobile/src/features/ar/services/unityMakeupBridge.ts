@@ -14,6 +14,7 @@ import {
   createDefaultRegionParams,
   getMakeupRecipeRegionsForArea,
   type FullFaceMakeupRecipe,
+  type HalfFaceMode,
   type FullFaceMakeupRecipeLayer,
   type UnitySynchronizedCaptureRequest,
   type FullFaceRegionControls,
@@ -130,6 +131,16 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     region: 'brow',
     texture: 'natural_brow',
   },
+  lens: {
+    branchSource: 'makeupAR-lens',
+    color: '#5B4634',
+    finish: 'natural-lens',
+    label: PRODUCT_REGION_LABELS.lens,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.lens.maskTextureId,
+    opacity: 0.55,
+    region: 'lens',
+    texture: 'shimmer_eye',
+  },
 };
 
 export const UNITY_MAKEUP_REGION_PRESETS: Record<
@@ -141,6 +152,7 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   blush: UNITY_MAKEUP_LAYER_PRESETS.blush,
   eyeliner: UNITY_MAKEUP_LAYER_PRESETS.eyeliner,
   lip: UNITY_MAKEUP_LAYER_PRESETS.lip,
+  lens: UNITY_MAKEUP_LAYER_PRESETS.lens,
 };
 
 // Brow 형태(shape) tab -> a distinct, correctly-authored brow mask. Every mask
@@ -158,6 +170,55 @@ const BROW_SHAPE_MASKS: Record<string, string> = {
 
 function resolveBrowMaskForShape(selectedShapeId: string): string {
   return BROW_SHAPE_MASKS[selectedShapeId] ?? FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId;
+}
+
+// Cheek 형태(shape) tab -> a blush session mask. The recipe builder auto-derives
+// the blush_session_N texture from the cheek-session-mask-N maskTextureId, so we
+// only override maskTextureId + candidateId (same pattern as the brow shapes).
+const BLUSH_SHAPE_MASKS: Record<string, {maskTextureId: string; candidateId: string}> = {
+  'cheek-daily': {maskTextureId: 'cheek-session-mask-1-v1', candidateId: 'blush-session-1-v1'},
+  'cheek-lovely': {maskTextureId: 'cheek-session-mask-2-v1', candidateId: 'blush-session-2-v1'},
+  'cheek-under': {maskTextureId: 'cheek-session-mask-3-v1', candidateId: 'blush-session-3-v1'},
+  'cheek-sunkiss1': {maskTextureId: 'cheek-session-mask-4-v1', candidateId: 'blush-session-4-v1'},
+  'cheek-sunkiss2': {maskTextureId: 'cheek-session-mask-5-v1', candidateId: 'blush-session-5-v1'},
+};
+
+function resolveBlushMaskForShape(
+  selectedShapeId: string,
+): {maskTextureId: string; candidateId: string} {
+  return (
+    BLUSH_SHAPE_MASKS[selectedShapeId] ?? {
+      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
+      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
+    }
+  );
+}
+
+// Lens 컬러(color id) -> 홍채 틴트 색 + opacity. The color id IS the lens id (from
+// REGION_COLOR_OPTIONS.lens); this record supplies the matching opacity. Vivids
+// (blue/green/violet) get a higher opacity so they actually show on dark eyes.
+// The swatch hex flows in via selection.selectedColor.hex, so we only need the
+// opacity here (mirrors BLUSH_SHAPE_MASKS: id -> preset). The disc geometry and
+// mask are generated in Unity (maskTextureId 'lens-iris-disc-v1'); blendMode is
+// forced to 'normal' in buildFullFaceMakeupRecipeLayer.
+const LENS_COLOR_PRESETS: Record<string, {hex: string; opacity: number}> = {
+  'lens-natural-brown': {hex: '#5B4634', opacity: 0.55},
+  'lens-choco': {hex: '#3E2C1E', opacity: 0.6},
+  'lens-hazel': {hex: '#8A6A3B', opacity: 0.55},
+  'lens-honey': {hex: '#9A6B34', opacity: 0.55},
+  'lens-gray': {hex: '#7C7B78', opacity: 0.6},
+  'lens-ash-gray': {hex: '#5E5E5C', opacity: 0.62},
+  'lens-olive': {hex: '#6E6B3A', opacity: 0.6},
+  'lens-forest-green': {hex: '#4C6B4A', opacity: 0.68},
+  'lens-ocean-blue': {hex: '#3C5A78', opacity: 0.72},
+  'lens-violet': {hex: '#5E4A78', opacity: 0.72},
+};
+
+function resolveLensOpacityForColorId(selectedColorId: string): number {
+  return (
+    LENS_COLOR_PRESETS[selectedColorId]?.opacity ??
+    UNITY_MAKEUP_LAYER_PRESETS.lens.opacity
+  );
 }
 
 export function getUnityMakeupLayerRegionsForMakeupArea(
@@ -210,6 +271,7 @@ export function createUnityMakeupRecipeBatchFromARFilterSelection({
 export function createUnityMakeupRecipeBatchFromARFilterSelections(
   selections: readonly UnityMakeupARFilterSelection[],
   sentAtMs = Date.now(),
+  halfFaceMode: HalfFaceMode = 'off',
 ): UnityMakeupRecipeBatch {
   const layerSelections = new Map<UnityMakeupLayerRegion, UnityMakeupARFilterSelection>();
 
@@ -240,6 +302,7 @@ export function createUnityMakeupRecipeBatchFromARFilterSelections(
     recipeId: ['rn-filter-combined', recipeAreas || 'none', sentAtMs].join('-'),
     recipeBatchId: ['rn-filter-combined', recipeAreas || 'none', sentAtMs].join('-'),
     sentAtMs,
+    halfFaceMode,
   });
 }
 
@@ -323,14 +386,23 @@ function createUnityMakeupControlsForRegions({
     const defaultControl = DEFAULT_FULL_FACE_REGION_CONTROLS[region];
     const preset = UNITY_MAKEUP_LAYER_PRESETS[region];
     const selectedHex = normalizeSelectedHex(selection?.selectedColor.hex);
+    const selectedColorId = selection?.selectedColorId ?? '';
     const selectedShapeId = selection?.selectedShapeId ?? '';
     const selectedTextureId = selection?.selectedTextureId ?? '';
     const selectedTypeId = selection?.selectedTypeId ?? '';
     const params = createDefaultRegionParams(region);
 
-    params.coverage = resolveCoverageForRegion(region, selectedShapeId);
-    params.feather = resolveFeatherForRegion(region, selectedShapeId);
+    params.coverage = resolveCoverageForRegion(region, selectedShapeId, selectedTypeId);
+    params.feather = resolveFeatherForRegion(region, selectedShapeId, selectedTypeId);
     params.maskThreshold = resolveMaskThresholdForRegion(region);
+
+    // Lip 질감(finish) / 형태(shape) / 타입(type) -> independent recipe params.
+    // finish -> gloss highlight (glossBoost/specular) + base texture (매트/글로우);
+    // shape -> base-fill gradientAmount; type -> extra gradient falloff. These
+    // combine freely (글로우+그라데이션 = gloss highlight over a gradient base fill).
+    const lipFinish = region === 'lip' ? resolveLipFinishParams(selectedTextureId) : null;
+    const lipShape = region === 'lip' ? resolveLipShapeParams(selectedShapeId) : null;
+    const lipType = region === 'lip' ? resolveLipTypeParams(selectedTypeId) : null;
     if (region === 'brow') {
       // The UV-locked brow sits well below the real brows; a positive
       // verticalOffset raises it (wired to _MaskOffset.y in E3, effect =
@@ -344,9 +416,23 @@ function createUnityMakeupControlsForRegions({
         ...defaultControl,
         enabled: activeRegionSet.has(region),
         colorHex: selectedHex ?? preset.color,
-        opacity: resolveOpacityForRegion(region, selectedTextureId, selectedTypeId),
+        opacity: resolveOpacityForRegion(region, selectedTextureId, selectedTypeId, selectedColorId),
         intensity: activeRegionSet.has(region) ? 1 : 0,
         params,
+        // Lip 질감/형태/타입 -> finish (base texture + gloss highlight), gradient
+        // shaping, and roughness/specular. control.finish drives the lip texture
+        // string in getTextureForRegionControl; when 형태 is 그라데이션 the base
+        // mode becomes gradient_lip regardless of finish (the gloss highlight
+        // still layers on top because it only needs glossBoost & specular > 0).
+        ...(region === 'lip' && lipFinish && lipShape && lipType
+          ? {
+              finish: lipShape.isGradient ? 'gradient' : lipFinish.finish,
+              glossBoost: lipFinish.glossBoost,
+              specular: lipFinish.specular,
+              roughness: lipFinish.roughness,
+              gradientAmount: clamp01(lipShape.gradientAmount + lipType.gradientBoost),
+            }
+          : {}),
         // Brow 형태 selection maps to a distinct brow mask; other regions keep
         // their default mask.
         ...(region === 'brow'
@@ -355,6 +441,9 @@ function createUnityMakeupControlsForRegions({
               candidateId: resolveBrowMaskForShape(selectedShapeId),
             }
           : {}),
+        // Cheek 형태 selection maps to a blush session mask (데일리/러블리/언더/
+        // 선키스 1/선키스 2). The blush_session_N texture auto-follows the mask id.
+        ...(region === 'blush' ? resolveBlushMaskForShape(selectedShapeId) : {}),
         // Foundation must render through OUR screen-space compositor (live HSV
         // tone correction on the camera) — the same path the working makeup
         // screen uses. Without this the recipe defaults to uvMask, which paints
@@ -408,15 +497,101 @@ function shouldEnableUnityMakeupSelection({
   return !shouldClearPoint && !shouldClearColor;
 }
 
+// ---------------------------------------------------------------------------
+// Lip 질감(finish) / 형태(shape) / 타입(type) -> recipe params. These three groups
+// are INDEPENDENT and combine: finish drives the light-reactive gloss highlight
+// (glossBoost/specular) + the lip texture string (matte_lip vs gloss_lip);
+// shape drives the base-fill gradient (gradientAmount) + over-lip coverage; type
+// layers opacity/feather/saturation combos on top. All uniforms already exist in
+// SmoothRegionMask.shader + E3RegionMaskOverlay, so this is RN-only (no rebuild).
+type LipFinishParams = {
+  // 'matte' | 'gloss' | 'gradient' — encodes the base-fill mode (Unity
+  // ResolveLipStyleMode). 그라데이션 wins the base mode; otherwise finish decides.
+  finish: string;
+  glossBoost: number;
+  specular: number;
+  roughness: number;
+};
+
+// 질감: 매트 => flat, no highlight; 글로우 => strong light-reactive gloss highlight.
+// The shader's GlossAdditiveHighlight pass early-outs when glossBoost<=0.001 OR
+// specular<=0.001, so 글로우 must set BOTH well above 0. The highlight boosts the
+// EXISTING camera highlights on the lips, so it reacts to the real light dir.
+function resolveLipFinishParams(selectedTextureId: string): LipFinishParams {
+  if (selectedTextureId === 'lip-glow' || includesAny(selectedTextureId, ['glow', 'gloss', 'glass'])) {
+    return {finish: 'gloss', glossBoost: 0.85, specular: 0.34, roughness: 0.08};
+  }
+
+  // 매트 (and unknown/unset) — no gloss highlight.
+  return {finish: 'matte', glossBoost: 0, specular: 0.02, roughness: 0.5};
+}
+
+// 형태: 오버 립 => paint slightly past the lip line (high coverage, no gradient
+// shaping); 그라데이션 => inner-concentrated fade (gradient_lip base + high
+// gradientAmount). Returns the gradientAmount and whether the base mode is
+// gradient (which overrides the finish's base texture with gradient_lip).
+type LipShapeParams = {
+  gradientAmount: number;
+  isGradient: boolean;
+};
+
+function resolveLipShapeParams(selectedShapeId: string): LipShapeParams {
+  if (selectedShapeId === 'lip-gradient') {
+    return {gradientAmount: 0.82, isGradient: true};
+  }
+
+  // 오버 립 (and unknown/unset) — solid fill, coverage carries the over-line reach.
+  return {gradientAmount: 0, isGradient: false};
+}
+
+// 타입: 소프트 스모키 => soft darkened smoky gradient (softer edge, gradient-
+// leaning); 얇은 라인 => thin inner-lip / lip-line emphasis (tighter coverage);
+// 뮤트 립 => muted, blurred, lower-opacity lip. Layers opacity/coverage/feather
+// deltas on top of finish+shape without changing the base mode.
+type LipTypeParams = {
+  opacityScale: number;
+  coverageScale: number;
+  featherBoost: number;
+  gradientBoost: number;
+};
+
+function resolveLipTypeParams(selectedTypeId: string): LipTypeParams {
+  switch (selectedTypeId) {
+    case 'lip-soft-smoky':
+      // Soft, darker, blurred — nudge toward a gradient falloff + soft edge.
+      return {opacityScale: 1, coverageScale: 0.96, featherBoost: 0.12, gradientBoost: 0.18};
+    case 'lip-thin-line':
+      // Thin inner-lip: pull coverage in, crisp edge.
+      return {opacityScale: 1, coverageScale: 0.8, featherBoost: -0.06, gradientBoost: 0};
+    case 'lip-mute':
+      // Muted, blurred, lower-saturation feel via reduced opacity + soft edge.
+      return {opacityScale: 0.82, coverageScale: 1, featherBoost: 0.16, gradientBoost: 0.1};
+    default:
+      return {opacityScale: 1, coverageScale: 1, featherBoost: 0, gradientBoost: 0};
+  }
+}
+
 function resolveOpacityForRegion(
   region: UnityMakeupLayerRegion,
   selectedTextureId = '',
   selectedTypeId = '',
+  selectedColorId = '',
 ): number {
   const defaultOpacity = UNITY_MAKEUP_LAYER_PRESETS[region].opacity;
 
-  if (region === 'lip' && includesAny(selectedTextureId, ['glass', 'glow', 'balmy'])) {
-    return 0.78;
+  if (region === 'lens') {
+    // The lens opacity follows the picked color (vivids show stronger). The
+    // color id IS the lens id from REGION_COLOR_OPTIONS.lens.
+    return resolveLensOpacityForColorId(selectedColorId);
+  }
+
+  if (region === 'lip') {
+    const glowBase = includesAny(selectedTextureId, ['glass', 'glow', 'balmy']) ||
+      selectedTextureId === 'lip-glow'
+      ? 0.78
+      : defaultOpacity;
+
+    return clamp01(glowBase * resolveLipTypeParams(selectedTypeId).opacityScale);
   }
 
   if (region === 'eyeliner' && includesAny(selectedTypeId, ['liner'])) {
@@ -433,9 +608,13 @@ function resolveOpacityForRegion(
 function resolveCoverageForRegion(
   region: UnityMakeupLayerRegion,
   selectedShapeId = '',
+  selectedTypeId = '',
 ): number {
   if (region === 'lip') {
-    return selectedShapeId === 'lip-over' ? 0.84 : 0.72;
+    // 오버 립 reaches slightly past the lip line (higher coverage); 그라데이션
+    // pulls the fill inward. Type scales it (얇은 라인 tightens further).
+    const shapeCoverage = selectedShapeId === 'lip-gradient' ? 0.7 : 0.84;
+    return clamp01(shapeCoverage * resolveLipTypeParams(selectedTypeId).coverageScale);
   }
 
   if (region === 'blush') {
@@ -456,6 +635,7 @@ function resolveCoverageForRegion(
 function resolveFeatherForRegion(
   region: UnityMakeupLayerRegion,
   selectedShapeId = '',
+  selectedTypeId = '',
 ): number {
   if (region === 'brow') {
     return selectedShapeId === 'brow-soft-arch' ? 0.38 : 0.34;
@@ -467,6 +647,12 @@ function resolveFeatherForRegion(
 
   if (region === 'foundation') {
     return 0.42;
+  }
+
+  if (region === 'lip') {
+    // 그라데이션 fades softer than 오버 립; 타입 layers a soft/crisp edge delta.
+    const shapeFeather = selectedShapeId === 'lip-gradient' ? 0.34 : 0.24;
+    return clamp01(shapeFeather + resolveLipTypeParams(selectedTypeId).featherBoost);
   }
 
   return selectedShapeId === 'cheek-round' ? 0.3 : 0.24;
@@ -505,6 +691,10 @@ function normalizeSelectedHex(hex: string | undefined): string | null {
 
 function includesAny(value: string, tokens: readonly string[]): boolean {
   return tokens.some(token => value.toLowerCase().includes(token));
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function sanitizeRecipeIdPart(value: string): string {

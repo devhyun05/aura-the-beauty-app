@@ -16,6 +16,7 @@ const MAKEUP_PART_AREA_LABELS: Record<SavePartMakeupArea, string> = {
   brow: '브로우',
   lip: '립',
   cheek: '치크',
+  lens: '렌즈',
   contour: '컨투어',
 };
 
@@ -25,6 +26,7 @@ const MAKEUP_PART_AREA_ORDER: readonly SavePartMakeupArea[] = [
   'brow',
   'cheek',
   'lip',
+  'lens',
   'contour',
 ];
 

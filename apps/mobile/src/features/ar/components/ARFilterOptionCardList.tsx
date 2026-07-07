@@ -16,6 +16,8 @@ import {
   ORIGINAL_OPTION_CARD_LABEL,
   isTotalMakeupArea,
   resolveAreaColorOptions,
+  resolveAreaTextureOptions,
+  resolveAreaTypeOptions,
   type ARMakeupOptionGroupId,
   type ShapeOption,
 } from '../services/arFilterOptionRules';
@@ -199,7 +201,10 @@ export function ARFilterOptionCardList({
           onPress={onOriginalOptionPress}>
           <OriginalOptionPreview />
         </OptionCard>
-        {selectedMakeupFilter.typeOptions.map(option => (
+        {resolveAreaTypeOptions(
+          selectedMakeupArea,
+          selectedMakeupFilter.typeOptions,
+        ).map(option => (
           <OptionCard
             key={option.id}
             accessibilityLabel={`${option.label} 타입 선택`}
@@ -226,7 +231,10 @@ export function ARFilterOptionCardList({
           onPress={onOriginalOptionPress}>
           <OriginalOptionPreview />
         </OptionCard>
-        {selectedMakeupFilter.textureOptions.map(option => (
+        {resolveAreaTextureOptions(
+          selectedMakeupArea,
+          selectedMakeupFilter.textureOptions,
+        ).map(option => (
           <OptionCard
             key={option.id}
             accessibilityLabel={`${option.label} 질감 선택`}

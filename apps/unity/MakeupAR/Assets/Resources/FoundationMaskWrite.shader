@@ -23,6 +23,7 @@ Shader "Hidden/MakeupAR/FoundationMaskWrite"
     {
         _MaskTex ("Mask", 2D) = "white" {}
         _MaskStrength ("Mask Strength", Range(0, 1)) = 1
+        _HalfFaceMode ("Half Face Mode", Float) = 0
     }
 
     SubShader
@@ -43,6 +44,11 @@ Shader "Hidden/MakeupAR/FoundationMaskWrite"
 
             sampler2D _MaskTex;
             float _MaskStrength;
+            // Half-face makeup: 0 = off (exact no-op), 1 = keep face UV x < 0.5,
+            // 2 = keep x > 0.5. Zeroes the written mask on the excluded half so
+            // the foundation composite (and mask-scaled skin smoothing) only
+            // covers one facial half.
+            float _HalfFaceMode;
             // RT-convention view-projection supplied by the compositor;
             // unity_ObjectToWorld is still set per-renderer by DrawRenderer
             // at execution time, so anchor tracking is unaffected.
@@ -71,7 +77,21 @@ Shader "Hidden/MakeupAR/FoundationMaskWrite"
 
             fixed4 frag(v2f input) : SV_Target
             {
-                float value = saturate(tex2D(_MaskTex, input.uv).r * _MaskStrength);
+                // Half-face gate: multiply the written mask value by halfGate.
+                // Uses input.uv.x = canonical face UV (x=0.5 centerline) for
+                // the face renderer. mode 1 keeps x < 0.5, mode 2 keeps x > 0.5;
+                // mode 0 (off) leaves halfGate = 1 -> exact no-op. (Note: the
+                // neck strip renderer uses its own strip UVs, so its split is
+                // only approximate — acceptable per the simple/consistent gate.)
+                float halfGate = 1.0;
+                if (_HalfFaceMode > 0.5)
+                {
+                    bool keepLeft = _HalfFaceMode < 1.5;
+                    bool onKeptSide = keepLeft ? (input.uv.x < 0.5) : (input.uv.x > 0.5);
+                    halfGate = onKeptSide ? 1.0 : 0.0;
+                }
+
+                float value = saturate(tex2D(_MaskTex, input.uv).r * _MaskStrength * halfGate);
                 // Channel contract consumed by ScreenSpaceFoundation.shader:
                 //   R = final foundation mask from the calibrated UV mask
                 //   G = exclusion/debug inverse of the calibrated mask

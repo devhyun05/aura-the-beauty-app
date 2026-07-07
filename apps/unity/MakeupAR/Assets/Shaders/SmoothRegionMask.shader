@@ -41,6 +41,7 @@ Shader "MakeupAR/SmoothRegionMask"
         _Coverage ("Coverage", Range(0, 1)) = 0.62
         _MaskOffset ("Mask UV Offset", Vector) = (0, 0, 0, 0)
         _MaskSpreadX ("Mask Spread X", Float) = 0
+        [HideInInspector] _HalfFaceMode ("Half Face Mode", Float) = 0
         _Roughness ("Roughness", Range(0, 1)) = 0.88
         _Specular ("Specular", Range(0, 1)) = 0.04
         _SpecularPower ("Specular Power", Range(1, 64)) = 8
@@ -57,6 +58,14 @@ Shader "MakeupAR/SmoothRegionMask"
         [HideInInspector] _BrowGeneratedMode ("Generated Brow Mode", Float) = 0
         [HideInInspector] _BrowCleanupStrength ("Brow Cleanup Strength", Range(0, 1)) = 0
         [HideInInspector] _BrowNeutralizeStrength ("Brow Neutralize Strength", Range(0, 1)) = 0
+        // Directional skin inpaint (BROW v1): covers the user's natural brow
+        // with forehead skin sampled from the live camera (SkinGate path)
+        // BEFORE the drawn brow pigment is composited, killing the
+        // "double-brow" show-through. All inpaint is gated on _SkinGateEnabled
+        // and mask.r; with the gate off it is an exact no-op.
+        [HideInInspector] _BrowInpaintStrength ("Brow Inpaint Opacity", Range(0, 1)) = 0.92
+        [HideInInspector] _BrowInpaintTapDistance ("Brow Inpaint Tap Distance (screen UV)", Float) = 0.045
+        [HideInInspector] _BrowInpaintFeather ("Brow Inpaint Edge Feather", Range(0.001, 0.5)) = 0.12
         _PreserveDetail ("Preserve Detail", Range(0, 1)) = 1
         _DensityPower ("Density Power", Range(0, 1)) = 0.72
         _EdgeSoftness ("Edge Softness", Range(0, 1)) = 0.86
@@ -67,6 +76,8 @@ Shader "MakeupAR/SmoothRegionMask"
         _LipStyleMode ("Lip Style Mode", Float) = -1
         [HideInInspector] _CheekBlushMode ("Cheek Blush Mode", Float) = 0
         [HideInInspector] _EyelinerMode ("Eyeliner Mode", Float) = 0
+        [HideInInspector] _LensMode ("Lens Mode", Float) = 0
+        [HideInInspector] _LensEyeVis ("Lens Eye Visibility", Vector) = (1, 1, 0, 0)
         [HideInInspector] _BrowGateTex ("Brow Gate", 2D) = "white" {}
         [HideInInspector] _BrowGateValid ("Brow Gate Valid", Float) = 0
         [HideInInspector] _CheekUvTransform ("Cheek UV Transform", Vector) = (1, 1, 0, 0)
@@ -175,6 +186,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BrowGeneratedMode;
             float _BrowCleanupStrength;
             float _BrowNeutralizeStrength;
+            float _BrowInpaintStrength;
+            float _BrowInpaintTapDistance;
+            float _BrowInpaintFeather;
             float _PreserveDetail;
             float _DensityPower;
             float _EdgeSoftness;
@@ -185,6 +199,8 @@ Shader "MakeupAR/SmoothRegionMask"
             float _LipStyleMode;
             float _CheekBlushMode;
             float _EyelinerMode;
+            float _LensMode;
+            float4 _LensEyeVis;
             sampler2D _BrowGateTex;
             float _BrowGateValid;
             float4 _CheekUvTransform;
@@ -209,6 +225,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float4 _SkinGateUvRect;
             float _SkinGateFailSafe;
             float4x4 _SkinGateDisplayTransform;
+            // Half-face makeup: 0 = off (exact no-op), 1 = keep canonical face
+            // UV x < 0.5, 2 = keep x > 0.5.
+            float _HalfFaceMode;
 
             // ---- Camera-texture skin gate -------------------------------
             // Compares each pixel's chroma against a live skin reference
@@ -316,6 +335,96 @@ Shader "MakeupAR/SmoothRegionMask"
                 float weight = lerp(saturate(_SkinGateCenterWeight), 1.0, edgeProximity)
                     * saturate(_SkinGateStrength);
                 return lerp(1.0, gate, saturate(weight));
+            }
+
+            // ---- BROW v1 directional forehead-skin inpaint --------------
+            // Samples live camera skin a few taps UPWARD (toward the
+            // forehead) from the current pixel and returns an RGB fill that
+            // covers the user's natural brow. Sampling only upward avoids
+            // pulling dark orbital/lash/eye pixels; a per-tap dark reject
+            // discards any tap that is much darker than the sampled skin
+            // reference (i.e. a tap that still landed on brow hair). Returns
+            // valid == 0 when SkinGate is unavailable so the caller can fall
+            // back to today's behavior (exact no-op).
+            float3 SampleBrowInpaintSkin(float4 clipPos, out float valid)
+            {
+                valid = 0.0;
+                if (_SkinGateEnabled < 0.5)
+                {
+                    return float3(0.0, 0.0, 0.0);
+                }
+
+                // Skin reference luminance from the same stable anchors the
+                // gate uses (cheeks/chin). Used to reject dark (brow/lash)
+                // taps rather than smearing them upward as "skin".
+                float3 referenceSum = float3(0.0, 0.0, 0.0);
+                float referenceCount = 0.0;
+                if (_SkinGateRefA.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefA.xy);
+                    referenceCount += 1.0;
+                }
+                if (_SkinGateRefB.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefB.xy);
+                    referenceCount += 1.0;
+                }
+                if (_SkinGateRefC.z > 0.5)
+                {
+                    referenceSum += SampleSkinGateCamera(_SkinGateRefC.xy);
+                    referenceCount += 1.0;
+                }
+                if (referenceCount < 0.5)
+                {
+                    return float3(0.0, 0.0, 0.0);
+                }
+                float3 reference = referenceSum / referenceCount;
+                float referenceLum = max(dot(reference, float3(0.2126, 0.7152, 0.0722)), 0.05);
+
+                float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
+                float2 screenUv = saturate(ndc * 0.5 + 0.5);
+
+                // Front selfie: the head renders upright, so the forehead is
+                // ABOVE the brow on screen, i.e. increasing screen-UV.y. Three
+                // upward taps (near/mid/far) are averaged for stability; each
+                // tap is chroma/luma-checked against the skin reference and
+                // rejected if it is too dark (still on brow hair) or too far
+                // off-chroma (hairline/shadow).
+                float tap = max(_BrowInpaintTapDistance, 0.0);
+                float3 skinAccum = float3(0.0, 0.0, 0.0);
+                float skinWeight = 0.0;
+                [unroll]
+                for (int i = 0; i < 3; i++)
+                {
+                    float2 sampleUv = saturate(screenUv + float2(0.0, tap * (1.0 + (float)i)));
+                    float3 c = SampleSkinGateCamera(sampleUv);
+                    float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
+                    // Reject taps that are much darker than skin (brow/lash).
+                    float darkAccept = smoothstep(0.42, 0.72, lum / referenceLum);
+                    // Reject taps whose chroma drifts far from skin (hairline).
+                    float chromaDist = length(SkinGateChroma(c) - SkinGateChroma(reference));
+                    float chromaAccept = 1.0 - smoothstep(
+                        _SkinGateTolerance * 1.6,
+                        _SkinGateTolerance * 3.4,
+                        chromaDist);
+                    // Weight nearer taps a little higher so the fill matches
+                    // the local skin just above the brow.
+                    float tapWeight = darkAccept * chromaAccept * (1.0 - 0.18 * (float)i);
+                    skinAccum += c * tapWeight;
+                    skinWeight += tapWeight;
+                }
+
+                if (skinWeight < 0.001)
+                {
+                    // Every upward tap was rejected (e.g. tall/dense brow):
+                    // fall back to the sampled skin reference so we still
+                    // cover the natural brow with a plausible skin tone.
+                    valid = 1.0;
+                    return reference;
+                }
+
+                valid = 1.0;
+                return skinAccum / skinWeight;
             }
 
             struct appdata
@@ -577,6 +686,25 @@ Shader "MakeupAR/SmoothRegionMask"
 
             fixed4 frag(v2f input) : SV_Target
             {
+                // Half-face makeup gate. Uses the RAW mesh/canonical face UV.x
+                // (x=0.5 is the face centerline), BEFORE the _MaskSpreadX /
+                // _MaskOffset remap below. mode 1 keeps x < 0.5, mode 2 keeps
+                // x > 0.5; the excluded half returns fully transparent so the
+                // bare camera face shows through. mode 0 (off) is a no-op.
+                if (_HalfFaceMode > 0.5)
+                {
+                    bool keepLeft = _HalfFaceMode < 1.5;   // mode 1 -> keep uv.x < 0.5
+                    bool onKeptSide = keepLeft ? (input.uv.x < 0.5) : (input.uv.x > 0.5);
+                    if (!onKeptSide)
+                    {
+                        // discard skips the pixel entirely so the excluded half
+                        // shows the bare camera face under ANY blend mode. An
+                        // alpha-0 return still paints BLACK where the region uses
+                        // a multiply/opaque blend (lip, cheek), which is the bug.
+                        discard;
+                    }
+                }
+
                 float2 maskUv = input.uv;
                 if (_UseScreenSpaceMask > 0.5)
                 {
@@ -847,6 +975,56 @@ Shader "MakeupAR/SmoothRegionMask"
                         * lerp(0.75, 1.0, coverage);
                 }
 
+                if (_LensMode > 0.5)
+                {
+                    // Colored contact lens (iris tint). The rasterized disc mask
+                    // carries the radial profile in R (0 = pupil hole / outside
+                    // the disc, ramps up through the iris annulus, feathered at
+                    // the rim) and the limbal darken factor in G. We sample the
+                    // RAW disc (no soft blur) so the profile is not smeared
+                    // across the eye "hole", and use R directly as the coverage
+                    // — this HARD-CLIPS to the disc (fix #2/#3): everything
+                    // outside the disc is already 0 in the mask, so no sclera or
+                    // eyelid ever receives color.
+                    float lensProfile = saturate(mask.r);
+
+                    // Per-eye geometric blink (fix #4): split on the canonical
+                    // face UV centerline (x < 0.5 = left eye). As the lid closes
+                    // the matching eye's visibility fades to 0, hiding the disc.
+                    float lensEyeVis = input.uv.x < 0.5 ? _LensEyeVis.x : _LensEyeVis.y;
+
+                    // Limbal ring: darken the tint toward the natural dark iris
+                    // rim using the G factor. This keeps a printed-contact look
+                    // (dark edge, colored body) instead of a flat coin.
+                    float3 lensColor = saturate(lerp(
+                        _RegionColor.rgb,
+                        _RegionColor.rgb * 0.55,
+                        saturate(mask.g)));
+
+                    // ALPHA OVERLAY, NOT MULTIPLY (fix #1). _Opacity is the
+                    // lens opacity from the recipe (up to ~0.85); it is NOT run
+                    // through the multiply pigmentStrength cap. A semi-opaque
+                    // color overlaid on the iris changes even dark eyes
+                    // believably while the pupil hole keeps gaze realistic.
+                    float lensAlpha = saturate(
+                        lensProfile
+                        * saturate(_Opacity)
+                        * saturate(_VisibilityAlpha)
+                        * saturate(lensEyeVis)
+                        * HandOcclusionVisibility(input.clipPos));
+
+                    if (_DebugMaskMode > 0.5)
+                    {
+                        return fixed4(lensProfile.xxx, saturate(lensProfile * 0.9));
+                    }
+
+                    // Early return via the standard alpha blend
+                    // (Blend [_SrcBlend] [_DstBlend] = SrcAlpha OneMinusSrcAlpha
+                    // for blendMode 'normal'); BYPASSES the _PigmentMultiply cap
+                    // block below entirely.
+                    return fixed4(lensColor, lensAlpha);
+                }
+
                 if (_BrowGeneratedMode > 0.5)
                 {
                     float desiredSoft = SoftMaskAlpha(max(softMask.g, mask.g), _Threshold, _Feather);
@@ -861,6 +1039,16 @@ Shader "MakeupAR/SmoothRegionMask"
                     float tintAlpha = saturate(
                         desiredCore * coverage * lerp(0.5, 0.9, saturate(_BlushIntensity))
                         + desiredSoft * coverage * 0.08);
+                    // Step-3 polish: at the inpaint footprint boundary the skin
+                    // fill feathers out, so any un-erased natural-brow residue
+                    // there must be covered by PIGMENT rather than left as a
+                    // fringe. Where the drawn soft body (mask.g) overlaps the
+                    // RED neutralize footprint (mask.r) but is still thin, add a
+                    // small density bump so the pigment slightly overhangs the
+                    // erase edge. Gated on both channels so the brow SHAPE is
+                    // not distorted (the bump only exists inside the footprint).
+                    float browResidueGuard = saturate(desiredSoft * saturate(mask.r));
+                    tintAlpha = saturate(tintAlpha + browResidueGuard * coverage * 0.10);
                     float hairAlpha = saturate(
                         pow(strandDetail, 0.68) * strandAmount * coverage * 0.82);
                     float browAlpha = saturate(
@@ -895,12 +1083,56 @@ Shader "MakeupAR/SmoothRegionMask"
                     // Makeup layer obeys the opacity slider.
                     float makeupAlpha = saturate(browAlpha * browOpacity * facingFade);
 
-                    // The "real-brow neutralize" inpaint that used the grabbed
-                    // camera frame (_BrowBackgroundTexture) was removed to stop
-                    // the per-frame full-screen GrabPass flicker. The generated
-                    // brow now composites its core+strand pigment directly via the
-                    // standard alpha blend (Blend [_SrcBlend] [_DstBlend]).
-                    return fixed4(browPigment, makeupAlpha);
+                    // BROW v1 directional skin inpaint. The mask RED channel is
+                    // the "real-brow neutralize" footprint: it covers where the
+                    // user's NATURAL brow sits (extending beyond the drawn body).
+                    // We fill that footprint with forehead skin sampled UPWARD
+                    // from the live camera so the natural brow is hidden BEFORE
+                    // the drawn brow pigment composites on top of clean skin.
+                    // Killing the "double-brow" show-through. This replaces the
+                    // removed full-screen GrabPass neutralize with a per-pixel,
+                    // flicker-free, Vision-free directional tap (no ScreenCapture).
+                    //
+                    // SkinGate-off is an EXACT no-op: skinValid == 0 forces
+                    // inpaintAlpha == 0, so outAlpha == makeupAlpha and
+                    // outRgb == browPigment (today's behavior).
+                    float skinValid = 0.0;
+                    float3 inpaintSkin = SampleBrowInpaintSkin(input.clipPos, skinValid);
+
+                    // Footprint coverage: opaque where the RED neutralize mask
+                    // is present (a dark natural brow needs a near-opaque fill),
+                    // feathered at the edge so there is no visible skin patch
+                    // rectangle. Also faded by facing so the profile view is not
+                    // painted with a stretched skin smear, and by the opacity /
+                    // visibility so the inpaint tracks the layer's own alpha.
+                    float redFootprint = saturate(mask.r);
+                    float footprintCoverage = smoothstep(
+                        _Threshold,
+                        _Threshold + max(_BrowInpaintFeather, 0.001),
+                        redFootprint);
+                    float inpaintAlpha = saturate(
+                        footprintCoverage
+                        * saturate(_BrowInpaintStrength)
+                        * skinValid
+                        * facingFade
+                        * saturate(_VisibilityAlpha));
+
+                    // Composite two straight-alpha layers over the live camera
+                    // (dst) in ONE SrcAlpha/OneMinusSrcAlpha pass:
+                    //   L1 = skin over camera  (alpha = inpaintAlpha)
+                    //   L2 = brow over L1       (alpha = makeupAlpha)
+                    // outAlpha = 1-(1-aS)(1-aB); outRgb weighted so the single
+                    // blend reproduces skin-then-brow. When inpaintAlpha == 0
+                    // this collapses to (browPigment, makeupAlpha) exactly.
+                    float outAlpha = saturate(
+                        1.0 - (1.0 - inpaintAlpha) * (1.0 - makeupAlpha));
+                    float3 weightedColor =
+                        browPigment * makeupAlpha
+                        + inpaintSkin * inpaintAlpha * (1.0 - makeupAlpha);
+                    float3 outRgb = outAlpha > 0.0001
+                        ? weightedColor / outAlpha
+                        : browPigment;
+                    return fixed4(saturate(outRgb), outAlpha);
                   }
                 }
 
@@ -1012,6 +1244,12 @@ Shader "MakeupAR/SmoothRegionMask"
                             : (_LipStyleMode < 3.5 && _LipStyleMode >= 2.5 ? 0.14 : 0.0));
                     float maxPigmentStrength = saturate(lerp(0.42, 0.66, saturate(_Coverage)) + styleCapBoost);
                     float pigmentStrength = min(saturate(maskStrength * opacity * preserveScale), maxPigmentStrength);
+                    // Melt-into-lip: ease pigment toward white where the mask is
+                    // thin (edges/creases) so the multiply blend reveals the real
+                    // lip texture there. Only lowers pigment; never over-darkens.
+                    float lipStructure = smoothstep(0.06, 0.55, saturate(maskStrength));
+                    float meltEase = lerp(0.82, 1.0, lipStructure);
+                    pigmentStrength = pigmentStrength * meltEase;
                     float3 pigmentFilter = lerp(float3(1.0, 1.0, 1.0), pigmentColor, pigmentStrength);
                     return fixed4(saturate(pigmentFilter), 1.0);
                 }
@@ -1068,6 +1306,9 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BrowGeneratedMode;
             float _UseScreenSpaceMask;
             float _DebugMaskMode;
+            // Half-face makeup: 0 = off (exact no-op), 1 = keep face UV x < 0.5,
+            // 2 = keep x > 0.5.
+            float _HalfFaceMode;
 
             struct appdata
             {
@@ -1190,6 +1431,24 @@ Shader "MakeupAR/SmoothRegionMask"
 
             fixed4 frag(v2f input) : SV_Target
             {
+                // Half-face gate for the additive gloss pass. This pass returns
+                // alpha 0 and adds LIGHT (additiveGloss), so multiplying alpha
+                // would NOT suppress it — we must early-out to zero on the
+                // excluded half. Raw canonical face UV.x, mode 0 = no-op.
+                if (_HalfFaceMode > 0.5)
+                {
+                    bool keepLeft = _HalfFaceMode < 1.5;
+                    bool onKeptSide = keepLeft ? (input.uv.x < 0.5) : (input.uv.x > 0.5);
+                    if (!onKeptSide)
+                    {
+                        // discard skips the pixel entirely so the excluded half
+                        // shows the bare camera face under ANY blend mode. An
+                        // alpha-0 return still paints BLACK where the region uses
+                        // a multiply/opaque blend (lip, cheek), which is the bug.
+                        discard;
+                    }
+                }
+
                 if (_DebugMaskMode > 0.5)
                 {
                     return fixed4(0.0, 0.0, 0.0, 0.0);
@@ -1245,20 +1504,22 @@ Shader "MakeupAR/SmoothRegionMask"
                 float shardSpec = pow(
                     saturate(styleGlossSeed * regionWeight * 1.25),
                     lerp(0.95, 2.25, saturate(_GlossSharpness)));
+                // Bias shine away from the fixed centerSpec blob toward the
+                // atlas-density terms so it tracks the lip form. Glow only.
                 float visibleHighlightMask = visibleLip
                     * edgeGuard
-                    * saturate(centerSpec + shardSpec * 0.74 + existingHighlight * saturate(_ExistingHighlightBoost));
+                    * saturate(centerSpec * 0.45 + shardSpec * 0.55 + existingHighlight * saturate(_ExistingHighlightBoost));
                 float glossEnergy = saturate(_Specular)
                     * saturate(_GlossBoost)
                     * saturate(_Opacity)
                     * lerp(0.42, 1.0, coverage);
-                float sharpHighlight = visibleHighlightMask * glossEnergy * 0.72;
+                float sharpHighlight = visibleHighlightMask * glossEnergy * 0.52;
                 float haloHighlight = visibleLip
                     * edgeGuard
                     * saturate(regionWeight * (1.0 - centerSpec * 0.30))
                     * glossEnergy
                     * saturate(_GlossHaloIntensity)
-                    * 0.075;
+                    * 0.045;
                 float3 warmWhite = float3(1.0, 0.965, 0.92);
                 float3 glossColor = saturate(lerp(warmWhite, _GlossColor.rgb, 0.12));
                 float3 additiveGloss = glossColor * sharpHighlight

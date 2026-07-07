@@ -29,8 +29,13 @@ const mockFilter: MakeupFilter = {
 
 expectEqual(
   UNITY_MAKEUP_LAYER_ORDER.join(','),
-  'lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeliner,lens',
   'Unity makeup layer order',
+);
+expectEqual(
+  getUnityMakeupLayerRegionsForMakeupArea('lens').join(','),
+  'lens',
+  'lens area alias',
 );
 expectEqual(
   getUnityMakeupLayerRegionsForMakeupArea('cheek').join(','),
@@ -80,13 +85,13 @@ expectEqual(
 const singleRegionRecipe = createUnityMakeupRecipeBatch('eyeliner', 1000);
 
 expectEqual(singleRegionRecipe.version, 2, 'single region recipe version');
-expectEqual(singleRegionRecipe.layerCount, 4, 'single region recipe layer count');
+expectEqual(singleRegionRecipe.layerCount, 6, 'single region recipe layer count');
 expectEqual(singleRegionRecipe.enabledLayerCount, 1, 'single region enabled count');
 expectEqual(singleRegionRecipe.activeRegions, 'eyeliner', 'single region active summary');
 expectEqual(
   singleRegionRecipe.layers.map(layer => layer.region).join(','),
-  'lip,blush,brow,eyeliner',
-  'single region recipe keeps four-layer shape',
+  'foundation,lip,blush,brow,eyeliner,lens',
+  'single region recipe keeps full-layer shape',
 );
 expectEqual(
   singleRegionRecipe.layers.find(layer => layer.region === 'eyeliner')?.maskTextureId,
@@ -111,11 +116,13 @@ const allRegionRecipe = createUnityMakeupRecipeBatchFromARFilterSelections(
   2000,
 );
 
-expectEqual(allRegionRecipe.layerCount, 4, 'all region recipe layer count');
-expectEqual(allRegionRecipe.enabledLayerCount, 4, 'all region enabled count');
+expectEqual(allRegionRecipe.layerCount, 6, 'all region recipe layer count');
+// 'all' enables every region EXCEPT lens (lens is opt-in via its own tab), so
+// 5 of the 6 emitted layers are active.
+expectEqual(allRegionRecipe.enabledLayerCount, 5, 'all region enabled count');
 expectEqual(
   allRegionRecipe.activeRegions,
-  'lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeliner',
   'all region active summary',
 );
 expectEqual(

@@ -142,6 +142,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         public int BrowDebugMode;
         public bool BrowDebugShowLeftRight;
         public bool BrowDebugExaggerate;
+        // 0 = off (full face), 1 = keep canonical face UV x < 0.5, 2 = keep x > 0.5.
+        public float HalfFaceMode;
         // Fit knobs from the extended RN recipe payload. MaskThreshold < 0
         // means "not provided" and falls back to the mask definition's default.
         public float MaskThreshold = -1.0f;
@@ -394,6 +396,22 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
     private static Texture2D foundationValidatedBaseMask;
     private static bool foundationLipMaskEvaluated;
     private static Texture2D foundationLipExclusionMask;
+    // Screen-space lip coverage mask, loaded directly (bypasses the coarse
+    // foundation-exclusion grid validation that rejects a tight lip mask).
+    private static Texture2D screenSpaceLipRegionMask;
+    private static bool screenSpaceLipRegionMaskLoaded;
+
+    // Milestone 1: the lip is now composited in SCREEN SPACE inside the
+    // foundation compositor (luma-preserving recolor + camera open-mouth
+    // gates), so the mesh-overlay lip PIGMENT/GLOSS passes are retired to
+    // avoid double-rendering the lip. Kept as a static flag for a quick A/B
+    // revert on device: set false to fall back to the mesh lip path.
+    // NOTE: this only skips the lip MESH rendering; the baked lip mask asset
+    // still loads (GetSharedLipRegionMask -> EnsureFoundationMaskSources), so
+    // the screen-space compositor keeps its coverage mask.
+    // Reverted to the mesh-overlay lip (multiply-blend drawn atlas) per user
+    // request — the screen-space YUV lip is kept behind this flag for later.
+    public static bool ScreenSpaceLipActive = false;
 
     // Camera-texture skin gate state (hair/brow/clothing suppression).
     private ARCameraManager skinGateCameraManager;
@@ -743,6 +761,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         recipes.Clear();
         latestRegionResults.Clear();
         HideAllOverlayViews();
+        // Screen-space lip lives on the composite material, not the recipe
+        // overlay, so it must be disabled explicitly here — otherwise the last
+        // lipEnabled/color stays latched and a stale lip keeps rendering after
+        // "remove all makeup" (and the composite pass never detaches).
+        screenSpaceFoundationController?.ConfigureLipDisabled();
         SetScreenSpaceFoundationRuntimeRequested(false, null);
     }
 
@@ -751,6 +774,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (recipes.Count == 0)
         {
             SetHandOcclusionRuntimeRequested(false);
+            // See ClearRecipesAndHideOverlays: the screen-space lip must be
+            // turned off explicitly when no recipes remain, or a stale lip
+            // keeps rendering and the composite pass never detaches.
+            screenSpaceFoundationController?.ConfigureLipDisabled();
             SetScreenSpaceFoundationRuntimeRequested(false, null);
             return;
         }
@@ -791,7 +818,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         bool preserveDetail,
         string foundationMode,
         string foundationFallbackMode,
-        int foundationDebugMaskMode)
+        int foundationDebugMaskMode,
+        float halfFaceMode = 0.0f)
     {
         region = NormalizeRegion(region);
         opacity = Mathf.Clamp01(opacity);
@@ -822,7 +850,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             PreserveDetail = preserveDetail,
             FoundationMode = NormalizeFoundationMode(region, foundationMode),
             FoundationFallbackMode = NormalizeFoundationFallbackMode(foundationFallbackMode),
-            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 42)
+            FoundationDebugMaskMode = Mathf.Clamp(foundationDebugMaskMode, 0, 42),
+            HalfFaceMode = halfFaceMode
         };
 
         return ApplyRegionToTrackedFaces(region, true);
@@ -864,7 +893,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         int foundationDebugMaskMode,
         int browDebugMode = 0,
         bool browDebugShowLeftRight = false,
-        bool browDebugExaggerate = false)
+        bool browDebugExaggerate = false,
+        float halfFaceMode = 0.0f)
     {
         RegionApplyResult result = ApplyRegionRecipe(
             region,
@@ -891,7 +921,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             preserveDetail,
             foundationMode,
             foundationFallbackMode,
-            foundationDebugMaskMode);
+            foundationDebugMaskMode,
+            halfFaceMode);
 
         // The shorter overload has no slots for the extended fit knobs, so wire
         // them into the stored recipe here instead of silently dropping them
@@ -980,6 +1011,32 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             }
         }
 
+        // Milestone 1: retire the mesh-overlay lip when the screen-space lip is
+        // active. The lip is composited in screen space inside the foundation
+        // compositor (luma-preserving recolor reads the real lip pixels), so
+        // rendering the SmoothRegionMask lip pigment/gloss mesh here would
+        // double-render the lip. Hide the lip mesh and early-out. The lip mask
+        // asset itself is still loaded by the compositor via
+        // GetSharedLipRegionMask(), so screen-space coverage is unaffected.
+        // A/B revert: set ScreenSpaceLipActive = false. Blush/eyeliner/brow are
+        // untouched (they keep the mesh path).
+        if (region == "lip" && ScreenSpaceLipActive)
+        {
+            HideRegionViews(region);
+            result.StateAction = "screen_space_lip_active_mesh_retired";
+            result.MaskSource = "screen_space_lip";
+            result.BoundaryRenderer = "FoundationScreenSpaceCompositor";
+            latestRegionResults[region] = result;
+            if (emitLog)
+            {
+                Debug.Log(
+                    "[E7] lip_mesh_retired_screen_space region=" + region
+                    + " screenSpaceLipActive=true");
+            }
+
+            return result;
+        }
+
         if (faceManager == null)
         {
             if (emitLog)
@@ -999,6 +1056,13 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
             FaceOverlayState faceState = EnsureFaceOverlayState(face);
             RegionOverlayView view = EnsureRegionOverlayView(face.transform, faceState, region);
+            if (region == "lens")
+            {
+                // Measure per-eye openness from THIS frame's mesh before the
+                // material props are applied, so _LensEyeVis reflects the
+                // current blink state (fix #4: geometric, not blendshapes).
+                UpdateLensEyeVisibility(face);
+            }
             ApplyRecipeAppearance(view, recipe);
             if (IsFoundationRegion(region))
             {
@@ -1028,6 +1092,29 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
                     ApplyFoundationGenericTintOverrides(foundationMaterial);
                     ApplyFoundationSkinGate(foundationMaterial, face, false);
+                }
+            }
+            else if (region == "brow" && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId))
+            {
+                // BROW v1 directional skin inpaint: bind the flicker-free ARKit
+                // camera textures + skin reference anchors so the brow shader can
+                // sample live forehead skin and cover the user's NATURAL brow
+                // (mask.r footprint) BEFORE the drawn brow composites on top,
+                // killing the "double-brow" show-through. ApplyFoundationSkinGate
+                // is generic (any material with _SkinGateEnabled): it binds
+                // _SkinGateTexY/_SkinGateTexCbCr (or _SkinGateCameraTex),
+                // _SkinGateCameraMode, _SkinGateDisplayTransform and the
+                // cheek/chin _SkinGateRef anchors, setting _SkinGateEnabled=1 only
+                // when the camera feed is fresh and anchors are valid; otherwise
+                // it sets _SkinGateEnabled=0 and the shader inpaint is an EXACT
+                // no-op (falls back to today's drawn-brow-only behavior). The
+                // brow does not use the hairline fail-safe fade, so isNeck=false
+                // keeps the same UV-rect config as the face foundation.
+                Material browMaterial =
+                    view.MeshRenderer != null ? view.MeshRenderer.sharedMaterial : null;
+                if (browMaterial != null)
+                {
+                    ApplyFoundationSkinGate(browMaterial, face, false);
                 }
             }
             TrackingVisibility visibility = ResolveTrackingVisibility(face, faceState);
@@ -1408,7 +1495,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             // end-to-end from RN so no new positional arg had to thread the
             // whole recipe chain; foundation never renders a mesh gloss, so
             // Specular is otherwise inert here.
-            recipe.Specular);
+            recipe.Specular,
+            recipe.HalfFaceMode);
     }
 
     private ScreenSpaceFoundationController.ScreenSpaceFoundationState UpdateScreenSpaceFoundationRuntime()
@@ -1424,6 +1512,13 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             && IsScreenSpaceFoundationRecipe(recipe)
             && !overlayRenderingSuppressed
             && !visionCaptureSuppressed;
+        // Milestone 1: route the LIP layer to the SAME controller BEFORE the
+        // foundation request. When the screen-space lip is active, the
+        // controller keeps the composite pass attached even if the foundation
+        // is off (see ConfigureDisabled), so the lip renders standalone. When
+        // the foundation IS requested it drives ConfigureRecipe as before; the
+        // lip uniforms are refreshed inside that path too.
+        RouteLipRecipeToScreenSpaceFoundation();
         SetScreenSpaceFoundationRuntimeRequested(requested, recipe);
 
         if (screenSpaceFoundationController == null)
@@ -1432,6 +1527,56 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         return screenSpaceFoundationController.UpdateRuntime(faceManager, Camera.main);
+    }
+
+    /// <summary>
+    /// Milestone 1: deliver the lip layer's color/opacity/finish to the
+    /// ScreenSpaceFoundationController so the lip renders in screen space
+    /// (mirrors the foundation recipe routing). finish glow (glossBoost > 0)
+    /// => glossBoost/specular carried through, matteAmount 0; finish matte
+    /// => glossBoost 0, matteAmount ~0.6. lipEnabled = a lip layer is present
+    /// AND the screen-space lip is active. Only routes when the compositor
+    /// path is not suppressed. Null-guarded.
+    /// </summary>
+    private void RouteLipRecipeToScreenSpaceFoundation()
+    {
+        if (screenSpaceFoundationController == null)
+        {
+            EnsureScreenSpaceFoundationController();
+        }
+
+        if (screenSpaceFoundationController == null)
+        {
+            return;
+        }
+
+        bool hasLip = recipes.TryGetValue("lip", out RegionRecipeState lipRecipe);
+        bool lipActive = hasLip
+            && lipRecipe.Enabled
+            && ScreenSpaceLipActive
+            && !overlayRenderingSuppressed
+            && !visionCaptureSuppressed;
+        if (!lipActive)
+        {
+            screenSpaceFoundationController.ConfigureLipDisabled();
+            return;
+        }
+
+        // finish decision is robust against the finish string: RN sends
+        // glossBoost 0.85 for glow, 0 for matte. Glow keeps luma (no matte
+        // deepening); matte pulls a fuller, flatter fill.
+        bool glow = lipRecipe.GlossBoost > 0.001f;
+        float matteAmount = glow ? 0.0f : 0.6f;
+        float glossBoost = glow ? lipRecipe.GlossBoost : 0.0f;
+        float specular = glow ? lipRecipe.Specular : 0.0f;
+        screenSpaceFoundationController.ConfigureLipRecipe(
+            true,
+            lipRecipe.Color,
+            lipRecipe.Opacity,
+            glossBoost,
+            specular,
+            matteAmount,
+            lipRecipe.HalfFaceMode);
     }
 
     private void ApplyFoundationDynamicMask(
@@ -1740,7 +1885,12 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             }
             else
             {
-                const float deadzoneMeters = 0.00025f;
+                // Expression tracking: a tighter deadzone (0.15mm) lets fine mouth
+                // movement register, and a higher follow cap (0.90) closes most of
+                // the lag on real expression motion so the lip tracks smiles/purses
+                // more precisely. The low end (0.12) still damps idle tracking noise,
+                // so this improves expression-following without idle shimmer.
+                const float deadzoneMeters = 0.00015f;
                 const float motionScaleMeters = 0.004f;
                 for (int index = 0; index < nativeVertices.Length; index++)
                 {
@@ -1749,7 +1899,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     float delta = Vector3.Distance(previous, current);
                     float follow = delta < deadzoneMeters
                         ? 0.0f
-                        : Mathf.Lerp(0.12f, 0.82f, Mathf.Clamp01(delta / motionScaleMeters));
+                        : Mathf.Lerp(0.12f, 0.90f, Mathf.Clamp01(delta / motionScaleMeters));
                     view.SmoothedVertices[index] = Vector3.Lerp(previous, current, follow);
                 }
             }
@@ -3301,6 +3451,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 ? 0.54f
                 : region == "eyeliner"
                 ? 0.10f
+                // Lens is a hard-edged disc whose rim feather is already baked
+                // into the rasterized radial profile; keep the mesh feather
+                // tight so it does not spill onto the sclera.
+                : region == "lens"
+                ? 0.04f
                 : lipStyleAtlas
                 ? 0.32f
                 : visionLipBoundary
@@ -3428,6 +3583,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 return "psd-arcore-brow-semi-arch-v1";
             case "eyeliner":
                 return "e7-eyeliner-minimal-safe-uv-v0";
+            case "lens":
+                return "lens-iris-disc-v1";
             default:
                 throw new ArgumentException("Unsupported smooth mask region: " + region);
         }
@@ -3448,6 +3605,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (IsGeneratedEyelinerMaskTextureId(mask.MaskTextureId))
         {
             return GetGeneratedEyelinerMaskTexture(mask.MaskTextureId);
+        }
+
+        if (IsGeneratedLensMaskTextureId(mask.MaskTextureId))
+        {
+            return GetGeneratedLensMaskTexture(mask.MaskTextureId);
         }
 
         if (IsGeneratedLipMaskTextureId(mask.MaskTextureId))
@@ -4223,6 +4385,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat("_Coverage", recipe.Coverage);
         }
 
+        if (material.HasProperty("_HalfFaceMode"))
+        {
+            // Half-face makeup: 0 = off (full face, exact no-op), 1 = keep
+            // canonical face UV x < 0.5, 2 = keep x > 0.5. Applies to every
+            // SmoothRegionMask region (lip/brow/cheek/eyeliner).
+            material.SetFloat("_HalfFaceMode", recipe.HalfFaceMode);
+        }
+
         if (material.HasProperty("_BlushIntensity"))
         {
             material.SetFloat("_BlushIntensity", Mathf.Clamp01(recipe.Intensity));
@@ -4253,11 +4423,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetColor("_GlossColor", new Color(1.0f, 0.965f, 0.92f, 1.0f));
         }
 
+        // 글로우 must render its light-reactive highlight over WHATEVER base fill
+        // the 형태 tab selected (오버립 = gloss_lip base, 그라데이션 = gradient_lip
+        // base). Gate the highlight on the actual gloss params (glossBoost &
+        // specular), NOT on the base-fill texture string, so 질감(finish) and
+        // 형태(shape) stay independent (글로우+그라데이션 = gloss highlight over a
+        // gradient fade). This matches the shader's GlossAdditiveHighlight entry
+        // gate (_GlossBoost>0.001 && _Specular>0.001) at SmoothRegionMask.shader
+        // line 1242.
+        bool lipGlossHighlightActive = recipe.GlossBoost > 0.001f && recipe.Specular > 0.001f;
         if (material.HasProperty("_GlossSharpness"))
         {
             material.SetFloat(
                 "_GlossSharpness",
-                recipe.TextureSample == "gloss_lip"
+                lipGlossHighlightActive
                     ? Mathf.Lerp(0.70f, 0.94f, recipe.GlossBoost)
                     : 0.0f);
         }
@@ -4266,7 +4445,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         {
             material.SetFloat(
                 "_GlossHaloIntensity",
-                recipe.TextureSample == "gloss_lip"
+                lipGlossHighlightActive
                     ? Mathf.Lerp(0.018f, 0.050f, recipe.GlossBoost)
                     : 0.0f);
         }
@@ -4276,19 +4455,21 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat("_HighlightThreshold", generatedLipMask ? 0.64f : 0.68f);
         }
 
+        // Lean on the density-following highlight term now that centerSpec is
+        // dialed down, so glow shine tracks the lip form. Matte keeps 0.0f.
         if (material.HasProperty("_ExistingHighlightBoost"))
         {
-            material.SetFloat("_ExistingHighlightBoost", recipe.TextureSample == "gloss_lip" ? 0.30f : 0.0f);
+            material.SetFloat("_ExistingHighlightBoost", lipGlossHighlightActive ? 0.55f : 0.0f);
         }
 
         if (material.HasProperty("_LowerLipHighlightWeight"))
         {
-            material.SetFloat("_LowerLipHighlightWeight", recipe.TextureSample == "gloss_lip" ? 1.0f : 0.0f);
+            material.SetFloat("_LowerLipHighlightWeight", lipGlossHighlightActive ? 1.0f : 0.0f);
         }
 
         if (material.HasProperty("_UpperLipHighlightWeight"))
         {
-            material.SetFloat("_UpperLipHighlightWeight", recipe.TextureSample == "gloss_lip" ? 0.44f : 0.0f);
+            material.SetFloat("_UpperLipHighlightWeight", lipGlossHighlightActive ? 0.44f : 0.0f);
         }
 
         if (material.HasProperty("_GradientAmount"))
@@ -4310,6 +4491,57 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         if (material.HasProperty("_BrowGeneratedMode"))
         {
             material.SetFloat("_BrowGeneratedMode", generatedBrowMask ? 1.0f : 0.0f);
+        }
+
+        if (generatedBrowMask)
+        {
+            // BROW v1 directional skin inpaint requires an ALPHA-OVER blend so
+            // the shader can composite: (1) forehead-skin fill covering the
+            // user's natural brow, then (2) the drawn brow pigment ON TOP, in a
+            // single SrcAlpha/OneMinusSrcAlpha pass. The recipe ships the brow
+            // as blendMode "multiply" (DstColor/Zero, _PigmentMultiply=1), under
+            // which the brow branch's premultiplied return would be reinterpreted
+            // as a pure darken and the skin fill (which must LIGHTEN over the dark
+            // natural brow) is impossible. The brow branch already early-returns a
+            // straight (color, alpha) value and its opacity/facing machinery only
+            // has an effect under an alpha blend, so forcing normal blend here is
+            // the mode that branch was written for. BROW-ONLY: gated on
+            // generatedBrowMask, so lip/cheek/eyeliner/lens/foundation are
+            // untouched. Static (psd) brows do not hit this branch.
+            if (material.HasProperty("_SrcBlend"))
+            {
+                material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+            }
+
+            if (material.HasProperty("_DstBlend"))
+            {
+                material.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            }
+
+            if (material.HasProperty("_PigmentMultiply"))
+            {
+                material.SetFloat("_PigmentMultiply", 0.0f);
+            }
+
+            // BROW v1 inpaint tuning (sane defaults; on-device tuning targets).
+            // _BrowInpaintStrength: fill opacity over the natural brow (a dark
+            // brow needs near-opaque skin). _BrowInpaintTapDistance: screen-UV
+            // step UPWARD per forehead tap (3 taps). _BrowInpaintFeather: edge
+            // softness on the mask.r footprint so there is no skin-patch rect.
+            if (material.HasProperty("_BrowInpaintStrength"))
+            {
+                material.SetFloat("_BrowInpaintStrength", 0.92f);
+            }
+
+            if (material.HasProperty("_BrowInpaintTapDistance"))
+            {
+                material.SetFloat("_BrowInpaintTapDistance", 0.045f);
+            }
+
+            if (material.HasProperty("_BrowInpaintFeather"))
+            {
+                material.SetFloat("_BrowInpaintFeather", 0.12f);
+            }
         }
 
         if (material.HasProperty("_BrowCleanupStrength"))
@@ -4465,6 +4697,32 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat(
                 "_EyelinerMode",
                 recipe.Region == "eyeliner" ? 1.0f : 0.0f);
+        }
+
+        if (material.HasProperty("_LensMode"))
+        {
+            // Colored contact lens: the disc mask's R channel is the radial
+            // alpha profile (pupil hole / iris annulus / limbal / feather),
+            // its G channel is the limbal darken factor. The lens composites
+            // via ALPHA overlay (blendMode 'normal' -> SrcAlpha/OneMinusSrcAlpha)
+            // and takes an EARLY return in the shader that BYPASSES the multiply
+            // pigment cap, so a semi-opaque color can overlay even a dark iris
+            // (fix #1). _LensEyeVis carries the geometric per-eye blink (fix #4):
+            // x = left eye (canonical UV x < 0.5), y = right eye (x > 0.5).
+            bool lensRegion = recipe.Region == "lens";
+            material.SetFloat("_LensMode", lensRegion ? 1.0f : 0.0f);
+            if (material.HasProperty("_LensEyeVis"))
+            {
+                material.SetVector(
+                    "_LensEyeVis",
+                    lensRegion
+                        ? new Vector4(
+                            Mathf.Clamp01(lensEyeVisLeft),
+                            Mathf.Clamp01(lensEyeVisRight),
+                            0.0f,
+                            0.0f)
+                        : new Vector4(1.0f, 1.0f, 0.0f, 0.0f));
+            }
         }
 
         if (material.HasProperty("_BrowGateValid"))
@@ -5389,6 +5647,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
 
         // Regenerate eyeliner shapes with the freshly measured eye zones.
         ClearGeneratedEyelinerMasks();
+        // Regenerate lens iris discs with the freshly measured eye zones.
+        ClearGeneratedLensMasks();
 
         Debug.Log(
             "[E7] foundation_skin_mask_calibrated"
@@ -5696,6 +5956,36 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         return GetFoundationSkinMaskTexture();
+    }
+
+    /// <summary>
+    /// Shared access for the screen-space lip pipeline: returns the baked lip
+    /// region mask (canonical UV, covers the lip vermillion) already loaded for
+    /// the foundation lip-exclusion. This mask is the lip COVERAGE mask used by
+    /// FoundationScreenSpaceCompositor's screen-space lip tint. Mirrors
+    /// GetSharedFoundationSkinMask: ensures the source is loaded, then returns
+    /// it (may be null if the shipped asset failed the sparsity validity check,
+    /// which the compositor null-guards).
+    /// </summary>
+    public static Texture2D GetSharedLipRegionMask()
+    {
+        EnsureFoundationMaskSources();
+        if (foundationLipExclusionMask != null)
+        {
+            return foundationLipExclusionMask;
+        }
+        // foundationLipExclusionMask is validated with a coarse 8x8 grid that
+        // MISSES a tight (~0.5% coverage) lip mask, leaving it null. The
+        // screen-space lip still needs the coverage mask, so load it directly
+        // (cached). Without this, maskWriteLipMaterial keeps FoundationMaskWrite's
+        // "white" _MaskTex default and tints the WHOLE face, not just the lips.
+        if (!screenSpaceLipRegionMaskLoaded)
+        {
+            screenSpaceLipRegionMaskLoaded = true;
+            screenSpaceLipRegionMask =
+                Resources.Load<Texture2D>("SmoothRegionMasks/lip-smooth-mask-v1");
+        }
+        return screenSpaceLipRegionMask;
     }
 
     private static float FoundationMaskZoneEllipse(float u, float v, FoundationMaskZone zone, float feather)
@@ -6164,6 +6454,272 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         }
 
         return weight;
+    }
+
+    // ---- Generated colored contact-lens (iris tint) discs ------------------
+    // A colored disc drawn over each iris in canonical face-UV space from the
+    // SAME measured per-person eye zones the eyeliner uses, so the disc hugs
+    // THIS user's eye opening (no static PNG misalignment). The disc carries a
+    // believable radial "contact lens" profile in its channels:
+    //   R = alpha profile (0 pupil hole .. 1 iris annulus .. feathered rim)
+    //   G = limbal-ring darken factor (0 body .. 1 at the outer rim), so the
+    //       shader can darken the tint toward the natural dark iris edge.
+    // The mask is zero everywhere outside the disc; the shader samples R as the
+    // alpha and HARD-clips there (no sclera/eyelid smear). The disc is drawn
+    // SMALLER than the aperture (LensIrisRadiusScale) so a lateral-gaze mismatch
+    // reads as limbal blur rather than a disc sliding off the eye (forward-gaze
+    // v1 — ARKit exposes no iris landmark).
+    private static readonly Dictionary<string, Texture2D> GeneratedLensMaskTextures =
+        new Dictionary<string, Texture2D>();
+
+    // Iris disc radius as a fraction of the calibrated eye-zone radius. The eye
+    // zone is a padded exclusion ellipse (wider than the real opening), so a
+    // value well under 1 keeps the disc inside the visible iris. Tune on device.
+    private const float LensIrisRadiusScale = 0.42f;
+    // Pupil hole (fraction of the disc radius) kept transparent so the real dark
+    // pupil shows through and gaze/pupil stay realistic.
+    private const float LensPupilScale = 0.32f;
+    // Where the limbal ring begins (fraction of the disc radius); from here to
+    // the rim the tint darkens toward the natural iris edge.
+    private const float LensLimbalStart = 0.85f;
+    // Outer-rim feather width in normalized disc radius (soft edge, not a hard
+    // circle) — kept tight so the mesh feather does not extend it onto sclera.
+    private const float LensRimFeather = 0.04f;
+
+    private static bool IsGeneratedLensMaskTextureId(string maskTextureId)
+    {
+        return !string.IsNullOrWhiteSpace(maskTextureId)
+            && maskTextureId.StartsWith("lens-", StringComparison.Ordinal);
+    }
+
+    private static void ClearGeneratedLensMasks()
+    {
+        foreach (KeyValuePair<string, Texture2D> entry in GeneratedLensMaskTextures)
+        {
+            if (entry.Value != null)
+            {
+                UnityEngine.Object.Destroy(entry.Value);
+            }
+        }
+
+        GeneratedLensMaskTextures.Clear();
+    }
+
+    // Evaluates the lens radial profile for a single eye disc at UV (u,v).
+    // Returns alpha in .x and the limbal darken factor in .y; both are 0 when
+    // the pixel is outside the disc (hard clip) or the pupil hole.
+    private static Vector2 EvaluateLensProfile(float u, float v, FoundationMaskZone eye)
+    {
+        if (!eye.Valid)
+        {
+            return Vector2.zero;
+        }
+
+        float irisRx = Mathf.Max(eye.Radius.x * LensIrisRadiusScale, 0.004f);
+        float irisRy = Mathf.Max(eye.Radius.y * LensIrisRadiusScale, 0.004f);
+        float du = (u - eye.Center.x) / irisRx;
+        float dv = (v - eye.Center.y) / irisRy;
+        float r = Mathf.Sqrt(du * du + dv * dv);
+
+        // Outside the disc (plus the outer feather band): fully clipped.
+        if (r >= 1.0f + LensRimFeather)
+        {
+            return Vector2.zero;
+        }
+
+        // Pupil hole: transparent center.
+        if (r <= LensPupilScale)
+        {
+            return Vector2.zero;
+        }
+
+        float alpha;
+        if (r < LensLimbalStart)
+        {
+            // Iris annulus: ramp from the pupil edge up to full body alpha.
+            alpha = Mathf.Clamp01(
+                (r - LensPupilScale) / Mathf.Max(1e-4f, LensLimbalStart - LensPupilScale));
+            // Ease the ramp so the pupil edge is soft, not a hard step.
+            alpha = alpha * alpha * (3.0f - 2.0f * alpha);
+        }
+        else
+        {
+            // Limbal ring + outer feather: full body alpha out to the rim, then
+            // feathered to zero over LensRimFeather past r=1.
+            alpha = 1.0f - Mathf.Clamp01((r - 1.0f) / Mathf.Max(1e-4f, LensRimFeather));
+        }
+
+        // Limbal darken factor ramps 0 -> 1 across the ring so the tint deepens
+        // toward the natural dark iris rim; 0 in the body.
+        float limbal = Mathf.Clamp01(
+            (r - LensLimbalStart) / Mathf.Max(1e-4f, 1.0f - LensLimbalStart));
+
+        return new Vector2(Mathf.Clamp01(alpha), limbal);
+    }
+
+    // Shared by the runtime texture cache and the editor PNG exporter (a
+    // separate assembly, hence public), so the disc profile can be inspected
+    // offline. Draws BOTH eye discs into one canonical-UV mask.
+    public static Color32[] RasterizeLensMask(int size)
+    {
+        Color32[] pixels = new Color32[size * size];
+        FoundationMaskZone leftEye = foundationCalLeftEye;
+        FoundationMaskZone rightEye = foundationCalRightEye;
+        for (int y = 0; y < size; y++)
+        {
+            float v = (y + 0.5f) / size;
+            int row = y * size;
+            for (int x = 0; x < size; x++)
+            {
+                float u = (x + 0.5f) / size;
+                Vector2 left = EvaluateLensProfile(u, v, leftEye);
+                Vector2 right = EvaluateLensProfile(u, v, rightEye);
+                // The two discs never overlap (opposite sides of the face), so
+                // max() simply picks whichever eye this pixel belongs to.
+                Vector2 profile = left.x >= right.x ? left : right;
+                byte alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01(profile.x) * 255.0f);
+                byte limbal = (byte)Mathf.RoundToInt(Mathf.Clamp01(profile.y) * 255.0f);
+                pixels[row + x] = new Color32(alpha, limbal, 0, alpha);
+            }
+        }
+
+        return pixels;
+    }
+
+    private static Texture2D GetGeneratedLensMaskTexture(string maskTextureId)
+    {
+        if (GeneratedLensMaskTextures.TryGetValue(maskTextureId, out Texture2D cached)
+            && cached != null)
+        {
+            return cached;
+        }
+
+        // 512 keeps the pupil hole and limbal ramp from aliasing. One-time cost;
+        // the cache is cleared whenever the eye zones are (re)calibrated.
+        const int size = 512;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            name = "Generated Lens " + maskTextureId,
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Bilinear
+        };
+        texture.SetPixels32(RasterizeLensMask(size));
+        texture.Apply(false, true);
+        GeneratedLensMaskTextures[maskTextureId] = texture;
+        Debug.Log(
+            "[E7] generated_lens_mask_created id=" + maskTextureId
+            + " calibrated=" + foundationSkinMaskCalibrated.ToString().ToLowerInvariant()
+            + " leftValid=" + foundationCalLeftEye.Valid.ToString().ToLowerInvariant()
+            + " rightValid=" + foundationCalRightEye.Valid.ToString().ToLowerInvariant());
+        return texture;
+    }
+
+    // ---- Geometric per-eye blink (fix #4) ---------------------------------
+    // Blendshapes (EyeBlinkLeft/Right) are TrueDepth-only and reported
+    // unavailable (FaceTrackingStatusReporter blendShapesAvailable=false), so
+    // openness is measured from the mesh: the vertical UV extent of each eye's
+    // ring vertices vs a calibrated open height. As the lid closes, the
+    // per-eye visibility fades so the disc disappears with the eye.
+    private static float lensEyeVisLeft = 1.0f;
+    private static float lensEyeVisRight = 1.0f;
+    private static float lensCalOpenHeightLeft;
+    private static float lensCalOpenHeightRight;
+    private static bool lensOpenHeightCalibrated;
+
+    private static void UpdateLensEyeVisibility(ARFace face)
+    {
+        if (face == null
+            || !face.vertices.IsCreated
+            || face.vertices.Length == 0
+            || !face.uvs.IsCreated
+            || face.uvs.Length < face.vertices.Length)
+        {
+            // No usable mesh this frame: hold the last visibility (do not force
+            // the lens off, which would flicker on brief tracking gaps).
+            return;
+        }
+
+        var vertices = face.vertices;
+        var uvs = face.uvs;
+        int count = vertices.Length;
+
+        // Reuse the same normalized face-local classification as the foundation
+        // eye zones to gather each eye's opening vertices, then measure the
+        // vertical UV extent (max-min v) as the openness signal.
+        float localMinX = float.PositiveInfinity;
+        float localMaxX = float.NegativeInfinity;
+        float localMinY = float.PositiveInfinity;
+        float localMaxY = float.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 vertex = vertices[i];
+            if (vertex.x < localMinX) localMinX = vertex.x;
+            if (vertex.x > localMaxX) localMaxX = vertex.x;
+            if (vertex.y < localMinY) localMinY = vertex.y;
+            if (vertex.y > localMaxY) localMaxY = vertex.y;
+        }
+
+        float leftMinV = float.PositiveInfinity;
+        float leftMaxV = float.NegativeInfinity;
+        int leftCount = 0;
+        float rightMinV = float.PositiveInfinity;
+        float rightMaxV = float.NegativeInfinity;
+        int rightCount = 0;
+        for (int i = 0; i < count; i++)
+        {
+            float nx = Mathf.InverseLerp(localMinX, localMaxX, vertices[i].x);
+            float ny = Mathf.InverseLerp(localMinY, localMaxY, vertices[i].y);
+            float vv = uvs[i].y;
+            if (nx >= 0.23f && nx <= 0.47f && ny >= 0.585f && ny <= 0.700f)
+            {
+                if (vv < leftMinV) leftMinV = vv;
+                if (vv > leftMaxV) leftMaxV = vv;
+                leftCount++;
+            }
+            else if (nx >= 0.53f && nx <= 0.77f && ny >= 0.585f && ny <= 0.700f)
+            {
+                if (vv < rightMinV) rightMinV = vv;
+                if (vv > rightMaxV) rightMaxV = vv;
+                rightCount++;
+            }
+        }
+
+        if (leftCount >= 6 && rightCount >= 6)
+        {
+            float leftHeight = leftMaxV - leftMinV;
+            float rightHeight = rightMaxV - rightMinV;
+            if (!lensOpenHeightCalibrated && leftHeight > 1e-5f && rightHeight > 1e-5f)
+            {
+                // First good frame is assumed eyes-open; captures the baseline.
+                lensCalOpenHeightLeft = leftHeight;
+                lensCalOpenHeightRight = rightHeight;
+                lensOpenHeightCalibrated = true;
+            }
+
+            if (lensOpenHeightCalibrated)
+            {
+                // Track the max seen height as the open baseline (a blink at
+                // calibration time would otherwise under-set it).
+                lensCalOpenHeightLeft = Mathf.Max(lensCalOpenHeightLeft, leftHeight);
+                lensCalOpenHeightRight = Mathf.Max(lensCalOpenHeightRight, rightHeight);
+                lensEyeVisLeft = LensOpennessToVisibility(leftHeight, lensCalOpenHeightLeft);
+                lensEyeVisRight = LensOpennessToVisibility(rightHeight, lensCalOpenHeightRight);
+            }
+        }
+    }
+
+    private static float LensOpennessToVisibility(float height, float openHeight)
+    {
+        if (openHeight <= 1e-5f)
+        {
+            return 1.0f;
+        }
+
+        // openness: 1 = fully open, 0 = fully closed. Start fading the lens at
+        // ~40% closed (openness 0.60) and hide it fully by ~65% closed
+        // (openness 0.35); above 0.60 the lens is unaffected.
+        float openness = Mathf.Clamp01(height / openHeight);
+        return Mathf.Clamp01((openness - 0.35f) / (0.60f - 0.35f));
     }
 
     // Runtime replacement for foundation-skin-mask-v1.png (whose R channel is
@@ -6657,7 +7213,8 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             || region == "blush"
             || region == "eye"
             || region == "brow"
-            || region == "eyeliner")
+            || region == "eyeliner"
+            || region == "lens")
         {
             return region;
         }
@@ -6759,11 +7316,22 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     || textureSample == "blush_session_3"
                     || textureSample == "blush_session_4"
                     || textureSample == "blush_session_5"))
-            || ((region == "eye" || region == "brow" || region == "eyeliner")
+            || ((region == "eye" || region == "brow" || region == "eyeliner" || region == "lens")
                 && textureSample == "shimmer_eye")
             || (region == "brow" && textureSample == "natural_brow"))
         {
             return textureSample;
+        }
+
+        // Lens ignores the texture sample entirely — the _LensMode shader branch
+        // draws a procedural iris disc, not a texture. Accept whatever RN sends
+        // (usually empty) instead of throwing: a throw here propagates out of
+        // ApplyRegionLayer and the ApplyRecipeJson catch calls
+        // ClearRecipesAndHideOverlays(), which wipes ALL makeup (base/cheek/lip
+        // included). Normalizing to a valid value keeps the lens harmless.
+        if (region == "lens")
+        {
+            return "shimmer_eye";
         }
 
         throw new ArgumentException(
@@ -6822,7 +7390,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 || IsGeneratedBrowMaskTextureId(maskTextureId)))
             || (region == "eyeliner" && (maskTextureId.StartsWith("e7-eyeliner-", StringComparison.Ordinal)
                 || maskTextureId == "eye-smooth-mask-v1"
-                || maskTextureId == "eye-drawn-mask-v1")))
+                || maskTextureId == "eye-drawn-mask-v1"))
+            || (region == "lens" && (maskTextureId == "lens-iris-disc-v1"
+                || IsGeneratedLensMaskTextureId(maskTextureId))))
         {
             return maskTextureId;
         }

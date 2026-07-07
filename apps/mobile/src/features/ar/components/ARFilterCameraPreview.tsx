@@ -110,12 +110,10 @@ export function ARFilterCameraPreview({
       )}
       {guideMode === 'half' ? (
         <>
-          <View
-            style={[
-              styles.comparisonDivider,
-              {top: comparisonDividerTopOffset},
-            ]}
-          />
+          {/* The centerline divider is now drawn by the foundation composite
+              shader (_HalfFaceDivider) so it follows and rotates with the
+              face. The old static screen-center line (styles.comparisonDivider)
+              was removed; only the Before/After labels remain here. */}
           <Text style={[styles.comparisonLabel, styles.comparisonLabelBefore]}>
             {leftComparisonLabel}
           </Text>

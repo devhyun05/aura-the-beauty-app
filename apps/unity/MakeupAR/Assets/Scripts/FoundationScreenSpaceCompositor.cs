@@ -74,6 +74,19 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
     private Material compositeMaterial;
     private Texture2D neckGradientTexture;
 
+    // Milestone 1 — screen-space lip coverage. A SECOND mask RT (higher res
+    // than the foundation mask so the lip edge stays crisp) written by a second
+    // FoundationMaskWrite material whose _MaskTex is the baked lip region mask.
+    // Reuses the SAME faceMaskRenderer/ARFace mesh — only the material + RT are
+    // new. Bound to the composite material as _LipMaskTex; the composite shader
+    // reads it in ApplyLipTint. All lip resources are null-guarded.
+    private const int LipMaskWidth = 768;
+    private const int LipMaskHeight = 1024;
+    private RenderTexture lipMaskTexture;
+    private Material maskWriteLipMaterial;
+
+    public Texture LipMaskTexture => lipMaskTexture;
+
     private GameObject faceMaskObject;
     private MeshRenderer faceMaskRenderer;
     private Mesh faceMaskMesh;
@@ -152,6 +165,12 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
             maskTexture.Release();
             Destroy(maskTexture);
         }
+
+        if (lipMaskTexture != null)
+        {
+            lipMaskTexture.Release();
+            Destroy(lipMaskTexture);
+        }
     }
 
     /// <summary>
@@ -215,6 +234,38 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         lastMaskWriteTransformMode = ResolveMaskWriteTransformMode(debugMode, renderIntoTexture);
         maskWriteFaceMaterial.SetMatrix("_FoundationMaskVP", maskVp);
         maskWriteNeckMaterial.SetMatrix("_FoundationMaskVP", maskVp);
+        // Lip mask-write uses the SAME RT-convention VP (drawn with the same
+        // ARFace mesh). Refresh its _MaskTex too in case the baked lip mask
+        // loaded after material creation (lazy Resources.Load) or the tracked
+        // face changed. Null-guarded throughout.
+        if (maskWriteLipMaterial != null)
+        {
+            maskWriteLipMaterial.SetMatrix("_FoundationMaskVP", maskVp);
+            Texture2D lipRegionMask = E3RegionMaskOverlay.GetSharedLipRegionMask();
+            // Fail-safe: FoundationMaskWrite's _MaskTex defaults to "white", so an
+            // unset mask paints the WHOLE face. Fall back to black (no lip).
+            maskWriteLipMaterial.SetTexture(
+                "_MaskTex", lipRegionMask != null ? (Texture)lipRegionMask : Texture2D.blackTexture);
+        }
+        // Forward the half-face flag from the composite material (set by
+        // ScreenSpaceFoundationController) onto BOTH mask-write materials.
+        // FoundationMaskWrite.frag zeroes the written value on the excluded
+        // half, so the foundation composite (and its skin smoothing, which
+        // scales with the mask) only affects one facial half. Mirrors the
+        // _FoundationDebugMode read above; 0 (off) is an exact no-op.
+        float halfFaceMode = compositeMaterial != null && compositeMaterial.HasProperty("_HalfFaceMode")
+            ? compositeMaterial.GetFloat("_HalfFaceMode")
+            : 0.0f;
+        maskWriteFaceMaterial.SetFloat("_HalfFaceMode", halfFaceMode);
+        maskWriteNeckMaterial.SetFloat("_HalfFaceMode", halfFaceMode);
+        // Half-face for the lip: FoundationMaskWrite.frag zeroes the excluded
+        // half by canonical face UV, so the lip mask itself carries the split
+        // (the composite passes halfGate=1 to ApplyLipTint to avoid double-
+        // gating). 0 (off) is an exact no-op.
+        if (maskWriteLipMaterial != null)
+        {
+            maskWriteLipMaterial.SetFloat("_HalfFaceMode", halfFaceMode);
+        }
         if (!loggedMaskVpDiagnostics)
         {
             loggedMaskVpDiagnostics = true;
@@ -256,6 +307,14 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         // identity; visionScaleY is still measured for diagnostics only.
         Vector2 shift = ComputeTotalShiftUv();
         compositeMaterial.SetTexture("_SkinMaskTex", maskTexture);
+        // Bind the screen-space lip coverage RT for ApplyLipTint. Guarded: only
+        // bound when both the RT and the lip mask-write material exist, so a
+        // missing lip asset leaves the composite lip disabled (the shader also
+        // early-outs on _LipEnabled and a near-zero mask).
+        if (lipMaskTexture != null && maskWriteLipMaterial != null)
+        {
+            compositeMaterial.SetTexture("_LipMaskTex", lipMaskTexture);
+        }
         compositeMaterial.SetFloat("_ScreenSpaceUvFlip", MaskSampleFlipY ? 1.0f : 0.0f);
         compositeMaterial.SetVector(
             "_MaskSampleShift",
@@ -432,6 +491,19 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
         compositeCommandBuffer.ClearRenderTarget(false, true, Color.clear);
         compositeCommandBuffer.DrawRenderer(faceMaskRenderer, maskWriteFaceMaterial, 0, 0);
         compositeCommandBuffer.DrawRenderer(neckMaskRenderer, maskWriteNeckMaterial, 0, 0);
+        // Screen-space lip coverage pass (Milestone 1): draw the SAME live
+        // ARFace mesh with the lip mask-write material into the dedicated lip
+        // RT. Ordered AFTER the foundation face/neck draws and BEFORE the
+        // camera-target blit so the composite material reads a fully-written
+        // _LipMaskTex this frame. Guarded so a missing lip RT/material skips
+        // the pass entirely (the foundation pipeline is untouched).
+        if (lipMaskTexture != null && maskWriteLipMaterial != null)
+        {
+            compositeCommandBuffer.SetRenderTarget(lipMaskTexture);
+            compositeCommandBuffer.ClearRenderTarget(false, true, Color.clear);
+            compositeCommandBuffer.DrawRenderer(faceMaskRenderer, maskWriteLipMaterial, 0, 0);
+        }
+
         compositeCommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         compositeCommandBuffer.Blit(
             null,
@@ -601,6 +673,25 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
             maskTexture.Create();
         }
 
+        // Screen-space lip coverage RT (Milestone 1). Higher-res than the
+        // foundation mask so the lip silhouette reads crisply. ARGB32/Linear,
+        // bilinear/clamp, no mips — same conventions as the foundation mask.
+        // Recreated only if missing (fixed size, so no per-frame reallocation).
+        if (lipMaskTexture == null)
+        {
+            DetachCommandBuffer();
+            lipMaskTexture = new RenderTexture(
+                LipMaskWidth, LipMaskHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear)
+            {
+                name = "FoundationScreenSpaceLipMask",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                useMipMap = false,
+                autoGenerateMips = false
+            };
+            lipMaskTexture.Create();
+        }
+
         if (maskWriteFaceMaterial == null)
         {
             Shader writeShader = Resources.Load<Shader>("FoundationMaskWrite")
@@ -610,6 +701,15 @@ public sealed class FoundationScreenSpaceCompositor : MonoBehaviour
                 maskWriteFaceMaterial = new Material(writeShader) { name = "FoundationMaskWriteFace" };
                 maskWriteNeckMaterial = new Material(writeShader) { name = "FoundationMaskWriteNeck" };
                 maskWriteNeckMaterial.SetTexture("_MaskTex", GetNeckGradientTexture());
+                // Second mask-write material for the lip coverage; _MaskTex is
+                // the baked lip region mask (canonical UV). Null-guarded: if the
+                // asset failed validation the material simply writes nothing.
+                maskWriteLipMaterial = new Material(writeShader) { name = "FoundationMaskWriteLip" };
+                Texture2D lipRegionMask = E3RegionMaskOverlay.GetSharedLipRegionMask();
+                // Fail-safe: _MaskTex defaults to "white" (would paint the WHOLE
+                // face); fall back to black (no lip) if the mask is null.
+                maskWriteLipMaterial.SetTexture(
+                    "_MaskTex", lipRegionMask != null ? (Texture)lipRegionMask : Texture2D.blackTexture);
             }
         }
 
