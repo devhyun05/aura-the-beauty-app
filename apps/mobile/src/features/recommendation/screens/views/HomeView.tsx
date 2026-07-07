@@ -79,10 +79,12 @@ export function HomeView({
   const heroSize = W < 360 ? 46 : 53; // small-screen tolerance
 
   // 3-1 추천 질의: 세션 시드(마운트마다 새로) → 칩 3개 고정 샘플 + 로테이션 리스트.
+  // lazy state init으로 마운트에 한 번만 생성·고정 — 렌더 중 ref.current 읽기 회피(React 선언형),
+  // useMemo와 달리 재계산으로 시드가 바뀌어 추천이 갑자기 뒤섞이는 일이 없다.
   const personalColor = availableReport?.personalColor ?? null;
-  const seedRef = React.useRef(Math.floor(Math.random() * 100000));
-  const chips = React.useMemo(() => sampleSuggestions(seedRef.current, 3, personalColor), [personalColor]);
-  const rotation = React.useMemo(() => sampleSuggestions(seedRef.current, 12, personalColor), [personalColor]);
+  const [seed] = React.useState(() => Math.floor(Math.random() * 100000));
+  const chips = React.useMemo(() => sampleSuggestions(seed, 3, personalColor), [seed, personalColor]);
+  const rotation = React.useMemo(() => sampleSuggestions(seed, 12, personalColor), [seed, personalColor]);
   const [rotIndex, setRotIndex] = React.useState(0);
   const current = rotation[rotIndex] ?? rotation[0] ?? null;
 

@@ -198,13 +198,14 @@ def infer_subcategory(category: str, title: str, query: str = "") -> str | None:
   sub_ids = SUBCATEGORIES_BY_CATEGORY.get(category)
   if not sub_ids:
     return None
-  haystack = f"{title} {query}".lower()
+  # 한국어 상품명은 띄어쓰기가 들쭉날쭉하다("크림 블러셔" vs "크림블러셔") — 공백 제거 후 비교해 유연화.
+  haystack_clean = f"{title} {query}".lower().replace(" ", "")
   best_id: str | None = None
   best_len = 0
   for sub_id in sub_ids:
     for term in SUBCATEGORIES[sub_id]["terms"]:
-      needle = str(term).lower()
-      if needle in haystack and len(needle) > best_len:
-        best_len = len(needle)
+      needle_clean = str(term).lower().replace(" ", "")
+      if needle_clean in haystack_clean and len(needle_clean) > best_len:
+        best_len = len(needle_clean)
         best_id = sub_id
   return best_id or sub_ids[0]
