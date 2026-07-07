@@ -24,6 +24,7 @@ type CognitoIdTokenClaims = {
   sub?: string;
 };
 
+const AUTH_PROMPT_TIMEOUT_MS = 60000;
 const TOKEN_EXCHANGE_TIMEOUT_MS = 20000;
 const USER_INFO_TIMEOUT_MS = 10000;
 const LOGIN_DELAY_MESSAGE = '로그인 응답이 지연되고 있어요. 다시 시도해 주세요.';
@@ -80,6 +81,14 @@ async function cleanupAuthBrowser() {
     await WebBrowser.coolDownAsync();
   } catch {
     // Ignore cleanup failures from browsers that do not support custom tabs services.
+  }
+}
+
+function dismissAuthBrowser() {
+  try {
+    WebBrowser.dismissAuthSession();
+  } catch {
+    // Ignore dismissal failures; the caller still needs to leave loading state.
   }
 }
 
@@ -193,12 +202,23 @@ export async function loginWithSocialProvider(
 
   let result: Awaited<ReturnType<AuthRequest['promptAsync']>>;
 
+  console.info('[aura:auth] prompt:open', {provider});
+
   try {
-    result = await request.promptAsync(config.discovery, {
-      createTask: false,
-      showInRecents: false,
-      url: authUrl,
+    result = await withTimeout(
+      request.promptAsync(config.discovery, {
+        url: authUrl,
+      }),
+      AUTH_PROMPT_TIMEOUT_MS,
+      LOGIN_DELAY_MESSAGE,
+    );
+  } catch (error) {
+    console.info('[aura:auth] prompt:failed', {
+      message: error instanceof Error ? error.message : String(error),
+      provider,
     });
+    dismissAuthBrowser();
+    throw error;
   } finally {
     void cleanupAuthBrowser();
   }

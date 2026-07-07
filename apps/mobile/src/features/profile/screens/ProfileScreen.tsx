@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {CalendarClock, ChevronRight, MessageCircle, Video} from 'lucide-react-native';
@@ -82,6 +82,14 @@ export function ProfileScreen({
         setLoadState(nextState);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const loadConsultingRecords = useCallback(() => {

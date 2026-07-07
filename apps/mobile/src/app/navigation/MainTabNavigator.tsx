@@ -16,6 +16,11 @@ import {
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
 import {MakeupExtractionActionSheet} from '../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../features/home/components/MakeupFeedbackActionSheet';
+import {
+  COMMUNITY_MODE_BAR_FOOTER_GAP,
+  CommunityModeBar,
+  type CommunityMode,
+} from '../../features/community/components/CommunityModeBar';
 import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
@@ -64,19 +69,45 @@ export function shouldShowFloatingActionDismissLayer(isExpanded: boolean): boole
 }
 
 export function MainTabNavigator() {
+  const [communityMode, setCommunityMode] = useState<CommunityMode>('home');
+
   return (
     <Tab.Navigator
       initialRouteName="HomeTab"
       screenOptions={{headerShown: false}}
-      tabBar={props => <MainTabBar {...props} />}>
+      tabBar={props => (
+        <MainTabBar
+          {...props}
+          communityMode={communityMode}
+          onSelectCommunityMode={setCommunityMode}
+        />
+      )}>
       <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
-      <Tab.Screen name="CommunityTab" component={CommunityTabRouteScreen} />
+      <Tab.Screen name="CommunityTab">
+        {props => (
+          <CommunityTabRouteScreen
+            {...props}
+            communityMode={communityMode}
+            onSelectCommunityMode={setCommunityMode}
+          />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
 
-function MainTabBar({navigation, state}: BottomTabBarProps) {
+type MainTabBarProps = BottomTabBarProps & {
+  communityMode: CommunityMode;
+  onSelectCommunityMode: (mode: CommunityMode) => void;
+};
+
+function MainTabBar({
+  communityMode,
+  navigation,
+  onSelectCommunityMode,
+  state,
+}: MainTabBarProps) {
   const insets = useSafeAreaInsets();
   const {height: windowHeight} = useWindowDimensions();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = useState(false);
@@ -95,6 +126,7 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
   } = useNavigationFlowState();
   const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  const shouldShowCommunityModeBar = activeRouteName === 'CommunityTab';
 
   const closeExtractionSheet = useCallback(() => {
     setIsExtractionSheetVisible(false);
@@ -187,6 +219,10 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
     rootNavigation?.navigate('FloatingActionSettings');
   }, [rootNavigation]);
 
+  const handleCommunityCreatePress = useCallback(() => {
+    rootNavigation?.navigate('CommunityThreadCreate');
+  }, [rootNavigation]);
+
   return (
     <YStack
       pointerEvents="box-none"
@@ -196,6 +232,25 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
           height: getMainTabBarHostHeight(windowHeight, footerBottomInset),
         },
       ]}>
+      {shouldShowCommunityModeBar ? (
+        <YStack
+          style={[
+            styles.communityModeBarHost,
+            {
+              bottom:
+                APP_FOOTER_FLOATING_HOST_BASE_HEIGHT +
+                footerBottomInset +
+                COMMUNITY_MODE_BAR_FOOTER_GAP,
+            },
+          ]}>
+          <CommunityModeBar
+            bottomPadding={spacing.sm}
+            mode={communityMode}
+            onPressCreate={handleCommunityCreatePress}
+            onSelectMode={onSelectCommunityMode}
+          />
+        </YStack>
+      ) : null}
       {shouldShowFloatingActionDismissLayer(isFloatingActionMenuExpanded) ? (
         <Pressable
           accessibilityLabel="빠른 실행 메뉴 닫기"
@@ -240,6 +295,13 @@ function MainTabBar({navigation, state}: BottomTabBarProps) {
 }
 
 const styles = StyleSheet.create({
+  communityModeBarHost: {
+    elevation: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 30,
+  },
   tabBarHost: {
     bottom: 0,
     left: 0,

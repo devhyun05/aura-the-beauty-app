@@ -5,7 +5,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, communityColors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {getCommunityMockImageSource} from '../mocks/community.mock';
-import type {CommunityThreadSummary} from '../types';
+import type {CommunityAuthor, CommunityThreadSummary} from '../types';
 import {difficultyLabels, formatCount} from '../utils/format';
 import {CommunityAvatar} from './CommunityAvatar';
 import {categoryIcons} from './CommunityCategoryTabs';
@@ -43,6 +43,7 @@ export function LookThreadCard({
   matchPercent = null,
   thread,
   onPress,
+  onPressAuthor,
   onToggleLike,
   onToggleSave,
 }: {
@@ -50,6 +51,7 @@ export function LookThreadCard({
   matchPercent?: number | null;
   thread: CommunityThreadSummary;
   onPress: (threadId: string) => void;
+  onPressAuthor?: (author: CommunityAuthor) => void;
   onToggleLike: (threadId: string) => void;
   onToggleSave: (threadId: string) => void;
 }) {
@@ -70,6 +72,25 @@ export function LookThreadCard({
   const hasDifficulty = thread.difficulty != null;
   const showRecipeStrip = hasDuration || hasDifficulty;
   const showQuestionContext = !showRecipeStrip && thread.category === 'question';
+
+  const authorRow = (
+    <XStack style={styles.authorRow}>
+      <CommunityAvatar
+        bordered
+        avatarUrl={thread.author.avatarUrl}
+        nickname={thread.author.nickname}
+        size={24}
+      />
+      <Text style={[styles.authorText, coverFailed && styles.fallbackAuthorText]}>
+        @{thread.author.nickname}
+      </Text>
+      {thread.situationTags[0] ? (
+        <Text style={[styles.contextText, coverFailed && styles.fallbackContextText]}>
+          · {thread.situationTags[0]}
+        </Text>
+      ) : null}
+    </XStack>
+  );
 
   return (
     <Pressable
@@ -126,22 +147,19 @@ export function LookThreadCard({
 
         {coverLoaded || coverFailed ? (
           <YStack style={styles.imageCopy}>
-            <XStack style={styles.authorRow}>
-              <CommunityAvatar
-                bordered
-                avatarUrl={thread.author.avatarUrl}
-                nickname={thread.author.nickname}
-                size={24}
-              />
-              <Text style={[styles.authorText, coverFailed && styles.fallbackAuthorText]}>
-                @{thread.author.nickname}
-              </Text>
-              {thread.situationTags[0] ? (
-                <Text style={[styles.contextText, coverFailed && styles.fallbackContextText]}>
-                  · {thread.situationTags[0]}
-                </Text>
-              ) : null}
-            </XStack>
+            {onPressAuthor ? (
+              <Pressable
+                accessibilityLabel={`${thread.author.nickname} 프로필 보기`}
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={event => {
+                  event.stopPropagation();
+                  onPressAuthor(thread.author);
+                }}
+                style={({pressed}) => pressed && styles.authorPressed}>
+                {authorRow}
+              </Pressable>
+            ) : authorRow}
             <Text
               numberOfLines={2}
               style={[styles.title, coverFailed && styles.fallbackTitle]}>
@@ -218,6 +236,9 @@ export function LookThreadCard({
 }
 
 const styles = StyleSheet.create({
+  authorPressed: {
+    opacity: 0.72,
+  },
   authorRow: {
     alignItems: 'center',
     flexDirection: 'row',
