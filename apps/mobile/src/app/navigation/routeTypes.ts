@@ -2,6 +2,7 @@ import type {NavigatorScreenParams} from '@react-navigation/native';
 import type {
   ConsultingBookingDraft,
   ConsultingCategoryId,
+  ConsultingRecord,
 } from '../../features/consulting/types';
 import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
 import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
@@ -54,13 +55,19 @@ export type RootStackParamList = {
   Consulting: undefined;
   ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
   ConsultingExpertProfile: {expertId: string};
-  ConsultingBooking: {expertId: string; durationId: string};
+  ConsultingBooking: {expertId: string; durationId: string; bookingId?: string};
   ConsultingPayment: {draft: ConsultingBookingDraft};
-  ConsultingBookingComplete: {draft: ConsultingBookingDraft};
-  ConsultingCall: {expertId: string; durationId: string};
+  ConsultingBookingComplete: {
+    bookingId: string;
+    draft: ConsultingBookingDraft;
+    record?: ConsultingRecord;
+  };
+  ConsultingCall: {bookingId?: string; expertId: string; durationId: string};
   ConsultingSummary: {expertId: string; recordId?: string};
   ConsultingHistory: undefined;
+  ConsultingConversation: {recordId: string; expertId: string};
   ConsultingMembership: undefined;
+  ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: undefined;
   LikedProductList: undefined;
   ARFilter:
@@ -141,7 +148,9 @@ export const rootStackRoutes = [
   'ConsultingCall',
   'ConsultingSummary',
   'ConsultingHistory',
+  'ConsultingConversation',
   'ConsultingMembership',
+  'ConsultingReview',
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',

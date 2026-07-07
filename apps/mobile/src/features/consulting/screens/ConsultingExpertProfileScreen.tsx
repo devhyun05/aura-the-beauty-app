@@ -13,7 +13,7 @@ import {ConsultingScreenScaffold} from '../components/ConsultingScreenScaffold';
 import {
   ConsultingBottomBar,
   ConsultingSectionTitle,
-  ExpertAvatar,
+  ExpertPortrait,
   PrimaryButton,
   StarRating,
 } from '../components/consultingComponents';
@@ -42,11 +42,14 @@ export function ConsultingExpertProfileScreen({
     <RNView style={styles.root}>
       <ConsultingScreenScaffold bottomPadding={spacing.md} contentGap={spacing.xxl}>
         <View style={styles.profileHeader}>
-          <ExpertAvatar expert={expert} size={76} />
+          <ExpertPortrait expert={expert} size={112} />
           <Text style={styles.name}>{expert.name}</Text>
           <Text style={styles.title}>
             {expert.title} · {expert.careerYears}년 차
           </Text>
+          {expert.studioName ? (
+            <Text style={styles.studioName}>{expert.studioName}</Text>
+          ) : null}
           <Text style={styles.signature}>"{expert.signatureLine}"</Text>
         </View>
 
@@ -281,14 +284,13 @@ const styles = StyleSheet.create({
     backgroundColor: consultingColors.surface,
     borderColor: consultingColors.borderSoft,
     borderRadius: consultingRadius.card,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flex: 1,
     gap: 3,
     padding: 14,
   },
   durationCardSelected: {
     borderColor: consultingColors.accent,
-    borderWidth: 2,
   },
   durationDescription: {
     color: consultingColors.textMuted,
@@ -448,6 +450,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
+  },
+  studioName: {
+    color: consultingColors.textSoft,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    marginTop: 4,
   },
   tag: {
     backgroundColor: consultingColors.surface,

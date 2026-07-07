@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from 'react';
+import {useState, type ReactNode} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, View as RNView} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
@@ -23,24 +23,20 @@ const SELF_VIEW_BACKGROUND = '#4A473F';
 type ConsultingCallScreenProps = {
   expert: ConsultingExpert;
   durationId: string;
+  bookingId?: string;
   onEndCall: () => void;
 };
 
 export function ConsultingCallScreen({
   expert,
   durationId,
+  bookingId,
   onEndCall,
 }: ConsultingCallScreenProps) {
   const insets = useSafeAreaInsets();
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
-  const [connecting, setConnecting] = useState(true);
   const duration = findConsultingDuration(expert, durationId);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setConnecting(false), 1400);
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <RNView
@@ -53,25 +49,24 @@ export function ConsultingCallScreen({
           <Text style={styles.pillText}>{expert.name}</Text>
         </RNView>
         <RNView style={styles.pill}>
-          <Text style={styles.pillText}>02:14 / {duration.minutes}:00</Text>
+          <Text style={styles.pillText}>상담 대기 · {duration.minutes}분</Text>
         </RNView>
       </RNView>
 
       <RNView style={styles.stage}>
         <ExpertAvatar expert={expert} size={96} />
-        {connecting ? (
-          <RNView style={styles.connectingRow}>
-            <ActivityIndicator color="#FFFFFF" size="small" />
-            <Text style={[styles.stageName, styles.stageNameInline]}>
-              연결 중이에요...
-            </Text>
-          </RNView>
-        ) : (
-          <Text style={styles.stageName}>{expert.name} 님과 상담 중</Text>
-        )}
+        <RNView style={styles.connectingRow}>
+          <ActivityIndicator color="#FFFFFF" size="small" />
+          <Text style={[styles.stageName, styles.stageNameInline]}>
+            상담사 전화를 기다리고 있어요
+          </Text>
+        </RNView>
         <Text style={styles.stageHint}>
-          {connecting ? '잠시만 기다려주세요' : '실시간 화상 상담'}
+          Agora 연동 전 임시 대기 화면입니다. 상담사가 발신하면 이 화면에서 연결돼요.
         </Text>
+        {bookingId ? (
+          <Text style={styles.bookingIdText}>예약 {bookingId.slice(0, 8)}</Text>
+        ) : null}
 
         <RNView style={[styles.selfView, {top: spacing.md}]}>
           <Text style={styles.selfViewText}>나</Text>
@@ -106,7 +101,7 @@ export function ConsultingCallScreen({
         <CallControl
           danger
           icon={<PhoneOff color="#fff" size={20} />}
-          label="상담 종료"
+          label="대기 나가기"
           onPress={onEndCall}
         />
       </RNView>
@@ -141,6 +136,12 @@ function CallControl({
 }
 
 const styles = StyleSheet.create({
+  bookingIdText: {
+    color: 'rgba(255, 255, 255, 0.42)',
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    marginTop: 10,
+  },
   control: {
     alignItems: 'center',
     borderRadius: radius.pill,
@@ -235,7 +236,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
     marginTop: 4,
+    maxWidth: 260,
+    textAlign: 'center',
   },
   stageName: {
     color: '#FFFFFF',

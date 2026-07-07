@@ -1,4 +1,8 @@
-import {StyleSheet} from 'react-native';
+import {
+  StyleSheet,
+  type AccessibilityRole,
+  type AccessibilityState,
+} from 'react-native';
 import { Text, View } from 'tamagui';
 
 import { colors, radius, spacing, typography } from '../../../shared/theme';
@@ -10,16 +14,27 @@ import {
 import type { FaceAnalysisReport } from '../../../shared/types/faceAnalysis';
 
 type FaceAnalysisSummaryCardProps = {
+  accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
   report: FaceAnalysisReport;
   onPress?: () => void;
 };
 
 export function FaceAnalysisSummaryCard({
+  accessibilityLabel,
+  accessibilityRole,
+  accessibilityState,
   report,
   onPress,
 }: FaceAnalysisSummaryCardProps) {
   return (
-    <AppCard onPress={onPress} style={styles.card}>
+    <AppCard
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={accessibilityState}
+      onPress={onPress}
+      style={styles.card}>
       <View style={styles.row}>
         <View style={styles.imageFrame}>
           <ImagePlaceholder

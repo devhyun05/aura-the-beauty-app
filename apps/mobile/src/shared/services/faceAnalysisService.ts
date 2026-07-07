@@ -142,6 +142,12 @@ function firstText(...values: Array<string | null | undefined>): string | undefi
 }
 
 function getBackendCdnBaseUrl(): string | null {
+  const explicitCdnBaseUrl = process.env.EXPO_PUBLIC_CDN_BASE_URL?.trim();
+
+  if (explicitCdnBaseUrl) {
+    return explicitCdnBaseUrl.replace(/\/+$/, '');
+  }
+
   const apiBaseUrl = getBackendApiBaseUrl();
 
   if (!apiBaseUrl) {
@@ -243,13 +249,13 @@ export function resolveFaceAnalysisReportImageSource(
 ): FaceAnalysisReport['imageSource'] | undefined {
   const request = job.detailPayload?.request;
   const directUrl = firstText(
-    capture?.imageUri,
+    resolveBackendMediaImageUrl(job.previewMedia),
     capture?.cdnUrl,
+    request?.previewUrl,
     request?.cdnUrl,
     request?.imageUrl,
-    request?.previewUrl,
-    resolveBackendMediaImageUrl(job.previewMedia),
     resolveBackendMediaImageUrl(job.sourceMedia),
+    capture?.imageUri,
     request?.sourceUri,
   );
 
