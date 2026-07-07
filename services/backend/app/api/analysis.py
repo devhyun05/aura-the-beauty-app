@@ -45,6 +45,25 @@ async def update_analysis_report_embedding(db: Database, report: dict) -> bool:
     return False
   return True
 
+ANALYSIS_MEDIA_SELECT = """
+  r.*,
+  source_media.id as source_media_ref_id,
+  source_media.bucket as source_media_ref_bucket,
+  source_media.object_key as source_media_ref_object_key,
+  source_media.cdn_url as source_media_ref_cdn_url,
+  source_media.content_type as source_media_ref_content_type,
+  source_media.width as source_media_ref_width,
+  source_media.height as source_media_ref_height,
+  preview_media.id as preview_media_ref_id,
+  preview_media.bucket as preview_media_ref_bucket,
+  preview_media.object_key as preview_media_ref_object_key,
+  preview_media.cdn_url as preview_media_ref_cdn_url,
+  preview_media.content_type as preview_media_ref_content_type,
+  preview_media.width as preview_media_ref_width,
+  preview_media.height as preview_media_ref_height
+"""
+
+
 def decode_json_object(value: object) -> dict:
   if isinstance(value, dict):
     return value
@@ -66,8 +85,34 @@ def normalize_analysis_report_row(row: dict | None) -> dict | None:
 
   normalized = dict(row)
   normalized["detail_payload"] = decode_json_object(normalized.get("detail_payload"))
+  attach_analysis_media_reference(normalized, "source_media_ref", "source_media")
+  attach_analysis_media_reference(normalized, "preview_media_ref", "preview_media")
 
   return normalized
+
+
+def attach_analysis_media_reference(row: dict, prefix: str, target_key: str) -> None:
+  media_id = row.pop(f"{prefix}_id", None)
+  bucket = row.pop(f"{prefix}_bucket", None)
+  object_key = row.pop(f"{prefix}_object_key", None)
+  cdn_url = row.pop(f"{prefix}_cdn_url", None)
+  content_type = row.pop(f"{prefix}_content_type", None)
+  width = row.pop(f"{prefix}_width", None)
+  height = row.pop(f"{prefix}_height", None)
+
+  if media_id is None:
+    row[target_key] = None
+    return
+
+  row[target_key] = {
+    "id": str(media_id),
+    "bucket": bucket,
+    "object_key": object_key,
+    "cdn_url": cdn_url,
+    "content_type": content_type,
+    "width": width,
+    "height": height,
+  }
 
 
 def normalize_analysis_report_rows(rows: list[dict]) -> list[dict]:
@@ -507,10 +552,12 @@ async def get_analysis_job(
 ) -> dict:
   user = await ensure_user(db, auth)
   job = await db.fetchrow(
-    """
-    select *
-    from analysis_reports
-    where id = $1 and user_id = $2 and deleted_at is null
+    f"""
+    select {ANALYSIS_MEDIA_SELECT}
+    from analysis_reports r
+    left join media_assets source_media on source_media.id = r.source_media_id
+    left join media_assets preview_media on preview_media.id = r.preview_media_id
+    where r.id = $1 and r.user_id = $2 and r.deleted_at is null
     """,
     job_id,
     user["id"],
@@ -530,23 +577,25 @@ async def list_analysis_reports(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  filters = ["user_id = $1"]
+  filters = ["r.user_id = $1"]
   values: list[object] = [user["id"]]
 
   if with_recommended_makeups:
     filters.append(
       """
-      jsonb_typeof(detail_payload->'result'->'recommendedMakeups') = 'array'
-      and jsonb_array_length(detail_payload->'result'->'recommendedMakeups') > 0
+      jsonb_typeof(r.detail_payload->'result'->'recommendedMakeups') = 'array'
+      and jsonb_array_length(r.detail_payload->'result'->'recommendedMakeups') > 0
       """,
     )
 
   query = f"""
-    select *
-    from analysis_reports
+    select {ANALYSIS_MEDIA_SELECT}
+    from analysis_reports r
+    left join media_assets source_media on source_media.id = r.source_media_id
+    left join media_assets preview_media on preview_media.id = r.preview_media_id
     where {' and '.join(filters)}
-      and deleted_at is null
-    order by created_at desc
+      and r.deleted_at is null
+    order by r.created_at desc
   """
 
   if limit is not None:
@@ -569,10 +618,12 @@ async def get_analysis_report(
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
-    """
-    select *
-    from analysis_reports
-    where id = $1 and user_id = $2 and deleted_at is null
+    f"""
+    select {ANALYSIS_MEDIA_SELECT}
+    from analysis_reports r
+    left join media_assets source_media on source_media.id = r.source_media_id
+    left join media_assets preview_media on preview_media.id = r.preview_media_id
+    where r.id = $1 and r.user_id = $2 and r.deleted_at is null
     """,
     report_id,
     user["id"],

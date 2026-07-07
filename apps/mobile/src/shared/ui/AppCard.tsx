@@ -3,6 +3,8 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type AccessibilityRole,
+  type AccessibilityState,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -10,6 +12,9 @@ import {
 import { colors, radius, shadows } from '../theme';
 
 type AppCardProps = {
+  accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
   children: ReactNode;
   onPress?: () => void;
   padded?: boolean;
@@ -17,6 +22,9 @@ type AppCardProps = {
 };
 
 export function AppCard({
+  accessibilityLabel,
+  accessibilityRole = 'button',
+  accessibilityState,
   children,
   onPress,
   padded = true,
@@ -27,7 +35,9 @@ export function AppCard({
   if (onPress) {
     return (
       <Pressable
-        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole={accessibilityRole}
+        accessibilityState={accessibilityState}
         onPress={onPress}
         style={cardStyle}
       >

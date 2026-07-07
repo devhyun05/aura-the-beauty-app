@@ -297,6 +297,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '내 상담 내역',
   },
+  ConsultingConversation: {
+    category: 'detail-report',
+    contextLabel: 'CONSULTING',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '상담 대화',
+  },
   ConsultingMembership: {
     category: 'detail-report',
     contextLabel: 'CONSULTING',
@@ -304,6 +312,14 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: 'AURA 멤버십',
+  },
+  ConsultingReview: {
+    category: 'form-edit',
+    contextLabel: 'CONSULTING',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '리뷰 작성',
   },
   MakeupLookList: {
     category: 'list',

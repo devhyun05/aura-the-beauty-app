@@ -71,6 +71,8 @@ import {
 
 type CameraDirection = 'front' | 'back';
 
+const FACE_CAPTURE_UPLOAD_IMAGE_QUALITY = 0.76;
+
 type ScreenLandmarkPoint = {
   left: number;
   top: number;
@@ -1019,7 +1021,7 @@ export function CameraFaceCaptureScreen({
       const picture = realtimeCaptureAvailable
         ? await realtimeCameraRef.current?.capture()
         : await cameraRef.current?.takePictureAsync({
-            quality: 0.9,
+            quality: FACE_CAPTURE_UPLOAD_IMAGE_QUALITY,
             skipProcessing: false,
           });
 
@@ -1099,7 +1101,7 @@ export function CameraFaceCaptureScreen({
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: false,
         mediaTypes: ['images'],
-        quality: 0.9,
+        quality: FACE_CAPTURE_UPLOAD_IMAGE_QUALITY,
       });
 
       if (pickerResult.canceled || pickerResult.assets.length === 0) {
