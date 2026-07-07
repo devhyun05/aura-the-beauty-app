@@ -36,6 +36,7 @@ export const APP_FOOTER_GLASS_BACKGROUND = colors.liquidGlassSurface;
 export const APP_FOOTER_GLASS_BORDER = colors.liquidGlassBorder;
 export const APP_FOOTER_GLASS_HIGHLIGHT = 'rgba(255, 255, 255, 0.42)';
 export const APP_FOOTER_SIDE_TAB_WIDTH = 58;
+export const APP_FOOTER_ACTION_CLEARANCE_SHIFT = 50;
 export const APP_FOOTER_DEFAULT_ACTION_SLOT_POSITION =
   DEFAULT_FLOATING_ACTION_BUTTON_POSITION;
 
@@ -95,6 +96,14 @@ export function getAppFooterActionSlotCornerStyle(
   return actionSlotPosition === 'left'
     ? {left: APP_FOOTER_ACTION_SLOT_CORNER_INSET}
     : {right: APP_FOOTER_ACTION_SLOT_CORNER_INSET};
+}
+
+export function getAppFooterBarClearanceTranslateX(
+  actionSlotPosition: FloatingActionButtonPosition,
+): number {
+  return actionSlotPosition === 'left'
+    ? APP_FOOTER_ACTION_CLEARANCE_SHIFT
+    : -APP_FOOTER_ACTION_CLEARANCE_SHIFT;
 }
 
 export function AppFooter({
@@ -165,7 +174,21 @@ export function AppFooter({
           paddingBottom: Math.max(bottomInset, spacing.md),
         },
       ]}>
-      <XStack style={styles.footerRow}>
+      <XStack
+        style={[
+          styles.footerRow,
+          actionSlot
+            ? {
+                transform: [
+                  {
+                    translateX: getAppFooterBarClearanceTranslateX(
+                      actionSlotPosition,
+                    ),
+                  },
+                ],
+              }
+            : undefined,
+        ]}>
         {footerBar}
       </XStack>
       {actionSlotElement}

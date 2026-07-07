@@ -107,12 +107,12 @@ expectEqual(
 );
 expectEqual(
   getARFilterOptionGroupLabels('all').join(','),
-  '룩,형태',
+  '룩,핏',
   'AR filter all face option groups',
 );
 expectEqual(
   getARFilterOptionGroupLabels('lip').join(','),
-  '룩,컬러,타입,질감,형태',
+  '룩,컬러,타입,질감,핏',
   'AR filter part option groups',
 );
 expectEqual(
@@ -132,7 +132,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterShapeEditButtonLabel(),
-  '형태 수정',
+  '핏 수정',
   'AR filter shape edit button label',
 );
 expectEqual(

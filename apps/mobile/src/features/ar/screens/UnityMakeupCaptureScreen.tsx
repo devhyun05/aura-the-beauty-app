@@ -197,7 +197,7 @@ const INITIAL_INVISIBLE_GENERATED_BROW_CONTROLS: GeneratedBrowControls = {
   opacity: 0,
 };
 // 사람별 실측 눈 존에서 Unity가 런타임 생성하는 절차적 아이라이너 모양들.
-// 참고 차트(v2) 6종. 컬러드는 형태보다 색이 정체성이라 선택 시 버건디를
+// 참고 차트(v2) 6종. 컬러드는 핏보다 색이 정체성이라 선택 시 버건디를
 // 기본 적용한다 (colorHex — 이후 색상 변경 가능).
 const AR_BLUSH_EYELINER_REGION_OPTIONS = [
   {label: '캣', candidateId: 'eyeliner-gen-cat-v2', maskTextureId: 'e7-eyeliner-gen-cat-v2'},

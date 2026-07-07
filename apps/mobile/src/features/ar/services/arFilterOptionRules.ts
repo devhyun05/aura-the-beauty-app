@@ -114,12 +114,12 @@ const POINT_MAKEUP_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
   {id: 'color', label: '컬러'},
   {id: 'type', label: '타입'},
   {id: 'texture', label: '질감'},
-  {id: 'shape', label: '형태'},
+  {id: 'shape', label: '핏'},
 ];
 
 const TOTAL_MAKEUP_OPTION_GROUPS: readonly ARMakeupOptionGroup[] = [
   {id: 'makeupLook', label: '룩'},
-  {id: 'shape', label: '형태'},
+  {id: 'shape', label: '핏'},
 ];
 
 const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> = {
@@ -157,7 +157,7 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'cheek-sunkiss1', label: '선키스 1'},
     {id: 'cheek-sunkiss2', label: '선키스 2'},
   ],
-  // 렌즈는 색(COLOR)이 주 선택 수단이라 형태는 최소 세트만 노출합니다. 비비드는
+  // 렌즈는 색(COLOR)이 주 선택 수단이라 핏은 최소 세트만 노출합니다. 비비드는
   // 진한 컬러를 더 선명하게(높은 opacity 프리셋의 색을 선택하도록 안내)하는 표시용.
   lens: [
     {id: 'lens-natural', label: '내추럴'},

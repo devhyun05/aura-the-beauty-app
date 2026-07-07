@@ -47,12 +47,12 @@ expectEqual(
 );
 expectEqual(
   getARFilterDetailEditButtonLabel(),
-  '상세 수정',
+  '제품 수정',
   'AR filter detail edit button label',
 );
 expectEqual(
   getARFilterShapeEditButtonLabel(),
-  '형태 수정',
+  '핏 수정',
   'AR filter shape edit button label',
 );
 expectEqual(
@@ -62,7 +62,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterEditActionOptions().map(option => option.label).join(','),
-  '상세 수정,형태 수정',
+  '제품 수정,핏 수정',
   'AR filter edit action menu options',
 );
 

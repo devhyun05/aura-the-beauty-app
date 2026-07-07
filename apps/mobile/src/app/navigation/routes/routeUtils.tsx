@@ -32,8 +32,14 @@ export type MainTabScreenProps<RouteName extends keyof MainTabParamList> =
 
 export type RootNavigation = NavigationProp<RootStackParamList>;
 
+export type MainTabChromeRenderContext = {
+  openFeatureMenu: () => void;
+};
+
 type MainTabChromeProps = {
-  children: React.ReactNode;
+  children:
+    | React.ReactNode
+    | ((context: MainTabChromeRenderContext) => React.ReactNode);
   navigation: BottomTabScreenProps<MainTabParamList>['navigation'];
   routeName: MainTabRouteName;
   wrapContentInScreen?: boolean;
@@ -141,6 +147,7 @@ export function MainTabChrome({
   const insets = useSafeAreaInsets();
   const [isFeatureMenuVisible, setIsFeatureMenuVisible] = React.useState(false);
   const headerCopy = getMainHeaderCopy(routeName);
+  const isHomeTab = routeName === 'HomeTab';
   const contentGap = routeName === 'HomeTab' ? spacing.xxl : spacing.xl;
   const headerBorderWidth = getMainTabHeaderBorderWidth(routeName);
   const handleOpenFeatureMenu = React.useCallback(() => {
@@ -168,36 +175,41 @@ export function MainTabChrome({
     },
     [navigation],
   );
+  const renderedChildren = typeof children === 'function'
+    ? children({openFeatureMenu: handleOpenFeatureMenu})
+    : children;
 
   return (
     <YStack style={styles.screen}>
-      <AppHeader
-        showTitle={headerCopy.showTitle}
-        subtitle={headerCopy.subtitle}
-        title={headerCopy.title}
-        titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
-        topInset={insets.top}
-        containerProps={{
-          style: [
-            styles.overlayHeader,
-            headerBorderWidth === undefined
-              ? null
-              : {borderBottomWidth: headerBorderWidth},
-          ],
-        }}
-        onProfilePress={handleOpenFeatureMenu}
-      />
+      {isHomeTab ? null : (
+        <AppHeader
+          showTitle={headerCopy.showTitle}
+          subtitle={headerCopy.subtitle}
+          title={headerCopy.title}
+          titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
+          topInset={insets.top}
+          containerProps={{
+            style: [
+              styles.overlayHeader,
+              headerBorderWidth === undefined
+                ? null
+                : {borderBottomWidth: headerBorderWidth},
+            ],
+          }}
+          onProfilePress={handleOpenFeatureMenu}
+        />
+      )}
       <YStack style={styles.body}>
         {wrapContentInScreen ? (
           <AppScreen
             bottomPadding="floatingFooter"
             contentGap={contentGap}
             topPadding="belowOverlayHeader">
-            {children}
+            {renderedChildren}
           </AppScreen>
         ) : (
           <YStack style={styles.customBody}>
-            {children}
+            {renderedChildren}
           </YStack>
         )}
       </YStack>

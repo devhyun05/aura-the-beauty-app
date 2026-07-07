@@ -2,7 +2,10 @@ import React from 'react';
 
 import {
   ARFilterShapeAdjustScreen,
+  getARFilterShapeAdjustAccentColor,
   getARFilterShapeAdjustCameraMode,
+  getARFilterShapeAdjustControlGroupLabels,
+  getARFilterShapeAdjustDefaultSymmetryEnabled,
   getARFilterShapeAdjustInteractionMode,
   getARFilterShapeAdjustTitle,
   getARFilterShapeAdjustSelectedTabOpacity,
@@ -23,7 +26,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterShapeAdjustCameraMode(),
-  'live-camera',
+  'photo-preview',
   'AR location camera mode',
 );
 expectEqual(
@@ -33,7 +36,7 @@ expectEqual(
 );
 expectEqual(
   getARFilterShapeAdjustTitle(),
-  '형태 수정',
+  '핏 수정',
   'AR location adjust title',
 );
 expectEqual(
@@ -45,6 +48,21 @@ expectEqual(
   getShapePointPanResponderDependencyMode(),
   'shape-point-ids',
   'AR shape point pan responders depend on point ids only',
+);
+expectEqual(
+  getARFilterShapeAdjustControlGroupLabels().join(','),
+  '눈꼬리,윙 길이,오버립,아치',
+  'AR fit warp exposes named precision control groups',
+);
+expectEqual(
+  getARFilterShapeAdjustAccentColor(),
+  '#D6A44C',
+  'AR fit warp uses gold accent color',
+);
+expectEqual(
+  getARFilterShapeAdjustDefaultSymmetryEnabled(),
+  true,
+  'AR fit warp symmetry starts enabled',
 );
 
 <ARFilterShapeAdjustScreen

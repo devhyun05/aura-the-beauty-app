@@ -1,9 +1,9 @@
 import React from 'react';
 
 import {ARFilterScreen} from '../../../features/ar/screens/ARFilterScreen';
-import {ARFilterShapeAdjustScreen} from '../../../features/ar/screens/ARFilterShapeAdjustScreen';
 import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterEditScreen';
 import {UnityMakeupCaptureScreen} from '../../../features/ar/screens/UnityMakeupCaptureScreen';
+import type {FullFaceMakeupSavedContract} from '../../../features/ar/services/fullFaceMakeupEditService';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {useNavigationFlowState} from '../flowState';
 import {getARFilterDetailEditRouteParams} from './arRouteActions';
@@ -15,7 +15,8 @@ export function ARFilterRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ARFilter'>) {
-  const {setSelectedRecommendedMakeupFilterId} = useNavigationFlowState();
+  const {selectedFaceCapture, setSelectedRecommendedMakeupFilterId} =
+    useNavigationFlowState();
   const initialMakeupFilterId = route.params?.initialMakeupFilterId;
   const initialSource = route.params?.source;
   const initialGuideMode =
@@ -30,16 +31,42 @@ export function ARFilterRouteScreen({
     }
   };
 
-  const handleOpenDetailEdit = (selectedMakeupFilterId?: string) => {
+  const getEditSourceImageUri = (editSourceImageUri?: string) =>
+    editSourceImageUri ?? selectedFaceCapture?.imageUri;
+
+  const handleOpenDetailEdit = (
+    selectedMakeupFilterId?: string,
+    editSourceImageUri?: string,
+  ) => {
     rememberSelectedRecommendedFilter(selectedMakeupFilterId);
 
-    navigation.navigate('MakeupFilterEdit', getARFilterDetailEditRouteParams());
+    navigation.navigate(
+      'MakeupFilterEdit',
+      getARFilterDetailEditRouteParams({
+        editSourceImageUri: getEditSourceImageUri(editSourceImageUri),
+        initialGuideMode,
+        initialMakeupFilterId: selectedMakeupFilterId ?? initialMakeupFilterId,
+        source: initialSource,
+      }),
+    );
   };
 
-  const handleOpenShapeAdjust = (selectedMakeupFilterId?: string) => {
+  const handleOpenShapeAdjust = (
+    selectedMakeupFilterId?: string,
+    editSourceImageUri?: string,
+  ) => {
     rememberSelectedRecommendedFilter(selectedMakeupFilterId);
 
-    navigation.navigate('ARFilterShapeAdjust');
+    navigation.navigate(
+      'MakeupFilterEdit',
+      getARFilterDetailEditRouteParams({
+        editSourceImageUri: getEditSourceImageUri(editSourceImageUri),
+        initialEditMode: 'fit',
+        initialGuideMode,
+        initialMakeupFilterId: selectedMakeupFilterId ?? initialMakeupFilterId,
+        source: initialSource,
+      }),
+    );
   };
 
   const handleSave = (selectedMakeupFilterId?: string) => {
@@ -85,46 +112,39 @@ export function UnityMakeupCaptureRouteScreen({
   );
 }
 
-export function ARFilterShapeAdjustRouteScreen({
-  navigation,
-  route,
-}: RootScreenProps<'ARFilterShapeAdjust'>) {
-  const {selectedRecommendedMakeupFilterId} = useNavigationFlowState();
-
-  const handleSave = () => {
-    if (selectedRecommendedMakeupFilterId) {
-      navigation.navigate('ARFilter', {
-        initialGuideMode: 'half',
-        initialMakeupFilterId: selectedRecommendedMakeupFilterId,
-        source: 'recommendedFilter',
-      });
-      return;
-    }
-
-    navigation.navigate('ARFilter');
-  };
-
-  return (
-    <ARFilterShapeAdjustScreen
-      onBack={() => navigateARBack(navigation, route.params?.backRoute)}
-      onSave={handleSave}
-    />
-  );
-}
-
 export function MakeupFilterEditRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'MakeupFilterEdit'>) {
+  const handleSave = (
+    savedContract?: FullFaceMakeupSavedContract,
+    selectedMakeupFilterId?: string,
+  ) => {
+    if (savedContract) {
+      navigation.navigate('ARFilter', {
+        fullFaceEditState: savedContract.editState,
+      });
+      return;
+    }
+
+    navigation.navigate('ARFilter', {
+      initialGuideMode: route.params?.initialGuideMode,
+      initialMakeupFilterId: selectedMakeupFilterId ?? route.params?.initialMakeupFilterId,
+      source: route.params?.source,
+    });
+  };
+
   return (
     <MakeupFilterEditScreen
+      editSourceImageUri={route.params?.editSourceImageUri}
+      initialEditMode={route.params?.initialEditMode ?? 'product'}
+      initialGuideMode={route.params?.initialGuideMode}
+      initialMakeupFilterId={route.params?.initialMakeupFilterId}
+      initialSource={route.params?.source}
       mode={route.params?.mode === 'fullFace' ? 'fullFace' : 'preset'}
+      onComplete={() => navigateARBack(navigation, route.params?.backRoute)}
       onBack={() => navigateARBack(navigation, route.params?.backRoute)}
-      onSave={savedContract =>
-        navigation.navigate('ARFilter', {
-          fullFaceEditState: savedContract?.editState,
-        })
-      }
+      onSave={handleSave}
       sourceFrameMetadata={route.params?.sourceFrameMetadata}
     />
   );

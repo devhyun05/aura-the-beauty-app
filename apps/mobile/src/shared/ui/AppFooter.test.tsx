@@ -5,6 +5,7 @@ import {
   APP_FOOTER_BAR_OVERFLOW,
   APP_FOOTER_ACTIVE_TAB_BACKGROUND,
   APP_FOOTER_ACTION_BUBBLE_SIZE,
+  APP_FOOTER_ACTION_CLEARANCE_SHIFT,
   APP_FOOTER_ACTION_SLOT_CORNER_INSET,
   APP_FOOTER_ACTION_SLOT_WIDTH,
   APP_FOOTER_ACTION_ICON_SIZE,
@@ -22,6 +23,7 @@ import {
   AppFooter,
   getAppFooterActionSlotCornerStyle,
   getAppFooterActionSlotOrder,
+  getAppFooterBarClearanceTranslateX,
 } from './AppFooter';
 import {CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND} from './CameraCaptureButton';
 import {colors} from '../theme';
@@ -32,6 +34,7 @@ const footerActiveTabBackground: 'rgba(43, 43, 43, 0.62)' =
   APP_FOOTER_ACTIVE_TAB_BACKGROUND;
 const sharedBlackSurface: 'rgba(43, 43, 43, 0.62)' = colors.blackSurface;
 const footerActionBubbleSize: 64 = APP_FOOTER_ACTION_BUBBLE_SIZE;
+const footerActionClearanceShift: 50 = APP_FOOTER_ACTION_CLEARANCE_SHIFT;
 const footerActionSlotWidth: 64 = APP_FOOTER_ACTION_SLOT_WIDTH;
 const footerActionSlotCornerInset: 8 = APP_FOOTER_ACTION_SLOT_CORNER_INSET;
 const footerHorizontalPadding: 20 = APP_FOOTER_HORIZONTAL_PADDING;
@@ -74,6 +77,14 @@ if (getAppFooterActionSlotCornerStyle('right').right !== APP_FOOTER_ACTION_SLOT_
 
 if (getAppFooterActionSlotCornerStyle('left').left !== APP_FOOTER_ACTION_SLOT_CORNER_INSET) {
   throw new Error('left action slot corner: expected left inset');
+}
+
+if (getAppFooterBarClearanceTranslateX('right') !== -APP_FOOTER_ACTION_CLEARANCE_SHIFT) {
+  throw new Error('right action slot shifts footer bar left');
+}
+
+if (getAppFooterBarClearanceTranslateX('left') !== APP_FOOTER_ACTION_CLEARANCE_SHIFT) {
+  throw new Error('left action slot shifts footer bar right');
 }
 
 <AppFooter
