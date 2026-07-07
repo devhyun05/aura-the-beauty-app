@@ -69,6 +69,13 @@ export type MakeupFilterOptionState = {
   selectedTextureId: string;
 };
 
+const SHAPE_POINT_SYMMETRY_PAIR_IDS: Readonly<Record<string, string>> = {
+  'left-brow': 'right-brow',
+  'right-brow': 'left-brow',
+  'left-cheek': 'right-cheek',
+  'right-cheek': 'left-cheek',
+};
+
 function clampValue(adjustment: FilterShapeAdjustment, nextValue: number) {
   return Math.min(Math.max(nextValue, adjustment.min), adjustment.max);
 }
@@ -100,6 +107,17 @@ export function updateFilterShapeAdjustment(
   };
 }
 
+export function getFilterShapeAdjustmentValueFromRatio(
+  adjustment: FilterShapeAdjustment,
+  ratio: number,
+): number {
+  const clampedRatio = Math.min(Math.max(ratio, 0), 1);
+  const rawValue = adjustment.min + (adjustment.max - adjustment.min) * clampedRatio;
+  const steppedValue = Math.round(rawValue / adjustment.step) * adjustment.step;
+
+  return clampValue(adjustment, Number(steppedValue.toFixed(4)));
+}
+
 export function updateFilterShapePointOffset(
   state: FilterShapeState,
   shapePointId: string,
@@ -118,11 +136,57 @@ export function updateFilterShapePointOffset(
   };
 }
 
+export function getShapePointSymmetryPairId(shapePointId: string): string | undefined {
+  return SHAPE_POINT_SYMMETRY_PAIR_IDS[shapePointId];
+}
+
+export function getMirroredShapePointOffset(
+  offset: FilterShapePointCoordinate,
+): FilterShapePointCoordinate {
+  return {
+    x: -offset.x,
+    y: offset.y,
+  };
+}
+
+export function updateFilterShapePointOffsetWithSymmetry(
+  state: FilterShapeState,
+  shapePointId: string,
+  offset: FilterShapePointCoordinate,
+  isSymmetryEnabled: boolean,
+): FilterShapeState {
+  const nextState = updateFilterShapePointOffset(state, shapePointId, offset);
+  const pairedShapePointId = getShapePointSymmetryPairId(shapePointId);
+
+  if (!isSymmetryEnabled || !pairedShapePointId) {
+    return nextState;
+  }
+
+  return updateFilterShapePointOffset(
+    nextState,
+    pairedShapePointId,
+    getMirroredShapePointOffset(offset),
+  );
+}
+
 export function resetFilterShapePointOffset(
   state: FilterShapeState,
   shapePointId: string,
 ): FilterShapeState {
   return updateFilterShapePointOffset(state, shapePointId, {x: 0, y: 0});
+}
+
+export function resetFilterShapePointOffsetWithSymmetry(
+  state: FilterShapeState,
+  shapePointId: string,
+  isSymmetryEnabled: boolean,
+): FilterShapeState {
+  return updateFilterShapePointOffsetWithSymmetry(
+    state,
+    shapePointId,
+    {x: 0, y: 0},
+    isSymmetryEnabled,
+  );
 }
 
 export function resetFilterShapePoints(state: FilterShapeState): FilterShapeState {

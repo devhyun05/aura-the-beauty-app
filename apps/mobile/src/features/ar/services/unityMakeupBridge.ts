@@ -155,7 +155,7 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   lens: UNITY_MAKEUP_LAYER_PRESETS.lens,
 };
 
-// Brow 형태(shape) tab -> a distinct, correctly-authored brow mask. Every mask
+// Brow 핏(shape) tab -> a distinct, correctly-authored brow mask. Every mask
 // here has its shape in RGB and sits on the eyebrow band (unlike the malformed
 // psd-arcore-brow-semi-arch, which was retired). candidateId == maskTextureId;
 // both pass the Unity whitelist (region=='brow' accepts a 'brow-' prefix).
@@ -172,7 +172,7 @@ function resolveBrowMaskForShape(selectedShapeId: string): string {
   return BROW_SHAPE_MASKS[selectedShapeId] ?? FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId;
 }
 
-// Cheek 형태(shape) tab -> a blush session mask. The recipe builder auto-derives
+// Cheek 핏(shape) tab -> a blush session mask. The recipe builder auto-derives
 // the blush_session_N texture from the cheek-session-mask-N maskTextureId, so we
 // only override maskTextureId + candidateId (same pattern as the brow shapes).
 const BLUSH_SHAPE_MASKS: Record<string, {maskTextureId: string; candidateId: string}> = {
@@ -396,7 +396,7 @@ function createUnityMakeupControlsForRegions({
     params.feather = resolveFeatherForRegion(region, selectedShapeId, selectedTypeId);
     params.maskThreshold = resolveMaskThresholdForRegion(region);
 
-    // Lip 질감(finish) / 형태(shape) / 타입(type) -> independent recipe params.
+    // Lip 질감(finish) / 핏(shape) / 타입(type) -> independent recipe params.
     // finish -> gloss highlight (glossBoost/specular) + base texture (매트/글로우);
     // shape -> base-fill gradientAmount; type -> extra gradient falloff. These
     // combine freely (글로우+그라데이션 = gloss highlight over a gradient base fill).
@@ -419,9 +419,9 @@ function createUnityMakeupControlsForRegions({
         opacity: resolveOpacityForRegion(region, selectedTextureId, selectedTypeId, selectedColorId),
         intensity: activeRegionSet.has(region) ? 1 : 0,
         params,
-        // Lip 질감/형태/타입 -> finish (base texture + gloss highlight), gradient
+        // Lip 질감/핏/타입 -> finish (base texture + gloss highlight), gradient
         // shaping, and roughness/specular. control.finish drives the lip texture
-        // string in getTextureForRegionControl; when 형태 is 그라데이션 the base
+        // string in getTextureForRegionControl; when 핏 is 그라데이션 the base
         // mode becomes gradient_lip regardless of finish (the gloss highlight
         // still layers on top because it only needs glossBoost & specular > 0).
         ...(region === 'lip' && lipFinish && lipShape && lipType
@@ -433,7 +433,7 @@ function createUnityMakeupControlsForRegions({
               gradientAmount: clamp01(lipShape.gradientAmount + lipType.gradientBoost),
             }
           : {}),
-        // Brow 형태 selection maps to a distinct brow mask; other regions keep
+        // Brow 핏 selection maps to a distinct brow mask; other regions keep
         // their default mask.
         ...(region === 'brow'
           ? {
@@ -441,7 +441,7 @@ function createUnityMakeupControlsForRegions({
               candidateId: resolveBrowMaskForShape(selectedShapeId),
             }
           : {}),
-        // Cheek 형태 selection maps to a blush session mask (데일리/러블리/언더/
+        // Cheek 핏 selection maps to a blush session mask (데일리/러블리/언더/
         // 선키스 1/선키스 2). The blush_session_N texture auto-follows the mask id.
         ...(region === 'blush' ? resolveBlushMaskForShape(selectedShapeId) : {}),
         // Foundation must render through OUR screen-space compositor (live HSV
@@ -498,7 +498,7 @@ function shouldEnableUnityMakeupSelection({
 }
 
 // ---------------------------------------------------------------------------
-// Lip 질감(finish) / 형태(shape) / 타입(type) -> recipe params. These three groups
+// Lip 질감(finish) / 핏(shape) / 타입(type) -> recipe params. These three groups
 // are INDEPENDENT and combine: finish drives the light-reactive gloss highlight
 // (glossBoost/specular) + the lip texture string (matte_lip vs gloss_lip);
 // shape drives the base-fill gradient (gradientAmount) + over-lip coverage; type
@@ -526,7 +526,7 @@ function resolveLipFinishParams(selectedTextureId: string): LipFinishParams {
   return {finish: 'matte', glossBoost: 0, specular: 0.02, roughness: 0.5};
 }
 
-// 형태: 오버 립 => paint slightly past the lip line (high coverage, no gradient
+// 핏: 오버 립 => paint slightly past the lip line (high coverage, no gradient
 // shaping); 그라데이션 => inner-concentrated fade (gradient_lip base + high
 // gradientAmount). Returns the gradientAmount and whether the base mode is
 // gradient (which overrides the finish's base texture with gradient_lip).

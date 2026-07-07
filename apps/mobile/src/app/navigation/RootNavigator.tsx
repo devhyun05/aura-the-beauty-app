@@ -16,7 +16,6 @@ import {
   SavedMakeupListRouteScreen,
 } from './routes/homeRoutes';
 import {
-  ARFilterShapeAdjustRouteScreen,
   MakeupFilterEditRouteScreen,
   ARFilterRouteScreen,
   UnityMakeupCaptureRouteScreen,
@@ -150,7 +149,6 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />
-      <Stack.Screen name="ARFilterShapeAdjust" component={ARFilterShapeAdjustRouteScreen} />
       <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
       <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
       <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />

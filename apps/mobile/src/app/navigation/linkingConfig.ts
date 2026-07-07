@@ -80,7 +80,6 @@ export const rootStackLinkingScreens = {
   MakeupLookList: 'makeup-look-list',
   LikedProductList: 'liked-product-list',
   ARFilter: 'ar-filter',
-  ARFilterShapeAdjust: 'ar-filter-shape-adjust',
   MakeupFilterEdit: 'makeup-filter-edit',
   MakeupFeedbackCapture: 'makeup-feedback-capture',
   MakeupFeedbackAlbumUpload: 'makeup-feedback-album-upload',
