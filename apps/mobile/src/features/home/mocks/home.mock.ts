@@ -1,50 +1,68 @@
+import type {ImageSourcePropType} from 'react-native';
+
 import {appAssetSource, makeupFilterAssetSource} from '../../../shared/config/mediaAssets';
 import type {HomeData} from '../types';
 
 const lookOjiGirl = appAssetSource('images/looks/look-ojigirl.png');
 const lookMoriGirl = appAssetSource('images/looks/look-morigirl.png');
 const lookCleanSmoky = appAssetSource('images/looks/look-clean-smoky.png');
-const filterWanghongRedGlass = makeupFilterAssetSource('filter-wanghong-glass-pink.png');
-const filterGyaruGlow = makeupFilterAssetSource('filter-gyaru-glow.png');
-const filterAuraBlushLift = makeupFilterAssetSource('filter-aura-blush-lift.png');
+const heroFaceDiagnosis = require('../../../assets/images/home-hero/hero-face-diagnosis.png') as ImageSourcePropType;
+const heroMakeupExtraction = require('../../../assets/images/home-hero/hero-makeup-extraction.png') as ImageSourcePropType;
+const heroConsulting = require('../../../assets/images/home-hero/hero-consulting.png') as ImageSourcePropType;
+const heroAuradin = require('../../../assets/images/home-hero/hero-auradin.png') as ImageSourcePropType;
 const filterJuiceCoral = makeupFilterAssetSource('filter-juice-coral.png');
 const filterGlassSkinNude = makeupFilterAssetSource('filter-glass-skin-nude.png');
 const filterMilkyStrawberryPink = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
 
 export const homeMock: HomeData = {
   hero: {
-    eyebrow: '이번 주 메이크업 가이드',
-    title: 'AI 트렌드 메이크업 무드',
-    description: '지금 많이 찾는 메이크업 무드를 AI가 골라 카드로 추천해요.',
-    imageSource: filterGyaruGlow,
+    eyebrow: 'AURA 기능 가이드',
+    title: '내 얼굴에 맞는 뷰티 루틴',
+    description: '진단부터 추출, 전문가 상담, 제품 추천까지 한 번에 이어져요.',
+    imageSource: heroFaceDiagnosis,
     notices: [
       {
-        id: 'notice-weekly-trend',
-        title: '공지',
-        description: '이번 주 추천 룩이 갸루 글로우 무드로 업데이트되었어요.',
+        id: 'notice-feature-hero',
+        title: '업데이트',
+        description: '홈 배너가 AURA 핵심 기능 중심으로 업데이트되었어요.',
       },
     ],
     trends: [
       {
-        filterId: 'filter-gyaru-glow',
-        id: 'trend-gyaru-glow',
-        title: '갸루 글로우',
-        tone: '샴페인 코랄',
-        imageSource: filterGyaruGlow,
+        ctaLabel: '진단하기',
+        description: '얼굴형, 비율, 피부톤을 한 번에 진단해요.',
+        featureId: 'faceDiagnosis',
+        id: 'feature-face-diagnosis',
+        title: '얼굴진단',
+        tone: 'AI 얼굴 분석',
+        imageSource: heroFaceDiagnosis,
       },
       {
-        filterId: 'filter-wanghong-glass-pink',
-        id: 'trend-wanghong-glass-pink',
-        title: '왕홍 레드 글래스',
-        tone: '루비 레드',
-        imageSource: filterWanghongRedGlass,
+        ctaLabel: '추출하기',
+        description: '참고 사진 속 메이크업 컬러와 질감을 뽑아줘요.',
+        featureId: 'makeupExtraction',
+        id: 'feature-makeup-extraction',
+        title: '메이크업 추출',
+        tone: '레퍼런스 분석',
+        imageSource: heroMakeupExtraction,
       },
       {
-        filterId: 'filter-aura-blush-lift',
-        id: 'trend-aura-blush',
-        title: '아우라 블러시',
-        tone: '워터 로즈',
-        imageSource: filterAuraBlushLift,
+        ctaLabel: '상담하기',
+        description: '메이크업 전문가와 연결해 맞춤 상담을 받아요.',
+        featureId: 'consulting',
+        id: 'feature-consulting',
+        title: '전문가 컨설팅',
+        tone: '메이크업 상담',
+        imageSource: heroConsulting,
+      },
+      {
+        ctaLabel: '찾아보기',
+        description: '색, 질감, 예산을 말하면 아우라딘이 제품을 찾아줘요.',
+        featureId: 'auradin',
+        id: 'feature-auradin',
+        title: '아우라딘',
+        tone: '추천 제품',
+        imageSource: heroAuradin,
       },
     ],
   },

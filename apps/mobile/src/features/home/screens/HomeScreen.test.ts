@@ -1,5 +1,6 @@
 import {
   filterRecommendedMakeupFiltersByHomeCategory,
+  getHeroCarouselActiveIndex,
   getHeroCarouselInitialOffset,
   getHeroCarouselLoopResetOffset,
   getHeroCarouselRenderItems,
@@ -52,12 +53,12 @@ const headline = getHeroTrendHeadline({
 } as const);
 
 const expectedHeadline: '뉴트럴 브라운 무드의\n클린 오피스' = headline;
-const expectedTitleColor: '#111111' = heroTrendTitleReadableTextStyle.color;
-const expectedShadowColor: 'rgba(255, 255, 255, 0.30)' =
+const expectedTitleColor: '#FFFFFF' = heroTrendTitleReadableTextStyle.color;
+const expectedShadowColor: 'rgba(0, 0, 0, 0.34)' =
   heroTrendTitleReadableTextStyle.textShadowColor;
-const expectedShadowRadius: 8 = heroTrendTitleReadableTextStyle.textShadowRadius;
-const expectedShadowOffsetY: 2 = heroTrendTitleReadableTextStyle.textShadowOffset.height;
-const expectedHeroCtaLabel: '보러가기' = heroCtaLabel;
+const expectedShadowRadius: 6 = heroTrendTitleReadableTextStyle.textShadowRadius;
+const expectedShadowOffsetY: 1 = heroTrendTitleReadableTextStyle.textShadowOffset.height;
+const expectedHeroCtaLabel: '시작하기' = heroCtaLabel;
 const expectedRecommendedFilterSectionTitle: '추천 메이크업 필터' =
   recommendedFilterSectionTitle;
 const expectedRecommendedFilterSectionDescription: undefined =
@@ -66,9 +67,9 @@ const expectedRecommendedFilterMoreButtonLabel: '더보기' =
   recommendedFilterMoreButtonLabel;
 const expectedRecommendedFilterCopyVerticalPadding: 10 =
   recommendedFilterCopyVerticalPadding;
-const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.semibold =
+const expectedHeroTitleMainFontFamily: typeof typography.fontFamily.medium =
   heroTrendTitleMainTextStyle.fontFamily;
-const expectedHomeHeroTopPadding: 8 = homeHeroLayoutMetrics.listTopPadding;
+const expectedHomeHeroTopPadding: 0 = homeHeroLayoutMetrics.listTopPadding;
 const expectedHomeHeroCopyGap: 8 = homeHeroLayoutMetrics.copyGap;
 const expectedHomeHeroTitleGroupGap: 2 = homeHeroLayoutMetrics.titleGroupGap;
 const recommendedFilterCategoryLabels = getRecommendedFilterCategoryLabels();
@@ -86,7 +87,6 @@ const expectedHomeServiceShortcutLabels: readonly [
   '얼굴 분석',
   '메이크업 필터',
   '컨설팅',
-  '반반메이크업',
   '커뮤니티',
   '메이크업 추출',
   '필터 스토어',
@@ -95,7 +95,7 @@ const expectedHomeServiceShortcutLabels: readonly [
 ] = HOME_SERVICE_SHORTCUT_LABELS;
 const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
-  '얼굴 분석,메이크업 필터,컨설팅,반반메이크업,커뮤니티';
+  '얼굴 분석,메이크업 필터,컨설팅,커뮤니티';
 const expectedHomeServiceShortcutSecondRowLabels =
   '메이크업 추출,필터 스토어,추천 제품,메이크업 피드백';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
@@ -297,6 +297,33 @@ expectEqual(
   'hero carousel trailing loop card',
 );
 expectEqual(
+  getHeroCarouselActiveIndex({
+    itemCount: heroCarouselItems.length,
+    scrollOffsetX: 0,
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  heroCarouselItems.length - 1,
+  'hero carousel active index wraps leading clone to last item',
+);
+expectEqual(
+  getHeroCarouselActiveIndex({
+    itemCount: heroCarouselItems.length,
+    scrollOffsetX: heroCarouselSnapInterval,
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  0,
+  'hero carousel active index maps first real item',
+);
+expectEqual(
+  getHeroCarouselActiveIndex({
+    itemCount: heroCarouselItems.length,
+    scrollOffsetX: heroCarouselSnapInterval * (heroCarouselItems.length + 1),
+    snapInterval: heroCarouselSnapInterval,
+  }),
+  0,
+  'hero carousel active index wraps trailing clone to first item',
+);
+expectEqual(
   getHeroCarouselInitialOffset({
     itemCount: heroCarouselItems.length,
     snapInterval: heroCarouselSnapInterval,
@@ -343,7 +370,7 @@ expectEqual(
 );
 expectEqual(
   getRecommendedFilterAccessibilityLabel(cleanSmokyFilter),
-  '차가운 도시의 클린 스모키, 96퍼센트 추천',
+  '차가운 도시의 클린 스모키,',
   'recommended filter accessibility label',
 );
 expectEqual(
@@ -368,7 +395,6 @@ let selectedHomeServiceShortcut:
   | 'consulting'
   | 'diagnosis'
   | 'filterStore'
-  | 'halfMakeup'
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'recommendation'
@@ -401,20 +427,6 @@ if (!arFilterPressHandler) {
 arFilterPressHandler();
 
 expectEqual(selectedHomeServiceShortcut, 'arFilter', 'makeup filter service shortcut target');
-
-const halfMakeupPressHandler = getHomeServiceShortcutPressHandler('halfMakeup', {
-  onPressHalfMakeup: () => {
-    selectedHomeServiceShortcut = 'halfMakeup';
-  },
-});
-
-if (!halfMakeupPressHandler) {
-  throw new Error('half makeup service shortcut should have a press handler');
-}
-
-halfMakeupPressHandler();
-
-expectEqual(selectedHomeServiceShortcut, 'halfMakeup', 'half makeup service shortcut target');
 
 const communityPressHandler = getHomeServiceShortcutPressHandler('community', {
   onPressCommunity: () => {

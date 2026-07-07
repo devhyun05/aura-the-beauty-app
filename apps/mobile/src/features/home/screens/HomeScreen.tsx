@@ -11,18 +11,15 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
-  ArrowRight,
-  Brush,
   Camera,
   ChevronUp,
   Compass,
   Heart,
-  MessageCircleMore,
+  MessageSquareText,
   PackageSearch,
   ScanFace,
-  SquareSplitHorizontal,
+  ScanSearch,
   Store,
-  Users,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -34,11 +31,12 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
-import {SectionMoreButton} from '../../../shared/ui';
+import {CommunityFooterIcon, MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
 import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
+  HomeHeroFeatureId,
   HomeTrendItem,
 } from '../types';
 
@@ -46,6 +44,7 @@ export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractio
 export {getHomeMakeupFeedbackActionLabels} from '../components/MakeupFeedbackActionSheet';
 
 type HomeScreenProps = {
+  onOpenFeatureMenu?: () => void;
   onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressCommunity?: () => void;
@@ -65,6 +64,7 @@ type HomeScreenProps = {
 };
 
 export function HomeScreen({
+  onOpenFeatureMenu,
   onPressArFilter,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
@@ -89,7 +89,8 @@ export function HomeScreen({
   const listRef = useRef<FlatList<RecommendedMakeupFilter>>(null);
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const heroCardWidth = Math.max(300, Math.min(width - spacing.lg * 2, width * 0.86));
+  const heroBannerWidth = width;
+  const heroBannerHeight = Math.round(heroBannerWidth / HOME_HERO_BANNER_ASPECT_RATIO);
   const [recommendedMakeupFilters, setRecommendedMakeupFilters] =
     useState<readonly RecommendedMakeupFilter[]>(() => getRecommendedMakeupFilters());
   const visibleRecommendedFilters = useMemo(
@@ -119,6 +120,25 @@ export function HomeScreen({
 
   const handleScrollToTop = () => {
     listRef.current?.scrollToOffset({animated: true, offset: 0});
+  };
+
+  const handleHeroFeaturePress = (featureId: HomeHeroFeatureId) => {
+    if (featureId === 'faceDiagnosis') {
+      onPressFaceDiagnosis?.();
+      return;
+    }
+
+    if (featureId === 'makeupExtraction') {
+      onPressMakeupExtraction?.();
+      return;
+    }
+
+    if (featureId === 'consulting') {
+      onPressConsulting?.();
+      return;
+    }
+
+    onPressProductRecommendations?.();
   };
 
   useEffect(() => {
@@ -166,6 +186,9 @@ export function HomeScreen({
     <View style={styles.homeContainer}>
       <FlatList
         ref={listRef}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        scrollIndicatorInsets={{bottom: 0, left: 0, right: 0, top: 0}}
         columnWrapperStyle={[
           styles.recommendedFilterRow,
           {gap: recommendedFilterGridGap},
@@ -182,9 +205,13 @@ export function HomeScreen({
         ListHeaderComponent={
           <YStack style={styles.homeListHeader}>
             <HeroBannerCarousel
-              cardWidth={heroCardWidth}
+              bannerHeight={heroBannerHeight}
+              bannerWidth={heroBannerWidth}
               fallbackImageSource={homeData.hero.imageSource}
+              onOpenFeatureMenu={onOpenFeatureMenu}
+              onPressFeature={handleHeroFeaturePress}
               onPressFilter={onPressHeroTrendFilter}
+              topInset={insets.top}
               trends={homeData.hero.trends}
             />
 
@@ -253,16 +280,27 @@ export function HomeScreen({
 }
 
 type HeroBannerCarouselProps = {
-  cardWidth: number;
+  bannerHeight: number;
+  bannerWidth: number;
   fallbackImageSource: ImageSourcePropType;
+  onOpenFeatureMenu?: () => void;
+  onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
+  topInset: number;
   trends: HomeTrendItem[];
 };
 
 type HeroBannerCardProps = {
-  cardWidth: number;
+  activeIndex: number;
+  bannerHeight: number;
+  bannerWidth: number;
+  ctaLabel?: string;
+  description?: string;
+  featureId?: HomeHeroFeatureId;
   filterId?: string;
   imageSource: ImageSourcePropType;
+  itemCount: number;
+  onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
   title: string;
   tone: string;
@@ -279,26 +317,27 @@ export function getHeroTrendHeadline<
 }
 
 export const heroTrendTitleReadableTextStyle = {
-  color: colors.textPrimary,
-  textShadowColor: 'rgba(255, 255, 255, 0.30)',
-  textShadowOffset: {width: 0, height: 2},
-  textShadowRadius: 8,
+  color: colors.white,
+  textShadowColor: 'rgba(0, 0, 0, 0.34)',
+  textShadowOffset: {width: 0, height: 1},
+  textShadowRadius: 6,
 } as const;
 
 export const heroTrendTitleMainTextStyle = {
   ...heroTrendTitleReadableTextStyle,
-  fontFamily: typography.fontFamily.semibold,
+  fontFamily: typography.fontFamily.medium,
   fontSize: typography.fontSize.xxl,
   lineHeight: typography.lineHeight.xxl,
 } as const;
 
-export const heroCtaLabel = '보러가기' as const;
+export const heroCtaLabel = '시작하기' as const;
 export const recommendedFilterSectionTitle = '추천 메이크업 필터' as const;
 export const recommendedFilterSectionDescription = undefined;
 export const recommendedFilterMoreButtonLabel = '더보기' as const;
+export const HOME_HERO_BANNER_ASPECT_RATIO = 1.62;
 export const homeHeroLayoutMetrics = {
   copyGap: spacing.sm,
-  listTopPadding: spacing.sm,
+  listTopPadding: 0,
   titleGroupGap: 2,
 } as const;
 
@@ -352,6 +391,32 @@ export function getHeroCarouselLoopResetOffset({
   return null;
 }
 
+
+export function getHeroCarouselActiveIndex({
+  itemCount,
+  scrollOffsetX,
+  snapInterval,
+}: {
+  itemCount: number;
+  scrollOffsetX: number;
+  snapInterval: number;
+}): number {
+  if (itemCount <= 1) {
+    return 0;
+  }
+
+  const snapIndex = Math.round(scrollOffsetX / snapInterval);
+
+  if (snapIndex <= 0) {
+    return itemCount - 1;
+  }
+
+  if (snapIndex >= itemCount + 1) {
+    return 0;
+  }
+
+  return snapIndex - 1;
+}
 export function createHeroCarouselLoopResetHandlers(
   handler: (event: NativeSyntheticEvent<NativeScrollEvent>) => void,
 ) {
@@ -411,22 +476,30 @@ export function getIsHomeScrollTopButtonVisible(scrollOffsetY: number): boolean 
 const scrollTopButtonSize = iconSize.xl + spacing.md;
 
 function HeroBannerCarousel({
-  cardWidth,
+  bannerHeight,
+  bannerWidth,
   fallbackImageSource,
+  onOpenFeatureMenu,
+  onPressFeature,
   onPressFilter,
+  topInset,
   trends,
 }: HeroBannerCarouselProps) {
   const heroCarouselRef = useRef<NativeScrollView>(null);
-  const snapInterval = cardWidth + spacing.md;
+  const snapInterval = bannerWidth;
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const heroItems =
     trends.length > 0
-      ? trends.slice(0, 3)
+      ? trends
       : [
           {
-            id: 'weekly-default',
+            ctaLabel: heroCtaLabel,
+            description: '얼굴형, 비율, 피부톤을 한 번에 진단해요.',
+            featureId: 'faceDiagnosis' as const,
+            id: 'feature-default',
             imageSource: fallbackImageSource,
-            title: '코랄 글로우',
-            tone: '맑은 로즈 베이지',
+            title: '얼굴진단',
+            tone: 'AI 얼굴 분석',
           },
         ];
   const heroRenderItems = getHeroCarouselRenderItems(heroItems);
@@ -436,18 +509,42 @@ function HeroBannerCarousel({
   });
 
   useEffect(() => {
+    setActiveHeroIndex(0);
     heroCarouselRef.current?.scrollTo({
       animated: false,
       x: initialScrollOffsetX,
     });
-  }, [initialScrollOffsetX]);
+  }, [heroItems.length, initialScrollOffsetX]);
 
+  const handleHeroCarouselScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const nextActiveIndex = getHeroCarouselActiveIndex({
+      itemCount: heroItems.length,
+      scrollOffsetX: event.nativeEvent.contentOffset.x,
+      snapInterval,
+    });
+
+    setActiveHeroIndex(current => (
+      current === nextActiveIndex ? current : nextActiveIndex
+    ));
+  };
   const handleHeroCarouselScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
+    const scrollOffsetX = event.nativeEvent.contentOffset.x;
+
+    setActiveHeroIndex(
+      getHeroCarouselActiveIndex({
+        itemCount: heroItems.length,
+        scrollOffsetX,
+        snapInterval,
+      }),
+    );
+
     const loopResetOffsetX = getHeroCarouselLoopResetOffset({
       itemCount: heroItems.length,
-      scrollOffsetX: event.nativeEvent.contentOffset.x,
+      scrollOffsetX,
       snapInterval,
     });
 
@@ -464,84 +561,164 @@ function HeroBannerCarousel({
     createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd);
 
   return (
-    <NativeScrollView
+    <View style={[styles.heroCarouselFrame, {height: bannerHeight, width: bannerWidth}]}>
+      <NativeScrollView
       ref={heroCarouselRef}
       horizontal
       contentOffset={{x: initialScrollOffsetX, y: 0}}
-      decelerationRate="fast"
+      decelerationRate="normal"
+      disableIntervalMomentum
       onMomentumScrollEnd={heroCarouselLoopResetHandlers.onMomentumScrollEnd}
+      onScroll={handleHeroCarouselScroll}
+      scrollEventThrottle={16}
       onScrollEndDrag={heroCarouselLoopResetHandlers.onScrollEndDrag}
       snapToAlignment="start"
       snapToInterval={snapInterval}
       showsHorizontalScrollIndicator={false}
+      style={styles.heroCarouselScroll}
       contentContainerStyle={styles.heroCarousel}>
       {heroRenderItems.map((item, index) => (
         <HeroBannerCard
-          cardWidth={cardWidth}
+          activeIndex={activeHeroIndex}
+          bannerHeight={bannerHeight}
+          bannerWidth={bannerWidth}
+          ctaLabel={item.ctaLabel}
+          description={item.description}
+          featureId={item.featureId}
           filterId={item.filterId}
           imageSource={item.imageSource}
+          itemCount={heroItems.length}
           key={`${item.id}-${index}`}
+          onPressFeature={onPressFeature}
           onPressFilter={onPressFilter}
           title={item.title}
           tone={item.tone}
         />
       ))}
-    </NativeScrollView>
+      </NativeScrollView>
+      <HomeHeroChrome onOpenFeatureMenu={onOpenFeatureMenu} topInset={topInset} />
+    </View>
+  );
+}
+
+function HomeHeroChrome({
+  onOpenFeatureMenu,
+  topInset,
+}: {
+  onOpenFeatureMenu?: () => void;
+  topInset: number;
+}) {
+  return (
+    <XStack
+      pointerEvents="box-none"
+      style={[styles.homeHeroChrome, {paddingTop: topInset + spacing.sm}]}>
+      <View style={styles.homeHeroLogoSurface}>
+        <Text style={styles.homeHeroLogo}>AURA</Text>
+      </View>
+      <Pressable
+        accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
+        accessibilityRole="button"
+        disabled={!onOpenFeatureMenu}
+        hitSlop={spacing.xs}
+        onPress={onOpenFeatureMenu}
+        style={({pressed}) => [
+          styles.homeHeroMenuButton,
+          pressed && styles.pressed,
+        ]}>
+        <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
+      </Pressable>
+    </XStack>
   );
 }
 
 function HeroBannerCard({
-  cardWidth,
+  activeIndex,
+  bannerHeight,
+  bannerWidth,
+  ctaLabel,
+  description,
+  featureId,
   filterId,
   imageSource,
+  itemCount,
+  onPressFeature,
   onPressFilter,
   title,
   tone,
 }: HeroBannerCardProps) {
-  const headline = getHeroTrendHeadline({title, tone});
-  const [headlineLead, headlineTitle] = headline.split('\n');
-  const accessibilityHeadline = headline.replace('\n', ' ');
-  const handlePress = filterId ? () => onPressFilter?.(filterId) : undefined;
+  const resolvedDescription = description ?? tone;
+  const resolvedCtaLabel = ctaLabel ?? heroCtaLabel;
+  const handlePress = featureId
+    ? () => onPressFeature?.(featureId)
+    : filterId
+      ? () => onPressFilter?.(filterId)
+      : undefined;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${accessibilityHeadline} ${heroCtaLabel}`}
+      accessibilityLabel={`${title} ${resolvedDescription} ${resolvedCtaLabel}`}
       onPress={handlePress}
       style={({pressed}) => [
         styles.heroBanner,
-        {height: cardWidth, width: cardWidth},
+        {height: bannerHeight, width: bannerWidth},
         pressed && styles.pressed,
       ]}>
       <CachedImage contentFit="cover" source={imageSource} style={styles.heroBackgroundImage} />
       <View style={styles.heroScrim} />
 
       <YStack style={styles.heroCopy}>
-        <XStack style={styles.heroBadge}>
-          <Text style={styles.heroBadgeText}>WEEKLY TREND</Text>
-        </XStack>
-
+        <Text numberOfLines={1} style={styles.heroTitleLead}>
+          {tone}
+        </Text>
         <YStack style={styles.heroTitleGroup}>
-          <Text style={styles.heroTitleLead}>{headlineLead}</Text>
-          <Text style={styles.heroTitleMain}>{headlineTitle}</Text>
+          <Text numberOfLines={1} style={styles.heroTitleMain}>
+            {title}
+          </Text>
         </YStack>
       </YStack>
 
-      <XStack style={styles.heroButton}>
-        <Text style={styles.heroButtonText}>{heroCtaLabel}</Text>
-        <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
-      </XStack>
+      <HeroPaginationIndicator activeIndex={activeIndex} count={itemCount} />
+
     </Pressable>
   );
 }
 
+
+function HeroPaginationIndicator({
+  activeIndex,
+  count,
+}: {
+  activeIndex: number;
+  count: number;
+}) {
+  if (count <= 1) {
+    return null;
+  }
+
+  return (
+    <XStack
+      accessibilityLabel={`${activeIndex + 1} / ${count}`}
+      accessibilityRole="text"
+      style={styles.heroPagination}>
+      {Array.from({length: count}).map((_, index) => (
+        <View
+          key={`hero-pagination-${index}`}
+          style={[
+            styles.heroPaginationDot,
+            index === activeIndex && styles.heroPaginationDotActive,
+          ]}
+        />
+      ))}
+    </XStack>
+  );
+}
 export const HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME = 'Store';
 export const HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME = 'Compass';
 export const HOME_SERVICE_SHORTCUT_LABELS = [
   '얼굴 분석',
   '메이크업 필터',
   '컨설팅',
-  '반반메이크업',
   '커뮤니티',
   '메이크업 추출',
   '필터 스토어',
@@ -549,22 +726,15 @@ export const HOME_SERVICE_SHORTCUT_LABELS = [
   '메이크업 피드백',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
-  HOME_SERVICE_SHORTCUT_LABELS.slice(0, 5),
-  HOME_SERVICE_SHORTCUT_LABELS.slice(5),
+  HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
+  HOME_SERVICE_SHORTCUT_LABELS.slice(4),
 ] as const;
-export const HOME_AR_FILTER_QUICK_ACTION_LABEL = 'AR 필터';
 export const HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES = 1;
 export const HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
 export const HOME_SERVICE_SHORTCUT_CIRCLE_SIZE = 52;
 
 const homeServiceShortcutRows = [
   [
-    {
-      id: 'arFilterCamera',
-      label: HOME_AR_FILTER_QUICK_ACTION_LABEL,
-      accessibilityLabel: 'AR 필터 카메라 열기',
-      icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
-    },
     {
       id: 'diagnosis',
       label: HOME_SERVICE_SHORTCUT_LABELS[0],
@@ -575,66 +745,56 @@ const homeServiceShortcutRows = [
       id: 'arFilter',
       label: HOME_SERVICE_SHORTCUT_LABELS[1],
       accessibilityLabel: '메이크업 필터 열기',
-      icon: (color: string) => (
-        <Brush color={color} size={iconSize.lg} strokeWidth={1.9} />
-      ),
+      icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
     },
     {
       id: 'consulting',
       label: HOME_SERVICE_SHORTCUT_LABELS[2],
-      accessibilityLabel: '\uCEE8\uC124\uD305 \uBCF4\uAE30',
+      accessibilityLabel: '컨설팅 보기',
       icon: (color: string) => (
         <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
-      id: 'halfMakeup',
-      label: HOME_SERVICE_SHORTCUT_LABELS[3],
-      accessibilityLabel: '반반메이크업 열기',
-      icon: (color: string) => (
-        <SquareSplitHorizontal color={color} size={iconSize.lg} strokeWidth={1.9} />
-      ),
-    },
-    {
       id: 'community',
-      label: HOME_SERVICE_SHORTCUT_LABELS[4],
+      label: HOME_SERVICE_SHORTCUT_LABELS[3],
       accessibilityLabel: '커뮤니티 보기',
       icon: (color: string) => (
-        <Users color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <CommunityFooterIcon color={color} size={iconSize.lg} strokeWidth={2.1} />
       ),
     },
   ],
   [
     {
       id: 'makeupExtraction',
-      label: HOME_SERVICE_SHORTCUT_LABELS[5],
+      label: HOME_SERVICE_SHORTCUT_LABELS[4],
       accessibilityLabel: '메이크업 추출 시작',
       icon: (color: string) => (
-        <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <ScanSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
       id: 'filterStore',
-      label: HOME_SERVICE_SHORTCUT_LABELS[6],
-      accessibilityLabel: '\uD544\uD130 \uC2A4\uD1A0\uC5B4 \uBCF4\uAE30',
+      label: HOME_SERVICE_SHORTCUT_LABELS[5],
+      accessibilityLabel: '필터 스토어 보기',
       icon: (color: string) => (
         <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
       id: 'recommendation',
-      label: HOME_SERVICE_SHORTCUT_LABELS[7],
-      accessibilityLabel: '\uCD94\uCC9C \uC81C\uD488 \uBCF4\uAE30',
+      label: HOME_SERVICE_SHORTCUT_LABELS[6],
+      accessibilityLabel: '추천 제품 보기',
       icon: (color: string) => (
         <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
       id: 'makeupFeedback',
-      label: HOME_SERVICE_SHORTCUT_LABELS[8],
+      label: HOME_SERVICE_SHORTCUT_LABELS[7],
       accessibilityLabel: '메이크업 피드백 시작',
       icon: (color: string) => (
-        <MessageCircleMore color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <MessageSquareText color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
   ],
@@ -676,20 +836,12 @@ export function getHomeServiceShortcutPressHandler(
     onPressRecommendedFilterMore,
   }: HomeServiceShortcutHandlers,
 ): (() => void) | undefined {
-  if (actionId === 'arFilterCamera') {
-    return onPressArFilter;
-  }
-
   if (actionId === 'diagnosis') {
     return onPressFaceDiagnosis;
   }
 
   if (actionId === 'arFilter') {
     return onPressMakeupFilter;
-  }
-
-  if (actionId === 'halfMakeup') {
-    return onPressHalfMakeup;
   }
 
   if (actionId === 'community') {
@@ -880,7 +1032,7 @@ function RecommendedFilterListHeader({
 export function getRecommendedFilterAccessibilityLabel(
   filter: RecommendedMakeupFilter,
 ): string {
-  return `${filter.headline} ${filter.displayTitle}, ${filter.matchScore}퍼센트 추천`;
+  return `${filter.headline} ${filter.displayTitle}`;
 }
 
 export function getRecommendedFilterRouteParams(filterId: string) {
@@ -932,9 +1084,6 @@ function RecommendedFilterCard({
           {filter.displayTitle}
         </Text>
       </YStack>
-      <XStack style={styles.recommendedFilterMetaRow}>
-        <Text style={styles.recommendedFilterPillText}>{filter.matchScore}% match</Text>
-      </XStack>
       <Pressable
         accessibilityLabel={`${filter.displayTitle} 좋아요 ${isLiked ? '해제' : '추가'}`}
         accessibilityRole="button"
@@ -1001,11 +1150,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   homeListContent: {
-    paddingHorizontal: spacing.screenX,
+    paddingHorizontal: 0,
     paddingTop: homeHeroLayoutMetrics.listTopPadding,
   },
   homeListHeader: {
-    gap: spacing.xxl,
+    gap: spacing.xl,
     paddingBottom: spacing.lg,
   },
   heroBackgroundImage: {
@@ -1017,41 +1166,27 @@ const styles = StyleSheet.create({
     top: 0,
     width: '100%',
   },
-  heroBadge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.liquidGlassSurface,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  heroBadgeText: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
   heroCarousel: {
-    gap: spacing.md,
+    gap: 0,
+  },
+  heroCarouselFrame: {
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  heroCarouselScroll: {
+    height: '100%',
   },
   heroBanner: {
     backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
   },
   heroCopy: {
+    bottom: spacing.xxl + spacing.lg,
     gap: homeHeroLayoutMetrics.copyGap,
-    left: spacing.xl,
-    maxWidth: 236,
+    left: spacing.screenX,
+    maxWidth: 246,
     position: 'absolute',
-    top: spacing.xl,
     zIndex: 1,
   },
   heroTitleGroup: {
@@ -1059,40 +1194,81 @@ const styles = StyleSheet.create({
   },
   heroTitleLead: {
     ...heroTrendTitleReadableTextStyle,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    color: 'rgba(255, 255, 255, 0.88)',
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   heroTitleMain: {
     ...heroTrendTitleMainTextStyle,
   },
-  heroButton: {
+  heroPagination: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.blackSurface,
-    bottom: spacing.xl,
-    borderRadius: radius.pill,
+    bottom: spacing.lg,
     flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.xl,
+    gap: spacing.xs,
+    left: spacing.screenX,
     position: 'absolute',
-    right: spacing.xl,
-    zIndex: 1,
+    zIndex: 2,
   },
-  heroButtonText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
+  heroPaginationDot: {
+    backgroundColor: 'rgba(255, 255, 255, 0.48)',
+    borderRadius: radius.pill,
+    height: 6,
+    width: 6,
+  },
+  heroPaginationDotActive: {
+    backgroundColor: colors.white,
+    width: 14,
   },
   heroScrim: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
     bottom: 0,
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
+  },
+  homeHeroChrome: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    left: 0,
+    paddingHorizontal: spacing.screenX,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 4,
+  },
+  homeHeroLogoSurface: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 32,
+  },
+  homeHeroLogo: {
+    color: colors.brandMuted,
+    fontFamily: typography.logoHeader.fontFamily,
+    fontSize: 26,
+    fontWeight: typography.logoHeader.fontWeight,
+    letterSpacing: 0,
+    lineHeight: 32,
+    textShadowColor: 'rgba(0, 0, 0, 0.34)',
+    textShadowOffset: {width: 0, height: 0},
+    textShadowRadius: 1.1,
+  },
+  homeHeroMenuButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.58)',
+    borderColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    width: 38,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -1199,7 +1375,7 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   recommendedFilterCopy: {
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'transparent',
     bottom: 0,
     gap: 2,
     left: 0,
@@ -1237,26 +1413,6 @@ const styles = StyleSheet.create({
   recommendedFilterFavoriteButtonActive: {
     backgroundColor: colors.blackSurface,
   },
-  recommendedFilterMetaRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    left: spacing.sm,
-    position: 'absolute',
-    right: spacing.xxl + spacing.lg,
-    top: spacing.sm,
-    zIndex: 1,
-  },
-  recommendedFilterPillText: {
-    backgroundColor: colors.blackSurface,
-    borderRadius: radius.pill,
-    color: colors.white,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
   recommendedFilterTitle: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
@@ -1268,6 +1424,7 @@ const styles = StyleSheet.create({
   },
   recommendedFilterRow: {
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.screenX,
   },
   recommendedFilterRowSeparator: {
     height: spacing.lg,
@@ -1306,6 +1463,7 @@ const styles = StyleSheet.create({
   },
   homeServiceShortcutList: {
     gap: spacing.sm,
+    paddingHorizontal: spacing.screenX,
   },
   homeServiceShortcutRow: {
     flexDirection: 'row',
@@ -1332,6 +1490,7 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.md,
+    paddingHorizontal: spacing.screenX,
   },
   sectionHeader: {
     alignItems: 'center',
