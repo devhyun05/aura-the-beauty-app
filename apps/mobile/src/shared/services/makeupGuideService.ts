@@ -30,6 +30,7 @@ const DEFAULT_RECOMMENDATION_PROFILE = {
 } as const;
 
 type BackendRecommendedMakeupFilter = {
+  category?: string | null;
   categoryId?: string | null;
   categoryTags?: unknown;
   colorOptions?: unknown;
@@ -38,6 +39,7 @@ type BackendRecommendedMakeupFilter = {
   displayTitle?: string | null;
   embeddingVector?: unknown;
   externalKey?: string | null;
+  filterPayload?: unknown;
   headline?: string | null;
   id?: string | null;
   intensityLabel?: string | null;
@@ -246,7 +248,8 @@ function isRecommendedMakeupFilter(
 function mapBackendRecommendedMakeupFilter(
   filter: BackendRecommendedMakeupFilter,
 ): RecommendedMakeupFilter | undefined {
-  const id = firstText(filter.id, filter.externalKey);
+  const payload = decodeBackendFilterPayload(filter.filterPayload);
+  const id = firstText(filter.externalKey, payload.externalKey, payload.id, filter.id);
   const fallback = mockRecommendedMakeupFilters.find(candidate => candidate.id === id);
 
   if (!id || !fallback) {
@@ -255,33 +258,98 @@ function mapBackendRecommendedMakeupFilter(
 
   return {
     ...fallback,
-    categoryId: asFilterCategoryId(filter.categoryId) ?? fallback.categoryId,
-    categoryTags: asTextList(filter.categoryTags, fallback.categoryTags),
-    colorOptions: asColorOptions(filter.colorOptions, fallback.colorOptions),
-    description: firstText(filter.description, filter.subtitle, fallback.description) ??
-      fallback.description,
-    displayTitle: firstText(filter.displayTitle, filter.title, fallback.displayTitle) ??
-      fallback.displayTitle,
-    embeddingVector: asNumberList(filter.embeddingVector, fallback.embeddingVector),
-    headline: firstText(filter.headline, fallback.headline) ?? fallback.headline,
+    categoryId:
+      asFilterCategoryId(firstText(filter.categoryId, payload.categoryId, filter.category)) ??
+      fallback.categoryId,
+    categoryTags: asTextList(
+      filter.categoryTags,
+      asTextList(payload.categoryTags, fallback.categoryTags),
+    ),
+    colorOptions: asColorOptions(
+      filter.colorOptions,
+      asColorOptions(payload.colorOptions, fallback.colorOptions),
+    ),
+    description:
+      firstText(
+        filter.description,
+        payload.description,
+        filter.subtitle,
+        payload.subtitle,
+        fallback.description,
+      ) ?? fallback.description,
+    displayTitle:
+      firstText(
+        filter.displayTitle,
+        payload.displayTitle,
+        filter.title,
+        payload.title,
+        fallback.displayTitle,
+      ) ?? fallback.displayTitle,
+    embeddingVector: asNumberList(
+      filter.embeddingVector,
+      asNumberList(payload.embeddingVector, fallback.embeddingVector),
+    ),
+    headline: firstText(filter.headline, payload.headline, fallback.headline) ?? fallback.headline,
     imageSource: fallback.imageSource,
-    intensityLabel: firstText(filter.intensityLabel, fallback.intensityLabel) ??
+    intensityLabel:
+      firstText(filter.intensityLabel, payload.intensityLabel, fallback.intensityLabel) ??
       fallback.intensityLabel,
-    keywords: asTextList(filter.keywords, fallback.keywords),
-    makeupAreas: asMakeupAreas(filter.makeupAreas, fallback.makeupAreas),
-    matchScore: typeof filter.matchScore === 'number' ? filter.matchScore : fallback.matchScore,
-    presetValues: asPresetValues(filter.presetValues, fallback.presetValues),
+    keywords: asTextList(filter.keywords, asTextList(payload.keywords, fallback.keywords)),
+    makeupAreas: asMakeupAreas(
+      filter.makeupAreas,
+      asMakeupAreas(payload.makeupAreas, fallback.makeupAreas),
+    ),
+    matchScore: firstNumber(filter.matchScore, payload.matchScore, fallback.matchScore) ?? fallback.matchScore,
+    presetValues: asPresetValues(
+      filter.presetValues,
+      asPresetValues(payload.presetValues, fallback.presetValues),
+    ),
     sourceImageId: fallback.sourceImageId,
-    subtitle: firstText(filter.subtitle, filter.description, fallback.subtitle) ??
-      fallback.subtitle,
-    textureOptions: asTextOptions(filter.textureOptions, fallback.textureOptions),
-    title: firstText(filter.title, filter.displayTitle, fallback.title) ?? fallback.title,
-    typeOptions: asTextOptions(filter.typeOptions, fallback.typeOptions),
+    subtitle:
+      firstText(
+        filter.subtitle,
+        payload.subtitle,
+        filter.description,
+        payload.description,
+        fallback.subtitle,
+      ) ?? fallback.subtitle,
+    textureOptions: asTextOptions(
+      filter.textureOptions,
+      asTextOptions(payload.textureOptions, fallback.textureOptions),
+    ),
+    title:
+      firstText(filter.title, payload.title, filter.displayTitle, payload.displayTitle, fallback.title) ??
+      fallback.title,
+    typeOptions: asTextOptions(
+      filter.typeOptions,
+      asTextOptions(payload.typeOptions, fallback.typeOptions),
+    ),
   };
 }
-
 function firstText(...values: Array<string | null | undefined>): string | undefined {
   return values.find(value => Boolean(value?.trim()))?.trim();
+}
+
+function firstNumber(...values: Array<number | null | undefined>): number | undefined {
+  return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value));
+}
+
+function decodeBackendFilterPayload(value: unknown): BackendRecommendedMakeupFilter {
+  const decodedValue = typeof value === 'string' ? parseJsonObject(value) : value;
+
+  if (!decodedValue || typeof decodedValue !== 'object' || Array.isArray(decodedValue)) {
+    return {};
+  }
+
+  return decodedValue as BackendRecommendedMakeupFilter;
+}
+
+function parseJsonObject(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
 }
 
 function asTextList(value: unknown, fallback: readonly string[]): readonly string[] {

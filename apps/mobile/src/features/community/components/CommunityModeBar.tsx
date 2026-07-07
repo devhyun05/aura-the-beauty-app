@@ -7,23 +7,25 @@ import {colors, communityColors, iconSize, spacing} from '../../../shared/theme'
 
 export type CommunityMode = 'home' | 'my' | 'recommended';
 
-/**
- * 커뮤니티 전용 하단 모드 바 (인스타 멘탈모델: 홈=둘러보기, 돋보기=개인화 탐색+검색).
- * 카테고리는 여기 두지 않는다 — 그건 홈 상단 필터 칩의 몫.
- */
+export const COMMUNITY_MODE_BAR_HEIGHT = 64;
+export const COMMUNITY_MODE_BAR_FOOTER_GAP = spacing.sm;
+
 export function CommunityModeBar({
+  bottomPadding,
   mode,
   onPressCreate,
   onSelectMode,
 }: {
+  bottomPadding?: number;
   mode: CommunityMode;
   onPressCreate: () => void;
   onSelectMode: (mode: CommunityMode) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const resolvedBottomPadding = bottomPadding ?? Math.max(insets.bottom, spacing.sm);
 
   return (
-    <XStack style={[styles.bar, {paddingBottom: Math.max(insets.bottom, spacing.sm)}]}>
+    <XStack style={[styles.bar, {paddingBottom: resolvedBottomPadding}]}>
       <ModeButton
         active={mode === 'home'}
         icon="home"
@@ -86,9 +88,6 @@ const styles = StyleSheet.create({
     height: 3,
     width: 14,
   },
-  activeLabel: {
-    color: colors.textPrimary,
-  },
   bar: {
     alignItems: 'center',
     backgroundColor: communityColors.surfaceWarm,
@@ -96,6 +95,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-around',
+    minHeight: COMMUNITY_MODE_BAR_HEIGHT,
     paddingTop: spacing.sm,
   },
   item: {

@@ -72,11 +72,10 @@ export function ProfileScreen({
 
   useEffect(() => {
     isMountedRef.current = true;
-    loadProfile();
     return () => {
       isMountedRef.current = false;
     };
-  }, [loadProfile]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {

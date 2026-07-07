@@ -9,14 +9,21 @@ import {
   useWindowDimensions,
   type ViewToken,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Flame, Search, Sparkles, WifiOff, X} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, communityColors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {IconButton, PencilIcon, useTransientToast} from '../../../shared/ui';
+import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {CommunityCategoryTabs, type CommunityFeedTabItem} from '../components/CommunityCategoryTabs';
 import {CommunityAvatar} from '../components/CommunityAvatar';
-import {CommunityModeBar, type CommunityMode} from '../components/CommunityModeBar';
+import {
+  COMMUNITY_MODE_BAR_FOOTER_GAP,
+  COMMUNITY_MODE_BAR_HEIGHT,
+  CommunityModeBar,
+  type CommunityMode,
+} from '../components/CommunityModeBar';
 import {LookGridCard} from '../components/LookGridCard';
 import {LookThreadCard} from '../components/LookThreadCard';
 import {getUserProfile, getUserProfileAvatarUri} from '../../../shared/services/userService';
@@ -101,19 +108,27 @@ function threadMatchesQuery(thread: CommunityThreadSummary, tokens: string[]): b
 }
 
 export function CommunityHomeScreen({
+  avoidFloatingFooter = false,
+  mode: controlledMode,
   onPressCreate,
+  onPressAuthor,
   onPressEditProfile,
   onPressThread,
+  onSelectMode,
 }: {
+  avoidFloatingFooter?: boolean;
+  mode?: CommunityMode;
   onPressCreate: () => void;
+  onPressAuthor?: (author: CommunityThreadSummary['author']) => void;
   /** MY 탭 '프로필 설정' — 편집은 앱 프로필 설정 한 곳에서 (단일 계정 원칙). */
   onPressEditProfile?: () => void;
   onPressThread: (threadId: string) => void;
+  onSelectMode?: (mode: CommunityMode) => void;
 }) {
   const [activeQuery, setActiveQuery] = useState('');
   const [error, setError] = useState<FeedErrorKind | null>(null);
   const [homeCategory, setHomeCategory] = useState<HomeCategory>('all');
-  const [mode, setMode] = useState<CommunityMode>('home');
+  const [internalMode, setInternalMode] = useState<CommunityMode>('home');
   const [isMyLoading, setIsMyLoading] = useState(false);
   const [myLooks, setMyLooks] = useState<CommunityThreadSummary[]>([]);
   const [myTab, setMyTab] = useState<'mine' | 'saved'>('mine');
@@ -130,6 +145,8 @@ export function CommunityHomeScreen({
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<CommunityThreadSummary[]>([]);
   const [threads, setThreads] = useState<CommunityThreadSummary[]>([]);
+  const mode = controlledMode ?? internalMode;
+  const selectMode = onSelectMode ?? setInternalMode;
   const isLoadingMoreRef = useRef(false);
   const clickedThreadIdsRef = useRef(new Set<string>());
   const pendingImpressionThreadsRef = useRef(new Map<string, CommunityThreadSummary>());
@@ -137,6 +154,15 @@ export function CommunityHomeScreen({
   const modeRef = useRef(mode);
   const isSearchModeRef = useRef(false);
   const {showToast, toast} = useTransientToast();
+  const insets = useSafeAreaInsets();
+  const tabFooterBottomPadding =
+    APP_FOOTER_FLOATING_HOST_BASE_HEIGHT +
+    Math.max(insets.bottom, spacing.md) +
+    COMMUNITY_MODE_BAR_HEIGHT +
+    COMMUNITY_MODE_BAR_FOOTER_GAP;
+  const listBottomPadding = avoidFloatingFooter
+    ? tabFooterBottomPadding + spacing.lg
+    : spacing.xxl;
 
   // 하단 모드 바(홈/추천) + 홈 카테고리 칩 → 데이터 로딩 키로 합성.
   const feedTab: FeedTab = mode === 'recommended' ? 'recommended' : homeCategory;
@@ -540,6 +566,7 @@ export function CommunityHomeScreen({
         matchPercent={stylePercent != null && stylePercent >= STYLE_BADGE_THRESHOLD ? stylePercent : null}
         thread={item}
         onPress={() => handlePressThread(item)}
+        onPressAuthor={onPressAuthor}
         onToggleLike={handleToggleLike}
         onToggleSave={handleToggleSave}
       />
@@ -565,7 +592,7 @@ export function CommunityHomeScreen({
       clearSearch();
     }
 
-    setMode(nextMode);
+    selectMode(nextMode);
   };
 
   return (
@@ -724,7 +751,7 @@ export function CommunityHomeScreen({
             : null
         }
         columnWrapperStyle={isGridMode ? styles.gridRow : undefined}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, {paddingBottom: listBottomPadding}]}
         data={listData}
         key={`${mode}-${isGridMode ? 'grid' : 'list'}`}
         keyExtractor={item => item.id}
@@ -765,11 +792,13 @@ export function CommunityHomeScreen({
         viewabilityConfig={viewabilityConfig}
       />
 
-      <CommunityModeBar
-        mode={mode}
-        onPressCreate={onPressCreate}
-        onSelectMode={handleSelectMode}
-      />
+      {avoidFloatingFooter ? null : (
+        <CommunityModeBar
+          mode={mode}
+          onPressCreate={onPressCreate}
+          onSelectMode={handleSelectMode}
+        />
+      )}
 
       {toast}
     </View>
@@ -971,6 +1000,7 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: communityColors.surfaceWarm,
     flex: 1,
+    position: 'relative',
   },
   // 추천 모드 최상단 고정 — 스크롤과 무관하게 항상 그 자리.
   searchBar: {
