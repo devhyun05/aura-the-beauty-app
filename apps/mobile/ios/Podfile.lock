@@ -55,6 +55,10 @@ PODS:
     - ExpoModulesCore
   - ExpoFont (56.0.7):
     - ExpoModulesCore
+  - ExpoGL (56.0.6):
+    - ExpoModulesCore
+    - ExpoModulesJSI
+    - ReactCommon/turbomodule/core
   - ExpoImage (56.0.11):
     - ExpoModulesCore
     - libavif/libdav1d
@@ -2126,6 +2130,36 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - react-native-skia (2.6.2):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React
+    - React-callinvoker
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
   - react-native-view-shot (5.1.1):
     - boost
     - DoubleConversion
@@ -3073,6 +3107,7 @@ DEPENDENCIES:
   - "ExpoDomWebView (from `../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
+  - ExpoGL (from `../node_modules/expo-gl`)
   - ExpoImage (from `../node_modules/expo-image/ios`)
   - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
@@ -3132,6 +3167,7 @@ DEPENDENCIES:
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
+  - "react-native-skia (from `../node_modules/@shopify/react-native-skia`)"
   - react-native-view-shot (from `../node_modules/react-native-view-shot`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-networking (from `../node_modules/react-native/ReactCommon/react/networking`)
@@ -3214,6 +3250,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-file-system/ios"
   ExpoFont:
     :path: "../node_modules/expo-font/ios"
+  ExpoGL:
+    :path: "../node_modules/expo-gl"
   ExpoImage:
     :path: "../node_modules/expo-image/ios"
   ExpoImagePicker:
@@ -3329,6 +3367,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
+  react-native-skia:
+    :path: "../node_modules/@shopify/react-native-skia"
   react-native-view-shot:
     :path: "../node_modules/react-native-view-shot"
   React-NativeModulesApple:
@@ -3422,6 +3462,7 @@ SPEC CHECKSUMS:
   ExpoDomWebView: 27205be8754f9992913b8a9a08e65019f2207075
   ExpoFileSystem: 9dc04ec1e11bc3c7b965d7feb2de12c789755c7b
   ExpoFont: 274487aa78f8c65d6551e2558eca3ec6ce3432ce
+  ExpoGL: 6d80b612794755afafc439fa3b5792b91efc0952
   ExpoImage: 93cda9464c2c62a5244931b66edeb0b24ed204c2
   ExpoImagePicker: 080421aeaf3836250e5fb764123f1d7f7905ea04
   ExpoKeepAwake: 359c47a1d9ccc3a3c519bca6e39562cce230c5bb
@@ -3440,7 +3481,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 473b935415b82ae4f7f9aa9d5b3378491143ccbf
   fmt: 530618a01105dae0fa3a2f27c81ae11fa8f67eac
   glog: e56ede4028c4b7418e6b1195a36b1656bb35e225
-  hermes-engine: 532f45dba5d90cddbd84343ad6bb8ef9096bf68b
+  hermes-engine: e88f9d9d31fa8624be4925d02698c2969c86c61f
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
@@ -3484,6 +3525,7 @@ SPEC CHECKSUMS:
   React-microtasksnativemodule: 663a8165cfe10e4eb749796a53b3b8c68631b00c
   React-mutationobservernativemodule: 4f7e4c18735cfbb0f81eada4f34aa527697e8704
   react-native-safe-area-context: befb5404eb8a16fdc07fa2bebab3568ecabcbb8a
+  react-native-skia: fc73e9bdc46ebb420a98c9c2be29fee80f565e79
   react-native-view-shot: 39463aa6cfaeab0a3533cc63f869d52d025ef2ff
   React-NativeModulesApple: eca825acade21068049647855e5e89767d38696f
   React-networking: 239d962dc531e8f04f802d45fef7c3d920084e08

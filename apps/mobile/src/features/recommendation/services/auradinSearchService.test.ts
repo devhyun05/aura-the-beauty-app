@@ -109,3 +109,20 @@ expectEqual(questionTurn.candidates.length, 0, 'question turn has no candidates'
 
 // 알 수 없는 phase → failed로 정규화
 expectEqual(mapSearchTurn({phase: 'weird'}).phase, 'failed', 'unknown phase normalizes to failed');
+
+// --- appliedFilters 관통 (최상위, 빈 label 제거) ---
+const filtersTurn = mapSearchTurn({
+  sessionId: 'auradin-f',
+  phase: 'results',
+  thinking: [],
+  result: {headerLabel: 'x', products: []},
+  appliedFilters: [
+    {label: '립', source: 'prompt'},
+    {label: '쿨톤 참고', source: 'report'},
+    {label: '', source: 'prompt'}, // 빈 label은 제거돼야
+  ],
+});
+expectEqual(filtersTurn.appliedFilters?.length, 2, 'appliedFilters drops empty labels');
+expectEqual(filtersTurn.appliedFilters?.[0].label, '립', 'appliedFilters label passthrough');
+expectEqual(filtersTurn.appliedFilters?.[1].source, 'report', 'appliedFilters report source passthrough');
+expectEqual(mapSearchTurn({phase: 'results'}).appliedFilters?.length, 0, 'missing appliedFilters → []');

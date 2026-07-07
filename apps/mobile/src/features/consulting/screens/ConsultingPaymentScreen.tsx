@@ -3,7 +3,6 @@ import {Pressable, StyleSheet, View as RNView} from 'react-native';
 import {
   Check,
   CreditCard,
-  Crown,
   MessageCircle,
   ShieldCheck,
   Ticket,
@@ -32,13 +31,9 @@ import {
 import type {
   ConsultingBookingDraft,
   ConsultingExpert,
-  ConsultingPurchaseOptionId,
 } from '../types';
 
 const FIRST_SESSION_COUPON_RATE = 0.2;
-const PACKAGE_DISCOUNT_RATE = 0.15;
-const MEMBERSHIP_FIRST_MONTH_PRICE = 14900;
-const MEMBERSHIP_SESSION_DISCOUNT_RATE = 0.2;
 
 type PaymentMethodId = 'card' | 'kakao' | 'naver';
 
@@ -56,17 +51,15 @@ type ConsultingPaymentScreenProps = {
   expert: ConsultingExpert;
   draft: ConsultingBookingDraft;
   onPay: () => void;
-  onPressMembershipDetail: () => void;
+  submitting?: boolean;
 };
 
 export function ConsultingPaymentScreen({
   expert,
   draft,
   onPay,
-  onPressMembershipDetail,
+  submitting = false,
 }: ConsultingPaymentScreenProps) {
-  const [purchaseOption, setPurchaseOption] =
-    useState<ConsultingPurchaseOptionId>('single');
   const [couponApplied, setCouponApplied] = useState(true);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethodId>('card');
 
@@ -75,45 +68,18 @@ export function ConsultingPaymentScreen({
 
   const pricing = useMemo(() => {
     const basePrice = duration.price;
-
-    if (purchaseOption === 'package3') {
-      const packageTotal = Math.round(basePrice * 3 * (1 - PACKAGE_DISCOUNT_RATE));
-      return {
-        label: `3회 패키지 (회당 ${formatConsultingPrice(Math.round(packageTotal / 3))})`,
-        original: basePrice * 3,
-        discountLabel: `패키지 ${Math.round(PACKAGE_DISCOUNT_RATE * 100)}% 할인`,
-        discount: basePrice * 3 - packageTotal,
-        total: packageTotal,
-        couponUsable: false,
-      };
-    }
-
-    if (purchaseOption === 'membership') {
-      const discountedSession = Math.round(
-        basePrice * (1 - MEMBERSHIP_SESSION_DISCOUNT_RATE),
-      );
-      return {
-        label: '멤버십 첫 달 + 이번 상담',
-        original: basePrice + MEMBERSHIP_FIRST_MONTH_PRICE,
-        discountLabel: `멤버십 상담 ${Math.round(MEMBERSHIP_SESSION_DISCOUNT_RATE * 100)}% 할인`,
-        discount: basePrice - discountedSession,
-        total: discountedSession + MEMBERSHIP_FIRST_MONTH_PRICE,
-        couponUsable: false,
-      };
-    }
-
     const couponDiscount = couponApplied
       ? Math.round(basePrice * FIRST_SESSION_COUPON_RATE)
       : 0;
+
     return {
-      label: `1회 상담 (${duration.label})`,
+      label: `화상 상담 ${duration.label}`,
       original: basePrice,
       discountLabel: `첫 상담 ${Math.round(FIRST_SESSION_COUPON_RATE * 100)}% 쿠폰`,
       discount: couponDiscount,
       total: basePrice - couponDiscount,
-      couponUsable: true,
     };
-  }, [couponApplied, duration.label, duration.price, purchaseOption]);
+  }, [couponApplied, duration.label, duration.price]);
 
   return (
     <RNView style={styles.root}>
@@ -131,71 +97,63 @@ export function ConsultingPaymentScreen({
         </View>
 
         <View style={styles.section}>
-          <ConsultingSectionTitle>이용권 선택</ConsultingSectionTitle>
-
-          <PurchaseOptionCard
-            description={`이번 상담 1회 · ${formatConsultingPrice(duration.price)}`}
-            label={`1회 상담 (${duration.label})`}
-            onPress={() => setPurchaseOption('single')}
-            selected={purchaseOption === 'single'}
-          />
-          <PurchaseOptionCard
-            badge={`${Math.round(PACKAGE_DISCOUNT_RATE * 100)}% 할인`}
-            description={`같은 전문가와 3회 · 3개월 내 사용 · ${formatConsultingPrice(
-              Math.round(duration.price * 3 * (1 - PACKAGE_DISCOUNT_RATE)),
-            )}`}
-            label="3회 패키지"
-            onPress={() => setPurchaseOption('package3')}
-            selected={purchaseOption === 'package3'}
-          />
-          <PurchaseOptionCard
-            badge="첫 달 혜택"
-            description={`월 ${formatConsultingPrice(
-              MEMBERSHIP_FIRST_MONTH_PRICE,
-            )} · 모든 상담 20% 상시 할인 + 월 1회 체크인`}
-            gold
-            label="AURA 멤버십과 함께"
-            onPress={() => setPurchaseOption('membership')}
-            selected={purchaseOption === 'membership'}
-          />
-
-          {purchaseOption === 'membership' ? (
-            <Pressable
-              accessibilityRole="button"
-              hitSlop={6}
-              onPress={onPressMembershipDetail}
-              style={({pressed}) => [pressed ? styles.pressed : null]}>
-              <Text style={styles.membershipDetailLink}>
-                멤버십 플랜 자세히 보기
+          <ConsultingSectionTitle>예약 확인</ConsultingSectionTitle>
+          <View style={styles.reservationCard}>
+            <RNView style={styles.reservationHeader}>
+              <RNView style={styles.reservationIcon}>
+                <Ticket color={consultingColors.roseStrong} size={17} />
+              </RNView>
+              <RNView style={styles.reservationBody}>
+                <Text style={styles.reservationTitle}>
+                  이번 예약 1건 결제
+                </Text>
+                <Text style={styles.reservationDescription}>
+                  선택한 날짜와 시간에 {duration.label} 화상 상담이 진행돼요.
+                </Text>
+              </RNView>
+              <Text style={styles.reservationPrice}>
+                {formatConsultingPrice(duration.price)}
               </Text>
-            </Pressable>
-          ) : null}
+            </RNView>
+            <RNView style={styles.reservationMetaRow}>
+              <Text style={styles.reservationMetaLabel}>전달 리포트</Text>
+              <Text style={styles.reservationMetaValue}>
+                {draft.sharedReportIds.length > 0
+                  ? `${draft.sharedReportIds.length}개`
+                  : '없음'}
+              </Text>
+            </RNView>
+            <RNView style={styles.reservationMetaRow}>
+              <Text style={styles.reservationMetaLabel}>상담 시작</Text>
+              <Text style={styles.reservationMetaValue}>
+                상담사가 예약 시간에 먼저 연락
+              </Text>
+            </RNView>
+          </View>
         </View>
 
-        {pricing.couponUsable ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{selected: couponApplied}}
-            onPress={() => setCouponApplied(current => !current)}
-            style={({pressed}) => [
-              styles.couponRow,
-              pressed ? styles.pressed : null,
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{selected: couponApplied}}
+          onPress={() => setCouponApplied(current => !current)}
+          style={({pressed}) => [
+            styles.couponRow,
+            pressed ? styles.pressed : null,
+          ]}>
+          <RNView style={styles.couponLabel}>
+            <Ticket color={consultingColors.roseStrong} size={17} />
+            <Text style={styles.couponText}>첫 상담 20% 쿠폰</Text>
+          </RNView>
+          <RNView
+            style={[
+              styles.couponCheck,
+              couponApplied && styles.couponCheckOn,
             ]}>
-            <RNView style={styles.couponLabel}>
-              <Ticket color={consultingColors.roseStrong} size={17} />
-              <Text style={styles.couponText}>첫 상담 20% 쿠폰</Text>
-            </RNView>
-            <RNView
-              style={[
-                styles.couponCheck,
-                couponApplied && styles.couponCheckOn,
-              ]}>
-              {couponApplied ? (
-                <Check color={consultingColors.onAccent} size={13} />
-              ) : null}
-            </RNView>
-          </Pressable>
-        ) : null}
+            {couponApplied ? (
+              <Check color={consultingColors.onAccent} size={13} />
+            ) : null}
+          </RNView>
+        </Pressable>
 
         <View style={styles.section}>
           <ConsultingSectionTitle>결제 수단</ConsultingSectionTitle>
@@ -258,7 +216,7 @@ export function ConsultingPaymentScreen({
           <RNView style={styles.refundRow}>
             <ShieldCheck color={consultingColors.textMuted} size={13} />
             <Text style={styles.refundText}>
-              상담 24시간 전까지 전액 환불 · 멤버십은 언제든 해지 가능
+              상담 24시간 전까지 전액 환불 · 이후 취소는 정책에 따라 환불돼요
             </Text>
           </RNView>
         </View>
@@ -266,7 +224,12 @@ export function ConsultingPaymentScreen({
 
       <ConsultingBottomBar>
         <PrimaryButton
-          label={`${formatConsultingPrice(pricing.total)} 결제하기`}
+          disabled={submitting}
+          label={
+            submitting
+              ? '예약 저장 중...'
+              : `${formatConsultingPrice(pricing.total)} 결제하기`
+          }
           onPress={onPay}
         />
       </ConsultingBottomBar>
@@ -292,61 +255,6 @@ function MethodIcon({
   }
 
   return <Wallet color={color} size={17} />;
-}
-
-function PurchaseOptionCard({
-  label,
-  description,
-  selected,
-  onPress,
-  badge,
-  gold = false,
-}: {
-  label: string;
-  description: string;
-  selected: boolean;
-  onPress: () => void;
-  badge?: string;
-  gold?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{selected}}
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.optionCard,
-        gold && styles.optionCardGold,
-        selected && styles.optionCardSelected,
-        pressed ? styles.pressed : null,
-      ]}>
-      <RNView style={styles.optionHeader}>
-        <RNView style={styles.optionTitleRow}>
-          {gold ? (
-            <Crown color={consultingColors.goldText} size={15} />
-          ) : null}
-          <Text style={styles.optionLabel}>{label}</Text>
-          {badge ? (
-            <RNView
-              style={[styles.optionBadge, gold && styles.optionBadgeGold]}>
-              <Text
-                style={[
-                  styles.optionBadgeText,
-                  gold && styles.optionBadgeTextGold,
-                ]}>
-                {badge}
-              </Text>
-            </RNView>
-          ) : null}
-        </RNView>
-        <RNView
-          style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-          {selected ? <RNView style={styles.radioInner} /> : null}
-        </RNView>
-      </RNView>
-      <Text style={styles.optionDescription}>{description}</Text>
-    </Pressable>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -414,20 +322,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
   },
-  membershipDetailLink: {
-    color: consultingColors.goldText,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
   methodCard: {
     alignItems: 'center',
     backgroundColor: consultingColors.surface,
     borderColor: consultingColors.borderSoft,
     borderRadius: consultingRadius.card,
-    borderWidth: 1,
+    borderWidth: 1.5,
     flexDirection: 'row',
     justifyContent: 'space-between',
     minHeight: 54,
@@ -436,7 +336,6 @@ const styles = StyleSheet.create({
   },
   methodCardSelected: {
     borderColor: consultingColors.accent,
-    borderWidth: 2,
   },
   methodLabel: {
     alignItems: 'center',
@@ -456,83 +355,8 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontWeight: typography.fontWeight.medium,
   },
-  optionBadge: {
-    backgroundColor: consultingColors.roseSoft,
-    borderRadius: consultingRadius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  optionBadgeGold: {
-    backgroundColor: consultingColors.goldSoft,
-  },
-  optionBadgeText: {
-    color: consultingColors.roseText,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: 10,
-    fontWeight: typography.fontWeight.semibold,
-  },
-  optionBadgeTextGold: {
-    color: consultingColors.goldText,
-  },
-  optionCard: {
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.borderSoft,
-    borderRadius: consultingRadius.card,
-    borderWidth: 1,
-    padding: 16,
-  },
-  optionCardGold: {
-    backgroundColor: consultingColors.surfaceSoft,
-  },
-  optionCardSelected: {
-    borderColor: consultingColors.accent,
-    borderWidth: 2,
-  },
-  optionDescription: {
-    color: consultingColors.textMuted,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: 17,
-    marginTop: 6,
-  },
-  optionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  optionLabel: {
-    color: consultingColors.text,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-  },
-  optionTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexShrink: 1,
-    gap: 6,
-    paddingRight: spacing.md,
-  },
   pressed: {
     opacity: 0.85,
-  },
-  radioInner: {
-    backgroundColor: consultingColors.accent,
-    borderRadius: consultingRadius.pill,
-    height: 10,
-    width: 10,
-  },
-  radioOuter: {
-    alignItems: 'center',
-    borderColor: consultingColors.border,
-    borderRadius: consultingRadius.pill,
-    borderWidth: 1.5,
-    height: 22,
-    justifyContent: 'center',
-    width: 22,
-  },
-  radioOuterSelected: {
-    borderColor: consultingColors.accent,
   },
   refundRow: {
     alignItems: 'center',
@@ -550,6 +374,72 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: consultingColors.background,
     flex: 1,
+  },
+  reservationBody: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  reservationCard: {
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: 16,
+  },
+  reservationDescription: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: 17,
+  },
+  reservationHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  reservationIcon: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.pill,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  reservationMetaLabel: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+  },
+  reservationMetaRow: {
+    alignItems: 'center',
+    borderTopColor: consultingColors.borderSoft,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+  },
+  reservationMetaValue: {
+    color: consultingColors.text,
+    flexShrink: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    paddingLeft: spacing.md,
+    textAlign: 'right',
+  },
+  reservationPrice: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+  },
+  reservationTitle: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
   },
   section: {
     gap: spacing.md,

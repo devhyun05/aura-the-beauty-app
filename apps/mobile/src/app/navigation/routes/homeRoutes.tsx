@@ -11,7 +11,13 @@ import {MakeupExtractionActionSheet} from '../../../features/home/components/Mak
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
-import {RoutePlaceholder} from '../../../shared/ui';
+import {
+  CommunityCreateThreadScreen,
+  CommunityHomeScreen,
+  CommunityThreadDetailScreen,
+  CommunityUserProfileScreen,
+  type CommunityMode,
+} from '../../../features/community';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
@@ -224,18 +230,51 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   );
 }
 
-export function CommunityTabRouteScreen({navigation}: MainTabScreenProps<'CommunityTab'>) {
+type CommunityTabRouteScreenProps = MainTabScreenProps<'CommunityTab'> & {
+  communityMode: CommunityMode;
+  onSelectCommunityMode: (mode: CommunityMode) => void;
+};
+
+export function CommunityTabRouteScreen({
+  communityMode,
+  navigation,
+  onSelectCommunityMode,
+}: CommunityTabRouteScreenProps) {
+  const rootNavigation = navigation.getParent<RootNavigation>();
+
   return (
     <MainTabChrome
       navigation={navigation}
-      routeName="CommunityTab">
-      <RoutePlaceholder
-        description="커뮤니티 기능을 준비 중이에요."
-        showHeader={false}
-        title="커뮤니티"
+      routeName="CommunityTab"
+      wrapContentInScreen={false}>
+      <CommunityHomeScreen
+        avoidFloatingFooter
+        mode={communityMode}
+        onPressCreate={() => rootNavigation?.navigate('CommunityThreadCreate')}
+        onPressAuthor={author => rootNavigation?.navigate('CommunityUserProfile', {
+          avatarUrl: author.avatarUrl,
+          nickname: author.nickname,
+          userId: author.id,
+        })}
+        onPressEditProfile={() => rootNavigation?.navigate('ProfileEdit')}
+        onPressThread={threadId => rootNavigation?.navigate('CommunityThreadDetail', {threadId})}
+        onSelectMode={onSelectCommunityMode}
       />
     </MainTabChrome>
   );
+}
+
+function navigateCommunityTab(navigation: RootNavigation) {
+  navigateMainTab(navigation, 'CommunityTab');
+}
+
+function navigateBackOrCommunityTab(navigation: RootNavigation) {
+  if (navigation.canGoBack()) {
+    navigation.goBack();
+    return;
+  }
+
+  navigateCommunityTab(navigation);
 }
 
 export function HomeFilterStoreRouteScreen({
@@ -308,15 +347,90 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
     <DetailRouteChrome
       routeName="Community"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="커뮤니티 기능을 준비 중이에요."
-        showHeader={false}
-        title="커뮤니티"
+      <CommunityHomeScreen
+        onPressCreate={() => navigation.navigate('CommunityThreadCreate')}
+        onPressAuthor={author => navigation.navigate('CommunityUserProfile', {
+          avatarUrl: author.avatarUrl,
+          nickname: author.nickname,
+          userId: author.id,
+        })}
+        onPressEditProfile={() => navigation.navigate('ProfileEdit')}
+        onPressThread={threadId => navigation.navigate('CommunityThreadDetail', {threadId})}
       />
     </DetailRouteChrome>
   );
 }
 
+export function CommunityThreadDetailRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityThreadDetail'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadDetail"
+      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      <CommunityThreadDetailScreen
+        threadId={route.params.threadId}
+        onDeleted={() => navigateCommunityTab(navigation)}
+        onPressEditThread={thread => navigation.navigate('CommunityThreadEdit', {threadId: thread.id})}
+        onPressAuthor={author => navigation.navigate('CommunityUserProfile', {
+          avatarUrl: author.avatarUrl,
+          nickname: author.nickname,
+          userId: author.id,
+        })}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityThreadEditRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityThreadEdit'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadEdit"
+      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      <CommunityCreateThreadScreen
+        mode="edit"
+        threadId={route.params.threadId}
+        onUpdated={thread => navigation.replace('CommunityThreadDetail', {threadId: thread.id})}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityUserProfileRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'CommunityUserProfile'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityUserProfile"
+      onBack={() => navigation.goBack()}>
+      <CommunityUserProfileScreen
+        avatarUrl={route.params.avatarUrl}
+        nickname={route.params.nickname}
+        userId={route.params.userId}
+        onPressThread={threadId => navigation.navigate('CommunityThreadDetail', {threadId})}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function CommunityThreadCreateRouteScreen({
+  navigation,
+}: RootScreenProps<'CommunityThreadCreate'>) {
+  return (
+    <DetailRouteChrome
+      routeName="CommunityThreadCreate"
+      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      <CommunityCreateThreadScreen
+        onCreated={thread => navigation.replace('CommunityThreadDetail', {threadId: thread.id})}
+      />
+    </DetailRouteChrome>
+  );
+}
 export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'>) {
   return (
     <DetailRouteChrome

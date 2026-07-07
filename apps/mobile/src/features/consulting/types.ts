@@ -1,3 +1,5 @@
+import type {ImageSourcePropType} from 'react-native';
+
 export type ConsultingCategoryId =
   | 'personalColor'
   | 'makeupClinic'
@@ -42,6 +44,9 @@ export type ConsultingExpert = {
   signatureLine: string;
   initials: string;
   avatarTone: 'rose' | 'sand' | 'mauve';
+  imageSource?: ImageSourcePropType;
+  imageUrl?: string;
+  studioName?: string;
   careerYears: number;
   rating: number;
   reviewCount: number;
@@ -92,6 +97,7 @@ export type ConsultingBookingDraft = {
   slotId: string;
   concernId: string | null;
   shareReports: boolean;
+  sharedReportIds: readonly string[];
   question: string;
 };
 
@@ -122,10 +128,15 @@ export type ConsultingRecordStatus = 'upcoming' | 'completed' | 'canceled';
 export type ConsultingRecord = {
   id: string;
   expertId: string;
+  durationId?: string;
+  dayId?: string | null;
+  slotId?: string | null;
   status: ConsultingRecordStatus;
   categoryLabel: string;
   dateLabel: string;
   durationLabel: string;
+  sharedReportIds?: readonly string[];
+  reviewId?: string | null;
   summary?: ConsultingSummary;
 };
 
@@ -138,4 +149,10 @@ export type ConsultingMembershipPlan = {
   benefits: readonly string[];
   badge?: string;
   highlight?: boolean;
+};
+
+export type ConsultingReviewDraft = {
+  rating: number;
+  body: string;
+  category?: string;
 };

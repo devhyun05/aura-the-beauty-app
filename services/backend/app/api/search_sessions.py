@@ -32,11 +32,15 @@ async def create_search_session(
     raise AppError(400, "PROMPT_REQUIRED", "Search prompt is required.")
 
   context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+  # §3: 리포트 톤은 client-relay context.personalColor로 받는다 (로컬/무DB에서도 동작).
+  # 서버 로드(db+auth+reportId) 경로는 배포 환경에서 추가 배선 — 지금은 relay만.
+  report_context = {"personalColor": str(context.get("personalColor") or "").strip()} if context.get("personalColor") else None
   state = await create_session_persisted(
     prompt=prompt,
     report_id=str(payload.get("reportId") or "").strip() or None,
     source=str(payload.get("source") or "").strip() or None,
     context=context,
+    report_context=report_context,
     settings=settings,
     db=db,
   )

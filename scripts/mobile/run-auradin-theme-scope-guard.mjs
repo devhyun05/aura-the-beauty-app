@@ -7,7 +7,7 @@
 //
 // 이 스크립트는 전역 shared/theme 소스에 AURADIN 재디자인 팔레트가 섞여 들어왔는지
 // 검사하고, 발견되면 실패(exit 1)한다. AURADIN 전용 색은 features/recommendation
-// 로컬 토큰으로 두어야 한다. (참고: "# AURADIN 첫 진입 화면 디자인/DESIGN.md")
+// 로컬 토큰으로 두어야 한다. (참고: features/recommendation/theme/auradinTokens.ts)
 //
 // 실행: (apps/mobile 에서) npm run test:auradin-theme-scope
 

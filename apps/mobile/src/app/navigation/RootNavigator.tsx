@@ -7,6 +7,10 @@ import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './
 import {
   ConsultingRouteScreen,
   CommunityRouteScreen,
+  CommunityThreadCreateRouteScreen,
+  CommunityThreadDetailRouteScreen,
+  CommunityThreadEditRouteScreen,
+  CommunityUserProfileRouteScreen,
   FloatingActionSettingsRouteScreen,
   HomeFilterStoreRouteScreen,
   SavedMakeupListRouteScreen,
@@ -21,11 +25,13 @@ import {
   ConsultingBookingCompleteRouteScreen,
   ConsultingBookingRouteScreen,
   ConsultingCallRouteScreen,
+  ConsultingConversationRouteScreen,
   ConsultingExpertListRouteScreen,
   ConsultingExpertProfileRouteScreen,
   ConsultingHistoryRouteScreen,
   ConsultingMembershipRouteScreen,
   ConsultingPaymentRouteScreen,
+  ConsultingReviewRouteScreen,
   ConsultingSummaryRouteScreen,
 } from './routes/consultingRoutes';
 import {FaceCaptureConfirmationRouteScreen} from './routes/faceCaptureConfirmationRoutes';
@@ -109,6 +115,10 @@ export function RootNavigator() {
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
+      <Stack.Screen name="CommunityThreadDetail" component={CommunityThreadDetailRouteScreen} />
+      <Stack.Screen name="CommunityThreadCreate" component={CommunityThreadCreateRouteScreen} />
+      <Stack.Screen name="CommunityThreadEdit" component={CommunityThreadEditRouteScreen} />
+      <Stack.Screen name="CommunityUserProfile" component={CommunityUserProfileRouteScreen} />
       <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
       <Stack.Screen
         name="ConsultingExpertList"
@@ -131,7 +141,12 @@ export function RootNavigator() {
       />
       <Stack.Screen name="ConsultingSummary" component={ConsultingSummaryRouteScreen} />
       <Stack.Screen name="ConsultingHistory" component={ConsultingHistoryRouteScreen} />
+      <Stack.Screen
+        name="ConsultingConversation"
+        component={ConsultingConversationRouteScreen}
+      />
       <Stack.Screen name="ConsultingMembership" component={ConsultingMembershipRouteScreen} />
+      <Stack.Screen name="ConsultingReview" component={ConsultingReviewRouteScreen} />
       <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
       <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
       <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />

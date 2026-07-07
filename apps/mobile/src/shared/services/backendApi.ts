@@ -44,7 +44,7 @@ export function getBackendApiBaseUrl(): string | null {
     return null;
   }
 
-  return rawUrl.replace(/\/+$/, '');
+  return ensureApiBasePath(rawUrl);
 }
 
 export function buildBackendApiUrl(path: string): string {
@@ -54,7 +54,25 @@ export function buildBackendApiUrl(path: string): string {
     throw new Error('EXPO_PUBLIC_API_BASE_URL is required for backend API calls.');
   }
 
-  return `${apiBaseUrl}/${path.replace(/^\/+/, '')}`;
+  return `${apiBaseUrl}/${path.replace(/^\/+/, '').replace(/^api\/+/, '')}`;
+}
+
+function ensureApiBasePath(rawUrl: string): string {
+  const trimmedUrl = rawUrl.replace(/\/+$/, '');
+
+  try {
+    const url = new URL(trimmedUrl);
+    const pathname = url.pathname.replace(/\/+$/, '');
+
+    if (pathname === '/api' || pathname.endsWith('/api')) {
+      return url.toString().replace(/\/+$/, '');
+    }
+
+    url.pathname = `${pathname}/api`;
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return trimmedUrl.endsWith('/api') ? trimmedUrl : `${trimmedUrl}/api`;
+  }
 }
 
 type BackendJsonRequestInit = Omit<RequestInit, 'body' | 'headers'> & {

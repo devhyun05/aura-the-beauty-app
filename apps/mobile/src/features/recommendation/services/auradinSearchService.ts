@@ -10,6 +10,7 @@
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import {auradinDraftMock} from '../mocks/auradin.mock';
 import type {
+  AuradinAppliedFilter,
   AuradinCandidateProduct,
   AuradinProductRole,
   AuradinQuestionOption,
@@ -57,12 +58,15 @@ type BackendProduct = {
   reasonCopy?: string | null; // §6 가산 카피 (구조화 reason이 권위값)
 };
 
+type BackendAppliedFilter = {label?: string | null; source?: string | null; confidence?: number | null};
+
 type BackendSearchTurn = {
   sessionId?: string | null;
   phase?: string | null;
   thinking?: AuradinSearchTurn['thinking'] | null;
   question?: BackendQuestion | null;
   result?: {headerLabel?: string | null; products?: BackendProduct[] | null} | null;
+  appliedFilters?: BackendAppliedFilter[] | null; // 최상위, 전 phase 존재
   error?: AuradinSearchTurn['error'];
   retryAfterMs?: number | null;
 };
@@ -73,6 +77,8 @@ export type CreateAuradinSessionRequest = {
   prompt: string;
   reportId?: string | null;
   source?: string;
+  // §3 리포트 톤 client-relay (로컬/무DB에서도 톤 반영). 향후 자료도 여기로 확장.
+  context?: {personalColor?: string} | null;
 };
 
 // ------------------------------------------------------------------ mapping helpers
@@ -173,6 +179,15 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
   };
 }
 
+function mapAppliedFilters(filters: BackendAppliedFilter[] | null | undefined): AuradinAppliedFilter[] {
+  if (!Array.isArray(filters)) {
+    return [];
+  }
+  return filters
+    .map((filter) => ({label: String(filter?.label ?? '').trim(), source: String(filter?.source ?? 'prompt')}))
+    .filter((filter) => filter.label.length > 0);
+}
+
 export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
   const products = Array.isArray(turn.result?.products) ? turn.result!.products! : [];
   return {
@@ -191,6 +206,7 @@ export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
       .filter((product) => product.imageUrl && product.purchaseUrl)
       .map(mapCandidate),
     headerLabel: turn.result?.headerLabel ?? undefined,
+    appliedFilters: mapAppliedFilters(turn.appliedFilters),
     error: turn.error ?? null,
   };
 }
@@ -236,7 +252,12 @@ export async function createAuradinSearchSession(
 
   return requestBackendJson<SessionAck>('/search/sessions', {
     method: 'POST',
-    body: {prompt: request.prompt, reportId: request.reportId, source: request.source},
+    body: {
+      prompt: request.prompt,
+      reportId: request.reportId,
+      source: request.source,
+      context: request.context ?? undefined,
+    },
   });
 }
 

@@ -68,6 +68,18 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
         onPressConsultingHistory={() =>
           rootNavigation?.navigate('ConsultingHistory')
         }
+        onPressConsultingReview={record =>
+          rootNavigation?.navigate('ConsultingReview', {
+            expertId: record.expertId,
+            recordId: record.id,
+          })
+        }
+        onPressConsultingSummary={record =>
+          rootNavigation?.navigate('ConsultingSummary', {
+            expertId: record.expertId,
+            recordId: record.id,
+          })
+        }
         likedMakeupLooks={savedAndLikedMakeupLooks}
       />
     </MainTabChrome>

@@ -6,7 +6,7 @@ import asyncpg
 
 from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
-from app.db.init_db import SCHEMA_VERSION
+from app.db.init_db import POST_SCHEMA_MIGRATIONS, SCHEMA_VERSION
 from app.db.seed_db import SEED_VERSION
 
 
@@ -23,6 +23,25 @@ EXPECTED_TABLES = {
   "user_ar_filter_states",
   "filter_extraction_reports",
   "makeup_feedback_reports",
+  "community_threads",
+  "community_thread_media",
+  "community_replies",
+  "community_thread_likes",
+  "community_thread_saves",
+  "community_reply_likes",
+  "community_reports",
+  "community_events",
+  "consulting_categories",
+  "consulting_experts",
+  "consulting_expert_categories",
+  "consulting_expert_durations",
+  "consulting_expert_career",
+  "consulting_expert_reviews",
+  "consulting_bookings",
+  "consulting_summaries",
+  "consulting_membership_plans",
+  "user_consulting_memberships",
+  "consulting_payments",
   "home_hero_banners",
   "home_notices",
   "home_trend_items",
@@ -34,6 +53,12 @@ EXPECTED_TABLES = {
   "schema_migrations",
 }
 
+EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
+
+EXPECTED_COLUMNS = {
+  "analysis_reports": {"embedding"},
+  "community_threads": {"embedding"},
+}
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch(
@@ -47,6 +72,22 @@ async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
 
   return {row["table_name"] for row in rows}
 
+async def fetch_table_columns(connection: asyncpg.Connection) -> dict[str, set[str]]:
+  rows = await connection.fetch(
+    """
+    select table_name, column_name
+    from information_schema.columns
+    where table_schema = 'public'
+    """,
+  )
+
+  columns: dict[str, set[str]] = {}
+  for row in rows:
+    columns.setdefault(row["table_name"], set()).add(row["column_name"])
+  return columns
+async def fetch_extensions(connection: asyncpg.Connection) -> set[str]:
+  rows = await connection.fetch("select extname from pg_extension")
+  return {row["extname"] for row in rows}
 
 async def fetch_applied_versions(connection: asyncpg.Connection) -> set[str]:
   if "schema_migrations" not in await fetch_table_names(connection):
@@ -61,19 +102,35 @@ def build_schema_report(
   table_names: set[str],
   applied_versions: set[str],
   require_seed: bool = False,
+  table_columns: dict[str, set[str]] | None = None,
+  installed_extensions: set[str] | None = None,
 ) -> dict[str, object]:
-  expected_versions = {SCHEMA_VERSION}
+  expected_versions = {SCHEMA_VERSION, *POST_SCHEMA_MIGRATIONS}
 
   if require_seed:
     expected_versions.add(SEED_VERSION)
 
   missing_tables = sorted(EXPECTED_TABLES - table_names)
   missing_versions = sorted(expected_versions - applied_versions)
+  missing_extensions = []
+  if installed_extensions is not None:
+    missing_extensions = sorted(EXPECTED_EXTENSIONS - installed_extensions)
+  missing_columns = {}
+  if table_columns is not None:
+    missing_columns = {
+      table: sorted(columns - table_columns.get(table, set()))
+      for table, columns in EXPECTED_COLUMNS.items()
+      if columns - table_columns.get(table, set())
+    }
 
   return {
-    "ok": not missing_tables and not missing_versions,
+    "ok": not missing_tables and not missing_versions and not missing_columns and not missing_extensions,
     "expectedTables": sorted(EXPECTED_TABLES),
     "missingTables": missing_tables,
+    "expectedExtensions": sorted(EXPECTED_EXTENSIONS),
+    "missingExtensions": missing_extensions,
+    "expectedColumns": {table: sorted(columns) for table, columns in EXPECTED_COLUMNS.items()},
+    "missingColumns": missing_columns,
     "appliedVersions": sorted(applied_versions),
     "missingVersions": missing_versions,
   }
@@ -93,11 +150,19 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
 
   try:
     table_names = await fetch_table_names(connection)
+    table_columns = await fetch_table_columns(connection)
+    installed_extensions = await fetch_extensions(connection)
     applied_versions = await fetch_applied_versions(connection)
   finally:
     await connection.close()
 
-  return build_schema_report(table_names, applied_versions, require_seed=require_seed)
+  return build_schema_report(
+    table_names,
+    applied_versions,
+    require_seed=require_seed,
+    table_columns=table_columns,
+    installed_extensions=installed_extensions,
+  )
 
 
 def format_schema_report(report: dict[str, object]) -> str:
@@ -105,17 +170,28 @@ def format_schema_report(report: dict[str, object]) -> str:
   lines = [f"Schema check: {status}"]
 
   missing_tables = report["missingTables"]
+  missing_extensions = report["missingExtensions"]
+  missing_columns = report["missingColumns"]
   missing_versions = report["missingVersions"]
 
   if missing_tables:
     lines.append("Missing tables:")
     lines.extend(f"- {name}" for name in missing_tables)
 
+  if missing_extensions:
+    lines.append("Missing extensions:")
+    lines.extend(f"- {name}" for name in missing_extensions)
+
+  if missing_columns:
+    lines.append("Missing columns:")
+    for table, columns in missing_columns.items():
+      lines.extend(f"- {table}.{column}" for column in columns)
+
   if missing_versions:
     lines.append("Missing migration markers:")
     lines.extend(f"- {version}" for version in missing_versions)
 
-  if not missing_tables and not missing_versions:
+  if not missing_tables and not missing_versions and not missing_columns and not missing_extensions:
     lines.append("All expected tables and migration markers are present.")
 
   return "\n".join(lines)

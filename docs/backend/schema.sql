@@ -4,6 +4,9 @@
 
 create extension if not exists pgcrypto;
 create extension if not exists citext;
+create extension if not exists btree_gist;
+create extension if not exists vector;
+create extension if not exists pg_trgm;
 
 -- -----------------------------------------------------------------------------
 -- Enum types
@@ -86,6 +89,13 @@ create table if not exists media_assets (
   bucket text,
   object_key text,
   cdn_url text,
+  thumbnail_bucket text,
+  thumbnail_object_key text,
+  thumbnail_cdn_url text,
+  thumbnail_content_type text,
+  thumbnail_byte_size bigint,
+  thumbnail_width integer,
+  thumbnail_height integer,
   content_type text,
   byte_size bigint,
   width integer,
@@ -98,8 +108,11 @@ create table if not exists media_assets (
   deleted_at timestamptz,
   constraint uq_media_assets_bucket_object_key unique (bucket, object_key),
   constraint chk_media_assets_byte_size check (byte_size is null or byte_size >= 0),
+  constraint chk_media_assets_thumbnail_byte_size check (thumbnail_byte_size is null or thumbnail_byte_size >= 0),
   constraint chk_media_assets_width check (width is null or width > 0),
-  constraint chk_media_assets_height check (height is null or height > 0)
+  constraint chk_media_assets_height check (height is null or height > 0),
+  constraint chk_media_assets_thumbnail_width check (thumbnail_width is null or thumbnail_width > 0),
+  constraint chk_media_assets_thumbnail_height check (thumbnail_height is null or thumbnail_height > 0)
 );
 
 comment on table media_assets is 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.';
@@ -144,6 +157,7 @@ create table if not exists analysis_reports (
   base_makeup_guide text,
   tags text[],
   detail_payload jsonb not null default '{}'::jsonb,
+  embedding vector(1024),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -409,131 +423,351 @@ create table if not exists audit_logs (
 comment on table audit_logs is 'Operational audit trail for sensitive media and AI analysis data.';
 
 -- -----------------------------------------------------------------------------
+-- Community look feed
+-- -----------------------------------------------------------------------------
+create table if not exists community_threads (
+  id uuid primary key default gen_random_uuid(),
+  author_user_id uuid not null,
+  category text not null,
+  title text not null,
+  body text not null default '',
+  mood_tags text[] not null default '{}',
+  situation_tags text[] not null default '{}',
+  difficulty text,
+  duration_minutes integer,
+  product_usage jsonb not null default '{"base": [], "eye": [], "cheek": [], "lip": []}',
+  like_count integer not null default 0,
+  reply_count integer not null default 0,
+  save_count integer not null default 0,
+  view_count integer not null default 0,
+  status text not null default 'active',
+  embedding vector(1024),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint chk_community_threads_category check (category in ('lookbook', 'question', 'product_combo', 'before_after')),
+  constraint chk_community_threads_title check (char_length(trim(title)) between 1 and 30),
+  constraint chk_community_threads_difficulty check (difficulty is null or difficulty in ('easy', 'medium', 'hard')),
+  constraint chk_community_threads_duration check (duration_minutes is null or duration_minutes between 1 and 240),
+  constraint chk_community_threads_counts check (like_count >= 0 and reply_count >= 0 and save_count >= 0 and view_count >= 0),
+  constraint chk_community_threads_status check (status in ('active', 'hidden', 'deleted'))
+);
+
+comment on table community_threads is 'Look-first community feed posts. Trending is derived by sort, not stored as a category.';
+
+create table if not exists community_thread_media (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null,
+  media_id uuid not null,
+  sort_order integer not null,
+  created_at timestamptz not null default now(),
+  constraint chk_community_thread_media_sort_order check (sort_order between 0 and 3),
+  constraint uq_community_thread_media_thread_media unique (thread_id, media_id),
+  constraint uq_community_thread_media_thread_sort unique (thread_id, sort_order)
+);
+
+comment on table community_thread_media is 'Ordered 1-4 community thread images. sort_order 0 is the feed cover image.';
+
+create table if not exists community_replies (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null,
+  parent_reply_id uuid,
+  author_user_id uuid not null,
+  body text not null,
+  like_count integer not null default 0,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint chk_community_replies_body check (char_length(trim(body)) between 1 and 1000),
+  constraint chk_community_replies_like_count check (like_count >= 0),
+  constraint chk_community_replies_status check (status in ('active', 'hidden', 'deleted'))
+);
+
+comment on table community_replies is 'Community comments with one-level nested replies enforced by API validation.';
+
+create table if not exists community_thread_likes (
+  user_id uuid not null,
+  thread_id uuid not null,
+  liked_at timestamptz not null default now(),
+  primary key (user_id, thread_id)
+);
+
+create table if not exists community_thread_saves (
+  user_id uuid not null,
+  thread_id uuid not null,
+  saved_at timestamptz not null default now(),
+  primary key (user_id, thread_id)
+);
+
+create table if not exists community_reply_likes (
+  user_id uuid not null,
+  reply_id uuid not null,
+  liked_at timestamptz not null default now(),
+  primary key (user_id, reply_id)
+);
+
+create table if not exists community_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_user_id uuid not null,
+  target_type text not null,
+  target_thread_id uuid,
+  target_reply_id uuid,
+  reason text not null,
+  detail text,
+  created_at timestamptz not null default now(),
+  constraint chk_community_reports_target_type check (target_type in ('thread', 'reply')),
+  constraint chk_community_reports_reason check (reason in ('spam', 'abuse', 'privacy', 'other')),
+  constraint chk_community_reports_target check (
+    (target_type = 'thread' and target_thread_id is not null and target_reply_id is null)
+    or (target_type = 'reply' and target_reply_id is not null and target_thread_id is null)
+  ),
+  constraint uq_community_reports_reporter_thread unique (reporter_user_id, target_thread_id),
+  constraint uq_community_reports_reporter_reply unique (reporter_user_id, target_reply_id)
+);
+
+comment on table community_reports is 'Duplicate-safe moderation reports for community threads and replies.';
+create table if not exists community_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  thread_id uuid,
+  event_type text not null,
+  search_query text,
+  dwell_ms integer,
+  created_at timestamptz not null default now(),
+  constraint chk_community_events_type check (
+    event_type in ('impression', 'view', 'revisit', 'dwell', 'like', 'save', 'reply', 'slider', 'search')
+  ),
+  constraint chk_community_events_target check (
+    (event_type = 'search' and search_query is not null)
+    or (event_type <> 'search' and thread_id is not null)
+  ),
+  constraint chk_community_events_dwell_ms check (dwell_ms is null or dwell_ms >= 0)
+);
+
+comment on table community_events is 'Community behavior events for look recommendation signals.';
+
+-- Embedding columns are repeated as idempotent alters so existing v1 databases are upgraded.
+alter table community_threads add column if not exists embedding vector(1024);
+alter table analysis_reports add column if not exists embedding vector(1024);
+-- -----------------------------------------------------------------------------
 -- Foreign keys
 -- -----------------------------------------------------------------------------
 alter table users
+  drop constraint if exists fk_users_avatar_media,
   add constraint fk_users_avatar_media
   foreign key (avatar_media_id) references media_assets(id) on delete set null;
 
 alter table media_assets
+  drop constraint if exists fk_media_assets_owner_user,
   add constraint fk_media_assets_owner_user
   foreign key (owner_user_id) references users(id) on delete set null;
 
 alter table photo_captures
+  drop constraint if exists fk_photo_captures_user,
   add constraint fk_photo_captures_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_photo_captures_media,
   add constraint fk_photo_captures_media
   foreign key (media_id) references media_assets(id) on delete restrict;
 
 alter table analysis_reports
+  drop constraint if exists fk_analysis_reports_user,
   add constraint fk_analysis_reports_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_analysis_reports_photo_capture,
   add constraint fk_analysis_reports_photo_capture
   foreign key (photo_capture_id) references photo_captures(id) on delete set null,
+  drop constraint if exists fk_analysis_reports_source_media,
   add constraint fk_analysis_reports_source_media
   foreign key (source_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_analysis_reports_preview_media,
   add constraint fk_analysis_reports_preview_media
   foreign key (preview_media_id) references media_assets(id) on delete set null;
 
 alter table saved_makeup_styles
+  drop constraint if exists fk_saved_makeup_styles_user,
   add constraint fk_saved_makeup_styles_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_saved_makeup_styles_source_analysis_report,
   add constraint fk_saved_makeup_styles_source_analysis_report
   foreign key (source_analysis_report_id) references analysis_reports(id) on delete set null,
+  drop constraint if exists fk_saved_makeup_styles_source_filter_extraction,
   add constraint fk_saved_makeup_styles_source_filter_extraction
   foreign key (source_filter_extraction_id) references filter_extraction_reports(id) on delete set null,
+  drop constraint if exists fk_saved_makeup_styles_source_media,
   add constraint fk_saved_makeup_styles_source_media
   foreign key (source_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_saved_makeup_styles_thumbnail_media,
   add constraint fk_saved_makeup_styles_thumbnail_media
   foreign key (thumbnail_media_id) references media_assets(id) on delete set null;
 
 alter table products
+  drop constraint if exists fk_products_image_media,
   add constraint fk_products_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
 alter table user_product_likes
+  drop constraint if exists fk_user_product_likes_user,
   add constraint fk_user_product_likes_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_user_product_likes_product,
   add constraint fk_user_product_likes_product
   foreign key (product_id) references products(id) on delete cascade;
 
 alter table product_recommendation_runs
+  drop constraint if exists fk_product_recommendation_runs_user,
   add constraint fk_product_recommendation_runs_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_product_recommendation_runs_source_analysis_report,
   add constraint fk_product_recommendation_runs_source_analysis_report
   foreign key (source_analysis_report_id) references analysis_reports(id) on delete set null,
+  drop constraint if exists fk_product_recommendation_runs_look_media,
   add constraint fk_product_recommendation_runs_look_media
   foreign key (look_media_id) references media_assets(id) on delete set null;
 
 alter table ar_filters
+  drop constraint if exists fk_ar_filters_preview_media,
   add constraint fk_ar_filters_preview_media
   foreign key (preview_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_ar_filters_source_analysis_report,
   add constraint fk_ar_filters_source_analysis_report
   foreign key (source_analysis_report_id) references analysis_reports(id) on delete set null,
+  drop constraint if exists fk_ar_filters_source_filter_extraction,
   add constraint fk_ar_filters_source_filter_extraction
   foreign key (source_filter_extraction_id) references filter_extraction_reports(id) on delete set null;
 
 alter table user_ar_filter_states
+  drop constraint if exists fk_user_ar_filter_states_user,
   add constraint fk_user_ar_filter_states_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_user_ar_filter_states_filter,
   add constraint fk_user_ar_filter_states_filter
   foreign key (filter_id) references ar_filters(id) on delete cascade;
 
 alter table filter_extraction_reports
+  drop constraint if exists fk_filter_extraction_reports_user,
   add constraint fk_filter_extraction_reports_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_filter_extraction_reports_photo_capture,
   add constraint fk_filter_extraction_reports_photo_capture
   foreign key (photo_capture_id) references photo_captures(id) on delete set null,
+  drop constraint if exists fk_filter_extraction_reports_result_media,
   add constraint fk_filter_extraction_reports_result_media
   foreign key (result_media_id) references media_assets(id) on delete set null;
 
 alter table makeup_feedback_reports
+  drop constraint if exists fk_makeup_feedback_reports_user,
   add constraint fk_makeup_feedback_reports_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_makeup_feedback_reports_photo_capture,
   add constraint fk_makeup_feedback_reports_photo_capture
   foreign key (photo_capture_id) references photo_captures(id) on delete set null,
+  drop constraint if exists fk_makeup_feedback_reports_uploaded_media,
   add constraint fk_makeup_feedback_reports_uploaded_media
   foreign key (uploaded_media_id) references media_assets(id) on delete set null;
 
 alter table home_hero_banners
+  drop constraint if exists fk_home_hero_banners_image_media,
   add constraint fk_home_hero_banners_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
 alter table home_notices
+  drop constraint if exists fk_home_notices_hero_banner,
   add constraint fk_home_notices_hero_banner
   foreign key (hero_banner_id) references home_hero_banners(id) on delete cascade;
 
 alter table home_trend_items
+  drop constraint if exists fk_home_trend_items_hero_banner,
   add constraint fk_home_trend_items_hero_banner
   foreign key (hero_banner_id) references home_hero_banners(id) on delete cascade,
+  drop constraint if exists fk_home_trend_items_target_style,
   add constraint fk_home_trend_items_target_style
   foreign key (target_style_id) references saved_makeup_styles(id) on delete set null,
+  drop constraint if exists fk_home_trend_items_image_media,
   add constraint fk_home_trend_items_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
 alter table home_filter_store_items
+  drop constraint if exists fk_home_filter_store_items_image_media,
   add constraint fk_home_filter_store_items_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_home_filter_store_items_product,
   add constraint fk_home_filter_store_items_product
   foreign key (product_id) references products(id) on delete set null,
+  drop constraint if exists fk_home_filter_store_items_ar_filter,
   add constraint fk_home_filter_store_items_ar_filter
   foreign key (ar_filter_id) references ar_filters(id) on delete set null;
 
 alter table home_recommended_looks
+  drop constraint if exists fk_home_recommended_looks_saved_makeup_style,
   add constraint fk_home_recommended_looks_saved_makeup_style
   foreign key (saved_makeup_style_id) references saved_makeup_styles(id) on delete set null,
+  drop constraint if exists fk_home_recommended_looks_image_media,
   add constraint fk_home_recommended_looks_image_media
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
+alter table community_threads
+  add constraint fk_community_threads_author
+  foreign key (author_user_id) references users(id) on delete cascade;
+
+alter table community_thread_media
+  add constraint fk_community_thread_media_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_thread_media_media
+  foreign key (media_id) references media_assets(id) on delete restrict;
+
+alter table community_replies
+  add constraint fk_community_replies_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_replies_parent
+  foreign key (parent_reply_id) references community_replies(id) on delete cascade,
+  add constraint fk_community_replies_author
+  foreign key (author_user_id) references users(id) on delete cascade;
+
+alter table community_thread_likes
+  add constraint fk_community_thread_likes_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_thread_likes_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
+
+alter table community_thread_saves
+  add constraint fk_community_thread_saves_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_thread_saves_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
+
+alter table community_reply_likes
+  add constraint fk_community_reply_likes_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_reply_likes_reply
+  foreign key (reply_id) references community_replies(id) on delete cascade;
+
+alter table community_reports
+  add constraint fk_community_reports_reporter
+  foreign key (reporter_user_id) references users(id) on delete cascade,
+  add constraint fk_community_reports_thread
+  foreign key (target_thread_id) references community_threads(id) on delete cascade,
+  add constraint fk_community_reports_reply
+  foreign key (target_reply_id) references community_replies(id) on delete cascade;
+
+alter table community_events
+  add constraint fk_community_events_user
+  foreign key (user_id) references users(id) on delete cascade,
+  add constraint fk_community_events_thread
+  foreign key (thread_id) references community_threads(id) on delete cascade;
 alter table user_consents
+  drop constraint if exists fk_user_consents_user,
   add constraint fk_user_consents_user
   foreign key (user_id) references users(id) on delete cascade;
 
 alter table data_deletion_requests
+  drop constraint if exists fk_data_deletion_requests_user,
   add constraint fk_data_deletion_requests_user
   foreign key (user_id) references users(id) on delete cascade;
 
 alter table audit_logs
+  drop constraint if exists fk_audit_logs_actor_user,
   add constraint fk_audit_logs_actor_user
   foreign key (actor_user_id) references users(id) on delete set null;
 
@@ -573,6 +807,19 @@ create index if not exists idx_data_deletion_requests_user_requested on data_del
 create index if not exists idx_audit_logs_entity on audit_logs (entity_type, entity_id);
 create index if not exists idx_audit_logs_actor_created on audit_logs (actor_user_id, created_at desc);
 
+create index if not exists idx_community_threads_category_created on community_threads (category, created_at desc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_popular on community_threads ((like_count + save_count * 2 + reply_count), created_at desc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_title_trgm on community_threads using gin (title gin_trgm_ops) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_body_trgm on community_threads using gin (body gin_trgm_ops) where deleted_at is null and status = 'active';
+create index if not exists idx_community_threads_embedding on community_threads using hnsw (embedding vector_cosine_ops) where embedding is not null and deleted_at is null and status = 'active';
+create index if not exists idx_community_thread_media_thread_order on community_thread_media (thread_id, sort_order);
+create index if not exists idx_community_replies_thread_created on community_replies (thread_id, created_at asc) where deleted_at is null and status = 'active';
+create index if not exists idx_community_thread_likes_thread on community_thread_likes (thread_id, liked_at desc);
+create index if not exists idx_community_thread_saves_thread on community_thread_saves (thread_id, saved_at desc);
+create index if not exists idx_community_reply_likes_reply on community_reply_likes (reply_id);
+create index if not exists idx_community_reports_thread on community_reports (target_thread_id) where target_thread_id is not null;
+create index if not exists idx_community_reports_reply on community_reports (target_reply_id) where target_reply_id is not null;
+create index if not exists idx_community_events_user_time on community_events (user_id, created_at desc);
 -- -----------------------------------------------------------------------------
 -- updated_at trigger helper
 -- -----------------------------------------------------------------------------
@@ -632,4 +879,329 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_home_recommended_looks_updated_at on home_recommended_looks;
 create trigger trg_home_recommended_looks_updated_at
 before update on home_recommended_looks
+for each row execute function set_updated_at();
+
+-- -----------------------------------------------------------------------------
+-- Consulting (1:1 expert video consulting)
+-- -----------------------------------------------------------------------------
+create table if not exists consulting_categories (
+  id text primary key,
+  title text not null,
+  description text not null default '',
+  icon text not null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists consulting_experts (
+  id text primary key,
+  name text not null,
+  title text not null,
+  signature_line text not null default '',
+  initials text not null,
+  avatar_tone text not null default 'rose',
+  image_url text,
+  studio_name text,
+  career_years integer not null default 0,
+  rating numeric(2,1) not null default 0,
+  review_count integer not null default 0,
+  session_count integer not null default 0,
+  rebook_rate integer not null default 0,
+  response_minutes integer not null default 0,
+  intro text not null default '',
+  availability_note text,
+  tags text[] not null default '{}',
+  certifications text[] not null default '{}',
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists consulting_expert_categories (
+  expert_id text not null,
+  category_id text not null,
+  primary key (expert_id, category_id)
+);
+
+create table if not exists consulting_expert_durations (
+  id uuid primary key default gen_random_uuid(),
+  expert_id text not null,
+  code text not null,
+  label text not null,
+  minutes integer not null,
+  price integer not null,
+  description text not null default '',
+  recommended boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (expert_id, code)
+);
+
+create table if not exists consulting_expert_career (
+  id uuid primary key default gen_random_uuid(),
+  expert_id text not null,
+  code text not null,
+  period text not null,
+  role text not null,
+  sort_order integer not null default 0,
+  unique (expert_id, code)
+);
+
+create table if not exists consulting_expert_reviews (
+  id text primary key,
+  expert_id text not null,
+  booking_id uuid,
+  author text not null,
+  author_user_id uuid,
+  category text not null default '',
+  body text not null,
+  rating integer not null default 5,
+  date_label text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists consulting_bookings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  expert_id text not null,
+  duration_code text,
+  duration_label text,
+  duration_minutes integer,
+  category_label text,
+  scheduled_at timestamptz,
+  scheduled_date date,
+  slot_start_minutes integer,
+  date_label text,
+  slot_id text,
+  concern_id text,
+  concern_label text,
+  share_reports boolean not null default false,
+  shared_report_ids uuid[] not null default '{}',
+  question text,
+  status text not null default 'upcoming',
+  price integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists consulting_summaries (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null unique,
+  expert_id text not null,
+  duration_label text,
+  date_label text,
+  notes jsonb not null default '[]'::jsonb,
+  products jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists consulting_membership_plans (
+  id text primary key,
+  name text not null,
+  tagline text not null default '',
+  price_per_month integer not null,
+  original_price_per_month integer,
+  benefits text[] not null default '{}',
+  badge text,
+  highlight boolean not null default false,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists user_consulting_memberships (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  plan_id text not null,
+  status text not null default 'active',
+  started_at timestamptz not null default now(),
+  current_period_end timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists consulting_payments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  kind text not null,
+  option_id text,
+  booking_id uuid,
+  membership_id uuid,
+  amount integer not null default 0,
+  currency text not null default 'KRW',
+  status text not null default 'pending',
+  method text,
+  pg_provider text,
+  pg_tx_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table consulting_experts
+  add column if not exists image_url text,
+  add column if not exists studio_name text;
+
+alter table consulting_expert_reviews
+  add column if not exists booking_id uuid;
+
+-- Consulting foreign keys
+alter table consulting_expert_categories
+  drop constraint if exists fk_consulting_expert_categories_expert,
+  add constraint fk_consulting_expert_categories_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_expert_categories
+  drop constraint if exists fk_consulting_expert_categories_category,
+  add constraint fk_consulting_expert_categories_category
+  foreign key (category_id) references consulting_categories(id) on delete cascade;
+
+alter table consulting_expert_durations
+  drop constraint if exists fk_consulting_expert_durations_expert,
+  add constraint fk_consulting_expert_durations_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_expert_career
+  drop constraint if exists fk_consulting_expert_career_expert,
+  add constraint fk_consulting_expert_career_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_expert_reviews
+  drop constraint if exists fk_consulting_expert_reviews_expert,
+  add constraint fk_consulting_expert_reviews_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_expert_reviews
+  drop constraint if exists fk_consulting_expert_reviews_user,
+  add constraint fk_consulting_expert_reviews_user
+  foreign key (author_user_id) references users(id) on delete set null;
+
+alter table consulting_expert_reviews
+  drop constraint if exists fk_consulting_expert_reviews_booking,
+  add constraint fk_consulting_expert_reviews_booking
+  foreign key (booking_id) references consulting_bookings(id) on delete set null;
+
+alter table consulting_bookings
+  drop constraint if exists fk_consulting_bookings_user,
+  add constraint fk_consulting_bookings_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table consulting_bookings
+  drop constraint if exists fk_consulting_bookings_expert,
+  add constraint fk_consulting_bookings_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_bookings
+  drop constraint if exists chk_consulting_bookings_slot_start_minutes,
+  add constraint chk_consulting_bookings_slot_start_minutes
+  check (
+    slot_start_minutes is null
+    or (slot_start_minutes >= 0 and slot_start_minutes < 1440)
+  );
+
+alter table consulting_summaries
+  drop constraint if exists fk_consulting_summaries_booking,
+  add constraint fk_consulting_summaries_booking
+  foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+
+alter table user_consulting_memberships
+  drop constraint if exists fk_user_consulting_memberships_user,
+  add constraint fk_user_consulting_memberships_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table user_consulting_memberships
+  drop constraint if exists fk_user_consulting_memberships_plan,
+  add constraint fk_user_consulting_memberships_plan
+  foreign key (plan_id) references consulting_membership_plans(id) on delete cascade;
+
+alter table consulting_payments
+  drop constraint if exists fk_consulting_payments_user,
+  add constraint fk_consulting_payments_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table consulting_payments
+  drop constraint if exists fk_consulting_payments_booking,
+  add constraint fk_consulting_payments_booking
+  foreign key (booking_id) references consulting_bookings(id) on delete set null;
+
+alter table consulting_payments
+  drop constraint if exists fk_consulting_payments_membership,
+  add constraint fk_consulting_payments_membership
+  foreign key (membership_id) references user_consulting_memberships(id) on delete set null;
+
+-- Consulting indexes
+create index if not exists idx_consulting_categories_active_order on consulting_categories (is_active, sort_order);
+create index if not exists idx_consulting_experts_active_order on consulting_experts (is_active, sort_order);
+create index if not exists idx_consulting_expert_categories_category on consulting_expert_categories (category_id);
+create index if not exists idx_consulting_expert_durations_expert on consulting_expert_durations (expert_id, sort_order);
+create index if not exists idx_consulting_expert_career_expert on consulting_expert_career (expert_id, sort_order);
+create index if not exists idx_consulting_expert_reviews_expert on consulting_expert_reviews (expert_id, created_at desc);
+create unique index if not exists idx_consulting_expert_reviews_booking
+  on consulting_expert_reviews (booking_id)
+  where booking_id is not null;
+create index if not exists idx_consulting_bookings_user_status on consulting_bookings (user_id, status, created_at desc);
+create index if not exists idx_consulting_bookings_expert on consulting_bookings (expert_id);
+drop index if exists idx_consulting_bookings_expert_upcoming_slot;
+alter table consulting_bookings
+  drop constraint if exists ex_consulting_bookings_expert_upcoming_time,
+  add constraint ex_consulting_bookings_expert_upcoming_time
+  exclude using gist (
+    expert_id with =,
+    scheduled_date with =,
+    int4range(
+      slot_start_minutes,
+      slot_start_minutes + coalesce(duration_minutes, 30),
+      '[)'
+    ) with &&
+  )
+  where (
+    status = 'upcoming'
+    and scheduled_date is not null
+    and slot_start_minutes is not null
+  );
+create index if not exists idx_consulting_payments_user on consulting_payments (user_id, created_at desc);
+create index if not exists idx_user_consulting_memberships_user on user_consulting_memberships (user_id, status);
+
+-- Consulting updated_at triggers
+drop trigger if exists trg_consulting_categories_updated_at on consulting_categories;
+create trigger trg_consulting_categories_updated_at
+before update on consulting_categories
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_consulting_experts_updated_at on consulting_experts;
+create trigger trg_consulting_experts_updated_at
+before update on consulting_experts
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_consulting_bookings_updated_at on consulting_bookings;
+create trigger trg_consulting_bookings_updated_at
+before update on consulting_bookings
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_consulting_membership_plans_updated_at on consulting_membership_plans;
+create trigger trg_consulting_membership_plans_updated_at
+before update on consulting_membership_plans
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_user_consulting_memberships_updated_at on user_consulting_memberships;
+create trigger trg_user_consulting_memberships_updated_at
+before update on user_consulting_memberships
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_consulting_payments_updated_at on consulting_payments;
+create trigger trg_consulting_payments_updated_at
+before update on consulting_payments
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_community_threads_updated_at on community_threads;
+create trigger trg_community_threads_updated_at
+before update on community_threads
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_community_replies_updated_at on community_replies;
+create trigger trg_community_replies_updated_at
+before update on community_replies
 for each row execute function set_updated_at();

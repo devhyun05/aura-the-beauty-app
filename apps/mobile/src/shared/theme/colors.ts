@@ -4,7 +4,7 @@
 //
 // ⚠️ AURADIN 추천 화면 재디자인 색(꿈꾸는 블루 + 솜사탕 핑크 + 마젠타)을 여기에
 //    추가하지 마세요. AURADIN 전용 색은 features/recommendation 로컬 토큰으로 둡니다.
-//    참고: "# AURADIN 첫 진입 화면 디자인/DESIGN.md"
+//    참고: apps/mobile/src/features/recommendation/theme/auradinTokens.ts
 //    가드:  npm run test:auradin-theme-scope
 // ─────────────────────────────────────────────────────────────────────────
 const bottomSheetSurface = 'rgba(255, 255, 255, 0.92)';
