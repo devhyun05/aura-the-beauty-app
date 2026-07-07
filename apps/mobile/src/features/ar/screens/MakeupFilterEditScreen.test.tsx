@@ -30,7 +30,7 @@ expectEqual(
 );
 expectEqual(
   getMakeupFilterEditCameraMode(),
-  'live-camera',
+  'photo-preview',
   'AR filter edit camera mode',
 );
 expectEqual(

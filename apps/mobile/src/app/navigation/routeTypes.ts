@@ -18,6 +18,7 @@ export type FaceCaptureConfirmationTarget =
   | 'makeupFeedback'
   | 'referenceMakeupExtraction';
 export type MakeupFilterEditMode = 'preset' | 'fullFace';
+export type MakeupFilterEditTabMode = 'product' | 'fit';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -78,10 +79,14 @@ export type RootStackParamList = {
         source?: ARFilterLaunchSource;
       }
     | undefined;
-  ARFilterShapeAdjust: {backRoute?: ARFilterBackRouteName} | undefined;
   MakeupFilterEdit: {
     backRoute?: ARFilterBackRouteName;
+    initialEditMode?: MakeupFilterEditTabMode;
+    editSourceImageUri?: string;
+    initialGuideMode?: GuideMode;
+    initialMakeupFilterId?: string;
     mode?: MakeupFilterEditMode;
+    source?: ARFilterLaunchSource;
     sourceFrameMetadata?: FullFaceMakeupSourceInput;
   } | undefined;
   MakeupFeedbackCapture: undefined;
@@ -154,7 +159,6 @@ export const rootStackRoutes = [
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',
-  'ARFilterShapeAdjust',
   'MakeupFilterEdit',
   'MakeupFeedbackCapture',
   'MakeupFeedbackAlbumUpload',

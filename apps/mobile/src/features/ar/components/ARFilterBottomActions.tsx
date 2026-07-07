@@ -23,14 +23,14 @@ type ARFilterEditActionOption = {
 
 const AR_FILTER_EDIT_ACTION_OPTIONS = [
   {
-    accessibilityLabel: '메이크업 상세 수정 화면 열기',
+    accessibilityLabel: '메이크업 제품 수정 화면 열기',
     id: 'detail',
-    label: '상세 수정',
+    label: '제품 수정',
   },
   {
-    accessibilityLabel: '메이크업 형태 수정 화면 열기',
+    accessibilityLabel: '메이크업 핏 수정 화면 열기',
     id: 'shape',
-    label: '형태 수정',
+    label: '핏 수정',
   },
 ] as const satisfies readonly ARFilterEditActionOption[];
 
@@ -49,11 +49,11 @@ export function getARFilterEditActionButtonLabel(): string {
 }
 
 export function getARFilterDetailEditButtonLabel(): string {
-  return '상세 수정';
+  return '제품 수정';
 }
 
 export function getARFilterShapeEditButtonLabel(): string {
-  return '형태 수정';
+  return '핏 수정';
 }
 
 export function getARFilterEditActionOptions(): readonly ARFilterEditActionOption[] {

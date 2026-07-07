@@ -343,17 +343,11 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
-  ARFilterShapeAdjust: {
-    category: 'ar-runtime',
-    depth: 'immersive',
-    kind: 'fullscreen',
-    statusBarStyle: 'dark',
-  },
   MakeupFilterEdit: {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
-    statusBarStyle: 'dark',
+    statusBarStyle: 'light',
   },
   MakeupFeedbackCapture: {
     category: 'capture-runtime',

@@ -1,5 +1,10 @@
 import React from 'react';
-import {Image, StyleSheet, type ViewStyle} from 'react-native';
+import {
+  Image,
+  StyleSheet,
+  type ImageSourcePropType,
+  type ViewStyle,
+} from 'react-native';
 import type {CameraType} from 'expo-camera';
 import {Text, View} from 'tamagui';
 
@@ -24,6 +29,7 @@ type ARFilterCameraPreviewProps = {
   comparisonDividerTopOffset?: number;
   previewColorHex: string;
   selectedComparisonMode: ComparisonMode;
+  sourceImageSource?: ImageSourcePropType | null;
   sourceImageUri?: string | null;
 };
 
@@ -48,7 +54,7 @@ export const AR_FILTER_COMPARISON_DIVIDER_BOTTOM = 0;
 export const AR_FILTER_MOCK_MAKEUP_OVERLAY_VISIBILITY = 'hidden' as const;
 export const AR_FILTER_HALF_GUIDE_SIDE_SHADE_VISIBILITY = 'hidden' as const;
 export const AR_FILTER_SOURCE_IMAGE_PREVIEW_MODE =
-  'gallery-image-over-camera' as const;
+  'photo-image-over-camera' as const;
 
 export function shouldShowARFilterHeaderCopy(): false {
   return false;
@@ -68,19 +74,13 @@ export function ARFilterCameraPreview({
   comparisonDividerTopOffset = AR_FILTER_COMPARISON_DIVIDER_TOP,
   guideMode,
   selectedComparisonMode,
+  sourceImageSource,
   sourceImageUri,
 }: ARFilterCameraPreviewProps) {
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
-  const shouldUseSourceImagePreview = Boolean(sourceImageUri);
-  // TEMP DIAG: which preview branch renders (Unity vs expo LiveCameraLayer).
-  console.info('[arfilter:preview] branch', {
-    shouldUseUnityPreview,
-    active,
-    shouldUseSourceImagePreview,
-    rendersUnity:
-      shouldUseUnityPreview && active && !shouldUseSourceImagePreview,
-  });
+  const resolvedSourceImage = sourceImageUri ? {uri: sourceImageUri} : sourceImageSource ?? null;
+  const shouldUseSourceImagePreview = Boolean(resolvedSourceImage);
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
   const rightComparisonLabel = selectedComparisonMode === 'left' ? 'Before' : 'After';
 
@@ -90,10 +90,10 @@ export function ARFilterCameraPreview({
         <UnityMakeupNativeView />
       ) : (
         <>
-          {sourceImageUri ? (
+          {resolvedSourceImage ? (
             <Image
               resizeMode="cover"
-              source={{uri: sourceImageUri}}
+              source={resolvedSourceImage}
               style={styles.sourceImagePreview}
             />
           ) : (

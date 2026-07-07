@@ -1,5 +1,10 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+} from 'react-native';
 import type {CameraType} from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import {ChevronDown, ChevronUp, Sparkles} from 'lucide-react-native';
@@ -55,6 +60,10 @@ import {
   getARFilterCategoryTitle,
 } from '../components/ARFilterOptionCardList';
 import {ARFilterOptionGroupTabs} from '../components/ARFilterOptionGroupTabs';
+import {
+  ARFilterEditModeTabs,
+  type ARFilterEditMode,
+} from '../components/ARFilterEditModeTabs';
 import {useARFilterSelectionState} from '../hooks/useARFilterSelectionState';
 import {useFullFaceMakeupEditState} from '../hooks/useFullFaceMakeupEditState';
 import type {FullFaceMakeupEditState} from '../services/fullFaceMakeupEditService';
@@ -83,6 +92,9 @@ import {
 } from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
+  editMode?: ARFilterEditMode;
+  editSourceImageSource?: ImageSourcePropType | null;
+  editSourceImageUri?: string | null;
   fullFaceEditState?: FullFaceMakeupEditState;
   initialComparisonMode?: ComparisonMode;
   initialGuideMode?: GuideMode;
@@ -90,9 +102,15 @@ type ARFilterScreenProps = {
   initialSource?: ARFilterLaunchSource;
   onBack?: () => void;
   onComplete?: () => void;
-  onOpenDetailEdit?: (selectedMakeupFilterId?: string) => void;
+  onOpenDetailEdit?: (
+    selectedMakeupFilterId?: string,
+    editSourceImageUri?: string,
+  ) => void;
   onOpenPersonalizedMakeup?: () => void;
-  onOpenShapeAdjust?: (selectedMakeupFilterId?: string) => void;
+  onOpenShapeAdjust?: (
+    selectedMakeupFilterId?: string,
+    editSourceImageUri?: string,
+  ) => void;
   onSave?: (selectedMakeupFilterId?: string) => void;
 };
 
@@ -184,6 +202,9 @@ export function getARFilterSelectedColor(
 }
 
 export function ARFilterScreen({
+  editMode,
+  editSourceImageSource,
+  editSourceImageUri,
   fullFaceEditState,
   initialComparisonMode = 'left',
   initialGuideMode = 'basic',
@@ -198,6 +219,7 @@ export function ARFilterScreen({
 }: ARFilterScreenProps) {
   const insets = useSafeAreaInsets();
   const isFullFaceMode = Boolean(fullFaceEditState);
+  const isPhotoEditMode = Boolean(editMode);
   const arGuideData = useMemo(() => getARMakeupGuideData(), []);
   const defaultFilter = useMemo(
     () => getDefaultMakeupFilter(arGuideData),
@@ -228,6 +250,8 @@ export function ARFilterScreen({
   const previewColorHex = isFullFaceMode
     ? fullFaceEdit.activeFullFaceControl.colorHex
     : selectedColor.hex;
+  const photoEditImageSource =
+    editSourceImageSource ?? arFilterSelectionState.selectedMakeupFilter.imageSource;
 
   useEffect(() => () => hideUnityMakeupView(), []);
 
@@ -289,13 +313,14 @@ export function ARFilterScreen({
     arFilterSelectionState.selectedMakeupFilter.id;
 
   const handleOpenDetailEdit = () => {
-    onOpenDetailEdit?.(getActiveMakeupFilterId());
+    onOpenDetailEdit?.(getActiveMakeupFilterId(), sourceImageUri ?? undefined);
   };
 
   const handleOpenShapeAdjust = () => {
     onOpenShapeAdjust?.(
       arFilterSelectionState.selectedTotalMakeupLookId ??
         arFilterSelectionState.selectedMakeupFilter.id,
+      sourceImageUri ?? undefined,
     );
   };
 
@@ -307,7 +332,7 @@ export function ARFilterScreen({
   };
 
   useEffect(() => {
-    if (isFullFaceMode) {
+    if (isFullFaceMode || isPhotoEditMode) {
       return;
     }
 
@@ -359,6 +384,7 @@ export function ARFilterScreen({
     arGuideData.makeupAreas,
     defaultFilter,
     isFullFaceMode,
+    isPhotoEditMode,
   ]);
 
   useEffect(() => {
@@ -375,23 +401,45 @@ export function ARFilterScreen({
         active={cameraSessionActive}
         cameraFacing={cameraFacing}
         comparisonDividerTopOffset={getARFilterGuideModeControlBottomOffset(insets.top)}
-        guideMode={arFilterSelectionState.guideMode}
+        guideMode={isPhotoEditMode ? 'basic' : arFilterSelectionState.guideMode}
         previewColorHex={previewColorHex}
         selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
-        sourceImageUri={sourceImageUri}
+        sourceImageSource={isPhotoEditMode ? photoEditImageSource : undefined}
+        sourceImageUri={isPhotoEditMode ? editSourceImageUri : sourceImageUri}
       />
 
-      <ARFilterModeTabs
-        arGuideData={arGuideData}
-        guideMode={arFilterSelectionState.guideMode}
-        onBack={handleBack}
-        onComparisonModeChange={arFilterSelectionState.setSelectedComparisonMode}
-        onGuideModeChange={arFilterSelectionState.setGuideMode}
-        selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
-        topInset={insets.top}
-      />
+      {editMode ? (
+        <ARFilterEditModeTabs
+          activeMode={editMode}
+          onBack={handleBack}
+          onModeChange={mode => {
+            if (mode === editMode) {
+              return;
+            }
 
-      {onOpenPersonalizedMakeup ? (
+            if (mode === 'product') {
+              handleOpenDetailEdit();
+              return;
+            }
+
+            handleOpenShapeAdjust();
+          }}
+          onSave={handleSave}
+          topInset={insets.top}
+        />
+      ) : (
+        <ARFilterModeTabs
+          arGuideData={arGuideData}
+          guideMode={arFilterSelectionState.guideMode}
+          onBack={handleBack}
+          onComparisonModeChange={arFilterSelectionState.setSelectedComparisonMode}
+          onGuideModeChange={arFilterSelectionState.setGuideMode}
+          selectedComparisonMode={arFilterSelectionState.selectedComparisonMode}
+          topInset={insets.top}
+        />
+      )}
+
+      {onOpenPersonalizedMakeup && !isPhotoEditMode ? (
         <Button
           accessibilityLabel="개인화 메이크업 열기"
           accessibilityRole="button"
@@ -425,7 +473,9 @@ export function ARFilterScreen({
             </Button>
           ) : null}
 
-          {isFilterSheetExpanded && AR_FILTER_BOTTOM_ACTIONS_PLACEMENT === 'aboveSheet' ? (
+          {isFilterSheetExpanded &&
+          AR_FILTER_BOTTOM_ACTIONS_PLACEMENT === 'aboveSheet' &&
+          !isPhotoEditMode ? (
             <View style={styles.floatingSheetActions}>
               <ARFilterBottomActions
                 hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}
@@ -441,7 +491,13 @@ export function ARFilterScreen({
           variant="sheet"
           style={[
             styles.controlsPanel,
-            {paddingBottom: insets.bottom + AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING},
+            {
+              paddingBottom:
+                insets.bottom +
+                (isPhotoEditMode
+                  ? spacing.lg
+                  : AR_FILTER_CAPTURE_CONTROLS_BOTTOM_PADDING),
+            },
           ]}>
           {isFilterSheetExpanded ? (
             <ScrollView
@@ -492,15 +548,17 @@ export function ARFilterScreen({
             </ScrollView>
           ) : null}
 
-          <ARFilterCaptureControls
-            cameraFacing={cameraFacing}
-            captureMode={captureMode}
-            isGalleryDisabled={isGalleryPickerOpen}
-            onCameraFacingToggle={handleCameraFacingToggle}
-            onCaptureModeChange={setCaptureMode}
-            onComplete={handleComplete}
-            onOpenGallery={handleOpenGallery}
-          />
+          {!isPhotoEditMode ? (
+            <ARFilterCaptureControls
+              cameraFacing={cameraFacing}
+              captureMode={captureMode}
+              isGalleryDisabled={isGalleryPickerOpen}
+              onCameraFacingToggle={handleCameraFacingToggle}
+              onCaptureModeChange={setCaptureMode}
+              onComplete={handleComplete}
+              onOpenGallery={handleOpenGallery}
+            />
+          ) : null}
         </BottomOverlayPanel>
       </View>
     </FullscreenOverlayScreen>

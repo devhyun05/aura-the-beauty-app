@@ -1,5 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, type ViewStyle} from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  type ImageSourcePropType,
+  type ViewStyle,
+} from 'react-native';
 import {ChevronLeft, Save} from 'lucide-react-native';
 import {Button, View, XStack, YStack} from 'tamagui';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -11,8 +16,11 @@ import {
 import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 import {colors, iconSize, radius, spacing} from '../../../shared/theme';
 import type {
+  ARFilterLaunchSource,
+  ComparisonMode,
   MakeupArea,
   FilterColorOption,
+  GuideMode,
   MakeupOptionGroupId,
 } from '../../../shared/types/makeupGuide';
 import {
@@ -47,14 +55,33 @@ import {
 } from '../components/UnityMakeupNativeView';
 import {useFullFaceMakeupEditState} from '../hooks/useFullFaceMakeupEditState';
 import {FullFaceMakeupEditPanel} from '../components/FullFaceMakeupEditPanel';
+import type {ARFilterEditMode} from '../components/ARFilterEditModeTabs';
 import type {FullFaceMakeupSourceInput} from '../../../shared/contracts/fullFaceMakeupRecipe';
+import {ARFilterShapeAdjustScreen} from './ARFilterShapeAdjustScreen';
+import {ARFilterScreen} from './ARFilterScreen';
 
 type MakeupFilterEditScreenProps = {
+  editSourceImageSource?: ImageSourcePropType | null;
+  editSourceImageUri?: string | null;
+  initialComparisonMode?: ComparisonMode;
+  initialEditMode?: ARFilterEditMode;
+  initialGuideMode?: GuideMode;
+  initialMakeupFilterId?: string;
+  initialSource?: ARFilterLaunchSource;
   mode?: 'preset' | 'fullFace';
   onBack?: () => void;
-  onSave?: (savedContract?: FullFaceMakeupSavedContract) => void;
+  onComplete?: () => void;
+  onSave?: (
+    savedContract?: FullFaceMakeupSavedContract,
+    selectedMakeupFilterId?: string,
+  ) => void;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
 };
+
+type FullFaceMakeupFilterEditScreenProps = Pick<
+  MakeupFilterEditScreenProps,
+  'mode' | 'onBack' | 'onSave' | 'sourceFrameMetadata'
+>;
 
 const OPTION_GROUPS: readonly {id: MakeupOptionGroupId; label: string}[] = [
   {id: 'color', label: '컬러'},
@@ -83,8 +110,8 @@ export function getMakeupFilterEditPreviewSummaryContent(): null {
   return null;
 }
 
-export function getMakeupFilterEditCameraMode(): 'live-camera' {
-  return 'live-camera';
+export function getMakeupFilterEditCameraMode(): 'photo-preview' {
+  return 'photo-preview';
 }
 
 export function getMakeupFilterEditSelectedTabOpacity(): number {
@@ -92,7 +119,7 @@ export function getMakeupFilterEditSelectedTabOpacity(): number {
 }
 
 export function getMakeupFilterEditTitle(mode: 'preset' | 'fullFace'): string {
-  return mode === 'fullFace' ? '맞춤 메이크업 조정' : '필터 수정';
+  return mode === 'fullFace' ? '맞춤 메이크업 조정' : '필터 상세 수정';
 }
 
 export function getMakeupFilterEditSelectedColor(
@@ -107,11 +134,121 @@ export function getMakeupFilterEditSelectedColor(
 }
 
 export function MakeupFilterEditScreen({
+  editSourceImageSource,
+  editSourceImageUri,
+  initialComparisonMode,
+  initialEditMode = 'product',
+  initialGuideMode,
+  initialMakeupFilterId,
+  initialSource,
   mode = 'preset',
+  onComplete,
   onBack,
   onSave,
   sourceFrameMetadata,
 }: MakeupFilterEditScreenProps) {
+  const [activeEditMode, setActiveEditMode] = useState<ARFilterEditMode>(
+    initialEditMode,
+  );
+  const [activeMakeupFilterId, setActiveMakeupFilterId] = useState<
+    string | undefined
+  >(initialMakeupFilterId);
+  const [activeEditSourceImageUri, setActiveEditSourceImageUri] = useState<
+    string | null | undefined
+  >(editSourceImageUri);
+
+  useEffect(() => {
+    setActiveEditMode(initialEditMode);
+  }, [initialEditMode]);
+
+  useEffect(() => {
+    setActiveMakeupFilterId(initialMakeupFilterId);
+  }, [initialMakeupFilterId]);
+
+  useEffect(() => {
+    setActiveEditSourceImageUri(editSourceImageUri);
+  }, [editSourceImageUri]);
+
+  const getNextMakeupFilterId = (selectedMakeupFilterId?: string) =>
+    selectedMakeupFilterId ?? activeMakeupFilterId ?? initialMakeupFilterId;
+
+  const getNextEditSourceImageUri = (nextEditSourceImageUri?: string) =>
+    nextEditSourceImageUri ?? activeEditSourceImageUri ?? editSourceImageUri;
+
+  const handleOpenProductEdit = (
+    selectedMakeupFilterId?: string,
+    nextEditSourceImageUri?: string,
+  ) => {
+    setActiveMakeupFilterId(getNextMakeupFilterId(selectedMakeupFilterId));
+    setActiveEditSourceImageUri(getNextEditSourceImageUri(nextEditSourceImageUri));
+    setActiveEditMode('product');
+  };
+
+  const handleOpenFitEdit = (
+    selectedMakeupFilterId?: string,
+    nextEditSourceImageUri?: string,
+  ) => {
+    setActiveMakeupFilterId(getNextMakeupFilterId(selectedMakeupFilterId));
+    setActiveEditSourceImageUri(getNextEditSourceImageUri(nextEditSourceImageUri));
+    setActiveEditMode('fit');
+  };
+
+  const handlePresetSave = (selectedMakeupFilterId?: string) => {
+    onSave?.(undefined, selectedMakeupFilterId ?? activeMakeupFilterId);
+  };
+
+  const handleFitSave = () => {
+    onSave?.(undefined, activeMakeupFilterId);
+  };
+
+  if (mode !== 'fullFace') {
+    if (activeEditMode === 'fit') {
+      return (
+        <ARFilterShapeAdjustScreen
+          editSourceImageSource={editSourceImageSource}
+          editSourceImageUri={activeEditSourceImageUri}
+          initialMakeupFilterId={activeMakeupFilterId}
+          onBack={onBack}
+          onOpenProductEdit={handleOpenProductEdit}
+          onSave={handleFitSave}
+        />
+      );
+    }
+
+    return (
+      <ARFilterScreen
+        editMode="product"
+        editSourceImageSource={editSourceImageSource}
+        editSourceImageUri={activeEditSourceImageUri}
+        initialComparisonMode={initialComparisonMode}
+        initialGuideMode={initialGuideMode}
+        initialMakeupFilterId={activeMakeupFilterId}
+        initialSource={initialSource}
+        onBack={onBack}
+        onComplete={onComplete ?? onBack}
+        onOpenDetailEdit={handleOpenProductEdit}
+        onOpenShapeAdjust={handleOpenFitEdit}
+        onSave={handlePresetSave}
+      />
+    );
+  }
+
+  return (
+    <FullFaceMakeupFilterEditScreen
+      mode={mode}
+      onBack={onBack}
+      onSave={onSave}
+      sourceFrameMetadata={sourceFrameMetadata}
+    />
+  );
+}
+
+function FullFaceMakeupFilterEditScreen({
+  mode = 'fullFace',
+  onBack,
+  onSave,
+  sourceFrameMetadata,
+}: FullFaceMakeupFilterEditScreenProps) {
   const insets = useSafeAreaInsets();
   const isFullFaceMode = mode === 'fullFace';
   const arGuideData = getARMakeupGuideData();

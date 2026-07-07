@@ -1,15 +1,19 @@
 import {
   createMakeupFilterShapePresetSaveValue,
   createShapePresetFromState,
+  getFilterShapeAdjustmentValueFromRatio,
   getShapePointOffsetFromDrag,
   getFilterShapeState,
+  getMirroredShapePointOffset,
   getResolvedShapePointPosition,
   getMakeupFilterOptionState,
   resetFilterShapePointOffset,
+  resetFilterShapePointOffsetWithSymmetry,
   resetFilterShapePoints,
   updateMakeupFilterOptionSelection,
   updateFilterShapeAdjustment,
   updateFilterShapePointOffset,
+  updateFilterShapePointOffsetWithSymmetry,
 } from './filterCustomizationService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -55,6 +59,46 @@ expectEqual(
   resetOnePointState.shapePoints[0]?.offset.x,
   0,
   'reset one shape point offset x',
+);
+
+const symmetryOffsetState = updateFilterShapePointOffsetWithSymmetry(
+  initialState,
+  'left-brow',
+  {x: 4, y: -2},
+  true,
+);
+
+expectEqual(
+  symmetryOffsetState.shapePoints[0]?.offset.x,
+  4,
+  'symmetry edit keeps selected point offset x',
+);
+expectEqual(
+  symmetryOffsetState.shapePoints[1]?.offset.x,
+  -4,
+  'symmetry edit mirrors paired point offset x',
+);
+expectEqual(
+  symmetryOffsetState.shapePoints[1]?.offset.y,
+  -2,
+  'symmetry edit mirrors paired point offset y',
+);
+expectEqual(
+  getMirroredShapePointOffset({x: 6, y: 3}).x,
+  -6,
+  'mirrored shape point offset flips x',
+);
+
+const resetSymmetryState = resetFilterShapePointOffsetWithSymmetry(
+  symmetryOffsetState,
+  'left-brow',
+  true,
+);
+
+expectEqual(
+  resetSymmetryState.shapePoints[1]?.offset.x,
+  0,
+  'symmetry reset clears paired point offset x',
 );
 
 const resetAllPointsState = resetFilterShapePoints(
@@ -103,6 +147,17 @@ const clampedDragOffset = getShapePointOffsetFromDrag({
 
 expectEqual(clampedDragOffset.x, -38, 'drag x clamps resolved shape point to left edge');
 expectEqual(clampedDragOffset.y, 69, 'drag y clamps resolved shape point to bottom edge');
+
+expectEqual(
+  getFilterShapeAdjustmentValueFromRatio(initialState.adjustments.horizontal, 0.75),
+  12,
+  'slider ratio maps to stepped adjustment value',
+);
+expectEqual(
+  getFilterShapeAdjustmentValueFromRatio(initialState.adjustments.horizontal, 2),
+  24,
+  'slider ratio clamps max adjustment value',
+);
 
 const shapePresetSaveValue = createMakeupFilterShapePresetSaveValue({
   state: offsetState,

@@ -43,12 +43,12 @@ const mockMakeupFilter: MakeupFilter = {
 
 expectEqual(
   getARFilterOptionGroupLabels('all').join(','),
-  '룩,형태',
+  '룩,핏',
   'total makeup option groups',
 );
 expectEqual(
   getARFilterOptionGroupLabels('lip').join(','),
-  '룩,컬러,타입,질감,형태',
+  '룩,컬러,타입,질감,핏',
   'point makeup option groups',
 );
 expectEqual(

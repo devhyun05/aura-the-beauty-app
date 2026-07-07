@@ -254,7 +254,7 @@ export function ARFilterOptionCardList({
       horizontal
       showsHorizontalScrollIndicator={false}>
       <OptionCard
-        accessibilityLabel="원본 형태 선택"
+        accessibilityLabel="원본 핏 선택"
         isActive={selectedShapeId === ORIGINAL_OPTION_CARD_ID}
         label={ORIGINAL_OPTION_CARD_LABEL}
         onPress={onOriginalOptionPress}>
@@ -263,7 +263,7 @@ export function ARFilterOptionCardList({
       {shapeOptions.map(option => (
         <OptionCard
           key={option.id}
-          accessibilityLabel={`${option.label} 형태 선택`}
+          accessibilityLabel={`${option.label} 핏 선택`}
           isActive={option.id === selectedShapeId}
           label={option.label}
           onPress={() => onShapeOptionPress(option.id)}>

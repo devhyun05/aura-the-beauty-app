@@ -51,8 +51,8 @@ expectEqual(
 );
 expectEqual(
   AR_FILTER_SOURCE_IMAGE_PREVIEW_MODE,
-  'gallery-image-over-camera',
-  'AR filter selected gallery image replaces the live camera preview',
+  'photo-image-over-camera',
+  'AR filter selected photo image replaces the live camera preview',
 );
 expectEqual(
   shouldShowARFilterMockMakeupOverlays(),
