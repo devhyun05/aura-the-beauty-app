@@ -11,7 +11,7 @@ def test_schema_path_exists() -> None:
 
   assert path.name == "schema.sql"
   assert path.exists()
-  assert SCHEMA_VERSION == "schema.sql:v1"
+  assert SCHEMA_VERSION == "schema.sql:v3"
 
 
 def test_seed_path_exists() -> None:
@@ -19,7 +19,7 @@ def test_seed_path_exists() -> None:
 
   assert path.name == "seed.sql"
   assert path.exists()
-  assert SEED_VERSION == "seed.sql:v2"
+  assert SEED_VERSION == "seed.sql:v4"
 
 
 def test_schema_report_passes_when_expected_tables_and_schema_marker_exist() -> None:
@@ -63,11 +63,22 @@ def test_schema_report_lists_missing_vector_extension() -> None:
   report = build_schema_report(
     set(EXPECTED_TABLES),
     EXPECTED_SCHEMA_VERSIONS,
-    installed_extensions={"pgcrypto", "citext", "pg_trgm"},
+    installed_extensions={"btree_gist", "pgcrypto", "citext", "pg_trgm"},
   )
 
   assert report["ok"] is False
   assert report["missingExtensions"] == ["vector"]
+
+
+def test_schema_report_lists_missing_booking_overlap_extension() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    installed_extensions={"pgcrypto", "citext", "pg_trgm", "vector"},
+  )
+
+  assert report["ok"] is False
+  assert report["missingExtensions"] == ["btree_gist"]
 
 
 def test_pending_community_core_migration_is_registered() -> None:

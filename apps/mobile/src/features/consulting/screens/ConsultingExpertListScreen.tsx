@@ -1,5 +1,5 @@
-import {useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, View as RNView} from 'react-native';
+import {useEffect, useMemo, useState} from 'react';
+import {Pressable, ScrollView, StyleSheet, View as RNView} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -8,12 +8,10 @@ import {
   typography,
 } from '../../../shared/theme';
 import {ConsultingScreenScaffold} from '../components/ConsultingScreenScaffold';
-import {
-  ConsultingChip,
-  ExpertListCard,
-} from '../components/consultingComponents';
+import {ExpertListCard} from '../components/consultingComponents';
 import {consultingExperts} from '../mocks/consulting.mock';
-import type {ConsultingCategoryId} from '../types';
+import {getConsultingExperts} from '../services/consultingService';
+import type {ConsultingCategoryId, ConsultingExpert} from '../types';
 
 type CategoryFilterId = ConsultingCategoryId | 'all';
 
@@ -26,8 +24,8 @@ const categoryFilters: readonly CategoryFilter[] = [
   {id: 'all', label: '전체'},
   {id: 'personalColor', label: '퍼스널컬러'},
   {id: 'makeupClinic', label: '메이크업'},
-  {id: 'lipColor', label: '립·컬러'},
-  {id: 'hairStyle', label: '헤어·스타일'},
+  {id: 'lipColor', label: '패션'},
+  {id: 'hairStyle', label: '헤어'},
 ];
 
 type ConsultingExpertListScreenProps = {
@@ -42,16 +40,32 @@ export function ConsultingExpertListScreen({
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterId>(
     initialCategoryId ?? 'all',
   );
+  const [experts, setExperts] =
+    useState<readonly ConsultingExpert[]>(consultingExperts);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getConsultingExperts().then(data => {
+      if (isMounted) {
+        setExperts(data);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredExperts = useMemo(() => {
     if (selectedCategory === 'all') {
-      return consultingExperts;
+      return experts;
     }
 
-    return consultingExperts.filter(expert =>
+    return experts.filter(expert =>
       expert.categoryIds.includes(selectedCategory),
     );
-  }, [selectedCategory]);
+  }, [experts, selectedCategory]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
@@ -65,12 +79,13 @@ export function ConsultingExpertListScreen({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}>
         {categoryFilters.map(filter => (
-          <ConsultingChip
+          <CategoryFilterCard
             key={filter.id}
-            label={filter.label}
             onPress={() => setSelectedCategory(filter.id)}
+            filter={filter}
             selected={filter.id === selectedCategory}
           />
         ))}
@@ -100,6 +115,37 @@ export function ConsultingExpertListScreen({
   );
 }
 
+function CategoryFilterCard({
+  filter,
+  selected,
+  onPress,
+}: {
+  filter: CategoryFilter;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.filterPill,
+        selected && styles.filterPillSelected,
+        pressed ? styles.pressed : null,
+      ]}>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.filterLabel,
+          selected && styles.filterLabelSelected,
+        ]}>
+        {filter.label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   countText: {
     color: consultingColors.textMuted,
@@ -118,9 +164,38 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
   },
+  filterPill: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    height: 34,
+    minWidth: 64,
+    paddingHorizontal: 13,
+  },
+  filterPillSelected: {
+    backgroundColor: consultingColors.text,
+    borderColor: consultingColors.text,
+  },
+  filterLabel: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  filterLabelSelected: {
+    color: '#FFFFFF',
+  },
   filterRow: {
+    alignItems: 'center',
     gap: spacing.sm,
     paddingRight: spacing.sm,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    maxHeight: 38,
   },
   intro: {
     gap: 6,
@@ -130,6 +205,9 @@ const styles = StyleSheet.create({
   },
   listSection: {
     gap: spacing.md,
+  },
+  pressed: {
+    opacity: 0.85,
   },
   subtitle: {
     color: consultingColors.textMuted,

@@ -8,7 +8,7 @@ from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
 
 
-SEED_VERSION = "seed.sql:v2"
+SEED_VERSION = "seed.sql:v4"
 
 
 def get_seed_path() -> Path:

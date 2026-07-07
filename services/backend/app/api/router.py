@@ -4,6 +4,7 @@ from app.api import (
   analysis,
   ar,
   community,
+  consulting,
   feedback,
   filter_extractions,
   health,
@@ -29,3 +30,4 @@ api_router.include_router(makeup_styles.router)
 api_router.include_router(feedback.router)
 api_router.include_router(filter_extractions.router)
 api_router.include_router(ar.router)
+api_router.include_router(consulting.router)

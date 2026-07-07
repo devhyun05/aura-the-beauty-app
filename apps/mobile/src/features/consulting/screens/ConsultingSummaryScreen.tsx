@@ -15,7 +15,7 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '../components/consultingComponents';
-import {consultingSummary, formatConsultingPrice} from '../mocks/consulting.mock';
+import {formatConsultingPrice} from '../mocks/consulting.mock';
 import type {
   ConsultingExpert,
   ConsultingRecommendedProduct,
@@ -38,11 +38,12 @@ type ConsultingSummaryScreenProps = {
 
 export function ConsultingSummaryScreen({
   expert,
-  summary = consultingSummary,
+  summary,
   heroTitle = '상담이 완료됐어요',
   onGoToConsultingHome,
   onPressHistory,
 }: ConsultingSummaryScreenProps) {
+  const hasSummary = Boolean(summary);
 
   return (
     <RNView style={styles.root}>
@@ -53,25 +54,36 @@ export function ConsultingSummaryScreen({
           </RNView>
           <Text style={styles.title}>{heroTitle}</Text>
           <Text style={styles.subtitle}>
-            {expert.name} · {summary.durationLabel} · {summary.dateLabel}
+            {summary
+              ? `${expert.name} · ${summary.durationLabel} · ${summary.dateLabel}`
+              : `${expert.name} 상담 요약은 전문가가 저장하면 표시돼요.`}
           </Text>
         </View>
 
-        <View style={styles.noteCard}>
-          <Text style={styles.noteCardLabel}>전문가 요약 노트</Text>
-          <View style={styles.noteList}>
-            {summary.notes.map(note => (
-              <RNView key={note.id} style={styles.noteRow}>
-                <Text style={styles.noteBody}>
-                  <Text style={styles.noteBadge}>{note.label} </Text>
-                  {note.body}
-                </Text>
-              </RNView>
-            ))}
+        {summary ? (
+          <View style={styles.noteCard}>
+            <Text style={styles.noteCardLabel}>전문가 요약 노트</Text>
+            <View style={styles.noteList}>
+              {summary.notes.map(note => (
+                <RNView key={note.id} style={styles.noteRow}>
+                  <Text style={styles.noteBody}>
+                    <Text style={styles.noteBadge}>{note.label} </Text>
+                    {note.body}
+                  </Text>
+                </RNView>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.noteCard}>
+            <Text style={styles.noteCardLabel}>요약 준비 중</Text>
+            <Text style={styles.noteBody}>
+              상담사가 요약 노트와 추천 제품을 저장하면 이 화면에 바로 반영돼요.
+            </Text>
+          </View>
+        )}
 
-        {summary.products.length > 0 ? (
+        {summary && summary.products.length > 0 ? (
           <View style={styles.section}>
             <ConsultingSectionTitle>전문가 추천 제품</ConsultingSectionTitle>
             <View style={styles.productList}>
@@ -83,7 +95,9 @@ export function ConsultingSummaryScreen({
         ) : null}
 
         <Text style={styles.saveNote}>
-          요약 리포트는 마이페이지 &gt; 내 상담 내역에 자동 저장됐어요.
+          {hasSummary
+            ? '요약 리포트는 마이페이지 > 내 상담 내역에 자동 저장됐어요.'
+            : '저장된 요약이 없을 때는 상담 내역만 먼저 보여드려요.'}
         </Text>
       </ConsultingScreenScaffold>
 

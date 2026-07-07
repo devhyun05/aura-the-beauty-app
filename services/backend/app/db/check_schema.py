@@ -31,6 +31,17 @@ EXPECTED_TABLES = {
   "community_reply_likes",
   "community_reports",
   "community_events",
+  "consulting_categories",
+  "consulting_experts",
+  "consulting_expert_categories",
+  "consulting_expert_durations",
+  "consulting_expert_career",
+  "consulting_expert_reviews",
+  "consulting_bookings",
+  "consulting_summaries",
+  "consulting_membership_plans",
+  "user_consulting_memberships",
+  "consulting_payments",
   "home_hero_banners",
   "home_notices",
   "home_trend_items",
@@ -42,7 +53,7 @@ EXPECTED_TABLES = {
   "schema_migrations",
 }
 
-EXPECTED_EXTENSIONS = {"pg_trgm", "vector"}
+EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 
 EXPECTED_COLUMNS = {
   "analysis_reports": {"embedding"},

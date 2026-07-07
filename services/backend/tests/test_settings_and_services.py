@@ -15,6 +15,7 @@ class FakeS3Client:
     assert operation == "put_object"
     assert Params["Bucket"] == "aura-dev-bucket"
     assert Params["ContentType"] == "image/jpeg"
+    assert Params["CacheControl"] == "public, max-age=31536000, immutable"
     assert ExpiresIn == 900
 
     return f"https://upload.example.com/{Params['Key']}"
@@ -53,6 +54,7 @@ def test_s3_presigned_upload_uses_cdn_url_and_file_extension() -> None:
   assert upload["object_key"].startswith("uploads/capture/")
   assert upload["object_key"].endswith(".jpg")
   assert upload["cdn_url"] == f"https://cdn.example.com/{upload['object_key']}"
+  assert upload["cache_control"] == "public, max-age=31536000, immutable"
   assert upload["method"] == "PUT"
 
 

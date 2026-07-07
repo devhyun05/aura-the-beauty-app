@@ -8,7 +8,7 @@ from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
 
 
-SCHEMA_VERSION = "schema.sql:v1"
+SCHEMA_VERSION = "schema.sql:v3"
 
 POST_SCHEMA_MIGRATIONS = {
   "schema.sql:community-core-v1": """

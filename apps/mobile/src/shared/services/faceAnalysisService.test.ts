@@ -7,6 +7,7 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 const originalApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+const originalCdnBaseUrl = process.env.EXPO_PUBLIC_CDN_BASE_URL;
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://cdn.example.com/api';
 
@@ -57,4 +58,21 @@ expectEqual(
   'analysis report image source builds cdn url from stored object key',
 );
 
+process.env.EXPO_PUBLIC_CDN_BASE_URL = 'https://media.example.com/';
+
+const explicitCdnObjectKeySource = resolveFaceAnalysisReportImageSource({
+  detailPayload: {
+    request: {
+      objectKey: 'uploads/capture/explicit-cdn-face.jpg',
+    },
+  },
+}) as {uri?: string};
+
+expectEqual(
+  explicitCdnObjectKeySource.uri,
+  'https://media.example.com/uploads/capture/explicit-cdn-face.jpg',
+  'analysis report image source uses explicit cdn base url before api base url',
+);
+
 process.env.EXPO_PUBLIC_API_BASE_URL = originalApiBaseUrl;
+process.env.EXPO_PUBLIC_CDN_BASE_URL = originalCdnBaseUrl;
