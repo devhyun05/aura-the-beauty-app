@@ -21,6 +21,7 @@ from app.services.auradin_catalog.candidate_normalizer import normalize_naver_fi
 from app.services.auradin_catalog.category_queries import (  # noqa: E402
   COLLECTABLE_CATEGORIES,
   DEFAULT_CATEGORY_QUERIES,
+  subcategory_query_templates,
 )
 from app.services.auradin_catalog.enrichment_queue import (  # noqa: E402
   build_brand_category_top_queue,
@@ -150,10 +151,17 @@ def _build_target_queries(
         continue
 
       slot_queries: list[str] = []
-      templates = [
+      # DEFAULT + EXTRA + 세부 카테고리 질의를 합쳐 subcategory 커버리지를 넓힌다 (순서 유지·중복 제거).
+      seen_templates: set[str] = set()
+      templates = []
+      for template in (
         *DEFAULT_CATEGORY_QUERIES.get(category, ()),
         *EXTRA_CATEGORY_QUERY_TEMPLATES.get(category, ()),
-      ]
+        *subcategory_query_templates(category),
+      ):
+        if template not in seen_templates:
+          seen_templates.add(template)
+          templates.append(template)
 
       for template in templates:
         query = template.format(brand=brand)

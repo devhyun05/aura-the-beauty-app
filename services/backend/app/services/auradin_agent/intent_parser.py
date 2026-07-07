@@ -4,8 +4,15 @@ import re
 from typing import Any
 
 
-SUPPORTED_CATEGORIES = {"lip", "cheek", "shadow"}
-KNOWN_CATEGORIES = SUPPORTED_CATEGORIES | {"base", "brow", "liner"}
+SUPPORTED_CATEGORIES = {"lip", "cheek", "shadow", "base", "brow", "liner"}
+
+# 색조/베이스 6종이 AURADIN 서빙 범위. 그 밖(네일·향수·스킨케어·헤어)은 조용히 넓히지 않고 안내한다(§9).
+OUT_OF_SCOPE_TERMS = {
+  "nail": ("네일", "매니큐어", "젤네일", "nail"),
+  "perfume": ("향수", "퍼퓸", "오드퍼퓸", "오드뚜왈렛", "fragrance", "perfume"),
+  "skincare": ("스킨케어", "토너", "세럼", "앰플", "선크림", "클렌징", "skincare", "toner", "serum"),
+  "hair": ("샴푸", "헤어", "트리트먼트", "린스", "hair", "shampoo"),
+}
 
 CATEGORY_TERMS = {
   "lip": ("립", "틴트", "립스틱", "글로스", "입술", "lip", "tint", "gloss"),
@@ -110,6 +117,13 @@ def _parse_category(text: str) -> str | None:
   return None
 
 
+def _parse_out_of_scope(text: str) -> str | None:
+  for name, terms in OUT_OF_SCOPE_TERMS.items():
+    if _contains(text, terms):
+      return name
+  return None
+
+
 def _parse_price_lte(text: str) -> int | None:
   normalized = text.replace(",", "")
   match = re.search(r"(\d+(?:\.\d+)?)\s*만\s*원?\s*(?:이하|까지|안쪽|미만|under)?", normalized)
@@ -150,7 +164,7 @@ def parse_intent(
   locked_filters: list[dict[str, Any]] = []
   soft_preferences: list[dict[str, Any]] = []
   category = _parse_category(text)
-  unsupported_category = category if category in KNOWN_CATEGORIES - SUPPORTED_CATEGORIES else None
+  unsupported_category = _parse_out_of_scope(text) if category is None else None
 
   if category in SUPPORTED_CATEGORIES:
     locked_filters.append(_filter("category", "eq", values=[category]))

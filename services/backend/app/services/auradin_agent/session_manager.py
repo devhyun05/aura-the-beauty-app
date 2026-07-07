@@ -9,7 +9,7 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database
 
 from .catalog_loader import get_catalog
-from .enrichment import enrich_results
+from .enrichment import enrich_question, enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
 from .report_profile import personal_color_to_soft_preferences
@@ -23,6 +23,8 @@ MAX_RESULTS = 6
 LAMBDA_MIN = 0.05
 LAMBDA_MAX = 0.95
 REFINE_DIALS = {"more_similar", "more_diverse"}
+# 종료 상태 — answer/refine을 조용히 무시하고(사용자 이탈/만료 후 늦은 요청), 에러를 노출한다.
+INACTIVE_PHASES = {"expired", "cancelled"}
 # '글리터'는 카탈로그에 없는 마감 → 아이섀도우·쉬머로 해석했음을 근거에 투명 노출 (§6/§9).
 GLITTER_TERMS = ("글리터", "반짝", "스파클", "glitter", "sparkle")
 
@@ -69,7 +71,14 @@ def _filter_label(filter_delta: dict[str, Any]) -> str:
   attribute = filter_delta.get("attribute")
   values = filter_delta.get("values") or []
   if attribute == "category" and values:
-    return {"lip": "립", "cheek": "블러셔/치크", "shadow": "아이섀도우"}.get(values[0], values[0])
+    return {
+      "lip": "립",
+      "cheek": "블러셔/치크",
+      "shadow": "아이섀도우",
+      "base": "베이스",
+      "brow": "브로우",
+      "liner": "라이너",
+    }.get(values[0], values[0])
   if attribute == "priceKrw":
     return f"{int(filter_delta.get('numberValue') or 0):,}원 이하"
   if attribute == "channel" and values:
@@ -105,15 +114,17 @@ def _applied_filters(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _unsupported_error(category: str | None) -> dict[str, Any]:
-  label = {"brow": "브로우", "base": "베이스", "liner": "라이너"}.get(category or "", category or "해당")
+  label = {"nail": "네일", "perfume": "향수", "skincare": "스킨케어", "hair": "헤어"}.get(
+    category or "", category or "해당"
+  )
   return {
     "code": "unsupported_category",
-    "message": f"지금 MVP seed는 립·치크·아이섀도우 중심이라 {label} 제품은 아직 충분하지 않아요.",
+    "message": f"AURADIN은 지금 립·치크·아이섀도우·베이스·브로우·라이너 색조 메이크업만 다뤄요. {label} 제품은 아직 범위 밖이에요.",
     "recoverable": True,
     "recoveryOptions": [
       {"label": "데일리 립으로 찾기", "prompt": "데일리로 쓸 만한 립 추천해줘"},
-      {"label": "자연스러운 블러셔", "prompt": "면접용 자연스러운 블러셔, 너무 붉지 않게"},
-      {"label": "은은한 쉬머 섀도우", "prompt": "글리터 강한 아이섀도우 말고 은은한 쉬머"},
+      {"label": "커버 좋은 쿠션", "prompt": "커버 잘 되는 쿠션 추천해줘"},
+      {"label": "자연스러운 브로우", "prompt": "자연스러운 브로우 펜슬 추천해줘"},
     ],
   }
 
@@ -125,7 +136,7 @@ def _no_results_error(state: dict[str, Any]) -> dict[str, Any]:
     "recoverable": True,
     "recoveryOptions": [
       {"label": "가격 조건 빼고 다시", "prompt": state.get("prompt", "").replace("2만원 이하", "").strip()},
-      {"label": "립·치크·섀도우 전체에서 보기", "prompt": "데일리로 쓸 만한 제품 추천해줘"},
+      {"label": "전체 카테고리에서 보기", "prompt": "데일리로 쓸 만한 제품 추천해줘"},
     ],
   }
 
@@ -196,7 +207,7 @@ def _build_result(
   ]
   return {
     "headerLabel": "답변 기준으로 후보를 좁혔어요" if state.get("answers") else "조건에 가까운 제품을 골랐어요",
-    "contextSummary": "현재 MVP는 립·치크·아이섀도우 구매 가능 상품을 우선 검색해요.",
+    "contextSummary": "현재 립·치크·아이섀도우·베이스·브로우·라이너 구매 가능 상품을 검색해요.",
     "appliedFilters": _applied_filters(state),
     "products": products,
     "diagnostics": {
@@ -358,7 +369,7 @@ def answer_session(
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
   state = get_session(session_id)
-  if not state or state.get("phase") == "expired":
+  if not state or state.get("phase") in INACTIVE_PHASES:
     return state
 
   question = state.get("lastQuestion") if isinstance(state.get("lastQuestion"), dict) else None
@@ -407,17 +418,31 @@ def answer_session(
   return state
 
 
-def _refine_header(prompt: str, dial: str | None) -> str:
+def _refine_header(prompt: str, dial: str | None, *, lambda_moved: bool = True) -> str:
   if prompt:
     return "추가 조건을 반영해 다시 골랐어요"
+  # §7 정직화: λ가 클램프 포화로 안 움직였으면 "다시 정렬했어요"는 거짓 — 사실대로 알린다.
+  if not lambda_moved:
+    return "이미 가장 비슷한 순서예요" if dial == "more_similar" else "이미 가장 다양한 순서예요"
   if dial == "more_similar":
     return "1위와 더 비슷한 결로 다시 정렬했어요"
   return "더 다양한 결로 다시 정렬했어요"
 
 
+def _refine_saturation_notice(dial: str | None) -> dict[str, Any]:
+  # dial이 λ 범위 끝에 닿아 순서가 그대로일 때 — 모바일이 토스트/배너로 구분 렌더.
+  axis = "비슷한" if dial == "more_similar" else "다양한"
+  return {
+    "kind": "dial_saturated",
+    "dial": dial,
+    "message": f"이미 가장 {axis} 순서로 정렬돼 있어요.",
+  }
+
+
 def _refine_recovery(state: dict[str, Any], prompt: str) -> dict[str, Any]:
   # §7: 후보 0이어도 조용히 완화 금지 — 이전 결과 유지 + 복구 옵션 제시.
   return {
+    "kind": "recovery",
     "message": "요청한 조건을 지키면 보여줄 후보가 없어요. 조건을 조용히 풀지 않고 이전 결과를 유지할게요.",
     "rejectedPrompt": prompt or None,
     "recoveryOptions": [
@@ -441,7 +466,7 @@ def refine_session(
   """
   settings = settings or get_settings()
   state = get_session(session_id)
-  if not state or state.get("phase") == "expired":
+  if not state or state.get("phase") in INACTIVE_PHASES:
     return state
 
   prompt = str(prompt or "").strip()
@@ -457,11 +482,14 @@ def refine_session(
     "softPreferences": state.get("softPreferences"),
   }
 
+  lambda_moved = True
   if dial in REFINE_DIALS:
     step = float(settings.auradin_refine_lambda_step)
-    current = _session_lambda(state, settings)
+    current = round(_session_lambda(state, settings), 4)
     adjusted = current + (step if dial == "more_similar" else -step)
-    state["mmrLambda"] = round(min(LAMBDA_MAX, max(LAMBDA_MIN, adjusted)), 4)
+    new_lambda = round(min(LAMBDA_MAX, max(LAMBDA_MIN, adjusted)), 4)
+    lambda_moved = new_lambda != current  # 클램프 포화면 순서가 그대로 → no-op
+    state["mmrLambda"] = new_lambda
 
   used_cache = False
   if prompt:
@@ -512,6 +540,7 @@ def refine_session(
         "dial": dial,
         "prompt": prompt or None,
         "lambda": _session_lambda(state, settings),
+        "lambdaMoved": lambda_moved,
         "usedCache": used_cache,
         "candidateCount": len(ranked),
       },
@@ -529,7 +558,9 @@ def refine_session(
     state["updatedAt"] = _now()
     return state
 
-  result["headerLabel"] = _refine_header(prompt, dial)
+  result["headerLabel"] = _refine_header(prompt, dial, lambda_moved=lambda_moved)
+  if dial and not prompt and not lambda_moved:
+    result["refineNotice"] = _refine_saturation_notice(dial)
   state["rankedCache"] = _ranked_cache(ranked)
   state["currentCandidateIds"] = [row["item"]["id"] for row in ranked]
   state["rankedCandidateIds"] = [row["item"]["id"] for row in ranked]
@@ -546,11 +577,11 @@ def to_search_turn(state: dict[str, Any]) -> dict[str, Any]:
     "sessionId": state.get("sessionId"),
     "phase": phase,
     "thinking": _thinking(phase),
-    "contextSummary": state.get("result", {}).get("contextSummary") or "립·치크·아이섀도우 MVP catalog 기준",
+    "contextSummary": state.get("result", {}).get("contextSummary") or "립·치크·아이섀도우·베이스·브로우·라이너 catalog 기준",
     "appliedFilters": _applied_filters(state),
     "question": state.get("lastQuestion") if phase == "question" else None,
     "result": state.get("result") if phase == "results" else None,
-    "error": state.get("error") if phase in {"failed", "expired"} else None,
+    "error": state.get("error") if phase in {"failed", "expired", "cancelled"} else None,
     "retryAfterMs": 350 if phase == "searching" else None,
     "logs": state.get("logs", []),
   }
@@ -560,10 +591,39 @@ def clear_sessions() -> None:
   _SESSIONS.clear()
 
 
+def cancel_session(session_id: str) -> dict[str, Any] | None:
+  """§ 사용자가 검색 도중 이탈 → 세션을 종료 상태로 표시한다.
+
+  enrich는 요청 내에서 await되므로 취소가 태스크를 죽이는 게 아니라, 세션을 'cancelled'로
+  전이시켜 이후 answer/refine을 조용히 무시(INACTIVE_PHASES)하고 늦은 poll에 명시적 상태를
+  돌려준다. expired와 같은 lazy-mark 패턴 — 행은 TTL로 정리된다.
+  """
+  state = _SESSIONS.get(session_id)
+  if not state:
+    return None
+  if state.get("phase") not in INACTIVE_PHASES:
+    state["phase"] = "cancelled"
+    state["error"] = {
+      "code": "cancelled",
+      "message": "검색을 중단했어요. 언제든 다시 시작할 수 있어요.",
+      "recoverable": True,
+    }
+    state["lastQuestion"] = None
+    state["updatedAt"] = _now()
+  return state
+
+
 async def _enrich_if_results(state: dict[str, Any] | None, settings: Settings) -> None:
   # §11 6/7단계: 랭킹(동기·순수) 뒤 비동기 enrich — 라이브 Naver 발견 + reasonCopy (가산).
   if state and state.get("phase") == "results":
     await enrich_results(state, settings=settings, extra_caveats=_interpretation_caveats(state))
+
+
+async def _enrich_if_question(state: dict[str, Any] | None, settings: Settings) -> None:
+  # §11 3-2단계: 되묻기 질문의 표시 텍스트를 실시간 LLM으로 다듬는다 — 구조(id/filterDelta)는 불변(§9).
+  # to_search_turn이 phase=="question"일 때 state["lastQuestion"]를 그대로 서빙하므로 in-place 재작성이면 충분.
+  if state and state.get("phase") == "question":
+    await enrich_question(state, settings=settings)
 
 
 def _postgres_enabled(settings: Settings, db: Database | None) -> bool:
@@ -649,6 +709,7 @@ async def create_session_persisted(
     settings=settings,
   )
   await _enrich_if_results(state, settings)
+  await _enrich_if_question(state, settings)
   if _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
@@ -690,6 +751,7 @@ async def answer_session_persisted(
 
   state = answer_session(session_id, question_id=question_id, option_id=option_id, settings=settings)
   await _enrich_if_results(state, settings)
+  await _enrich_if_question(state, settings)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 
@@ -711,6 +773,26 @@ async def refine_session_persisted(
 
   state = refine_session(session_id, prompt=prompt, dial=dial, settings=settings)
   await _enrich_if_results(state, settings)
+  await _enrich_if_question(state, settings)
+  if state and _postgres_enabled(settings, db):
+    await _save_postgres_session(db, state)
+
+  return state
+
+
+async def cancel_session_persisted(
+  session_id: str,
+  *,
+  settings: Settings | None = None,
+  db: Database | None = None,
+) -> dict[str, Any] | None:
+  settings = settings or get_settings()
+  # postgres 백엔드면 먼저 rehydrate — 다른 워커가 만든 세션도 취소 가능하게.
+  state = await get_session_persisted(session_id, settings=settings, db=db)
+  if not state:
+    return None
+
+  state = cancel_session(session_id)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 

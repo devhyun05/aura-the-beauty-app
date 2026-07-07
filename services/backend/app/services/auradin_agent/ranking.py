@@ -46,7 +46,14 @@ ATTRIBUTE_LABELS = {
   },
 }
 
-CATEGORY_LABELS = {"lip": "립", "cheek": "블러셔/치크", "shadow": "아이섀도우"}
+CATEGORY_LABELS = {
+  "lip": "립",
+  "cheek": "블러셔/치크",
+  "shadow": "아이섀도우",
+  "base": "베이스",
+  "brow": "브로우",
+  "liner": "라이너",
+}
 
 # §5 랭킹 가중치 (튜너블). evidencedMatch(rule+evidence)를 주력으로,
 # semantic은 낮게 둔다 — 현행 hash 임베딩은 max~0.13이라 상한을 눌러 매치율을 왜곡한다.
@@ -110,6 +117,19 @@ def _evidence_score(item: dict[str, Any]) -> float:
     score += 0.25
   if any(source in evidence_types for source in ("prior_detail", "structured_extraction")):
     score += 0.15
+  # 라이브 NAVER 오퍼 = 실재·구매가능의 실질 근거(공식 상세보다 약하나 무시할 근거는 아님).
+  # 이 축을 0으로 두면 NAVER 시드 전 품목이 근거 바닥(0.2)에 깔려 매치율이 부당하게 눌린다.
+  # 단, 오퍼만으로 evidence_floor(0.45)를 넘겨선 안 된다 — 그러면 §5 floor가 관련성 대신
+  # 구매가능성만으로 뚫려 무의미해진다(0.2+0.2=0.4 < 0.45 유지).
+  if "naver_live_offer" in evidence_types:
+    score += 0.2
+  if "retail_presence_from_live_offer" in evidence_types:
+    score += 0.12
+  if any(
+    source in evidence_types
+    for source in ("shade_option_text_inferred", "shade_option_tone_inferred")
+  ):
+    score += 0.1
   if "title_residual_rule_inferred" in evidence_types:
     score += 0.05
   return min(score, 1.0)
@@ -332,6 +352,18 @@ def assign_roles(
   return roled[:top_n]
 
 
+def _has_hard_topic_lock(hard_filters: list[dict[str, Any]] | None) -> bool:
+  """사용자가 category/priceKrw를 명시적으로 잠갔는가 — 잠갔다면 랭크셋 전체가 on-topic."""
+  for filter_delta in hard_filters or []:
+    if _clean(filter_delta.get("mode")) == "soft":
+      continue
+    attribute = _clean(filter_delta.get("attribute"))
+    op = _clean(filter_delta.get("op"))
+    if attribute in {"category", "priceKrw"} and op not in {"", "noop"}:
+      return True
+  return False
+
+
 def build_slice_result(
   ranked: list[dict[str, Any]],
   *,
@@ -343,6 +375,13 @@ def build_slice_result(
 ) -> dict[str, Any]:
   """floor → MMR → 3역할 → 구조화 근거 합성 (§5/§6 계약 검증 진입점)."""
   floored = [row for row in ranked if passes_floor(row, s_floor=s_floor)]
+  # §5 floor 폴백: category/price를 명시적으로 잠근 질의는 랭크셋 전체가 이미 on-topic·구매가능이다.
+  # 속성이 희소하거나(공식 근거 없는 NAVER 시드) hash 시맨틱 한계로 floor 통과분이 top_n 미만이면
+  # no_results/빈약한 결과로 잘못 떨어뜨리지 말고 상위 랭크로 채운다. broad(무잠금) 질의엔 미적용(정크 방지).
+  # 상위 랭크는 preference-매칭분이 점수상 앞서므로 실제 매칭 상품이 anchor로 유지된다.
+  floor_fallback = len(floored) < top_n and bool(ranked) and _has_hard_topic_lock(hard_filters)
+  if floor_fallback:
+    floored = ranked[: max(top_n * 4, 12)]
   reranked = mmr_rerank(floored, lambda_=lambda_)
   roled = assign_roles(reranked, top_n=top_n)
   products = [
@@ -359,6 +398,7 @@ def build_slice_result(
   return {
     "rankedCount": len(ranked),
     "floorCount": len(floored),
+    "floorFallback": floor_fallback,
     "topScoreGap": round(top_score_gap(reranked), 6),
     "lambda": lambda_,
     "sFloor": s_floor,

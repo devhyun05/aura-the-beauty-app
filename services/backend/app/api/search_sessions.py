@@ -11,6 +11,7 @@ from app.db.session import Database, get_database
 from app.services.auradin_agent.session_manager import (
   REFINE_DIALS,
   answer_session_persisted,
+  cancel_session_persisted,
   create_session_persisted,
   get_session_persisted,
   refine_session_persisted,
@@ -95,6 +96,20 @@ async def answer_search_session(
       "retryAfterMs": 350,
     },
   )
+
+
+@router.post("/{session_id}/cancel")
+async def cancel_search_session(
+  session_id: str,
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(get_database),
+) -> dict:
+  # 사용자가 검색 도중 이탈 → 세션 종료. 모바일이 홈 복귀 시 fire-and-forget으로 호출한다.
+  state = await cancel_session_persisted(session_id, settings=settings, db=db)
+  if not state:
+    raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
+
+  return success({"sessionId": session_id, "phase": "cancelled"})
 
 
 @router.post("/{session_id}/refine")

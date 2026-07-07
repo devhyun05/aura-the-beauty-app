@@ -159,7 +159,7 @@ def test_live_discovery_replaces_slot_with_hedged_naver_pick(monkeypatch) -> Non
   assert turn["phase"] == "results"
 
   live_status = turn["result"]["enrichment"]["liveDiscovery"]
-  assert live_status["status"] == "replaced"
+  assert live_status["status"] == "filled"
   assert live_status["pickedId"] == "naver-1001"
 
   products = turn["result"]["products"]
@@ -187,6 +187,49 @@ def test_live_discovery_replaces_slot_with_hedged_naver_pick(monkeypatch) -> Non
   turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
   assert any(p["source"] == "live_naver" for p in turn["result"]["products"])
   assert len(calls) == 1
+
+
+def test_live_discovery_fills_multiple_slots_and_dedupes(monkeypatch) -> None:
+  """큐레이션이 얇으면(<3) 남는 Top3 슬롯을 라이브로 마저 채운다 + 같은 상품명은 하나만 (#7).
+
+  '5천원 이하 라이너'는 채널 잠금이 없어(라이브 naver 채널 통과 가능) 큐레이션 1개만 나오는 얇은 질의.
+  """
+  _patch_naver(
+    monkeypatch,
+    [
+      _naver_item(product_id="3001", title="클리오 샤프소 젤 라이너 다크브라운", brand="클리오", lprice="4500", category3="아이라이너"),
+      _naver_item(product_id="3002", title="페리페라 잉크 더 라이너 블랙", brand="페리페라", lprice="3900", category3="아이라이너"),
+      # 3002와 동일 상품명(다른 리스팅·가격) → 이름 중복 제거로 하나만 채택.
+      _naver_item(product_id="3003", title="페리페라 잉크 더 라이너 블랙", brand="페리페라", lprice="4100", category3="아이라이너"),
+      # 가격 초과 → §9 하드조건은 라이브에도 그대로 적용되어 제외.
+      _naver_item(product_id="3004", title="클리오 워터프루프 펜 라이너 롱래스팅", brand="클리오", lprice="9000", category3="아이라이너"),
+    ],
+  )
+  client = _client(
+    naver_shopping_client_id="test-id",
+    naver_shopping_client_secret="test-secret",
+  )
+  _, turn = _results(client, "5천원 이하 라이너")
+  assert turn["phase"] == "results"
+
+  live_status = turn["result"]["enrichment"]["liveDiscovery"]
+  assert live_status["status"] == "filled"
+  assert live_status["filledCount"] == 2  # 큐레이션 1 + 라이브 2 = Top3
+
+  products = turn["result"]["products"]
+  assert len(products) == 3
+  assert [p["role"] for p in products] == ["anchor", "diverse", "discovery"]
+
+  live_ids = {p["id"] for p in products if p["source"] == "live_naver"}
+  assert len(live_ids) == 2
+  assert "naver-3001" in live_ids  # 서로 다른 상품은 채워진다
+  assert "naver-3004" not in live_ids  # §9: 가격 하드조건은 라이브에도 그대로
+  # 같은 상품명(3002·3003) 중 정확히 하나만 — 조용한 중복 없음.
+  assert len({"naver-3002", "naver-3003"} & live_ids) == 1
+
+  for product in products:  # 라이브·큐레이션 모두 구매가능 + 가격 조건 준수
+    assert product["imageUrl"] and product["purchaseUrl"] and product["price"] > 0
+    assert product["price"] <= 5000
 
 
 def test_live_discovery_no_match_keeps_curated(monkeypatch) -> None:
