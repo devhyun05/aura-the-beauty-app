@@ -67,6 +67,10 @@ public sealed class RNBridge : MonoBehaviour
         public int debugMaskMode;
         public string foundationMode;
         public string foundationFallbackMode;
+        // Recipe-level half-face makeup flag: "off" | "left" | "right"
+        // (also accepts numeric "0"/"1"/"2"). Renders makeup on one facial
+        // half only; the other half stays the bare camera face.
+        public string halfFaceMode;
         public RecipeLayerPayload[] layers;
     }
 
@@ -124,6 +128,9 @@ public sealed class RNBridge : MonoBehaviour
         public int debugMaskMode;
         public string foundationMode;
         public string foundationFallbackMode;
+        // Per-layer override of the recipe-level half-face flag (rarely set;
+        // the recipe-level value normally wins). Same encoding.
+        public string halfFaceMode;
     }
 
     [Serializable]
@@ -385,6 +392,8 @@ public sealed class RNBridge : MonoBehaviour
         public int DebugMode;
         public bool DebugShowLeftRight;
         public bool DebugExaggerate;
+        // 0 = off (full face), 1 = keep canonical face UV x < 0.5, 2 = keep x > 0.5.
+        public float HalfFaceMode;
     }
 
     private sealed class RegionFeatureState
@@ -637,12 +646,27 @@ public sealed class RNBridge : MonoBehaviour
                     + " feather=" + layer.Feather.ToString("0.##", CultureInfo.InvariantCulture)
                     + " blendMode=" + layer.BlendMode);
 
-                E3RegionMaskOverlay.RegionApplyResult result = ApplyRegionLayer(layer);
-                long appliedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                int appliedFrame = Time.frameCount;
-                RememberRegionFeatureState(layer, result);
-                LogRecipeApplied("message", layer, result, appliedAtMs, appliedFrame);
-                SendRecipeAppliedEvent(layer, result, appliedAtMs, appliedFrame);
+                // Per-layer isolation: a single failing layer must NOT abort the
+                // whole recipe. Without this, an exception here propagates to the
+                // outer catch which calls ClearRecipesAndHideOverlays(), wiping
+                // EVERY region (base/cheek/lip/brow) because of one bad layer.
+                try
+                {
+                    E3RegionMaskOverlay.RegionApplyResult result = ApplyRegionLayer(layer);
+                    long appliedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    int appliedFrame = Time.frameCount;
+                    RememberRegionFeatureState(layer, result);
+                    LogRecipeApplied("message", layer, result, appliedAtMs, appliedFrame);
+                    SendRecipeAppliedEvent(layer, result, appliedAtMs, appliedFrame);
+                }
+                catch (Exception layerException)
+                {
+                    Debug.LogError(
+                        "[E4] region_layer_failed region=" + layer.Region
+                        + " id=" + layer.Id
+                        + " error=" + layerException.Message
+                        + " (skipped; other layers unaffected)");
+                }
             }
         }
         catch (Exception exception)
@@ -3003,7 +3027,8 @@ public sealed class RNBridge : MonoBehaviour
             layer.FoundationDebugMaskMode,
             layer.DebugMode,
             layer.DebugShowLeftRight,
-            layer.DebugExaggerate);
+            layer.DebugExaggerate,
+            layer.HalfFaceMode);
     }
 
     private void RememberRegionFeatureState(
@@ -4012,6 +4037,7 @@ public sealed class RNBridge : MonoBehaviour
                 layer.debugMaskMode,
                 recipe.debugMaskMode,
                 region),
+            HalfFaceMode = NormalizeHalfFaceMode(layer.halfFaceMode, recipe.halfFaceMode),
             ValidationVisible = layer.enabled,
             ValidationStrongMode = false,
             ValidationMode = "standard",
@@ -4129,6 +4155,32 @@ public sealed class RNBridge : MonoBehaviour
         // test clockwise/counter-clockwise 90-degree display rotations. Mode
         // 19 is a shader-path confirmation fill.
         return region == "foundation" ? Mathf.Clamp(preferred != 0 ? preferred : secondary, 0, 42) : 0;
+    }
+
+    // Recipe/layer half-face flag -> shader float. Accepts "off"|"left"|"right"
+    // and the numeric forms "0"/"1"/"2". Anything unrecognized (or blank) is
+    // treated as off (0), so normal full-face makeup is unchanged.
+    private static float NormalizeHalfFaceMode(string preferred, string recipeValue)
+    {
+        string value = FirstNonBlank(preferred, recipeValue);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 0.0f;
+        }
+
+        value = value.Trim().ToLowerInvariant();
+        if (value == "left" || value == "1")
+        {
+            return 1.0f;
+        }
+
+        if (value == "right" || value == "2")
+        {
+            return 2.0f;
+        }
+
+        // "off", "0", "none", or anything else -> off.
+        return 0.0f;
     }
 
     private static string FirstNonBlank(params string[] values)

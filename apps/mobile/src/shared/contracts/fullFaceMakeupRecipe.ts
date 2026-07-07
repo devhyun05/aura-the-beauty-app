@@ -1,6 +1,8 @@
 import type {FullFaceMakeupSourceInput} from './fullFaceMakeupCapture';
 
-export const MAKEUP_RECIPE_REGIONS = ['foundation', 'lip', 'blush', 'brow', 'eyeliner'] as const;
+// 'lens' is LAST so the colored contact-lens disc paints AFTER (on top of) the
+// eye makeup layers (eyeliner) in a combined look.
+export const MAKEUP_RECIPE_REGIONS = ['foundation', 'lip', 'blush', 'brow', 'eyeliner', 'lens'] as const;
 
 export type MakeupRecipeRegion = (typeof MAKEUP_RECIPE_REGIONS)[number];
 
@@ -13,6 +15,7 @@ export type MakeupAreaLike =
   | 'brow'
   | 'lip'
   | 'cheek'
+  | 'lens'
   | 'contour';
 
 export type RegionAdjustmentFieldSchema = {
@@ -54,6 +57,12 @@ export type FoundationRenderMode = 'uvMask' | 'screenSpace' | 'semantic';
 
 export type FoundationFallbackMode = 'uvMask' | 'off';
 
+// Recipe-level half-face makeup flag. 'off' = full face (default, unchanged
+// behavior). 'left'/'right' render makeup on only one half of the face,
+// split down the canonical face centerline (face UV x = 0.5). The Unity side
+// maps this to the _HalfFaceMode shader uniform (off=0, left=1, right=2).
+export type HalfFaceMode = 'off' | 'left' | 'right';
+
 export type FullFaceMakeupRecipeLayer = {
   id: string;
   recipeId?: string;
@@ -74,6 +83,8 @@ export type FullFaceMakeupRecipeLayer = {
     | 'foundation_matte'
     | 'foundation_glow'
     | 'matte_lip'
+    | 'gloss_lip'
+    | 'gradient_lip'
     | 'soft_blush'
     | 'blush_session_1'
     | 'blush_session_2'
@@ -87,6 +98,8 @@ export type FullFaceMakeupRecipeLayer = {
     | 'foundation_matte'
     | 'foundation_glow'
     | 'matte_lip'
+    | 'gloss_lip'
+    | 'gradient_lip'
     | 'soft_blush'
     | 'blush_session_1'
     | 'blush_session_2'
@@ -109,6 +122,7 @@ export type FullFaceMakeupRecipeLayer = {
   browArchPosition: number;
   finish: string;
   textureAmount: number;
+  gradientAmount: number;
   roughness: number;
   specular: number;
   specularPower: number;
@@ -154,6 +168,7 @@ export type FullFaceMakeupRecipe = {
   layerCount: number;
   enabledLayerCount: number;
   sentAtMs: number;
+  halfFaceMode: HalfFaceMode;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
   layers: FullFaceMakeupRecipeLayer[];
 };
@@ -165,6 +180,7 @@ export type FullFaceRegionControl = {
   intensity: number;
   finish: string;
   textureAmount: number;
+  gradientAmount: number;
   roughness: number;
   specular: number;
   specularPower: number;
@@ -204,6 +220,7 @@ export const MAKEUP_REGION_ALIASES: Record<MakeupRecipeRegionAlias, MakeupRecipe
   eye: 'eyeliner',
   eyeliner: 'eyeliner',
   foundation: 'foundation',
+  lens: 'lens',
   lip: 'lip',
 };
 
@@ -213,6 +230,7 @@ export const PRODUCT_REGION_LABELS: Record<MakeupRecipeRegion, string> = {
   blush: '블러셔',
   brow: '브로우',
   eyeliner: '아이라이너',
+  lens: '렌즈',
 };
 
 export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
@@ -267,6 +285,16 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
     height: 512,
     runtimeReady: false,
   },
+  lens: {
+    region: 'lens',
+    // The iris disc mask is generated at runtime in E3 from the calibrated eye
+    // zones (region=='lens' && maskTextureId=='lens-iris-disc-v1'); no PNG.
+    candidateId: 'lens-iris-disc-v1',
+    maskTextureId: 'lens-iris-disc-v1',
+    width: 512,
+    height: 512,
+    runtimeReady: false,
+  },
 };
 
 export const REGION_COLOR_OPTIONS: Record<
@@ -277,7 +305,6 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'porcelain-cool-110c', label: '포슬린 쿨', hex: '#F0E7DB'},
     {id: 'golden-sand-260n', label: '골든 샌드', hex: '#D9AD7E'},
     {id: 'rosy-medium-320n', label: '로지 미디엄', hex: '#B88C6A'},
-    {id: 'caramel-tan-400n', label: '카라멜 탠', hex: '#8E5A31'},
   ],
   lip: [
     {id: 'rose', label: '로즈', hex: '#C76B74'},
@@ -304,6 +331,21 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'taupe', label: '토프', hex: '#5E514E'},
     // 컬러드 아이라이너 스타일의 기본색 (AR 검증 팔레트와 동일 hex).
     {id: 'burgundy', label: '버건디', hex: '#5A2A33'},
+  ],
+  // 컬러 렌즈(홍채 틴트). 색 id가 곧 렌즈 id이며 unityMakeupBridge의
+  // LENS_COLOR_PRESETS가 이 id로 opacity를 결정합니다. 진한색(블루/그린/바이올렛)은
+  // 어두운 눈에도 보이도록 opacity를 높였습니다.
+  lens: [
+    {id: 'lens-natural-brown', label: '내추럴 브라운', hex: '#5B4634'},
+    {id: 'lens-choco', label: '초코 브라운', hex: '#3E2C1E'},
+    {id: 'lens-hazel', label: '헤이즐', hex: '#8A6A3B'},
+    {id: 'lens-honey', label: '허니 브라운', hex: '#9A6B34'},
+    {id: 'lens-gray', label: '그레이', hex: '#7C7B78'},
+    {id: 'lens-ash-gray', label: '애쉬 그레이', hex: '#5E5E5C'},
+    {id: 'lens-olive', label: '올리브 그린', hex: '#6E6B3A'},
+    {id: 'lens-forest-green', label: '포레스트 그린', hex: '#4C6B4A'},
+    {id: 'lens-ocean-blue', label: '오션 블루', hex: '#3C5A78'},
+    {id: 'lens-violet', label: '바이올렛', hex: '#5E4A78'},
   ],
 };
 
@@ -486,6 +528,21 @@ export const REGION_FINISH_OPTIONS: Record<
       shimmer: 0.08,
     },
   ],
+  // Lens has no finish variety (the disc is a flat tint); a single natural
+  // entry satisfies the total Record and the default-controls spread.
+  lens: [
+    {
+      id: 'natural',
+      label: '내추럴',
+      finish: 'natural-lens',
+      textureAmount: 0,
+      roughness: 0.4,
+      specular: 0,
+      specularPower: 8,
+      glossBoost: 0,
+      shimmer: 0,
+    },
+  ],
 };
 
 export const REGION_CANDIDATE_OPTIONS: Record<
@@ -590,6 +647,14 @@ export const REGION_CANDIDATE_OPTIONS: Record<
       label: '선명',
       candidateId: 'eyeliner-drawn-v1',
       maskTextureId: 'eye-drawn-mask-v1',
+    },
+  ],
+  lens: [
+    {
+      id: 'iris',
+      label: '아이리스',
+      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.lens.candidateId,
+      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.lens.maskTextureId,
     },
   ],
 };
@@ -797,6 +862,9 @@ export const REGION_ADJUSTMENT_FIELD_SCHEMAS: Record<
       help: '라인이 보이는 밀도를 조정합니다.',
     },
   ],
+  // Lens has no per-person adjustable params in v1 (color id carries opacity;
+  // the disc geometry is auto-calibrated in Unity). Empty schema is valid.
+  lens: [],
 };
 
 export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
@@ -806,6 +874,7 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     opacity: 0.65,
     intensity: 0.5,
     ...REGION_FINISH_OPTIONS.foundation[0],
+    gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.foundation[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.foundation[0].maskTextureId,
     params: createDefaultRegionParams('foundation'),
@@ -816,6 +885,7 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     opacity: 0.62,
     intensity: 0.72,
     ...REGION_FINISH_OPTIONS.lip[0],
+    gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.lip[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.lip[0].maskTextureId,
     params: createDefaultRegionParams('lip'),
@@ -826,6 +896,7 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     opacity: 0.45,
     intensity: 0.45,
     ...REGION_FINISH_OPTIONS.blush[0],
+    gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.blush[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.blush[0].maskTextureId,
     params: createDefaultRegionParams('blush'),
@@ -836,6 +907,7 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     opacity: 0.75,
     intensity: 0.76,
     ...REGION_FINISH_OPTIONS.brow[0],
+    gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.brow[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.brow[0].maskTextureId,
     params: createDefaultRegionParams('brow'),
@@ -846,9 +918,22 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     opacity: 0.66,
     intensity: 0.72,
     ...REGION_FINISH_OPTIONS.eyeliner[0],
+    gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.eyeliner[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.eyeliner[0].maskTextureId,
     params: createDefaultRegionParams('eyeliner'),
+  },
+  lens: {
+    // Off by default: the lens only renders once the user picks a lens color.
+    enabled: false,
+    colorHex: REGION_COLOR_OPTIONS.lens[0].hex,
+    opacity: 0.55,
+    intensity: 1,
+    ...REGION_FINISH_OPTIONS.lens[0],
+    gradientAmount: 0,
+    candidateId: REGION_CANDIDATE_OPTIONS.lens[0].candidateId,
+    maskTextureId: REGION_CANDIDATE_OPTIONS.lens[0].maskTextureId,
+    params: createDefaultRegionParams('lens'),
   },
 };
 
@@ -862,7 +947,10 @@ export function getMakeupRecipeRegionsForArea(
   area: MakeupAreaLike,
 ): readonly MakeupRecipeRegion[] {
   if (area === 'all') {
-    return MAKEUP_RECIPE_REGIONS;
+    // 'all' (전체 look) intentionally EXCLUDES lens: a colored contact lens is
+    // an opt-in point item, not part of a full-face makeup look. It only
+    // activates from its own dedicated 렌즈 tab.
+    return MAKEUP_RECIPE_REGIONS.filter(region => region !== 'lens');
   }
 
   if (area === 'cheek') {
@@ -875,6 +963,10 @@ export function getMakeupRecipeRegionsForArea(
 
   if (area === 'base') {
     return ['foundation'];
+  }
+
+  if (area === 'lens') {
+    return ['lens'];
   }
 
   if (area === 'lip' || area === 'brow') {
@@ -901,21 +993,30 @@ export function buildFullFaceMakeupRecipe({
   recipeId,
   recipeBatchId,
   sentAtMs = Date.now(),
+  halfFaceMode = 'off',
   sourceFrameMetadata,
 }: {
   controls?: FullFaceRegionControls;
   recipeId?: string;
   recipeBatchId?: string;
   sentAtMs?: number;
+  halfFaceMode?: HalfFaceMode;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
 } = {}): FullFaceMakeupRecipe {
   const resolvedRecipeId = recipeId ?? `full-face-makeup-${sentAtMs}`;
   const resolvedRecipeBatchId = recipeBatchId ?? `${resolvedRecipeId}-batch`;
-  const activeRegions = MAKEUP_RECIPE_REGIONS.filter(region => controls[region].enabled);
+  // Lens is temporarily EXCLUDED from the recipe pipeline — reverted to the
+  // pre-lens working state per user request. Building/parsing a lens layer threw
+  // in E3 (NormalizeTextureMode/Sample on the lens layer, before the per-layer
+  // guard) and the recipe-apply catch responded by wiping ALL makeup. Excluding
+  // the lens layer here means no lens layer is ever sent/parsed. The lens Unity
+  // + RN code stays dormant for a clean re-introduction later.
+  const recipeRegionsActive = MAKEUP_RECIPE_REGIONS.filter(region => region !== 'lens');
+  const activeRegions = recipeRegionsActive.filter(region => controls[region].enabled);
   const activeRegionSummary =
     activeRegions.length > 0 ? activeRegions.join(',') : 'none';
   const enabledLayerCount = activeRegions.length;
-  const layers = MAKEUP_RECIPE_REGIONS.map(region =>
+  const layers = recipeRegionsActive.map(region =>
     buildFullFaceMakeupRecipeLayer({
       region,
       controls,
@@ -938,6 +1039,7 @@ export function buildFullFaceMakeupRecipe({
     layerCount: MAKEUP_RECIPE_REGIONS.length,
     enabledLayerCount,
     sentAtMs,
+    halfFaceMode,
     sourceFrameMetadata,
     layers,
   };
@@ -963,7 +1065,13 @@ function buildFullFaceMakeupRecipeLayer({
   const control = controls[region];
   const params = control.params;
   const texture = getTextureForRegionControl(region, control);
-  const blendMode = 'multiply';
+  // The lens MUST composite as an ALPHA OVERLAY (blendMode 'normal' ->
+  // SrcAlpha/OneMinusSrcAlpha in Unity), NOT multiply. Multiply can only
+  // darken, so it could never turn a dark iris blue/green/lighter, and it also
+  // routes through the pigmentStrength cap. 'normal' overlays the color like a
+  // real printed contact and bypasses that cap (fix #1). All other regions keep
+  // the existing multiply tint blend.
+  const blendMode = region === 'lens' ? 'normal' : 'multiply';
   const materialId = `e7-full-face-${region}-material-v0`;
   const skinAdaptive = region === 'lip' || region === 'foundation';
 
@@ -998,6 +1106,9 @@ function buildFullFaceMakeupRecipeLayer({
     browArchPosition: getRegionParam(params, 'browArchPosition', 0),
     finish: control.finish,
     textureAmount: control.textureAmount,
+    // Lip 형태(그라데이션) shaping strength. Independent of finish/glossBoost:
+    // drives _GradientAmount in the shader's gradient_lip base-fill (mode 3).
+    gradientAmount: control.gradientAmount,
     roughness: control.roughness,
     specular: control.specular,
     specularPower: control.specularPower,
@@ -1056,6 +1167,10 @@ function getDefaultTextureForRegion(
     return 'natural_brow';
   }
 
+  // eyeliner + lens both use 'shimmer_eye' as a placeholder sample. The lens
+  // ignores the sample entirely (the shader's lens branch early-returns before
+  // any sample-driven logic); it just needs a token the Unity normalizer
+  // accepts for the 'lens' region.
   return 'shimmer_eye';
 }
 
@@ -1071,6 +1186,25 @@ function getTextureForRegionControl(
       if (control.finish === 'glow') {
         return 'foundation_glow';
       }
+    }
+
+    if (region === 'lip') {
+      // Lip base-fill mode is picked by the texture string (Unity
+      // ResolveLipStyleMode: matte_lip=0, gloss_lip=1, gradient_lip=3). The
+      // AR-filter bridge encodes the combined 질감(finish)+형태(shape) decision
+      // into control.finish: 'gradient' when 그라데이션 is chosen (inner-
+      // concentrated base fill shaped by gradientAmount), else 'gloss' for the
+      // 글로우 finish (matte-reference base + light-reactive highlight pass),
+      // else matte. The gloss highlight pass fires for ANY lip mode when
+      // glossBoost & specular are > 0, so 글로우 stays light-reactive on top of
+      // whichever base fill the shape selected.
+      if (control.finish === 'gradient' || control.finish === 'gradient-lip') {
+        return 'gradient_lip';
+      }
+      if (control.finish === 'gloss' || control.finish === 'glow') {
+        return 'gloss_lip';
+      }
+      return 'matte_lip';
     }
 
     return getDefaultTextureForRegion(region);

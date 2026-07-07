@@ -337,11 +337,23 @@ export function ARFilterScreen({
         selectedTypeId: selectionState.selectedTypeId,
       };
     });
-    const recipeBatch =
-      createUnityMakeupRecipeBatchFromARFilterSelections(unitySelections);
+    // In 반반 가이드 mode, the 왼쪽/오른쪽 comparison tabs pick which face half
+    // gets makeup; the other half stays the bare camera face.
+    const halfFaceMode =
+      arFilterSelectionState.guideMode === 'half' &&
+      arFilterSelectionState.selectedComparisonMode !== 'full'
+        ? arFilterSelectionState.selectedComparisonMode
+        : 'off';
+    const recipeBatch = createUnityMakeupRecipeBatchFromARFilterSelections(
+      unitySelections,
+      Date.now(),
+      halfFaceMode,
+    );
 
     postUnityMakeupRecipe(recipeBatch);
   }, [
+    arFilterSelectionState.guideMode,
+    arFilterSelectionState.selectedComparisonMode,
     arFilterSelectionState.selectionStatesByArea,
     arGuideData.filters,
     arGuideData.makeupAreas,

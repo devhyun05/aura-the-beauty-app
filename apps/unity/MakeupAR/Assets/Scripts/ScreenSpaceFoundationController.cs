@@ -76,6 +76,14 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private int lastVisionStabilizerSequence = -1;
     private Material material;
     private MeshRenderer quadRenderer;
+    // Temporal smoothing state for the half-face divider endpoints. ARKit
+    // forehead/chin anchors carry per-frame tracking noise that makes the
+    // centerline shake; a motion-adaptive EMA holds them steady when the head
+    // is still and follows real motion without lag.
+    private Vector2 smoothedForeheadAnchor;
+    private Vector2 smoothedChinAnchor;
+    private bool smoothedForeheadInit;
+    private bool smoothedChinInit;
     private MeshFilter quadFilter;
     private Mesh quadMesh;
     private Camera currentCamera;
@@ -94,6 +102,37 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
     private float lastQuadWidth;
     private float lastQuadHeight;
 
+    // Screen-space lip recipe (Milestone 1). Routed from RN the SAME way as the
+    // foundation recipe: E3RegionMaskOverlay reads recipes["lip"] and calls
+    // ConfigureLipRecipe, which stashes these and pushes them to the composite
+    // material in the recipe-config path. Camera gate tolerances have sane
+    // defaults tuned off-device; final values need on-device tuning.
+    private bool lipEnabled;
+    private Color lipColor = new Color(0.85f, 0.29f, 0.45f, 1.0f);
+    private float lipIntensity;
+    private float lipGlossBoost;
+    private float lipSpecular;
+    private float lipMatteAmount;
+    private const float LipGlossThreshold = 0.68f;
+    // Lip DETAIL enhancement (screen-space ApplyLipTint): moderate, artifact-safe
+    // defaults — micro-contrast dimension, high-freq striation texture, and a
+    // subtle vermillion ombre. Rim kept low (0.22) so the border never reads muddy.
+    private const float LipMicroContrast = 0.45f;
+    private const float LipTextureAmount = 0.40f;
+    private const float LipRimShade = 0.22f;
+    // Open-mouth gate tolerances tuned CONSERVATIVE so the whole lip paints
+    // (real lip highlights/creases survive); only extreme gap/teeth pixels drop.
+    private const float MouthGapLuma = 0.06f;   // only a deep-dark mouth gap is cut
+    private const float TeethLuma = 0.80f;      // only very bright pixels can be teeth
+    private const float TeethSat = 0.05f;       // ...and only if near-neutral (lips keep red chroma)
+    // Hysteresis for the foundation-independent attach gate: once the lip
+    // (or foundation/skin-smooth) is active, keep the pass attached until the
+    // intensity falls clearly below a lower threshold, so intensity dithering
+    // near zero cannot toggle attach/detach every frame (flicker).
+    private const float LipActivateThreshold = 0.02f;
+    private const float LipDeactivateThreshold = 0.008f;
+    private bool lipActiveHysteresis;
+
     public ScreenSpaceFoundationState CurrentState => state;
 
     private void OnDisable()
@@ -109,6 +148,39 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
 
     public void ConfigureDisabled(string reason)
     {
+        // Milestone 1: the screen-space lip is foundation-independent. If the
+        // FOUNDATION is disabled but a lip layer is active, keep the composite
+        // pass requested/enabled so the lip still renders (foundation uniforms
+        // are already at their off values). Only when the lip is inactive too
+        // do we fully disable. Refresh the lip uniforms so _LipEnabled tracks
+        // the current recipe even on the foundation-off path.
+        EnsureMaterial();
+        PushLipUniforms();
+        if (LipRenderActive())
+        {
+            disabledReason = "foundation_off_lip_active";
+            state.Requested = true;
+            state.Enabled = true;
+            // The compositor path is the screen-space renderer; force the mode
+            // so UpdateRuntime does not early-out when foundation never set it.
+            state.Mode = "screenSpace";
+            // Foundation is OFF in this branch: zero its contribution on both
+            // the state and the material so a previously-applied foundation
+            // tint / skin smoothing does not linger while only the lip renders.
+            // The lip tint (ApplyLipTint) is independent of these.
+            state.Intensity = 0.0f;
+            state.Coverage = 0.0f;
+            state.SkinSmoothStrength = 0.0f;
+            if (material != null)
+            {
+                material.SetFloat("_FoundationIntensity", 0.0f);
+                material.SetFloat("_FoundationCoverage", 0.0f);
+                material.SetFloat("_SkinSmoothStrength", 0.0f);
+            }
+
+            return;
+        }
+
         disabledReason = string.IsNullOrWhiteSpace(reason) ? "disabled" : reason;
         state.Requested = false;
         state.Enabled = false;
@@ -138,14 +210,19 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         float coverage,
         float evenness,
         float luminanceInfluence,
-        float skinSmoothStrength)
+        float skinSmoothStrength,
+        float halfFaceMode = 0.0f)
     {
         state.Requested = true;
         // 잡티 제거(skin smoothing) can run standalone: enable the screen-space
         // pass when the base is on OR when only blemish smoothing is requested,
-        // so the slider works even at 0 foundation intensity.
+        // so the slider works even at 0 foundation intensity. Milestone 1: the
+        // screen-space LIP is also foundation-independent — the composite pass
+        // must attach when the lip is active even if foundation intensity and
+        // skin smoothing are both 0 (LipRenderActive carries the hysteresis).
         state.Enabled = (enabled && intensity > 0.0001f && opacity > 0.0001f)
-            || skinSmoothStrength > 0.0001f;
+            || skinSmoothStrength > 0.0001f
+            || LipRenderActive();
         state.Mode = NormalizeMode(mode);
         state.FallbackMode = NormalizeFallbackMode(fallbackMode);
         // Modes 8-11 are mask-orientation probes used while calibrating the
@@ -181,11 +258,124 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         material.SetFloat("_FoundationLuminanceInfluence", state.LuminanceInfluence);
         material.SetFloat("_SkinSmoothStrength", state.SkinSmoothStrength);
         material.SetFloat("_FoundationDebugMode", state.DebugMaskMode);
+        // Half-face makeup flag. The composite frag ignores it (its maskUv is
+        // screen space), but FoundationScreenSpaceCompositor reads it back off
+        // this composite material each frame and forwards it to the
+        // FoundationMaskWrite face/neck materials (which DO see canonical face
+        // UV), so the written skin mask covers only one facial half. 0 = off
+        // (exact no-op), 1 = keep face UV x < 0.5, 2 = keep x > 0.5.
+        material.SetFloat("_HalfFaceMode", Mathf.Clamp(halfFaceMode, 0.0f, 2.0f));
+        // Draw the face-following centerline divider whenever half-face mode is
+        // active (either half). The composite frag reads this to blend the
+        // forehead->chin line on top of the final color; 0 keeps it a no-op.
+        material.SetFloat("_HalfFaceDivider", halfFaceMode > 0.5f ? 1.0f : 0.0f);
         material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
         material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
         material.SetFloat(ActiveRendererModeId, 0.0f);
         material.SetFloat("_ProviderProductionReady", ProviderProductionReady ? 1.0f : 0.0f);
+        // Keep the lip uniforms fresh on the composite material whenever the
+        // foundation recipe is (re)configured, since foundation and lip share
+        // this one material. Lip stays an exact no-op while _LipEnabled = 0.
+        PushLipUniforms();
         ApplyBlendModeForDebug(state.DebugMaskMode);
+    }
+
+    /// <summary>
+    /// Screen-space lip recipe (Milestone 1). Routed from RN via
+    /// E3RegionMaskOverlay (mirrors the foundation ConfigureRecipe routing):
+    /// the lip layer's color/opacity/glossBoost/specular/finish reach this
+    /// controller so the composite shader can render the lip in screen space.
+    /// finish glow => glossBoost 0.85 / specular 0.34 / matteAmount 0;
+    /// finish matte => glossBoost 0 / matteAmount ~0.6. lipEnabled = a lip
+    /// layer is present. All values null-safe; the shader early-outs when the
+    /// lip is disabled or the coverage mask is near zero.
+    /// </summary>
+    public void ConfigureLipRecipe(
+        bool enabled,
+        Color color,
+        float opacity,
+        float glossBoost,
+        float specular,
+        float matteAmount,
+        float halfFaceMode)
+    {
+        lipEnabled = enabled;
+        lipColor = new Color(color.r, color.g, color.b, 1.0f);
+        lipIntensity = Mathf.Clamp01(opacity);
+        lipGlossBoost = Mathf.Clamp01(glossBoost);
+        lipSpecular = Mathf.Clamp01(specular);
+        lipMatteAmount = Mathf.Clamp01(matteAmount);
+
+        EnsureMaterial();
+        // The lip OWNS the half-face split when it drives the composite (lip-only
+        // basic mode): the foundation's ConfigureRecipe is not called there, so
+        // _HalfFaceMode would otherwise stay STUCK at a prior half-face session's
+        // value and split the lip in basic mode. In basic mode halfFaceMode == 0
+        // => an exact no-op; in 반반 mode it carries the same left/right split.
+        if (material != null)
+        {
+            material.SetFloat("_HalfFaceMode", Mathf.Clamp(halfFaceMode, 0.0f, 2.0f));
+            material.SetFloat("_HalfFaceDivider", halfFaceMode > 0.5f ? 1.0f : 0.0f);
+        }
+        PushLipUniforms();
+    }
+
+    /// <summary>
+    /// Disables the screen-space lip (no lip layer requested). Leaves the
+    /// composite material's _LipEnabled at 0 so ApplyLipTint is an exact no-op.
+    /// </summary>
+    public void ConfigureLipDisabled()
+    {
+        lipEnabled = false;
+        lipIntensity = 0.0f;
+        EnsureMaterial();
+        PushLipUniforms();
+    }
+
+    private void PushLipUniforms()
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        material.SetColor("_LipColor", lipColor);
+        material.SetFloat("_LipIntensity", lipIntensity);
+        material.SetFloat("_LipGlossBoost", lipGlossBoost);
+        material.SetFloat("_LipSpecular", lipSpecular);
+        material.SetFloat("_LipMatteAmount", lipMatteAmount);
+        material.SetFloat("_LipMicroContrast", LipMicroContrast);
+        material.SetFloat("_LipTextureAmount", LipTextureAmount);
+        material.SetFloat("_LipRimShade", LipRimShade);
+        material.SetFloat("_LipGlossThreshold", LipGlossThreshold);
+        material.SetFloat("_MouthGapLuma", MouthGapLuma);
+        material.SetFloat("_TeethLuma", TeethLuma);
+        material.SetFloat("_TeethSat", TeethSat);
+        material.SetFloat("_LipEnabled", LipRenderActive() ? 1.0f : 0.0f);
+    }
+
+    // Whether the screen-space lip should render this frame, with hysteresis so
+    // intensity dithering near zero cannot toggle the tint (and, via the attach
+    // gate below, the whole composite pass) every frame.
+    private bool LipRenderActive()
+    {
+        if (!lipEnabled)
+        {
+            lipActiveHysteresis = false;
+            return false;
+        }
+
+        if (lipActiveHysteresis)
+        {
+            // Stay active until intensity drops clearly below the low threshold.
+            lipActiveHysteresis = lipIntensity > LipDeactivateThreshold;
+        }
+        else
+        {
+            lipActiveHysteresis = lipIntensity > LipActivateThreshold;
+        }
+
+        return lipActiveHysteresis;
     }
 
     public ScreenSpaceFoundationState UpdateRuntime(ARFaceManager faceManager, Camera arCamera)
@@ -426,10 +616,18 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
             DebugAnchor(maskState.NoseAnchor, maskState.NoseValid));
         material.SetVector(
             "_FoundationDebugChin",
-            DebugAnchor(maskState.ChinAnchor, maskState.ChinValid));
+            DebugAnchor(
+                SmoothDividerAnchor(
+                    maskState.ChinAnchor, maskState.ChinValid,
+                    ref smoothedChinAnchor, ref smoothedChinInit),
+                maskState.ChinValid));
         material.SetVector(
             "_FoundationDebugForehead",
-            DebugAnchor(maskState.LowerForeheadAnchor, maskState.LowerForeheadValid));
+            DebugAnchor(
+                SmoothDividerAnchor(
+                    maskState.LowerForeheadAnchor, maskState.LowerForeheadValid,
+                    ref smoothedForeheadAnchor, ref smoothedForeheadInit),
+                maskState.LowerForeheadValid));
         material.SetVector(
             "_FoundationDebugMouth",
             DebugAnchor(maskState.MouthAnchor, maskState.LipExclusionValid));
@@ -952,6 +1150,35 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         {
             screenSpaceCompositor = gameObject.AddComponent<FoundationScreenSpaceCompositor>();
         }
+    }
+
+    // Motion-adaptive EMA for a divider endpoint (screen-uv space). Holds the
+    // point still under tracking noise (deadzone), follows real head motion,
+    // and resets on (re)acquire so it doesn't lerp across a tracking gap.
+    private static Vector2 SmoothDividerAnchor(
+        Vector2 raw, bool valid, ref Vector2 smoothed, ref bool init)
+    {
+        if (!valid)
+        {
+            init = false;
+            return raw;
+        }
+
+        if (!init)
+        {
+            smoothed = raw;
+            init = true;
+            return smoothed;
+        }
+
+        const float deadzone = 0.0015f;   // ~kill idle shimmer
+        const float motionScale = 0.02f;  // uv delta at which we mostly snap
+        float delta = Vector2.Distance(smoothed, raw);
+        float follow = delta < deadzone
+            ? 0.0f
+            : Mathf.Lerp(0.12f, 0.85f, Mathf.Clamp01(delta / motionScale));
+        smoothed = Vector2.Lerp(smoothed, raw, follow);
+        return smoothed;
     }
 
     private static Vector4 DebugAnchor(Vector2 anchor, bool valid)

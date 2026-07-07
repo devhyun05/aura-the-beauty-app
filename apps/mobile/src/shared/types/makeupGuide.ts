@@ -13,6 +13,7 @@ export type MakeupArea =
   | 'brow'
   | 'lip'
   | 'cheek'
+  | 'lens'
   | 'contour';
 
 export type MakeupOptionGroupId =
