@@ -157,10 +157,6 @@ export function ReferenceMakeupExtractionLoadingScreen({
               <View style={styles.liveDot} />
               <Text style={styles.previewBadgeText}>결과서 생성 중</Text>
             </XStack>
-            <YStack style={styles.previewTitleBlock}>
-              <Text style={styles.previewLabel}>REFERENCE</Text>
-              <Text numberOfLines={1} style={styles.previewTitle}>{photo.title}</Text>
-            </YStack>
           </View>
 
           <XStack style={styles.progressBlock}>

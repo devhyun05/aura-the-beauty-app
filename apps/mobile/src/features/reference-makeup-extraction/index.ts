@@ -1,5 +1,6 @@
 export {ReferenceMakeupExtractionLoadingScreen} from './screens/ReferenceMakeupExtractionLoadingScreen';
 export {ReferenceMakeupExtractionResultScreen} from './screens/ReferenceMakeupExtractionResultScreen';
+export {ReferenceMakeupExtractionAlbumUploadScreen} from './screens/ReferenceMakeupExtractionAlbumUploadScreen';
 export {MakeupRecipeDetailScreen} from './screens/MakeupRecipeDetailScreen';
 export {MakeupRecipeListScreen, type MakeupRecipeListItem} from './screens/MakeupRecipeListScreen';
 export {MakeupFilterSaveCompleteScreen} from './screens/MakeupFilterSaveCompleteScreen';

@@ -8,6 +8,7 @@ import {
   MakeupRecipeListScreen,
   type MakeupRecipeListItem,
   MakeupRecipeSaveCompleteScreen,
+  ReferenceMakeupExtractionAlbumUploadScreen,
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   type MakeupExtractionProgressUpdate,
@@ -164,9 +165,25 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
     navigation.replace('FaceCaptureConfirmation', {target: 'referenceMakeupExtraction'});
   };
 
+  const handleSelectAlbumPhoto = (photo: ReferenceMakeupPhoto) => {
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(photo);
+    navigation.replace('FaceCaptureConfirmation', {target: 'referenceMakeupExtraction'});
+  };
+
+  if (route.params?.initialSource === 'gallery') {
+    return (
+      <DetailRouteChrome
+        routeName="ReferenceMakeupExtractionUpload"
+        onBack={handleClose}
+        onClose={handleClose}>
+        <ReferenceMakeupExtractionAlbumUploadScreen onSelectPhoto={handleSelectAlbumPhoto} />
+      </DetailRouteChrome>
+    );
+  }
+
   return (
     <CameraFaceCaptureScreen
-      autoOpenGallery={route.params?.initialSource === 'gallery'}
       captureMode="reference"
       captureType="filter_extraction"
       onCapture={handleStartAnalysis}
