@@ -50,14 +50,23 @@ export function ProductRecommendationRouteScreen({
 // 탭과 동일한 핸들러로 자동 구동한다 (시뮬레이터 QA·데모용, 기본 미설정 = 영향 없음).
 const DEMO_DRIVE_PROMPT = process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE;
 const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> = [
-  {delayMs: 1000, step: {prompt: DEMO_DRIVE_PROMPT ?? '', ts: 'demo-1'}},
-  {delayMs: 16000, step: {open: 'discovery', ts: 'demo-2'}},
-  {delayMs: 24000, step: {dial: 'more_diverse', ts: 'demo-3'}},
-  {delayMs: 32000, step: {open: 'anchor', ts: 'demo-4'}},
+  {delayMs: 6000, step: {prompt: DEMO_DRIVE_PROMPT ?? '', ts: 'demo-1'}},
+  {delayMs: 22000, step: {open: 'discovery', ts: 'demo-2'}},
+  {delayMs: 30000, step: {dial: 'more_diverse', ts: 'demo-3'}},
+  {delayMs: 38000, step: {open: 'anchor', ts: 'demo-4'}},
 ];
 
 export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch'>) {
   const [drive, setDrive] = React.useState(route.params);
+  // 리포트 첨부: nav state의 선택된 얼굴분석 리포트 → availableReport (첨부 트레이가 소비).
+  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const availableReport = React.useMemo(
+    () =>
+      selectedFaceAnalysisReport?.personalColor
+        ? {id: selectedFaceAnalysisReport.id, personalColor: selectedFaceAnalysisReport.personalColor}
+        : null,
+    [selectedFaceAnalysisReport],
+  );
 
   React.useEffect(() => {
     if (route.params) {
@@ -75,7 +84,7 @@ export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  return <AuradinSearchScreen drive={drive} />;
+  return <AuradinSearchScreen availableReport={availableReport} drive={drive} />;
 }
 
 export function MakeupLookListRouteScreen({

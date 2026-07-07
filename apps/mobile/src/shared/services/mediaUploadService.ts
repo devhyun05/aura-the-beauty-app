@@ -33,6 +33,7 @@ export type UploadedMediaAsset = {
 
 type PresignedUpload = {
   bucket: string;
+  cacheControl?: string | null;
   cdnUrl?: string | null;
   contentType: string;
   expiresIn: number;
@@ -261,7 +262,10 @@ async function uploadFileToPresignedUrl(
   contentType: string,
 ): Promise<void> {
   const uploadResult = await FileSystem.uploadAsync(upload.uploadUrl, fileUri, {
-    headers: {'Content-Type': contentType},
+    headers: {
+      ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
+      'Content-Type': contentType,
+    },
     httpMethod: upload.method,
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
   });

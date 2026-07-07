@@ -56,6 +56,8 @@ const profileEditHeaderPresentation = {
   title: '프로필 수정',
 } as const;
 
+const PROFILE_AVATAR_IMAGE_QUALITY = 0.78;
+
 export function getProfileEditHeaderPresentation() {
   return profileEditHeaderPresentation;
 }
@@ -230,7 +232,7 @@ export function ProfileEditScreen({
         allowsEditing: true,
         aspect: [1, 1],
         mediaTypes: ['images'],
-        quality: 0.9,
+        quality: PROFILE_AVATAR_IMAGE_QUALITY,
       });
 
       const selectedAsset = pickerResult.canceled

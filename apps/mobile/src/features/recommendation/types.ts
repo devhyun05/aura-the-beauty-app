@@ -111,6 +111,13 @@ export type AuradinReason = {
 
 export type AuradinProductRole = 'anchor' | 'diverse' | 'discovery';
 
+// 결과에 노출되는 적용 조건 칩. source가 하드 조건(prompt/question/refine/fallback)인지
+// 리포트 톤 참고(report)인지 구분 — report는 "참고" 뉘앙스로 렌더한다(§9).
+export type AuradinAppliedFilter = {
+  label: string;
+  source: 'prompt' | 'question' | 'refine' | 'report' | 'fallback' | string;
+};
+
 export type AuradinCandidateProduct = {
   id: string;
   brandName: string;
@@ -134,6 +141,22 @@ export type AuradinCandidateProduct = {
 
 export type AuradinSearchPhase = 'searching' | 'question' | 'results' | 'failed' | 'expired';
 
+// ── auradin-rn DS 포팅(프리젠테이션 레이어)이 소비하는 타입 ──
+// 화면 phase — 단일 PersistentOrb 모프 + 지반 다크 여부를 구동 (§9 ③).
+export type AuradinPhase =
+  | 'home'
+  | 'searching'
+  | 'question'
+  | 'results'
+  | 'detail'
+  | 'saved'
+  | 'failed';
+
+export type ThinkingStepState = 'done' | 'active' | 'pending';
+export type ThinkingStep = {label: string; state: ThinkingStepState};
+
+export type RefineDial = 'more_similar' | 'more_diverse';
+
 // 백엔드 SearchTurn을 화면이 소비하는 형태로 매핑한 결과.
 export type AuradinSearchTurn = {
   sessionId: string;
@@ -142,6 +165,7 @@ export type AuradinSearchTurn = {
   question?: AuradinQuestion;
   candidates: AuradinCandidateProduct[];
   headerLabel?: string;
+  appliedFilters?: AuradinAppliedFilter[];
   error?: {code?: string; message?: string; recoverable?: boolean} | null;
 };
 

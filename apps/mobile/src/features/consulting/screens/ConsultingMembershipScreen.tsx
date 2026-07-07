@@ -1,4 +1,4 @@
-import {useState, type ReactNode} from 'react';
+import {useEffect, useState, type ReactNode} from 'react';
 import {Pressable, StyleSheet, View as RNView} from 'react-native';
 import {BadgePercent, CalendarHeart, Check, Crown, Sparkles} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -18,6 +18,7 @@ import {
   consultingMembershipPlans,
   formatConsultingPrice,
 } from '../mocks/consulting.mock';
+import {getConsultingMembershipPlans} from '../services/consultingService';
 import type {ConsultingMembershipPlan} from '../types';
 
 type ConsultingMembershipScreenProps = {
@@ -27,13 +28,27 @@ type ConsultingMembershipScreenProps = {
 export function ConsultingMembershipScreen({
   onSubscribe,
 }: ConsultingMembershipScreenProps) {
-  const defaultPlan =
-    consultingMembershipPlans.find(plan => plan.highlight) ??
-    consultingMembershipPlans[0];
+  const [plans, setPlans] =
+    useState<readonly ConsultingMembershipPlan[]>(consultingMembershipPlans);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getConsultingMembershipPlans().then(data => {
+      if (isMounted && data.length > 0) {
+        setPlans(data);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const defaultPlan = plans.find(plan => plan.highlight) ?? plans[0];
   const [selectedPlanId, setSelectedPlanId] = useState(defaultPlan.id);
   const selectedPlan =
-    consultingMembershipPlans.find(plan => plan.id === selectedPlanId) ??
-    defaultPlan;
+    plans.find(plan => plan.id === selectedPlanId) ?? defaultPlan;
 
   return (
     <RNView style={styles.root}>
@@ -65,7 +80,7 @@ export function ConsultingMembershipScreen({
         </View>
 
         <View style={styles.planList}>
-          {consultingMembershipPlans.map(plan => (
+          {plans.map(plan => (
             <PlanCard
               key={plan.id}
               onPress={() => setSelectedPlanId(plan.id)}

@@ -22,6 +22,8 @@ const copy = {
   retry: '앨범 다시 열기',
 } as const;
 
+const MAKEUP_FEEDBACK_IMAGE_QUALITY = 0.76;
+
 export function MakeupFeedbackAlbumUploadScreen({
   onStartAnalysis,
 }: MakeupFeedbackAlbumUploadScreenProps) {
@@ -48,7 +50,7 @@ export function MakeupFeedbackAlbumUploadScreen({
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: false,
         mediaTypes: ['images'],
-        quality: 0.9,
+        quality: MAKEUP_FEEDBACK_IMAGE_QUALITY,
       });
       const pickedAsset = pickerResult.canceled ? null : pickerResult.assets[0];
 

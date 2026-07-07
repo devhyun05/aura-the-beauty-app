@@ -11,6 +11,7 @@ import React, {
 import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../features/makeup-feedback';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
 import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
+import type {AuraPersonalColorResult} from '../../features/personal-color/types';
 import type {ReferenceMakeupPhoto} from '../../features/reference-makeup-extraction';
 import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
@@ -37,6 +38,8 @@ export type NavigationFlowState = {
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
   selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
+  // 얼굴 분석 세션에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용, 업로드 없음).
+  selectedPersonalColor: AuraPersonalColorResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
@@ -55,6 +58,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
+  setSelectedPersonalColor: Dispatch<SetStateAction<AuraPersonalColorResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
@@ -77,6 +81,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedFaceVerticalThirds: null,
+    selectedPersonalColor: null,
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
@@ -106,6 +111,8 @@ export function NavigationFlowStateProvider({
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedFaceVerticalThirds, setSelectedFaceVerticalThirds] =
     useState<FaceVerticalThirdsResult | null>(initialState.selectedFaceVerticalThirds);
+  const [selectedPersonalColor, setSelectedPersonalColor] =
+    useState<AuraPersonalColorResult | null>(initialState.selectedPersonalColor);
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
   const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
@@ -143,6 +150,7 @@ export function NavigationFlowStateProvider({
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedFaceVerticalThirds,
+      selectedPersonalColor,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
@@ -158,6 +166,7 @@ export function NavigationFlowStateProvider({
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
       setSelectedFaceVerticalThirds,
+      setSelectedPersonalColor,
       setSelectedMakeupFeedbackPhoto,
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
@@ -175,6 +184,7 @@ export function NavigationFlowStateProvider({
       selectedFaceAnalysisReport,
       selectedFaceCapture,
       selectedFaceVerticalThirds,
+      selectedPersonalColor,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,

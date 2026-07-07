@@ -52,6 +52,7 @@ class S3Service:
       extension = "." + original_filename.rsplit(".", 1)[1].lower()
 
     object_key = f"uploads/{media_kind}/{uuid4()}{extension}"
+    cache_control = "public, max-age=31536000, immutable"
     upload_url = self._client().generate_presigned_url(
       "put_object",
       Params={
@@ -59,6 +60,7 @@ class S3Service:
         "ContentType": content_type,
         "Key": object_key,
         "ContentType": content_type,
+        "CacheControl": cache_control,
       },
       ExpiresIn=expires_in,
     )
@@ -73,6 +75,7 @@ class S3Service:
       "method": "PUT",
       "expires_in": expires_in,
       "content_type": content_type,
+      "cache_control": cache_control,
     }
 
   def delete_object(self, *, bucket: str, object_key: str) -> None:

@@ -8,6 +8,8 @@ on:
       - "services/backend/**"
       - "docs/backend/schema.sql"
       - "docs/backend/seed.sql"
+      - "data/auradin/catalog/**"
+      - "data/auradin/knowledge/**"
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
 

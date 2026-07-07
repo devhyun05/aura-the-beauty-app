@@ -9,6 +9,15 @@ import type {
   ConsultingSummary,
 } from '../types';
 
+const consultingCdnBaseUrl = (
+  process.env.EXPO_PUBLIC_CDN_BASE_URL?.trim().replace(/\/+$/, '') ??
+  'https://d3t1pbvtir1lj.cloudfront.net'
+);
+
+function consultingImageUrl(fileName: string): string {
+  return `${consultingCdnBaseUrl}/uploads/optimized/consulting/${fileName}`;
+}
+
 export const consultingCategories: readonly ConsultingCategory[] = [
   {
     id: 'personalColor',
@@ -24,8 +33,8 @@ export const consultingCategories: readonly ConsultingCategory[] = [
   },
   {
     id: 'lipColor',
-    title: '립 · 컬러 조합',
-    description: '어울리는 색 찾기',
+    title: '패션 · 골격 진단',
+    description: '어울리는 옷 스타일',
     icon: 'sparkles',
   },
   {
@@ -44,6 +53,8 @@ export const consultingExperts: readonly ConsultingExpert[] = [
     signatureLine: '진단으로 끝나지 않는, 손에 잡히는 메이크업 처방',
     initials: '세아',
     avatarTone: 'rose',
+    imageUrl: consultingImageUrl('expert-sea.jpg'),
+    studioName: 'AURA 성수 메이크업 스튜디오',
     careerYears: 12,
     rating: 4.9,
     reviewCount: 128,
@@ -64,22 +75,22 @@ export const consultingExperts: readonly ConsultingExpert[] = [
       '색채심리 지도사',
     ],
     availabilityNote: '평일 저녁 · 주말 오전 상담 가능',
-    categoryIds: ['personalColor', 'makeupClinic', 'lipColor'],
+    categoryIds: ['personalColor', 'makeupClinic'],
     durations: [
-      {
-        id: 'd15',
-        label: '15분',
-        minutes: 15,
-        price: 19000,
-        description: '간단한 질문 1~2개',
-      },
       {
         id: 'd30',
         label: '30분',
         minutes: 30,
-        price: 33000,
-        description: '진단 + 실습 피드백',
+        price: 19000,
+        description: '핵심 진단 + 우선 교정',
         recommended: true,
+      },
+      {
+        id: 'd60',
+        label: '1시간',
+        minutes: 60,
+        price: 34000,
+        description: '진단 + 실습 + 제품 루틴',
       },
     ],
     reviews: [
@@ -95,15 +106,15 @@ export const consultingExperts: readonly ConsultingExpert[] = [
         id: 'rv_sea_2',
         author: '수민*',
         category: '메이크업 클리닉',
-        body: '블러셔가 붉게 뜨는 이유가 색이 아니라 위치였다는 걸 알려주셔서 놀랐어요. 15분이 아깝지 않았습니다.',
+        body: '블러셔가 붉게 뜨는 이유가 색이 아니라 위치였다는 걸 알려주셔서 놀랐어요. 30분이 아깝지 않았습니다.',
         rating: 5,
         dateLabel: '6월 21일',
       },
       {
         id: 'rv_sea_3',
         author: '하영*',
-        category: '립 · 컬러 조합',
-        body: '가지고 있는 립 중에 살릴 것과 정리할 것을 정확히 골라주셨어요. 쇼핑 리스트까지 받았어요.',
+        category: '메이크업 클리닉',
+        body: '평소 화장이 답답해 보이는 이유를 순서대로 잡아주셔서 다음 날 바로 따라 했어요.',
         rating: 4,
         dateLabel: '6월 12일',
       },
@@ -116,6 +127,8 @@ export const consultingExperts: readonly ConsultingExpert[] = [
     signatureLine: '조명이 달라져도 흔들리지 않는 정밀 톤 진단',
     initials: '도아',
     avatarTone: 'mauve',
+    imageUrl: consultingImageUrl('expert-doa.jpg'),
+    studioName: 'AURA 컬러 랩',
     careerYears: 8,
     rating: 4.9,
     reviewCount: 210,
@@ -131,22 +144,22 @@ export const consultingExperts: readonly ConsultingExpert[] = [
     ],
     certifications: ['컬러리스트 기사', '이미지 컨설팅 전문가'],
     availabilityNote: '평일 오후 · 저녁 상담 가능',
-    categoryIds: ['personalColor', 'lipColor'],
+    categoryIds: ['personalColor'],
     durations: [
-      {
-        id: 'd15',
-        label: '15분',
-        minutes: 15,
-        price: 21000,
-        description: '톤 재확인 · 질문',
-      },
       {
         id: 'd30',
         label: '30분',
         minutes: 30,
-        price: 36000,
+        price: 22000,
         description: '정밀 진단 + 컬러 팔레트',
         recommended: true,
+      },
+      {
+        id: 'd60',
+        label: '1시간',
+        minutes: 60,
+        price: 39000,
+        description: '정밀 진단 + 쇼핑 가이드',
       },
     ],
     reviews: [
@@ -161,7 +174,7 @@ export const consultingExperts: readonly ConsultingExpert[] = [
       {
         id: 'rv_doa_2',
         author: '보라*',
-        category: '립 · 컬러 조합',
+        category: '퍼스널컬러 진단',
         body: '피해야 할 컬러 리스트가 진짜 유용해요. 옷 살 때도 계속 보게 돼요.',
         rating: 5,
         dateLabel: '6월 25일',
@@ -171,49 +184,51 @@ export const consultingExperts: readonly ConsultingExpert[] = [
   {
     id: 'exp_lian',
     name: '박리안',
-    title: '헤어 · 이미지 디렉터',
+    title: '패션 · 이미지 디렉터',
     signatureLine: '얼굴형과 톤을 함께 읽는 스타일 설계',
     initials: '리안',
     avatarTone: 'sand',
+    imageUrl: consultingImageUrl('expert-lian.jpg'),
+    studioName: 'AURA 청담 이미지 살롱',
     careerYears: 9,
     rating: 4.8,
     reviewCount: 96,
     sessionCount: 720,
     rebookRate: 82,
     responseMinutes: 60,
-    tags: ['헤어 스타일링', '이미지 메이킹', '얼굴형 분석'],
+    tags: ['골격 진단', '패션 스타일링', '얼굴형 분석'],
     intro:
-      '얼굴형과 퍼스널 톤을 함께 고려해 어울리는 헤어 컬러와 스타일 방향을 제안해요. 미용실에서 바로 보여줄 수 있는 레퍼런스 가이드를 만들어 드립니다.',
+      '얼굴형과 골격, 퍼스널 톤을 함께 고려해 어울리는 옷 실루엣과 헤어 방향을 제안해요. 쇼핑할 때 바로 참고할 수 있는 스타일 가이드를 만들어 드립니다.',
     careerHistory: [
       {id: 'c1', period: '2019 — 현재', role: '청담 헤어살롱 원장'},
       {id: 'c2', period: '2015 — 2019', role: '헤어 디자이너 · 이미지 코치'},
     ],
     certifications: ['미용사(일반) 국가자격', '퍼스널 이미지 코치'],
     availabilityNote: '화 · 목 저녁, 주말 상담 가능',
-    categoryIds: ['hairStyle', 'makeupClinic'],
+    categoryIds: ['lipColor', 'hairStyle', 'makeupClinic'],
     durations: [
-      {
-        id: 'd15',
-        label: '15분',
-        minutes: 15,
-        price: 15000,
-        description: '스타일 방향 상담',
-      },
       {
         id: 'd30',
         label: '30분',
         minutes: 30,
-        price: 29000,
-        description: '헤어 + 이미지 코디',
+        price: 18000,
+        description: '골격 진단 + 스타일 방향',
         recommended: true,
+      },
+      {
+        id: 'd60',
+        label: '1시간',
+        minutes: 60,
+        price: 32000,
+        description: '골격 + 헤어 + 쇼핑 가이드',
       },
     ],
     reviews: [
       {
         id: 'rv_lian_1',
         author: '유나*',
-        category: '헤어 · 스타일',
-        body: '얼굴형에 맞는 앞머리 기준을 정확히 알려주셔서 미용실에서 바로 활용했어요.',
+        category: '패션 · 골격 진단',
+        body: '상체 골격에 맞는 재킷 길이와 네크라인 기준을 잡아주셔서 옷 고르기가 훨씬 쉬워졌어요.',
         rating: 5,
         dateLabel: '6월 30일',
       },
@@ -289,25 +304,25 @@ export const consultingBookingDays: readonly ConsultingBookingDay[] = [
 export const consultingConcerns: readonly ConsultingConcern[] = [
   {id: 'concern_tone', label: '퍼스널컬러가 헷갈려요'},
   {id: 'concern_makeup', label: '메이크업 피드백 심화'},
-  {id: 'concern_product', label: '제품 추천을 받고 싶어요'},
+  {id: 'concern_product', label: '골격에 맞는 옷 스타일'},
   {id: 'concern_hair', label: '헤어 · 스타일 고민'},
 ];
 
 export const consultingSharedReports: readonly ConsultingSharedReport[] = [
   {
-    id: 'report_face_1',
+    id: '11111111-1111-4111-8111-111111111111',
     kind: 'faceAnalysis',
     label: '얼굴 분석 리포트',
     detail: '여름 쿨 뮤트 · 7월 2일',
   },
   {
-    id: 'report_feedback_1',
+    id: '22222222-2222-4222-8222-222222222222',
     kind: 'makeupFeedback',
     label: 'AI 메이크업 피드백',
     detail: '데일리 룩 · 82점 · 7월 4일',
   },
   {
-    id: 'report_feedback_2',
+    id: '33333333-3333-4333-8333-333333333333',
     kind: 'makeupFeedback',
     label: 'AI 메이크업 피드백',
     detail: '오피스 룩 · 88점 · 7월 5일',
@@ -384,14 +399,21 @@ export const consultingRecords: readonly ConsultingRecord[] = [
   {
     id: 'rec_upcoming_1',
     expertId: 'exp_sea',
+    durationId: 'd30',
+    dayId: '2026-07-08',
+    slotId: '18:30',
     status: 'upcoming',
     categoryLabel: '퍼스널컬러 진단',
     dateLabel: '7월 8일 (화) 오후 6:30',
     durationLabel: '30분',
+    sharedReportIds: ['11111111-1111-4111-8111-111111111111'],
   },
   {
     id: 'rec_done_1',
     expertId: 'exp_doa',
+    durationId: 'd30',
+    dayId: '2026-06-24',
+    slotId: '19:00',
     status: 'completed',
     categoryLabel: '퍼스널컬러 진단',
     dateLabel: '6월 24일 (수) 오후 7:00',
@@ -401,13 +423,16 @@ export const consultingRecords: readonly ConsultingRecord[] = [
   {
     id: 'rec_done_2',
     expertId: 'exp_lian',
+    durationId: 'd30',
+    dayId: '2026-06-10',
+    slotId: '20:00',
     status: 'completed',
     categoryLabel: '헤어 · 스타일',
     dateLabel: '6월 10일 (수) 오후 8:00',
-    durationLabel: '15분',
+    durationLabel: '30분',
     summary: {
       expertId: 'exp_lian',
-      durationLabel: '15분',
+      durationLabel: '30분',
       dateLabel: '6월 10일 (수) 오후 8:00',
       notes: [
         {
@@ -441,7 +466,7 @@ export const consultingMembershipPlans: readonly ConsultingMembershipPlan[] = [
     originalPricePerMonth: 19900,
     benefits: [
       '모든 상담 20% 상시 할인',
-      '월 1회 15분 화상 체크인 포함',
+      '월 1회 30분 화상 체크인 포함',
       '전문가 우선 예약',
       '신제품 샘플 박스 분기 1회',
     ],
@@ -509,14 +534,44 @@ export function findConsultingBookingDay(dayId: string) {
   return consultingBookingDays.find(day => day.id === dayId);
 }
 
+const koreanWeekdays = ['일', '월', '화', '수', '목', '금', '토'];
+
+function formatIsoConsultingDayLabel(dayId: string): string | null {
+  const parts = dayId.split('-');
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+
+  return `${month}월 ${day}일 (${
+    koreanWeekdays[date.getDay()]
+  })`;
+}
+
 export function formatConsultingSlotLabel(
   dayId: string,
   slotId: string,
 ): string {
   const day = findConsultingBookingDay(dayId);
+  const dayLabel = day
+    ? formatIsoConsultingDayLabel(day.id) ?? `${day.day}일 (${day.weekday})`
+    : formatIsoConsultingDayLabel(dayId);
+
   if (!day) {
-    return slotId;
+    return dayLabel ? `${dayLabel} ${slotId}` : slotId;
   }
 
-  return `7월 ${day.day}일 (${day.weekday}) ${slotId}`;
+  return `${dayLabel} ${slotId}`;
 }
