@@ -9,13 +9,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
-  ChevronDown,
   ChevronRight,
-  CircleHelp,
-  ChevronUp,
   Search,
   ShoppingBag,
-  Sparkles,
 } from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -25,7 +21,6 @@ import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtraction
 import type {
   MakeupLookPoint,
   ReferenceMakeupAreaGuide,
-  ReferenceMakeupExtractionResult,
   ReferenceMakeupPhoto,
 } from '../types';
 
@@ -47,7 +42,6 @@ export function ReferenceMakeupExtractionResultScreen({
 }: ReferenceMakeupExtractionResultScreenProps) {
   const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
   const [activeAreaIndex, setActiveAreaIndex] = useState(0);
-  const [isProExpanded, setIsProExpanded] = useState(false);
   const {width} = useWindowDimensions();
   const areaScrollRef = useRef<ScrollView | null>(null);
   const isProgrammaticAreaScrollRef = useRef(false);
@@ -62,9 +56,6 @@ export function ReferenceMakeupExtractionResultScreen({
     };
   }, []);
 
-  useEffect(() => {
-    setIsProExpanded(false);
-  }, [activeAreaIndex]);
 
   const handleSelectArea = (index: number) => {
     if (index === activeAreaIndex) {
@@ -131,7 +122,7 @@ export function ReferenceMakeupExtractionResultScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
-        <LookIntroCard look={extractedMakeupLook} photo={photo} />
+        <LookIntroPhoto photo={photo} width={width} />
         <ReferenceSummaryCard points={extractedMakeupLook.points} />
 
         <YStack style={styles.areaExploreSection}>
@@ -156,11 +147,7 @@ export function ReferenceMakeupExtractionResultScreen({
             style={styles.areaCarousel}>
             {extractedMakeupLook.areaGuides.map((guide, index) => (
               <View key={guide.id} style={[styles.areaPage, {width: areaPageWidth}]}>
-                <AreaGuidePanel
-                  guide={guide}
-                  isProExpanded={index === activeAreaIndex && isProExpanded}
-                  onTogglePro={() => setIsProExpanded((expanded) => !expanded)}
-                />
+                <AreaGuidePanel guide={guide} />
               </View>
             ))}
           </ScrollView>
@@ -188,41 +175,19 @@ export function ReferenceMakeupExtractionResultScreen({
   );
 }
 
-function LookIntroCard({
-  look,
+function LookIntroPhoto({
   photo,
+  width,
 }: {
-  look: ReferenceMakeupExtractionResult;
   photo: ReferenceMakeupPhoto;
+  width: number;
 }) {
-  const displayTag = look.tags.find((tag) => tag.includes('러블리')) ?? look.tags[0];
-
   return (
-    <View style={styles.introCard}>
-      <View style={styles.introImageFrame}>
-        <Image resizeMode="cover" source={photo.imageSource} style={styles.introImage} />
-        <View style={styles.introImageShade} />
-        <View style={styles.introSparkleBadge}>
-          <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
-        </View>
-      </View>
-
-      <YStack style={styles.introCopy}>
-        <Text style={styles.resultTitle}>{photo.title}</Text>
-        <XStack style={styles.lookNameRow}>
-          <Text style={styles.lookNameLabel}>분석 룩</Text>
-          <Text style={styles.lookNameText}>{look.title}</Text>
-        </XStack>
-        {displayTag ? (
-          <View style={styles.singleTagPill}>
-            <Text style={styles.singleTagText}>{displayTag}</Text>
-          </View>
-        ) : null}
-      </YStack>
+    <View style={[styles.introPhotoFrame, {height: width, width}]}>
+      <Image resizeMode="cover" source={photo.imageSource} style={styles.introImage} />
     </View>
   );
 }
-
 function ReferenceSummaryCard({
   points,
 }: {
@@ -307,19 +272,11 @@ function AreaTabRail({
 
 function AreaGuidePanel({
   guide,
-  isProExpanded,
-  onTogglePro,
 }: {
   guide: ReferenceMakeupAreaGuide;
-  isProExpanded: boolean;
-  onTogglePro: () => void;
 }) {
   const product = guide.productRecommendation.product;
-  const [isProductReasonVisible, setIsProductReasonVisible] = useState(false);
-
-  useEffect(() => {
-    setIsProductReasonVisible(false);
-  }, [guide.id]);
+  const hasProductReason = guide.productRecommendation.reason.trim().length > 0;
 
   return (
     <YStack style={styles.areaCard}>
@@ -344,10 +301,17 @@ function AreaGuidePanel({
         <Text style={styles.textureText}>{guide.texture}</Text>
       </YStack>
 
+      <ProDetailSteps guide={guide} />
+
       <YStack style={styles.productSection}>
         <XStack style={styles.productHeader}>
-          <ShoppingBag color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-          <Text style={styles.productTitle}>추천 제품</Text>
+          <View style={styles.productIconShell}>
+            <ShoppingBag color={colors.white} size={iconSize.xs} strokeWidth={2} />
+          </View>
+          <YStack style={styles.productHeaderCopy}>
+            <Text style={styles.productEyebrow}>추천 제품</Text>
+            <Text style={styles.productTitle}>이 룩에 가까운 제품</Text>
+          </YStack>
         </XStack>
 
         <XStack style={styles.searchQueryRow}>
@@ -360,77 +324,64 @@ function AreaGuidePanel({
         {product ? (
           <XStack style={styles.productRow}>
             <View style={styles.productImageFrame}>
-              <Image resizeMode="contain" source={product.imageUrl ? {uri: product.imageUrl} : product.imageSource} style={styles.productImage} />
+              <Image
+                resizeMode="contain"
+                source={product.imageUrl ? {uri: product.imageUrl} : product.imageSource}
+                style={styles.productImage}
+              />
             </View>
             <YStack style={styles.productCopy}>
               <Text style={styles.productBrand}>{product.brandName}</Text>
               <Text style={styles.productName}>{product.productName}</Text>
               <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
             </YStack>
-            <Pressable
-              accessibilityLabel="추천 제품 선택 기준 보기"
-              accessibilityRole="button"
-              accessibilityState={{expanded: isProductReasonVisible}}
-              hitSlop={8}
-              onPress={() => setIsProductReasonVisible((visible) => !visible)}
-              style={({pressed}) => [
-                styles.productReasonButton,
-                isProductReasonVisible ? styles.productReasonButtonActive : undefined,
-                pressed && styles.pressed,
-              ]}>
-              <CircleHelp
-                color={isProductReasonVisible ? colors.white : colors.textSecondary}
-                size={iconSize.xs}
-                strokeWidth={2}
-              />
-            </Pressable>
           </XStack>
         ) : null}
 
-        {isProductReasonVisible ? (
+        {hasProductReason ? (
           <View style={styles.productReasonBubble}>
             <Text style={styles.productReasonLabel}>제품 선택 기준</Text>
             <Text style={styles.productReasonText}>{guide.productRecommendation.reason}</Text>
           </View>
         ) : null}
       </YStack>
-
-      <Pressable
-        accessibilityLabel={isProExpanded ? '자세히 접기' : '자세히 펼치기'}
-        accessibilityRole="button"
-        accessibilityState={{expanded: isProExpanded}}
-        onPress={onTogglePro}
-        style={({pressed}) => [styles.proToggleButton, pressed && styles.pressed]}>
-        <Text style={styles.proToggleText}>자세히</Text>
-        {isProExpanded ? (
-          <ChevronUp color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-        ) : (
-          <ChevronDown color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-        )}
-      </Pressable>
-
-      {isProExpanded ? <ProDetailSteps guide={guide} /> : null}
     </YStack>
   );
 }
-
 type ProDetailStep = {
   id: string;
   number?: string;
   text: string;
 };
 
+function splitPlainDetailSteps(text: string): ProDetailStep[] {
+  const sentenceMatches = text.match(/[^.!?。！？]+[.!?。！？]+|[^.!?。！？]+$/g) ?? [];
+  const sentenceSteps = sentenceMatches
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+
+  if (sentenceSteps.length === 0) {
+    return [];
+  }
+
+  return sentenceSteps.map((sentence, index) => ({
+    id: `plain-${index}`,
+    number: String(index + 1),
+    text: sentence,
+  }));
+}
+
 function parseNumberedDetailSteps(text: string): ProDetailStep[] {
-  const normalizedText = text.replace(/\r\n/g, '\n').trim();
+  const normalizedText = text.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
 
   if (!normalizedText) {
     return [];
   }
 
-  const matches = [...normalizedText.matchAll(/^\s*(\d{1,2})[.)]\s+/gm)];
+  const matches = [...normalizedText.matchAll(/(^|\s)(\d{1,2})[.)]\s+/g)];
 
   if (matches.length === 0) {
-    return [{id: 'plain-0', text: normalizedText}];
+    return splitPlainDetailSteps(normalizedText);
   }
 
   return matches.map((match, index) => {
@@ -438,15 +389,15 @@ function parseNumberedDetailSteps(text: string): ProDetailStep[] {
     const nextMatch = matches[index + 1];
     const endIndex = nextMatch?.index ?? normalizedText.length;
     const textValue = normalizedText.slice(startIndex, endIndex).trim();
+    const stepNumber = match[2];
 
     return {
-      id: `${match[1]}-${index}`,
-      number: match[1],
+      id: `${stepNumber}-${index}`,
+      number: stepNumber,
       text: textValue,
     };
   }).filter((step) => step.text.length > 0);
 }
-
 function normalizeFinishDetail(text: string): string {
   const parsedSteps = parseNumberedDetailSteps(text);
   const hasNumberedDetail = parsedSteps.some((step) => step.number);
@@ -469,7 +420,9 @@ function ProDetailSteps({guide}: {guide: ReferenceMakeupAreaGuide}) {
         <YStack style={styles.proStepList}>
           {guideSteps.map((step, index) => (
             <XStack key={`${step.id}-${index}`} style={styles.proStepRow}>
-              <Text style={styles.proStepNumberText}>{`${step.number ?? index + 1}.`}</Text>
+              <View style={styles.proStepNumberBadge}>
+                <Text style={styles.proStepNumberText}>{`${step.number ?? index + 1}.`}</Text>
+              </View>
               <Text style={styles.proStepDescription}>{step.text}</Text>
             </XStack>
           ))}
@@ -634,6 +587,11 @@ const styles = StyleSheet.create({
     height: '100%',
     width: '100%',
   },
+  introPhotoFrame: {
+    alignSelf: 'center',
+    backgroundColor: colors.surfaceMuted,
+    overflow: 'hidden',
+  },
   introImageFrame: {
     borderRadius: radius.md,
     height: 128,
@@ -697,10 +655,12 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   proDetailSection: {
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    gap: spacing.lg,
-    paddingTop: spacing.md,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md,
   },
   proDetailBlock: {
     gap: spacing.sm,
@@ -709,36 +669,59 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
   proFinishText: {
-    color: colors.textPrimary,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
+    padding: spacing.md,
   },
   proStepDescription: {
     color: colors.textPrimary,
     flex: 1,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
     minWidth: 0,
   },
   proStepList: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  proStepNumberBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    height: 28,
+    justifyContent: 'center',
+    marginTop: 1,
+    minWidth: 34,
+    paddingHorizontal: spacing.xs,
   },
   proStepNumberText: {
-    color: colors.textPrimary,
+    color: colors.white,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.md,
-    width: 20,
+    fontSize: typography.fontSize.xs,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
   },
   proStepRow: {
     alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.sm,
+    padding: spacing.md,
   },
   proToggleButton: {
     alignItems: 'center',
@@ -765,14 +748,34 @@ const styles = StyleSheet.create({
   },
   productCopy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
     justifyContent: 'center',
     minWidth: 0,
   },
   productHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  productHeaderCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  productIconShell: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  productEyebrow: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
   },
   productImage: {
     height: '100%',
@@ -783,9 +786,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
-    height: 66,
+    height: 72,
     overflow: 'hidden',
-    width: 66,
+    width: 72,
   },
   productName: {
     color: colors.textPrimary,
@@ -801,7 +804,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   productReasonBubble: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -836,16 +839,28 @@ const styles = StyleSheet.create({
   },
   productRow: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.md,
+    padding: spacing.sm,
   },
   productSection: {
-    gap: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    marginTop: spacing.xs,
+    padding: spacing.md,
   },
   productTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
+    letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
 
@@ -879,11 +894,13 @@ const styles = StyleSheet.create({
   },
   searchQueryRow: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.pill,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 36,
+    minHeight: 38,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
