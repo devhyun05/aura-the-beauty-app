@@ -113,17 +113,26 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
     const h = handleRef.current;
     if (!h || h.raf !== null || failedRef.current) return;
     h.last = Date.now() / 1000;
+    // 30fps 상한(3-3): rAF는 매 디스플레이 프레임 스케줄하되 MIN_FRAME_MS 미만 경과분은
+    // step(렌더)을 스킵 → 60/120Hz 기기에서 GPU 작업 절반/¼. 애니는 시간 기반(step의 dt 누적)
+    // 이라 프레임을 걸러도 모션 속도는 그대로다.
+    let lastRenderMs = 0;
     const frame = (): void => {
       const hh = handleRef.current;
       if (!hh || pausedRef.current || failedRef.current) return;
-      try {
-        step(hh, true);
-        hh.raf = requestAnimationFrame(frame);
-      } catch (e) {
-        console.warn('[OrbGL:step]', e);
-        stopLoop();
-        fail();
+      const nowMs = Date.now();
+      if (nowMs - lastRenderMs >= A.MIN_FRAME_MS) {
+        lastRenderMs = nowMs;
+        try {
+          step(hh, true);
+        } catch (e) {
+          console.warn('[OrbGL:step]', e);
+          stopLoop();
+          fail();
+          return;
+        }
       }
+      hh.raf = requestAnimationFrame(frame);
     };
     h.raf = requestAnimationFrame(frame);
   }, [fail, step, stopLoop]);

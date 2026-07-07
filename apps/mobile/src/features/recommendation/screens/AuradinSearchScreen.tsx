@@ -11,7 +11,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {StyleSheet, View} from 'react-native';
 
-import {AuradinGround, PersistentOrb} from '../components/ds';
+import {AuradinGround, PersistentOrb, useHostPause} from '../components/ds';
 import {
   DetailView,
   ErrorView,
@@ -23,7 +23,9 @@ import {
 } from './views';
 import {
   answerAuradinQuestion,
+  cancelAuradinSearchSession,
   createAuradinSearchSession,
+  isAuradinAbort,
   pollAuradinSearchTurn,
   refineAuradinSearch,
 } from '../services/auradinSearchService';
@@ -35,15 +37,10 @@ import type {
 } from '../types';
 import {buildRequestParts, type AuradinAttachment} from '../attachments';
 
-// 칩 라벨 → 실제 질의 (HomeView는 라벨만 넘긴다)
-const SUGGESTION_QUERIES: Record<string, string> = {
-  '쿨톤 글로시 립': '쿨톤 글로시 립, 2만원 이하',
-  '면접용 블러셔': '면접용 자연스러운 블러셔',
-  '올리브영에서만': '올리브영에서 살 수 있는 데일리 립',
-};
-
-// 첨부만/공백으로 보낼 때의 중립 broad 시드 — 백엔드가 '어느 부위' 스코프 질문을 묻게 한다(§4).
+// 첨부만(리포트/필터)으로 보낼 때의 중립 broad 시드 — 백엔드가 '어느 부위' 스코프 질문을 묻게 한다(§4).
 const BROAD_SEED = '추천해줘';
+// 완전 공백 전송 시 최후 폴백 — 보통은 HomeView 로테이션(3-1)이 올려준 '현재 표시 중 추천 질의'를 쓴다.
+const EMPTY_SUBMIT_QUERY = '물빠진 로즈 느낌의 매트 립';
 const SEARCH_MS = 2300;
 const PICK_MS = 1700;
 
@@ -63,6 +60,8 @@ export function AuradinSearchScreen({
   availableReport,
 }: {drive?: AuradinDriveParams; availableReport?: AuradinAvailableReport | null} = {}) {
   const [phase, setPhase] = useState<AuradinPhase>('home');
+  // 3-3 게이팅: 앱 백그라운드·키보드 표시 중엔 오브 GL 루프를 멈춘다(GPU·배터리 절약).
+  const orbPaused = useHostPause();
   // Change D: 컴포저는 빈 값으로 시작(placeholder만) — 첨부만 하고 보내면 broad 스코프 질문.
   const [query, setQuery] = useState('');
   // Change C: 확장형 첨부 — 리포트(nav/딥링크로 시드) + 필터. submit이 요청에 합성.
@@ -83,17 +82,38 @@ export function AuradinSearchScreen({
   const sessionIdRef = useRef<string | null>(null);
   const cancelled = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // 진행 중인 세션 요청의 컨트롤러 — 새 검색/취소/이탈 시 in-flight fetch·poll을 중단한다.
+  const abortRef = useRef<AbortController | null>(null);
+  // 3-1: HomeView 로테이션이 올려주는 '현재 표시 중 추천 질의' — 빈 전송 시 이 질의로 검색.
+  const currentSuggestionRef = useRef<string>('');
 
   useEffect(() => {
     cancelled.current = false;
     return () => {
       cancelled.current = true;
       clearTimeout(timer.current);
+      abortRef.current?.abort();
+      const sid = sessionIdRef.current;
+      if (sid) {
+        void cancelAuradinSearchSession(sid); // 화면 이탈 → 서버 세션도 종료
+      }
     };
   }, []);
 
+  // 새 세션 요청을 위한 컨트롤러 발급 — 직전 요청은 중단한다.
+  const beginRequest = (): AbortController => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
+  };
+
   // 백엔드가 즉답해도 searching 오브를 최소 표시시간만큼 유지 (calm — DS 규칙)
-  const runWithSearching = async (minMs: number, work: () => Promise<AuradinSearchTurn>) => {
+  const runWithSearching = async (
+    minMs: number,
+    signal: AbortSignal,
+    work: () => Promise<AuradinSearchTurn>,
+  ) => {
     setPhase('searching');
     const startedAt = Date.now();
     try {
@@ -104,16 +124,16 @@ export function AuradinSearchScreen({
           timer.current = setTimeout(resolve, remaining);
         });
       }
-      if (cancelled.current) {
-        return;
+      if (cancelled.current || signal.aborted) {
+        return; // 사용자 이탈/취소 — 결과를 반영하지 않는다 (홈 복귀 레이스 방지)
       }
       setTurn(nextTurn);
       setPhase(
         nextTurn.phase === 'results' ? 'results' : nextTurn.phase === 'question' ? 'question' : 'failed',
       );
-    } catch {
-      if (cancelled.current) {
-        return;
+    } catch (error) {
+      if (cancelled.current || signal.aborted || isAuradinAbort(error)) {
+        return; // 취소로 인한 abort는 실패 화면을 띄우지 않고 조용히 종료
       }
       setTurn({
         sessionId: sessionIdRef.current ?? '',
@@ -129,17 +149,23 @@ export function AuradinSearchScreen({
   const submit = (raw?: string) => {
     const typed = (raw?.trim() ? raw.trim() : query.trim()).trim();
     const parts = buildRequestParts(attachments);
-    // 타이핑 + 필터 첨부 표준구. 비면(리포트만/공백) broad 시드로 스코프 질문 유도.
-    const effective = [typed, parts.promptSuffix].filter(Boolean).join(' ').trim();
+    // 완전 공백(텍스트·첨부 모두 없음) → placeholder 예시를 실제 질의로 승격해 "본 그대로" 검색.
+    // 첨부만 있으면 기존대로 broad 시드로 스코프 질문을 유도한다.
+    const seed =
+      !typed && attachments.length === 0
+        ? currentSuggestionRef.current || EMPTY_SUBMIT_QUERY
+        : typed;
+    const effective = [seed, parts.promptSuffix].filter(Boolean).join(' ').trim();
     const prompt = effective || BROAD_SEED;
-    setQuery(typed); // 표시는 사용자가 친 것만 유지 (첨부는 칩으로 별도 표시)
+    setQuery(seed); // 승격된 예시(또는 사용자가 친 것)를 입력창에 반영 — 첨부는 칩으로 별도 표시
     setAnswering(false);
     setSelected(null);
     const context = parts.context.personalColor ? {personalColor: parts.context.personalColor} : undefined;
-    void runWithSearching(SEARCH_MS, async () => {
-      const created = await createAuradinSearchSession({prompt, reportId: parts.reportId, context});
+    const {signal} = beginRequest();
+    void runWithSearching(SEARCH_MS, signal, async () => {
+      const created = await createAuradinSearchSession({prompt, reportId: parts.reportId, context}, signal);
       sessionIdRef.current = created.sessionId;
-      return pollAuradinSearchTurn(created.sessionId);
+      return pollAuradinSearchTurn(created.sessionId, {signal});
     });
   };
 
@@ -166,9 +192,10 @@ export function AuradinSearchScreen({
       return;
     }
     setAnswering(true);
-    void runWithSearching(PICK_MS, async () => {
-      await answerAuradinQuestion(sessionId, questionId, optionId);
-      return pollAuradinSearchTurn(sessionId);
+    const {signal} = beginRequest();
+    void runWithSearching(PICK_MS, signal, async () => {
+      await answerAuradinQuestion(sessionId, questionId, optionId, signal);
+      return pollAuradinSearchTurn(sessionId, {signal});
     });
   };
 
@@ -179,17 +206,18 @@ export function AuradinSearchScreen({
       return;
     }
     setRefining(true);
+    const {signal} = beginRequest();
     void (async () => {
       try {
-        await refineAuradinSearch(sessionId, {dial});
-        const nextTurn = await pollAuradinSearchTurn(sessionId);
-        if (!cancelled.current && nextTurn.phase === 'results') {
+        await refineAuradinSearch(sessionId, {dial}, signal);
+        const nextTurn = await pollAuradinSearchTurn(sessionId, {signal});
+        if (!cancelled.current && !signal.aborted && nextTurn.phase === 'results') {
           setTurn(nextTurn);
         }
       } catch {
-        // refine 실패는 조용히 — 기존 결과 유지 (§7 recovery는 백엔드가 담당)
+        // refine 실패/취소는 조용히 — 기존 결과 유지 (§7 recovery는 백엔드가 담당)
       } finally {
-        if (!cancelled.current) {
+        if (!cancelled.current && !signal.aborted) {
           setRefining(false);
         }
       }
@@ -211,8 +239,14 @@ export function AuradinSearchScreen({
 
   const reset = () => {
     clearTimeout(timer.current);
+    abortRef.current?.abort(); // in-flight 검색·poll 중단 (홈 복귀 후 결과 강제 전환 방지)
+    const sid = sessionIdRef.current;
+    if (sid) {
+      void cancelAuradinSearchSession(sid); // 서버 세션도 종료 (best-effort)
+    }
     sessionIdRef.current = null;
     setTurn(null);
+    setQuery(''); // 입력창 잔존 질의 초기화 — 다음 홈 진입 시 placeholder만 보이게
     setAnswering(false);
     setRefining(false);
     setSelected(null);
@@ -259,7 +293,7 @@ export function AuradinSearchScreen({
   return (
     <View style={styles.shell}>
       <AuradinGround dark={phase === 'searching'}>
-        <PersistentOrb phase={phase} />
+        <PersistentOrb phase={phase} paused={orbPaused} />
 
         {phase === 'home' ? (
           <HomeView
@@ -273,7 +307,10 @@ export function AuradinSearchScreen({
             }
             onAddAttachment={addAttachment}
             onOpenSaved={saved.length ? () => setPhase('saved') : undefined}
-            onPickSuggestion={(label) => submit(SUGGESTION_QUERIES[label] ?? label)}
+            onPickSuggestion={(pickedQuery) => submit(pickedQuery)}
+            onSuggestionChange={(shownQuery) => {
+              currentSuggestionRef.current = shownQuery;
+            }}
             onRemoveAttachment={removeAttachment}
             onSubmit={() => submit()}
             query={query}

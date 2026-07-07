@@ -33,6 +33,21 @@ export class BackendApiError extends Error {
   }
 }
 
+/**
+ * 사용자가 의도적으로 취소(홈 복귀·화면 이탈)해 요청이 abort된 경우. 타임아웃과 구분해
+ * 호출부가 조용히 삼킬 수 있게 별도 타입으로 던진다 (실패 화면을 띄우면 안 됨).
+ */
+export class RequestAbortedError extends Error {
+  constructor(message = 'Request was aborted by the caller.') {
+    super(message);
+    this.name = 'RequestAbortedError';
+  }
+}
+
+export function isRequestAbortedError(error: unknown): error is RequestAbortedError {
+  return error instanceof RequestAbortedError;
+}
+
 export function setBackendAuthTokenProvider(provider: AuthTokenProvider | null): void {
   authTokenProvider = provider;
 }
@@ -142,6 +157,11 @@ export async function requestBackendJson<T>(
     });
   } catch (error) {
     if (isAbortError(error)) {
+      // 외부 시그널이 원인이면 사용자 취소 — 타임아웃 카피 대신 조용한 abort 에러.
+      if (externalSignal?.aborted) {
+        console.info('[aura:api] request:aborted', {durationMs: Date.now() - startedAt, method, path});
+        throw new RequestAbortedError();
+      }
       console.info('[aura:api] request:timeout', {
         durationMs: Date.now() - startedAt,
         method,

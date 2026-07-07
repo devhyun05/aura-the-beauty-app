@@ -24,6 +24,7 @@ import {
   GlassSheet,
   StatusBarRow,
   useEnterTransition,
+  useReducedMotion,
 } from '../../components/ds';
 import {
   attachmentChipLabel,
@@ -31,12 +32,16 @@ import {
   FILTER_PRESETS,
   type AuradinAttachment,
 } from '../../attachments';
+import { sampleSuggestions } from '../../suggestions';
 
 export type HomeViewProps = {
   query: string;
   setQuery: (v: string) => void;
   onSubmit: () => void;
-  onPickSuggestion: (label: string) => void;
+  /** 칩 탭 — 3-1: 라벨이 아니라 완전한 추천 질의를 그대로 넘긴다. */
+  onPickSuggestion: (query: string) => void;
+  /** 3-1: 로테이션으로 현재 표시 중인 추천 질의 — 빈 전송 시 이 질의로 검색(호스트가 ref에 보관). */
+  onSuggestionChange?: (query: string) => void;
   savedCount: number;
   onOpenSaved?: () => void;
   // Change C: 확장형 첨부 트레이 (리포트·필터, 향후 자료).
@@ -46,14 +51,15 @@ export type HomeViewProps = {
   onRemoveAttachment: (index: number) => void;
 };
 
-/** Suggestion chips — Korean conversational fragments (brand copy, fixed). */
-const SUGGESTIONS = ['쿨톤 글로시 립', '면접용 블러셔', '올리브영에서만'] as const;
+// 3-1 로테이션 주기(ms) — 4~6초 구간. 유휴(키보드 닫힘·리듀스드모션 아님)일 때만 돈다.
+const ROTATE_MS = 5200;
 
 export function HomeView({
   query,
   setQuery,
   onSubmit,
   onPickSuggestion,
+  onSuggestionChange,
   savedCount,
   onOpenSaved,
   attachments,
@@ -64,10 +70,44 @@ export function HomeView({
   // 첨부 메뉴: null(닫힘) | 'root'(리포트/필터/사진) | 'filter'(프리셋).
   const [menu, setMenu] = React.useState<null | 'root' | 'filter'>(null);
   const [reportHint, setReportHint] = React.useState(false);
+  // 키보드가 올라오면 히어로·오브존을 접어 컴포저가 키보드에 가리지 않게 한다 (실기기 이슈 1).
+  const [keyboardOpen, setKeyboardOpen] = React.useState(false);
   const insets = useSafeAreaInsets();
   const { width: W } = useWindowDimensions();
   const enter = useEnterTransition(12);
+  const reduced = useReducedMotion();
   const heroSize = W < 360 ? 46 : 53; // small-screen tolerance
+
+  // 3-1 추천 질의: 세션 시드(마운트마다 새로) → 칩 3개 고정 샘플 + 로테이션 리스트.
+  const personalColor = availableReport?.personalColor ?? null;
+  const seedRef = React.useRef(Math.floor(Math.random() * 100000));
+  const chips = React.useMemo(() => sampleSuggestions(seedRef.current, 3, personalColor), [personalColor]);
+  const rotation = React.useMemo(() => sampleSuggestions(seedRef.current, 12, personalColor), [personalColor]);
+  const [rotIndex, setRotIndex] = React.useState(0);
+  const current = rotation[rotIndex] ?? rotation[0] ?? null;
+
+  // 현재 표시 중 추천 질의를 호스트로 올린다(빈 전송 시 이 질의로 검색 — 실기기 이슈 3 완성).
+  React.useEffect(() => {
+    if (current) onSuggestionChange?.(current.query);
+  }, [current, onSuggestionChange]);
+
+  // placeholder 로테이션 — 유휴(키보드 닫힘)일 때만, 리듀스드모션이면 고정.
+  React.useEffect(() => {
+    if (reduced || keyboardOpen || rotation.length <= 1) return;
+    const id = setInterval(() => setRotIndex((i) => (i + 1) % rotation.length), ROTATE_MS);
+    return () => clearInterval(id);
+  }, [reduced, keyboardOpen, rotation.length]);
+
+  React.useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -101,37 +141,51 @@ export function HomeView({
           </Pressable>
         ) : null}
 
-        <Text
-          style={[
-            text.hero,
-            {
-              marginTop: onOpenSaved ? 12 : 30,
-              fontSize: heroSize,
-              lineHeight: Math.round(heroSize * 1.08),
-              letterSpacing: tracking(heroSize, -0.035),
-            },
-          ]}
-          accessibilityRole="header"
-        >
-          Find your{'\n'}own Cosmetic.
-        </Text>
-        <Text style={[text.heroSub, { marginTop: 14 }]}>
-          색·질감·예산 — 편하게 말하면 아우라딘이 찾아드려요.
-        </Text>
+        {/* 키보드가 열리면 히어로+서브는 접어 공간을 컴포저에 양보한다. */}
+        {keyboardOpen ? null : (
+          <>
+            <Text
+              style={[
+                text.hero,
+                {
+                  marginTop: onOpenSaved ? 12 : 30,
+                  fontSize: heroSize,
+                  lineHeight: Math.round(heroSize * 1.08),
+                  letterSpacing: tracking(heroSize, -0.035),
+                },
+              ]}
+              accessibilityRole="header"
+            >
+              Find your{'\n'}own Cosmetic.
+            </Text>
+            <Text style={[text.heroSub, { marginTop: 14 }]}>
+              색·질감·예산 — 편하게 말하면 아우라딘이 찾아드려요.
+            </Text>
+          </>
+        )}
 
         {/* orb zone — the PersistentOrb (mounted by the host) floats here on home.
-            Tapping the open ground dismisses the keyboard. */}
-        <Pressable style={{ flex: 1, minHeight: 180 }} onPress={Keyboard.dismiss} accessible={false} />
+            Tapping the open ground dismisses the keyboard. 키보드 열림 시 0으로 접힘. */}
+        <Pressable
+          style={{ flex: 1, minHeight: keyboardOpen ? 0 : 180 }}
+          onPress={Keyboard.dismiss}
+          accessible={false}
+        />
 
         <GlassSheet iridescent style={{ marginHorizontal: -layout.sheetBleed }}>
-          <Composer value={query} onChangeText={setQuery} onSend={onSubmit} />
+          <Composer
+            value={query}
+            onChangeText={setQuery}
+            onSend={onSubmit}
+            placeholder={current ? `예: ${current.query}` : undefined}
+          />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-            {SUGGESTIONS.map((label) => (
+            {chips.map((suggestion) => (
               <Chip
-                key={label}
-                label={label}
-                on={query === label}
-                onPress={() => onPickSuggestion(label)}
+                key={suggestion.chip}
+                label={suggestion.chip}
+                on={query === suggestion.query}
+                onPress={() => onPickSuggestion(suggestion.query)}
               />
             ))}
           </View>

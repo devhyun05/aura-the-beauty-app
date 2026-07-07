@@ -44,9 +44,9 @@ export const BLOB_VERT = `
   varying vec3 vN; varying vec3 vV; varying float vD; varying float vRip;
   float disp(vec3 p){
     float t=uTime*0.28;
-    float d=snoise(p*0.65+vec3(t,t*0.6,t*0.45))*0.085;
-    d+=snoise(p*1.1+vec3(-t*0.4,t*0.5,t*0.3))*0.042;
-    return d;
+    // 전역 저사양 하향(3-3): 2번째 노이즈 옥타브 제거 → 정점당 snoise 호출 절반.
+    // FD 법선(pA/pB/pC)이 disp를 3회 더 부르므로 이 절감이 정점 비용에 크게 반영된다.
+    return snoise(p*0.65+vec3(t,t*0.6,t*0.45))*0.085;
   }
   void main(){
     float d=disp(normal);
@@ -102,7 +102,8 @@ export const BLOB_FRAG = `
   void main(){
     vec3 n=normalize(vN); vec3 v=normalize(vV);
     float fres=pow(1.0-max(dot(n,v),0.0),2.2);
-    float swirl=snoise(vec3(n.xy*1.6,uTime*0.12))*0.30+snoise(vec3(n.yx*3.2,uTime*0.07))*0.12;
+    // 전역 저사양 하향(3-3): 픽셀당 2번째 swirl 옥타브 제거 (프래그먼트 snoise 2→1).
+    float swirl=snoise(vec3(n.xy*1.6,uTime*0.12))*0.30;
     float hue=n.x*0.28+n.y*0.2+vD*1.4+uTime*0.045+swirl+vRip*1.4;
     fres=min(fres+vRip*0.55,1.0);
     vec3 iri=palette(hue);
@@ -127,7 +128,8 @@ export const ORB_ANIM = {
   CAMERA_FOV: 35,
   CAMERA_Z: 3, // box framing — the Animated PersistentOrb container does phase scaling
   BLOB_RADIUS: 0.43,
-  BLOB_DETAIL: 32, // ~20k faces — 웜업(첫 표시 지연) 단축; 155px 박스에선 48과 시각차 없음
+  BLOB_DETAIL: 24, // 전역 저사양 하향(3-3): 32→24 (정점 ≈(25/33)²≈0.57배). 155px 박스에선 시각차 미미
+  MIN_FRAME_MS: 33, // 전역 30fps 상한(3-3) — 느긋한 젤리 모션은 30fps로도 부드럽고, GPU 부하 절반
   GLOW_LERP: 0.04,
   ROTATE_SPEED: 0.07, // rad/s around y
   FLOAT_FREQ: 0.7,

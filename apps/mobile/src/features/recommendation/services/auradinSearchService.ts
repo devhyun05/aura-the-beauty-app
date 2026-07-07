@@ -7,7 +7,11 @@
 //
 // 백엔드 URL(EXPO_PUBLIC_API_BASE_URL)이 없으면 dev의 오프라인 mock 데모 흐름을 유지한다.
 
-import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  getBackendApiBaseUrl,
+  isRequestAbortedError,
+  requestBackendJson,
+} from '../../../shared/services/backendApi';
 import {auradinDraftMock} from '../mocks/auradin.mock';
 import type {
   AuradinAppliedFilter,
@@ -243,6 +247,7 @@ function delay(ms: number): Promise<void> {
 
 export async function createAuradinSearchSession(
   request: CreateAuradinSessionRequest,
+  signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
     mockAnswered = false;
@@ -252,6 +257,7 @@ export async function createAuradinSearchSession(
 
   return requestBackendJson<SessionAck>('/search/sessions', {
     method: 'POST',
+    signal,
     body: {
       prompt: request.prompt,
       reportId: request.reportId,
@@ -259,6 +265,21 @@ export async function createAuradinSearchSession(
       context: request.context ?? undefined,
     },
   });
+}
+
+// 사용자가 검색 도중 이탈 → 세션 종료. fire-and-forget으로 호출하며 실패는 조용히 삼킨다.
+export async function cancelAuradinSearchSession(sessionId: string): Promise<void> {
+  if (!getBackendApiBaseUrl() || !sessionId) {
+    return;
+  }
+  try {
+    await requestBackendJson<{sessionId: string; phase: string}>(
+      `/search/sessions/${encodeURIComponent(sessionId)}/cancel`,
+      {method: 'POST', timeoutMs: 4000},
+    );
+  } catch {
+    // 취소는 best-effort — 세션 없음(404)/네트워크 실패여도 UX엔 영향 없음.
+  }
 }
 
 export type AuradinRefineInput = {
@@ -270,6 +291,7 @@ export type AuradinRefineInput = {
 export async function refineAuradinSearch(
   sessionId: string,
   input: AuradinRefineInput,
+  signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
     return {sessionId, phase: 'searching', retryAfterMs: 400};
@@ -277,7 +299,7 @@ export async function refineAuradinSearch(
 
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/refine`,
-    {method: 'POST', body: {dial: input.dial, prompt: input.prompt}},
+    {method: 'POST', signal, body: {dial: input.dial, prompt: input.prompt}},
   );
 }
 
@@ -285,6 +307,7 @@ export async function answerAuradinQuestion(
   sessionId: string,
   questionId: string,
   optionId: string,
+  signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
     mockAnswered = true;
@@ -293,14 +316,14 @@ export async function answerAuradinQuestion(
 
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/answer`,
-    {method: 'POST', body: {questionId, optionId}},
+    {method: 'POST', signal, body: {questionId, optionId}},
   );
 }
 
 // 세션이 searching이면 retryAfterMs 후 재시도. in-memory 백엔드는 보통 즉시 확정되지만 방어적으로.
 export async function pollAuradinSearchTurn(
   sessionId: string,
-  {maxAttempts = 6}: {maxAttempts?: number} = {},
+  {maxAttempts = 6, signal}: {maxAttempts?: number; signal?: AbortSignal} = {},
 ): Promise<AuradinSearchTurn> {
   if (!getBackendApiBaseUrl()) {
     return buildMockTurn(sessionId);
@@ -308,14 +331,27 @@ export async function pollAuradinSearchTurn(
 
   let turn = await requestBackendJson<BackendSearchTurn>(
     `/search/sessions/${encodeURIComponent(sessionId)}`,
+    {signal},
   );
   let attempts = 1;
   while (normalizePhase(turn.phase) === 'searching' && attempts < maxAttempts) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     await delay(turn.retryAfterMs ?? 350);
     turn = await requestBackendJson<BackendSearchTurn>(
       `/search/sessions/${encodeURIComponent(sessionId)}`,
+      {signal},
     );
     attempts += 1;
   }
   return mapSearchTurn(turn);
+}
+
+// 화면 콜백에서 사용자 취소로 인한 abort를 조용히 삼킬지 판단.
+export function isAuradinAbort(error: unknown): boolean {
+  return (
+    isRequestAbortedError(error) ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
 }

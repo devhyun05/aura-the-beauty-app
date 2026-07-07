@@ -47,8 +47,9 @@ export function ProductRecommendationRouteScreen({
 
 // AURADIN 검색 — 자체 글라스 지반·워드마크를 갖는 풀스크린 경험 (DetailRouteChrome 미사용).
 // EXPO_PUBLIC_AURADIN_DEMO_DRIVE(질의 텍스트)가 설정되면 검색→상세→다이얼→상세 시퀀스를
-// 탭과 동일한 핸들러로 자동 구동한다 (시뮬레이터 QA·데모용, 기본 미설정 = 영향 없음).
-const DEMO_DRIVE_PROMPT = process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE;
+// 탭과 동일한 핸들러로 자동 구동한다 (시뮬레이터 QA·데모 전용).
+// __DEV__ 가드 — 릴리즈/실기기 테스트 빌드에는 절대 반영되지 않는다 (실기기 이슈: 데모가 홈을 강탈).
+const DEMO_DRIVE_PROMPT = __DEV__ ? process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE : undefined;
 const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> = [
   {delayMs: 6000, step: {prompt: DEMO_DRIVE_PROMPT ?? '', ts: 'demo-1'}},
   {delayMs: 22000, step: {open: 'discovery', ts: 'demo-2'}},
