@@ -1094,13 +1094,18 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     ApplyFoundationSkinGate(foundationMaterial, face, false);
                 }
             }
-            else if (region == "brow" && IsGeneratedBrowMaskTextureId(recipe.MaskTextureId))
+            else if (region == "brow")
             {
-                // BROW v1 directional skin inpaint: bind the flicker-free ARKit
+                // BROW directional skin inpaint: bind the flicker-free ARKit
                 // camera textures + skin reference anchors so the brow shader can
                 // sample live forehead skin and cover the user's NATURAL brow
-                // (mask.r footprint) BEFORE the drawn brow composites on top,
-                // killing the "double-brow" show-through. ApplyFoundationSkinGate
+                // BEFORE the drawn brow composites on top, killing the
+                // "double-brow" show-through. This binds for BOTH brow paths:
+                //   * generated brow -> erase footprint from mask.r
+                //   * static/default brow -> erase footprint from the drawn
+                //     coverage (_BrowStaticEraseMode); the mask is UV-glued to
+                //     the ARKit face mesh so it already sits on the natural brow.
+                // ApplyFoundationSkinGate
                 // is generic (any material with _SkinGateEnabled): it binds
                 // _SkinGateTexY/_SkinGateTexCbCr (or _SkinGateCameraTex),
                 // _SkinGateCameraMode, _SkinGateDisplayTransform and the
@@ -4493,21 +4498,35 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             material.SetFloat("_BrowGeneratedMode", generatedBrowMask ? 1.0f : 0.0f);
         }
 
-        if (generatedBrowMask)
+        if (material.HasProperty("_BrowStaticEraseMode"))
         {
-            // BROW v1 directional skin inpaint requires an ALPHA-OVER blend so
-            // the shader can composite: (1) forehead-skin fill covering the
-            // user's natural brow, then (2) the drawn brow pigment ON TOP, in a
-            // single SrcAlpha/OneMinusSrcAlpha pass. The recipe ships the brow
-            // as blendMode "multiply" (DstColor/Zero, _PigmentMultiply=1), under
+            // Static/default brow (AR-filter path): no generated neutralize mask
+            // exists, so the shader must ERASE the natural brow using the drawn
+            // coverage as the footprint (the mask is UV-glued to the face mesh,
+            // so it already sits on the natural brow) and fill it with forehead
+            // skin sampled UPWARD from the live camera before compositing the
+            // brow color on top. The generated brow uses its own mask.r footprint
+            // branch instead, so this is OFF there. Non-brow regions never carry
+            // the property (HasProperty false) and are unaffected.
+            bool staticBrow = recipe.Region == "brow" && !generatedBrowMask;
+            material.SetFloat("_BrowStaticEraseMode", staticBrow ? 1.0f : 0.0f);
+        }
+
+        if (recipe.Region == "brow")
+        {
+            // BROW directional skin inpaint requires an ALPHA-OVER blend so the
+            // shader can composite: (1) forehead-skin fill covering the user's
+            // natural brow, then (2) the drawn brow pigment ON TOP, in a single
+            // SrcAlpha/OneMinusSrcAlpha pass. The recipe ships the brow as
+            // blendMode "multiply" (DstColor/Zero, _PigmentMultiply=1), under
             // which the brow branch's premultiplied return would be reinterpreted
             // as a pure darken and the skin fill (which must LIGHTEN over the dark
-            // natural brow) is impossible. The brow branch already early-returns a
-            // straight (color, alpha) value and its opacity/facing machinery only
-            // has an effect under an alpha blend, so forcing normal blend here is
-            // the mode that branch was written for. BROW-ONLY: gated on
-            // generatedBrowMask, so lip/cheek/eyeliner/lens/foundation are
-            // untouched. Static (psd) brows do not hit this branch.
+            // natural brow) is impossible — AND the multiply path early-returns
+            // BEFORE the static-erase branch ever runs. Forcing normal blend +
+            // _PigmentMultiply=0 for BOTH brow paths (generated mask.r footprint
+            // AND static _BrowStaticEraseMode coverage footprint) is the mode both
+            // branches were written for. BROW-ONLY: gated on region == "brow", so
+            // lip/cheek/eyeliner/lens/foundation are untouched.
             if (material.HasProperty("_SrcBlend"))
             {
                 material.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
@@ -4526,7 +4545,7 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             // BROW v1 inpaint tuning (sane defaults; on-device tuning targets).
             // _BrowInpaintStrength: fill opacity over the natural brow (a dark
             // brow needs near-opaque skin). _BrowInpaintTapDistance: screen-UV
-            // step UPWARD per forehead tap (3 taps). _BrowInpaintFeather: edge
+            // step UPWARD per forehead tap (5 taps). _BrowInpaintFeather: edge
             // softness on the mask.r footprint so there is no skin-patch rect.
             if (material.HasProperty("_BrowInpaintStrength"))
             {
@@ -4541,6 +4560,20 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             if (material.HasProperty("_BrowInpaintFeather"))
             {
                 material.SetFloat("_BrowInpaintFeather", 0.12f);
+            }
+
+            // BROW v2 hair re-composite: where the natural brow is COVERED BY
+            // HAIR (bangs) — i.e. the upward forehead search finds only hair AND
+            // the pixel here is itself hair-dark — fade the whole drawn brow
+            // (skin fill + pigment) back to the live camera so the user's real
+            // hair strands show on top of the brow instead of a painted-over
+            // smear. Natural-brow pixels (forehead skin visible above) keep
+            // browHairKeep ~ 0 and erase + draw exactly as before. On-device
+            // tuning target: raise if brow bleeds through bangs, lower if the
+            // brow drops out where hair only lightly grazes it.
+            if (material.HasProperty("_BrowHairKeepStrength"))
+            {
+                material.SetFloat("_BrowHairKeepStrength", 1.15f);
             }
         }
 
@@ -5252,6 +5285,16 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                 SetViewVisibility(view, false);
             }
         }
+    }
+
+    // Public wrapper so RNBridge can hide a single region's AURA overlay when
+    // that region is rendered by an external (grafted MediaPipe) renderer
+    // instead — e.g. the lip is routed to ARMakeup.Face.LipRenderer, so AURA's
+    // own lip overlay must be hidden to avoid a double lip. Other regions
+    // (cheek/base) are untouched.
+    public void HideRegionOverlay(string region)
+    {
+        HideRegionViews(region);
     }
 
     private void HideRegionViews(string region)

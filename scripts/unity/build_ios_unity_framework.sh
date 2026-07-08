@@ -58,6 +58,19 @@ mkdir -p "${MOBILE_UNITY_BUILD_DIR}"
 rsync -a --delete "${BUILT_FRAMEWORK}" "${MOBILE_UNITY_BUILD_DIR}/"
 rsync -a --delete "${UNITY_EXPORT_PATH}/Data/" "${MOBILE_UNITY_BUILD_DIR}/Data/"
 
+# MediaPipe (homuler) ships its iOS native code as a SEPARATE dynamic framework
+# (MediaPipeUnity.framework) that UnityFramework links via @rpath. It is NOT
+# inside UnityFramework.framework, so copy it alongside so the pbxproj "Embed
+# UnityFramework" phase can embed it into the app (else FaceLandmarkSource /
+# MediaPipe calls crash at runtime with a dyld missing-library error).
+MP_FRAMEWORK_SRC="$(find "${UNITY_EXPORT_PATH}/Frameworks" -type d -name 'MediaPipeUnity.framework' -print -quit 2>/dev/null || true)"
+if [[ -n "${MP_FRAMEWORK_SRC}" && -d "${MP_FRAMEWORK_SRC}" ]]; then
+  echo "[aura:unity] Copying MediaPipeUnity.framework from ${MP_FRAMEWORK_SRC}"
+  rsync -a --delete "${MP_FRAMEWORK_SRC}" "${MOBILE_UNITY_BUILD_DIR}/"
+else
+  echo "[aura:unity] MediaPipeUnity.framework not found under ${UNITY_EXPORT_PATH}/Frameworks (MediaPipe path disabled?)."
+fi
+
 echo "[aura:unity] Done:"
 echo "[aura:unity]   ${MOBILE_UNITY_BUILD_DIR}/UnityFramework.framework"
 echo "[aura:unity]   ${MOBILE_UNITY_BUILD_DIR}/Data"

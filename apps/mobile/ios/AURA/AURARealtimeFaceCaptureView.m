@@ -7,7 +7,19 @@
 #import <React/RCTViewManager.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
+
+// MediaPipe was removed from this build (a Unity MediaPipe plugin now provides
+// it; keeping the Pod caused a duplicate-MediaPipe crash). Guard every
+// MediaPipe use so this file still compiles and runs when the Pod is absent.
+// When present, realtime MediaPipe screen landmarks work as before; when
+// absent, the MediaPipe path degrades gracefully (Vision-based capture and the
+// rest of the module are unaffected).
+#if __has_include(<MediaPipeTasksVision/MediaPipeTasksVision.h>)
+#define AURA_HAS_MEDIAPIPE 1
 #import <MediaPipeTasksVision/MediaPipeTasksVision.h>
+#else
+#define AURA_HAS_MEDIAPIPE 0
+#endif
 
 static void *AURARealtimeCameraStabilityContext = &AURARealtimeCameraStabilityContext;
 
@@ -351,6 +363,238 @@ static NSMutableDictionary *AURARealtimeLandmarksFromFace(
   return result;
 }
 
+// Forward declarations: these are defined later in the file (outside the
+// MediaPipe guard) but are used by the Vision→MediaPipe shim helpers below.
+static CGFloat AURARealtimeNumberFromPoint(NSDictionary *point, NSString *key);
+static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks);
+
+// Rotate a raw-frame Vision point into the UPRIGHT PORTRAIT, selfie-mirrored
+// frame that the MediaPipe path emitted (eyes horizontal, origin top-left,
+// user-view left/right).
+//
+// The video-data-output buffer is LANDSCAPE (e.g. 1440x1080), so a frontal
+// upright face arrives 90° rotated: the eye line is VERTICAL in the raw frame.
+// That is why the un-rotated payload showed roll≈-90°, a near-zero eye x-span
+// (faceWidthRatio≈0.045), and a yaw that blew up dividing by that tiny span. The
+// top-level screen dots already undo this via captureDevicePointFromVisionPoint's
+// (x,y)->(y,x) swap; the mediaPipe slot needs the same rotation.
+//
+//   swap axes  (x,y) -> (y,x)     [undo the 90° buffer rotation → eyes horizontal]
+//   front only: mirror x -> 1 - x [selfie view, matches the preview layer]
+//
+// Both raw and upright points are normalized [0,1]; AURARealtimePointFromImagePoint
+// already put raw points at origin top-left, so the swap keeps origin top-left.
+static NSDictionary *AURARealtimeUprightPortraitPoint(
+    NSDictionary *point,
+    BOOL isFront)
+{
+  if (!point) {
+    return nil;
+  }
+
+  CGFloat rawX = AURARealtimeNumberFromPoint(point, @"x");
+  CGFloat rawY = AURARealtimeNumberFromPoint(point, @"y");
+  CGFloat uprightX = rawY;
+  CGFloat uprightY = rawX;
+
+  if (isFront) {
+    uprightX = 1.0 - uprightX;
+  }
+
+  return AURARealtimePoint(uprightX, uprightY);
+}
+
+// Builds the MediaPipe-shaped `landmarks` map in the SAME RAW camera-buffer
+// frame that the top-level Vision landmarks (AURARealtimeLandmarksFromFace) use.
+// This is deliberate: these landmarks feed attachMediaPipeScreenLandmarksToPayload
+// → screenPointFromNormalizedPoint → captureDevicePointFromVisionPoint, the exact
+// converter that already places the top-level forehead/chin dots correctly. So
+// the mediaPipe screenLandmarks (which the greenlight's not_centered check reads)
+// land in the right place only if they share that raw convention. Pose and
+// faceWidthRatio are computed separately from an UPRIGHT copy (see below), NOT
+// from these raw points.
+static NSMutableDictionary *AURARealtimeMediaPipeLandmarksFromVisionFace(
+    VNFaceObservation *face,
+    CGSize imageSize)
+{
+  VNFaceLandmarks2D *landmarks = face.landmarks;
+  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face);
+  NSMutableDictionary *result = [NSMutableDictionary dictionary];
+
+  if (landmarks == nil) {
+    return result;
+  }
+
+  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize);
+  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize);
+  VNFaceLandmarkRegion2D *lips = landmarks.outerLips ?: landmarks.innerLips;
+  NSDictionary *mouthLeft = AURARealtimeLipCornerFromRegion(lips, imageSize, YES);
+  NSDictionary *mouthRight = AURARealtimeLipCornerFromRegion(lips, imageSize, NO);
+  NSDictionary *chin = AURARealtimeCenteredChinPointFromRegion(landmarks.faceContour, bounds, imageSize) ?:
+      AURARealtimeBoundsPoint(bounds, 0.5, 0.92);
+  NSDictionary *forehead = AURARealtimeForeheadPoint(landmarks, bounds, imageSize);
+
+  // noseBridge/noseTip are placed by interpolating between the raw forehead and
+  // chin — the two centerline points that already screen-project correctly (they
+  // drive the top-level dots). Interpolating guarantees all four centerline points
+  // are COLLINEAR on screen, so the greenlight's centerLineSpread ≈ 0 and the
+  // not_centered check passes for a centered face. (Nose-region extreme pickers
+  // are unreliable in the rotated raw frame, so we do not use them here.)
+  NSDictionary *noseBridge = nil;
+  NSDictionary *noseTip = nil;
+  if (forehead && chin) {
+    CGFloat fx = AURARealtimeNumberFromPoint(forehead, @"x");
+    CGFloat fy = AURARealtimeNumberFromPoint(forehead, @"y");
+    CGFloat cx = AURARealtimeNumberFromPoint(chin, @"x");
+    CGFloat cy = AURARealtimeNumberFromPoint(chin, @"y");
+    // 0 = forehead, 1 = chin. noseBridge ≈ 35%, noseTip ≈ 55% down the midline.
+    noseBridge = AURARealtimePoint(fx + (cx - fx) * 0.35, fy + (cy - fy) * 0.35);
+    noseTip = AURARealtimePoint(fx + (cx - fx) * 0.55, fy + (cy - fy) * 0.55);
+  }
+
+  if (forehead) {
+    result[@"forehead"] = forehead;
+  }
+  if (noseBridge) {
+    result[@"noseBridge"] = noseBridge;
+  }
+  if (noseTip) {
+    result[@"noseTip"] = noseTip;
+  }
+  if (chin) {
+    result[@"chin"] = chin;
+  }
+  if (leftEye) {
+    result[@"leftEye"] = leftEye;
+  }
+  if (rightEye) {
+    result[@"rightEye"] = rightEye;
+  }
+  if (mouthLeft) {
+    result[@"mouthLeft"] = mouthLeft;
+  }
+  if (mouthRight) {
+    result[@"mouthRight"] = mouthRight;
+  }
+
+  return result;
+}
+
+// Rotates a raw-frame landmark map into the UPRIGHT PORTRAIT frame used ONLY to
+// compute pose (yaw/roll/pitch) and faceWidthRatio. The raw buffer is landscape,
+// so a frontal upright face has its eye line VERTICAL there — feeding raw points
+// straight into AURARealtimePoseFromGeometry produced roll≈-90°, a near-zero eye
+// x-span (faceWidthRatio≈0.045), and a yaw that blew up dividing by that span.
+// After swapping axes the eyes are horizontal, so roll≈0, eye x-span is real, and
+// yaw is well-defined. (The mirror does not change any |magnitude| the greenlight
+// gates on; it only fixes left/right labeling and yaw sign.)
+static NSMutableDictionary *AURARealtimeUprightLandmarks(
+    NSDictionary *rawLandmarks,
+    BOOL isFront)
+{
+  NSMutableDictionary *upright = [NSMutableDictionary dictionary];
+
+  for (NSString *key in rawLandmarks) {
+    NSDictionary *uprightPoint =
+        AURARealtimeUprightPortraitPoint(rawLandmarks[key], isFront);
+    if (uprightPoint) {
+      upright[key] = uprightPoint;
+    }
+  }
+
+  // After the axis swap, the eye/mouth whose upright-X is smaller is the
+  // user-view-left one. Re-order so left/right labels match the MediaPipe
+  // convention (rollDeg = atan2(rightY-leftY, rightX-leftX) needs correct order).
+  NSArray<NSArray<NSString *> *> *pairs = @[ @[ @"leftEye", @"rightEye" ], @[ @"mouthLeft", @"mouthRight" ] ];
+  for (NSArray<NSString *> *pair in pairs) {
+    NSDictionary *a = upright[pair[0]];
+    NSDictionary *b = upright[pair[1]];
+    if (a && b &&
+        AURARealtimeNumberFromPoint(a, @"x") > AURARealtimeNumberFromPoint(b, @"x")) {
+      upright[pair[0]] = b;
+      upright[pair[1]] = a;
+    }
+  }
+
+  return upright;
+}
+
+// faceWidthRatio in the MediaPipe scale (thresholds 0.30..0.62 in the
+// greenlight). Reuses the MediaPipe path's eye/mouth-span heuristic so the same
+// thresholds apply; both use UPRIGHT full-image normalized x coordinates.
+static NSNumber *AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(NSDictionary *landmarks)
+{
+  NSDictionary *leftEye = landmarks[@"leftEye"];
+  NSDictionary *rightEye = landmarks[@"rightEye"];
+  NSDictionary *mouthLeft = landmarks[@"mouthLeft"];
+  NSDictionary *mouthRight = landmarks[@"mouthRight"];
+
+  if (leftEye && rightEye && mouthLeft && mouthRight) {
+    CGFloat eyeWidth =
+        fabs(AURARealtimeNumberFromPoint(rightEye, @"x") -
+             AURARealtimeNumberFromPoint(leftEye, @"x"));
+    CGFloat mouthWidth =
+        fabs(AURARealtimeNumberFromPoint(mouthRight, @"x") -
+             AURARealtimeNumberFromPoint(mouthLeft, @"x"));
+    return @(fmax(eyeWidth * 2.35, mouthWidth * 2.15));
+  }
+
+  return nil;
+}
+
+// Assembles the full MediaPipe-shaped payload. `landmarks` stay in the RAW frame
+// (so screenLandmarks convert correctly like the top-level dots); pose and
+// faceWidthRatio come from a separate UPRIGHT copy so their values are sane.
+static NSDictionary *AURARealtimeMediaPipePayloadFromVisionFace(
+    VNFaceObservation *face,
+    CGSize imageSize,
+    BOOL isFront)
+{
+  NSMutableDictionary *landmarks =
+      AURARealtimeMediaPipeLandmarksFromVisionFace(face, imageSize);
+
+  if (landmarks.count == 0) {
+    return @{
+      @"status": @"landmark_missing",
+      @"landmarkCount": @0,
+    };
+  }
+
+  NSMutableDictionary *payload = [@{
+    @"status": @"ok",
+    @"landmarkCount": @(landmarks.count),
+    @"landmarks": landmarks,
+    @"poseSource": @"geometry",
+  } mutableCopy];
+
+  // Pose + width need eyes horizontal; derive them from the upright copy.
+  NSMutableDictionary *uprightLandmarks =
+      AURARealtimeUprightLandmarks(landmarks, isFront);
+
+  // For yaw, pose needs a REAL nose position, not the on-midline interpolated
+  // noseTip (which would force yaw≈0). The nose-region centroid is rotation-safe,
+  // so override the upright noseTip with it for the pose calc only. This does not
+  // affect the emitted centerline landmarks/screenLandmarks.
+  NSDictionary *noseCentroid =
+      AURARealtimeCentroidFromRegion(face.landmarks.nose, imageSize);
+  NSDictionary *uprightNose = AURARealtimeUprightPortraitPoint(noseCentroid, isFront);
+  if (uprightNose) {
+    uprightLandmarks[@"noseTip"] = uprightNose;
+  }
+
+  // AURARealtimePoseFromGeometry (defined below, outside the MediaPipe guard)
+  // reads leftEye/rightEye/noseTip/mouthLeft/mouthRight to derive yaw/roll/pitch.
+  [payload addEntriesFromDictionary:AURARealtimePoseFromGeometry(uprightLandmarks)];
+
+  NSNumber *faceWidthRatio =
+      AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(uprightLandmarks);
+  if (faceWidthRatio) {
+    payload[@"faceWidthRatio"] = faceWidthRatio;
+  }
+
+  return payload;
+}
+
 static VNFaceObservation *AURARealtimeLargestFace(NSArray<VNFaceObservation *> *faces)
 {
   VNFaceObservation *largestFace = nil;
@@ -377,16 +621,28 @@ static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePo
       : kCGImagePropertyOrientationRight;
 }
 
+static CGFloat AURARealtimeDegrees(CGFloat radians)
+{
+  return radians * 180.0 / M_PI;
+}
+
+// Non-MediaPipe numeric helper: reads a coordinate from a landmark dictionary.
+// Used by BOTH the MediaPipe path and the Vision/ARKit path (e.g. line ~520), so
+// it must live OUTSIDE the MediaPipe guard — the guard workflow wrongly enclosed
+// it, which broke the Pod-removed build (undeclared function at the call sites).
+static CGFloat AURARealtimeNumberFromPoint(NSDictionary *point, NSString *key)
+{
+  NSNumber *number = point[key];
+  return [number respondsToSelector:@selector(doubleValue)] ? number.doubleValue : 0.0;
+}
+
+#if AURA_HAS_MEDIAPIPE
+
 static UIImageOrientation AURARealtimeMediaPipeImageOrientation(AVCaptureDevicePosition position)
 {
   return position == AVCaptureDevicePositionFront
       ? UIImageOrientationLeft
       : UIImageOrientationRight;
-}
-
-static CGFloat AURARealtimeDegrees(CGFloat radians)
-{
-  return radians * 180.0 / M_PI;
 }
 
 static NSDictionary *AURARealtimeMediaPipePoint(MPPNormalizedLandmark *landmark)
@@ -443,12 +699,6 @@ static NSDictionary *AURARealtimeAverageMediaPipePoint(
   };
 }
 
-static CGFloat AURARealtimeNumberFromPoint(NSDictionary *point, NSString *key)
-{
-  NSNumber *number = point[key];
-  return [number respondsToSelector:@selector(doubleValue)] ? number.doubleValue : 0.0;
-}
-
 static NSDictionary *AURARealtimePoseFromMatrix(MPPTransformMatrix *matrix)
 {
   if (!matrix || matrix.rows < 3 || matrix.columns < 3) {
@@ -483,6 +733,8 @@ static NSDictionary *AURARealtimePoseFromMatrix(MPPTransformMatrix *matrix)
     @"poseSource": @"matrix",
   };
 }
+
+#endif  // AURA_HAS_MEDIAPIPE
 
 static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 {
@@ -558,6 +810,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   BOOL _isSessionConfigured;
   BOOL _isSessionRunning;
   BOOL _hasPendingCapture;
+  // Monotonic id for the in-flight capture so a watchdog scheduled for one
+  // capture never fires against a later (or already-finished) one.
+  NSUInteger _captureGeneration;
+  // YES once the current capture has already been retried without semantic
+  // mattes (the stall fallback); a second stall then rejects instead of looping.
+  BOOL _pendingCaptureIsFallback;
   BOOL _hasCameraStabilityObservers;
   BOOL _semanticMatteCapture;
   BOOL _semanticMatteRequiresHeic;
@@ -567,7 +825,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   NSDictionary *_pendingCaptureCameraMetadata;
   NSDictionary *_pendingSemanticMattes;
   NSString *_pendingCaptureFormat;
+#if AURA_HAS_MEDIAPIPE
   MPPFaceLandmarker *_faceLandmarker;
+#endif
   NSString *_faceLandmarkerInitError;
   CFTimeInterval _cameraStableSince;
   CFTimeInterval _cameraAdjustingSince;
@@ -1167,6 +1427,8 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   });
 }
 
+#if AURA_HAS_MEDIAPIPE
+
 - (MPPFaceLandmarker *)faceLandmarker
 {
   if (_faceLandmarker || _faceLandmarkerInitError) {
@@ -1295,8 +1557,11 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   return nil;
 }
 
+#endif  // AURA_HAS_MEDIAPIPE
+
 - (NSDictionary *)mediaPipePayloadForSampleBuffer:(CMSampleBufferRef)sampleBuffer
 {
+#if AURA_HAS_MEDIAPIPE
   MPPFaceLandmarker *landmarker = [self faceLandmarker];
   if (!landmarker) {
     return @{
@@ -1355,6 +1620,17 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   }
 
   return payload;
+#else
+  // MediaPipe was removed from this build: realtime MediaPipe screen landmarks
+  // are unavailable. Return a clean "unavailable" payload so the RN event
+  // stream keeps flowing (Vision-based face detection still works) instead of
+  // crashing or failing to compile.
+  (void)sampleBuffer;
+  return @{
+    @"status": @"mediapipe_unavailable",
+    @"error": @"MediaPipe was removed from this build.",
+  };
+#endif  // AURA_HAS_MEDIAPIPE
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output
@@ -1406,7 +1682,25 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   NSArray<VNFaceObservation *> *faces = request.results ?: @[];
   NSMutableDictionary *payload =
       [[self payloadForFaces:faces imageSize:imageSize] mutableCopy];
+
+#if AURA_HAS_MEDIAPIPE
+  // Real MediaPipe present: keep its screen-landmark payload (computed from the
+  // sample buffer above) as the greenlight source.
   payload[@"mediaPipe"] = mediaPipePayload;
+#else
+  // MediaPipe removed from this build: the RN greenlight reads ONLY
+  // payload.mediaPipe, so synthesize a MediaPipe-shaped payload from the same
+  // Vision face the top-level landmarks came from. status='ok' + centerline
+  // landmarks (forehead/noseBridge/noseTip/chin) + yaw/roll/pitch +
+  // faceWidthRatio let finalCaptureGreenlight pass when the face is framed.
+  (void)mediaPipePayload;
+  VNFaceObservation *greenlightFace = AURARealtimeLargestFace(faces);
+  BOOL isFrontCamera = [self devicePosition] == AVCaptureDevicePositionFront;
+  payload[@"mediaPipe"] = greenlightFace
+      ? AURARealtimeMediaPipePayloadFromVisionFace(greenlightFace, imageSize, isFrontCamera)
+      : @{@"status": @"no_face", @"landmarkCount": @0};
+#endif  // AURA_HAS_MEDIAPIPE
+
   payload[@"cameraStability"] = cameraStabilityPayload;
   [self emitPayload:payload];
   _isProcessingFrame = NO;
@@ -1584,6 +1878,8 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     }
 
     self->_hasPendingCapture = YES;
+    self->_pendingCaptureIsFallback = NO;
+    NSUInteger captureGeneration = ++self->_captureGeneration;
     self->_captureResolve = resolve;
     self->_captureReject = reject;
     self->_pendingCaptureCameraMetadata = [self lockCameraForCaptureAndCreateMetadata];
@@ -1622,7 +1918,70 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     }
 
     [self->_photoOutput capturePhotoWithSettings:settings delegate:self];
+
+    // Watchdog: the semantic-segmentation-matte (depth/portrait) capture
+    // pipeline can silently stall on some device/format combinations, so the
+    // photo delegate never fires and the JS `capture()` promise hangs forever —
+    // the "camera frozen before report generation" bug. If this capture has not
+    // completed after the timeout, restore the camera and reject so JS can
+    // recover (retry / fall back to a plain photo) instead of freezing.
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7.0 * NSEC_PER_SEC)),
+        self->_sessionQueue,
+        ^{
+          if (self->_hasPendingCapture &&
+              self->_captureGeneration == captureGeneration) {
+            [self failPendingCaptureWithTimeout];
+          }
+        });
   });
+}
+
+// Runs on _sessionQueue. On the FIRST stall, re-issue a plain (no matte / no
+// depth) capture keeping the same promise — a basic photo almost never stalls,
+// so the report still gets a usable frame instead of the camera freezing. Only
+// if that fallback ALSO stalls do we restore the camera and reject so the JS
+// layer is never stuck "uploading".
+- (void)failPendingCaptureWithTimeout
+{
+  if (!_pendingCaptureIsFallback && _captureResolve && _photoOutput) {
+    NSLog(@"[aura:face-capture] capture:timeout matte pipeline stalled; retrying without mattes");
+    _pendingCaptureIsFallback = YES;
+    _pendingSemanticMattes = AURARealtimeSemanticMatteAvailability(NO, NO, NO);
+    _pendingCaptureFormat = @"jpg";
+    NSUInteger captureGeneration = ++_captureGeneration;
+
+    AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
+    settings.flashMode = AVCaptureFlashModeOff;
+    [_photoOutput capturePhotoWithSettings:settings delegate:self];
+
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+        _sessionQueue,
+        ^{
+          if (self->_hasPendingCapture &&
+              self->_captureGeneration == captureGeneration) {
+            [self failPendingCaptureWithTimeout];
+          }
+        });
+    return;
+  }
+
+  RCTPromiseRejectBlock reject = _captureReject;
+  _captureResolve = nil;
+  _captureReject = nil;
+  _pendingCaptureCameraMetadata = nil;
+  _pendingSemanticMattes = nil;
+  _pendingCaptureFormat = nil;
+  _pendingCaptureIsFallback = NO;
+  _hasPendingCapture = NO;
+  [self restoreCameraAutoModes];
+  NSLog(@"[aura:face-capture] capture:timeout restored camera; rejecting stalled capture");
+  if (reject) {
+    reject(@"REALTIME_CAPTURE_TIMEOUT",
+           @"Realtime face capture timed out (semantic matte pipeline stalled).",
+           nil);
+  }
 }
 
 - (void)captureOutput:(AVCapturePhotoOutput *)output

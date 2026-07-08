@@ -59,6 +59,8 @@ PODS:
     - ExpoModulesCore
     - ExpoModulesJSI
     - ReactCommon/turbomodule/core
+  - ExpoHaptics (56.0.3):
+    - ExpoModulesCore
   - ExpoImage (56.0.11):
     - ExpoModulesCore
     - libavif/libdav1d
@@ -66,6 +68,9 @@ PODS:
     - SDWebImageAVIFCoder (~> 0.11.0)
     - SDWebImageSVGCoder (~> 1.7.0)
     - SDWebImageWebPCoder (~> 0.14.6)
+  - ExpoImageManipulator (56.0.20):
+    - ExpoModulesCore
+    - SDWebImageWebPCoder
   - ExpoImagePicker (56.0.18):
     - ExpoModulesCore
   - ExpoKeepAwake (56.0.3):
@@ -150,9 +155,6 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
-  - MediaPipeTasksCommon (0.10.35)
-  - MediaPipeTasksVision (0.10.35):
-    - MediaPipeTasksCommon (= 0.10.35)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3108,7 +3110,9 @@ DEPENDENCIES:
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
   - ExpoGL (from `../node_modules/expo-gl`)
+  - ExpoHaptics (from `../node_modules/expo-haptics/ios`)
   - ExpoImage (from `../node_modules/expo-image/ios`)
+  - ExpoImageManipulator (from `../node_modules/expo-image-manipulator/ios`)
   - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo-keep-awake/ios`)
   - ExpoLinearGradient (from `../node_modules/expo-linear-gradient/ios`)
@@ -3127,7 +3131,6 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - MediaPipeTasksVision (= 0.10.35)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -3214,8 +3217,6 @@ SPEC REPOS:
     - libavif
     - libdav1d
     - libwebp
-    - MediaPipeTasksCommon
-    - MediaPipeTasksVision
     - SDWebImage
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
@@ -3252,8 +3253,12 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-font/ios"
   ExpoGL:
     :path: "../node_modules/expo-gl"
+  ExpoHaptics:
+    :path: "../node_modules/expo-haptics/ios"
   ExpoImage:
     :path: "../node_modules/expo-image/ios"
+  ExpoImageManipulator:
+    :path: "../node_modules/expo-image-manipulator/ios"
   ExpoImagePicker:
     :path: "../node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
@@ -3463,7 +3468,9 @@ SPEC CHECKSUMS:
   ExpoFileSystem: 9dc04ec1e11bc3c7b965d7feb2de12c789755c7b
   ExpoFont: 274487aa78f8c65d6551e2558eca3ec6ce3432ce
   ExpoGL: 6d80b612794755afafc439fa3b5792b91efc0952
+  ExpoHaptics: 89364cf3c3ca2cfd54cafed42f3be3169bab6d42
   ExpoImage: 93cda9464c2c62a5244931b66edeb0b24ed204c2
+  ExpoImageManipulator: adcc5d5b08c08d66273e5f96ad1f0449d27d5c72
   ExpoImagePicker: 080421aeaf3836250e5fb764123f1d7f7905ea04
   ExpoKeepAwake: 359c47a1d9ccc3a3c519bca6e39562cce230c5bb
   ExpoLinearGradient: 16c2b9c6105444883d34958d573725de1293b8d0
@@ -3481,12 +3488,10 @@ SPEC CHECKSUMS:
   FBLazyVector: 473b935415b82ae4f7f9aa9d5b3378491143ccbf
   fmt: 530618a01105dae0fa3a2f27c81ae11fa8f67eac
   glog: e56ede4028c4b7418e6b1195a36b1656bb35e225
-  hermes-engine: e88f9d9d31fa8624be4925d02698c2969c86c61f
+  hermes-engine: 532f45dba5d90cddbd84343ad6bb8ef9096bf68b
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
-  MediaPipeTasksCommon: ae27d88c4d185db114a1a768c504f8270dda79b5
-  MediaPipeTasksVision: 1d6c3efa89830a131dbd0dc4fb80dea283fac521
   RCT-Folly: 36c4f904fb6cd0219dcb76b94e9502d2a72fab0b
   RCTDeprecation: 225e022b85a206cf0883a909c4a114159783363c
   RCTRequired: 827a95c181af0886a11e21bc66c084088cf87839
@@ -3572,6 +3577,6 @@ SPEC CHECKSUMS:
   Yoga: 2fe23f676416a73cb4be2c15929e352c9395b9cf
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: b4754efe3b98dd072c8d9723ee49277d4e82bb7a
+PODFILE CHECKSUM: a4cbd6211398781def535c8d51a0c27387d37242
 
 COCOAPODS: 1.16.2

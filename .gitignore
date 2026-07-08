@@ -65,3 +65,4 @@ tmp-debug/
 # Unity XR simulation temp artifacts
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
+apps/unity/MakeupAR/Packages/local/

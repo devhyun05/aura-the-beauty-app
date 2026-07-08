@@ -1,7 +1,12 @@
 #import <Foundation/Foundation.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
+#if __has_include(<MediaPipeTasksVision/MediaPipeTasksVision.h>)
 #import <MediaPipeTasksVision/MediaPipeTasksVision.h>
+#define AURA_PC_HAS_MEDIAPIPE 1
+#else
+#define AURA_PC_HAS_MEDIAPIPE 0
+#endif
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
 #import <ImageIO/ImageIO.h>
@@ -167,6 +172,7 @@ static void AURAPCPixel(AURAPCImageBuffer buf, double nx, double ny,
 
 typedef struct { double x; double y; BOOL valid; } AURAPCPoint;
 
+#if AURA_PC_HAS_MEDIAPIPE
 static AURAPCPoint AURAPCLandmark(NSArray<MPPNormalizedLandmark *> *landmarks, int index) {
   AURAPCPoint p = {0, 0, NO};
   if (index < 0 || (NSUInteger)index >= landmarks.count) return p;
@@ -195,6 +201,7 @@ static AURAPCPoint AURAPCClusterCenter(NSArray<MPPNormalizedLandmark *> *landmar
   c.valid = YES;
   return c;
 }
+#endif // AURA_PC_HAS_MEDIAPIPE
 
 // point-in-polygon (ray casting), 폴리곤은 정규화 좌표 배열
 static BOOL AURAPCInsidePolygon(const double *px, const double *py, int count, double x, double y) {
@@ -304,7 +311,9 @@ static NSDictionary *AURAPCFinalizeRegion(AURAPCAcc *a) {
 @end
 
 @implementation AURAPersonalColorAnalyzer {
+#if AURA_PC_HAS_MEDIAPIPE
   MPPFaceLandmarker *_faceLandmarker;
+#endif
   NSString *_faceLandmarkerInitError;
 }
 
@@ -314,6 +323,7 @@ RCT_EXPORT_MODULE();
   return dispatch_queue_create("com.aura.personal-color-analyzer", DISPATCH_QUEUE_SERIAL);
 }
 
+#if AURA_PC_HAS_MEDIAPIPE
 - (MPPFaceLandmarker *)imageModeFaceLandmarker {
   if (_faceLandmarker || _faceLandmarkerInitError) {
     return _faceLandmarker;
@@ -339,11 +349,18 @@ RCT_EXPORT_MODULE();
   }
   return _faceLandmarker;
 }
+#endif // AURA_PC_HAS_MEDIAPIPE
 
 RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
                   options:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
+#if !AURA_PC_HAS_MEDIAPIPE
+  (void)imageUri;
+  (void)options;
+  reject(@"MEDIAPIPE_UNAVAILABLE", @"MediaPipe was removed from this build.", nil);
+  return;
+#else
   NSURL *url = [NSURL URLWithString:imageUri];
   NSString *path = url.isFileURL ? url.path : imageUri;
   NSURL *imageFileURL = url.isFileURL ? url : [NSURL fileURLWithPath:path];
@@ -577,6 +594,7 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
         (unsigned long)faceCount, (unsigned long)regions.count, hairBuf != NULL, skinBuf != NULL);
 
   resolve(payload);
+#endif // AURA_PC_HAS_MEDIAPIPE
 }
 
 @end

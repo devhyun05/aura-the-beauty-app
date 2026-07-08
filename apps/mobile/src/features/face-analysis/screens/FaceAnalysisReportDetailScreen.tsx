@@ -57,6 +57,7 @@ import {
 type FaceAnalysisReportDetailScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
+  bottomOverlayHeight?: number;
   headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
@@ -245,6 +246,7 @@ function getShareErrorMessage(error: unknown) {
 
 export function FaceAnalysisReportDetailScreen({
   analysisReport,
+  bottomOverlayHeight = 0,
   capturedPhotoUri,
   headerTitle = '맞춤 분석 보고서',
   personalColor,
@@ -516,6 +518,7 @@ export function FaceAnalysisReportDetailScreen({
   if (!report) {
     return (
       <FaceAnalysisReportScaffold
+        bottomOverlayHeight={bottomOverlayHeight}
         contentStyle={styles.empty}
         scroll={false}
       >
@@ -531,6 +534,7 @@ export function FaceAnalysisReportDetailScreen({
 
   return (
     <FaceAnalysisReportScaffold
+      bottomOverlayHeight={bottomOverlayHeight}
       floatingAction={
         <CreateFilterButton
           onPress={onCreateARFilter}
@@ -694,11 +698,13 @@ function FacePointGuideMap({
   );
 }
 function FaceAnalysisReportScaffold({
+  bottomOverlayHeight = 0,
   children,
   contentStyle,
   floatingAction,
   scroll = true,
 }: {
+  bottomOverlayHeight?: number;
   children: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   floatingAction?: React.ReactNode;
@@ -710,6 +716,7 @@ function FaceAnalysisReportScaffold({
     {
       paddingBottom:
         Math.max(insets.bottom, spacing.xl) +
+        bottomOverlayHeight +
         (floatingAction ? CREATE_FILTER_BUTTON_HEIGHT : 0) +
         spacing.xxl,
     },
@@ -741,7 +748,10 @@ function FaceAnalysisReportScaffold({
           pointerEvents="box-none"
           style={[
             styles.floatingCreateFilterArea,
-            {paddingBottom: Math.max(insets.bottom, spacing.md)},
+            {
+              bottom: bottomOverlayHeight,
+              paddingBottom: Math.max(insets.bottom, spacing.md),
+            },
           ]}
         >
           {floatingAction}

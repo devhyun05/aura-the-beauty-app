@@ -28,6 +28,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)handleUnityMessage:(NSString *)message;
 - (UIView *)unityView;
 - (void)detachUnityView;
+- (void)setPlayerPaused:(BOOL)paused;
 - (void)sendMessageToGameObject:(NSString *)gameObject
                          method:(NSString *)method
                         payload:(NSString *)payload;
@@ -47,6 +48,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   BOOL _isReady;
   BOOL _isRunning;
   BOOL _isPresentingUnityView;
+  BOOL _didInstallWindowGuard;
   int _unityArgc;
   char **_unityArgv;
 }
@@ -108,6 +110,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   }
 
   [self rememberReactWindowIfNeeded];
+  [self installWindowGuardIfNeeded];
 
   SEL runSelector = NSSelectorFromString(@"runEmbeddedWithArgc:argv:appLaunchOpts:");
   if (![_unityFramework respondsToSelector:runSelector]) {
@@ -222,6 +225,22 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   _isPresentingUnityView = NO;
   [self concealUnityView];
   [self scheduleConcealUnityView];
+}
+
+- (void)setPlayerPaused:(BOOL)paused
+{
+  // 표준 UnityFramework pause: — 플레이어(렌더 루프 + AR 세션)를 통째로 멈춰 CPU/
+  // 카메라/작업 메모리를 놓는다. ARSession.enabled 토글(setPaused 메시지)과 달리 Unity
+  // 내부 상태를 깨지 않아 resume 후 정상 복귀한다. 보고서 카메라처럼 전면 카메라+무거운
+  // 파이프라인이 필요할 때 잠시 pause했다가, 나갈 때 resume(false).
+  if (_unityFramework == nil) {
+    return;
+  }
+  SEL pauseSelector = NSSelectorFromString(@"pause:");
+  if ([_unityFramework respondsToSelector:pauseSelector]) {
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(_unityFramework, pauseSelector, paused);
+    NSLog(@"[aura:unity-native] player paused=%@", paused ? @"YES" : @"NO");
+  }
 }
 
 - (void)sendMessageToGameObject:(NSString *)gameObject
@@ -464,6 +483,52 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   [self restoreReactWindowIfNeeded];
 }
 
+// 예약 conceal(아래 0~2초)은 부트가 느리면 레이스에서 진다 — MediaPipe 모델 로드
+// 등으로 Unity가 2초+ 뒤에 자기 윈도우를 띄우면 이미 모든 conceal이 지나가 버려
+// 홈 화면 위로 Unity 카메라가 드러난다(사용자에겐 "갑자기 AR 필터에 들어간" 증상).
+// 이 가드는 Unity 윈도우가 '보이거나 key가 되는 그 순간' 노티피케이션으로 즉시
+// 숨겨서, 부트가 얼마나 오래 걸리든 화면에 나타나지 않게 한다. scene 자체는
+// offscreen에서 계속 돌아 AR 진입 시 로딩 없이 라이브 장면이 바로 뜬다.
+- (void)installWindowGuardIfNeeded
+{
+  if (_didInstallWindowGuard) {
+    return;
+  }
+  _didInstallWindowGuard = YES;
+
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleWindowGuardNotification:)
+                                               name:UIWindowDidBecomeVisibleNotification
+                                             object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleWindowGuardNotification:)
+                                               name:UIWindowDidBecomeKeyNotification
+                                             object:nil];
+}
+
+- (void)handleWindowGuardNotification:(NSNotification *)notification
+{
+  if (_isPresentingUnityView) {
+    return;
+  }
+
+  UIWindow *window = notification.object;
+  UIWindow *unityWindow = [self unityWindow];
+  if (!window || !unityWindow || window != unityWindow || window == _reactWindow) {
+    return;
+  }
+
+  // 노티피케이션 콜백 안에서 윈도우 계층을 바로 바꾸지 않고 다음 runloop 틱에서
+  // 숨긴다 (UIKit 재진입 안전).
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_isPresentingUnityView) {
+      return;
+    }
+    NSLog(@"[aura:unity-native] window guard concealed unity window during offscreen boot");
+    [self concealUnityView];
+  });
+}
+
 - (void)scheduleConcealUnityView
 {
   NSArray<NSNumber *> *delays = @[@0.0, @0.05, @0.2, @0.5, @1.0, @2.0];
@@ -554,6 +619,13 @@ RCT_EXPORT_METHOD(hideView)
 {
   dispatch_async(dispatch_get_main_queue(), ^{
     [[UnityMakeupRuntime sharedRuntime] detachUnityView];
+  });
+}
+
+RCT_EXPORT_METHOD(setPlayerPaused:(BOOL)paused)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[UnityMakeupRuntime sharedRuntime] setPlayerPaused:paused];
   });
 }
 

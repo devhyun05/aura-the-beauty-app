@@ -15,8 +15,7 @@ export type MakeupAreaLike =
   | 'brow'
   | 'lip'
   | 'cheek'
-  | 'lens'
-  | 'contour';
+  | 'lens';
 
 export type RegionAdjustmentFieldSchema = {
   name: string;
@@ -306,11 +305,16 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'golden-sand-260n', label: '골든 샌드', hex: '#D9AD7E'},
     {id: 'rosy-medium-320n', label: '로지 미디엄', hex: '#B88C6A'},
   ],
+  // ARwithFable 원본 립 스와치(src/presets.ts LIP_COLORS)를 그대로 사용.
+  // id는 rose/berry/coral/brick 유지(기존 목·테스트 selectedColorId 호환) +
+  // pink/rosy 추가로 6색 구성.
   lip: [
-    {id: 'rose', label: '로즈', hex: '#C76B74'},
-    {id: 'berry', label: '베리', hex: '#A64262'},
-    {id: 'coral', label: '코랄', hex: '#D97A5B'},
-    {id: 'brick', label: '브릭', hex: '#9D4E3F'},
+    {id: 'rose', label: '로즈', hex: '#C94F6D'},
+    {id: 'pink', label: '핑크', hex: '#E04E68'},
+    {id: 'brick', label: '브릭', hex: '#B01E3C'},
+    {id: 'coral', label: '코랄', hex: '#F2846B'},
+    {id: 'rosy', label: '로지', hex: '#D96C7B'},
+    {id: 'berry', label: '베리', hex: '#9E3B54'},
   ],
   blush: [
     {id: 'peach', label: '피치', hex: '#E67B5F'},
@@ -1012,6 +1016,7 @@ export function buildFullFaceMakeupRecipe({
   // the lens layer here means no lens layer is ever sent/parsed. The lens Unity
   // + RN code stays dormant for a clean re-introduction later.
   const recipeRegionsActive = MAKEUP_RECIPE_REGIONS.filter(region => region !== 'lens');
+  const recipeLayerCount = recipeRegionsActive.length;
   const activeRegions = recipeRegionsActive.filter(region => controls[region].enabled);
   const activeRegionSummary =
     activeRegions.length > 0 ? activeRegions.join(',') : 'none';
@@ -1023,6 +1028,7 @@ export function buildFullFaceMakeupRecipe({
       recipeId: resolvedRecipeId,
       recipeBatchId: resolvedRecipeBatchId,
       activeRegions: activeRegionSummary,
+      layerCount: recipeLayerCount,
       enabledLayerCount,
       sentAtMs,
     }),
@@ -1036,7 +1042,7 @@ export function buildFullFaceMakeupRecipe({
     rendererMode: 'smooth-region-mask',
     activeRegions: activeRegionSummary,
     region: 'lip',
-    layerCount: MAKEUP_RECIPE_REGIONS.length,
+    layerCount: recipeLayerCount,
     enabledLayerCount,
     sentAtMs,
     halfFaceMode,
@@ -1051,6 +1057,7 @@ function buildFullFaceMakeupRecipeLayer({
   recipeId,
   recipeBatchId,
   activeRegions,
+  layerCount,
   enabledLayerCount,
   sentAtMs,
 }: {
@@ -1059,6 +1066,7 @@ function buildFullFaceMakeupRecipeLayer({
   recipeId: string;
   recipeBatchId: string;
   activeRegions: string;
+  layerCount: number;
   enabledLayerCount: number;
   sentAtMs: number;
 }): FullFaceMakeupRecipeLayer {
@@ -1069,9 +1077,16 @@ function buildFullFaceMakeupRecipeLayer({
   // SrcAlpha/OneMinusSrcAlpha in Unity), NOT multiply. Multiply can only
   // darken, so it could never turn a dark iris blue/green/lighter, and it also
   // routes through the pigmentStrength cap. 'normal' overlays the color like a
-  // real printed contact and bypasses that cap (fix #1). All other regions keep
-  // the existing multiply tint blend.
-  const blendMode = region === 'lens' ? 'normal' : 'multiply';
+  // real printed contact and bypasses that cap (fix #1).
+  //
+  // The BROW likewise needs 'normal': to ERASE the user's natural brow the
+  // Unity shader must FILL forehead skin (a LIGHTEN over the dark natural brow)
+  // and then draw the brow color on top in one alpha-over pass. Under multiply
+  // (DstColor/Zero) that skin fill is impossible AND the multiply path
+  // early-returns before the static-erase branch runs, so the natural brow is
+  // never removed (it just gets a darker brow painted over it). All other
+  // regions keep the existing multiply tint blend.
+  const blendMode = region === 'lens' || region === 'brow' ? 'normal' : 'multiply';
   const materialId = `e7-full-face-${region}-material-v0`;
   const skinAdaptive = region === 'lip' || region === 'foundation';
 
@@ -1082,7 +1097,7 @@ function buildFullFaceMakeupRecipeLayer({
     lookId: 'e7_full_face_region_generate_v0',
     sentAtMs,
     activeRegions,
-    layerCount: MAKEUP_RECIPE_REGIONS.length,
+    layerCount,
     enabledLayerCount,
     region,
     layer: region,

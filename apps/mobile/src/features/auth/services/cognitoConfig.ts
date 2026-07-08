@@ -1,5 +1,3 @@
-import * as AuthSession from 'expo-auth-session';
-
 import type {SocialLoginProvider} from '../types';
 
 const DEFAULT_SCOPES = ['openid', 'email', 'profile'];
@@ -99,10 +97,7 @@ function resolveRedirectUri(): string {
     return configuredRedirectUri;
   }
 
-  return AuthSession.makeRedirectUri({
-    path: DEFAULT_REDIRECT_PATH,
-    scheme: 'aiarmakeup',
-  });
+  return `aiarmakeup://${DEFAULT_REDIRECT_PATH}`;
 }
 
 function resolveScopes(): string[] {

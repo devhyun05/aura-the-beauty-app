@@ -1,5 +1,9 @@
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
-import {shouldCreateFaceAnalysisReportFromCapture} from './faceAnalysisRoutes';
+import {
+  getFaceAnalysisReportFooterHostHeight,
+  getFaceAnalysisReportFooterReservedHeight,
+  shouldCreateFaceAnalysisReportFromCapture,
+} from './faceAnalysisRoutes';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -27,4 +31,19 @@ expectEqual(
   shouldCreateFaceAnalysisReportFromCapture(captureResult),
   true,
   'face analysis loading starts with capture',
+);
+expectEqual(
+  getFaceAnalysisReportFooterReservedHeight(18),
+  86,
+  'face analysis report reserves the floating footer below content',
+);
+expectEqual(
+  getFaceAnalysisReportFooterHostHeight(874, 18),
+  874,
+  'face analysis report footer host covers screen for outside taps',
+);
+expectEqual(
+  getFaceAnalysisReportFooterHostHeight(220, 18),
+  264,
+  'face analysis report footer host keeps room for quick action arc',
 );

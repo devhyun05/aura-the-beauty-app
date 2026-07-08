@@ -259,7 +259,7 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     keywords: ['윤광', '누디', '베이지', '컨투어', '글래스'],
     embeddingVector: [0.58, 0.55, 0.24, 0.68, 0.94],
     matchScore: 92,
-    makeupAreas: ['base', 'contour', 'lip'],
+    makeupAreas: ['base', 'lip'],
     colorOptions: colorOptions([
       ['nude-beige', '누드 베이지', '#C9A18A'],
       ['skin-glow', '스킨 글로우', '#E2C6B4'],
@@ -267,7 +267,6 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     ]),
     typeOptions: textOptions([
       ['glass-base', '윤광 베이스'],
-      ['soft-contour', '소프트 컨투어'],
       ['nude-lip', '누디 립'],
     ]),
     textureOptions: textOptions([
@@ -518,15 +517,13 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     keywords: ['라떼', '브라운', '베이지', '음영', '컨투어'],
     embeddingVector: [0.28, 0.88, 0.2, 0.94, 0.5],
     matchScore: 85,
-    makeupAreas: ['eye', 'contour', 'lip'],
+    makeupAreas: ['eye', 'lip'],
     colorOptions: colorOptions([
       ['milk-brown', '밀크 브라운', '#9B725E'],
       ['toast-beige', '토스트 베이지', '#C69B7C'],
-      ['soft-contour', '소프트 컨투어', '#8A6658'],
     ]),
     typeOptions: textOptions([
       ['brown-shadow', '브라운 음영'],
-      ['soft-contour', '소프트 컨투어'],
       ['nude-lip', '누드 립'],
     ]),
     textureOptions: textOptions([
@@ -555,7 +552,7 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     keywords: ['오피스', '쿨토프', '얇은아이라인', '뮤트립', '슬릭'],
     embeddingVector: [0.88, 0.22, 0.25, 0.82, 0.32],
     matchScore: 93,
-    makeupAreas: ['eye', 'brow', 'contour', 'lip'],
+    makeupAreas: ['eye', 'brow', 'lip'],
     colorOptions: colorOptions([
       ['cool-taupe', '쿨 토프', '#80716D'],
       ['mute-lip', '뮤트 립', '#A46B72'],
@@ -564,7 +561,6 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     typeOptions: textOptions([
       ['thin-liner', '얇은 아이라인'],
       ['sleek-brow', '슬릭 브로우'],
-      ['soft-contour', '소프트 컨투어'],
     ]),
     textureOptions: textOptions([
       ['satin', '새틴'],
@@ -592,7 +588,7 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     keywords: ['소프트고스', '그런지', '플럼', '스모키', '딥로즈'],
     embeddingVector: [0.82, 0.28, 0.48, 0.86, 0.34],
     matchScore: 84,
-    makeupAreas: ['eye', 'lip', 'contour'],
+    makeupAreas: ['eye', 'lip'],
     colorOptions: colorOptions([
       ['plum-brown', '플럼 브라운', '#5D3C48'],
       ['deep-rose', '딥 로즈', '#7A3C50'],
@@ -601,7 +597,6 @@ export const mockRecommendedMakeupFilters: readonly RecommendedMakeupFilter[] = 
     typeOptions: textOptions([
       ['diffused-smoky', '번진 스모키'],
       ['deep-lip', '딥 립'],
-      ['soft-contour', '소프트 컨투어'],
     ]),
     textureOptions: textOptions([
       ['velvet', '벨벳'],
@@ -831,7 +826,7 @@ export const mockARMakeupGuideData: ARMakeupGuideData = {
     {id: 'brow', label: '브로우'},
     {id: 'cheek', label: '치크'},
     {id: 'lip', label: '립'},
-    {id: 'contour', label: '컨투어'},
+    {id: 'lens', label: '렌즈'},
   ],
   filters: mockRecommendedMakeupFilters,
 };

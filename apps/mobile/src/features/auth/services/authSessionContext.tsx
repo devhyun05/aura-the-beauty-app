@@ -8,7 +8,7 @@
   useState,
   type ReactNode,
 } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../../shared/services/localSecureStore';
 
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
 import type {AuthSession} from '../types';

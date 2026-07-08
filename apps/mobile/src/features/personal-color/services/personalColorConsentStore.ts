@@ -1,7 +1,7 @@
 // 퍼스널 컬러 민감정보(얼굴 이미지) 동의 플래그. feature-scoped just-in-time 동의.
 // expo-secure-store 사용(앱 직접 의존성). 촬영 전 게이트가 이 값을 확인.
 
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../../shared/services/localSecureStore';
 
 const CONSENT_KEY = 'personalColorConsentAcceptedAt';
 

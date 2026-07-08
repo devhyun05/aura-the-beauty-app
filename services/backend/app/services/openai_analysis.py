@@ -63,7 +63,13 @@ class OpenAIAnalysisService:
     if not self.settings.openai_api_key:
       raise AppError(503, "OPENAI_NOT_CONFIGURED", "OPENAI_API_KEY is required.")
 
-    return OpenAI(api_key=self.settings.openai_api_key)
+    # 이미지 생성은 반드시 실제 OpenAI를 호출한다. OPENAI_BASE_URL(예: bedrock-mantle
+    # 채팅 전용 게이트웨이)이 프로세스 환경으로 새어들어오면 이미지 모델이 404가 나므로,
+    # base_url을 명시해 환경변수 오염과 무관하게 api.openai.com으로 고정한다.
+    return OpenAI(
+      api_key=self.settings.openai_api_key,
+      base_url="https://api.openai.com/v1",
+    )
 
   def _s3_client(self):
     client_kwargs = {

@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './localSecureStore';
 import type {ImageSourcePropType} from 'react-native';
 
 import {beautyProfileMock, profileEditFieldsMock, userProfileMock} from '../mocks/user.mock';

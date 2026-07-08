@@ -397,7 +397,6 @@ function asMakeupAreas(value: unknown, fallback: readonly MakeupArea[]): readonl
     'brow',
     'lip',
     'cheek',
-    'contour',
   ]);
 
   if (!Array.isArray(value)) {

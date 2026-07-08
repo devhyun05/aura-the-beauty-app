@@ -299,6 +299,7 @@ export const recommendedFilterSectionTitle = '추천 메이크업 필터' as con
 export const recommendedFilterSectionDescription = undefined;
 export const recommendedFilterMoreButtonLabel = '더보기' as const;
 export const HOME_HERO_BANNER_ASPECT_RATIO = 1.62;
+export const HOME_HERO_AUTOSCROLL_INTERVAL_MS = 2500;
 export const homeHeroLayoutMetrics = {
   copyGap: spacing.sm,
   listTopPadding: 0,
@@ -505,6 +506,33 @@ function HeroBannerCarousel({
       x: initialScrollOffsetX,
     });
   }, [heroItems.length, initialScrollOffsetX]);
+
+  useEffect(() => {
+    if (heroItems.length <= 1 || snapInterval <= 0) {
+      return undefined;
+    }
+
+    const intervalId = setInterval(() => {
+      setActiveHeroIndex(currentIndex => {
+        const nextIndex = (currentIndex + 1) % heroItems.length;
+        const nextSnapIndex =
+          currentIndex === heroItems.length - 1
+            ? heroItems.length + 1
+            : currentIndex + 2;
+
+        heroCarouselRef.current?.scrollTo({
+          animated: true,
+          x: nextSnapIndex * snapInterval,
+        });
+
+        return nextIndex;
+      });
+    }, HOME_HERO_AUTOSCROLL_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [heroItems.length, snapInterval]);
 
   const handleHeroCarouselScroll = (
     event: NativeSyntheticEvent<NativeScrollEvent>,

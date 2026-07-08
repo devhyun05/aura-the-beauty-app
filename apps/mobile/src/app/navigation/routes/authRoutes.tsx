@@ -111,12 +111,20 @@ function replacePostLoginRoute(
 }
 
 export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
-  const {isRestoringSession, session, setSession} = useAuthSession();
+  const {getAuthToken, isRestoringSession, session, setSession} = useAuthSession();
   const {setShouldShowBeautyJourneyGuide} = useNavigationFlowState();
   const isRoutingAfterLoginRef = React.useRef(false);
 
   React.useEffect(() => {
     if (isRestoringSession || !session || isRoutingAfterLoginRef.current) {
+      return;
+    }
+
+    // 세션 객체가 있어도 토큰이 만료됐으면 홈으로 되돌리지 않는다. 인증 게이트
+    // (예: FaceCapture)가 만료 토큰 때문에 Login으로 보낸 케이스인데, 여기서
+    // 세션 객체만 보고 홈으로 replace하면 "얼굴 분석 → 카메라 안 나오고 홈"
+    // 바운스 루프가 된다. 로그인 폼을 그대로 보여줘 재로그인하게 한다.
+    if (!getAuthToken()) {
       return;
     }
 
@@ -130,6 +138,7 @@ export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
       replacePostLoginRoute(navigation, nextRoute.routeName);
     })();
   }, [
+    getAuthToken,
     isRestoringSession,
     navigation,
     session,

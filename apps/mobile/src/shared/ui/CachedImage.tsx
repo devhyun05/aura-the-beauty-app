@@ -1,7 +1,13 @@
-import {Image, type ImageContentFit, type ImageProps} from 'expo-image';
-import type {ImageSourcePropType, ImageStyle, StyleProp} from 'react-native';
+import {
+  Image,
+  type ImageResizeMode,
+  type ImageSourcePropType,
+  type ImageStyle,
+  type StyleProp,
+} from 'react-native';
 
 const DEFAULT_TRANSITION_MS = 120;
+type ImageContentFit = 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
 
 export type CachedImageProps = {
   accessibilityLabel?: string;
@@ -23,16 +29,25 @@ export type CachedImageProps = {
  */
 export function CachedImage({
   contentFit = 'cover',
+  priority: _priority,
+  recyclingKey: _recyclingKey,
   source,
-  transition = DEFAULT_TRANSITION_MS,
+  transition: _transition = DEFAULT_TRANSITION_MS,
   ...rest
 }: CachedImageProps) {
+  const resizeMode: ImageResizeMode =
+    contentFit === 'fill'
+      ? 'stretch'
+      : contentFit === 'none'
+        ? 'center'
+        : contentFit === 'scale-down'
+          ? 'contain'
+          : contentFit;
+
   return (
     <Image
-      cachePolicy="memory-disk"
-      contentFit={contentFit}
-      source={source as ImageProps['source']}
-      transition={transition}
+      resizeMode={resizeMode}
+      source={source}
       {...rest}
     />
   );
@@ -67,6 +82,8 @@ export function prefetchImageSources(
   );
 
   if (uris.length > 0) {
-    void Image.prefetch(uris, {cachePolicy: 'memory-disk'});
+    uris.forEach(uri => {
+      void Image.prefetch(uri);
+    });
   }
 }

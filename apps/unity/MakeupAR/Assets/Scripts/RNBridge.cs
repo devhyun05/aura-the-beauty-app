@@ -652,12 +652,37 @@ public sealed class RNBridge : MonoBehaviour
                 // EVERY region (base/cheek/lip/brow) because of one bad layer.
                 try
                 {
-                    E3RegionMaskOverlay.RegionApplyResult result = ApplyRegionLayer(layer);
-                    long appliedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    int appliedFrame = Time.frameCount;
-                    RememberRegionFeatureState(layer, result);
-                    LogRecipeApplied("message", layer, result, appliedAtMs, appliedFrame);
-                    SendRecipeAppliedEvent(layer, result, appliedAtMs, appliedFrame);
+                    // PILOT (graft): route the LIP to the grafted MediaPipe lip
+                    // renderer (ARwithFable LipRenderer) instead of AURA's own lip
+                    // overlay, and hide AURA's lip so they do not double-render.
+                    // Cheek/base and every other region still flow through
+                    // ApplyRegionLayer unchanged. Falls back to AURA's lip until
+                    // the graft has wired itself (LipRenderer.Instance == null).
+                    if (layer.Region == "lip"
+                        && ARMakeup.Face.LipRenderer.Instance != null)
+                    {
+                        float lipIntensity = layer.Enabled
+                            ? Mathf.Clamp01(layer.Intensity > 0.01f ? layer.Intensity : 0.85f)
+                            : 0f;
+                        ARMakeup.Face.LipRenderer.Instance.ApplyLipParams(
+                            layer.ColorHex, lipIntensity);
+                        if (regionMaskOverlay != null)
+                        {
+                            regionMaskOverlay.HideRegionOverlay("lip");
+                        }
+                        Debug.Log("[graft] lip -> MediaPipe LipRenderer color="
+                            + layer.ColorHex + " intensity="
+                            + lipIntensity.ToString("0.##", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        E3RegionMaskOverlay.RegionApplyResult result = ApplyRegionLayer(layer);
+                        long appliedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        int appliedFrame = Time.frameCount;
+                        RememberRegionFeatureState(layer, result);
+                        LogRecipeApplied("message", layer, result, appliedAtMs, appliedFrame);
+                        SendRecipeAppliedEvent(layer, result, appliedAtMs, appliedFrame);
+                    }
                 }
                 catch (Exception layerException)
                 {
