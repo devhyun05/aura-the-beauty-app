@@ -1,4 +1,3 @@
-import {Image as ExpoImage} from 'expo-image';
 import {Image as RNImage, type ImageSourcePropType} from 'react-native';
 
 const prefetchedUris = new Set<string>();
@@ -43,7 +42,7 @@ export function prefetchImageUri(uri?: string): Promise<boolean> {
     return pending;
   }
 
-  const task = ExpoImage.prefetch(uri, 'memory-disk')
+  const task = RNImage.prefetch(uri)
     .then(success => {
       if (success) {
         prefetchedUris.add(uri);

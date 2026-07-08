@@ -17,6 +17,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {colors, iconSize, shadows, spacing, typography} from '../../../shared/theme';
 import {getBackendApiBaseUrl} from '../../../shared/services/backendApi';
 import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
+import {setUnityMakeupPlayerPaused} from '../../ar/services/unityMakeupBridge';
 import {
   CameraCaptureControlRow,
   CameraCaptureButton,
@@ -404,6 +405,18 @@ export function CameraFaceCaptureScreen({
     }, GUIDANCE_MESSAGE_REFRESH_MS);
 
     return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    // ARwithFable Unity(ARKit + MediaPipe + 렌더)가 백그라운드에 상주한 채 이 화면의
+    // 무거운 카메라 파이프라인(전면 + Depth + Vision + 매트)이 겹치면 메모리 초과로
+    // 앱이 강제 종료된다(jetsam). 이 화면 동안 Unity 플레이어를 pause해 자원·전면
+    // 카메라를 넘겨주고, 나갈 때 resume한다. AR 필터의 Unity 생명주기는 안 건드림.
+    // Unity 미기동이면 no-op.
+    setUnityMakeupPlayerPaused(true);
+    return () => {
+      setUnityMakeupPlayerPaused(false);
+    };
   }, []);
 
   const realtimeCaptureAvailable = useMemo(

@@ -10,7 +10,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../../shared/services/localSecureStore';
 import {
   CheckCircle2,
   ExternalLink,

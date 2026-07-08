@@ -40,8 +40,8 @@ const sourcedRecipe = buildFullFaceMakeupRecipe({
 
 expectEqual(
   MAKEUP_RECIPE_REGIONS.join(','),
-  'foundation,lip,blush,brow,eyeliner',
-  'canonical full-face region order',
+  'foundation,lip,blush,brow,eyeliner,lens',
+  'canonical makeup region registry',
 );
 expectEqual(
   recipe.layers.map(layer => layer.region).join(','),
@@ -59,8 +59,8 @@ expectEqual(
 );
 expectEqual(
   recipe.layers.find(layer => layer.region === 'brow')?.maskTextureId,
-  'psd-arcore-brow-semi-arch-v1',
-  'PSD brow mask id',
+  'brow-png-natural-hair-v1',
+  'natural hair brow mask id',
 );
 expectEqual(
   recipe.layers.find(layer => layer.region === 'eyeliner')?.maskTextureId,

@@ -15,7 +15,7 @@
 import * as React from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import type { ImageSourcePropType, StyleProp, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {LinearGradient} from './LinearGradientFallback';
 import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { gradient, gradPoints, motion } from '../../theme/auradinTokens';
 import { useReducedMotion } from './motion';

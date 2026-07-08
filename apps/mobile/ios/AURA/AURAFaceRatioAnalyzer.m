@@ -1,7 +1,13 @@
 #import <Foundation/Foundation.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
+
+#if __has_include(<MediaPipeTasksVision/MediaPipeTasksVision.h>)
+#define AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE 1
 #import <MediaPipeTasksVision/MediaPipeTasksVision.h>
+#else
+#define AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE 0
+#endif
 
 #import "AURAFaceRatioHairline.h"
 
@@ -32,6 +38,7 @@ static BOOL AURAFaceRatioHairlineEnabled(NSDictionary *options)
   return [enabled respondsToSelector:@selector(boolValue)] ? enabled.boolValue : YES;
 }
 
+#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 static NSDictionary *AURAFaceRatioPoint(MPPNormalizedLandmark *landmark)
 {
   if (!landmark) {
@@ -85,6 +92,7 @@ static NSDictionary *AURAFaceRatioAveragePoint(
     @"z": @(sumZ / count),
   };
 }
+#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 
 static CGFloat AURAFaceRatioMedianValue(NSArray<NSNumber *> *values)
 {
@@ -201,6 +209,7 @@ static NSDictionary *AURAFaceRatioBottomContourPoint(
   };
 }
 
+#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 static NSDictionary *AURAFaceRatioPoseFromMatrix(MPPTransformMatrix *matrix)
 {
   if (!matrix || matrix.rows < 3 || matrix.columns < 3) {
@@ -235,6 +244,7 @@ static NSDictionary *AURAFaceRatioPoseFromMatrix(MPPTransformMatrix *matrix)
     @"poseSource": @"matrix",
   };
 }
+#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 
 // MediaPipe normalized coordinates assume upright pixels. Captured JPEGs carry
 // EXIF rotation flags, so bake the orientation into pixel data before
@@ -259,7 +269,9 @@ static UIImage *AURAFaceRatioUprightImage(UIImage *image)
 @end
 
 @implementation AURAFaceRatioAnalyzer {
+#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
   MPPFaceLandmarker *_faceLandmarker;
+#endif
   NSString *_faceLandmarkerInitError;
 }
 
@@ -270,6 +282,7 @@ RCT_EXPORT_MODULE();
   return dispatch_queue_create("com.aura.face-ratio-analyzer", DISPATCH_QUEUE_SERIAL);
 }
 
+#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 - (MPPFaceLandmarker *)imageModeFaceLandmarker
 {
   if (_faceLandmarker || _faceLandmarkerInitError) {
@@ -301,12 +314,14 @@ RCT_EXPORT_MODULE();
 
   return _faceLandmarker;
 }
+#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 
 RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
                   options:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
+#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
   NSURL *url = [NSURL URLWithString:imageUri];
   NSString *path = url.isFileURL ? url.path : imageUri;
   NSURL *imageFileURL = url.isFileURL ? url : [NSURL fileURLWithPath:path];
@@ -528,6 +543,18 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
         payload[@"keypoints"]);
 
   resolve(payload);
+#else
+  // MediaPipe was removed from this build (the Unity MediaPipe plugin now
+  // provides MediaPipe, and a duplicate CocoaPods dependency caused a crash).
+  // Keep the exported interface intact but fail gracefully so the RN side gets
+  // a clean, catchable error instead of a crash.
+  (void)imageUri;
+  (void)options;
+  (void)resolve;
+  reject(@"MEDIAPIPE_UNAVAILABLE",
+         @"MediaPipe was removed from this build.",
+         nil);
+#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 }
 
 @end

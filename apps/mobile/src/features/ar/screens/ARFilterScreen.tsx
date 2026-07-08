@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import type {CameraType} from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import {ChevronDown, ChevronUp, Sparkles} from 'lucide-react-native';
+import {ChevronDown, ChevronUp} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Text} from 'tamagui';
 
@@ -86,9 +86,11 @@ import {
   getARFilterShapeEditButtonLabel,
 } from '../components/ARFilterBottomActions';
 import {
-  createUnityMakeupRecipeBatchFromARFilterSelections,
+  buildFilterParamsFromARFilterSelections,
   hideUnityMakeupView,
+  postUnityFilterParams,
   postUnityMakeupRecipe,
+  setUnityMakeupPlayerPaused,
 } from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
@@ -106,7 +108,6 @@ type ARFilterScreenProps = {
     selectedMakeupFilterId?: string,
     editSourceImageUri?: string,
   ) => void;
-  onOpenPersonalizedMakeup?: () => void;
   onOpenShapeAdjust?: (
     selectedMakeupFilterId?: string,
     editSourceImageUri?: string,
@@ -213,7 +214,6 @@ export function ARFilterScreen({
   onBack,
   onComplete,
   onOpenDetailEdit,
-  onOpenPersonalizedMakeup,
   onOpenShapeAdjust,
   onSave,
 }: ARFilterScreenProps) {
@@ -253,7 +253,12 @@ export function ARFilterScreen({
   const photoEditImageSource =
     editSourceImageSource ?? arFilterSelectionState.selectedMakeupFilter.imageSource;
 
-  useEffect(() => () => hideUnityMakeupView(), []);
+  useEffect(() => {
+    // 보고서/얼굴촬영 화면이 Unity 플레이어를 pause했을 수 있으니 AR 필터 진입 시
+    // 재개한다. 네이티브 pause:0은 idempotent(이미 실행 중이면 no-op)라 안전.
+    setUnityMakeupPlayerPaused(false);
+    return () => hideUnityMakeupView();
+  }, []);
 
   useEffect(() => {
     if (!cameraSessionActive) {
@@ -336,7 +341,12 @@ export function ARFilterScreen({
       return;
     }
 
-    const unitySelections = arGuideData.makeupAreas.map(makeupArea => {
+    // '전체(all)'는 풀페이스 룩 탭이라 여기(포인트 경로)서 처리하면 안 된다.
+    // 'all'은 색이 하나뿐이라 모든 리전(립=블러셔=베이스)에 같은 색이 찍혀
+    // 치크 블러셔가 자동으로 뜨는 버그가 있었다. 개별 영역만 처리 → 선택 시만 적용.
+    const unitySelections = arGuideData.makeupAreas
+      .filter(makeupArea => makeupArea.id !== 'all')
+      .map(makeupArea => {
       const selectionState =
         arFilterSelectionState.getSelectionStateForMakeupArea(makeupArea.id);
       const selectedMakeupFilter = getARFilterSelectedMakeupFilter({
@@ -362,24 +372,25 @@ export function ARFilterScreen({
         selectedTypeId: selectionState.selectedTypeId,
       };
     });
-    // In 반반 가이드 mode, the 왼쪽/오른쪽 comparison tabs pick which face half
-    // gets makeup; the other half stays the bare camera face.
+    // The live AR filter Unity is the ARwithFable ("ARMakeup") engine, driven by
+    // a flat FilterParams message. Map per-area color selections onto FilterParams
+    // and send. 반반(half-face): guideMode 'half' + 비교탭 left/right -> halfFaceMode
+    // 1/2 (Unity가 얼굴 세로 중심 기준 한쪽만 메이크업, 선 없이).
     const halfFaceMode =
-      arFilterSelectionState.guideMode === 'half' &&
-      arFilterSelectionState.selectedComparisonMode !== 'full'
-        ? arFilterSelectionState.selectedComparisonMode
-        : 'off';
-    const recipeBatch = createUnityMakeupRecipeBatchFromARFilterSelections(
-      unitySelections,
-      Date.now(),
-      halfFaceMode,
+      arFilterSelectionState.guideMode === 'half'
+        ? arFilterSelectionState.selectedComparisonMode === 'left'
+          ? 1
+          : arFilterSelectionState.selectedComparisonMode === 'right'
+            ? 2
+            : 0
+        : 0;
+    postUnityFilterParams(
+      buildFilterParamsFromARFilterSelections(unitySelections, halfFaceMode),
     );
-
-    postUnityMakeupRecipe(recipeBatch);
   }, [
+    arFilterSelectionState.selectionStatesByArea,
     arFilterSelectionState.guideMode,
     arFilterSelectionState.selectedComparisonMode,
-    arFilterSelectionState.selectionStatesByArea,
     arGuideData.filters,
     arGuideData.makeupAreas,
     defaultFilter,
@@ -438,19 +449,6 @@ export function ARFilterScreen({
           topInset={insets.top}
         />
       )}
-
-      {onOpenPersonalizedMakeup && !isPhotoEditMode ? (
-        <Button
-          accessibilityLabel="개인화 메이크업 열기"
-          accessibilityRole="button"
-          onPress={onOpenPersonalizedMakeup}
-          pressStyle={{scale: 0.96, opacity: 0.85}}
-          style={[styles.personalizedMakeupButton, {top: insets.top + spacing.md}]}
-          unstyled>
-          <Sparkles color={colors.white} size={iconSize.sm} />
-          <Text style={styles.personalizedMakeupButtonLabel}>개인화 메이크업</Text>
-        </Button>
-      ) : null}
 
       <View pointerEvents="box-none" style={styles.bottomSheetHost}>
         <View pointerEvents="box-none" style={styles.aboveSheetControls}>
@@ -572,25 +570,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     zIndex: 4,
-  },
-  personalizedMakeupButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(20, 20, 22, 0.6)',
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    position: 'absolute',
-    right: spacing.md,
-    zIndex: 6,
-  },
-  personalizedMakeupButtonLabel: {
-    color: colors.white,
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
   },
   aboveSheetControls: {
     alignItems: 'center',

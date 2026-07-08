@@ -23,6 +23,7 @@ import {
   homeHeroLayoutMetrics,
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
+  HOME_HERO_AUTOSCROLL_INTERVAL_MS,
   HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME,
   HOME_RECOMMENDED_FILTER_PREVIEW_COUNT,
   HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID,
@@ -149,6 +150,11 @@ expectEqual(
   'weekly trend title shadow offset',
 );
 expectEqual(heroCtaLabel, expectedHeroCtaLabel, 'hero CTA label');
+expectEqual(
+  HOME_HERO_AUTOSCROLL_INTERVAL_MS,
+  2500,
+  'home hero banner auto-scrolls every 2.5 seconds',
+);
 expectEqual(
   recommendedFilterSectionTitle,
   expectedRecommendedFilterSectionTitle,

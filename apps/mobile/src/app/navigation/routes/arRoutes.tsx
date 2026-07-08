@@ -84,7 +84,6 @@ export function ARFilterRouteScreen({
       onBack={() => navigateMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
       onOpenDetailEdit={handleOpenDetailEdit}
-      onOpenPersonalizedMakeup={() => navigation.navigate('UnityMakeupCapture')}
       onOpenShapeAdjust={handleOpenShapeAdjust}
       onSave={handleSave}
     />

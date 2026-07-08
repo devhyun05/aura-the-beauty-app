@@ -23,7 +23,6 @@ prepare_react_native_project!
 
 target 'AURA' do
   use_expo_modules!
-  pod 'MediaPipeTasksVision', '0.10.35'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];

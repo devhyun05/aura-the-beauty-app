@@ -85,12 +85,12 @@ expectEqual(
 const singleRegionRecipe = createUnityMakeupRecipeBatch('eyeliner', 1000);
 
 expectEqual(singleRegionRecipe.version, 2, 'single region recipe version');
-expectEqual(singleRegionRecipe.layerCount, 6, 'single region recipe layer count');
+expectEqual(singleRegionRecipe.layerCount, 5, 'single region recipe layer count');
 expectEqual(singleRegionRecipe.enabledLayerCount, 1, 'single region enabled count');
 expectEqual(singleRegionRecipe.activeRegions, 'eyeliner', 'single region active summary');
 expectEqual(
   singleRegionRecipe.layers.map(layer => layer.region).join(','),
-  'foundation,lip,blush,brow,eyeliner,lens',
+  'foundation,lip,blush,brow,eyeliner',
   'single region recipe keeps full-layer shape',
 );
 expectEqual(
@@ -116,7 +116,7 @@ const allRegionRecipe = createUnityMakeupRecipeBatchFromARFilterSelections(
   2000,
 );
 
-expectEqual(allRegionRecipe.layerCount, 6, 'all region recipe layer count');
+expectEqual(allRegionRecipe.layerCount, 5, 'all region recipe layer count');
 // 'all' enables every region EXCEPT lens (lens is opt-in via its own tab), so
 // 5 of the 6 emitted layers are active.
 expectEqual(allRegionRecipe.enabledLayerCount, 5, 'all region enabled count');
@@ -127,6 +127,6 @@ expectEqual(
 );
 expectEqual(
   allRegionRecipe.layers.find(layer => layer.region === 'brow')?.maskTextureId,
-  'psd-arcore-brow-semi-arch-v1',
+  'brow-png-natural-hair-v1',
   'brow recipe mask id',
 );

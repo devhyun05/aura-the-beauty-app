@@ -40,8 +40,14 @@ export function ReferenceMakeupExtractionAlbumUploadScreen({
   onSelectPhoto,
 }: ReferenceMakeupExtractionAlbumUploadScreenProps) {
   const insets = useSafeAreaInsets();
+  const hasAutoOpenedPickerRef = useRef(false);
   const isPickerOpenRef = useRef(false);
+  const onSelectPhotoRef = useRef(onSelectPhoto);
   const [pickerState, setPickerState] = useState<PickerState>('opening');
+
+  useEffect(() => {
+    onSelectPhotoRef.current = onSelectPhoto;
+  }, [onSelectPhoto]);
 
   const openImagePicker = useCallback(async () => {
     if (isPickerOpenRef.current) {
@@ -71,13 +77,18 @@ export function ReferenceMakeupExtractionAlbumUploadScreen({
         return;
       }
 
-      onSelectPhoto(buildReferenceMakeupPhoto(pickedAsset));
+      onSelectPhotoRef.current(buildReferenceMakeupPhoto(pickedAsset));
     } finally {
       isPickerOpenRef.current = false;
     }
-  }, [onSelectPhoto]);
+  }, []);
 
   useEffect(() => {
+    if (hasAutoOpenedPickerRef.current) {
+      return;
+    }
+
+    hasAutoOpenedPickerRef.current = true;
     void openImagePicker();
   }, [openImagePicker]);
 

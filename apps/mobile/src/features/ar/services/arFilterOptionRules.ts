@@ -15,7 +15,7 @@ import {
 // palettes (REGION_COLOR_OPTIONS) instead of the dev filter's flat cosmetic
 // color list, so each makeup-area tab shows the correct palette: base ->
 // foundation shades, lip -> lip colors, cheek -> blush colors. Areas with no
-// region mapping ('all', 'contour') keep the filter's own colorOptions. This
+// region mapping ('all') keep the filter's own colorOptions. This
 // MUST be applied at every color read site (swatch render, preview color,
 // recipe-build color lookup) so the shown swatch and the applied colorHex
 // never diverge.
@@ -162,11 +162,6 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
   lens: [
     {id: 'lens-natural', label: '내추럴'},
     {id: 'lens-vivid', label: '비비드'},
-  ],
-  contour: [
-    {id: 'contour-default', label: '기본 윤곽'},
-    {id: 'contour-jaw', label: '턱선 강조'},
-    {id: 'contour-nose', label: '코 쉐딩'},
   ],
 };
 

@@ -28,8 +28,14 @@ export function MakeupFeedbackAlbumUploadScreen({
   onStartAnalysis,
 }: MakeupFeedbackAlbumUploadScreenProps) {
   const insets = useSafeAreaInsets();
+  const hasAutoOpenedPickerRef = useRef(false);
   const isPickerOpenRef = useRef(false);
+  const onStartAnalysisRef = useRef(onStartAnalysis);
   const [pickerState, setPickerState] = useState<PickerState>('opening');
+
+  useEffect(() => {
+    onStartAnalysisRef.current = onStartAnalysis;
+  }, [onStartAnalysis]);
 
   const openImagePicker = useCallback(async () => {
     if (isPickerOpenRef.current) {
@@ -66,13 +72,18 @@ export function MakeupFeedbackAlbumUploadScreen({
         photoSource: 'gallery',
       };
 
-      onStartAnalysis(selection);
+      onStartAnalysisRef.current(selection);
     } finally {
       isPickerOpenRef.current = false;
     }
-  }, [onStartAnalysis]);
+  }, []);
 
   useEffect(() => {
+    if (hasAutoOpenedPickerRef.current) {
+      return;
+    }
+
+    hasAutoOpenedPickerRef.current = true;
     void openImagePicker();
   }, [openImagePicker]);
 

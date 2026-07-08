@@ -45,7 +45,6 @@ const makeupAreas: {id: MakeupArea; label: string}[] = [
   {id: 'eye', label: '아이'},
   {id: 'lip', label: '립'},
   {id: 'cheek', label: '치크'},
-  {id: 'contour', label: '컨투어'},
 ];
 
 const typeOptions = ['소프트', '또렷함', '글로우', '내추럴'];

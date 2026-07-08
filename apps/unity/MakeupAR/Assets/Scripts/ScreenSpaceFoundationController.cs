@@ -268,7 +268,10 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         // Draw the face-following centerline divider whenever half-face mode is
         // active (either half). The composite frag reads this to blend the
         // forehead->chin line on top of the final color; 0 keeps it a no-op.
-        material.SetFloat("_HalfFaceDivider", halfFaceMode > 0.5f ? 1.0f : 0.0f);
+        // 반반(half-face) 가운데 분할선 제거 (사용자 요청): the left/right makeup
+        // split itself is driven by _HalfFaceMode above, so forcing the divider
+        // line OFF removes only the visual centerline and keeps 반반 makeup.
+        material.SetFloat("_HalfFaceDivider", 0.0f);
         material.SetFloat("_ScreenSpaceUvFlip", DefaultScreenSpaceUvFlip);
         material.SetFloat("_ScreenSpaceUvFlipX", DefaultScreenSpaceUvFlipX);
         material.SetFloat(ActiveRendererModeId, 0.0f);
@@ -315,7 +318,10 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         if (material != null)
         {
             material.SetFloat("_HalfFaceMode", Mathf.Clamp(halfFaceMode, 0.0f, 2.0f));
-            material.SetFloat("_HalfFaceDivider", halfFaceMode > 0.5f ? 1.0f : 0.0f);
+            // 반반(half-face) 가운데 분할선 제거 (사용자 요청): the left/right makeup
+        // split itself is driven by _HalfFaceMode above, so forcing the divider
+        // line OFF removes only the visual centerline and keeps 반반 makeup.
+        material.SetFloat("_HalfFaceDivider", 0.0f);
         }
         PushLipUniforms();
     }

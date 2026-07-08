@@ -55,7 +55,6 @@ const REFERENCE_MAKEUP_SAVE_AREAS: readonly MakeupArea[] = [
   'brow',
   'cheek',
   'lip',
-  'contour',
 ];
 
 export function mapFaceCaptureResultToReferenceMakeupPhoto(

@@ -66,6 +66,16 @@ Shader "MakeupAR/SmoothRegionMask"
         [HideInInspector] _BrowInpaintStrength ("Brow Inpaint Opacity", Range(0, 1)) = 0.92
         [HideInInspector] _BrowInpaintTapDistance ("Brow Inpaint Tap Distance (screen UV)", Float) = 0.045
         [HideInInspector] _BrowInpaintFeather ("Brow Inpaint Edge Feather", Range(0.001, 0.5)) = 0.12
+        // Hair re-composite: fades the whole drawn brow (skin fill + pigment)
+        // back to the live camera where the natural brow is covered by hair
+        // (bangs), so the camera's own hair strands show on top of the brow.
+        // 0 = today's behavior (no hair re-composite).
+        [HideInInspector] _BrowHairKeepStrength ("Brow Hair Re-Composite Strength", Range(0, 2)) = 1.15
+        // Static/default brow (AR-filter path, no generated neutralize mask):
+        // erase the natural brow using the drawn coverage as the footprint and
+        // fill it with upward-sampled forehead skin before compositing the brow
+        // color on top. 0 = draw-only (old behavior); 1 = erase + draw.
+        [HideInInspector] _BrowStaticEraseMode ("Brow Static Erase Mode", Float) = 0
         _PreserveDetail ("Preserve Detail", Range(0, 1)) = 1
         _DensityPower ("Density Power", Range(0, 1)) = 0.72
         _EdgeSoftness ("Edge Softness", Range(0, 1)) = 0.86
@@ -189,6 +199,8 @@ Shader "MakeupAR/SmoothRegionMask"
             float _BrowInpaintStrength;
             float _BrowInpaintTapDistance;
             float _BrowInpaintFeather;
+            float _BrowHairKeepStrength;
+            float _BrowStaticEraseMode;
             float _PreserveDetail;
             float _DensityPower;
             float _EdgeSoftness;
@@ -346,9 +358,10 @@ Shader "MakeupAR/SmoothRegionMask"
             // reference (i.e. a tap that still landed on brow hair). Returns
             // valid == 0 when SkinGate is unavailable so the caller can fall
             // back to today's behavior (exact no-op).
-            float3 SampleBrowInpaintSkin(float4 clipPos, out float valid)
+            float3 SampleBrowInpaintSkin(float4 clipPos, out float valid, out float hairKeep)
             {
                 valid = 0.0;
+                hairKeep = 0.0;
                 if (_SkinGateEnabled < 0.5)
                 {
                     return float3(0.0, 0.0, 0.0);
@@ -380,6 +393,7 @@ Shader "MakeupAR/SmoothRegionMask"
                 }
                 float3 reference = referenceSum / referenceCount;
                 float referenceLum = max(dot(reference, float3(0.2126, 0.7152, 0.0722)), 0.05);
+                float2 referenceChroma = SkinGateChroma(reference);
 
                 float2 ndc = clipPos.xy / max(clipPos.w, 0.00001);
                 float2 screenUv = saturate(ndc * 0.5 + 0.5);
@@ -394,7 +408,7 @@ Shader "MakeupAR/SmoothRegionMask"
                 float3 skinAccum = float3(0.0, 0.0, 0.0);
                 float skinWeight = 0.0;
                 [unroll]
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < 5; i++)
                 {
                     float2 sampleUv = saturate(screenUv + float2(0.0, tap * (1.0 + (float)i)));
                     float3 c = SampleSkinGateCamera(sampleUv);
@@ -402,23 +416,45 @@ Shader "MakeupAR/SmoothRegionMask"
                     // Reject taps that are much darker than skin (brow/lash).
                     float darkAccept = smoothstep(0.42, 0.72, lum / referenceLum);
                     // Reject taps whose chroma drifts far from skin (hairline).
-                    float chromaDist = length(SkinGateChroma(c) - SkinGateChroma(reference));
+                    float chromaDist = length(SkinGateChroma(c) - referenceChroma);
                     float chromaAccept = 1.0 - smoothstep(
                         _SkinGateTolerance * 1.6,
                         _SkinGateTolerance * 3.4,
                         chromaDist);
                     // Weight nearer taps a little higher so the fill matches
                     // the local skin just above the brow.
-                    float tapWeight = darkAccept * chromaAccept * (1.0 - 0.18 * (float)i);
+                    float tapWeight = darkAccept * chromaAccept * (1.0 - 0.16 * (float)i);
                     skinAccum += c * tapWeight;
                     skinWeight += tapWeight;
                 }
 
+                // ---- Hair re-composite signal -------------------------------
+                // hairAbove == 1 when the WHOLE upward column was rejected
+                // (hair/bangs above this pixel, no forehead skin found); ~0 for
+                // a normal brow where the forehead is visible above.
+                float hairAbove = 1.0 - saturate(skinWeight / 1.3);
+                // Is the pixel HERE itself hair-like (dark and/or off skin
+                // chroma)? The natural brow is ALSO dark, but it has skin above
+                // (hairAbove ~ 0), so hairAbove * camHairish only fires where
+                // real hair actually covers the brow band.
+                float3 camHere = SampleSkinGateCamera(screenUv);
+                float camLum = dot(camHere, float3(0.2126, 0.7152, 0.0722));
+                float camDark = 1.0 - smoothstep(0.34, 0.62, camLum / referenceLum);
+                float camChromaDist = length(SkinGateChroma(camHere) - referenceChroma);
+                float camOffChroma = smoothstep(
+                    _SkinGateTolerance * 1.5,
+                    _SkinGateTolerance * 3.2,
+                    camChromaDist);
+                float camHairish = saturate(max(camDark, camOffChroma));
+                hairKeep = saturate(hairAbove * camHairish * max(_BrowHairKeepStrength, 0.0));
+
                 if (skinWeight < 0.001)
                 {
-                    // Every upward tap was rejected (e.g. tall/dense brow):
-                    // fall back to the sampled skin reference so we still
-                    // cover the natural brow with a plausible skin tone.
+                    // Every upward tap was rejected (e.g. tall/dense brow or a
+                    // full bang column): fall back to the sampled skin reference
+                    // so a skin gap between strands (hairKeep low there) still
+                    // gets a plausible skin tone. Where hair actually covers
+                    // (hairKeep high) the caller fades the overlay out anyway.
                     valid = 1.0;
                     return reference;
                 }
@@ -1097,7 +1133,8 @@ Shader "MakeupAR/SmoothRegionMask"
                     // inpaintAlpha == 0, so outAlpha == makeupAlpha and
                     // outRgb == browPigment (today's behavior).
                     float skinValid = 0.0;
-                    float3 inpaintSkin = SampleBrowInpaintSkin(input.clipPos, skinValid);
+                    float browHairKeep = 0.0;
+                    float3 inpaintSkin = SampleBrowInpaintSkin(input.clipPos, skinValid, browHairKeep);
 
                     // Footprint coverage: opaque where the RED neutralize mask
                     // is present (a dark natural brow needs a near-opaque fill),
@@ -1132,6 +1169,13 @@ Shader "MakeupAR/SmoothRegionMask"
                     float3 outRgb = outAlpha > 0.0001
                         ? weightedColor / outAlpha
                         : browPigment;
+                    // Re-composite real hair on top of the drawn brow: where
+                    // this pixel is under bangs (browHairKeep), fade the whole
+                    // overlay (skin fill + pigment) toward transparent so the
+                    // camera's own hair strands show back through. Natural-brow
+                    // pixels (forehead skin visible above) have browHairKeep ~ 0
+                    // and erase + draw exactly as before.
+                    outAlpha *= (1.0 - browHairKeep);
                     return fixed4(saturate(outRgb), outAlpha);
                   }
                 }
@@ -1252,6 +1296,58 @@ Shader "MakeupAR/SmoothRegionMask"
                     pigmentStrength = pigmentStrength * meltEase;
                     float3 pigmentFilter = lerp(float3(1.0, 1.0, 1.0), pigmentColor, pigmentStrength);
                     return fixed4(saturate(pigmentFilter), 1.0);
+                }
+
+                // Static/default brow (AR-filter path): ERASE the natural brow,
+                // then draw. There is no generated neutralize mask here, so the
+                // shader fills the drawn coverage footprint with forehead skin
+                // sampled UPWARD from the live camera (SkinGate) and composites
+                // the brow color on top in ONE SrcAlpha/OneMinusSrcAlpha pass —
+                // the same skin-then-brow model as the generated brow, plus the
+                // hair re-composite so bangs show back through. SkinGate-off is
+                // an EXACT no-op (browSkinValid==0 -> draw-only, old behavior).
+                if (_BrowStaticEraseMode > 0.5)
+                {
+                    // Draw visibility deliberately EXCLUDES SkinGateVisibility
+                    // (a foundation-only hair/brow suppressor) so the brow still
+                    // draws over the dark natural-brow area; the erase fill below
+                    // is what removes the natural brow. View-angle fade matches
+                    // the generated brow so the profile tail does not smear.
+                    float browFacingFade = smoothstep(0.16, 0.5, input.facing);
+                    float browVis = saturate(_Opacity * _VisibilityAlpha)
+                        * HandOcclusionVisibility(input.clipPos)
+                        * browFacingFade;
+                    float browMakeupAlpha = saturate(maskStrength * browVis);
+                    float browSkinValid = 0.0;
+                    float browStaticHairKeep = 0.0;
+                    float3 browInpaintSkin = SampleBrowInpaintSkin(
+                        input.clipPos, browSkinValid, browStaticHairKeep);
+                    // Footprint = the drawn brow coverage (UV-glued onto the
+                    // natural brow), feathered so there is no skin-patch edge.
+                    float browFootprint = smoothstep(
+                        _Threshold,
+                        _Threshold + max(_BrowInpaintFeather, 0.001),
+                        saturate(maskStrength));
+                    float browInpaintAlpha = saturate(
+                        browFootprint
+                        * saturate(_BrowInpaintStrength)
+                        * browSkinValid
+                        * browFacingFade
+                        * saturate(_VisibilityAlpha)
+                        * HandOcclusionVisibility(input.clipPos));
+                    float browOutAlpha = saturate(
+                        1.0 - (1.0 - browInpaintAlpha) * (1.0 - browMakeupAlpha));
+                    float3 browWeighted =
+                        alphaColor * browMakeupAlpha
+                        + browInpaintSkin * browInpaintAlpha * (1.0 - browMakeupAlpha);
+                    float3 browOutRgb = browOutAlpha > 0.0001
+                        ? browWeighted / browOutAlpha
+                        : alphaColor;
+                    // Re-composite real hair on top where this pixel is under
+                    // bangs (browStaticHairKeep) — fade the whole overlay so the
+                    // camera's own hair strands show back through.
+                    browOutAlpha *= (1.0 - browStaticHairKeep);
+                    return fixed4(saturate(browOutRgb), browOutAlpha);
                 }
 
                 float alpha = maskStrength * opacity * preserveScale;

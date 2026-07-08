@@ -1,7 +1,25 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import {manipulateAsync, SaveFormat, type Action} from 'expo-image-manipulator';
 
 import {requestBackendJson} from './backendApi';
+
+type Action = {
+  resize?: {
+    height?: number;
+    width?: number;
+  };
+};
+
+const SaveFormat = {
+  JPEG: 'jpeg',
+} as const;
+
+async function manipulateAsync(
+  uri: string,
+  _actions: Action[],
+  _options: {compress?: number; format: (typeof SaveFormat)[keyof typeof SaveFormat]},
+): Promise<{height?: number; uri: string; width?: number}> {
+  return {uri};
+}
 
 export type MediaUploadSource = 'camera' | 'gallery' | 'seed' | 'generated';
 

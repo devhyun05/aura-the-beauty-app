@@ -17,7 +17,6 @@ const MAKEUP_PART_AREA_LABELS: Record<SavePartMakeupArea, string> = {
   lip: '립',
   cheek: '치크',
   lens: '렌즈',
-  contour: '컨투어',
 };
 
 const MAKEUP_PART_AREA_ORDER: readonly SavePartMakeupArea[] = [
@@ -27,7 +26,6 @@ const MAKEUP_PART_AREA_ORDER: readonly SavePartMakeupArea[] = [
   'cheek',
   'lip',
   'lens',
-  'contour',
 ];
 
 export function getDefaultMakeupFilterSaveSettings({

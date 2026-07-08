@@ -172,6 +172,44 @@ function resolveBrowMaskForShape(selectedShapeId: string): string {
   return BROW_SHAPE_MASKS[selectedShapeId] ?? FULL_FACE_REGION_RUNTIME_ASSETS.brow.maskTextureId;
 }
 
+// Eyeliner 형태(shape) tab -> one of the PROCEDURAL eyeliner styles that Unity
+// rasterizes live from the measured eye zones (e7-eyeliner-gen-* -> quadratic
+// thickness profile + bezier wing, per the reference chart: 캣/퍼피/섹시/윙드/
+// 컬러드/돌). These already render in the live AR filter (the eye zones are
+// re-measured every foundation calibration, same source the lens discs use), so
+// wiring the shape id here is all that is needed to replace the flat static
+// `minimal-safe` liner with a realistic generated one. Unknown/absent shape ids
+// fall back to a universally flattering WINGED liner so the AR-filter eyeliner
+// is realistic by default; the exact 형태 option ids are logged at the call site
+// so any that do not match below can be added.
+const EYELINER_SHAPE_MASKS: Record<string, string> = {
+  cat: 'e7-eyeliner-gen-cat-v2',
+  puppy: 'e7-eyeliner-gen-puppy-v2',
+  sexy: 'e7-eyeliner-gen-sexy-v2',
+  winged: 'e7-eyeliner-gen-winged-v2',
+  colored: 'e7-eyeliner-gen-colored-v2',
+  doll: 'e7-eyeliner-gen-doll-v2',
+  'eyeliner-cat': 'e7-eyeliner-gen-cat-v2',
+  'eyeliner-puppy': 'e7-eyeliner-gen-puppy-v2',
+  'eyeliner-sexy': 'e7-eyeliner-gen-sexy-v2',
+  'eyeliner-winged': 'e7-eyeliner-gen-winged-v2',
+  'eyeliner-colored': 'e7-eyeliner-gen-colored-v2',
+  'eyeliner-doll': 'e7-eyeliner-gen-doll-v2',
+  'eyeliner-gen-cat-v2': 'e7-eyeliner-gen-cat-v2',
+  'eyeliner-gen-puppy-v2': 'e7-eyeliner-gen-puppy-v2',
+  'eyeliner-gen-sexy-v2': 'e7-eyeliner-gen-sexy-v2',
+  'eyeliner-gen-winged-v2': 'e7-eyeliner-gen-winged-v2',
+  'eyeliner-gen-colored-v2': 'e7-eyeliner-gen-colored-v2',
+  'eyeliner-gen-doll-v2': 'e7-eyeliner-gen-doll-v2',
+};
+
+const DEFAULT_GENERATED_EYELINER_MASK = 'e7-eyeliner-gen-winged-v2';
+
+function resolveEyelinerMaskForShape(selectedShapeId: string): string {
+  const key = (selectedShapeId ?? '').toLowerCase();
+  return EYELINER_SHAPE_MASKS[key] ?? DEFAULT_GENERATED_EYELINER_MASK;
+}
+
 // Cheek 핏(shape) tab -> a blush session mask. The recipe builder auto-derives
 // the blush_session_N texture from the cheek-session-mask-N maskTextureId, so we
 // only override maskTextureId + candidateId (same pattern as the brow shapes).
@@ -227,6 +265,245 @@ export function getUnityMakeupLayerRegionsForMakeupArea(
   return getMakeupRecipeRegionsForArea(selectedMakeupArea);
 }
 
+// ---- ARwithFable Unity bridge (AR filter engine = ARwithFable) --------------
+// The live AR filter Unity is now the ARwithFable ("ARMakeup") project instead
+// of AURA's E3 region-mask system. It is driven by a FLAT FilterParams message
+// (all colors + intensities), delivered via the SAME native UnitySendMessage
+// bridge: postMessage('NativeBridge', 'OnMessageFromRN', json). AURA's per-area
+// color selections are mapped onto FilterParams here.
+export type ArwFilterParams = {
+  skinSmoothing: number;
+  skinBrightening: number;
+  // AURA 스크린스페이스 파운데이션 (FaceMakeup.shader에 이식): 선택 shade가
+  // foundationColor, skinSmoothing이 잡티제거, foundationIntensity가 HSV 톤 강도.
+  foundationColor: string;
+  userSkinBaseColor: string;
+  foundationIntensity: number;
+  foundationCoverage: number;
+  foundationEvenness: number;
+  foundationLuminance: number;
+  lipColor: string;
+  lipIntensity: number;
+  lipStyleIntensity: number;
+  blushColor: string;
+  blushIntensity: number;
+  // AURA cheek session-mask index (0..4: daily/lovely/under/sunkiss1/sunkiss2).
+  // Drives the ported AURA CheekBlushRenderer's mask + per-mask tuning in Unity.
+  blushShape: number;
+  blushStyleIntensity: number;
+  eyeshadowColor: string;
+  eyeshadowIntensity: number;
+  irisColor: string;
+  irisIntensity: number;
+  eyelinerColor: string;
+  eyelinerIntensity: number;
+  eyelinerStyle: number;
+  eyelinerStyleIntensity: number;
+  browColor: string;
+  browIntensity: number;
+  browPowderColor: string;
+  browPowderIntensity: number;
+  browLightenerIntensity: number;
+  browPencilColor: string;
+  browPencilIntensity: number;
+  browStyleColor: string;
+  browStyleIntensity: number;
+  browThickness: number;
+  browArch: number;
+  highlightColor: string;
+  highlightIntensity: number;
+  contourColor: string;
+  contourIntensity: number;
+  concealerColor: string;
+  concealerIntensity: number;
+  faceOverlayIntensity: number;
+  // 반반: 0=전체, 1=왼쪽만, 2=오른쪽만.
+  halfFaceMode: number;
+};
+
+// Matches ARwithFable src/presets.ts BARE (all intensities 0).
+export const ARW_BARE_FILTER_PARAMS: ArwFilterParams = {
+  skinSmoothing: 0,
+  skinBrightening: 0,
+  foundationColor: '#D6B09A',
+  userSkinBaseColor: '#C79A82',
+  foundationIntensity: 0,
+  foundationCoverage: 0.55,
+  foundationEvenness: 0.25,
+  foundationLuminance: 0.08,
+  lipColor: '#C94F6D',
+  lipIntensity: 0,
+  lipStyleIntensity: 0,
+  blushColor: '#F08FA0',
+  blushIntensity: 0,
+  blushShape: 0,
+  blushStyleIntensity: 0,
+  eyeshadowColor: '#B06A4E',
+  eyeshadowIntensity: 0,
+  irisColor: '#5B7B8C',
+  irisIntensity: 0,
+  eyelinerColor: '#181418',
+  eyelinerIntensity: 0,
+  eyelinerStyle: 0,
+  eyelinerStyleIntensity: 0,
+  browColor: '#4A3428',
+  browIntensity: 0,
+  browPowderColor: '#4A3628',
+  browPowderIntensity: 0,
+  browLightenerIntensity: 0,
+  browPencilColor: '#2A1E16',
+  browPencilIntensity: 0,
+  browStyleColor: '#3A2A20',
+  browStyleIntensity: 0,
+  browThickness: 1,
+  browArch: 0,
+  highlightColor: '#FFF2DB',
+  highlightIntensity: 0,
+  contourColor: '#9E806B',
+  contourIntensity: 0,
+  concealerColor: '#FADCC2',
+  concealerIntensity: 0,
+  faceOverlayIntensity: 0,
+  halfFaceMode: 0,
+};
+
+// AURA cheek 형태 tab -> session-mask index. Mirrors BLUSH_SHAPE_MASKS
+// (cheek-session-mask-N -> index N-1) which the ported CheekBlushRenderer uses.
+const BLUSH_SHAPE_INDEX: Record<string, number> = {
+  'cheek-daily': 0,
+  'cheek-lovely': 1,
+  'cheek-under': 2,
+  'cheek-sunkiss1': 3,
+  'cheek-sunkiss2': 4,
+};
+
+function mapArwBlushShapeId(selectedShapeId: string): number {
+  return BLUSH_SHAPE_INDEX[selectedShapeId] ?? 0;
+}
+
+function mapArwEyelinerStyleId(selectedShapeId: string): number {
+  const id = (selectedShapeId ?? '').toLowerCase();
+  if (id.includes('puppy') || id.includes('down')) {
+    return 1;
+  }
+  if (id.includes('horizontal') || id.includes('straight') || id.includes('long')) {
+    return 2;
+  }
+  return 0; // cat / wing-up
+}
+
+// Build a full ARwithFable FilterParams from AURA's per-area AR-filter
+// selections. Only colors are wired for now (type/texture/shape come later):
+// each enabled area sets its region's color + a visible intensity.
+export function buildFilterParamsFromARFilterSelections(
+  selections: readonly UnityMakeupARFilterSelection[],
+  halfFaceMode = 0,
+): ArwFilterParams {
+  const params: ArwFilterParams = {...ARW_BARE_FILTER_PARAMS};
+  params.halfFaceMode = halfFaceMode;
+
+  selections.forEach(selection => {
+    if (!shouldEnableUnityMakeupSelection(selection)) {
+      return;
+    }
+    const hex = normalizeSelectedHex(selection.selectedColor.hex);
+    getUnityMakeupLayerRegionsForMakeupArea(selection.selectedMakeupArea).forEach(
+      region => {
+        switch (region) {
+          case 'lip': {
+            if (hex) {
+              params.lipColor = hex;
+            }
+            // 기본 립 불투명도 0.37 (요청: 더 옅게).
+            params.lipIntensity = 0.37;
+            break;
+          }
+          case 'blush': {
+            if (hex) {
+              params.blushColor = hex;
+            }
+            params.blushIntensity = 0.7;
+            params.blushShape = mapArwBlushShapeId(selection.selectedShapeId);
+            break;
+          }
+          case 'brow': {
+            if (hex) {
+              params.browColor = hex;
+            }
+            params.browIntensity = 0.85;
+            break;
+          }
+          case 'eyeliner': {
+            if (hex) {
+              params.eyelinerColor = hex;
+            }
+            params.eyelinerIntensity = 0.9;
+            params.eyelinerStyle = mapArwEyelinerStyleId(selection.selectedShapeId);
+            break;
+          }
+          case 'lens': {
+            if (hex) {
+              params.irisColor = hex;
+            }
+            params.irisIntensity = 0.85;
+            break;
+          }
+          case 'foundation': {
+            // AURA 스크린스페이스 base (FaceMakeup.shader에 이식). 선택한 shade가
+            // 파운데이션 색(HSV 가산광채 톤), skinSmoothing이 잡티제거. 기존
+            // ARwithFable flat brighten/concealer 매핑은 폐기.
+            // intensity는 셰이더 자연 기본값(0.45)에 맞춘다 — 0.7은 gentle 톤보정을
+            // 통째로 과구동해 "쨍한/부자연"으로 보였다(AURA 원본 대비 과함).
+            params.skinSmoothing = 0.35;
+            params.foundationIntensity = 0.45;
+            if (hex) {
+              params.foundationColor = hex;
+            }
+            break;
+          }
+          default:
+            break;
+        }
+      },
+    );
+  });
+
+  return params;
+}
+
+// Send a FilterParams to the ARwithFable Unity via the native UnitySendMessage
+// bridge (GameObject 'NativeBridge', method 'OnMessageFromRN').
+export function postUnityFilterParams(params: ArwFilterParams): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  if (!nativeBridge?.postMessage) {
+    return false;
+  }
+  nativeBridge.postMessage(
+    'NativeBridge',
+    'OnMessageFromRN',
+    JSON.stringify({filter: params, type: 'applyFilter'}),
+  );
+  return true;
+}
+
+// Pause/resume the ARwithFable Unity AR session. The Unity player is a persistent
+// singleton — its ARSession keeps holding the FRONT camera even after the AR
+// filter view is hidden, which blocks the face-capture (report) camera from
+// starting (black preview). Pausing (setPaused true) disables the ARSession and
+// releases the camera so other features can use it; resume on AR-filter re-entry.
+export function setUnityMakeupSessionPaused(paused: boolean): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  if (!nativeBridge?.postMessage) {
+    return false;
+  }
+  nativeBridge.postMessage(
+    'NativeBridge',
+    'OnMessageFromRN',
+    JSON.stringify({paused, type: 'setPaused'}),
+  );
+  return true;
+}
+
 export function createUnityMakeupRecipeBatch(
   activeRegion: UnityMakeupRegion,
   sentAtMs = Date.now(),
@@ -272,8 +549,10 @@ export function createUnityMakeupRecipeBatchFromARFilterSelections(
   selections: readonly UnityMakeupARFilterSelection[],
   sentAtMs = Date.now(),
   halfFaceMode: HalfFaceMode = 'off',
+  excludeRegions: readonly UnityMakeupLayerRegion[] = [],
 ): UnityMakeupRecipeBatch {
   const layerSelections = new Map<UnityMakeupLayerRegion, UnityMakeupARFilterSelection>();
+  const excludeRegionSet = new Set(excludeRegions);
 
   selections.forEach(selection => {
     if (!shouldEnableUnityMakeupSelection(selection)) {
@@ -282,6 +561,12 @@ export function createUnityMakeupRecipeBatchFromARFilterSelections(
 
     getUnityMakeupLayerRegionsForMakeupArea(selection.selectedMakeupArea).forEach(
       region => {
+        // Regions handled outside the recipe (e.g. the generated brow, applied
+        // via ApplyGeneratedBrowMaskJson) are excluded so the static UV brow
+        // layer does not double-render over the landmark-aligned one.
+        if (excludeRegionSet.has(region)) {
+          return;
+        }
         layerSelections.set(region, selection);
       },
     );
@@ -404,10 +689,15 @@ function createUnityMakeupControlsForRegions({
     const lipShape = region === 'lip' ? resolveLipShapeParams(selectedShapeId) : null;
     const lipType = region === 'lip' ? resolveLipTypeParams(selectedTypeId) : null;
     if (region === 'brow') {
-      // The UV-locked brow sits well below the real brows; a positive
-      // verticalOffset raises it (wired to _MaskOffset.y in E3, effect =
-      // value * 0.10 in UV). Tune sign/magnitude here after the rebuild.
-      params.verticalOffset = 0.5;
+      // The UV-locked brow sits BELOW the real brows; a positive verticalOffset
+      // raises it (wired to _MaskOffset.y in E3, effect = value * 0.10 in UV).
+      // Device feedback (this session): at 0.5 the drawn brow still lands
+      // slightly BELOW the natural brow, so the natural brow shows above it and
+      // the erase footprint (which follows the drawn brow) never reaches it.
+      // Raise so the drawn brow + its erase footprint sit ON the natural brow.
+      // Hot-reloadable RN value — tune up/down from device feedback (no Unity
+      // rebuild needed).
+      params.verticalOffset = 0.9;
     }
 
     return {
@@ -441,6 +731,11 @@ function createUnityMakeupControlsForRegions({
               candidateId: resolveBrowMaskForShape(selectedShapeId),
             }
           : {}),
+        // NOTE: the eyeliner 형태 -> live generated style wiring is temporarily
+        // reverted — pointing the eyeliner layer at e7-eyeliner-gen-* wiped ALL
+        // makeup (a generated-eyeliner recipe field is rejected by Unity's layer
+        // parser, which clears every overlay). resolveEyelinerMaskForShape is
+        // kept for when the generated-eyeliner recipe shape is validated.
         // Cheek 핏 selection maps to a blush session mask (데일리/러블리/언더/
         // 선키스 1/선키스 2). The blush_session_N texture auto-follows the mask id.
         ...(region === 'blush' ? resolveBlushMaskForShape(selectedShapeId) : {}),
@@ -465,7 +760,7 @@ function createUnityMakeupControlsForRegions({
   }, {} as FullFaceRegionControls);
 }
 
-function shouldEnableUnityMakeupSelection({
+export function shouldEnableUnityMakeupSelection({
   selectedColorId,
   selectedMakeupArea,
   selectedPointMakeupLookId,
@@ -831,10 +1126,21 @@ type NativeUnityMakeupBridge = {
   ) => void;
   prepareFramework?: () => void;
   prepareRuntime?: () => void;
+  setPlayerPaused?: (paused: boolean) => void;
 };
 
 function getNativeUnityMakeupBridge(): NativeUnityMakeupBridge | undefined {
   return NativeModules.UnityMakeupBridge as NativeUnityMakeupBridge | undefined;
+}
+
+// Pause/resume the whole ARwithFable Unity PLAYER (native UnityFramework pause:)
+// — stops its render loop + AR session, freeing CPU/camera/working-memory so a
+// heavy screen (e.g. the report/face-capture camera: front + depth + Vision +
+// matte) doesn't OOM/jetsam-kill the app while Unity is resident. Unlike the
+// ARSession.enabled toggle (setUnityMakeupSessionPaused), the player pause does
+// not corrupt Unity's state, so resume(false) restores it cleanly.
+export function setUnityMakeupPlayerPaused(paused: boolean): void {
+  getNativeUnityMakeupBridge()?.setPlayerPaused?.(paused);
 }
 
 type NativeUnityPostMetadata = {

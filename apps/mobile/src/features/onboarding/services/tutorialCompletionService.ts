@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../../shared/services/localSecureStore';
 
 import type {AuthUser} from '../../auth/types';
 

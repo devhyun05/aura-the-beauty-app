@@ -10,6 +10,7 @@ import {
   buildGeneratedBrowMaskUnityPayload,
   buildGeneratedBrowPackage,
   DEFAULT_GENERATED_BROW_CONTROLS,
+  type GeneratedBrowControls,
   type GeneratedBrowPackage,
 } from './browGenerateCore';
 import {
@@ -304,6 +305,89 @@ export async function generatePersonalizedLipMakeup({
         includeTexture: true,
       }),
     ),
+  };
+}
+
+export type GeneratedBrowFromCaptureResult = {
+  browUnityApplyPayload: string;
+  generatedBrowPackage: GeneratedBrowPackage;
+  nativeResult: E7NativeBoundaryResult;
+};
+
+/**
+ * Brow-only variant of {@link generatePersonalizedLipMakeup} for the LIVE AR
+ * filter brow tab: runs the native face-landmark extraction on a synchronized
+ * capture and builds a landmark-aligned generated brow (real-brow neutralize
+ * footprint + strand map), WITHOUT the lip candidate build (so a face where the
+ * lip boundary fails to solve still yields a brow). The returned
+ * browUnityApplyPayload is ready for postUnityGeneratedBrowMaskPayload; the
+ * nativeResult is kept so shape/color taps can re-rasterize via
+ * buildGeneratedBrowPackage without re-capturing.
+ */
+export async function generateBrowFromCapture({
+  controls = DEFAULT_GENERATED_BROW_CONTROLS,
+  provider = DEFAULT_PROVIDER,
+  sourceFrameMetadata,
+}: {
+  controls?: GeneratedBrowControls;
+  provider?: LipMaskProvider;
+  sourceFrameMetadata: FullFaceMakeupSourceInput;
+}): Promise<GeneratedBrowFromCaptureResult> {
+  const nativeModule = getNativeLipBoundaryProviders();
+
+  if (!nativeModule?.extractLipBoundary) {
+    throw new Error('native_lip_boundary_module_unavailable');
+  }
+
+  const capture = sourceFrameMetadata.capture;
+  const nativeResult = JSON.parse(
+    await nativeModule.extractLipBoundary(
+      JSON.stringify({
+        adjustment: DEFAULT_LIP_ADJUSTMENT,
+        arFaceExportPath: capture.arFaceExportPath,
+        capturePairId: capture.capturePairId,
+        captureSetId: capture.captureSetId,
+        captureShotKind: capture.captureShotKind,
+        framePath: capture.framePath,
+        orientation: 'up',
+        privacy: {
+          localOnly: true,
+          longTermRawFrameStored: false,
+          offDeviceUpload: false,
+        },
+        provider,
+      }),
+    ),
+  ) as E7NativeBoundaryResult;
+
+  if (nativeResult.status === 'blocked' || !nativeResult.arFaceExport) {
+    throw new Error(nativeResult.blockedReason ?? 'native_brow_arface_missing');
+  }
+
+  return buildGeneratedBrowFromCaptureResult(nativeResult, controls);
+}
+
+/**
+ * Re-rasterize the generated brow for a NEW shape/color using a cached
+ * nativeResult (from a prior generateBrowFromCapture) — no re-capture needed.
+ */
+export function buildGeneratedBrowFromCaptureResult(
+  nativeResult: E7NativeBoundaryResult,
+  controls: GeneratedBrowControls = DEFAULT_GENERATED_BROW_CONTROLS,
+): GeneratedBrowFromCaptureResult {
+  const generatedBrowPackage = buildGeneratedBrowPackage({
+    controls,
+    nativeResult,
+  });
+
+  return {
+    browUnityApplyPayload: JSON.stringify(
+      buildGeneratedBrowMaskUnityPayload(generatedBrowPackage, controls, {
+        includeTexture: true,
+      }),
+    ),
+    generatedBrowPackage,
+    nativeResult,
   };
 }
 
