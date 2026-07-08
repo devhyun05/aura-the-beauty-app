@@ -1,6 +1,5 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState, type ElementRef} from 'react';
 import {
-  FlatList,
   Modal,
   Pressable,
   ScrollView as NativeScrollView,
@@ -83,28 +82,19 @@ export function HomeScreen({
   showBeautyJourneyGuide = false,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData | null>(null);
-  const [selectedCategory, setSelectedCategory] =
-    useState<RecommendedFilterCategoryId>('all');
   const [showScrollTopButton, setShowScrollTopButton] = useState(false);
-  const listRef = useRef<FlatList<RecommendedMakeupFilter>>(null);
+  const listRef = useRef<ElementRef<typeof NativeScrollView>>(null);
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const heroBannerWidth = width;
   const heroBannerHeight = Math.round(heroBannerWidth / HOME_HERO_BANNER_ASPECT_RATIO);
   const [recommendedMakeupFilters, setRecommendedMakeupFilters] =
     useState<readonly RecommendedMakeupFilter[]>(() => getRecommendedMakeupFilters());
-  const visibleRecommendedFilters = useMemo(
-    () => filterRecommendedMakeupFiltersByHomeCategory(
-      recommendedMakeupFilters,
-      selectedCategory,
-    ),
-    [recommendedMakeupFilters, selectedCategory],
+  const recommendedFilterPreviewItems = useMemo(
+    () => getRecommendedFilterPreviewItems(recommendedMakeupFilters),
+    [recommendedMakeupFilters],
   );
-  const recommendedFilterGridGap = spacing.md;
-  const recommendedFilterGridWidth = width - spacing.screenX * 2;
-  const recommendedFilterCardWidth = Math.floor(
-    (recommendedFilterGridWidth - recommendedFilterGridGap) / 2,
-  );
+  const recommendedFilterPreviewCardWidth = getRecommendedFilterPreviewCardWidth(width);
   const bottomPadding =
     APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md);
 
@@ -119,7 +109,7 @@ export function HomeScreen({
   };
 
   const handleScrollToTop = () => {
-    listRef.current?.scrollToOffset({animated: true, offset: 0});
+    listRef.current?.scrollTo({animated: true, y: 0});
   };
 
   const handleHeroFeaturePress = (featureId: HomeHeroFeatureId) => {
@@ -184,79 +174,53 @@ export function HomeScreen({
 
   return (
     <View style={styles.homeContainer}>
-      <FlatList
+      <NativeScrollView
         ref={listRef}
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         scrollIndicatorInsets={{bottom: 0, left: 0, right: 0, top: 0}}
-        columnWrapperStyle={[
-          styles.recommendedFilterRow,
-          {gap: recommendedFilterGridGap},
-        ]}
         contentContainerStyle={[
           styles.homeListContent,
           {paddingBottom: bottomPadding},
         ]}
-        data={visibleRecommendedFilters}
-        extraData={isMakeupFilterLiked}
-        initialNumToRender={recommendedFilterListVirtualizationConfig.initialNumToRender}
-        ItemSeparatorComponent={RecommendedFilterRowSeparator}
-        keyExtractor={filter => filter.id}
-        ListHeaderComponent={
-          <YStack style={styles.homeListHeader}>
-            <HeroBannerCarousel
-              bannerHeight={heroBannerHeight}
-              bannerWidth={heroBannerWidth}
-              fallbackImageSource={homeData.hero.imageSource}
-              onOpenFeatureMenu={onOpenFeatureMenu}
-              onPressFeature={handleHeroFeaturePress}
-              onPressFilter={onPressHeroTrendFilter}
-              topInset={insets.top}
-              trends={homeData.hero.trends}
-            />
-
-            <HomeServiceShortcutSection
-              onPressArFilter={onPressArFilter}
-              onPressFaceDiagnosis={onPressFaceDiagnosis}
-              onPressCommunity={onPressCommunity}
-              onPressConsulting={onPressConsulting}
-              onPressHalfMakeup={onPressHalfMakeup}
-              onPressMakeupExtraction={onPressMakeupExtraction}
-              onPressMakeupFeedback={onPressMakeupFeedback}
-              onPressMakeupFilter={onPressMakeupFilter}
-              onPressProductRecommendations={onPressProductRecommendations}
-              onPressRecommendedFilterMore={onPressRecommendedFilterMore}
-            />
-
-            <RecommendedFilterListHeader
-              selectedCategory={selectedCategory}
-              onPressMore={onPressRecommendedFilterMore}
-              onSelectCategory={setSelectedCategory}
-            />
-          </YStack>
-        }
-        maxToRenderPerBatch={
-          recommendedFilterListVirtualizationConfig.maxToRenderPerBatch
-        }
-        numColumns={getRecommendedFilterGridColumnCount()}
         onScroll={handleListScroll}
-        renderItem={({item}) => (
-          <RecommendedFilterCard
-            cardWidth={recommendedFilterCardWidth}
-            filter={item}
-            isLiked={Boolean(isMakeupFilterLiked?.(item.id))}
-            onPress={onPressRecommendedFilter}
-            onToggleLike={onToggleMakeupFilterLike}
-          />
-        )}
         scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        updateCellsBatchingPeriod={
-          recommendedFilterListVirtualizationConfig.updateCellsBatchingPeriod
-        }
-        windowSize={recommendedFilterListVirtualizationConfig.windowSize}
-      />
+        showsVerticalScrollIndicator={false}>
+        <YStack style={styles.homeListHeader}>
+          <HeroBannerCarousel
+            bannerHeight={heroBannerHeight}
+            bannerWidth={heroBannerWidth}
+            fallbackImageSource={homeData.hero.imageSource}
+            onOpenFeatureMenu={onOpenFeatureMenu}
+            onPressFeature={handleHeroFeaturePress}
+            onPressFilter={onPressHeroTrendFilter}
+            topInset={insets.top}
+            trends={homeData.hero.trends}
+          />
 
+          <HomeServiceShortcutSection
+            onPressArFilter={onPressArFilter}
+            onPressFaceDiagnosis={onPressFaceDiagnosis}
+            onPressCommunity={onPressCommunity}
+            onPressConsulting={onPressConsulting}
+            onPressHalfMakeup={onPressHalfMakeup}
+            onPressMakeupExtraction={onPressMakeupExtraction}
+            onPressMakeupFeedback={onPressMakeupFeedback}
+            onPressMakeupFilter={onPressMakeupFilter}
+            onPressProductRecommendations={onPressProductRecommendations}
+            onPressRecommendedFilterMore={onPressRecommendedFilterMore}
+          />
+
+          <RecommendedFilterPreviewSection
+            cardWidth={recommendedFilterPreviewCardWidth}
+            filters={recommendedFilterPreviewItems}
+            isMakeupFilterLiked={isMakeupFilterLiked}
+            onPressFilter={onPressRecommendedFilter}
+            onPressMore={onPressRecommendedFilterMore}
+            onToggleFilterLike={onToggleMakeupFilterLike}
+          />
+        </YStack>
+      </NativeScrollView>
       {showScrollTopButton ? (
         <Pressable
           accessibilityLabel="맨 위로 이동"
@@ -464,6 +428,32 @@ export const recommendedFilterListVirtualizationConfig = {
   updateCellsBatchingPeriod: 60,
   windowSize: 5,
 } as const;
+
+export const HOME_RECOMMENDED_FILTER_PREVIEW_COUNT = 5;
+export const HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID = 'filter-aura-blush-lift';
+export const HOME_RECOMMENDED_FILTER_PREVIEW_SECONDARY_ID = 'filter-wanghong-glass-pink';
+
+export function getRecommendedFilterPreviewItems(
+  filters: readonly RecommendedMakeupFilter[],
+): readonly RecommendedMakeupFilter[] {
+  const pinnedFilters = [
+    HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID,
+    HOME_RECOMMENDED_FILTER_PREVIEW_SECONDARY_ID,
+  ]
+    .map(filterId => filters.find(filter => filter.id === filterId))
+    .filter((filter): filter is RecommendedMakeupFilter => Boolean(filter));
+  const pinnedFilterIds = new Set(pinnedFilters.map(filter => filter.id));
+  const orderedFilters = [
+    ...pinnedFilters,
+    ...filters.filter(filter => !pinnedFilterIds.has(filter.id)),
+  ];
+
+  return orderedFilters.slice(0, HOME_RECOMMENDED_FILTER_PREVIEW_COUNT);
+}
+
+export function getRecommendedFilterPreviewCardWidth(screenWidth: number): number {
+  return Math.max(136, Math.min(168, Math.floor(screenWidth * 0.4)));
+}
 
 export const recommendedFilterCopyVerticalPadding = 10;
 
@@ -718,12 +708,12 @@ export const HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME = 'Compass';
 export const HOME_SERVICE_SHORTCUT_LABELS = [
   '얼굴 분석',
   '메이크업 필터',
-  '컨설팅',
-  '커뮤니티',
   '메이크업 추출',
+  '메이크업 피드백',
   '필터 스토어',
   '추천 제품',
-  '메이크업 피드백',
+  '컨설팅',
+  '커뮤니티',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
   HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
@@ -748,34 +738,26 @@ const homeServiceShortcutRows = [
       icon: (color: string) => <Camera color={color} size={iconSize.lg} strokeWidth={1.9} />,
     },
     {
-      id: 'consulting',
-      label: HOME_SERVICE_SHORTCUT_LABELS[2],
-      accessibilityLabel: '컨설팅 보기',
-      icon: (color: string) => (
-        <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
-      ),
-    },
-    {
-      id: 'community',
-      label: HOME_SERVICE_SHORTCUT_LABELS[3],
-      accessibilityLabel: '커뮤니티 보기',
-      icon: (color: string) => (
-        <CommunityFooterIcon color={color} size={iconSize.lg} strokeWidth={2.1} />
-      ),
-    },
-  ],
-  [
-    {
       id: 'makeupExtraction',
-      label: HOME_SERVICE_SHORTCUT_LABELS[4],
+      label: HOME_SERVICE_SHORTCUT_LABELS[2],
       accessibilityLabel: '메이크업 추출 시작',
       icon: (color: string) => (
         <ScanSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
+      id: 'makeupFeedback',
+      label: HOME_SERVICE_SHORTCUT_LABELS[3],
+      accessibilityLabel: '메이크업 피드백 시작',
+      icon: (color: string) => (
+        <MessageSquareText color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+  ],
+  [
+    {
       id: 'filterStore',
-      label: HOME_SERVICE_SHORTCUT_LABELS[5],
+      label: HOME_SERVICE_SHORTCUT_LABELS[4],
       accessibilityLabel: '필터 스토어 보기',
       icon: (color: string) => (
         <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
@@ -783,18 +765,26 @@ const homeServiceShortcutRows = [
     },
     {
       id: 'recommendation',
-      label: HOME_SERVICE_SHORTCUT_LABELS[6],
+      label: HOME_SERVICE_SHORTCUT_LABELS[5],
       accessibilityLabel: '추천 제품 보기',
       icon: (color: string) => (
         <PackageSearch color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
-      id: 'makeupFeedback',
-      label: HOME_SERVICE_SHORTCUT_LABELS[7],
-      accessibilityLabel: '메이크업 피드백 시작',
+      id: 'consulting',
+      label: HOME_SERVICE_SHORTCUT_LABELS[6],
+      accessibilityLabel: '컨설팅 보기',
       icon: (color: string) => (
-        <MessageSquareText color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <Compass color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+    {
+      id: 'community',
+      label: HOME_SERVICE_SHORTCUT_LABELS[7],
+      accessibilityLabel: '커뮤니티 보기',
+      icon: (color: string) => (
+        <CommunityFooterIcon color={color} size={iconSize.lg} strokeWidth={2.1} />
       ),
     },
   ],
@@ -977,6 +967,53 @@ function BeautyJourneyGuideDialog({
   );
 }
 
+function RecommendedFilterPreviewSection({
+  cardWidth,
+  filters,
+  isMakeupFilterLiked,
+  onPressFilter,
+  onPressMore,
+  onToggleFilterLike,
+}: {
+  cardWidth: number;
+  filters: readonly RecommendedMakeupFilter[];
+  isMakeupFilterLiked?: (filterId: string) => boolean;
+  onPressFilter?: (filterId: string) => void;
+  onPressMore?: () => void;
+  onToggleFilterLike?: (filterId: string) => void;
+}) {
+  if (filters.length === 0) {
+    return null;
+  }
+
+  return (
+    <YStack style={styles.section}>
+      <SectionHeader
+        actionAccessibilityLabel="추천 메이크업 필터 더보기"
+        actionLabel={recommendedFilterMoreButtonLabel}
+        description={recommendedFilterSectionDescription}
+        onPressAction={onPressMore}
+        title={recommendedFilterSectionTitle}
+      />
+
+      <NativeScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.recommendedFilterPreviewList}>
+        {filters.map(filter => (
+          <RecommendedFilterCard
+            cardWidth={cardWidth}
+            filter={filter}
+            isLiked={Boolean(isMakeupFilterLiked?.(filter.id))}
+            key={filter.id}
+            onPress={onPressFilter}
+            onToggleLike={onToggleFilterLike}
+          />
+        ))}
+      </NativeScrollView>
+    </YStack>
+  );
+}
 function RecommendedFilterListHeader({
   onPressMore,
   onSelectCategory,
@@ -1094,7 +1131,7 @@ function RecommendedFilterCard({
           pressed && styles.pressed,
         ]}>
         <Heart
-          color={colors.white}
+          color={isLiked ? colors.white : colors.textPrimary}
           fill={isLiked ? colors.white : 'transparent'}
           size={iconSize.sm}
           strokeWidth={2}
@@ -1103,7 +1140,6 @@ function RecommendedFilterCard({
     </Pressable>
   );
 }
-
 function RecommendedFilterRowSeparator() {
   return <View style={styles.recommendedFilterRowSeparator} />;
 }
@@ -1338,10 +1374,10 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   recommendedFilterCard: {
-    aspectRatio: 0.78,
+    aspectRatio: 0.82,
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
@@ -1375,24 +1411,22 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   recommendedFilterCopy: {
-    backgroundColor: 'transparent',
-    bottom: 0,
+    bottom: recommendedFilterCopyVerticalPadding,
     gap: 2,
-    left: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: recommendedFilterCopyVerticalPadding,
+    left: spacing.sm,
+    minWidth: 0,
     position: 'absolute',
-    right: 0,
+    right: spacing.sm,
     zIndex: 1,
   },
   recommendedFilterHeadline: {
     color: colors.white,
-    fontFamily: typography.fontFamily.semibold,
+    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-    textShadowColor: 'rgba(0, 0, 0, 0.58)',
+    textShadowColor: 'rgba(0, 0, 0, 0.42)',
     textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 5,
+    textShadowRadius: 4,
   },
   recommendedFilterImage: {
     height: '100%',
@@ -1400,27 +1434,34 @@ const styles = StyleSheet.create({
   },
   recommendedFilterFavoriteButton: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderColor: 'rgba(255, 255, 255, 0.86)',
     borderRadius: radius.pill,
-    height: 32,
+    borderWidth: 1,
+    height: 30,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    width: 32,
+    right: spacing.xs,
+    top: spacing.xs,
+    width: 30,
     zIndex: 2,
   },
   recommendedFilterFavoriteButtonActive: {
     backgroundColor: colors.blackSurface,
+    borderColor: colors.transparent,
+  },
+  recommendedFilterPreviewList: {
+    gap: spacing.md,
+    paddingRight: spacing.screenX,
   },
   recommendedFilterTitle: {
     color: colors.white,
-    fontFamily: typography.fontFamily.bold,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
-    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowColor: 'rgba(0, 0, 0, 0.48)',
     textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 7,
+    textShadowRadius: 5,
   },
   recommendedFilterRow: {
     justifyContent: 'space-between',
@@ -1454,7 +1495,7 @@ const styles = StyleSheet.create({
   },
   homeServiceShortcutLabel: {
     color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
+    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
     minHeight: HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
@@ -1463,6 +1504,7 @@ const styles = StyleSheet.create({
   },
   homeServiceShortcutList: {
     gap: spacing.sm,
+    marginBottom: spacing.xs,
     paddingHorizontal: spacing.screenX,
   },
   homeServiceShortcutRow: {
