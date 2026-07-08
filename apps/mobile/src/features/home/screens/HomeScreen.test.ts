@@ -7,6 +7,8 @@ import {
   createHeroCarouselLoopResetHandlers,
   getRecommendedFilterCategoryLabels,
   getRecommendedFilterGridColumnCount,
+  getRecommendedFilterPreviewCardWidth,
+  getRecommendedFilterPreviewItems,
   getIsHomeScrollTopButtonVisible,
   getRecommendedFilterAccessibilityLabel,
   getRecommendedFilterRouteParams,
@@ -22,6 +24,9 @@ import {
   heroTrendTitleMainTextStyle,
   heroTrendTitleReadableTextStyle,
   HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME,
+  HOME_RECOMMENDED_FILTER_PREVIEW_COUNT,
+  HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID,
+  HOME_RECOMMENDED_FILTER_PREVIEW_SECONDARY_ID,
   HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME,
   HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
   HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES,
@@ -82,26 +87,29 @@ const redRecommendedFilters = filterRecommendedMakeupFiltersByHomeCategory(
   recommendedFilters,
   'red',
 );
+const previewRecommendedFilters = getRecommendedFilterPreviewItems(recommendedFilters);
 const homeServiceShortcutLabels = getHomeServiceShortcutLabels();
 const expectedHomeServiceShortcutLabels: readonly [
   '얼굴 분석',
   '메이크업 필터',
-  '컨설팅',
-  '커뮤니티',
   '메이크업 추출',
+  '메이크업 피드백',
   '필터 스토어',
   '추천 제품',
-  '메이크업 피드백',
+  '컨설팅',
+  '커뮤니티',
 ] = HOME_SERVICE_SHORTCUT_LABELS;
 const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
-  '얼굴 분석,메이크업 필터,컨설팅,커뮤니티';
+  '얼굴 분석,메이크업 필터,메이크업 추출,메이크업 피드백';
 const expectedHomeServiceShortcutSecondRowLabels =
-  '메이크업 추출,필터 스토어,추천 제품,메이크업 피드백';
+  '필터 스토어,추천 제품,컨설팅,커뮤니티';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
   getRecommendedFilterGridColumnCount();
+const expectedRecommendedFilterPreviewCount: 5 = HOME_RECOMMENDED_FILTER_PREVIEW_COUNT;
+const expectedRecommendedFilterPreviewCardWidth = 156;
 const expectedInitialRecommendedFiltersToRender: 6 =
   recommendedFilterListVirtualizationConfig.initialNumToRender;
 const expectedRecommendedFilterRenderBatchSize: 4 =
@@ -260,6 +268,26 @@ expectEqual(
   getRecommendedFilterGridColumnCount(),
   expectedRecommendedFilterGridColumnCount,
   'recommended filter grid column count',
+);
+expectEqual(
+  previewRecommendedFilters.length,
+  expectedRecommendedFilterPreviewCount,
+  'recommended filter preview count',
+);
+expectEqual(
+  previewRecommendedFilters[0]?.id,
+  HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID,
+  'recommended filter preview starts with aura blush',
+);
+expectEqual(
+  previewRecommendedFilters[1]?.id,
+  HOME_RECOMMENDED_FILTER_PREVIEW_SECONDARY_ID,
+  'recommended filter preview second item is wanghong red glass',
+);
+expectEqual(
+  getRecommendedFilterPreviewCardWidth(390),
+  expectedRecommendedFilterPreviewCardWidth,
+  'recommended filter preview card width',
 );
 expectEqual(
   recommendedFilterListVirtualizationConfig.initialNumToRender,

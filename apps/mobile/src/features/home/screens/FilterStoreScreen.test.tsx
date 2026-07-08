@@ -54,8 +54,8 @@ expectEqual(
 );
 expectEqual(
   FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT,
-  76,
-  'filter store card image overlay has reduced top padding',
+  0,
+  'filter store card image overlay is disabled',
 );
 expectEqual(allFilters.length, 20, 'filter store all category count');
 expectEqual(wanghongFilterCategory, 'red', 'filter store category for Wanghong trend filter');

@@ -45,7 +45,7 @@ export const FILTER_STORE_CATEGORY_LIST_SCROLL_AXIS = 'horizontal';
 export const FILTER_STORE_CATEGORY_LIST_ALLOWS_WRAP = false;
 export const FILTER_STORE_CATEGORY_CHIP_HEIGHT = 34;
 export const FILTER_STORE_CATEGORY_TEXT_NUMBER_OF_LINES = 1;
-export const FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT = 76;
+export const FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT = 0;
 
 function isFilterStoreCategoryId(categoryId: string): categoryId is FilterStoreCategoryId {
   return filterStoreCategoryIds.includes(categoryId as FilterStoreCategoryId);
@@ -223,13 +223,12 @@ function FilterStoreGridCard({
 
   return (
     <Pressable
-      accessibilityLabel={`${filter.headline} ${filter.displayTitle}, ${filter.matchScore}퍼센트 추천`}
+      accessibilityLabel={`${filter.headline} ${filter.displayTitle}`}
       accessibilityRole="button"
       onPress={() => onApplyFilter?.(filter.id)}
       style={({pressed}) => [styles.card, {width}, pressed && styles.pressed]}>
       <View style={styles.imageArea}>
         <Image resizeMode="cover" source={filter.imageSource} style={styles.image} />
-        <View style={styles.imageScrim} />
         <YStack style={styles.imageCopy}>
           <Text numberOfLines={1} style={styles.imageHeadline}>
             {filter.headline}
@@ -238,9 +237,6 @@ function FilterStoreGridCard({
             {filter.displayTitle}
           </Text>
         </YStack>
-        <XStack style={styles.matchBadge}>
-          <Text style={styles.matchBadgeText}>{filter.matchScore}% match</Text>
-        </XStack>
         <Pressable
           accessibilityLabel={`${filter.displayTitle} 좋아요 ${isLiked ? '해제' : '추가'}`}
           accessibilityRole="button"
@@ -251,7 +247,7 @@ function FilterStoreGridCard({
             pressed && styles.pressed,
           ]}>
           <Heart
-            color={colors.white}
+            color={isLiked ? colors.white : colors.textPrimary}
             fill={isLiked ? colors.white : 'transparent'}
             size={iconSize.sm}
             strokeWidth={2}
@@ -319,8 +315,10 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderColor: 'rgba(255, 255, 255, 0.86)',
     borderRadius: radius.pill,
+    borderWidth: 1,
     height: 32,
     justifyContent: 'center',
     position: 'absolute',
@@ -359,23 +357,21 @@ const styles = StyleSheet.create({
   },
   imageHeadline: {
     color: colors.white,
-    fontFamily: typography.fontFamily.semibold,
+    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  imageScrim: {
-    backgroundColor: 'rgba(0, 0, 0, 0.42)',
-    bottom: 0,
-    height: FILTER_STORE_CARD_IMAGE_OVERLAY_HEIGHT,
-    left: 0,
-    position: 'absolute',
-    right: 0,
+    textShadowColor: 'rgba(0, 0, 0, 0.42)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 4,
   },
   imageTitle: {
     color: colors.white,
-    fontFamily: typography.fontFamily.bold,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+    textShadowColor: 'rgba(0, 0, 0, 0.48)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 5,
   },
   keywordChip: {
     backgroundColor: colors.surfaceMuted,
@@ -393,23 +389,6 @@ const styles = StyleSheet.create({
   keywordList: {
     flexDirection: 'row',
     gap: spacing.xs,
-  },
-  matchBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.blackSurface,
-    borderRadius: radius.pill,
-    left: spacing.sm,
-    minHeight: 28,
-    paddingHorizontal: spacing.sm,
-    position: 'absolute',
-    top: spacing.sm,
-    zIndex: 1,
-  },
-  matchBadgeText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
   },
   pressed: {
     opacity: 0.78,
