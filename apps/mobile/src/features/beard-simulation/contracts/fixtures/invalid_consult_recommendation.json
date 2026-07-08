@@ -1,0 +1,9 @@
+{
+  "kind": "consultQuestions",
+  "expectValid": false,
+  "expectErrorContains": "recommendation",
+  "payload": [
+    "젠틀맥스 프로 레이저를 추천드립니다.",
+    "이 시술은 효과가 확실합니다."
+  ]
+}

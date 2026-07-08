@@ -13,6 +13,7 @@
     "mobile:test:generated-brow": "npm --prefix apps/mobile run test:generated-brow",
     "mobile:test:face-ratio-distortion": "npm --prefix apps/mobile run test:face-ratio-distortion",
     "mobile:test:unity-bridge": "npm --prefix apps/mobile run test:unity-bridge",
+    "mobile:test:beard-simulation": "node scripts/mobile/run-beard-simulation-contract.mjs",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {

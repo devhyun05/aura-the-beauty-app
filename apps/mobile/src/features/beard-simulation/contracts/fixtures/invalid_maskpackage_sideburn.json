@@ -1,0 +1,23 @@
+{
+  "kind": "maskPackage",
+  "expectValid": false,
+  "expectErrorContains": "sideburn",
+  "payload": {
+    "imageWidth": 1024,
+    "imageHeight": 1365,
+    "encoding": "png-gray8",
+    "masks": {
+      "hardHair": "runs/fixture/mask_hard_hair.png",
+      "beardShadow": "runs/fixture/mask_beard_shadow.png",
+      "protect": "runs/fixture/mask_protect.png",
+      "softBlend": "runs/fixture/mask_soft_blend.png"
+    },
+    "regions": ["mustache", "chin", "sideburn"],
+    "regionCoverage": {"mustache": 0.4},
+    "stats": {
+      "hardHairMean": 0.2,
+      "beardShadowMean": 0.3,
+      "protectOverlapRatio": 0.11
+    }
+  }
+}

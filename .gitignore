@@ -65,3 +65,11 @@ tmp-debug/
 # Unity XR simulation temp artifacts
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
+
+# Beard simulation lab — real face photos and run artifacts must never be committed
+tools/beard-simulation-lab/samples/
+tools/beard-simulation-lab/outputs/
+tools/beard-simulation-lab/.venv/
+tools/beard-simulation-lab/external/
+tools/beard-simulation-lab/.hf-cache/
+tools/beard-simulation-lab/.mplconfig/

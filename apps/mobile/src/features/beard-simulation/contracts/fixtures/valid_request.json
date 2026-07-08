@@ -1,0 +1,17 @@
+{
+  "kind": "request",
+  "expectValid": true,
+  "payload": {
+    "requestId": "req-fixture-001",
+    "photoRef": "photos/fixture-001.jpg",
+    "survey": {
+      "shavingState": "stubble",
+      "goal": "shadow_reduction",
+      "concernRegions": ["mustache", "chin"],
+      "shavingFrequencyPerWeek": 7,
+      "makeupCoverUsed": false,
+      "consultPlanned": true
+    },
+    "stages": ["mild", "medium", "strong"]
+  }
+}

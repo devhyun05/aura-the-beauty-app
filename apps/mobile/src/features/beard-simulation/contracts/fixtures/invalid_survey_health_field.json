@@ -1,0 +1,19 @@
+{
+  "kind": "request",
+  "expectValid": false,
+  "expectErrorContains": "health",
+  "payload": {
+    "requestId": "req-fixture-002",
+    "photoRef": "photos/fixture-002.jpg",
+    "survey": {
+      "shavingState": "short",
+      "goal": "density_reduction",
+      "concernRegions": ["jaw"],
+      "shavingFrequencyPerWeek": 3,
+      "makeupCoverUsed": true,
+      "consultPlanned": false,
+      "skinIrritationFrequency": "often"
+    },
+    "stages": ["medium"]
+  }
+}

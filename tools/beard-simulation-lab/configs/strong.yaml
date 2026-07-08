@@ -1,0 +1,11 @@
+# "많이 줄어든 느낌" — strong shadow removal + residual-dot inpaint.
+# Deliberately below 1.0: a perfectly clean result reads as "just shaved",
+# not "hair removed" — some residual texture is the product goal.
+stage: strong
+shadow_strength: 0.85
+hair_attenuation: 0.85
+stubble_inpaint: true
+feather_ratio: 0.04
+global_strength: 1.0
+guard:
+  identity_check: warn

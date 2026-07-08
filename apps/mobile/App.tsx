@@ -1,4 +1,5 @@
 import {AppRoot} from './src/app/AppRoot';
+import {BeardSimulationLabApp} from './src/app/experiments/BeardSimulationLabApp';
 import {FaceCaptureLabApp} from './src/app/experiments/FaceCaptureLabApp';
 import {PersonalColorLabApp} from './src/app/experiments/PersonalColorLabApp';
 import {PersonalColorRepeatabilityLabApp} from './src/app/experiments/PersonalColorRepeatabilityLabApp';
@@ -14,6 +15,9 @@ function selectApp() {
   }
   if (experimentApp === 'personal-color-repeatability-lab') {
     return PersonalColorRepeatabilityLabApp;
+  }
+  if (experimentApp === 'beard-simulation-lab') {
+    return BeardSimulationLabApp;
   }
   return AppRoot;
 }
