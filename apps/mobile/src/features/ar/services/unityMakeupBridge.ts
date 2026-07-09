@@ -1250,6 +1250,174 @@ export function addUnityMakeupEventListener(
   });
 }
 
+// ── 퍼스널 컬러 정지영상 랜드마크 (homuler 일원화, Track 1) ──────────────────
+// CocoaPods MediaPipe 제거(Unity homuler와 중복 크래시) 이후, 퍼스널 컬러
+// 정지영상 분석은 랜드마크를 Unity homuler(IMAGE 모드)에서 받아온다.
+// RN→Unity: postMessage('NativeBridge','OnMessageFromRN', {type:'analyzePersonalColorStill', ...})
+// Unity→RN: UnityMakeupEvent 의 message = {type:'personalColorLandmarks', requestId, ...}
+export const PERSONAL_COLOR_STILL_REQUEST_TYPE = 'analyzePersonalColorStill';
+export const PERSONAL_COLOR_LANDMARKS_EVENT_TYPE = 'personalColorLandmarks';
+
+export type PersonalColorLandmarkPoint = {
+  i: number;
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type PersonalColorLandmarksStatus = 'ok' | 'no_face' | 'error';
+
+export type PersonalColorLandmarksResult = {
+  status: PersonalColorLandmarksStatus;
+  requestId: string;
+  faceCount: number;
+  imageWidth: number;
+  imageHeight: number;
+  landmarks: PersonalColorLandmarkPoint[];
+  pose: {pitchDeg: number; yawDeg: number; rollDeg: number} | null;
+  error?: string;
+};
+
+let personalColorRequestCounter = 0;
+
+export function createPersonalColorRequestId(): string {
+  personalColorRequestCounter += 1;
+  return `pc-${Date.now().toString(36)}-${personalColorRequestCounter.toString(36)}`;
+}
+
+// 순수 함수: Unity 로 보낼 요청 JSON 문자열을 만든다(유닛테스트 대상).
+export function buildAnalyzePersonalColorStillRequest(
+  imagePath: string,
+  requestId: string,
+  maxFaces = 1,
+): string {
+  return JSON.stringify({
+    type: PERSONAL_COLOR_STILL_REQUEST_TYPE,
+    requestId,
+    imagePath,
+    maxFaces,
+  });
+}
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+// 순수 함수: Unity 이벤트 message(JSON 문자열)를 파싱한다(유닛테스트 대상).
+// personalColorLandmarks 이벤트가 아니거나 형식이 깨지면 null(무시).
+export function parsePersonalColorLandmarksMessage(
+  rawMessage: string | undefined,
+): PersonalColorLandmarksResult | null {
+  if (typeof rawMessage !== 'string' || rawMessage.length === 0) {
+    return null;
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawMessage) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  if (
+    !parsed ||
+    parsed.type !== PERSONAL_COLOR_LANDMARKS_EVENT_TYPE ||
+    typeof parsed.requestId !== 'string'
+  ) {
+    return null;
+  }
+
+  const status: PersonalColorLandmarksStatus =
+    parsed.status === 'ok' || parsed.status === 'no_face'
+      ? parsed.status
+      : 'error';
+
+  const rawLandmarks = Array.isArray(parsed.landmarks) ? parsed.landmarks : [];
+  const landmarks: PersonalColorLandmarkPoint[] = rawLandmarks
+    .map((point, index) => {
+      const p = (point ?? {}) as Record<string, unknown>;
+      return {
+        i: toFiniteNumber(p.i, index),
+        x: toFiniteNumber(p.x, NaN),
+        y: toFiniteNumber(p.y, NaN),
+        z: toFiniteNumber(p.z, 0),
+      };
+    })
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  const rawPose = (parsed.pose ?? null) as Record<string, unknown> | null;
+  const pose = rawPose
+    ? {
+        pitchDeg: toFiniteNumber(rawPose.pitchDeg, 0),
+        yawDeg: toFiniteNumber(rawPose.yawDeg, 0),
+        rollDeg: toFiniteNumber(rawPose.rollDeg, 0),
+      }
+    : null;
+
+  return {
+    status,
+    requestId: parsed.requestId,
+    faceCount: toFiniteNumber(parsed.faceCount, landmarks.length > 0 ? 1 : 0),
+    imageWidth: toFiniteNumber(parsed.imageWidth, 0),
+    imageHeight: toFiniteNumber(parsed.imageHeight, 0),
+    landmarks,
+    pose,
+    error: typeof parsed.error === 'string' ? parsed.error : undefined,
+  };
+}
+
+// Unity homuler(IMAGE 모드)에 정지영상 랜드마크 검출을 요청하고 응답을 기다린다.
+// 브릿지 미탑재/타임아웃은 reject → 호출측(personalColorService)이 null 로 격리한다.
+export function requestPersonalColorLandmarks(
+  imagePath: string,
+  options: {timeoutMs?: number; maxFaces?: number} = {},
+): Promise<PersonalColorLandmarksResult> {
+  const {timeoutMs = 8000, maxFaces = 1} = options;
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (!nativeBridge?.postMessage) {
+    return Promise.reject(new Error('unity_makeup_bridge_unavailable'));
+  }
+
+  // 가드 직후 좁혀진 postMessage 를 캡처(옵셔널 narrowing 은 Promise 클로저로
+  // 이어지지 않는다). RN 네이티브 모듈 메서드는 this 에 의존하지 않는다.
+  const postMessage = nativeBridge.postMessage;
+  const requestId = createPersonalColorRequestId();
+
+  return new Promise<PersonalColorLandmarksResult>((resolve, reject) => {
+    let settled = false;
+    let subscription: {remove: () => void} | null = null;
+
+    const finish = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      subscription?.remove();
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      finish(() => reject(new Error('personal_color_landmarks_timeout')));
+    }, timeoutMs);
+
+    subscription = addUnityMakeupEventListener(event => {
+      const parsed = parsePersonalColorLandmarksMessage(event.message);
+      if (!parsed || parsed.requestId !== requestId) {
+        return;
+      }
+      finish(() => resolve(parsed));
+    });
+
+    postMessage(
+      'NativeBridge',
+      'OnMessageFromRN',
+      buildAnalyzePersonalColorStillRequest(imagePath, requestId, maxFaces),
+    );
+  });
+}
+
 function clearScheduledNativePost(retryKey: string) {
   const scheduledPost = scheduledNativePosts.get(retryKey);
 
