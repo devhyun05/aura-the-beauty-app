@@ -37,6 +37,12 @@
           "photosPermission": "AURA 사진 업로드와 분석 기능을 위해 사진 보관함 접근 권한이 필요합니다."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "AURA가 현재 위치 주변의 네이버 뷰티샵을 보여주기 위해 위치 접근 권한이 필요합니다."
+        }
+      ],
       "expo-web-browser",
       "expo-secure-store",
       [

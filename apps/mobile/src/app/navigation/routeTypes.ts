@@ -57,7 +57,7 @@ export type RootStackParamList = {
   ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
   ConsultingExpertProfile: {expertId: string};
   ConsultingBooking: {expertId: string; durationId: string; bookingId?: string};
-  ConsultingPayment: {draft: ConsultingBookingDraft};
+  ConsultingRequestConfirm: {draft: ConsultingBookingDraft};
   ConsultingBookingComplete: {
     bookingId: string;
     draft: ConsultingBookingDraft;
@@ -66,7 +66,10 @@ export type RootStackParamList = {
   ConsultingCall: {bookingId?: string; expertId: string; durationId: string};
   ConsultingSummary: {expertId: string; recordId?: string};
   ConsultingHistory: undefined;
+  ConsultingMessages: undefined;
+  ConsultingNotifications: undefined;
   ConsultingConversation: {recordId: string; expertId: string};
+  ConsultingLocalPlaces: undefined;
   ConsultingMembership: undefined;
   ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: undefined;
@@ -148,12 +151,15 @@ export const rootStackRoutes = [
   'ConsultingExpertList',
   'ConsultingExpertProfile',
   'ConsultingBooking',
-  'ConsultingPayment',
+  'ConsultingRequestConfirm',
   'ConsultingBookingComplete',
   'ConsultingCall',
   'ConsultingSummary',
   'ConsultingHistory',
+  'ConsultingMessages',
+  'ConsultingNotifications',
   'ConsultingConversation',
+  'ConsultingLocalPlaces',
   'ConsultingMembership',
   'ConsultingReview',
   'MakeupLookList',

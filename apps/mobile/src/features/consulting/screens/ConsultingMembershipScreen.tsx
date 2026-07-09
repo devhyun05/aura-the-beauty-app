@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from 'react';
+import {useState, type ReactNode} from 'react';
 import {Pressable, StyleSheet, View as RNView} from 'react-native';
 import {BadgePercent, CalendarHeart, Check, Crown, Sparkles} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -14,11 +14,7 @@ import {
   ConsultingBottomBar,
   PrimaryButton,
 } from '../components/consultingComponents';
-import {
-  consultingMembershipPlans,
-  formatConsultingPrice,
-} from '../mocks/consulting.mock';
-import {getConsultingMembershipPlans} from '../services/consultingService';
+import {consultingMembershipPlans} from '../mocks/consulting.mock';
 import type {ConsultingMembershipPlan} from '../types';
 
 type ConsultingMembershipScreenProps = {
@@ -28,22 +24,7 @@ type ConsultingMembershipScreenProps = {
 export function ConsultingMembershipScreen({
   onSubscribe,
 }: ConsultingMembershipScreenProps) {
-  const [plans, setPlans] =
-    useState<readonly ConsultingMembershipPlan[]>(consultingMembershipPlans);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    getConsultingMembershipPlans().then(data => {
-      if (isMounted && data.length > 0) {
-        setPlans(data);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const plans: readonly ConsultingMembershipPlan[] = consultingMembershipPlans;
 
   const defaultPlan = plans.find(plan => plan.highlight) ?? plans[0];
   const [selectedPlanId, setSelectedPlanId] = useState(defaultPlan.id);
@@ -57,25 +38,24 @@ export function ConsultingMembershipScreen({
           <RNView style={styles.heroIcon}>
             <Crown color={consultingColors.goldText} size={22} />
           </RNView>
-          <Text style={styles.heroTitle}>AURA 멤버십</Text>
+          <Text style={styles.heroTitle}>멤버십 준비 중</Text>
           <Text style={styles.heroSubtitle}>
-            매달 나를 돌보는 가장 확실한 방법.{'\n'}상시 할인과 정기 체크인으로
-            뷰티 루틴을 완성하세요.
+            사업자 등록과 결제 정책을 준비한 뒤 다시 열 예정이에요.{'\n'}현재 MVP에서는 예약 신청만 운영합니다.
           </Text>
         </View>
 
         <View style={styles.benefitRow}>
           <BenefitCell
             icon={<BadgePercent color={consultingColors.goldText} size={17} />}
-            label="상담 상시 할인"
+            label="혜택 검토"
           />
           <BenefitCell
             icon={<CalendarHeart color={consultingColors.goldText} size={17} />}
-            label="월 정기 체크인"
+            label="정기 체크인"
           />
           <BenefitCell
             icon={<Sparkles color={consultingColors.goldText} size={17} />}
-            label="샘플 · 리포트"
+            label="리포트 연계"
           />
         </View>
 
@@ -91,14 +71,13 @@ export function ConsultingMembershipScreen({
         </View>
 
         <Text style={styles.footnote}>
-          첫 달은 언제든 전액 환불할 수 있어요. 결제일 기준 매월 자동 갱신되며,
-          해지는 마이페이지에서 바로 가능해요.
+          결제, 자동 갱신, 할인 혜택은 이번 MVP에 포함하지 않아요.
         </Text>
       </ConsultingScreenScaffold>
 
       <ConsultingBottomBar>
         <PrimaryButton
-          label={`월 ${formatConsultingPrice(selectedPlan.pricePerMonth)}로 시작하기`}
+          label="준비 중"
           onPress={() => onSubscribe(selectedPlan.id)}
         />
       </ConsultingBottomBar>
@@ -149,13 +128,8 @@ function PlanCard({
           </Text>
         </RNView>
         <RNView style={styles.planPriceGroup}>
-          {plan.originalPricePerMonth ? (
-            <Text style={styles.planOriginalPrice}>
-              {formatConsultingPrice(plan.originalPricePerMonth)}
-            </Text>
-          ) : null}
           <Text style={styles.planPrice}>
-            월 {formatConsultingPrice(plan.pricePerMonth)}
+            출시 검토 중
           </Text>
         </RNView>
       </RNView>

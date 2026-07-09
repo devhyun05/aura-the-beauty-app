@@ -56,13 +56,13 @@ export function ConsultingSummaryScreen({
           <Text style={styles.subtitle}>
             {summary
               ? `${expert.name} · ${summary.durationLabel} · ${summary.dateLabel}`
-              : `${expert.name} 상담 요약은 전문가가 저장하면 표시돼요.`}
+              : `${expert.name} 상담 AI 요약이 준비되면 표시돼요.`}
           </Text>
         </View>
 
         {summary ? (
           <View style={styles.noteCard}>
-            <Text style={styles.noteCardLabel}>전문가 요약 노트</Text>
+            <Text style={styles.noteCardLabel}>AI 상담 요약</Text>
             <View style={styles.noteList}>
               {summary.notes.map(note => (
                 <RNView key={note.id} style={styles.noteRow}>
@@ -78,7 +78,7 @@ export function ConsultingSummaryScreen({
           <View style={styles.noteCard}>
             <Text style={styles.noteCardLabel}>요약 준비 중</Text>
             <Text style={styles.noteBody}>
-              상담사가 요약 노트와 추천 제품을 저장하면 이 화면에 바로 반영돼요.
+              화상 상담이 완료되고 AI 요약이 생성되면 이 화면에 바로 반영돼요.
             </Text>
           </View>
         )}

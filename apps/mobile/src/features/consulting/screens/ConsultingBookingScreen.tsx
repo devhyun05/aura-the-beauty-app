@@ -34,6 +34,7 @@ import type {
   ConsultingBookingDay,
   ConsultingBookingDraft,
   ConsultingExpert,
+  ConsultingPreferredContactMethod,
   ConsultingRecord,
   ConsultingTimeSlot,
 } from '../types';
@@ -64,11 +65,19 @@ const slotPeriodLabels: Record<SlotPeriodId, string> = {
   evening: '저녁',
 };
 const bookingNoticeItems = [
-  '상담 시작 24시간 전까지 앱에서 무료 취소할 수 있어요.',
-  '24시간 이내 취소는 결제 금액의 50%가 환불돼요.',
-  '상담 시작 후 취소 또는 노쇼는 환불이 어려워요.',
-  '예약 시간에는 상담사가 먼저 연락을 시작해요.',
+  '예약 신청 후 운영팀이 프리랜서 일정과 가능 여부를 확인해요.',
+  '확정 전까지는 앱에서 신청 내용을 수정하거나 취소할 수 있어요.',
+  '확정 안내는 문자 또는 전화로만 보내드려요.',
+  '앱 안에서는 결제하지 않으며, 비용 정산은 연결된 프리랜서와 직접 진행해요.',
+  '프리랜서가 외부 정산과 일정을 확인한 뒤 웹에서 예약 확정을 눌러요.',
 ] as const;
+const contactMethods: readonly {
+  id: ConsultingPreferredContactMethod;
+  label: string;
+}[] = [
+  {id: 'sms', label: '문자'},
+  {id: 'call', label: '전화'},
+];
 
 export function ConsultingBookingScreen({
   expert,
@@ -94,6 +103,12 @@ export function ConsultingBookingScreen({
     [],
   );
   const [question, setQuestion] = useState('');
+  const [contactName, setContactName] = useState(initialRecord?.contactName ?? '');
+  const [contactPhone, setContactPhone] = useState(initialRecord?.contactPhone ?? '');
+  const [preferredContactMethod, setPreferredContactMethod] =
+    useState<ConsultingPreferredContactMethod>(
+      initialRecord?.preferredContactMethod ?? 'sms',
+    );
   const initialSharedReportKey = initialRecord?.sharedReportIds?.join('|') ?? '';
 
   useEffect(() => {
@@ -161,6 +176,16 @@ export function ConsultingBookingScreen({
   }, [selectedDayId]);
 
   useEffect(() => {
+    if (!initialRecord) {
+      return;
+    }
+
+    setContactName(initialRecord.contactName ?? '');
+    setContactPhone(initialRecord.contactPhone ?? '');
+    setPreferredContactMethod(initialRecord.preferredContactMethod ?? 'sms');
+  }, [initialRecord]);
+
+  useEffect(() => {
     let isMounted = true;
 
     setReportsLoading(true);
@@ -217,10 +242,15 @@ export function ConsultingBookingScreen({
     [selectedDay],
   );
 
-  const canProceed = Boolean(selectedDay && selectedSlotId);
+  const canProceed = Boolean(
+    selectedDay &&
+      selectedSlotId &&
+      contactName.trim() &&
+      contactPhone.trim(),
+  );
   const shareReports = selectedReportIds.length > 0;
   const primaryLabel =
-    mode === 'edit' ? (submitting ? '수정 중' : '예약 수정') : '다음';
+    mode === 'edit' ? (submitting ? '수정 중' : '신청 수정') : '신청 내용 확인';
 
   const handleMonthStep = (offset: -1 | 1) => {
     if (activeMonthIndex < 0) {
@@ -269,6 +299,9 @@ export function ConsultingBookingScreen({
       shareReports,
       sharedReportIds: selectedReportIds,
       question: question.trim(),
+      contactName: contactName.trim(),
+      contactPhone: contactPhone.trim(),
+      preferredContactMethod,
     });
   };
 
@@ -277,10 +310,10 @@ export function ConsultingBookingScreen({
       <ConsultingScreenScaffold bottomPadding={spacing.md}>
         <View style={styles.section}>
           <RNView style={styles.sectionHeader}>
-            <ConsultingSectionTitle>날짜 선택</ConsultingSectionTitle>
+          <ConsultingSectionTitle>희망 날짜 선택</ConsultingSectionTitle>
             {activeMonthId ? (
               <Text style={styles.availableLabel}>
-                가능한 날짜만 선택할 수 있어요
+                신청 가능한 날짜만 선택할 수 있어요
               </Text>
             ) : null}
           </RNView>
@@ -390,7 +423,7 @@ export function ConsultingBookingScreen({
         </View>
 
         <View style={styles.section}>
-          <ConsultingSectionTitle>시간 선택</ConsultingSectionTitle>
+          <ConsultingSectionTitle>희망 시간 선택</ConsultingSectionTitle>
           {selectedDay ? (
             <View style={styles.timePanel}>
               <RNView style={styles.selectedDateRow}>
@@ -504,10 +537,41 @@ export function ConsultingBookingScreen({
           />
         </View>
 
+        <View style={styles.section}>
+          <ConsultingSectionTitle>확정 안내 연락처</ConsultingSectionTitle>
+          <View style={styles.contactCard}>
+            <TextInput
+              onChangeText={setContactName}
+              placeholder="이름"
+              placeholderTextColor={consultingColors.textSoft}
+              style={styles.contactInput}
+              value={contactName}
+            />
+            <TextInput
+              keyboardType="phone-pad"
+              onChangeText={setContactPhone}
+              placeholder="휴대폰 번호"
+              placeholderTextColor={consultingColors.textSoft}
+              style={styles.contactInput}
+              value={contactPhone}
+            />
+            <View style={styles.contactMethodRow}>
+              {contactMethods.map(method => (
+                <ConsultingChip
+                  key={method.id}
+                  label={method.label}
+                  onPress={() => setPreferredContactMethod(method.id)}
+                  selected={preferredContactMethod === method.id}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+
         <View style={styles.noticeCard}>
           <RNView style={styles.noticeHeader}>
             <AlertCircle color={consultingColors.roseStrong} size={18} />
-            <Text style={styles.noticeTitle}>예약 전 확인사항</Text>
+            <Text style={styles.noticeTitle}>신청 전 확인사항</Text>
           </RNView>
           <View style={styles.noticeList}>
             {bookingNoticeItems.map(item => (
@@ -820,6 +884,29 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
+  },
+  contactCard: {
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: 14,
+  },
+  contactInput: {
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.card,
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    minHeight: 44,
+    paddingHorizontal: 13,
+  },
+  contactMethodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingTop: 4,
   },
   noticeBullet: {
     backgroundColor: consultingColors.roseStrong,

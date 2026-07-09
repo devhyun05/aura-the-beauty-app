@@ -47,9 +47,9 @@ export function ConsultingBookingCompleteScreen({
           <RNView style={styles.checkCircle}>
             <Check color={consultingColors.roseText} size={26} />
           </RNView>
-          <Text style={styles.title}>예약이 완료됐어요</Text>
+          <Text style={styles.title}>예약 신청이 접수됐어요</Text>
           <Text style={styles.subtitle}>
-            예약 시간에 상담사가 먼저 전화를 걸면 연결할 수 있어요.
+            운영팀이 프리랜서 일정을 확인한 뒤 문자 또는 전화로 안내드려요.
           </Text>
         </View>
 
@@ -65,15 +65,15 @@ export function ConsultingBookingCompleteScreen({
 
         <View style={styles.infoCard}>
           <Bell color={consultingColors.roseStrong} size={17} />
-          <Text style={styles.infoText}>
-            예약 내역은 마이페이지 &gt; 내 상담에서 다시 볼 수 있어요.
+            <Text style={styles.infoText}>
+            신청 내역은 마이페이지 &gt; 내 상담에서 다시 볼 수 있어요.
           </Text>
         </View>
 
         <View style={styles.infoCard}>
           <Video color={consultingColors.roseStrong} size={17} />
           <Text style={styles.infoText}>
-            화상 연결은 상담사가 먼저 시작하며, 앱에서 바로 대기 화면으로 들어갈 수 있어요.
+            앱에서는 결제하지 않아요. 프리랜서와 직접 정산과 일정을 맞춘 뒤 확정되면 대화방과 통화가 열려요.
           </Text>
         </View>
 

@@ -225,6 +225,121 @@ POST_SCHEMA_MIGRATIONS = {
     alter table media_assets add column if not exists thumbnail_width integer;
     alter table media_assets add column if not exists thumbnail_height integer;
   """,
+  "schema.sql:consulting-messages-v1": """
+    create table if not exists consulting_messages (
+      id uuid primary key default gen_random_uuid(),
+      booking_id uuid not null,
+      client_message_id text not null,
+      sender_type text not null,
+      sender_user_id uuid,
+      sender_name text not null default '',
+      body text not null default '',
+      created_at timestamptz not null default now(),
+      deleted_at timestamptz,
+      constraint uq_consulting_messages_booking_sender_client unique (booking_id, sender_type, client_message_id),
+      constraint chk_consulting_messages_sender_type check (sender_type in ('user', 'expert', 'operator', 'system')),
+      constraint chk_consulting_messages_body_length check (char_length(body) <= 1000)
+    );
+
+    create table if not exists consulting_message_media (
+      id uuid primary key default gen_random_uuid(),
+      message_id uuid not null,
+      media_id uuid not null,
+      sort_order integer not null,
+      created_at timestamptz not null default now(),
+      constraint uq_consulting_message_media_message_media unique (message_id, media_id),
+      constraint uq_consulting_message_media_message_sort unique (message_id, sort_order),
+      constraint chk_consulting_message_media_sort_order check (sort_order between 0 and 9)
+    );
+
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_messages_booking') then
+      alter table consulting_messages add constraint fk_consulting_messages_booking foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+    end if; end $migration$;
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_messages_sender_user') then
+      alter table consulting_messages add constraint fk_consulting_messages_sender_user foreign key (sender_user_id) references users(id) on delete set null;
+    end if; end $migration$;
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_message_media_message') then
+      alter table consulting_message_media add constraint fk_consulting_message_media_message foreign key (message_id) references consulting_messages(id) on delete cascade;
+    end if; end $migration$;
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_message_media_media') then
+      alter table consulting_message_media add constraint fk_consulting_message_media_media foreign key (media_id) references media_assets(id) on delete restrict;
+    end if; end $migration$;
+
+    create index if not exists idx_consulting_messages_booking_created on consulting_messages (booking_id, created_at desc)
+      where deleted_at is null;
+    create index if not exists idx_consulting_message_media_message_order on consulting_message_media (message_id, sort_order);
+  """,
+  "schema.sql:consulting-partner-accounts-v1": """
+    create extension if not exists pgcrypto;
+    create extension if not exists citext;
+
+    create table if not exists consulting_partner_accounts (
+      id uuid primary key default gen_random_uuid(),
+      expert_id text not null,
+      email citext not null unique,
+      password_hash text not null,
+      password_salt text not null,
+      role text not null default 'expert',
+      workspace_scope text not null default 'expert_personal',
+      status text not null default 'active',
+      password_change_required boolean not null default false,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_consulting_partner_accounts_role check (role in ('expert', 'business_manager', 'operator')),
+      constraint chk_consulting_partner_accounts_scope check (workspace_scope in ('expert_personal', 'business_operations')),
+      constraint chk_consulting_partner_accounts_status check (status in ('invited', 'active', 'suspended'))
+    );
+
+    create table if not exists consulting_partner_sessions (
+      token_hash text primary key,
+      account_id uuid not null,
+      expires_at timestamptz not null,
+      created_at timestamptz not null default now(),
+      last_seen_at timestamptz
+    );
+
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_accounts_expert') then
+      alter table consulting_partner_accounts add constraint fk_consulting_partner_accounts_expert foreign key (expert_id) references consulting_experts(id) on delete cascade;
+    end if; end $migration$;
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_sessions_account') then
+      alter table consulting_partner_sessions add constraint fk_consulting_partner_sessions_account foreign key (account_id) references consulting_partner_accounts(id) on delete cascade;
+    end if; end $migration$;
+
+    create index if not exists idx_consulting_partner_accounts_expert on consulting_partner_accounts (expert_id);
+    create index if not exists idx_consulting_partner_sessions_account_expires on consulting_partner_sessions (account_id, expires_at);
+  """,
+  "schema.sql:consulting-request-flow-v1": """
+    alter table consulting_bookings add column if not exists contact_name text;
+    alter table consulting_bookings add column if not exists contact_phone text;
+    alter table consulting_bookings add column if not exists preferred_contact_method text;
+    alter table consulting_bookings add column if not exists operator_note text;
+    alter table consulting_bookings add column if not exists confirmed_at timestamptz;
+    alter table consulting_bookings add column if not exists expert_read_at timestamptz;
+
+    update consulting_bookings
+    set status = 'confirmed',
+        confirmed_at = coalesce(confirmed_at, created_at)
+    where status = 'upcoming';
+
+    alter table consulting_bookings alter column status set default 'requested';
+    alter table consulting_bookings
+      drop constraint if exists chk_consulting_bookings_status,
+      add constraint chk_consulting_bookings_status
+      check (status in ('requested', 'contacting', 'confirmed', 'unavailable', 'completed', 'canceled'));
+
+    alter table consulting_bookings
+      drop constraint if exists ex_consulting_bookings_expert_upcoming_time,
+      add constraint ex_consulting_bookings_expert_upcoming_time
+      exclude using gist (
+        expert_id with =,
+        scheduled_date with =,
+        int4range(slot_start_minutes, slot_start_minutes + coalesce(duration_minutes, 30), '[)') with &&
+      )
+      where (status in ('contacting', 'confirmed') and scheduled_date is not null and slot_start_minutes is not null);
+  """,
+  "schema.sql:consulting-chat-read-state-v1": """
+    alter table consulting_bookings add column if not exists expert_read_at timestamptz;
+  """,
   "schema.sql:community-bedrock-embeddings-v2": """
     create extension if not exists vector;
     alter table community_threads add column if not exists embedding vector(1024);

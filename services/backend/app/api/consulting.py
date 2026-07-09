@@ -4,14 +4,14 @@ from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.db.session import Database, require_database
 from app.schemas.consulting import (
+  AdminBookingStatusUpdate,
   AdminBookingSummaryUpsert,
   AdminExpertCreate,
   BookingCreate,
-  MembershipSubscribe,
-  PaymentCreate,
   ReviewCreate,
 )
-from app.services import consulting
+from app.core.settings import Settings, get_settings
+from app.services import consulting, consulting_places
 from app.services.users import ensure_user
 
 
@@ -70,11 +70,26 @@ async def get_consulting_expert_slots(
   return success({"days": await consulting.get_expert_slots(db, expert_id, duration_id)})
 
 
-@router.get("/membership/plans")
-async def get_consulting_membership_plans(
-  db: Database = Depends(require_database),
+@router.get("/local-places")
+async def search_consulting_local_places(
+  category: str = Query(default="hair"),
+  region: str | None = Query(default=None),
+  query: str | None = Query(default=None),
+  latitude: float | None = Query(default=None),
+  longitude: float | None = Query(default=None),
+  limit: int = Query(default=15, ge=1, le=20),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
-  return success({"plans": await consulting.list_membership_plans(db)})
+  result = await consulting_places.search_local_places(
+    settings,
+    category=category,
+    region=region,
+    query=query,
+    latitude=latitude,
+    longitude=longitude,
+    limit=limit,
+  )
+  return success(result)
 
 
 # -----------------------------------------------------------------------------
@@ -194,6 +209,17 @@ async def complete_consulting_admin_booking(
   return success({"record": await consulting.complete_booking(db, booking_id)})
 
 
+@router.patch("/admin/bookings/{booking_id}/status")
+async def update_consulting_admin_booking_status(
+  booking_id: str,
+  payload: AdminBookingStatusUpdate,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  await ensure_user(db, auth)
+  return success({"record": await consulting.update_booking_status(db, booking_id, payload)})
+
+
 @router.put("/admin/bookings/{booking_id}/summary")
 async def upsert_consulting_admin_booking_summary(
   booking_id: str,
@@ -203,35 +229,3 @@ async def upsert_consulting_admin_booking_summary(
 ) -> dict:
   await ensure_user(db, auth)
   return success({"record": await consulting.upsert_booking_summary(db, booking_id, payload)})
-
-
-# -----------------------------------------------------------------------------
-# Membership & payments
-# -----------------------------------------------------------------------------
-@router.get("/membership/me")
-async def get_consulting_membership_me(
-  auth: AuthContext = Depends(get_current_user),
-  db: Database = Depends(require_database),
-) -> dict:
-  user = await ensure_user(db, auth)
-  return success({"membership": await consulting.get_my_membership(db, user["id"])})
-
-
-@router.post("/membership/subscribe")
-async def subscribe_consulting_membership(
-  payload: MembershipSubscribe,
-  auth: AuthContext = Depends(get_current_user),
-  db: Database = Depends(require_database),
-) -> dict:
-  user = await ensure_user(db, auth)
-  return success({"membership": await consulting.subscribe_membership(db, user["id"], payload)})
-
-
-@router.post("/payments")
-async def create_consulting_payment(
-  payload: PaymentCreate,
-  auth: AuthContext = Depends(get_current_user),
-  db: Database = Depends(require_database),
-) -> dict:
-  user = await ensure_user(db, auth)
-  return success({"payment": await consulting.create_payment(db, user["id"], payload)})

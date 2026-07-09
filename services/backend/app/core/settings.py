@@ -6,7 +6,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-REPO_ROOT = BACKEND_ROOT.parents[1]
+
+
+def _resolve_repo_root(backend_root: Path) -> Path:
+  for candidate in (backend_root, *backend_root.parents):
+    if (candidate / "docs" / "backend" / "schema.sql").exists():
+      return candidate
+
+    if (candidate / "services" / "backend" / "app").exists():
+      return candidate
+
+  return backend_root
+
+
+REPO_ROOT = _resolve_repo_root(BACKEND_ROOT)
 ENV_FILES = (REPO_ROOT / ".env", BACKEND_ROOT / ".env")
 
 
