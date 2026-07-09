@@ -11,6 +11,7 @@ export { HeartButton } from './HeartButton';
 export { LoaderDots } from './LoaderDots';
 export { PaletteSwatches } from './PaletteSwatches';
 export { PersistentOrb, ORB_BY_PHASE } from './PersistentOrb';
+export { OrbGLCanvas } from './OrbGLCanvas';
 export { ORB_ANIM, NOISE, BLOB_VERT, BLOB_FRAG } from './orbShaders';
 export { ProductThumb } from './ProductThumb';
 export { StatusBarRow } from './StatusBarRow';
