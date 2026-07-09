@@ -11,6 +11,8 @@ import type {
   VerticalThirdsRatio,
 } from '../types';
 import {analyzeFacePhoto} from './faceRatioAnalyzerNative';
+import type {FaceRatioLandmarkInput} from './faceRatioAnalyzerNative';
+import {requestFaceLandmarks} from '../../ar/services/unityMakeupBridge';
 import {
   getFaceVerticalThirdsResultJsonUri,
   saveHairlineDebugArtifacts,
@@ -374,12 +376,38 @@ export async function analyzeFaceVerticalThirds(
         input.semanticMattes.requested
       : true;
 
+    // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 퍼스널 컬러와 동일한
+    // 요청을 공유한다. 미탑재/타임아웃/미검출은 undefined 로 넘겨 네이티브가 얼굴
+    // 미검출로 처리 → createFailedResult 경로로 흡수된다(업로드/원격 호출 없음).
+    let landmarks: FaceRatioLandmarkInput | undefined;
+    try {
+      const detected = await requestFaceLandmarks(input.imageUri);
+      await logEvent(logger, 'landmarks:done', {
+        source: 'unity-homuler',
+        status: detected.status,
+        count: detected.landmarks.length,
+      });
+      if (detected.status === 'ok' && detected.landmarks.length > 0) {
+        landmarks = {
+          points: detected.landmarks,
+          imageWidth: detected.imageWidth,
+          imageHeight: detected.imageHeight,
+          pose: detected.pose,
+        };
+      }
+    } catch (error) {
+      await logEvent(logger, 'landmarks:error', {
+        message: getErrorMessage(error),
+      });
+    }
+
     nativeResult = await analyzeFacePhoto(input.imageUri, {
       hairline: {
         debugArtifacts: input.debugArtifacts,
         enabled: shouldAnalyzeHairline,
         tuning: HAIRLINE_TUNING,
       },
+      landmarks,
     });
   } catch (error) {
     return createFailedResult({

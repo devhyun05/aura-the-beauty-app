@@ -3,7 +3,7 @@
 
 import { analyzePersonalColorPhoto } from './personalColorAnalyzerNative';
 import type { PersonalColorLandmarkInput } from './personalColorAnalyzerNative';
-import { requestPersonalColorLandmarks } from '../../ar/services/unityMakeupBridge';
+import { requestFaceLandmarks } from '../../ar/services/unityMakeupBridge';
 import { saveSourceImage, writeResultJson } from './personalColorArtifacts';
 import { analyzePersonalColor } from './personalColorCore/engine';
 import { evaluatePersonalColorQuality } from './personalColorQualityGate';
@@ -44,7 +44,7 @@ export async function analyzePersonalColorCapture(
   // null 로 격리 → 네이티브가 얼굴 미검출로 처리(로컬 전용 유지, 업로드/원격 호출 없음).
   let landmarks: PersonalColorLandmarkInput | undefined;
   try {
-    const detected = await requestPersonalColorLandmarks(input.imageUri);
+    const detected = await requestFaceLandmarks(input.imageUri);
     logger.log('landmarks:done', {
       source: 'unity-homuler',
       status: detected.status,

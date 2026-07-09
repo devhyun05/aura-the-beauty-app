@@ -1,14 +1,14 @@
 import {
-  PERSONAL_COLOR_LANDMARKS_EVENT_TYPE,
-  PERSONAL_COLOR_STILL_REQUEST_TYPE,
+  FACE_LANDMARKS_EVENT_TYPE,
+  FACE_LANDMARKS_STILL_REQUEST_TYPE,
   UNITY_MAKEUP_BRIDGE_TARGET,
   UNITY_MAKEUP_LAYER_ORDER,
-  buildAnalyzePersonalColorStillRequest,
+  buildAnalyzeFaceLandmarksStillRequest,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
   getUnityGeneratedMaskBridgeRoute,
   getUnityMakeupLayerRegionsForMakeupArea,
-  parsePersonalColorLandmarksMessage,
+  parseFaceLandmarksMessage,
 } from './unityMakeupBridge';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
 
@@ -137,16 +137,16 @@ expectEqual(
 
 // ── 퍼스널 컬러 정지영상 랜드마크 요청/응답 (homuler Track 1) ────────────────
 const stillRequest = JSON.parse(
-  buildAnalyzePersonalColorStillRequest('file:///tmp/capture.jpg', 'pc-abc', 1),
+  buildAnalyzeFaceLandmarksStillRequest('file:///tmp/capture.jpg', 'pc-abc', 1),
 );
-expectEqual(stillRequest.type, PERSONAL_COLOR_STILL_REQUEST_TYPE, 'still request type');
+expectEqual(stillRequest.type, FACE_LANDMARKS_STILL_REQUEST_TYPE, 'still request type');
 expectEqual(stillRequest.requestId, 'pc-abc', 'still request id');
 expectEqual(stillRequest.imagePath, 'file:///tmp/capture.jpg', 'still request imagePath');
 expectEqual(stillRequest.maxFaces, 1, 'still request maxFaces');
 
-const okLandmarks = parsePersonalColorLandmarksMessage(
+const okLandmarks = parseFaceLandmarksMessage(
   JSON.stringify({
-    type: PERSONAL_COLOR_LANDMARKS_EVENT_TYPE,
+    type: FACE_LANDMARKS_EVENT_TYPE,
     requestId: 'pc-abc',
     status: 'ok',
     faceCount: 1,
@@ -169,31 +169,31 @@ expectEqual(okLandmarks?.landmarks[0].x, 0.5, 'landmarks first x');
 expectEqual(okLandmarks?.pose?.pitchDeg, 1.2, 'landmarks pose pitch');
 
 // 다른 이벤트 타입(예: photoCaptured)은 무시(null)
-const otherEvent = parsePersonalColorLandmarksMessage(
+const otherEvent = parseFaceLandmarksMessage(
   JSON.stringify({type: 'photoCaptured', path: 'file:///tmp/x.jpg'}),
 );
 expectEqual(otherEvent, null, 'non personal-color event ignored');
 
 // 형식 깨진 JSON 은 null
 expectEqual(
-  parsePersonalColorLandmarksMessage('{not-json'),
+  parseFaceLandmarksMessage('{not-json'),
   null,
   'malformed message ignored',
 );
 
 // requestId 없는 랜드마크 이벤트는 null(상관 불가)
 expectEqual(
-  parsePersonalColorLandmarksMessage(
-    JSON.stringify({type: PERSONAL_COLOR_LANDMARKS_EVENT_TYPE, status: 'ok'}),
+  parseFaceLandmarksMessage(
+    JSON.stringify({type: FACE_LANDMARKS_EVENT_TYPE, status: 'ok'}),
   ),
   null,
   'landmarks without requestId ignored',
 );
 
 // no_face 응답도 정상 파싱(호출측이 insufficient 처리)
-const noFace = parsePersonalColorLandmarksMessage(
+const noFace = parseFaceLandmarksMessage(
   JSON.stringify({
-    type: PERSONAL_COLOR_LANDMARKS_EVENT_TYPE,
+    type: FACE_LANDMARKS_EVENT_TYPE,
     requestId: 'pc-def',
     status: 'no_face',
     faceCount: 0,
