@@ -180,19 +180,29 @@ def _component_filter(
     return confidence * np.clip(keep, 0, 1), kept, total, boundary_dropped
 
 
-def _region_prior(crop: LowerFaceCrop) -> np.ndarray:
+def _weighted_region_prior(crop: LowerFaceCrop, weights: dict[str, float]) -> np.ndarray:
     prior = np.zeros_like(crop.roi_mask, dtype=np.float32)
-    weights = {
-        "mustache": 1.0,
-        "chin": 0.88,
-        "mouth_side": 0.55,
-        "jaw": 0.52,
-    }
     for name, weight in weights.items():
         mask = crop.region_masks.get(name)
         if mask is not None:
             prior = np.maximum(prior, mask.astype(np.float32) * weight)
     return np.clip(prior, 0, 1)
+
+
+def _region_prior(crop: LowerFaceCrop) -> np.ndarray:
+    # Hair prior: strands concentrate on mustache/chin.
+    return _weighted_region_prior(crop, {
+        "mustache": 1.0, "chin": 0.88, "mouth_side": 0.55, "jaw": 0.52,
+    })
+
+
+def _shadow_region_prior(crop: LowerFaceCrop) -> np.ndarray:
+    # Shadow prior (task B): five-o'clock shadow lives on chin/jaw, so raise
+    # those for recall, but keep mouth_side LOW — it is the lip-adjacent band
+    # and inflating it bleeds shadow into the protect zone (preProtect breach).
+    return _weighted_region_prior(crop, {
+        "mustache": 0.8, "chin": 0.95, "mouth_side": 0.35, "jaw": 0.9,
+    })
 
 
 def segment_beard(
@@ -256,8 +266,8 @@ def segment_beard(
     delta_b = delta[..., 2]
     local_dist = np.sqrt(
         (delta_l / 10.0) ** 2 + (delta_a / 8.0) ** 2 + (delta_b / 9.0) ** 2)
-    local_dist_score = _smoothstep(shadow_d0 * 0.55, shadow_d1 * 0.62, local_dist)
-    darker = _smoothstep(1.0, 16.0, delta_l)
+    local_dist_score = _smoothstep(shadow_d0 * 0.42, shadow_d1 * 0.62, local_dist)
+    darker = _smoothstep(0.5, 16.0, delta_l)
     blue_shift = _smoothstep(1.5, 14.0, delta_b)
     red_loss = _smoothstep(1.0, 9.0, delta_a)
     ref_chroma = np.sqrt((local_ref[..., 1] - 128.0) ** 2 + (local_ref[..., 2] - 128.0) ** 2)
@@ -268,9 +278,17 @@ def segment_beard(
         0,
         1,
     )
+    # Recall tuning (task B): distance-from-skin and darkness both measure the
+    # same "shadow" signal; a triple product double-penalizes faint shadow and
+    # tanks recall. Combine them by max (either suffices) and keep blue_gray as
+    # the multiplicative specificity gate so non-beard faces stay dark.
+    intensity = np.maximum(local_dist_score, darker)
     low_freq = cv2.GaussianBlur(
-        local_dist_score * darker * blue_gray, (0, 0), sigmaX=max(2.0, fw / 55))
-    shadow = low_freq * np.clip(0.2 + 0.8 * prior, 0, 1)
+        intensity * blue_gray, (0, 0), sigmaX=max(2.0, fw / 55))
+    # Recall tuning (task B): use a shadow-specific region prior that raises
+    # chin/jaw (where five-o'clock shadow lives) without inflating the
+    # lip-adjacent mouth_side band (which would breach the protect zone).
+    shadow = low_freq * _shadow_region_prior(crop)
 
     # Optional dense-beard prior (spike C2): coarse heatmap multiplied in.
     if clipseg_prior is not None:
