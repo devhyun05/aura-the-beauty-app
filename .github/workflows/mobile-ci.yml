@@ -3,25 +3,55 @@ name: Mobile CI
 # dev/main 으로 가는 PR 에서 모바일 앱의 타입·컨트랙트 회귀를 머지 전에 잡는다.
 # 도입 배경: 컨트랙트 테스트가 로컬 전용이라 PR #224(020cb33) 같은 회귀가
 # 머지 시점에 걸러지지 않았다. 전부 node 전용(시뮬레이터/기기 불필요)이라 빠르다.
+#
+# Required status check 안전 설계: 트리거에 paths 필터를 쓰면 모바일을 안 건드린
+# PR 에서 워크플로가 아예 생성되지 않아, Required 지정 시 그 PR 이 영원히
+# "Expected" 로 막힌다. 대신 항상 트리거하고 changes 잡이 변경을 감지해 무관 PR
+# 에선 본 잡을 skip 한다 — GitHub 은 skip 된 잡을 Required 통과로 취급한다.
 
 on:
   pull_request:
     branches:
       - dev
       - main
-    paths:
-      - "apps/mobile/**"
-      - "scripts/mobile/**"
-      - ".github/workflows/mobile-ci.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      mobile: ${{ steps.filter.outputs.changed }}
+    steps:
+      - name: Detect mobile-related changes
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -z "${PR_NUMBER}" ]; then
+            # workflow_dispatch 등 PR 컨텍스트 밖에서는 전체 실행
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
+            --paginate --jq '.[].filename')
+          if echo "$files" | grep -qE '^(apps/mobile/|scripts/mobile/|\.github/workflows/mobile-ci\.yml)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "모바일 관련 변경 없음 — 본 잡은 skip 되며 Required 체크는 통과 처리된다."
+          fi
+
   typecheck-and-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
 
     defaults:
       run:
