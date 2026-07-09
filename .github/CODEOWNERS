@@ -1,0 +1,34 @@
+# 영역별 코드 오너 — 해당 경로를 건드리는 PR은 오너 리뷰가 자동 요청된다.
+# (dev 브랜치 보호에서 "Require review from Code Owners"를 켜면 승인 없이 머지 불가)
+#
+# 도입 배경: PR #224(020cb33)가 AR 통합과 함께 다른 오너 영역 4곳을 한 번에
+# 수정(MediaPipe pod 제거로 퍼스널컬러·얼굴비율 분석기 사망, 아우라딘 유리
+# 표면·GL 오브 스텁화)했으나 해당 영역 오너 리뷰 없이 머지돼 dev 가 깨졌다.
+# 오너 지정은 각 경로의 지배적 커밋 저자 기준.
+
+# ── 기본값: 리포 오너 ─────────────────────────────────────────────
+*                                                   @devhyun05
+
+# ── 모바일 기능 영역 ─────────────────────────────────────────────
+/apps/mobile/src/features/recommendation/            @nicewei77-lang @cloud-9-git
+/apps/mobile/src/features/personal-color/            @nicewei77-lang
+/apps/mobile/src/features/face-ratio/                @nicewei77-lang
+/apps/mobile/src/features/face-analysis/             @nicewei77-lang
+/apps/mobile/src/features/face-capture/              @cloud-9-git @nicewei77-lang
+/apps/mobile/src/features/ar/                        @devhyun05 @nicewei77-lang
+/apps/mobile/src/features/home/                      @cloud-9-git @leejunhee8235
+/apps/mobile/src/features/community/                 @leejunhee8235
+/apps/mobile/src/features/consulting/                @Y-duchi
+
+# ── iOS 네이티브 ────────────────────────────────────────────────
+# 카메라·분석기 네이티브는 AR 브릿지와 한 폴더를 공유하므로 두 오너 공동.
+/apps/mobile/ios/AURA/                               @devhyun05 @nicewei77-lang
+/apps/mobile/ios/Podfile                             @devhyun05 @nicewei77-lang
+/apps/mobile/ios/Podfile.lock                        @devhyun05 @nicewei77-lang
+
+# ── Unity ───────────────────────────────────────────────────────
+/apps/unity/                                         @devhyun05 @Y-duchi
+/apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/  @devhyun05 @nicewei77-lang
+
+# ── CI / 인프라 ─────────────────────────────────────────────────
+/.github/                                            @devhyun05
