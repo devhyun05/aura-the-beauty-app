@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { Animated, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import {LinearGradient} from './LinearGradientFallback';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import {
   color,
