@@ -77,8 +77,12 @@ def evaluate_pair(name: str, img_path: Path, mask_path: Path) -> dict | None:
     # `keep` is the DETECTION scope: what the segmenter is allowed to look at.
     # Stage 1 split this from the correction-side protect mask, so it follows
     # detect_protect_mask (blend still clamps the output with protect_mask).
-    keep = _restore(
-        crop.roi_mask * (1 - crop.detect_protect_mask), crop.bbox, shape) > 0.5
+    # Fall back to protect_mask so this script can also score a pre-Stage-1
+    # engine checked out from git, which is how the baseline is regenerated.
+    detect_protect = getattr(crop, "detect_protect_mask", None)
+    if detect_protect is None:
+        detect_protect = crop.protect_mask
+    keep = _restore(crop.roi_mask * (1 - detect_protect), crop.bbox, shape) > 0.5
     bands = build_bands(shape, det.landmarks, det.face_width, det.face_height)
 
     m = segment_beard(crop, skin)
@@ -94,7 +98,11 @@ def evaluate_pair(name: str, img_path: Path, mask_path: Path) -> dict | None:
         thr = OP[pname]
         entry: dict = {"thr": thr, "sweep": {}, "scopes": {}}
         for t in SWEEP:
-            entry["sweep"][f"{t}"] = _score((conf > t) & keep, gt & keep)
+            # Full GT as the denominator, never `gt & keep`. Stage 1 changed the
+            # keep mask itself, so scoring against gt & keep silently moves the
+            # goalposts and makes two plumbing versions incomparable: a stingier
+            # keep flatters its own recall by deleting the ground truth it missed.
+            entry["sweep"][f"{t}"] = _score((conf > t) & keep, gt)
 
         scopes = {"keep": (conf > thr) & keep}
         if pname != "c1":
