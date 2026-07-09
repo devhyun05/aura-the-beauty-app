@@ -40,8 +40,11 @@ export async function analyzePersonalColorCapture(
     logger.log('artifact:source_failed', { message: String(error) });
   }
 
-  // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 미탑재/타임아웃/미검출은
-  // null 로 격리 → 네이티브가 얼굴 미검출로 처리(로컬 전용 유지, 업로드/원격 호출 없음).
+  // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 미탑재/타임아웃/에러는
+  // undefined 로 격리 → 네이티브가 unsupported 로 처리(로컬 전용, 업로드 없음).
+  // no_face 는 빈 points 로 그대로 전달한다 — 네이티브가 no_face 를 방출해야
+  // quality gate 가 '재촬영' 신호(no_face)와 '기능 불가'(native_unsupported)를
+  // 구분할 수 있다.
   let landmarks: PersonalColorLandmarkInput | undefined;
   try {
     const detected = await requestFaceLandmarks(input.imageUri);
@@ -49,8 +52,9 @@ export async function analyzePersonalColorCapture(
       source: 'unity-homuler',
       status: detected.status,
       count: detected.landmarks.length,
+      error: detected.error ?? null,
     });
-    if (detected.status === 'ok' && detected.landmarks.length > 0) {
+    if (detected.status === 'ok' || detected.status === 'no_face') {
       landmarks = {
         points: detected.landmarks,
         imageWidth: detected.imageWidth,

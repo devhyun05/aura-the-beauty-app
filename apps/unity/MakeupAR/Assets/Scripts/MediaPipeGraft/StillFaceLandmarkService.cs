@@ -77,6 +77,8 @@ namespace ARMakeup.Face
         {
             public string requestId;
             public string imagePath;
+            // 예약: 현재 landmarker 는 numFaces:1 로 1회 생성되어 이 값을 읽지 않는다.
+            // 다중 얼굴이 필요해지면 값 변화 시 landmarker 재생성으로 연결할 것.
             public int maxFaces = 1;
         }
 
@@ -144,7 +146,17 @@ namespace ARMakeup.Face
                     yield break;
                 }
 
-                Analyze(request);
+                // 디코드/베이크/Image 생성 중 어떤 예외(대형 이미지 OOM 등)가 나도
+                // 응답 없이 죽지 않는다 — 무응답이면 RN 이 타임아웃까지 기다린다.
+                try
+                {
+                    Analyze(request);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("[StillFaceLandmarks] analyze exception: " + e.Message);
+                    SendFailure(request.requestId, "error", "analyze_exception");
+                }
 #else
                 // homuler 패키지 미설치 빌드: 즉시 실패를 알려 RN 타임아웃을 피한다.
                 SendFailure(request.requestId, "error", "mediapipe_package_unavailable");

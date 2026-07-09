@@ -376,9 +376,13 @@ export async function analyzeFaceVerticalThirds(
         input.semanticMattes.requested
       : true;
 
-    // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 퍼스널 컬러와 동일한
-    // 요청을 공유한다. 미탑재/타임아웃/미검출은 undefined 로 넘겨 네이티브가 얼굴
-    // 미검출로 처리 → createFailedResult 경로로 흡수된다(업로드/원격 호출 없음).
+    // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 퍼스널 컬러와 같은
+    // 캡처면 브릿지가 요청을 dedup 해 하나의 Unity 검출을 공유한다.
+    // 미탑재/타임아웃/에러는 undefined 로 넘겨 네이티브가 unsupported 로 처리
+    // → createFailedResult 경로로 흡수된다(업로드/원격 호출 없음).
+    // no_face 는 빈 points 로 그대로 전달한다 — 네이티브가 실제 이미지 크기와 함께
+    // no_face 를 방출해야 quality gate 의 face_not_detected(재촬영 신호)와
+    // sourceImage 크기가 보존된다.
     let landmarks: FaceRatioLandmarkInput | undefined;
     try {
       const detected = await requestFaceLandmarks(input.imageUri);
@@ -386,8 +390,9 @@ export async function analyzeFaceVerticalThirds(
         source: 'unity-homuler',
         status: detected.status,
         count: detected.landmarks.length,
+        error: detected.error ?? null,
       });
-      if (detected.status === 'ok' && detected.landmarks.length > 0) {
+      if (detected.status === 'ok' || detected.status === 'no_face') {
         landmarks = {
           points: detected.landmarks,
           imageWidth: detected.imageWidth,

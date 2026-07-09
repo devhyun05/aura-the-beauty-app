@@ -352,6 +352,25 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
     payload[@"landmarkCount"] =
         @([jsPoints isKindOfClass:[NSArray class]] ? jsPoints.count : 0);
 
+    // 랜드마크 정규화 좌표는 이 uprightImage(EXIF 적용) 기준이어야 한다.
+    // Unity 가 다른 방향으로 디코드했다면 종횡비가 어긋난다 — 조용히 틀린
+    // 키포인트/비율을 내느니 계측 가능한 플래그를 남긴다(퍼스널 컬러의
+    // landmark_frame_mismatch 경고와 대칭). 미러(EXIF 2/4/5/7) 불일치는
+    // 종횡비로는 탐지할 수 없으므로 실기기 검증 항목으로 남는다.
+    double jsW = [landmarkInput[@"imageWidth"] doubleValue];
+    double jsH = [landmarkInput[@"imageHeight"] doubleValue];
+    double nativeW = uprightImage.size.width;
+    double nativeH = uprightImage.size.height;
+    if (jsW > 0.0 && jsH > 0.0 && nativeW > 0.0 && nativeH > 0.0) {
+      double jsAspect = jsW / jsH;
+      double nativeAspect = nativeW / nativeH;
+      if (fabs(jsAspect - nativeAspect) > 0.02 * nativeAspect) {
+        payload[@"landmarkFrameMismatch"] = @YES;
+        NSLog(@"[aura:face-ratio] landmark frame mismatch js=%.0fx%.0f native=%.0fx%.0f",
+              jsW, jsH, nativeW, nativeH);
+      }
+    }
+
     NSDictionary *idx9 =
         AURAFaceRatioPoint(AURAFaceRatioLandmarkAtIndex(faceLandmarks, 9));
     NSDictionary *idx10 =

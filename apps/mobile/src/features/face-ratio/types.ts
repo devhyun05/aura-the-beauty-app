@@ -189,6 +189,9 @@ export type NativeFaceRatioAnalyzeResult = {
   imageWidth?: number;
   keypoints?: Partial<Record<NativeFaceRatioKeypointKey, NativeFaceRatioPoint>>;
   landmarkCount?: number;
+  // homuler(JS) 랜드마크 프레임과 네이티브 upright 이미지의 종횡비 불일치 플래그.
+  // true 면 키포인트/비율이 어긋난 프레임에서 계산됐을 수 있다(계측·디버깅용).
+  landmarkFrameMismatch?: boolean;
   matte?: NativeFaceRatioMatteInfo;
   pose?: NativeFaceRatioPose;
   status: 'ok' | 'no_face' | 'unsupported';
