@@ -321,14 +321,6 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '상담 대화',
   },
-  ConsultingLocalPlaces: {
-    category: 'list',
-    contextLabel: 'CONSULTING',
-    depth: 'sub',
-    kind: 'detail',
-    statusBarStyle: 'dark',
-    title: '근처 업체',
-  },
   ConsultingMembership: {
     category: 'detail-report',
     contextLabel: 'CONSULTING',

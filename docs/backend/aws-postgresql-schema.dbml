@@ -712,6 +712,7 @@ Table consulting_bookings {
   contact_name text
   contact_phone text
   preferred_contact_method text
+  session_mode text [not null, default: 'online', note: 'online | offline']
   operator_note text
   confirmed_at timestamptz
   expert_read_at timestamptz

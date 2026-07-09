@@ -8,7 +8,6 @@ import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {
   consultingCategories,
   consultingExperts,
-  consultingLocalPlaces,
   consultingRecords,
   findConsultingExpertOrFirst,
 } from '../mocks/consulting.mock';
@@ -19,10 +18,9 @@ import type {
   ConsultingDurationOption,
   ConsultingExpert,
   ConsultingExpertReview,
-  ConsultingLocalPlace,
-  ConsultingLocalPlaceCategoryId,
   ConsultingRecord,
   ConsultingReviewDraft,
+  ConsultingSessionMode,
   ConsultingSummary,
 } from '../types';
 
@@ -48,12 +46,40 @@ function logFallback(scope: string, error: unknown): void {
 // frontend types; these guard against missing/partial fields and fall back to
 // the mock so the UI never renders undefined.
 // ---------------------------------------------------------------------------
+function normalizeSessionMode(value: unknown): ConsultingSessionMode {
+  return value === 'offline' ? 'offline' : 'online';
+}
+
+function roundConsultingPrice(price: number): number {
+  return Math.round(price / 1000) * 1000;
+}
+
+function getDefaultOfflineConsultingPrice(onlinePrice: number): number {
+  const offlinePrices: Record<number, number> = {
+    49000: 79000,
+    59000: 89000,
+    89000: 129000,
+    99000: 139000,
+    109000: 149000,
+  };
+  return offlinePrices[onlinePrice] ?? roundConsultingPrice(onlinePrice * 1.45);
+}
+
 function coerceDuration(raw: any, index: number): ConsultingDurationOption {
+  const onlinePrice = Number(raw?.prices?.online ?? raw?.onlinePrice ?? raw?.price ?? 0);
+  const offlinePrice = Number(
+    raw?.prices?.offline ?? raw?.offlinePrice ?? getDefaultOfflineConsultingPrice(onlinePrice),
+  );
+
   return {
     id: String(raw?.id ?? `d${index}`),
     label: String(raw?.label ?? ''),
     minutes: Number(raw?.minutes ?? 0),
-    price: Number(raw?.price ?? 0),
+    price: onlinePrice,
+    prices: {
+      online: onlinePrice,
+      offline: offlinePrice,
+    },
     description: String(raw?.description ?? ''),
     recommended: Boolean(raw?.recommended),
   };
@@ -101,6 +127,13 @@ function coerceRecord(raw: any): ConsultingRecord {
       : raw?.preferredContactMethod === 'sms'
         ? 'sms'
         : null;
+  const rawSessionMode = raw?.sessionMode ?? raw?.session_mode;
+  const sessionMode = rawSessionMode == null
+    ? null
+    : normalizeSessionMode(rawSessionMode);
+  const estimatedPrice = Number(
+    raw?.estimatedPrice ?? raw?.estimated_price ?? raw?.price,
+  );
 
   return {
     id: String(raw?.id ?? ''),
@@ -112,12 +145,25 @@ function coerceRecord(raw: any): ConsultingRecord {
     categoryLabel: String(raw?.categoryLabel ?? ''),
     dateLabel: String(raw?.dateLabel ?? ''),
     durationLabel: String(raw?.durationLabel ?? ''),
+    sessionMode,
+    estimatedPrice: Number.isFinite(estimatedPrice) ? estimatedPrice : null,
     sharedReportIds: arr<string>(raw?.sharedReportIds, []),
     reviewId: raw?.reviewId ? String(raw.reviewId) : null,
     summary: raw?.summary ? (raw.summary as ConsultingSummary) : undefined,
     contactName: raw?.contactName ? String(raw.contactName) : null,
     contactPhone: raw?.contactPhone ? String(raw.contactPhone) : null,
     preferredContactMethod,
+  };
+}
+
+function withDraftReservationDetails(
+  record: ConsultingRecord,
+  draft: ConsultingBookingDraft,
+): ConsultingRecord {
+  return {
+    ...record,
+    estimatedPrice: record.estimatedPrice ?? draft.estimatedPrice,
+    sessionMode: record.sessionMode ?? draft.sessionMode,
   };
 }
 
@@ -206,44 +252,6 @@ function filterBookingsByStatus(
   }
 
   return records.filter(record => record.status === status);
-}
-
-function fallbackLocalPlaces({
-  category,
-  region,
-  limit,
-}: {
-  category: ConsultingLocalPlaceCategoryId;
-  region?: string;
-  limit: number;
-}): readonly ConsultingLocalPlace[] {
-  const normalizedRegion = region?.trim();
-  const categoryLabel =
-      category === 'personalColor'
-        ? '퍼스널컬러'
-        : category === 'makeup'
-          ? '메이크업'
-          : category === 'fashion'
-            ? '패션'
-            : '헤어';
-  const categoryPlaces = consultingLocalPlaces.filter(place =>
-    place.categoryLabel.includes(categoryLabel),
-  );
-
-  if (!normalizedRegion) {
-    return (categoryPlaces.length > 0 ? categoryPlaces : consultingLocalPlaces).slice(
-      0,
-      limit,
-    );
-  }
-
-  const regionPlaces = categoryPlaces.filter(place =>
-    `${place.address} ${place.roadAddress} ${place.name}`.includes(
-      normalizedRegion,
-    ),
-  );
-
-  return (regionPlaces.length > 0 ? regionPlaces : categoryPlaces).slice(0, limit);
 }
 
 function upsertCachedBooking(record: ConsultingRecord): void {
@@ -453,54 +461,6 @@ export async function getConsultingShareableReports(): Promise<
   }
 }
 
-export async function getConsultingLocalPlaces({
-  category,
-  region,
-  query,
-  latitude,
-  longitude,
-  limit = 15,
-}: {
-  category: ConsultingLocalPlaceCategoryId;
-  region?: string;
-  query?: string;
-  latitude?: number;
-  longitude?: number;
-  limit?: number;
-}): Promise<readonly ConsultingLocalPlace[]> {
-  if (!hasBackend()) {
-    return fallbackLocalPlaces({category, region, limit});
-  }
-
-  try {
-    const params = new URLSearchParams({category});
-    if (region?.trim()) {
-      params.set('region', region.trim());
-    }
-    if (query?.trim()) {
-      params.set('query', query.trim());
-    }
-    if (typeof latitude === 'number' && Number.isFinite(latitude)) {
-      params.set('latitude', String(latitude));
-    }
-    if (typeof longitude === 'number' && Number.isFinite(longitude)) {
-      params.set('longitude', String(longitude));
-    }
-    params.set('limit', String(Math.max(1, Math.min(limit, 20))));
-    const res = await requestBackendJson<{places?: unknown; source?: string}>(
-      `/consulting/local-places?${params.toString()}`,
-    );
-    const places = arr<ConsultingLocalPlace>(res.places, []);
-    if (places.length === 0 && res.source === 'empty_not_configured') {
-      return fallbackLocalPlaces({category, region, limit});
-    }
-    return places;
-  } catch (error) {
-    logFallback('localPlaces', error);
-    return fallbackLocalPlaces({category, region, limit});
-  }
-}
-
 export async function getConsultingBookings(
   status?: string,
 ): Promise<readonly ConsultingRecord[]> {
@@ -574,7 +534,9 @@ export async function createConsultingBooking(
       '/consulting/bookings',
       {method: 'POST', body: draft},
     );
-    const record = res.record ? coerceRecord(res.record) : null;
+    const record = res.record
+      ? withDraftReservationDetails(coerceRecord(res.record), draft)
+      : null;
     if (record) {
       upsertCachedBooking(record);
     }
@@ -655,7 +617,9 @@ export async function updateConsultingBooking(
       `/consulting/bookings/${encodeURIComponent(bookingId)}`,
       {method: 'PATCH', body: draft},
     );
-    const record = res.record ? coerceRecord(res.record) : null;
+    const record = res.record
+      ? withDraftReservationDetails(coerceRecord(res.record), draft)
+      : null;
     if (record) {
       upsertCachedBooking(record);
     }

@@ -18,6 +18,10 @@ export type ConsultingDurationOption = {
   label: string;
   minutes: number;
   price: number;
+  prices?: {
+    online: number;
+    offline: number;
+  };
   description: string;
   recommended?: boolean;
 };
@@ -89,10 +93,13 @@ export type ConsultingSharedReport = {
 };
 
 export type ConsultingPreferredContactMethod = 'sms' | 'call';
+export type ConsultingSessionMode = 'online' | 'offline';
 
 export type ConsultingBookingDraft = {
   expertId: string;
   durationId: string;
+  sessionMode: ConsultingSessionMode;
+  estimatedPrice: number;
   dayId: string;
   slotId: string;
   concernId: string | null;
@@ -144,6 +151,8 @@ export type ConsultingRecord = {
   categoryLabel: string;
   dateLabel: string;
   durationLabel: string;
+  sessionMode?: ConsultingSessionMode | null;
+  estimatedPrice?: number | null;
   sharedReportIds?: readonly string[];
   reviewId?: string | null;
   summary?: ConsultingSummary;
@@ -167,41 +176,4 @@ export type ConsultingReviewDraft = {
   rating: number;
   body: string;
   category?: string;
-};
-
-export type ConsultingLocalPlaceCategoryId =
-  | 'hair'
-  | 'makeup'
-  | 'personalColor'
-  | 'fashion';
-
-export type ConsultingLocalPlace = {
-  id: string;
-  source: 'naver_local';
-  name: string;
-  category: string;
-  categoryLabel: string;
-  description: string;
-  summary: string;
-  telephone: string;
-  address: string;
-  roadAddress: string;
-  mapX: string;
-  mapY: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  distanceKm?: number | null;
-  distanceLabel?: string;
-  websiteUrl?: string;
-  naverMapUrl?: string;
-  naverReservationUrl?: string;
-  naverPlaceSearchUrl?: string;
-  reservationSearchKeyword?: string;
-  bookingHint?: string;
-  detailLines?: readonly string[];
-  ratingHint?: string;
-  priceHint?: string;
-  serviceHighlights?: readonly string[];
-  thumbnailKey?: string;
-  naverUrl: string;
 };

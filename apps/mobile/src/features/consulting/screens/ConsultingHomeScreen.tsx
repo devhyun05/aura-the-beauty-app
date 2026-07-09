@@ -1,4 +1,5 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   ImageBackground,
   type ImageSourcePropType,
@@ -12,13 +13,8 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
-  Bell,
-  CalendarDays,
   ChevronRight,
-  History,
-  MapPin,
   MessageCircle,
-  Store,
   Video,
 } from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -43,8 +39,10 @@ import {
 } from '../mocks/consulting.mock';
 import {
   type ConsultingHomeData,
+  getConsultingBookings,
   getConsultingHome,
 } from '../services/consultingService';
+import {isConsultingMessageStatus} from '../services/consultingReadStateService';
 import type {
   ConsultingCategory,
   ConsultingCategoryId,
@@ -56,38 +54,36 @@ const consultingCdnBaseUrl = (
   'https://d3t1pbvtir1lj.cloudfront.net'
 );
 
-function consultingHeroImageSource(fileName: string): ImageSourcePropType {
+function consultingImageSource(fileName: string): ImageSourcePropType {
   return {
     uri: `${consultingCdnBaseUrl}/uploads/optimized/consulting/${fileName}`,
   };
 }
 
-const consultingHeroOnlineImage = consultingHeroImageSource(
+const consultingHeroOnlineImage = consultingImageSource(
   'consulting-hero-online.jpg',
 );
-const consultingHeroColorImage = consultingHeroImageSource(
+const consultingHeroColorImage = consultingImageSource(
   'consulting-hero-color.jpg',
 );
-const consultingHeroMakeupImage = consultingHeroImageSource(
+const consultingHeroMakeupImage = consultingImageSource(
   'consulting-hero-makeup.jpg',
 );
-const consultingHeroFashionImage = consultingHeroImageSource(
+const consultingHeroFashionImage = consultingImageSource(
   'consulting-hero-fashion.jpg',
 );
-const consultingHeroHairImage = consultingHeroImageSource(
+const consultingHeroHairImage = consultingImageSource(
   'consulting-hero-hair.jpg',
 );
 
 const HERO_BANNER_GAP = spacing.md;
+const INITIAL_DISCOVERY_VISIBLE_COUNT = 2;
+const DISCOVERY_VISIBLE_INCREMENT = 3;
 
 type ConsultingHomeScreenProps = {
   onPressHeroSlide: (categoryId: ConsultingCategoryId | null) => void;
   onPressExpert: (expertId: string) => void;
   onPressExpertList: () => void;
-  onPressLocalPlaces: () => void;
-  onPressHistory: () => void;
-  onPressMessages: () => void;
-  onPressNotifications: () => void;
   onPressUpcoming: (record: ConsultingRecord) => void;
 };
 
@@ -147,10 +143,6 @@ export function ConsultingHomeScreen({
   onPressHeroSlide,
   onPressExpert,
   onPressExpertList,
-  onPressLocalPlaces,
-  onPressHistory,
-  onPressMessages,
-  onPressNotifications,
   onPressUpcoming,
 }: ConsultingHomeScreenProps) {
   const {width} = useWindowDimensions();
@@ -162,24 +154,50 @@ export function ConsultingHomeScreen({
     activeRecords: [],
   }));
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  const [visibleExpertCount, setVisibleExpertCount] = useState(
+    INITIAL_DISCOVERY_VISIBLE_COUNT,
+  );
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-    getConsultingHome().then(data => {
-      if (isMounted) {
-        setHome(data);
-      }
-    });
+      Promise.all([getConsultingHome(), getConsultingBookings()]).then(
+        ([homeData, bookingRecords]) => {
+          const recordsForBadges =
+            bookingRecords.length > 0 ? bookingRecords : homeData.activeRecords;
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+          if (!isMounted) {
+            return;
+          }
+
+          const activeBookingRecords =
+            getActiveRecordsFromBookings(recordsForBadges);
+          setHome({
+            ...homeData,
+            activeRecord:
+              activeBookingRecords[0] ?? homeData.activeRecord ?? null,
+            activeRecords:
+              activeBookingRecords.length > 0
+                ? activeBookingRecords
+                : homeData.activeRecords,
+          });
+        },
+      );
+
+      return () => {
+        isMounted = false;
+      };
+    }, []),
+  );
 
   const {categories, experts} = home;
   const heroBannerWidth = useMemo(
     () => Math.max(300, Math.min(width - 64, 342)),
+    [width],
+  );
+  const activeRequestCardWidth = useMemo(
+    () => Math.max(260, Math.min(width * 0.78, 320)),
     [width],
   );
   const heroSlides = useMemo<readonly HeroSlide[]>(
@@ -226,6 +244,8 @@ export function ConsultingHomeScreen({
     ];
   }, [heroSlides]);
   const activeRecords = home.activeRecords;
+  const visibleExperts = experts.slice(0, visibleExpertCount);
+  const hasMoreExperts = visibleExpertCount < experts.length;
 
   const handleHeroScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
@@ -254,38 +274,67 @@ export function ConsultingHomeScreen({
     const rawIndex = Math.round(
       event.nativeEvent.contentOffset.x / (heroBannerWidth + HERO_BANNER_GAP),
     );
-    const nextIndex = ((rawIndex % heroSlides.length) + heroSlides.length) % heroSlides.length;
+    const nextIndex =
+      ((rawIndex % heroSlides.length) + heroSlides.length) % heroSlides.length;
     setActiveHeroIndex(nextIndex);
   };
 
   return (
     <ConsultingScreenScaffold bottomPadding="floatingFooter" contentGap={spacing.xxl}>
-      <View style={styles.quickAccessSection}>
-        <RNView style={styles.quickAccessHeader}>
-          <RNView>
-            <Text style={styles.quickAccessTitle}>상담 허브</Text>
-            <Text style={styles.quickAccessSubtitle}>
-              알림, 톡, 예약내역을 바로 확인해요
-            </Text>
+      <View style={styles.heroSection}>
+        <ScrollView
+          decelerationRate="fast"
+          contentContainerStyle={styles.heroCarouselContent}
+          horizontal
+          onScroll={handleHeroScroll}
+          onMomentumScrollEnd={handleHeroScrollEnd}
+          ref={heroScrollRef}
+          scrollEventThrottle={16}
+          showsHorizontalScrollIndicator={false}
+          snapToAlignment="start"
+          snapToInterval={heroBannerWidth + HERO_BANNER_GAP}>
+          {loopingHeroSlides.map(slide => (
+            <HeroBanner
+              key={slide.id}
+              onPress={() => onPressHeroSlide(slide.categoryId)}
+              slide={slide}
+              width={heroBannerWidth}
+            />
+          ))}
+        </ScrollView>
+        <RNView style={styles.heroCarouselMeta}>
+          <RNView style={styles.heroDots}>
+            {heroSlides.map((slide, index) => (
+              <RNView
+                key={slide.id}
+                style={[
+                  styles.heroDot,
+                  index === activeHeroIndex ? styles.heroDotActive : null,
+                ]}
+              />
+            ))}
           </RNView>
-          <RNView style={styles.quickActions}>
-            <QuickActionButton
-              icon="bell"
-              label="알림"
-              onPress={onPressNotifications}
-              showDot={activeRecords.length > 0}
-            />
-            <QuickActionButton
-              icon="message"
-              label="톡"
-              onPress={onPressMessages}
-              showDot={activeRecords.length > 0}
-            />
-            <QuickActionButton
-              icon="calendar"
-              label="내역"
-              onPress={onPressHistory}
-            />
+          <Text style={styles.heroCounter}>
+            {activeHeroIndex + 1} / {heroSlides.length}
+          </Text>
+        </RNView>
+      </View>
+
+      <View style={styles.discoverySection}>
+        <RNView>
+          <ConsultingSectionTitle>상담 찾기</ConsultingSectionTitle>
+          <Text style={styles.discoverySectionSubtitle}>
+            섭외한 프리랜서를 온라인 또는 오프라인으로 예약해요
+          </Text>
+        </RNView>
+        <RNView style={styles.bookingModeSummary}>
+          <RNView style={styles.bookingModePill}>
+            <Video color={consultingColors.roseStrong} size={15} />
+            <Text style={styles.bookingModePillText}>온라인 상담</Text>
+          </RNView>
+          <RNView style={styles.bookingModePill}>
+            <Text style={styles.bookingModeIconText}>OFF</Text>
+            <Text style={styles.bookingModePillText}>오프라인 예약</Text>
           </RNView>
         </RNView>
       </View>
@@ -310,7 +359,7 @@ export function ConsultingHomeScreen({
                   key={record.id}
                   onPress={() => onPressUpcoming(record)}
                   record={record}
-                  width={heroBannerWidth}
+                  width={activeRequestCardWidth}
                 />
               );
             })}
@@ -318,123 +367,24 @@ export function ConsultingHomeScreen({
         </View>
       ) : null}
 
-      <View style={styles.discoverySwitch}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="AURA 섭외 프리랜서 상담 신청"
-          onPress={onPressExpertList}
-          style={({pressed}) => [
-            styles.discoveryCard,
-            styles.discoveryCardPrimary,
-            pressed ? styles.pressed : null,
-          ]}>
-          <RNView style={styles.discoveryIcon}>
-            <Video color={consultingColors.onAccent} size={17} />
-          </RNView>
-          <Text style={[styles.discoveryTitle, styles.discoveryTitlePrimary]}>
-            프리랜서 상담
-          </Text>
-          <Text
-            numberOfLines={2}
-            style={[styles.discoveryText, styles.discoveryTextPrimary]}>
-            앱에서 신청하고 톡으로 일정 조율
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="근처 뷰티샵 지도 찾기"
-          onPress={onPressLocalPlaces}
-          style={({pressed}) => [
-            styles.discoveryCard,
-            pressed ? styles.pressed : null,
-          ]}>
-          <RNView style={styles.discoveryShopIcon}>
-            <Store color={consultingColors.roseStrong} size={17} />
-          </RNView>
-          <Text style={styles.discoveryTitle}>근처 뷰티샵</Text>
-          <Text numberOfLines={2} style={styles.discoveryText}>
-            지역 업체를 지도와 함께 확인
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.heroSection}>
-        <ScrollView
-          decelerationRate="fast"
-          contentContainerStyle={styles.heroCarouselContent}
-          horizontal
-          onScroll={handleHeroScroll}
-          onMomentumScrollEnd={handleHeroScrollEnd}
-          ref={heroScrollRef}
-          scrollEventThrottle={16}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={heroBannerWidth + HERO_BANNER_GAP}
-          snapToAlignment="start">
-          {loopingHeroSlides.map(slide => (
-            <HeroBanner
-              key={slide.id}
-              onPress={() => onPressHeroSlide(slide.categoryId)}
-              slide={slide}
-              width={heroBannerWidth}
-            />
-          ))}
-        </ScrollView>
-        <RNView style={styles.heroCarouselMeta}>
-          <RNView style={styles.heroDots}>
-            {heroSlides.map((slide, index) => (
-              <RNView
-                key={slide.id}
-                style={[
-                  styles.heroDot,
-                  index === activeHeroIndex && styles.heroDotActive,
-                ]}
-              />
-            ))}
-          </RNView>
-          <Text style={styles.heroCounter}>
-            {activeHeroIndex + 1} / {heroSlides.length}
-          </Text>
-        </RNView>
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="근처 뷰티샵 지도 찾기"
-        onPress={onPressLocalPlaces}
-        style={({pressed}) => [
-          styles.localPlaceBanner,
-          pressed ? styles.pressed : null,
-        ]}>
-        <RNView style={styles.localPlaceIcon}>
-          <MapPin color={consultingColors.roseStrong} size={18} />
-        </RNView>
-        <RNView style={styles.localPlaceBody}>
-          <Text style={styles.localPlaceTitle}>근처 뷰티샵 지도 찾기</Text>
-          <Text numberOfLines={1} style={styles.localPlaceSubtitle}>
-            지역 업체 위치와 예약 정보를 함께 확인해요
-          </Text>
-        </RNView>
-        <ChevronRight color={consultingColors.roseStrong} size={16} />
-      </Pressable>
-
-      <View style={styles.expertSection}>
-        <View style={styles.sectionHeader}>
+      <View style={styles.discoveryListSection}>
+        <RNView style={styles.sectionHeader}>
           <ConsultingSectionTitle>섭외 프리랜서</ConsultingSectionTitle>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="전문가 전체 보기"
-            hitSlop={8}
-            onPress={onPressExpertList}
-            style={({pressed}) => [
-              styles.moreRow,
-              pressed ? styles.pressed : null,
-            ]}>
-            <Text style={styles.moreText}>더보기</Text>
-            <ChevronRight color={consultingColors.textSoft} size={14} />
-          </Pressable>
-        </View>
+          {hasMoreExperts ? (
+            <MoreInlineButton
+              label="더보기"
+              onPress={() =>
+                setVisibleExpertCount(count =>
+                  Math.min(count + DISCOVERY_VISIBLE_INCREMENT, experts.length),
+                )
+              }
+            />
+          ) : (
+            <MoreInlineButton label="전체보기" onPress={onPressExpertList} />
+          )}
+        </RNView>
         <View style={styles.expertList}>
-          {experts.map(expert => (
+          {visibleExperts.map(expert => (
             <ExpertListCard
               expert={expert}
               key={expert.id}
@@ -443,21 +393,14 @@ export function ConsultingHomeScreen({
           ))}
         </View>
       </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="내 상담 내역 보기"
-        onPress={onPressHistory}
-        style={({pressed}) => [
-          styles.historyRow,
-          pressed ? styles.pressed : null,
-        ]}>
-        <History color={consultingColors.textMuted} size={18} />
-        <Text style={styles.historyText}>내 상담 내역</Text>
-        <ChevronRight color={consultingColors.textSoft} size={16} />
-      </Pressable>
     </ConsultingScreenScaffold>
   );
+}
+
+function getActiveRecordsFromBookings(
+  records: readonly ConsultingRecord[],
+): readonly ConsultingRecord[] {
+  return records.filter(record => isConsultingMessageStatus(record.status));
 }
 
 function HeroBanner({
@@ -511,38 +454,25 @@ function HeroBanner({
   );
 }
 
-function QuickActionButton({
-  icon,
+function MoreInlineButton({
   label,
   onPress,
-  showDot = false,
 }: {
-  icon: 'bell' | 'calendar' | 'message';
   label: string;
   onPress: () => void;
-  showDot?: boolean;
 }) {
-  const Icon =
-    icon === 'bell'
-      ? Bell
-      : icon === 'message'
-        ? MessageCircle
-        : CalendarDays;
-
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${label} 바로가기`}
+      accessibilityLabel={label}
+      hitSlop={8}
       onPress={onPress}
       style={({pressed}) => [
-        styles.quickActionButton,
+        styles.moreRow,
         pressed ? styles.pressed : null,
       ]}>
-      <RNView style={styles.quickActionIconFrame}>
-        <Icon color={consultingColors.text} size={18} />
-        {showDot ? <RNView style={styles.quickActionDot} /> : null}
-      </RNView>
-      <Text style={styles.quickActionText}>{label}</Text>
+      <Text style={styles.moreText}>{label}</Text>
+      <ChevronRight color={consultingColors.textSoft} size={14} />
     </Pressable>
   );
 }
@@ -621,32 +551,65 @@ function getActiveRequestDescription(status: ConsultingRecord['status']): string
 }
 
 const styles = StyleSheet.create({
-  heroDot: {
-    backgroundColor: consultingColors.border,
-    borderRadius: consultingRadius.pill,
-    height: 6,
-    width: 6,
+  bookingModeIconText: {
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
   },
-  heroDotActive: {
-    backgroundColor: consultingColors.accent,
-    width: 18,
-  },
-  heroDots: {
+  bookingModePill: {
     alignItems: 'center',
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.pill,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 12,
   },
-  heroCounter: {
+  bookingModePillText: {
     color: consultingColors.text,
     fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  bookingModeSummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  discoveryListSection: {
+    gap: spacing.lg,
+  },
+  discoveryLoadingBody: {
+    flex: 1,
+    gap: 2,
+  },
+  discoveryLoadingCard: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  discoveryLoadingText: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
     fontSize: 11,
+  },
+  discoveryLoadingTitle: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
   },
   expertList: {
     gap: spacing.md,
-  },
-  expertSection: {
-    gap: spacing.lg,
   },
   hero: {
     backgroundColor: consultingColors.text,
@@ -663,6 +626,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 2,
+  },
+  heroCounter: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 11,
+    fontWeight: typography.fontWeight.semibold,
   },
   heroCta: {
     alignItems: 'center',
@@ -682,6 +651,21 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
   },
+  heroDot: {
+    backgroundColor: consultingColors.border,
+    borderRadius: consultingRadius.pill,
+    height: 6,
+    width: 6,
+  },
+  heroDotActive: {
+    backgroundColor: consultingColors.accent,
+    width: 18,
+  },
+  heroDots: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
   heroImage: {
     borderRadius: consultingRadius.sheet,
   },
@@ -696,6 +680,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
     letterSpacing: 0,
   },
+  heroLabelDot: {
+    borderRadius: consultingRadius.pill,
+    height: 8,
+    width: 8,
+  },
   heroLabelPill: {
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -708,10 +697,11 @@ const styles = StyleSheet.create({
     minHeight: 28,
     paddingHorizontal: 10,
   },
-  heroLabelDot: {
-    borderRadius: consultingRadius.pill,
-    height: 8,
-    width: 8,
+  heroScrim: {
+    backgroundColor: 'rgba(12, 10, 9, 0.48)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 18,
   },
   heroSection: {
     gap: spacing.md,
@@ -725,12 +715,6 @@ const styles = StyleSheet.create({
     marginTop: 7,
     maxWidth: 238,
   },
-  heroScrim: {
-    backgroundColor: 'rgba(12, 10, 9, 0.48)',
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: 18,
-  },
   heroTitle: {
     color: consultingColors.onAccent,
     fontFamily: typography.fontFamily.bold,
@@ -740,59 +724,114 @@ const styles = StyleSheet.create({
     marginTop: 9,
     maxWidth: 240,
   },
-  historyRow: {
+  localPlaceBody: {
+    flex: 1,
+    gap: 5,
+  },
+  localPlaceCard: {
     alignItems: 'center',
     backgroundColor: consultingColors.surface,
     borderColor: consultingColors.borderSoft,
     borderRadius: consultingRadius.card,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  historyText: {
-    color: consultingColors.text,
-    flex: 1,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-  },
-  localPlaceBanner: {
-    alignItems: 'center',
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.roseSoft,
-    borderRadius: consultingRadius.card,
-    borderWidth: 1,
-    flexDirection: 'row',
     gap: spacing.md,
-    minHeight: 64,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    padding: 13,
   },
-  localPlaceBody: {
-    flex: 1,
+  localPlaceCategory: {
+    color: consultingColors.textSoft,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 11,
   },
-  localPlaceIcon: {
+  localPlaceChip: {
     alignItems: 'center',
     backgroundColor: consultingColors.roseSoft,
     borderRadius: consultingRadius.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 28,
+    paddingHorizontal: 9,
   },
-  localPlaceSubtitle: {
+  localPlaceChipText: {
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 11,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  localPlaceDistance: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderRadius: consultingRadius.pill,
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.semibold,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  localPlaceFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+    marginTop: 3,
+  },
+  localPlaceImage: {
+    borderRadius: consultingRadius.card,
+  },
+  localPlaceImageFrame: {
+    borderRadius: consultingRadius.card,
+    height: 92,
+    overflow: 'hidden',
+    width: 92,
+  },
+  localPlaceList: {
+    gap: spacing.md,
+  },
+  localPlaceMapPill: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.pill,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 28,
+    paddingHorizontal: 9,
+  },
+  localPlaceMapText: {
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 11,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  localPlaceMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+  },
+  localPlaceMetaText: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 11,
+    flex: 1,
+  },
+  localPlaceName: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+  },
+  localPlaceSummary: {
     color: consultingColors.textMuted,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
-    marginTop: 2,
+    lineHeight: typography.lineHeight.xs,
   },
-  localPlaceTitle: {
-    color: consultingColors.text,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
+  localPlaceTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
   moreRow: {
     alignItems: 'center',
@@ -895,113 +934,53 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
   },
-  discoveryCard: {
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.borderSoft,
-    borderRadius: consultingRadius.card,
-    borderWidth: 1,
-    flex: 1,
-    gap: 7,
-    minHeight: 116,
-    padding: 14,
-  },
-  discoveryCardPrimary: {
-    backgroundColor: consultingColors.text,
-    borderColor: consultingColors.text,
-  },
-  discoveryIcon: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderRadius: consultingRadius.pill,
-    height: 34,
-    justifyContent: 'center',
-    width: 34,
-  },
-  discoveryShopIcon: {
-    alignItems: 'center',
-    backgroundColor: consultingColors.roseSoft,
-    borderRadius: consultingRadius.pill,
-    height: 34,
-    justifyContent: 'center',
-    width: 34,
-  },
-  discoverySwitch: {
-    flexDirection: 'row',
+  discoverySection: {
     gap: spacing.md,
   },
-  discoveryText: {
+  discoverySectionSubtitle: {
     color: consultingColors.textMuted,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    marginTop: 4,
   },
-  discoveryTextPrimary: {
-    color: 'rgba(255, 255, 255, 0.76)',
+  discoveryTab: {
+    alignItems: 'center',
+    borderRadius: consultingRadius.pill,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 12,
   },
-  discoveryTitle: {
-    color: consultingColors.text,
+  discoveryTabActive: {
+    backgroundColor: consultingColors.text,
+  },
+  discoveryTabIcon: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surface,
+    borderRadius: consultingRadius.pill,
+    height: 26,
+    justifyContent: 'center',
+    width: 26,
+  },
+  discoveryTabIconActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  discoveryTabText: {
+    color: consultingColors.textMuted,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.semibold,
   },
-  discoveryTitlePrimary: {
+  discoveryTabTextActive: {
     color: consultingColors.onAccent,
   },
-  quickAccessHeader: {
-    alignItems: 'center',
+  discoveryTabs: {
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.pill,
     flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'space-between',
-  },
-  quickAccessSection: {
-    gap: spacing.md,
-  },
-  quickAccessSubtitle: {
-    color: consultingColors.textMuted,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    marginTop: 3,
-  },
-  quickAccessTitle: {
-    color: consultingColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
-  },
-  quickActionButton: {
-    alignItems: 'center',
     gap: 4,
-    minWidth: 46,
-  },
-  quickActionDot: {
-    backgroundColor: consultingColors.roseStrong,
-    borderColor: consultingColors.surface,
-    borderRadius: consultingRadius.pill,
-    borderWidth: 1,
-    height: 8,
-    position: 'absolute',
-    right: 7,
-    top: 6,
-    width: 8,
-  },
-  quickActionIconFrame: {
-    alignItems: 'center',
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.borderSoft,
-    borderRadius: consultingRadius.pill,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  quickActionText: {
-    color: consultingColors.textMuted,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: 10,
-    fontWeight: typography.fontWeight.medium,
+    padding: 4,
   },
 });

@@ -984,6 +984,7 @@ create table if not exists consulting_bookings (
   contact_name text,
   contact_phone text,
   preferred_contact_method text,
+  session_mode text not null default 'online',
   operator_note text,
   confirmed_at timestamptz,
   expert_read_at timestamptz,
@@ -1145,6 +1146,9 @@ alter table consulting_bookings
   add column if not exists expert_read_at timestamptz;
 
 alter table consulting_bookings
+  add column if not exists session_mode text not null default 'online';
+
+alter table consulting_bookings
   drop constraint if exists fk_consulting_bookings_user,
   add constraint fk_consulting_bookings_user
   foreign key (user_id) references users(id) on delete cascade;
@@ -1166,6 +1170,11 @@ alter table consulting_bookings
   drop constraint if exists chk_consulting_bookings_status,
   add constraint chk_consulting_bookings_status
   check (status in ('requested', 'contacting', 'confirmed', 'unavailable', 'completed', 'canceled'));
+
+alter table consulting_bookings
+  drop constraint if exists chk_consulting_bookings_session_mode,
+  add constraint chk_consulting_bookings_session_mode
+  check (session_mode in ('online', 'offline'));
 
 alter table consulting_summaries
   drop constraint if exists fk_consulting_summaries_booking,

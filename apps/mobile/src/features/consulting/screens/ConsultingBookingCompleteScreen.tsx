@@ -1,5 +1,5 @@
 import {StyleSheet, View as RNView} from 'react-native';
-import {Bell, Check, Video} from 'lucide-react-native';
+import {Bell, Check, MapPin, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -17,7 +17,10 @@ import {
 } from '../components/consultingComponents';
 import {
   findConsultingDuration,
+  formatConsultingPrice,
   formatConsultingSlotLabel,
+  getConsultingDurationPrice,
+  getConsultingSessionModeLabel,
 } from '../mocks/consulting.mock';
 import type {ConsultingBookingDraft, ConsultingExpert, ConsultingRecord} from '../types';
 
@@ -39,6 +42,13 @@ export function ConsultingBookingCompleteScreen({
   const duration = findConsultingDuration(expert, draft.durationId);
   const slotLabel = record?.dateLabel ?? formatConsultingSlotLabel(draft.dayId, draft.slotId);
   const durationLabel = record?.durationLabel ?? duration.label;
+  const sessionMode = record?.sessionMode ?? draft.sessionMode ?? 'online';
+  const sessionModeLabel = getConsultingSessionModeLabel(sessionMode);
+  const estimatedPrice =
+    record?.estimatedPrice ??
+    draft.estimatedPrice ??
+    getConsultingDurationPrice(duration, sessionMode);
+  const ModeIcon = sessionMode === 'offline' ? MapPin : Video;
 
   return (
     <RNView style={styles.root}>
@@ -49,7 +59,7 @@ export function ConsultingBookingCompleteScreen({
           </RNView>
           <Text style={styles.title}>예약 신청이 접수됐어요</Text>
           <Text style={styles.subtitle}>
-            운영팀이 프리랜서 일정을 확인한 뒤 문자 또는 전화로 안내드려요.
+            운영팀이 프리랜서 일정을 확인한 뒤 알림과 톡으로 안내드려요.
           </Text>
         </View>
 
@@ -57,9 +67,11 @@ export function ConsultingBookingCompleteScreen({
           <ExpertAvatar expert={expert} size={44} />
           <RNView style={styles.bookingText}>
             <Text style={styles.bookingTitle}>
-              {expert.name} · 화상 {durationLabel}
+              {expert.name} · {sessionModeLabel} {durationLabel}
             </Text>
-            <Text style={styles.bookingMeta}>{slotLabel}</Text>
+            <Text style={styles.bookingMeta}>
+              {slotLabel} · 예상가 {formatConsultingPrice(estimatedPrice)}
+            </Text>
           </RNView>
         </View>
 
@@ -71,9 +83,11 @@ export function ConsultingBookingCompleteScreen({
         </View>
 
         <View style={styles.infoCard}>
-          <Video color={consultingColors.roseStrong} size={17} />
+          <ModeIcon color={consultingColors.roseStrong} size={17} />
           <Text style={styles.infoText}>
-            앱에서는 결제하지 않아요. 프리랜서와 직접 정산과 일정을 맞춘 뒤 확정되면 대화방과 통화가 열려요.
+            {sessionMode === 'offline'
+              ? '오프라인 상담은 프리랜서가 장소와 준비 내용을 확인한 뒤 톡에서 세부 안내를 드려요.'
+              : '온라인 상담은 프리랜서와 직접 정산과 일정을 맞춘 뒤 확정되면 대화방과 통화가 열려요.'}
           </Text>
         </View>
 

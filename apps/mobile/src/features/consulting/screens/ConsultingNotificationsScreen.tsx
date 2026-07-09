@@ -24,6 +24,10 @@ import {
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
+import {
+  isConsultingNotificationStatus,
+  markConsultingInboxRead,
+} from '../services/consultingReadStateService';
 import type {
   ConsultingExpert,
   ConsultingRecord,
@@ -50,10 +54,11 @@ export function ConsultingNotificationsScreen({
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()])
-        .then(([recordData, expertData]) => {
+        .then(async ([recordData, expertData]) => {
           if (isMounted) {
             setRecords(recordData);
             setExperts(expertData);
+            await markConsultingInboxRead('notifications', recordData);
           }
         })
         .finally(() => {
@@ -71,7 +76,7 @@ export function ConsultingNotificationsScreen({
   const notifications = useMemo(
     () =>
       records
-        .filter(record => isNotificationStatus(record.status))
+        .filter(record => isConsultingNotificationStatus(record.status))
         .map(record => ({
           expert:
             experts.find(item => item.id === record.expertId) ??
@@ -123,15 +128,6 @@ export function ConsultingNotificationsScreen({
 
       <SecondaryButton label="내 상담 내역 보기" onPress={onPressHistory} />
     </ConsultingScreenScaffold>
-  );
-}
-
-function isNotificationStatus(status: ConsultingRecordStatus): boolean {
-  return (
-    status === 'requested' ||
-    status === 'contacting' ||
-    status === 'confirmed' ||
-    status === 'unavailable'
   );
 }
 

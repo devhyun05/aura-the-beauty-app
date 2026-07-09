@@ -56,6 +56,7 @@ type DetailRouteChromeProps = {
   headerBackgroundColor?: string;
   headerBorderColor?: string;
   headerMode?: DetailRouteHeaderMode;
+  headerRightSlot?: ReactNode;
   onBack?: () => void;
   onClose?: () => void;
   onDone?: () => void;
@@ -72,6 +73,7 @@ export function DetailRouteChrome({
   headerBackgroundColor,
   headerBorderColor,
   headerMode = DETAIL_ROUTE_DEFAULT_HEADER_MODE,
+  headerRightSlot,
   onBack,
   onClose,
   onDone,
@@ -101,15 +103,17 @@ export function DetailRouteChrome({
       <ChevronDown color={headerContentColor} size={iconSize.sm} strokeWidth={2} />
     </HeaderIconAction>
   ) : undefined;
-  const rightSlot = renderRightSlot({
-    actions: presentation.rightActions,
-    iconColor: headerContentColor,
-    onBack,
-    onClose,
-    onDone,
-    onShare,
-    shareDisabled,
-  });
+  const rightSlot =
+    headerRightSlot ??
+    renderRightSlot({
+      actions: presentation.rightActions,
+      iconColor: headerContentColor,
+      onBack,
+      onClose,
+      onDone,
+      onShare,
+      shareDisabled,
+    });
   const shouldReserveLeftSlot =
     !onBack && !leftSlot && presentation.rightActions.length > 0;
   const header = (

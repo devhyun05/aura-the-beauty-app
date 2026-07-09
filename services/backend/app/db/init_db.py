@@ -312,6 +312,7 @@ POST_SCHEMA_MIGRATIONS = {
     alter table consulting_bookings add column if not exists contact_name text;
     alter table consulting_bookings add column if not exists contact_phone text;
     alter table consulting_bookings add column if not exists preferred_contact_method text;
+    alter table consulting_bookings add column if not exists session_mode text not null default 'online';
     alter table consulting_bookings add column if not exists operator_note text;
     alter table consulting_bookings add column if not exists confirmed_at timestamptz;
     alter table consulting_bookings add column if not exists expert_read_at timestamptz;
@@ -326,6 +327,11 @@ POST_SCHEMA_MIGRATIONS = {
       drop constraint if exists chk_consulting_bookings_status,
       add constraint chk_consulting_bookings_status
       check (status in ('requested', 'contacting', 'confirmed', 'unavailable', 'completed', 'canceled'));
+
+    alter table consulting_bookings
+      drop constraint if exists chk_consulting_bookings_session_mode,
+      add constraint chk_consulting_bookings_session_mode
+      check (session_mode in ('online', 'offline'));
 
     alter table consulting_bookings
       drop constraint if exists ex_consulting_bookings_expert_upcoming_time,

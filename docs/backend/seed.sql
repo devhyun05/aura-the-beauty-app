@@ -329,12 +329,12 @@ delete from consulting_expert_durations
 where expert_id in ('exp_sea', 'exp_doa', 'exp_lian') and code = 'd15';
 
 insert into consulting_expert_durations (expert_id, code, label, minutes, price, description, recommended, sort_order) values
-  ('exp_sea', 'd30', '30분', 30, 19000, '핵심 진단 + 우선 교정', true, 0),
-  ('exp_sea', 'd60', '1시간', 60, 34000, '진단 + 실습 + 제품 루틴', false, 1),
-  ('exp_doa', 'd30', '30분', 30, 22000, '정밀 진단 + 컬러 팔레트', true, 0),
-  ('exp_doa', 'd60', '1시간', 60, 39000, '정밀 진단 + 쇼핑 가이드', false, 1),
-  ('exp_lian', 'd30', '30분', 30, 18000, '골격 진단 + 스타일 방향', true, 0),
-  ('exp_lian', 'd60', '1시간', 60, 32000, '골격 + 헤어 + 쇼핑 가이드', false, 1)
+  ('exp_sea', 'd30', '30분', 30, 49000, '핵심 진단 + 우선 교정', true, 0),
+  ('exp_sea', 'd60', '1시간', 60, 89000, '진단 + 실습 + 제품 루틴', false, 1),
+  ('exp_doa', 'd30', '30분', 30, 59000, '정밀 진단 + 컬러 팔레트', true, 0),
+  ('exp_doa', 'd60', '1시간', 60, 109000, '정밀 진단 + 쇼핑 가이드', false, 1),
+  ('exp_lian', 'd30', '30분', 30, 49000, '골격 진단 + 스타일 방향', true, 0),
+  ('exp_lian', 'd60', '1시간', 60, 99000, '골격 + 헤어 + 쇼핑 가이드', false, 1)
 on conflict (expert_id, code) do update set
   label = excluded.label,
   minutes = excluded.minutes,
@@ -374,17 +374,17 @@ insert into consulting_membership_plans (
   id, name, tagline, price_per_month, original_price_per_month, benefits, badge, highlight, sort_order
 ) values
   (
-    'plan_lite', '라이트', '가볍게 시작하는 뷰티 케어', 9900, null,
+    'plan_lite', '라이트', '가볍게 시작하는 뷰티 케어', 15000, null,
     array['모든 상담 10% 상시 할인', '월 1회 포토 질문권', '상담 요약 리포트 무제한 보관']::text[],
     null, false, 0
   ),
   (
-    'plan_standard', '스탠다드', '가장 많이 선택하는 플랜', 14900, 19900,
+    'plan_standard', '스탠다드', '가장 많이 선택하는 플랜', 49000, 69000,
     array['모든 상담 20% 상시 할인', '월 1회 30분 화상 체크인 포함', '전문가 우선 예약', '신제품 샘플 박스 분기 1회']::text[],
     '인기', true, 1
   ),
   (
-    'plan_premium', '프리미엄', '나만의 뷰티 디렉터', 29900, null,
+    'plan_premium', '프리미엄', '나만의 뷰티 디렉터', 99000, null,
     array['모든 상담 30% 상시 할인', '월 1회 30분 화상 상담 포함', '전담 전문가 지정', '시즌별 퍼스널 스타일 리포트']::text[],
     null, false, 2
   )

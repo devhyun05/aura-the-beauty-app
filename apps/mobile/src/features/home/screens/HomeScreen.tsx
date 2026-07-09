@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState, type ElementRef} from 'react';
+import {useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode} from 'react';
 import {
   Modal,
   Pressable,
@@ -43,6 +43,7 @@ export {getHomeMakeupExtractionActionLabels} from '../components/MakeupExtractio
 export {getHomeMakeupFeedbackActionLabels} from '../components/MakeupFeedbackActionSheet';
 
 type HomeScreenProps = {
+  headerRightSlot?: ReactNode;
   onOpenFeatureMenu?: () => void;
   onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
@@ -63,6 +64,7 @@ type HomeScreenProps = {
 };
 
 export function HomeScreen({
+  headerRightSlot,
   onOpenFeatureMenu,
   onPressArFilter,
   onPressFaceDiagnosis,
@@ -191,6 +193,7 @@ export function HomeScreen({
             bannerHeight={heroBannerHeight}
             bannerWidth={heroBannerWidth}
             fallbackImageSource={homeData.hero.imageSource}
+            headerRightSlot={headerRightSlot}
             onOpenFeatureMenu={onOpenFeatureMenu}
             onPressFeature={handleHeroFeaturePress}
             onPressFilter={onPressHeroTrendFilter}
@@ -247,6 +250,7 @@ type HeroBannerCarouselProps = {
   bannerHeight: number;
   bannerWidth: number;
   fallbackImageSource: ImageSourcePropType;
+  headerRightSlot?: ReactNode;
   onOpenFeatureMenu?: () => void;
   onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
@@ -300,6 +304,7 @@ export const recommendedFilterSectionDescription = undefined;
 export const recommendedFilterMoreButtonLabel = '더보기' as const;
 export const HOME_HERO_BANNER_ASPECT_RATIO = 1.62;
 export const HOME_HERO_AUTOSCROLL_INTERVAL_MS = 2500;
+const HOME_HERO_CHROME_ACTION_HEIGHT = 40;
 export const homeHeroLayoutMetrics = {
   copyGap: spacing.sm,
   listTopPadding: 0,
@@ -470,6 +475,7 @@ function HeroBannerCarousel({
   bannerHeight,
   bannerWidth,
   fallbackImageSource,
+  headerRightSlot,
   onOpenFeatureMenu,
   onPressFeature,
   onPressFilter,
@@ -498,6 +504,9 @@ function HeroBannerCarousel({
     itemCount: heroItems.length,
     snapInterval,
   });
+  const chromeReservedHeight =
+    topInset + spacing.sm + HOME_HERO_CHROME_ACTION_HEIGHT + spacing.sm;
+  const frameHeight = bannerHeight + chromeReservedHeight;
 
   useEffect(() => {
     setActiveHeroIndex(0);
@@ -579,50 +588,59 @@ function HeroBannerCarousel({
     createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd);
 
   return (
-    <View style={[styles.heroCarouselFrame, {height: bannerHeight, width: bannerWidth}]}>
+    <View style={[styles.heroCarouselFrame, {height: frameHeight, width: bannerWidth}]}>
       <NativeScrollView
-      ref={heroCarouselRef}
-      horizontal
-      contentOffset={{x: initialScrollOffsetX, y: 0}}
-      decelerationRate="normal"
-      disableIntervalMomentum
-      onMomentumScrollEnd={heroCarouselLoopResetHandlers.onMomentumScrollEnd}
-      onScroll={handleHeroCarouselScroll}
-      scrollEventThrottle={16}
-      onScrollEndDrag={heroCarouselLoopResetHandlers.onScrollEndDrag}
-      snapToAlignment="start"
-      snapToInterval={snapInterval}
-      showsHorizontalScrollIndicator={false}
-      style={styles.heroCarouselScroll}
-      contentContainerStyle={styles.heroCarousel}>
-      {heroRenderItems.map((item, index) => (
-        <HeroBannerCard
-          activeIndex={activeHeroIndex}
-          bannerHeight={bannerHeight}
-          bannerWidth={bannerWidth}
-          ctaLabel={item.ctaLabel}
-          description={item.description}
-          featureId={item.featureId}
-          filterId={item.filterId}
-          imageSource={item.imageSource}
-          itemCount={heroItems.length}
-          key={`${item.id}-${index}`}
-          onPressFeature={onPressFeature}
-          onPressFilter={onPressFilter}
-          title={item.title}
-          tone={item.tone}
-        />
-      ))}
+        ref={heroCarouselRef}
+        horizontal
+        contentOffset={{x: initialScrollOffsetX, y: 0}}
+        decelerationRate="normal"
+        disableIntervalMomentum
+        onMomentumScrollEnd={heroCarouselLoopResetHandlers.onMomentumScrollEnd}
+        onScroll={handleHeroCarouselScroll}
+        scrollEventThrottle={16}
+        onScrollEndDrag={heroCarouselLoopResetHandlers.onScrollEndDrag}
+        snapToAlignment="start"
+        snapToInterval={snapInterval}
+        showsHorizontalScrollIndicator={false}
+        style={[
+          styles.heroCarouselScroll,
+          {height: bannerHeight, marginTop: chromeReservedHeight},
+        ]}
+        contentContainerStyle={styles.heroCarousel}>
+        {heroRenderItems.map((item, index) => (
+          <HeroBannerCard
+            activeIndex={activeHeroIndex}
+            bannerHeight={bannerHeight}
+            bannerWidth={bannerWidth}
+            ctaLabel={item.ctaLabel}
+            description={item.description}
+            featureId={item.featureId}
+            filterId={item.filterId}
+            imageSource={item.imageSource}
+            itemCount={heroItems.length}
+            key={`${item.id}-${index}`}
+            onPressFeature={onPressFeature}
+            onPressFilter={onPressFilter}
+            title={item.title}
+            tone={item.tone}
+          />
+        ))}
       </NativeScrollView>
-      <HomeHeroChrome onOpenFeatureMenu={onOpenFeatureMenu} topInset={topInset} />
+      <HomeHeroChrome
+        headerRightSlot={headerRightSlot}
+        onOpenFeatureMenu={onOpenFeatureMenu}
+        topInset={topInset}
+      />
     </View>
   );
 }
 
 function HomeHeroChrome({
+  headerRightSlot,
   onOpenFeatureMenu,
   topInset,
 }: {
+  headerRightSlot?: ReactNode;
   onOpenFeatureMenu?: () => void;
   topInset: number;
 }) {
@@ -633,18 +651,21 @@ function HomeHeroChrome({
       <View style={styles.homeHeroLogoSurface}>
         <Text style={styles.homeHeroLogo}>AURA</Text>
       </View>
-      <Pressable
-        accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
-        accessibilityRole="button"
-        disabled={!onOpenFeatureMenu}
-        hitSlop={spacing.xs}
-        onPress={onOpenFeatureMenu}
-        style={({pressed}) => [
-          styles.homeHeroMenuButton,
-          pressed && styles.pressed,
-        ]}>
-        <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
-      </Pressable>
+      <XStack style={styles.homeHeroRightActions}>
+        {headerRightSlot}
+        <Pressable
+          accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
+          accessibilityRole="button"
+          disabled={!onOpenFeatureMenu}
+          hitSlop={spacing.xs}
+          onPress={onOpenFeatureMenu}
+          style={({pressed}) => [
+            styles.homeHeroMenuButton,
+            pressed && styles.pressed,
+          ]}>
+          <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
+        </Pressable>
+      </XStack>
     </XStack>
   );
 }
@@ -1333,6 +1354,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.10,
     shadowRadius: 10,
     width: 38,
+  },
+  homeHeroRightActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   loadingContainer: {
     alignItems: 'center',
