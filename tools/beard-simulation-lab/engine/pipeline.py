@@ -173,12 +173,12 @@ def run_pipeline(
         )
 
     # --- protect pre-reject (primary defense; one erode retry allowed).
-    pre = check_mask_protect_overlap(masks.hard, masks.shadow, crop.protect_mask)
+    pre = check_mask_protect_overlap(masks.hard, masks.shadow, crop.lips_mask)
     mask_mitigations: list[str] = []
     if not pre.passed:
         masks = blend.erode_masks(masks, crop.face_width)
         mask_mitigations.append("mask_erode")
-        pre = check_mask_protect_overlap(masks.hard, masks.shadow, crop.protect_mask)
+        pre = check_mask_protect_overlap(masks.hard, masks.shadow, crop.lips_mask)
         if not pre.passed:
             return reject("guard:mask_protect_overlap", {"value": pre.value})
     masks.stats["protectOverlapRatio"] = min(

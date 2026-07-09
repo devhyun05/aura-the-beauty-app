@@ -312,16 +312,22 @@ def segment_beard(
     # differ from the skin model, so measuring the unsuppressed candidate map
     # causes false guard rejects; the guard verifies the persisted masks.
     pre_protect_union = np.maximum(hard, shadow)
-    hard = hard * crop.roi_mask * (1 - crop.protect_mask)
-    shadow = shadow * crop.roi_mask * (1 - crop.protect_mask)
+    # Detection clamps against the undilated protect: the philtrum and the soul
+    # patch live inside the dilated one. Blend still clamps the OUTPUT against
+    # crop.protect_mask, so the lips remain untouched in the final image.
+    detect_protect = crop.detect_protect_mask
+    hard = hard * crop.roi_mask * (1 - detect_protect)
+    shadow = shadow * crop.roi_mask * (1 - detect_protect)
     raw_union = np.maximum(hard, shadow)
-    protect_area = max(crop.protect_mask.sum(), 1.0)
-    protect_overlap = float(
-        ((raw_union > 0.3) * crop.protect_mask).sum() / protect_area
-    )
-    pre_protect_overlap = float(
-        ((pre_protect_union > 0.3) * crop.protect_mask).sum() / protect_area
-    )
+    # Guard stats measure the property that actually matters -- "would we have
+    # painted on the lips" -- against the true lip polygon, not the dilated
+    # protect. Measured against the dilated mask these fire on legitimate
+    # philtrum/soul-patch detections (psd02 hit 0.056 vs a 0.02 threshold),
+    # while against the lips they read 0.0000 on all nine of our selfies.
+    lips = crop.lips_mask
+    protect_area = max(lips.sum(), 1.0)
+    protect_overlap = float(((raw_union > 0.3) * lips).sum() / protect_area)
+    pre_protect_overlap = float(((pre_protect_union > 0.3) * lips).sum() / protect_area)
 
     region_coverage = {}
     region_hard_coverage = {}

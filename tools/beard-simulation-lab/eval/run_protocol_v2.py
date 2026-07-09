@@ -74,7 +74,11 @@ def evaluate_pair(name: str, img_path: Path, mask_path: Path) -> dict | None:
     crop = build_lower_face_crop(bgr, det.landmarks, det.face_width, det.face_height)
     shape = bgr.shape[:2]
 
-    keep = _restore(crop.roi_mask * (1 - crop.protect_mask), crop.bbox, shape) > 0.5
+    # `keep` is the DETECTION scope: what the segmenter is allowed to look at.
+    # Stage 1 split this from the correction-side protect mask, so it follows
+    # detect_protect_mask (blend still clamps the output with protect_mask).
+    keep = _restore(
+        crop.roi_mask * (1 - crop.detect_protect_mask), crop.bbox, shape) > 0.5
     bands = build_bands(shape, det.landmarks, det.face_width, det.face_height)
 
     m = segment_beard(crop, skin)

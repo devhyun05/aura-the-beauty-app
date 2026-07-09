@@ -35,11 +35,30 @@ class LowerFaceCrop:
     bbox: tuple[int, int, int, int]  # x0, y0, x1, y1 in full-image coords
     roi_mask: np.ndarray          # float32 0..1
     protect_mask: np.ndarray      # float32 0..1 (lips + nostrils, dilated)
+                                  #   CORRECTION-side: blend zeroes the output here,
+                                  #   which is what actually keeps lips untouched.
     skin_ref_mask: np.ndarray     # float32 0..1 (forehead/upper-cheek patches, may
                                   #   extend above bbox → clipped to crop)
     region_masks: dict[str, np.ndarray]  # name -> float32 0..1
     face_width: float
     landmarks: np.ndarray         # full 468 set, crop coords
+
+    # DETECTION-side protect: lips + nostrils with no dilation. "Where may we
+    # look" and "where must we never paint" are different questions, and
+    # conflating them cost real recall: the dilated protect_mask swallowed
+    # 0.158 of philtrum recall and 0.083 of soul-patch recall (the downward lip
+    # dilation sits exactly on the soul patch, and the nose-bottom disk sits on
+    # top of the philtrum). Detection now clamps against this smaller mask while
+    # blend still clamps the output against protect_mask, so lips stay safe.
+    # Defaults to protect_mask so hand-built crops keep the old behaviour.
+    detect_protect_mask: np.ndarray | None = None
+    lips_mask: np.ndarray | None = None   # true outer-lip polygon, no dilation
+
+    def __post_init__(self) -> None:
+        if self.detect_protect_mask is None:
+            self.detect_protect_mask = self.protect_mask
+        if self.lips_mask is None:
+            self.lips_mask = self.protect_mask
 
 
 def _fill_polygon(shape: tuple[int, int], points: np.ndarray) -> np.ndarray:
@@ -64,17 +83,22 @@ def build_lower_face_crop(
     nose_bottom_y = landmarks[NOSE_BOTTOM][1]
     top_y = nose_bottom_y - 0.03 * face_height
 
-    # ROI polygon: face-oval points below the nose, chin points pushed down a
-    # little so under-jaw beard is included, closed across the top.
-    oval = landmarks[FACE_OVAL]
-    lower = oval[oval[:, 1] >= top_y].copy()
-    lower = lower[np.argsort(np.arctan2(lower[:, 1] - lower[:, 1].mean(),
-                                        lower[:, 0] - lower[:, 0].mean()))]
+    # ROI: the face oval below the nose, chin pushed down a little so under-jaw
+    # beard is included.
+    #
+    # Fill the WHOLE oval and then cut at top_y. Selecting the oval points below
+    # top_y first and filling those closed the shape with a straight chord
+    # between the topmost surviving points -- which sit wherever the landmark
+    # ring happens to be sampled, not at top_y. That chord sliced away 53-62% of
+    # the philtrum on three of our nine selfies, so the mustache was outside the
+    # ROI and no model could ever score there.
+    oval = landmarks[FACE_OVAL].copy()
     chin_y = landmarks[CHIN_TIP][1]
-    push = lower[:, 1] > (nose_bottom_y + chin_y) / 2
-    lower[push, 1] += under_jaw_extend * face_height
+    push = oval[:, 1] > (nose_bottom_y + chin_y) / 2
+    oval[push, 1] += under_jaw_extend * face_height
 
-    roi_full = _fill_polygon((h, w), lower)
+    roi_full = _fill_polygon((h, w), oval)
+    roi_full = roi_full * (np.arange(h, dtype=np.float32)[:, None] >= top_y)
 
     # Protect mask: outer-lip polygon dilated + nostril disks.  The upper
     # dilation is capped so mustache pixels immediately above the lip are still
@@ -95,6 +119,16 @@ def build_lower_face_crop(
     for idx in (*NOSTRILS, NOSE_BOTTOM):
         _disk(protect_full, landmarks[idx], nostril_r)
     protect_full = np.clip(protect_full, 0.0, 1.0)
+
+    # Detection-side protect: the lips themselves plus tight nostril disks, with
+    # no dilation. The dilated protect_full above is what blend uses to keep the
+    # OUTPUT off the lips; using it to gate detection as well was throwing away
+    # the philtrum (nose-bottom disk) and the soul patch (downward dilation).
+    detect_protect_full = lip_base.copy()
+    tight_r = max(2, int(0.014 * face_width))
+    for idx in NOSTRILS:
+        _disk(detect_protect_full, landmarks[idx], tight_r)
+    detect_protect_full = np.clip(detect_protect_full, 0.0, 1.0)
 
     # Skin reference patches (clean-skin sample for the per-person color model):
     # forehead center + both upper cheeks.
@@ -135,11 +169,15 @@ def build_lower_face_crop(
     jaw = np.clip(roi - base, 0, 1)
 
     protect = protect_full[y0:y1, x0:x1]
+    detect_protect = detect_protect_full[y0:y1, x0:x1]
+    lips = lip_base[y0:y1, x0:x1]
+
+    # Region priors gate DETECTION, so they use the detection-side protect.
     region_masks = {
-        "mustache": mustache * roi * (1 - protect),
-        "chin": chin * roi * (1 - protect),
-        "mouth_side": mouth_side * roi * (1 - protect),
-        "jaw": jaw * (1 - protect),
+        "mustache": mustache * roi * (1 - detect_protect),
+        "chin": chin * roi * (1 - detect_protect),
+        "mouth_side": mouth_side * roi * (1 - detect_protect),
+        "jaw": jaw * (1 - detect_protect),
     }
 
     return LowerFaceCrop(
@@ -151,6 +189,8 @@ def build_lower_face_crop(
         region_masks=region_masks,
         face_width=face_width,
         landmarks=crop_landmarks,
+        detect_protect_mask=detect_protect,
+        lips_mask=lips,
     )
 
 
