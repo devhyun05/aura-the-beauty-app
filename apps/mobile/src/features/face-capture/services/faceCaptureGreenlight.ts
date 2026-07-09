@@ -43,7 +43,13 @@ export type FaceCaptureGreenlightReport = {
   nativeCameraMetadata?: NativeCameraCaptureMetadata;
 };
 
-const CENTER_OFFSET_MAX_RATIO = 0.12;
+// 중앙 오프셋 허용치: 가이드 폭 대비 비율. 0.12는 전형 화면(가이드 ~310pt)에서
+// ±37pt 까지 통과시켜 "중앙선이 눈에 띄게 어긋나도 촬영 가능" 문제를 낳았다.
+// 0.06(±~18pt)은 두 중앙선이 시각적으로 겹쳐 보이는 수준. 얼굴 중앙선 렌더와
+// 게이트가 같은 수치를 쓰므로, 선이 빨간(미정렬) 동안은 셔터가 잠긴다.
+// TODO(실기기): 지터로 초록불이 불안정하면 0.08까지 완화 검토
+// (realtime-landmark-frame 로그의 metrics.centerOffsetPx 분포로 판단).
+const CENTER_OFFSET_MAX_RATIO = 0.06;
 const CENTER_LINE_SPREAD_MAX_RATIO = 0.1;
 const YAW_MAX_DEG = 10;
 const ROLL_MAX_DEG = 8;
