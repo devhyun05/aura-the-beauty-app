@@ -193,10 +193,25 @@ const statusBadgePresets: Record<
   ConsultingRecordStatus,
   {label: string; background: string; color: string}
 > = {
-  upcoming: {
-    label: '예정',
+  requested: {
+    label: '신청 접수',
     background: consultingColors.roseSoft,
     color: consultingColors.roseText,
+  },
+  contacting: {
+    label: '확인 중',
+    background: consultingColors.goldSoft,
+    color: consultingColors.goldText,
+  },
+  confirmed: {
+    label: '예약 확정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  unavailable: {
+    label: '조율 불가',
+    background: consultingColors.surfaceMuted,
+    color: consultingColors.textMuted,
   },
   completed: {
     label: '완료',

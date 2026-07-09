@@ -5,6 +5,8 @@ from app.api import (
   ar,
   community,
   consulting,
+  consulting_partner,
+  consulting_realtime,
   feedback,
   filter_extractions,
   health,
@@ -31,3 +33,5 @@ api_router.include_router(feedback.router)
 api_router.include_router(filter_extractions.router)
 api_router.include_router(ar.router)
 api_router.include_router(consulting.router)
+api_router.include_router(consulting_partner.router)
+api_router.include_router(consulting_realtime.router)

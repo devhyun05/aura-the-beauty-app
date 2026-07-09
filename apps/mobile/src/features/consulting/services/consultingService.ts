@@ -8,7 +8,8 @@ import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {
   consultingCategories,
   consultingExperts,
-  consultingMembershipPlans,
+  consultingLocalPlaces,
+  consultingRecords,
   findConsultingExpertOrFirst,
 } from '../mocks/consulting.mock';
 import type {
@@ -18,7 +19,8 @@ import type {
   ConsultingDurationOption,
   ConsultingExpert,
   ConsultingExpertReview,
-  ConsultingMembershipPlan,
+  ConsultingLocalPlace,
+  ConsultingLocalPlaceCategoryId,
   ConsultingRecord,
   ConsultingReviewDraft,
   ConsultingSummary,
@@ -27,7 +29,8 @@ import type {
 export type ConsultingHomeData = {
   categories: readonly ConsultingCategory[];
   experts: readonly ConsultingExpert[];
-  upcomingRecord: ConsultingRecord | null;
+  activeRecord: ConsultingRecord | null;
+  activeRecords: readonly ConsultingRecord[];
 };
 
 function arr<T>(value: unknown, fallback: readonly T[]): readonly T[] {
@@ -92,19 +95,29 @@ function coerceExpert(raw: any): ConsultingExpert {
 }
 
 function coerceRecord(raw: any): ConsultingRecord {
+  const preferredContactMethod =
+    raw?.preferredContactMethod === 'call'
+      ? 'call'
+      : raw?.preferredContactMethod === 'sms'
+        ? 'sms'
+        : null;
+
   return {
     id: String(raw?.id ?? ''),
     expertId: String(raw?.expertId ?? ''),
     durationId: raw?.durationId ? String(raw.durationId) : undefined,
     dayId: raw?.dayId ? String(raw.dayId) : null,
     slotId: raw?.slotId ? String(raw.slotId) : null,
-    status: (raw?.status ?? 'upcoming') as ConsultingRecord['status'],
+    status: (raw?.status ?? 'requested') as ConsultingRecord['status'],
     categoryLabel: String(raw?.categoryLabel ?? ''),
     dateLabel: String(raw?.dateLabel ?? ''),
     durationLabel: String(raw?.durationLabel ?? ''),
     sharedReportIds: arr<string>(raw?.sharedReportIds, []),
     reviewId: raw?.reviewId ? String(raw.reviewId) : null,
     summary: raw?.summary ? (raw.summary as ConsultingSummary) : undefined,
+    contactName: raw?.contactName ? String(raw.contactName) : null,
+    contactPhone: raw?.contactPhone ? String(raw.contactPhone) : null,
+    preferredContactMethod,
   };
 }
 
@@ -174,6 +187,65 @@ function cacheBookings(records: readonly ConsultingRecord[]): readonly Consultin
   return records;
 }
 
+function isActiveRecordStatus(status: ConsultingRecord['status']): boolean {
+  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+}
+
+function activeRecordsFrom(
+  records: readonly ConsultingRecord[],
+): readonly ConsultingRecord[] {
+  return records.filter(record => isActiveRecordStatus(record.status));
+}
+
+function filterBookingsByStatus(
+  records: readonly ConsultingRecord[],
+  status?: string,
+): readonly ConsultingRecord[] {
+  if (!status || status === 'all') {
+    return records;
+  }
+
+  return records.filter(record => record.status === status);
+}
+
+function fallbackLocalPlaces({
+  category,
+  region,
+  limit,
+}: {
+  category: ConsultingLocalPlaceCategoryId;
+  region?: string;
+  limit: number;
+}): readonly ConsultingLocalPlace[] {
+  const normalizedRegion = region?.trim();
+  const categoryLabel =
+      category === 'personalColor'
+        ? '퍼스널컬러'
+        : category === 'makeup'
+          ? '메이크업'
+          : category === 'fashion'
+            ? '패션'
+            : '헤어';
+  const categoryPlaces = consultingLocalPlaces.filter(place =>
+    place.categoryLabel.includes(categoryLabel),
+  );
+
+  if (!normalizedRegion) {
+    return (categoryPlaces.length > 0 ? categoryPlaces : consultingLocalPlaces).slice(
+      0,
+      limit,
+    );
+  }
+
+  const regionPlaces = categoryPlaces.filter(place =>
+    `${place.address} ${place.roadAddress} ${place.name}`.includes(
+      normalizedRegion,
+    ),
+  );
+
+  return (regionPlaces.length > 0 ? regionPlaces : categoryPlaces).slice(0, limit);
+}
+
 function upsertCachedBooking(record: ConsultingRecord): void {
   const current = bookingsCache?.data ?? [];
   const next = [
@@ -182,13 +254,28 @@ function upsertCachedBooking(record: ConsultingRecord): void {
   ];
   cacheBookings(next);
 
-  if (record.status === 'upcoming') {
+  if (isActiveRecordStatus(record.status)) {
+    const activeRecords = activeRecordsFrom(next);
     homeCache = homeCache
       ? {
           createdAt: Date.now(),
-          data: {...homeCache.data, upcomingRecord: record},
+          data: {
+            ...homeCache.data,
+            activeRecord: activeRecords[0] ?? record,
+            activeRecords,
+          },
         }
       : homeCache;
+  } else if (homeCache?.data.activeRecord?.id === record.id) {
+    const activeRecords = activeRecordsFrom(next);
+    homeCache = {
+      createdAt: Date.now(),
+      data: {
+        ...homeCache.data,
+        activeRecord: activeRecords[0] ?? null,
+        activeRecords,
+      },
+    };
   }
 }
 
@@ -199,10 +286,15 @@ function removeCachedBooking(bookingId: string): void {
 
   cacheBookings(bookingsCache.data.filter(record => record.id !== bookingId));
 
-  if (homeCache?.data.upcomingRecord?.id === bookingId) {
+  if (homeCache?.data.activeRecord?.id === bookingId) {
+    const activeRecords = activeRecordsFrom(bookingsCache.data);
     homeCache = {
       createdAt: Date.now(),
-      data: {...homeCache.data, upcomingRecord: null},
+      data: {
+        ...homeCache.data,
+        activeRecord: activeRecords[0] ?? null,
+        activeRecords,
+      },
     };
   }
 }
@@ -211,10 +303,12 @@ function removeCachedBooking(bookingId: string): void {
 // Reads
 // ---------------------------------------------------------------------------
 export async function getConsultingHome(): Promise<ConsultingHomeData> {
+  const fallbackActiveRecords = activeRecordsFrom(consultingRecords);
   const fallback: ConsultingHomeData = {
     categories: consultingCategories,
     experts: consultingExperts,
-    upcomingRecord: null,
+    activeRecord: fallbackActiveRecords[0] ?? null,
+    activeRecords: fallbackActiveRecords,
   };
   if (!hasBackend()) {
     return fallback;
@@ -227,14 +321,23 @@ export async function getConsultingHome(): Promise<ConsultingHomeData> {
     const res = await requestBackendJson<{
       categories?: unknown;
       experts?: unknown;
+      activeRecord?: unknown;
+      activeRecords?: unknown;
       upcomingRecord?: unknown;
+      upcomingRecords?: unknown;
     }>('/consulting/home');
+    const activeRecord = res.activeRecord ?? res.upcomingRecord;
+    const activeRecords = (arr<any>(
+      res.activeRecords ?? res.upcomingRecords,
+      activeRecord ? [activeRecord] : [],
+    ) as any[]).map(coerceRecord);
     const home = {
       categories: arr<ConsultingCategory>(res.categories, consultingCategories),
       experts: (arr<any>(res.experts, consultingExperts) as any[]).map(coerceExpert),
-      upcomingRecord: res.upcomingRecord
-        ? coerceRecord(res.upcomingRecord)
-        : null,
+      activeRecord: activeRecord
+        ? coerceRecord(activeRecord)
+        : activeRecords[0] ?? null,
+      activeRecords,
     };
     homeCache = {createdAt: Date.now(), data: home};
     cacheExperts(home.experts);
@@ -350,21 +453,51 @@ export async function getConsultingShareableReports(): Promise<
   }
 }
 
-export async function getConsultingMembershipPlans(): Promise<
-  readonly ConsultingMembershipPlan[]
-> {
+export async function getConsultingLocalPlaces({
+  category,
+  region,
+  query,
+  latitude,
+  longitude,
+  limit = 15,
+}: {
+  category: ConsultingLocalPlaceCategoryId;
+  region?: string;
+  query?: string;
+  latitude?: number;
+  longitude?: number;
+  limit?: number;
+}): Promise<readonly ConsultingLocalPlace[]> {
   if (!hasBackend()) {
-    return consultingMembershipPlans;
+    return fallbackLocalPlaces({category, region, limit});
   }
+
   try {
-    const res = await requestBackendJson<{plans?: unknown}>(
-      '/consulting/membership/plans',
+    const params = new URLSearchParams({category});
+    if (region?.trim()) {
+      params.set('region', region.trim());
+    }
+    if (query?.trim()) {
+      params.set('query', query.trim());
+    }
+    if (typeof latitude === 'number' && Number.isFinite(latitude)) {
+      params.set('latitude', String(latitude));
+    }
+    if (typeof longitude === 'number' && Number.isFinite(longitude)) {
+      params.set('longitude', String(longitude));
+    }
+    params.set('limit', String(Math.max(1, Math.min(limit, 20))));
+    const res = await requestBackendJson<{places?: unknown; source?: string}>(
+      `/consulting/local-places?${params.toString()}`,
     );
-    const plans = arr<ConsultingMembershipPlan>(res.plans, consultingMembershipPlans);
-    return plans.length > 0 ? plans : consultingMembershipPlans;
+    const places = arr<ConsultingLocalPlace>(res.places, []);
+    if (places.length === 0 && res.source === 'empty_not_configured') {
+      return fallbackLocalPlaces({category, region, limit});
+    }
+    return places;
   } catch (error) {
-    logFallback('plans', error);
-    return consultingMembershipPlans;
+    logFallback('localPlaces', error);
+    return fallbackLocalPlaces({category, region, limit});
   }
 }
 
@@ -372,7 +505,7 @@ export async function getConsultingBookings(
   status?: string,
 ): Promise<readonly ConsultingRecord[]> {
   if (!hasBackend()) {
-    return [];
+    return filterBookingsByStatus(consultingRecords, status);
   }
   if (!status || status === 'all') {
     if (isFresh(bookingsCache)) {
@@ -530,46 +663,5 @@ export async function updateConsultingBooking(
   } catch (error) {
     logFallback('booking:update', error);
     return null;
-  }
-}
-
-export async function createConsultingPayment(payload: {
-  kind: 'booking' | 'membership';
-  optionId?: string;
-  bookingId?: string;
-  planId?: string;
-  method?: string;
-}): Promise<boolean> {
-  if (!hasBackend()) {
-    return false;
-  }
-  try {
-    await requestBackendJson('/consulting/payments', {
-      method: 'POST',
-      body: payload,
-    });
-    return true;
-  } catch (error) {
-    logFallback('payment', error);
-    return false;
-  }
-}
-
-export async function subscribeConsultingMembership(
-  planId: string,
-  method?: string,
-): Promise<boolean> {
-  if (!hasBackend()) {
-    return false;
-  }
-  try {
-    await requestBackendJson('/consulting/membership/subscribe', {
-      method: 'POST',
-      body: {planId, method},
-    });
-    return true;
-  } catch (error) {
-    logFallback('membership:subscribe', error);
-    return false;
   }
 }

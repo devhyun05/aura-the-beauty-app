@@ -40,6 +40,7 @@
     "expo-image-manipulator": "~56.0.20",
     "expo-image-picker": "~56.0.18",
     "expo-linear-gradient": "~56.0.4",
+    "expo-location": "~56.0.20",
     "expo-media-library": "~56.0.8",
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.19",

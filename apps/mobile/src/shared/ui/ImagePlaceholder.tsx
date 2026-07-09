@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Image, type ImageSourcePropType, StyleSheet} from 'react-native';
+import {Image as ExpoImage} from 'expo-image';
+import {type ImageSourcePropType, StyleSheet} from 'react-native';
 import {View} from 'tamagui';
 
 import {
@@ -72,7 +73,9 @@ export function ImagePlaceholder({
   return (
     <View style={[styles.frame, {borderRadius}]}>
       {!isLoaded ? <View style={styles.placeholder} /> : null}
-      <Image
+      <ExpoImage
+        cachePolicy="memory-disk"
+        contentFit={resizeMode}
         onError={() => setIsLoaded(false)}
         onLoad={() => {
           markImageUriCached(sourceUri);
@@ -84,7 +87,7 @@ export function ImagePlaceholder({
           styles.image,
           {borderRadius, opacity: shouldShowLoadedImage ? 1 : 0},
         ]}
-        resizeMode={resizeMode}
+        transition={120}
       />
     </View>
   );

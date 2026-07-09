@@ -257,15 +257,15 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '예약',
+    title: '상담 신청',
   },
-  ConsultingPayment: {
+  ConsultingRequestConfirm: {
     category: 'form-edit',
     contextLabel: 'CONSULTING',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '결제',
+    title: '신청 확인',
   },
   ConsultingBookingComplete: {
     category: 'completion',
@@ -273,7 +273,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: '예약 완료',
+    title: '신청 접수',
   },
   ConsultingCall: {
     category: 'capture-runtime',
@@ -297,6 +297,22 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '내 상담 내역',
   },
+  ConsultingMessages: {
+    category: 'list',
+    contextLabel: 'CONSULTING',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '상담 톡',
+  },
+  ConsultingNotifications: {
+    category: 'list',
+    contextLabel: 'CONSULTING',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '알림',
+  },
   ConsultingConversation: {
     category: 'detail-report',
     contextLabel: 'CONSULTING',
@@ -305,13 +321,21 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '상담 대화',
   },
+  ConsultingLocalPlaces: {
+    category: 'list',
+    contextLabel: 'CONSULTING',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '근처 업체',
+  },
   ConsultingMembership: {
     category: 'detail-report',
     contextLabel: 'CONSULTING',
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: 'AURA 멤버십',
+    title: '멤버십 준비 중',
   },
   ConsultingReview: {
     category: 'form-edit',
@@ -347,7 +371,7 @@ export const routeChromeByRoute = {
     category: 'ar-runtime',
     depth: 'immersive',
     kind: 'fullscreen',
-    statusBarStyle: 'light',
+    statusBarStyle: 'dark',
   },
   MakeupFeedbackCapture: {
     category: 'capture-runtime',

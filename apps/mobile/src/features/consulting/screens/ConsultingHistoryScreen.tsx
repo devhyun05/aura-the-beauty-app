@@ -4,13 +4,13 @@ import {
   Alert,
   type GestureResponderEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   View as RNView,
 } from 'react-native';
 import {
   CalendarX2,
   ChevronRight,
-  FileText,
   MessageCircle,
   MoreHorizontal,
 } from 'lucide-react-native';
@@ -44,18 +44,18 @@ import type {
   ConsultingRecordStatus,
 } from '../types';
 
-type HistoryFilterId = 'all' | ConsultingRecordStatus | 'reports';
+type HistoryFilterId = 'all' | Exclude<ConsultingRecordStatus, 'unavailable'>;
 
 const historyFilters: readonly {id: HistoryFilterId; label: string}[] = [
   {id: 'all', label: '전체'},
-  {id: 'upcoming', label: '예정'},
+  {id: 'requested', label: '신청'},
+  {id: 'contacting', label: '확인 중'},
+  {id: 'confirmed', label: '확정'},
   {id: 'completed', label: '완료'},
-  {id: 'reports', label: '리포트'},
   {id: 'canceled', label: '취소'},
 ];
 
 type ConsultingHistoryScreenProps = {
-  onPressCompleted: (record: ConsultingRecord) => void;
   onPressUpcoming: (record: ConsultingRecord) => void;
   onPressReschedule: (record: ConsultingRecord) => void;
   onPressReview: (record: ConsultingRecord) => void;
@@ -63,7 +63,6 @@ type ConsultingHistoryScreenProps = {
 };
 
 export function ConsultingHistoryScreen({
-  onPressCompleted,
   onPressUpcoming,
   onPressReschedule,
   onPressReview,
@@ -107,8 +106,8 @@ export function ConsultingHistoryScreen({
   const handleCancel = useCallback((record: ConsultingRecord) => {
     setOpenMenuRecordId(null);
     Alert.alert(
-      '예약을 취소할까요?',
-      '상담 시작 24시간 전까지는 무료 취소되고, 이후에는 환불 금액이 달라질 수 있어요.',
+      '신청을 취소할까요?',
+      '취소하면 운영팀과 프리랜서에게 더 이상 일정 확인을 요청하지 않아요.',
       [
         {text: '아니요', style: 'cancel'},
         {
@@ -121,7 +120,7 @@ export function ConsultingHistoryScreen({
               if (!canceled) {
                 Alert.alert(
                   '취소 실패',
-                  '예약 상태를 변경하지 못했어요. 네트워크와 API 연결을 확인해 주세요.',
+                  '신청 상태를 변경하지 못했어요. 네트워크와 API 연결을 확인해 주세요.',
                   [{text: '확인'}],
                 );
                 return;
@@ -173,29 +172,25 @@ export function ConsultingHistoryScreen({
     );
   }, []);
 
-  const reportRecords = useMemo(
-    () =>
-      records.filter(
-        record => record.status === 'completed' && Boolean(record.summary),
-      ),
+  const visibleRecords = useMemo(
+    () => records.filter(record => record.status !== 'unavailable'),
     [records],
   );
 
   const filteredRecords = useMemo(() => {
     if (filter === 'all') {
-      return records;
+      return visibleRecords;
     }
 
-    if (filter === 'reports') {
-      return reportRecords;
-    }
-
-    return records.filter(record => record.status === filter);
-  }, [filter, records, reportRecords]);
+    return visibleRecords.filter(record => record.status === filter);
+  }, [filter, visibleRecords]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
-      <View style={styles.filterRow}>
+      <ScrollView
+        contentContainerStyle={styles.filterRow}
+        horizontal
+        showsHorizontalScrollIndicator={false}>
         {historyFilters.map(item => (
           <ConsultingChip
             key={item.id}
@@ -204,83 +199,61 @@ export function ConsultingHistoryScreen({
             selected={item.id === filter}
           />
         ))}
-      </View>
+      </ScrollView>
 
       {filteredRecords.length > 0 ? (
         <View style={styles.list}>
-          {filter === 'reports' ? (
-            <View style={styles.reportIntro}>
-              <Text style={styles.reportIntroTitle}>저장된 상담 리포트</Text>
-              <Text style={styles.reportIntroDescription}>
-                전화 상담 후 전문가가 저장한 요약을 한 곳에 모았어요.
-              </Text>
-            </View>
-          ) : null}
           {filteredRecords.map(record => (
-            filter === 'reports' ? (
-              <SummaryReportCard
-                expert={
-                  experts.find(item => item.id === record.expertId) ??
-                  findConsultingExpertOrFirst(record.expertId)
-                }
-                key={record.id}
-                onPress={() => onPressCompleted(record)}
-                record={record}
-              />
-            ) : (
-              <HistoryCard
-                expert={
-                  experts.find(item => item.id === record.expertId) ??
-                  findConsultingExpertOrFirst(record.expertId)
-                }
-                key={record.id}
-                onPress={() =>
-                  record.status === 'upcoming'
-                    ? onPressUpcoming(record)
-                    : record.status === 'completed'
-                      ? onPressCompleted(record)
-                      : undefined
-                }
-                onPressCancel={() => handleCancel(record)}
-                onPressDelete={() => handleDelete(record)}
-                onPressReschedule={() => onPressReschedule(record)}
-                onPressReview={() => onPressReview(record)}
-                menuOpen={openMenuRecordId === record.id}
-                onToggleMenu={() =>
-                  setOpenMenuRecordId(current =>
-                    current === record.id ? null : record.id,
-                  )
-                }
-                record={record}
-                cancelling={cancellingRecordId === record.id}
-                deleting={deletingRecordId === record.id}
-              />
-            )
+            <HistoryCard
+              expert={
+                experts.find(item => item.id === record.expertId) ??
+                findConsultingExpertOrFirst(record.expertId)
+              }
+              key={record.id}
+              onPress={() =>
+                isActiveRecordStatus(record.status)
+                  ? onPressUpcoming(record)
+                  : undefined
+              }
+              onPressCancel={() => handleCancel(record)}
+              onPressDelete={() => handleDelete(record)}
+              onPressReschedule={() => onPressReschedule(record)}
+              onPressReview={() => onPressReview(record)}
+              menuOpen={openMenuRecordId === record.id}
+              onToggleMenu={() =>
+                setOpenMenuRecordId(current =>
+                  current === record.id ? null : record.id,
+                )
+              }
+              record={record}
+              cancelling={cancellingRecordId === record.id}
+              deleting={deletingRecordId === record.id}
+            />
           ))}
         </View>
       ) : isLoading ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>상담 내역을 불러오는 중이에요</Text>
           <Text style={styles.emptyDescription}>
-            예약 저장 내역을 확인하고 있어요.
+            신청 접수 내역을 확인하고 있어요.
           </Text>
         </View>
       ) : (
         <View style={styles.empty}>
           <CalendarX2 color={consultingColors.textSoft} size={32} />
           <Text style={styles.emptyTitle}>
-            {filter === 'upcoming'
-              ? '예정된 상담이 없어요'
+            {filter === 'requested'
+              ? '접수된 신청이 없어요'
+              : filter === 'contacting'
+                ? '확인 중인 신청이 없어요'
+              : filter === 'confirmed'
+                ? '확정된 상담이 없어요'
               : filter === 'canceled'
                 ? '취소된 상담이 없어요'
-              : filter === 'reports'
-                ? '저장된 상담 리포트가 없어요'
               : '상담 내역이 없어요'}
           </Text>
           <Text style={styles.emptyDescription}>
-            {filter === 'reports'
-              ? '상담 완료 후 전문가가 요약을 저장하면 여기에 모아 보여드려요.'
-              : '전문가와 첫 상담을 시작해 보세요.'}
+            프리랜서에게 첫 상담 신청을 보내보세요.
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -289,12 +262,16 @@ export function ConsultingHistoryScreen({
               styles.emptyCta,
               pressed ? styles.pressed : null,
             ]}>
-            <Text style={styles.emptyCtaText}>전문가 둘러보기</Text>
+            <Text style={styles.emptyCtaText}>프리랜서 둘러보기</Text>
           </Pressable>
         </View>
       )}
     </ConsultingScreenScaffold>
   );
+}
+
+function isActiveRecordStatus(status: ConsultingRecordStatus): boolean {
+  return status === 'requested' || status === 'contacting' || status === 'confirmed';
 }
 
 function HistoryCard({
@@ -322,9 +299,12 @@ function HistoryCard({
   cancelling: boolean;
   deleting: boolean;
 }) {
-  const isUpcoming = record.status === 'upcoming';
+  const isActive = isActiveRecordStatus(record.status);
+  const canReschedule =
+    record.status === 'requested' || record.status === 'contacting';
+  const canCancel = isActive;
   const isCanceled = record.status === 'canceled';
-  const canManage = isUpcoming || isCanceled;
+  const canManage = canCancel || isCanceled;
   const canReview = record.status === 'completed' && !record.reviewId;
   const handleReviewPress = (event: GestureResponderEvent) => {
     event.stopPropagation();
@@ -352,12 +332,12 @@ function HistoryCard({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${expert.name} ${record.dateLabel} 상담 ${
-        isUpcoming ? '예약됨' : '요약 보기'
+        isActive ? '신청 대화' : '진행 상태'
       }`}
       onPress={onPress}
       style={({pressed}) => [
         styles.card,
-        isUpcoming && styles.cardUpcoming,
+        isActive && styles.cardUpcoming,
         isCanceled && styles.cardCanceled,
         pressed && !isCanceled ? styles.pressed : null,
       ]}>
@@ -382,7 +362,7 @@ function HistoryCard({
       </RNView>
       {menuOpen ? (
         <RNView style={styles.actionMenu}>
-          {isUpcoming ? (
+          {canReschedule ? (
             <>
               <Pressable
                 accessibilityRole="button"
@@ -391,8 +371,12 @@ function HistoryCard({
                   styles.actionMenuItem,
                   pressed ? styles.pressed : null,
                 ]}>
-                <Text style={styles.actionMenuText}>예약 수정</Text>
+                <Text style={styles.actionMenuText}>신청 수정</Text>
               </Pressable>
+            </>
+          ) : null}
+          {canCancel ? (
+            <>
               <Pressable
                 accessibilityRole="button"
                 disabled={cancelling}
@@ -403,7 +387,7 @@ function HistoryCard({
                   pressed && !cancelling ? styles.pressed : null,
                 ]}>
                 <Text style={styles.actionMenuDangerText}>
-                  {cancelling ? '취소 중' : '예약 취소'}
+                  {cancelling ? '취소 중' : '신청 취소'}
                 </Text>
               </Pressable>
             </>
@@ -435,7 +419,7 @@ function HistoryCard({
             {record.categoryLabel}
           </Text>
         </RNView>
-        {isUpcoming ? (
+        {isActive ? (
           <RNView style={styles.enterCta}>
             <MessageCircle color={consultingColors.roseStrong} size={13} />
             <Text style={styles.enterCtaText}>대화 보기</Text>
@@ -444,9 +428,13 @@ function HistoryCard({
           <RNView style={styles.canceledCta}>
             <Text style={styles.canceledCtaText}>취소됨</Text>
           </RNView>
+        ) : record.status === 'completed' ? (
+          <RNView style={styles.completedCta}>
+            <Text style={styles.completedCtaText}>상담 완료</Text>
+          </RNView>
         ) : (
           <RNView style={styles.summaryCta}>
-            <Text style={styles.summaryCtaText}>요약 보기</Text>
+            <Text style={styles.summaryCtaText}>상태 확인</Text>
             <ChevronRight color={consultingColors.textMuted} size={14} />
           </RNView>
         )}
@@ -462,56 +450,6 @@ function HistoryCard({
           <Text style={styles.reviewCtaText}>리뷰 작성</Text>
         </Pressable>
       ) : null}
-    </Pressable>
-  );
-}
-
-function SummaryReportCard({
-  record,
-  expert,
-  onPress,
-}: {
-  record: ConsultingRecord;
-  expert: ConsultingExpert;
-  onPress: () => void;
-}) {
-  const firstNote = record.summary?.notes[0];
-
-  return (
-    <Pressable
-      accessibilityLabel={`${expert.name} ${record.dateLabel} 상담 리포트 보기`}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({pressed}) => [
-        styles.reportCard,
-        pressed ? styles.pressed : null,
-      ]}>
-      <RNView style={styles.cardTopRow}>
-        <RNView style={styles.reportTitleRow}>
-          <RNView style={styles.reportIcon}>
-            <FileText color={consultingColors.roseStrong} size={16} />
-          </RNView>
-          <Text style={styles.reportCardEyebrow}>상담 요약 리포트</Text>
-        </RNView>
-        <Text style={styles.cardDate}>{record.dateLabel}</Text>
-      </RNView>
-      <RNView style={styles.cardBodyRow}>
-        <ExpertAvatar expert={expert} size={44} />
-        <RNView style={styles.cardBody}>
-          <Text numberOfLines={1} style={styles.cardTitle}>
-            {expert.name} · {record.durationLabel}
-          </Text>
-          <Text numberOfLines={2} style={styles.reportPreview}>
-            {firstNote
-              ? `${firstNote.label} ${firstNote.body}`
-              : '전문가가 저장한 상담 요약을 확인해 보세요.'}
-          </Text>
-        </RNView>
-        <RNView style={styles.summaryCta}>
-          <Text style={styles.summaryCtaText}>열기</Text>
-          <ChevronRight color={consultingColors.textMuted} size={14} />
-        </RNView>
-      </RNView>
     </Pressable>
   );
 }
@@ -605,6 +543,21 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
   },
+  completedCta: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.pill,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  completedCtaText: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
   cardStatusRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -680,6 +633,7 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    paddingRight: spacing.xl,
   },
   list: {
     gap: spacing.md,

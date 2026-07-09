@@ -43,6 +43,9 @@ _BOOKING_WINDOW_DAYS = 31
 _BOOKING_START_MINUTE = 10 * 60
 _BOOKING_END_MINUTE = 20 * 60
 _BOOKING_INTERVAL_MINUTES = 30
+ACTIVE_BOOKING_STATUSES = ("requested", "contacting", "confirmed")
+EDITABLE_BOOKING_STATUSES = ("requested", "contacting")
+SLOT_BLOCKING_STATUSES = ("contacting", "confirmed")
 
 
 def _weekday_label(value: Any) -> str:
@@ -166,13 +169,14 @@ async def _slot_overlaps_booking(
       from consulting_bookings
       where expert_id = $1
         and coalesce(scheduled_date, scheduled_at::date) = $2::date
-        and status = 'upcoming'
+        and status = any($4::text[])
         and slot_id is not null
         and id <> $3::uuid
       """,
       expert_id,
       day_id,
       exclude_booking_id,
+      list(SLOT_BLOCKING_STATUSES),
     )
   else:
     rows = await db.fetch(
@@ -181,11 +185,12 @@ async def _slot_overlaps_booking(
       from consulting_bookings
       where expert_id = $1
         and coalesce(scheduled_date, scheduled_at::date) = $2::date
-        and status = 'upcoming'
+        and status = any($3::text[])
         and slot_id is not null
       """,
       expert_id,
       day_id,
+      list(SLOT_BLOCKING_STATUSES),
     )
 
   start_minute = _slot_label_to_minutes(slot_id)
@@ -444,7 +449,7 @@ async def get_expert_slots(
            duration_minutes
     from consulting_bookings
     where expert_id = $1
-      and status = 'upcoming'
+      and status = any($4::text[])
       and coalesce(scheduled_date, scheduled_at::date) between $2::date and $3::date
       and slot_id is not null
     order by scheduled_at
@@ -452,6 +457,7 @@ async def get_expert_slots(
     expert_id,
     first_day,
     last_day,
+    list(SLOT_BLOCKING_STATUSES),
   )
 
   booked_intervals_by_day: dict[str, list[tuple[int, int]]] = {}
@@ -470,15 +476,19 @@ async def get_expert_slots(
 # Home aggregate
 # -----------------------------------------------------------------------------
 async def get_home(db: Database, user_id: str) -> dict[str, Any]:
-  categories, experts, upcoming = await asyncio.gather(
+  categories, experts, active_records = await asyncio.gather(
     list_categories(db),
     list_experts(db),
-    _upcoming_booking(db, user_id),
+    _active_bookings(db, user_id),
   )
+  active = active_records[0] if active_records else None
   return {
     "categories": categories,
     "experts": experts,
-    "upcoming_record": upcoming,
+    "active_record": active,
+    "active_records": active_records,
+    "upcoming_record": active,
+    "upcoming_records": active_records,
   }
 
 
@@ -505,6 +515,9 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     "duration_label": row["duration_label"],
     "shared_report_ids": [str(report_id) for report_id in shared_report_ids],
     "review_id": row.get("review_id"),
+    "contact_name": row.get("contact_name"),
+    "contact_phone": row.get("contact_phone"),
+    "preferred_contact_method": row.get("preferred_contact_method"),
   }
 
 
@@ -528,20 +541,31 @@ async def _attach_summary(db: Database, record: dict[str, Any], booking_id: Any)
   return record
 
 
-async def _upcoming_booking(db: Database, user_id: str) -> dict[str, Any] | None:
-  row = await db.fetchrow(
+async def _active_booking(db: Database, user_id: str) -> dict[str, Any] | None:
+  records = await _active_bookings(db, user_id, limit=1)
+  return records[0] if records else None
+
+
+async def _active_bookings(
+  db: Database,
+  user_id: str,
+  limit: int = 10,
+) -> list[dict[str, Any]]:
+  rows = await db.fetch(
     """
     select b.*, r.id as review_id
     from consulting_bookings b
     left join consulting_expert_reviews r
       on r.booking_id = b.id and r.author_user_id = $1
-    where b.user_id = $1 and b.status = 'upcoming'
-    order by b.scheduled_at asc nulls last, b.created_at asc
-    limit 1
+    where b.user_id = $1 and b.status = any($2::text[])
+    order by b.created_at desc, b.scheduled_at desc nulls last
+    limit $3
     """,
     user_id,
+    list(ACTIVE_BOOKING_STATUSES),
+    limit,
   )
-  return _record(row) if row else None
+  return [_record(record) for record in rows]
 
 
 async def list_bookings(
@@ -664,13 +688,17 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
         user_id, expert_id, duration_code, duration_label, duration_minutes,
         category_label, scheduled_at, scheduled_date, slot_start_minutes,
         date_label, slot_id, concern_id, concern_label,
-        share_reports, shared_report_ids, question, status, price
+        share_reports, shared_report_ids, question,
+        contact_name, contact_phone, preferred_contact_method,
+        status, price
       )
       values (
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9,
         $10, $11, $12, $13,
-        $14, $15::uuid[], $16, 'upcoming', $17
+        $14, $15::uuid[], $16,
+        $17, $18, $19,
+        'requested', $20
       )
       returning *
       """,
@@ -690,6 +718,9 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
       payload.share_reports,
       shared_report_ids,
       (payload.question or "").strip() or None,
+      (payload.contact_name or "").strip() or None,
+      (payload.contact_phone or "").strip() or None,
+      (payload.preferred_contact_method or "").strip() or None,
       duration["price"],
     )
   except asyncpg.exceptions.ExclusionViolationError as error:
@@ -711,8 +742,8 @@ async def update_booking(
   )
   if current is None:
     raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
-  if current["status"] != "upcoming":
-    raise AppError(409, "CONSULTING_BOOKING_NOT_UPCOMING", "예정된 상담만 수정할 수 있어요.")
+  if current["status"] not in EDITABLE_BOOKING_STATUSES:
+    raise AppError(409, "CONSULTING_BOOKING_NOT_EDITABLE", "확정 전 신청만 수정할 수 있어요.")
   if current["expert_id"] != payload.expert_id:
     raise AppError(400, "CONSULTING_EXPERT_CHANGE_UNSUPPORTED", "전문가 변경은 새 예약으로 진행해 주세요.")
 
@@ -783,7 +814,10 @@ async def update_booking(
         share_reports = $14,
         shared_report_ids = $15::uuid[],
         question = $16,
-        price = $17,
+        contact_name = $17,
+        contact_phone = $18,
+        preferred_contact_method = $19,
+        price = $20,
         updated_at = now()
       where id = $1 and user_id = $2
       returning *
@@ -804,6 +838,9 @@ async def update_booking(
       payload.share_reports,
       shared_report_ids,
       (payload.question or "").strip() or None,
+      (payload.contact_name or "").strip() or None,
+      (payload.contact_phone or "").strip() or None,
+      (payload.preferred_contact_method or "").strip() or None,
       duration["price"],
     )
   except asyncpg.exceptions.ExclusionViolationError as error:
@@ -850,6 +887,44 @@ async def delete_canceled_booking(db: Database, user_id: str, booking_id: str) -
   )
 
 
+async def update_booking_status(db: Database, booking_id: str, payload: Any) -> dict[str, Any]:
+  row = await db.fetchrow(
+    "select * from consulting_bookings where id = $1",
+    booking_id,
+  )
+  if row is None:
+    raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
+
+  next_status = payload.status
+  if next_status == "completed":
+    return await complete_booking(db, booking_id)
+
+  if row["status"] == "completed" and next_status != "completed":
+    raise AppError(409, "CONSULTING_BOOKING_COMPLETED", "완료된 상담 상태는 되돌릴 수 없어요.")
+
+  try:
+    updated = await db.fetchrow(
+      """
+      update consulting_bookings
+      set status = $2,
+          operator_note = $3,
+          confirmed_at = case
+            when $2 = 'confirmed' and confirmed_at is null then now()
+            else confirmed_at
+          end,
+          updated_at = now()
+      where id = $1
+      returning *
+      """,
+      booking_id,
+      next_status,
+      (payload.operator_note or "").strip() or None,
+    )
+  except asyncpg.exceptions.ExclusionViolationError as error:
+    raise AppError(409, "CONSULTING_SLOT_TAKEN", "이미 확정 또는 확인 중인 시간이에요.") from error
+  return _record(updated)
+
+
 async def complete_booking(db: Database, booking_id: str) -> dict[str, Any]:
   row = await db.fetchrow(
     "select * from consulting_bookings where id = $1",
@@ -861,6 +936,8 @@ async def complete_booking(db: Database, booking_id: str) -> dict[str, Any]:
     raise AppError(409, "CONSULTING_BOOKING_CANCELED", "취소된 상담은 완료 처리할 수 없어요.")
   if row["status"] == "completed":
     return await _attach_summary(db, _record(row), row["id"])
+  if row["status"] != "confirmed":
+    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정된 상담만 완료 처리할 수 있어요.")
 
   updated = await db.fetchrow(
     """
@@ -915,6 +992,8 @@ async def upsert_booking_summary(db: Database, booking_id: str, payload: Any) ->
     raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
   if row["status"] == "canceled":
     raise AppError(409, "CONSULTING_BOOKING_CANCELED", "취소된 상담에는 요약을 저장할 수 없어요.")
+  if row["status"] not in {"confirmed", "completed"}:
+    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정된 상담에만 요약을 저장할 수 있어요.")
 
   notes = _summary_notes_from_payload(payload)
   products = _summary_products_from_payload(payload)
@@ -1192,165 +1271,3 @@ async def create_admin_expert(db: Database, payload: Any) -> dict[str, Any]:
     )
 
   return await get_expert(db, expert_id)
-
-
-# -----------------------------------------------------------------------------
-# Membership
-# -----------------------------------------------------------------------------
-async def list_membership_plans(db: Database) -> list[dict[str, Any]]:
-  return await db.fetch(
-    """
-    select id, name, tagline, price_per_month, original_price_per_month,
-           benefits, badge, highlight
-    from consulting_membership_plans
-    where is_active = true
-    order by sort_order, price_per_month
-    """,
-  )
-
-
-async def get_my_membership(db: Database, user_id: str) -> dict[str, Any] | None:
-  return await db.fetchrow(
-    """
-    select m.id, m.plan_id, m.status, m.started_at, m.current_period_end,
-           p.name as plan_name, p.price_per_month
-    from user_consulting_memberships m
-    join consulting_membership_plans p on p.id = m.plan_id
-    where m.user_id = $1 and m.status = 'active'
-    order by m.created_at desc
-    limit 1
-    """,
-    user_id,
-  )
-
-
-async def subscribe_membership(db: Database, user_id: str, payload: Any) -> dict[str, Any]:
-  plan = await db.fetchrow(
-    "select id, name, price_per_month from consulting_membership_plans where id = $1 and is_active = true",
-    payload.plan_id,
-  )
-  if plan is None:
-    raise AppError(404, "CONSULTING_PLAN_NOT_FOUND", "멤버십 플랜을 찾을 수 없어요.")
-
-  # Deactivate any existing active membership before subscribing to a new one.
-  await db.execute(
-    "update user_consulting_memberships set status = 'canceled' where user_id = $1 and status = 'active'",
-    user_id,
-  )
-
-  period_end = datetime.now() + timedelta(days=30)
-  membership = await db.fetchrow(
-    """
-    insert into user_consulting_memberships (user_id, plan_id, status, current_period_end)
-    values ($1, $2, 'active', $3)
-    returning id, plan_id, status, started_at, current_period_end
-    """,
-    user_id,
-    plan["id"],
-    period_end,
-  )
-
-  payment = await _record_payment(
-    db,
-    user_id=user_id,
-    kind="membership",
-    option_id=plan["id"],
-    amount=plan["price_per_month"],
-    booking_id=None,
-    membership_id=membership["id"],
-    method=payload.method,
-  )
-
-  result = dict(membership)
-  result["plan_name"] = plan["name"]
-  result["payment"] = payment
-  return result
-
-
-# -----------------------------------------------------------------------------
-# Payments (records the payment; the real PG charge is a stub for now)
-# -----------------------------------------------------------------------------
-_OPTION_MULTIPLIER = {"single": 1, "package3": 3}
-
-
-async def _record_payment(
-  db: Database,
-  *,
-  user_id: str,
-  kind: str,
-  option_id: str | None,
-  amount: int,
-  booking_id: Any,
-  membership_id: Any,
-  method: str | None,
-) -> dict[str, Any]:
-  # NOTE: This marks the payment as paid without calling a real payment
-  # gateway. Wire a PG provider (Toss/PortOne) here and set status from its
-  # result once merchant credentials are available.
-  row = await db.fetchrow(
-    """
-    insert into consulting_payments (
-      user_id, kind, option_id, booking_id, membership_id,
-      amount, currency, status, method, pg_provider
-    )
-    values ($1, $2, $3, $4, $5, $6, 'KRW', 'paid', $7, 'stub')
-    returning id, kind, option_id, amount, currency, status, method, created_at
-    """,
-    user_id,
-    kind,
-    option_id,
-    booking_id,
-    membership_id,
-    amount,
-    method,
-  )
-  result = dict(row)
-  result["id"] = str(result["id"])
-  return result
-
-
-async def create_payment(db: Database, user_id: str, payload: Any) -> dict[str, Any]:
-  if payload.kind == "booking":
-    if payload.booking_id is None:
-      raise AppError(400, "CONSULTING_PAYMENT_INVALID", "결제할 예약이 필요해요.")
-    booking = await db.fetchrow(
-      "select id, price from consulting_bookings where id = $1 and user_id = $2",
-      str(payload.booking_id),
-      user_id,
-    )
-    if booking is None:
-      raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
-    multiplier = _OPTION_MULTIPLIER.get(payload.option_id or "single", 1)
-    amount = booking["price"] * multiplier
-    return await _record_payment(
-      db,
-      user_id=user_id,
-      kind="booking",
-      option_id=payload.option_id or "single",
-      amount=amount,
-      booking_id=booking["id"],
-      membership_id=None,
-      method=payload.method,
-    )
-
-  if payload.kind == "membership":
-    if payload.plan_id is None:
-      raise AppError(400, "CONSULTING_PAYMENT_INVALID", "결제할 멤버십 플랜이 필요해요.")
-    plan = await db.fetchrow(
-      "select id, price_per_month from consulting_membership_plans where id = $1 and is_active = true",
-      payload.plan_id,
-    )
-    if plan is None:
-      raise AppError(404, "CONSULTING_PLAN_NOT_FOUND", "멤버십 플랜을 찾을 수 없어요.")
-    return await _record_payment(
-      db,
-      user_id=user_id,
-      kind="membership",
-      option_id=plan["id"],
-      amount=plan["price_per_month"],
-      booking_id=None,
-      membership_id=None,
-      method=payload.method,
-    )
-
-  raise AppError(400, "CONSULTING_PAYMENT_INVALID", "결제 종류를 확인해 주세요.")

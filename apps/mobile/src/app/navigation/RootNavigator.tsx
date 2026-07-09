@@ -28,8 +28,11 @@ import {
   ConsultingExpertListRouteScreen,
   ConsultingExpertProfileRouteScreen,
   ConsultingHistoryRouteScreen,
+  ConsultingLocalPlacesRouteScreen,
   ConsultingMembershipRouteScreen,
-  ConsultingPaymentRouteScreen,
+  ConsultingMessagesRouteScreen,
+  ConsultingNotificationsRouteScreen,
+  ConsultingRequestConfirmRouteScreen,
   ConsultingReviewRouteScreen,
   ConsultingSummaryRouteScreen,
 } from './routes/consultingRoutes';
@@ -131,7 +134,10 @@ export function RootNavigator() {
         component={ConsultingExpertProfileRouteScreen}
       />
       <Stack.Screen name="ConsultingBooking" component={ConsultingBookingRouteScreen} />
-      <Stack.Screen name="ConsultingPayment" component={ConsultingPaymentRouteScreen} />
+      <Stack.Screen
+        name="ConsultingRequestConfirm"
+        component={ConsultingRequestConfirmRouteScreen}
+      />
       <Stack.Screen
         name="ConsultingBookingComplete"
         component={ConsultingBookingCompleteRouteScreen}
@@ -143,9 +149,18 @@ export function RootNavigator() {
       />
       <Stack.Screen name="ConsultingSummary" component={ConsultingSummaryRouteScreen} />
       <Stack.Screen name="ConsultingHistory" component={ConsultingHistoryRouteScreen} />
+      <Stack.Screen name="ConsultingMessages" component={ConsultingMessagesRouteScreen} />
+      <Stack.Screen
+        name="ConsultingNotifications"
+        component={ConsultingNotificationsRouteScreen}
+      />
       <Stack.Screen
         name="ConsultingConversation"
         component={ConsultingConversationRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingLocalPlaces"
+        component={ConsultingLocalPlacesRouteScreen}
       />
       <Stack.Screen name="ConsultingMembership" component={ConsultingMembershipRouteScreen} />
       <Stack.Screen name="ConsultingReview" component={ConsultingReviewRouteScreen} />

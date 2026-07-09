@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {Pressable, StyleSheet, View as RNView} from 'react-native';
-import {Award, CalendarClock, Check} from 'lucide-react-native';
+import {Award, CalendarClock, Check, MessageCircle} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -13,22 +13,27 @@ import {ConsultingScreenScaffold} from '../components/ConsultingScreenScaffold';
 import {
   ConsultingBottomBar,
   ConsultingSectionTitle,
+  ConsultingStatusBadge,
   ExpertPortrait,
   PrimaryButton,
   StarRating,
 } from '../components/consultingComponents';
 import {formatConsultingPrice} from '../mocks/consulting.mock';
-import type {ConsultingExpert} from '../types';
+import type {ConsultingExpert, ConsultingRecord} from '../types';
 
 type ConsultingDuration = ConsultingExpert['durations'][number];
 
 type ConsultingExpertProfileScreenProps = {
+  activeRecord?: ConsultingRecord | null;
   expert: ConsultingExpert;
+  onPressActiveRecord: (record: ConsultingRecord) => void;
   onReserve: (durationId: string) => void;
 };
 
 export function ConsultingExpertProfileScreen({
+  activeRecord,
   expert,
+  onPressActiveRecord,
   onReserve,
 }: ConsultingExpertProfileScreenProps) {
   const defaultDuration =
@@ -52,6 +57,30 @@ export function ConsultingExpertProfileScreen({
           ) : null}
           <Text style={styles.signature}>"{expert.signatureLine}"</Text>
         </View>
+
+        {activeRecord ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${expert.name} 신청 진행상황 보기`}
+            onPress={() => onPressActiveRecord(activeRecord)}
+            style={({pressed}) => [
+              styles.activeRecordCard,
+              pressed ? styles.pressed : null,
+            ]}>
+            <RNView style={styles.activeRecordTopRow}>
+              <ConsultingStatusBadge status={activeRecord.status} />
+              <Text style={styles.activeRecordDate}>{activeRecord.dateLabel}</Text>
+            </RNView>
+            <Text style={styles.activeRecordTitle}>이미 신청한 전문가예요</Text>
+            <Text style={styles.activeRecordText}>
+              {getActiveRecordProfileText(activeRecord.status)}
+            </Text>
+            <RNView style={styles.activeRecordCta}>
+              <MessageCircle color={consultingColors.roseStrong} size={14} />
+              <Text style={styles.activeRecordCtaText}>톡에서 진행상황 보기</Text>
+            </RNView>
+          </Pressable>
+        ) : null}
 
         <View style={styles.statGrid}>
           <StatCell label="평점" value={expert.rating.toFixed(1)} />
@@ -155,12 +184,28 @@ export function ConsultingExpertProfileScreen({
 
       <ConsultingBottomBar>
         <PrimaryButton
-          label="예약하기"
-          onPress={() => onReserve(selectedDurationId)}
+          label={activeRecord ? '신청 진행상황 보기' : '예약 신청하기'}
+          onPress={() =>
+            activeRecord
+              ? onPressActiveRecord(activeRecord)
+              : onReserve(selectedDurationId)
+          }
         />
       </ConsultingBottomBar>
     </RNView>
   );
+}
+
+function getActiveRecordProfileText(status: ConsultingRecord['status']): string {
+  if (status === 'confirmed') {
+    return '예약이 확정됐어요. 톡에서 상담 안내와 통화 버튼을 확인할 수 있어요.';
+  }
+
+  if (status === 'contacting') {
+    return '운영팀과 프리랜서가 가능 여부를 확인 중이에요. 톡에서 추가 안내를 확인하세요.';
+  }
+
+  return '아직 예약 완료가 아니라 신청 접수 상태예요. 확정되면 알림과 톡으로 안내돼요.';
 }
 
 function StatCell({label, value}: {label: string; value: string}) {
@@ -205,16 +250,65 @@ function DurationCard({
         {selected ? <Check color={consultingColors.accent} size={16} /> : null}
       </RNView>
       <Text style={styles.durationPrice}>
-        {formatConsultingPrice(duration.price)}
+        표시용 예상가 {formatConsultingPrice(duration.price)}
       </Text>
       <Text numberOfLines={1} style={styles.durationDescription}>
-        {duration.description}
+        {duration.description} · 결제는 연결 후 직접 진행
       </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  activeRecordCard: {
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: 16,
+  },
+  activeRecordCta: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+    minHeight: 34,
+    paddingHorizontal: 12,
+  },
+  activeRecordCtaText: {
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  activeRecordDate: {
+    color: consultingColors.textSoft,
+    flexShrink: 1,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+  },
+  activeRecordText: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  activeRecordTitle: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  activeRecordTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
   availabilityRow: {
     alignItems: 'center',
     borderTopColor: consultingColors.borderSoft,

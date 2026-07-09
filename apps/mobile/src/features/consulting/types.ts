@@ -88,7 +88,7 @@ export type ConsultingSharedReport = {
   detail: string;
 };
 
-export type ConsultingPurchaseOptionId = 'single' | 'package3' | 'membership';
+export type ConsultingPreferredContactMethod = 'sms' | 'call';
 
 export type ConsultingBookingDraft = {
   expertId: string;
@@ -99,6 +99,9 @@ export type ConsultingBookingDraft = {
   shareReports: boolean;
   sharedReportIds: readonly string[];
   question: string;
+  contactName: string;
+  contactPhone: string;
+  preferredContactMethod: ConsultingPreferredContactMethod;
 };
 
 export type ConsultingSummaryNote = {
@@ -123,7 +126,13 @@ export type ConsultingSummary = {
   products: readonly ConsultingRecommendedProduct[];
 };
 
-export type ConsultingRecordStatus = 'upcoming' | 'completed' | 'canceled';
+export type ConsultingRecordStatus =
+  | 'requested'
+  | 'contacting'
+  | 'confirmed'
+  | 'unavailable'
+  | 'completed'
+  | 'canceled';
 
 export type ConsultingRecord = {
   id: string;
@@ -138,6 +147,9 @@ export type ConsultingRecord = {
   sharedReportIds?: readonly string[];
   reviewId?: string | null;
   summary?: ConsultingSummary;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  preferredContactMethod?: ConsultingPreferredContactMethod | null;
 };
 
 export type ConsultingMembershipPlan = {
@@ -155,4 +167,41 @@ export type ConsultingReviewDraft = {
   rating: number;
   body: string;
   category?: string;
+};
+
+export type ConsultingLocalPlaceCategoryId =
+  | 'hair'
+  | 'makeup'
+  | 'personalColor'
+  | 'fashion';
+
+export type ConsultingLocalPlace = {
+  id: string;
+  source: 'naver_local';
+  name: string;
+  category: string;
+  categoryLabel: string;
+  description: string;
+  summary: string;
+  telephone: string;
+  address: string;
+  roadAddress: string;
+  mapX: string;
+  mapY: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  distanceKm?: number | null;
+  distanceLabel?: string;
+  websiteUrl?: string;
+  naverMapUrl?: string;
+  naverReservationUrl?: string;
+  naverPlaceSearchUrl?: string;
+  reservationSearchKeyword?: string;
+  bookingHint?: string;
+  detailLines?: readonly string[];
+  ratingHint?: string;
+  priceHint?: string;
+  serviceHighlights?: readonly string[];
+  thumbnailKey?: string;
+  naverUrl: string;
 };

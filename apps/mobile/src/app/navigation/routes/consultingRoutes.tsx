@@ -1,6 +1,7 @@
 import {Alert} from 'react-native';
 import {useEffect, useState} from 'react';
 
+import {useAuthSession} from '../../../features/auth';
 import {
   ConsultingBookingCompleteScreen,
   ConsultingBookingScreen,
@@ -9,18 +10,20 @@ import {
   ConsultingExpertListScreen,
   ConsultingExpertProfileScreen,
   ConsultingHistoryScreen,
+  ConsultingLocalPlacesScreen,
   ConsultingHomeScreen,
   ConsultingMembershipScreen,
-  ConsultingPaymentScreen,
+  ConsultingMessagesScreen,
+  ConsultingNotificationsScreen,
+  ConsultingRequestConfirmScreen,
   ConsultingReviewScreen,
   ConsultingSummaryScreen,
   consultingMembershipPlans,
   createConsultingBooking,
-  createConsultingPayment,
   createConsultingReview,
   findConsultingRecord,
   getConsultingBooking,
-  subscribeConsultingMembership,
+  getConsultingBookings,
   updateConsultingBooking,
   useConsultingExpert,
   type ConsultingRecord,
@@ -36,13 +39,20 @@ import {
 export function renderConsultingHome(navigation: RootNavigation) {
   return (
     <ConsultingHomeScreen
-      onPressStartWithReport={() => navigation.navigate('ConsultingExpertList')}
+      onPressHeroSlide={categoryId =>
+        navigation.navigate(
+          'ConsultingExpertList',
+          categoryId ? {categoryId} : undefined,
+        )
+      }
       onPressExpert={expertId =>
         navigation.navigate('ConsultingExpertProfile', {expertId})
       }
       onPressExpertList={() => navigation.navigate('ConsultingExpertList')}
-      onPressMembership={() => navigation.navigate('ConsultingMembership')}
+      onPressLocalPlaces={() => navigation.navigate('ConsultingLocalPlaces')}
       onPressHistory={() => navigation.navigate('ConsultingHistory')}
+      onPressMessages={() => navigation.navigate('ConsultingMessages')}
+      onPressNotifications={() => navigation.navigate('ConsultingNotifications')}
       onPressUpcoming={record =>
         navigation.navigate('ConsultingConversation', {
           expertId: record.expertId,
@@ -85,13 +95,43 @@ export function ConsultingExpertProfileRouteScreen({
   route,
 }: RootScreenProps<'ConsultingExpertProfile'>) {
   const expert = useConsultingExpert(route.params?.expertId);
+  const [activeRecord, setActiveRecord] = useState<ConsultingRecord | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getConsultingBookings().then(records => {
+      if (!isMounted) {
+        return;
+      }
+
+      setActiveRecord(
+        records.find(
+          record =>
+            record.expertId === expert.id &&
+            ['requested', 'contacting', 'confirmed'].includes(record.status),
+        ) ?? null,
+      );
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [expert.id]);
 
   return (
     <DetailRouteChrome
       routeName="ConsultingExpertProfile"
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingExpertProfileScreen
+        activeRecord={activeRecord}
         expert={expert}
+        onPressActiveRecord={record =>
+          navigation.navigate('ConsultingConversation', {
+            expertId: record.expertId,
+            recordId: record.id,
+          })
+        }
         onReserve={durationId =>
           navigation.navigate('ConsultingBooking', {
             expertId: expert.id,
@@ -141,7 +181,7 @@ export function ConsultingBookingRouteScreen({
         submitting={submitting}
         onNext={async draft => {
           if (!route.params.bookingId) {
-            navigation.navigate('ConsultingPayment', {draft});
+            navigation.navigate('ConsultingRequestConfirm', {draft});
             return;
           }
 
@@ -157,14 +197,14 @@ export function ConsultingBookingRouteScreen({
             );
             if (!updatedRecord) {
               Alert.alert(
-                '예약 수정 실패',
-                '예약 시간을 변경하지 못했어요. 선택한 시간이 가능한지 확인해 주세요.',
+                '신청 수정 실패',
+                '희망 일정을 변경하지 못했어요. 선택한 시간이 가능한지 확인해 주세요.',
                 [{text: '확인'}],
               );
               return;
             }
 
-            Alert.alert('예약 수정', '예약 시간이 변경됐어요.', [
+            Alert.alert('신청 수정', '희망 일정이 변경됐어요.', [
               {
                 text: '확인',
                 onPress: () => navigation.replace('ConsultingHistory'),
@@ -179,23 +219,23 @@ export function ConsultingBookingRouteScreen({
   );
 }
 
-export function ConsultingPaymentRouteScreen({
+export function ConsultingRequestConfirmRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'ConsultingPayment'>) {
+}: RootScreenProps<'ConsultingRequestConfirm'>) {
   const {draft} = route.params;
   const expert = useConsultingExpert(draft.expertId);
   const [submitting, setSubmitting] = useState(false);
 
   return (
     <DetailRouteChrome
-      routeName="ConsultingPayment"
+      routeName="ConsultingRequestConfirm"
       onBack={() => goBackToConsulting(navigation)}>
-      <ConsultingPaymentScreen
+      <ConsultingRequestConfirmScreen
         draft={draft}
         expert={expert}
         submitting={submitting}
-        onPay={async () => {
+        onSubmit={async () => {
           if (submitting) {
             return;
           }
@@ -205,17 +245,13 @@ export function ConsultingPaymentRouteScreen({
             const record = await createConsultingBooking(draft);
             if (!record) {
               Alert.alert(
-                '예약 저장 실패',
-                '백엔드에 예약을 저장하지 못했어요. 네트워크와 API 설정을 확인해 주세요.',
+                '신청 접수 실패',
+                '예약 신청을 접수하지 못했어요. 네트워크와 API 설정을 확인해 주세요.',
                 [{text: '확인'}],
               );
               return;
             }
 
-            void createConsultingPayment({
-              kind: 'booking',
-              bookingId: record.id,
-            });
             navigation.navigate('ConsultingBookingComplete', {
               bookingId: record.id,
               draft,
@@ -226,6 +262,18 @@ export function ConsultingPaymentRouteScreen({
           }
         }}
       />
+    </DetailRouteChrome>
+  );
+}
+
+export function ConsultingLocalPlacesRouteScreen({
+  navigation,
+}: RootScreenProps<'ConsultingLocalPlaces'>) {
+  return (
+    <DetailRouteChrome
+      routeName="ConsultingLocalPlaces"
+      onBack={() => goBackToConsulting(navigation)}>
+      <ConsultingLocalPlacesScreen />
     </DetailRouteChrome>
   );
 }
@@ -303,7 +351,7 @@ export function ConsultingSummaryRouteScreen({
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingSummaryScreen
         expert={expert}
-        heroTitle={record ? '상담 요약 리포트' : undefined}
+        heroTitle={record ? 'AI 상담 요약' : undefined}
         summary={summary}
         onGoToConsultingHome={() =>
           navigation.navigate('Consulting')
@@ -322,12 +370,6 @@ export function ConsultingHistoryRouteScreen({
       routeName="ConsultingHistory"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <ConsultingHistoryScreen
-        onPressCompleted={record =>
-          navigation.navigate('ConsultingSummary', {
-            expertId: record.expertId,
-            recordId: record.id,
-          })
-        }
         onPressReview={record =>
           navigation.navigate('ConsultingReview', {
             expertId: record.expertId,
@@ -353,10 +395,51 @@ export function ConsultingHistoryRouteScreen({
   );
 }
 
+export function ConsultingMessagesRouteScreen({
+  navigation,
+}: RootScreenProps<'ConsultingMessages'>) {
+  return (
+    <DetailRouteChrome
+      routeName="ConsultingMessages"
+      onBack={() => goBackToConsulting(navigation)}>
+      <ConsultingMessagesScreen
+        onPressConversation={record =>
+          navigation.navigate('ConsultingConversation', {
+            expertId: record.expertId,
+            recordId: record.id,
+          })
+        }
+        onPressFindExpert={() => navigation.navigate('ConsultingExpertList')}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ConsultingNotificationsRouteScreen({
+  navigation,
+}: RootScreenProps<'ConsultingNotifications'>) {
+  return (
+    <DetailRouteChrome
+      routeName="ConsultingNotifications"
+      onBack={() => goBackToConsulting(navigation)}>
+      <ConsultingNotificationsScreen
+        onPressHistory={() => navigation.navigate('ConsultingHistory')}
+        onPressRecord={record =>
+          navigation.navigate('ConsultingConversation', {
+            expertId: record.expertId,
+            recordId: record.id,
+          })
+        }
+      />
+    </DetailRouteChrome>
+  );
+}
+
 export function ConsultingConversationRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ConsultingConversation'>) {
+  const {getAuthToken} = useAuthSession();
   const [record, setRecord] = useState<ConsultingRecord | null>(
     () => findConsultingRecord(route.params.recordId) ?? null,
   );
@@ -381,6 +464,8 @@ export function ConsultingConversationRouteScreen({
       routeName="ConsultingConversation"
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingConversationScreen
+        authToken={getAuthToken()}
+        bookingId={route.params.recordId}
         expert={expert}
         onPressCall={() =>
           navigation.navigate('ConsultingCall', {
@@ -471,10 +556,9 @@ export function ConsultingMembershipRouteScreen({
             membershipPlan => membershipPlan.id === planId,
           );
 
-          void subscribeConsultingMembership(planId);
           Alert.alert(
-            '멤버십 구독',
-            `${plan?.name ?? ''} 플랜 구독을 접수했어요. 결제 연동은 순차 적용됩니다.`,
+            '멤버십 준비 중',
+            `${plan?.name ?? '멤버십'} 플랜은 사업자 등록 이후 다시 검토할 예정이에요.`,
             [{text: '확인'}],
           );
         }}

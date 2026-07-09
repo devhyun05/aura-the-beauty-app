@@ -70,9 +70,9 @@ export function ConsultingExpertListScreen({
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
       <View style={styles.intro}>
-        <Text style={styles.title}>전문가를 선택하세요</Text>
+        <Text style={styles.title}>프리랜서를 선택하세요</Text>
         <Text style={styles.subtitle}>
-          내 AI 리포트를 함께 볼 전문가를 골라보세요.
+          AURA가 직접 섭외한 컨설턴트에게 예약 신청을 보낼 수 있어요.
         </Text>
       </View>
 
@@ -92,7 +92,7 @@ export function ConsultingExpertListScreen({
       </ScrollView>
 
       <View style={styles.listSection}>
-        <Text style={styles.countText}>전문가 {filteredExperts.length}명</Text>
+        <Text style={styles.countText}>섭외 프리랜서 {filteredExperts.length}명</Text>
         {filteredExperts.length > 0 ? (
           <View style={styles.list}>
             {filteredExperts.map(expert => (
