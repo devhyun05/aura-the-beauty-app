@@ -10,25 +10,25 @@
 *                                                   @devhyun05
 
 # ── 모바일 기능 영역 ─────────────────────────────────────────────
-apps/mobile/src/features/recommendation/            @nicewei77-lang @cloud-9-git
-apps/mobile/src/features/personal-color/            @nicewei77-lang
-apps/mobile/src/features/face-ratio/                @nicewei77-lang
-apps/mobile/src/features/face-analysis/             @nicewei77-lang
-apps/mobile/src/features/face-capture/              @cloud-9-git @nicewei77-lang
-apps/mobile/src/features/ar/                        @devhyun05 @nicewei77-lang
-apps/mobile/src/features/home/                      @cloud-9-git @leejunhee8235
-apps/mobile/src/features/community/                 @leejunhee8235
-apps/mobile/src/features/consulting/                @Y-duchi
+/apps/mobile/src/features/recommendation/            @nicewei77-lang @cloud-9-git
+/apps/mobile/src/features/personal-color/            @nicewei77-lang
+/apps/mobile/src/features/face-ratio/                @nicewei77-lang
+/apps/mobile/src/features/face-analysis/             @nicewei77-lang
+/apps/mobile/src/features/face-capture/              @cloud-9-git @nicewei77-lang
+/apps/mobile/src/features/ar/                        @devhyun05 @nicewei77-lang
+/apps/mobile/src/features/home/                      @cloud-9-git @leejunhee8235
+/apps/mobile/src/features/community/                 @leejunhee8235
+/apps/mobile/src/features/consulting/                @Y-duchi
 
 # ── iOS 네이티브 ────────────────────────────────────────────────
 # 카메라·분석기 네이티브는 AR 브릿지와 한 폴더를 공유하므로 두 오너 공동.
-apps/mobile/ios/AURA/                               @devhyun05 @nicewei77-lang
-apps/mobile/ios/Podfile                             @devhyun05 @nicewei77-lang
-apps/mobile/ios/Podfile.lock                        @devhyun05 @nicewei77-lang
+/apps/mobile/ios/AURA/                               @devhyun05 @nicewei77-lang
+/apps/mobile/ios/Podfile                             @devhyun05 @nicewei77-lang
+/apps/mobile/ios/Podfile.lock                        @devhyun05 @nicewei77-lang
 
 # ── Unity ───────────────────────────────────────────────────────
-apps/unity/                                         @devhyun05 @Y-duchi
-apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/  @devhyun05 @nicewei77-lang
+/apps/unity/                                         @devhyun05 @Y-duchi
+/apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/  @devhyun05 @nicewei77-lang
 
 # ── CI / 인프라 ─────────────────────────────────────────────────
-.github/                                            @devhyun05
+/.github/                                            @devhyun05
