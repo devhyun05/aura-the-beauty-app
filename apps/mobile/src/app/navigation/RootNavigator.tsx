@@ -28,7 +28,6 @@ import {
   ConsultingExpertListRouteScreen,
   ConsultingExpertProfileRouteScreen,
   ConsultingHistoryRouteScreen,
-  ConsultingLocalPlacesRouteScreen,
   ConsultingMembershipRouteScreen,
   ConsultingMessagesRouteScreen,
   ConsultingNotificationsRouteScreen,
@@ -157,10 +156,6 @@ export function RootNavigator() {
       <Stack.Screen
         name="ConsultingConversation"
         component={ConsultingConversationRouteScreen}
-      />
-      <Stack.Screen
-        name="ConsultingLocalPlaces"
-        component={ConsultingLocalPlacesRouteScreen}
       />
       <Stack.Screen name="ConsultingMembership" component={ConsultingMembershipRouteScreen} />
       <Stack.Screen name="ConsultingReview" component={ConsultingReviewRouteScreen} />

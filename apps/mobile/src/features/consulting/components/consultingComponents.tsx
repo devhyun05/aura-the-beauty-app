@@ -18,7 +18,10 @@ import {
   typography,
 } from '../../../shared/theme';
 import type {ConsultingExpert, ConsultingRecordStatus} from '../types';
-import {formatConsultingPrice} from '../mocks/consulting.mock';
+import {
+  formatConsultingPrice,
+  getConsultingDurationPrice,
+} from '../mocks/consulting.mock';
 
 const avatarToneColors: Record<
   ConsultingExpert['avatarTone'],
@@ -282,7 +285,9 @@ export function ExpertListCard({
   expert: ConsultingExpert;
   onPress: () => void;
 }) {
-  const fromPrice = Math.min(...expert.durations.map(duration => duration.price));
+  const fromPrice = Math.min(
+    ...expert.durations.map(duration => getConsultingDurationPrice(duration, 'online')),
+  );
   const shortestMinutes = Math.min(
     ...expert.durations.map(duration => duration.minutes),
   );
@@ -321,7 +326,7 @@ export function ExpertListCard({
         <View style={styles.expertBottomRow}>
           <RatingRow rating={expert.rating} suffix={`(${expert.reviewCount})`} />
           <Text style={styles.expertPrice}>
-            {shortestMinutes}분 {formatConsultingPrice(fromPrice)}~
+            온라인 {shortestMinutes}분 {formatConsultingPrice(fromPrice)}~
           </Text>
         </View>
       </View>

@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 
 import {useAuthSession} from '../../../features/auth';
+import {ConsultingHeaderActions} from '../../../features/consulting';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
 import {
@@ -51,6 +52,14 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
 
   return (
     <MainTabChrome
+      headerRightSlot={
+        <ConsultingHeaderActions
+          onPressMessages={() => rootNavigation?.navigate('ConsultingMessages')}
+          onPressNotifications={() =>
+            rootNavigation?.navigate('ConsultingNotifications')
+          }
+        />
+      }
       navigation={navigation}
       routeName="ProfileTab"
       wrapContentInScreen={false}>

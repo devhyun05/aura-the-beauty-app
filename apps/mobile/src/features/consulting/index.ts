@@ -10,9 +10,9 @@ export {ConsultingHistoryScreen} from './screens/ConsultingHistoryScreen';
 export {ConsultingMessagesScreen} from './screens/ConsultingMessagesScreen';
 export {ConsultingNotificationsScreen} from './screens/ConsultingNotificationsScreen';
 export {ConsultingConversationScreen} from './screens/ConsultingConversationScreen';
-export {ConsultingLocalPlacesScreen} from './screens/ConsultingLocalPlacesScreen';
 export {ConsultingMembershipScreen} from './screens/ConsultingMembershipScreen';
 export {ConsultingReviewScreen} from './screens/ConsultingReviewScreen';
+export {ConsultingHeaderActions} from './components/ConsultingHeaderActions';
 export {
   consultingCategories,
   consultingExperts,
@@ -22,6 +22,8 @@ export {
   findConsultingExpert,
   findConsultingExpertOrFirst,
   findConsultingRecord,
+  getConsultingDurationPrice,
+  getConsultingSessionModeLabel,
   getUpcomingConsultingRecord,
 } from './mocks/consulting.mock';
 export {useConsultingExpert} from './hooks/useConsultingExpert';
@@ -34,13 +36,19 @@ export {
   getConsultingBookings,
   updateConsultingBooking,
 } from './services/consultingService';
+export {
+  getConsultingUnreadState,
+  isConsultingMessageStatus,
+  isConsultingNotificationStatus,
+  markConsultingInboxRead,
+} from './services/consultingReadStateService';
+export type {ConsultingUnreadState} from './services/consultingReadStateService';
 export type {
   ConsultingBookingDraft,
   ConsultingCategoryId,
   ConsultingExpert,
-  ConsultingLocalPlace,
-  ConsultingLocalPlaceCategoryId,
   ConsultingMembershipPlan,
   ConsultingRecord,
   ConsultingReviewDraft,
+  ConsultingSessionMode,
 } from './types';

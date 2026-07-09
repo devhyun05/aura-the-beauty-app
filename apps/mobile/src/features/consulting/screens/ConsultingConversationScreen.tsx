@@ -27,6 +27,10 @@ import {
   ExpertAvatar,
 } from '../components/consultingComponents';
 import {
+  formatConsultingPrice,
+  getConsultingSessionModeLabel,
+} from '../mocks/consulting.mock';
+import {
   connectConsultingConversationSocket,
   type ConsultingConversationSocketClient,
   type ConsultingRealtimeMessageEvent,
@@ -322,6 +326,13 @@ export function ConsultingConversationScreen({
   const canSendText = connectionStatus === 'connected' && input.trim().length > 0;
   const canPickImage = connectionStatus === 'connected' && !isUploadingImage;
   const callEnabled = record?.status === 'confirmed';
+  const reservationDateLabel = getReservationDateLabel(record);
+  const reservationStartTimeLabel = getReservationStartTimeLabel(record);
+  const sessionModeLabel = getReservationSessionModeLabel(record);
+  const estimatedPriceLabel =
+    typeof record?.estimatedPrice === 'number'
+      ? formatConsultingPrice(record.estimatedPrice)
+      : null;
 
   return (
     <KeyboardAvoidingView
@@ -362,10 +373,19 @@ export function ConsultingConversationScreen({
           </RNView>
           <InfoRow
             label="일정"
-            value={record?.dateLabel ?? '예약 정보를 불러오는 중'}
+            value={reservationDateLabel}
           />
+          <InfoRow label="시작 시간" value={reservationStartTimeLabel} />
           <InfoRow label="상담" value={record?.categoryLabel ?? expert.title} />
-          <InfoRow label="시간" value={record?.durationLabel ?? '화상 상담'} />
+          <InfoRow
+            label="방식"
+            value={
+              estimatedPriceLabel
+                ? `${sessionModeLabel} · 예상가 ${estimatedPriceLabel}`
+                : sessionModeLabel
+            }
+          />
+          <InfoRow label="소요 시간" value={record?.durationLabel ?? '화상 상담'} />
           <Text style={styles.reservationNotice}>
             톡은 일정 조율과 사전 질문 공간이에요. 예약이 확정되면 통화 버튼이 활성화돼요.
           </Text>
@@ -460,6 +480,70 @@ function formatMessageTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function getReservationDateLabel(record: ConsultingRecord | null): string {
+  if (!record) {
+    return '예약 정보를 불러오는 중';
+  }
+
+  return stripTimeFromDateLabel(record.dateLabel) || record.dateLabel;
+}
+
+function getReservationStartTimeLabel(record: ConsultingRecord | null): string {
+  if (!record) {
+    return '예약 정보를 불러오는 중';
+  }
+
+  const slotTime = formatSlotTimeLabel(record.slotId);
+  if (slotTime) {
+    return slotTime;
+  }
+
+  const dateTime = extractTimeFromDateLabel(record.dateLabel);
+  return dateTime || '시간 확인 중';
+}
+
+function getReservationSessionModeLabel(record: ConsultingRecord | null): string {
+  return getConsultingSessionModeLabel(record?.sessionMode ?? 'online');
+}
+
+function stripTimeFromDateLabel(label: string): string {
+  return label
+    .replace(/\s*(오전|오후)\s*\d{1,2}:\d{2}\s*$/, '')
+    .replace(/\s*\d{1,2}:\d{2}\s*$/, '')
+    .trim();
+}
+
+function extractTimeFromDateLabel(label: string): string | null {
+  const koreanTimeMatch = label.match(/(오전|오후)\s*\d{1,2}:\d{2}/);
+  if (koreanTimeMatch?.[0]) {
+    return koreanTimeMatch[0].replace(/\s+/, ' ');
+  }
+
+  const numericTimeMatch = label.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (!numericTimeMatch?.[0]) {
+    return null;
+  }
+
+  return formatSlotTimeLabel(numericTimeMatch[0]);
+}
+
+function formatSlotTimeLabel(slotId?: string | null): string | null {
+  if (!slotId) {
+    return null;
+  }
+
+  const match = slotId.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) {
+    return slotId;
+  }
+
+  const hour = Number(match[1]);
+  const minute = match[2];
+  const period = hour < 12 ? '오전' : '오후';
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${period} ${displayHour}:${minute}`;
 }
 
 function mapSocketMessage(event: ConsultingRealtimeMessageEvent): ChatMessage {
@@ -675,7 +759,7 @@ const styles = StyleSheet.create({
     color: consultingColors.textMuted,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
-    width: 54,
+    width: 64,
   },
   infoRow: {
     flexDirection: 'row',

@@ -24,6 +24,10 @@ import {
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
+import {
+  isConsultingMessageStatus,
+  markConsultingInboxRead,
+} from '../services/consultingReadStateService';
 import type {
   ConsultingExpert,
   ConsultingRecord,
@@ -50,10 +54,11 @@ export function ConsultingMessagesScreen({
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()])
-        .then(([recordData, expertData]) => {
+        .then(async ([recordData, expertData]) => {
           if (isMounted) {
             setRecords(recordData);
             setExperts(expertData);
+            await markConsultingInboxRead('messages', recordData);
           }
         })
         .finally(() => {
@@ -69,7 +74,7 @@ export function ConsultingMessagesScreen({
   );
 
   const activeRecords = useMemo(
-    () => records.filter(record => isMessageRecordStatus(record.status)),
+    () => records.filter(record => isConsultingMessageStatus(record.status)),
     [records],
   );
 
@@ -122,10 +127,6 @@ export function ConsultingMessagesScreen({
       )}
     </ConsultingScreenScaffold>
   );
-}
-
-function isMessageRecordStatus(status: ConsultingRecordStatus): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
 }
 
 function MessageCard({

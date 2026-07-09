@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: APP_HEADER_SIDE_SIZE,
     justifyContent: 'center',
-    width: APP_HEADER_SIDE_SIZE,
+    minWidth: APP_HEADER_SIDE_SIZE,
   },
   titleArea: {
     flex: 1,

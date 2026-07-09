@@ -18,6 +18,8 @@ class BookingCreate(CamelModel):
   contact_name: str | None = Field(default=None, alias="contactName", max_length=40)
   contact_phone: str | None = Field(default=None, alias="contactPhone", max_length=40)
   preferred_contact_method: str | None = Field(default=None, alias="preferredContactMethod", pattern="^(sms|call)$")
+  session_mode: str = Field(default="online", alias="sessionMode", pattern="^(online|offline)$")
+  estimated_price: int | None = Field(default=None, alias="estimatedPrice", ge=0)
 
 
 class AdminBookingStatusUpdate(CamelModel):

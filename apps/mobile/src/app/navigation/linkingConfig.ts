@@ -77,7 +77,6 @@ export const rootStackLinkingScreens = {
   ConsultingMessages: 'consulting-messages',
   ConsultingNotifications: 'consulting-notifications',
   ConsultingConversation: 'consulting-conversation',
-  ConsultingLocalPlaces: 'consulting-local-places',
   ConsultingMembership: 'consulting-membership',
   ConsultingReview: 'consulting-review',
   MakeupLookList: 'makeup-look-list',

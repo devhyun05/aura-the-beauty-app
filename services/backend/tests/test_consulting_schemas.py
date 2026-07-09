@@ -27,12 +27,16 @@ def test_booking_create_parses_mobile_request_payload() -> None:
       "contactName": "서진",
       "contactPhone": "010-0000-0000",
       "preferredContactMethod": "sms",
+      "sessionMode": "offline",
+      "estimatedPrice": 29000,
     },
   )
 
   assert payload.day_id == date(2026, 7, 7)
   assert payload.contact_name == "서진"
   assert payload.preferred_contact_method == "sms"
+  assert payload.session_mode == "offline"
+  assert payload.estimated_price == 29000
 
 
 def test_booking_create_rejects_kakao_contact_method() -> None:

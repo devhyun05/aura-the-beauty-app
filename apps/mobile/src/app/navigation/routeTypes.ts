@@ -3,6 +3,7 @@ import type {
   ConsultingBookingDraft,
   ConsultingCategoryId,
   ConsultingRecord,
+  ConsultingSessionMode,
 } from '../../features/consulting/types';
 import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
 import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
@@ -56,7 +57,12 @@ export type RootStackParamList = {
   Consulting: undefined;
   ConsultingExpertList: {categoryId?: ConsultingCategoryId} | undefined;
   ConsultingExpertProfile: {expertId: string};
-  ConsultingBooking: {expertId: string; durationId: string; bookingId?: string};
+  ConsultingBooking: {
+    expertId: string;
+    durationId: string;
+    bookingId?: string;
+    sessionMode?: ConsultingSessionMode;
+  };
   ConsultingRequestConfirm: {draft: ConsultingBookingDraft};
   ConsultingBookingComplete: {
     bookingId: string;
@@ -69,7 +75,6 @@ export type RootStackParamList = {
   ConsultingMessages: undefined;
   ConsultingNotifications: undefined;
   ConsultingConversation: {recordId: string; expertId: string};
-  ConsultingLocalPlaces: undefined;
   ConsultingMembership: undefined;
   ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: undefined;
@@ -159,7 +164,6 @@ export const rootStackRoutes = [
   'ConsultingMessages',
   'ConsultingNotifications',
   'ConsultingConversation',
-  'ConsultingLocalPlaces',
   'ConsultingMembership',
   'ConsultingReview',
   'MakeupLookList',

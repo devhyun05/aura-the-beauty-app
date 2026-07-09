@@ -18,6 +18,9 @@ import {
   CommunityUserProfileScreen,
   type CommunityMode,
 } from '../../../features/community';
+import {
+  ConsultingHeaderActions,
+} from '../../../features/consulting';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
@@ -195,6 +198,14 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       {({openFeatureMenu}) => (
         <>
           <HomeScreen
+            headerRightSlot={
+              <ConsultingHeaderActions
+                onPressMessages={() => rootNavigation?.navigate('ConsultingMessages')}
+                onPressNotifications={() =>
+                  rootNavigation?.navigate('ConsultingNotifications')
+                }
+              />
+            }
             onOpenFeatureMenu={openFeatureMenu}
             onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
             onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
@@ -247,6 +258,14 @@ export function CommunityTabRouteScreen({
 
   return (
     <MainTabChrome
+      headerRightSlot={
+        <ConsultingHeaderActions
+          onPressMessages={() => rootNavigation?.navigate('ConsultingMessages')}
+          onPressNotifications={() =>
+            rootNavigation?.navigate('ConsultingNotifications')
+          }
+        />
+      }
       navigation={navigation}
       routeName="CommunityTab"
       wrapContentInScreen={false}>
@@ -436,6 +455,15 @@ export function CommunityThreadCreateRouteScreen({
 export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'>) {
   return (
     <DetailRouteChrome
+      headerMode="standard"
+      headerRightSlot={
+        <ConsultingHeaderActions
+          onPressHistory={() => navigation.navigate('ConsultingHistory')}
+          onPressMessages={() => navigation.navigate('ConsultingMessages')}
+          onPressNotifications={() => navigation.navigate('ConsultingNotifications')}
+          showHistory
+        />
+      }
       routeName="Consulting"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       {renderConsultingHome(navigation)}

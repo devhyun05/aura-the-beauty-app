@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {Pressable, StyleSheet, View as RNView} from 'react-native';
-import {Award, CalendarClock, Check, MessageCircle} from 'lucide-react-native';
+import {Award, CalendarClock, Check, MapPin, MessageCircle, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -18,8 +18,12 @@ import {
   PrimaryButton,
   StarRating,
 } from '../components/consultingComponents';
-import {formatConsultingPrice} from '../mocks/consulting.mock';
-import type {ConsultingExpert, ConsultingRecord} from '../types';
+import {
+  formatConsultingPrice,
+  getConsultingDurationPrice,
+  getConsultingSessionModeLabel,
+} from '../mocks/consulting.mock';
+import type {ConsultingExpert, ConsultingRecord, ConsultingSessionMode} from '../types';
 
 type ConsultingDuration = ConsultingExpert['durations'][number];
 
@@ -27,8 +31,25 @@ type ConsultingExpertProfileScreenProps = {
   activeRecord?: ConsultingRecord | null;
   expert: ConsultingExpert;
   onPressActiveRecord: (record: ConsultingRecord) => void;
-  onReserve: (durationId: string) => void;
+  onReserve: (durationId: string, sessionMode: ConsultingSessionMode) => void;
 };
+
+const sessionModeOptions: readonly {
+  id: ConsultingSessionMode;
+  description: string;
+  title: string;
+}[] = [
+  {
+    id: 'online',
+    title: '온라인',
+    description: '리포트 공유 후 앱에서 일정 조율',
+  },
+  {
+    id: 'offline',
+    title: '오프라인',
+    description: '현장 상담 기준, 이동 준비 비용 포함',
+  },
+];
 
 export function ConsultingExpertProfileScreen({
   activeRecord,
@@ -42,6 +63,8 @@ export function ConsultingExpertProfileScreen({
   const [selectedDurationId, setSelectedDurationId] = useState(
     defaultDuration.id,
   );
+  const [selectedSessionMode, setSelectedSessionMode] =
+    useState<ConsultingSessionMode>('online');
 
   return (
     <RNView style={styles.root}>
@@ -168,6 +191,20 @@ export function ConsultingExpertProfileScreen({
         </View>
 
         <View style={styles.section}>
+          <ConsultingSectionTitle>상담 방식 선택</ConsultingSectionTitle>
+          <View style={styles.sessionModeRow}>
+            {sessionModeOptions.map(option => (
+              <SessionModeCard
+                key={option.id}
+                option={option}
+                selected={option.id === selectedSessionMode}
+                onPress={() => setSelectedSessionMode(option.id)}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <ConsultingSectionTitle>상담 시간 선택</ConsultingSectionTitle>
           <View style={styles.durationRow}>
             {expert.durations.map(duration => (
@@ -176,6 +213,7 @@ export function ConsultingExpertProfileScreen({
                 key={duration.id}
                 onPress={() => setSelectedDurationId(duration.id)}
                 selected={duration.id === selectedDurationId}
+                sessionMode={selectedSessionMode}
               />
             ))}
           </View>
@@ -188,7 +226,7 @@ export function ConsultingExpertProfileScreen({
           onPress={() =>
             activeRecord
               ? onPressActiveRecord(activeRecord)
-              : onReserve(selectedDurationId)
+              : onReserve(selectedDurationId, selectedSessionMode)
           }
         />
       </ConsultingBottomBar>
@@ -223,13 +261,18 @@ function StatCell({label, value}: {label: string; value: string}) {
 
 function DurationCard({
   duration,
+  sessionMode,
   selected,
   onPress,
 }: {
   duration: ConsultingDuration;
+  sessionMode: ConsultingSessionMode;
   selected: boolean;
   onPress: () => void;
 }) {
+  const price = getConsultingDurationPrice(duration, sessionMode);
+  const modeLabel = getConsultingSessionModeLabel(sessionMode);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -250,11 +293,62 @@ function DurationCard({
         {selected ? <Check color={consultingColors.accent} size={16} /> : null}
       </RNView>
       <Text style={styles.durationPrice}>
-        표시용 예상가 {formatConsultingPrice(duration.price)}
+        {modeLabel} 예상가 {formatConsultingPrice(price)}
       </Text>
       <Text numberOfLines={1} style={styles.durationDescription}>
         {duration.description} · 결제는 연결 후 직접 진행
       </Text>
+    </Pressable>
+  );
+}
+
+function SessionModeCard({
+  option,
+  selected,
+  onPress,
+}: {
+  option: (typeof sessionModeOptions)[number];
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const Icon = option.id === 'online' ? Video : MapPin;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.sessionModeCard,
+        selected && styles.sessionModeCardSelected,
+        pressed ? styles.pressed : null,
+      ]}>
+      <RNView
+        style={[
+          styles.sessionModeIcon,
+          selected && styles.sessionModeIconSelected,
+        ]}>
+        <Icon
+          color={selected ? consultingColors.onAccent : consultingColors.textMuted}
+          size={17}
+        />
+      </RNView>
+      <RNView style={styles.sessionModeBody}>
+        <RNView style={styles.sessionModeTitleRow}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.sessionModeTitle,
+              selected && styles.sessionModeTitleSelected,
+            ]}>
+            {option.title}
+          </Text>
+          {selected ? <Check color={consultingColors.accent} size={15} /> : null}
+        </RNView>
+        <Text numberOfLines={2} style={styles.sessionModeDescription}>
+          {option.description}
+        </Text>
+      </RNView>
     </Pressable>
   );
 }
@@ -512,6 +606,61 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.md,
+  },
+  sessionModeBody: {
+    flex: 1,
+    gap: 3,
+  },
+  sessionModeCard: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1.5,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 88,
+    padding: 12,
+  },
+  sessionModeCardSelected: {
+    borderColor: consultingColors.accent,
+  },
+  sessionModeDescription: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  sessionModeIcon: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  sessionModeIconSelected: {
+    backgroundColor: consultingColors.accent,
+  },
+  sessionModeRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  sessionModeTitle: {
+    color: consultingColors.text,
+    flex: 1,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  sessionModeTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  sessionModeTitleSelected: {
+    color: consultingColors.accent,
   },
   signature: {
     color: consultingColors.roseText,

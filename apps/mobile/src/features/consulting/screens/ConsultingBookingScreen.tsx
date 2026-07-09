@@ -5,7 +5,14 @@ import {
   TextInput,
   View as RNView,
 } from 'react-native';
-import {AlertCircle, Check, ChevronLeft, ChevronRight} from 'lucide-react-native';
+import {
+  AlertCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Video,
+} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {FaceAnalysisSummaryCard} from '../../profile/components/FaceAnalysisSummaryCard';
@@ -24,6 +31,10 @@ import {
 } from '../components/consultingComponents';
 import {
   consultingConcerns,
+  findConsultingDuration,
+  formatConsultingPrice,
+  getConsultingDurationPrice,
+  getConsultingSessionModeLabel,
 } from '../mocks/consulting.mock';
 import {
   getConsultingExpertSlots,
@@ -36,6 +47,7 @@ import type {
   ConsultingExpert,
   ConsultingPreferredContactMethod,
   ConsultingRecord,
+  ConsultingSessionMode,
   ConsultingTimeSlot,
 } from '../types';
 
@@ -44,6 +56,7 @@ type ConsultingBookingScreenProps = {
   durationId: string;
   initialRecord?: ConsultingRecord | null;
   mode?: 'create' | 'edit';
+  sessionMode?: ConsultingSessionMode;
   submitting?: boolean;
   onNext: (draft: ConsultingBookingDraft) => void;
 };
@@ -66,11 +79,28 @@ const slotPeriodLabels: Record<SlotPeriodId, string> = {
 };
 const bookingNoticeItems = [
   '예약 신청 후 운영팀이 프리랜서 일정과 가능 여부를 확인해요.',
+  '온라인과 오프라인은 진행 방식과 예상 비용이 다르게 적용돼요.',
   '확정 전까지는 앱에서 신청 내용을 수정하거나 취소할 수 있어요.',
   '확정 안내는 문자 또는 전화로만 보내드려요.',
   '앱 안에서는 결제하지 않으며, 비용 정산은 연결된 프리랜서와 직접 진행해요.',
   '프리랜서가 외부 정산과 일정을 확인한 뒤 웹에서 예약 확정을 눌러요.',
 ] as const;
+const sessionModeOptions: readonly {
+  id: ConsultingSessionMode;
+  description: string;
+  title: string;
+}[] = [
+  {
+    id: 'online',
+    title: '온라인',
+    description: '리포트를 미리 공유하고 앱에서 일정 조율',
+  },
+  {
+    id: 'offline',
+    title: '오프라인',
+    description: '현장 상담 기준, 준비 비용 포함',
+  },
+];
 const contactMethods: readonly {
   id: ConsultingPreferredContactMethod;
   label: string;
@@ -84,6 +114,7 @@ export function ConsultingBookingScreen({
   durationId,
   initialRecord,
   mode = 'create',
+  sessionMode = 'online',
   submitting = false,
   onNext,
 }: ConsultingBookingScreenProps) {
@@ -109,6 +140,8 @@ export function ConsultingBookingScreen({
     useState<ConsultingPreferredContactMethod>(
       initialRecord?.preferredContactMethod ?? 'sms',
     );
+  const [selectedSessionMode, setSelectedSessionMode] =
+    useState<ConsultingSessionMode>(initialRecord?.sessionMode ?? sessionMode);
   const initialSharedReportKey = initialRecord?.sharedReportIds?.join('|') ?? '';
 
   useEffect(() => {
@@ -183,7 +216,8 @@ export function ConsultingBookingScreen({
     setContactName(initialRecord.contactName ?? '');
     setContactPhone(initialRecord.contactPhone ?? '');
     setPreferredContactMethod(initialRecord.preferredContactMethod ?? 'sms');
-  }, [initialRecord]);
+    setSelectedSessionMode(initialRecord.sessionMode ?? sessionMode);
+  }, [initialRecord, sessionMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -241,6 +275,12 @@ export function ConsultingBookingScreen({
     () => buildSlotGroups(selectedDay?.slots ?? []),
     [selectedDay],
   );
+  const selectedDuration = findConsultingDuration(expert, durationId);
+  const estimatedPrice = getConsultingDurationPrice(
+    selectedDuration,
+    selectedSessionMode,
+  );
+  const sessionModeLabel = getConsultingSessionModeLabel(selectedSessionMode);
 
   const canProceed = Boolean(
     selectedDay &&
@@ -293,6 +333,8 @@ export function ConsultingBookingScreen({
     onNext({
       expertId: expert.id,
       durationId,
+      sessionMode: selectedSessionMode,
+      estimatedPrice,
       dayId: selectedDay.id,
       slotId: selectedSlotId,
       concernId: selectedConcernId,
@@ -308,6 +350,26 @@ export function ConsultingBookingScreen({
   return (
     <RNView style={styles.root}>
       <ConsultingScreenScaffold bottomPadding={spacing.md}>
+        <View style={styles.section}>
+          <RNView style={styles.sectionHeader}>
+            <ConsultingSectionTitle>상담 방식 선택</ConsultingSectionTitle>
+            <Text style={styles.availableLabel}>
+              {sessionModeLabel} 예상가 {formatConsultingPrice(estimatedPrice)}
+            </Text>
+          </RNView>
+          <View style={styles.sessionModeRow}>
+            {sessionModeOptions.map(option => (
+              <SessionModeOption
+                key={option.id}
+                option={option}
+                price={getConsultingDurationPrice(selectedDuration, option.id)}
+                selected={option.id === selectedSessionMode}
+                onPress={() => setSelectedSessionMode(option.id)}
+              />
+            ))}
+          </View>
+        </View>
+
         <View style={styles.section}>
           <RNView style={styles.sectionHeader}>
           <ConsultingSectionTitle>희망 날짜 선택</ConsultingSectionTitle>
@@ -624,6 +686,62 @@ function TimeSlotButton({
         ]}>
         {slot.label}
       </Text>
+    </Pressable>
+  );
+}
+
+function SessionModeOption({
+  option,
+  price,
+  selected,
+  onPress,
+}: {
+  option: (typeof sessionModeOptions)[number];
+  price: number;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const Icon = option.id === 'online' ? Video : MapPin;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.sessionModeOption,
+        selected && styles.sessionModeOptionSelected,
+        pressed ? styles.pressed : null,
+      ]}>
+      <RNView
+        style={[
+          styles.sessionModeIcon,
+          selected && styles.sessionModeIconSelected,
+        ]}>
+        <Icon
+          color={selected ? consultingColors.onAccent : consultingColors.textMuted}
+          size={17}
+        />
+      </RNView>
+      <RNView style={styles.sessionModeBody}>
+        <RNView style={styles.sessionModeTitleRow}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.sessionModeTitle,
+              selected && styles.sessionModeTitleSelected,
+            ]}>
+            {option.title}
+          </Text>
+          {selected ? <Check color={consultingColors.accent} size={15} /> : null}
+        </RNView>
+        <Text style={styles.sessionModePrice}>
+          {formatConsultingPrice(price)}
+        </Text>
+        <Text numberOfLines={2} style={styles.sessionModeDescription}>
+          {option.description}
+        </Text>
+      </RNView>
     </Pressable>
   );
 }
@@ -973,6 +1091,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  sessionModeBody: {
+    flex: 1,
+    gap: 2,
+  },
+  sessionModeDescription: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  sessionModeIcon: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderRadius: consultingRadius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  sessionModeIconSelected: {
+    backgroundColor: consultingColors.accent,
+  },
+  sessionModeOption: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surface,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.card,
+    borderWidth: 1.5,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 104,
+    padding: 12,
+  },
+  sessionModeOptionSelected: {
+    borderColor: consultingColors.accent,
+  },
+  sessionModePrice: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  sessionModeRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  sessionModeTitle: {
+    color: consultingColors.text,
+    flex: 1,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  sessionModeTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  sessionModeTitleSelected: {
+    color: consultingColors.accent,
   },
   selectedDateLabel: {
     color: consultingColors.text,

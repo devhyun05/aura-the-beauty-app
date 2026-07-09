@@ -228,8 +228,29 @@ async def list_categories(db: Database) -> list[dict[str, Any]]:
 # -----------------------------------------------------------------------------
 # Experts
 # -----------------------------------------------------------------------------
+def _offline_duration_price(online_price: int) -> int:
+  offline_prices = {
+    49000: 79000,
+    59000: 89000,
+    89000: 129000,
+    99000: 139000,
+    109000: 149000,
+  }
+  return offline_prices.get(online_price, round(online_price * 1.45 / 1000) * 1000)
+
+
+def _duration_option(row: dict[str, Any]) -> dict[str, Any]:
+  option = {key: value for key, value in row.items() if key != "expert_id"}
+  online_price = int(option.get("price") or 0)
+  option["prices"] = {
+    "online": online_price,
+    "offline": _offline_duration_price(online_price),
+  }
+  return option
+
+
 async def _durations_for(db: Database, expert_id: str) -> list[dict[str, Any]]:
-  return await db.fetch(
+  rows = await db.fetch(
     """
     select code as id, label, minutes, price, description, recommended
     from consulting_expert_durations
@@ -238,6 +259,7 @@ async def _durations_for(db: Database, expert_id: str) -> list[dict[str, Any]]:
     """,
     expert_id,
   )
+  return [_duration_option(row) for row in rows]
 
 
 async def _duration_minutes_for(
@@ -306,9 +328,7 @@ async def _durations_for_many(
   grouped: dict[str, list[dict[str, Any]]] = {expert_id: [] for expert_id in expert_ids}
   for row in rows:
     expert_id = row["expert_id"]
-    grouped.setdefault(expert_id, []).append(
-      {key: value for key, value in row.items() if key != "expert_id"},
-    )
+    grouped.setdefault(expert_id, []).append(_duration_option(row))
   return grouped
 
 
@@ -499,6 +519,7 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
   scheduled_at = row.get("scheduled_at")
   scheduled_date = row.get("scheduled_date")
   shared_report_ids = row.get("shared_report_ids") or []
+  price = row.get("price")
   return {
     "id": str(row["id"]),
     "expert_id": row["expert_id"],
@@ -513,12 +534,20 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     "category_label": row["category_label"],
     "date_label": row["date_label"],
     "duration_label": row["duration_label"],
+    "session_mode": row.get("session_mode") or "online",
+    "estimated_price": int(price) if price is not None else None,
     "shared_report_ids": [str(report_id) for report_id in shared_report_ids],
     "review_id": row.get("review_id"),
     "contact_name": row.get("contact_name"),
     "contact_phone": row.get("contact_phone"),
     "preferred_contact_method": row.get("preferred_contact_method"),
   }
+
+
+def _booking_price(payload: Any, duration: dict[str, Any]) -> int:
+  if payload.estimated_price is not None:
+    return int(payload.estimated_price)
+  return int(duration["price"] or 0)
 
 
 async def _attach_summary(db: Database, record: dict[str, Any], booking_id: Any) -> dict[str, Any]:
@@ -680,6 +709,7 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
     f"({weekday}) {slot_id}"
   )
   shared_report_ids = list(payload.shared_report_ids or [])
+  booking_price = _booking_price(payload, duration)
 
   try:
     row = await db.fetchrow(
@@ -690,6 +720,7 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
         date_label, slot_id, concern_id, concern_label,
         share_reports, shared_report_ids, question,
         contact_name, contact_phone, preferred_contact_method,
+        session_mode,
         status, price
       )
       values (
@@ -698,7 +729,8 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
         $10, $11, $12, $13,
         $14, $15::uuid[], $16,
         $17, $18, $19,
-        'requested', $20
+        $20,
+        'requested', $21
       )
       returning *
       """,
@@ -721,7 +753,8 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
       (payload.contact_name or "").strip() or None,
       (payload.contact_phone or "").strip() or None,
       (payload.preferred_contact_method or "").strip() or None,
-      duration["price"],
+      payload.session_mode,
+      booking_price,
     )
   except asyncpg.exceptions.ExclusionViolationError as error:
     raise AppError(409, "CONSULTING_SLOT_TAKEN", "이미 예약된 시간이에요.") from error
@@ -795,6 +828,7 @@ async def update_booking(
     f"({weekday}) {slot_id}"
   )
   shared_report_ids = list(payload.shared_report_ids or [])
+  booking_price = _booking_price(payload, duration)
 
   try:
     row = await db.fetchrow(
@@ -817,7 +851,8 @@ async def update_booking(
         contact_name = $17,
         contact_phone = $18,
         preferred_contact_method = $19,
-        price = $20,
+        session_mode = $20,
+        price = $21,
         updated_at = now()
       where id = $1 and user_id = $2
       returning *
@@ -841,7 +876,8 @@ async def update_booking(
       (payload.contact_name or "").strip() or None,
       (payload.contact_phone or "").strip() or None,
       (payload.preferred_contact_method or "").strip() or None,
-      duration["price"],
+      payload.session_mode,
+      booking_price,
     )
   except asyncpg.exceptions.ExclusionViolationError as error:
     raise AppError(409, "CONSULTING_SLOT_TAKEN", "이미 예약된 시간이에요.") from error

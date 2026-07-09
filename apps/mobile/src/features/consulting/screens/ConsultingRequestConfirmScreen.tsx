@@ -20,6 +20,8 @@ import {
   findConsultingDuration,
   formatConsultingPrice,
   formatConsultingSlotLabel,
+  getConsultingDurationPrice,
+  getConsultingSessionModeLabel,
 } from '../mocks/consulting.mock';
 import type {ConsultingBookingDraft, ConsultingExpert} from '../types';
 
@@ -43,6 +45,10 @@ export function ConsultingRequestConfirmScreen({
 }: ConsultingRequestConfirmScreenProps) {
   const duration = findConsultingDuration(expert, draft.durationId);
   const slotLabel = formatConsultingSlotLabel(draft.dayId, draft.slotId);
+  const sessionMode = draft.sessionMode ?? 'online';
+  const sessionModeLabel = getConsultingSessionModeLabel(sessionMode);
+  const estimatedPrice =
+    draft.estimatedPrice ?? getConsultingDurationPrice(duration, sessionMode);
 
   return (
     <RNView style={styles.root}>
@@ -51,7 +57,7 @@ export function ConsultingRequestConfirmScreen({
           <ExpertAvatar expert={expert} size={44} />
           <RNView style={styles.summaryText}>
             <Text numberOfLines={1} style={styles.summaryTitle}>
-              {expert.name} · 온라인 컨설팅 {duration.label}
+              {expert.name} · {sessionModeLabel} 컨설팅 {duration.label}
             </Text>
             <Text numberOfLines={1} style={styles.summaryMeta}>
               {slotLabel}
@@ -70,7 +76,12 @@ export function ConsultingRequestConfirmScreen({
             <DetailRow
               icon={<MessageCircle color={consultingColors.roseStrong} size={17} />}
               label="상담 시간"
-              value={`${duration.label} · 표시용 예상가 ${formatConsultingPrice(duration.price)}`}
+              value={duration.label}
+            />
+            <DetailRow
+              icon={<MessageCircle color={consultingColors.roseStrong} size={17} />}
+              label="방식 · 예상가"
+              value={`${sessionModeLabel} · ${formatConsultingPrice(estimatedPrice)}`}
             />
             <DetailRow
               icon={<FileText color={consultingColors.roseStrong} size={17} />}
@@ -97,7 +108,7 @@ export function ConsultingRequestConfirmScreen({
         <View style={styles.noticeCard}>
           <Bell color={consultingColors.roseStrong} size={18} />
           <Text style={styles.noticeText}>
-            신청 후 운영팀이 프리랜서 일정과 가능 여부를 확인해요. 앱에서는 결제하지 않고, 프리랜서가 외부 정산과 일정을 확인한 뒤 웹에서 예약 확정을 눌러요.
+            신청 후 운영팀이 프리랜서 일정과 가능 여부를 확인해요. 온라인과 오프라인은 예상 비용이 다르며, 앱에서는 결제하지 않고 프리랜서가 외부 정산과 일정을 확인한 뒤 웹에서 예약 확정을 눌러요.
           </Text>
         </View>
       </ConsultingScreenScaffold>

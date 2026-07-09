@@ -67,10 +67,32 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
       return explicitMetroURL
     }
 
+    if let configuredMetroURL = configuredMetroBundleURL() {
+      NSLog("[AURA] Using configured Metro bundle URL: \(configuredMetroURL.absoluteString)")
+      return configuredMetroURL
+    }
+
     return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
 #else
     return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
+  }
+
+  private func configuredMetroBundleURL() -> URL? {
+    let url = RCTBundleURLProvider.sharedSettings().jsBundleURL(
+      forBundleRoot: ".expo/.virtual-metro-entry"
+    )
+
+    guard
+      let host = url?.host,
+      host != "localhost",
+      host != "127.0.0.1",
+      host != "::1"
+    else {
+      return nil
+    }
+
+    return url
   }
 
   private func explicitMetroBundleURL() -> URL? {

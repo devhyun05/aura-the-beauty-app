@@ -40,6 +40,7 @@ type MainTabChromeProps = {
   children:
     | React.ReactNode
     | ((context: MainTabChromeRenderContext) => React.ReactNode);
+  headerRightSlot?: React.ReactNode;
   navigation: BottomTabScreenProps<MainTabParamList>['navigation'];
   routeName: MainTabRouteName;
   wrapContentInScreen?: boolean;
@@ -140,6 +141,7 @@ function navigateAppFeatureRootRoute(
 
 export function MainTabChrome({
   children,
+  headerRightSlot,
   navigation,
   routeName,
   wrapContentInScreen = true,
@@ -188,6 +190,7 @@ export function MainTabChrome({
           title={headerCopy.title}
           titleSlot={headerCopy.usesBrandLogo ? <AuraLogo variant="header" /> : undefined}
           topInset={insets.top}
+          rightSlot={headerRightSlot}
           containerProps={{
             style: [
               styles.overlayHeader,
