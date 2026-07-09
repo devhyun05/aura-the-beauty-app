@@ -26,6 +26,7 @@ import Svg, { Circle, ClipPath, Defs, Ellipse, G, RadialGradient, Stop } from 'r
 import { color, motion } from '../../theme/auradinTokens';
 import type { AuradinPhase } from '../../types';
 import { useReducedMotion } from './motion';
+import { OrbGLCanvas } from './OrbGLCanvas';
 
 type OrbPhaseSpec = {
   /** center, as fraction of screen width/height */
@@ -180,6 +181,10 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
   const dia = diameter ?? Math.min(W * 0.36, 155);
   const box = dia * (BOX / (R * 2)); // halo/canvas box in px
 
+  // GL failure → layered-SVG fallback (kept for the app's lifetime)
+  const [glFailed, setGlFailed] = React.useState(false);
+  const onGlFail = React.useCallback(() => setGlFailed(true), []);
+
   const spec = ORB_BY_PHASE[phase];
   const tx = React.useRef(new Animated.Value(spec.cx * W - box / 2)).current;
   const ty = React.useRef(new Animated.Value(spec.cy * H - box / 2)).current;
@@ -255,7 +260,16 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: Animated.multiply(glow, glowPulse) }]}>
           <Halo kind="glow" />
         </Animated.View>
-        <OrbArtwork />
+        {glFailed ? (
+          <OrbArtwork />
+        ) : (
+          <OrbGLCanvas
+            glowTarget={spec.glow}
+            paused={frozen}
+            onFail={onGlFail}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
       </Animated.View>
     </View>
   );

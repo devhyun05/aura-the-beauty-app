@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Animated, Pressable, Text } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import {LinearGradient} from './LinearGradientFallback';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   color,
   gradient,

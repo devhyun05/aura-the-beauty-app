@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import type { DimensionValue, StyleProp, ViewStyle } from 'react-native';
-import {LinearGradient} from './LinearGradientFallback';
+import { LinearGradient } from 'expo-linear-gradient';
 import { color, gradPoints } from '../../theme/auradinTokens';
 import type { GradientStops } from '../../theme/auradinTokens';
 
