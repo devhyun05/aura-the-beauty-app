@@ -1,10 +1,15 @@
 import {
+  FACE_LANDMARKS_EVENT_TYPE,
+  FACE_LANDMARKS_STILL_REQUEST_TYPE,
   UNITY_MAKEUP_BRIDGE_TARGET,
   UNITY_MAKEUP_LAYER_ORDER,
+  UNITY_STILL_FACE_LANDMARKS_TARGET,
+  buildAnalyzeFaceLandmarksStillRequest,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
   getUnityGeneratedMaskBridgeRoute,
   getUnityMakeupLayerRegionsForMakeupArea,
+  parseFaceLandmarksMessage,
 } from './unityMakeupBridge';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
 
@@ -130,3 +135,100 @@ expectEqual(
   'brow-png-natural-hair-v1',
   'brow recipe mask id',
 );
+
+// ── 퍼스널 컬러 정지영상 랜드마크 요청/응답 (homuler Track 1) ────────────────
+const stillRequest = JSON.parse(
+  buildAnalyzeFaceLandmarksStillRequest('file:///tmp/capture.jpg', 'pc-abc', 1),
+);
+expectEqual(stillRequest.type, FACE_LANDMARKS_STILL_REQUEST_TYPE, 'still request type');
+expectEqual(stillRequest.requestId, 'pc-abc', 'still request id');
+expectEqual(stillRequest.imagePath, 'file:///tmp/capture.jpg', 'still request imagePath');
+expectEqual(stillRequest.maxFaces, 1, 'still request maxFaces');
+
+const okLandmarks = parseFaceLandmarksMessage(
+  JSON.stringify({
+    type: FACE_LANDMARKS_EVENT_TYPE,
+    requestId: 'pc-abc',
+    status: 'ok',
+    faceCount: 1,
+    imageWidth: 1080,
+    imageHeight: 1440,
+    landmarks: [
+      {i: 0, x: 0.5, y: 0.42, z: -0.03},
+      {i: 1, x: 0.51, y: 0.44, z: -0.02},
+      {i: 2, x: 'bad', y: 0.5, z: 0}, // 비유한값 → 필터링
+    ],
+    pose: {pitchDeg: 1.2, yawDeg: -0.4, rollDeg: 0.8},
+  }),
+);
+expectEqual(okLandmarks?.status, 'ok', 'landmarks status ok');
+expectEqual(okLandmarks?.requestId, 'pc-abc', 'landmarks requestId');
+expectEqual(okLandmarks?.faceCount, 1, 'landmarks faceCount');
+expectEqual(okLandmarks?.imageWidth, 1080, 'landmarks imageWidth');
+expectEqual(okLandmarks?.landmarks.length, 2, 'landmarks filtered count');
+expectEqual(okLandmarks?.landmarks[0].x, 0.5, 'landmarks first x');
+expectEqual(okLandmarks?.pose?.pitchDeg, 1.2, 'landmarks pose pitch');
+
+// 다른 이벤트 타입(예: photoCaptured)은 무시(null)
+const otherEvent = parseFaceLandmarksMessage(
+  JSON.stringify({type: 'photoCaptured', path: 'file:///tmp/x.jpg'}),
+);
+expectEqual(otherEvent, null, 'non personal-color event ignored');
+
+// 형식 깨진 JSON 은 null
+expectEqual(
+  parseFaceLandmarksMessage('{not-json'),
+  null,
+  'malformed message ignored',
+);
+
+// requestId 없는 랜드마크 이벤트는 null(상관 불가)
+expectEqual(
+  parseFaceLandmarksMessage(
+    JSON.stringify({type: FACE_LANDMARKS_EVENT_TYPE, status: 'ok'}),
+  ),
+  null,
+  'landmarks without requestId ignored',
+);
+
+// Unity 수신 타겟: StillFaceLandmarkService.cs 의 GameObject/메서드명과 계약
+expectEqual(
+  UNITY_STILL_FACE_LANDMARKS_TARGET.gameObject,
+  'AuraStillFaceLandmarks',
+  'still landmarks gameObject',
+);
+expectEqual(
+  UNITY_STILL_FACE_LANDMARKS_TARGET.analyzeMethod,
+  'AnalyzeStillJson',
+  'still landmarks method',
+);
+
+// Unity SendFailure 형식(빈 landmarks + error, imageWidth/pose 없음)도 파싱
+const failureEvent = parseFaceLandmarksMessage(
+  JSON.stringify({
+    type: FACE_LANDMARKS_EVENT_TYPE,
+    requestId: 'pc-err',
+    status: 'error',
+    faceCount: 0,
+    landmarks: [],
+    error: 'mediapipe_package_unavailable',
+  }),
+);
+expectEqual(failureEvent?.status, 'error', 'failure status parsed');
+expectEqual(failureEvent?.error, 'mediapipe_package_unavailable', 'failure error field');
+expectEqual(failureEvent?.imageWidth, 0, 'failure imageWidth defaults 0');
+expectEqual(failureEvent?.pose, null, 'failure pose null');
+
+// no_face 응답도 정상 파싱(호출측이 insufficient 처리)
+const noFace = parseFaceLandmarksMessage(
+  JSON.stringify({
+    type: FACE_LANDMARKS_EVENT_TYPE,
+    requestId: 'pc-def',
+    status: 'no_face',
+    faceCount: 0,
+    landmarks: [],
+  }),
+);
+expectEqual(noFace?.status, 'no_face', 'no_face status parsed');
+expectEqual(noFace?.landmarks.length, 0, 'no_face empty landmarks');
+expectEqual(noFace?.pose, null, 'no_face null pose');

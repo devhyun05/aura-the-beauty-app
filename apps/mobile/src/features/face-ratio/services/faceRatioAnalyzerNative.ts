@@ -13,8 +13,21 @@ export type FaceRatioHairlineOptions = {
   tuning?: FaceRatioHairlineTuning;
 };
 
+// homuler(Unity IMAGE 모드)에서 검출해 넘겨주는 얼굴 랜드마크.
+// CocoaPods MediaPipe 제거 이후, 네이티브 분석기는 랜드마크를 스스로 검출하지 않고
+// 이 입력(정규화 478점 + 원본 크기 + pose)으로 키포인트/비율 계산만 수행한다.
+// pose.rollDeg 는 촬영 후 roll 좌표 보정(기획 §5.2)에 쓰인다.
+export type FaceRatioLandmarkInput = {
+  points: {i: number; x: number; y: number; z: number}[];
+  imageWidth: number;
+  imageHeight: number;
+  pose: {pitchDeg: number; yawDeg: number; rollDeg: number} | null;
+};
+
 export type FaceRatioAnalyzeOptions = {
   hairline?: FaceRatioHairlineOptions;
+  // Unity homuler 로 검출한 랜드마크. 없으면 네이티브가 얼굴 미검출로 처리한다.
+  landmarks?: FaceRatioLandmarkInput;
 };
 
 type NativeFaceRatioAnalyzer = {

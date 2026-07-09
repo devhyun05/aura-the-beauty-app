@@ -2,6 +2,8 @@
 // 프라이버시 불변식(localOnly)을 assert하고, personal_color는 어떤 업로드 경로도 호출하지 않는다.
 
 import { analyzePersonalColorPhoto } from './personalColorAnalyzerNative';
+import type { PersonalColorLandmarkInput } from './personalColorAnalyzerNative';
+import { requestFaceLandmarks } from '../../ar/services/unityMakeupBridge';
 import { saveSourceImage, writeResultJson } from './personalColorArtifacts';
 import { analyzePersonalColor } from './personalColorCore/engine';
 import { evaluatePersonalColorQuality } from './personalColorQualityGate';
@@ -38,7 +40,35 @@ export async function analyzePersonalColorCapture(
     logger.log('artifact:source_failed', { message: String(error) });
   }
 
-  const native = await analyzePersonalColorPhoto(input.imageUri);
+  // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 미탑재/타임아웃/에러는
+  // undefined 로 격리 → 네이티브가 unsupported 로 처리(로컬 전용, 업로드 없음).
+  // no_face 는 빈 points 로 그대로 전달한다 — 네이티브가 no_face 를 방출해야
+  // quality gate 가 '재촬영' 신호(no_face)와 '기능 불가'(native_unsupported)를
+  // 구분할 수 있다.
+  let landmarks: PersonalColorLandmarkInput | undefined;
+  try {
+    const detected = await requestFaceLandmarks(input.imageUri);
+    logger.log('landmarks:done', {
+      source: 'unity-homuler',
+      status: detected.status,
+      count: detected.landmarks.length,
+      error: detected.error ?? null,
+    });
+    if (detected.status === 'ok' || detected.status === 'no_face') {
+      landmarks = {
+        points: detected.landmarks,
+        imageWidth: detected.imageWidth,
+        imageHeight: detected.imageHeight,
+        pose: detected.pose,
+      };
+    }
+  } catch (error) {
+    logger.log('landmarks:error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const native = await analyzePersonalColorPhoto(input.imageUri, { landmarks });
   logger.log('native:done', {
     status: native.status,
     regions: Object.keys(native.regions ?? {}),

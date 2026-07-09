@@ -44,7 +44,9 @@ export type RealtimeMediaPipePayload = {
   landmarkCount?: number;
   landmarks?: Partial<Record<RealtimeMediaPipeLandmarkKey, RealtimeMediaPipePoint>>;
   pitchDeg?: number;
-  poseSource?: 'matrix' | 'geometry' | 'geometry_unavailable';
+  // 'vision': VNFaceObservation 이 직접 제공하는 각도 (Vision 폴백 경로의 기본).
+  // 'geometry': 5점 랜드마크 근사 (vision 각도 미제공 시 2차 폴백).
+  poseSource?: 'matrix' | 'vision' | 'geometry' | 'geometry_unavailable';
   rollDeg?: number;
   screenLandmarks?: Partial<Record<RealtimeMediaPipeLandmarkKey, RealtimeFaceCaptureScreenPoint>>;
   status: 'ok' | 'no_face' | 'landmark_missing';

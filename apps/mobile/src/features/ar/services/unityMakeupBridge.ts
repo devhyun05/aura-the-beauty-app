@@ -1250,6 +1250,206 @@ export function addUnityMakeupEventListener(
   });
 }
 
+// ── 정지영상 얼굴 랜드마크 (homuler 일원화) ─────────────────────────────────
+// CocoaPods MediaPipe 제거(Unity homuler와 중복 크래시) 이후, MediaPipe 에 의존하던
+// 두 정지영상 분석기(퍼스널 컬러 · 얼굴 세로비율)는 랜드마크를 Unity homuler
+// (IMAGE 모드)에서 공통으로 받아온다. 요청 1종이 두 소비자를 모두 커버한다.
+// RN→Unity: postMessage('AuraStillFaceLandmarks','AnalyzeStillJson', {requestId, imagePath, ...})
+//   (Unity 측 수신자: MediaPipeGraft/StillFaceLandmarkService.cs — RNBridge 와 별개의
+//    자립형 GameObject. UnitySendMessage 는 GameObject 이름으로 라우팅된다.)
+// Unity→RN: UnityMakeupEvent 의 message = {type:'faceLandmarks', requestId, ...}
+export const UNITY_STILL_FACE_LANDMARKS_TARGET = {
+  gameObject: 'AuraStillFaceLandmarks',
+  analyzeMethod: 'AnalyzeStillJson',
+} as const;
+export const FACE_LANDMARKS_STILL_REQUEST_TYPE = 'analyzeFaceLandmarksStill';
+export const FACE_LANDMARKS_EVENT_TYPE = 'faceLandmarks';
+
+export type FaceLandmarkPoint = {
+  i: number;
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type FaceLandmarksStatus = 'ok' | 'no_face' | 'error';
+
+export type FaceLandmarksResult = {
+  status: FaceLandmarksStatus;
+  requestId: string;
+  faceCount: number;
+  imageWidth: number;
+  imageHeight: number;
+  landmarks: FaceLandmarkPoint[];
+  pose: {pitchDeg: number; yawDeg: number; rollDeg: number} | null;
+  error?: string;
+};
+
+let faceLandmarksRequestCounter = 0;
+
+export function createFaceLandmarksRequestId(): string {
+  faceLandmarksRequestCounter += 1;
+  return `fl-${Date.now().toString(36)}-${faceLandmarksRequestCounter.toString(36)}`;
+}
+
+// 순수 함수: Unity 로 보낼 요청 JSON 문자열을 만든다(유닛테스트 대상).
+export function buildAnalyzeFaceLandmarksStillRequest(
+  imagePath: string,
+  requestId: string,
+  maxFaces = 1,
+): string {
+  return JSON.stringify({
+    type: FACE_LANDMARKS_STILL_REQUEST_TYPE,
+    requestId,
+    imagePath,
+    maxFaces,
+  });
+}
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+// 순수 함수: Unity 이벤트 message(JSON 문자열)를 파싱한다(유닛테스트 대상).
+// faceLandmarks 이벤트가 아니거나 형식이 깨지면 null(무시).
+export function parseFaceLandmarksMessage(
+  rawMessage: string | undefined,
+): FaceLandmarksResult | null {
+  if (typeof rawMessage !== 'string' || rawMessage.length === 0) {
+    return null;
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(rawMessage) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  if (
+    !parsed ||
+    parsed.type !== FACE_LANDMARKS_EVENT_TYPE ||
+    typeof parsed.requestId !== 'string'
+  ) {
+    return null;
+  }
+
+  const status: FaceLandmarksStatus =
+    parsed.status === 'ok' || parsed.status === 'no_face'
+      ? parsed.status
+      : 'error';
+
+  const rawLandmarks = Array.isArray(parsed.landmarks) ? parsed.landmarks : [];
+  const landmarks: FaceLandmarkPoint[] = rawLandmarks
+    .map((point, index) => {
+      const p = (point ?? {}) as Record<string, unknown>;
+      return {
+        i: toFiniteNumber(p.i, index),
+        x: toFiniteNumber(p.x, NaN),
+        y: toFiniteNumber(p.y, NaN),
+        z: toFiniteNumber(p.z, 0),
+      };
+    })
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  const rawPose = (parsed.pose ?? null) as Record<string, unknown> | null;
+  const pose = rawPose
+    ? {
+        pitchDeg: toFiniteNumber(rawPose.pitchDeg, 0),
+        yawDeg: toFiniteNumber(rawPose.yawDeg, 0),
+        rollDeg: toFiniteNumber(rawPose.rollDeg, 0),
+      }
+    : null;
+
+  return {
+    status,
+    requestId: parsed.requestId,
+    faceCount: toFiniteNumber(parsed.faceCount, landmarks.length > 0 ? 1 : 0),
+    imageWidth: toFiniteNumber(parsed.imageWidth, 0),
+    imageHeight: toFiniteNumber(parsed.imageHeight, 0),
+    landmarks,
+    pose,
+    error: typeof parsed.error === 'string' ? parsed.error : undefined,
+  };
+}
+
+// 같은 이미지에 대한 동시 요청은 하나의 Unity 검출을 공유한다.
+// 얼굴 분석 캡처 1회에 퍼스널 컬러·얼굴 세로비율 두 effect 가 같은 렌더 패스에서
+// 각자 requestFaceLandmarks 를 부르는데, Unity 쪽 StillFaceLandmarkService 는
+// 단일 비행(_busy)이라 공유하지 않으면 둘째 요청이 analyzer_busy 로 거절되어
+// 한쪽 분석이 매 캡처마다 조용히 죽는다. imagePath 키 dedup 이 근본 해결이다.
+const pendingFaceLandmarksRequests = new Map<string, Promise<FaceLandmarksResult>>();
+
+// Unity homuler(IMAGE 모드)에 정지영상 랜드마크 검출을 요청하고 응답을 기다린다.
+// 퍼스널 컬러 · 얼굴 세로비율 두 분석기가 공통으로 쓴다.
+// 브릿지 미탑재/런타임 미준비/타임아웃은 reject → 호출측 서비스가 격리한다.
+// 기본 타임아웃(3500ms)은 로딩 화면의 보고서 대기(VERTICAL_THIRDS_WAIT_TIMEOUT_MS
+// 8000ms)와 직렬로 쌓이므로, 그 예산 안에서 네이티브 분석 시간이 남도록 짧게 둔다.
+export function requestFaceLandmarks(
+  imagePath: string,
+  options: {timeoutMs?: number} = {},
+): Promise<FaceLandmarksResult> {
+  const {timeoutMs = 3500} = options;
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (!nativeBridge?.postMessage) {
+    return Promise.reject(new Error('unity_makeup_bridge_unavailable'));
+  }
+
+  // Unity 런타임이 없는 빌드(실험 lab 등)나 예열 전에는 응답이 올 수 없다.
+  // 타임아웃까지 기다리지 않고 즉시 실패시켜 캡처 흐름을 지연시키지 않는다.
+  if (!isUnityMakeupReady()) {
+    return Promise.reject(new Error('unity_runtime_not_ready'));
+  }
+
+  const pending = pendingFaceLandmarksRequests.get(imagePath);
+  if (pending) {
+    return pending;
+  }
+
+  // 가드 직후 좁혀진 postMessage 를 캡처(옵셔널 narrowing 은 Promise 클로저로
+  // 이어지지 않는다). RN 네이티브 모듈 메서드는 this 에 의존하지 않는다.
+  const postMessage = nativeBridge.postMessage;
+  const requestId = createFaceLandmarksRequestId();
+
+  const request = new Promise<FaceLandmarksResult>((resolve, reject) => {
+    let settled = false;
+    let subscription: {remove: () => void} | null = null;
+
+    const finish = (fn: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      subscription?.remove();
+      pendingFaceLandmarksRequests.delete(imagePath);
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      finish(() => reject(new Error('face_landmarks_timeout')));
+    }, timeoutMs);
+
+    subscription = addUnityMakeupEventListener(event => {
+      const parsed = parseFaceLandmarksMessage(event.message);
+      if (!parsed || parsed.requestId !== requestId) {
+        return;
+      }
+      finish(() => resolve(parsed));
+    });
+
+    postMessage(
+      UNITY_STILL_FACE_LANDMARKS_TARGET.gameObject,
+      UNITY_STILL_FACE_LANDMARKS_TARGET.analyzeMethod,
+      buildAnalyzeFaceLandmarksStillRequest(imagePath, requestId),
+    );
+  });
+
+  pendingFaceLandmarksRequests.set(imagePath, request);
+  return request;
+}
+
 function clearScheduledNativePost(retryKey: string) {
   const scheduledPost = scheduledNativePosts.get(retryKey);
 
