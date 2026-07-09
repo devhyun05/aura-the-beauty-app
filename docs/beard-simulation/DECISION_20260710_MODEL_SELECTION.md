@@ -22,6 +22,31 @@
 
 **교훈**: threshold 보정이 안 된 상태의 모델 간 비교는 무의미하다.
 
+### 정정 3 — ELFW를 "Apache-2.0, 깨끗함"이라 한 것도 **틀렸다**
+
+- ELFW **코드**는 Apache-2.0이 맞다 (LICENSE 파일 직접 확인).
+- 그러나 **데이터셋**은 프로젝트 사이트에 **Hippocratic License**로 명시돼 있다
+  (https://multimedia-eurecat.github.io/2020/06/22/extended-faces-in-the-wild.html).
+  이는 OSI 미승인 "Ethical Source" 라이선스로, **상업 사용 자체는 허용**하나
+  인권 준수 조항이 붙은 **비표준 라이선스**다 → 법무 검토 필요.
+- 게다가 **다운로드가 구글 폼 승인제**라 자동으로 받을 수 없다. 사람이 신청해야 한다.
+- 규모: 라벨 얼굴 **3,754장**, 확장 클래스(beard-mustache 등) 포함 **1,423장**, 6+1 클래스.
+
+### ⚠️ 반복된 실수의 패턴 (기록해 둘 것)
+
+세 번의 라이선스 오판은 **모두 같은 실수**였다:
+
+> **"저장소의 코드 라이선스"를 "가중치·데이터셋의 라이선스"로 착각했다.**
+
+| 대상 | 코드 | 가중치/데이터 |
+|---|---|---|
+| CLIPSeg | MIT ✅ | 불명확 ⚠️ |
+| SegFormer | Apache-2.0 (HF transformers) ✅ | NVIDIA 비상업 ❌ |
+| ELFW | Apache-2.0 ✅ | Hippocratic ⚠️ |
+
+**앞으로 규칙: 모델·데이터셋 라이선스는 반드시 "가중치 파일" 또는 "데이터 배포처"에서
+따로 확인한다. GitHub의 LICENSE 파일만 보고 판단하지 않는다.**
+
 ### 정정 2 — SegFormer-B0 추천은 **틀렸다** (비상업 라이선스)
 
 앞서 "SegFormer-B0 fine-tune"을 권했으나, `nvidia/mit-b0` 사전학습 가중치는
@@ -86,7 +111,8 @@ CPU warm latency: C1 0.25s/장, CLIPSeg 1.20s/장 (약 5배).
 | CLIPSeg **가중치** (`CIDAS/clipseg-rd64-refined`) | HF 태그는 `apache-2.0`, 그러나 GitHub는 "MIT는 가중치에 적용 안 됨"이라 명시하고 대체 라이선스를 안 밝힘 | ⚠️ **법적으로 불명확** |
 | 내장 **OpenAI CLIP 가중치** | 별도 라이선스 파일 없음. 모델 카드: "Any deployed use case of the model — whether commercial or not — is currently out of scope." | ⚠️ **회색지대** |
 | 학습 데이터 PhraseCut → Visual Genome | PhraseCut 라이선스 파일 없음 / VG는 CC BY 4.0 | ⚠️ 불명확 (기반은 관대) |
-| **ELFW** (beard-mustache 클래스 보유) | **Apache-2.0** | ✅ **깨끗함** |
+| ELFW **코드** | Apache-2.0 (LICENSE 파일 확인) | ✅ |
+| ELFW **데이터셋** (beard-mustache 클래스 보유) | **Hippocratic License** (프로젝트 사이트 명시) — 상업 사용은 허용하나 OSI 미승인 "Ethical Source" 라이선스 | ⚠️ **비표준, 법무 검토 필요** |
 | `nvidia/mit-b0` (SegFormer-B0) | NVIDIA Source Code License | ❌ **비상업 전용** |
 | DeepLabv3 + MobileNetV3 (torchvision) | BSD-3-Clause | ✅ |
 | MobileSAM | Apache-2.0 | ✅ |
@@ -103,10 +129,17 @@ CLIPSeg가 이긴 이유가 이것이다.
 
 **핵심 전략: CLIPSeg를 "선생님"으로만 쓰고, 출시 모델은 따로 만든다 (teacher-student).**
 
-이 한 수로 세 문제가 동시에 풀린다:
-- **라이선스**: CLIPSeg 가중치를 **배포하지 않는다** (사내 오프라인 라벨링 도구로만 사용) → 리스크 회피
 - **아이폰**: 출시 모델은 ~10M 파라미터 (150M 아님) → 가볍고 CoreML 변환 쉬움
 - **데이터 부족**: CLIPSeg가 셀카를 **자동 라벨링** → 사람이 손보기만 하면 되어 데이터 확보 저렴
+- **라이선스**: CLIPSeg 가중치를 **배포하지 않는다** (사내 오프라인 라벨링 도구로만 사용)
+
+**단, 라이선스 리스크가 0이 되는 것은 아니다 (과장 금지).**
+가중치를 배포하지 않는 것은 **명백한 이득**이지만, "불명확한 라이선스의 모델이 생성한
+라벨로 학습한 모델"이 파생물로 간주되는지는 **법적으로 미정**이다. 리스크를 낮출 뿐 없애지 못한다.
+
+**리스크를 실제로 0에 가깝게 만드는 유일한 길**: 자체 촬영·자체 라벨링한 데이터로만 학습.
+CLIPSeg는 **초안을 그려주는 보조**로 쓰고 **사람이 모두 검수·수정**하면, 최종 라벨의
+저작·소유가 우리에게 있다는 주장이 훨씬 강해진다. ELFW는 **선택 사항**이지 필수가 아니다.
 
 ### 절차
 
