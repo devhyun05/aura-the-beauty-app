@@ -367,6 +367,7 @@ static NSMutableDictionary *AURARealtimeLandmarksFromFace(
 // MediaPipe guard) but are used by the Vision→MediaPipe shim helpers below.
 static CGFloat AURARealtimeNumberFromPoint(NSDictionary *point, NSString *key);
 static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks);
+static NSDictionary *AURARealtimePoseFromVisionObservation(VNFaceObservation *face);
 
 // Rotate a raw-frame Vision point into the UPRIGHT PORTRAIT, selfie-mirrored
 // frame that the MediaPipe path emitted (eyes horizontal, origin top-left,
@@ -582,9 +583,14 @@ static NSDictionary *AURARealtimeMediaPipePayloadFromVisionFace(
     uprightLandmarks[@"noseTip"] = uprightNose;
   }
 
-  // AURARealtimePoseFromGeometry (defined below, outside the MediaPipe guard)
-  // reads leftEye/rightEye/noseTip/mouthLeft/mouthRight to derive yaw/roll/pitch.
-  [payload addEntriesFromDictionary:AURARealtimePoseFromGeometry(uprightLandmarks)];
+  // Vision 이 관측 자체에 제공하는 head pose 각도(roll/yaw/pitch)를 우선 사용한다.
+  // VNImageRequestHandler 에 orientation 을 전달하므로 각도는 upright 프레임 기준.
+  // 5점 geometry 근사((noseRatio-0.48)*28 등 개인차 큰 휴리스틱)보다 훨씬 안정적이라
+  // pitch/yaw 게이트의 프레임 간 지터가 줄어든다. 게이트는 |값| 기준이라 부호 규약
+  // 차이는 판정에 영향 없다. 각도가 없으면(관측 미제공) geometry 로 폴백.
+  NSDictionary *visionPose = AURARealtimePoseFromVisionObservation(face);
+  [payload addEntriesFromDictionary:
+      visionPose ?: AURARealtimePoseFromGeometry(uprightLandmarks)];
 
   NSNumber *faceWidthRatio =
       AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(uprightLandmarks);
@@ -735,6 +741,30 @@ static NSDictionary *AURARealtimePoseFromMatrix(MPPTransformMatrix *matrix)
 }
 
 #endif  // AURA_HAS_MEDIAPIPE
+
+// Vision 얼굴 검출기가 관측에 직접 제공하는 head pose(라디안 → 도).
+// 핸들러에 버퍼 orientation 을 전달하므로 각도는 upright 프레임 기준이다.
+// 세 각도가 모두 있을 때만 사용하고, 하나라도 없으면 nil 을 반환해 호출측이
+// geometry 근사로 폴백하게 한다 (부분 혼합은 소스 의미를 흐린다).
+static NSDictionary *AURARealtimePoseFromVisionObservation(VNFaceObservation *face)
+{
+  NSNumber *roll = face.roll;
+  NSNumber *yaw = face.yaw;
+  NSNumber *pitch = nil;
+  if (@available(iOS 15.0, *)) {
+    pitch = face.pitch;
+  }
+  if (!roll || !yaw || !pitch) {
+    return nil;
+  }
+
+  return @{
+    @"pitchDeg": @(AURARealtimeDegrees(pitch.doubleValue)),
+    @"yawDeg": @(AURARealtimeDegrees(yaw.doubleValue)),
+    @"rollDeg": @(AURARealtimeDegrees(roll.doubleValue)),
+    @"poseSource": @"vision",
+  };
+}
 
 static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 {

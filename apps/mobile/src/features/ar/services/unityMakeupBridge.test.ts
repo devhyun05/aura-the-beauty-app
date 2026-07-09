@@ -3,6 +3,7 @@ import {
   FACE_LANDMARKS_STILL_REQUEST_TYPE,
   UNITY_MAKEUP_BRIDGE_TARGET,
   UNITY_MAKEUP_LAYER_ORDER,
+  UNITY_STILL_FACE_LANDMARKS_TARGET,
   buildAnalyzeFaceLandmarksStillRequest,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
@@ -189,6 +190,34 @@ expectEqual(
   null,
   'landmarks without requestId ignored',
 );
+
+// Unity 수신 타겟: StillFaceLandmarkService.cs 의 GameObject/메서드명과 계약
+expectEqual(
+  UNITY_STILL_FACE_LANDMARKS_TARGET.gameObject,
+  'AuraStillFaceLandmarks',
+  'still landmarks gameObject',
+);
+expectEqual(
+  UNITY_STILL_FACE_LANDMARKS_TARGET.analyzeMethod,
+  'AnalyzeStillJson',
+  'still landmarks method',
+);
+
+// Unity SendFailure 형식(빈 landmarks + error, imageWidth/pose 없음)도 파싱
+const failureEvent = parseFaceLandmarksMessage(
+  JSON.stringify({
+    type: FACE_LANDMARKS_EVENT_TYPE,
+    requestId: 'pc-err',
+    status: 'error',
+    faceCount: 0,
+    landmarks: [],
+    error: 'mediapipe_package_unavailable',
+  }),
+);
+expectEqual(failureEvent?.status, 'error', 'failure status parsed');
+expectEqual(failureEvent?.error, 'mediapipe_package_unavailable', 'failure error field');
+expectEqual(failureEvent?.imageWidth, 0, 'failure imageWidth defaults 0');
+expectEqual(failureEvent?.pose, null, 'failure pose null');
 
 // no_face 응답도 정상 파싱(호출측이 insufficient 처리)
 const noFace = parseFaceLandmarksMessage(

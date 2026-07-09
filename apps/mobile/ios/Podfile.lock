@@ -157,9 +157,6 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
-  - MediaPipeTasksCommon (0.10.35)
-  - MediaPipeTasksVision (0.10.35):
-    - MediaPipeTasksCommon (= 0.10.35)
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3137,7 +3134,6 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - MediaPipeTasksVision (= 0.10.35)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -3224,8 +3220,6 @@ SPEC REPOS:
     - libavif
     - libdav1d
     - libwebp
-    - MediaPipeTasksCommon
-    - MediaPipeTasksVision
     - SDWebImage
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
@@ -3504,8 +3498,6 @@ SPEC CHECKSUMS:
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
-  MediaPipeTasksCommon: ae27d88c4d185db114a1a768c504f8270dda79b5
-  MediaPipeTasksVision: 1d6c3efa89830a131dbd0dc4fb80dea283fac521
   RCT-Folly: 36c4f904fb6cd0219dcb76b94e9502d2a72fab0b
   RCTDeprecation: 225e022b85a206cf0883a909c4a114159783363c
   RCTRequired: 827a95c181af0886a11e21bc66c084088cf87839

@@ -1254,8 +1254,14 @@ export function addUnityMakeupEventListener(
 // CocoaPods MediaPipe 제거(Unity homuler와 중복 크래시) 이후, MediaPipe 에 의존하던
 // 두 정지영상 분석기(퍼스널 컬러 · 얼굴 세로비율)는 랜드마크를 Unity homuler
 // (IMAGE 모드)에서 공통으로 받아온다. 요청 1종이 두 소비자를 모두 커버한다.
-// RN→Unity: postMessage('NativeBridge','OnMessageFromRN', {type:'analyzeFaceLandmarksStill', ...})
+// RN→Unity: postMessage('AuraStillFaceLandmarks','AnalyzeStillJson', {requestId, imagePath, ...})
+//   (Unity 측 수신자: MediaPipeGraft/StillFaceLandmarkService.cs — RNBridge 와 별개의
+//    자립형 GameObject. UnitySendMessage 는 GameObject 이름으로 라우팅된다.)
 // Unity→RN: UnityMakeupEvent 의 message = {type:'faceLandmarks', requestId, ...}
+export const UNITY_STILL_FACE_LANDMARKS_TARGET = {
+  gameObject: 'AuraStillFaceLandmarks',
+  analyzeMethod: 'AnalyzeStillJson',
+} as const;
 export const FACE_LANDMARKS_STILL_REQUEST_TYPE = 'analyzeFaceLandmarksStill';
 export const FACE_LANDMARKS_EVENT_TYPE = 'faceLandmarks';
 
@@ -1413,8 +1419,8 @@ export function requestFaceLandmarks(
     });
 
     postMessage(
-      'NativeBridge',
-      'OnMessageFromRN',
+      UNITY_STILL_FACE_LANDMARKS_TARGET.gameObject,
+      UNITY_STILL_FACE_LANDMARKS_TARGET.analyzeMethod,
       buildAnalyzeFaceLandmarksStillRequest(imagePath, requestId, maxFaces),
     );
   });
