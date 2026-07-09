@@ -2,23 +2,18 @@
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 
-#if __has_include(<MediaPipeTasksVision/MediaPipeTasksVision.h>)
-#define AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE 1
-#import <MediaPipeTasksVision/MediaPipeTasksVision.h>
-#else
-#define AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE 0
-#endif
-
 #import "AURAFaceRatioHairline.h"
+
+// AURAFaceRatioAnalyzer — 얼굴 세로 3분할(상/중/하안부) 키포인트 추출.
+//
+// 얼굴 검출은 하지 않는다. CocoaPods MediaPipe 는 Unity homuler MediaPipe 와 중복
+// 크래시를 일으켜 제거됐고(020cb33), 랜드마크와 pose 는 Unity homuler(IMAGE 모드)가
+// 검출해 options[@"landmarks"] 로 넘겨준다. homuler 는 MediaPipe 와 동일한 478점
+// 메시라 기존 인덱스 상수(9/10/151/234/454/2/97/326/148/152/176/377/400)를 그대로 쓴다.
 
 static CGFloat AURAFaceRatioClamp(CGFloat value)
 {
   return fmax(0.0, fmin(1.0, value));
-}
-
-static CGFloat AURAFaceRatioDegrees(CGFloat radians)
-{
-  return radians * 180.0 / M_PI;
 }
 
 static double AURAFaceRatioPointValue(NSDictionary *point, NSString *key)
@@ -38,29 +33,75 @@ static BOOL AURAFaceRatioHairlineEnabled(NSDictionary *options)
   return [enabled respondsToSelector:@selector(boolValue)] ? enabled.boolValue : YES;
 }
 
-#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
-static NSDictionary *AURAFaceRatioPoint(MPPNormalizedLandmark *landmark)
+// Unity homuler 가 넘겨준 정규화 랜드마크를 인덱스 접근 가능한 배열로 채운다.
+// 각 슬롯은 clamp 된 {x,y,z} 또는 NSNull. `i` 필드를 슬롯 번호로 쓰므로 전송 순서에
+// 의존하지 않는다.
+static NSArray *AURAFaceRatioLandmarksFromJS(NSArray *jsPoints)
 {
-  if (!landmark) {
-    return nil;
+  if (![jsPoints isKindOfClass:[NSArray class]] || jsPoints.count == 0) {
+    return @[];
   }
 
-  return @{
-    @"x": @(AURAFaceRatioClamp(landmark.x)),
-    @"y": @(AURAFaceRatioClamp(landmark.y)),
-    @"z": @(landmark.z),
-  };
+  NSInteger maxIndex = -1;
+  for (id entry in jsPoints) {
+    if (![entry isKindOfClass:[NSDictionary class]]) {
+      continue;
+    }
+    NSInteger index = [entry[@"i"] integerValue];
+    if (index > maxIndex) {
+      maxIndex = index;
+    }
+  }
+  if (maxIndex < 0) {
+    return @[];
+  }
+
+  NSMutableArray *slots = [NSMutableArray arrayWithCapacity:(NSUInteger)(maxIndex + 1)];
+  for (NSInteger i = 0; i <= maxIndex; i++) {
+    [slots addObject:[NSNull null]];
+  }
+
+  for (id entry in jsPoints) {
+    if (![entry isKindOfClass:[NSDictionary class]]) {
+      continue;
+    }
+    NSInteger index = [entry[@"i"] integerValue];
+    if (index < 0 || index > maxIndex) {
+      continue;
+    }
+    NSNumber *x = entry[@"x"];
+    NSNumber *y = entry[@"y"];
+    if (![x isKindOfClass:[NSNumber class]] || ![y isKindOfClass:[NSNumber class]]) {
+      continue;
+    }
+    NSNumber *z = [entry[@"z"] isKindOfClass:[NSNumber class]] ? entry[@"z"] : @0;
+    slots[(NSUInteger)index] = @{
+      @"x": @(AURAFaceRatioClamp(x.doubleValue)),
+      @"y": @(AURAFaceRatioClamp(y.doubleValue)),
+      @"z": z,
+    };
+  }
+
+  return slots;
 }
 
-static MPPNormalizedLandmark *AURAFaceRatioLandmarkAtIndex(
-    NSArray<MPPNormalizedLandmark *> *landmarks,
-    NSUInteger index)
+static NSDictionary *AURAFaceRatioLandmarkAtIndex(NSArray *landmarks, NSUInteger index)
 {
-  return index < landmarks.count ? landmarks[index] : nil;
+  if (index >= landmarks.count) {
+    return nil;
+  }
+  id entry = landmarks[index];
+  return [entry isKindOfClass:[NSDictionary class]] ? entry : nil;
+}
+
+// 슬롯은 이미 clamp 된 {x,y,z} 이므로 그대로 통과시킨다(호출부 형태 유지).
+static NSDictionary *AURAFaceRatioPoint(NSDictionary *landmark)
+{
+  return landmark;
 }
 
 static NSDictionary *AURAFaceRatioAveragePoint(
-    NSArray<MPPNormalizedLandmark *> *landmarks,
+    NSArray *landmarks,
     NSArray<NSNumber *> *indices)
 {
   CGFloat sumX = 0.0;
@@ -69,16 +110,16 @@ static NSDictionary *AURAFaceRatioAveragePoint(
   NSUInteger count = 0;
 
   for (NSNumber *index in indices) {
-    MPPNormalizedLandmark *landmark =
+    NSDictionary *landmark =
         AURAFaceRatioLandmarkAtIndex(landmarks, index.unsignedIntegerValue);
 
     if (!landmark) {
       continue;
     }
 
-    sumX += landmark.x;
-    sumY += landmark.y;
-    sumZ += landmark.z;
+    sumX += [landmark[@"x"] doubleValue];
+    sumY += [landmark[@"y"] doubleValue];
+    sumZ += [landmark[@"z"] doubleValue];
     count += 1;
   }
 
@@ -92,7 +133,6 @@ static NSDictionary *AURAFaceRatioAveragePoint(
     @"z": @(sumZ / count),
   };
 }
-#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 
 static CGFloat AURAFaceRatioMedianValue(NSArray<NSNumber *> *values)
 {
@@ -209,46 +249,34 @@ static NSDictionary *AURAFaceRatioBottomContourPoint(
   };
 }
 
-#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
-static NSDictionary *AURAFaceRatioPoseFromMatrix(MPPTransformMatrix *matrix)
+// pose 는 homuler 의 facialTransformationMatrixes 에서 유도되어 도(degree) 단위로
+// 넘어온다. poseSource 를 "matrix" 로 유지해 하위(roll 보정·quality gate) 의미를 보존한다.
+static NSDictionary *AURAFaceRatioPoseFromJS(NSDictionary *poseInput)
 {
-  if (!matrix || matrix.rows < 3 || matrix.columns < 3) {
+  if (![poseInput isKindOfClass:[NSDictionary class]]) {
     return nil;
   }
 
-  CGFloat r00 = [matrix valueAtRow:0 column:0];
-  CGFloat r10 = [matrix valueAtRow:1 column:0];
-  CGFloat r20 = [matrix valueAtRow:2 column:0];
-  CGFloat r21 = [matrix valueAtRow:2 column:1];
-  CGFloat r22 = [matrix valueAtRow:2 column:2];
-  CGFloat sy = sqrt(r00 * r00 + r10 * r10);
-  CGFloat pitch = 0.0;
-  CGFloat yaw = 0.0;
-  CGFloat roll = 0.0;
-
-  if (sy >= 1e-6) {
-    pitch = atan2(r21, r22);
-    yaw = atan2(-r20, sy);
-    roll = atan2(r10, r00);
-  } else {
-    CGFloat r01 = [matrix valueAtRow:0 column:1];
-    CGFloat r11 = [matrix valueAtRow:1 column:1];
-    pitch = atan2(-r11, r01);
-    yaw = atan2(-r20, sy);
+  NSNumber *pitch = poseInput[@"pitchDeg"];
+  NSNumber *yaw = poseInput[@"yawDeg"];
+  NSNumber *roll = poseInput[@"rollDeg"];
+  if (![pitch isKindOfClass:[NSNumber class]] ||
+      ![yaw isKindOfClass:[NSNumber class]] ||
+      ![roll isKindOfClass:[NSNumber class]]) {
+    return nil;
   }
 
   return @{
-    @"pitchDeg": @(AURAFaceRatioDegrees(pitch)),
-    @"yawDeg": @(AURAFaceRatioDegrees(yaw)),
-    @"rollDeg": @(AURAFaceRatioDegrees(roll)),
+    @"pitchDeg": pitch,
+    @"yawDeg": yaw,
+    @"rollDeg": roll,
     @"poseSource": @"matrix",
   };
 }
-#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 
-// MediaPipe normalized coordinates assume upright pixels. Captured JPEGs carry
-// EXIF rotation flags, so bake the orientation into pixel data before
-// detection to keep landmark coordinates aligned with how RN renders the file.
+// 랜드마크 정규화 좌표는 upright 픽셀을 전제한다. 촬영 JPEG 은 EXIF 회전 플래그를
+// 담고 있으므로, RN 이 파일을 렌더하는 방식과 좌표계를 맞추기 위해 픽셀에 방향을
+// 구워 넣는다. Unity homuler 도 동일한 upright 프레임 기준으로 검출해야 한다.
 static UIImage *AURAFaceRatioUprightImage(UIImage *image)
 {
   if (image.imageOrientation == UIImageOrientationUp) {
@@ -268,12 +296,7 @@ static UIImage *AURAFaceRatioUprightImage(UIImage *image)
 @interface AURAFaceRatioAnalyzer : NSObject <RCTBridgeModule>
 @end
 
-@implementation AURAFaceRatioAnalyzer {
-#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
-  MPPFaceLandmarker *_faceLandmarker;
-#endif
-  NSString *_faceLandmarkerInitError;
-}
+@implementation AURAFaceRatioAnalyzer
 
 RCT_EXPORT_MODULE();
 
@@ -282,46 +305,11 @@ RCT_EXPORT_MODULE();
   return dispatch_queue_create("com.aura.face-ratio-analyzer", DISPATCH_QUEUE_SERIAL);
 }
 
-#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
-- (MPPFaceLandmarker *)imageModeFaceLandmarker
-{
-  if (_faceLandmarker || _faceLandmarkerInitError) {
-    return _faceLandmarker;
-  }
-
-  NSString *modelPath = [NSBundle.mainBundle pathForResource:@"face_landmarker" ofType:@"task"];
-  if (!modelPath) {
-    _faceLandmarkerInitError = @"face_landmarker.task is missing from the app bundle.";
-    return nil;
-  }
-
-  MPPBaseOptions *baseOptions = [MPPBaseOptions new];
-  baseOptions.modelAssetPath = modelPath;
-  MPPFaceLandmarkerOptions *options = [MPPFaceLandmarkerOptions new];
-  options.baseOptions = baseOptions;
-  options.runningMode = MPPRunningModeImage;
-  options.numFaces = 1;
-  options.minFaceDetectionConfidence = 0.5;
-  options.minFacePresenceConfidence = 0.5;
-  options.outputFacialTransformationMatrixes = YES;
-
-  NSError *error = nil;
-  _faceLandmarker = [[MPPFaceLandmarker alloc] initWithOptions:options error:&error];
-  if (!_faceLandmarker || error) {
-    _faceLandmarkerInitError =
-        error.localizedDescription ?: @"MediaPipe FaceLandmarker initialization failed.";
-  }
-
-  return _faceLandmarker;
-}
-#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
-
 RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
                   options:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-#if AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
   NSURL *url = [NSURL URLWithString:imageUri];
   NSString *path = url.isFileURL ? url.path : imageUri;
   NSURL *imageFileURL = url.isFileURL ? url : [NSURL fileURLWithPath:path];
@@ -335,32 +323,24 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
   }
 
   UIImage *uprightImage = AURAFaceRatioUprightImage(image);
-  MPPFaceLandmarker *landmarker = [self imageModeFaceLandmarker];
-  if (!landmarker) {
-    reject(@"FACE_RATIO_MODEL_MISSING",
-           self->_faceLandmarkerInitError ?: @"FaceLandmarker unavailable.",
-           nil);
+
+  // 랜드마크·pose 는 Unity homuler(IMAGE 모드)가 검출해 넘겨준다.
+  // 없으면 얼굴 검출 자체가 불가하므로 unsupported 로 알린다(호출측이 격리).
+  NSDictionary *landmarkInput =
+      [options isKindOfClass:[NSDictionary class]] ? options[@"landmarks"] : nil;
+  if (![landmarkInput isKindOfClass:[NSDictionary class]]) {
+    resolve(@{
+      @"status": @"unsupported",
+      @"faceCount": @0,
+      @"error": @"Face landmarks were not provided (homuler landmark service unavailable).",
+    });
     return;
   }
 
-  NSError *error = nil;
-  MPPImage *mpImage = [[MPPImage alloc] initWithUIImage:uprightImage error:&error];
-  if (!mpImage || error) {
-    reject(@"FACE_RATIO_IMAGE_UNAVAILABLE",
-           error.localizedDescription ?: @"Unable to wrap image for MediaPipe.",
-           error);
-    return;
-  }
+  NSArray *jsPoints = landmarkInput[@"points"];
+  NSArray *faceLandmarks = AURAFaceRatioLandmarksFromJS(jsPoints);
+  NSUInteger faceCount = faceLandmarks.count > 0 ? 1 : 0;
 
-  MPPFaceLandmarkerResult *result = [landmarker detectImage:mpImage error:&error];
-  if (!result || error) {
-    reject(@"FACE_RATIO_DETECTION_FAILED",
-           error.localizedDescription ?: @"MediaPipe face detection failed.",
-           error);
-    return;
-  }
-
-  NSUInteger faceCount = result.faceLandmarks.count;
   NSMutableDictionary *payload = [@{
     @"status": faceCount > 0 ? @"ok" : @"no_face",
     @"faceCount": @(faceCount),
@@ -369,8 +349,8 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
   } mutableCopy];
 
   if (faceCount > 0) {
-    NSArray<MPPNormalizedLandmark *> *faceLandmarks = result.faceLandmarks.firstObject;
-    payload[@"landmarkCount"] = @(faceLandmarks.count);
+    payload[@"landmarkCount"] =
+        @([jsPoints isKindOfClass:[NSArray class]] ? jsPoints.count : 0);
 
     NSDictionary *idx9 =
         AURAFaceRatioPoint(AURAFaceRatioLandmarkAtIndex(faceLandmarks, 9));
@@ -468,8 +448,7 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
     if (rightInnerBrow) debugPoints[@"rightInnerBrow"] = rightInnerBrow;
     payload[@"debugPoints"] = debugPoints;
 
-    NSDictionary *pose =
-        AURAFaceRatioPoseFromMatrix(result.facialTransformationMatrixes.firstObject);
+    NSDictionary *pose = AURAFaceRatioPoseFromJS(landmarkInput[@"pose"]);
     payload[@"pose"] = pose ?: @{
       @"pitchDeg": @0,
       @"yawDeg": @0,
@@ -543,18 +522,6 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
         payload[@"keypoints"]);
 
   resolve(payload);
-#else
-  // MediaPipe was removed from this build (the Unity MediaPipe plugin now
-  // provides MediaPipe, and a duplicate CocoaPods dependency caused a crash).
-  // Keep the exported interface intact but fail gracefully so the RN side gets
-  // a clean, catchable error instead of a crash.
-  (void)imageUri;
-  (void)options;
-  (void)resolve;
-  reject(@"MEDIAPIPE_UNAVAILABLE",
-         @"MediaPipe was removed from this build.",
-         nil);
-#endif // AURA_FACE_RATIO_MEDIAPIPE_AVAILABLE
 }
 
 @end

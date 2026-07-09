@@ -1,12 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
-#if __has_include(<MediaPipeTasksVision/MediaPipeTasksVision.h>)
-#import <MediaPipeTasksVision/MediaPipeTasksVision.h>
-#define AURA_PC_HAS_MEDIAPIPE 1
-#else
-#define AURA_PC_HAS_MEDIAPIPE 0
-#endif
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
 #import <ImageIO/ImageIO.h>
@@ -16,6 +10,11 @@
 // LOCKED: CPU 픽셀 루프(Core Image 미사용), 알파 가중은 별도 matte 버퍼에서만.
 // 반환 스키마는 src/features/personal-color/services/personalColorCore/contracts.ts의
 // NativePersonalColorResult 와 일치.
+//
+// 얼굴 검출은 하지 않는다. CocoaPods MediaPipe 는 Unity homuler MediaPipe 와 중복
+// 크래시를 일으켜 제거됐고(020cb33), 랜드마크는 Unity homuler(IMAGE 모드)가 검출해
+// options[@"landmarks"] 로 넘겨준다. homuler 는 MediaPipe 와 동일한 478점 메시라
+// 기존 인덱스 상수(234/454/10, 입술·볼 클러스터)를 그대로 쓴다.
 //
 // NOTE: matte 재구성/샘플링 헬퍼는 AURAFaceRatioHairline.m의 static 헬퍼를 이 모듈에
 // self-contained로 복제(promote 대신)했다 — 작동 중인 hairline 파일을 건드리지 않기 위함.
@@ -172,18 +171,59 @@ static void AURAPCPixel(AURAPCImageBuffer buf, double nx, double ny,
 
 typedef struct { double x; double y; BOOL valid; } AURAPCPoint;
 
-#if AURA_PC_HAS_MEDIAPIPE
-static AURAPCPoint AURAPCLandmark(NSArray<MPPNormalizedLandmark *> *landmarks, int index) {
-  AURAPCPoint p = {0, 0, NO};
-  if (index < 0 || (NSUInteger)index >= landmarks.count) return p;
-  MPPNormalizedLandmark *lm = landmarks[index];
-  p.x = AURAPCClamp01(lm.x);
-  p.y = AURAPCClamp01(lm.y);
-  p.valid = YES;
-  return p;
+// Unity homuler 가 넘겨준 정규화 랜드마크. 각 항목의 `i` 필드를 슬롯 번호로 삼아
+// 인덱스 직접 접근이 가능한 C 배열로 채운다(전송 순서에 의존하지 않는다).
+typedef struct {
+  AURAPCPoint *points;
+  int capacity;
+} AURAPCLandmarkSet;
+
+static AURAPCLandmarkSet AURAPCLandmarkSetFromJS(NSArray *jsPoints) {
+  AURAPCLandmarkSet set = {NULL, 0};
+  if (jsPoints.count == 0) return set;
+
+  int maxIndex = -1;
+  for (id entry in jsPoints) {
+    if (![entry isKindOfClass:NSDictionary.class]) continue;
+    int index = [entry[@"i"] intValue];
+    if (index > maxIndex) maxIndex = index;
+  }
+  if (maxIndex < 0) return set;
+
+  int capacity = maxIndex + 1;
+  set.points = calloc((size_t)capacity, sizeof(AURAPCPoint));
+  if (!set.points) return set;
+  set.capacity = capacity;
+
+  for (id entry in jsPoints) {
+    if (![entry isKindOfClass:NSDictionary.class]) continue;
+    int index = [entry[@"i"] intValue];
+    if (index < 0 || index >= capacity) continue;
+    NSNumber *xNum = entry[@"x"];
+    NSNumber *yNum = entry[@"y"];
+    if (![xNum isKindOfClass:NSNumber.class] || ![yNum isKindOfClass:NSNumber.class]) continue;
+    set.points[index].x = AURAPCClamp01(xNum.doubleValue);
+    set.points[index].y = AURAPCClamp01(yNum.doubleValue);
+    set.points[index].valid = YES;
+  }
+  return set;
 }
 
-static AURAPCPoint AURAPCClusterCenter(NSArray<MPPNormalizedLandmark *> *landmarks,
+static void AURAPCLandmarkSetFree(AURAPCLandmarkSet *set) {
+  if (set && set->points) {
+    free(set->points);
+    set->points = NULL;
+    set->capacity = 0;
+  }
+}
+
+static AURAPCPoint AURAPCLandmark(AURAPCLandmarkSet landmarks, int index) {
+  AURAPCPoint p = {0, 0, NO};
+  if (!landmarks.points || index < 0 || index >= landmarks.capacity) return p;
+  return landmarks.points[index];
+}
+
+static AURAPCPoint AURAPCClusterCenter(AURAPCLandmarkSet landmarks,
                                        const int *indices, int count) {
   double sx = 0, sy = 0;
   int n = 0;
@@ -201,7 +241,6 @@ static AURAPCPoint AURAPCClusterCenter(NSArray<MPPNormalizedLandmark *> *landmar
   c.valid = YES;
   return c;
 }
-#endif // AURA_PC_HAS_MEDIAPIPE
 
 // point-in-polygon (ray casting), 폴리곤은 정규화 좌표 배열
 static BOOL AURAPCInsidePolygon(const double *px, const double *py, int count, double x, double y) {
@@ -310,12 +349,7 @@ static NSDictionary *AURAPCFinalizeRegion(AURAPCAcc *a) {
 @interface AURAPersonalColorAnalyzer : NSObject <RCTBridgeModule>
 @end
 
-@implementation AURAPersonalColorAnalyzer {
-#if AURA_PC_HAS_MEDIAPIPE
-  MPPFaceLandmarker *_faceLandmarker;
-#endif
-  NSString *_faceLandmarkerInitError;
-}
+@implementation AURAPersonalColorAnalyzer
 
 RCT_EXPORT_MODULE();
 
@@ -323,44 +357,12 @@ RCT_EXPORT_MODULE();
   return dispatch_queue_create("com.aura.personal-color-analyzer", DISPATCH_QUEUE_SERIAL);
 }
 
-#if AURA_PC_HAS_MEDIAPIPE
-- (MPPFaceLandmarker *)imageModeFaceLandmarker {
-  if (_faceLandmarker || _faceLandmarkerInitError) {
-    return _faceLandmarker;
-  }
-  NSString *modelPath = [NSBundle.mainBundle pathForResource:@"face_landmarker" ofType:@"task"];
-  if (!modelPath) {
-    _faceLandmarkerInitError = @"face_landmarker.task is missing from the app bundle.";
-    return nil;
-  }
-  MPPBaseOptions *baseOptions = [MPPBaseOptions new];
-  baseOptions.modelAssetPath = modelPath;
-  MPPFaceLandmarkerOptions *options = [MPPFaceLandmarkerOptions new];
-  options.baseOptions = baseOptions;
-  options.runningMode = MPPRunningModeImage;
-  options.numFaces = 1;
-  options.minFaceDetectionConfidence = 0.5;
-  options.minFacePresenceConfidence = 0.5;
-  NSError *error = nil;
-  _faceLandmarker = [[MPPFaceLandmarker alloc] initWithOptions:options error:&error];
-  if (!_faceLandmarker || error) {
-    _faceLandmarkerInitError =
-        error.localizedDescription ?: @"MediaPipe FaceLandmarker initialization failed.";
-  }
-  return _faceLandmarker;
-}
-#endif // AURA_PC_HAS_MEDIAPIPE
-
 RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
                   options:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-#if !AURA_PC_HAS_MEDIAPIPE
-  (void)imageUri;
-  (void)options;
-  reject(@"MEDIAPIPE_UNAVAILABLE", @"MediaPipe was removed from this build.", nil);
-  return;
-#else
+  (void)reject;
+
   NSURL *url = [NSURL URLWithString:imageUri];
   NSString *path = url.isFileURL ? url.path : imageUri;
   NSURL *imageFileURL = url.isFileURL ? url : [NSURL fileURLWithPath:path];
@@ -372,38 +374,40 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
   }
   UIImage *uprightImage = AURAPCUprightImage(image);
 
-  MPPFaceLandmarker *landmarker = [self imageModeFaceLandmarker];
-  if (!landmarker) {
-    resolve(@{@"status": @"unsupported", @"faceCount": @0,
-              @"error": self->_faceLandmarkerInitError ?: @"landmarker_unavailable"});
-    return;
-  }
-
-  NSError *error = nil;
-  MPPImage *mpImage = [[MPPImage alloc] initWithUIImage:uprightImage error:&error];
-  if (!mpImage || error) {
-    resolve(@{@"status": @"error", @"faceCount": @0, @"error": @"mp_image_failed"});
-    return;
-  }
-  MPPFaceLandmarkerResult *result = [landmarker detectImage:mpImage error:&error];
-  if (!result || error) {
-    resolve(@{@"status": @"error", @"faceCount": @0, @"error": @"detection_failed"});
-    return;
-  }
-
-  NSUInteger faceCount = result.faceLandmarks.count;
   double imgW = uprightImage.size.width;
   double imgH = uprightImage.size.height;
-  if (faceCount == 0) {
+
+  // 랜드마크는 Unity homuler(IMAGE 모드)가 검출해 JS 를 통해 넘겨준다.
+  // 없으면 얼굴 검출 자체가 불가하므로 unsupported 로 알린다(호출측이 격리).
+  NSDictionary *landmarkInput =
+      [options isKindOfClass:NSDictionary.class] ? options[@"landmarks"] : nil;
+  if (![landmarkInput isKindOfClass:NSDictionary.class]) {
+    resolve(@{@"status": @"unsupported", @"faceCount": @0,
+              @"error": @"face landmarks were not provided (homuler landmark service unavailable)"});
+    return;
+  }
+
+  NSArray *jsPoints = landmarkInput[@"points"];
+  if (![jsPoints isKindOfClass:NSArray.class] || jsPoints.count == 0) {
     resolve(@{@"status": @"no_face", @"faceCount": @0,
               @"imageWidth": @(imgW), @"imageHeight": @(imgH), @"colorSpace": @"srgb"});
     return;
   }
-  NSArray<MPPNormalizedLandmark *> *landmarks = result.faceLandmarks.firstObject;
+
+  AURAPCLandmarkSet landmarks = AURAPCLandmarkSetFromJS(jsPoints);
+  if (landmarks.capacity == 0) {
+    AURAPCLandmarkSetFree(&landmarks);
+    resolve(@{@"status": @"no_face", @"faceCount": @0,
+              @"imageWidth": @(imgW), @"imageHeight": @(imgH), @"colorSpace": @"srgb"});
+    return;
+  }
+  NSUInteger faceCount = 1;
+  NSUInteger landmarkCount = jsPoints.count;
 
   // sRGB rasterize
   AURAPCImageBuffer colorBuf = {0};
   if (!AURAPCRasterize(uprightImage, &colorBuf)) {
+    AURAPCLandmarkSetFree(&landmarks);
     resolve(@{@"status": @"error", @"faceCount": @(faceCount), @"error": @"rasterize_failed"});
     return;
   }
@@ -427,6 +431,19 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
 
   NSMutableArray<NSString *> *warnings = [NSMutableArray array];
   NSMutableDictionary *regions = [NSMutableDictionary dictionary];
+
+  // 랜드마크 정규화 좌표는 EXIF 적용된 upright 프레임 기준이어야 한다(아래 샘플링이
+  // uprightImage 를 쓰기 때문). Unity 가 다른 방향으로 디코드했다면 종횡비가 어긋나므로
+  // 계측 가능한 경고로 남긴다 — 조용히 틀린 색을 뽑는 것보다 낫다.
+  double jsW = [landmarkInput[@"imageWidth"] doubleValue];
+  double jsH = [landmarkInput[@"imageHeight"] doubleValue];
+  if (jsW > 0.0 && jsH > 0.0 && imgW > 0.0 && imgH > 0.0) {
+    double jsAspect = jsW / jsH;
+    double nativeAspect = imgW / imgH;
+    if (fabs(jsAspect - nativeAspect) > 0.02 * nativeAspect) {
+      [warnings addObject:@"landmark_frame_mismatch"];
+    }
+  }
 
   double faceWidth = 0.0;
   AURAPCPoint left = AURAPCLandmark(landmarks, 234);
@@ -572,11 +589,12 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
   if (hairBuf) CVPixelBufferUnlockBaseAddress(hairBuf, kCVPixelBufferLock_ReadOnly);
   if (skinBuf) CVPixelBufferUnlockBaseAddress(skinBuf, kCVPixelBufferLock_ReadOnly);
   free(colorBuf.data);
+  AURAPCLandmarkSetFree(&landmarks);
 
   NSDictionary *payload = @{
     @"status": @"ok",
     @"faceCount": @(faceCount),
-    @"landmarkCount": @(landmarks.count),
+    @"landmarkCount": @(landmarkCount),
     @"imageWidth": @(imgW),
     @"imageHeight": @(imgH),
     @"colorSpace": @"srgb",
@@ -594,7 +612,6 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
         (unsigned long)faceCount, (unsigned long)regions.count, hairBuf != NULL, skinBuf != NULL);
 
   resolve(payload);
-#endif // AURA_PC_HAS_MEDIAPIPE
 }
 
 @end
