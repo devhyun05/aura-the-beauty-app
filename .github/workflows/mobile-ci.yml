@@ -1,0 +1,60 @@
+name: Mobile CI
+
+# dev/main 으로 가는 PR 에서 모바일 앱의 타입·컨트랙트 회귀를 머지 전에 잡는다.
+# 도입 배경: 컨트랙트 테스트가 로컬 전용이라 PR #224(020cb33) 같은 회귀가
+# 머지 시점에 걸러지지 않았다. 전부 node 전용(시뮬레이터/기기 불필요)이라 빠르다.
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "apps/mobile/**"
+      - "scripts/mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-and-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Contract — Unity makeup bridge (랜드마크 요청/응답 포함)
+        run: npm run test:unity-bridge
+
+      - name: Contract — Personal color engine (5축·12톤)
+        run: npm run test:personal-color
+
+      - name: Contract — Face ratio distortion
+        run: npm run test:face-ratio-distortion
+
+      - name: Contract — Generated brow
+        run: npm run test:generated-brow
+
+      - name: Contract — Auradin theme scope
+        run: npm run test:auradin-theme-scope

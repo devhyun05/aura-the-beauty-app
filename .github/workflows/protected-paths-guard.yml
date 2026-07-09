@@ -1,0 +1,70 @@
+name: Protected Paths Guard
+
+# 보호 경로의 파일을 한 PR 이 대량 삭제(도려내기)하면 실패시킨다.
+# 도입 배경: PR #224(020cb33)가 아우라딘 GlassBase 371→41줄, OrbGLCanvas
+# 283줄 삭제(빈 스텁화) 등 다른 오너의 동작 코드를 도려낸 채 머지돼 dev 의
+# UI/3D 가 깨졌다. 이 가드는 "보호 파일에서 삭제 100줄 초과 + 삭제가 추가의
+# 3배 초과"인 파일이 있으면 실패한다. 의도된 대규모 정리는 PR 에
+# `scope-approved` 라벨을 달면 통과한다(오너 승인 전제).
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'scope-approved') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check protected paths for mass deletions
+        run: |
+          set -euo pipefail
+
+          PROTECTED_PATHS=(
+            "apps/mobile/src/features/recommendation/components/ds/"
+            "apps/mobile/src/features/personal-color/"
+            "apps/mobile/src/features/face-ratio/"
+            "apps/mobile/src/features/face-capture/services/"
+            "apps/mobile/ios/AURA/"
+            "apps/unity/MakeupAR/Assets/Scripts/"
+          )
+
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --quiet
+
+          violations=0
+          while IFS=$'\t' read -r added deleted path; do
+            # 바이너리는 numstat 이 '-' 를 준다
+            [[ "$added" == "-" || "$deleted" == "-" ]] && continue
+
+            protected=0
+            for p in "${PROTECTED_PATHS[@]}"; do
+              [[ "$path" == "$p"* ]] && protected=1 && break
+            done
+            [[ "$protected" == "0" ]] && continue
+
+            if (( deleted > 100 && deleted > added * 3 )); then
+              echo "::error file=${path}::보호 파일 대량 삭제: -${deleted}/+${added}. 의도된 정리면 해당 영역 오너 승인 후 PR 에 'scope-approved' 라벨을 다세요."
+              violations=$((violations + 1))
+            fi
+          done < <(git diff --numstat "${BASE}...HEAD")
+
+          if (( violations > 0 )); then
+            echo ""
+            echo "보호 경로에서 ${violations}개 파일이 대량 삭제됐습니다."
+            echo "020cb33(아우라딘 스텁화·MediaPipe 분석기 무력화) 같은 회귀를 막기 위한 가드입니다."
+            exit 1
+          fi
+          echo "보호 경로 대량 삭제 없음 ✓"
