@@ -314,6 +314,15 @@ export const updateBeautyProfile = async (
   return Promise.resolve(currentBeautyProfile);
 };
 
+export async function clearCachedUserProfile(): Promise<void> {
+  currentUserProfile = {...userProfileMock};
+  currentBeautyProfile = {
+    ...beautyProfileMock,
+    tags: [...beautyProfileMock.tags],
+  };
+  await SecureStore.deleteItemAsync(USER_PROFILE_STORAGE_KEY);
+}
+
 export const getProfileEditFields = async (): Promise<ProfileEditField[]> => {
   const profile = await getUserProfile();
 

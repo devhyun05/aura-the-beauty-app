@@ -31,7 +31,7 @@ function expectMainHeader(
 
 expectEqual(getMainTabFooterState('HomeTab'), 'home', 'home tab footer state');
 expectEqual(getMainTabFooterState('ProfileTab'), 'profile', 'profile tab footer state');
-expectEqual(getMainTabFooterState('CommunityTab'), 'community', 'community tab footer state');
+expectEqual(getMainTabFooterState('ConsultingTab'), 'consulting', 'consulting tab footer state');
 
 expectMainHeader('HomeTab', {
   showTitle: true,
@@ -45,7 +45,7 @@ expectMainHeader('ProfileTab', {
   title: 'AI AR Makeup',
   usesBrandLogo: true,
 });
-expectMainHeader('CommunityTab', {
+expectMainHeader('ConsultingTab', {
   showTitle: true,
   subtitle: 'MAKEUP GUIDE',
   title: 'AI AR Makeup',
@@ -53,7 +53,7 @@ expectMainHeader('CommunityTab', {
 });
 
 const footerExpectations: Record<FooterTabKey, ReturnType<typeof getRootRouteForFooterTab>> = {
-  community: 'CommunityTab',
+  consulting: 'ConsultingTab',
   home: 'HomeTab',
   profile: 'ProfileTab',
 };

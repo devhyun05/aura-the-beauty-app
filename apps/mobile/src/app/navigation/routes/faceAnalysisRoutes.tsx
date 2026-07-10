@@ -491,8 +491,8 @@ function FaceAnalysisReportBottomNav({
         return;
       }
 
-      if (tab === 'community') {
-        navigateMainTab(navigation, 'CommunityTab');
+      if (tab === 'consulting') {
+        navigateMainTab(navigation, 'ConsultingTab');
         return;
       }
 

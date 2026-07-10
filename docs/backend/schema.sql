@@ -410,6 +410,14 @@ create table if not exists data_deletion_requests (
 
 comment on table data_deletion_requests is 'Account/photo/report/feedback/filter deletion request tracking.';
 
+create table if not exists account_deletion_tombstones (
+  subject_hash text primary key,
+  auth_provider text not null,
+  deleted_at timestamptz not null default now()
+);
+
+comment on table account_deletion_tombstones is 'Hashed auth identities of deleted accounts. Prevents a still-valid token from recreating deleted data.';
+
 create table if not exists audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor_user_id uuid,
@@ -779,6 +787,7 @@ create unique index if not exists idx_users_provider_sub
   where oauth_sub is not null and deleted_at is null;
 
 create index if not exists idx_users_email on users (email);
+create index if not exists idx_account_deletion_tombstones_deleted_at on account_deletion_tombstones (deleted_at);
 create index if not exists idx_media_assets_owner_created on media_assets (owner_user_id, created_at desc);
 create index if not exists idx_photo_captures_user_type_created on photo_captures (user_id, capture_type, created_at desc);
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);

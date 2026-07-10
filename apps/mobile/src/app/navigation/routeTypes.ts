@@ -41,8 +41,10 @@ export type RootStackParamList = {
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
   FloatingActionSettings: undefined;
   AppSettings: undefined;
+  Faq: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
+  HairRemovalSimulation: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
@@ -121,7 +123,7 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   HomeTab: undefined;
   ProfileTab: undefined;
-  CommunityTab: undefined;
+  ConsultingTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -142,8 +144,10 @@ export const rootStackRoutes = [
   'FaceAnalysisReportDetail',
   'FloatingActionSettings',
   'AppSettings',
+  'Faq',
   'ProfileEdit',
   'HomeFilterStore',
+  'HairRemovalSimulation',
   'SavedMakeupList',
   'ProductRecommendation',
   'AuradinSearch',
@@ -192,7 +196,7 @@ export const rootStackRoutes = [
 export const mainTabRoutes = [
   'HomeTab',
   'ProfileTab',
-  'CommunityTab',
+  'ConsultingTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

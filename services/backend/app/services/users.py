@@ -1,14 +1,9 @@
 from typing import Any
 
+from app.core.errors import AppError
 from app.core.security import AuthContext
 from app.db.session import Database
-
-
-SUPPORTED_PROVIDERS = {"google", "kakao", "naver", "apple"}
-
-
-def normalize_provider(provider: str) -> str:
-  return provider if provider in SUPPORTED_PROVIDERS else "google"
+from app.services.account_identity import hash_auth_subject, normalize_auth_provider
 
 
 def default_nickname(auth: AuthContext) -> str:
@@ -16,7 +11,7 @@ def default_nickname(auth: AuthContext) -> str:
 
 
 async def ensure_user(db: Database, auth: AuthContext) -> dict[str, Any]:
-  provider = normalize_provider(auth.provider)
+  provider = normalize_auth_provider(auth.provider)
   row = await db.fetchrow(
     """
     select *
@@ -45,6 +40,22 @@ async def ensure_user(db: Database, auth: AuthContext) -> dict[str, Any]:
       auth.name,
       default_nickname(auth),
     ) or row
+
+  deleted_identity = await db.fetchrow(
+    """
+    select subject_hash
+    from account_deletion_tombstones
+    where subject_hash = $1
+    """,
+    hash_auth_subject(provider, auth.subject),
+  )
+
+  if deleted_identity:
+    raise AppError(
+      403,
+      "ACCOUNT_DELETED",
+      "This account has been deleted.",
+    )
 
   return await db.fetchrow(
     """

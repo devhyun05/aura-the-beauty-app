@@ -37,6 +37,7 @@ export {
   updateConsultingBooking,
 } from './services/consultingService';
 export {
+  clearConsultingReadState,
   getConsultingUnreadState,
   isConsultingMessageStatus,
   isConsultingNotificationStatus,

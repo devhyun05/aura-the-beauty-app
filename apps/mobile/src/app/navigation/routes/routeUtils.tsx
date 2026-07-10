@@ -66,7 +66,7 @@ export function getMainTabHeaderBorderWidth(
   routeName: MainTabRouteName,
 ): 0 | undefined {
   return routeName === 'HomeTab' ||
-    routeName === 'CommunityTab' ||
+    routeName === 'ConsultingTab' ||
     routeName === 'ProfileTab'
     ? 0
     : undefined;
@@ -103,6 +103,11 @@ function navigateAppFeatureRootRoute(
 
   if (routeName === 'Consulting') {
     navigation.navigate('Consulting');
+    return;
+  }
+
+  if (routeName === 'Community') {
+    navigation.navigate('Community');
     return;
   }
 

@@ -21,6 +21,8 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
 
 prepare_react_native_project!
 
+project 'AURA.xcodeproj'
+
 target 'AURA' do
   use_expo_modules!
 

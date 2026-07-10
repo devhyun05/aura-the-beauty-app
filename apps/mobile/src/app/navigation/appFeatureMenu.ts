@@ -28,6 +28,7 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'MakeupFeedbackAlbumUpload'
   | 'FaceAnalysisIntro'
   | 'HomeFilterStore'
+  | 'Community'
   | 'Consulting'
   | 'ProductRecommendation'
   | 'SavedMakeupList'
@@ -82,13 +83,13 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         id: 'community',
         label: '커뮤니티',
         description: '커뮤니티 화면으로 이동해요.',
-        target: {kind: 'mainTab', routeName: 'CommunityTab'},
+        target: {kind: 'root', routeName: 'Community'},
       },
       {
         id: 'consulting',
         label: '컨설팅',
         description: '퍼스널 컬러, 헤어, 패션 컨설팅 화면으로 이동해요.',
-        target: {kind: 'root', routeName: 'Consulting'},
+        target: {kind: 'mainTab', routeName: 'ConsultingTab'},
       },
     ],
   },

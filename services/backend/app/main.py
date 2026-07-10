@@ -11,6 +11,7 @@ from app.api.router import api_router
 from app.core.errors import AppError, app_error_handler, http_error_handler, validation_error_handler
 from app.core.settings import Settings, get_settings
 from app.db.session import database
+from app.services.account_deletion import ensure_account_deletion_schema
 from app.services.media_deletion import ensure_media_deletion_schema
 
 
@@ -18,6 +19,7 @@ from app.services.media_deletion import ensure_media_deletion_schema
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
   await database.connect()
   await ensure_media_deletion_schema(database)
+  await ensure_account_deletion_schema(database)
 
   try:
     yield

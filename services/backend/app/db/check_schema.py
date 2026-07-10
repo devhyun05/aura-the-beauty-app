@@ -49,6 +49,7 @@ EXPECTED_TABLES = {
   "home_recommended_looks",
   "user_consents",
   "data_deletion_requests",
+  "account_deletion_tombstones",
   "audit_logs",
   "schema_migrations",
 }

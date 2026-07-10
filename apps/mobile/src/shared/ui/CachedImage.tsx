@@ -1,10 +1,7 @@
-import {
-  Image,
-  type ImageResizeMode,
-  type ImageSourcePropType,
-  type ImageStyle,
-  type StyleProp,
-} from 'react-native';
+import {Image as ExpoImage} from 'expo-image';
+import type {ImageSourcePropType, ImageStyle, StyleProp} from 'react-native';
+
+export {prefetchImageSources} from '../services/imageCacheService';
 
 const DEFAULT_TRANSITION_MS = 120;
 type ImageContentFit = 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
@@ -29,61 +26,21 @@ export type CachedImageProps = {
  */
 export function CachedImage({
   contentFit = 'cover',
-  priority: _priority,
-  recyclingKey: _recyclingKey,
+  priority = 'normal',
+  recyclingKey,
   source,
-  transition: _transition = DEFAULT_TRANSITION_MS,
+  transition = DEFAULT_TRANSITION_MS,
   ...rest
 }: CachedImageProps) {
-  const resizeMode: ImageResizeMode =
-    contentFit === 'fill'
-      ? 'stretch'
-      : contentFit === 'none'
-        ? 'center'
-        : contentFit === 'scale-down'
-          ? 'contain'
-          : contentFit;
-
   return (
-    <Image
-      resizeMode={resizeMode}
+    <ExpoImage
+      cachePolicy="memory-disk"
+      contentFit={contentFit}
+      priority={priority}
+      recyclingKey={recyclingKey}
       source={source}
+      transition={transition}
       {...rest}
     />
   );
-}
-
-export function getPrefetchableImageUri(
-  source: ImageSourcePropType | undefined,
-): string | undefined {
-  if (!source || typeof source === 'number') {
-    return undefined;
-  }
-
-  const candidate = Array.isArray(source) ? source[0] : source;
-  const uri = candidate?.uri;
-
-  return typeof uri === 'string' && /^https?:\/\//.test(uri) ? uri : undefined;
-}
-
-/**
- * Warm the cache for a set of remote images so they render instantly later.
- * Local (bundled) sources and non-http uris are ignored.
- */
-export function prefetchImageSources(
-  sources: ReadonlyArray<ImageSourcePropType | undefined>,
-): void {
-  const uris = Array.from(
-    new Set(
-      sources
-        .map(getPrefetchableImageUri)
-        .filter((uri): uri is string => Boolean(uri)),
-    ),
-  );
-
-  if (uris.length > 0) {
-    uris.forEach(uri => {
-      void Image.prefetch(uri);
-    });
-  }
 }

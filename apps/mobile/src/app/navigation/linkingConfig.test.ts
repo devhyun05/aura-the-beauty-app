@@ -38,6 +38,12 @@ type MakeupLookListPathContract = ExpectType<
 type HomeFilterStorePathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.HomeFilterStore, 'filter-store'>
 >;
+type HairRemovalSimulationPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.HairRemovalSimulation,
+    'hair-removal-simulation'
+  >
+>;
 type SavedMakeupListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
 >;
@@ -52,6 +58,9 @@ type FloatingActionSettingsPathContract = ExpectType<
 >;
 type AppSettingsPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.AppSettings, 'app-settings'>
+>;
+type FaqPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.Faq, 'faq'>
 >;
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
@@ -180,6 +189,11 @@ expectEqual(
   'saved makeup list path uses saved makeup naming',
 );
 expectEqual(
+  navigationLinking.config?.screens?.HairRemovalSimulation,
+  'hair-removal-simulation',
+  'hair removal simulation path uses feature naming',
+);
+expectEqual(
   navigationLinking.config?.screens?.ProductRecommendation,
   'product-recommendation',
   'product recommendation path uses product naming',
@@ -198,6 +212,11 @@ expectEqual(
   navigationLinking.config?.screens?.AppSettings,
   'app-settings',
   'app settings path uses settings naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.Faq,
+  'faq',
+  'FAQ path uses support naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.Community,

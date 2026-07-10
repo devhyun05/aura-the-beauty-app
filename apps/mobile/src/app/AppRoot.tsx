@@ -20,6 +20,7 @@ import {
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
 import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
+import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
 import {typography} from '../shared/theme';
 
 export function AppRoot() {
@@ -41,6 +42,10 @@ export function AppRoot() {
     },
     [],
   );
+
+  useEffect(() => {
+    prefetchHomeHeroImages();
+  }, []);
 
   useEffect(() => {
     if (!fontsLoaded) {

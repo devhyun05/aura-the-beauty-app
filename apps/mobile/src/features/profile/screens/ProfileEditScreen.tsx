@@ -529,14 +529,6 @@ export function ProfileEditScreen({
             >
               <Text style={styles.actionText}>로그아웃</Text>
             </Pressable>
-            <Pressable
-              accessibilityLabel="회원 탈퇴"
-              accessibilityRole="button"
-              onPress={() => setNotice('회원 탈퇴는 아직 연결되지 않았어요.')}
-              style={styles.textButton}
-            >
-              <Text style={styles.actionText}>회원 탈퇴</Text>
-            </Pressable>
           </View>
         </AppCard>
         <Modal
@@ -650,7 +642,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.divider,
     borderTopWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginTop: spacing.md,
     paddingTop: spacing.lg,
   },

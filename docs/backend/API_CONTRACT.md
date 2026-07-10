@@ -55,6 +55,7 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/health/db`
 - `GET /api/health/config`
 - `GET /api/users/me`
+- `DELETE /api/users/me`
 - `PATCH /api/users/me/profile`
 - `GET /api/home`
 - `POST /api/media/presigned-upload`
@@ -77,6 +78,18 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/ar/filters`
 - `GET /api/ar/filter-states`
 - `PUT /api/ar/filter-states/{filterId}`
+
+### Account Deletion
+
+`DELETE /api/users/me` permanently removes the user's application data and
+queues owned S3 objects for deletion. A one-way hash of the Cognito subject is
+kept as a tombstone so a still-valid JWT cannot recreate the deleted account.
+The response includes `identityDeleted` because deleting the Cognito identity is
+best-effort after the database transaction succeeds.
+
+In ECS, grant the task role `cognito-idp:AdminDeleteUser` only for the configured
+user pool. If that permission is missing, application data is still deleted and
+the tombstone blocks the old identity, but `identityDeleted` is `false`.
 
 ### Recommended Makeup Filters
 

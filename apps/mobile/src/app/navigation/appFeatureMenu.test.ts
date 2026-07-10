@@ -17,6 +17,7 @@ const mainSection = appFeatureMenuSections.find(section => section.id === 'main'
 const makeupSection = appFeatureMenuSections.find(section => section.id === 'makeup');
 const makeupFeedbackTarget = getAppFeatureMenuTarget('makeupFeedback');
 const consultingTarget = getAppFeatureMenuTarget('consulting');
+const communityTarget = getAppFeatureMenuTarget('community');
 const appSettingsTarget = getAppFeatureMenuTarget('appSettings');
 
 expectEqual(
@@ -38,7 +39,7 @@ expectEqual(
 expectEqual(
   mainSection?.items.map(item => item.label).join(','),
   '홈,프로필,커뮤니티,컨설팅',
-  'main menu labels keep consulting outside the tab bar',
+  'main menu labels include community and consulting',
 );
 expectEqual(
   makeupSection?.items.map(item => item.label).join(','),
@@ -51,11 +52,17 @@ expectEqual(
   'MakeupFeedbackAlbumUpload',
   'makeup feedback menu opens available feedback flow',
 );
-expectEqual(consultingTarget.kind, 'root', 'consulting menu target kind');
+expectEqual(consultingTarget.kind, 'mainTab', 'consulting menu target kind');
 expectEqual(
-  consultingTarget.kind === 'root' ? consultingTarget.routeName : null,
-  'Consulting',
-  'consulting menu opens consulting detail route',
+  consultingTarget.kind === 'mainTab' ? consultingTarget.routeName : null,
+  'ConsultingTab',
+  'consulting menu opens consulting tab',
+);
+expectEqual(communityTarget.kind, 'root', 'community menu target kind');
+expectEqual(
+  communityTarget.kind === 'root' ? communityTarget.routeName : null,
+  'Community',
+  'community menu preserves community root route',
 );
 expectEqual(appSettingsTarget.kind, 'root', 'app settings target kind');
 expectEqual(

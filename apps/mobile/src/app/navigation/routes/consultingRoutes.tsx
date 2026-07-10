@@ -30,13 +30,17 @@ import {
   type ConsultingReviewDraft,
 } from '../../../features/consulting';
 import {DetailRouteChrome} from '../detailHeaderChrome';
+import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import {
   navigateMainTab,
   type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
 
-export function renderConsultingHome(navigation: RootNavigation) {
+export function renderConsultingHome(
+  navigation: RootNavigation,
+  options?: {topPadding?: AppScreenTopPadding},
+) {
   return (
     <ConsultingHomeScreen
       onPressHeroSlide={categoryId =>
@@ -55,6 +59,7 @@ export function renderConsultingHome(navigation: RootNavigation) {
           recordId: record.id,
         })
       }
+      topPadding={options?.topPadding}
     />
   );
 }
@@ -65,7 +70,7 @@ function goBackToConsulting(navigation: RootNavigation) {
     return;
   }
 
-  navigation.navigate('Consulting');
+  navigateMainTab(navigation, 'ConsultingTab');
 }
 
 export function ConsultingExpertListRouteScreen({
@@ -75,7 +80,7 @@ export function ConsultingExpertListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingExpertList"
-      onBack={() => navigation.navigate('Consulting')}>
+      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
       <ConsultingExpertListScreen
         initialCategoryId={route.params?.categoryId ?? null}
         onPressExpert={expertId =>
@@ -276,15 +281,13 @@ export function ConsultingBookingCompleteRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingBookingComplete"
-      onBack={() => navigation.navigate('Consulting')}>
+      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
       <ConsultingBookingCompleteScreen
         draft={draft}
         expert={expert}
         record={record}
         onPressHistory={() => navigation.navigate('ConsultingHistory')}
-        onGoToConsultingHome={() =>
-          navigation.navigate('Consulting')
-        }
+        onGoToConsultingHome={() => navigateMainTab(navigation, 'ConsultingTab')}
       />
     </DetailRouteChrome>
   );
@@ -341,9 +344,7 @@ export function ConsultingSummaryRouteScreen({
         expert={expert}
         heroTitle={record ? 'AI 상담 요약' : undefined}
         summary={summary}
-        onGoToConsultingHome={() =>
-          navigation.navigate('Consulting')
-        }
+        onGoToConsultingHome={() => navigateMainTab(navigation, 'ConsultingTab')}
         onPressHistory={() => navigation.navigate('ConsultingHistory')}
       />
     </DetailRouteChrome>

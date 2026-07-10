@@ -49,3 +49,15 @@ export async function markProfileSetupCompleted(user: AuthUser): Promise<void> {
   completionMap[getProfileSetupCompletionKey(user)] = true;
   await writeProfileSetupCompletionMap(completionMap);
 }
+
+export async function clearProfileSetupCompletion(user: AuthUser): Promise<void> {
+  const completionMap = await readProfileSetupCompletionMap();
+  delete completionMap[getProfileSetupCompletionKey(user)];
+
+  if (Object.keys(completionMap).length === 0) {
+    await SecureStore.deleteItemAsync(PROFILE_SETUP_COMPLETION_STORAGE_KEY);
+    return;
+  }
+
+  await writeProfileSetupCompletionMap(completionMap);
+}
