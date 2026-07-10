@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.core.responses import success
-from app.core.security import AuthContext, get_current_user
+from app.core.security import AuthContext, get_current_user, require_consulting_admin
 from app.db.session import Database, require_database
 from app.schemas.consulting import (
   AdminBookingStatusUpdate,
@@ -192,7 +192,7 @@ async def create_consulting_review(
 @router.post("/admin/experts")
 async def create_consulting_admin_expert(
   payload: AdminExpertCreate,
-  auth: AuthContext = Depends(get_current_user),
+  auth: AuthContext = Depends(require_consulting_admin),
   db: Database = Depends(require_database),
 ) -> dict:
   await ensure_user(db, auth)
@@ -202,7 +202,7 @@ async def create_consulting_admin_expert(
 @router.post("/admin/bookings/{booking_id}/complete")
 async def complete_consulting_admin_booking(
   booking_id: str,
-  auth: AuthContext = Depends(get_current_user),
+  auth: AuthContext = Depends(require_consulting_admin),
   db: Database = Depends(require_database),
 ) -> dict:
   await ensure_user(db, auth)
@@ -213,7 +213,7 @@ async def complete_consulting_admin_booking(
 async def update_consulting_admin_booking_status(
   booking_id: str,
   payload: AdminBookingStatusUpdate,
-  auth: AuthContext = Depends(get_current_user),
+  auth: AuthContext = Depends(require_consulting_admin),
   db: Database = Depends(require_database),
 ) -> dict:
   await ensure_user(db, auth)
@@ -224,7 +224,7 @@ async def update_consulting_admin_booking_status(
 async def upsert_consulting_admin_booking_summary(
   booking_id: str,
   payload: AdminBookingSummaryUpsert,
-  auth: AuthContext = Depends(get_current_user),
+  auth: AuthContext = Depends(require_consulting_admin),
   db: Database = Depends(require_database),
 ) -> dict:
   await ensure_user(db, auth)
