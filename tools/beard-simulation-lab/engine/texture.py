@@ -165,6 +165,41 @@ def build_grain_field(bgr: np.ndarray, sample_mask: np.ndarray,
     return (field / rms).astype(np.float32)
 
 
+def tonal_seam_step(original: np.ndarray, result: np.ndarray,
+                    zone: np.ndarray, face_width: float) -> float | None:
+    """Low-frequency tone step the edit leaves at the zone boundary, in gray levels.
+
+    The guard's `seam_score` is a Sobel ratio, blind to a SMOOTH tonal step --
+    which is exactly the seam a viewer sees where a lightened beard zone meets
+    the untouched neck. This measures the edit's low-frequency footprint
+    (result - original, blurred to discard texture and keep shading) and returns
+    how far it jumps between a band just inside the boundary and a band just
+    outside. ~0 means the edit fades into its surroundings; a few gray levels is
+    a visible band. Report-only, and tested as a ruler.
+    """
+    if not zone.any():
+        return None
+    g0 = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    g1 = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    foot = g1 - g0   # the edit's tone change, grain and all
+
+    # No spatial blur: it would smear a sharp step into the same shape as a wide
+    # ramp, the very thing we must tell apart. Grain is killed instead by
+    # AVERAGING along the boundary -- a thin band holds thousands of pixels and
+    # the edit's injected grain is zero-mean, so it cancels while a coherent
+    # tone step survives. A step jumps most of its height across the boundary; a
+    # wide inward ramp barely moves within the same narrow window.
+    z = zone.astype(np.uint8)
+    d_in = cv2.distanceTransform(z, cv2.DIST_L2, 3)
+    d_out = cv2.distanceTransform(1 - z, cv2.DIST_L2, 3)
+    w = 0.02 * face_width
+    inside = (d_in > 0) & (d_in < w)
+    outside = (d_out > 0) & (d_out < w)
+    if inside.sum() < 40 or outside.sum() < 40:
+        return None
+    return float(abs(np.mean(foot[inside]) - np.mean(foot[outside])))
+
+
 def clean_skin_mask(shape: tuple[int, int], landmarks: np.ndarray,
                     face_width: float) -> np.ndarray:
     """Forehead + upper-cheek disks: this person's beard-free reference skin."""

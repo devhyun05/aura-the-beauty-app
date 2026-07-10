@@ -38,7 +38,8 @@ from engine.lower_face_roi import (  # noqa: E402
 )
 from engine.pipeline import load_stage_config  # noqa: E402
 from engine.texture import (  # noqa: E402
-    chroma_delta_ab, grain_map, relative_grain_map, streak_score, waxiness_score,
+    chroma_delta_ab, grain_map, relative_grain_map, streak_score,
+    tonal_seam_step, waxiness_score,
 )
 from eval.run_owndomain_eval import _fit, _restore, discover_pairs  # noqa: E402
 
@@ -65,6 +66,10 @@ def clipseg_masks(crop, c1: BeardMasks) -> BeardMasks:
     from eval.bench_models import clipseg_heat
 
     heat = clipseg_heat(CLIPSEG_MODEL, crop.bgr, ["beard stubble"], normalize=False)
+    # CLIPSeg's logits are coarse (352px) and bilinear upsampling to the crop
+    # leaves ~30px plateaus that print as a checkerboard once the mask is
+    # saturated. Smooth the heat back to a continuous field before thresholding.
+    heat = cv2.GaussianBlur(heat, (0, 0), sigmaX=max(2.0, crop.face_width / 45))
     region = np.clip((heat - CLIPSEG_THR) / (1.0 - CLIPSEG_THR), 0, 1).astype(np.float32)
     dp = crop.detect_protect_mask
     dp = crop.protect_mask if dp is None else dp
@@ -147,7 +152,9 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
         corr_s = time.perf_counter() - t0
         soft = derive_soft_blend(crop, masks, p.get("feather_ratio", 0.035))
         result = composite_full(bgr, corrected, crop, soft, p.get("global_strength", 1.0))
-        rec["stages"][stage] = {**score(result), "correctSeconds": round(corr_s, 3)}
+        rec["stages"][stage] = {**score(result),
+                                "tonalSeam": tonal_seam_step(bgr, result, zone, fw),
+                                "correctSeconds": round(corr_s, 3)}
         panels.append(result)
 
     x0, y0, x1, y1 = crop.bbox
@@ -196,6 +203,17 @@ def main() -> int:
             print(f"{r['id']:7} {f(vals[0]):>7} " + " ".join(f"{f(x):>8}" for x in vals[1:]))
         means = [np.mean(col(metric)), *[np.mean(col(metric, s)) for s in STAGES]]
         print(f"{'MEAN':7} {means[0]:>7.3f} " + " ".join(f"{m:>8.3f}" for m in means[1:]) + "\n")
+
+    # tonalSeam is a per-stage edit property (no 'original' baseline). Lower is
+    # better -- gray levels of tonal step the edit leaves at the zone boundary.
+    print(f"--- tonalSeam (gray-level step at zone edge; lower better) ---")
+    print(f"{'id':7} " + " ".join(f"{s:>8}" for s in STAGES))
+    for r in records:
+        print(f"{r['id']:7} " + " ".join(
+            f"{f(r['stages'][s].get('tonalSeam')):>8}" for s in STAGES))
+    smeans = [np.mean([r["stages"][s]["tonalSeam"] for r in records
+                       if r["stages"][s].get("tonalSeam") is not None]) for s in STAGES]
+    print(f"{'MEAN':7} " + " ".join(f"{m:>8.3f}" for m in smeans) + "\n")
 
     mono = sum(
         all(v is not None for v in (r["original"]["waxiness"],

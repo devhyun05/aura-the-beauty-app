@@ -12,7 +12,8 @@ import numpy as np
 import pytest
 
 from engine.texture import (
-    chroma_delta_ab, coherence_map, grain_map, streak_score, waxiness_score,
+    chroma_delta_ab, coherence_map, grain_map, streak_score, tonal_seam_step,
+    waxiness_score,
 )
 
 # Landmarks only need the three indices clean_skin_mask reads.
@@ -136,3 +137,27 @@ def test_chroma_delta_ignores_luminance_but_sees_a_cast() -> None:
     blue = _canvas(6.0, 6.0)
     blue[..., 0][z] = np.clip(blue[..., 0][z].astype(np.int16) + 40, 0, 255).astype(np.uint8)
     assert chroma_delta_ab(blue, z, lm, FACE_W) > 8.0    # bluish cast
+
+
+def test_tonal_seam_sees_a_hard_step_and_clears_a_faded_edit() -> None:
+    """The guard's Sobel seam_score misses a smooth tonal step; this ruler must
+    catch one, and must NOT flag an edit that fades into its surroundings."""
+    lm, z = _landmarks(), _zone()
+    base = _canvas(6.0, 6.0)
+
+    # Hard edit: lift the whole zone +25 gray with a sharp boundary.
+    hard = base.copy()
+    hard[z] = np.clip(hard[z].astype(np.int16) + 25, 0, 255).astype(np.uint8)
+    seam_hard = tonal_seam_step(base, hard, z, FACE_W)
+    assert seam_hard is not None and seam_hard > 8.0   # a visible band
+
+    # Faded edit: the same +25 core, but ramped to 0 over a wide band inside the
+    # boundary (as the inward-ramp alpha does) so the edge slope is gentle.
+    import cv2
+    dist = cv2.distanceTransform(z.astype(np.uint8), cv2.DIST_L2, 3)
+    ramp = np.clip(dist / (0.12 * FACE_W), 0, 1)
+    faded = base.astype(np.float32)
+    faded += (ramp * 25.0)[..., None]
+    faded = np.clip(faded, 0, 255).astype(np.uint8)
+    seam_faded = tonal_seam_step(base, faded, z, FACE_W)
+    assert seam_faded is not None and seam_faded < seam_hard * 0.4  # melted
