@@ -21,7 +21,11 @@ import yaml
 
 from . import blend, consult
 from .beard_segmentation import BeardMasks, fit_skin_model, segment_beard
-from .beard_shadow_corrector import build_correction_context, correct_crop
+from .beard_shadow_corrector import (
+    DEFAULT_LUMA_SHIFT,
+    build_correction_context,
+    correct_crop,
+)
 from .contracts import PROTECT_OVERLAP_REJECT_RATIO, validate_result
 from .detect_face import detect_landmarks, detect_face
 from .geometry_guard import (
@@ -191,12 +195,12 @@ def run_pipeline(
 
     stage_results: list[dict] = []
     failures: list[dict] = []
-    # Built once: black-hat plus two Telea passes, none of which depend on the
-    # stage. The mitigation ladder can call the corrector four times per stage
-    # across three stages, so hoisting them turns 12 inpaint pairs into one.
-    # The ladder's eroded masks only reweight the blend; a fill computed from the
-    # superset mask stays valid.
-    ctx = build_correction_context(crop, masks)
+    # Built once: strand black-hat, the strand inpaint, and the local skin
+    # reference field -- none depend on the stage. The mitigation ladder can call
+    # the corrector four times per stage across three stages, so hoisting them
+    # turns 12 inpaints into one. The ladder's eroded masks only reweight the
+    # blend; a fill computed from the superset mask stays valid.
+    ctx = build_correction_context(crop, masks, skin_model)
     metrics: dict = {"maskStats": {**masks.stats, **ctx.stats}, "stages": {}}
 
     for stage in stages:
@@ -325,6 +329,7 @@ def _run_stage_with_mitigations(
             hair_attenuation=params["hair_attenuation"] * strength_scale,
             stubble_inpaint=params.get("stubble_inpaint", False),
             strand_strength=None if strand is None else strand * strength_scale,
+            luma_shift_frac=params.get("luma_shift_frac", DEFAULT_LUMA_SHIFT),
             context=context,
         )
         soft = blend.derive_soft_blend(crop, stage_masks, feather)

@@ -101,7 +101,7 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
                 "chromaDeltaAb": chroma_delta_ab(img, zone, lm, fw)}
 
     t0 = time.perf_counter()
-    ctx = build_correction_context(crop, masks)
+    ctx = build_correction_context(crop, masks, skin)
     rec_ctx_s = time.perf_counter() - t0
 
     rec: dict = {
@@ -118,7 +118,8 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
         t0 = time.perf_counter()
         corrected = correct_crop(crop, masks, p["shadow_strength"],
                                  p["hair_attenuation"], p.get("stubble_inpaint", False),
-                                 strand_strength=p.get("strand_strength"), context=ctx)
+                                 strand_strength=p.get("strand_strength"),
+                                 luma_shift_frac=p.get("luma_shift_frac", 0.75), context=ctx)
         corr_s = time.perf_counter() - t0
         soft = derive_soft_blend(crop, masks, p.get("feather_ratio", 0.035))
         result = composite_full(bgr, corrected, crop, soft, p.get("global_strength", 1.0))

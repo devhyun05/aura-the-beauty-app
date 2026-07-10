@@ -205,6 +205,30 @@ def _shadow_region_prior(crop: LowerFaceCrop) -> np.ndarray:
     })
 
 
+def local_skin_reference(
+    crop: LowerFaceCrop, hard_seed: np.ndarray, skin_model: SkinModel | None = None
+) -> np.ndarray:
+    """Public entry to the smooth local Lab skin field, for the corrector.
+
+    Same field the shadow branch measures against, so "how far is this pixel from
+    skin" and "where do we move it to" use one definition. It preserves the
+    illumination gradient, which is why the corrector can pull chroma home
+    without flattening the jaw's own shading.
+
+    `skin_model` is optional: hand-built crops and tests do not carry one, and it
+    is only consulted where the reference field has no support at all.
+    """
+    lab = cv2.cvtColor(crop.bgr, cv2.COLOR_BGR2Lab).astype(np.float32)
+    if skin_model is None:
+        ref = lab[crop.skin_ref_mask > 0.5]
+        if ref.size < 30:
+            editable = crop.roi_mask * (1 - crop.protect_mask)
+            ref = lab[editable > 0.5]
+        skin_model = fit_skin_model(ref)
+    local_ref, _ = _local_reference_lab(lab, lab[..., 0], crop, hard_seed, skin_model)
+    return local_ref
+
+
 def segment_beard(
     crop: LowerFaceCrop,
     skin_model: SkinModel,

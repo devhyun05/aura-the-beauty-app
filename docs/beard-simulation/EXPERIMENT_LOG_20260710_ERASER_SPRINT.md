@@ -168,7 +168,62 @@ pic 세트는 waxiness가 소폭 상승(털이 더 남음): `_stubble_inpaint`�
 
 ---
 
-## 다음
+## Step 2 — B: Telea-on-low 삭제, 국소 피부색으로 크로마 이동 · **채택**
 
-Step 2 — B: Telea-on-low 삭제 → `_local_reference_lab` 목표장으로 크로마(a,b) 이동 + L 부분 이동.
-게이트: `test_correction_moves_shadow_toward_skin` **무수정 통과** / ΔE 개선 / 턱그늘 육안 보존.
+### 구현
+
+- `beard_segmentation.local_skin_reference()` 공개 래퍼 신설 — shadow 채널이 "이 픽셀이 피부에서
+  얼마나 먼가"를 재는 바로 그 목표장을 corrector가 "어디로 옮길까"에 재사용. 정의가 하나로 통일된다.
+- `low_inpainted`(Telea) 삭제 → `local_ref_lab` 목표장.
+  - **크로마(a, b)는 `shadow_w`만큼 완전히** 이동 (수염의 시각적 서명 = 푸른 잿빛 cast)
+  - **L은 `shadow_w × luma_shift_frac(0.75)`만** 이동 — 턱은 원래 그늘져 있고, L을 끝까지 당기면
+    얼굴의 입체 모델링이 지워져 붙인 자국처럼 보인다.
+- Lab 변환은 **float 경로 전용**(`_bgr_to_lab`/`_lab_to_bgr`). uint8을 거치면 Step 0에서 특정한
+  0.577 RMS 양자화 주입이 되살아난다.
+- configs에 `luma_shift_frac: 0.75`.
+
+### 게이트 — 전부 통과
+
+| 항목 | 기준 | 실측 |
+|---|---|---|
+| `test_correction_moves_shadow_toward_skin` | **무수정** 통과 | ✅ (51 passed) |
+| chroma ΔE 개선 | 필수 | **10.329 → 8.080** (strong), **9/9 사진 전부** |
+| 턱그늘 육안 보존 | 필수 | ✅ 아래 |
+| 입술 불변식 | diff 0 | **9장 전부 0** |
+| 새 방향성 아티팩트 없음 | — | streak 1.639 ≈ **원본 1.635** |
+
+### 지표 변화 (strong, dev 9장 평균)
+
+| | baseline(Step0) | Step 1 | **Step 2** |
+|---|---|---|---|
+| waxiness | 3.206 | 3.240 | **2.802** (목표 1.0) |
+| chroma ΔE | 10.250 | 10.217 | **8.080** |
+| 단조감소 | 6/9 | 6/9 | **7/9** |
+| context 시간 | — | 0.262s | **0.104s** |
+| stage 시간 | 0.263s | 0.022s | 0.024s |
+
+**Step 1까지 ΔE는 10.33→10.22로 꿈쩍도 안 했다.** Telea-on-low는 색을 고치는 게 아니라 뭉개기만 했던 것.
+Step 2에서 처음으로 색 얼룩이 실제로 교정된다(−2.25). psd03 19.03→13.36, pic2 18.05→10.51.
+
+### 시각 관문 (육안 기록)
+
+- `outputs/waxiness/compare_step1_step2/cmp_psd04.jpg` — STEP2에서 콧수염·턱의 푸른 얼룩이 옅어지고
+  **턱→목으로 이어지는 그늘은 그대로 남는다**(얼굴형 왜곡 없음). 피부 모공 결이 살아 있다.
+- `.../cmp_psd03.jpg` — 인중·턱의 cast가 확연히 감소(ΔE 19.03→13.36), 잔털은 유지, 결 보존.
+- `.../cmp_psd05.jpg` — 변화 미미(원래 ΔE 5.96으로 낮음). 이상 없음.
+
+### 남은 문제 (정직하게)
+
+- waxiness가 여전히 2.80(strong)으로 1.0에서 멀다. 두 요인이 섞여 있다:
+  (a) **털이 아직 많이 남음** — pic 세트 4.4~6.5. CLIPSeg raw heat가 약해 마스크가 옅다.
+  (b) **결 손실** — psd04 1.04, psd05 0.71로 이미 1.0 근처/이하. 여기가 Step 3(re-grain)의 대상.
+  즉 두 세트가 정반대 방향으로 1.0을 벗어난다. **평균 하나로 판단하면 안 된다.**
+- `high_out = high * (1 - hair_w)`(최대 85% 감쇠)는 그대로다. 되살리는 단계가 없다 = Step 3.
+
+---
+
+## 다음 (사람 판단 대기)
+
+Step 3 — C: re-grain. 본인 피부에서 채취한 결을 에너지 부족분만큼 등방성으로 재주입.
+**단, 계획대로 여기서 멈추고 사람이 before/after를 보고 Step 3 필요 여부를 결정한다.**
+Step 0~2만으로 충분하면 `regrain:false`로 출시하고 위험한 결 합성을 아예 생략할 수 있다.

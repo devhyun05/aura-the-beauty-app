@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from .beard_segmentation import BeardMasks
+from .beard_segmentation import BeardMasks, SkinModel, local_skin_reference
 from .lower_face_roi import LowerFaceCrop
 
 # Never remove all high-frequency signal — a fully flat patch reads as
@@ -44,9 +44,40 @@ _STRAND_PERCENTILE = 94.0
 _MAX_STRAND_COVERAGE = 0.35
 _ZONE_FLOOR = 0.20  # only look for strands where the detector says beard
 
+# How much of the luminance gap to the skin reference we close. Below 1.0 on
+# purpose: the beard's visible signature is a bluish-grey CAST, which lives in
+# chroma, while L legitimately varies across the face because the jaw is in
+# shade. Closing L fully would erase the face's own modelling and read as a flat
+# pasted patch.
+DEFAULT_LUMA_SHIFT = 0.75
+
 
 def _odd(value: float) -> int:
     return max(3, int(value) | 1)
+
+
+def _bgr_to_lab(bgr: np.ndarray) -> np.ndarray:
+    """float32 BGR 0..255 -> Lab on the uint8 scale (L 0..255, a/b centred 128).
+
+    Via the float path, never through uint8: quantizing an intermediate layer
+    injects 0.577 RMS of noise (1/sqrt(3)) against skin whose own high-frequency
+    content is 0.29-0.35 -- measured, and the reason the old low-layer inpaint
+    raised grain instead of smoothing it.
+    """
+    lab = cv2.cvtColor(np.clip(bgr, 0, 255) / 255.0, cv2.COLOR_BGR2Lab)
+    out = np.empty_like(lab)
+    out[..., 0] = lab[..., 0] * 2.55
+    out[..., 1] = lab[..., 1] + 128.0
+    out[..., 2] = lab[..., 2] + 128.0
+    return out
+
+
+def _lab_to_bgr(lab_u8scale: np.ndarray) -> np.ndarray:
+    lab = np.empty_like(lab_u8scale)
+    lab[..., 0] = lab_u8scale[..., 0] / 2.55
+    lab[..., 1] = lab_u8scale[..., 1] - 128.0
+    lab[..., 2] = lab_u8scale[..., 2] - 128.0
+    return cv2.cvtColor(lab, cv2.COLOR_Lab2BGR) * 255.0
 
 
 @dataclass
@@ -62,7 +93,7 @@ class CorrectionContext:
 
     strand: np.ndarray         # float32 0..1, thin dark structures in the zone
     clean_full: np.ndarray     # float32 BGR, strand-inpainted crop
-    low_inpainted: np.ndarray  # skin-coloured base under the beard
+    local_ref_lab: np.ndarray  # smooth local skin Lab field, illumination kept
     stats: dict = field(default_factory=dict)
 
 
@@ -103,7 +134,7 @@ def _strand_mask(crop: LowerFaceCrop, masks: BeardMasks) -> tuple[np.ndarray, di
 
 
 def build_correction_context(
-    crop: LowerFaceCrop, masks: BeardMasks
+    crop: LowerFaceCrop, masks: BeardMasks, skin_model: SkinModel | None = None
 ) -> CorrectionContext:
     fw = crop.face_width
     strand, stats = _strand_mask(crop, masks)
@@ -121,20 +152,15 @@ def build_correction_context(
         clean_u8 = crop.bgr
     clean_full = clean_u8.astype(np.float32)
 
-    # Skin-coloured base under the beard. Built from the strand-free crop, so
-    # hair darkness is no longer blurred into it before the fill. Replaced
-    # wholesale in Step 2 -- it still carries the uint8 round-trip.
-    low = cv2.GaussianBlur(clean_full, (0, 0), sigmaX=max(2.0, fw / 30))
-    union = np.maximum(masks.shadow, masks.hard)
-    inpaint_mask = ((union > 0.22).astype(np.uint8)) * 255
-    inpaint_mask = cv2.dilate(
-        inpaint_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-    low_u8 = np.clip(low, 0, 255).astype(np.uint8)
-    low_inpainted = cv2.inpaint(
-        low_u8, inpaint_mask, max(3, int(fw / 40)), cv2.INPAINT_TELEA).astype(np.float32)
+    # Where the beard's colour should go. Not an inpaint: cv2.inpaint diffuses
+    # neighbouring colour across a binarized `union > 0.22` mask, which printed
+    # the mask's own straight edge into the photo and wiped the skin inside it
+    # flat. This field is a normalized Gaussian average of the person's nearby
+    # clean skin, so it is smooth, edge-free, and keeps the illumination gradient.
+    local_ref_lab = local_skin_reference(crop, masks.hard, skin_model)
 
     return CorrectionContext(strand=strand, clean_full=clean_full,
-                             low_inpainted=low_inpainted, stats=stats)
+                             local_ref_lab=local_ref_lab, stats=stats)
 
 
 def correct_crop(
@@ -145,6 +171,7 @@ def correct_crop(
     stubble_inpaint: bool = False,
     *,
     strand_strength: float | None = None,
+    luma_shift_frac: float = DEFAULT_LUMA_SHIFT,
     context: CorrectionContext | None = None,
 ) -> np.ndarray:
     """Stage application. Pure blending over a `context` when one is supplied.
@@ -168,10 +195,17 @@ def correct_crop(
     low = cv2.GaussianBlur(base, (0, 0), sigmaX=max(2.0, crop.face_width / 30))
     high = base - low
 
-    # B: shadow is low-frequency colour.
+    # B: shadow is low-frequency colour. Move the low layer's chroma home to the
+    # local skin reference, and its luminance only partway, so the jaw keeps its
+    # own shading instead of being lit flat.
     shadow_w = np.clip(masks.shadow * shadow_strength
-                       + masks.hard * shadow_strength * 0.6, 0, 1)[..., None]
-    low_out = low * (1 - shadow_w) + ctx.low_inpainted * shadow_w
+                       + masks.hard * shadow_strength * 0.6, 0, 1)
+    low_lab = _bgr_to_lab(low)
+    delta = ctx.local_ref_lab - low_lab
+    low_lab[..., 0] += delta[..., 0] * shadow_w * luma_shift_frac
+    low_lab[..., 1] += delta[..., 1] * shadow_w
+    low_lab[..., 2] += delta[..., 2] * shadow_w
+    low_out = _lab_to_bgr(low_lab)
 
     # C: stubble is high-frequency.
     hair_w = np.clip(masks.hard * hair_attenuation, 0, MAX_HIGH_ATTENUATION)[..., None]
