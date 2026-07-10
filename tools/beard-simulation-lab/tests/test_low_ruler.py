@@ -82,6 +82,15 @@ def test_flat_white_trips_overlift_not_residual() -> None:
     assert v.overLiftQ90 > 8.0
 
 
+def test_untouched_original_never_trips_overlift() -> None:
+    """S undershooting bright skin must not charge the (non-)edit: only NEW
+    overshoot counts. Untouched original vs a too-dark S -> overLift ~ 0."""
+    clean, orig, s_l, s_ab, o_l, stain = _setup()
+    s_dark = s_l - 10.0                     # S wrongly darker than real skin
+    v = score_low_band(orig, s_dark, o_l, stain, _zone(), FACE_W)
+    assert v.overLiftQ90 < 0.5
+
+
 def test_small_stain_is_none_not_pass() -> None:
     clean, orig, s_l, s_ab, o_l, stain = _setup()
     tiny = np.zeros(SHAPE, bool)

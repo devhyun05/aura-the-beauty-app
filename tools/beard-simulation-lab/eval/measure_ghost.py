@@ -199,8 +199,11 @@ def build_soft_high_weight(ctx: dict, onset_percentile: float = 95.0,
             mad = max(float(np.median(np.abs(vals - med))), 1e-6)
             z = (bh - med) / mad
             z_on = (float(np.percentile(vals, onset_percentile)) - med) / mad
-            z_p99 = (float(np.percentile(vals, 99.0)) - med) / mad
-            z_sat = z_p99 + max(z_p99 - z_on, 1.0)
+            # Saturate AT clean p99: a pixel as dark as the gate's candidate
+            # grade is a hair core and must be FULLY replaced -- saturating
+            # above p99 left dense-stubble cores at w~0.4 (measured
+            # candSat 0.19 on psd03/psd05) = attenuation again.
+            z_sat = (float(np.percentile(vals, 99.0)) - med) / mad
             w = np.maximum(w, np.clip((z - z_on) / max(z_sat - z_on, 1e-6),
                                       0.0, 1.0))
     w *= ctx["key_zone"].astype(np.float32)

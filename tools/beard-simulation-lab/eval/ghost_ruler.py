@@ -234,7 +234,11 @@ def score_low_band(result_bgr: np.ndarray, s_l: np.ndarray,
     need = np.maximum(s_l - orig_low_l, 0.0)
     eff = stain & (need > _STAIN_MIN_NEED) & zone
 
-    over = np.maximum(r_l - s_l - tol, 0.0)
+    # Only NEW overshoot counts: where S under-predicts skin that was already
+    # bright, the untouched original must score 0 (S's own error is charged to
+    # the sConfidence gate, not to the eraser). min(R-S-tol, R-O) is the part
+    # of the overshoot the edit itself created; flat-white still trips it.
+    over = np.maximum(np.minimum(r_l - s_l - tol, r_l - orig_low_l), 0.0)
     over_q90 = float(np.percentile(over[zone], 90)) if zone.sum() >= 64 else None
     over_mean = float(over[zone].mean()) if zone.sum() >= 64 else None
 
