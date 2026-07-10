@@ -42,6 +42,7 @@ def test_presigned_upload_rejects_unsafe_media_kind() -> None:
     json={
       "mediaKind": "../capture",
       "contentType": "image/jpeg",
+      "byteSize": 1024,
       "originalFilename": "capture.jpg",
     },
   )
@@ -49,6 +50,40 @@ def test_presigned_upload_rejects_unsafe_media_kind() -> None:
   assert response.status_code == 422
   body = response.json()
   assert body["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_presigned_upload_rejects_active_content_type() -> None:
+  client = TestClient(create_app(Settings()))
+
+  response = client.post(
+    "/api/media/presigned-upload",
+    json={
+      "mediaKind": "capture",
+      "contentType": "text/html",
+      "byteSize": 1024,
+      "originalFilename": "capture.html",
+    },
+  )
+
+  assert response.status_code == 422
+  assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_presigned_upload_rejects_unknown_but_well_formed_media_kind() -> None:
+  client = TestClient(create_app(Settings()))
+
+  response = client.post(
+    "/api/media/presigned-upload",
+    json={
+      "mediaKind": "arbitrary-storage",
+      "contentType": "image/jpeg",
+      "byteSize": 1024,
+      "originalFilename": "capture.jpg",
+    },
+  )
+
+  assert response.status_code == 422
+  assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 def test_photo_capture_requires_uuid_media_id() -> None:

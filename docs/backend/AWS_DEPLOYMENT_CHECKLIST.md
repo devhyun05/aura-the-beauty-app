@@ -91,9 +91,37 @@ CLOUDFRONT_DOMAIN=
 - Upload flow:
 
 ```text
-POST /api/media/presigned-upload
+POST /api/media/presigned-upload -> uploadId + server-issued target
 mobile PUT to S3
-POST /api/media/complete-upload
+POST /api/media/complete-upload { uploadId }
+```
+
+- Restrict the ECS task role to the configured media bucket and the
+  `uploads/*` object prefix. Do not grant object access to `arn:aws:s3:::*`.
+  Replace `<media-bucket>` before applying this example:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectTagging"],
+      "Resource": "arn:aws:s3:::<media-bucket>/uploads/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": "arn:aws:s3:::<media-bucket>",
+      "Condition": {"StringLike": {"s3:prefix": ["uploads/*"]}}
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetBucketVersioning",
+      "Resource": "arn:aws:s3:::<media-bucket>"
+    }
+  ]
+}
 ```
 
 ## 4. OpenAI API

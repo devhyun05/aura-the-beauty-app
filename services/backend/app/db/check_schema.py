@@ -13,6 +13,7 @@ from app.db.seed_db import SEED_VERSION
 EXPECTED_TABLES = {
   "users",
   "media_assets",
+  "media_upload_sessions",
   "photo_captures",
   "analysis_reports",
   "saved_makeup_styles",
@@ -59,6 +60,7 @@ EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 EXPECTED_COLUMNS = {
   "analysis_reports": {"embedding"},
   "community_threads": {"embedding"},
+  "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:

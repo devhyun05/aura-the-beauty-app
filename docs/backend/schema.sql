@@ -117,6 +117,49 @@ create table if not exists media_assets (
 
 comment on table media_assets is 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.';
 
+create table if not exists media_upload_sessions (
+  id uuid primary key,
+  owner_user_id uuid,
+  partner_account_id uuid,
+  media_kind text not null,
+  source media_source_type not null,
+  bucket text not null,
+  object_key text not null,
+  cdn_url text,
+  content_type text not null,
+  expected_byte_size bigint,
+  width integer,
+  height integer,
+  original_filename text,
+  thumbnail_bucket text,
+  thumbnail_object_key text,
+  thumbnail_cdn_url text,
+  thumbnail_content_type text,
+  thumbnail_expected_byte_size bigint,
+  thumbnail_width integer,
+  thumbnail_height integer,
+  status text not null default 'pending',
+  media_asset_id uuid,
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint uq_media_upload_sessions_bucket_key unique (bucket, object_key),
+  constraint uq_media_upload_sessions_thumbnail_bucket_key unique (thumbnail_bucket, thumbnail_object_key),
+  constraint chk_media_upload_sessions_principal check (
+    (owner_user_id is not null and partner_account_id is null)
+    or (owner_user_id is null and partner_account_id is not null)
+  ),
+  constraint chk_media_upload_sessions_status check (status in ('pending', 'completed', 'expired')),
+  constraint chk_media_upload_sessions_expected_size check (
+    expected_byte_size is null or expected_byte_size between 1 and 52428800
+  ),
+  constraint chk_media_upload_sessions_thumbnail_expected_size check (
+    thumbnail_expected_byte_size is null or thumbnail_expected_byte_size between 1 and 52428800
+  )
+);
+
+comment on table media_upload_sessions is 'Server-issued, principal-bound S3 upload locations consumed exactly once.';
+
 create table if not exists photo_captures (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -1210,6 +1253,17 @@ alter table consulting_partner_sessions
   add constraint fk_consulting_partner_sessions_account
   foreign key (account_id) references consulting_partner_accounts(id) on delete cascade;
 
+alter table media_upload_sessions
+  drop constraint if exists fk_media_upload_sessions_owner_user,
+  add constraint fk_media_upload_sessions_owner_user
+  foreign key (owner_user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_media_upload_sessions_partner_account,
+  add constraint fk_media_upload_sessions_partner_account
+  foreign key (partner_account_id) references consulting_partner_accounts(id) on delete cascade,
+  drop constraint if exists fk_media_upload_sessions_media_asset,
+  add constraint fk_media_upload_sessions_media_asset
+  foreign key (media_asset_id) references media_assets(id) on delete set null;
+
 alter table consulting_message_media
   drop constraint if exists fk_consulting_message_media_message,
   add constraint fk_consulting_message_media_message
@@ -1262,6 +1316,9 @@ create index if not exists idx_consulting_messages_booking_created on consulting
 create index if not exists idx_consulting_partner_accounts_expert on consulting_partner_accounts (expert_id);
 create index if not exists idx_consulting_partner_sessions_account_expires on consulting_partner_sessions (account_id, expires_at);
 create index if not exists idx_consulting_message_media_message_order on consulting_message_media (message_id, sort_order);
+create index if not exists idx_media_upload_sessions_owner_status on media_upload_sessions (owner_user_id, status, expires_at);
+create index if not exists idx_media_upload_sessions_partner_status on media_upload_sessions (partner_account_id, status, expires_at);
+create index if not exists idx_media_upload_sessions_pending_expires on media_upload_sessions (expires_at) where status = 'pending';
 drop index if exists idx_consulting_bookings_expert_upcoming_slot;
 alter table consulting_bookings
   drop constraint if exists ex_consulting_bookings_expert_upcoming_time,
