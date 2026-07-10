@@ -23,6 +23,11 @@ from app.services.media_deletion import (
   process_media_deletion_outbox_items,
 )
 from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.owned_media import (
+  require_owned_media,
+  resolve_owned_source_media,
+  trusted_media_request_payload,
+)
 from app.services.users import ensure_user
 
 
@@ -503,6 +508,30 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  source_media = await resolve_owned_source_media(
+    db,
+    owner_user_id=user["id"],
+    media_id=payload.source_media_id,
+    photo_capture_id=payload.photo_capture_id,
+    required=payload.run_immediately,
+  )
+  if payload.preview_media_id is not None and (
+    source_media is None or payload.preview_media_id != source_media["id"]
+  ):
+    await require_owned_media(
+      db,
+      media_id=payload.preview_media_id,
+      owner_user_id=user["id"],
+    )
+  payload = payload.model_copy(
+    update={
+      "request_payload": trusted_media_request_payload(
+        settings,
+        payload.request_payload,
+        source_media,
+      ),
+    },
+  )
   logger.info(
     "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s",
     auth.subject,

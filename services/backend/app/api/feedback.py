@@ -17,6 +17,7 @@ from app.services.makeup_feedback_analysis import (
 )
 from app.services.makeup_feedback_conference import build_makeup_feedback_conference_messages
 from app.services.makeup_feedback_goal_intent import normalize_feedback_goal_context_for_request
+from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.users import ensure_user
 
 
@@ -96,47 +97,16 @@ async def resolve_feedback_request_payload(
   settings: Settings,
 ) -> dict[str, Any]:
   user_id = user["id"]
-  request_payload = dict(payload.request_payload or {})
+  media = await resolve_owned_source_media(
+    db,
+    owner_user_id=user_id,
+    media_id=payload.uploaded_media_id,
+    photo_capture_id=payload.photo_capture_id,
+    required=payload.run_immediately,
+  )
+  request_payload = trusted_media_request_payload(settings, payload.request_payload, media)
   request_payload.setdefault("source", payload.source)
   request_payload.setdefault("sourceLabel", payload.source_label)
-
-  media = None
-
-  if payload.uploaded_media_id:
-    media = await db.fetchrow(
-      """
-      select id, bucket, object_key, cdn_url, content_type, width, height
-      from media_assets
-      where id = $1 and owner_user_id = $2
-      """,
-      payload.uploaded_media_id,
-      user_id,
-    )
-
-  if media is None and payload.photo_capture_id:
-    media = await db.fetchrow(
-      """
-      select m.id, m.bucket, m.object_key, m.cdn_url, m.content_type, m.width, m.height
-      from photo_captures pc
-      join media_assets m on m.id = pc.media_id
-      where pc.id = $1 and pc.user_id = $2
-      """,
-      payload.photo_capture_id,
-      user_id,
-    )
-
-  if media:
-    request_payload.update(
-      {
-        "mediaId": str(media["id"]),
-        "bucket": media["bucket"],
-        "objectKey": media["object_key"],
-        "cdnUrl": media["cdn_url"],
-        "contentType": media["content_type"],
-        "width": media["width"],
-        "height": media["height"],
-      },
-    )
 
   merge_profile_feedback_context(request_payload, user)
   await normalize_feedback_goal_context_for_request(request_payload, settings)
