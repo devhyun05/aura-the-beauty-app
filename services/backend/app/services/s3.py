@@ -1,4 +1,5 @@
 from uuid import uuid4
+from urllib.parse import urlencode
 
 import boto3
 from botocore.config import Config
@@ -40,6 +41,7 @@ def is_private_hair_object_key(object_key: str) -> bool:
 class S3Service:
   def __init__(self, settings: Settings) -> None:
     self.settings = settings
+    self._bucket_versioning: dict[str, str | None] = {}
 
   def _client(self):
     region = self.settings.aws_region
@@ -119,6 +121,39 @@ class S3Service:
     self.assert_managed_media_location(bucket=bucket, object_key=object_key)
     self._client().delete_object(Bucket=bucket, Key=object_key)
 
+  def delete_object_permanently(self, *, bucket: str, object_key: str) -> None:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_DELETE_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    self.assert_managed_media_location(bucket=bucket, object_key=object_key)
+    client = self._client()
+    if bucket not in self._bucket_versioning:
+      self._bucket_versioning[bucket] = client.get_bucket_versioning(Bucket=bucket).get("Status")
+    versioning = self._bucket_versioning[bucket]
+    if versioning not in {"Enabled", "Suspended"}:
+      client.delete_object(Bucket=bucket, Key=object_key)
+      return
+
+    versions: list[dict[str, str]] = []
+    paginator = client.get_paginator("list_object_versions")
+    for page in paginator.paginate(Bucket=bucket, Prefix=object_key):
+      for collection in (page.get("Versions") or [], page.get("DeleteMarkers") or []):
+        versions.extend(
+          {"Key": item["Key"], "VersionId": item["VersionId"]}
+          for item in collection
+          if item.get("Key") == object_key and item.get("VersionId")
+        )
+
+    if not versions:
+      return
+    for offset in range(0, len(versions), 1000):
+      response = client.delete_objects(
+        Bucket=bucket,
+        Delete={"Objects": versions[offset : offset + 1000], "Quiet": True},
+      )
+      if response.get("Errors"):
+        raise AppError(503, "S3_VERSION_DELETE_FAILED", "One or more media versions could not be deleted.")
+
   def get_object_metadata(self, *, bucket: str, object_key: str) -> dict[str, str | int]:
     self.assert_managed_media_location(bucket=bucket, object_key=object_key)
     try:
@@ -133,3 +168,98 @@ class S3Service:
       "byte_size": int(response.get("ContentLength") or 0),
       "content_type": str(response.get("ContentType") or "application/octet-stream").split(";", 1)[0].lower(),
     }
+
+  def create_presigned_download(
+    self,
+    *,
+    bucket: str,
+    object_key: str,
+    expires_in: int = 900,
+  ) -> str:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_DOWNLOAD_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    return self._client().generate_presigned_url(
+      "get_object",
+      Params={"Bucket": bucket, "Key": object_key},
+      ExpiresIn=expires_in,
+    )
+
+  def get_object_bytes(
+    self,
+    *,
+    bucket: str,
+    object_key: str,
+    max_bytes: int | None = None,
+  ) -> tuple[bytes, str]:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_READ_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    response = self._client().get_object(Bucket=bucket, Key=object_key)
+    body = response["Body"]
+    content_length = int(response.get("ContentLength") or 0)
+    if max_bytes is not None and content_length > max_bytes:
+      body.close()
+      raise AppError(413, "S3_OBJECT_TOO_LARGE", "The uploaded media exceeds the allowed size.")
+
+    try:
+      payload = body.read(max_bytes + 1) if max_bytes is not None else body.read()
+    finally:
+      body.close()
+    if max_bytes is not None and len(payload) > max_bytes:
+      raise AppError(413, "S3_OBJECT_TOO_LARGE", "The uploaded media exceeds the allowed size.")
+    return payload, str(response.get("ContentType") or "application/octet-stream")
+
+  def put_private_object(
+    self,
+    *,
+    bucket: str,
+    object_key: str,
+    body: bytes,
+    content_type: str,
+    tags: dict[str, str] | None = None,
+  ) -> None:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_WRITE_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    params = {
+      "Bucket": bucket,
+      "Key": object_key,
+      "Body": body,
+      "ContentType": content_type,
+      "CacheControl": "private, no-store",
+    }
+    if tags:
+      params["Tagging"] = urlencode(tags)
+    self._client().put_object(
+      **params,
+    )
+
+  def put_object_tags(self, *, bucket: str, object_key: str, tags: dict[str, str]) -> None:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_TAG_TARGET_REQUIRED", "S3 bucket and object key are required.")
+    self._client().put_object_tagging(
+      Bucket=bucket,
+      Key=object_key,
+      Tagging={"TagSet": [{"Key": key, "Value": value} for key, value in tags.items()]},
+    )
+
+  def put_catalog_object(
+    self,
+    *,
+    bucket: str,
+    object_key: str,
+    body: bytes,
+    content_type: str,
+    cache_control: str = "public, max-age=31536000, immutable",
+  ) -> None:
+    if not bucket or not object_key:
+      raise AppError(400, "S3_WRITE_TARGET_REQUIRED", "S3 bucket and object key are required.")
+
+    self._client().put_object(
+      Bucket=bucket,
+      Key=object_key,
+      Body=body,
+      ContentType=content_type,
+      CacheControl=cache_control,
+    )

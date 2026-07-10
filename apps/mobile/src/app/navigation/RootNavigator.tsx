@@ -38,6 +38,15 @@ import {
 } from './routes/consultingRoutes';
 import {FaceCaptureConfirmationRouteScreen} from './routes/faceCaptureConfirmationRoutes';
 import {
+  HairAnalysisCaptureRouteScreen,
+  HairAnalysisIntroRouteScreen,
+  HairAnalysisLoadingRouteScreen,
+  HairAnalysisResultRouteScreen,
+  HairSimulationLoadingRouteScreen,
+  HairSimulationResultRouteScreen,
+  SavedHairSimulationsRouteScreen,
+} from './routes/hairAnalysisRoutes';
+import {
   FaceAnalysisIntroRouteScreen,
   FaceAnalysisLoadingRouteScreen,
   FaceAnalysisReportDetailRouteScreen,
@@ -128,6 +137,13 @@ export function RootNavigator() {
         name="HairRemovalSimulation"
         component={HairRemovalSimulationRouteScreen}
       />
+      <Stack.Screen name="HairAnalysisIntro" component={HairAnalysisIntroRouteScreen} />
+      <Stack.Screen name="HairAnalysisCapture" component={HairAnalysisCaptureRouteScreen} />
+      <Stack.Screen name="HairAnalysisLoading" component={HairAnalysisLoadingRouteScreen} />
+      <Stack.Screen name="HairAnalysisResult" component={HairAnalysisResultRouteScreen} />
+      <Stack.Screen name="HairSimulationLoading" component={HairSimulationLoadingRouteScreen} />
+      <Stack.Screen name="HairSimulationResult" component={HairSimulationResultRouteScreen} />
+      <Stack.Screen name="SavedHairSimulations" component={SavedHairSimulationsRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />

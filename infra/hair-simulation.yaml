@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AURA hair analysis SQS worker, autoscaling, and retention cleanup.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: aura-hair
+    AllowedPattern: "[a-zA-Z0-9-]+"
+  ClusterName:
+    Type: String
+    Default: aura-backend-dev
+  ContainerImage:
+    Type: String
+    Description: Immutable ECR image URI for the shared API/worker image.
+  WorkerContainerName:
+    Type: String
+    Default: aura-hair-worker
+  ExecutionRoleArn:
+    Type: String
+    Description: ECS execution role ARN with ECR, Logs, and configured Secrets Manager access.
+  ApiTaskRoleName:
+    Type: String
+    Default: ""
+    Description: Optional existing API ECS task role name to grant sqs:SendMessage.
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two or more private subnets with NAT or required VPC endpoints.
+  WorkerSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Worker security groups with database and HTTPS egress access.
+  DataBucketName:
+    Type: String
+  HairStyleAssetBucketName:
+    Type: String
+    Default: ""
+    Description: Optional separate style asset bucket. Empty uses DataBucketName.
+  DatabaseSecretValueFrom:
+    Type: String
+    NoEcho: true
+    Description: ECS secret ValueFrom for DATABASE_URL.
+  OpenAISecretValueFrom:
+    Type: String
+    NoEcho: true
+    Description: ECS secret ValueFrom for OPENAI_API_KEY.
+  WorkerCpu:
+    Type: String
+    Default: "1024"
+    AllowedValues: ["512", "1024", "2048"]
+  WorkerMemory:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["1024", "2048", "3072", "4096"]
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [7, 14, 30, 60, 90, 180, 365]
+
+Conditions:
+  HasApiTaskRole: !Not [!Equals [!Ref ApiTaskRoleName, ""]]
+  HasSeparateStyleBucket: !Not [!Equals [!Ref HairStyleAssetBucketName, ""]]
+
+Resources:
+  HairJobsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectName}-jobs-dlq
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+
+  HairJobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectName}-jobs
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 360
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt HairJobsDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  HairWorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ecs/${ProjectName}-worker
+      RetentionInDays: !Ref LogRetentionDays
+
+  HairWorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-worker-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ChangeMessageVisibility
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ReceiveMessage
+                Resource: !GetAtt HairJobsQueue.Arn
+              - Effect: Allow
+                Action:
+                  - s3:DeleteObject
+                  - s3:DeleteObjectVersion
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:PutObjectTagging
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-analysis-source/*
+                  - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-analysis-mask/*
+                  - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-simulation-result/*
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !If
+                  - HasSeparateStyleBucket
+                  - !Sub arn:${AWS::Partition}:s3:::${HairStyleAssetBucketName}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/*
+              - Effect: Allow
+                Action: s3:GetBucketVersioning
+                Resource: !Sub arn:${AWS::Partition}:s3:::${DataBucketName}
+              - Effect: Allow
+                Action: s3:ListBucketVersions
+                Resource: !Sub arn:${AWS::Partition}:s3:::${DataBucketName}
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - uploads/hair-analysis-source/*
+                      - uploads/hair-analysis-mask/*
+                      - uploads/hair-simulation-result/*
+
+  ApiQueueSendPolicy:
+    Type: AWS::IAM::Policy
+    Condition: HasApiTaskRole
+    Properties:
+      PolicyName: !Sub ${ProjectName}-api-queue-send
+      Roles:
+        - !Ref ApiTaskRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !GetAtt HairJobsQueue.Arn
+          - Effect: Allow
+            Action:
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+              - s3:GetObject
+              - s3:PutObject
+              - s3:PutObjectTagging
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-analysis-source/*
+              - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-analysis-mask/*
+              - !Sub arn:${AWS::Partition}:s3:::${DataBucketName}/uploads/hair-simulation-result/*
+          - Effect: Allow
+            Action: s3:GetBucketVersioning
+            Resource: !Sub arn:${AWS::Partition}:s3:::${DataBucketName}
+          - Effect: Allow
+            Action: s3:ListBucketVersions
+            Resource: !Sub arn:${AWS::Partition}:s3:::${DataBucketName}
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - uploads/hair-analysis-source/*
+                  - uploads/hair-analysis-mask/*
+                  - uploads/hair-simulation-result/*
+
+  HairWorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${ProjectName}-worker
+      Cpu: !Ref WorkerCpu
+      Memory: !Ref WorkerMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Ref ExecutionRoleArn
+      TaskRoleArn: !GetAtt HairWorkerTaskRole.Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: !Ref WorkerContainerName
+          Image: !Ref ContainerImage
+          Essential: true
+          Command: ["python", "-m", "app.workers.hair_simulation"]
+          StopTimeout: 30
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: AWS_USE_IAM_ROLE
+              Value: "true"
+            - Name: HAIR_JOBS_QUEUE_URL
+              Value: !Ref HairJobsQueue
+            - Name: HAIR_SEGMENTER_MODEL_PATH
+              Value: /app/models/hair_segmenter.tflite
+            - Name: HAIR_SOURCE_RETENTION_HOURS
+              Value: "24"
+            - Name: HAIR_SIMULATIONS_PER_ANALYSIS
+              Value: "3"
+            - Name: HAIR_SIMULATIONS_PER_DAY
+              Value: "6"
+            - Name: HAIR_WORKER_WAIT_TIME_SECONDS
+              Value: "20"
+            - Name: HAIR_WORKER_VISIBILITY_TIMEOUT_SECONDS
+              Value: "360"
+            - Name: HAIR_WORKER_REQUEST_TIMEOUT_SECONDS
+              Value: "180"
+            - Name: HAIR_GENERATION_QUALITY
+              Value: medium
+            - Name: HAIR_STYLE_ASSETS_REQUIRE_APPROVAL
+              Value: "true"
+            - Name: HAIR_STYLE_ASSET_PREFIX
+              Value: catalog/hair-styles/v1
+            - Name: HAIR_STYLE_ASSET_BUCKET
+              Value: !If [HasSeparateStyleBucket, !Ref HairStyleAssetBucketName, !Ref DataBucketName]
+            - Name: S3_BUCKET_NAME
+              Value: !Ref DataBucketName
+          Secrets:
+            - Name: DATABASE_URL
+              ValueFrom: !Ref DatabaseSecretValueFrom
+            - Name: OPENAI_API_KEY
+              ValueFrom: !Ref OpenAISecretValueFrom
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref HairWorkerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: worker
+
+  HairWorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub ${ProjectName}-worker
+      Cluster: !Ref ClusterName
+      DesiredCount: 1
+      LaunchType: FARGATE
+      PlatformVersion: LATEST
+      TaskDefinition: !Ref HairWorkerTaskDefinition
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+        MaximumPercent: 200
+        MinimumHealthyPercent: 0
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: !Ref WorkerSecurityGroupIds
+          Subnets: !Ref PrivateSubnetIds
+
+  HairWorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: HairWorkerService
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 1
+      ResourceId: !Sub service/${ClusterName}/${ProjectName}-worker
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  HairWorkerQueueScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${ProjectName}-queue-backlog
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref HairWorkerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 30
+        CustomizedMetricSpecification:
+          Namespace: AWS/SQS
+          MetricName: ApproximateNumberOfMessagesVisible
+          Statistic: Average
+          Unit: Count
+          Dimensions:
+            - Name: QueueName
+              Value: !GetAtt HairJobsQueue.QueueName
+
+  HairCleanupEventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-scheduled-cleanup
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref HairWorkerTaskDefinition
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Ref ExecutionRoleArn
+                  - !GetAtt HairWorkerTaskRole.Arn
+
+  HairCleanupSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Delete expired hair source, mask, and unsaved result objects.
+      ScheduleExpression: rate(15 minutes)
+      State: ENABLED
+      Targets:
+        - Id: HairCleanupEcsTask
+          Arn: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}
+          RoleArn: !GetAtt HairCleanupEventRole.Arn
+          Input: !Sub >-
+            {"containerOverrides":[{"name":"${WorkerContainerName}","command":["python","-m","app.ops.cleanup_hair_media","--limit","500"]}]}
+          EcsParameters:
+            TaskDefinitionArn: !Ref HairWorkerTaskDefinition
+            TaskCount: 1
+            LaunchType: FARGATE
+            PlatformVersion: LATEST
+            NetworkConfiguration:
+              AwsVpcConfiguration:
+                AssignPublicIp: DISABLED
+                SecurityGroups: !Ref WorkerSecurityGroupIds
+                Subnets: !Ref PrivateSubnetIds
+
+Outputs:
+  HairJobsQueueUrl:
+    Value: !Ref HairJobsQueue
+  HairJobsQueueArn:
+    Value: !GetAtt HairJobsQueue.Arn
+  HairJobsDeadLetterQueueUrl:
+    Value: !Ref HairJobsDeadLetterQueue
+  HairJobsDeadLetterQueueArn:
+    Value: !GetAtt HairJobsDeadLetterQueue.Arn
+  HairWorkerServiceName:
+    Value: !Sub ${ProjectName}-worker
+  HairWorkerTaskDefinitionArn:
+    Value: !Ref HairWorkerTaskDefinition
+  HairWorkerLogGroupName:
+    Value: !Ref HairWorkerLogGroup

@@ -6,6 +6,8 @@ import type {NativeFaceRatioAnalyzeResult} from '../types';
 export type FaceRatioHairlineOptions = {
   // 네이티브 tmp에 apple-hair-matte.png / apple-skin-matte.png / hairline-debug.png 생성
   debugArtifacts?: boolean;
+  // 헤어 분석 기능에서 Apple hair/skin matte PNG를 production 입력으로 내보낸다.
+  matteArtifacts?: boolean;
   // false면 matte 파싱 자체를 건너뜀 (촬영 payload가 matte 없음을 알린 경우 로그 소음 억제용).
   // 기본 true — matte 없는 파일의 aux-data 조회는 빠르게 nil이라 안전하다.
   enabled?: boolean;

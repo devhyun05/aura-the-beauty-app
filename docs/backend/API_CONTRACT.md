@@ -78,6 +78,47 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/ar/filters`
 - `GET /api/ar/filter-states`
 - `PUT /api/ar/filter-states/{filterId}`
+- `GET /api/hair-styles`
+- `POST /api/hair-analyses`
+- `GET /api/hair-analyses/{analysis_id}`
+- `POST /api/hair-analyses/{analysis_id}/simulations`
+- `GET /api/hair-simulations/{simulation_id}`
+- `POST /api/hair-simulations/{simulation_id}/save`
+- `GET /api/hair-simulations?saved=true`
+- `DELETE /api/hair-simulations/{simulation_id}`
+
+### Media Upload Sessions
+
+`POST /api/media/presigned-upload` creates a one-time upload session bound to
+the authenticated user. The response includes `uploadId` and the server-issued
+S3 target. An optional nested `thumbnail` request returns `thumbnailUpload`
+under the same session.
+
+After every issued target has been uploaded, the client calls
+`POST /api/media/complete-upload` with only the session identifier:
+
+```json
+{
+  "uploadId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+The backend resolves bucket and object keys from the session, verifies S3
+metadata, checks the session principal, and consumes the session once. Clients
+must not send or persist a replacement bucket, object key, or CDN URL.
+
+During the mobile rollout transition, the legacy bucket/objectKey completion
+shape is accepted only as an exact lookup for a still-valid server-issued
+session owned by the same authenticated principal. Those client values are
+never inserted directly into `media_assets`.
+
+### Hair Analysis And Simulation
+
+Hair analysis and simulation are asynchronous SQS-backed jobs. Create requests
+require a stable `clientRequestId`; polling reads `queued`, `processing`,
+`completed`, `failed`, or `expired`. Source photos, masks, and unsaved results
+are private and expire after 24 hours. See
+`docs/backend/HAIR_ANALYSIS_SIMULATION.md` for deployment, quotas, and retention.
 
 ### Account Deletion
 

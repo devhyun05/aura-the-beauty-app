@@ -333,3 +333,15 @@ Only switch one mock service at a time:
 4. analysis jobs and reports
 5. products/likes/styles
 6. feedback/filter/AR flows
+
+## 15. Hair Analysis Worker
+
+헤어 분석·합성은 API ECS 서비스와 별도 SQS worker가 필요하다. 다음 항목을 함께 배포한다.
+
+- `infra/hair-simulation.yaml`: SQS/DLQ, ECS worker, 1~10 autoscaling, 15분 정리 작업
+- API ECS 환경 변수 `HAIR_JOBS_QUEUE_URL`
+- 스타일 레퍼런스 12종 및 승인된 `manifest.json`
+- `scripts/aws/configure-hair-api-routes.sh`
+- `scripts/aws/configure-hair-s3-lifecycle.sh`
+
+private subnet worker가 OpenAI에 접속하려면 NAT egress가 필요하다. 상세 순서와 데이터 보관 정책은 `docs/backend/HAIR_ANALYSIS_SIMULATION.md`를 따른다.

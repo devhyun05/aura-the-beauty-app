@@ -95,6 +95,8 @@ type FaceCaptureUploadHandler = (
 export type CameraFaceCaptureMode = 'face' | 'reference';
 
 type CameraFaceCaptureScreenProps = {
+  allowCameraToggle?: boolean;
+  allowGallery?: boolean;
   autoOpenGallery?: boolean;
   captureMode?: CameraFaceCaptureMode;
   captureType?: FaceCaptureUploadCaptureType;
@@ -106,6 +108,7 @@ type CameraFaceCaptureScreenProps = {
   onClose?: () => void;
   onPickImage?: () => void;
   onToggleCamera?: (direction: CameraDirection) => void;
+  deferUpload?: boolean;
   // 실험용(face-capture lab)에서 backend 업로드를 로컬 스텁으로 대체할 때만 주입한다.
   uploadImage?: FaceCaptureUploadHandler;
 };
@@ -347,16 +350,20 @@ function createLocalFaceCaptureResult({
     bucket: 'local',
     cdnUrl: null,
     contentType: contentType ?? 'image/jpeg',
+    height: height ?? null,
     imageUri: uri,
     mediaId: localId,
     objectKey: uri,
     photoCaptureId: localId,
     semanticMattes,
     source,
+    width: width ?? null,
   };
 }
 
 export function CameraFaceCaptureScreen({
+  allowCameraToggle = true,
+  allowGallery = true,
   autoOpenGallery = false,
   captureMode = 'face',
   captureType,
@@ -365,6 +372,7 @@ export function CameraFaceCaptureScreen({
   onClose,
   onPickImage,
   onToggleCamera,
+  deferUpload = false,
   uploadImage = uploadFaceCaptureImage,
 }: CameraFaceCaptureScreenProps) {
   const shouldValidateFace = shouldValidateCameraFaceCapture(captureMode);
@@ -433,7 +441,9 @@ export function CameraFaceCaptureScreen({
   // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
   const semanticMatteCapture =
     requireGreenlight &&
-    (captureType === 'face_analysis' || captureType === 'personal_color');
+    (captureType === 'face_analysis' ||
+      captureType === 'personal_color' ||
+      captureType === 'hair_analysis');
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   // 타원 프레이밍 가이드 (기획서 §3.5 비율, 화면 중앙 앵커).
   // 정수리/턱끝이 타원 상하단 점에 맞아야 촬영되므로 얼굴 크기(=촬영 거리)를
@@ -1067,7 +1077,9 @@ export function CameraFaceCaptureScreen({
       let result: FaceCaptureUploadResult;
 
       try {
-        result = await uploadImage(imageInput);
+        result = deferUpload
+          ? createLocalFaceCaptureResult(imageInput)
+          : await uploadImage(imageInput);
       } catch (error) {
         setUploadError(
           error instanceof Error
@@ -1135,7 +1147,9 @@ export function CameraFaceCaptureScreen({
       let result: FaceCaptureUploadResult;
 
       try {
-        result = await uploadImage(imageInput);
+        result = deferUpload
+          ? createLocalFaceCaptureResult(imageInput)
+          : await uploadImage(imageInput);
       } catch (error) {
         setUploadError(
           error instanceof Error
@@ -1297,27 +1311,31 @@ export function CameraFaceCaptureScreen({
           </CameraCaptureButton>
         }
         horizontalPadding={spacing.xxl * 2 + spacing.xs}
-        leftSlot={
+        leftSlot={allowGallery ? (
           <CameraGalleryButton
             accessibilityLabel="Pick photo from album"
             disabled={isPickingImage || isUploading}
             onPress={handlePickImage}
           />
-        }
-        rightSlot={
+        ) : <View style={styles.controlPlaceholder} />}
+        rightSlot={allowCameraToggle ? (
           <CameraFacingToggleButton
             accessibilityLabel={`Switch to ${cameraDirection === 'front' ? 'back' : 'front'} camera`}
             cameraFacing={cameraDirection}
             disabled={isUploading}
             onPress={handleToggleCamera}
           />
-        }
+        ) : <View style={styles.controlPlaceholder} />}
       />
     </FullscreenOverlayScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  controlPlaceholder: {
+    height: 48,
+    width: 48,
+  },
   errorBar: {
     alignItems: 'center',
     alignSelf: 'center',

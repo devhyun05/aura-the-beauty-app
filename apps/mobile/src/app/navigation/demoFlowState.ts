@@ -40,6 +40,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedFaceVerticalThirds: null,
+    selectedHairCapture: null,
     selectedPersonalColor: null,
     selectedMakeupFeedbackPhoto: demoSelectedMakeupFeedbackPhoto,
     selectedRecommendedMakeupFilterId: null,

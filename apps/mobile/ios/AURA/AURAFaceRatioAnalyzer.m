@@ -509,6 +509,7 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
       NSDictionary *matte = hairlineResult[@"matte"];
       NSDictionary *hairline = hairlineResult[@"hairline"];
       NSDictionary *debugArtifacts = hairlineResult[@"debugArtifacts"];
+      NSDictionary *matteArtifacts = hairlineResult[@"matteArtifacts"];
       NSString *failureReason = hairlineResult[@"failureReason"];
 
       if ([matte isKindOfClass:[NSDictionary class]]) {
@@ -519,6 +520,9 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
       }
       if ([debugArtifacts isKindOfClass:[NSDictionary class]]) {
         payload[@"debugArtifacts"] = debugArtifacts;
+      }
+      if ([matteArtifacts isKindOfClass:[NSDictionary class]]) {
+        payload[@"matteArtifacts"] = matteArtifacts;
       }
       if ([failureReason isKindOfClass:[NSString class]]) {
         payload[@"hairlineFailureReason"] = failureReason;

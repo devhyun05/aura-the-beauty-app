@@ -211,6 +211,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
             onPressConsulting={() => navigation.navigate('ConsultingTab')}
             onPressHalfMakeup={handleHalfMakeupPress}
+            onPressHairAnalysis={() => rootNavigation?.navigate('HairAnalysisIntro')}
             onPressHairRemovalSimulation={() =>
               rootNavigation?.navigate('HairRemovalSimulation')
             }

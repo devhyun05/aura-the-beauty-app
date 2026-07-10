@@ -34,6 +34,13 @@ expectEqual(getRouteChrome('ProfileEdit').category, 'form-edit', 'profile edit c
 expectEqual(getRouteChrome('MakeupFeedbackLoading').kind, 'detail', 'makeup feedback loading chrome');
 expectEqual(getRouteChrome('MakeupFeedbackLoading').category, 'progress', 'makeup feedback loading category');
 expectEqual(getRouteChrome('FaceAnalysisIntro').kind, 'detail', 'face analysis intro chrome');
+expectEqual(getRouteChrome('HairAnalysisIntro').kind, 'detail', 'hair analysis intro chrome');
+expectEqual(getRouteChrome('HairAnalysisCapture').kind, 'fullscreen', 'hair capture chrome');
+expectEqual(
+  getDetailRouteTitle('HairSimulationResult'),
+  '헤어 합성 결과',
+  'hair simulation result route title',
+);
 expectEqual(
   getDetailRouteTitle('FaceAnalysisIntro'),
   '얼굴 분석',

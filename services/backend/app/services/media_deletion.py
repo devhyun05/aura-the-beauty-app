@@ -11,7 +11,7 @@ import asyncpg
 
 from app.core.settings import Settings
 from app.db.session import Database
-from app.services.s3 import S3Service
+from app.services.s3 import S3Service, is_private_hair_object_key
 
 
 logger = logging.getLogger(__name__)
@@ -563,7 +563,9 @@ async def process_media_deletion_outbox_item(
       )
       return
 
-    S3Service(settings).delete_object(bucket=bucket, object_key=object_key)
+    s3 = S3Service(settings)
+    delete = s3.delete_object_permanently if is_private_hair_object_key(object_key) else s3.delete_object
+    delete(bucket=bucket, object_key=object_key)
 
     async with db.pool.acquire() as connection:
       async with connection.transaction():
