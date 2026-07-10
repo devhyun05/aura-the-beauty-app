@@ -1,0 +1,58 @@
+{
+  "pic2": [
+    {
+      "kind": "lip_corner",
+      "x": 116,
+      "y": 90,
+      "r": 6
+    },
+    {
+      "kind": "lip_corner",
+      "x": 234,
+      "y": 93,
+      "r": 6
+    }
+  ],
+  "pic4": [
+    {
+      "kind": "lip_corner",
+      "x": 125,
+      "y": 100,
+      "r": 7
+    },
+    {
+      "kind": "lip_corner",
+      "x": 266,
+      "y": 97,
+      "r": 7
+    }
+  ],
+  "psd05": [
+    {
+      "kind": "lip_corner",
+      "x": 201,
+      "y": 166,
+      "r": 12
+    },
+    {
+      "kind": "lip_corner",
+      "x": 451,
+      "y": 157,
+      "r": 12
+    }
+  ],
+  "psd03": [
+    {
+      "kind": "lip_corner",
+      "x": 207,
+      "y": 198,
+      "r": 13
+    },
+    {
+      "kind": "lip_corner",
+      "x": 491,
+      "y": 176,
+      "r": 13
+    }
+  ]
+}
