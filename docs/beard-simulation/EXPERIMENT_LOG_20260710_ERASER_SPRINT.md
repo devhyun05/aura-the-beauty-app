@@ -115,8 +115,60 @@ psd02 0.945 / psd03 2.771 / psd04 **0.887** / psd05 **0.653**
 
 ---
 
+## Step 1 — CorrectionContext + A(가는 털 inpaint) · **채택**
+
+### 계획 수정 (증거 기반)
+
+계획서의 A는 `masks.hard`에서 형태학으로 얇은 구조를 뽑으라고 했다. **틀렸다.**
+`hard`는 털을 담고 있지 않다 — (a) `segment_beard`가 strand_cov>0.28에서 통짜 덩어리로 solidify하고
+(`beard_segmentation.py:302-309`), (b) 출시 구성은 `hard = max(c1.hard, clipseg_region*0.9)`로 **넓은
+지대**로 덮어쓴다. 덩어리를 형태학으로 얇게 하면 **가장자리 껍질**이 나오지 털이 아니다.
+
+→ 대신 **crop 휘도에서 black-hat으로 직접** 얇고 어두운 구조를 찾는다(C1이 쓰는 연산자, 커널 fw×0.010).
+마스크의 출처·의미와 무관하게 동작한다. 지대(`union>0.2`) 안으로 제한하고 보호막 제외.
+strand 커버리지 >35%면 "털이 아니라 덩어리"로 보고 A를 건너뛴다(stats에 기록).
+
+### 구현
+
+- `CorrectionContext`(신설): black-hat 1회 + Telea 2회만 보유. 주파수 분리는 **stage별로 유지** —
+  blur는 선형이나 strand 가중치가 비선형이라 hoist하면 결과가 달라진다.
+- A는 **원본 uint8 crop**에 Telea(radius fw/150) → 양자화 주입 0.
+- low = blur(**strand 제거된** base) → 털의 어둠이 low에 안 섞인다(스미어 #3 제거).
+- `_stubble_inpaint` 삭제. `stubble_inpaint` 인자는 하위호환 유지(strand_strength 기본값 선택용).
+- `pipeline.py`: context를 사진당 1회 빌드해 사다리 전체에 관통. configs에 `strand_strength` 0.35/0.65/0.90.
+
+### 게이트 — 전부 통과
+
+| 항목 | 기준 | 실측 |
+|---|---|---|
+| 기존 테스트 무수정 통과 | 전부 | **51 passed** |
+| context 시간 | ≤1.5s | **0.262s/장** (최대 0.704) |
+| stage 시간 | ≤0.3s | **0.022s/stage** (기존 0.263 → **12배**) |
+| 입술 불변식 | diff 0 | **9장 전부 0** |
+| 스미어 육안 감소 | 필수 | **아래 참조** |
+
+### 시각 관문 (육안 기록) — `outputs/waxiness/compare_step0_step1/cmp_psd04.jpg`
+
+STEP0(before) 확대: **턱 아래에 직선 경계를 가진 납작하고 어두운 직사각형 블록**이 있다.
+`union>0.22`를 이진화해 팽창시킨 inpaint 마스크의 경계가 그대로 이미지에 찍힌 것 — 이것이 사용자가
+말한 "피부를 뭉갠다"의 정체다. 블록 내부는 결이 사라지고 광택이 돈다.
+
+STEP1(after): **그 블록과 직선 경계가 완전히 사라졌다.** 피부 결과 잔털이 경계 없이 이어진다.
+
+수치도 일치: psd04 strong waxiness **0.887 → 1.041** (과평탄화에서 목표 1.0으로 복귀),
+psd02 0.945→0.922, psd05 0.653→0.675. streak 변화 없음(1.606→1.601) — 새 아티팩트 없음.
+
+pic 세트는 waxiness가 소폭 상승(털이 더 남음): `_stubble_inpaint`의 넓은 점 제거(`hard>0.45`)를
+훨씬 보수적인 strand 마스크(ROI의 0.2~1.2%)로 교체했기 때문. **이 스프린트의 목표는 결 보존**이고
+"덜 지움"은 Step 2/3 이후 강도 재조정으로 다룬다.
+
+### 남은 것
+
+`low_inpainted`는 아직 uint8 왕복 Telea다(양자화 주입 0.577 RMS 잔존). Step 2에서 통째로 제거된다.
+
+---
+
 ## 다음
 
-Step 1 — `CorrectionContext`(사진당 1회) + A(가는 털만 full-res Telea, `_stubble_inpaint` 삭제).
-게이트: 기존 테스트 전부 green / context ≤1.5s·stage ≤0.3s(psd04) / 스미어 육안 감소.
-A는 원본 uint8 crop에 직접 적용하므로 위의 양자화 주입이 발생하지 않는다.
+Step 2 — B: Telea-on-low 삭제 → `_local_reference_lab` 목표장으로 크로마(a,b) 이동 + L 부분 이동.
+게이트: `test_correction_moves_shadow_toward_skin` **무수정 통과** / ΔE 개선 / 턱그늘 육안 보존.

@@ -2,6 +2,7 @@
 stage: medium
 shadow_strength: 0.60
 hair_attenuation: 0.60
+strand_strength: 0.65   # A: thin-strand inpaint blend-back
 stubble_inpaint: false
 feather_ratio: 0.035
 global_strength: 0.95

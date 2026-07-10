@@ -21,7 +21,7 @@ import yaml
 
 from . import blend, consult
 from .beard_segmentation import BeardMasks, fit_skin_model, segment_beard
-from .beard_shadow_corrector import correct_crop
+from .beard_shadow_corrector import build_correction_context, correct_crop
 from .contracts import PROTECT_OVERLAP_REJECT_RATIO, validate_result
 from .detect_face import detect_landmarks, detect_face
 from .geometry_guard import (
@@ -191,14 +191,20 @@ def run_pipeline(
 
     stage_results: list[dict] = []
     failures: list[dict] = []
-    metrics: dict = {"maskStats": masks.stats, "stages": {}}
+    # Built once: black-hat plus two Telea passes, none of which depend on the
+    # stage. The mitigation ladder can call the corrector four times per stage
+    # across three stages, so hoisting them turns 12 inpaint pairs into one.
+    # The ladder's eroded masks only reweight the blend; a fill computed from the
+    # superset mask stays valid.
+    ctx = build_correction_context(crop, masks)
+    metrics: dict = {"maskStats": {**masks.stats, **ctx.stats}, "stages": {}}
 
     for stage in stages:
         base_params = _shaving_state_adjust(
             load_stage_config(config_dir, stage), survey["shavingState"])
         guard_cfg = base_params.get("guard", {})
         report, result_img, soft = _run_stage_with_mitigations(
-            bgr, crop, masks, base_params, detection, pre, guard_cfg)
+            bgr, crop, masks, base_params, detection, pre, guard_cfg, ctx)
 
         stage_png = f"result_{stage}.png"
         if result_img is not None:
@@ -298,6 +304,7 @@ def _run_stage_with_mitigations(
     detection,
     pre_check,
     guard_cfg: dict,
+    context=None,
 ) -> tuple[GuardReport, np.ndarray | None, np.ndarray | None]:
     applied: list[str] = []
     last_report: GuardReport | None = None
@@ -310,12 +317,15 @@ def _run_stage_with_mitigations(
         strength_scale = tweak.get("strength_scale", 1.0)
         feather = params.get("feather_ratio", 0.035) * tweak.get("feather_scale", 1.0)
 
+        strand = params.get("strand_strength")
         corrected = correct_crop(
             crop,
             stage_masks,
             shadow_strength=params["shadow_strength"] * strength_scale,
             hair_attenuation=params["hair_attenuation"] * strength_scale,
             stubble_inpaint=params.get("stubble_inpaint", False),
+            strand_strength=None if strand is None else strand * strength_scale,
+            context=context,
         )
         soft = blend.derive_soft_blend(crop, stage_masks, feather)
         result_img = blend.composite_full(

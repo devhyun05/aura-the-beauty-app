@@ -28,7 +28,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from engine.beard_segmentation import BeardMasks, fit_skin_model, segment_beard  # noqa: E402
-from engine.beard_shadow_corrector import correct_crop  # noqa: E402
+from engine.beard_shadow_corrector import (  # noqa: E402
+    build_correction_context, correct_crop,
+)
 from engine.blend import composite_full, derive_soft_blend  # noqa: E402
 from engine.detect_face import detect_face  # noqa: E402
 from engine.lower_face_roi import (  # noqa: E402
@@ -98,16 +100,25 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
                 "streak": streak_score(img, zone, lm, fw),
                 "chromaDeltaAb": chroma_delta_ab(img, zone, lm, fw)}
 
+    t0 = time.perf_counter()
+    ctx = build_correction_context(crop, masks)
+    rec_ctx_s = time.perf_counter() - t0
+
     rec: dict = {
         "id": name, "zonePx": int(zone.sum()), "segSeconds": round(seg_s, 3),
+        "ctxSeconds": round(rec_ctx_s, 3),
+        "strandCoverage": ctx.stats.get("strandCoverage"),
+        "strandSkipped": ctx.stats.get("strandSkipped"),
         "original": score(bgr), "stages": {},
     }
+
     panels = [bgr]
     for stage in STAGES:
         p = load_stage_config(CONFIGS, stage)
         t0 = time.perf_counter()
         corrected = correct_crop(crop, masks, p["shadow_strength"],
-                                 p["hair_attenuation"], p.get("stubble_inpaint", False))
+                                 p["hair_attenuation"], p.get("stubble_inpaint", False),
+                                 strand_strength=p.get("strand_strength"), context=ctx)
         corr_s = time.perf_counter() - t0
         soft = derive_soft_blend(crop, masks, p.get("feather_ratio", 0.035))
         result = composite_full(bgr, corrected, crop, soft, p.get("global_strength", 1.0))
@@ -170,8 +181,13 @@ def main() -> int:
     print(f"waxiness monotone (orig >= mild >= medium >= strong): {mono}/{len(records)}")
     t_corr = [r["stages"][s]["correctSeconds"] for r in records for s in STAGES]
     t_seg = [r["segSeconds"] for r in records]
+    t_ctx = [r.get("ctxSeconds", 0.0) for r in records]
     print(f"\ntiming: segment {np.mean(t_seg):.3f}s/photo   "
+          f"context {np.mean(t_ctx):.3f}s/photo (max {max(t_ctx):.3f})   "
           f"correct {np.mean(t_corr):.3f}s/stage (max {max(t_corr):.3f})")
+    print("strand coverage: " + "  ".join(
+        f"{r['id']}={r.get('strandCoverage') or 0:.3f}"
+        + ("(SKIP)" if r.get("strandSkipped") else "") for r in records))
 
     (out_dir / "waxiness.json").write_text(json.dumps(records, indent=2))
     print(f"\noutputs -> {out_dir}")
