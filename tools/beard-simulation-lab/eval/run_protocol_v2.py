@@ -54,14 +54,16 @@ from eval.run_owndomain_eval import (  # noqa: E402
 OUT_DIR = Path(__file__).resolve().parents[1] / "outputs" / "protocol_v2"
 SWEEP = (0.05, 0.08, 0.12, 0.15, 0.2, 0.3, 0.4)
 
-# Per-predictor operating point (best IoU from eval/bench_models.py).
-OP = {"c1": 0.05, "clipseg": 0.12}
+# Per-predictor operating point. clipseg uses raw sigmoid (normalize=False);
+# its best-mean-IoU point moved to ~0.06 (raw) from 0.12 (normalized).
+OP = {"c1": 0.05, "clipseg": 0.06}
 
 
 def _clipseg(crop) -> np.ndarray:
     from eval.bench_models import clipseg_heat
 
-    return clipseg_heat("CIDAS/clipseg-rd64-refined", crop.bgr, ["beard stubble"])
+    return clipseg_heat("CIDAS/clipseg-rd64-refined", crop.bgr, ["beard stubble"],
+                        normalize=False)
 
 
 def evaluate_pair(name: str, img_path: Path, mask_path: Path,

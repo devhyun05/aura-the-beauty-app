@@ -63,17 +63,65 @@ CLIPSeg의 진짜 적은 해상도가 아니라 **절대 보정 부재(스프레
 zoom을 **recall 소스**로, C1의 알갱이(텍스처) 게이트를 **precision 필터**로 결합하는 것이
 Stage 3의 직접 근거가 됐다. `spike/clipseg_zoom.py`는 폐기하지 않고 Stage 3에서 재사용.
 
-## SKIPPED / 방향 전환
+## Stage 3 · 융합 시도 — 게이트 3종 전부 **기각**, raw-sigmoid 채택
 
-- 기법 2(부위 프롬프트)·3(TTA): 단독으로는 보정 문제 미해결이 자명 → Stage 3에서 융합의
-  일부로만 검토. 순수 CLIPSeg 짜내기를 더 갈지 않고 Stage 3로 진행.
+`spike/grain_gate.py` + `spike/eval_fusion.py`. 모두 v2.1 REGION, 전역 동작점(best mean IoU).
+비교 대상 `full` = whole-crop raw-sigmoid CLIPSeg: **mean 0.507 / worst 0.329**.
+
+| 시도 | mean IoU | worst IoU | 판정 |
+|---|---|---|---|
+| full (raw-sigmoid) | **0.507** | **0.329** | 기준 |
+| pixel grain gate | 0.186 | 0.020 | 기각 |
+| zone grain gate | 0.259 | 0.000 | 기각 |
+| 절대 히스테리시스(t_high 0.30) | 0.376 | 0.000 | 기각 |
+| 상대 히스테리시스(0.55·max) | 0.444/0.483 | 0.257/0.118 | 기각 |
+
+**게이트별 실패 근본원인**:
+- **grain 게이트(알갱이 테스트의 코드화)**: 고주파 에너지는 수염↔피부가 아니라 **선명함↔흐림**을
+  가른다. 계측: psd(고해상 사진)는 clean-skin grain이 2.3~4.1로 커서 문턱 5.4~9.4 → 수염이 못 넘어
+  GT 안 게이트 발화 **2~9%**, pic(매끈 피부)는 GT 밖에서도 65~70% 무차별 발화. clean-skin 상대화도
+  못 구제(같은 이미지 안에서 이마 모공 grain ≈ 볼 수염 grain).
+- **pixel grain**: 채워진 REGION GT에 구멍을 뚫음. `zone_grain_filter`(덩어리 단위 유지)로 고쳤으나
+  → 이번엔 거대 blob이 스프레이와 합쳐져 grain 비율 희석 + psd는 애초에 grain 미발화로 통째 기각.
+  육안 `fusion_psd05.jpg`: full IoU 0.724가 색종이 조각(0.044)으로 붕괴.
+- **히스테리시스**: 절대 t_high는 저확신 이미지(psd01 최대 0.175)를 통째 기각(← **또 미보정**).
+  상대 t_high는 스프레이가 진짜 수염과 한 blob으로 연결돼 분리 실패 + 정상 케이스의 저확신 말단 절단.
+
+**공통 결론**: CLIPSeg heat에 대한 어떤 값싼 비지도 후처리도 스프레이/옅음/그늘을 못 가른다.
+반복해서 **이미지 간 미보정**이 모든 시도를 무너뜨린다. → Stage 4(학습) 정당화.
+
+## 채택 — raw sigmoid (min-max 정규화 제거)
+
+융합 실패의 부산물로 확정된 유일한 순증분. min-max 정규화는 각 이미지 peak를 1.0으로 끌어올려
+**거의 수염 없는 얼굴의 잡음까지 만점 확신으로 부풀린다** — 스프레이의 수치적 뿌리를 증폭.
+raw sigmoid로 바꾸면(둘 다 best-mean 동작점 선택, 공정):
+
+| CLIPSeg | mean IoU | worst IoU | 인중 R | soul_patch R |
+|---|---|---|---|---|
+| 정규화(v21_baseline, thr0.08) | 0.491 | 0.239 | 0.791 | 0.540 |
+| **raw(v21_raw, thr0.06)** | **0.507** | **0.329** | **0.898** | **0.613** |
+
+`eval/bench_models.py`에 `normalize` 파라미터(기본 True=하위호환), 프로토콜은 `normalize=False`.
+배관손실 여전히 ~0.000. pytest 39 passed(자 테스트 10 포함). 엔진 blend 무변경 → 입술 불변식 유지.
+
+## Stage 4 트리거 — **발동**
+
+현재 최고: mean IoU 0.507(<0.55) **및** worst 0.329(<0.35). 두 조건 모두 미달 → 학습 착수 정당.
+근거: ①~③가 반복적으로 부딪힌 벽(이미지 간 미보정 + 스프레이/그늘/옅음 무료 판별기 부재)은
+정확히 라벨 학습이 푸는 문제다. ND 2,350 하관 크롭으로 소형 seg 학습(로컬 우선).
+
+## SKIPPED
+
+- 기법 2(부위 프롬프트)·3(TTA): 미보정을 못 건드림이 자명 → 미실행, Stage 4로 직행.
 
 ## 커밋
 
 - 8d2d345 REGION 표준 + 자 테스트 + 시각 관문
-- (다음) Stage 2 spike 기록 + 본 로그
+- 4c397c0 Stage 2 타일줌 spike(기각, 이월)
+- (다음) Stage 3 게이트 spike(전부 기각) + raw-sigmoid 채택 + 본 로그
 
-## 다음
+## 시각 관문 이미지 (사람 사후확인용)
 
-Stage 3 — region_prior 융합 + 알갱이(텍스처) 게이트. zoom heat를 zone 후보로,
-C1 hard(픽셀 단위)로 판정, shadow는 텍스처 없으면 기각. v2.1 잣대로 최악·평균 IoU 판정.
+- `outputs/visual_gate/region_transform_grid.jpg` — REGION 변환 9장
+- `outputs/visual_gate/stage2_zoom/zoom_{pic4,pic2,psd05}.jpg` — 줌 gain-up 증거
+- `outputs/visual_gate/stage3_fusion/fusion_{pic4,pic2,psd01,psd05}.jpg` — 게이트 붕괴 증거

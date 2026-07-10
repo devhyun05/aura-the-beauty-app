@@ -68,8 +68,18 @@ def load_clipseg(name: str):
     return _CACHE[name]
 
 
-def clipseg_heat(model_name: str, bgr_crop: np.ndarray, prompts: list[str]) -> np.ndarray:
-    """Mean sigmoid heatmap over prompts, min-max normalized. Returns crop-sized."""
+def clipseg_heat(model_name: str, bgr_crop: np.ndarray, prompts: list[str],
+                 normalize: bool = True) -> np.ndarray:
+    """Mean sigmoid heatmap over prompts, resized to the crop.
+
+    normalize=True is the historical min-max rescale (kept as default so existing
+    callers and their thresholds are unchanged). It turned out to HURT: min-max
+    rescales every image's peak to 1.0, so a nearly beardless face's faint noise
+    blooms to full confidence -- amplifying exactly the cross-image
+    miscalibration that makes CLIPSeg spray. Raw sigmoid (normalize=False) beats
+    it on both mean IoU (0.491 -> 0.507) and worst-case IoU (0.239 -> 0.329)
+    against REGION GT, so the protocol operating config uses normalize=False.
+    """
     import torch
 
     proc, model, _ = load_clipseg(model_name)
@@ -82,8 +92,9 @@ def clipseg_heat(model_name: str, bgr_crop: np.ndarray, prompts: list[str]) -> n
     if heat.ndim == 3:
         heat = heat.mean(0)
     heat = heat.squeeze().numpy().astype(np.float32)
-    heat -= heat.min()
-    heat /= max(heat.max(), 1e-6)
+    if normalize:
+        heat -= heat.min()
+        heat /= max(heat.max(), 1e-6)
     return cv2.resize(heat, (bgr_crop.shape[1], bgr_crop.shape[0]))
 
 
