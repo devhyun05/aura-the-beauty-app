@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-11",
+  "what": "Variant B (keyed replacement, commit cc46a01) low-band stain residual vs reconstruction target S (robust quadratic + multi-scale NC residual, computed regardless of gate). stain = zone & (S_L - orig_L_low > 2). L in 0-255 units.",
+  "script": "session scratchpad probe_low_residual.py (deterministic rebuild of spike B)",
+  "results": {
+    "pic2":  {"gate": "fallback", "stainPx": 5547,  "zonePx": 10879, "needL_q50": 18.2, "needL_q90": 52.4, "residualL_q50": 18.2, "residualL_q90": 53.5, "residualFraction": 1.00, "abDist_q90_orig": 6.1, "abDist_q90_B": 4.9},
+    "psd03": {"gate": "fallback", "stainPx": 37103, "zonePx": 57294, "needL_q50": 22.0, "needL_q90": 60.5, "residualL_q50": 24.2, "residualL_q90": 66.1, "residualFraction": 1.10, "abDist_q90_orig": 8.6, "abDist_q90_B": 4.8},
+    "psd05": {"gate": "fallback", "stainPx": 22381, "zonePx": 56485, "needL_q50": 6.3,  "needL_q90": 12.6, "residualL_q50": 5.4,  "residualL_q90": 12.5, "residualFraction": 0.87, "abDist_q90_orig": 4.8, "abDist_q90_B": 3.2},
+    "pic4":  {"gate": "full",     "stainPx": 2488,  "zonePx": 9396,  "needL_q50": 3.9,  "needL_q90": 7.0,  "residualL_q50": 3.6,  "residualL_q90": 7.4,  "residualFraction": 0.96, "abDist_q90_orig": 2.4, "abDist_q90_B": 1.6}
+  },
+  "reading": "B removes hair high-band (ghost gate 0.00) but leaves 87-110% of the diffused low-band darkness; chroma (ab) does improve. The user-rejected '색 퍼짐' is the untouched low band. Needed lift reaches 60 L where C's cap was 7-12 L."
+}
