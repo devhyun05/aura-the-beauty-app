@@ -16,6 +16,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 JWKS_CACHE_TTL_SECONDS = 600
 _jwks_cache: dict[str, dict[str, Any]] = {}
+CONSULTING_ADMIN_GROUPS = frozenset({"admin", "operator", "business_manager"})
 
 
 @dataclass(frozen=True)
@@ -175,3 +176,24 @@ async def get_current_user(
     raise AppError(401, "UNAUTHORIZED", "Authorization bearer token is required.")
 
   return await verify_cognito_token(credentials.credentials, settings)
+
+
+def cognito_groups(auth: AuthContext) -> frozenset[str]:
+  groups = auth.claims.get("cognito:groups")
+  if isinstance(groups, str):
+    groups = [groups]
+  if not isinstance(groups, list):
+    return frozenset()
+  return frozenset(str(group).strip().lower() for group in groups if str(group).strip())
+
+
+def require_consulting_admin(
+  auth: AuthContext = Depends(get_current_user),
+) -> AuthContext:
+  if not cognito_groups(auth).intersection(CONSULTING_ADMIN_GROUPS):
+    raise AppError(
+      403,
+      "CONSULTING_ADMIN_FORBIDDEN",
+      "Consulting administrator or operator access is required.",
+    )
+  return auth
