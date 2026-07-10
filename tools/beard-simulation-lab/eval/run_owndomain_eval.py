@@ -34,6 +34,7 @@ from engine.lower_face_roi import (  # noqa: E402
 LAB_ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = LAB_ROOT / "samples"
 PSD_DIR = SAMPLES / "302beardPhotos_layers_separated"
+HOLDOUT_DIR = SAMPLES / "holdout"
 OUT_DIR = LAB_ROOT / "outputs" / "owndomain_eval"
 
 MAX_DIM = 1536  # matches the pipeline's working resolution
@@ -55,6 +56,28 @@ def discover_pairs() -> list[tuple[str, Path, Path]]:
             msk = next(PSD_DIR.glob(f"group_{grp}_*layer_02*.png"), None)
             if msk:
                 pairs.append((f"psd{grp}", img, msk))
+    return pairs
+
+
+def discover_holdout_pairs() -> list[tuple[str, Path, Path]]:
+    """The fresh holdout, deliberately NOT returned by discover_pairs().
+
+    Every adopt/reject decision in Stages 0-4 was made against the same 9 dev
+    photos, so those decisions are fitted to them ("garden of forking paths").
+    These pairs are shot and labelled afterwards and are touched ONCE, to check
+    whether the adopted config generalizes. They must never enter tuning, so
+    they live in their own directory and their own discovery function; a ruler
+    test asserts the two sets stay disjoint.
+    """
+    pairs: list[tuple[str, Path, Path]] = []
+    if not HOLDOUT_DIR.is_dir():
+        return pairs
+    for img in sorted(HOLDOUT_DIR.glob("hold*.png")):
+        if img.stem.endswith("_green"):
+            continue
+        msk = HOLDOUT_DIR / f"{img.stem}_green.png"
+        if msk.exists():
+            pairs.append((img.stem, img, msk))
     return pairs
 
 

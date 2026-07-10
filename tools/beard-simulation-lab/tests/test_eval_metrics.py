@@ -16,7 +16,7 @@ import pytest
 
 from eval.bands import band_recall
 from eval.gt_region import region_from_strands
-from eval.run_owndomain_eval import _score
+from eval.run_owndomain_eval import _score, discover_holdout_pairs, discover_pairs
 
 
 def _rect(shape, y0, y1, x0, x1) -> np.ndarray:
@@ -107,6 +107,18 @@ def test_band_metrics_are_none_when_the_band_is_empty() -> None:
 
 
 # --- REGION ground-truth transform (the approved label standard) ------------
+
+def test_holdout_never_leaks_into_the_tuning_set() -> None:
+    """Every Stage 0-4 decision was fitted to the 9 dev photos; the holdout is
+    the only unfitted evidence we have. Naming one `pic5.png` would silently
+    pull it into discover_pairs() and burn it."""
+    dev = {name for name, _, _ in discover_pairs()}
+    hold = {name for name, _, _ in discover_holdout_pairs()}
+    assert dev.isdisjoint(hold)
+    dev_paths = {p.resolve() for _, p, m in discover_pairs() for p in (p, m)}
+    hold_paths = {p.resolve() for _, p, m in discover_holdout_pairs() for p in (p, m)}
+    assert dev_paths.isdisjoint(hold_paths)
+
 
 def test_region_fills_the_gap_between_two_nearby_strands() -> None:
     """The whole point of REGION: sparse hairs close into one zone."""
