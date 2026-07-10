@@ -131,6 +131,44 @@ Table media_assets {
   Note: 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.'
 }
 
+Table media_upload_sessions {
+  id uuid [pk]
+  owner_user_id uuid
+  partner_account_id uuid
+  media_kind text [not null]
+  source media_source_type [not null]
+  bucket text [not null]
+  object_key text [not null]
+  cdn_url text
+  content_type text [not null]
+  expected_byte_size bigint
+  width integer
+  height integer
+  original_filename text
+  thumbnail_bucket text
+  thumbnail_object_key text
+  thumbnail_cdn_url text
+  thumbnail_content_type text
+  thumbnail_expected_byte_size bigint
+  thumbnail_width integer
+  thumbnail_height integer
+  status text [not null, default: 'pending', note: 'pending | completed | expired']
+  media_asset_id uuid
+  expires_at timestamptz [not null]
+  completed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (bucket, object_key) [unique]
+    (thumbnail_bucket, thumbnail_object_key) [unique]
+    (owner_user_id, status, expires_at)
+    (partner_account_id, status, expires_at)
+    (expires_at)
+  }
+
+  Note: 'Server-issued, principal-bound S3 upload locations consumed exactly once.'
+}
+
 Table photo_captures {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
@@ -791,6 +829,29 @@ Table consulting_partner_sessions {
   Note: 'Hashed partner workspace session tokens for consulting-web.'
 }
 
+Table consulting_partner_applications {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email citext [not null]
+  name text [not null]
+  title text [not null]
+  studio_name text
+  phone text
+  message text
+  status text [not null, default: 'submitted', note: 'submitted | needs_update | approved | rejected']
+  expert_id text
+  rejection_reason text
+  reviewed_by_subject text
+  reviewed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (email) [unique, note: 'Partial unique index for submitted/needs_update statuses']
+  }
+
+  Note: 'Consultant signup applications reviewed by Cognito admin/operator users.'
+}
+
 Table consulting_message_media {
   id uuid [pk, default: `gen_random_uuid()`]
   message_id uuid [not null]
@@ -911,6 +972,9 @@ Table audit_logs {
 
 Ref: users.avatar_media_id > media_assets.id
 Ref: media_assets.owner_user_id > users.id
+Ref: media_upload_sessions.owner_user_id > users.id
+Ref: media_upload_sessions.partner_account_id > consulting_partner_accounts.id
+Ref: media_upload_sessions.media_asset_id > media_assets.id
 
 Ref: photo_captures.user_id > users.id
 Ref: photo_captures.media_id > media_assets.id
@@ -989,6 +1053,7 @@ Ref: consulting_messages.booking_id > consulting_bookings.id
 Ref: consulting_messages.sender_user_id > users.id
 Ref: consulting_partner_accounts.expert_id > consulting_experts.id
 Ref: consulting_partner_sessions.account_id > consulting_partner_accounts.id
+Ref: consulting_partner_applications.expert_id > consulting_experts.id
 Ref: consulting_message_media.message_id > consulting_messages.id
 Ref: consulting_message_media.media_id > media_assets.id
 Ref: user_consulting_memberships.user_id > users.id

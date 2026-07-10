@@ -78,6 +78,55 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/ar/filters`
 - `GET /api/ar/filter-states`
 - `PUT /api/ar/filter-states/{filterId}`
+- `POST /api/consulting/partner/applications`
+- `POST /api/consulting/partner/me/password`
+- `POST /api/consulting/partner/login`
+- `GET /api/consulting/admin/partner-applications`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/approve`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/needs-update`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/reject`
+
+### Consultant Signup And Approval
+
+Consultant onboarding uses an approval flow; there is no remote development-account
+issuer and no fixed password in source code.
+
+1. Consulting-web submits `POST /api/consulting/partner/applications` with the
+   applicant email, name, title, and optional profile/contact fields. The public
+   response uses the same submitted shape so existing account emails cannot be enumerated.
+2. An authenticated Cognito `admin`, `operator`, or `business_manager` lists pending
+   applications. The admin first creates/selects the matching expert profile, then
+   approves with `{ "expertId": "..." }` or rejects the application.
+3. Approval returns a randomly generated temporary password once to the authorized
+   admin. Only its PBKDF2 hash is persisted, and all previous sessions are revoked.
+4. The partner signs in with the temporary password and is restricted to
+   `POST /api/consulting/partner/me/password` until a new password is set.
+5. After the password change, the account becomes active and workspace APIs are enabled.
+
+### Media Upload Sessions
+
+`POST /api/media/presigned-upload` creates a one-time upload session bound to
+the authenticated user. The response includes `uploadId` and the server-issued
+S3 target. An optional nested `thumbnail` request returns `thumbnailUpload`
+under the same session.
+
+After every issued target has been uploaded, the client calls
+`POST /api/media/complete-upload` with only the session identifier:
+
+```json
+{
+  "uploadId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+The backend resolves bucket and object keys from the session, verifies S3
+metadata, checks the session principal, and consumes the session once. Clients
+must not send or persist a replacement bucket, object key, or CDN URL.
+
+During the mobile rollout transition, the legacy bucket/objectKey completion
+shape is accepted only as an exact lookup for a still-valid server-issued
+session owned by the same authenticated principal. Those client values are
+never inserted directly into `media_assets`.
 
 ### Account Deletion
 

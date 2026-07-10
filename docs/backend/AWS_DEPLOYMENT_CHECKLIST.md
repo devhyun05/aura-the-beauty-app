@@ -76,6 +76,21 @@ Authorization: Bearer <Cognito JWT>
 - Kakao/Naver are later provider extensions. Do not block them in DB/provider
   structure, but do not deploy them as required auth paths yet.
 
+### Partner credential rotation
+
+Partner credentials are not issued through an HTTP API. Before deploying this
+change, rotate existing partner credentials from a trusted operator terminal:
+
+```bash
+cd services/backend
+.venv/bin/python scripts/rotate_partner_credentials.py --confirm rotate-partner-credentials --output ./partner-credentials.json
+```
+
+- The output file is created with owner-only permissions and must not already exist.
+- Deliver each credential through an approved secret-sharing channel, then securely remove the file.
+- Rotation replaces legacy password hashes and revokes every existing partner session.
+- Confirm `POST /api/consulting/partner/dev/issue-accounts` returns `404` after deployment.
+
 ## 3. S3 Media Bucket
 
 - Create the media bucket.
@@ -91,9 +106,37 @@ CLOUDFRONT_DOMAIN=
 - Upload flow:
 
 ```text
-POST /api/media/presigned-upload
+POST /api/media/presigned-upload -> uploadId + server-issued target
 mobile PUT to S3
-POST /api/media/complete-upload
+POST /api/media/complete-upload { uploadId }
+```
+
+- Restrict the ECS task role to the configured media bucket and the
+  `uploads/*` object prefix. Do not grant object access to `arn:aws:s3:::*`.
+  Replace `<media-bucket>` before applying this example:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectTagging"],
+      "Resource": "arn:aws:s3:::<media-bucket>/uploads/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": "arn:aws:s3:::<media-bucket>",
+      "Condition": {"StringLike": {"s3:prefix": ["uploads/*"]}}
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetBucketVersioning",
+      "Resource": "arn:aws:s3:::<media-bucket>"
+    }
+  ]
+}
 ```
 
 ## 4. OpenAI API

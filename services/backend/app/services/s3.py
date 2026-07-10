@@ -2,9 +2,28 @@ from uuid import uuid4
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from app.core.errors import AppError
+from app.core.media_policy import ALLOWED_UPLOAD_MEDIA_KINDS, upload_extension_for_content_type
 from app.core.settings import Settings
+
+
+SERVER_MANAGED_MEDIA_KINDS = {
+  "face-analysis",
+  "generated-makeup",
+  "optimized",
+  "photo-captures",
+  "recommended-makeups",
+}
+MANAGED_MEDIA_OBJECT_PREFIXES = tuple(
+  f"uploads/{kind}/"
+  for kind in sorted(
+    ALLOWED_UPLOAD_MEDIA_KINDS
+    | {f"{kind}-thumbnail" for kind in ALLOWED_UPLOAD_MEDIA_KINDS}
+    | SERVER_MANAGED_MEDIA_KINDS,
+  )
+)
 
 
 class S3Service:
@@ -36,20 +55,24 @@ class S3Service:
 
     return boto3.client("s3", **client_kwargs)
 
+  def assert_managed_media_location(self, *, bucket: str, object_key: str) -> None:
+    configured_bucket = self.settings.s3_bucket_name
+    if not configured_bucket:
+      raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for media access.")
+    if bucket != configured_bucket or not object_key.startswith(MANAGED_MEDIA_OBJECT_PREFIXES):
+      raise AppError(403, "S3_TARGET_NOT_MANAGED", "The requested object is outside the managed media location.")
+
   def create_presigned_upload(
     self,
     media_kind: str,
     content_type: str,
     original_filename: str | None,
     expires_in: int = 900,
-  ) -> dict[str, str | int]:
+  ) -> dict[str, str | int | None]:
     if not self.settings.s3_bucket_name:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for uploads.")
 
-    extension = ""
-
-    if original_filename and "." in original_filename:
-      extension = "." + original_filename.rsplit(".", 1)[1].lower()
+    extension = upload_extension_for_content_type(content_type)
 
     object_key = f"uploads/{media_kind}/{uuid4()}{extension}"
     cache_control = "public, max-age=31536000, immutable"
@@ -59,7 +82,6 @@ class S3Service:
         "Bucket": self.settings.s3_bucket_name,
         "ContentType": content_type,
         "Key": object_key,
-        "ContentType": content_type,
         "CacheControl": cache_control,
       },
       ExpiresIn=expires_in,
@@ -82,4 +104,20 @@ class S3Service:
     if not bucket or not object_key:
       raise AppError(400, "S3_DELETE_TARGET_REQUIRED", "S3 bucket and object key are required.")
 
+    self.assert_managed_media_location(bucket=bucket, object_key=object_key)
     self._client().delete_object(Bucket=bucket, Key=object_key)
+
+  def get_object_metadata(self, *, bucket: str, object_key: str) -> dict[str, str | int]:
+    self.assert_managed_media_location(bucket=bucket, object_key=object_key)
+    try:
+      response = self._client().head_object(Bucket=bucket, Key=object_key)
+    except ClientError as exc:
+      error_code = str(exc.response.get("Error", {}).get("Code") or "")
+      if error_code in {"404", "NoSuchKey", "NotFound"}:
+        raise AppError(409, "UPLOAD_OBJECT_NOT_FOUND", "The uploaded object was not found.") from exc
+      raise AppError(503, "S3_METADATA_UNAVAILABLE", "The uploaded object could not be verified.") from exc
+
+    return {
+      "byte_size": int(response.get("ContentLength") or 0),
+      "content_type": str(response.get("ContentType") or "application/octet-stream").split(";", 1)[0].lower(),
+    }

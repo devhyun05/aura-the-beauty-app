@@ -65,7 +65,13 @@ async def _drive_query(prompt: str, settings) -> dict:
   """세션 생성 → (질문은 noop 통과) → 결과. 실서빙과 동일한 persisted 경로."""
   started = time.monotonic()
   questions_seen: list[dict] = []
-  state = await create_session_persisted(prompt=prompt, settings=settings, db=None)
+  owner_subject = "auradin-live-reliability"
+  state = await create_session_persisted(
+    prompt=prompt,
+    owner_subject=owner_subject,
+    settings=settings,
+    db=None,
+  )
   for _ in range(4):
     if state.get("phase") != "question":
       break
@@ -76,6 +82,7 @@ async def _drive_query(prompt: str, settings) -> dict:
     questions_seen.append(question)  # noop으로 넘기기 전, 3-2 questionCopy 적용본을 캡처
     state = await answer_session_persisted(
       state["sessionId"],
+      owner_subject=owner_subject,
       question_id=question["id"],
       option_id=options[-1]["id"],
       settings=settings,
