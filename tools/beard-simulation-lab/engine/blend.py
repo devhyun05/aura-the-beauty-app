@@ -11,7 +11,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from .beard_segmentation import BeardMasks
+from .beard_segmentation import BeardMasks, confidence_ramp
 from .lower_face_roi import LowerFaceCrop
 
 
@@ -20,8 +20,16 @@ def derive_soft_blend(
 ) -> np.ndarray:
     union = np.maximum(masks.hard, masks.shadow) * crop.roi_mask
     union = union * (1 - crop.protect_mask)
-    sigma = max(1.5, feather_ratio * crop.face_width)
-    soft = cv2.GaussianBlur(union, (0, 0), sigmaX=sigma)
+    # The alpha's job is the SPATIAL seam, not confidence weighting -- the
+    # corrector already weighted every edit by mask confidence, so multiplying
+    # raw union in again squares it (0.57 mean alpha inside psd04's zone core,
+    # which threw away half the correction). Saturate first, then feather.
+    core = confidence_ramp(union)
+    blurred = cv2.GaussianBlur(core, (0, 0),
+                               sigmaX=max(1.5, feather_ratio * crop.face_width))
+    # max() keeps the core at full strength where the blur of a thin band
+    # would sag below it, while the blur alone supplies the outward falloff.
+    soft = np.maximum(blurred, core)
     # Feathering must never leak into the protect area.
     soft = soft * (1 - crop.protect_mask)
     return np.clip(soft, 0, 1).astype(np.float32)

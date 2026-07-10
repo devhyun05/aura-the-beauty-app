@@ -26,7 +26,9 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from .beard_segmentation import BeardMasks, SkinModel, local_skin_reference
+from .beard_segmentation import (
+    BeardMasks, SkinModel, confidence_ramp, local_skin_reference,
+)
 from .lower_face_roi import LowerFaceCrop
 
 # Never remove all high-frequency signal — a fully flat patch reads as
@@ -38,18 +40,28 @@ MAX_HIGH_ATTENUATION = 0.85
 # hair, narrow enough that a solid beard blob is not "thin".
 _STRAND_KERNEL_RATIO = 0.010
 # Keep only the darkest tail of the black-hat response inside the zone.
-_STRAND_PERCENTILE = 94.0
+# 94 left the mid-dark hairs standing ("아예 안 지워진 것처럼 보여"); 90 widens
+# the net to the top 10% while _MAX_STRAND_COVERAGE still rejects solid masses.
+_STRAND_PERCENTILE = 90.0
 # Above this the "strands" are really a solid mass; inpainting it would be the
 # directional smear we are removing. Fall through to the shadow/high branches.
 _MAX_STRAND_COVERAGE = 0.35
 _ZONE_FLOOR = 0.20  # only look for strands where the detector says beard
 
-# How much of the luminance gap to the skin reference we close. Below 1.0 on
-# purpose: the beard's visible signature is a bluish-grey CAST, which lives in
-# chroma, while L legitimately varies across the face because the jaw is in
-# shade. Closing L fully would erase the face's own modelling and read as a flat
-# pasted patch.
-DEFAULT_LUMA_SHIFT = 0.75
+# The local reference keeps illumination, but its CHROMA must stay believable
+# skin. On psd05 the field drifted 11-13 ab-units from the person's global skin
+# chroma across the whole zone (healthy photos sit under 6) and full-strength
+# correction painted that drift as an orange stain. Trust the local field's
+# shading; cap how far its colour may wander from the global skin model.
+_MAX_REF_AB_DEV = 6.0
+
+# How much of the luminance gap to the skin reference we close. The old 0.75
+# guarded against flattening the jaw's shading, but that fear belonged to the
+# global skin target: the LOCAL reference field keeps the illumination
+# gradient by construction, so closing the gap fully follows the face's own
+# shading instead of erasing it. At 0.75 the exposed stubble-mean stayed ~10
+# gray levels under the inter-hair skin and read as a grey band (psd04).
+DEFAULT_LUMA_SHIFT = 1.0
 
 
 def _odd(value: float) -> int:
@@ -158,6 +170,14 @@ def build_correction_context(
     # flat. This field is a normalized Gaussian average of the person's nearby
     # clean skin, so it is smooth, edge-free, and keeps the illumination gradient.
     local_ref_lab = local_skin_reference(crop, masks.hard, skin_model)
+    if skin_model is not None:
+        dev = local_ref_lab[..., 1:] - skin_model.mean[1:]
+        norm = np.linalg.norm(dev, axis=-1, keepdims=True)
+        scale = np.minimum(1.0, _MAX_REF_AB_DEV / np.maximum(norm, 1e-6))
+        clamped = float((scale < 1.0).mean())
+        local_ref_lab = local_ref_lab.copy()
+        local_ref_lab[..., 1:] = skin_model.mean[1:] + dev * scale
+        stats["refChromaClamped"] = clamped
 
     return CorrectionContext(strand=strand, clean_full=clean_full,
                              local_ref_lab=local_ref_lab, stats=stats)
@@ -197,9 +217,14 @@ def correct_crop(
 
     # B: shadow is low-frequency colour. Move the low layer's chroma home to the
     # local skin reference, and its luminance only partway, so the jaw keeps its
-    # own shading instead of being lit flat.
-    shadow_w = np.clip(masks.shadow * shadow_strength
-                       + masks.hard * shadow_strength * 0.6, 0, 1)
+    # own shading instead of being lit flat. Confidence is saturated first:
+    # where the detector is sure, the stage strength alone decides how far the
+    # colour moves (raw confidence here plus raw union in the composite alpha
+    # squared the confidence and left the exposed stubble-mean as a grey band).
+    conf_shadow = confidence_ramp(masks.shadow)
+    conf_hard = confidence_ramp(masks.hard)
+    shadow_w = np.clip(conf_shadow * shadow_strength
+                       + conf_hard * shadow_strength * 0.6, 0, 1)
     low_lab = _bgr_to_lab(low)
     delta = ctx.local_ref_lab - low_lab
     low_lab[..., 0] += delta[..., 0] * shadow_w * luma_shift_frac
@@ -208,7 +233,18 @@ def correct_crop(
     low_out = _lab_to_bgr(low_lab)
 
     # C: stubble is high-frequency.
-    hair_w = np.clip(masks.hard * hair_attenuation, 0, MAX_HIGH_ATTENUATION)[..., None]
+    hair_w = np.clip(conf_hard * hair_attenuation, 0, MAX_HIGH_ATTENUATION)[..., None]
     high_out = high * (1 - hair_w)
+
+    # Inside a dark stubble band the high layer is not zero-mean: the blur that
+    # made `low` pulled the brighter surroundings in, so `high` carries the
+    # band's average darkness (-5 gray on psd04), whose attenuated residual
+    # prints straight into the result as a grey band. Texture's job is detail,
+    # not tone -- hand the local mean back to the (shifted) low layer by
+    # removing it, gated on zone confidence so pixels outside the beard keep
+    # their exact high layer.
+    conf_zone = np.maximum(conf_hard, conf_shadow)[..., None]
+    debt = cv2.GaussianBlur(high_out, (0, 0), sigmaX=max(2.0, crop.face_width / 30))
+    high_out = high_out - debt * conf_zone
 
     return np.clip(low_out + high_out, 0, 255).astype(np.uint8)

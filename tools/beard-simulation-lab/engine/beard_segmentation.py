@@ -69,6 +69,20 @@ def _smoothstep(edge0: float, edge1: float, values: np.ndarray) -> np.ndarray:
     return (t * t * (3 - 2 * t)).astype(np.float32)
 
 
+def confidence_ramp(mask: np.ndarray, floor: float = 0.15,
+                    saturate: float = 0.60) -> np.ndarray:
+    """Detector confidence -> edit strength, saturating.
+
+    The masks are confidence fields, and confidence used to be multiplied into
+    the edit twice -- once as the corrector's weight, once as the composite
+    alpha -- so a 0.75-confident zone was only ~half erased (0.75 x 0.57 on
+    psd04, measured). Confidence should pick WHERE to edit; the stage strength
+    says HOW MUCH. Above `saturate` the detector has already said "beard" as
+    loudly as it can, so strength is 1; below `floor` it is speckle and gets 0.
+    """
+    return _smoothstep(floor, saturate, mask)
+
+
 def _normalize_feature(
     feature: np.ndarray,
     sample_mask: np.ndarray,

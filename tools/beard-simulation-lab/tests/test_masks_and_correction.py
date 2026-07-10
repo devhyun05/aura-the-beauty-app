@@ -10,8 +10,10 @@ import numpy as np
 
 from engine.beard_segmentation import (
     _CLIPSEG_CACHE,
+    BeardMasks,
     _component_filter,
     _load_clipseg_components,
+    confidence_ramp,
     fit_skin_model,
     segment_beard,
 )
@@ -195,7 +197,31 @@ def test_clipseg_component_loader_uses_process_cache() -> None:
     _CLIPSEG_CACHE["model"] = None
 
 
-def test_correction_moves_shadow_toward_skin() -> None:
+def test_confidence_ramp_saturates_and_zeroes_speckle() -> None:
+    vals = np.array([0.0, 0.10, 0.15, 0.60, 0.75, 1.0], dtype=np.float32)
+    out = confidence_ramp(vals)
+    assert out[0] == 0.0 and out[1] == 0.0 and out[2] == 0.0   # speckle -> 0
+    assert out[3] == 1.0 and out[4] == 1.0 and out[5] == 1.0   # confident -> full
+    mid = confidence_ramp(np.array([0.2, 0.3, 0.4, 0.5], dtype=np.float32))
+    assert np.all(np.diff(mid) > 0)                            # monotone between
+
+
+def test_soft_blend_core_is_full_strength_for_a_confident_zone() -> None:
+    """A 0.75-confident zone must composite at ~1.0 in its core.
+
+    The old alpha multiplied raw confidence in a second time (the corrector
+    already weights by it), so a 0.75 zone kept only ~half of its correction
+    -- the measured cause of psd04's grey chin band.
+    """
+    crop, _ = _synthetic_crop()
+    hard = np.zeros_like(crop.roi_mask)
+    hard[180:300, 40:260] = 0.75
+    masks = BeardMasks(hard=hard, shadow=np.zeros_like(hard),
+                       protect=crop.protect_mask, stats={})
+    soft = derive_soft_blend(crop, masks)
+    assert soft[230:250, 140:160].min() > 0.95      # zone core: full strength
+    assert soft[crop.protect_mask > 0.5].max() == 0.0
+    assert soft[102:106, 12:16].max() == 0.0        # far corner inside roi: untouched
     crop, ref = _synthetic_crop()
     model = fit_skin_model(ref)
     masks = segment_beard(crop, model)
@@ -205,6 +231,42 @@ def test_correction_moves_shadow_toward_skin() -> None:
     before_dist = np.abs(crop.bgr[zone].astype(np.float32) - SKIN_BGR).mean()
     after_dist = np.abs(corrected[zone].astype(np.float32) - SKIN_BGR).mean()
     assert after_dist < before_dist * 0.7
+
+
+def test_zone_mean_darkness_is_not_printed_into_the_result() -> None:
+    """Erasing dense stubble must not leave its average darkness as a grey band.
+
+    The blur that builds the low layer pulls bright surroundings into a dark
+    stubble patch, so the high layer's local mean inside the patch is negative;
+    attenuating it printed that mean into the composite (psd04's chin band).
+    After correction the patch's tone must sit near the surrounding skin, not
+    near the stubble-averaged grey.
+    """
+    crop, ref = _synthetic_crop()
+    model = fit_skin_model(ref)
+    # Draw our own dense, deterministic stubble patch: the module RNG's state
+    # depends on test order, which would make the premise flaky.
+    img = crop.bgr.copy()
+    for y in range(200, 280, 4):
+        for x in range(200, 280, 4):
+            cv2.circle(img, (x, y), 1, (35, 30, 40), -1)
+    crop.bgr[:] = img
+    dots = np.zeros_like(crop.roi_mask)
+    dots[195:285, 195:285] = 1.0
+    masks = BeardMasks(hard=dots * 0.9, shadow=dots * 0.9,
+                       protect=crop.protect_mask, stats={})
+    corrected = correct_crop(crop, masks, shadow_strength=0.85,
+                             hair_attenuation=0.85, strand_strength=0.0)
+
+    lum = cv2.cvtColor(corrected, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    lum_orig = cv2.cvtColor(crop.bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    zone_after = lum[210:270, 210:270].mean()
+    clean_skin = lum_orig[160:180, 200:300].mean()   # untouched skin nearby
+    zone_before = lum_orig[210:270, 210:270].mean()
+    # The stubble dots darken the zone well below clean skin; the correction
+    # must recover most of that gap instead of leaving the grey average.
+    assert clean_skin - zone_before > 10.0           # premise: visible darkening
+    assert clean_skin - zone_after < 6.0             # band gone (within noise)
 
 
 def test_composite_untouched_outside_blend_mask() -> None:

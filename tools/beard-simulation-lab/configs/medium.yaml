@@ -4,7 +4,7 @@ shadow_strength: 0.60
 hair_attenuation: 0.60
 strand_strength: 0.65   # A: thin-strand inpaint blend-back
 stubble_inpaint: false
-luma_shift_frac: 0.75  # B: keep the jaw's own shading; the cast lives in chroma
+luma_shift_frac: 1.0   # B: full close -- the LOCAL reference already carries the jaw shading
 feather_ratio: 0.035
 global_strength: 0.95
 guard:
