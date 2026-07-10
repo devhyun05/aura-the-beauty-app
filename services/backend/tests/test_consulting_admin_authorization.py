@@ -33,6 +33,22 @@ ADMIN_REQUESTS = (
   ("POST", "/api/consulting/admin/bookings/booking-1/complete", None),
   ("PATCH", "/api/consulting/admin/bookings/booking-1/status", {"status": "completed"}),
   ("PUT", "/api/consulting/admin/bookings/booking-1/summary", {}),
+  ("GET", "/api/consulting/admin/partner-applications", None),
+  (
+    "POST",
+    "/api/consulting/admin/partner-applications/11111111-1111-1111-1111-111111111111/approve",
+    {"expertId": "expert-1"},
+  ),
+  (
+    "POST",
+    "/api/consulting/admin/partner-applications/11111111-1111-1111-1111-111111111111/reject",
+    {},
+  ),
+  (
+    "POST",
+    "/api/consulting/admin/partner-applications/11111111-1111-1111-1111-111111111111/needs-update",
+    {},
+  ),
 )
 
 

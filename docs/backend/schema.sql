@@ -138,7 +138,7 @@ create table if not exists media_upload_sessions (
   thumbnail_expected_byte_size bigint,
   thumbnail_width integer,
   thumbnail_height integer,
-  status text not null default 'pending',
+  status text not null default 'submitted',
   media_asset_id uuid,
   expires_at timestamptz not null,
   completed_at timestamptz,
@@ -1097,6 +1097,29 @@ create table if not exists consulting_partner_sessions (
   last_seen_at timestamptz
 );
 
+create table if not exists consulting_partner_applications (
+  id uuid primary key default gen_random_uuid(),
+  email citext not null,
+  name text not null,
+  title text not null,
+  studio_name text,
+  phone text,
+  message text,
+  status text not null default 'pending',
+  expert_id text,
+  rejection_reason text,
+  reviewed_by_subject text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_consulting_partner_applications_status
+    check (status in ('submitted', 'needs_update', 'approved', 'rejected'))
+);
+
+create unique index if not exists uq_consulting_partner_applications_pending_email
+  on consulting_partner_applications (email) where status in ('submitted', 'needs_update');
+
+
 create table if not exists consulting_message_media (
   id uuid primary key default gen_random_uuid(),
   message_id uuid not null,
@@ -1252,6 +1275,11 @@ alter table consulting_partner_sessions
   drop constraint if exists fk_consulting_partner_sessions_account,
   add constraint fk_consulting_partner_sessions_account
   foreign key (account_id) references consulting_partner_accounts(id) on delete cascade;
+
+alter table consulting_partner_applications
+  drop constraint if exists fk_consulting_partner_applications_expert,
+  add constraint fk_consulting_partner_applications_expert
+  foreign key (expert_id) references consulting_experts(id) on delete set null;
 
 alter table media_upload_sessions
   drop constraint if exists fk_media_upload_sessions_owner_user,

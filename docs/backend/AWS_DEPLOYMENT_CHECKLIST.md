@@ -76,6 +76,21 @@ Authorization: Bearer <Cognito JWT>
 - Kakao/Naver are later provider extensions. Do not block them in DB/provider
   structure, but do not deploy them as required auth paths yet.
 
+### Partner credential rotation
+
+Partner credentials are not issued through an HTTP API. Before deploying this
+change, rotate existing partner credentials from a trusted operator terminal:
+
+```bash
+cd services/backend
+.venv/bin/python scripts/rotate_partner_credentials.py --confirm rotate-partner-credentials --output ./partner-credentials.json
+```
+
+- The output file is created with owner-only permissions and must not already exist.
+- Deliver each credential through an approved secret-sharing channel, then securely remove the file.
+- Rotation replaces legacy password hashes and revokes every existing partner session.
+- Confirm `POST /api/consulting/partner/dev/issue-accounts` returns `404` after deployment.
+
 ## 3. S3 Media Bucket
 
 - Create the media bucket.

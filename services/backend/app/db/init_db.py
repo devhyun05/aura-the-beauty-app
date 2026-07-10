@@ -298,15 +298,68 @@ POST_SCHEMA_MIGRATIONS = {
       last_seen_at timestamptz
     );
 
+    create table if not exists consulting_partner_applications (
+      id uuid primary key default gen_random_uuid(),
+      email citext not null,
+      name text not null,
+      title text not null,
+      studio_name text,
+      phone text,
+      message text,
+      status text not null default 'submitted',
+      expert_id text,
+      rejection_reason text,
+      reviewed_by_subject text,
+      reviewed_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_consulting_partner_applications_status check (status in ('submitted', 'needs_update', 'approved', 'rejected'))
+    );
+
+    create unique index if not exists uq_consulting_partner_applications_pending_email
+      on consulting_partner_applications (email) where status in ('submitted', 'needs_update');
+
     do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_accounts_expert') then
       alter table consulting_partner_accounts add constraint fk_consulting_partner_accounts_expert foreign key (expert_id) references consulting_experts(id) on delete cascade;
     end if; end $migration$;
     do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_sessions_account') then
       alter table consulting_partner_sessions add constraint fk_consulting_partner_sessions_account foreign key (account_id) references consulting_partner_accounts(id) on delete cascade;
     end if; end $migration$;
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_applications_expert') then
+      alter table consulting_partner_applications add constraint fk_consulting_partner_applications_expert foreign key (expert_id) references consulting_experts(id) on delete set null;
+    end if; end $migration$;
 
     create index if not exists idx_consulting_partner_accounts_expert on consulting_partner_accounts (expert_id);
     create index if not exists idx_consulting_partner_sessions_account_expires on consulting_partner_sessions (account_id, expires_at);
+  """,
+  "schema.sql:consulting-partner-onboarding-v1": """
+    create extension if not exists pgcrypto;
+    create extension if not exists citext;
+
+    create table if not exists consulting_partner_applications (
+      id uuid primary key default gen_random_uuid(),
+      email citext not null,
+      name text not null,
+      title text not null,
+      studio_name text,
+      phone text,
+      message text,
+      status text not null default 'submitted',
+      expert_id text,
+      rejection_reason text,
+      reviewed_by_subject text,
+      reviewed_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_consulting_partner_applications_status check (status in ('submitted', 'needs_update', 'approved', 'rejected'))
+    );
+
+    create unique index if not exists uq_consulting_partner_applications_pending_email
+      on consulting_partner_applications (email) where status in ('submitted', 'needs_update');
+
+    do $migration$ begin if not exists (select 1 from pg_constraint where conname = 'fk_consulting_partner_applications_expert') then
+      alter table consulting_partner_applications add constraint fk_consulting_partner_applications_expert foreign key (expert_id) references consulting_experts(id) on delete set null;
+    end if; end $migration$;
   """,
   "schema.sql:consulting-request-flow-v1": """
     alter table consulting_bookings add column if not exists contact_name text;

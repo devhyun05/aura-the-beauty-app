@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 
 from app.core.responses import success
@@ -10,8 +12,12 @@ from app.schemas.consulting import (
   BookingCreate,
   ReviewCreate,
 )
+from app.schemas.consulting_partner import (
+  AdminPartnerApplicationApprove,
+  AdminPartnerApplicationReject,
+)
 from app.core.settings import Settings, get_settings
-from app.services import consulting, consulting_places
+from app.services import consulting, consulting_partner, consulting_places
 from app.services.users import ensure_user
 
 
@@ -229,3 +235,65 @@ async def upsert_consulting_admin_booking_summary(
 ) -> dict:
   await ensure_user(db, auth)
   return success({"record": await consulting.upsert_booking_summary(db, booking_id, payload)})
+
+
+@router.get("/admin/partner-applications")
+async def get_consulting_admin_partner_applications(
+  status: str = Query(default="submitted", pattern="^(all|submitted|needs_update|approved|rejected)$"),
+  auth: AuthContext = Depends(require_consulting_admin),
+  db: Database = Depends(require_database),
+) -> dict:
+  await ensure_user(db, auth)
+  applications = await consulting_partner.list_partner_applications(db, status)
+  return success({"applications": applications})
+
+
+@router.post("/admin/partner-applications/{application_id}/approve")
+async def approve_consulting_admin_partner_application(
+  application_id: UUID,
+  payload: AdminPartnerApplicationApprove,
+  auth: AuthContext = Depends(require_consulting_admin),
+  db: Database = Depends(require_database),
+) -> dict:
+  await ensure_user(db, auth)
+  approved = await consulting_partner.approve_partner_application(
+    db,
+    str(application_id),
+    payload.expert_id,
+    auth.subject,
+  )
+  return success(approved)
+
+
+@router.post("/admin/partner-applications/{application_id}/reject")
+async def reject_consulting_admin_partner_application(
+  application_id: UUID,
+  payload: AdminPartnerApplicationReject,
+  auth: AuthContext = Depends(require_consulting_admin),
+  db: Database = Depends(require_database),
+) -> dict:
+  await ensure_user(db, auth)
+  rejected = await consulting_partner.reject_partner_application(
+    db,
+    str(application_id),
+    auth.subject,
+    payload.reason,
+  )
+  return success({"application": rejected})
+
+
+@router.post("/admin/partner-applications/{application_id}/needs-update")
+async def request_consulting_admin_partner_application_update(
+  application_id: UUID,
+  payload: AdminPartnerApplicationReject,
+  auth: AuthContext = Depends(require_consulting_admin),
+  db: Database = Depends(require_database),
+) -> dict:
+  await ensure_user(db, auth)
+  application = await consulting_partner.request_partner_application_update(
+    db,
+    str(application_id),
+    auth.subject,
+    payload.reason,
+  )
+  return success({"application": application})
