@@ -116,9 +116,18 @@ def prepare_photo(name: str, img_path: Path, gt_path: Path):
     key_zone = (cv2.dilate(key_zone.astype(np.uint8),
                            np.ones((3, 3), np.uint8)) > 0)
     key_zone &= (crop.protect_mask < 0.5) & (crop.roi_mask > 0.5)
+    # Candidate zone for spike v2: the SAME upward extension as the key, with
+    # the gate's dilated-protect subtraction kept. Spike v1 scored candidates
+    # on the strict zone while the key extended upward, so hairs in the
+    # extension were neither edited nor judged (cross-validation finding,
+    # 2026-07-11). Frozen-from-original methodology is unchanged.
+    cand_zone = key_zone & ~protect_d
+    cands_ext = _apply_exclusions(
+        name, find_candidates(excess, cand_zone, crop.face_width))
     return dict(bgr=bgr, det=det, skin=skin, crop=crop, zone=zone, thr=thr,
                 cands=cands, cand_px=cand_px, digest=digest, clean=clean,
-                maps=maps, name=name, key_zone=key_zone)
+                maps=maps, name=name, key_zone=key_zone,
+                cand_zone=cand_zone, cands_ext=cands_ext)
 
 
 def build_broad_key(ctx: dict, percentile: float = 95.0,
@@ -161,6 +170,61 @@ def build_broad_key(ctx: dict, percentile: float = 95.0,
             for c in circles:
                 key &= ((yy - c["y"]) ** 2 + (xx - c["x"]) ** 2) > c["r"] ** 2
     return key
+
+
+def build_soft_high_weight(ctx: dict, onset_percentile: float = 95.0,
+                           seed_w: float = 0.7, support_w: float = 0.15,
+                           ) -> np.ndarray:
+    """Continuous high-band replacement weight: soft support, saturated core.
+
+    Replaces the binary broad key for COMPOSITING (the key stays for overlays
+    and audits). A binary key at any threshold either misses low-contrast
+    hairs or partially replaces everywhere (back to attenuation); the
+    cross-validated shape is: robust-z normalization of both absolute and
+    luminance-relative black-hat against clean skin, soft onset at the clean
+    p95 quantile, saturation (w=1) at the clean p99 + one onset-gap above --
+    so every gate-grade hair core is FULLY replaced -- plus hysteresis: weak
+    support only survives when connected to a confident seed, which keeps
+    isolated noise out without abandoning the faint tail of a real hair.
+    """
+    lum = cv2.cvtColor(ctx["crop"].bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    base = np.maximum(cv2.GaussianBlur(lum, (0, 0), 8.0), 8.0)
+    fw = ctx["crop"].face_width
+    w = np.zeros(lum.shape, np.float32)
+    for variant_maps in (ctx["maps"],
+                         {s: bh / base for s, bh in ctx["maps"].items()}):
+        for sname, bh in variant_maps.items():
+            vals = bh[ctx["clean"]]
+            med = float(np.median(vals))
+            mad = max(float(np.median(np.abs(vals - med))), 1e-6)
+            z = (bh - med) / mad
+            z_on = (float(np.percentile(vals, onset_percentile)) - med) / mad
+            z_p99 = (float(np.percentile(vals, 99.0)) - med) / mad
+            z_sat = z_p99 + max(z_p99 - z_on, 1.0)
+            w = np.maximum(w, np.clip((z - z_on) / max(z_sat - z_on, 1e-6),
+                                      0.0, 1.0))
+    w *= ctx["key_zone"].astype(np.float32)
+    if _EXCLUSIONS.exists():
+        circles = json.loads(_EXCLUSIONS.read_text()).get(ctx["name"], [])
+        if circles:
+            yy, xx = np.mgrid[0:w.shape[0], 0:w.shape[1]]
+            for c in circles:
+                w[((yy - c["y"]) ** 2 + (xx - c["x"]) ** 2) <= c["r"] ** 2] = 0.0
+
+    # Hysteresis: support components must contain a seed.
+    support = (w > support_w).astype(np.uint8)
+    n, labels = cv2.connectedComponents(support, connectivity=8)
+    seeded = np.zeros(n, bool)
+    seed_labels = np.unique(labels[w >= seed_w])
+    seeded[seed_labels[seed_labels > 0]] = True
+    w[~seeded[labels]] = 0.0
+
+    # Halo: feather scaled to face width so the replaced core doesn't end in a
+    # hard cliff against the surviving skin texture.
+    k = max(3, int(0.004 * fw) | 1)
+    w = cv2.dilate(w, np.ones((k, k), np.float32))
+    w = cv2.GaussianBlur(w, (0, 0), max(1.0, 0.003 * fw))
+    return np.clip(w, 0.0, 1.0)
 
 
 def overlay(ctx: dict, out_path: Path) -> None:
