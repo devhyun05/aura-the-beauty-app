@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "default": "allow",
+  "allow_commit_with_hooks": true,
+  "_note": "Trusted local toy project. default=allow so the beard-lab's own `.venv/bin/python <script>` runs and `git checkout` rollback works unattended. The catastrophic floor is NOT softened: load_policy re-inserts the hard denies (fs.destructive/rm -rf, secret.exfil, deploy.prod, policy.tamper) even though they are absent here, and secret_decision/tamper_decision run in code regardless -- so `curl --data @<secret>` is still a deny even though curl itself is now allowed. User decisions: network egress (curl|sh) is allowed; sudo is a hard deny, never; push stays denied per the plan.",
+  "rules": [
+    {"action": "git.push", "decision": "deny", "match": ["git push"]},
+    {"action": "auth.change", "decision": "deny", "match": ["sudo"]},
+    {"action": "auth.change", "decision": "ask", "match": ["chown", "chgrp", "launchctl", "security ", "gh auth", "aws configure"]}
+  ]
+}
