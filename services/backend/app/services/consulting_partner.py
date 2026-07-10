@@ -499,6 +499,35 @@ def _shared_report_from_feedback(row: dict[str, Any], booking_id: str | None = N
   }
 
 
+def _recommended_makeup_images(detail_payload: dict[str, Any]) -> list[dict[str, Any]]:
+  result = detail_payload.get("result") if isinstance(detail_payload, dict) else None
+  cards = result.get("recommendedMakeups") if isinstance(result, dict) else None
+  if not isinstance(cards, list):
+    return []
+
+  images: list[dict[str, Any]] = []
+  for index, card in enumerate(cards):
+    if not isinstance(card, dict):
+      continue
+    image_url = next(
+      (
+        str(card[key]).strip()
+        for key in ("imageUrl", "cdnUrl", "previewUrl", "image_url")
+        if card.get(key) and str(card[key]).strip()
+      ),
+      "",
+    )
+    if not image_url:
+      continue
+    images.append(
+      {
+        "title": str(card.get("title") or f"AI 추천 메이크업 {index + 1}"),
+        "image_url": image_url,
+      }
+    )
+  return images
+
+
 def _default_partner_operating_hours() -> list[dict[str, Any]]:
   labels = ["월", "화", "수", "목", "금", "토", "일"]
   return [
@@ -1223,14 +1252,22 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
     raise AppError(404, "PARTNER_REPORT_NOT_FOUND", "예약에 연결된 리포트를 찾을 수 없습니다.")
   analysis = await db.fetchrow(
     """
-    select *
-    from analysis_reports
-    where id::text = $1
+    select
+      r.*,
+      coalesce(source.thumbnail_cdn_url, source.cdn_url) as source_image_url,
+      coalesce(preview.thumbnail_cdn_url, preview.cdn_url) as preview_image_url
+    from analysis_reports r
+    left join media_assets source on source.id = r.source_media_id
+    left join media_assets preview on preview.id = r.preview_media_id
+    where r.id::text = $1
     """,
     report_id,
   )
   if analysis is not None:
     row = dict(analysis)
+    detail_payload = _decode_json(row.get("detail_payload"), {})
+    source_image_url = row.get("source_image_url")
+    preview_image_url = row.get("preview_image_url")
     return {
       "report": _shared_report_from_analysis(row),
       "kind": "analysis",
@@ -1245,23 +1282,37 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
         "skin_analysis_summary": row.get("skin_analysis_summary"),
         "base_makeup_guide": row.get("base_makeup_guide"),
         "tags": row.get("tags") or [],
-        "detail_payload": _decode_json(row.get("detail_payload"), {}),
+        "image_url": preview_image_url or source_image_url,
+        "source_image_url": source_image_url,
+        "preview_image_url": preview_image_url,
+        "recommended_makeup_images": _recommended_makeup_images(detail_payload),
+        "detail_payload": detail_payload,
       },
     }
   feedback = await db.fetchrow(
     """
-    select *
-    from makeup_feedback_reports
-    where id::text = $1
+    select
+      r.*,
+      coalesce(media.thumbnail_cdn_url, media.cdn_url) as uploaded_image_url
+    from makeup_feedback_reports r
+    left join media_assets media on media.id = r.uploaded_media_id
+    where r.id::text = $1
     """,
     report_id,
   )
   if feedback is not None:
     row = dict(feedback)
+    detail = _decode_json(row.get("feedback_payload"), {})
+    if isinstance(detail, dict):
+      detail = {
+        **detail,
+        "image_url": row.get("uploaded_image_url"),
+        "source_image_url": row.get("uploaded_image_url"),
+      }
     return {
       "report": _shared_report_from_feedback(row),
       "kind": "feedback",
-      "detail": _decode_json(row.get("feedback_payload"), {}),
+      "detail": detail,
     }
   raise AppError(404, "PARTNER_REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다.")
 
