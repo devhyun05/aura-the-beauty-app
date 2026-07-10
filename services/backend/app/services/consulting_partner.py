@@ -15,11 +15,8 @@ from app.services.consulting_message_store import list_consulting_messages
 
 
 PARTNER_SESSION_TTL_DAYS = 14
-DEFAULT_PARTNER_PASSWORDS: dict[str, str] = {
-  "exp_sea": "AuraSea!2026",
-  "exp_doa": "AuraDoa!2026",
-  "exp_lian": "AuraRian!2026",
-}
+PARTNER_PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
+PARTNER_PASSWORD_HASH_ITERATIONS = 600_000
 DEFAULT_PARTNER_EMAILS: dict[str, str] = {
   "exp_sea": "seah.kim@aura-partner.local",
   "exp_doa": "doa.jung@aura-partner.local",
@@ -76,11 +73,32 @@ def _hash_secret(value: str) -> str:
 
 
 def _password_hash(password: str, salt: str) -> str:
-  return _hash_secret(f"{salt}:{password}")
+  digest = hashlib.pbkdf2_hmac(
+    "sha256",
+    password.encode("utf-8"),
+    salt.encode("utf-8"),
+    PARTNER_PASSWORD_HASH_ITERATIONS,
+  )
+  return f"{PARTNER_PASSWORD_HASH_SCHEME}${PARTNER_PASSWORD_HASH_ITERATIONS}${digest.hex()}"
 
 
 def _verify_password(password: str, salt: str, expected_hash: str) -> bool:
-  return secrets.compare_digest(_password_hash(password, salt), expected_hash)
+  if not expected_hash.startswith(f"{PARTNER_PASSWORD_HASH_SCHEME}$"):
+    return False
+  try:
+    _, iterations_text, expected_digest = expected_hash.split("$", 2)
+    iterations = int(iterations_text)
+  except (TypeError, ValueError):
+    return False
+  if iterations < 100_000 or iterations > 2_000_000:
+    return False
+  digest = hashlib.pbkdf2_hmac(
+    "sha256",
+    password.encode("utf-8"),
+    salt.encode("utf-8"),
+    iterations,
+  ).hex()
+  return secrets.compare_digest(digest, expected_digest)
 
 
 def _partner_email_for(expert: dict[str, Any]) -> str:
@@ -91,12 +109,8 @@ def _partner_email_for(expert: dict[str, Any]) -> str:
   return f"{normalized_name or expert_id}@aura-partner.local"
 
 
-def _partner_password_for(expert: dict[str, Any]) -> str:
-  expert_id = str(expert["id"])
-  if expert_id in DEFAULT_PARTNER_PASSWORDS:
-    return DEFAULT_PARTNER_PASSWORDS[expert_id]
-  suffix = _hash_secret(expert_id)[:8]
-  return f"Aura{suffix}!2026"
+def _new_partner_password() -> str:
+  return secrets.token_urlsafe(24)
 
 
 def _map_booking_status(status: str) -> str:
@@ -539,6 +553,35 @@ async def ensure_partner_account_schema(db: Database) -> None:
   )
   await db.execute(
     """
+    create table if not exists consulting_partner_applications (
+      id uuid primary key default gen_random_uuid(),
+      email citext not null,
+      name text not null,
+      title text not null,
+      studio_name text,
+      phone text,
+      message text,
+      status text not null default 'submitted',
+      expert_id text,
+      rejection_reason text,
+      reviewed_by_subject text,
+      reviewed_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_consulting_partner_applications_status
+        check (status in ('submitted', 'needs_update', 'approved', 'rejected'))
+    )
+    """,
+  )
+  await db.execute(
+    """
+    create unique index if not exists uq_consulting_partner_applications_pending_email
+      on consulting_partner_applications (email)
+      where status in ('submitted', 'needs_update')
+    """,
+  )
+  await db.execute(
+    """
     create index if not exists idx_consulting_partner_accounts_expert
       on consulting_partner_accounts (expert_id)
     """,
@@ -551,58 +594,281 @@ async def ensure_partner_account_schema(db: Database) -> None:
   )
 
 
-async def issue_default_partner_accounts(db: Database) -> list[dict[str, Any]]:
+async def rotate_existing_partner_credentials(db: Database) -> list[dict[str, Any]]:
   await ensure_partner_account_schema(db)
-  experts = await db.fetch(
+  accounts = await db.fetch(
     """
-    select *
-    from consulting_experts
-    where is_active = true
-    order by sort_order, id
+    select account.id, account.expert_id, account.email::text,
+      expert.name as expert_name
+    from consulting_partner_accounts account
+    join consulting_experts expert on expert.id = account.expert_id
+    where account.status in ('invited', 'active')
+    order by account.created_at, account.id
     """,
   )
-  issued: list[dict[str, Any]] = []
-  for expert in experts:
-    email = _partner_email_for(expert)
-    password = _partner_password_for(expert)
-    salt = _hash_secret(f"{expert['id']}:{email}")[:24]
-    account = await db.fetchrow(
+  rotated: list[dict[str, Any]] = []
+  for account in accounts:
+    password = _new_partner_password()
+    salt = secrets.token_hex(16)
+    updated = await db.fetchrow(
       """
+      update consulting_partner_accounts
+      set password_hash = $2,
+        password_salt = $3,
+        status = 'active',
+        password_change_required = false,
+        updated_at = now()
+      where id = $1
+      returning id, expert_id, email::text
+      """,
+      account["id"],
+      _password_hash(password, salt),
+      salt,
+    )
+    await db.execute(
+      "delete from consulting_partner_sessions where account_id = $1",
+      updated["id"],
+    )
+    rotated.append(
+      {
+        "id": str(updated["id"]),
+        "expert_id": updated["expert_id"],
+        "expert_name": account["expert_name"],
+        "email": updated["email"],
+        "temporary_password": password,
+      },
+    )
+  return rotated
+
+
+async def submit_partner_application(db: Database, payload: Any) -> dict[str, Any]:
+  await ensure_partner_account_schema(db)
+  application = await db.fetchrow(
+    """
+    insert into consulting_partner_applications (
+      email, name, title, studio_name, phone, message
+    )
+    select $1, $2, $3, $4, $5, $6
+    where not exists (
+      select 1 from consulting_partner_accounts account
+      where account.email = $1
+    )
+    on conflict (email) where status in ('submitted', 'needs_update')
+    do update set
+      name = excluded.name,
+      title = excluded.title,
+      studio_name = excluded.studio_name,
+      phone = excluded.phone,
+      message = excluded.message,
+      status = 'submitted',
+      updated_at = now()
+    returning id::text, email::text, name, title, studio_name, phone, message,
+      status, created_at, updated_at
+    """,
+    payload.email.strip().lower(),
+    payload.name.strip(),
+    payload.title.strip(),
+    (payload.studio_name or "").strip() or None,
+    (payload.phone or "").strip() or None,
+    (payload.message or "").strip() or None,
+  )
+  if application is None:
+    return {"status": "submitted"}
+  return dict(application)
+
+
+async def list_partner_applications(db: Database, status: str) -> list[dict[str, Any]]:
+  await ensure_partner_account_schema(db)
+  condition = "" if status == "all" else "where status = $1"
+  args = () if status == "all" else (status,)
+  return await db.fetch(
+    f"""
+    select id::text, email::text, name, title, studio_name, phone, message,
+      status, expert_id, rejection_reason, reviewed_by_subject, reviewed_at,
+      created_at, updated_at
+    from consulting_partner_applications
+    {condition}
+    order by created_at asc
+    """,
+    *args,
+  )
+
+
+async def approve_partner_application(
+  db: Database,
+  application_id: str,
+  expert_id: str,
+  reviewer_subject: str,
+) -> dict[str, Any]:
+  await ensure_partner_account_schema(db)
+  temporary_password = _new_partner_password()
+  salt = secrets.token_hex(16)
+  approved = await db.fetchrow(
+    """
+    with selected as (
+      select application.id, application.email
+      from consulting_partner_applications application
+      where application.id = $1::uuid
+        and application.status in ('submitted', 'needs_update')
+        and exists (
+          select 1 from consulting_experts expert
+          where expert.id = $2 and expert.is_active = true
+        )
+    ),
+    account as (
       insert into consulting_partner_accounts (
-        expert_id,
-        email,
-        password_hash,
-        password_salt,
-        role,
-        workspace_scope,
-        status,
-        password_change_required
+        expert_id, email, password_hash, password_salt, role,
+        workspace_scope, status, password_change_required
       )
-      values ($1, $2, $3, $4, 'expert', 'expert_personal', 'active', false)
+      select $2, selected.email, $4, $5, 'expert',
+        'expert_personal', 'invited', true
+      from selected
       on conflict (email)
       do update set
         expert_id = excluded.expert_id,
         password_hash = excluded.password_hash,
         password_salt = excluded.password_salt,
-        status = 'active',
+        role = 'expert',
+        workspace_scope = 'expert_personal',
+        status = 'invited',
+        password_change_required = true,
         updated_at = now()
-      returning *
-      """,
-      expert["id"],
-      email,
-      _password_hash(password, salt),
-      salt,
+      returning id, email::text, expert_id, status
+    ),
+    revoked_sessions as (
+      delete from consulting_partner_sessions session
+      using account
+      where session.account_id = account.id
+      returning session.account_id
+    ),
+    approved_application as (
+      update consulting_partner_applications application
+      set status = 'approved',
+          expert_id = $2,
+          rejection_reason = null,
+          reviewed_by_subject = $3,
+          reviewed_at = now(),
+          updated_at = now()
+      from selected
+      where application.id = selected.id
+      returning application.id::text, application.email::text, application.status,
+        application.expert_id, application.reviewed_at
     )
-    issued.append(
-      {
-        "id": str(account["id"]),
-        "expert_id": expert["id"],
-        "expert_name": expert["name"],
-        "email": email,
-        "temporary_password": password,
-      },
+    select approved_application.*, account.id::text as account_id,
+      account.email, account.status as account_status,
+      true as password_change_required
+    from approved_application
+    cross join account
+    """,
+    application_id,
+    expert_id.strip(),
+    reviewer_subject,
+    _password_hash(temporary_password, salt),
+    salt,
+  )
+  if approved is None:
+    raise AppError(
+      409,
+      "PARTNER_APPLICATION_NOT_APPROVABLE",
+      "가입 신청이 대기 상태가 아니거나 활성 상담사 프로필을 찾을 수 없습니다.",
     )
-  return issued
+  return {
+    "application": dict(approved),
+    "account": {
+      "id": approved["account_id"],
+      "expert_id": approved["expert_id"],
+      "email": approved["email"],
+      "temporary_password": temporary_password,
+      "role": "expert",
+      "workspace_scope": "expert_personal",
+      "status": approved["account_status"],
+      "password_change_required": True,
+      "delivered_by": "manual",
+    },
+  }
+
+
+async def reject_partner_application(
+  db: Database,
+  application_id: str,
+  reviewer_subject: str,
+  reason: str | None,
+) -> dict[str, Any]:
+  await ensure_partner_account_schema(db)
+  rejected = await db.fetchrow(
+    """
+    update consulting_partner_applications
+    set status = 'rejected',
+        rejection_reason = $3,
+        reviewed_by_subject = $2,
+        reviewed_at = now(),
+        updated_at = now()
+    where id = $1::uuid and status in ('submitted', 'needs_update')
+    returning id::text, email::text, status, rejection_reason, reviewed_at
+    """,
+    application_id,
+    reviewer_subject,
+    (reason or "").strip() or None,
+  )
+  if rejected is None:
+    raise AppError(409, "PARTNER_APPLICATION_NOT_PENDING", "대기 중인 가입 신청을 찾을 수 없습니다.")
+  return dict(rejected)
+
+
+async def request_partner_application_update(
+  db: Database,
+  application_id: str,
+  reviewer_subject: str,
+  reason: str | None,
+) -> dict[str, Any]:
+  await ensure_partner_account_schema(db)
+  requested = await db.fetchrow(
+    """
+    update consulting_partner_applications
+    set status = 'needs_update',
+        rejection_reason = $3,
+        reviewed_by_subject = $2,
+        reviewed_at = now(),
+        updated_at = now()
+    where id = $1::uuid and status = 'submitted'
+    returning id::text, email::text, status, rejection_reason, reviewed_at
+    """,
+    application_id,
+    reviewer_subject,
+    (reason or "").strip() or None,
+  )
+  if requested is None:
+    raise AppError(409, "PARTNER_APPLICATION_NOT_SUBMITTED", "검토 중인 가입 신청을 찾을 수 없습니다.")
+  return dict(requested)
+
+
+async def change_partner_password(db: Database, account_id: str, password: str) -> dict[str, Any]:
+  await ensure_partner_account_schema(db)
+  salt = secrets.token_hex(16)
+  activated = await db.fetchrow(
+    """
+    update consulting_partner_accounts
+    set password_hash = $2,
+        password_salt = $3,
+        status = 'active',
+        password_change_required = false,
+        updated_at = now()
+    where id = $1::uuid
+      and status = 'invited'
+      and password_change_required = true
+    returning id::text, email::text, expert_id, status, password_change_required
+    """,
+    account_id,
+    _password_hash(password, salt),
+    salt,
+  )
+  if activated is None:
+    raise AppError(
+      400,
+      "PARTNER_PASSWORD_CHANGE_NOT_ALLOWED",
+      "임시 비밀번호 변경이 필요한 계정을 찾을 수 없습니다.",
+    )
+  return dict(activated)
 
 
 async def _account_by_token(db: Database, token: str) -> dict[str, Any] | None:
@@ -632,7 +898,7 @@ async def _account_by_token(db: Database, token: str) -> dict[str, Any] | None:
     join consulting_experts e on e.id = a.expert_id
     where s.token_hash = $1
       and s.expires_at > now()
-      and a.status = 'active'
+      and a.status in ('invited', 'active')
     """,
     _hash_secret(token),
   )
@@ -652,7 +918,7 @@ async def account_for_token(db: Database, token: str) -> dict[str, Any] | None:
 
 async def auth_context_for_partner_token(db: Database, token: str) -> AuthContext | None:
   account = await _account_by_token(db, token)
-  if account is None:
+  if account is None or account.get("status") != "active" or account.get("password_change_required"):
     return None
   return AuthContext(
     subject=str(account["id"]),
@@ -694,7 +960,7 @@ async def login(db: Database, email: str, password: str) -> dict[str, Any]:
     from consulting_partner_accounts a
     join consulting_experts e on e.id = a.expert_id
     where lower(a.email::text) = lower($1)
-      and a.status <> 'suspended'
+      and a.status in ('invited', 'active')
     limit 1
     """,
     email.strip(),

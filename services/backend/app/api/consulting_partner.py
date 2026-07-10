@@ -6,8 +6,10 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.media import CompleteUploadRequest, PresignedUploadRequest
 from app.schemas.consulting_partner import (
+  PartnerApplicationCreate,
   PartnerBookingStatusUpdate,
   PartnerLoginRequest,
+  PartnerPasswordChangeRequest,
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
@@ -21,7 +23,6 @@ from app.services import consulting_partner
 
 
 router = APIRouter(prefix="/consulting/partner", tags=["consulting-partner"])
-PARTNER_ACCOUNT_ISSUE_CONFIRMATION = "issue-default-partner-accounts"
 
 
 def _extract_bearer_token(authorization: str | None, session_token: str | None) -> str | None:
@@ -32,7 +33,7 @@ def _extract_bearer_token(authorization: str | None, session_token: str | None) 
   return None
 
 
-async def get_partner_account(
+async def get_partner_session_account(
   authorization: str | None = Header(default=None),
   session_token: str | None = Header(default=None, alias="X-Partner-Session"),
   db: Database = Depends(require_database),
@@ -48,6 +49,18 @@ async def get_partner_account(
   return account
 
 
+async def get_partner_account(
+  account: dict = Depends(get_partner_session_account),
+) -> dict:
+  if account.get("status") != "active" or account.get("password_change_required"):
+    raise AppError(
+      403,
+      "PARTNER_PASSWORD_CHANGE_REQUIRED",
+      "운영 화면에 접근하기 전에 새 비밀번호를 설정해 주세요.",
+    )
+  return account
+
+
 @router.post("/login")
 async def login_partner(
   payload: PartnerLoginRequest,
@@ -56,17 +69,27 @@ async def login_partner(
   return success(await consulting_partner.login(db, payload.email, payload.password))
 
 
-@router.post("/dev/issue-accounts")
-async def issue_dev_partner_accounts(
-  confirmation: str | None = Header(default=None, alias="X-Partner-Issue-Confirmation"),
-  settings: Settings = Depends(get_settings),
+@router.post("/applications", status_code=201)
+async def create_partner_application(
+  payload: PartnerApplicationCreate,
   db: Database = Depends(require_database),
 ) -> dict:
-  if settings.environment.strip().lower() in {"prod", "production"}:
-    raise AppError(403, "PARTNER_ACCOUNT_ISSUE_DISABLED", "운영 환경에서는 개발용 파트너 계정 발급을 사용할 수 없습니다.")
-  if confirmation != PARTNER_ACCOUNT_ISSUE_CONFIRMATION:
-    raise AppError(400, "PARTNER_ACCOUNT_ISSUE_CONFIRMATION_REQUIRED", "파트너 계정 발급 확인 헤더가 필요합니다.")
-  return success({"accounts": await consulting_partner.issue_default_partner_accounts(db)})
+  await consulting_partner.submit_partner_application(db, payload)
+  return success({"application": {"status": "submitted"}})
+
+
+@router.post("/me/password")
+async def change_partner_password(
+  payload: PartnerPasswordChangeRequest,
+  account: dict = Depends(get_partner_session_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  updated = await consulting_partner.change_partner_password(
+    db,
+    str(account["id"]),
+    payload.new_password,
+  )
+  return success({"account": updated})
 
 
 @router.get("/me")

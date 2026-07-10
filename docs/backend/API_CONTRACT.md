@@ -86,6 +86,30 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `POST /api/hair-simulations/{simulation_id}/save`
 - `GET /api/hair-simulations?saved=true`
 - `DELETE /api/hair-simulations/{simulation_id}`
+- `POST /api/consulting/partner/applications`
+- `POST /api/consulting/partner/me/password`
+- `POST /api/consulting/partner/login`
+- `GET /api/consulting/admin/partner-applications`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/approve`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/needs-update`
+- `POST /api/consulting/admin/partner-applications/{applicationId}/reject`
+
+### Consultant Signup And Approval
+
+Consultant onboarding uses an approval flow; there is no remote development-account
+issuer and no fixed password in source code.
+
+1. Consulting-web submits `POST /api/consulting/partner/applications` with the
+   applicant email, name, title, and optional profile/contact fields. The public
+   response uses the same submitted shape so existing account emails cannot be enumerated.
+2. An authenticated Cognito `admin`, `operator`, or `business_manager` lists pending
+   applications. The admin first creates/selects the matching expert profile, then
+   approves with `{ "expertId": "..." }` or rejects the application.
+3. Approval returns a randomly generated temporary password once to the authorized
+   admin. Only its PBKDF2 hash is persisted, and all previous sessions are revoked.
+4. The partner signs in with the temporary password and is restricted to
+   `POST /api/consulting/partner/me/password` until a new password is set.
+5. After the password change, the account becomes active and workspace APIs are enabled.
 
 ### Media Upload Sessions
 
