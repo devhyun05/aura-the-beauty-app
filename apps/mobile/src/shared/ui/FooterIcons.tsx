@@ -46,7 +46,7 @@ export function ProfileFooterIcon({
   );
 }
 
-export function CommunityFooterIcon({
+export function ConsultingFooterIcon({
   color = colors.black,
   size = iconSize.md,
   strokeWidth = defaultStrokeWidth,

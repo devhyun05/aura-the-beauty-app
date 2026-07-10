@@ -1,9 +1,24 @@
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
 
 from app.schemas.base import CamelModel
+
+
+AccountDeletionReason = Literal[
+  "low_usage",
+  "missing_features",
+  "difficult_to_use",
+  "privacy_concerns",
+  "restart_account",
+  "other",
+]
+
+
+class AccountDeletionRequest(CamelModel):
+  reason: AccountDeletionReason | None = None
 
 
 class ProfileUpdate(CamelModel):

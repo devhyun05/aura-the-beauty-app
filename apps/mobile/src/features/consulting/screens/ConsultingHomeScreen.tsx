@@ -43,6 +43,7 @@ import {
   getConsultingHome,
 } from '../services/consultingService';
 import {isConsultingMessageStatus} from '../services/consultingReadStateService';
+import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import type {
   ConsultingCategory,
   ConsultingCategoryId,
@@ -85,6 +86,7 @@ type ConsultingHomeScreenProps = {
   onPressExpert: (expertId: string) => void;
   onPressExpertList: () => void;
   onPressUpcoming: (record: ConsultingRecord) => void;
+  topPadding?: AppScreenTopPadding;
 };
 
 const categoryDetails: Record<
@@ -144,6 +146,7 @@ export function ConsultingHomeScreen({
   onPressExpert,
   onPressExpertList,
   onPressUpcoming,
+  topPadding,
 }: ConsultingHomeScreenProps) {
   const {width} = useWindowDimensions();
   const heroScrollRef = useRef<ScrollView>(null);
@@ -280,7 +283,10 @@ export function ConsultingHomeScreen({
   };
 
   return (
-    <ConsultingScreenScaffold bottomPadding="floatingFooter" contentGap={spacing.xxl}>
+    <ConsultingScreenScaffold
+      bottomPadding="floatingFooter"
+      contentGap={spacing.xxl}
+      topPadding={topPadding}>
       <View style={styles.heroSection}>
         <ScrollView
           decelerationRate="fast"

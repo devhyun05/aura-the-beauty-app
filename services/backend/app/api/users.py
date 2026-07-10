@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, BackgroundTasks, Body, Depends
 
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
+from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
-from app.schemas.users import ProfileUpdate
+from app.schemas.users import AccountDeletionRequest, ProfileUpdate
+from app.services.account_deletion import delete_cognito_identity, delete_user_account
+from app.services.media_deletion import process_media_deletion_outbox_items
 from app.services.users import ensure_user
 
 
@@ -46,6 +51,38 @@ async def get_me(
   user = await ensure_user(db, auth)
 
   return success({"user": await attach_avatar_media(db, user), "auth": {"provider": auth.provider}})
+
+
+@router.delete("/me")
+async def delete_my_account(
+  background_tasks: BackgroundTasks,
+  payload: Annotated[AccountDeletionRequest | None, Body()] = None,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  user = await ensure_user(db, auth)
+  result = await delete_user_account(
+    db,
+    auth=auth,
+    reason=payload.reason if payload else None,
+    user_id=user["id"],
+  )
+  identity_deleted = await delete_cognito_identity(auth, settings)
+
+  if result.outbox_ids:
+    background_tasks.add_task(
+      process_media_deletion_outbox_items,
+      db,
+      settings,
+      result.outbox_ids,
+    )
+
+  return success({
+    "deleted": True,
+    "identity_deleted": identity_deleted,
+    "media_deletion_pending": len(result.outbox_ids),
+  })
 
 
 @router.patch("/me/profile")

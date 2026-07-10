@@ -119,3 +119,10 @@ export async function markConsultingInboxRead(
     // 읽음 상태 저장 실패는 화면 진입 자체를 막지 않는다.
   }
 }
+
+export async function clearConsultingReadState(): Promise<void> {
+  await Promise.all([
+    SecureStore.deleteItemAsync(getReadStateKey('messages')),
+    SecureStore.deleteItemAsync(getReadStateKey('notifications')),
+  ]);
+}

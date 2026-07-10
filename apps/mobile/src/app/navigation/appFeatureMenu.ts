@@ -17,8 +17,6 @@ export type AppFeatureMenuItemId =
   | 'savedMakeup'
   | 'makeupLooks'
   | 'likedProducts'
-  | 'floatingActionSettings'
-  | 'profileEdit'
   | 'appSettings';
 
 export type AppFeatureMenuRootRouteName = Extract<
@@ -28,13 +26,12 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'MakeupFeedbackAlbumUpload'
   | 'FaceAnalysisIntro'
   | 'HomeFilterStore'
+  | 'Community'
   | 'Consulting'
   | 'ProductRecommendation'
   | 'SavedMakeupList'
   | 'MakeupLookList'
   | 'LikedProductList'
-  | 'FloatingActionSettings'
-  | 'ProfileEdit'
   | 'AppSettings'
 >;
 
@@ -82,13 +79,13 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         id: 'community',
         label: '커뮤니티',
         description: '커뮤니티 화면으로 이동해요.',
-        target: {kind: 'mainTab', routeName: 'CommunityTab'},
+        target: {kind: 'root', routeName: 'Community'},
       },
       {
         id: 'consulting',
         label: '컨설팅',
         description: '퍼스널 컬러, 헤어, 패션 컨설팅 화면으로 이동해요.',
-        target: {kind: 'root', routeName: 'Consulting'},
+        target: {kind: 'mainTab', routeName: 'ConsultingTab'},
       },
     ],
   },
@@ -162,18 +159,6 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
     id: 'settings',
     label: '설정',
     items: [
-      {
-        id: 'floatingActionSettings',
-        label: '빠른 실행 설정',
-        description: '별 액션 버튼에 넣을 기능을 고르세요.',
-        target: {kind: 'root', routeName: 'FloatingActionSettings'},
-      },
-      {
-        id: 'profileEdit',
-        label: '프로필 수정',
-        description: '프로필과 기본 정보를 수정해요.',
-        target: {kind: 'root', routeName: 'ProfileEdit'},
-      },
       {
         id: 'appSettings',
         label: '앱 환경설정',

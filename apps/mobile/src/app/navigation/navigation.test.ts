@@ -21,8 +21,8 @@ expectEqual(getRouteChrome('HomeTab').kind, 'mainTab', 'home tab chrome');
 expectEqual(getRouteChrome('HomeTab').depth, 'main', 'home tab depth');
 expectEqual(
   mainTabRoutes.join(','),
-  'HomeTab,ProfileTab,CommunityTab',
-  'main tab route order excludes consulting',
+  'HomeTab,ProfileTab,ConsultingTab',
+  'main tab route order includes consulting',
 );
 expectEqual(
   rootStackRoutes.map(routeName => String(routeName)).includes('Magazine'),
@@ -86,9 +86,21 @@ expectEqual(
   '앱 환경설정',
   'app settings detail route title',
 );
+expectEqual(getDetailRouteTitle('Faq'), 'FAQ', 'FAQ detail route title');
+expectEqual(getDetailRouteContextLabel('Faq'), 'SUPPORT', 'FAQ context label');
+expectEqual(
+  getDetailRouteTitle('AccountManagement'),
+  '계정 관리',
+  'account management detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('AccountDeletion'),
+  '회원 탈퇴',
+  'account deletion detail route title',
+);
 expectEqual(
   getDetailRouteTitle('Community'),
-  '커뮤니티',
+  '룩톡',
   'community detail route title',
 );
 expectEqual(
@@ -98,7 +110,7 @@ expectEqual(
 );
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('profile'), 'ProfileTab', 'profile footer target');
-expectEqual(getFooterTargetRoute('community'), 'CommunityTab', 'community footer target');
+expectEqual(getFooterTargetRoute('consulting'), 'ConsultingTab', 'consulting footer target');
 expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
@@ -120,13 +132,13 @@ expectEqual(
           routes: [
             {name: 'HomeTab'},
             {name: 'ProfileTab'},
-            {name: 'CommunityTab'},
+            {name: 'ConsultingTab'},
           ],
         },
       },
     ],
   }),
-  'CommunityTab',
+  'ConsultingTab',
   'nested active route',
 );
 expectEqual(

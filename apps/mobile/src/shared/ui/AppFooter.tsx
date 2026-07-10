@@ -4,7 +4,7 @@ import {Button, Text, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
 import {
-  CommunityFooterIcon,
+  ConsultingFooterIcon,
   HomeFooterIcon,
   ProfileFooterIcon,
 } from './FooterIcons';
@@ -13,10 +13,10 @@ import {
   type FloatingActionButtonPosition,
 } from './FloatingActionMenu';
 
-export type FooterTabKey = 'home' | 'profile' | 'community';
+export type FooterTabKey = 'home' | 'profile' | 'consulting';
 export const APP_FOOTER_TAB_ORDER = [
   'home',
-  'community',
+  'consulting',
   'profile',
 ] as const satisfies readonly FooterTabKey[];
 
@@ -66,11 +66,11 @@ const footerItemByKey = {
     accessibilityLabel: '홈으로 이동',
     icon: color => <HomeFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
-  community: {
-    key: 'community',
-    label: '커뮤니티',
-    accessibilityLabel: '커뮤니티로 이동',
-    icon: color => <CommunityFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+  consulting: {
+    key: 'consulting',
+    label: '컨설팅',
+    accessibilityLabel: '컨설팅으로 이동',
+    icon: color => <ConsultingFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   profile: {
     key: 'profile',

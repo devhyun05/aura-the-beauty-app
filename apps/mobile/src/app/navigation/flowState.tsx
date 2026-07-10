@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -48,6 +49,7 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  resetNavigationFlowState: () => void;
   setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
   setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
   setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
@@ -138,6 +140,27 @@ export function NavigationFlowStateProvider({
   const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
     useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
+  const resetNavigationFlowState = useCallback(() => {
+    const nextState = getInitialNavigationFlowState();
+
+    setFloatingActionButtonPosition(nextState.floatingActionButtonPosition);
+    setFloatingActionIds(nextState.floatingActionIds);
+    setFloatingActionInteractionMode(nextState.floatingActionInteractionMode);
+    setLikedMakeupFilterIds(nextState.likedMakeupFilterIds);
+    setMakeupFeedbackResult(nextState.makeupFeedbackResult);
+    setSavedMakeupLook(nextState.savedMakeupLook);
+    setSavedMakeupLooks(nextState.savedMakeupLooks);
+    setSelectedFaceAnalysisReport(nextState.selectedFaceAnalysisReport);
+    setSelectedFaceCapture(nextState.selectedFaceCapture);
+    setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
+    setSelectedPersonalColor(nextState.selectedPersonalColor);
+    setSelectedMakeupFeedbackPhoto(nextState.selectedMakeupFeedbackPhoto);
+    setSelectedRecommendedMakeupFilterId(nextState.selectedRecommendedMakeupFilterId);
+    setSelectedReferenceMakeupPhoto(nextState.selectedReferenceMakeupPhoto);
+    setReferenceMakeupUploadedPhotos(nextState.referenceMakeupUploadedPhotos);
+    setShouldShowBeautyJourneyGuide(nextState.shouldShowBeautyJourneyGuide);
+  }, []);
+
   const value = useMemo(
     () => ({
       floatingActionButtonPosition,
@@ -155,6 +178,7 @@ export function NavigationFlowStateProvider({
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      resetNavigationFlowState,
       shouldShowBeautyJourneyGuide,
       setFloatingActionButtonPosition,
       setFloatingActionIds,
@@ -189,6 +213,7 @@ export function NavigationFlowStateProvider({
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      resetNavigationFlowState,
       shouldShowBeautyJourneyGuide,
     ],
   );

@@ -355,7 +355,8 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_community_threads_embedding
       on community_threads using hnsw (embedding vector_cosine_ops)
       where embedding is not null and deleted_at is null and status = 'active';
-  """,  "schema.sql:community-search-v1": """
+  """,
+  "schema.sql:community-search-v1": """
     create extension if not exists pg_trgm;
     create index if not exists idx_community_threads_title_trgm
       on community_threads using gin (title gin_trgm_ops)
@@ -363,6 +364,15 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_community_threads_body_trgm
       on community_threads using gin (body gin_trgm_ops)
       where deleted_at is null and status = 'active';
+  """,
+  "schema.sql:account-deletion-v1": """
+    create table if not exists account_deletion_tombstones (
+      subject_hash text primary key,
+      auth_provider text not null,
+      deleted_at timestamptz not null default now()
+    );
+    create index if not exists idx_account_deletion_tombstones_deleted_at
+      on account_deletion_tombstones (deleted_at);
   """,
 }
 

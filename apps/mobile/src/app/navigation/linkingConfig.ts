@@ -35,7 +35,7 @@ type MainTabLinkingScreenConfig = NonNullable<
 export const mainTabLinkingScreens = {
   HomeTab: 'home',
   ProfileTab: 'profile',
-  CommunityTab: 'community-tab',
+  ConsultingTab: 'consulting-tab',
 } as const satisfies Record<MainTabRouteName, MainTabLinkingScreenConfig>;
 
 export const rootStackLinkingScreens = {
@@ -55,8 +55,12 @@ export const rootStackLinkingScreens = {
   FaceAnalysisReportDetail: 'face-analysis-report/:reportId?',
   FloatingActionSettings: 'floating-action-settings',
   AppSettings: 'app-settings',
+  Faq: 'faq',
+  AccountManagement: 'account-management',
+  AccountDeletion: 'account-deletion',
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
+  HairRemovalSimulation: 'hair-removal-simulation',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
   AuradinSearch: 'auradin-search',

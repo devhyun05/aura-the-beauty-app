@@ -12,7 +12,7 @@ export type ScreenCategory =
   | 'onboarding'
   | 'main-home'
   | 'main-profile'
-  | 'main-community'
+  | 'main-consulting'
   | 'feature-entry'
   | 'list'
   | 'detail-report'
@@ -148,6 +148,30 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '앱 환경설정',
   },
+  Faq: {
+    category: 'list',
+    contextLabel: 'SUPPORT',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: 'FAQ',
+  },
+  AccountManagement: {
+    category: 'list',
+    contextLabel: 'ACCOUNT',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '계정 관리',
+  },
+  AccountDeletion: {
+    category: 'form-edit',
+    contextLabel: 'ACCOUNT',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '회원 탈퇴',
+  },
   ProfileEdit: {
     category: 'form-edit',
     contextLabel: 'PROFILE',
@@ -163,6 +187,14 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '필터 스토어',
+  },
+  HairRemovalSimulation: {
+    category: 'feature-entry',
+    contextLabel: 'HAIR REMOVAL',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '제모 시뮬레이션',
   },
   SavedMakeupList: {
     category: 'list',
@@ -512,10 +544,10 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
-  CommunityTab: {
-    category: 'main-community',
+  ConsultingTab: {
+    category: 'main-consulting',
     depth: 'main',
-    footerTab: 'community',
+    footerTab: 'consulting',
     headerVariant: 'home',
     kind: 'mainTab',
     statusBarStyle: 'dark',
@@ -551,8 +583,8 @@ export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
     return 'ProfileTab';
   }
 
-  if (tab === 'community') {
-    return 'CommunityTab';
+  if (tab === 'consulting') {
+    return 'ConsultingTab';
   }
 
   return 'HomeTab';

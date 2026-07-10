@@ -19,7 +19,7 @@ expectEqual(
   'profile tab header border is hidden',
 );
 expectEqual(
-  getMainTabHeaderBorderWidth('CommunityTab'),
+  getMainTabHeaderBorderWidth('ConsultingTab'),
   0,
-  'community tab header border is hidden',
+  'consulting tab header border is hidden',
 );

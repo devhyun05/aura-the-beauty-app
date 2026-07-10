@@ -54,3 +54,17 @@ export async function markFaceCaptureTutorialCompleted(
   completionMap[getFaceCaptureTutorialCompletionKey(user)] = true;
   await writeFaceCaptureTutorialCompletionMap(completionMap);
 }
+
+export async function clearFaceCaptureTutorialCompletion(
+  user: AuthUser,
+): Promise<void> {
+  const completionMap = await readFaceCaptureTutorialCompletionMap();
+  delete completionMap[getFaceCaptureTutorialCompletionKey(user)];
+
+  if (Object.keys(completionMap).length === 0) {
+    await SecureStore.deleteItemAsync(FACE_CAPTURE_TUTORIAL_COMPLETION_STORAGE_KEY);
+    return;
+  }
+
+  await writeFaceCaptureTutorialCompletionMap(completionMap);
+}

@@ -15,7 +15,7 @@ export {
   CameraCaptureButtonSurface,
 } from './CameraCaptureButton';
 export {
-  CommunityFooterIcon,
+  ConsultingFooterIcon,
   FloatingActionFooterIcon,
   HomeFooterIcon,
   ProfileFooterIcon,

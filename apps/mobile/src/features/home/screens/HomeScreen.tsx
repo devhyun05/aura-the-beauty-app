@@ -18,6 +18,7 @@ import {
   PackageSearch,
   ScanFace,
   ScanSearch,
+  Sparkles,
   Store,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -30,8 +31,9 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
-import {CommunityFooterIcon, MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
+import {MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
 import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
+import {homeMock} from '../mocks/home.mock';
 import {getHomeData} from '../services/homeService';
 import type {
   HomeData,
@@ -47,9 +49,9 @@ type HomeScreenProps = {
   onOpenFeatureMenu?: () => void;
   onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressCommunity?: () => void;
   onPressConsulting?: () => void;
   onPressHalfMakeup?: () => void;
+  onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressMakeupFilter?: () => void;
@@ -69,9 +71,9 @@ export function HomeScreen({
   onPressArFilter,
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
-  onPressCommunity,
   onPressConsulting,
   onPressHalfMakeup,
+  onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
   onPressMakeupFilter,
@@ -83,7 +85,7 @@ export function HomeScreen({
   onConfirmBeautyJourneyGuide,
   showBeautyJourneyGuide = false,
 }: HomeScreenProps) {
-  const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [homeData, setHomeData] = useState<HomeData>(homeMock);
   const [showScrollTopButton, setShowScrollTopButton] = useState(false);
   const listRef = useRef<ElementRef<typeof NativeScrollView>>(null);
   const insets = useSafeAreaInsets();
@@ -152,12 +154,17 @@ export function HomeScreen({
   }, []);
 
   useEffect(() => {
+    prefetchImageSources(
+      recommendedFilterPreviewItems.map((filter) => filter.imageSource),
+    );
+  }, [recommendedFilterPreviewItems]);
+
+  useEffect(() => {
     let isMounted = true;
 
     getRecommendedMakeupFiltersFromApi().then((filters) => {
       if (isMounted) {
         setRecommendedMakeupFilters(filters);
-        prefetchImageSources(filters.map((filter) => filter.imageSource));
       }
     });
 
@@ -165,14 +172,6 @@ export function HomeScreen({
       isMounted = false;
     };
   }, []);
-
-  if (!homeData) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>홈을 불러오는 중이에요.</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.homeContainer}>
@@ -204,9 +203,9 @@ export function HomeScreen({
           <HomeServiceShortcutSection
             onPressArFilter={onPressArFilter}
             onPressFaceDiagnosis={onPressFaceDiagnosis}
-            onPressCommunity={onPressCommunity}
             onPressConsulting={onPressConsulting}
             onPressHalfMakeup={onPressHalfMakeup}
+            onPressHairRemovalSimulation={onPressHairRemovalSimulation}
             onPressMakeupExtraction={onPressMakeupExtraction}
             onPressMakeupFeedback={onPressMakeupFeedback}
             onPressMakeupFilter={onPressMakeupFilter}
@@ -303,8 +302,7 @@ export const recommendedFilterSectionTitle = '추천 메이크업 필터' as con
 export const recommendedFilterSectionDescription = undefined;
 export const recommendedFilterMoreButtonLabel = '더보기' as const;
 export const HOME_HERO_BANNER_ASPECT_RATIO = 1.62;
-export const HOME_HERO_AUTOSCROLL_INTERVAL_MS = 2500;
-const HOME_HERO_CHROME_ACTION_HEIGHT = 40;
+export const HOME_HERO_AUTOSCROLL_INTERVAL_MS = 4000;
 export const homeHeroLayoutMetrics = {
   copyGap: spacing.sm,
   listTopPadding: 0,
@@ -504,10 +502,6 @@ function HeroBannerCarousel({
     itemCount: heroItems.length,
     snapInterval,
   });
-  const chromeReservedHeight =
-    topInset + spacing.sm + HOME_HERO_CHROME_ACTION_HEIGHT + spacing.sm;
-  const frameHeight = bannerHeight + chromeReservedHeight;
-
   useEffect(() => {
     setActiveHeroIndex(0);
     heroCarouselRef.current?.scrollTo({
@@ -588,7 +582,7 @@ function HeroBannerCarousel({
     createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd);
 
   return (
-    <View style={[styles.heroCarouselFrame, {height: frameHeight, width: bannerWidth}]}>
+    <View style={[styles.heroCarouselFrame, {height: bannerHeight, width: bannerWidth}]}>
       <NativeScrollView
         ref={heroCarouselRef}
         horizontal
@@ -602,10 +596,7 @@ function HeroBannerCarousel({
         snapToAlignment="start"
         snapToInterval={snapInterval}
         showsHorizontalScrollIndicator={false}
-        style={[
-          styles.heroCarouselScroll,
-          {height: bannerHeight, marginTop: chromeReservedHeight},
-        ]}
+        style={[styles.heroCarouselScroll, {height: bannerHeight}]}
         contentContainerStyle={styles.heroCarousel}>
         {heroRenderItems.map((item, index) => (
           <HeroBannerCard
@@ -648,23 +639,20 @@ function HomeHeroChrome({
     <XStack
       pointerEvents="box-none"
       style={[styles.homeHeroChrome, {paddingTop: topInset + spacing.sm}]}>
-      <View style={styles.homeHeroLogoSurface}>
-        <Text style={styles.homeHeroLogo}>AURA</Text>
-      </View>
+      <Pressable
+        accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
+        accessibilityRole="button"
+        disabled={!onOpenFeatureMenu}
+        hitSlop={spacing.xs}
+        onPress={onOpenFeatureMenu}
+        style={({pressed}) => [
+          styles.homeHeroMenuButton,
+          pressed && styles.pressed,
+        ]}>
+        <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
+      </Pressable>
       <XStack style={styles.homeHeroRightActions}>
         {headerRightSlot}
-        <Pressable
-          accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
-          accessibilityRole="button"
-          disabled={!onOpenFeatureMenu}
-          hitSlop={spacing.xs}
-          onPress={onOpenFeatureMenu}
-          style={({pressed}) => [
-            styles.homeHeroMenuButton,
-            pressed && styles.pressed,
-          ]}>
-          <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
-        </Pressable>
       </XStack>
     </XStack>
   );
@@ -703,7 +691,12 @@ function HeroBannerCard({
         {height: bannerHeight, width: bannerWidth},
         pressed && styles.pressed,
       ]}>
-      <CachedImage contentFit="cover" source={imageSource} style={styles.heroBackgroundImage} />
+      <CachedImage
+        contentFit="cover"
+        priority="high"
+        source={imageSource}
+        style={styles.heroBackgroundImage}
+      />
       <View style={styles.heroScrim} />
 
       <YStack style={styles.heroCopy}>
@@ -762,7 +755,7 @@ export const HOME_SERVICE_SHORTCUT_LABELS = [
   '필터 스토어',
   '추천 제품',
   '컨설팅',
-  '커뮤니티',
+  '제모 시뮬레이션',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
   HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
@@ -829,11 +822,11 @@ const homeServiceShortcutRows = [
       ),
     },
     {
-      id: 'community',
+      id: 'hairRemovalSimulation',
       label: HOME_SERVICE_SHORTCUT_LABELS[7],
-      accessibilityLabel: '커뮤니티 보기',
+      accessibilityLabel: '제모 시뮬레이션 열기',
       icon: (color: string) => (
-        <CommunityFooterIcon color={color} size={iconSize.lg} strokeWidth={2.1} />
+        <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
   ],
@@ -849,10 +842,10 @@ export type HomeServiceShortcutPresentation =
 
 type HomeServiceShortcutHandlers = {
   onPressArFilter?: () => void;
-  onPressCommunity?: () => void;
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressHalfMakeup?: () => void;
+  onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
   onPressMakeupFilter?: () => void;
@@ -864,10 +857,10 @@ export function getHomeServiceShortcutPressHandler(
   actionId: HomeServiceShortcutId,
   {
     onPressArFilter,
-    onPressCommunity,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
+    onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,
     onPressMakeupFilter,
@@ -883,8 +876,8 @@ export function getHomeServiceShortcutPressHandler(
     return onPressMakeupFilter;
   }
 
-  if (actionId === 'community') {
-    return onPressCommunity;
+  if (actionId === 'hairRemovalSimulation') {
+    return onPressHairRemovalSimulation;
   }
 
   if (actionId === 'makeupExtraction') {
@@ -934,10 +927,10 @@ export function getHomeServiceShortcutRowLabels(): readonly (readonly string[])[
 
 function HomeServiceShortcutSection({
   onPressArFilter,
-  onPressCommunity,
   onPressConsulting,
   onPressFaceDiagnosis,
   onPressHalfMakeup,
+  onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
   onPressMakeupFilter,
@@ -946,10 +939,10 @@ function HomeServiceShortcutSection({
 }: HomeServiceShortcutHandlers) {
   const homeServiceShortcutHandlers: HomeServiceShortcutHandlers = {
     onPressArFilter,
-    onPressCommunity,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
+    onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,
     onPressMakeupFilter,
@@ -1325,22 +1318,6 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 4,
   },
-  homeHeroLogoSurface: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 32,
-  },
-  homeHeroLogo: {
-    color: colors.brandMuted,
-    fontFamily: typography.logoHeader.fontFamily,
-    fontSize: 26,
-    fontWeight: typography.logoHeader.fontWeight,
-    letterSpacing: 0,
-    lineHeight: 32,
-    textShadowColor: 'rgba(0, 0, 0, 0.34)',
-    textShadowOffset: {width: 0, height: 0},
-    textShadowRadius: 1.1,
-  },
   homeHeroMenuButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.58)',
@@ -1359,18 +1336,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.xs,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
   },
   beautyJourneyDialog: {
     backgroundColor: colors.surface,
