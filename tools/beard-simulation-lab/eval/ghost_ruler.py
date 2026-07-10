@@ -177,3 +177,110 @@ def score_result(result_bgr: np.ndarray, candidates: list[Candidate],
         excessAreaRatio=area_res / max(area_orig, 1),
         perComponentR=rs,
     )
+
+
+# --------------------------------------------------------------------------
+# Low-band stain ruler ("색 퍼짐"). Black-hat is blind to smooth darkness: the
+# spike-v1 verdict proved a result can score ghost 0.00 while leaving 100% of
+# the diffused beard stain. This ruler measures the stain against a
+# reconstruction target S ("skin as if no beard"), two-sided: residual stain
+# AND over-lift (flat-white gaming). Cross-validated design, 2026-07-11.
+
+LOW_SIGMA_RATIO = 30.0     # low band = GaussianBlur sigma fw/30 (spike-v1 split)
+_STAIN_MIN_NEED = 2.0      # L units below which a pixel is not stain
+_STAIN_MIN_PX = 64         # smaller stains are N/A, never an automatic pass
+OVERLIFT_TOL = 2.0         # L of headroom above S before lift counts as "over"
+
+
+def low_lab(bgr: np.ndarray, face_width: float) -> np.ndarray:
+    """Low band of an image in Lab, L scaled to 0-255, ab offset +128.
+
+    The ruler always re-low-passes the FINAL composited image: reading an
+    internal low buffer would miss donor-high and clipping effects (under test
+    via score_low_band taking BGR, not L fields).
+    """
+    low = cv2.GaussianBlur(bgr.astype(np.float32), (0, 0),
+                           sigmaX=max(2.0, face_width / LOW_SIGMA_RATIO))
+    lab = cv2.cvtColor(np.clip(low, 0, 255) / 255.0, cv2.COLOR_BGR2Lab)
+    lab[..., 0] *= 2.55
+    lab[..., 1:] += 128.0
+    return lab
+
+
+@dataclass
+class LowVerdict:
+    stainPx: int
+    stainResidual: float | None   # sum(max(S-R,0)) / sum(D) over the stain
+    stainQ90R: float | None       # D-weighted Q90 of per-px residual ratio
+    overLiftQ90: float | None     # Q90 over zone of max(R - S - tol, 0)
+    overLiftMean: float | None
+    abResidualQ90: float | None   # Q90 over stain of |ab_result - S_ab|
+
+
+def score_low_band(result_bgr: np.ndarray, s_l: np.ndarray,
+                   orig_low_l: np.ndarray, stain: np.ndarray,
+                   zone: np.ndarray, face_width: float,
+                   s_ab: np.ndarray | None = None,
+                   tol: float = OVERLIFT_TOL) -> LowVerdict:
+    """Score a result's low band against the frozen target S from the original.
+
+    D = max(S - orig_low, 0) is the needed lift; the stain is where D exceeds
+    the noise floor. Too little stain -> None verdict (no evidence is not good
+    evidence). Over-lift is measured over the whole zone: brightening past S
+    anywhere is gaming, not erasing.
+    """
+    res_lab = low_lab(result_bgr, face_width)
+    r_l = res_lab[..., 0]
+    need = np.maximum(s_l - orig_low_l, 0.0)
+    eff = stain & (need > _STAIN_MIN_NEED) & zone
+
+    over = np.maximum(r_l - s_l - tol, 0.0)
+    over_q90 = float(np.percentile(over[zone], 90)) if zone.sum() >= 64 else None
+    over_mean = float(over[zone].mean()) if zone.sum() >= 64 else None
+
+    if int(eff.sum()) < _STAIN_MIN_PX:
+        return LowVerdict(int(eff.sum()), None, None, over_q90, over_mean, None)
+
+    resid = np.maximum(s_l - r_l, 0.0)[eff]
+    d = need[eff]
+    ratio = resid / d
+    ab_q90 = None
+    if s_ab is not None:
+        dist = np.linalg.norm(res_lab[..., 1:] - s_ab, axis=-1)[eff]
+        ab_q90 = float(np.percentile(dist, 90))
+    return LowVerdict(
+        stainPx=int(eff.sum()),
+        stainResidual=float(resid.sum() / d.sum()),
+        stainQ90R=_weighted_quantile(ratio, d, 0.90),
+        overLiftQ90=over_q90,
+        overLiftMean=over_mean,
+        abResidualQ90=ab_q90,
+    )
+
+
+def structure_preservation(orig_bgr: np.ndarray, result_bgr: np.ndarray,
+                           band: np.ndarray, face_width: float,
+                           sigma_ratios: tuple[float, ...] = (0.03, 0.08),
+                           ) -> float | None:
+    """Cosine similarity of smoothed gradient fields inside an anatomy band.
+
+    Guards the mentolabial fold / jaw ridge: erasing the fold zeroes the
+    result's gradients there, so similarity drops toward 0; a pure brightness
+    shift leaves gradients intact (~1). Returns the worst scale, None if the
+    band is too small to judge.
+    """
+    if band.sum() < 64:
+        return None
+    g0 = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    g1 = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    worst = 1.0
+    for ratio in sigma_ratios:
+        s = max(1.5, ratio * face_width)
+        a, b = cv2.GaussianBlur(g0, (0, 0), s), cv2.GaussianBlur(g1, (0, 0), s)
+        ax, ay = cv2.Sobel(a, cv2.CV_32F, 1, 0), cv2.Sobel(a, cv2.CV_32F, 0, 1)
+        bx, by = cv2.Sobel(b, cv2.CV_32F, 1, 0), cv2.Sobel(b, cv2.CV_32F, 0, 1)
+        num = float((ax[band] * bx[band] + ay[band] * by[band]).sum())
+        den = float(np.sqrt((ax[band] ** 2 + ay[band] ** 2).sum()
+                            * (bx[band] ** 2 + by[band] ** 2).sum()))
+        worst = min(worst, num / max(den, 1e-6))
+    return worst
