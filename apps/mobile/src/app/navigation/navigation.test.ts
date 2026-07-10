@@ -89,6 +89,16 @@ expectEqual(
 expectEqual(getDetailRouteTitle('Faq'), 'FAQ', 'FAQ detail route title');
 expectEqual(getDetailRouteContextLabel('Faq'), 'SUPPORT', 'FAQ context label');
 expectEqual(
+  getDetailRouteTitle('AccountManagement'),
+  '계정 관리',
+  'account management detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('AccountDeletion'),
+  '회원 탈퇴',
+  'account deletion detail route title',
+);
+expectEqual(
   getDetailRouteTitle('Community'),
   '룩톡',
   'community detail route title',

@@ -30,7 +30,11 @@ expectEqual(
   true,
   'feature menu includes app settings',
 );
-expectEqual(settingsSection?.items.map(item => item.label).join(','), '빠른 실행 설정,프로필 수정,앱 환경설정', 'settings menu labels');
+expectEqual(
+  settingsSection?.items.map(item => item.label).join(','),
+  '앱 환경설정',
+  'settings menu keeps only the app settings entry',
+);
 expectEqual(
   analysisSection?.items.map(item => item.label).includes('매거진'),
   false,

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CircleHelp,
   Settings2,
+  UserCog,
   UserRound,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -11,6 +12,7 @@ import {colors, iconSize, radius, spacing, typography} from '../../../shared/the
 import {AppScreen, ChevronRightIcon} from '../../../shared/ui';
 
 type AppSettingsScreenProps = {
+  onPressAccountManagement: () => void;
   onPressFaq: () => void;
   onPressProfile: () => void;
   onPressQuickActions: () => void;
@@ -25,6 +27,7 @@ type SettingsItemProps = {
 };
 
 export const APP_SETTINGS_LABELS = {
+  accountManagement: '계정 관리',
   faq: 'FAQ',
   profile: '프로필 관리',
   quickActions: '빠른 실행 설정',
@@ -60,6 +63,7 @@ function SettingsItem({
 }
 
 export function AppSettingsScreen({
+  onPressAccountManagement,
   onPressFaq,
   onPressProfile,
   onPressQuickActions,
@@ -72,7 +76,7 @@ export function AppSettingsScreen({
       <View style={styles.intro}>
         <Text style={styles.introTitle}>계정과 앱 설정을 관리해요</Text>
         <Text style={styles.introDescription}>
-          프로필, 빠른 실행, 고객 지원 메뉴를 확인할 수 있어요.
+          프로필, 빠른 실행, 계정과 고객 지원 메뉴를 확인할 수 있어요.
         </Text>
       </View>
 
@@ -92,11 +96,24 @@ export function AppSettingsScreen({
             onPress={onPressQuickActions}
           />
           <SettingsItem
-            description="자주 묻는 질문과 계정 관리"
+            description="자주 묻는 질문과 앱 사용 안내"
             icon={CircleHelp}
             isLast
             label={APP_SETTINGS_LABELS.faq}
             onPress={onPressFaq}
+          />
+        </View>
+      </View>
+
+      <View>
+        <Text style={styles.sectionLabel}>계정</Text>
+        <View style={styles.list}>
+          <SettingsItem
+            description="로그아웃과 회원 탈퇴"
+            icon={UserCog}
+            isLast
+            label={APP_SETTINGS_LABELS.accountManagement}
+            onPress={onPressAccountManagement}
           />
         </View>
       </View>

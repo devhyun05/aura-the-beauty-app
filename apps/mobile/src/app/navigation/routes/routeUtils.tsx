@@ -131,16 +131,6 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
-  if (routeName === 'FloatingActionSettings') {
-    navigation.navigate('FloatingActionSettings');
-    return;
-  }
-
-  if (routeName === 'ProfileEdit') {
-    navigation.navigate('ProfileEdit');
-    return;
-  }
-
   navigation.navigate('AppSettings');
 }
 

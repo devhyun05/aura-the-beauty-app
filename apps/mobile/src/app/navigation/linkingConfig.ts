@@ -56,6 +56,8 @@ export const rootStackLinkingScreens = {
   FloatingActionSettings: 'floating-action-settings',
   AppSettings: 'app-settings',
   Faq: 'faq',
+  AccountManagement: 'account-management',
+  AccountDeletion: 'account-deletion',
   ProfileEdit: 'profile-edit',
   HomeFilterStore: 'filter-store',
   HairRemovalSimulation: 'hair-removal-simulation',

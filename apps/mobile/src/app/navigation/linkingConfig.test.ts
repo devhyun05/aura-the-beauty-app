@@ -62,6 +62,12 @@ type AppSettingsPathContract = ExpectType<
 type FaqPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Faq, 'faq'>
 >;
+type AccountManagementPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.AccountManagement, 'account-management'>
+>;
+type AccountDeletionPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.AccountDeletion, 'account-deletion'>
+>;
 type CommunityPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.Community, 'community'>
 >;
@@ -217,6 +223,16 @@ expectEqual(
   navigationLinking.config?.screens?.Faq,
   'faq',
   'FAQ path uses support naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.AccountManagement,
+  'account-management',
+  'account management path uses account naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.AccountDeletion,
+  'account-deletion',
+  'account deletion path uses account naming',
 );
 expectEqual(
   navigationLinking.config?.screens?.Community,

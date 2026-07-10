@@ -5,6 +5,7 @@ import {clearFaceCaptureTutorialCompletion} from '../../onboarding/services/tuto
 import {revokePersonalColorConsent} from '../../personal-color/services/personalColorConsentStore';
 import {requestBackendJson} from '../../../shared/services/backendApi';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
+import type {AccountDeletionReasonId} from '../types';
 
 export type DeleteAccountResponse = {
   deleted: boolean;
@@ -12,8 +13,11 @@ export type DeleteAccountResponse = {
   mediaDeletionPending: number;
 };
 
-export async function deleteMyAccount(): Promise<DeleteAccountResponse> {
+export async function deleteMyAccount(
+  reason: AccountDeletionReasonId | null = null,
+): Promise<DeleteAccountResponse> {
   return requestBackendJson<DeleteAccountResponse>('/users/me', {
+    body: {reason},
     method: 'DELETE',
   });
 }

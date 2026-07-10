@@ -42,6 +42,8 @@ export type RootStackParamList = {
   FloatingActionSettings: undefined;
   AppSettings: undefined;
   Faq: undefined;
+  AccountManagement: undefined;
+  AccountDeletion: undefined;
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   HairRemovalSimulation: undefined;
@@ -145,6 +147,8 @@ export const rootStackRoutes = [
   'FloatingActionSettings',
   'AppSettings',
   'Faq',
+  'AccountManagement',
+  'AccountDeletion',
   'ProfileEdit',
   'HomeFilterStore',
   'HairRemovalSimulation',

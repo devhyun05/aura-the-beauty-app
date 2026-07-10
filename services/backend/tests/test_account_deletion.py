@@ -7,6 +7,7 @@ from app.api import users as users_api
 from app.core.errors import AppError
 from app.core.security import AuthContext
 from app.core.settings import Settings
+from app.schemas.users import AccountDeletionRequest
 from app.services.account_deletion import AccountDeletionResult, delete_cognito_identity
 from app.services.account_identity import hash_auth_subject
 from app.services.users import ensure_user
@@ -64,8 +65,9 @@ async def test_delete_account_response_and_media_cleanup_task(monkeypatch) -> No
   async def fake_ensure_user(_db, _auth):
     return {"id": uuid4()}
 
-  async def fake_delete_user_account(_db, *, auth, user_id):
+  async def fake_delete_user_account(_db, *, auth, reason, user_id):
     assert auth.subject == "cognito-user-subject"
+    assert reason == "privacy_concerns"
     assert user_id is not None
     return AccountDeletionResult(media_count=1, outbox_ids=(outbox_id,))
 
@@ -79,6 +81,7 @@ async def test_delete_account_response_and_media_cleanup_task(monkeypatch) -> No
   background_tasks = BackgroundTasks()
   response = await users_api.delete_my_account(
     background_tasks,
+    payload=AccountDeletionRequest(reason="privacy_concerns"),
     auth=build_auth_context(),
     db=object(),
     settings=Settings(cognito_user_pool_id="ap-northeast-2_example"),

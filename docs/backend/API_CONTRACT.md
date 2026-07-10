@@ -87,6 +87,16 @@ kept as a tombstone so a still-valid JWT cannot recreate the deleted account.
 The response includes `identityDeleted` because deleting the Cognito identity is
 best-effort after the database transaction succeeds.
 
+The request body can include an optional neutral exit-reason code. The code is
+stored only in the account-deletion audit metadata and is not required to delete
+the account.
+
+```json
+{
+  "reason": "low_usage"
+}
+```
+
 In ECS, grant the task role `cognito-idp:AdminDeleteUser` only for the configured
 user pool. If that permission is missing, application data is still deleted and
 the tombstone blocks the old identity, but `identityDeleted` is `false`.

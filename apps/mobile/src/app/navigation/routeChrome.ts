@@ -156,6 +156,22 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: 'FAQ',
   },
+  AccountManagement: {
+    category: 'list',
+    contextLabel: 'ACCOUNT',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '계정 관리',
+  },
+  AccountDeletion: {
+    category: 'form-edit',
+    contextLabel: 'ACCOUNT',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '회원 탈퇴',
+  },
   ProfileEdit: {
     category: 'form-edit',
     contextLabel: 'PROFILE',

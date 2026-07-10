@@ -17,8 +17,6 @@ export type AppFeatureMenuItemId =
   | 'savedMakeup'
   | 'makeupLooks'
   | 'likedProducts'
-  | 'floatingActionSettings'
-  | 'profileEdit'
   | 'appSettings';
 
 export type AppFeatureMenuRootRouteName = Extract<
@@ -34,8 +32,6 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'SavedMakeupList'
   | 'MakeupLookList'
   | 'LikedProductList'
-  | 'FloatingActionSettings'
-  | 'ProfileEdit'
   | 'AppSettings'
 >;
 
@@ -163,18 +159,6 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
     id: 'settings',
     label: '설정',
     items: [
-      {
-        id: 'floatingActionSettings',
-        label: '빠른 실행 설정',
-        description: '별 액션 버튼에 넣을 기능을 고르세요.',
-        target: {kind: 'root', routeName: 'FloatingActionSettings'},
-      },
-      {
-        id: 'profileEdit',
-        label: '프로필 수정',
-        description: '프로필과 기본 정보를 수정해요.',
-        target: {kind: 'root', routeName: 'ProfileEdit'},
-      },
       {
         id: 'appSettings',
         label: '앱 환경설정',

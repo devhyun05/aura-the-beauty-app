@@ -1,13 +1,6 @@
 import React, {useState} from 'react';
-import {ChevronDown, Trash2} from 'lucide-react-native';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ChevronDown} from 'lucide-react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
@@ -43,58 +36,10 @@ export const FAQ_ITEMS: readonly FaqItem[] = [
     answer:
       '하단의 컨설팅 탭에서 예약 상태, 메시지, 알림을 확인할 수 있어요.',
   },
-  {
-    id: 'logout-vs-delete',
-    question: '로그아웃과 회원 탈퇴는 어떻게 다른가요?',
-    answer:
-      '로그아웃은 이 기기의 로그인 상태만 종료하며 계정 데이터는 유지됩니다. 회원 탈퇴는 계정과 연결된 데이터를 삭제하며 되돌릴 수 없어요.',
-  },
-  {
-    id: 'deletion-scope',
-    question: '회원 탈퇴하면 어떤 데이터가 삭제되나요?',
-    answer:
-      '프로필, 업로드한 미디어, 분석 보고서, 저장 기록, 커뮤니티 게시물, 컨설팅 정보가 삭제 대상에 포함돼요. 법령에 따라 보관 의무가 있는 기록은 정해진 기간 동안 별도로 보관될 수 있어요.',
-  },
 ] as const;
 
-type FaqScreenProps = {
-  onDeleteAccount: () => Promise<void>;
-};
-
-export function FaqScreen({onDeleteAccount}: FaqScreenProps) {
+export function FaqScreen() {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-
-  const confirmAccountDeletion = () => {
-    if (isDeletingAccount) {
-      return;
-    }
-
-    Alert.alert(
-      '회원 탈퇴',
-      '프로필, 분석 보고서, 저장한 메이크업, 커뮤니티 게시물, 컨설팅 내역이 삭제되며 되돌릴 수 없어요. 계속할까요?',
-      [
-        {style: 'cancel', text: '취소'},
-        {
-          onPress: () => {
-            setIsDeletingAccount(true);
-            void onDeleteAccount()
-              .catch(error => {
-                const message =
-                  error instanceof Error && error.message.trim()
-                    ? error.message
-                    : '회원 탈퇴를 처리하지 못했어요. 잠시 후 다시 시도해 주세요.';
-
-                Alert.alert('회원 탈퇴 실패', message);
-              })
-              .finally(() => setIsDeletingAccount(false));
-          },
-          style: 'destructive',
-          text: '탈퇴하기',
-        },
-      ],
-    );
-  };
 
   return (
     <AppScreen
@@ -142,73 +87,11 @@ export function FaqScreen({onDeleteAccount}: FaqScreenProps) {
           );
         })}
       </View>
-
-      <View style={styles.accountSection}>
-        <View style={styles.accountHeading}>
-          <View style={styles.dangerIconFrame}>
-            <Trash2 color={colors.danger} size={iconSize.sm} strokeWidth={1.8} />
-          </View>
-          <View style={styles.accountCopy}>
-            <Text style={styles.accountTitle}>계정 관리</Text>
-            <Text style={styles.accountDescription}>
-              탈퇴하면 계정과 연결된 데이터가 삭제되며 복구할 수 없어요.
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          accessibilityLabel="회원 탈퇴"
-          accessibilityRole="button"
-          accessibilityState={{disabled: isDeletingAccount}}
-          disabled={isDeletingAccount}
-          onPress={confirmAccountDeletion}
-          style={({pressed}) => [
-            styles.deleteButton,
-            pressed ? styles.deleteButtonPressed : null,
-            isDeletingAccount ? styles.deleteButtonDisabled : null,
-          ]}>
-          {isDeletingAccount ? (
-            <ActivityIndicator color={colors.danger} size="small" />
-          ) : null}
-          <Text style={styles.deleteButtonText}>
-            {isDeletingAccount ? '탈퇴 처리 중' : '회원 탈퇴'}
-          </Text>
-        </Pressable>
-      </View>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  accountCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
-  },
-  accountDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  accountHeading: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  accountSection: {
-    borderBottomColor: colors.divider,
-    borderBottomWidth: 1,
-    borderTopColor: colors.divider,
-    borderTopWidth: 1,
-    gap: spacing.lg,
-    paddingVertical: spacing.xl,
-  },
-  accountTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
-  },
   answer: {
     backgroundColor: colors.surfaceMuted,
     marginBottom: spacing.md,
@@ -223,39 +106,6 @@ const styles = StyleSheet.create({
   },
   chevronExpanded: {
     transform: [{rotate: '180deg'}],
-  },
-  dangerIconFrame: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 90, 77, 0.08)',
-    borderRadius: radius.sm,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  deleteButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderColor: colors.danger,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'center',
-    minHeight: 44,
-    minWidth: 124,
-    paddingHorizontal: spacing.lg,
-  },
-  deleteButtonDisabled: {
-    opacity: 0.6,
-  },
-  deleteButtonPressed: {
-    backgroundColor: 'rgba(255, 90, 77, 0.08)',
-  },
-  deleteButtonText: {
-    color: colors.danger,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
   },
   faqItemDivider: {
     borderBottomColor: colors.divider,

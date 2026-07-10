@@ -67,6 +67,7 @@ async def delete_user_account(
   db: Database,
   *,
   auth: AuthContext,
+  reason: str | None = None,
   user_id: UUID | str,
 ) -> AccountDeletionResult:
   if db.pool is None:
@@ -111,6 +112,15 @@ async def delete_user_account(
       media_ids = [row["id"] for row in media_rows]
 
       # Reviews use ON DELETE SET NULL so remove authored content before deleting the user.
+      audit_metadata = {
+        "authProvider": provider,
+        "mediaAssetCount": len(media_rows),
+        "mediaObjectCount": len(media_objects),
+      }
+
+      if reason:
+        audit_metadata["reason"] = reason
+
       await connection.execute(
         "delete from consulting_expert_reviews where author_user_id = $1",
         user_id,
@@ -171,13 +181,7 @@ async def delete_user_account(
         values (null, 'account.deleted', 'user', $1, $2::jsonb)
         """,
         user_id,
-        json.dumps(
-          {
-            "authProvider": provider,
-            "mediaAssetCount": len(media_rows),
-            "mediaObjectCount": len(media_objects),
-          },
-        ),
+        json.dumps(audit_metadata),
       )
 
   return AccountDeletionResult(

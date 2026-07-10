@@ -72,7 +72,12 @@ import {
   MakeupRecipeSaveCompleteRouteScreen,
 } from './routes/referenceMakeupExtractionRoutes';
 import {ProfileEditRouteScreen} from './routes/profileRoutes';
-import {AppSettingsRouteScreen, FaqRouteScreen} from './routes/settingsRoutes';
+import {
+  AccountDeletionRouteScreen,
+  AccountManagementRouteScreen,
+  AppSettingsRouteScreen,
+  FaqRouteScreen,
+} from './routes/settingsRoutes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -115,6 +120,8 @@ export function RootNavigator() {
       />
       <Stack.Screen name="AppSettings" component={AppSettingsRouteScreen} />
       <Stack.Screen name="Faq" component={FaqRouteScreen} />
+      <Stack.Screen name="AccountManagement" component={AccountManagementRouteScreen} />
+      <Stack.Screen name="AccountDeletion" component={AccountDeletionRouteScreen} />
       <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
       <Stack.Screen name="HomeFilterStore" component={HomeFilterStoreRouteScreen} />
       <Stack.Screen
