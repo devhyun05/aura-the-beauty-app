@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
@@ -10,12 +10,18 @@ from app.schemas.consulting import (
   BookingCreate,
   ReviewCreate,
 )
+from app.schemas.consulting_call import ConsultingCallJoinRequest
 from app.core.settings import Settings, get_settings
-from app.services import consulting, consulting_places
+from app.services import consulting, consulting_call, consulting_places
 from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/consulting", tags=["consulting"])
+
+
+def _set_sensitive_response_headers(response: Response) -> None:
+  response.headers["Cache-Control"] = "no-store"
+  response.headers["Pragma"] = "no-cache"
 
 
 def _mask_author(nickname: str | None) -> str:
@@ -156,6 +162,52 @@ async def delete_consulting_booking(
   user = await ensure_user(db, auth)
   await consulting.delete_canceled_booking(db, user["id"], booking_id)
   return success({"deleted": True, "booking_id": booking_id})
+
+
+@router.get("/bookings/{booking_id}/call")
+async def get_consulting_call_state(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  return success({"call": await consulting_call.get_customer_call_state(db, user["id"], booking_id, settings)})
+
+
+@router.post("/bookings/{booking_id}/call/join")
+async def join_consulting_call(
+  booking_id: str,
+  payload: ConsultingCallJoinRequest,
+  response: Response,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  _set_sensitive_response_headers(response)
+  return success(
+    {
+      "call": await consulting_call.join_customer_call(
+        db,
+        user["id"],
+        booking_id,
+        payload.language_code,
+        settings,
+      ),
+    },
+  )
+
+
+@router.post("/bookings/{booking_id}/call/end")
+async def end_consulting_call(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  return success({"call": await consulting_call.end_customer_call(db, user["id"], booking_id, settings)})
 
 
 @router.get("/bookings/{booking_id}/summary")

@@ -211,6 +211,16 @@ const statusBadgePresets: Record<
     background: consultingColors.roseSoft,
     color: consultingColors.roseText,
   },
+  scheduled: {
+    label: '상담 예정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  in_progress: {
+    label: '상담 진행',
+    background: consultingColors.goldSoft,
+    color: consultingColors.goldText,
+  },
   unavailable: {
     label: '조율 불가',
     background: consultingColors.surfaceMuted,

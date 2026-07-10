@@ -170,6 +170,14 @@ function NotificationCard({
 }
 
 function getNotificationTitle(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 일정이 확정됐어요';
+  }
+
   if (status === 'confirmed') {
     return '예약이 확정됐어요';
   }
@@ -186,8 +194,16 @@ function getNotificationTitle(status: ConsultingRecordStatus): string {
 }
 
 function getNotificationBody(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '톡에서 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '톡에서 안내를 확인하고 상담 시간에 화상 상담을 시작하세요.';
+  }
+
   if (status === 'confirmed') {
-    return '톡에서 안내를 확인하고 상담 시간에 통화를 시작하세요.';
+    return '톡에서 안내를 확인하고 상담 시간에 화상 상담을 시작하세요.';
   }
 
   if (status === 'contacting') {

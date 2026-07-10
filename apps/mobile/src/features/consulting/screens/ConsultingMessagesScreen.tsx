@@ -167,8 +167,16 @@ function MessageCard({
 }
 
 function getMessagePreview(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요. 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 시간이 확정됐어요. 안내와 화상 상담 버튼을 확인하세요.';
+  }
+
   if (status === 'confirmed') {
-    return '예약이 확정됐어요. 안내와 통화 버튼을 확인하세요.';
+    return '예약이 확정됐어요. 안내와 화상 상담 버튼을 확인하세요.';
   }
 
   if (status === 'contacting') {

@@ -22,6 +22,8 @@
 		E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */; };
 		E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */; };
 		E7A110122F81000000E7AAA3 /* face_landmarker.task in Resources */ = {isa = PBXBuildFile; fileRef = E7A110022F81000000E7AAA3 /* face_landmarker.task */; };
+		E7C001102F90000000C00110 /* AURAChimeMeeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C001002F90000000C00110 /* AURAChimeMeeting.swift */; };
+		E7C001112F90000000C00111 /* AURAChimeMeetingBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = E7C001012F90000000C00111 /* AURAChimeMeetingBridge.m */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */; };
 /* End PBXBuildFile section */
@@ -47,6 +49,8 @@
 		E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = E7NativeLipBoundaryProviders.swift; path = AURA/E7NativeLipBoundaryProviders.swift; sourceTree = "<group>"; };
 		E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = E7NativeLipBoundaryProvidersBridge.m; path = AURA/E7NativeLipBoundaryProvidersBridge.m; sourceTree = "<group>"; };
 		E7A110022F81000000E7AAA3 /* face_landmarker.task */ = {isa = PBXFileReference; lastKnownFileType = file; name = face_landmarker.task; path = AURA/E7Models/face_landmarker.task; sourceTree = "<group>"; };
+		E7C001002F90000000C00110 /* AURAChimeMeeting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AURAChimeMeeting.swift; path = AURA/AURAChimeMeeting.swift; sourceTree = "<group>"; };
+		E7C001012F90000000C00111 /* AURAChimeMeetingBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURAChimeMeetingBridge.m; path = AURA/AURAChimeMeetingBridge.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = AURA/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* AURA-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "AURA-Bridging-Header.h"; path = "AURA/AURA-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -71,6 +75,8 @@
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
 				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
+				E7C001002F90000000C00110 /* AURAChimeMeeting.swift */,
+				E7C001012F90000000C00111 /* AURAChimeMeetingBridge.m */,
 				E7A110002F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift */,
 				E7A110012F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m */,
 				E7A110022F81000000E7AAA3 /* face_landmarker.task */,
@@ -284,11 +290,15 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-AURA/Pods-AURA-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/AmazonChimeSDK/AmazonChimeSDK.framework/AmazonChimeSDK",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/AmazonChimeSDKMedia/AmazonChimeSDKMedia.framework/AmazonChimeSDKMedia",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AmazonChimeSDK.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/AmazonChimeSDKMedia.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
 			);
@@ -388,6 +398,8 @@
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
+				E7C001102F90000000C00110 /* AURAChimeMeeting.swift in Sources */,
+				E7C001112F90000000C00111 /* AURAChimeMeetingBridge.m in Sources */,
 				E7A110102F81000000E7AAA1 /* E7NativeLipBoundaryProviders.swift in Sources */,
 				E7A110112F81000000E7AAA2 /* E7NativeLipBoundaryProvidersBridge.m in Sources */,
 				E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */,

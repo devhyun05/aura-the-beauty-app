@@ -5,13 +5,128 @@ import pytest
 
 from app.core.errors import AppError
 from app.services.consulting_partner import (
+  _settings_payload,
+  _map_booking_status,
+  _map_partner_status,
+  _booking_to_web,
   complete_consultation_summary,
   generate_consultation_summary,
   update_booking_status,
+  update_manager_settings,
 )
 
 
 ACCOUNT = {"id": "account-1", "expert_id": "exp_sea"}
+
+
+@pytest.mark.parametrize("status", ["scheduled", "in_progress"])
+def test_partner_status_mapping_preserves_video_call_runtime_statuses(status: str) -> None:
+  assert _map_partner_status(status) == status
+  assert _map_booking_status(status) == status
+
+
+@pytest.mark.parametrize(
+  ("session_mode", "channel"),
+  [("online", "video"), ("offline", "offline")],
+)
+def test_partner_booking_channel_follows_session_mode(session_mode: str, channel: str) -> None:
+  row = {
+    "id": "booking-1",
+    "user_id": "user-1",
+    "expert_id": "exp_sea",
+    "status": "scheduled",
+    "session_mode": session_mode,
+    "duration_minutes": 30,
+    "price": 49000,
+    "category_label": "퍼스널컬러 진단",
+    "concern_label": None,
+    "question": "",
+    "shared_report_ids": [],
+    "summary_id": None,
+    "review_id": None,
+    "operator_note": None,
+    "preferred_contact_method": "sms",
+    "contact_phone": "010-0000-0000",
+    "phone": None,
+    "created_at": datetime(2026, 7, 9, 4, tzinfo=timezone.utc),
+    "scheduled_at": datetime(2026, 7, 10, 9, tzinfo=timezone.utc),
+  }
+
+  assert _booking_to_web(row)["channel"] == channel
+
+
+def test_partner_settings_payload_maps_expert_schedule_to_manager_contract() -> None:
+  settings = _settings_payload(
+    {**ACCOUNT, "email": "seah.kim@aura-partner.local", "role": "expert", "workspace_scope": "expert_personal"},
+    {
+      "id": "exp_sea",
+      "operating_hours": [
+        {"day_of_week": 0, "label": "월", "opens_at": "18:00", "closes_at": "20:00", "is_closed": False},
+      ],
+      "holiday_dates": ["2026-07-15"],
+      "booking_open_months": 1,
+    },
+  )
+
+  assert settings["operatingHours"][0] == {
+    "dayOfWeek": 0,
+    "label": "월",
+    "opensAt": "18:00",
+    "closesAt": "20:00",
+    "isClosed": False,
+  }
+  assert settings["holidays"] == ["2026-07-15"]
+  assert settings["bookingOpenMonths"] == 1
+  assert settings["integrations"]["chatProvider"] == "websocket"
+
+
+class FakePartnerSettingsDatabase:
+  def __init__(self) -> None:
+    self.expert = {
+      "id": "exp_sea",
+      "operating_hours": [
+        {"day_of_week": 0, "label": "월", "opens_at": "10:00", "closes_at": "19:00", "is_closed": False},
+      ],
+      "holiday_dates": ["2026-07-15"],
+      "booking_open_months": 1,
+    }
+    self.update_args = None
+
+  async def fetchrow(self, query: str, *args):
+    if "select id, operating_hours, holiday_dates, booking_open_months" in query:
+      return dict(self.expert)
+    if "update consulting_experts" in query:
+      self.update_args = args
+      self.expert["operating_hours"] = json.loads(args[1])
+      self.expert["holiday_dates"] = json.loads(args[2])
+      self.expert["booking_open_months"] = args[3]
+      return dict(self.expert)
+    return None
+
+
+@pytest.mark.asyncio
+async def test_update_partner_settings_accepts_web_manager_payload() -> None:
+  db = FakePartnerSettingsDatabase()
+
+  settings = await update_manager_settings(
+    db,
+    {**ACCOUNT, "email": "seah.kim@aura-partner.local", "role": "expert", "workspace_scope": "expert_personal"},
+    {
+      "operatingHours": [
+        {"dayOfWeek": 0, "label": "월", "opensAt": "18:00", "closesAt": "20:30", "isClosed": False},
+        {"dayOfWeek": 2, "label": "수", "opensAt": "11:00", "closesAt": "17:00", "isClosed": False},
+      ],
+      "holidays": ["2026-08-15T00:00:00Z", "2026-08-15", "2026-09-01"],
+      "bookingOpenMonths": 4,
+    },
+  )
+
+  assert settings["operatingHours"][0]["opensAt"] == "18:00"
+  assert settings["operatingHours"][0]["closesAt"] == "20:30"
+  assert settings["operatingHours"][2]["opensAt"] == "11:00"
+  assert settings["holidays"] == ["2026-08-15", "2026-09-01"]
+  assert settings["bookingOpenMonths"] == 3
+  assert db.update_args[3] == 3
 
 
 class FakePartnerSummaryDatabase:

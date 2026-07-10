@@ -10,7 +10,7 @@ import {
   View as RNView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import {CalendarClock, PhoneCall, Plus, Send} from 'lucide-react-native';
+import {CalendarClock, Plus, Send, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -325,7 +325,7 @@ export function ConsultingConversationScreen({
 
   const canSendText = connectionStatus === 'connected' && input.trim().length > 0;
   const canPickImage = connectionStatus === 'connected' && !isUploadingImage;
-  const callEnabled = record?.status === 'confirmed';
+  const callEnabled = canJoinVideoCall(record);
   const reservationDateLabel = getReservationDateLabel(record);
   const reservationStartTimeLabel = getReservationStartTimeLabel(record);
   const sessionModeLabel = getReservationSessionModeLabel(record);
@@ -352,7 +352,7 @@ export function ConsultingConversationScreen({
           <RNView style={styles.headerActions}>
             {record ? <ConsultingStatusBadge status={record.status} /> : null}
             <Pressable
-              accessibilityLabel={callEnabled ? '전화 연결' : '예약 확정 후 전화 연결'}
+              accessibilityLabel={callEnabled ? '화상 상담 입장' : '온라인 예약 확정 후 화상 상담 입장'}
               accessibilityRole="button"
               disabled={!callEnabled}
               onPress={onPressCall}
@@ -361,7 +361,7 @@ export function ConsultingConversationScreen({
                 !callEnabled && styles.callButtonDisabled,
                 pressed && callEnabled ? styles.pressed : null,
               ]}>
-              <PhoneCall color={consultingColors.onAccent} size={18} />
+              <Video color={consultingColors.onAccent} size={18} />
             </Pressable>
           </RNView>
         </View>
@@ -387,7 +387,7 @@ export function ConsultingConversationScreen({
           />
           <InfoRow label="소요 시간" value={record?.durationLabel ?? '화상 상담'} />
           <Text style={styles.reservationNotice}>
-            톡은 일정 조율과 사전 질문 공간이에요. 예약이 확정되면 통화 버튼이 활성화돼요.
+            톡은 일정 조율과 사전 질문 공간이에요. 온라인 예약이 확정되면 화상 상담 버튼이 활성화돼요.
           </Text>
         </View>
 
@@ -506,6 +506,14 @@ function getReservationStartTimeLabel(record: ConsultingRecord | null): string {
 
 function getReservationSessionModeLabel(record: ConsultingRecord | null): string {
   return getConsultingSessionModeLabel(record?.sessionMode ?? 'online');
+}
+
+function canJoinVideoCall(record: ConsultingRecord | null): boolean {
+  if (!record || record.sessionMode === 'offline') {
+    return false;
+  }
+
+  return ['confirmed', 'scheduled', 'in_progress'].includes(record.status);
 }
 
 function stripTimeFromDateLabel(label: string): string {

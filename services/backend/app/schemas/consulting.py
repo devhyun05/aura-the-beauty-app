@@ -23,7 +23,7 @@ class BookingCreate(CamelModel):
 
 
 class AdminBookingStatusUpdate(CamelModel):
-  status: str = Field(pattern="^(requested|contacting|confirmed|unavailable|completed|canceled)$")
+  status: str = Field(pattern="^(requested|contacting|confirmed|scheduled|in_progress|unavailable|completed|canceled)$")
   operator_note: str | None = Field(default=None, alias="operatorNote", max_length=500)
 
 

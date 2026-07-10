@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from app.core.errors import AppError
 from app.core.security import AuthContext
-from app.core.settings import get_settings
+from app.core.settings import get_settings as get_app_settings
 from app.db.session import Database
 from app.services.consulting_message_store import list_consulting_messages
 
@@ -100,7 +100,7 @@ def _partner_password_for(expert: dict[str, Any]) -> str:
 
 
 def _map_booking_status(status: str) -> str:
-  if status in {"requested", "contacting", "confirmed", "completed"}:
+  if status in {"requested", "contacting", "confirmed", "scheduled", "in_progress", "completed"}:
     return status
   if status in {"canceled", "cancelled", "unavailable", "no_show", "refund_requested"}:
     return "cancelled"
@@ -112,9 +112,7 @@ def _map_partner_status(status: str) -> str:
     return "completed"
   if status in {"cancelled", "no_show", "refund_requested", "canceled", "unavailable"}:
     return "canceled"
-  if status == "in_progress":
-    return "contacting"
-  if status in {"requested", "contacting", "confirmed"}:
+  if status in {"requested", "contacting", "confirmed", "scheduled", "in_progress"}:
     return status
   return "confirmed"
 
@@ -270,7 +268,7 @@ def _customer_phone(row: dict[str, Any]) -> str:
 def _customer_email(row: dict[str, Any]) -> str:
   email = row.get("email")
   if isinstance(email, str) and email.strip():
-    settings = get_settings()
+    settings = get_app_settings()
     dev_email = (settings.dev_user_email or "").strip()
     if not settings.auth_required and email.strip().lower() == "dev@example.com" and dev_email:
       return dev_email
@@ -325,7 +323,7 @@ def _booking_to_web(row: dict[str, Any]) -> dict[str, Any]:
     "payment_status": "paid" if int(row.get("price") or 0) > 0 else "pending",
     "paid_amount": int(row.get("price") or 0),
     "discount_amount": 0,
-    "channel": "chat",
+    "channel": "video" if row.get("session_mode") == "online" else "offline",
     "requested_at": _iso_datetime(row.get("created_at")),
     "request_memo": request_memo,
     "selected_concern_tags": concern_tags,
@@ -499,6 +497,148 @@ def _shared_report_from_feedback(row: dict[str, Any], booking_id: str | None = N
     "summary": summary,
     "attachment_ids": [],
   }
+
+
+def _default_partner_operating_hours() -> list[dict[str, Any]]:
+  labels = ["월", "화", "수", "목", "금", "토", "일"]
+  return [
+    {
+      "dayOfWeek": day,
+      "label": labels[day],
+      "opensAt": "10:00",
+      "closesAt": "19:00",
+      "isClosed": day >= 5,
+    }
+    for day in range(7)
+  ]
+
+
+def _manager_operating_hours(value: Any) -> list[dict[str, Any]]:
+  raw_hours = _decode_json(value, [])
+  defaults = _default_partner_operating_hours()
+  if not isinstance(raw_hours, list):
+    raw_hours = []
+
+  by_day: dict[int, dict[str, Any]] = {}
+  for raw in raw_hours:
+    if not isinstance(raw, dict):
+      continue
+    try:
+      day = int(raw.get("day_of_week", raw.get("dayOfWeek")))
+    except (TypeError, ValueError):
+      continue
+    if day < 0 or day > 6:
+      continue
+    default = defaults[day]
+    by_day[day] = {
+      "dayOfWeek": day,
+      "label": str(raw.get("label") or default["label"]),
+      "opensAt": str(raw.get("opens_at", raw.get("opensAt")) or default["opensAt"]),
+      "closesAt": str(raw.get("closes_at", raw.get("closesAt")) or default["closesAt"]),
+      "isClosed": bool(raw.get("is_closed", raw.get("isClosed", default["isClosed"]))),
+    }
+    lunch_start = raw.get("lunch_start", raw.get("lunchStart"))
+    lunch_end = raw.get("lunch_end", raw.get("lunchEnd"))
+    if lunch_start:
+      by_day[day]["lunchStart"] = str(lunch_start)
+    if lunch_end:
+      by_day[day]["lunchEnd"] = str(lunch_end)
+
+  return [by_day.get(day, defaults[day]) for day in range(7)]
+
+
+def _holiday_dates(value: Any) -> list[str]:
+  raw_holidays = _decode_json(value, [])
+  if not isinstance(raw_holidays, list):
+    return []
+  return sorted({str(item)[:10] for item in raw_holidays if str(item or "").strip()})
+
+
+def _settings_payload(account: dict[str, Any], expert: dict[str, Any]) -> dict[str, Any]:
+  return {
+    "operatingHours": _manager_operating_hours(expert.get("operating_hours")),
+    "holidays": _holiday_dates(expert.get("holiday_dates")),
+    "bookingOpenMonths": int(expert.get("booking_open_months") or 1),
+    "notification": {
+      "bookingCreated": True,
+      "bookingReminder": True,
+      "unreadChatDigest": True,
+      "reviewCreated": True,
+    },
+    "integrations": {
+      "phoneProvider": "none",
+      "chatProvider": "websocket",
+      "smsProvider": "none",
+    },
+    "accountRoles": [
+        {
+          "id": str(account.get("id") or account.get("account_id") or ""),
+          "name": str(account.get("expert_name") or account.get("email") or "파트너"),
+          "email": str(account.get("email") or ""),
+        "role": str(account.get("role") or "expert"),
+        "scope": str(account.get("workspace_scope") or "expert_personal"),
+      },
+    ],
+  }
+
+
+def _settings_operating_hours_for_db(value: Any) -> list[dict[str, Any]]:
+  return [
+    {
+      "day_of_week": item["dayOfWeek"],
+      "label": item["label"],
+      "opens_at": item["opensAt"],
+      "closes_at": item["closesAt"],
+      "is_closed": item["isClosed"],
+      **({"lunch_start": item["lunchStart"]} if item.get("lunchStart") else {}),
+      **({"lunch_end": item["lunchEnd"]} if item.get("lunchEnd") else {}),
+    }
+    for item in _manager_operating_hours(value)
+  ]
+
+
+async def get_manager_settings(db: Database, account: dict[str, Any]) -> dict[str, Any]:
+  expert = await db.fetchrow(
+    """
+    select id, operating_hours, holiday_dates, booking_open_months
+    from consulting_experts
+    where id = $1
+    """,
+    account["expert_id"],
+  )
+  if expert is None:
+    raise AppError(404, "PARTNER_EXPERT_NOT_FOUND", "전문가 정보를 찾을 수 없습니다.")
+  return _settings_payload(account, expert)
+
+
+async def update_manager_settings(db: Database, account: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+  current = await get_manager_settings(db, account)
+  next_operating_hours = patch.get("operating_hours", patch.get("operatingHours", current["operatingHours"]))
+  next_holidays = patch.get("holidays", current["holidays"])
+  next_open_months = patch.get("booking_open_months", patch.get("bookingOpenMonths", current["bookingOpenMonths"]))
+  try:
+    booking_open_months = min(max(int(next_open_months), 1), 3)
+  except (TypeError, ValueError):
+    booking_open_months = current["bookingOpenMonths"]
+
+  row = await db.fetchrow(
+    """
+    update consulting_experts
+    set operating_hours = $2::jsonb,
+        holiday_dates = $3::jsonb,
+        booking_open_months = $4,
+        updated_at = now()
+    where id = $1
+    returning id, operating_hours, holiday_dates, booking_open_months
+    """,
+    account["expert_id"],
+    json.dumps(_settings_operating_hours_for_db(next_operating_hours), ensure_ascii=False),
+    json.dumps(_holiday_dates(next_holidays), ensure_ascii=False),
+    booking_open_months,
+  )
+  if row is None:
+    raise AppError(404, "PARTNER_EXPERT_NOT_FOUND", "전문가 정보를 찾을 수 없습니다.")
+  return _settings_payload(account, row)
 
 
 async def ensure_partner_account_schema(db: Database) -> None:
@@ -911,7 +1051,7 @@ async def update_booking_status(
     update consulting_bookings
     set status = $3,
         operator_note = coalesce($4, operator_note),
-        confirmed_at = case when $3 = 'confirmed' then now() else confirmed_at end
+        confirmed_at = case when $3 in ('confirmed', 'scheduled', 'in_progress') then now() else confirmed_at end
     where id::text = $1 and expert_id = $2
     returning *
     """,

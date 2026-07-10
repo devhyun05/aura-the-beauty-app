@@ -27,6 +27,15 @@ export type ConsultingRealtimeMessageEvent = {
   type: 'message.new';
 };
 
+export type ConsultingCaptionTranslationEvent = {
+  bookingId: string;
+  resultId: string;
+  sourceLanguageCode: 'ko-KR' | 'en-US';
+  targetLanguageCode: 'ko' | 'en';
+  translatedContent: string;
+  type: 'caption.translation';
+};
+
 export type ConsultingClientSocketEvent =
   | {
       at: string;
@@ -63,6 +72,7 @@ export type ConsultingServerSocketEvent =
       type: 'message.history';
     }
   | ConsultingRealtimeMessageEvent
+  | ConsultingCaptionTranslationEvent
   | {
       bookingId: string;
       clientMessageId: string;

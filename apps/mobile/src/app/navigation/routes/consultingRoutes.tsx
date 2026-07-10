@@ -105,7 +105,7 @@ export function ConsultingExpertProfileRouteScreen({
         records.find(
           record =>
             record.expertId === expert.id &&
-            ['requested', 'contacting', 'confirmed'].includes(record.status),
+            ['requested', 'contacting', 'confirmed', 'scheduled', 'in_progress'].includes(record.status),
         ) ?? null,
       );
     });
@@ -294,10 +294,12 @@ export function ConsultingCallRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ConsultingCall'>) {
+  const {getAuthToken} = useAuthSession();
   const expert = useConsultingExpert(route.params?.expertId);
 
   return (
     <ConsultingCallScreen
+      authToken={getAuthToken()}
       bookingId={route.params.bookingId}
       durationId={route.params.durationId}
       expert={expert}

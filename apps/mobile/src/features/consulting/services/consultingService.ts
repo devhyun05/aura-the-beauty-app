@@ -13,6 +13,10 @@ import {
 } from '../mocks/consulting.mock';
 import type {
   ConsultingBookingDay,
+  ConsultingCallJoinResult,
+  ConsultingCallLanguageCode,
+  ConsultingCallState,
+  ConsultingCallTranscription,
   ConsultingBookingDraft,
   ConsultingCategory,
   ConsultingDurationOption,
@@ -178,6 +182,75 @@ function coerceReview(raw: any): ConsultingExpertReview {
   };
 }
 
+function coerceCallLanguageCode(value: unknown): ConsultingCallLanguageCode | null {
+  return value === 'ko-KR' || value === 'en-US' ? value : null;
+}
+
+function coerceCallTranscription(raw: any): ConsultingCallTranscription {
+  const mode = raw?.mode === 'identify' ? 'identify' : 'fixed';
+  return {
+    enabled: Boolean(raw?.enabled),
+    translationEnabled: Boolean(raw?.translationEnabled),
+    status:
+      raw?.status === 'starting' ||
+      raw?.status === 'active' ||
+      raw?.status === 'stopping' ||
+      raw?.status === 'stopped' ||
+      raw?.status === 'failed'
+        ? raw.status
+        : 'disabled',
+    mode,
+    languageCode: coerceCallLanguageCode(raw?.languageCode),
+    customerLanguageCode: coerceCallLanguageCode(raw?.customerLanguageCode),
+    expertLanguageCode: coerceCallLanguageCode(raw?.expertLanguageCode),
+  };
+}
+
+function coerceCallState(raw: any, bookingId: string): ConsultingCallState {
+  const status = raw?.status;
+  return {
+    callSessionId: raw?.callSessionId ? String(raw.callSessionId) : null,
+    bookingId: String(raw?.bookingId ?? bookingId),
+    provider: 'chime',
+    providerMeetingId: raw?.providerMeetingId ? String(raw.providerMeetingId) : null,
+    mediaRegion: raw?.mediaRegion ? String(raw.mediaRegion) : null,
+    status:
+      status === 'created' ||
+      status === 'active' ||
+      status === 'ended' ||
+      status === 'failed'
+        ? status
+        : 'not_started',
+    startedAt: raw?.startedAt ? String(raw.startedAt) : null,
+    endedAt: raw?.endedAt ? String(raw.endedAt) : null,
+    chimeEnabled: Boolean(raw?.chimeEnabled),
+    transcription: coerceCallTranscription(raw?.transcription),
+  };
+}
+
+function coerceCallJoinResult(raw: any, bookingId: string): ConsultingCallJoinResult | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const languageCode =
+    coerceCallLanguageCode(raw?.participant?.languageCode) ??
+    coerceCallLanguageCode(raw?.participantLanguageCode) ??
+    'ko-KR';
+  const participantType = raw?.participant?.type ?? raw?.participantType;
+  return {
+    callSessionId: String(raw.callSessionId ?? ''),
+    bookingId: String(raw.bookingId ?? bookingId),
+    participant: {
+      id: String(raw?.participant?.id ?? ''),
+      type: participantType === 'partner' || participantType === 'expert' ? 'partner' : 'customer',
+      languageCode,
+    },
+    meeting: raw?.meeting && typeof raw.meeting === 'object' ? raw.meeting : {},
+    attendee: raw?.attendee && typeof raw.attendee === 'object' ? raw.attendee : {},
+    transcription: coerceCallTranscription(raw?.transcription),
+  };
+}
+
 const hasBackend = (): boolean => Boolean(getBackendApiBaseUrl());
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -234,7 +307,13 @@ function cacheBookings(records: readonly ConsultingRecord[]): readonly Consultin
 }
 
 function isActiveRecordStatus(status: ConsultingRecord['status']): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+  return (
+    status === 'requested' ||
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress'
+  );
 }
 
 function activeRecordsFrom(
@@ -516,6 +595,60 @@ export async function getConsultingBooking(
     return res.record ? coerceRecord(res.record) : null;
   } catch (error) {
     logFallback('booking', error);
+    return null;
+  }
+}
+
+export async function getConsultingCallState(
+  bookingId: string,
+): Promise<ConsultingCallState | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call`,
+    );
+    return res.call ? coerceCallState(res.call, bookingId) : null;
+  } catch (error) {
+    logFallback('call:state', error);
+    return null;
+  }
+}
+
+export async function joinConsultingCall(
+  bookingId: string,
+  languageCode: ConsultingCallLanguageCode = 'ko-KR',
+): Promise<ConsultingCallJoinResult | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/join`,
+      {method: 'POST', body: {languageCode}},
+    );
+    return coerceCallJoinResult(res.call, bookingId);
+  } catch (error) {
+    logFallback('call:join', error);
+    return null;
+  }
+}
+
+export async function endConsultingCall(
+  bookingId: string,
+): Promise<ConsultingCallState | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/end`,
+      {method: 'POST'},
+    );
+    return res.call ? coerceCallState(res.call, bookingId) : null;
+  } catch (error) {
+    logFallback('call:end', error);
     return null;
   }
 }

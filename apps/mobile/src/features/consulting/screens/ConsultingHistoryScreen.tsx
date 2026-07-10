@@ -51,6 +51,8 @@ const historyFilters: readonly {id: HistoryFilterId; label: string}[] = [
   {id: 'requested', label: '신청'},
   {id: 'contacting', label: '확인 중'},
   {id: 'confirmed', label: '확정'},
+  {id: 'scheduled', label: '예정'},
+  {id: 'in_progress', label: '진행'},
   {id: 'completed', label: '완료'},
   {id: 'canceled', label: '취소'},
 ];
@@ -271,7 +273,13 @@ export function ConsultingHistoryScreen({
 }
 
 function isActiveRecordStatus(status: ConsultingRecordStatus): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+  return (
+    status === 'requested' ||
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress'
+  );
 }
 
 function HistoryCard({

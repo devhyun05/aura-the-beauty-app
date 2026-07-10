@@ -15,13 +15,25 @@ function getReadStateKey(kind: ConsultingInboxKind): string {
 export function isConsultingNotificationStatus(
   status: ConsultingRecordStatus,
 ): boolean {
-  return status === 'contacting' || status === 'confirmed' || status === 'unavailable';
+  return (
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress' ||
+    status === 'unavailable'
+  );
 }
 
 export function isConsultingMessageStatus(
   status: ConsultingRecordStatus,
 ): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+  return (
+    status === 'requested' ||
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress'
+  );
 }
 
 function isRelevantRecord(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, Query, Response
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -11,12 +11,23 @@ from app.schemas.consulting_partner import (
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
+from app.schemas.consulting_call import (
+  ConsultingCallJoinRequest,
+  ConsultingCaptionTranslateRequest,
+  ConsultingTranscriptionStartRequest,
+)
 from app.services.s3 import S3Service
-from app.services import consulting_partner
+from app.services import consulting_call, consulting_partner
+from app.services.consulting_realtime import consulting_realtime_manager
 
 
 router = APIRouter(prefix="/consulting/partner", tags=["consulting-partner"])
 PARTNER_ACCOUNT_ISSUE_CONFIRMATION = "issue-default-partner-accounts"
+
+
+def _set_sensitive_response_headers(response: Response) -> None:
+  response.headers["Cache-Control"] = "no-store"
+  response.headers["Pragma"] = "no-cache"
 
 
 def _extract_bearer_token(authorization: str | None, session_token: str | None) -> str | None:
@@ -143,6 +154,129 @@ async def update_partner_booking_status(
     payload.operator_note,
   )
   return success({"booking": booking})
+
+
+@router.get("/bookings/{booking_id}/call")
+async def get_partner_call_state(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success({"call": await consulting_call.get_partner_call_state(db, account, booking_id, settings)})
+
+
+@router.get("/settings")
+async def get_partner_settings(
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success({"settings": await consulting_partner.get_manager_settings(db, account)})
+
+
+@router.patch("/settings")
+async def update_partner_settings(
+  payload: dict = Body(default_factory=dict),
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success({"settings": await consulting_partner.update_manager_settings(db, account, payload)})
+
+
+@router.post("/bookings/{booking_id}/call/join")
+async def join_partner_call(
+  booking_id: str,
+  payload: ConsultingCallJoinRequest,
+  response: Response,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  _set_sensitive_response_headers(response)
+  return success(
+    {
+      "call": await consulting_call.join_partner_call(
+        db,
+        account,
+        booking_id,
+        payload.language_code,
+        settings,
+      ),
+    },
+  )
+
+
+@router.post("/bookings/{booking_id}/call/end")
+async def end_partner_call(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success({"call": await consulting_call.end_partner_call(db, account, booking_id, settings)})
+
+
+@router.post("/bookings/{booking_id}/call/transcription/start")
+async def start_partner_call_transcription(
+  booking_id: str,
+  payload: ConsultingTranscriptionStartRequest,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success(
+    {
+      "call": await consulting_call.start_partner_transcription(
+        db,
+        account,
+        booking_id,
+        payload.language_code,
+        payload.transcription_consent_accepted,
+        settings,
+      ),
+    },
+  )
+
+
+@router.post("/bookings/{booking_id}/call/transcription/stop")
+async def stop_partner_call_transcription(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  return success({"call": await consulting_call.stop_partner_transcription(db, account, booking_id, settings)})
+
+
+@router.post("/bookings/{booking_id}/call/captions/translate")
+async def translate_partner_call_caption(
+  booking_id: str,
+  payload: ConsultingCaptionTranslateRequest,
+  account: dict = Depends(get_partner_account),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  translated = await consulting_call.translate_partner_caption(
+    db,
+    account,
+    booking_id,
+    result_id=payload.result_id,
+    source_language_code=payload.source_language_code,
+    content=payload.content,
+    settings=settings,
+  )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "caption.translation",
+      "bookingId": booking_id,
+      "resultId": translated["result_id"],
+      "sourceLanguageCode": translated["source_language_code"],
+      "targetLanguageCode": translated["target_language_code"],
+      "translatedContent": translated["translated_content"],
+    },
+  )
+  return success(translated)
 
 
 @router.get("/customers")

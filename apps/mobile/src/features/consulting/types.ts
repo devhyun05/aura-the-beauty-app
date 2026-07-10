@@ -137,6 +137,8 @@ export type ConsultingRecordStatus =
   | 'requested'
   | 'contacting'
   | 'confirmed'
+  | 'scheduled'
+  | 'in_progress'
   | 'unavailable'
   | 'completed'
   | 'canceled';
@@ -176,4 +178,56 @@ export type ConsultingReviewDraft = {
   rating: number;
   body: string;
   category?: string;
+};
+
+export type ConsultingCallLanguageCode = 'ko-KR' | 'en-US';
+
+export type ConsultingCaptionViewModel = {
+  resultId: string;
+  attendeeId?: string;
+  externalUserId?: string;
+  speakerType: 'user' | 'expert' | 'unknown';
+  sourceLanguageCode: ConsultingCallLanguageCode;
+  content: string;
+  isPartial: boolean;
+  targetLanguageCode?: 'ko' | 'en';
+  translatedContent?: string;
+  startTimeMs?: number;
+  endTimeMs?: number;
+};
+
+export type ConsultingCallTranscription = {
+  enabled: boolean;
+  translationEnabled: boolean;
+  status: 'disabled' | 'stopped' | 'starting' | 'active' | 'stopping' | 'failed';
+  mode: 'fixed' | 'identify';
+  languageCode?: ConsultingCallLanguageCode | null;
+  customerLanguageCode?: ConsultingCallLanguageCode | null;
+  expertLanguageCode?: ConsultingCallLanguageCode | null;
+};
+
+export type ConsultingCallState = {
+  callSessionId: string | null;
+  bookingId: string;
+  provider: 'chime';
+  providerMeetingId?: string | null;
+  mediaRegion?: string | null;
+  status: 'not_started' | 'created' | 'active' | 'ended' | 'failed';
+  startedAt?: string | null;
+  endedAt?: string | null;
+  chimeEnabled: boolean;
+  transcription: ConsultingCallTranscription;
+};
+
+export type ConsultingCallJoinResult = {
+  callSessionId: string;
+  bookingId: string;
+  participant: {
+    id: string;
+    type: 'customer' | 'partner';
+    languageCode: ConsultingCallLanguageCode;
+  };
+  meeting: Record<string, unknown>;
+  attendee: Record<string, unknown>;
+  transcription: ConsultingCallTranscription;
 };
