@@ -49,7 +49,7 @@ export type UploadedMediaAsset = {
   thumbnailUrl?: string | null;
 };
 
-type PresignedUpload = {
+type PresignedUploadTarget = {
   bucket: string;
   cacheControl?: string | null;
   cdnUrl?: string | null;
@@ -58,6 +58,11 @@ type PresignedUpload = {
   method: 'PUT';
   objectKey: string;
   uploadUrl: string;
+};
+
+type PresignedUpload = PresignedUploadTarget & {
+  thumbnailUpload?: PresignedUploadTarget | null;
+  uploadId: string;
 };
 
 type PresignedUploadResponse = {
@@ -80,20 +85,31 @@ type PreparedJpegUploadFile = PreparedUploadFile & {
   width: number | null;
 };
 
-type ThumbnailCompletionPayload = {
-  thumbnailBucket: string;
-  thumbnailByteSize: number | null;
-  thumbnailCdnUrl: string | null;
-  thumbnailContentType: string;
-  thumbnailHeight: number | null;
-  thumbnailObjectKey: string;
-  thumbnailWidth: number | null;
+type PreparedThumbnailUpload = {
+  cleanup: () => Promise<void>;
+  contentType: 'image/jpeg';
+  fileUri: string;
+  request: {
+    byteSize: number;
+    contentType: 'image/jpeg';
+    height: number | null;
+    originalFilename: string;
+    width: number | null;
+  };
 };
 
 const DEFAULT_JPEG_COMPRESS = 0.82;
 const DEFAULT_JPEG_MAX_DIMENSION = 1440;
 const COMMUNITY_THUMBNAIL_COMPRESS = 0.72;
 const COMMUNITY_THUMBNAIL_MAX_DIMENSION = 640;
+const MAX_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+function requireUploadByteSize(byteSize: number | null): number {
+  if (!byteSize || byteSize > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error('Upload file size must be between 1 byte and 50 MiB.');
+  }
+  return byteSize;
+}
 
 export function inferImageContentType(uri: string, fallback?: string | null): string {
   if (fallback?.trim()) {
@@ -275,7 +291,7 @@ async function normalizeUploadFileToJpeg({
 }
 
 async function uploadFileToPresignedUrl(
-  upload: PresignedUpload,
+  upload: PresignedUploadTarget,
   fileUri: string,
   contentType: string,
 ): Promise<void> {
@@ -293,21 +309,17 @@ async function uploadFileToPresignedUrl(
   }
 }
 
-async function uploadCommunityThumbnail({
+async function prepareCommunityThumbnail({
   filename,
   height,
-  mediaKind,
-  source,
   uploadFileUri,
   width,
 }: {
   filename: string;
   height: number | null;
-  mediaKind: string;
-  source: MediaUploadSource;
   uploadFileUri: string;
   width: number | null;
-}): Promise<{cleanup: () => Promise<void>; payload: ThumbnailCompletionPayload}> {
+}): Promise<PreparedThumbnailUpload> {
   const thumbnail = await createJpegFile({
     baseFileUri: uploadFileUri,
     filename: getThumbnailFilename(filename),
@@ -319,35 +331,18 @@ async function uploadCommunityThumbnail({
     },
     width,
   });
-  const contentType = 'image/jpeg';
-
-  const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
-    body: {
-      byteSize: thumbnail.byteSize,
-      contentType,
-      height: thumbnail.height,
-      mediaKind: `${mediaKind}-thumbnail`,
-      originalFilename: thumbnail.filename,
-      source,
-      width: thumbnail.width,
-    },
-    method: 'POST',
-  });
-
-  await uploadFileToPresignedUrl(upload, thumbnail.fileUri, contentType);
-
   return {
     cleanup: async () => {
       await thumbnail.cleanup?.();
     },
-    payload: {
-      thumbnailBucket: upload.bucket,
-      thumbnailByteSize: thumbnail.byteSize,
-      thumbnailCdnUrl: upload.cdnUrl || null,
-      thumbnailContentType: contentType,
-      thumbnailHeight: thumbnail.height,
-      thumbnailObjectKey: upload.objectKey,
-      thumbnailWidth: thumbnail.width,
+    contentType: 'image/jpeg',
+    fileUri: thumbnail.fileUri,
+    request: {
+      byteSize: requireUploadByteSize(thumbnail.byteSize),
+      contentType: 'image/jpeg',
+      height: thumbnail.height,
+      originalFilename: thumbnail.filename,
+      width: thumbnail.width,
     },
   };
 }
@@ -367,8 +362,7 @@ export async function uploadMediaAsset({
   let uploadHeight = height ?? null;
   let uploadWidth = width ?? null;
   let uploadFile = await prepareUploadFile(uri, originalFilename);
-  let thumbnailCleanup: (() => Promise<void>) | undefined;
-  let thumbnailPayload: ThumbnailCompletionPayload | undefined;
+  let thumbnail: PreparedThumbnailUpload | undefined;
 
   try {
     if (normalize?.format === 'jpeg') {
@@ -388,52 +382,45 @@ export async function uploadMediaAsset({
     }
 
     if (shouldCreateCommunityThumbnail(mediaKind, contentType)) {
-      const thumbnail = await uploadCommunityThumbnail({
+      thumbnail = await prepareCommunityThumbnail({
         filename: originalFilename,
         height: uploadHeight,
-        mediaKind,
-        source,
         uploadFileUri: uploadFile.fileUri,
         width: uploadWidth,
       });
-      thumbnailCleanup = thumbnail.cleanup;
-      thumbnailPayload = thumbnail.payload;
     }
 
+    const uploadByteSize = requireUploadByteSize(uploadFile.byteSize);
     const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
       body: {
+        byteSize: uploadByteSize,
         contentType,
         height: uploadHeight,
         mediaKind,
         originalFilename,
         source,
+        thumbnail: thumbnail?.request,
         width: uploadWidth,
       },
       method: 'POST',
     });
 
     await uploadFileToPresignedUrl(upload, uploadFile.fileUri, contentType);
+    if (thumbnail) {
+      if (!upload.thumbnailUpload) {
+        throw new Error('Backend did not issue the requested thumbnail upload target.');
+      }
+      await uploadFileToPresignedUrl(upload.thumbnailUpload, thumbnail.fileUri, thumbnail.contentType);
+    }
 
     const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
-      body: {
-        bucket: upload.bucket,
-        byteSize: uploadFile.byteSize,
-        cdnUrl: upload.cdnUrl || null,
-        contentType,
-        height: uploadHeight,
-        mediaKind,
-        objectKey: upload.objectKey,
-        originalFilename,
-        source,
-        width: uploadWidth,
-        ...thumbnailPayload,
-      },
+      body: {uploadId: upload.uploadId},
       method: 'POST',
     });
 
     return media;
   } finally {
-    await thumbnailCleanup?.();
+    await thumbnail?.cleanup();
     await uploadFile.cleanup?.();
   }
 }

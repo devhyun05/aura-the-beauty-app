@@ -47,7 +47,7 @@ def test_s3_presigned_upload_uses_cdn_url_and_file_extension() -> None:
   upload = FakeS3Service(settings).create_presigned_upload(
     media_kind="capture",
     content_type="image/jpeg",
-    original_filename="face.JPG",
+    original_filename="face.jpg.html",
   )
 
   assert upload["bucket"] == "aura-dev-bucket"

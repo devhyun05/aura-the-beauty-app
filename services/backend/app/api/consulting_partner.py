@@ -11,7 +11,12 @@ from app.schemas.consulting_partner import (
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
-from app.services.s3 import S3Service
+from app.services.media_uploads import (
+  bind_legacy_thumbnail_session,
+  complete_upload_session,
+  issue_upload_session,
+  resolve_legacy_upload_session_id,
+)
 from app.services import consulting_partner
 
 
@@ -256,72 +261,51 @@ async def complete_partner_booking_summary(
 @router.post("/media/presigned-upload")
 async def create_partner_presigned_upload(
   payload: PresignedUploadRequest,
-  _: dict = Depends(get_partner_account),
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  return success(
-    {
-      "upload": S3Service(settings).create_presigned_upload(
-        media_kind=payload.media_kind,
-        content_type=payload.content_type,
-        original_filename=payload.original_filename,
-      ),
-    },
+  upload = await issue_upload_session(
+    db,
+    settings,
+    payload,
+    partner_account_id=account["id"],
   )
+  return success({"upload": upload})
 
 
 @router.post("/media/complete-upload")
 async def complete_partner_upload(
   payload: CompleteUploadRequest,
-  _: dict = Depends(get_partner_account),
+  account: dict = Depends(get_partner_account),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
-  media = await db.fetchrow(
-    """
-    insert into media_assets (
-      owner_user_id,
-      media_kind,
-      source,
-      bucket,
-      object_key,
-      cdn_url,
-      thumbnail_bucket,
-      thumbnail_object_key,
-      thumbnail_cdn_url,
-      thumbnail_content_type,
-      thumbnail_byte_size,
-      thumbnail_width,
-      thumbnail_height,
-      content_type,
-      byte_size,
-      width,
-      height,
-      checksum_sha256,
-      original_filename
+  upload_id = payload.upload_id
+  if upload_id is None:
+    upload_id = await resolve_legacy_upload_session_id(
+      db,
+      settings,
+      bucket=payload.bucket or "",
+      object_key=payload.object_key or "",
+      partner_account_id=account["id"],
     )
-    values (null, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-    returning *
-    """,
-    payload.media_kind,
-    payload.source,
-    payload.bucket,
-    payload.object_key,
-    payload.cdn_url,
-    payload.thumbnail_bucket,
-    payload.thumbnail_object_key,
-    payload.thumbnail_cdn_url,
-    payload.thumbnail_content_type,
-    payload.thumbnail_byte_size,
-    payload.thumbnail_width,
-    payload.thumbnail_height,
-    payload.content_type,
-    payload.byte_size,
-    payload.width,
-    payload.height,
-    payload.checksum_sha256,
-    payload.original_filename,
+    if payload.thumbnail_bucket and payload.thumbnail_object_key:
+      await bind_legacy_thumbnail_session(
+        db,
+        settings,
+        upload_id,
+        thumbnail_bucket=payload.thumbnail_bucket,
+        thumbnail_object_key=payload.thumbnail_object_key,
+        partner_account_id=account["id"],
+      )
+  media = await complete_upload_session(
+    db,
+    settings,
+    upload_id,
+    partner_account_id=account["id"],
   )
-  return success({"media": dict(media)})
+  return success({"media": media})
 
 
 @router.get("/shared-reports")
