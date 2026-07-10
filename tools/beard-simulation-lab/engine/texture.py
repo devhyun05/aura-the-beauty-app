@@ -106,6 +106,65 @@ def coherence_map(bgr: np.ndarray) -> np.ndarray:
     return num / np.maximum(jxx + jyy, 1e-6)
 
 
+_GRAIN_PATCH = 32
+_GRAIN_STRIDE = 16  # half-overlap so the jitter can never open a hole
+
+
+def build_grain_field(bgr: np.ndarray, sample_mask: np.ndarray,
+                      seed: int = 0) -> np.ndarray | None:
+    """Unit-RMS, zero-mean grain field tiled from THIS person's own clean skin.
+
+    Quilting: 32px patches of high-passed luminance from `sample_mask`, placed
+    on a jittered half-overlap grid under a Hann window, with seeded flips and
+    rotations so the tiling never repeats visibly. Everything is seeded --
+    the product path must be reproducible, and determinism is under test.
+    Returns None when the sample area is too small or carries no texture;
+    callers must treat that as "skip re-grain", not as an error.
+    """
+    h, w = bgr.shape[:2]
+    lum = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    hp = lum - cv2.GaussianBlur(lum, (0, 0), _HP_SIGMA)
+    ok = sample_mask > 0.5
+    ys, xs = np.where(ok)
+    P = _GRAIN_PATCH
+    if ys.size < P * P:
+        return None
+    patches = []
+    for y in range(int(ys.min()), max(int(ys.max()) - P, int(ys.min())) + 1, P // 2):
+        for x in range(int(xs.min()), max(int(xs.max()) - P, int(xs.min())) + 1, P // 2):
+            m = ok[y:y + P, x:x + P]
+            if m.shape == (P, P) and float(m.mean()) > 0.98:
+                p = hp[y:y + P, x:x + P]
+                rms = float(np.sqrt(np.mean(p * p)))
+                if rms > 1e-3:
+                    patches.append(((p - p.mean()) / rms).astype(np.float32))
+    if not patches:
+        return None
+
+    rng = np.random.default_rng(seed)
+    win = (np.hanning(P)[:, None] * np.hanning(P)[None, :]).astype(np.float32)
+    acc = np.zeros((h + 2 * P, w + 2 * P), np.float32)
+    wsum = np.zeros_like(acc)
+    for gy in range(0, h + P, _GRAIN_STRIDE):
+        for gx in range(0, w + P, _GRAIN_STRIDE):
+            p = patches[int(rng.integers(len(patches)))]
+            p = np.rot90(p, int(rng.integers(4)))
+            if rng.integers(2):
+                p = p[:, ::-1]
+            jy = gy + int(rng.integers(-P // 4, P // 4 + 1))
+            jx = gx + int(rng.integers(-P // 4, P // 4 + 1))
+            jy = min(max(jy, 0), h + P)
+            jx = min(max(jx, 0), w + P)
+            acc[jy:jy + P, jx:jx + P] += p * win
+            wsum[jy:jy + P, jx:jx + P] += win
+    field = acc[P:P + h, P:P + w] / np.maximum(wsum[P:P + h, P:P + w], 1e-3)
+    field -= field.mean()
+    rms = float(np.sqrt(np.mean(field * field)))
+    if rms < 1e-6:
+        return None
+    return (field / rms).astype(np.float32)
+
+
 def clean_skin_mask(shape: tuple[int, int], landmarks: np.ndarray,
                     face_width: float) -> np.ndarray:
     """Forehead + upper-cheek disks: this person's beard-free reference skin."""

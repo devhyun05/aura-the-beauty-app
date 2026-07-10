@@ -269,6 +269,63 @@ def test_zone_mean_darkness_is_not_printed_into_the_result() -> None:
     assert clean_skin - zone_after < 6.0             # band gone (within noise)
 
 
+def _flattening_setup():
+    """A crop with a dense stubble patch and a full-confidence mask over it."""
+    crop, ref = _synthetic_crop()
+    img = crop.bgr.copy()
+    for y in range(200, 280, 4):
+        for x in range(200, 280, 4):
+            cv2.circle(img, (x, y), 1, (35, 30, 40), -1)
+    crop.bgr[:] = img
+    dots = np.zeros_like(crop.roi_mask)
+    dots[195:285, 195:285] = 1.0
+    masks = BeardMasks(hard=dots * 0.9, shadow=dots * 0.9,
+                       protect=crop.protect_mask, stats={})
+    return crop, masks
+
+
+def test_regrain_is_deterministic_and_stays_inside_the_zone() -> None:
+    crop, masks = _flattening_setup()
+    kwargs = dict(shadow_strength=0.85, hair_attenuation=0.85, strand_strength=0.0)
+    once = correct_crop(crop, masks, regrain=True, **kwargs)
+    twice = correct_crop(crop, masks, regrain=True, **kwargs)
+    assert np.array_equal(once, twice)          # seeded quilting: reproducible
+    off = correct_crop(crop, masks, regrain=False, **kwargs)
+    # conf_zone is 0 where the masks are 0: grain must not leak out of the zone.
+    assert np.array_equal(once[:150], off[:150])
+    assert np.array_equal(once[:, :150], off[:, :150])
+
+
+def test_regrain_restores_grain_energy_in_a_flattened_zone() -> None:
+    """Strong attenuation flattens the zone; re-grain must refill it toward the
+    person's own clean-skin texture instead of leaving the matte patch."""
+    from engine.texture import grain_map
+
+    # Plain skin under a confident mask: 85% attenuation flattens its noise
+    # grain. Placed at the crop's only dot-, shadow- and lip-free area --
+    # the module's own stubble dots or shadow patch would keep the zone
+    # textured even after attenuation and break the premise.
+    crop, _ = _synthetic_crop()
+    dots = np.zeros_like(crop.roi_mask)
+    dots[105:175, 215:300] = 1.0
+    masks = BeardMasks(hard=dots * 0.9, shadow=dots * 0.9,
+                       protect=crop.protect_mask, stats={})
+    kwargs = dict(shadow_strength=0.85, hair_attenuation=0.85, strand_strength=0.0)
+    off = correct_crop(crop, masks, regrain=False, **kwargs)
+    on = correct_crop(crop, masks, regrain=True, **kwargs)
+
+    zone = np.zeros(crop.bgr.shape[:2], bool)
+    zone[120:160, 230:290] = True
+    clean = np.zeros_like(zone)
+    clean[25:55, 105:215] = True                # the crop's skin_ref patch
+    ref = float(np.median(grain_map(crop.bgr)[clean]))
+    g_off = float(np.median(grain_map(off)[zone]))
+    g_on = float(np.median(grain_map(on)[zone]))
+    assert g_off < ref * 0.65                   # premise: the zone went flat
+    assert g_on > g_off * 1.3                   # re-grain refilled energy
+    assert g_on < ref * 1.6                     # ...without overshooting wildly
+
+
 def test_composite_untouched_outside_blend_mask() -> None:
     crop, ref = _synthetic_crop()
     masks = segment_beard(crop, fit_skin_model(ref))

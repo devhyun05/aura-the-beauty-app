@@ -30,6 +30,7 @@ from .beard_segmentation import (
     BeardMasks, SkinModel, confidence_ramp, local_skin_reference,
 )
 from .lower_face_roi import LowerFaceCrop
+from .texture import build_grain_field, grain_map, relative_grain_map
 
 # Never remove all high-frequency signal — a fully flat patch reads as
 # "plastic skin" and fails the 제모/면도 distinction reviewers check for.
@@ -106,6 +107,8 @@ class CorrectionContext:
     strand: np.ndarray         # float32 0..1, thin dark structures in the zone
     clean_full: np.ndarray     # float32 BGR, strand-inpainted crop
     local_ref_lab: np.ndarray  # smooth local skin Lab field, illumination kept
+    grain: np.ndarray | None = None   # unit-RMS field quilted from own skin
+    ref_rel_grain: float | None = None  # clean skin's texture contrast (target)
     stats: dict = field(default_factory=dict)
 
 
@@ -179,8 +182,28 @@ def build_correction_context(
         local_ref_lab[..., 1:] = skin_model.mean[1:] + dev * scale
         stats["refChromaClamped"] = clamped
 
+    # Re-grain material: this person's own clean-skin texture. The canonical
+    # reference patches (forehead, upper cheeks) live OUTSIDE the lower-face
+    # crop, so `skin_ref_mask` is empty on real crops (the plan's F4 risk) --
+    # fall back to the in-crop skin the detector itself called beard-free,
+    # eroded away from mask and protect boundaries. If even that is too small
+    # or flat, the field is None and re-grain degrades to off (in stats).
+    sample = crop.skin_ref_mask
+    if float((sample > 0.5).sum()) < 32 * 32:
+        union = np.maximum(masks.hard, masks.shadow)
+        clean = ((union < 0.10) * crop.roi_mask * (1 - crop.protect_mask))
+        sample = cv2.erode(clean.astype(np.float32), np.ones((9, 9), np.float32))
+    grain = build_grain_field(crop.bgr, sample)
+    ref_rel_grain = None
+    ref_px = sample > 0.5
+    if grain is not None and ref_px.any():
+        if float(np.median(grain_map(crop.bgr)[ref_px])) >= 0.05:
+            ref_rel_grain = float(np.median(relative_grain_map(crop.bgr)[ref_px]))
+    stats["grainBankOk"] = bool(grain is not None and ref_rel_grain is not None)
+
     return CorrectionContext(strand=strand, clean_full=clean_full,
-                             local_ref_lab=local_ref_lab, stats=stats)
+                             local_ref_lab=local_ref_lab, grain=grain,
+                             ref_rel_grain=ref_rel_grain, stats=stats)
 
 
 def correct_crop(
@@ -192,6 +215,7 @@ def correct_crop(
     *,
     strand_strength: float | None = None,
     luma_shift_frac: float = DEFAULT_LUMA_SHIFT,
+    regrain: bool = False,
     context: CorrectionContext | None = None,
 ) -> np.ndarray:
     """Stage application. Pure blending over a `context` when one is supplied.
@@ -247,4 +271,22 @@ def correct_crop(
     debt = cv2.GaussianBlur(high_out, (0, 0), sigmaX=max(2.0, crop.face_width / 30))
     high_out = high_out - debt * conf_zone
 
-    return np.clip(low_out + high_out, 0, 255).astype(np.uint8)
+    out = low_out + high_out
+
+    # D: re-grain. Attenuating the hair also removed the pores that lived on
+    # the same pixels, and nothing above puts texture back -- the matte-patch
+    # look. Refill by ENERGY shortfall, not linearly: grain adds in quadrature,
+    # so the injection is sqrt(target^2 - current^2) -- self-limiting where
+    # texture survived, full strength where the zone went flat. The target
+    # scales with local luminance (texture contrast is what the eye keys on),
+    # so shaded skin gets a quiet grain. Luminance-only, zone-gated.
+    if regrain and ctx.grain is not None and ctx.ref_rel_grain:
+        lum = (out[..., 0] * 0.114 + out[..., 1] * 0.587 + out[..., 2] * 0.299)
+        hp = lum - cv2.GaussianBlur(lum, (0, 0), 2.0)
+        cur2 = cv2.boxFilter(hp * hp, -1, (7, 7))
+        base = cv2.GaussianBlur(lum, (0, 0), 8.0)
+        target = ctx.ref_rel_grain * np.maximum(base, 8.0)
+        add = np.sqrt(np.maximum(target * target - cur2, 0.0))
+        out = out + (ctx.grain * add * conf_zone[..., 0])[..., None]
+
+    return np.clip(out, 0, 255).astype(np.uint8)

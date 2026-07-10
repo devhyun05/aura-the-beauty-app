@@ -11,3 +11,4 @@ feather_ratio: 0.04
 global_strength: 1.0
 guard:
   identity_check: warn
+regrain: true    # C: refill the erased pixels with this person's own skin grain

@@ -37,7 +37,9 @@ from engine.lower_face_roi import (  # noqa: E402
     build_lower_face_crop, skin_reference_pixels,
 )
 from engine.pipeline import load_stage_config  # noqa: E402
-from engine.texture import chroma_delta_ab, streak_score, waxiness_score  # noqa: E402
+from engine.texture import (  # noqa: E402
+    chroma_delta_ab, grain_map, relative_grain_map, streak_score, waxiness_score,
+)
 from eval.run_owndomain_eval import _fit, _restore, discover_pairs  # noqa: E402
 
 LAB = Path(__file__).resolve().parents[1]
@@ -95,8 +97,29 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
 
     zone = _zone_full(crop, masks, shape)
     lm, fw = det.landmarks, det.face_width
+
+    # Second anchor: the in-crop skin the detector called beard-free (the same
+    # sample the corrector's re-grain targets). `waxiness` anchors at the
+    # forehead, which on some photos carries 2.3x the grain of the skin that
+    # actually surrounds the jaw -- the eye compares the zone to its
+    # NEIGHBOURS, so both anchors are reported side by side.
+    union = np.maximum(masks.hard, masks.shadow)
+    near = ((union < 0.10) * crop.roi_mask * (1 - crop.protect_mask))
+    near = cv2.erode(near.astype(np.float32), np.ones((9, 9), np.float32))
+    near_full = _restore(near, crop.bbox, shape) > 0.5
+
+    def wax_local(img: np.ndarray) -> float | None:
+        if not zone.any() or near_full.sum() < 32 * 32:
+            return None
+        if float(np.median(grain_map(img)[near_full])) < 0.05:
+            return None
+        rel = relative_grain_map(img)
+        ref = float(np.median(rel[near_full]))
+        return float(np.median(rel[zone]) / ref) if ref > 1e-9 else None
+
     def score(img: np.ndarray) -> dict:
         return {"waxiness": waxiness_score(img, zone, lm, fw),
+                "waxinessLocal": wax_local(img),
                 "streak": streak_score(img, zone, lm, fw),
                 "chromaDeltaAb": chroma_delta_ab(img, zone, lm, fw)}
 
@@ -119,7 +142,8 @@ def measure_one(name: str, img_path: Path, out_dir: Path,
         corrected = correct_crop(crop, masks, p["shadow_strength"],
                                  p["hair_attenuation"], p.get("stubble_inpaint", False),
                                  strand_strength=p.get("strand_strength"),
-                                 luma_shift_frac=p.get("luma_shift_frac", 0.75), context=ctx)
+                                 luma_shift_frac=p.get("luma_shift_frac", 0.75),
+                                 regrain=p.get("regrain", False), context=ctx)
         corr_s = time.perf_counter() - t0
         soft = derive_soft_blend(crop, masks, p.get("feather_ratio", 0.035))
         result = composite_full(bgr, corrected, crop, soft, p.get("global_strength", 1.0))
@@ -164,7 +188,7 @@ def main() -> int:
         return [v for v in vals if v is not None]
 
     f = lambda v: f"{v:.3f}" if v is not None else "  n/a"  # noqa: E731
-    for metric in ("waxiness", "streak", "chromaDeltaAb"):
+    for metric in ("waxiness", "waxinessLocal", "streak", "chromaDeltaAb"):
         print(f"--- {metric} (zone core > {ZONE_THR}) ---")
         print(f"{'id':7} {'orig':>7} " + " ".join(f"{s:>8}" for s in STAGES))
         for r in records:

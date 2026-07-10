@@ -330,6 +330,7 @@ def _run_stage_with_mitigations(
             stubble_inpaint=params.get("stubble_inpaint", False),
             strand_strength=None if strand is None else strand * strength_scale,
             luma_shift_frac=params.get("luma_shift_frac", DEFAULT_LUMA_SHIFT),
+            regrain=params.get("regrain", False),
             context=context,
         )
         soft = blend.derive_soft_blend(crop, stage_masks, feather)
