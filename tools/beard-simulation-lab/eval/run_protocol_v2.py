@@ -42,6 +42,7 @@ from engine.lower_face_roi import (  # noqa: E402
     skin_reference_pixels,
 )
 from eval.bands import BAND_NAMES, band_recall, build_bands  # noqa: E402
+from eval.gt_region import load_region_gt  # noqa: E402
 from eval.run_owndomain_eval import (  # noqa: E402
     _fit,
     _restore,
@@ -63,13 +64,20 @@ def _clipseg(crop) -> np.ndarray:
     return clipseg_heat("CIDAS/clipseg-rd64-refined", crop.bgr, ["beard stubble"])
 
 
-def evaluate_pair(name: str, img_path: Path, mask_path: Path) -> dict | None:
+def evaluate_pair(name: str, img_path: Path, mask_path: Path,
+                  gt_mode: str = "region") -> dict | None:
     bgr = _fit(cv2.imread(str(img_path), cv2.IMREAD_COLOR))
     det = detect_face(bgr)
     if det is None or not det.quality.passed:
         return {"id": name, "status": "gate_rejected"}
 
     gt = load_gt_mask(mask_path, bgr.shape[:2])
+    strand_px, clipped_px = int(gt.sum()), 0
+    if gt_mode == "region":
+        # The approved label standard (REGION): strands -> filled zone, clipped
+        # above the nose line. clipped_px is surfaced, never silently dropped.
+        gt, clipped_px = load_region_gt(
+            gt, det.landmarks, det.face_width, det.face_height)
     skin = fit_skin_model(skin_reference_pixels(bgr, det.landmarks, det.face_width))
     crop = build_lower_face_crop(bgr, det.landmarks, det.face_width, det.face_height)
     shape = bgr.shape[:2]
@@ -92,8 +100,9 @@ def evaluate_pair(name: str, img_path: Path, mask_path: Path) -> dict | None:
         "clipseg": _restore(_clipseg(crop), crop.bbox, shape),
     }
 
-    rec: dict = {"id": name, "status": "processed", "gtPixels": int(gt.sum()),
-                 "predictors": {}}
+    rec: dict = {"id": name, "status": "processed", "gtMode": gt_mode,
+                 "gtPixels": int(gt.sum()), "strandPixels": strand_px,
+                 "clippedPx": clipped_px, "predictors": {}}
     for pname, conf in preds.items():
         thr = OP[pname]
         entry: dict = {"thr": thr, "sweep": {}, "scopes": {}}
@@ -148,14 +157,19 @@ def summarize(records: list[dict]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="baseline", help="subdir name under outputs/protocol_v2")
+    ap.add_argument("--gt", choices=("region", "strand"), default="region",
+                    help="region = approved zone standard (default); strand = raw hand labels")
     args = ap.parse_args()
     out = OUT_DIR / args.tag
     out.mkdir(parents=True, exist_ok=True)
 
-    records = [evaluate_pair(*p) for p in discover_pairs()]
+    records = [evaluate_pair(*p, gt_mode=args.gt) for p in discover_pairs()]
     s = summarize(records)
 
-    print(f"processed {s['processed']}/{s['pairs']}\n")
+    proc = [r for r in records if r["status"] == "processed"]
+    clipped = sum(r.get("clippedPx", 0) for r in proc)
+    print(f"processed {s['processed']}/{s['pairs']}  gt={args.gt}  "
+          f"clipped-above-nose={clipped}px\n")
     for pname, p in s["predictors"].items():
         print(f"--- {pname} (thr {p['thr']}) ---")
         for scope, sc in p["scopes"].items():
