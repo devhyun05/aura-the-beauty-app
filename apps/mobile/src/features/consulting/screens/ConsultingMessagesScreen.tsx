@@ -64,6 +64,15 @@ export function ConsultingMessagesScreen({
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+
+      if (!authToken) {
+        setRecords([]);
+        setIsLoading(false);
+        return () => {
+          isMounted = false;
+        };
+      }
+
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()])
@@ -86,7 +95,7 @@ export function ConsultingMessagesScreen({
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [authToken]),
   );
 
   const activeRecords = useMemo(

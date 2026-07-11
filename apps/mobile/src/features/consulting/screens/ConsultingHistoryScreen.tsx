@@ -55,6 +55,7 @@ const historyFilters: readonly {id: HistoryFilterId; label: string}[] = [
 ];
 
 type ConsultingHistoryScreenProps = {
+  authToken?: string | null;
   onPressUpcoming: (record: ConsultingRecord) => void;
   onPressReschedule: (record: ConsultingRecord) => void;
   onPressReview: (record: ConsultingRecord) => void;
@@ -62,6 +63,7 @@ type ConsultingHistoryScreenProps = {
 };
 
 export function ConsultingHistoryScreen({
+  authToken,
   onPressUpcoming,
   onPressReschedule,
   onPressReview,
@@ -80,6 +82,15 @@ export function ConsultingHistoryScreen({
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+
+      if (!authToken) {
+        setRecords([]);
+        setIsLoading(false);
+        return () => {
+          isMounted = false;
+        };
+      }
+
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()]).then(
@@ -98,7 +109,7 @@ export function ConsultingHistoryScreen({
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [authToken]),
   );
 
   const handleCancel = useCallback((record: ConsultingRecord) => {

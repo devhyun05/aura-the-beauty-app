@@ -357,11 +357,14 @@ export function ConsultingSummaryRouteScreen({
 export function ConsultingHistoryRouteScreen({
   navigation,
 }: RootScreenProps<'ConsultingHistory'>) {
+  const {getAuthToken} = useAuthSession();
+
   return (
     <DetailRouteChrome
       routeName="ConsultingHistory"
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingHistoryScreen
+        authToken={getAuthToken()}
         onPressReview={record =>
           navigation.navigate('ConsultingReview', {
             expertId: record.expertId,
@@ -442,6 +445,7 @@ export function ConsultingConversationRouteScreen({
   route,
 }: RootScreenProps<'ConsultingConversation'>) {
   const {getAuthToken} = useAuthSession();
+  const authToken = getAuthToken();
   const [record, setRecord] = useState<ConsultingRecord | null>(
     () => findConsultingRecord(route.params.recordId) ?? null,
   );
@@ -449,6 +453,13 @@ export function ConsultingConversationRouteScreen({
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!authToken) {
+      setRecord(null);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     getConsultingBooking(route.params.recordId).then(data => {
       if (isMounted && data) {
@@ -459,7 +470,7 @@ export function ConsultingConversationRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [route.params.recordId]);
+  }, [authToken, route.params.recordId]);
 
   useEffect(() => {
     if (record) {
@@ -472,7 +483,7 @@ export function ConsultingConversationRouteScreen({
       routeName="ConsultingConversation"
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingConversationScreen
-        authToken={getAuthToken()}
+        authToken={authToken}
         bookingId={route.params.recordId}
         expert={expert}
         onBookingStatusChange={() => {
