@@ -68,6 +68,9 @@ class S3Service:
 
     return boto3.client("s3", **client_kwargs)
 
+  def client(self):
+    return self._client()
+
   def assert_managed_media_location(self, *, bucket: str, object_key: str) -> None:
     configured_bucket = self.settings.s3_bucket_name
     if not configured_bucket:

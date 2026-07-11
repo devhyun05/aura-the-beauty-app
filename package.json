@@ -13,6 +13,7 @@
     "mobile:test:generated-brow": "npm --prefix apps/mobile run test:generated-brow",
     "mobile:test:face-ratio-distortion": "npm --prefix apps/mobile run test:face-ratio-distortion",
     "mobile:test:unity-bridge": "npm --prefix apps/mobile run test:unity-bridge",
+    "mobile:test:ios-privacy": "npm --prefix apps/mobile run test:ios-privacy",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {

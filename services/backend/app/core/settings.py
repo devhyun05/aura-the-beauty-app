@@ -50,6 +50,8 @@ class Settings(BaseSettings):
 
   ai_provider: str = "bedrock"
   image_generation_provider: str = "openai"
+  ai_job_execution_mode: str = "inline"
+  sqs_ai_job_queue_url: str | None = None
   openai_enabled: bool = True
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
@@ -67,7 +69,7 @@ class Settings(BaseSettings):
   auradin_retrieval_backend: str = "auto"
   auradin_vector_index_path: str | None = None
   auradin_vector_index_autobuild: bool = False
-  auradin_session_store: str = "memory"
+  auradin_session_store: str = "postgres"
   auradin_session_ttl_seconds: int = 15 * 60
   # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
   auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
@@ -140,6 +142,21 @@ class Settings(BaseSettings):
   @property
   def image_generation_provider_normalized(self) -> str:
     return (self.image_generation_provider or "openai").strip().lower()
+
+  @property
+  def ai_job_execution_mode_normalized(self) -> str:
+    return (self.ai_job_execution_mode or "inline").strip().lower()
+
+  @property
+  def ai_job_execution_mode_configured(self) -> bool:
+    return self.ai_job_execution_mode_normalized in {"inline", "sqs"}
+
+  @property
+  def sqs_ai_job_queue_configured(self) -> bool:
+    if self.ai_job_execution_mode_normalized != "sqs":
+      return True
+
+    return bool((self.sqs_ai_job_queue_url or "").strip())
 
   @property
   def effective_bedrock_analysis_region(self) -> str:
@@ -242,6 +259,7 @@ class Settings(BaseSettings):
   def public_config_status(self) -> dict[str, object]:
     analysis_provider = self.analysis_provider
     image_generation_provider = self.image_generation_provider_normalized
+    ai_job_execution_mode = self.ai_job_execution_mode_normalized
     items = {
       "databaseUrl": {
         "configured": self.database_configured,
@@ -310,6 +328,15 @@ class Settings(BaseSettings):
         "requiredWhen": "Recommendation images should be generated.",
         "value": image_generation_provider,
       },
+      "aiJobExecutionMode": {
+        "configured": self.ai_job_execution_mode_configured,
+        "requiredWhen": "AI analysis jobs are created. Use inline for local development and sqs for worker-backed deployments.",
+        "value": ai_job_execution_mode,
+      },
+      "sqsAiJobQueueUrl": {
+        "configured": self.sqs_ai_job_queue_configured,
+        "requiredWhen": "AI_JOB_EXECUTION_MODE=sqs.",
+      },
       "naverShoppingApi": {
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
         "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
@@ -345,6 +372,7 @@ class Settings(BaseSettings):
       "auradinSessionStore": self.auradin_session_store,
       "imageGenerationProvider": image_generation_provider,
       "imageGenerationModel": self.openai_image_model_id if image_generation_provider == "openai" else None,
+      "aiJobExecutionMode": ai_job_execution_mode,
       "items": items,
       "missing": missing,
     }

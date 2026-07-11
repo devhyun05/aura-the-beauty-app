@@ -637,7 +637,7 @@ def _postgres_enabled(settings: Settings, db: Database | None) -> bool:
   return bool(settings.auradin_session_store == "postgres" and db and db.is_connected)
 
 
-async def _ensure_postgres_table(db: Database) -> None:
+async def ensure_postgres_session_table(db: Database) -> None:
   global _POSTGRES_TABLE_READY
   if _POSTGRES_TABLE_READY:
     return
@@ -652,11 +652,17 @@ async def _ensure_postgres_table(db: Database) -> None:
     )
     """,
   )
+  await db.execute(
+    """
+    create index if not exists idx_auradin_search_sessions_expires_at
+      on auradin_search_sessions (expires_at)
+    """,
+  )
   _POSTGRES_TABLE_READY = True
 
 
 async def _save_postgres_session(db: Database, state: dict[str, Any]) -> None:
-  await _ensure_postgres_table(db)
+  await ensure_postgres_session_table(db)
   await db.execute(
     """
     insert into auradin_search_sessions (session_id, state, expires_at, updated_at)
@@ -674,7 +680,7 @@ async def _save_postgres_session(db: Database, state: dict[str, Any]) -> None:
 
 
 async def _load_postgres_session(db: Database, session_id: str) -> dict[str, Any] | None:
-  await _ensure_postgres_table(db)
+  await ensure_postgres_session_table(db)
   row = await db.fetchrow(
     """
     select state
@@ -733,14 +739,20 @@ async def get_session_persisted(
   db: Database | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
-  state = get_session(session_id, owner_subject=owner_subject)
-  if not state and _postgres_enabled(settings, db):
-    loaded_state = await _load_postgres_session(db, session_id)
-    if loaded_state and loaded_state.get("ownerSubject") == owner_subject:
-      _SESSIONS[session_id] = loaded_state
-      state = get_session(session_id, owner_subject=owner_subject)
+  if not _postgres_enabled(settings, db):
+    return get_session(session_id, owner_subject=owner_subject)
 
-  if state and _postgres_enabled(settings, db):
+  state = await _load_postgres_session(db, session_id)
+  if not state:
+    _SESSIONS.pop(session_id, None)
+    return None
+  if state.get("ownerSubject") != owner_subject:
+    return None
+
+  previous_phase = state.get("phase")
+  _SESSIONS[session_id] = state
+  state = get_session(session_id, owner_subject=owner_subject)
+  if state and state.get("phase") != previous_phase:
     await _save_postgres_session(db, state)
 
   return state

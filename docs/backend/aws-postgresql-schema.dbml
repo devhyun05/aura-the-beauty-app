@@ -345,6 +345,19 @@ Table user_product_likes {
   Note: 'LikedProductList and product heart state.'
 }
 
+Table auradin_search_sessions {
+  session_id text [pk]
+  state jsonb [not null]
+  expires_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    expires_at
+  }
+
+  Note: 'Temporary Auradin conversation state. Product likes remain in user_product_likes.'
+}
+
 Table product_recommendation_runs {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]

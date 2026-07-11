@@ -94,3 +94,9 @@ jobs:
 
       - name: Contract — Auradin theme scope
         run: npm run test:auradin-theme-scope
+
+      - name: Contract - iOS bundle identifiers
+        run: npm run test:ios-bundle-ids
+
+      - name: Contract - iOS privacy settings
+        run: npm run test:ios-privacy
