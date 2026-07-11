@@ -1,0 +1,203 @@
+{
+  "protocol": "docs/beard-simulation/CHECKPOINT6_PROTOCOL.md",
+  "sealedAt": "2026-07-12T06:48:17",
+  "sources": {
+    "IMG_4572": {
+      "file": "IMG_4572.JPG",
+      "layer": "dense",
+      "kind": "primary",
+      "bytes": 67102,
+      "sha256": "e10057b3d7b62b7bf83802ab18c9b7d4487401744ad7e8609a773e560acaf018"
+    },
+    "IMG_4570": {
+      "file": "IMG_4570.JPG",
+      "layer": "medium",
+      "kind": "primary",
+      "bytes": 29095,
+      "sha256": "c355e5a0c6170584eb1fc24c2241679fb9c527d1659cc9a635974d17914487e6"
+    },
+    "IMG_4575": {
+      "file": "IMG_4575.JPG",
+      "layer": "stubble",
+      "kind": "primary",
+      "bytes": 59279,
+      "sha256": "dacd444cc40c47c483092d0163b26cf8d7a3a7fa34fa5c85d413ff09784a0ab7"
+    },
+    "IMG_4561": {
+      "file": "IMG_4561.JPG",
+      "layer": "negative",
+      "kind": "primary",
+      "bytes": 65696,
+      "sha256": "091b131d09add7a0197af3c858212e3515b9d19703595fa79c3f89046428c197"
+    },
+    "IMG_4565": {
+      "file": "IMG_4565.JPG",
+      "layer": "negative",
+      "kind": "primary",
+      "bytes": 67383,
+      "sha256": "94df56b2e6af7de10a02f449d85f01a53c2b9cde4a32478575b99440a9989b62"
+    },
+    "none_wikimedia_g01": {
+      "file": "none_wikimedia_g01.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 939046,
+      "sha256": "ff4a9955e342b14cbd2aaca74b52ffaa1e5c507ba65c3e991ef34e56d0bfc057"
+    },
+    "none_wikimedia_03": {
+      "file": "none_wikimedia_03.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 262261,
+      "sha256": "863db675ece41ff2e10ed4b2ad09af37b8de0181160e23da8fb894146f52f14d"
+    },
+    "none_wikimedia_01": {
+      "file": "none_wikimedia_01.png",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 3962154,
+      "sha256": "4cf92f7a5c6b221b1b4d552bb33473c66cde8057aec433b3a1ccea8a5736bfc6"
+    },
+    "none_wikimedia_g02": {
+      "file": "none_wikimedia_g02.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 5242872,
+      "sha256": "9c96bd63f81fd3434215c54217121b55220f5f95d1ea7ef0ab173ec81cd16ab1"
+    },
+    "none_wikimedia_02": {
+      "file": "none_wikimedia_02.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 139234,
+      "sha256": "2543607d0d7fbfb835e535f2deb8f1c0c5dd54973a377234c346aef2f3b64dbc"
+    },
+    "stubble_wikimedia_g03": {
+      "file": "stubble_wikimedia_g03.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 3416375,
+      "sha256": "f4544588564e7c4865993bc267e8d8b3324a38d3fc78ca7e97730685a4a3e812"
+    },
+    "stubble_wikimedia_g04": {
+      "file": "stubble_wikimedia_g04.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 3103628,
+      "sha256": "9027ede53bf6c4247d734557a6cfd82281bc89ff5613bac1d2aa5fd783c809c1"
+    },
+    "stubble_wikimedia_g05": {
+      "file": "stubble_wikimedia_g05.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 3409175,
+      "sha256": "d0b9612c6809c5422d784137413563b11c4f274b773f9f1697a16f477e3c3473"
+    },
+    "stubble_wikimedia_02": {
+      "file": "stubble_wikimedia_02.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1270375,
+      "sha256": "378b6b0336d5e0866f50f9843184005e0d310a00a3655a83abd919cb5e72f6b4"
+    },
+    "stubble_wikimedia_06": {
+      "file": "stubble_wikimedia_06.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 2656992,
+      "sha256": "667fb9ae0adc62a301be1770bec644c388c28f9c33a262e48cc5add99d50cb4f"
+    },
+    "stubble_wikimedia_g01": {
+      "file": "stubble_wikimedia_g01.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1510637,
+      "sha256": "e8e87e533d1182b036bb501f28b94eae77d75542ce4992bf03c7ddebae4f2990"
+    },
+    "stubble_wikimedia_g06": {
+      "file": "stubble_wikimedia_g06.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1574160,
+      "sha256": "a6942550400756ddcc0d005c7dd2530175fe2696c49fa2b5368f746dcacd69c0"
+    },
+    "stubble_wikimedia_03": {
+      "file": "stubble_wikimedia_03.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 925288,
+      "sha256": "583e16311d7ef85f29bd57d9a05488848478442931b2a608cf7dbea96a296634"
+    },
+    "medium_flickr_91": {
+      "file": "medium_flickr_91.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 141217,
+      "sha256": "00052946fb61f52f59c900f499037931dbd2bd9c49bf82780582ac1650d64613"
+    },
+    "medium_wikimedia_g02": {
+      "file": "medium_wikimedia_g02.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 2071317,
+      "sha256": "9eeab757f937788725872674ae1135cc41b677f3e4863cf21e6d49227f02d45e"
+    },
+    "medium_unsplash_06": {
+      "file": "medium_unsplash_06.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 297497,
+      "sha256": "79d11a2f8484392d1b608b7fc2951f2f9e40bfd95b19cc29eaf940c93c803c4d"
+    },
+    "medium_wikimedia_05": {
+      "file": "medium_wikimedia_05.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 3060579,
+      "sha256": "8115d4f789ecaeba7c53aa136a5866e93a81115207a10dc8a6700baf32deb4ca"
+    },
+    "medium_wikimedia_g04": {
+      "file": "medium_wikimedia_g04.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 2149426,
+      "sha256": "2d977fcb7606dc2502c0e9be987ce6a3386e88aa3fce28ff34031ed76d2e40e1"
+    },
+    "medium_wikimedia_g03": {
+      "file": "medium_wikimedia_g03.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 4276373,
+      "sha256": "ed81452bb0db097451fc0e59118d6309539e397e90b54f1014eba9e78569ccc3"
+    },
+    "medium_pexels_01": {
+      "file": "medium_pexels_01.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 812360,
+      "sha256": "bfb5a0c8df7bcdc056990db3063acae5c2e996a18c44dcec5e4c992f519b16da"
+    },
+    "medium_wikimedia_04": {
+      "file": "medium_wikimedia_04.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 1287235,
+      "sha256": "1ef3ff224029d9cc276bcb086102c943189e65189fa0c8ee265cd8e11ee35a46"
+    },
+    "dense_wikimedia_g01": {
+      "file": "dense_wikimedia_g01.jpg",
+      "layer": "dense",
+      "kind": "webset",
+      "bytes": 2798037,
+      "sha256": "b4c62eb5ba134bdcec5c777bbb7f8aa79be8cc7b04c978048127cd27fbbeeec6"
+    },
+    "dense_wikimedia_g02": {
+      "file": "dense_wikimedia_g02.jpg",
+      "layer": "dense",
+      "kind": "webset",
+      "bytes": 329428,
+      "sha256": "02b4ad7be200b6f76063aab5a67f7caeb1d586a04a08fb6956a17d0818340268"
+    }
+  },
+  "variants": "pending — deterministic generation at §6-3 build only"
+}
