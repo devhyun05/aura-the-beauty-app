@@ -199,5 +199,112 @@
       "sha256": "02b4ad7be200b6f76063aab5a67f7caeb1d586a04a08fb6956a17d0818340268"
     }
   },
-  "variants": "pending — deterministic generation at §6-3 build only"
+  "variants": {
+    "stubble_wikimedia_g03__beauty": {
+      "file": "stubble_wikimedia_g03__beauty.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 3982429,
+      "sha256": "e72ee5a75c798fc4762d6ea6f69664ac75a7fd4102741eb09232a7ead03875c1"
+    },
+    "stubble_wikimedia_g03__jpeg40": {
+      "file": "stubble_wikimedia_g03__jpeg40.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 5148706,
+      "sha256": "4d86321a8ed5e0d3e10a2cf080f19f3c655df471e5d037582bfeafd2aaa914fa"
+    },
+    "stubble_wikimedia_g03__down06": {
+      "file": "stubble_wikimedia_g03__down06.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 6061114,
+      "sha256": "903e9bec6ddc3fb0c60f98188810b73ac3798b2667779c632a24c6b65da5b894"
+    },
+    "stubble_wikimedia_g04__beauty": {
+      "file": "stubble_wikimedia_g04__beauty.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 3514745,
+      "sha256": "78380066f9838720fb1ee03c7fb77d2587be7bf17b54bf31739241a93c229543"
+    },
+    "stubble_wikimedia_g04__jpeg40": {
+      "file": "stubble_wikimedia_g04__jpeg40.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 4527739,
+      "sha256": "97792aaaac5a8d97e056bdc27cd188c65b2a8855bc593a5e67e3e4cf4c258e56"
+    },
+    "stubble_wikimedia_g04__down06": {
+      "file": "stubble_wikimedia_g04__down06.png",
+      "layer": "stubble",
+      "kind": "variant",
+      "bytes": 5416885,
+      "sha256": "01fa2161117285536c12c48bba8a277583851de27a4154760f2f7dc2b7ab646b"
+    },
+    "medium_flickr_91__beauty": {
+      "file": "medium_flickr_91__beauty.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 551612,
+      "sha256": "974e4a98f9b075a58f62c97ab2e796be3e63c348fa69bb92363059d9cf8f8b35"
+    },
+    "medium_flickr_91__jpeg40": {
+      "file": "medium_flickr_91__jpeg40.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 753374,
+      "sha256": "040f063bca3ab585bab01fd416294a3899f5289edbbabd4384f09c84e9e48c5a"
+    },
+    "medium_flickr_91__down06": {
+      "file": "medium_flickr_91__down06.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 807562,
+      "sha256": "abd3863cf0bdf58d68c96912203f9c939c858c7e03cab2ba485f4a695781323a"
+    },
+    "medium_wikimedia_g02__beauty": {
+      "file": "medium_wikimedia_g02__beauty.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 3267625,
+      "sha256": "7e1b918b3deed751dc0de28fa988fbc02d3be692cbc4cd156cb87252708be908"
+    },
+    "medium_wikimedia_g02__jpeg40": {
+      "file": "medium_wikimedia_g02__jpeg40.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 3017422,
+      "sha256": "3d9cacacb145c44fa1eed3fd5dfab6983fc494f8d6bdd1efcd73dd6026dbe250"
+    },
+    "medium_wikimedia_g02__down06": {
+      "file": "medium_wikimedia_g02__down06.png",
+      "layer": "medium",
+      "kind": "variant",
+      "bytes": 4543704,
+      "sha256": "b0764a94d0f6c4902748a22ea48f8f7b117359cf3ce2664110ca7a3a397c30e9"
+    },
+    "none_wikimedia_g01__beauty": {
+      "file": "none_wikimedia_g01__beauty.png",
+      "layer": "negative",
+      "kind": "variant",
+      "bytes": 2208226,
+      "sha256": "46459122285da9660f4259a36a7b9df6273cea9369e3fc517939f5cea6e23f8d"
+    },
+    "none_wikimedia_g01__jpeg40": {
+      "file": "none_wikimedia_g01__jpeg40.png",
+      "layer": "negative",
+      "kind": "variant",
+      "bytes": 2653674,
+      "sha256": "b67344cc048731a624d08879625b9c09a95d4be7d0bfb02c85caaf7e32848a9a"
+    },
+    "none_wikimedia_g01__down06": {
+      "file": "none_wikimedia_g01__down06.png",
+      "layer": "negative",
+      "kind": "variant",
+      "bytes": 2962301,
+      "sha256": "d30ab6633168f6c9045d28c171642e98b481af067e793c7ba6c0438a2e5bec70"
+    }
+  },
+  "variantsSealedAt": "2026-07-12T06:48:56"
 }
