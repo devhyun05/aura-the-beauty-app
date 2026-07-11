@@ -246,13 +246,19 @@ def shading_field_v2(lab_low: np.ndarray, clean: np.ndarray, zone: np.ndarray,
 
     # pseudo-hole validation on the L channel
     hole_r = max(3, int(0.03 * fw))
-    hole_step = max(hole_r * 4, int(0.12 * fw))
-    holes_u8 = np.zeros(ring.shape, np.uint8)
-    for hy in range(hole_step // 2, ring.shape[0], hole_step):
-        for hx in range(hole_step // 2, ring.shape[1], hole_step):
-            if ring[hy, hx]:
-                cv2.circle(holes_u8, (hx, hy), hole_r, 1, -1)
-    holes = (holes_u8 > 0) & ring
+    holes = np.zeros(ring.shape, bool)
+    # a fragmented ring (dense beard, below-sector excluded) can miss every
+    # grid point -- densify rather than abstain for a measurement gap
+    for hole_step in (max(hole_r * 4, int(0.12 * fw)),
+                      max(hole_r * 2, int(0.05 * fw))):
+        holes_u8 = np.zeros(ring.shape, np.uint8)
+        for hy in range(hole_step // 2, ring.shape[0], hole_step):
+            for hx in range(hole_step // 2, ring.shape[1], hole_step):
+                if ring[hy, hx]:
+                    cv2.circle(holes_u8, (hx, hy), hole_r, 1, -1)
+        holes = (holes_u8 > 0) & ring
+        if holes.sum() >= 64:
+            break
     info["holePx"] = int(holes.sum())
     if holes.sum() >= 64:
         sup2 = ring & ~holes
