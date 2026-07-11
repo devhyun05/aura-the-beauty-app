@@ -154,6 +154,31 @@ def test_mole_single_dot_no_fire():
     assert not fired_b
 
 
+def test_mole_guard_measures_bbox_max_side():
+    """MOLE_MAX_SIDE_FW is the bbox MAX SIDE, not the diagonal (2026-07-12
+    rename, behavior preserved): a lone 5x5 blob has side 5 < 0.03fw=6.6 and
+    is mole-rejected — under a diagonal rule (hypot(5,5)=7.07 > 6.6) it
+    would slip through."""
+    assert not hasattr(mr, "MOLE_MAX_DIAG_FW")        # old name retired
+    nz = _dots([(160, 145)], size=5) * 8.0            # 25 px lone blob
+    _, _, coincident = _signals(_semantic_band(), nz)
+    fired, d = mr.fires_rule_a(SUBR["L"], coincident, FW)
+    assert not fired and d.get("moleRejected"), d
+    assert d["loneComponentSidePx"] == 5
+    assert math.hypot(5, 5) > mr.MOLE_MAX_SIDE_FW * FW  # diag rule differs
+
+
+def test_mole_guard_elongated_lone_component_not_mole():
+    """A lone hair-like streak (bbox max side > 0.03fw) is NOT dismissed as
+    a mole; with x-thirds spread it fires rule A."""
+    nz = _empty().astype(np.float32)
+    nz[150:153, 139:155] = 8.0                        # 3x16 streak in L lobe
+    _, _, coincident = _signals(_semantic_band(), nz)
+    fired, d = mr.fires_rule_a(SUBR["L"], coincident, FW)
+    assert not d.get("moleRejected"), d
+    assert fired, d
+
+
 def test_texture_only_lab_darkness_no_fire():
     """Principle 5: Lab-darkness/texture alone (semantic silent) must not
     fire — even with a committed strict mask."""
@@ -281,9 +306,21 @@ def _skin_bgr() -> np.ndarray:
     return img
 
 
-def _ctx(nz: np.ndarray, heat: np.ndarray) -> dict:
+def _ctx(nz: np.ndarray, heat: np.ndarray,
+         coincident_floor: bool = True) -> dict:
+    """coincident_floor paints a chin patch of weak agreeing evidence
+    (semantic 0.2 + nz 0.5, both sub-seed) so photo-wide coincident mass
+    clears the PROVISIONAL 300px global no-op floor — the fixtures here test
+    the mustache ACTIVATION rules, not the no-op (tests/test_coincident_gate
+    owns that). The patch sits outside the L/C/R subregions and seeds
+    nothing, so rule evaluation and the strict mask are unaffected."""
     crop = SimpleNamespace(bgr=_skin_bgr(), face_width=FW, landmarks=LM.copy(),
                            protect_mask=np.zeros((H, W), np.float32))
+    nz = nz.copy()
+    heat = heat.copy()
+    if coincident_floor:
+        heat[230:270, 170:230] = np.maximum(heat[230:270, 170:230], 0.2)
+        nz[235:265, 180:220] = np.maximum(nz[235:265, 180:220], 0.5)
     return dict(crop=crop, det=SimpleNamespace(face_height=FH),
                 zone_soft=np.zeros((H, W), np.float32),
                 zone=np.zeros((H, W), bool), nz=nz,
@@ -328,3 +365,11 @@ def test_build_mask_no_signal_no_activation():
     must = info["mask"]["mustache"]
     assert must["activated"] == []
     assert not edit.any()
+    assert info["mask"]["noOp"]["triggered"] is False   # floor patch clears it
+    # without the coincident floor the global no-op takes the whole photo
+    ctx0 = _ctx(np.zeros((H, W), np.float32), np.zeros((H, W), np.float32),
+                coincident_floor=False)
+    edit0, _, info0 = build_mask(ctx0)
+    assert not edit0.any()
+    assert info0["mask"]["noOp"]["triggered"] is True
+    assert info0["mask"]["noOp"]["provisional"] is True

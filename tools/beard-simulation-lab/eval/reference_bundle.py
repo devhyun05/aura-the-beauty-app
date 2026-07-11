@@ -58,12 +58,30 @@ repairs, both to the STATISTICS (the maps are untouched):
    GT-region beard shadow sits at most 67 below the anchor low edge (psd03
    deep chin shadow; p05 over dev9), garments 80-140 below. Measured after
    both: pic1-4 fired fraction 0.007-0.068, psd unchanged-to-better.
+
+CODEX #14 ROUND (2026-07-12) — typed abstains + two factorial-confirmed
+surgical fixes (controlled-degradation harness: eval/run_reference_factorial):
+
+1. build_reference_bundle returns a typed ReferenceAbstain instead of None.
+   rawCapacity < Nmin is classified insufficient_face_resolution: a capture
+   problem (shooting gate fw>=320), never a QC-relaxation candidate.
+2. Fix (i): the forehead-VERIFY sigma floor on a/b only is 1.5 (L stays 0.5).
+   Factorial: bilateral smoothing / JPEG chroma subsampling collapse the
+   cheek a/b MAD to 0 on degraded pic3/psd03 and the 0.5 floor rejected
+   color-identical foreheads at inlier 0.00. A ~20-L differently-lit
+   forehead stays rejected (L floor unchanged; regression-tested).
+3. Fix (ii): clipping is two-tier. Channel-only saturation (bright exposure:
+   R >= 250 while gray < 250 — factorial clip arm: gain 1.15 saturates 9.2%
+   of the frame in one channel vs 1.5% in gray) removes a pixel from the
+   COLOR model (lab_pixels/mean/cov) but keeps it in the gray black-hat
+   support (anchor_mask_full) the ladder and anchor stats use.
+   Nmin and the coherence gate are UNCHANGED this round.
 """
 
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -112,6 +130,19 @@ _CHEEK_MODEL_MIN = 64     # min pooled cheek px to verify the forehead against
 _FOREHEAD_MAHA = 3.0      # forehead px is a skin-inlier if maha <= this
 _FOREHEAD_MIN_INLIER = 0.70  # below this the whole forehead patch is bangs/
                           #   shadow and gets discarded, not trimmed
+_AB_SIGMA_FLOOR = 1.5     # forehead-VERIFY sigma floor on a/b only (Codex #14
+                          #   fix i, factorial-confirmed 2026-07-12): beauty-
+                          #   filter smoothing + JPEG chroma subsampling
+                          #   collapse the cheek a/b MAD to 0 (measured
+                          #   sigma 1.48 -> 0.00 on degraded pic3/psd03),
+                          #   and the old 0.5 floor turned the verification
+                          #   into a razor (inlier 0.00 on color-identical
+                          #   foreheads). 1.5 ~= one uint8 Lab quantization
+                          #   step * 1.4826 — the smallest honest spread a
+                          #   quantized chroma channel can show. The L floor
+                          #   stays 0.5: a REAL lighting-difference forehead
+                          #   (IMG_4578, ~20 L offset) must stay rejected —
+                          #   guarded by the factorial regression test.
 
 # --- validity ----------------------------------------------------------------
 _NMIN_FLOOR = 768.0
@@ -143,10 +174,20 @@ Z_THR = 4.5
 
 @dataclass
 class ReferenceBundle:
-    """Anchor-based clean-skin reference for one photo (FULL-frame coords)."""
+    """Anchor-based clean-skin reference for one photo (FULL-frame coords).
+
+    Two-tier clipping (Codex #14 fix ii, factorial-confirmed): a pixel whose
+    gray is honest but with one SATURATED channel (bright exposure: R hits
+    >= 250 first on skin) has valid gray-based black-hat texture but invalid
+    COLOR. Such pixels stay in anchor_mask_full (the gray/black-hat support
+    the ladder and anchor_blackhat_stats use) but are excluded from
+    lab_pixels / lab_mean / lab_cov (anchor_mask_color). On photos without
+    channel saturation the two masks are identical."""
 
     anchor_mask_full: np.ndarray   # (H, W) bool, final valid anchor pixels
+                                   #   (gray/black-hat support tier)
     lab_pixels: np.ndarray         # (N, 3) float32, OpenCV uint8-range Lab
+                                   #   (color tier: channel-sat px excluded)
     lab_mean: np.ndarray           # (3,) float32
     lab_cov: np.ndarray            # (3, 3) float32
     n_valid: int
@@ -158,6 +199,70 @@ class ReferenceBundle:
     low_conf: bool = False         # True only at ladder level 4: Nmin is met
                                    #   but the 25% per-patch share rule is not —
                                    #   recorded degradation instead of abstain
+    cheek_sigma: tuple[float, float, float] | None = None
+                                   # diagnostic: PRE-floor robust sigma
+                                   #   (1.4826*MAD, Lab) of the pooled cheek
+                                   #   px — beauty-filter smoothing shows up
+                                   #   here as a/b collapse toward 0
+    anchor_mask_color: np.ndarray | None = None
+                                   # color-valid subset of anchor_mask_full
+                                   #   (source of lab_pixels); None never
+                                   #   happens from the builder
+
+
+# --- typed abstain reasons (Codex #14 task 1) --------------------------------
+# rawCapacity < Nmin is a CAPTURE problem (fw below the shooting gate), not a
+# QC problem: even a QC that rejected nothing could not reach Nmin, so these
+# photos are classified insufficient_face_resolution and are NOT candidates
+# for any QC relaxation.
+REASON_RESOLUTION = "insufficient_face_resolution"
+REASON_FOREHEAD = "forehead_verify_rejected"   # ladder would pass WITH forehead
+REASON_CLIP = "clip_rejected"                  # largest QC loss: clip/specular
+REASON_COHERENCE = "coherence_rejected"        # largest QC loss: coherence gate
+REASON_MAHA = "maha_rejected"                  # largest QC loss: maha trim/thin
+REASON_NMIN = "nmin_not_met"                   # shortfall with no dominant gate
+REASON_COLOR_STARVED = "color_model_starved"   # Nmin met on gray support but
+                                               #   too few color-valid px to
+                                               #   carry the Lab model
+
+
+@dataclass
+class ReferenceAbstain:
+    """Typed reference-abstain record: WHY the bundle could not be built.
+
+    Returned by build_reference_bundle instead of a bare None so callers and
+    reports can distinguish capture-gate failures (insufficient face
+    resolution — retake) from QC-eaten anchors (candidate for surgical QC
+    fixes). All counts are FULL-frame anchor-patch pixels."""
+
+    reason: str                     # one of the REASON_* constants
+    raw_capacity: int               # pre-QC px over all anchor patches
+    nmin: float                     # Nmin the ladder was judged against
+    clip_rejected: int              # raw anchor px lost to the clip gate
+    coherence_rejected: int         # raw anchor px lost to the coherence gate
+    maha_rejected: int              # patch-model px lost to maha trim + thin-patch drops
+    forehead_inlier: float | None   # inlier fraction when verification ran
+    counts: dict[str, int] = field(default_factory=dict)      # post-QC counts
+    raw_counts: dict[str, int] = field(default_factory=dict)  # pre-QC counts
+    cheek_sigma: tuple[float, float, float] | None = None
+                                    # PRE-floor cheek-pool robust sigma (Lab)
+
+    def as_json(self) -> dict:
+        """JSON-safe camelCase dict for report propagation."""
+        return {
+            "reason": self.reason,
+            "rawCapacity": int(self.raw_capacity),
+            "nmin": float(self.nmin),
+            "clipRejected": int(self.clip_rejected),
+            "coherenceRejected": int(self.coherence_rejected),
+            "mahaRejected": int(self.maha_rejected),
+            "foreheadInlier": (None if self.forehead_inlier is None
+                               else round(float(self.forehead_inlier), 3)),
+            "counts": {k: int(v) for k, v in self.counts.items()},
+            "rawCounts": {k: int(v) for k, v in self.raw_counts.items()},
+            "cheekSigma": (None if self.cheek_sigma is None else
+                           [round(float(v), 3) for v in self.cheek_sigma]),
+        }
 
 
 def nmin_for(face_width: float) -> float:
@@ -183,13 +288,18 @@ def _disk(shape: tuple[int, int], center: np.ndarray, radius: int) -> np.ndarray
     return m.astype(bool)
 
 
-def _robust_model(pixels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Per-channel (median, MAD-derived sigma). Sigma floored at 0.5 Lab units
-    (below any real skin's spread) so a synthetically flat patch cannot turn
-    the Mahalanobis distance into a divide-by-zero oracle."""
+def _robust_model(pixels: np.ndarray,
+                  floor: float | np.ndarray = 0.5,
+                  ) -> tuple[np.ndarray, np.ndarray]:
+    """Per-channel (median, MAD-derived sigma). Sigma floored (default 0.5
+    Lab units, below any real skin's spread) so a synthetically flat patch
+    cannot turn the Mahalanobis distance into a divide-by-zero oracle.
+    `floor` may be per-channel: the forehead verification floors a/b at
+    _AB_SIGMA_FLOOR (smoothing/JPEG collapse the chroma MAD to 0 — Codex #14
+    fix i) while keeping the L floor at 0.5."""
     med = np.median(pixels, axis=0)
     mad = np.median(np.abs(pixels - med), axis=0)
-    return med, np.maximum(_MAD_SIGMA * mad, 0.5)
+    return med, np.maximum(_MAD_SIGMA * mad, floor)
 
 
 def _maha(pixels: np.ndarray, med: np.ndarray, sigma: np.ndarray) -> np.ndarray:
@@ -291,10 +401,43 @@ def select_patch_ladder(counts: dict[str, int], forehead_ok: bool,
     return None
 
 
+def _classify_abstain(raw_capacity: int, nmin: float, counts: dict[str, int],
+                      forehead_qc_n: int, forehead_inlier: float | None,
+                      clip_rej: int, coh_rej: int, maha_rej: int) -> str:
+    """Final abstain reason, checked in Codex #14 investigation order:
+
+    1. rawCapacity < Nmin — geometry alone forbids the bundle (fw below the
+       fw>=320 shooting gate); no QC change can help: insufficient_face_resolution.
+    2. The forehead verification failed AND re-running the ladder with the
+       forehead's post-QC pixels counted would have passed: the verification
+       was the killing gate (forehead_verify_rejected).
+    3. Otherwise the largest QC rejection bucket (clip / coherence / maha).
+    4. Fallback: nmin_not_met (shortfall without a dominant gate — e.g. the
+       oval/nose-line clipping of the disks on an extreme pose).
+    """
+    if raw_capacity < nmin:
+        return REASON_RESOLUTION
+    if (forehead_inlier is not None and forehead_inlier < _FOREHEAD_MIN_INLIER
+            and forehead_qc_n > 0):
+        retry = select_patch_ladder({**counts, "forehead": forehead_qc_n},
+                                    True, nmin)
+        if retry is not None:
+            return REASON_FOREHEAD
+    buckets = {REASON_CLIP: clip_rej, REASON_COHERENCE: coh_rej,
+               REASON_MAHA: maha_rej}
+    top = max(buckets, key=lambda k: buckets[k])
+    return top if buckets[top] > 0 else REASON_NMIN
+
+
 def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
-                           face_width: float) -> ReferenceBundle | None:
-    """Anchor extraction + QC + ladder. None = reference abstain (and the
-    caller must abstain too — there is deliberately no weaker fallback)."""
+                           face_width: float,
+                           ) -> ReferenceBundle | ReferenceAbstain:
+    """Anchor extraction + QC + ladder. On failure returns a typed
+    ReferenceAbstain (Codex #14 task 1) instead of a bare None — the caller
+    must still abstain (there is deliberately no weaker fallback), but the
+    record says WHY: rawCapacity < Nmin is a capture problem
+    (insufficient_face_resolution), everything else names the gate that ate
+    the anchors."""
     h, w = bgr_full.shape[:2]
     gray = cv2.cvtColor(bgr_full, cv2.COLOR_BGR2GRAY)
     lab = cv2.cvtColor(bgr_full, cv2.COLOR_BGR2Lab).astype(np.float32)
@@ -305,10 +448,16 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
     oval = oval.astype(bool)
 
     # Shared pixel-level QC: clipping/specular + directional coherence
-    # (scale-aware threshold — see _coh_max_for).
-    usable = ((gray < _CLIP_LEVEL)
-              & (bgr_full.max(axis=2) < _CLIP_LEVEL)
-              & (coh <= _coh_max_for(face_width)))
+    # (scale-aware threshold — see _coh_max_for). Clipping is TWO-TIER
+    # (Codex #14 fix ii, factorial clip arm: exposure gain 1.15 saturated
+    # 9.2% of the frame in ONE channel vs 1.5% in gray and killed the psd03
+    # bundle): gray-saturated px are dead for everything, but channel-only
+    # saturation invalidates COLOR while the gray black-hat texture is real.
+    gray_clip = gray >= _CLIP_LEVEL
+    chan_clip = bgr_full.max(axis=2) >= _CLIP_LEVEL
+    coh_bad = coh > _coh_max_for(face_width)
+    usable_color = ~gray_clip & ~chan_clip & ~coh_bad   # Lab-model tier
+    usable_gray = ~gray_clip & ~coh_bad                 # black-hat support tier
 
     yy = np.arange(h, dtype=np.float32)[:, None]
     cheek_r = max(2, int(_CHEEK_R * face_width))
@@ -327,30 +476,85 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
             (h, w), (landmarks[FOREHEAD_MID] + landmarks[BROW_MID]) / 2.0,
             max(2, int(_FOREHEAD_R * face_width))) & oval & (yy < brow_y),
     }
-    qc = {name: _qc_patch(lab, usable, m) for name, m in raw.items()}
+    # Color tier: robust Lab model + maha outlier trim, as before. Channel-
+    # only-saturated px (color-invalid, gray-valid) bypass the maha trim —
+    # their Lab is untrustworthy by definition, so trimming on it would be
+    # circular — and join only the SUPPORT tier.
+    qc_color = {name: _qc_patch(lab, usable_color, m) for name, m in raw.items()}
+    chan_only = chan_clip & usable_gray
+    qc = {name: (qc_color[name] | (m & chan_only)) for name, m in raw.items()}
+
+    # --- abstain accounting (typed reasons; costs nothing on success) -------
+    raw_counts = {name: int(m.sum()) for name, m in raw.items()}
+    raw_any = raw["cheek_left"] | raw["cheek_right"] | raw["forehead"]
+    clip_rej = int((raw_any & gray_clip).sum())     # SUPPORT-tier clip loss
+    coh_rej = int((raw_any & ~gray_clip & coh_bad).sum())
+    maha_rej = sum(int((m & usable_color).sum()) - int(qc_color[n].sum())
+                   for n, m in raw.items())
 
     # Forehead verification: the forehead is where bangs live, so it is only
     # trusted if it agrees with the CHEEK skin model. No cheek pixels means no
     # verification means no forehead (the ladder has no forehead-only level).
+    # Forehead verification runs on the COLOR tier only: channel-saturated
+    # px have no trustworthy Lab and can neither carry nor pass the check.
     forehead_ok = False
-    cheek_pool = qc["cheek_left"] | qc["cheek_right"]
-    if int(cheek_pool.sum()) >= _CHEEK_MODEL_MIN and qc["forehead"].any():
-        med, sigma = _robust_model(lab[cheek_pool])
-        d = _maha(lab[qc["forehead"]], med, sigma)
-        forehead_ok = float((d <= _FOREHEAD_MAHA).mean()) >= _FOREHEAD_MIN_INLIER
+    forehead_inlier: float | None = None
+    cheek_sigma: tuple[float, float, float] | None = None
+    forehead_qc_n = int(qc["forehead"].sum())
+    cheek_pool = qc_color["cheek_left"] | qc_color["cheek_right"]
+    if cheek_pool.any():
+        # Diagnostic (Codex #14): PRE-floor robust sigma of the cheek pool —
+        # beauty-filter smoothing collapses the a/b MAD toward 0 here, which
+        # is what turns the forehead verification into a razor.
+        cp = lab[cheek_pool]
+        cmed = np.median(cp, axis=0)
+        craw = _MAD_SIGMA * np.median(np.abs(cp - cmed), axis=0)
+        cheek_sigma = tuple(float(v) for v in craw)
+    if int(cheek_pool.sum()) >= _CHEEK_MODEL_MIN and qc_color["forehead"].any():
+        # Fix (i): a/b sigma floor 1.5 — quantized/smoothed chroma cannot be
+        # judged tighter than one Lab quantization step. L floor stays 0.5 so
+        # a genuinely differently-lit forehead is still rejected.
+        med, sigma = _robust_model(
+            lab[cheek_pool],
+            floor=np.array([0.5, _AB_SIGMA_FLOOR, _AB_SIGMA_FLOOR],
+                           np.float32))
+        d = _maha(lab[qc_color["forehead"]], med, sigma)
+        forehead_inlier = float((d <= _FOREHEAD_MAHA).mean())
+        forehead_ok = forehead_inlier >= _FOREHEAD_MIN_INLIER
     if not forehead_ok:
         qc["forehead"] = np.zeros((h, w), bool)
+        qc_color["forehead"] = np.zeros((h, w), bool)
 
     counts = {name: int(m.sum()) for name, m in qc.items()}
-    picked = select_patch_ladder(counts, forehead_ok, nmin_for(face_width))
+    nmin = nmin_for(face_width)
+    picked = select_patch_ladder(counts, forehead_ok, nmin)
     if picked is None:
-        return None
+        return ReferenceAbstain(
+            reason=_classify_abstain(
+                sum(raw_counts.values()), nmin, counts, forehead_qc_n,
+                forehead_inlier, clip_rej, coh_rej, maha_rej),
+            raw_capacity=sum(raw_counts.values()), nmin=nmin,
+            clip_rejected=clip_rej, coherence_rejected=coh_rej,
+            maha_rejected=maha_rej, forehead_inlier=forehead_inlier,
+            counts=counts, raw_counts=raw_counts, cheek_sigma=cheek_sigma)
     level, names, single = picked
 
     mask = np.zeros((h, w), bool)
+    color_mask = np.zeros((h, w), bool)
     for name in names:
         mask |= qc[name]
-    px = lab[mask]
+        color_mask |= qc_color[name]
+    if int(color_mask.sum()) < _CHEEK_MODEL_MIN:
+        # Nmin met on gray support alone, but almost every pixel is channel-
+        # saturated: no honest Lab model can be fit. Abstain rather than
+        # serve a color reference made of clipped pixels.
+        return ReferenceAbstain(
+            reason=REASON_COLOR_STARVED,
+            raw_capacity=sum(raw_counts.values()), nmin=nmin,
+            clip_rejected=clip_rej, coherence_rejected=coh_rej,
+            maha_rejected=maha_rej, forehead_inlier=forehead_inlier,
+            counts=counts, raw_counts=raw_counts, cheek_sigma=cheek_sigma)
+    px = lab[color_mask]
     return ReferenceBundle(
         anchor_mask_full=mask,
         lab_pixels=px.astype(np.float32),
@@ -361,6 +565,8 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
         ladder_level=level,
         single_anchor=single,
         low_conf=(level == 4),
+        cheek_sigma=cheek_sigma,
+        anchor_mask_color=color_mask,
     )
 
 

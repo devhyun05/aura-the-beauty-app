@@ -149,7 +149,13 @@ def test_forehead_inlier_rejection_forces_abstain():
     region[:] = (80.0, 190.0, 110.0)                  # green: far in Lab
     region += rng.normal(0, 5.5, region.shape)        # keep coherence/QC quiet
     img[y - r:y + r, x - r:x + r] = np.clip(region, 0, 255).astype(np.uint8)
-    assert rb.build_reference_bundle(img, _landmarks(), FW) is None
+    out = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(out, rb.ReferenceAbstain)
+    # Typed reason (Codex #14): the forehead verification was the killing
+    # gate — with its post-QC pixels counted the ladder would have passed.
+    assert out.reason == rb.REASON_FOREHEAD
+    assert out.forehead_inlier is not None
+    assert out.forehead_inlier < 0.70
 
 
 def test_abstain_when_both_cheeks_dead():
@@ -158,7 +164,11 @@ def test_abstain_when_both_cheeks_dead():
     img = _fixture(2, 5.5, 45.0)
     _whiteout(img, CHEEK_L, CHEEK_RAD)
     _whiteout(img, CHEEK_R, CHEEK_RAD)
-    assert rb.build_reference_bundle(img, _landmarks(), FW) is None
+    out = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(out, rb.ReferenceAbstain)
+    assert out.reason == rb.REASON_CLIP          # specular whiteouts ate it
+    assert out.raw_capacity >= out.nmin          # NOT a resolution problem
+    assert out.clip_rejected > 0
 
 
 def test_nmin_geometric_enforcement():
@@ -170,7 +180,9 @@ def test_nmin_geometric_enforcement():
     img = _fixture(2, 5.5, 45.0)
     _whiteout(img, CHEEK_L, CHEEK_RAD)
     _whiteout(img, FOREHEAD_C, FOREHEAD_RAD)
-    assert rb.build_reference_bundle(img, _landmarks(), FW) is None
+    out = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(out, rb.ReferenceAbstain)
+    assert out.reason == rb.REASON_CLIP
 
 
 def test_coherent_stripes_trip_the_coherence_qc():
@@ -247,6 +259,118 @@ def test_ladder_level1_forehead_recruit_and_level4_degradation():
     assert rb.select_patch_ladder(
         {"cheek_left": 0, "cheek_right": 0, "forehead": 9000},
         True, nmin) is None
+
+
+def test_insufficient_face_resolution_reason():
+    """Codex #14: a face too small for the anchor geometry (raw disk capacity
+    < Nmin floor 768) must be classified insufficient_face_resolution — a
+    capture problem, never a QC-relaxation candidate. fw=200 -> two cheek
+    disks r=9 + forehead r=8 hold ~700 raw px < 768 even before any QC."""
+    fw_tiny = 200.0
+    scale = fw_tiny / FW
+    img = _fixture(2, 5.5, 45.0, int(SIZE * scale))
+    out = rb.build_reference_bundle(img, _landmarks(scale), fw_tiny)
+    assert isinstance(out, rb.ReferenceAbstain)
+    assert out.reason == rb.REASON_RESOLUTION
+    assert out.raw_capacity < out.nmin
+    j = out.as_json()
+    assert j["reason"] == rb.REASON_RESOLUTION
+    assert j["rawCapacity"] == out.raw_capacity
+
+
+# --------------------------------- Codex #14 factorial regression -----------
+# Controlled-degradation factorial (eval/run_reference_factorial, 2026-07-12)
+# confirmed two mechanisms and sanctioned two surgical fixes. These tests
+# freeze the fixes' contract.
+
+def test_forehead_l_offset_still_rejected():
+    """Fix (i) regression guard (IMG_4578 class): the a/b sigma floor went
+    0.5 -> 1.5 but L stayed 0.5, so a forehead under genuinely different
+    lighting (~+20 L, chroma matched) must STILL fail verification. Control:
+    test_clipped_cheek_rescued_by_forehead_level2 (same geometry, honest
+    forehead, level-2 rescue succeeds)."""
+    img = _fixture(2, 5.5, 10.0)
+    _whiteout(img, CHEEK_L, CHEEK_RAD)   # forehead is needed, as in the control
+    x, y, r = *FOREHEAD_C, FOREHEAD_RAD + 4
+    region = cv2.cvtColor(img[y - r:y + r, x - r:x + r], cv2.COLOR_BGR2Lab)
+    region = region.astype(np.float32)
+    region[..., 0] += 20.0               # L-only offset: different lighting
+    img[y - r:y + r, x - r:x + r] = cv2.cvtColor(
+        np.clip(region, 0, 255).astype(np.uint8), cv2.COLOR_Lab2BGR)
+    out = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(out, rb.ReferenceAbstain)
+    assert out.reason == rb.REASON_FOREHEAD
+    assert out.forehead_inlier is not None and out.forehead_inlier < 0.70
+
+
+def test_smoothed_chroma_collapse_forehead_survives():
+    """Fix (i) positive control (IMG_4559 mechanism, factorial-confirmed):
+    when the cheek chroma spread collapses (gray-only grain -> a/b MAD ~ 0,
+    the beauty-filter/JPEG-chroma-subsampling signature), a color-matched
+    forehead whose b offset is one quantization step (~3 Lab units) must
+    VERIFY: 3/1.5 = z 2 < maha 3. Under the old 0.5 floor the same offset
+    scored z 6 and the forehead was razored off."""
+    rng = np.random.RandomState(5)
+    base = np.full((SIZE, SIZE, 3), SKIN_BGR, np.float32)
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32)
+    base += (10.0 * (xx / SIZE - 0.5) + 6.0 * (yy / SIZE - 0.5))[..., None]
+    # GRAY-only grain: identical per-channel noise leaves a/b ~constant,
+    # which is exactly the collapsed-chroma regime the factorial measured.
+    base += rng.normal(0, 5.5, (SIZE, SIZE, 1)).astype(np.float32)
+    img = np.clip(base, 0, 255).astype(np.uint8)
+    _whiteout(img, CHEEK_L, CHEEK_RAD)   # forehead must be recruited (level 2)
+    x, y, r = *FOREHEAD_C, FOREHEAD_RAD + 4
+    region = cv2.cvtColor(img[y - r:y + r, x - r:x + r],
+                          cv2.COLOR_BGR2Lab).astype(np.float32)
+    region[..., 2] += 3.0                # one-quantization-step chroma offset
+    img[y - r:y + r, x - r:x + r] = cv2.cvtColor(
+        np.clip(region, 0, 255).astype(np.uint8), cv2.COLOR_Lab2BGR)
+    b = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(b, rb.ReferenceBundle), getattr(b, "reason", None)
+    assert "forehead" in b.patches_used
+    # Premise guard: the cheek chroma spread really is collapsed (< the floor).
+    assert b.cheek_sigma is not None
+    assert max(b.cheek_sigma[1], b.cheek_sigma[2]) < 1.5
+
+
+def test_channel_saturation_two_tier():
+    """Fix (ii) (IMG_4569 mechanism, factorial clip arm): R-channel-only
+    saturation (R=255, gray ~193 < 250) must stay in the gray/black-hat
+    support (anchor_mask_full, Nmin) but leave the COLOR model — lab_pixels
+    excludes every channel-saturated pixel."""
+    img = _fixture(2, 5.5, 10.0)
+    sat = np.zeros((SIZE, SIZE), bool)
+    for cx, cy in (CHEEK_L, CHEEK_R):    # saturate a horizontal band of both
+        sat[cy - 8:cy + 8, cx - CHEEK_RAD - 2:cx + CHEEK_RAD + 3] = True
+    img[..., 2][sat] = 255
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    assert (gray[sat] < 250).all()       # premise: gray tier stays honest
+    b = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(b, rb.ReferenceBundle)
+    n_sat_support = int((b.anchor_mask_full & sat).sum())
+    assert n_sat_support > 0             # support keeps the gray-valid px
+    assert b.anchor_mask_color is not None
+    assert not (b.anchor_mask_color & sat).any()
+    assert len(b.lab_pixels) == int(b.anchor_mask_color.sum())
+    assert b.n_valid == int(b.anchor_mask_full.sum())
+    # Color model unpolluted: mean still matches the unsaturated skin tone.
+    ref = cv2.cvtColor(np.full((1, 1, 3), SKIN_BGR, np.uint8),
+                       cv2.COLOR_BGR2Lab)[0, 0].astype(np.float32)
+    assert np.abs(b.lab_mean[1:] - ref[1:]).max() < 5.0
+
+
+def test_color_model_starved_abstain():
+    """Fix (ii) guard: if nearly every anchor pixel is channel-saturated the
+    gray support may still clear Nmin, but no honest Lab model exists —
+    typed abstain color_model_starved, never a color model made of clipped
+    pixels."""
+    img = _fixture(2, 5.5, 10.0)
+    for cx, cy in (CHEEK_L, CHEEK_R, FOREHEAD_C):
+        img[..., 2][cy - CHEEK_RAD - 4:cy + CHEEK_RAD + 5,
+                    cx - CHEEK_RAD - 4:cx + CHEEK_RAD + 5] = 255
+    b = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(b, rb.ReferenceAbstain)
+    assert b.reason == rb.REASON_COLOR_STARVED
 
 
 def test_bundle_low_conf_flag_default():

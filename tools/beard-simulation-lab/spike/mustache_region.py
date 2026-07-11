@@ -29,8 +29,8 @@ False-fire principles (task 5), encoded structurally:
   - Lab darkness alone can NEVER fire: texture enters only through
     coincident (needs semantic nearby) or rule B (needs semantic ≥1%·|R|).
   - A single dot (mole/pore) can NEVER fire: rule A rejects a lone compact
-    coincident component (MOLE_MAX_DIAG_FW) and needs 2 of 3 x-thirds;
-    rule B needs ≥3 spread components.
+    coincident component (MOLE_MAX_SIDE_FW, bbox max side) and needs 2 of 3
+    x-thirds; rule B needs ≥3 spread components.
   - Negative (beardless) kill-set validation: 보류 — 무수염 negative 세트
     대기 (2026-07-12). Synthetic negatives only, in tests/test_mustache_region.
 
@@ -63,8 +63,15 @@ RULE_B_STRICT_FRAC = 0.03      # strict edit mask already covers 3% of |R|
 RULE_B_MIN_COMPONENTS = 3      # hair-like texture components in R
 RULE_B_SPAN_FW = 0.04          # their centers must span this much
 RULE_B_SEMANTIC_FRAC = 0.01    # independent semantic co-signal, 1% of |R|
-MOLE_MAX_DIAG_FW = 0.03        # lone coincident component smaller than this
-                               #   (bbox max side) is a mole/pore -> reject
+MOLE_MAX_SIDE_FW = 0.03        # lone coincident component whose bbox MAX
+                               #   SIDE is under this is a mole/pore ->
+                               #   reject. (Renamed from MOLE_MAX_DIAG_FW
+                               #   2026-07-12: the implementation always
+                               #   measured max(bbox w, h), not the diagonal;
+                               #   the name now matches the implementation —
+                               #   value and behavior unchanged, max-side is
+                               #   the more conservative reading and frozen
+                               #   constants are not retuned.)
 LOBE_EXT_FW = 0.08             # lobe outer x extent past the mouth corner
 
 SUBREGIONS = ("L", "C", "R")
@@ -147,7 +154,7 @@ def fires_rule_a(region: np.ndarray, coincident: np.ndarray, fw: float,
         side = max(int(stats[1, cv2.CC_STAT_WIDTH]),
                    int(stats[1, cv2.CC_STAT_HEIGHT]))
         d["loneComponentSidePx"] = side
-        if side < MOLE_MAX_DIAG_FW * fw:
+        if side < MOLE_MAX_SIDE_FW * fw:
             d["moleRejected"] = True
             return False, d
     d["thirdsHit"] = _x_thirds_hit(co, region)

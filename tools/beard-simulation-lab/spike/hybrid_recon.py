@@ -32,6 +32,7 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -50,11 +51,12 @@ from eval.ghost_ruler import find_candidates  # noqa: E402
 from eval.measure_ghost import _apply_exclusions  # noqa: E402
 from eval.measure_waxiness import CLIPSEG_MODEL, CLIPSEG_THR  # noqa: E402
 from eval.reference_bundle import (  # noqa: E402
-    anchor_blackhat_stats, build_reference_bundle, normalized_excess,
+    ReferenceAbstain, anchor_blackhat_stats, build_reference_bundle,
+    normalized_excess,
 )
 from eval.run_owndomain_eval import _fit  # noqa: E402
 from eval.silhouette_ruler import score_silhouette  # noqa: E402
-from spike import lama_runner, mask_v3  # noqa: E402
+from spike import lama_runner, mask_v3, mustache_region  # noqa: E402
 from spike.mask_v3 import build_canvas, hysteresis_mask  # noqa: E402
 from spike.oracle_kill import _mod8_window, label  # noqa: E402
 
@@ -122,6 +124,71 @@ APERTURE_SPLIT_HALF_FW = 0.005  # center strip excluded so a shadow can't
                                #   merge both apertures into one component
 APERTURE_DILATE_FW = 0.004     # guard halo (spec allows 0.003..0.005)
 
+# --- Aperture detector robustness gates (Codex #14 Q4, 2026-07-12). --------
+# ADDITIVE pass conditions on top of the frozen per-component gates above —
+# a photo that failed detection before can only keep failing (no fabricated
+# pass), a photo that passed must also satisfy these. Bounds calibrated on
+# the n=18 non-holdout pair detections (scratchpad calib_aperture 2026-07-12):
+#   L/R area ratio      measured max 2.68  -> bound 5.0   (1.9x margin)
+#   nose-x asymmetry    measured max 0.062 -> bound 0.12fw (1.9x margin)
+#   centroid gap        measured 0.091..0.158fw -> bounds 0.05 / 0.30fw
+#   contrast persistence: {36,40} is the largest set ALL 18 pass (44 loses
+#     IMG_4578, 32 loses psd02/IMG_4578) — so the pair must hold at both.
+#   ROI-shift consensus: measured min 3/4 hits -> floor 3 of 4.
+APERTURE_AREA_RATIO_MAX = 5.0   # max(areaL,areaR)/min(...)
+APERTURE_X_ASYM_MAX_FW = 0.12   # |(nose_x-cxL) - (cxR-nose_x)|
+APERTURE_GAP_MIN_FW = 0.05      # cxR - cxL lower bound
+APERTURE_GAP_MAX_FW = 0.30      # cxR - cxL upper bound
+APERTURE_CONTRAST_SET = (36.0, 40.0)  # pair must hold at every threshold
+APERTURE_PERTURB_FW = 0.005     # ROI shift magnitude (floor 2 px)
+APERTURE_PERTURB_MIN_HITS = 3   # of the 4 shifted ROIs
+
+# Typed rejection reasons (Codex #14 Q4): detection failure always abstains
+# the photo (never a fabricated guard); the reason names the failed gate.
+APERTURE_REJECT_ROI = "aperture_roi_degenerate"
+APERTURE_REJECT_NO_PAIR = "aperture_no_pair"
+APERTURE_REJECT_DY = "aperture_pair_misaligned"
+APERTURE_REJECT_RATIO = "aperture_area_ratio"
+APERTURE_REJECT_ASYM = "aperture_x_asymmetry"
+APERTURE_REJECT_GAP = "aperture_gap_out_of_range"
+APERTURE_REJECT_CONTRAST = "aperture_unstable_contrast"
+APERTURE_REJECT_PERTURB = "aperture_unstable_roi"
+
+# --- Component dual-signal gate + global coincident no-op (2026-07-12). ----
+# Diagnostic basis (scratchpad diag_false_fire, re-verified): bare-skin
+# IMG_4564 carried a 14,549 px strict false fire — nz>3 pore speckle (3,452
+# px seeds, 0 px semantic support) + c1_shadow jaw band (4,549 px) — with
+# ZERO coincident pixels; morphology (halo dilate + close) amplified 40.6%
+# of it from no signal. coincident = dilate(raw CLIPSeg > SEMANTIC_THR,
+# 0.006fw) ∩ (nz > 0), the single definition in
+# spike.mustache_region.region_signals.
+# (b2) Component gate: every CLOSED strict component (hysteresis growth +
+# cand halos + close bridges) must contain >= 1 coincident px, else the
+# whole component is dropped. Measured: 4564 100% suppressed / pic3 0.00pp /
+# psd03 0.00pp GT-recall loss (component-level, vs the CATASTROPHIC region
+# gates: full anatomy gating cost pic3 -36pp). Post-morphology placement is
+# load-bearing: the pre-morphology variant re-measured -19.5pp on psd03.
+COMP_COINCIDENT_MIN_PX = 1
+# (c) PROVISIONAL global no-op: total canvas coincident below this ABSOLUTE
+# floor AND no mustache subregion fired (frozen rules A/B silent) -> the
+# whole photo is a no-op (strict mask AND activation fill both suppressed).
+# 2026-07-12 repair: the original mass-only trigger suppressed GT-positive
+# pic1 WHOLE (coincident 179 < 300 with ALL 4 strict components coincident-
+# supported and rules A/B/A fired; b3 editPx 18,273 / GT recall 99.6 -> 0)
+# — a provisional low-mass heuristic must never override the FROZEN rule-A/B
+# presence standard, so a rule fire now overrides the floor (recorded in
+# noOp as overriddenByMustacheRules, never triggered). Negative basis
+# re-measured after the repair: 4564 (coincident 0, 43/43 components
+# dropped, fired F/F/F) still no-ops; 4567 (legacy-guard bypass measurement
+# 2026-07-12: coincident 39, 19/21 components dropped, fired F/F/F — the
+# historical 11,279px activation false fire does NOT reproduce under the
+# current frozen rules) still no-ops. Floor value unchanged at 300 absolute
+# (n=4 mass basis: 4564=0, 4567=39, pic3=1473, psd03=509 px; psd03 margin
+# just 1.7x; the fw²-normalized variant annihilated psd03 (-86pp recall)
+# and is BANNED). Still PROVISIONAL: dense-beard low-coincident positives
+# need a wider-set re-validation before product adoption.
+GLOBAL_COINCIDENT_NOOP_PX = 300
+
 ABSTAIN_LOWER_FACE = "lower_face_uncertain"  # retake classification
 
 # Provenance codes (Codex #12 stage 0): per-pixel reason a pixel was NOT
@@ -184,8 +251,12 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
     # FULL-frame call by contract (reviewer trap #2): anchors live on the
     # upper cheeks/forehead, outside the crop.
     bundle = build_reference_bundle(bgr, det.landmarks, det.face_width)
-    if bundle is None:
-        return dict(name=name, abstain="reference abstain (no valid anchors)")
+    if isinstance(bundle, ReferenceAbstain):
+        # Typed reason (Codex #14): insufficient_face_resolution is a capture
+        # problem (retake), the QC reasons name the gate that ate the anchors.
+        return dict(name=name,
+                    abstain=f"reference abstain ({bundle.reason})",
+                    referenceAbstain=bundle.as_json())
     stats = anchor_blackhat_stats(bgr, det.landmarks, det.face_width, bundle)
 
     skin = fit_skin_model(skin_reference_pixels(bgr, det.landmarks,
@@ -227,32 +298,51 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
                 cands_ext=cands, name=name)
 
 
-def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
-                             fw: float) -> np.ndarray | None:
-    """Detect the two nostril APERTURES as skin-contrasting dark compact
-    components in a nose-bottom ROI; return their union dilated by
-    APERTURE_DILATE_FW as the guard mask, or None when no valid pair exists
-    (caller must then ABSTAIN — a guard is never fabricated).
+@dataclass
+class ApertureDetection:
+    """Typed aperture-detection result (Codex #14 Q4).
 
-    Per-component gates: area within [APERTURE_MIN_AREA_FW², max²],
-    compactness (bbox fill ratio), centroid on its own side of the nose
-    center; pair gate: one component per side + vertical alignment."""
+    ok=False NEVER comes with a guard: the caller must abstain the photo
+    (retake class ABSTAIN_LOWER_FACE) — a fabricated guard would hide the
+    exact failure this detector exists to catch."""
+    ok: bool
+    reject: str | None            # APERTURE_REJECT_* when not ok
+    core: np.ndarray | None       # detected aperture pair, undilated
+    halo: np.ndarray | None       # core + APERTURE_DILATE_FW guard halo
+    confidence: float             # ROI-shift consensus fraction (incl. base)
+    checks: dict = field(default_factory=dict)  # measured gate values
+
+
+def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
+                        contrast: float, shift: tuple[int, int] = (0, 0),
+                        ) -> tuple[np.ndarray | None, str | None, dict]:
+    """One detection scan: dark compact pair in the (optionally shifted)
+    nose-bottom ROI at the given darkness contrast. Returns (pair mask in
+    full-image coords | None, typed reject reason, measured checks).
+
+    Per-component gates (frozen, Codex #13): area in [min², max²],
+    compactness, own side of the nose center. Pair gates: vertical
+    alignment (frozen) + the calibrated robustness gates (Codex #14 Q4):
+    L/R area ratio, nose-x symmetry, centroid gap bounds."""
     h, w = bgr.shape[:2]
     nose_x, nose_y = (float(v) for v in landmarks[NOSE_BOTTOM])
     al = landmarks[list(NOSTRILS)].astype(np.float64)
+    sx, sy = shift
 
-    x0 = int(max(0, np.floor(al[:, 0].min() - APERTURE_ROI_PAD_FW * fw)))
-    x1 = int(min(w, np.ceil(al[:, 0].max() + APERTURE_ROI_PAD_FW * fw) + 1))
+    x0 = int(max(0, np.floor(al[:, 0].min() - APERTURE_ROI_PAD_FW * fw))) + sx
+    x1 = int(min(w, np.ceil(al[:, 0].max() + APERTURE_ROI_PAD_FW * fw) + 1)) + sx
     y0 = int(max(0, np.floor(min(al[:, 1].min(), nose_y)
-                             - APERTURE_ROI_UP_FW * fw)))
-    y1 = int(min(h, np.ceil(nose_y + APERTURE_ROI_DOWN_FW * fw) + 1))
+                             - APERTURE_ROI_UP_FW * fw))) + sy
+    y1 = int(min(h, np.ceil(nose_y + APERTURE_ROI_DOWN_FW * fw) + 1)) + sy
+    x0, x1 = max(0, x0), min(w, x1)
+    y0, y1 = max(0, y0), min(h, y1)
     if x1 - x0 < 4 or y1 - y0 < 3:
-        return None
+        return None, APERTURE_REJECT_ROI, {"roi": [x0, y0, x1, y1]}
 
     roi_l = cv2.cvtColor(bgr[y0:y1, x0:x1],
                          cv2.COLOR_BGR2Lab)[..., 0].astype(np.float32)
     med = float(np.median(roi_l))
-    dark = roi_l < med - APERTURE_CONTRAST_L
+    dark = roi_l < med - contrast
     # center strip out: a philtrum/columella shadow must not merge L and R
     split = max(1, int(round(APERTURE_SPLIT_HALF_FW * fw)))
     cx_roi = int(round(nose_x)) - x0
@@ -273,32 +363,92 @@ def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
         side = "L" if cents[i, 0] + x0 < nose_x else "R"
         if side not in best or area > best[side][1]:
             best[side] = (i, area)
+    checks: dict = {"roi": [x0, y0, x1, y1], "contrast": contrast}
     if "L" not in best or "R" not in best:
-        return None
+        checks["sidesFound"] = sorted(best)
+        return None, APERTURE_REJECT_NO_PAIR, checks
     li, ri = best["L"][0], best["R"][0]
-    if abs(float(cents[li, 1] - cents[ri, 1])) > APERTURE_MAX_DY_FW * fw:
-        return None
+    a_l, a_r = float(best["L"][1]), float(best["R"][1])
+    cxl, cxr = float(cents[li, 0]) + x0, float(cents[ri, 0]) + x0
+    checks.update({
+        "areaL": int(a_l), "areaR": int(a_r),
+        "areaRatio": round(max(a_l, a_r) / max(min(a_l, a_r), 1.0), 2),
+        "dyFw": round(abs(float(cents[li, 1] - cents[ri, 1])) / fw, 4),
+        "gapFw": round((cxr - cxl) / fw, 4),
+        "xAsymFw": round(abs((nose_x - cxl) - (cxr - nose_x)) / fw, 4),
+    })
+    if checks["dyFw"] > APERTURE_MAX_DY_FW:
+        return None, APERTURE_REJECT_DY, checks
+    if checks["areaRatio"] > APERTURE_AREA_RATIO_MAX:
+        return None, APERTURE_REJECT_RATIO, checks
+    if checks["xAsymFw"] > APERTURE_X_ASYM_MAX_FW:
+        return None, APERTURE_REJECT_ASYM, checks
+    if not APERTURE_GAP_MIN_FW <= checks["gapFw"] <= APERTURE_GAP_MAX_FW:
+        return None, APERTURE_REJECT_GAP, checks
 
-    guard = np.zeros((h, w), np.uint8)
-    pair = (labels == li) | (labels == ri)
-    guard[y0:y1, x0:x1] = pair.astype(np.uint8)
+    pair = np.zeros((h, w), bool)
+    pair[y0:y1, x0:x1] = (labels == li) | (labels == ri)
+    return pair, None, checks
+
+
+def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
+                             fw: float) -> ApertureDetection:
+    """Detect the two nostril APERTURES as a skin-contrasting dark compact
+    pair in the nose-bottom ROI (Codex #13 base + #14 Q4 robustness).
+
+    Pipeline: base scan at APERTURE_CONTRAST_L (frozen) with the calibrated
+    geometry gates (area ratio / nose-x symmetry / gap bounds) → the pair
+    must PERSIST at every darkness threshold in APERTURE_CONTRAST_SET →
+    the pair must survive >= APERTURE_PERTURB_MIN_HITS of the 4 shifted
+    ROIs (±APERTURE_PERTURB_FW·fw in x and y). Any failure returns
+    ok=False with a typed reason — the caller abstains, a guard is never
+    fabricated. confidence = (base + shifted hits) / 5."""
+    core, reject, checks = _aperture_pair_scan(bgr, landmarks, fw,
+                                               APERTURE_CONTRAST_L)
+    if core is None:
+        return ApertureDetection(False, reject, None, None, 0.0, checks)
+
+    persist = {}
+    for c in APERTURE_CONTRAST_SET:
+        if c == APERTURE_CONTRAST_L:
+            persist[c] = True
+            continue
+        m, _, _ = _aperture_pair_scan(bgr, landmarks, fw, c)
+        persist[c] = m is not None
+    checks["contrastPersist"] = {str(k): v for k, v in persist.items()}
+    if not all(persist.values()):
+        return ApertureDetection(False, APERTURE_REJECT_CONTRAST,
+                                 None, None, 0.0, checks)
+
+    d = max(2, int(round(APERTURE_PERTURB_FW * fw)))
+    hits = 0
+    for sh in ((d, 0), (-d, 0), (0, d), (0, -d)):
+        m, _, _ = _aperture_pair_scan(bgr, landmarks, fw,
+                                      APERTURE_CONTRAST_L, shift=sh)
+        hits += int(m is not None)
+    checks["perturbHits"] = f"{hits}/4"
+    confidence = round((1 + hits) / 5.0, 2)
+    if hits < APERTURE_PERTURB_MIN_HITS:
+        return ApertureDetection(False, APERTURE_REJECT_PERTURB,
+                                 None, None, confidence, checks)
+
     dk = max(3, int(APERTURE_DILATE_FW * fw) | 1)
-    guard = cv2.dilate(guard, cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (dk, dk)))
-    return guard > 0
+    halo = cv2.dilate(core.astype(np.uint8), cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (dk, dk))) > 0
+    return ApertureDetection(True, None, core, halo, confidence, checks)
 
 
-def _anatomy_guards(crop, legacy: bool = False) -> dict | None:
+def _anatomy_guards(crop, legacy: bool = False) -> dict:
     """Tight anatomical no-paint guards (Codex #12 lips; #13 apertures).
 
     lip      = true LIPS_OUTER polygon + 0.004fw dilation
-    aperture = detect_nostril_apertures() pair, dilated 0.004fw
-
-    Returns None when the aperture pair cannot be detected — the caller
-    ABSTAINS the photo (retake class "lower_face_uncertain"); a fabricated
-    guard would hide exactly the failure it exists to catch. These masks
-    are final — no re-dilation after this point — and are exactly what
-    eval.hybrid_rulers byte-identity gates check.
+    aperture = detect_nostril_apertures() pair halo (core + 0.004fw), or
+               None when detection fails — the caller ABSTAINS the photo
+               (retake class "lower_face_uncertain") with the typed reason
+               in "aperture_detection"; a fabricated guard would hide
+               exactly the failure it exists to catch. These masks are
+               final — no re-dilation after this point — and are exactly
+               what eval.hybrid_rulers byte-identity gates check.
 
     legacy=True reproduces the pre-Codex-#12 guards verbatim (protect-mask
     seeded distance dilation, key "nostril_core"); it exists ONLY so
@@ -318,7 +468,8 @@ def _anatomy_guards(crop, legacy: bool = False) -> dict | None:
         ndist = cv2.distanceTransform((~nostril).astype(np.uint8),
                                       cv2.DIST_L2, 3)
         nostril_core = ndist < max(4.0, 0.025 * fw)
-        return {"lip": lip, "aperture": nostril_core}
+        return {"lip": lip, "aperture": nostril_core,
+                "aperture_detection": None}
 
     lip_poly = np.zeros((h, w), np.uint8)
     cv2.fillPoly(lip_poly, [crop.landmarks[LIPS_OUTER].astype(np.int32)], 1)
@@ -326,10 +477,9 @@ def _anatomy_guards(crop, legacy: bool = False) -> dict | None:
     lip = cv2.dilate(lip_poly, cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (lk, lk))) > 0
 
-    aperture = detect_nostril_apertures(crop.bgr, crop.landmarks, fw)
-    if aperture is None:
-        return None
-    return {"lip": lip, "aperture": aperture}
+    det = detect_nostril_apertures(crop.bgr, crop.landmarks, fw)
+    return {"lip": lip, "aperture": det.halo if det.ok else None,
+            "aperture_detection": det}
 
 
 def build_mask(ctx: dict, legacy_guards: bool = False,
@@ -352,10 +502,37 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
     shape = crop.bgr.shape[:2]
 
     guards = _anatomy_guards(crop, legacy=legacy_guards)
-    if guards is None:
-        return None, None, {"abstain": ABSTAIN_LOWER_FACE}
+    if guards["aperture"] is None:
+        det = guards["aperture_detection"]
+        return None, None, {"abstain": ABSTAIN_LOWER_FACE,
+                            "apertureReject": det.reject,
+                            "apertureChecks": det.checks}
 
     canvas = build_canvas(crop.landmarks, shape, fw)
+
+    # Independent-signal coincidence (diag 2026-07-12): coincident =
+    # dilate(raw CLIPSeg > SEMANTIC_THR, 0.006fw) ∩ (nz > 0) — the single
+    # definition lives in spike.mustache_region.region_signals. Synthetic-ctx
+    # callers (guard tests) without a semantic field skip every coincident
+    # stage (component gate, global no-op, mustache activation).
+    semantic = texture = coincident = co_canvas = None
+    noop_info: dict | None = None
+    if ctx.get("semantic_heat") is not None:
+        semantic, texture, coincident = mustache_region.region_signals(
+            ctx["semantic_heat"], ctx["nz"], fw)
+        co_canvas = coincident & canvas["canvas"]
+        co_total = int(co_canvas.sum())
+        # PROVISIONAL (n=4 mass basis, psd03 margin 1.7x): absolute px floor
+        # ONLY — the fw² variant killed psd03 recall (-86pp). lowMass is the
+        # floor check; "triggered" is FINALIZED after the mustache decision
+        # below (2026-07-12 repair): the frozen rule-A/B presence standard
+        # overrides the provisional floor, see the constant's comment.
+        noop_info = {"triggered": False,
+                     "lowMass": co_total < GLOBAL_COINCIDENT_NOOP_PX,
+                     "coincidentPx": co_total,
+                     "floorPx": GLOBAL_COINCIDENT_NOOP_PX,
+                     "provisional": True,
+                     "reason": None}
 
     # Hysteresis evidence: a component survives iff it carries one strong
     # seed from EITHER independent signal (CLIPSeg union / anchor-z).
@@ -365,6 +542,10 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
     mask = hysteresis_mask(growth, seed, canvas["canvas"])
 
     # Strict hair components get a small halo (never a blanket dilation).
+    # cands_ext no longer joins the composite unconditionally (Codex #14):
+    # the component dual-signal gate below subsumes every candidate — an
+    # isolated candidate whose closed component carries no coincident px
+    # drops with its component.
     hk = max(3, int(CONFIG["hairHaloDilate"] * fw) | 1)
     for c in ctx["cands_ext"]:
         comp = np.zeros(shape, np.uint8)
@@ -377,6 +558,32 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
                             np.ones((ck, ck), np.uint8)) > 0
     mask &= canvas["canvas"]
 
+    # (b2) Component dual-signal gate on the CLOSED strict components (diag
+    # 2026-07-12, the measured-and-adopted lever: 4564 100% suppressed /
+    # pic3 0.00pp / psd03 0.00pp): every connected component must contain
+    # >= 1 coincident px (independent semantic+texture agreement) or the
+    # WHOLE component — hysteresis growth, cand halos and close bridges
+    # alike — drops. Placement is deliberately POST-morphology: the
+    # pre-morphology variant re-measured -19.5pp psd03 GT recall (close
+    # legitimately seals GT-beard fragments onto coincident-carrying cores),
+    # while gating the closed components keeps the 4564 kill total (every
+    # closed component there carries 0 coincident) and nothing after this
+    # point re-dilates the edit mask, so a dropped component cannot be
+    # resurrected by morphology.
+    comp_gate: dict | None = None
+    if co_canvas is not None:
+        n_lbl, labels = cv2.connectedComponents(mask.astype(np.uint8),
+                                                connectivity=8)
+        co_per = np.bincount(labels[co_canvas], minlength=n_lbl)
+        keep = co_per >= COMP_COINCIDENT_MIN_PX
+        keep[0] = False
+        gated = keep[labels]
+        comp_gate = {"components": int(n_lbl - 1),
+                     "droppedComponents": int((n_lbl - 1)
+                                              - int(keep[1:].sum())),
+                     "droppedPx": int(mask.sum()) - int(gated.sum())}
+        mask = gated
+
     def _guard(mk: np.ndarray, cv_mask: np.ndarray) -> np.ndarray:
         return mk & ~guards["lip"] & ~guards["aperture"] & cv_mask
 
@@ -386,14 +593,10 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
     # ban) — fill = R ∩ canvas − lip − aperture. Synthetic-ctx callers
     # (guard tests) that carry no semantic field skip the stage.
     mustache_info: dict | None = None
-    if ctx.get("semantic_heat") is not None:
-        from spike import mustache_region
-
+    if coincident is not None:
         strict_edit = _guard(mask, canvas["canvas"])
         subr = mustache_region.mustache_subregions(
             crop.landmarks, shape, fw)
-        semantic, texture, coincident = mustache_region.region_signals(
-            ctx["semantic_heat"], ctx["nz"], fw)
         dec = mustache_region.decide(subr, semantic, texture, coincident,
                                      strict_edit, fw)
         fill = mustache_region.activation_fill(
@@ -406,6 +609,39 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
                          "detail": dec.detail,
                          # 무수염 negative kill 검증: 보류 — negative 세트 대기
                          "negativeKill": "보류: 세트 대기"}
+
+    # (c) PROVISIONAL global no-op, FINALIZED here (2026-07-12 repair): the
+    # photo-wide mass floor only takes the photo when the FROZEN mustache
+    # rules A/B found no presence in ANY subregion — a provisional low-mass
+    # heuristic never overrides the frozen positive-evidence standard (the
+    # mass-only trigger suppressed GT-positive pic1 whole; see the constant
+    # comment for the measured basis, incl. 4567 re-measured F/F/F under the
+    # current rules via the legacy-guard bypass). When triggered, NOTHING is
+    # edited — strict mask AND activation fill are both suppressed; when
+    # overridden, the low mass is still recorded for the report.
+    if noop_info is not None and noop_info["lowMass"]:
+        fired_any = mustache_info is not None and any(
+            mustache_info["fired"].values())
+        if fired_any:
+            noop_info["overriddenByMustacheRules"] = True
+            noop_info["reason"] = (
+                f"canvas coincident {noop_info['coincidentPx']}px < "
+                f"{GLOBAL_COINCIDENT_NOOP_PX}px absolute floor, but frozen "
+                f"mustache rules fired {mustache_info['rules']} -> floor "
+                "overridden, photo edits (PROVISIONAL floor never "
+                "suppresses rule-A/B positives; 2026-07-12 repair)")
+        else:
+            noop_info["triggered"] = True
+            noop_info["reason"] = (
+                f"canvas coincident {noop_info['coincidentPx']}px < "
+                f"{GLOBAL_COINCIDENT_NOOP_PX}px absolute floor and no "
+                "mustache subregion fired -> photo-wide no-op "
+                "(PROVISIONAL, n=4 diag 2026-07-12)")
+            mask = np.zeros(shape, bool)
+            if mustache_info is not None:
+                mustache_info["fillPxDecided"] = mustache_info["fillPx"]
+                mustache_info["fillPx"] = 0
+                mustache_info["suppressedByNoOp"] = True
 
     pre_guard = mask.copy()
 
@@ -439,6 +675,7 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
     counts = np.bincount(prov.ravel(), minlength=len(PROV_NAMES))
     guards["provenance"] = prov
 
+    ap_det = guards.get("aperture_detection")
     info = {"maskFrac": round(float(edit_mask.mean()), 4),
             "provenancePx": {PROV_NAMES[c]: int(counts[c])
                              for c in sorted(PROV_NAMES)},
@@ -448,6 +685,11 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
                 float((pre_guard & ~edit_mask).sum())
                 / max(float(pre_guard.sum()), 1.0), 4),
             "seedPx": int(seed.sum()),
+            "componentGate": comp_gate,
+            "noOp": noop_info,
+            "aperture": (None if ap_det is None else
+                         {"confidence": ap_det.confidence,
+                          "checks": ap_det.checks}),
             "mustache": mustache_info,
             "config": CONFIG}
     return edit_mask, model_mask, {"mask": info, **guards, "growth": growth}
@@ -526,21 +768,29 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
         return None
     if "abstain" in ctx:
         rec = {"id": name, "verdict": "abstain", "abstains": [ctx["abstain"]]}
+        if "referenceAbstain" in ctx:   # typed reason -> report (Codex #14)
+            rec["referenceAbstain"] = ctx["referenceAbstain"]
         print(f"{name}: {ctx['abstain']}")
         return rec
     edit_mask, model_mask, guards = build_mask(ctx)
     if edit_mask is None:
-        # Aperture pair undetected → photo-level abstain (retake class).
+        # Aperture pair undetected → photo-level abstain (retake class),
+        # with the typed detector rejection reason (Codex #14 Q4).
         rec = {"id": name, "verdict": "abstain",
                "abstains": [guards["abstain"]],
-               "retakeClass": guards["abstain"]}
-        print(f"{name}: abstain ({guards['abstain']})")
+               "retakeClass": guards["abstain"],
+               "apertureReject": guards.get("apertureReject"),
+               "apertureChecks": guards.get("apertureChecks")}
+        print(f"{name}: abstain ({guards['abstain']}, "
+              f"{guards.get('apertureReject')})")
         return rec
     t_mask = time.perf_counter()
     rec: dict = {"id": name, **guards["mask"]}
     if not edit_mask.any():
-        rec["skip"] = "empty mask"
-        print(f"{name}: empty mask, untouched")
+        noop = (rec.get("noOp") or {}).get("triggered")
+        rec["skip"] = ("global coincident no-op (PROVISIONAL)" if noop
+                       else "empty mask")
+        print(f"{name}: {rec['skip']}, untouched")
         return rec
     result, linfo = run_lama(ctx, edit_mask, model_mask)
     rec.update(linfo)

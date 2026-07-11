@@ -41,6 +41,31 @@ b3 additions (reviewer round 2):
   Pool: + archive real positives (stubble/medium/dense) and a real
   beardless NEGATIVE pool (false-fire kill: 0 activation + speckle-level
   editPx, raw px reported).
+
+c1 additions (Codex #14 task 1, measurement only — no pipeline change):
+  (a) perturbation abstains are aggregated SEPARATELY from coverage
+      failures: per-photo perturbAbstainDirections (which of x±/y± lost
+      the aperture pair) + aggregate perturbAnyAbstainPhotos /
+      perturbAbstainDirectionsByTag / perturbSuccessDirMinAbs (min
+      absolute coverage over the directions that DID rebuild). The kill
+      verdict itself is unchanged (any abstain still fails).
+  (b) coverage=None loophole CLOSED: a photo whose activated denominator
+      is 0 px after guard subtraction (activation fired but nothing was
+      measurable) is INVALID — it now counts as a FAIL inside the
+      coverageKillPass denominator (all activated photos), never silently
+      dropped from it. Flagged per-photo as coverageInvalid.
+  (c) aperture metrics split into 3 layers:
+        raw       — absolute-gray dark px in the ROI (broad; beard shadow
+                    included; info only),
+        cand      — INDEPENDENT aperture-candidate components: dark
+                    components that are aperture-like by geometry alone
+                    (plausible size, compact, nose-local, BILATERAL L/R
+                    partner) — edit px here is the kill-relevant
+                    intrusion signal,
+        implCheck — overlap with the DETECTED guard (circular by
+                    construction: demoted to implementation check only).
+  (d) abstain reasons aggregated typed: referenceAbstainReasons +
+      apertureRejectReasons alongside abstainsByClass.
 """
 from __future__ import annotations
 
@@ -62,7 +87,9 @@ from engine.detect_face import (  # noqa: E402
 from eval.run_owndomain_eval import PSD_DIR, SAMPLES, load_gt_mask  # noqa: E402
 from spike import mustache_region  # noqa: E402
 from spike.hybrid_recon import (  # noqa: E402
-    APERTURE_ROI_DOWN_FW, APERTURE_ROI_PAD_FW, APERTURE_ROI_UP_FW,
+    APERTURE_GAP_MAX_FW, APERTURE_MAX_AREA_FW, APERTURE_MAX_DY_FW,
+    APERTURE_MIN_AREA_FW, APERTURE_MIN_FILL, APERTURE_ROI_DOWN_FW,
+    APERTURE_ROI_PAD_FW, APERTURE_ROI_UP_FW, APERTURE_SPLIT_HALF_FW,
     build_mask, prepare_unlabeled, provenance_sheet,
 )
 from spike.oracle_kill import label  # noqa: E402
@@ -165,21 +192,90 @@ def aperture_roi_box(crop) -> tuple[int, int, int, int] | None:
     return x0, y0, x1, y1
 
 
+def _aperture_dark_candidates(crop, dark: np.ndarray,
+                              box: tuple[int, int, int, int]) -> np.ndarray:
+    """(c1-c) INDEPENDENT aperture-candidate components inside the ROI.
+
+    Built from the absolute-gray dark map only (never the detector's Lab
+    median-relative rule, never the detected guard): a component is a
+    candidate iff it is aperture-LIKE by geometry alone —
+      size     in [(APERTURE_MIN_AREA_FW·fw)², (APERTURE_MAX_AREA_FW·fw)²],
+      compact  area/bbox >= APERTURE_MIN_FILL,
+      nose-local |cx − nose_x| <= APERTURE_GAP_MAX_FW/2 · fw,
+      bilateral  an opposite-side partner within APERTURE_MAX_DY_FW·fw.
+    Beard-shadow smears fail size/compactness/pairing, so edit px on THESE
+    components is the kill-relevant aperture-intrusion signal; the raw
+    dark-edit count stays as info only (it reads laugh-line/beard shadow
+    as intrusion — the IMG_4573 b3 false alarm)."""
+    x0, y0, x1, y1 = box
+    fw = crop.face_width
+    nose_x = float(crop.landmarks[NOSE_BOTTOM][0])
+    dmap = dark[y0:y1, x0:x1].copy()
+    # same center split geometry as the detector: a philtrum shadow must
+    # not merge L and R into one (unpairable) component
+    split = max(1, int(round(APERTURE_SPLIT_HALF_FW * fw)))
+    cx_roi = int(round(nose_x)) - x0
+    dmap[:, max(0, cx_roi - split):cx_roi + split + 1] = False
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(
+        dmap.astype(np.uint8), connectivity=8)
+    min_px = max(4, int((APERTURE_MIN_AREA_FW * fw) ** 2))
+    max_px = int((APERTURE_MAX_AREA_FW * fw) ** 2)
+    sides: dict[str, list[int]] = {"L": [], "R": []}
+    for i in range(1, n):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        if not min_px <= area <= max_px:
+            continue
+        bw = int(stats[i, cv2.CC_STAT_WIDTH])
+        bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+        if area / float(max(bw * bh, 1)) < APERTURE_MIN_FILL:
+            continue
+        cx = float(cents[i, 0]) + x0
+        if abs(cx - nose_x) > 0.5 * APERTURE_GAP_MAX_FW * fw:
+            continue
+        sides["L" if cx < nose_x else "R"].append(i)
+    keep: set[int] = set()
+    for li in sides["L"]:
+        for ri in sides["R"]:
+            if abs(float(cents[li, 1] - cents[ri, 1])) \
+                    <= APERTURE_MAX_DY_FW * fw:
+                keep.update((li, ri))
+    cand = np.zeros(dark.shape, bool)
+    if keep:
+        cand[y0:y1, x0:x1] = np.isin(labels, sorted(keep))
+    return cand
+
+
 def aperture_dark_check(crop, edit: np.ndarray,
                         aperture_guard: np.ndarray) -> dict:
+    """(c1-c) 3-layer aperture metrics: raw (broad darkness, info) / cand
+    (independent aperture-candidate intrusion, kill-relevant) / implCheck
+    (guard overlap — CIRCULAR, implementation check only)."""
     box = aperture_roi_box(crop)
     if box is None:
-        return {"roi": None, "darkPx": None, "darkEditedPx": None}
+        return {"roi": None, "raw": None, "cand": None, "implCheck": None}
     x0, y0, x1, y1 = box
     gray = cv2.cvtColor(crop.bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
     dark = np.zeros(crop.bgr.shape[:2], bool)
     dark[y0:y1, x0:x1] = gray < DARK_GRAY_THR
     n_dark = int(dark.sum())
-    return {"roi": [x0, y0, x1, y1],
-            "darkPx": n_dark,
-            "darkEditedPx": int((edit & dark).sum()),
+
+    cand = _aperture_dark_candidates(crop, dark, box)
+    n_cand = int(cand.sum())
+    n_lbl, _ = cv2.connectedComponents(
+        cand[y0:y1, x0:x1].astype(np.uint8), connectivity=8)
+    return {
+        "roi": [x0, y0, x1, y1],
+        "raw": {"darkPx": n_dark,
+                "darkEditedPx": int((edit & dark).sum())},
+        "cand": {"nCandidates": int(n_lbl - 1),
+                 "candPx": n_cand,
+                 "candEditedPx": int((edit & cand).sum())},
+        "implCheck": {   # uses the DETECTED guard -> circular by definition
+            "circular": True,
             "darkGuardCoveredPct": (None if n_dark == 0 else round(
-                100.0 * float((dark & aperture_guard).sum()) / n_dark, 1))}
+                100.0 * float((dark & aperture_guard).sum()) / n_dark, 1)),
+            "candGuardCoveredPct": (None if n_cand == 0 else round(
+                100.0 * float((cand & aperture_guard).sum()) / n_cand, 1))}}
 
 
 def _cov(edit: np.ndarray, region: np.ndarray) -> float | None:
@@ -286,6 +382,8 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
     if "abstain" in ctx:
         rec["abstain"] = ctx["abstain"]
         rec["abstainClass"] = "reference"
+        if "referenceAbstain" in ctx:   # typed reason (Codex #14 task 1)
+            rec["referenceAbstain"] = ctx["referenceAbstain"]
         return rec
 
     crop = ctx["crop"]
@@ -296,8 +394,11 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
         # aperture pair undetected -> product path abstains: RETAKE class
         rec["abstain"] = g["abstain"]
         rec["abstainClass"] = "aperture_retake"
+        rec["apertureReject"] = g.get("apertureReject")  # typed (Codex #14)
         return rec
 
+    rec["noOp"] = g["mask"].get("noOp")            # global coincident no-op
+    rec["componentGate"] = g["mask"].get("componentGate")
     mus = g["mask"]["mustache"]
     rec["mustache"] = {"fired": mus["fired"], "rules": mus["rules"],
                        "activated": mus["activated"],
@@ -307,6 +408,11 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
     activated = tuple(mus["activated"])
     rec["editPx"] = int(edit.sum())   # negatives: speckle-level or bust
     rec["coverage"] = measure_mustache(edit, g, subr, activated)
+    # (c1-b) loophole closed: activation fired but the guarded denominator
+    # is 0 px -> INVALID measurement, counted as a kill FAIL in aggregate
+    # (never dropped from the coverageKillPass denominator).
+    rec["coverageInvalid"] = bool(
+        activated and rec["coverage"]["activatedCoverage"] is None)
 
     # (b) mouth-side, evidence-gated denominator
     band = mouth_side_band(crop)
@@ -339,12 +445,18 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
         rec["perturbAbs"] = perturb_abs(ctx, act & ~no_paint)
         vals = [v for v in rec["perturbAbs"].values()
                 if isinstance(v, (int, float))]
-        n_abst = sum(1 for v in rec["perturbAbs"].values() if v == "abstain")
+        # (c1-a) abstain directions split out from coverage numbers:
+        # perturbMinAbs is the min ABSOLUTE coverage over the directions
+        # that DID rebuild; abstains are listed by direction and still
+        # fail the kill (unchanged verdict, separated accounting).
+        rec["perturbAbstainDirections"] = [
+            k for k, v in rec["perturbAbs"].items() if v == "abstain"]
         rec["perturbMinAbs"] = min(vals) if vals else None
-        rec["perturbPass"] = (n_abst == 0 and bool(vals)
-                              and min(vals) >= COVERAGE_KILL)
+        rec["perturbPass"] = (not rec["perturbAbstainDirections"]
+                              and bool(vals) and min(vals) >= COVERAGE_KILL)
     else:
         rec["perturbAbs"] = None
+        rec["perturbAbstainDirections"] = None
         rec["perturbMinAbs"] = None
         rec["perturbPass"] = None  # n/a — no activation to hold
 
@@ -380,8 +492,8 @@ def _fmt(v) -> str:
 
 def table(rows: list[dict]) -> str:
     lines = ["| photo | grp | fired L/C/R (rule) | activated | actCov% "
-             "(raw) | mouthSide% (evidence) | lip px | apDark edit/total px "
-             "| perturb min abs % | editPx | abstain |",
+             "(raw) | mouthSide% (evidence) | lip px | apCand edit/px "
+             "(raw dark) | perturb min abs % | editPx | abstain |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if "abstain" in r:
@@ -394,20 +506,29 @@ def table(rows: list[dict]) -> str:
             for k in mustache_region.SUBREGIONS)
         act = "".join(m["activated"]) or "none"
         c = r["coverage"]
+        cov_s = (f"{_fmt(c['activatedCoverage'])} "
+                 f"({_fmt(c['activatedCoverageRaw'])})")
+        if r.get("coverageInvalid"):
+            cov_s += " INVALID"
         ms = r["mouthSide"]
         ms_s = (f"{_fmt(ms['coverage'])} ({ms['evidence']})" if ms["eligible"]
                 else f"n/a ({ms['evidence']})")
         ad = r["apertureDark"]
+        if ad["cand"] is None:
+            ad_s = "n/a"
+        else:
+            ad_s = (f"{ad['cand']['candEditedPx']}/{ad['cand']['candPx']} "
+                    f"({ad['raw']['darkEditedPx']}/{ad['raw']['darkPx']})")
         pert = ("n/a" if r["perturbAbs"] is None else
                 f"{_fmt(r['perturbMinAbs'])}"
-                + ("" if all(v != "abstain" for v in r["perturbAbs"].values())
-                   else " (+abstain)"))
+                + ("" if not r["perturbAbstainDirections"] else
+                   " (abstain:" + ",".join(r["perturbAbstainDirections"])
+                   + ")"))
+        noop = (r.get("noOp") or {}).get("triggered")
         lines.append(
-            f"| {r['id']} | {r['group']} | {fired} | {act} | "
-            f"{_fmt(c['activatedCoverage'])} ({_fmt(c['activatedCoverageRaw'])})"
-            f" | {ms_s} | {r['lipIntrusionPx']} | "
-            f"{_fmt(ad['darkEditedPx'])}/{_fmt(ad['darkPx'])} | {pert} | "
-            f"{r['editPx']} | |")
+            f"| {r['id']} | {r['group']} | {fired} | {act} | {cov_s}"
+            f" | {ms_s} | {r['lipIntrusionPx']} | {ad_s} | {pert} | "
+            f"{r['editPx']}{' (noOp)' if noop else ''} | |")
     return "\n".join(lines)
 
 
@@ -419,19 +540,48 @@ def aggregate(rows: list[dict], positive: bool = True) -> dict:
     pool): silence is the desired outcome; the field is n/a."""
     ok = [r for r in rows if "abstain" not in r]
     abst: dict[str, int] = {}
+    ref_reasons: dict[str, int] = {}
+    ap_reasons: dict[str, int] = {}
     for r in rows:
-        if "abstain" in r:
-            abst[r["abstainClass"]] = abst.get(r["abstainClass"], 0) + 1
+        if "abstain" not in r:
+            continue
+        abst[r["abstainClass"]] = abst.get(r["abstainClass"], 0) + 1
+        # (c1-d) typed abstain reasons, separated by family
+        if r["abstainClass"] == "reference":
+            k = (r.get("referenceAbstain") or {}).get("reason", "untyped")
+            ref_reasons[k] = ref_reasons.get(k, 0) + 1
+        elif r["abstainClass"] == "aperture_retake":
+            k = r.get("apertureReject") or "untyped"
+            ap_reasons[k] = ap_reasons.get(k, 0) + 1
     act_rows = [r for r in ok if r["mustache"]["activated"]]
     silent = [r["id"] for r in ok if not r["mustache"]["activated"]]
     covs = [r["coverage"]["activatedCoverage"] for r in act_rows
             if r["coverage"]["activatedCoverage"] is not None]
+    # (c1-b) coverage=None on an activated photo is INVALID -> kill FAIL;
+    # the kill denominator is ALL activated photos, never just the valid ones.
+    invalid = [r["id"] for r in act_rows if r.get("coverageInvalid")]
     ms = [r["mouthSide"]["coverage"] for r in ok
           if r["mouthSide"]["eligible"]
           and r["mouthSide"]["coverage"] is not None]
     pert = [r for r in act_rows if r["perturbPass"] is not None]
+    # (c1-a) perturb abstains split from coverage numbers
+    p_abst_photos = [r["id"] for r in pert
+                     if r.get("perturbAbstainDirections")]
+    p_abst_by_tag: dict[str, int] = {}
+    for r in pert:
+        for tag in (r.get("perturbAbstainDirections") or ()):
+            p_abst_by_tag[tag] = p_abst_by_tag.get(tag, 0) + 1
+    p_mins = [r["perturbMinAbs"] for r in pert
+              if r["perturbMinAbs"] is not None]
+
+    def _ad(r, layer, key):
+        d = r["apertureDark"].get(layer)
+        return (d or {}).get(key) or 0
+
     return {
         "n": len(rows), "measured": len(ok), "abstainsByClass": abst,
+        "referenceAbstainReasons": ref_reasons,
+        "apertureRejectReasons": ap_reasons,
         "mustacheActivated": len(act_rows),
         "activationSilentOnPositive": (len(silent) if positive else None),
         "activationSilentIds": (silent if positive else None),
@@ -443,25 +593,37 @@ def aggregate(rows: list[dict], positive: bool = True) -> dict:
         "activatedCoverageMin": min(covs) if covs else None,
         "activatedCoverageMean": (round(float(np.mean(covs)), 1)
                                   if covs else None),
+        "coverageInvalidDenomIds": invalid,
         "coverageKillPass": (sum(1 for c in covs if c >= COVERAGE_KILL),
-                             len(covs)),
+                             len(act_rows)),
         "mouthSideEligible": len(ms),
         "mouthSideCoverageMin": min(ms) if ms else None,
         "lipIntrusionPhotos": sum(1 for r in ok if r["lipIntrusionPx"] > 0),
         "lipIntrusionTotalPx": sum(r["lipIntrusionPx"] for r in ok),
-        "apertureDarkEditedPhotos": sum(
-            1 for r in ok
-            if (r["apertureDark"]["darkEditedPx"] or 0) > 0),
-        "apertureDarkEditedTotalPx": sum(
-            (r["apertureDark"]["darkEditedPx"] or 0) for r in ok),
+        # (c1-c) kill-relevant = independent candidate intrusion; raw dark
+        # kept as info (beard shadow inflates it — IMG_4573 b3 false alarm)
+        "apertureCandEditedPhotos": sum(
+            1 for r in ok if _ad(r, "cand", "candEditedPx") > 0),
+        "apertureCandEditedTotalPx": sum(
+            _ad(r, "cand", "candEditedPx") for r in ok),
+        "apertureDarkEditedPhotosInfo": sum(
+            1 for r in ok if _ad(r, "raw", "darkEditedPx") > 0),
+        "apertureDarkEditedTotalPxInfo": sum(
+            _ad(r, "raw", "darkEditedPx") for r in ok),
         "perturbPass": (sum(1 for r in pert if r["perturbPass"]), len(pert)),
+        "perturbAnyAbstainPhotos": len(p_abst_photos),
+        "perturbAbstainPhotoIds": p_abst_photos,
+        "perturbAbstainDirectionsByTag": p_abst_by_tag,
+        "perturbSuccessDirMinAbs": min(p_mins) if p_mins else None,
+        "noOpTriggered": [r["id"] for r in ok
+                          if (r.get("noOp") or {}).get("triggered")],
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("photos", nargs="*", help="subset of photo names")
-    ap.add_argument("--tag", default="maskv4_b3")
+    ap.add_argument("--tag", default="maskv41_c1")
     args = ap.parse_args()
     out_dir = LAB / "outputs" / "ghost" / "hybrid" / args.tag
     out_dir.mkdir(parents=True, exist_ok=True)

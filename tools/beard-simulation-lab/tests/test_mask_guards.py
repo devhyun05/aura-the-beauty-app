@@ -30,8 +30,11 @@ from engine.detect_face import (  # noqa: E402
 )
 from spike import hybrid_recon  # noqa: E402
 from spike.hybrid_recon import (  # noqa: E402
-    ABSTAIN_LOWER_FACE, APERTURE_DILATE_FW, LIP_GUARD_DILATE_FW, PROV_EDIT,
-    PROV_OUT_CANVAS, _anatomy_guards, build_mask, detect_nostril_apertures,
+    ABSTAIN_LOWER_FACE, APERTURE_DILATE_FW, APERTURE_REJECT_ASYM,
+    APERTURE_REJECT_CONTRAST, APERTURE_REJECT_GAP, APERTURE_REJECT_NO_PAIR,
+    APERTURE_REJECT_PERTURB, APERTURE_REJECT_RATIO, LIP_GUARD_DILATE_FW,
+    PROV_EDIT, PROV_OUT_CANVAS, _anatomy_guards, build_mask,
+    detect_nostril_apertures,
 )
 
 H, W = 520, 400
@@ -183,8 +186,9 @@ def test_guards_not_redilated():
     # The aperture guard byte-matches the detector's own output, which in
     # turn is exactly the painted blobs + the APERTURE_DILATE_FW halo.
     direct = detect_nostril_apertures(ctx["crop"].bgr, LM, FW)
-    assert direct is not None
-    assert np.array_equal(guards["aperture"], direct)
+    assert direct.ok and direct.reject is None
+    assert np.array_equal(guards["aperture"], direct.halo)
+    assert np.array_equal(direct.core, _true_apertures())
     dk = max(3, int(APERTURE_DILATE_FW * FW) | 1)
     expect_ap = cv2.dilate(_true_apertures().astype(np.uint8),
                            cv2.getStructuringElement(
@@ -199,14 +203,17 @@ def test_guards_not_redilated():
 
 
 def test_aperture_detection_failure_abstains():
-    """(v) No dark aperture pair in the image -> _anatomy_guards returns
-    None and build_mask abstains (a guard is never fabricated)."""
+    """(v) No dark aperture pair in the image -> the aperture guard is None
+    and build_mask abstains with the typed reason (never fabricated)."""
     ctx = _ctx()
     ctx["crop"].bgr = _skin_bgr(with_apertures=False)
-    assert _anatomy_guards(ctx["crop"]) is None
+    g = _anatomy_guards(ctx["crop"])
+    assert g["aperture"] is None
+    assert g["aperture_detection"].reject == APERTURE_REJECT_NO_PAIR
     edit, model, info = build_mask(ctx)
     assert edit is None and model is None
     assert info["abstain"] == ABSTAIN_LOWER_FACE
+    assert info["apertureReject"] == APERTURE_REJECT_NO_PAIR
 
 
 def test_canvas_top_gap_zero():
@@ -275,3 +282,91 @@ def test_no_nose_bottom_seed_in_guards():
     y, x = int(NOSE_Y) + 3, int(CX)
     assert not guards["lip"][y, x]
     assert not guards["aperture"][y, x]
+
+
+# ---------------------------------------------------------------------------
+# Aperture detector robustness (Codex #14 Q4): every ADDITIVE gate has a
+# reject control with its typed reason; a clean pair keeps full confidence.
+# Bounds are the calibrated envelope (n=18 non-holdout detections): area
+# ratio <=5.0, x-asym <=0.12fw, gap in [0.05, 0.30]fw, pair persistence at
+# contrasts {36, 40}, ROI-shift consensus >=3/4.
+# ---------------------------------------------------------------------------
+
+def _blob_img(blobs: list[tuple[int, int, int, int]],
+              color=(25, 25, 25)) -> np.ndarray:
+    """Skin image (no default apertures) + custom dark ellipses
+    (cx, cy, ax, ay)."""
+    img = _skin_bgr(with_apertures=False)
+    for cx, cy, ax, ay in blobs:
+        cv2.ellipse(img, (cx, cy), (ax, ay), 0, 0, 360, color, -1)
+    return img
+
+
+def test_aperture_clean_pair_full_confidence():
+    det = detect_nostril_apertures(_skin_bgr(), LM, FW)
+    assert det.ok and det.reject is None
+    assert det.confidence == 1.0
+    assert det.checks["perturbHits"] == "4/4"
+    assert all(det.checks["contrastPersist"].values())
+
+
+def test_aperture_area_ratio_rejects():
+    """One big + one tiny aperture (ratio ~9 > 5.0) -> typed reject."""
+    img = _blob_img([(176, 146, 5, 3), (224, 146, 1, 1)])
+    det = detect_nostril_apertures(img, LM, FW)
+    assert not det.ok and det.reject == APERTURE_REJECT_RATIO
+    assert det.checks["areaRatio"] > 5.0
+    assert det.halo is None and det.core is None
+
+
+def test_aperture_x_asymmetry_rejects():
+    """Pair heavily off the nose center (asym ~0.16fw > 0.12fw)."""
+    lm = LM.copy()
+    lm[NOSTRILS[0]] = (CX - 45.0, NOSTRIL_Y)
+    lm[NOSTRILS[1]] = (CX + 45.0, NOSTRIL_Y)
+    img = _blob_img([(158, 146, 4, 2), (206, 146, 4, 2)])
+    det = detect_nostril_apertures(img, lm, FW)
+    assert not det.ok and det.reject == APERTURE_REJECT_ASYM
+    assert det.checks["xAsymFw"] > 0.12
+
+
+def test_aperture_gap_too_small_rejects():
+    """Pair squeezed to a 0.036fw gap (< 0.05fw floor)."""
+    img = _blob_img([(196, 146, 2, 2), (204, 146, 2, 2)])
+    det = detect_nostril_apertures(img, LM, FW)
+    assert not det.ok and det.reject == APERTURE_REJECT_GAP
+    assert det.checks["gapFw"] < 0.05
+
+
+def _gray_for_lab_l(l_target: float) -> int:
+    for g in range(255, -1, -1):
+        l_val = float(cv2.cvtColor(np.full((1, 1, 3), g, np.uint8),
+                                   cv2.COLOR_BGR2Lab)[0, 0, 0])
+        if l_val <= l_target:
+            return g
+    return 0
+
+
+def test_aperture_contrast_instability_rejects():
+    """A mid-dark flood (L = ROI median - 38) is invisible at contrast 40
+    but at 36 merges with the left aperture into an over-max-area blob:
+    the pair does not PERSIST across the contrast set -> typed reject."""
+    img = _blob_img([(176, 146, 4, 2), (224, 146, 4, 2)])
+    med0 = float(np.median(cv2.cvtColor(img[138:155, 171:230],
+                                        cv2.COLOR_BGR2Lab)[..., 0]))
+    g = _gray_for_lab_l(med0 - 38.0)
+    img[138:145, 171:196] = (g, g, g)   # 7x25 band touching the left blob
+    det = detect_nostril_apertures(img, LM, FW)
+    assert not det.ok and det.reject == APERTURE_REJECT_CONTRAST
+    assert det.checks["contrastPersist"]["36.0"] is False
+
+
+def test_aperture_roi_perturb_consensus_rejects():
+    """Blobs straddling the ROI's left/right edges survive the base scan but
+    vanish under x-shifts: consensus 2/4 < 3/4 -> typed reject."""
+    img = _blob_img([(171, 141, 2, 2), (229, 141, 2, 2)])
+    det = detect_nostril_apertures(img, LM, FW)
+    assert not det.ok and det.reject == APERTURE_REJECT_PERTURB
+    hits = int(det.checks["perturbHits"].split("/")[0])
+    assert hits < 3
+    assert det.confidence < 1.0
