@@ -606,3 +606,57 @@ overLift ≤1.5L(신규 초과), 턱그늘 ≤±1.6%, 컨트롤 표류 p95 ≤1�
 1. 완전 소거 능력(강도 조절로 "아예 깨끗"까지) 2. 밝은 밴드/헤일로 절대 금지(조명 일관 리프트)
 3. 모틀 금지(균질 질감 재건) 4. 볼·입술밑·인중 포함 지대 전체 커버(재현율)
 5. 목 침범 금지(경계 규율) 6. 코 밑 자연 음영 보존(검증된 정책 유지)
+
+### 경로 전환 (2026-07-11): 경로 B 승인 — LaMa 하이브리드
+
+- Codex #7 판정("짙은 수염 아래 피부는 관측 불가 — 거부 없는 laser-complete는 결정론만으로
+  불가, 생성형 인페인터 필요") + 사용자의 갤럭시 S25 AI 지우개 실증(삼성 = LaMa 인페인팅,
+  형태 유지·질감 뭉갬) → **사용자 경로 B 승인. 계약 수정: 생성형 신경망 허용 —
+  단 추론 결정론(같은 입력 bytes → 같은 출력 bytes, per-environment) 필수. diffusion 금지 유지.**
+- 디스크: 승인 하에 external/CelebAMask-HQ + facial_hair_annotations 삭제(2.7GB 확보,
+  둘 다 재다운로드 가능한 공개 데이터셋, 스테이지4 학생모델은 이미 기각).
+- big-lama traced TorchScript 205.7MB 다운로드, SHA256 `344c77bb…` `spike/lama_manifest.json`에
+  고정(로드 시마다 재검증). 라이선스: 코드/가중치 Apache-2.0, 학습 데이터 Places2 —
+  **상용화 전 법무 검토 blocking item**.
+
+### Codex #8 교차검증 (2026-07-11): 하이브리드 설계 — 조건부 GO, 블로커 4
+
+1. `0.06 + 0.04fw 일괄 팽창` 과마스크 위험 → 팽창 폐기/축소, erase_core와 context 분리,
+   jaw 클립은 팽창 전+후 이중 적용. fringeRing 기반 재팽창은 v1 금지(Goodhart).
+2. **quilt donor 선정이 원본 저주파(수염 얼룩 포함)에 매칭 — LaMa 채움 위에서는 어두운
+   donor를 골라 모틀 재생산.** → target_low_l 파라미터 추가(LaMa low 기준 선정) + rehipass.
+3. lip byte-identity는 필요조건일 뿐 — 인접부 입술 연장/치아/이중 fold 환각 가능.
+   넓은 moat 금지(soul-patch 리콜 재손실), **좁은 lip polygon 홀 + lipLeak·newBrightStructure
+   자 + 환각 시 abstain**.
+4. 러너 결정론 미달 → freeze(optimize_numerics=False), manifest 없으면 로드 거부,
+   interop 실패 hard-fail, use_deterministic_algorithms, OMP/MKL 고정, ABA·사이즈·마스크
+   토폴로지·PNG bytes 테스트. **전부 반영, tests/test_lama_runner.py 14/14 green.**
+- 손절 순서 재정렬: **oracle-mask kill test 최우선**(완벽 마스크에서도 추한지) —
+  실패 시 CLIPSeg 배관·자 작업 전 즉시 NO-GO.
+- U_b(조명 일관 상한)는 pixel clamp가 아니라 one-sided reject/abstain 자로 유지.
+- 체크포인트 ⑤ 프로토콜: ORIG 상시 노출 + A/C 블라인드, **절대 허용/불가가 1차**, 선호는 2차.
+  게이트는 새 사진 보기 전 동결.
+
+### Oracle-mask kill test (2026-07-11): 생존 — 단 승자는 LaMa-as-is
+
+pic1·pic3·psd01·psd04, REGION GT 기반 oracle 마스크(위쪽 확장 + 좁은 lip 홀 + 콧구멍 코어
+제외 + jaw 클립), LaMa ≤512 추론(1.4~5.0s/장). 패널: ORIG | LAMA(그대로) | HYB(LaMa 저대역
++ 교정 donor 고대역).
+
+- **LAMA 팔 생존**: 입 환각 0건(Codex 최대 베팅 미발화 — 좁은 lip 홀 유효), 턱 과밝음 0건,
+  LaMa 자체 모틀 0건. pic1·psd01은 즉시 서비스 후보 수준(여드름 자국까지 자연 소거).
+- **HYB 팔(donor 재주입)이 오히려 실패**: psd01·psd04 격자무늬 모틀(Hann 격자 잔존,
+  psd04는 donor 침식 과다로 nDonors=1 — 단일 스탬프 반복). 죽인 건 LaMa가 아니라 우리 quilt.
+- grain 비율(채움 고대역 RMS / clean 피부): pic1 0.54, pic3 0.55, psd01 0.66(**결손** —
+  갤럭시식 왁스), psd04 **1.53(과잉** — 짙은 문맥을 이어 그린 잔털 질감 재생성 의심).
+  → grainMatch 자는 **양방향** 필수.
+- pic3 인중 양옆 잔존 = GT 리콜 빈틈(LaMa 실패 아님) — 프로덕션 존(CLIPSeg ∪ soft-high)에서
+  재검증. psd01 인중 상단 잔존 = 콧구멍 코어 정책 제외(의도된 불가침).
+- **psd04 턱선 하드 클립이 "위는 깨끗/바로 아래 수염 링" 경계 생성 → under_jaw_margin 실험:
+  jaw+0.06fw(∩ roi — 목 불가침 유지)에서 링 소멸, 턱 실루엣·이중턱 음영 보존. 0.06 채택,
+  0.10과 사실상 동일(roi가 캡).**
+
+**v1 방향 확정(Codex #9 교차검증 예정)**: 마스크 내 단일 소스 = guarded LaMa as-is
+(자체 저+고대역). donor 재주입은 기본 OFF — grainMatch 트립 시의 조건부 후속 과제
+(결정론 스펙트럼 grain 또는 quilt 개선). 근거: 시각 관문에서 LaMa 자체 질감 > quilt,
+Codex #8 Q3의 "erase core donor w=1" 권고는 현행 quilt 품질에서 성립하지 않음.

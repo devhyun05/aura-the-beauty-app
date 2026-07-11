@@ -78,6 +78,8 @@ _FOLD_BAND_CAP = 0.5              # max w_low inside the mentolabial band
 
 def quilt_high_field_v2(bgr: np.ndarray, clean: np.ndarray, fw: float,
                         forbid: np.ndarray | None = None,
+                        target_low_l: np.ndarray | None = None,
+                        rehipass: bool = False,
                         ) -> tuple[np.ndarray | None, dict]:
     """Deterministic donor micro-texture field.
 
@@ -86,6 +88,15 @@ def quilt_high_field_v2(bgr: np.ndarray, clean: np.ndarray, fw: float,
     band (skin texture varies vertically: cheek vs chin), no rotations, and
     each cell takes the donor minimizing |low-band L difference| -- shading-
     matched, deterministic, index tie-broken.
+
+    target_low_l (hybrid v3, Codex #8): over a LaMa fill, matching donors to
+    the ORIGINAL low band is wrong -- the original low still holds the beard
+    stain, so dark donors win and re-create chin mottle / dark stamps. Pass
+    the low-band L of the FILLED image so cells match the brightness the fill
+    will actually have. Donor brightness (dband) still comes from the original
+    -- donors live on untouched clean skin. rehipass strips any low-frequency
+    the overlap-averaged quilt synthesized, so the field stays strictly high
+    band.
     """
     img = bgr.astype(np.float32)
     low = cv2.GaussianBlur(img, (0, 0), sigmaX=max(2.0, fw / LOW_SIGMA_RATIO))
@@ -117,6 +128,7 @@ def quilt_high_field_v2(bgr: np.ndarray, clean: np.ndarray, fw: float,
     dband = l_low[dcy, dcx]
 
     h, w = clean.shape
+    tgt_low = l_low if target_low_l is None else target_low_l.astype(np.float32)
     win = np.hanning(patch)[:, None] * np.hanning(patch)[None, :]
     acc = np.zeros((h, w, 3), np.float32)
     wacc = np.zeros((h, w), np.float32)
@@ -127,7 +139,7 @@ def quilt_high_field_v2(bgr: np.ndarray, clean: np.ndarray, fw: float,
             for cx in range(pass_off, w, step):
                 y_pen = np.abs(dcy - cy).astype(np.float32)
                 y_pen = np.where(y_pen <= 0.15 * fw, 0.0, y_pen / fw * 40.0)
-                cost = np.abs(dband - l_low[min(cy, h - 1), min(cx, w - 1)]) + y_pen
+                cost = np.abs(dband - tgt_low[min(cy, h - 1), min(cx, w - 1)]) + y_pen
                 j = int(np.argmin(cost))    # deterministic: first minimum
                 sy, sx = int(dcy[j]) - half, int(dcx[j]) - half
                 p = high[sy:sy + patch, sx:sx + patch]
@@ -143,6 +155,10 @@ def quilt_high_field_v2(bgr: np.ndarray, clean: np.ndarray, fw: float,
                 dy_used.append(abs(int(dcy[j]) - cy))
     field = acc / np.maximum(wacc[..., None], 1e-6)
     field[wacc < 1e-4] = 0.0
+    if rehipass:
+        field -= cv2.GaussianBlur(field, (0, 0),
+                                  sigmaX=max(2.0, fw / LOW_SIGMA_RATIO))
+        field[wacc < 1e-4] = 0.0
     # Overlap-averaging independent patches shrinks the variance (the re-grain
     # "energy shortfall" lesson): rescale so the field's RMS on clean skin
     # matches the person's real micro-texture RMS, or the replaced area reads
