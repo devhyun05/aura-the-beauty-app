@@ -30,10 +30,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 
-os.environ.setdefault("OMP_NUM_THREADS", "4")
-os.environ.setdefault("MKL_NUM_THREADS", "4")
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    _cur = os.environ.get(_v)
+    if _cur is None:
+        os.environ[_v] = "4"
+    elif _cur != "4":
+        # setdefault would silently accept a foreign value — the pinned
+        # thread count IS the determinism mechanism, so refuse instead
+        # (Codex #9: MKL vars take precedence over OMP).
+        raise RuntimeError(
+            f"determinism contract violation: {_v}={_cur} != 4 — unset it or "
+            "run LaMa in a dedicated worker process"
+        )
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
@@ -62,6 +73,11 @@ except RuntimeError:
 
 _MODEL = None
 _WEIGHTS_SHA: str | None = None
+# torch.use_deterministic_algorithms is PROCESS-GLOBAL state: concurrent
+# callers would race the set-and-restore around the forward. All inference
+# serializes on this lock (Codex #9; a dedicated worker process is the
+# service-grade alternative).
+_FORWARD_LOCK = threading.Lock()
 
 
 def _sha256_of(path: Path) -> str:
@@ -152,13 +168,14 @@ def inpaint(bgr: np.ndarray, mask: np.ndarray, *, allow_reflect_pad: bool = Fals
     t_mask = torch.from_numpy(mask_bin)[None, None]
 
     model = get_model()
-    was_det = torch.are_deterministic_algorithms_enabled()
-    torch.use_deterministic_algorithms(True)
-    try:
-        with torch.inference_mode():
-            out = model(t_img, t_mask)
-    finally:
-        torch.use_deterministic_algorithms(was_det)
+    with _FORWARD_LOCK:
+        was_det = torch.are_deterministic_algorithms_enabled()
+        torch.use_deterministic_algorithms(True)
+        try:
+            with torch.inference_mode():
+                out = model(t_img, t_mask)
+        finally:
+            torch.use_deterministic_algorithms(was_det)
 
     res = out[0].permute(1, 2, 0).numpy()
     res = np.clip(np.rint(res * 255.0), 0, 255).astype(np.uint8)

@@ -146,6 +146,33 @@ def test_fill_actually_changes_and_is_plausible():
     assert diff < 60, f"fill wildly off the surrounding skin (mean |diff| {diff:.1f})"
 
 
+def test_concurrent_identical_calls_byte_identical():
+    """Deterministic flag is process-global; the forward lock must make
+    concurrent same-input calls agree (Codex #9)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    img, mask = _fixture_pair()
+    ref = lama_runner.inpaint(img, mask)
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        outs = list(ex.map(lambda _: lama_runner.inpaint(img, mask), range(4)))
+    for out in outs:
+        assert np.array_equal(out, ref)
+
+
+def test_foreign_omp_env_refused():
+    """Importing the runner under a mismatched OMP/MKL pin must hard-fail —
+    a silently accepted foreign thread count breaks byte reproducibility."""
+    code = "import sys; sys.path.insert(0, sys.argv[1]); from spike import lama_runner"
+    lab = str(Path(__file__).resolve().parents[1])
+    import os
+
+    env = dict(os.environ, OMP_NUM_THREADS="8")
+    proc = subprocess.run([sys.executable, "-c", code, lab],
+                          capture_output=True, text=True, timeout=120, env=env)
+    assert proc.returncode != 0
+    assert "determinism contract violation" in proc.stderr
+
+
 def test_manifest_pin_is_mandatory():
     """get_model must have verified the pin (it loaded in earlier tests)."""
     assert lama_runner._WEIGHTS_SHA is not None
