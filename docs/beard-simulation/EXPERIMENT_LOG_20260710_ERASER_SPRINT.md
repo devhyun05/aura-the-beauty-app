@@ -787,3 +787,129 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   reference abstain. **라이브 C팔 3/7 — abstain율 4/7이 자체 핵심 데이터.**
 - 패널(ORIG 상시 + X/Y 봉인) + 판정표(judgment_form.md) 생성, 매핑은
   spike/blind_mapping_cp5a.json에 봉인. 오퍼레이터는 결과 패널 미열람.
+
+### 체크포인트 ⑤ 판정 결과 + 원인 포렌식 (2026-07-12)
+
+- **인간 블라인드 판정 (봉인 개봉: nb1 X=A/Y=C, nb7 X=C/Y=A, nb10 X=A/Y=C)**:
+  nb1 "X 거의 안지워짐 / Y 턱 뭉개져 얼굴형 바뀜 / 인중 거의 안지워짐",
+  nb7 "Y 거의 안지워짐 / X 턱-목 경계 못 지움 + 지운 턱 색 잔존 + 인중 잔존, 굳이 X",
+  nb10 "X 턱 과백·턱끝/가장자리 미소거·인중 그대로 / Y 수염을 더 만들고 입모양 바뀜".
+  총평 "전체적으로 실망, 갤럭시 S25가 훨씬 좋았다". **Sprint A 종료 조건 미달(커버리지
+  reject 3/3)** — 단, 게이트도 7/7 abstain·hard-fail(통과 0)로 인간과 일치, 실루엣 자
+  (advisory)는 판정 3장 전부 hard-fail로 인간의 "얼굴형" 지적과 일치 → 측정층 검증됨.
+- **포렌식 (워크플로 4에이전트: 사진 3 시각 + 코드 감사) 결함 귀속**:
+  ① 인중·입양옆 = guard-block — nostril_core(hybrid_recon.py:185-188)가 팽창-립 슬리버
+  (protect_mask upper_cap 0.018fw, lower_face_roi.py:107-117)를 씨앗으로 0.025fw 재팽창,
+  인중 최대 98.6% 차단(nb10). growth는 인중 100% 발화 — 증거가 아니라 가드 기하 문제.
+  ② 목·턱-목 경계 = dual-seed AND 기아 — black-hat은 그늘 목에서 침묵, CLIPSeg 약함,
+  1px-AND 결과 dualSeedPx nb1=0/nb7=1; face_mask&=above_split이라 경계 밴드 구조적 미편집.
+  nb7은 경계 그림자 호가 occluder 밴드로도 차단.
+  ③ nb10 턱끝 밴드 = mask-miss — seed 47%(4.98만px, 87% 하단) 발화에도 최종 edit이
+  30-80px 위에서 잘림(분할선 침식 추정; 가드 겹침 235px뿐).
+  ④ 채움 붕괴 = lama-artifact — 왁스 회갈색·무모공(nb1 lapvar 32→8.3·dL−13.3, nb7 밴딩·
+  grain 1.81, nb10 lapvar 76→9·dAb50 21.9 → "수염 추가"로 지각). nb10 입모양 변화는 립
+  바이트가드 유지 확인(마스크 밖 변경 680px) — 립 경계에 붙은 어두운 채움 테의 착시.
+  악화: inferenceScale nb1 0.744/nb10 0.381(512 캡 붕괴) — 단 nb7은 1.0에서도 실패 →
+  다운스케일은 증폭 요인. oracle(완벽 마스크·작은 창·성긴 수염)은 승인급이었음: big-lama는
+  **구멍 크고 문맥에 짙은 수염이 남을 때** 붕괴한다.
+- nb1·nb7·nb10 **SPENT** (판정 후 재실행 금지). Codex #12 교차검증 발제(진단 동의 여부 +
+  가드 축소/커버리지-주도 마스크 전환/해상도 전략/채움 품질/실루엣 자 hard 복귀 + Sprint B
+  순서·새 홀드아웃·갤럭시 비교팔 여부).
+
+### Codex #12 (2026-07-12): 진단 교차검증 + Sprint B 설계 합의
+
+- **귀속 판정**: ①가드 잠식·②목 기아 = 코드상 확정 동의. ③턱끝 절단은 "split이 잘랐다"
+  까지 확정, 랜드마크-수염-오염 원인론은 유보(ablation 필요). ④채움 붕괴 = 복합 원인 —
+  "dense-beard 도메인 미스매치 + 불완전한 문맥 정화가 근본, 저해상도·마스크 축소·창 분리가
+  증폭". **추가 발견 4**: (i) canvas 상단 nose_y+0.01fw 절단도 인중 ceiling, (ii)
+  normalized_excess −70L 정책이 깊은 목 그림자를 정책적으로 소거, (iii) 마스크 INTER_AREA
+  축소 후 >64 이진화가 0.381 스케일에서 얇은 마스크 토폴로지 파괴(hybrid_recon.py:355-362),
+  (iv) model halo 0.004fw는 문맥 정화에 과소. **측정층 맹점**: ghost는 z-검출 후보만 평가
+  (nb7 nCands=0) — solid beard 커버리지는 자에 비관측; 다음 체크포인트는 "거절 일치율"과
+  "자 원인별 recall" 분리 보고.
+- **Sprint B 합의 순서**(각 단계 kill 기준 로그 별도): 0) 마스크 픽셀 provenance 계측 →
+  1) 가드·canvas 수리(립=버밀리언+0.003~0.005fw, 콧구멍=NOSTRILS 타이트 디스크
+  0.010~0.014fw, NOSE_BOTTOM 씨앗 제거, protect_mask 재사용 금지, 인중 명시 폴리곤;
+  philtrum coverage ≥95% kill) → 2) **영역 활성화 구조 전환**: "증거는 어느 해부학 영역을
+  켤지만 결정, 켜진 영역은 해부학이 전체 커버"(무조건 목 편집은 반대 — negative FP 비용;
+  dual-seed OR 완화는 임시방편으로 기각), occluder hard 감산은 확실한 의복·액세서리만,
+  jaw curve는 hard boundary 금지(±tube ∪ contour, overlap feather) → 3) 해상도 factorial
+  512/1024/native(타일링 반대 — FFC 전역 문맥 훼손; 공식 refinement는 결정론 재고정 필요)
+  → 4) model halo {0.02,0.04fw} × 2-pass(확대 정화→원마스크 재채움) → 5) Lab 정합(합격권
+  진입 후에만)·spectral re-grain(ring 위상 소스) → 6) **kill switch**: 완전커버+고해상+정화
+  후에도 dev positive 인간 usable<60%면 MI-GAN(MIT)/AOT-GAN(Apache-2.0) 연구 팔 투입
+  (MAT·EdgeConnect는 CC BY-NC 상용 불가, GFPGAN은 정체성 변형 위험+라이선스 혼합).
+- **실루엣 자**: serving veto(비-pass=미출고) 즉시 복귀 가능, 단 hard-fail 확정은 6조건
+  AND(identity pass, support≥0.30, shift>0.012fw ∧ corr<0.75, hair-free probe≥20,
+  두 신호 동일 구간)로 제한.
+- **다음 체크포인트**: subject-disjoint 신규 40장(dense 8/medium 8/jaw-neck 8/negative 10/
+  hard 6), 3팔 A(동결 서빙)·B(Sprint B)·**S(갤럭시 S25 지우개 — quality-reference arm,
+  동일 원본·기기·작업자·고정 예산 기록)**, 판정자 3인, 사전등록 게이트(usable≥18/24,
+  anatomy change 0, S25 갭≤15%p, negative 열화 0/10, unsafe serve 0/6). usable<12/24 또는
+  anatomy 실패≥2면 후처리 튜닝이 아니라 backend/도메인 전환. LaMa 매니페스트에 라이선스·
+  출처 URI 필드 보강. cp5a 3장 재실행 금지 재확인.
+
+### 정정 (2026-07-12, 사용자 지적): "승인급"과 "짙은 수염" 서사 폐기
+
+- **정정 1 — 승인 사례는 0건**: "성긴~중간 수염 + 완벽 마스크 = 승인급"은 과장.
+  oracle kill test의 "승인"은 내부 평가(운영자 육안 + 게이트 + Codex 감사)일 뿐이며,
+  Codex 감사조차 결함을 지적했음(psd02 콧수염 잔존·재생성, psd01 과평활). 인간 블라인드
+  판정을 통과한 결과는 어떤 밀도에서도 아직 없다. oracle의 정확한 의미: "완벽 마스크에서
+  메커니즘이 죽지 않는다"는 하한 증거까지만.
+- **정정 2 — cp5a에 짙은 수염은 없었다**: 원본 재확인 결과 nb1=옅은~중간 스터블(점 패턴,
+  피부 전면 가시), nb7=매우 옅은 스터블(그림자 수준), nb10=중간 스터블(콧수염 점+턱 아크).
+  풀/짙은 비어드 0장. 즉 **채움 붕괴는 옅은~중간 스터블에서 발생**했고, "dense-beard
+  도메인 미스매치가 근본"(Codex #12 종합이 승계한 내 프레이밍)은 데이터 근거 없음 → 폐기.
+  남는 진짜 변수: 마스크 형상(가드 구멍·들쭉 경계), 구멍 크기(maskFrac 0.31~0.41 vs
+  oracle 0.12~0.29), 창 크기/스케일(824~1344px/0.38 vs 208~696px/0.74~1.0), 순차 2창,
+  사진 도메인(jpg/avif/webp 압축). 전부 통제 실험으로 분리 가능(Sprint B 3~4단계 factorial
+  설계가 그대로 유효). 엔진 도메인 갭은 "짙은 수염"이 아니라 "Places2→얼굴 피부 채움
+  전반"으로 재정의.
+- **수염 밀도 조작적 정의(이후 이 용어 사용 시 기준, 다음 체크포인트 층화 전 동결)**:
+  ① stubble = 개별 털이 점으로 분리, 사이 피부 가시 / ② medium = 국소 연속 덩어리,
+  피부 부분 가시 / ③ dense/full = 연속 털 덩어리, 수염 영역 내 피부 가시율 낮음(예 <20%).
+  측정 프록시: 수염 영역 내 피부색 픽셀 비율 + 점 검출기(black-hat)의 개별 털 분해 가능
+  여부. 지금까지 전 실험(dev9·newbeards)은 ①~② 범위였다.
+- 진행 중인 딥 리서치(5앵글)는 질문 자체가 밀도와 무관하게 유효(엔진 대안·fine-tune·
+  상용 스택·데이터)하므로 유지하되, 결과 해석에 본 정정을 반영한다.
+
+### 딥 리서치 (2026-07-12, 5앵글 + 적대적 검증 12건, 에이전트 16/17)
+
+- **A1 전용 수염 제거**: 기성 오픈소스 수염 제거 모델은 존재하지 않음. StyleGAN 잠재편집
+  계보(HairMapper 등)는 전부 비상업 + aligned crop 전체 재생성이라 정체성 훼손 구조적
+  (arXiv 2403.08092 정량 증거). 마스크 국소 인페인트(우리 접근)가 문헌상 정체성 보존 우위.
+  Olszewski CVPR 2020(합성 수염 50종으로 페어 데이터) 레시피만 차용 가치. FaceApp은 검증
+  단계에서 기각(클라우드 전용 + TOS가 연구 목적 사용까지 금지).
+- **A2 LaMa 얼굴 fine-tune (핵심 가설) — 실행 가능, 선례 2**: 공식 리포가 학습 레시피 +
+  fine-tune용 big-lama-with-discr 체크포인트 배포. anime-lama(big-lama→512px 도메인
+  fine-tune→TorchScript 배포 = 우리 경로 실증), GLaMa(LaMa 얼굴 재학습, NTIRE 2022 1위).
+  공식 CelebA-HQ LaMa(256px, 비상업)로 며칠 내 가설 사전검증 가능(연구용). 함정: 손실
+  레시피 변경 금지(#342 품질저하), 마스크 분포가 1급 하이퍼파라미터, 커뮤니티 fine-tune
+  성공담은 과장(#341은 실패담) — 난이도 있음. **refinement는 추론 중 Adam 최적화 →
+  결정론 위반, 영구 배제**.
+- **A3 상용 정찰 — S25 재해석**: S25 지우개는 클라우드 diffusion(계정 필수·12MP 리사이즈·
+  워터마크) — 동일 조건 경쟁자가 아니라 다른 리그. LaMa 자체가 삼성 리서치 산물(계열
+  선택은 옳음). Google Magic Eraser(10MB U-Net 온디바이스)가 비-diffusion 상용 실증이나
+  '배경 물체'용이고, 큰 구멍은 업계 전체가 생성형 클라우드로 이동. 전략: 일반 도메인
+  추격 불가 → 수염 도메인 특화 학습으로 좁혀 이김. 오프라인·무워터마크·결정론이 차별점.
+- **A4 엔진 시장**: 상업-클린 얼굴 인페인터 부재. MI-GAN: 코드 MIT이나 가중치는 라이선스
+  무표기(개인 HF 계정 배포) + 리포에 NVIDIA-NC 코드 혼입(inference/ONNX 경로만 클린) +
+  얼굴 가중치 256px. AOT-GAN: 코드 Apache, CelebA-HQ 512 가중치는 비상업 오염(실험용만).
+  MAT/FcF/CoModGAN research-only. 2024+ 비-diffusion 신모델 사실상 소멸 → 엔진 교체보다
+  **현 LaMa 재학습이 최소 위험 경로**.
+- **A5 데이터 전략 — 역방향 페어 합성**: AI Hub 한국인 안면 데이터(FAQ 기준 영리 모델
+  허용·출처 명시 의무·국외반출 제한·일부만 공개 — 법무 확인 필요) 무수염 얼굴에
+  Qwen-Image-Edit(Apache-2.0 확인)로 수염을 '추가'해 픽셀 정렬 페어 생성 → 역방향 제거를
+  지도학습. diffusion은 오프라인 데이터 공장 전용이라 추론 결정론과 무충돌. 단 한국인
+  얼굴 수염 추가 품질은 미실증 → 스파이크 필요.
+- **법무 리스크 목록 갱신**: big-lama 가중치 자체도 저자 명시 라이선스 없음(제3자 HF
+  미러의 자체 표기 + 라이선스 문서 없는 GDrive; Yandex 원링크 전멸 — 링크 부패 이력).
+  기존 '상용화 전 법무 검토' blocking item에 구체화하여 추가.
+- **밀도 정정 반영 해석**: 리서치는 'dense 붕괴' 전제로 발주됐으나 결론은 밀도 무관 —
+  문제를 'Places2→얼굴 피부 채움 도메인 갭'으로 재정의해도 처방(도메인 fine-tune) 동일.
+  스터블에서도 실패했다는 정정이 오히려 fine-tune 필요성을 강화.
+- **계획 반영**: Sprint B 코어(가드·영역활성화·해상도·문맥정화)는 엔진 무관이므로 유지.
+  병행 스파이크 2건 추가 — (S1) CelebA-HQ LaMa·AOT-GAN 512·MI-GAN 256을 개발 실패
+  사진(dev9 + 미사용 newbeards nb3/5/8/11; cp5a 3장 재실행 금지)에 걸어 '얼굴 도메인
+  가중치 → 왁스 감소' 가설 검증(연구용), (S2) Qwen-Image-Edit 수염 추가 품질 스파이크.
+  두 스파이크 GO 시 페어 공장 + big-lama fine-tune(Sprint C 규모)으로.

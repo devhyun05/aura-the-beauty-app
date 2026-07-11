@@ -34,7 +34,8 @@ sys.path.insert(0, str(LAB))
 
 from engine.beard_segmentation import fit_skin_model, segment_beard  # noqa: E402
 from engine.detect_face import (  # noqa: E402
-    CHIN_TIP, FACE_OVAL, JAW_OVAL, LIPS_OUTER, NOSE_BOTTOM, detect_face,
+    CHIN_TIP, FACE_OVAL, JAW_OVAL, LIPS_OUTER, NOSE_BOTTOM, NOSTRILS,
+    detect_face,
 )
 from engine.lower_face_roi import build_lower_face_crop, skin_reference_pixels  # noqa: E402
 from eval.fill_color_ruler import score_fill_color  # noqa: E402
@@ -90,6 +91,31 @@ CONFIG = {
     "modelMaskDilate": 0.004,
     "hairHaloDilate": 0.003,
 }
+
+# --- Anatomy guards (Codex #12 stage-1 redesign). --------------------------
+# The old guards re-dilated crop.protect_mask (lips already dilated 0.045fw
+# + THREE nose disks including NOSE_BOTTOM) by another 0.025fw distance —
+# measured philtrum blockage up to 98.6%, and the mouth-side bands were cut
+# too. The inviolable contract is the TRUE lip vermilion and the TRUE
+# nostrils; the philtrum (mustache) and mouth-side bands are first-class
+# edit regions. Guards below are built from raw landmarks, are FINAL once
+# built (no downstream re-dilation), and are exactly the masks the
+# byte-identity gates in eval.hybrid_rulers check.
+LIP_GUARD_DILATE_FW = 0.004    # vermilion polygon + thin blend margin
+NOSTRIL_GUARD_R_FW = 0.012     # tight disk on each NOSTRILS landmark
+
+# Provenance codes (Codex #12 stage 0): per-pixel reason a pixel was NOT
+# edited (0 = edited). Recorded by build_mask, sheeted by run_photo.
+PROV_EDIT, PROV_OUT_CANVAS, PROV_NO_EVIDENCE = 0, 1, 2
+PROV_HYSTERESIS, PROV_LIP, PROV_NOSTRIL, PROV_OCCLUDER = 3, 4, 5, 6
+PROV_NAMES = {PROV_EDIT: "edit", PROV_OUT_CANVAS: "outCanvas",
+              PROV_NO_EVIDENCE: "noEvidence",
+              PROV_HYSTERESIS: "hysteresisDrop", PROV_LIP: "lipGuard",
+              PROV_NOSTRIL: "nostrilGuard", PROV_OCCLUDER: "occluderGuard"}
+PROV_COLORS = {PROV_EDIT: (0, 200, 0), PROV_OUT_CANVAS: (40, 40, 40),
+               PROV_NO_EVIDENCE: (160, 160, 160),
+               PROV_HYSTERESIS: (0, 255, 255), PROV_LIP: (0, 0, 255),
+               PROV_NOSTRIL: (255, 0, 255), PROV_OCCLUDER: (255, 128, 0)}
 
 
 def production_zone_soft(crop, skin) -> np.ndarray:
@@ -169,32 +195,63 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
                 cands_ext=cands, name=name)
 
 
-def _anatomy_guards(crop) -> dict:
-    """Narrow lip hole + nostril cores. v3 retired the below-jaw guard —
-    the mask now legitimately crosses the jaw (coverage-first); silhouette
-    safety moved from geometry to the silhouette ruler."""
+def _anatomy_guards(crop, legacy: bool = False) -> dict:
+    """Tight anatomical no-paint guards, from RAW landmarks only (Codex #12).
+
+    lip          = true LIPS_OUTER polygon + 0.004fw dilation
+    nostril_core = one r=0.012fw disk per NOSTRILS landmark
+
+    NOSE_BOTTOM is NOT a guard seed and crop.protect_mask is never reused
+    as guard raw material: the old protect-mask-seeded distance dilation
+    blocked up to 98.6% of the philtrum, which is a first-class edit region
+    (mustache). These masks are final — no re-dilation after this point —
+    and are exactly what eval.hybrid_rulers byte-identity gates check.
+
+    legacy=True reproduces the pre-fix guards verbatim; it exists ONLY so
+    spike.mask_eval can measure before/after on the same harness.
+    """
     h, w = crop.bgr.shape[:2]
     fw = crop.face_width
-    yy = np.arange(h, dtype=np.float32)[:, None]
 
-    lip_pts = crop.landmarks[LIPS_OUTER].astype(np.int32)
-    lip = np.zeros((h, w), np.uint8)
-    cv2.fillPoly(lip, [lip_pts], 1)
-    lip = cv2.dilate(lip, np.ones((5, 5), np.uint8)) > 0
+    if legacy:  # pre-Codex-#12 guards, kept for measurement only
+        yy = np.arange(h, dtype=np.float32)[:, None]
+        lip_pts = crop.landmarks[LIPS_OUTER].astype(np.int32)
+        lip = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(lip, [lip_pts], 1)
+        lip = cv2.dilate(lip, np.ones((5, 5), np.uint8)) > 0
+        lips_top = float(crop.landmarks[LIPS_OUTER][:, 1].min())
+        nostril = (crop.protect_mask > 0.5) & (yy < lips_top - 2)
+        ndist = cv2.distanceTransform((~nostril).astype(np.uint8),
+                                      cv2.DIST_L2, 3)
+        nostril_core = ndist < max(4.0, 0.025 * fw)
+        return {"lip": lip, "nostril_core": nostril_core}
 
-    lips_top = float(crop.landmarks[LIPS_OUTER][:, 1].min())
-    nostril = (crop.protect_mask > 0.5) & (yy < lips_top - 2)
-    ndist = cv2.distanceTransform((~nostril).astype(np.uint8), cv2.DIST_L2, 3)
-    nostril_core = ndist < max(4.0, 0.025 * fw)
+    lip_poly = np.zeros((h, w), np.uint8)
+    cv2.fillPoly(lip_poly, [crop.landmarks[LIPS_OUTER].astype(np.int32)], 1)
+    lk = max(3, int(LIP_GUARD_DILATE_FW * fw) | 1)
+    lip = cv2.dilate(lip_poly, cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (lk, lk))) > 0
 
-    return {"lip": lip, "nostril_core": nostril_core}
+    nostril_core = np.zeros((h, w), np.uint8)
+    nr = max(2, int(round(NOSTRIL_GUARD_R_FW * fw)))
+    for idx in NOSTRILS:
+        cx, cy = (int(round(float(v))) for v in crop.landmarks[idx])
+        cv2.circle(nostril_core, (cx, cy), nr, 1, -1)
+
+    return {"lip": lip, "nostril_core": nostril_core > 0}
 
 
-def build_mask(ctx: dict) -> tuple[np.ndarray, np.ndarray, dict]:
+def build_mask(ctx: dict, legacy_guards: bool = False,
+               ) -> tuple[np.ndarray, np.ndarray, dict]:
     """v3 coverage-first mask: canvas = face ∪ silhouette tube ∪ neck
     corridor (spike.mask_v3), evidence hysteresis with two independent seed
     signals, garment/occluder guards. edit_mask is what the composite writes;
-    model_mask (slightly dilated) is LaMa's hole."""
+    model_mask (slightly dilated) is LaMa's hole.
+
+    The returned dict additionally carries "provenance": a uint8 per-pixel
+    map of WHY each pixel is not edited (PROV_* codes), plus per-code pixel
+    counts in the "mask" info. legacy_guards reproduces the pre-Codex-#12
+    guards for before/after measurement only (spike.mask_eval)."""
     crop, bundle = ctx["crop"], ctx["bundle"]
     fw = crop.face_width
     fh = ctx["det"].face_height
@@ -268,7 +325,7 @@ def build_mask(ctx: dict) -> tuple[np.ndarray, np.ndarray, dict]:
     face_mask &= above_split
     mask = face_mask | neck_mask
 
-    guards = _anatomy_guards(crop)
+    guards = _anatomy_guards(crop, legacy=legacy_guards)
     # Occluder candidates must EXCLUDE beard-evidence pixels first: dense
     # beard and shaded neck skin are the pixels farthest from the bright
     # cheek-anchor color model, so a raw non-skin test eats the very beard
@@ -293,7 +350,23 @@ def build_mask(ctx: dict) -> tuple[np.ndarray, np.ndarray, dict]:
                                    np.ones((mk, mk), np.uint8)) > 0)
     guards["above_split"] = above_split
 
+    # Provenance (Codex #12 stage 0): why is each pixel NOT edited. Guard
+    # footprints are painted regardless of evidence (that is the map's whole
+    # point: seeing what the guards would eat); edit wins, out-of-canvas
+    # wins over guards that morphologically spilled outside.
+    prov = np.full(shape, PROV_NO_EVIDENCE, np.uint8)
+    prov[growth & ~mask] = PROV_HYSTERESIS
+    prov[occl] = PROV_OCCLUDER
+    prov[guards["nostril_core"]] = PROV_NOSTRIL
+    prov[guards["lip"]] = PROV_LIP
+    prov[~canvas["canvas"]] = PROV_OUT_CANVAS
+    prov[edit_mask] = PROV_EDIT
+    counts = np.bincount(prov.ravel(), minlength=len(PROV_NAMES))
+    guards["provenance"] = prov
+
     info = {"maskFrac": round(float(edit_mask.mean()), 4),
+            "provenancePx": {PROV_NAMES[c]: int(counts[c])
+                             for c in sorted(PROV_NAMES)},
             "zoneFrac": round(float(ctx["zone"].mean()), 4),
             "modelMaskFrac": round(float(model_mask.mean()), 4),
             "corridorFloorY": round(float(canvas["corridor_floor_y"]), 1),
@@ -556,8 +629,23 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
         label(_tint(guards["canvas"], (255, 128, 0)), "CANVAS"),
     ])
     cv2.imwrite(str(out_dir / f"{name}_layers.png"), layers)
+
+    # Provenance sheet (Codex #12 stage 0): color-coded reason-not-edited
+    # map next to the original, so mask drop causes are eyeballable per run.
+    cv2.imwrite(str(out_dir / f"{name}_provenance.png"),
+                provenance_sheet(crop.bgr, guards["provenance"]))
     print(f"{name}: {json.dumps(rec)}")
     return rec
+
+
+def provenance_sheet(bgr: np.ndarray, prov: np.ndarray) -> np.ndarray:
+    """ORIG | color-coded provenance map (PROV_COLORS), shared by run_photo
+    and spike.mask_eval."""
+    sheet = np.zeros((*prov.shape, 3), np.uint8)
+    for code, color in PROV_COLORS.items():
+        sheet[prov == code] = color
+    return np.hstack([label(bgr, "ORIG"),
+                      label(sheet, "PROVENANCE")])
 
 
 def main() -> int:

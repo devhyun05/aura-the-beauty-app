@@ -72,11 +72,13 @@ def _empty() -> np.ndarray:
 # --------------------------------------------------------------------------
 
 def test_face_region_starts_below_nose():
+    """Codex #12: the old 0.01fw margin cut the philtrum's first band OUT of
+    the canvas — the margin is now 0 and the face region must start on the
+    first full row under the nose bottom (top gap = 0)."""
+    assert mask_v3.BELOW_NOSE_MARGIN_FW == 0.0
     c = _canvas()
-    cut_y = NOSE_Y + 0.01 * FW  # 152.2
-    assert not c["face_region"][int(cut_y) - 1, int(CX)]   # above the cut
-    assert c["face_region"][int(cut_y) + 3, int(CX)]       # just below it
-    assert not c["face_region"][:int(NOSE_Y)].any()
+    assert not c["face_region"][:int(NOSE_Y) + 1].any()  # nose row and above
+    assert c["face_region"][int(NOSE_Y) + 1, int(CX)]    # very next row: in
 
 
 def test_silhouette_tube_reaches_outside_oval():

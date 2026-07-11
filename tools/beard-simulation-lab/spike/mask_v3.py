@@ -43,8 +43,12 @@ from engine.detect_face import CHIN_TIP, FACE_OVAL, JAW_OVAL, NOSE_BOTTOM  # noq
 JAW_ANGLE_LEFT = 172   # subject's right / image-left on a frontal face
 JAW_ANGLE_RIGHT = 397
 
-# --- Frozen geometry ratios (Codex #10). ---------------------------------
-BELOW_NOSE_MARGIN_FW = 0.01    # face_region starts this far below nose bottom
+# --- Frozen geometry ratios (Codex #10; margin re-zeroed Codex #12). ------
+# 0.01 cut the first band under the nose OUT of the canvas, so the top of
+# the philtrum was structurally unerasable (checkpoint-5 mustache survivors).
+# Nostril safety is the nostril guard's job (hybrid_recon._anatomy_guards),
+# never the canvas's: the canvas must start AT the nose bottom.
+BELOW_NOSE_MARGIN_FW = 0.0     # face_region starts right below nose bottom
 TUBE_RADIUS_FW = 0.04          # silhouette tube half-width around JAW_OVAL
 RAIL_CONVERGE_SLOPE = 0.03     # corridor rails move inward 0.03·fw per 1.0·fw descent
 CORRIDOR_FLOOR_FH = 0.35       # default corridor depth below the chin
