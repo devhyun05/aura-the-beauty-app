@@ -132,10 +132,17 @@ def build_canvas(landmarks_crop: np.ndarray, shape: tuple[int, ...],
 
     # Corridor floor: coverage-first default 0.35·fh under the chin, pulled
     # up only by a confidently detected garment (or the image edge).
-    corridor_floor_y = min(float(h - 1),
-                           chin_y + CORRIDOR_FLOOR_FH * float(face_height))
-    if garment_boundary_y is not None:
-        corridor_floor_y = min(corridor_floor_y, float(garment_boundary_y))
+    # garment_boundary_y may be a scalar (row-persistent collar) or a (w,)
+    # per-column curve (garment_floor_cols — V-necks/slanted necklines).
+    default_floor = min(float(h - 1),
+                        chin_y + CORRIDOR_FLOOR_FH * float(face_height))
+    if garment_boundary_y is None:
+        floor_col = np.full(w, default_floor, np.float32)
+    else:
+        gb = np.asarray(garment_boundary_y, np.float32)
+        floor_col = np.minimum(np.broadcast_to(gb, (w,)).astype(np.float32),
+                               default_floor)
+    corridor_floor_y = float(np.median(floor_col))
 
     # Neck corridor: trapezoid hanging from the jaw. Rails start at the
     # mandible corners and converge inward with depth (necks narrow; a
@@ -148,7 +155,8 @@ def build_canvas(landmarks_crop: np.ndarray, shape: tuple[int, ...],
     right_rail = xr - RAIL_CONVERGE_SLOPE * (yy - yr)
     jaw_y_col = _columnwise_jaw_y(jaw_pts, (h, w), chin_y)
     neck_corridor = ((xx >= left_rail) & (xx <= right_rail)
-                     & (yy >= jaw_y_col[None, :]) & (yy <= corridor_floor_y))
+                     & (yy >= jaw_y_col[None, :])
+                     & (yy <= floor_col[None, :]))
 
     return {
         "face_region": face_region,
@@ -157,7 +165,8 @@ def build_canvas(landmarks_crop: np.ndarray, shape: tuple[int, ...],
         "canvas": face_region | silhouette_tube | neck_corridor,
         "corridor_floor_y": corridor_floor_y,
         "garment_boundary_y": (None if garment_boundary_y is None
-                               else float(garment_boundary_y)),
+                               else float(np.median(
+                                   np.asarray(garment_boundary_y)))),
     }
 
 
@@ -225,6 +234,69 @@ def garment_boundary(bgr_crop: np.ndarray, corridor_cols_mask: np.ndarray,
         if float(np.median(below)) > NONSKIN_MAHALANOBIS:
             return float(y)
     return None
+
+
+def garment_floor_cols(bgr_crop: np.ndarray, corridor_cols_mask: np.ndarray,
+                       chin_y: float, face_height: float,
+                       skin_lab_mean: np.ndarray,
+                       skin_lab_cov: np.ndarray) -> np.ndarray | None:
+    """Per-COLUMN garment floor (w,) — the row-persistence detector above
+    requires the collar edge to sit on one row, so any V-neck / slanted
+    neckline returns None and the corridor runs onto the fabric (measured
+    psd04: hoodie edited because CLIPSeg+z dual seeds both fired on the dark
+    neckline). Here each corridor column takes its FIRST qualifying step
+    (strong low-pass vertical gradient with non-skin below); columns without
+    a crossing inherit the median, and the curve is median-filtered. Returns
+    None when fewer than half the corridor columns cross (uncertain →
+    coverage-first, caller keeps the 0.35·fh floor)."""
+    h, w = bgr_crop.shape[:2]
+    fh = float(face_height)
+    mask = np.asarray(corridor_cols_mask, bool)
+    if mask.ndim == 1:
+        mask = np.repeat(mask[None, :], h, axis=0)
+
+    lab = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2Lab).astype(np.float32)
+    low = cv2.GaussianBlur(lab[..., 0], (0, 0), sigmaX=max(2.0, 0.02 * fh))
+    grad = np.abs(cv2.Sobel(low, cv2.CV_32F, 0, 1, ksize=3)) / 8.0
+
+    y_start = int(np.ceil(float(chin_y) + GARMENT_SEARCH_START_FH * fh))
+    if y_start >= h - 3:
+        return None
+    counts = mask.sum(axis=1)
+    valid_rows = (np.arange(h) >= y_start) & (counts >= GARMENT_MIN_COLS)
+    if valid_rows.sum() < GARMENT_MIN_ROWS:
+        return None
+    row_mean = np.where(mask, grad, 0.0).sum(axis=1) / np.maximum(counts, 1)
+    vals = row_mean[valid_rows]
+    med = float(np.median(vals))
+    mad = float(np.median(np.abs(vals - med)))
+    thr = max(med + GARMENT_GRAD_MAD_K * mad, GARMENT_GRAD_FLOOR)
+
+    maha = _mahalanobis_field(bgr_crop, skin_lab_mean, skin_lab_cov)
+    band = max(3, int(0.04 * fh))
+    cols = np.nonzero(mask[y_start:].any(axis=0))[0]
+    if len(cols) < GARMENT_MIN_COLS:
+        return None
+    floor = np.full(w, np.nan, np.float32)
+    for c in cols:
+        ys = np.nonzero((grad[y_start:, c] > thr) & mask[y_start:, c])[0]
+        for dy in ys:
+            y = y_start + int(dy)
+            y2 = min(y + 2, h - 1)
+            below = maha[y2:min(y2 + band, h), c]
+            if below.size and float(np.median(below)) > NONSKIN_MAHALANOBIS:
+                floor[c] = y
+                break
+    crossed = ~np.isnan(floor[cols])
+    if crossed.mean() < 0.5:
+        return None
+    fill = float(np.nanmedian(floor[cols]))
+    floor = np.where(np.isnan(floor), fill, floor)
+    # median-filter the curve so one noisy column cannot spike the floor
+    k = 9
+    pad = np.pad(floor, k // 2, mode="edge")
+    floor = np.array([np.median(pad[i:i + k]) for i in range(w)], np.float32)
+    return floor
 
 
 def hysteresis_mask(growth: np.ndarray, seed_strong: np.ndarray,

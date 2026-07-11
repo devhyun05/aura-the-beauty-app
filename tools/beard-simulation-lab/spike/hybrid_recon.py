@@ -51,7 +51,8 @@ from eval.run_owndomain_eval import _fit  # noqa: E402
 from eval.silhouette_ruler import score_silhouette  # noqa: E402
 from spike import lama_runner  # noqa: E402
 from spike.mask_v3 import (  # noqa: E402
-    build_canvas, garment_boundary, hysteresis_mask, occluder_guard,
+    build_canvas, garment_boundary, garment_floor_cols, hysteresis_mask,
+    occluder_guard,
 )
 from spike.oracle_kill import _mod8_window, _smoothstep, label  # noqa: E402
 
@@ -202,9 +203,16 @@ def build_mask(ctx: dict) -> tuple[np.ndarray, np.ndarray, dict]:
     # Two-pass canvas (reviewer trap #4): geometry first, then the garment
     # boundary from pixels, then rebuild with the found floor.
     canvas0 = build_canvas(crop.landmarks, shape, fw, fh)
-    gy = garment_boundary(crop.bgr, canvas0["neck_corridor"],
-                          float(crop.landmarks[CHIN_TIP][1]), fh,
-                          bundle.lab_mean, bundle.lab_cov)
+    chin_y = float(crop.landmarks[CHIN_TIP][1])
+    # Per-column floor first (V-necks/slanted necklines — row-persistence
+    # returned None on psd04's hoodie and the corridor ran onto fabric with
+    # CLIPSeg+z dual seeds both firing on the dark neckline); scalar
+    # detector as fallback.
+    gy = garment_floor_cols(crop.bgr, canvas0["neck_corridor"], chin_y, fh,
+                            bundle.lab_mean, bundle.lab_cov)
+    if gy is None:
+        gy = garment_boundary(crop.bgr, canvas0["neck_corridor"], chin_y, fh,
+                              bundle.lab_mean, bundle.lab_cov)
     canvas = build_canvas(crop.landmarks, shape, fw, fh, garment_boundary_y=gy)
 
     # Hysteresis evidence: seeds from two INDEPENDENT signals; dual seed =
@@ -289,7 +297,7 @@ def build_mask(ctx: dict) -> tuple[np.ndarray, np.ndarray, dict]:
             "zoneFrac": round(float(ctx["zone"].mean()), 4),
             "modelMaskFrac": round(float(model_mask.mean()), 4),
             "corridorFloorY": round(float(canvas["corridor_floor_y"]), 1),
-            "garmentY": None if gy is None else round(float(gy), 1),
+            "garmentY": None if gy is None else round(float(np.median(gy)), 1),
             "occluderFrac": round(float(occl.mean()), 4),
             "guardExcludedEnergyFrac": round(
                 float((pre_guard & ~edit_mask).sum())
@@ -522,6 +530,26 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
     ring = model_mask & ~edit_mask
     ov[ring] = (0.6 * ov[ring] + 0.4 * np.array([0, 160, 255])).astype(np.uint8)
     cv2.imwrite(str(out_dir / f"{name}_mask.png"), ov)
+
+    # 5-layer inspection sheet (Codex #10 Q7-1): the mask must be eyeballed
+    # on these layers BEFORE trusting any run — growth / seeds / final edit /
+    # guards / canvas.
+    def _tint(mask_b, color):
+        o = crop.bgr.copy()
+        o[mask_b] = (0.55 * o[mask_b] + 0.45 * np.array(color)).astype(np.uint8)
+        return o
+
+    layers = np.hstack([
+        label(_tint(guards["growth"], (0, 255, 255)), "GROWTH"),
+        label(_tint(ctx["zone_soft"] > CONFIG["seedClipseg"], (255, 0, 255)),
+              "SEED:CLIP"),
+        label(_tint(ctx["nz"] > CONFIG["seedZ"], (255, 255, 0)), "SEED:Z"),
+        label(_tint(edit_mask, (0, 255, 0)), "EDIT"),
+        label(_tint(guards["occluder"] | guards["lip"]
+                    | guards["nostril_core"], (0, 0, 255)), "GUARDS"),
+        label(_tint(guards["canvas"], (255, 128, 0)), "CANVAS"),
+    ])
+    cv2.imwrite(str(out_dir / f"{name}_layers.png"), layers)
     print(f"{name}: {json.dumps(rec)}")
     return rec
 
