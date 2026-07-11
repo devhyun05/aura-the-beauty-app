@@ -182,8 +182,8 @@ def build_soft_high_weight(ctx: dict, onset_percentile: float = 95.0,
     hairs or partially replaces everywhere (back to attenuation); the
     cross-validated shape is: robust-z normalization of both absolute and
     luminance-relative black-hat against clean skin, soft onset at the clean
-    p95 quantile, saturation (w=1) at the clean p99 + one onset-gap above --
-    so every gate-grade hair core is FULLY replaced -- plus hysteresis: weak
+    p95 quantile, saturation (w=1) AT the clean p99 -- so every gate-grade
+    hair core is FULLY replaced -- plus hysteresis: weak
     support only survives when connected to a confident seed, which keeps
     isolated noise out without abandoning the faint tail of a real hair.
     """

@@ -42,8 +42,8 @@ from engine.beard_segmentation import fit_skin_model  # noqa: E402
 from engine.detect_face import CHIN_TIP, LIPS_OUTER, NOSE_BOTTOM  # noqa: E402
 from engine.lower_face_roi import skin_reference_pixels  # noqa: E402
 from eval.ghost_ruler import (  # noqa: E402
-    LOW_SIGMA_RATIO, excess_map, low_lab, score_low_band, score_result,
-    structure_preservation,
+    Candidate, LOW_SIGMA_RATIO, excess_map, low_lab, score_low_band,
+    score_result, structure_preservation,
 )
 from eval.measure_ghost import (  # noqa: E402
     build_broad_key, build_soft_high_weight, prepare_photo, run_stages,
@@ -218,7 +218,17 @@ def shading_field_v2(lab_low: np.ndarray, clean: np.ndarray, zone: np.ndarray,
     ring = ((cv2.dilate(zone.astype(np.uint8),
                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (rk, rk))) > 0)
             & ~zone & clean)
-    info: dict = {"ringPx": int(ring.sum())}
+    # Directional support (v2.1): the ring segment BELOW the zone's inferior
+    # contour sits in the jaw/neck shadow and dragged S dark at the chin (the
+    # pic2 "턱 안 지워짐" root cause) -- excluded from BOTH the quadratic fit
+    # and the NC residual. Upper and same-row lateral support carry the
+    # illumination.
+    bottom, bvalid = inferior_contour(zone, fw)
+    yy_r = np.arange(zone.shape[0], dtype=np.float32)[:, None]
+    below = (yy_r > (bottom[None, :] + 2.0)) & bvalid[None, :]
+    info: dict = {"ringPx": int(ring.sum()),
+                  "ringBelowExcluded": int((ring & below).sum())}
+    ring = ring & ~below
     if ring.sum() < 800:
         info["gate"] = "insufficient ring"
         return None, None, info
@@ -275,29 +285,62 @@ def fold_band(crop, fw: float) -> np.ndarray:
 
 
 def anatomy_cap(crop, fw: float) -> np.ndarray:
-    """Per-pixel cap on the low-band lift over anatomic shading.
+    """Per-pixel cap on the low-band lift: mentolabial fold insurance only.
 
-    Visual gate on the first v2 run: the nose-base shadow, philtrum dimple and
-    the ring just outside the lips were read as 'stain' (dark, hair evidence
-    nearby) and lifted into a pale airbrush wash -- the exact predicted NO-GO.
-    These shadows are anatomy the ring-fitted S cannot know about, so the lift
-    is capped by landmark bands + a distance ramp off the protect mask:
-      mentolabial fold band  <= 0.5
-      nose-base band         <= 0.25
-      philtrum column        <= 0.4
-      lip/nostril adjacency  ramps 0 -> 1 over 0.03 fw
+    v2.1: the protect-distance ramp is GONE from here -- it zeroed the whole
+    low-band prescription at the lips and the dark ring it left was
+    checkpoint-3's top complaint (39-50% of residual stain mass). Lip
+    adjacency is now handled by the separated lift in compose_v2 (hair-scale
+    component passes, broad component ramps in over 0.04 fw of LIP-only
+    distance). The fold keeps a mild cap; the envelope target carries the
+    rest of the anatomy.
     """
     h, w = crop.bgr.shape[:2]
     cap = np.ones((h, w), np.float32)
-    # Insurance only: the envelope target carries nose-shadow/philtrum anatomy
-    # (bands at 0.25-0.7 here were the main reason only 19% of the intended
-    # lift arrived). The fold keeps a mild cap; lips/nostrils keep a distance
-    # ramp because the envelope right next to protect is least trustworthy.
     cap[fold_band(crop, fw)] = 0.85
-    dpr = cv2.distanceTransform((crop.protect_mask < 0.5).astype(np.uint8),
-                                cv2.DIST_L2, 3)
-    cap = np.minimum(cap, np.clip(dpr / max(4.0, 0.015 * fw), 0.0, 1.0))
     return cap
+
+
+def smoothstep(x: np.ndarray) -> np.ndarray:
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3.0 - 2.0 * x)
+
+
+def lip_distance(crop, fw: float) -> np.ndarray:
+    """Distance (px) from the LIP protect component only (not nostrils)."""
+    lips_top = float(crop.landmarks[LIPS_OUTER][:, 1].min())
+    yy = np.arange(crop.bgr.shape[0])[:, None]
+    lip = (crop.protect_mask > 0.5) & (yy >= lips_top - 2)
+    return cv2.distanceTransform((~lip).astype(np.uint8), cv2.DIST_L2, 3)
+
+
+def inferior_contour(zone: np.ndarray, fw: float) -> np.ndarray:
+    """Smoothed per-column bottom row of the zone, extended to all columns.
+
+    A global horizontal cut at zone.max(y) would just draw a NEW horizontal
+    finish line (cross-validated objection); the taper and the S-support
+    exclusion both follow the actual jaw-shaped contour instead.
+    """
+    h, w = zone.shape
+    zc = cv2.morphologyEx(zone.astype(np.uint8), cv2.MORPH_CLOSE,
+                          np.ones((5, 5), np.uint8)) > 0
+    cols = np.where(zc.any(0))[0]
+    bottom = np.full(w, np.nan, np.float32)
+    ys = np.arange(h)
+    for x in cols:
+        bottom[x] = ys[zc[:, x]].max()
+    # extend to gap columns with nearest defined value, then smooth
+    idx = np.where(~np.isnan(bottom))[0]
+    bottom = np.interp(np.arange(w), idx, bottom[idx])
+    k = max(3, int(0.05 * fw) | 1)
+    bottom = cv2.GaussianBlur(bottom.reshape(1, -1), (k, 1), 0).ravel()
+    # validity: the contour means nothing outside the zone's own column range
+    # (edge extrapolation classified the LATERAL cheek ring as "below" and cut
+    # 67% of pic2's support -> abstain, measured)
+    valid = np.zeros(w, bool)
+    m = int(0.02 * fw)
+    valid[max(int(cols.min()) - m, 0):min(int(cols.max()) + m + 1, w)] = True
+    return bottom, valid
 
 
 def nose_band_weight(crop, fw: float) -> np.ndarray:
@@ -422,9 +465,21 @@ def compose_v2(ctx: dict, w_high: np.ndarray) -> tuple[np.ndarray | None, dict]:
     w_conf = np.where(S[..., 0] < E - 0.5, conf, 1.0).astype(np.float32)
     guard = np.minimum(w_conf, anatomy_cap(crop, fw))
 
-    w_low = (ramp * guard
-             * (crop.roi_mask > 0.5) * (1 - crop.protect_mask))
-    w_low = np.clip(w_low, 0.0, 1.0)
+    # Base weight: NO protect-distance ramp here anymore (v2.1) -- lip
+    # adjacency is handled by the separated lift below, so the base only
+    # carries the seam ramp, S-confidence, the fold cap and hard protects.
+    w_base = (ramp * guard
+              * (crop.roi_mask > 0.5) * (1 - crop.protect_mask))
+    w_base = np.clip(w_base, 0.0, 1.0)
+
+    # Nose band: NO low-band edit at all. Every softer treatment (flat cap,
+    # scale-separated lift) still rendered blobs or a hard seam against the
+    # nostril protect disks (visual gates); hairs there are handled by the
+    # high-band donor, and residual shadow under the nose reads natural.
+    nose_w = nose_band_weight(crop, fw)
+    w_base = w_base * (1.0 - nose_w)
+
+    bottom, _ = inferior_contour(zone_ext, fw)
 
     D = np.maximum(t_l - lab_low[..., 0], 0.0)
     stain = zone_ext & (D > 2.0)
@@ -433,36 +488,49 @@ def compose_v2(ctx: dict, w_high: np.ndarray) -> tuple[np.ndarray | None, dict]:
         D = np.minimum(D, dcap)
         diag["winsorCapL"] = dcap
 
+    # Separated lift (v2.1): the hair-scale component D_hp passes EVERYWHERE;
+    # the broad component ramps out near the lips (0.04 fw of LIP-only
+    # distance) and toward the jaw-shaped inferior contour (last 0.05 fw).
+    # One rule for both complaints: the previous hard ramps zeroed BOTH
+    # components and left the dark lip ring (checkpoint-3 top complaint) /
+    # killed pic2's chin stain (taper regression, measured resid 0.88);
+    # full broad lift to the boundary put clean skin hard against the jaw
+    # shadow ("턱 끝 마감 이상"). D_eff <= D by construction.
+    d_lip = lip_distance(crop, fw)
+    alpha_lip = smoothstep(d_lip / max(6.0, 0.04 * fw))
+    yy_c = np.arange(zone_ext.shape[0], dtype=np.float32)[:, None]
+    alpha_chin = smoothstep((bottom[None, :] - yy_c) / max(6.0, 0.05 * fw))
+    alpha = alpha_lip * alpha_chin
+    d_hp = np.clip(D - cv2.GaussianBlur(D, (0, 0), 0.05 * fw), 0.0, D)
+    d_eff = d_hp + alpha * (D - d_hp)
+
     # The final image is judged (by ruler AND eye) after re-low-passing, and
     # a mustache-band lift is NARROWER than the low-pass kernel: adding w*D
     # pointwise delivered only ~1/3 of it after the re-blur spread it out
-    # (measured). Van-Cittert deconvolution makes blur(lift) ~ w*D land on
-    # target; only-lighten and a 3x cap bound the ringing.
-    # Nose band: NO low-band edit at all. Every softer treatment (flat cap,
-    # scale-separated lift) still rendered blobs or a hard seam against the
-    # nostril protect disks (visual gates); hairs there are handled by the
-    # high-band donor, and residual shadow under the nose reads natural.
-    nose_w = nose_band_weight(crop, fw)
-    w_low = w_low * (1.0 - nose_w)
-
-    target_lift = w_low * D
+    # (measured). Van-Cittert deconvolution makes blur(lift) ~ target land;
+    # only-lighten and a 2x cap bound the ringing (3x re-tripped the ghost
+    # ruler around hair cores, measured psd03 0.0 -> 0.53).
+    target_lift = w_base * d_eff
     sig = max(2.0, fw / LOW_SIGMA_RATIO)
     lift = target_lift.copy()
     for _ in range(3):
         lift = lift + (target_lift - cv2.GaussianBlur(lift, (0, 0), sig))
-        lift = np.clip(lift, 0.0, None) * (w_low > 1e-4)
-    # 2x cap: at 3x the overshoot around hair cores brightened their
-    # surroundings enough to RAISE black-hat excess at the cores themselves
-    # (psd03 ghost 0.0 -> 0.53 measured).
+        lift = np.clip(lift, 0.0, None) * (w_base > 1e-4)
     lift = np.minimum(lift, 2.0 * target_lift + 2.0)
     l_out = lab_low[..., 0] + lift                          # only lighten
 
+    # Chroma moves on its own weight (v2.1): full-D logic does not apply to
+    # ab, and near the lips the color shift ramps with alpha so lip-adjacent
+    # tone is preserved.
+    w_ab = w_base * alpha
     lab2 = lab_low.copy()
     lab2[..., 0] = l_out
-    lab2[..., 1:] += (S[..., 1:] - lab_low[..., 1:]) * w_low[..., None]
+    lab2[..., 1:] += (S[..., 1:] - lab_low[..., 1:]) * w_ab[..., None]
     lab2[..., 0] /= 2.55
     lab2[..., 1:] -= 128.0
     low_out = cv2.cvtColor(lab2, cv2.COLOR_Lab2BGR) * 255.0
+
+    w_low = np.maximum(w_base * (d_eff / np.maximum(D, 1e-6)), w_ab)
 
     hair_excess = excess_map(ctx["maps"], ctx["thr"]) > 0
     donor, qinfo = quilt_high_field_v2(crop.bgr, ctx["clean"], fw,
@@ -473,13 +541,40 @@ def compose_v2(ctx: dict, w_high: np.ndarray) -> tuple[np.ndarray | None, dict]:
         return None, diag
     high_out = high * (1 - w_high[..., None]) + donor * w_high[..., None]
 
-    # The ramps live INSIDE w_low/w_high (edited == img where both are 0), so
+    # The ramps live INSIDE the weights (edited == img where all are 0), so
     # the composite scope is a binary support mask -- weighting twice
     # (scope * w) squared the lift down to w^2*D, the v0 triple-dilution
     # failure repeating (measured stainResidual 0.84 at wLowMean 0.66).
-    scope = (((w_low > 1e-4) | (w_high > 1e-4)).astype(np.float32))[..., None]
+    scope = (((lift > 0.01) | (w_ab > 1e-4) | (w_high > 1e-4))
+             .astype(np.float32))[..., None]
     edited = low_out + high_out
     result = np.clip(img * (1 - scope) + edited * scope, 0, 255).astype(np.uint8)
+
+    # Prescription audit (v2.1, DIAGNOSTIC only, cross-validated design): the
+    # stain ruler is blind where the target itself is dark (pic2 chin). A =
+    # how far the original sits below the same-row lateral clean envelope;
+    # valid only where left/right references agree.
+    lat = np.full(zone_ext.shape[0], np.nan, np.float32)
+    l_low = lab_low[..., 0]
+    for y in range(0, zone_ext.shape[0], 2):
+        row_z = np.where(zone_ext[y])[0]
+        if len(row_z) == 0:
+            continue
+        lref = l_low[y][ctx["clean"][y] & (np.arange(zone_ext.shape[1]) < row_z.min())]
+        rref = l_low[y][ctx["clean"][y] & (np.arange(zone_ext.shape[1]) > row_z.max())]
+        if len(lref) >= 8 and len(rref) >= 8:
+            lm, rm = float(np.median(lref)), float(np.median(rref))
+            if abs(lm - rm) < 6.0:
+                lat[y] = (lm + rm) / 2.0
+    valid_rows = ~np.isnan(lat)
+    if valid_rows.sum() >= 8:
+        latf = np.where(valid_rows, lat, 0.0)[:, None]
+        A = np.maximum(latf - l_low - 3.0, 0.0) * zone_ext \
+            * valid_rows[:, None] * (nose_w < 0.3)
+        a_sum = float(A.sum())
+        if a_sum > 1e-3:
+            diag["prescriptionCoverageEnergy"] = float(A[D > 2.0].sum() / a_sum)
+            diag["targetSuspiciousDarkEnergy"] = float(A[D <= 2.0].sum() / a_sum)
 
     diag["S_L"] = t_l
     diag["S_ab"] = S[..., 1:]
@@ -487,6 +582,8 @@ def compose_v2(ctx: dict, w_high: np.ndarray) -> tuple[np.ndarray | None, dict]:
     diag["stain"] = stain
     diag["zoneExt"] = zone_ext
     diag["band"] = band
+    diag["lipDist"] = d_lip
+    diag["bottomContour"] = bottom
     diag["wLowMeanStain"] = float(w_low[stain].mean()) if stain.any() else None
     return result, diag
 
@@ -526,7 +623,8 @@ def compose_v1_b(ctx: dict) -> np.ndarray:
 
 # --------------------------------------------------------------------------
 
-def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
+def run_photo(name: str, img_path: Path, gt_path: Path,
+              pair: bool = False, out_dir: Path = OUT) -> dict | None:
     ctrl = controls_for(name)
     ctx = prepare_photo(name, img_path, gt_path)
     if ctx is None:
@@ -556,14 +654,15 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
     yy_g = np.arange(w_high.shape[0])[:, None]
     nostril = (crop.protect_mask > 0.5) & (yy_g < lips_top - 2)
     ndist = cv2.distanceTransform((~nostril).astype(np.uint8), cv2.DIST_L2, 3)
-    # Feathered veto: a binary mask left a donor-vs-original horizontal seam
-    # under the nostrils (visual gate).
+    # Candidate-core-preserving feather (v2.1, cross-validated): full veto
+    # inside nr, weak support feathers in over nr..2nr, but REAL hair cores
+    # outside the veto are restored to w=1 -- an inward feather alone just
+    # moved the half-treated annulus outward ("콧구멍에 뭔가 붙여놓음").
     nr = max(4.0, 0.025 * crop.face_width)
-    w_high *= np.clip(ndist / nr, 0.0, 1.0)
-    # Scoring exclusion covers only the strong-veto core (<50% replacement);
-    # excluding the whole feather would silently un-count partially-replaced
-    # hairs.
-    nostril_d = ndist < 0.5 * nr
+    nostril_core = ndist < nr
+    w_high *= np.clip((ndist - nr) / nr, 0.0, 1.0)
+    w_high = np.maximum(w_high, cand_core * (~nostril_core)
+                        * (crop.protect_mask < 0.5) * (crop.roi_mask > 0.5))
     c_img, diag = compose_v2(ctx, w_high)
     out: dict = {"id": name, "diag": {k: v for k, v in diag.items()
                                       if not isinstance(v, np.ndarray)},
@@ -575,14 +674,37 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
     out["abstain"] = False
 
     a_img = run_stages(ctx)["medium"]
-    b_img = compose_v1_b(ctx)
+    if pair:
+        # checkpoint-4 protocol: A/C only, two-way blind on FRESH photos.
+        variant_list = (("A", a_img), ("C", c_img))
+        letters = "XY"
+    else:
+        b_img = compose_v1_b(ctx)
+        variant_list = (("A", a_img), ("B", b_img), ("C", c_img))
+        letters = "XYZ"
 
-    # Nostril-adjacent candidates are out of scope by the same policy that
-    # vetoes editing there (nostril hairs stay); excluding them from scoring
-    # is recorded, never silent.
-    cands = [c for c in ctx["cands_ext"]
-             if not nostril_d[c.px[:, 0], c.px[:, 1]].any()]
-    out["diag"]["nCandsExcludedNostril"] = len(ctx["cands_ext"]) - len(cands)
+    # Nostril veto core is out of scope by policy (nostril hairs stay), but
+    # dropping a WHOLE component for touching the core is metric gaming
+    # (cross-validated objection): components are trimmed to their outside-
+    # core pixels and re-scored; only the vetoed ENERGY is excluded, and the
+    # excluded fraction is recorded, never silent.
+    excess_orig = excess_map(ctx["maps"], ctx["thr"])
+    cands, total_e, dropped_e = [], 0.0, 0.0
+    for c in ctx["cands_ext"]:
+        total_e += c.weight
+        inside = nostril_core[c.px[:, 0], c.px[:, 1]]
+        if not inside.any():
+            cands.append(c)
+            continue
+        px_out = c.px[~inside]
+        kept_w = float(excess_orig[px_out[:, 0], px_out[:, 1]].sum()) \
+            if len(px_out) else 0.0
+        dropped_e += c.weight - kept_w
+        if len(px_out) >= 4 and kept_w > 0:
+            vals = excess_orig[px_out[:, 0], px_out[:, 1]]
+            cands.append(Candidate(label=c.label, px=px_out, weight=kept_w,
+                                   q95_orig=float(np.percentile(vals, 95))))
+    out["diag"]["nostrilExcludedEnergyFrac"] = dropped_e / max(total_e, 1e-6)
     zone_ext = diag["zoneExt"]
     yy, xx = np.mgrid[0:H, 0:W]
 
@@ -600,7 +722,33 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
         a, b = mag(g0)[zone_ext], mag(g1)[zone_ext]
         return float((b.mean() - a.mean()) / max(a.mean(), 1e-6))
 
-    for tag, res in (("A", a_img), ("B", b_img), ("C", c_img)):
+    def seam_metrics(res):
+        """Complaint-shaped seam rulers (v2.1): lip-ring gradient ratio and
+        the low-band jump across the inferior contour, both vs the original
+        (1.0 = unchanged; large = a NEW seam the edit created)."""
+        rl = low_lab(res, fw)[..., 0]
+        ol = diag["origLowL"]
+        ringm = ((diag["lipDist"] > 2) & (diag["lipDist"] < 0.05 * fw)
+                 & (crop.roi_mask > 0.5))
+
+        def gmag(a):
+            return cv2.magnitude(cv2.Sobel(a, cv2.CV_32F, 1, 0),
+                                 cv2.Sobel(a, cv2.CV_32F, 0, 1))
+
+        lip_ratio = float(gmag(rl)[ringm].mean()
+                          / max(gmag(ol)[ringm].mean(), 1e-6)) \
+            if ringm.sum() >= 64 else None
+        bot = diag["bottomContour"]
+        k = 4
+        cols_z = np.where(zone_ext.any(0))[0]
+        ybi = np.clip(bot[cols_z].astype(int), k, H - k - 1)
+        jr = np.abs(rl[ybi + k, cols_z] - rl[ybi - k, cols_z])
+        jo = np.abs(ol[ybi + k, cols_z] - ol[ybi - k, cols_z])
+        inf_ratio = float(jr.mean() / max(jo.mean(), 1e-6)) \
+            if len(cols_z) >= 16 else None
+        return lip_ratio, inf_ratio
+
+    for tag, res in variant_list:
         v = score_result(res, cands, ctx["thr"], fw)
         lv = score_low_band(res, diag["S_L"], diag["origLowL"], diag["stain"],
                             zone_ext, fw, diag["S_ab"])
@@ -609,6 +757,7 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
             mm = (yy - c["y"]) ** 2 + (xx - c["x"]) ** 2 <= c["r"] ** 2
             d = np.abs(res.astype(np.int16) - crop.bgr.astype(np.int16))[mm]
             drift.append(float(np.percentile(d, 95)) if d.size else None)
+        lip_ratio, inf_ratio = seam_metrics(res)
         out["variants"][tag] = {
             "ghostQ90R": v.weightedQ90R, "survival": v.survivalRate,
             "excessArea": v.excessAreaRatio,
@@ -616,6 +765,7 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
             "overLiftQ90": lv.overLiftQ90, "abResidualQ90": lv.abResidualQ90,
             "structureBand": structure_preservation(crop.bgr, res,
                                                     diag["band"], fw),
+            "lipSeamRatio": lip_ratio, "inferiorSeamRatio": inf_ratio,
             "jawGradChange": jaw_gradient_change(res),
             "controlDriftP95": drift,
         }
@@ -632,10 +782,10 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
         if ctx["clean"].any() else None
 
     # blinded panels
-    order = list("ABC")
+    order = [t for t, _ in variant_list]
     seed = int(hashlib.sha256(name.encode()).hexdigest(), 16) % (2 ** 32)
     np.random.default_rng(seed).shuffle(order)
-    imgs = {"A": a_img, "B": b_img, "C": c_img}
+    imgs = dict(variant_list)
     zys, zxs = np.nonzero(zone_ext)
     zy0, zy1 = int(zys.min()), int(zys.max())
     zx0, zx1 = int(zxs.min()), int(zxs.max())
@@ -647,12 +797,12 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
         "lower_left": (max(zym - 10, 0), min(zy1 + 10, H), max(zx0 - 10, 0), zxm),
         "lower_right": (max(zym - 10, 0), min(zy1 + 10, H), zxm, min(zx1 + 10, W)),
     }
-    pdir = OUT / "panels"
+    pdir = out_dir / "panels"
     pdir.mkdir(parents=True, exist_ok=True)
     for rname, (ry0, ry1, rx0, rx1) in regions.items():
         tiles = []
         for lbl, im in [("ORIG", crop.bgr)] + [(x, imgs[v]) for x, v in
-                                               zip("XYZ", order)]:
+                                               zip(letters, order)]:
             t = im[ry0:ry1, rx0:rx1]
             if rname != "full":
                 t = cv2.resize(t, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
@@ -661,32 +811,42 @@ def run_photo(name: str, img_path: Path, gt_path: Path) -> dict | None:
                         (255, 255, 255), 2)
             tiles.append(cv2.vconcat([bar, t]))
         cv2.imwrite(str(pdir / f"{name}_{rname}.png"), cv2.hconcat(tiles))
-    out["blindOrder"] = {x: v for x, v in zip("XYZ", order)}
+    out["blindOrder"] = {x: v for x, v in zip(letters, order)}
     return out
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("photos", nargs="+")
+    ap.add_argument("--pair", action="store_true",
+                    help="checkpoint-4 mode: A/C only, X/Y letters")
+    ap.add_argument("--tag", default=None,
+                    help="output subfolder (규율 8: no overwriting runs)")
     args = ap.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
+    out_dir = OUT / args.tag if args.tag else OUT
+    out_dir.mkdir(parents=True, exist_ok=True)
     pairs = {n: (p, g) for n, p, g in discover_pairs()}
     results = []
     for name in args.photos:
         if name not in pairs:
             print(f"unknown photo {name}")
             continue
-        r = run_photo(name, *pairs[name])
+        r = run_photo(name, *pairs[name], pair=args.pair, out_dir=out_dir)
         if r:
             results.append(r)
             pub = {k: v for k, v in r.items() if k != "blindOrder"}
             print(json.dumps(pub, indent=2, default=str))
-    (OUT / "spike.json").write_text(json.dumps(
+    (out_dir / "spike.json").write_text(json.dumps(
         [{k: v for k, v in r.items() if k != "blindOrder"} for r in results],
         indent=2, default=str))
-    (OUT / "blind_mapping.json").write_text(json.dumps(
-        {r["id"]: r["blindOrder"] for r in results if "blindOrder" in r}, indent=2))
-    print(f"\npanels -> {OUT / 'panels'}   (X/Y/Z blinded; mapping sealed)")
+    # Sealed OUTSIDE the panels/output folder the judge browses
+    # (cross-validated one-shot protocol).
+    seal = LAB / "spike" / f"blind_mapping_{args.tag or 'zone_recon'}.json"
+    seal.write_text(json.dumps(
+        {r["id"]: r["blindOrder"] for r in results if "blindOrder" in r},
+        indent=2))
+    print(f"\npanels -> {out_dir / 'panels'}   (blinded; mapping sealed at "
+          f"{seal})")
     return 0
 
 
