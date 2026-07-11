@@ -756,3 +756,34 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   변화로 측정**. 8/9 hard-fail의 실체 → 재설계 필요(Codex #11).
   ② pic1/pic4 grain 과잉(1.68~1.75, 흐린 원본 위 선명한 채움), pic2 이상치(검은
   재킷 지배 크롭에서 참조 왜곡: G50 0.163/dark 0.21 — 시각은 양호).
+
+### Codex #11 (2026-07-12): 체크포인트 ⑤ 조건부 GO — 서비스는 아직 NO-GO
+
+- **판정**: "고정된 파이프라인을 7장 홀드아웃에서 인간 절대평가하러 가는 GO"이지
+  서비스 출시 GO가 아님. 조건 3: ① 실루엣 자 advisory 강등(구조 결함 4종 지적 —
+  stable point가 hair-free/SNR 미검사, _peak의 무조건 argmax, jawToLandmark 전 사진
+  0.025 = 탐색창 포화로 정보 없음, corr hard-fail이 support 검사보다 먼저), ② 마스크
+  전용 사전점검 선행(기준 5종 동결), ③ 사전점검 실패 사진은 수정 없이 제품 abstain.
+- 영구 실루엣 자 v2 스펙: hair-free(nz≤0 이웃) stable만, hair-free support<30%→전체
+  advisory-abstain(hard 금지), obscured는 연속 contour path 추적, identity 미통과
+  사진에선 어떤 hard-fail도 금지. → Sprint B 백로그.
+- **게이트 정합 수정 2건 반영**: grainLowConf가 hard-fail로 새던 버그(pic2), fillColor
+  성분별 low_conf를 사진 pass가 덮던 버그(pic4). bundle low_conf도 report에 기록.
+- D1(face/neck 분리) 영구 승인(공유 jaw curve 통일 조건), D2 원칙 승인(단
+  evidence∩raw-occluder는 conflict→abstain으로 — 백로그), D3 승인(단 production
+  폴백은 "불확실→0.35fh 개방"이 아니라 abstain — 백로그), S1 승인, S2 시그마 승인
+  (−70L은 veto가 아니라 validity로: normalized_excess가 (excess, valid) 반환 — 백로그),
+  S3 QC 승인(level-4 전파 수정 완료).
+- 정확한 기록 요구 반영: "자 판정 임계값은 컨트롤로 동결, 탐지/참조 운용 임계값
+  (zoneEditThr·coherence ramp·−70L)은 dev9(개발 세트)로 보정"이 맞는 문장.
+- Codex의 dev9 패널 육안 감사: pic2 전역 밝은 반점, psd02 콧수염 대량 잔존/재생성
+  (ghost=0 위음성!), psd01 과평활(병변까지 소거), psd05 따뜻한 blob — **목 커버리지·
+  가먼트 안전은 전진했으나 전체 소거·자연스러움·자 신뢰성은 미입증**이 정확한 상태.
+
+### 체크포인트 ⑤ 실행 (2026-07-12, cp5a)
+
+- 마스크 전용 사전점검(동결 기준): nb1·nb7·nb10 통과 / **nb2·nb12 실패 → 제품
+  abstain**(가드가 보이는 수염 차단; nb12는 크롭 얼굴 랜드마크 불신뢰) / nb4·nb6
+  reference abstain. **라이브 C팔 3/7 — abstain율 4/7이 자체 핵심 데이터.**
+- 패널(ORIG 상시 + X/Y 봉인) + 판정표(judgment_form.md) 생성, 매핑은
+  spike/blind_mapping_cp5a.json에 봉인. 오퍼레이터는 결과 패널 미열람.

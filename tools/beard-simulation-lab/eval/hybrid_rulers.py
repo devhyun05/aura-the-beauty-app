@@ -199,18 +199,23 @@ def judge(m: dict) -> dict:
         if m.get(k) is False:
             hard.append(k)
 
+    # Low-confidence grain numbers may ABSTAIN but never hard-fail: a
+    # degraded reference (fallback ring, garment-dominated crop) measuring
+    # G50=0.16 on a visually fine fill is uncertainty, not proof (Codex #11
+    # — pic2's black track-jacket crop hard-failed on a distorted reference).
+    grain_low = bool(m.get("grainLowConf"))
     g50, g90 = m.get("grainG50"), m.get("grainG90")
     if g50 is not None:
         lo, hi = FROZEN["grainG50Hard"]
         if not lo <= g50 <= hi:
-            hard.append("grainG50")
+            (abstain if grain_low else hard).append("grainG50")
         else:
             lo, hi = FROZEN["grainG50"]
             if not lo <= g50 <= hi:
                 abstain.append("grainG50")
     if g90 is not None:
         if g90 > FROZEN["grainG90Hard"]:
-            hard.append("grainG90")
+            (abstain if grain_low else hard).append("grainG90")
         elif g90 > FROZEN["grainG90Max"]:
             abstain.append("grainG90")
 

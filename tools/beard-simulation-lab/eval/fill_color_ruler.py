@@ -197,8 +197,11 @@ def score_fill_color(orig_bgr: np.ndarray, result_bgr: np.ndarray,
              "neutralPull50": None}
 
     low_conf = low_conf or total < _MIN_CORE_PX
-    if total < _MIN_CORE_PX:
-        verdict = "abstain"  # not enough confident evidence to say anything
+    if low_conf:
+        # A component-level unknown must not be covered by other components'
+        # pooled pass (Codex #11 — pic4 shipped fillColorLowConf=true with
+        # verdict=pass): unknown color anywhere in the fill is an abstain.
+        verdict = "abstain"
     elif (m["fillDeltaAb50"] <= FROZEN["fillDeltaAb50Max"]
           and m["fillDeltaAb90"] <= FROZEN["fillDeltaAb90Max"]
           and m["fillColorD90"] <= FROZEN["fillColorD90Max"]):

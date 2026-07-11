@@ -52,6 +52,17 @@ STRATA = {
 }
 SALT = "checkpoint5-20260711"
 
+# Mask-only preflight verdicts (Codex #11, criteria frozen BEFORE running):
+# photos whose 5-layer sheets failed a frozen criterion are PRODUCT ABSTAINS
+# — the pipeline is not re-tuned on the checkpoint set; they stay in the
+# denominator with an ABSTAIN C-tile.
+PREFLIGHT_ABSTAIN = {
+    "newbeard2": "occluder guard blocks the shaded chin where visible "
+                 "stubble lives (GUARD-blocks-visible-beard criterion)",
+    "newbeard12": "cropped face: landmarks unreliable, lip/nostril guards "
+                  "land on cheek beard (GUARD-blocks-visible-beard)",
+}
+
 
 def _load(path: Path) -> np.ndarray | None:
     img = cv2.imread(str(path), cv2.IMREAD_COLOR)
@@ -93,7 +104,12 @@ def main() -> int:
             # reference abstain / gate failure is still recorded; the panel
             # then shows the C tile as ABSTAIN (an abstain IS a product
             # outcome the judge must see).
-            rec = hybrid_recon.run_photo(stem, src, out_dir)
+            if stem in PREFLIGHT_ABSTAIN:
+                rec = {"id": stem, "verdict": "abstain",
+                       "abstains": [f"preflight: {PREFLIGHT_ABSTAIN[stem]}"]}
+                print(f"{stem}: preflight abstain")
+            else:
+                rec = hybrid_recon.run_photo(stem, src, out_dir)
             rows.append({"stratum": stratum, **(rec or {"id": stem})})
 
             ctx = hybrid_recon.prepare_unlabeled(stem, src)
@@ -130,6 +146,32 @@ def main() -> int:
         {"meta": lama_runner.run_metadata(),
          "config": hybrid_recon.CONFIG, "strata": STRATA,
          "photos": rows}, indent=2, default=str))
+
+    # Sealed judgment form (Codex #11): per-photo ①-⑤ answers + defect note
+    # + stratum + final usable, one row per blinded letter. The judge fills
+    # this in; aggregation happens per stratum, never pooled.
+    form_lines = ["# 체크포인트 ⑤ 판정표 (사진마다 X와 Y를 각각 절대 기준으로)",
+                  "",
+                  "| 사진 | 층 | 팔 | ①수염 전부 제거 | ②얼굴형·입·콧구멍·가림물 보존 |"
+                  " ③회색/이색 패치·seam 없음 | ④사용 가능 | 결함 메모 |",
+                  "|---|---|---|---|---|---|---|---|"]
+    for stratum, names in STRATA.items():
+        for stem in names:
+            if stem not in mapping:
+                form_lines.append(f"| {stem} | {stratum} | (abstain) "
+                                  "| - | - | - | - |  |")
+                continue
+            for letter in "XY":
+                form_lines.append(f"| {stem} | {stratum} | {letter} "
+                                  "|  |  |  |  |  |")
+    form_lines += ["", "⑤ 선호 (모든 절대 판정을 마친 뒤에만):",
+                   "", "| 사진 | 선호(X/Y/무) |", "|---|---|"]
+    for names in STRATA.values():
+        for stem in names:
+            if stem in mapping:
+                form_lines.append(f"| {stem} |  |")
+    (out_dir / "judgment_form.md").write_text("\n".join(form_lines) + "\n")
+
     seal = LAB / "spike" / f"blind_mapping_{tag}.json"
     seal.write_text(json.dumps(mapping, indent=2))
     print(f"\npanels -> {panels}   (blinded; mapping sealed at {seal})")

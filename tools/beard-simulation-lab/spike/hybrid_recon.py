@@ -454,7 +454,12 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
     rec["reference"] = {"ladder": bundle.ladder_level,
                         "nValid": bundle.n_valid,
                         "patches": bundle.patches_used,
-                        "singleAnchor": bundle.single_anchor}
+                        "singleAnchor": bundle.single_anchor,
+                        # degraded references must be visible in the record
+                        # (Codex #11: level-4 was silently a normal pass)
+                        "lowConf": bool(getattr(bundle, "low_conf", False)),
+                        "statsLowConf": bool(getattr(ctx["stats"],
+                                                     "any_low_conf", False))}
 
     nz_result = normalized_excess(result, fw, ctx["stats"])
     rec.update(score_photo(crop.bgr, result, edit_mask, ctx["lowev"],
@@ -464,13 +469,14 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
     # crosses the jaw, so face-shape preservation is measured, not masked.
     sil = score_silhouette(crop.bgr, result, crop.landmarks, fw)
     rec["silhouette"] = sil
-    if sil["silhouetteVerdict"] == "hard-fail":
-        rec["hardFails"] = rec.get("hardFails", []) + ["silhouette"]
-        rec["verdict"] = "hard-fail"
-    elif sil["silhouetteVerdict"] == "abstain":
-        rec["abstains"] = rec.get("abstains", []) + ["silhouette"]
-        if rec.get("verdict") == "pass":
-            rec["verdict"] = "abstain"
+    # ADVISORY for checkpoint-5 (Codex #11): the ruler as built cannot
+    # discriminate — its stable points include hair edges, so erasing the
+    # beard reads as contour change (user-praised v2 == airbrushed one-hole
+    # on psd04, and identity abstains on hair-buried jaws). Recorded, never
+    # folded into the verdict; the human judges 얼굴형 directly against ORIG.
+    # Permanent redesign spec (hair-free stable points, contour-path
+    # tracking, no hard-fail without identity-pass) is Sprint-B backlog.
+    rec["silhouetteAdvisory"] = True
 
     # Fill color harmony (independent of the L-only fillLift breaker).
     # anchor_cov: ab block of the bundle Lab covariance (reviewer trap #3 —
