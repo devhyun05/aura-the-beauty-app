@@ -1,4 +1,7 @@
 import {requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  buildFaceCaptureCompleteUploadBody,
+} from './faceCaptureUploadContract';
 
 export type FaceCaptureImageSource = 'camera' | 'gallery';
 
@@ -46,7 +49,7 @@ type PresignedUpload = {
   expiresIn: number;
   method: 'PUT';
   objectKey: string;
-  uploadId: string;
+  uploadId?: string | null;
   uploadUrl: string;
 };
 
@@ -191,6 +194,7 @@ export async function uploadFaceCaptureImage({
   console.info('[aura:capture-upload] presigned-upload:success', {
     expiresIn: upload.expiresIn,
     hasCdnUrl: Boolean(upload.cdnUrl),
+    hasUploadId: Boolean(upload.uploadId?.trim()),
   });
 
   const s3StartedAt = Date.now();
@@ -220,7 +224,15 @@ export async function uploadFaceCaptureImage({
 
   console.info('[aura:capture-upload] media-complete:start');
   const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
-    body: {uploadId: upload.uploadId},
+    body: buildFaceCaptureCompleteUploadBody(upload, {
+      byteSize: imageBlob.size,
+      contentType,
+      height,
+      mediaKind,
+      originalFilename,
+      source,
+      width,
+    }),
     method: 'POST',
   });
 

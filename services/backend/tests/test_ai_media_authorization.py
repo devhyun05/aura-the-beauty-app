@@ -247,6 +247,7 @@ def test_trusted_payload_replaces_client_location_with_database_location() -> No
     Settings(s3_bucket_name="media-bucket"),
     {
       "bucket": "victim-bucket",
+      "contentType": "image/gif",
       "objectKey": "private/victim.jpg",
       "imageUrl": "s3://victim-bucket/private/victim.jpg",
       "sourceUri": "file:///private/device-photo.jpg",
@@ -256,6 +257,7 @@ def test_trusted_payload_replaces_client_location_with_database_location() -> No
   )
 
   assert payload["bucket"] == "media-bucket"
+  assert payload["contentType"] == owned_media["content_type"]
   assert payload["objectKey"] == owned_media["object_key"]
   assert payload["mediaId"] == str(owned_media["id"])
   assert payload["task"] == "face_makeup_recommendation_report_v1"
