@@ -1,0 +1,860 @@
+{
+  "finishedAt": "2026-07-12T06:58:24",
+  "overallPass": false,
+  "gates": {
+    "K1": {
+      "pass": false,
+      "raw": "1/10",
+      "rows": [
+        {
+          "stem": "IMG_4561",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "IMG_4565",
+          "status": "noop",
+          "editPx": 0,
+          "byteIdentity": true,
+          "pass": true
+        },
+        {
+          "stem": "none_wikimedia_g01",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_03",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_01",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_g02",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_02",
+          "status": "hardfail",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_g01__beauty",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_g01__jpeg40",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        },
+        {
+          "stem": "none_wikimedia_g01__down06",
+          "status": "abstain",
+          "editPx": null,
+          "byteIdentity": null,
+          "pass": false
+        }
+      ]
+    },
+    "K2": {
+      "pass": true,
+      "raw": "훼손 0/30",
+      "photos": []
+    },
+    "K3": {
+      "pass": false,
+      "raw": "0/15",
+      "fails": [
+        "IMG_4575",
+        "stubble_wikimedia_02",
+        "stubble_wikimedia_03",
+        "stubble_wikimedia_06",
+        "stubble_wikimedia_g01",
+        "stubble_wikimedia_g03",
+        "stubble_wikimedia_g03__beauty",
+        "stubble_wikimedia_g03__down06",
+        "stubble_wikimedia_g03__jpeg40",
+        "stubble_wikimedia_g04",
+        "stubble_wikimedia_g04__beauty",
+        "stubble_wikimedia_g04__down06",
+        "stubble_wikimedia_g04__jpeg40",
+        "stubble_wikimedia_g05",
+        "stubble_wikimedia_g06"
+      ]
+    },
+    "K4": {
+      "pass": false,
+      "raw": "0/15",
+      "fails": [
+        "IMG_4570",
+        "medium_flickr_91",
+        "medium_flickr_91__beauty",
+        "medium_flickr_91__down06",
+        "medium_flickr_91__jpeg40",
+        "medium_pexels_01",
+        "medium_unsplash_06",
+        "medium_wikimedia_04",
+        "medium_wikimedia_05",
+        "medium_wikimedia_g02",
+        "medium_wikimedia_g02__beauty",
+        "medium_wikimedia_g02__down06",
+        "medium_wikimedia_g02__jpeg40",
+        "medium_wikimedia_g03",
+        "medium_wikimedia_g04"
+      ]
+    },
+    "K5": {
+      "pass": false,
+      "raw": "1/5",
+      "rows": {
+        "IMG_4572": "abstain",
+        "IMG_4570": "abstain",
+        "IMG_4575": "abstain",
+        "IMG_4561": "abstain",
+        "IMG_4565": "noop"
+      }
+    }
+  },
+  "K6_variants": [
+    {
+      "variant": "medium_flickr_91__beauty",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "medium_flickr_91__down06",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "medium_flickr_91__jpeg40",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "medium_wikimedia_g02__beauty",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "medium_wikimedia_g02__down06",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "medium_wikimedia_g02__jpeg40",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g03__beauty",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g03__down06",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g03__jpeg40",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g04__beauty",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g04__down06",
+      "nonRegression": false,
+      "baseNonRegression": false
+    },
+    {
+      "variant": "stubble_wikimedia_g04__jpeg40",
+      "nonRegression": false,
+      "baseNonRegression": false
+    }
+  ],
+  "R1_dense": [
+    {
+      "stem": "IMG_4572",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "dense_wikimedia_g01",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "dense_wikimedia_g02",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    }
+  ],
+  "R2_pureImprovement": "0/30",
+  "R3_armA_negatives": [
+    {
+      "stem": "IMG_4561",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "IMG_4565",
+      "status": "hardfail",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_g01",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_03",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_01",
+      "status": "hardfail",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_g02",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_02",
+      "status": "hardfail",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_g01__beauty",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_g01__jpeg40",
+      "status": "abstain",
+      "editPx": null
+    },
+    {
+      "stem": "none_wikimedia_g01__down06",
+      "status": "abstain",
+      "editPx": null
+    }
+  ],
+  "rows": [
+    {
+      "stem": "IMG_4570",
+      "layer": "medium",
+      "kind": "primary",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "IMG_4572",
+      "layer": "dense",
+      "kind": "primary",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "IMG_4575",
+      "layer": "stubble",
+      "kind": "primary",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "dense_wikimedia_g01",
+      "layer": "dense",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "dense_wikimedia_g02",
+      "layer": "dense",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_flickr_91",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_flickr_91__beauty",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_flickr_91__down06",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_flickr_91__jpeg40",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_pexels_01",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "hardfail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_unsplash_06",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "hardfail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_04",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_05",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g02",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g02__beauty",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g02__down06",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g02__jpeg40",
+      "layer": "medium",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g03",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "medium_wikimedia_g04",
+      "layer": "medium",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "hardfail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_02",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "hardfail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_03",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "hardfail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_06",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g01",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "hardfail",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g03",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g03__beauty",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g03__down06",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g03__jpeg40",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g04",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g04__beauty",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g04__down06",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g04__jpeg40",
+      "layer": "stubble",
+      "kind": "variant",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g05",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    },
+    {
+      "stem": "stubble_wikimedia_g06",
+      "layer": "stubble",
+      "kind": "webset",
+      "statusA": "abstain",
+      "statusB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "bWins": 0,
+      "anatomyA": false,
+      "anatomyB": false,
+      "note": "기계적 강제 기록: 양측 미출고(ABSTAIN) — 판정 대상 결과 0장, 인간 심미 판정 아님(§8 B-abstain 자동탈락 규칙이 귀결을 정의)"
+    }
+  ],
+  "denseCaveat": "dense 일반화는 표본 부족(현대 실사 1 + 프로브 2)으로 미입증 (§1)"
+}

@@ -1,0 +1,138 @@
+{
+  "salt": "dcd3e74a383c77731faa7b7a400da137",
+  "createdAt": "2026-07-12T06:53:08",
+  "mapping": {
+    "IMG_4570": {
+      "L": "B",
+      "R": "A"
+    },
+    "IMG_4572": {
+      "L": "A",
+      "R": "B"
+    },
+    "IMG_4575": {
+      "L": "A",
+      "R": "B"
+    },
+    "dense_wikimedia_g01": {
+      "L": "B",
+      "R": "A"
+    },
+    "dense_wikimedia_g02": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_flickr_91": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_flickr_91__beauty": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_flickr_91__down06": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_flickr_91__jpeg40": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_pexels_01": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_unsplash_06": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_wikimedia_04": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_wikimedia_05": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_wikimedia_g02": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_wikimedia_g02__beauty": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_wikimedia_g02__down06": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_wikimedia_g02__jpeg40": {
+      "L": "A",
+      "R": "B"
+    },
+    "medium_wikimedia_g03": {
+      "L": "B",
+      "R": "A"
+    },
+    "medium_wikimedia_g04": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_02": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_03": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_06": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g01": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_g03": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_g03__beauty": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_g03__down06": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g03__jpeg40": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g04": {
+      "L": "B",
+      "R": "A"
+    },
+    "stubble_wikimedia_g04__beauty": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g04__down06": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g04__jpeg40": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g05": {
+      "L": "A",
+      "R": "B"
+    },
+    "stubble_wikimedia_g06": {
+      "L": "A",
+      "R": "B"
+    }
+  }
+}

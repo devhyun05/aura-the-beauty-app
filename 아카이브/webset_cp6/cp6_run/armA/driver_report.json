@@ -1,0 +1,3338 @@
+{
+  "lab": "/private/tmp/claude-501/-Users-wiseungcheol-Desktop-AURA-cosmetic-search-engine/8994e34c-dd70-4a8e-a9d7-ffaed89a7701/scratchpad/cp6_wt/armA/tools/beard-simulation-lab",
+  "config": {
+    "lamaMaxDim": 512,
+    "zoneEditThr": 0.03,
+    "underJawExtend": 0.12,
+    "seedClipseg": 0.5,
+    "seedZ": 3.0,
+    "modelMaskDilate": 0.004,
+    "hairHaloDilate": 0.003
+  },
+  "meta": {
+    "torch": "2.13.0",
+    "numpy": "2.5.1",
+    "opencv": "5.0.0",
+    "python": "3.12.4",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "threads": 4,
+    "interop_threads": 1,
+    "weights_sha256": "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9",
+    "device": "cpu"
+  },
+  "finishedAt": "2026-07-12T06:51:13",
+  "photos": {
+    "IMG_4572": {
+      "status": "abstain",
+      "layer": "dense",
+      "seconds": 1.0,
+      "rec": {
+        "id": "IMG_4572",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        265,
+        282,
+        473,
+        432
+      ],
+      "byteIdentity": null
+    },
+    "IMG_4570": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.02,
+      "rec": {
+        "id": "IMG_4570",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        108,
+        258,
+        286,
+        388
+      ],
+      "byteIdentity": null
+    },
+    "IMG_4575": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 0.02,
+      "rec": {
+        "id": "IMG_4575",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        114,
+        271,
+        281,
+        393
+      ],
+      "byteIdentity": null
+    },
+    "IMG_4561": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 11.21,
+      "rec": {
+        "id": "IMG_4561",
+        "maskFrac": 0.3474,
+        "provenancePx": {
+          "edit": 23626,
+          "outCanvas": 35709,
+          "noEvidence": 5409,
+          "hysteresisDrop": 222,
+          "lipGuard": 3002,
+          "apertureGuard": 47
+        },
+        "zoneFrac": 0.5846,
+        "modelMaskFrac": 0.3765,
+        "guardExcludedEnergyFrac": 0.1143,
+        "seedPx": 969,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "B"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 7040,
+          "detail": {
+            "L": {
+              "regionPx": 1581,
+              "A": {
+                "coincidentPx": 105,
+                "needPx": 8,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 4000,
+              "A": {
+                "coincidentPx": 138,
+                "needPx": 20,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 1656,
+              "A": {
+                "coincidentPx": 4,
+                "needPx": 9
+              },
+              "B": {
+                "strictPx": 1312,
+                "semanticPx": 1656,
+                "textureComponents": 4,
+                "componentSpanFw": 0.1265
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 1.63,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          224,
+          352
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 810,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 0.98,
+        "grainG90": 1.494,
+        "grainLowConf": false,
+        "newDarkArea": 0.0667,
+        "newDarkCoh": 0.339,
+        "newBrightArea": 0.0,
+        "lipLeakRed": 3.55,
+        "brightBand": 4.05,
+        "fillLiftLQ90": 1.33,
+        "fillLiftLQ10": -8.43,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "grainG90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0083,
+          "jawProfileCorr": 0.902,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.1163,
+          "silhouetteVerdict": "abstain",
+          "nStable": 15,
+          "nObscured": 114
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 4.71,
+          "fillDeltaAb90": 7.44,
+          "fillColorD50": 1.864,
+          "fillColorD90": 3.126,
+          "neutralPull50": -1.336,
+          "fillColorCorePx": 21908,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 47,
+          "fringeCands": 0,
+          "outCanvasCands": 81,
+          "weightedQ90R": 1.265,
+          "survival": 0.261
+        },
+        "timings": {
+          "prepSeconds": 9.4,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 1.63,
+          "totalSeconds": 11.14
+        }
+      },
+      "bbox": [
+        144,
+        351,
+        449,
+        574
+      ],
+      "byteIdentity": null
+    },
+    "IMG_4565": {
+      "status": "hardfail",
+      "layer": "negative",
+      "seconds": 3.11,
+      "rec": {
+        "id": "IMG_4565",
+        "maskFrac": 0.0512,
+        "provenancePx": {
+          "edit": 3236,
+          "outCanvas": 37871,
+          "noEvidence": 16932,
+          "hysteresisDrop": 2469,
+          "lipGuard": 2575,
+          "apertureGuard": 178
+        },
+        "zoneFrac": 0.1373,
+        "modelMaskFrac": 0.0769,
+        "guardExcludedEnergyFrac": 0.0052,
+        "seedPx": 972,
+        "mustache": {
+          "fired": {
+            "L": false,
+            "C": false,
+            "R": false
+          },
+          "rules": {
+            "L": null,
+            "C": null,
+            "R": null
+          },
+          "activated": [],
+          "fillPx": 0,
+          "detail": {
+            "L": {
+              "regionPx": 1391,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 0,
+                "semanticPx": 0
+              }
+            },
+            "C": {
+              "regionPx": 3949,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 20
+              },
+              "B": {
+                "strictPx": 364,
+                "semanticPx": 0
+              }
+            },
+            "R": {
+              "regionPx": 1392,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 306,
+                "semanticPx": 0
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 0.44,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          192,
+          240
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 895,
+          "patches": [
+            "cheek_left",
+            "cheek_right",
+            "forehead"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 0.946,
+        "grainG90": 2.07,
+        "grainLowConf": false,
+        "newDarkArea": 0.0927,
+        "newDarkCoh": 0.283,
+        "newBrightArea": 0.0,
+        "lipLeakRed": 0.0,
+        "brightBand": 1.85,
+        "fillLiftLQ90": 1.77,
+        "fillLiftLQ10": -3.64,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG90"
+        ],
+        "abstains": [
+          "newDarkArea",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0061,
+          "jawProfileCorr": 0.9644,
+          "jawToLandmarkP95": 0.0189,
+          "supportFrac": 0.2174,
+          "silhouetteVerdict": "abstain",
+          "nStable": 30,
+          "nObscured": 108
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 3.293,
+          "fillDeltaAb90": 4.765,
+          "fillColorD50": 0.891,
+          "fillColorD90": 1.236,
+          "neutralPull50": -3.198,
+          "fillColorCorePx": 2179,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 37,
+          "fringeCands": 0,
+          "outCanvasCands": 114,
+          "weightedQ90R": 0.603,
+          "survival": 0.269
+        },
+        "timings": {
+          "prepSeconds": 2.56,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 0.44,
+          "totalSeconds": 3.07
+        }
+      },
+      "bbox": [
+        146,
+        390,
+        443,
+        603
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_g01": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 0.13,
+      "rec": {
+        "id": "none_wikimedia_g01",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        291,
+        619,
+        911,
+        1103
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_03": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 2.55,
+      "rec": {
+        "id": "none_wikimedia_03",
+        "maskFrac": 0.3389,
+        "provenancePx": {
+          "edit": 21706,
+          "outCanvas": 35082,
+          "noEvidence": 3596,
+          "hysteresisDrop": 1419,
+          "lipGuard": 2168,
+          "apertureGuard": 79
+        },
+        "zoneFrac": 0.5429,
+        "modelMaskFrac": 0.3607,
+        "guardExcludedEnergyFrac": 0.0938,
+        "seedPx": 1142,
+        "mustache": {
+          "fired": {
+            "L": false,
+            "C": true,
+            "R": false
+          },
+          "rules": {
+            "L": null,
+            "C": "B",
+            "R": null
+          },
+          "activated": [
+            "C"
+          ],
+          "fillPx": 3885,
+          "detail": {
+            "L": {
+              "regionPx": 1033,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 1030,
+                "semanticPx": 1033,
+                "textureComponents": 0
+              }
+            },
+            "C": {
+              "regionPx": 4072,
+              "A": {
+                "coincidentPx": 8,
+                "needPx": 21
+              },
+              "B": {
+                "strictPx": 3885,
+                "semanticPx": 4072,
+                "textureComponents": 5,
+                "componentSpanFw": 0.0918
+              }
+            },
+            "R": {
+              "regionPx": 1081,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 1080,
+                "semanticPx": 1081,
+                "textureComponents": 0
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 0.79,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          208,
+          320
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1040,
+          "patches": [
+            "cheek_left",
+            "cheek_right",
+            "forehead"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.124,
+        "grainG90": 0.38,
+        "grainLowConf": true,
+        "newDarkArea": 0.0076,
+        "newDarkCoh": 0.39,
+        "newBrightArea": 0.0016,
+        "lipLeakRed": 6.0,
+        "brightBand": 6.44,
+        "fillLiftLQ90": 5.15,
+        "fillLiftLQ10": -22.93,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "fillLiftLQ10",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0063,
+          "jawProfileCorr": 0.8512,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.2446,
+          "silhouetteVerdict": "abstain",
+          "nStable": 34,
+          "nObscured": 105
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 4.465,
+          "fillDeltaAb90": 8.3,
+          "fillColorD50": 1.555,
+          "fillColorD90": 3.979,
+          "neutralPull50": 1.062,
+          "fillColorCorePx": 20437,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 14,
+          "fringeCands": 0,
+          "outCanvasCands": 16,
+          "weightedQ90R": 0.116,
+          "survival": 0.054
+        },
+        "timings": {
+          "prepSeconds": 1.65,
+          "maskSeconds": 0.0,
+          "lamaSeconds": 0.79,
+          "totalSeconds": 2.52
+        }
+      },
+      "bbox": [
+        590,
+        402,
+        895,
+        612
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_01": {
+      "status": "hardfail",
+      "layer": "negative",
+      "seconds": 2.51,
+      "rec": {
+        "id": "none_wikimedia_01",
+        "maskFrac": 0.0091,
+        "provenancePx": {
+          "edit": 764,
+          "outCanvas": 51120,
+          "noEvidence": 27410,
+          "hysteresisDrop": 359,
+          "lipGuard": 4439,
+          "apertureGuard": 148
+        },
+        "zoneFrac": 0.1518,
+        "modelMaskFrac": 0.0197,
+        "guardExcludedEnergyFrac": 0.1157,
+        "seedPx": 5034,
+        "mustache": {
+          "fired": {
+            "L": false,
+            "C": false,
+            "R": false
+          },
+          "rules": {
+            "L": null,
+            "C": null,
+            "R": null
+          },
+          "activated": [],
+          "fillPx": 0,
+          "detail": {
+            "L": {
+              "regionPx": 1287,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 205,
+                "semanticPx": 0
+              }
+            },
+            "C": {
+              "regionPx": 4756,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 24
+              },
+              "B": {
+                "strictPx": 32,
+                "semanticPx": 0
+              }
+            },
+            "R": {
+              "regionPx": 1288,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 56,
+                "semanticPx": 0
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 0.7,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          216,
+          336
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1336,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 1.502,
+        "grainG90": 4.035,
+        "grainLowConf": false,
+        "newDarkArea": 0.127,
+        "newDarkCoh": 0.328,
+        "newBrightArea": 0.0,
+        "lipLeakRed": 0.0,
+        "brightBand": 0.21,
+        "fillLiftLQ90": 0.34,
+        "fillLiftLQ10": -0.07,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG50",
+          "grainG90"
+        ],
+        "abstains": [
+          "newDarkArea",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0007,
+          "jawProfileCorr": 0.9921,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.2681,
+          "silhouetteVerdict": "abstain",
+          "nStable": 37,
+          "nObscured": 101
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 0.411,
+          "fillDeltaAb90": 5.352,
+          "fillColorD50": 0.205,
+          "fillColorD90": 2.676,
+          "neutralPull50": -0.301,
+          "fillColorCorePx": 277,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "pass"
+        },
+        "ghost": {
+          "nCands": 15,
+          "fringeCands": 0,
+          "outCanvasCands": 32,
+          "weightedQ90R": 1.606,
+          "survival": 0.356
+        },
+        "timings": {
+          "prepSeconds": 1.66,
+          "maskSeconds": 0.0,
+          "lamaSeconds": 0.7,
+          "totalSeconds": 2.47
+        }
+      },
+      "bbox": [
+        583,
+        434,
+        934,
+        674
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_g02": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 4.61,
+      "rec": {
+        "id": "none_wikimedia_g02",
+        "maskFrac": 0.2441,
+        "provenancePx": {
+          "edit": 52200,
+          "outCanvas": 117661,
+          "noEvidence": 32342,
+          "hysteresisDrop": 872,
+          "lipGuard": 10729,
+          "apertureGuard": 40
+        },
+        "zoneFrac": 0.3546,
+        "modelMaskFrac": 0.2767,
+        "guardExcludedEnergyFrac": 0.1279,
+        "seedPx": 2842,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "B",
+            "C": "A",
+            "R": "B"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 20008,
+          "detail": {
+            "L": {
+              "regionPx": 3730,
+              "A": {
+                "coincidentPx": 23,
+                "needPx": 19,
+                "thirdsHit": 1
+              },
+              "B": {
+                "strictPx": 233,
+                "semanticPx": 959,
+                "textureComponents": 13,
+                "componentSpanFw": 0.1501
+              }
+            },
+            "C": {
+              "regionPx": 12873,
+              "A": {
+                "coincidentPx": 115,
+                "needPx": 65,
+                "thirdsHit": 2
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 3640,
+              "A": {
+                "coincidentPx": 14,
+                "needPx": 19
+              },
+              "B": {
+                "strictPx": 495,
+                "semanticPx": 1791,
+                "textureComponents": 16,
+                "componentSpanFw": 0.1553
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.37,
+        "inferenceScale": 0.831,
+        "windowHW": [
+          384,
+          616
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 2801,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 0.791,
+        "grainG90": 1.296,
+        "grainLowConf": false,
+        "newDarkArea": 0.0074,
+        "newDarkCoh": 0.252,
+        "newBrightArea": 0.0032,
+        "lipLeakRed": 10.0,
+        "brightBand": 4.91,
+        "fillLiftLQ90": 6.08,
+        "fillLiftLQ10": -13.28,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "fillLiftLQ10",
+          "lipLeakRed",
+          "brightBand",
+          "fillColor"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0166,
+          "jawProfileCorr": 0.7757,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.2643,
+          "silhouetteVerdict": "abstain",
+          "nStable": 37,
+          "nObscured": 103
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 2.24,
+          "fillDeltaAb90": 6.995,
+          "fillColorD50": 1.064,
+          "fillColorD90": 3.409,
+          "neutralPull50": -0.148,
+          "fillColorCorePx": 45622,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 104,
+          "fringeCands": 0,
+          "outCanvasCands": 101,
+          "weightedQ90R": 0.03,
+          "survival": 0.028
+        },
+        "timings": {
+          "prepSeconds": 1.85,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.37,
+          "totalSeconds": 4.49
+        }
+      },
+      "bbox": [
+        198,
+        658,
+        752,
+        1044
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_02": {
+      "status": "hardfail",
+      "layer": "negative",
+      "seconds": 3.07,
+      "rec": {
+        "id": "none_wikimedia_02",
+        "maskFrac": 0.13,
+        "provenancePx": {
+          "edit": 11245,
+          "outCanvas": 45691,
+          "noEvidence": 18896,
+          "hysteresisDrop": 7461,
+          "lipGuard": 3093,
+          "apertureGuard": 99
+        },
+        "zoneFrac": 0.2485,
+        "modelMaskFrac": 0.1506,
+        "guardExcludedEnergyFrac": 0.0081,
+        "seedPx": 954,
+        "mustache": {
+          "fired": {
+            "L": false,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": null,
+            "C": "B",
+            "R": "B"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 8003,
+          "detail": {
+            "L": {
+              "regionPx": 1499,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 0,
+                "semanticPx": 0
+              }
+            },
+            "C": {
+              "regionPx": 5186,
+              "A": {
+                "coincidentPx": 11,
+                "needPx": 26
+              },
+              "B": {
+                "strictPx": 1020,
+                "semanticPx": 3563,
+                "textureComponents": 6,
+                "componentSpanFw": 0.0405
+              }
+            },
+            "R": {
+              "regionPx": 1560,
+              "A": {
+                "coincidentPx": 3,
+                "needPx": 8
+              },
+              "B": {
+                "strictPx": 175,
+                "semanticPx": 1117,
+                "textureComponents": 3,
+                "componentSpanFw": 0.0896
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 0.69,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          240,
+          336
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1004,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 1.438,
+        "grainG90": 3.621,
+        "grainLowConf": false,
+        "newDarkArea": 0.0041,
+        "newDarkCoh": 0.307,
+        "newBrightArea": 0.0,
+        "lipLeakRed": 4.0,
+        "brightBand": 4.82,
+        "fillLiftLQ90": 0.91,
+        "fillLiftLQ10": -10.33,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG90"
+        ],
+        "abstains": [
+          "grainG50",
+          "fillLiftLQ10",
+          "brightBand",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0055,
+          "jawProfileCorr": 0.9068,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.295,
+          "silhouetteVerdict": "abstain",
+          "nStable": 41,
+          "nObscured": 98
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 2.533,
+          "fillDeltaAb90": 5.594,
+          "fillColorD50": 1.267,
+          "fillColorD90": 2.797,
+          "neutralPull50": -0.088,
+          "fillColorCorePx": 9821,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "pass"
+        },
+        "ghost": {
+          "nCands": 6,
+          "fringeCands": 0,
+          "outCanvasCands": 5,
+          "weightedQ90R": 0.966,
+          "survival": 0.269
+        },
+        "timings": {
+          "prepSeconds": 2.24,
+          "maskSeconds": 0.0,
+          "lamaSeconds": 0.69,
+          "totalSeconds": 3.04
+        }
+      },
+      "bbox": [
+        418,
+        402,
+        771,
+        647
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g03": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 2.93,
+      "rec": {
+        "id": "stubble_wikimedia_g03",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        189,
+        794,
+        865,
+        1267
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g04": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 4.36,
+      "rec": {
+        "id": "stubble_wikimedia_g04",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        139,
+        700,
+        923,
+        1245
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g05": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 0.15,
+      "rec": {
+        "id": "stubble_wikimedia_g05",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        344,
+        290,
+        599,
+        478
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_02": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 6.55,
+      "rec": {
+        "id": "stubble_wikimedia_02",
+        "maskFrac": 0.3679,
+        "provenancePx": {
+          "edit": 62581,
+          "outCanvas": 96092,
+          "noEvidence": 3317,
+          "hysteresisDrop": 166,
+          "lipGuard": 7398,
+          "apertureGuard": 546
+        },
+        "zoneFrac": 0.6138,
+        "modelMaskFrac": 0.3922,
+        "guardExcludedEnergyFrac": 0.1126,
+        "seedPx": 16896,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 16966,
+          "detail": {
+            "L": {
+              "regionPx": 4068,
+              "A": {
+                "coincidentPx": 632,
+                "needPx": 21,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 9560,
+              "A": {
+                "coincidentPx": 666,
+                "needPx": 48,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 4070,
+              "A": {
+                "coincidentPx": 282,
+                "needPx": 21,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.81,
+        "inferenceScale": 0.941,
+        "windowHW": [
+          352,
+          544
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1789,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.112,
+        "grainG90": 0.794,
+        "grainLowConf": false,
+        "newDarkArea": 0.0439,
+        "newDarkCoh": 0.289,
+        "newBrightArea": 0.0592,
+        "lipLeakRed": 8.0,
+        "brightBand": 11.76,
+        "fillLiftLQ90": 8.3,
+        "fillLiftLQ10": -65.32,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "lipLeakRed",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0186,
+          "jawProfileCorr": 0.9146,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0963,
+          "silhouetteVerdict": "abstain",
+          "nStable": 13,
+          "nObscured": 122
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 5.913,
+          "fillDeltaAb90": 14.107,
+          "fillColorD50": 2.116,
+          "fillColorD90": 3.22,
+          "neutralPull50": -4.668,
+          "fillColorCorePx": 57555,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 204,
+          "fringeCands": 0,
+          "outCanvasCands": 86,
+          "weightedQ90R": 0.734,
+          "survival": 0.341
+        },
+        "timings": {
+          "prepSeconds": 3.37,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.81,
+          "totalSeconds": 6.42
+        }
+      },
+      "bbox": [
+        356,
+        590,
+        842,
+        940
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_06": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 0.16,
+      "rec": {
+        "id": "stubble_wikimedia_06",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        392,
+        316,
+        667,
+        498
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g01": {
+      "status": "hardfail",
+      "layer": "stubble",
+      "seconds": 5.75,
+      "rec": {
+        "id": "stubble_wikimedia_g01",
+        "maskFrac": 0.3931,
+        "provenancePx": {
+          "edit": 71326,
+          "outCanvas": 105110,
+          "noEvidence": 0,
+          "hysteresisDrop": 0,
+          "lipGuard": 5004,
+          "apertureGuard": 0
+        },
+        "zoneFrac": 0.7349,
+        "modelMaskFrac": 0.4104,
+        "guardExcludedEnergyFrac": 0.0656,
+        "seedPx": 57919,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 16335,
+          "detail": {
+            "L": {
+              "regionPx": 2735,
+              "A": {
+                "coincidentPx": 72,
+                "needPx": 14,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 11046,
+              "A": {
+                "coincidentPx": 334,
+                "needPx": 56,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 2736,
+              "A": {
+                "coincidentPx": 23,
+                "needPx": 14,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.83,
+        "inferenceScale": 0.914,
+        "windowHW": [
+          352,
+          560
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 2384,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 1.169,
+        "grainG90": 1.926,
+        "grainLowConf": false,
+        "newDarkArea": 0.0261,
+        "newDarkCoh": 0.467,
+        "newBrightArea": 0.2489,
+        "lipLeakRed": 6.0,
+        "brightBand": 7.24,
+        "fillLiftLQ90": 23.43,
+        "fillLiftLQ10": -20.93,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG90"
+        ],
+        "abstains": [
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0072,
+          "jawProfileCorr": 0.7036,
+          "jawToLandmarkP95": 0.0204,
+          "supportFrac": 0.2201,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 35,
+          "nObscured": 124
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 5.26,
+          "fillDeltaAb90": 8.632,
+          "fillColorD50": 2.17,
+          "fillColorD90": 3.43,
+          "neutralPull50": -0.395,
+          "fillColorCorePx": 67719,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 243,
+          "fringeCands": 0,
+          "outCanvasCands": 122,
+          "weightedQ90R": 0.05,
+          "survival": 0.059
+        },
+        "timings": {
+          "prepSeconds": 2.53,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.83,
+          "totalSeconds": 5.62
+        }
+      },
+      "bbox": [
+        248,
+        648,
+        752,
+        1008
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g06": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 6.59,
+      "rec": {
+        "id": "stubble_wikimedia_g06",
+        "maskFrac": 0.4074,
+        "provenancePx": {
+          "edit": 94389,
+          "outCanvas": 121326,
+          "noEvidence": 651,
+          "hysteresisDrop": 0,
+          "lipGuard": 15258,
+          "apertureGuard": 69
+        },
+        "zoneFrac": 0.6417,
+        "modelMaskFrac": 0.4223,
+        "guardExcludedEnergyFrac": 0.1397,
+        "seedPx": 45297,
+        "mustache": {
+          "fired": {
+            "L": false,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": null,
+            "C": "B",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 22280,
+          "detail": {
+            "L": {
+              "regionPx": 4672,
+              "A": {
+                "coincidentPx": 0,
+                "needPx": 24
+              },
+              "B": {
+                "strictPx": 4668,
+                "semanticPx": 4672,
+                "textureComponents": 0
+              }
+            },
+            "C": {
+              "regionPx": 13223,
+              "A": {
+                "coincidentPx": 13,
+                "needPx": 67
+              },
+              "B": {
+                "strictPx": 12941,
+                "semanticPx": 13223,
+                "textureComponents": 3,
+                "componentSpanFw": 0.0635
+              }
+            },
+            "R": {
+              "regionPx": 4674,
+              "A": {
+                "coincidentPx": 30,
+                "needPx": 24,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.84,
+        "inferenceScale": 0.821,
+        "windowHW": [
+          408,
+          624
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 2900,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 0.694,
+        "grainG90": 0.868,
+        "grainLowConf": false,
+        "newDarkArea": 0.0418,
+        "newDarkCoh": 0.347,
+        "newBrightArea": 0.1068,
+        "lipLeakRed": 5.0,
+        "brightBand": 8.9,
+        "fillLiftLQ90": 13.04,
+        "fillLiftLQ10": -36.74,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "grainG50",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0155,
+          "jawProfileCorr": 0.5271,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.1655,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 23,
+          "nObscured": 116
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 17.38,
+          "fillDeltaAb90": 27.179,
+          "fillColorD50": 2.017,
+          "fillColorD90": 2.722,
+          "neutralPull50": 2.456,
+          "fillColorCorePx": 90027,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 44,
+          "fringeCands": 0,
+          "outCanvasCands": 146,
+          "weightedQ90R": 2.091,
+          "survival": 0.771
+        },
+        "timings": {
+          "prepSeconds": 3.31,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.84,
+          "totalSeconds": 6.45
+        }
+      },
+      "bbox": [
+        299,
+        606,
+        860,
+        1019
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_03": {
+      "status": "hardfail",
+      "layer": "stubble",
+      "seconds": 6.11,
+      "rec": {
+        "id": "stubble_wikimedia_03",
+        "maskFrac": 0.3831,
+        "provenancePx": {
+          "edit": 100286,
+          "outCanvas": 140690,
+          "noEvidence": 12403,
+          "hysteresisDrop": 24,
+          "lipGuard": 7831,
+          "apertureGuard": 517
+        },
+        "zoneFrac": 0.5883,
+        "modelMaskFrac": 0.4064,
+        "guardExcludedEnergyFrac": 0.0768,
+        "seedPx": 33094,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "B"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 27244,
+          "detail": {
+            "L": {
+              "regionPx": 5129,
+              "A": {
+                "coincidentPx": 46,
+                "needPx": 26,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 17724,
+              "A": {
+                "coincidentPx": 194,
+                "needPx": 89,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 5130,
+              "A": {
+                "coincidentPx": 14,
+                "needPx": 26
+              },
+              "B": {
+                "strictPx": 3855,
+                "semanticPx": 4983,
+                "textureComponents": 7,
+                "componentSpanFw": 0.0928
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.69,
+        "inferenceScale": 0.744,
+        "windowHW": [
+          432,
+          688
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 3637,
+          "patches": [
+            "cheek_left",
+            "cheek_right",
+            "forehead"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.572,
+        "grainG90": 1.243,
+        "grainLowConf": false,
+        "newDarkArea": 0.0174,
+        "newDarkCoh": 0.401,
+        "newBrightArea": 0.0,
+        "lipLeakRed": 4.0,
+        "brightBand": 4.4,
+        "fillLiftLQ90": 0.78,
+        "fillLiftLQ10": -28.61,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG50"
+        ],
+        "abstains": [
+          "fillLiftLQ10",
+          "newDarkArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0095,
+          "jawProfileCorr": 0.8534,
+          "jawToLandmarkP95": 0.0244,
+          "supportFrac": 0.2214,
+          "silhouetteVerdict": "abstain",
+          "nStable": 31,
+          "nObscured": 109
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 18.723,
+          "fillDeltaAb90": 23.665,
+          "fillColorD50": 2.694,
+          "fillColorD90": 3.398,
+          "neutralPull50": -12.901,
+          "fillColorCorePx": 94107,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 52,
+          "fringeCands": 0,
+          "outCanvasCands": 145,
+          "weightedQ90R": 0.911,
+          "survival": 0.636
+        },
+        "timings": {
+          "prepSeconds": 2.9,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.69,
+          "totalSeconds": 5.93
+        }
+      },
+      "bbox": [
+        216,
+        751,
+        829,
+        1178
+      ],
+      "byteIdentity": null
+    },
+    "medium_flickr_91": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 4.0,
+      "rec": {
+        "id": "medium_flickr_91",
+        "maskFrac": 0.3712,
+        "provenancePx": {
+          "edit": 34457,
+          "outCanvas": 51399,
+          "noEvidence": 1372,
+          "hysteresisDrop": 10,
+          "lipGuard": 5194,
+          "apertureGuard": 388
+        },
+        "zoneFrac": 0.9147,
+        "modelMaskFrac": 0.3913,
+        "guardExcludedEnergyFrac": 0.1384,
+        "seedPx": 10630,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 11257,
+          "detail": {
+            "L": {
+              "regionPx": 2393,
+              "A": {
+                "coincidentPx": 60,
+                "needPx": 12,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 6897,
+              "A": {
+                "coincidentPx": 176,
+                "needPx": 35,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 2492,
+              "A": {
+                "coincidentPx": 72,
+                "needPx": 13,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 1.43,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          256,
+          424
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1032,
+          "patches": [
+            "cheek_left",
+            "cheek_right",
+            "forehead"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.384,
+        "grainG90": 1.388,
+        "grainLowConf": true,
+        "newDarkArea": 0.0436,
+        "newDarkCoh": 0.356,
+        "newBrightArea": 0.1834,
+        "lipLeakRed": 1.0,
+        "brightBand": 10.47,
+        "fillLiftLQ90": 21.91,
+        "fillLiftLQ10": -23.46,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "grainG50",
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0173,
+          "jawProfileCorr": 0.5396,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.1399,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 20,
+          "nObscured": 123
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 0.21,
+          "fillDeltaAb90": 0.403,
+          "fillColorD50": 0.105,
+          "fillColorD90": 0.201,
+          "neutralPull50": -0.203,
+          "fillColorCorePx": 32859,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "pass"
+        },
+        "ghost": {
+          "nCands": 81,
+          "fringeCands": 0,
+          "outCanvasCands": 194,
+          "weightedQ90R": 1.072,
+          "survival": 0.339
+        },
+        "timings": {
+          "prepSeconds": 2.39,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 1.43,
+          "totalSeconds": 3.93
+        }
+      },
+      "bbox": [
+        130,
+        412,
+        487,
+        672
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g02": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.15,
+      "rec": {
+        "id": "medium_wikimedia_g02",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        233,
+        624,
+        836,
+        1076
+      ],
+      "byteIdentity": null
+    },
+    "medium_unsplash_06": {
+      "status": "hardfail",
+      "layer": "medium",
+      "seconds": 4.87,
+      "rec": {
+        "id": "medium_unsplash_06",
+        "maskFrac": 0.4176,
+        "provenancePx": {
+          "edit": 63503,
+          "outCanvas": 81694,
+          "noEvidence": 1869,
+          "hysteresisDrop": 2,
+          "lipGuard": 4580,
+          "apertureGuard": 408
+        },
+        "zoneFrac": 0.5805,
+        "modelMaskFrac": 0.435,
+        "guardExcludedEnergyFrac": 0.0728,
+        "seedPx": 28712,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "B",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 13128,
+          "detail": {
+            "L": {
+              "regionPx": 2753,
+              "A": {
+                "coincidentPx": 6,
+                "needPx": 14
+              },
+              "B": {
+                "strictPx": 2601,
+                "semanticPx": 2753,
+                "textureComponents": 4,
+                "componentSpanFw": 0.073
+              }
+            },
+            "C": {
+              "regionPx": 8254,
+              "A": {
+                "coincidentPx": 855,
+                "needPx": 42,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 2673,
+              "A": {
+                "coincidentPx": 56,
+                "needPx": 14,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.58,
+        "inferenceScale": 0.985,
+        "windowHW": [
+          328,
+          520
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1681,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.426,
+        "grainG90": 2.158,
+        "grainLowConf": false,
+        "newDarkArea": 0.0255,
+        "newDarkCoh": 0.29,
+        "newBrightArea": 0.1537,
+        "lipLeakRed": 6.0,
+        "brightBand": 10.37,
+        "fillLiftLQ90": 23.36,
+        "fillLiftLQ10": -27.5,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG90"
+        ],
+        "abstains": [
+          "grainG50",
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.02,
+          "jawProfileCorr": 0.59,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0956,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 13,
+          "nObscured": 123
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 11.171,
+          "fillDeltaAb90": 14.223,
+          "fillColorD50": 2.132,
+          "fillColorD90": 2.835,
+          "neutralPull50": -7.917,
+          "fillColorCorePx": 59692,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 66,
+          "fringeCands": 0,
+          "outCanvasCands": 82,
+          "weightedQ90R": 0.012,
+          "survival": 0.058
+        },
+        "timings": {
+          "prepSeconds": 2.02,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 2.58,
+          "totalSeconds": 4.78
+        }
+      },
+      "bbox": [
+        296,
+        569,
+        754,
+        901
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_05": {
+      "status": "hardfail",
+      "layer": "medium",
+      "seconds": 3.9,
+      "rec": {
+        "id": "medium_wikimedia_05",
+        "maskFrac": 0.328,
+        "provenancePx": {
+          "edit": 35084,
+          "outCanvas": 62886,
+          "noEvidence": 5512,
+          "hysteresisDrop": 67,
+          "lipGuard": 2870,
+          "apertureGuard": 541
+        },
+        "zoneFrac": 0.4813,
+        "modelMaskFrac": 0.3595,
+        "guardExcludedEnergyFrac": 0.0885,
+        "seedPx": 11752,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 10598,
+          "detail": {
+            "L": {
+              "regionPx": 2009,
+              "A": {
+                "coincidentPx": 30,
+                "needPx": 11,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 7246,
+              "A": {
+                "coincidentPx": 723,
+                "needPx": 37,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 2010,
+              "A": {
+                "coincidentPx": 52,
+                "needPx": 11,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 1.8,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          272,
+          440
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1328,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 0.669,
+        "grainG90": 0.522,
+        "grainLowConf": false,
+        "newDarkArea": 0.0547,
+        "newDarkCoh": 0.337,
+        "newBrightArea": 0.1311,
+        "lipLeakRed": 8.0,
+        "brightBand": 7.56,
+        "fillLiftLQ90": 17.08,
+        "fillLiftLQ10": -15.86,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG50"
+        ],
+        "abstains": [
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "lipLeakRed",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0223,
+          "jawProfileCorr": 0.479,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0556,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 8,
+          "nObscured": 136
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 3.947,
+          "fillDeltaAb90": 10.45,
+          "fillColorD50": 1.211,
+          "fillColorD90": 2.389,
+          "neutralPull50": 1.852,
+          "fillColorCorePx": 32742,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 159,
+          "fringeCands": 0,
+          "outCanvasCands": 286,
+          "weightedQ90R": 0.421,
+          "survival": 0.189
+        },
+        "timings": {
+          "prepSeconds": 1.9,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 1.8,
+          "totalSeconds": 3.84
+        }
+      },
+      "bbox": [
+        358,
+        576,
+        740,
+        856
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g04": {
+      "status": "hardfail",
+      "layer": "medium",
+      "seconds": 4.91,
+      "rec": {
+        "id": "medium_wikimedia_g04",
+        "maskFrac": 0.3758,
+        "provenancePx": {
+          "edit": 56680,
+          "outCanvas": 84317,
+          "noEvidence": 60,
+          "hysteresisDrop": 0,
+          "lipGuard": 9720,
+          "apertureGuard": 33
+        },
+        "zoneFrac": 0.6847,
+        "modelMaskFrac": 0.3929,
+        "guardExcludedEnergyFrac": 0.1468,
+        "seedPx": 28074,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "B",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 14780,
+          "detail": {
+            "L": {
+              "regionPx": 2672,
+              "A": {
+                "coincidentPx": 79,
+                "needPx": 14,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 9562,
+              "A": {
+                "coincidentPx": 37,
+                "needPx": 48
+              },
+              "B": {
+                "strictPx": 9358,
+                "semanticPx": 9562,
+                "textureComponents": 17,
+                "componentSpanFw": 0.2907
+              }
+            },
+            "R": {
+              "regionPx": 2754,
+              "A": {
+                "coincidentPx": 106,
+                "needPx": 14,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.42,
+        "inferenceScale": 0.955,
+        "windowHW": [
+          328,
+          536
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 1596,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 0.563,
+        "grainG90": 0.362,
+        "grainLowConf": false,
+        "newDarkArea": 0.0228,
+        "newDarkCoh": 0.455,
+        "newBrightArea": 0.164,
+        "lipLeakRed": 4.0,
+        "brightBand": 13.99,
+        "fillLiftLQ90": 28.61,
+        "fillLiftLQ10": -37.82,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG50"
+        ],
+        "abstains": [
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0157,
+          "jawProfileCorr": 0.5032,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0972,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 14,
+          "nObscured": 130
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 16.018,
+          "fillDeltaAb90": 22.16,
+          "fillColorD50": 7.343,
+          "fillColorD90": 10.161,
+          "neutralPull50": -6.387,
+          "fillColorCorePx": 53062,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 115,
+          "fringeCands": 0,
+          "outCanvasCands": 69,
+          "weightedQ90R": 0.335,
+          "survival": 0.055
+        },
+        "timings": {
+          "prepSeconds": 2.21,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 2.42,
+          "totalSeconds": 4.81
+        }
+      },
+      "bbox": [
+        350,
+        549,
+        807,
+        879
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g03": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.17,
+      "rec": {
+        "id": "medium_wikimedia_g03",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        183,
+        780,
+        811,
+        1215
+      ],
+      "byteIdentity": null
+    },
+    "medium_pexels_01": {
+      "status": "hardfail",
+      "layer": "medium",
+      "seconds": 4.86,
+      "rec": {
+        "id": "medium_pexels_01",
+        "maskFrac": 0.2739,
+        "provenancePx": {
+          "edit": 69918,
+          "outCanvas": 142112,
+          "noEvidence": 30605,
+          "hysteresisDrop": 188,
+          "lipGuard": 12289,
+          "apertureGuard": 113
+        },
+        "zoneFrac": 0.4226,
+        "modelMaskFrac": 0.2963,
+        "guardExcludedEnergyFrac": 0.1495,
+        "seedPx": 16120,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "B",
+            "C": "B",
+            "R": "B"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 22598,
+          "detail": {
+            "L": {
+              "regionPx": 5924,
+              "A": {
+                "coincidentPx": 1,
+                "needPx": 30
+              },
+              "B": {
+                "strictPx": 3540,
+                "semanticPx": 4185,
+                "textureComponents": 3,
+                "componentSpanFw": 0.1724
+              }
+            },
+            "C": {
+              "regionPx": 11060,
+              "A": {
+                "coincidentPx": 4,
+                "needPx": 56
+              },
+              "B": {
+                "strictPx": 9261,
+                "semanticPx": 10459,
+                "textureComponents": 4,
+                "componentSpanFw": 0.134
+              }
+            },
+            "R": {
+              "regionPx": 5940,
+              "A": {
+                "coincidentPx": 2,
+                "needPx": 30
+              },
+              "B": {
+                "strictPx": 4256,
+                "semanticPx": 4650,
+                "textureComponents": 3,
+                "componentSpanFw": 0.1349
+              }
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.28,
+        "inferenceScale": 0.736,
+        "windowHW": [
+          416,
+          696
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 3648,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": false
+        },
+        "grainG50": 1.147,
+        "grainG90": 2.104,
+        "grainLowConf": false,
+        "newDarkArea": 0.0008,
+        "newDarkCoh": 0.35,
+        "newBrightArea": 0.1815,
+        "lipLeakRed": 15.0,
+        "brightBand": 13.54,
+        "fillLiftLQ90": 22.53,
+        "fillLiftLQ10": -68.18,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "hard-fail",
+        "hardFails": [
+          "grainG90"
+        ],
+        "abstains": [
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newBrightArea",
+          "lipLeakRed",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0171,
+          "jawProfileCorr": 0.3303,
+          "jawToLandmarkP95": 0.0236,
+          "supportFrac": 0.3094,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 43,
+          "nObscured": 96
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 5.617,
+          "fillDeltaAb90": 10.032,
+          "fillColorD50": 2.376,
+          "fillColorD90": 4.227,
+          "neutralPull50": -1.432,
+          "fillColorCorePx": 63956,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 5,
+          "fringeCands": 0,
+          "outCanvasCands": 22,
+          "weightedQ90R": 0.0,
+          "survival": 0.097
+        },
+        "timings": {
+          "prepSeconds": 2.06,
+          "maskSeconds": 0.01,
+          "lamaSeconds": 2.28,
+          "totalSeconds": 4.7
+        }
+      },
+      "bbox": [
+        217,
+        689,
+        832,
+        1104
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_04": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 2.38,
+      "rec": {
+        "id": "medium_wikimedia_04",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        223,
+        767,
+        905,
+        1215
+      ],
+      "byteIdentity": null
+    },
+    "dense_wikimedia_g01": {
+      "status": "abstain",
+      "layer": "dense",
+      "seconds": 0.21,
+      "rec": {
+        "id": "dense_wikimedia_g01",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        390,
+        715,
+        844,
+        1001
+      ],
+      "byteIdentity": null
+    },
+    "dense_wikimedia_g02": {
+      "status": "abstain",
+      "layer": "dense",
+      "seconds": 4.74,
+      "rec": {
+        "id": "dense_wikimedia_g02",
+        "maskFrac": 0.456,
+        "provenancePx": {
+          "edit": 78050,
+          "outCanvas": 85494,
+          "noEvidence": 0,
+          "hysteresisDrop": 0,
+          "lipGuard": 7437,
+          "apertureGuard": 176
+        },
+        "zoneFrac": 0.9993,
+        "modelMaskFrac": 0.4723,
+        "guardExcludedEnergyFrac": 0.0889,
+        "seedPx": 32987,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 14509,
+          "detail": {
+            "L": {
+              "regionPx": 3598,
+              "A": {
+                "coincidentPx": 45,
+                "needPx": 18,
+                "thirdsHit": 2
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 7652,
+              "A": {
+                "coincidentPx": 60,
+                "needPx": 39,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 3600,
+              "A": {
+                "coincidentPx": 31,
+                "needPx": 18,
+                "thirdsHit": 2
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 2.45,
+        "inferenceScale": 0.889,
+        "windowHW": [
+          352,
+          576
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 2250,
+          "patches": [
+            "cheek_left",
+            "cheek_right"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 0.792,
+        "grainG90": 0.95,
+        "grainLowConf": true,
+        "newDarkArea": 0.0698,
+        "newDarkCoh": 0.386,
+        "newBrightArea": 0.0163,
+        "lipLeakRed": 5.0,
+        "brightBand": 8.73,
+        "fillLiftLQ90": 3.55,
+        "fillLiftLQ10": -27.97,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "fillColor",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0235,
+          "jawProfileCorr": 0.3443,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0472,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 6,
+          "nObscured": 121
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": null,
+          "fillDeltaAb90": null,
+          "fillColorD50": null,
+          "fillColorD90": null,
+          "neutralPull50": null,
+          "fillColorCorePx": 0,
+          "fillColorLowConf": true,
+          "fillColorVerdict": "abstain"
+        },
+        "ghost": {
+          "nCands": 257,
+          "fringeCands": 0,
+          "outCanvasCands": 101,
+          "weightedQ90R": 0.898,
+          "survival": 0.579
+        },
+        "timings": {
+          "prepSeconds": 1.97,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 2.45,
+          "totalSeconds": 4.64
+        }
+      },
+      "bbox": [
+        337,
+        419,
+        836,
+        762
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g03__beauty": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 3.12,
+      "rec": {
+        "id": "stubble_wikimedia_g03__beauty",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        187,
+        793,
+        865,
+        1269
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g03__jpeg40": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 2.63,
+      "rec": {
+        "id": "stubble_wikimedia_g03__jpeg40",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        188,
+        794,
+        867,
+        1270
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g03__down06": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 2.61,
+      "rec": {
+        "id": "stubble_wikimedia_g03__down06",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        188,
+        795,
+        864,
+        1267
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g04__beauty": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 3.39,
+      "rec": {
+        "id": "stubble_wikimedia_g04__beauty",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        137,
+        701,
+        921,
+        1245
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g04__jpeg40": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 3.85,
+      "rec": {
+        "id": "stubble_wikimedia_g04__jpeg40",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        139,
+        699,
+        924,
+        1242
+      ],
+      "byteIdentity": null
+    },
+    "stubble_wikimedia_g04__down06": {
+      "status": "abstain",
+      "layer": "stubble",
+      "seconds": 5.65,
+      "rec": {
+        "id": "stubble_wikimedia_g04__down06",
+        "verdict": "abstain",
+        "abstains": [
+          "lower_face_uncertain"
+        ],
+        "retakeClass": "lower_face_uncertain"
+      },
+      "bbox": [
+        138,
+        699,
+        922,
+        1243
+      ],
+      "byteIdentity": null
+    },
+    "medium_flickr_91__beauty": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.06,
+      "rec": {
+        "id": "medium_flickr_91__beauty",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        123,
+        408,
+        482,
+        675
+      ],
+      "byteIdentity": null
+    },
+    "medium_flickr_91__jpeg40": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 2.21,
+      "rec": {
+        "id": "medium_flickr_91__jpeg40",
+        "maskFrac": 0.3795,
+        "provenancePx": {
+          "edit": 37163,
+          "outCanvas": 53869,
+          "noEvidence": 0,
+          "hysteresisDrop": 0,
+          "lipGuard": 6531,
+          "apertureGuard": 353
+        },
+        "zoneFrac": 0.972,
+        "modelMaskFrac": 0.3971,
+        "guardExcludedEnergyFrac": 0.1563,
+        "seedPx": 29531,
+        "mustache": {
+          "fired": {
+            "L": true,
+            "C": true,
+            "R": true
+          },
+          "rules": {
+            "L": "A",
+            "C": "A",
+            "R": "A"
+          },
+          "activated": [
+            "L",
+            "C",
+            "R"
+          ],
+          "fillPx": 11349,
+          "detail": {
+            "L": {
+              "regionPx": 2559,
+              "A": {
+                "coincidentPx": 182,
+                "needPx": 13,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "C": {
+              "regionPx": 6714,
+              "A": {
+                "coincidentPx": 129,
+                "needPx": 34,
+                "thirdsHit": 3
+              },
+              "B": {}
+            },
+            "R": {
+              "regionPx": 2565,
+              "A": {
+                "coincidentPx": 130,
+                "needPx": 13,
+                "thirdsHit": 3
+              },
+              "B": {}
+            }
+          },
+          "negativeKill": "\ubcf4\ub958: \uc138\ud2b8 \ub300\uae30"
+        },
+        "config": {
+          "lamaMaxDim": 512,
+          "zoneEditThr": 0.03,
+          "underJawExtend": 0.12,
+          "seedClipseg": 0.5,
+          "seedZ": 3.0,
+          "modelMaskDilate": 0.004,
+          "hairHaloDilate": 0.003
+        },
+        "lamaSeconds": 1.12,
+        "inferenceScale": 1.0,
+        "windowHW": [
+          264,
+          432
+        ],
+        "windows": 1,
+        "reference": {
+          "ladder": 1,
+          "nValid": 935,
+          "patches": [
+            "cheek_left",
+            "cheek_right",
+            "forehead"
+          ],
+          "singleAnchor": false,
+          "lowConf": false,
+          "statsLowConf": true
+        },
+        "grainG50": 1.481,
+        "grainG90": 1.852,
+        "grainLowConf": true,
+        "newDarkArea": 0.0517,
+        "newDarkCoh": 0.434,
+        "newBrightArea": 0.2568,
+        "lipLeakRed": 1.0,
+        "brightBand": 10.1,
+        "fillLiftLQ90": 23.39,
+        "fillLiftLQ10": -19.64,
+        "outsideIdentical": true,
+        "lipIdentical": true,
+        "apertureIdentical": true,
+        "belowJawIdentical": true,
+        "verdict": "abstain",
+        "hardFails": [],
+        "abstains": [
+          "grainG50",
+          "grainG90",
+          "fillLiftLQ90",
+          "fillLiftLQ10",
+          "newDarkArea",
+          "newBrightArea",
+          "brightBand",
+          "ghost"
+        ],
+        "silhouette": {
+          "jawShiftP95": 0.0198,
+          "jawProfileCorr": 0.608,
+          "jawToLandmarkP95": 0.025,
+          "supportFrac": 0.0759,
+          "silhouetteVerdict": "hard-fail",
+          "nStable": 11,
+          "nObscured": 134
+        },
+        "silhouetteAdvisory": true,
+        "fillColor": {
+          "fillDeltaAb50": 0.228,
+          "fillDeltaAb90": 0.409,
+          "fillColorD50": 0.114,
+          "fillColorD90": 0.205,
+          "neutralPull50": -0.206,
+          "fillColorCorePx": 35631,
+          "fillColorLowConf": false,
+          "fillColorVerdict": "pass"
+        },
+        "ghost": {
+          "nCands": 147,
+          "fringeCands": 0,
+          "outCanvasCands": 321,
+          "weightedQ90R": 0.95,
+          "survival": 0.291
+        },
+        "timings": {
+          "prepSeconds": 0.9,
+          "maskSeconds": 0.02,
+          "lamaSeconds": 1.12,
+          "totalSeconds": 2.15
+        }
+      },
+      "bbox": [
+        121,
+        412,
+        485,
+        681
+      ],
+      "byteIdentity": null
+    },
+    "medium_flickr_91__down06": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.06,
+      "rec": {
+        "id": "medium_flickr_91__down06",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        136,
+        410,
+        485,
+        661
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g02__beauty": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.22,
+      "rec": {
+        "id": "medium_wikimedia_g02__beauty",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        233,
+        620,
+        842,
+        1077
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g02__jpeg40": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.16,
+      "rec": {
+        "id": "medium_wikimedia_g02__jpeg40",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        234,
+        622,
+        839,
+        1077
+      ],
+      "byteIdentity": null
+    },
+    "medium_wikimedia_g02__down06": {
+      "status": "abstain",
+      "layer": "medium",
+      "seconds": 0.17,
+      "rec": {
+        "id": "medium_wikimedia_g02__down06",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        233,
+        622,
+        839,
+        1076
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_g01__beauty": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 0.15,
+      "rec": {
+        "id": "none_wikimedia_g01__beauty",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        290,
+        619,
+        904,
+        1097
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_g01__jpeg40": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 0.14,
+      "rec": {
+        "id": "none_wikimedia_g01__jpeg40",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        294,
+        618,
+        912,
+        1100
+      ],
+      "byteIdentity": null
+    },
+    "none_wikimedia_g01__down06": {
+      "status": "abstain",
+      "layer": "negative",
+      "seconds": 0.15,
+      "rec": {
+        "id": "none_wikimedia_g01__down06",
+        "verdict": "abstain",
+        "abstains": [
+          "reference abstain (no valid anchors)"
+        ]
+      },
+      "bbox": [
+        290,
+        617,
+        910,
+        1101
+      ],
+      "byteIdentity": null
+    }
+  }
+}
