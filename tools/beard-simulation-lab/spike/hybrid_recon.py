@@ -64,7 +64,14 @@ OUT = LAB / "outputs" / "ghost" / "hybrid"
 
 # v4 face-only config (Codex #13). Recorded verbatim into every report.json.
 CONFIG = {
-    "lamaMaxDim": 512,
+    # Fill factorial fill_factorial_f1 (2026-07-12, 60 combos on oracle
+    # masks): the 512 cap was the main wax driver on large crops — texture
+    # ratio psd01 0.38->1.19, psd04 0.20->0.99 at 1024 with halo 0.02fw,
+    # best ring color harmony; crops <=512 are byte-identical (scale 1.0),
+    # so the only cost is ~2x LaMa time on large windows (~5.7s single
+    # pass). 2-pass rejected (over-texture on blurry originals, psd04
+    # texture regression); halo 0.04fw rejected (stripe artifacts).
+    "lamaMaxDim": 1024,
     # Zone edit threshold on the C1∪CLIPSeg union field. Serving ZONE_THR=0.5
     # measured 6.6% GT recall on dev9 — unusable for "아예 깨끗" (R1/R4).
     # Sweep on dev9 GT (scoring-only use): 0.06->70%, 0.03->83%, 0.01->91%
@@ -90,7 +97,10 @@ CONFIG = {
     # larger hole so boundary stubble doesn't condition the fill, but the
     # composite writes edit_mask pixels ONLY (Codex #9 Q4). Below the jaw the
     # hole may additionally extend mask_v3.MODEL_JAW_CONTEXT_FW (0.015fw).
-    "modelMaskDilate": 0.004,
+    # 0.004->0.02 per fill_factorial_f1: the wider hole strips boundary
+    # stubble from LaMa's conditioning context (context purification);
+    # 0.04 worsened stripe energy. Composite still writes edit_mask only.
+    "modelMaskDilate": 0.02,
     "hairHaloDilate": 0.003,
 }
 
