@@ -85,13 +85,20 @@ def grain_gate(orig: np.ndarray, result: np.ndarray, edit_mask: np.ndarray,
             "grainLowConf": low_conf}
 
 
-def new_dark_gate(result: np.ndarray, edit_mask: np.ndarray, thr: dict,
-                  fw: float) -> dict:
+def new_dark_gate(result: np.ndarray, edit_mask: np.ndarray, thr: dict | None,
+                  fw: float, excess_override: np.ndarray | None = None) -> dict:
     """Hair-grade darkness INSIDE the fill. The fill must contain no hair —
     any black-hat excess there is either a survivor or a LaMa-regenerated
-    strand, and every pre-hybrid ruler was blind to the second kind."""
-    maps_r = blackhat_maps(result, fw)
-    exc = excess_map(maps_r, thr)
+    strand, and every pre-hybrid ruler was blind to the second kind.
+
+    excess_override: v3 path — the anchor-normalized z-excess map from
+    eval.reference_bundle (complement-of-zone thresholds collapsed on hairy
+    photos; anchor z-space replaces them)."""
+    if excess_override is not None:
+        exc = excess_override
+    else:
+        maps_r = blackhat_maps(result, fw)
+        exc = excess_map(maps_r, thr)
     inside = (exc > 0) & edit_mask
     area = float(inside.sum()) / max(float(edit_mask.sum()), 1.0)
     coh = coherence_map(result)
@@ -155,23 +162,31 @@ def fill_lift_gate(orig: np.ndarray, result: np.ndarray,
             "fillLiftLQ10": round(float(np.percentile(lift, 10)), 2)}
 
 
+_BYTE_GUARDS = (("lip", "lipIdentical"), ("nostril_core", "nostrilIdentical"),
+                ("below_jaw", "belowJawIdentical"),
+                ("occluder", "occluderIdentical"))
+
+
 def score_photo(orig: np.ndarray, result: np.ndarray, edit_mask: np.ndarray,
-                clean: np.ndarray, thr: dict, guards: dict, fw: float) -> dict:
+                clean: np.ndarray, thr: dict | None, guards: dict, fw: float,
+                excess_result: np.ndarray | None = None) -> dict:
+    """Byte gates run for whichever guard masks the caller supplies —
+    v3 retired below_jaw (the mask now legitimately crosses the jaw) and
+    added the occluder guard; the gate list follows the guards dict."""
     m: dict = {}
     m.update(grain_gate(orig, result, edit_mask, clean, fw))
-    m.update(new_dark_gate(result, edit_mask, thr, fw))
+    m.update(new_dark_gate(result, edit_mask, thr, fw,
+                           excess_override=excess_result))
     m.update(new_bright_gate(orig, result, edit_mask, fw))
     m.update(lip_leak_gate(orig, result, guards["lip"], fw))
     m.update(bright_band_gate(orig, result, edit_mask, fw))
     m.update(fill_lift_gate(orig, result, edit_mask, fw))
     m["outsideIdentical"] = bool(np.array_equal(result[~edit_mask],
                                                 orig[~edit_mask]))
-    m["lipIdentical"] = bool(np.array_equal(result[guards["lip"]],
-                                            orig[guards["lip"]]))
-    m["nostrilIdentical"] = bool(np.array_equal(
-        result[guards["nostril_core"]], orig[guards["nostril_core"]]))
-    m["belowJawIdentical"] = bool(np.array_equal(
-        result[guards["below_jaw"]], orig[guards["below_jaw"]]))
+    for key, label in _BYTE_GUARDS:
+        if key in guards:
+            m[label] = bool(np.array_equal(result[guards[key]],
+                                           orig[guards[key]]))
     m.update(judge(m))
     return m
 
@@ -180,7 +195,7 @@ def judge(m: dict) -> dict:
     """pass / abstain / hard-fail per the frozen gates."""
     hard, abstain = [], []
     for k in ("outsideIdentical", "lipIdentical", "nostrilIdentical",
-              "belowJawIdentical"):
+              "belowJawIdentical", "occluderIdentical"):
         if m.get(k) is False:
             hard.append(k)
 

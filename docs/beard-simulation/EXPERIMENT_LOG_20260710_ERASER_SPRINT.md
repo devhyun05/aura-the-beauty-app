@@ -706,3 +706,29 @@ dev9 원샷 결과: 9/9 실행(clean 사다리 후), 판정은 hard-fail 5 / abs
 **결론: 메커니즘·마스크는 전진, 측정 참조(clean) 재설계가 다음 블로커.**
 dev9 결과를 보고 임계값을 조정하는 것은 금지(Codex 규율)이므로, 참조 재설계는
 Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
+
+### Sprint A: 커버리지-퍼스트 v3 (2026-07-11, 사용자 승인 + Codex #10 공동 설계)
+
+- 방향 전환: "목이든 가장자리든 최대 커버, 디테일은 위에서". R5(턱 아래 금지) 은퇴 —
+  geometry 누락은 이제 coverage failure. 계획은 Codex #10과 공동 설계(신규 자 공식,
+  목 코리도, ReferenceBundle 레시피, 체크포인트 프로토콜 전부 반영).
+- **워크플로 병렬 구축**: 4모듈(eval/reference_bundle.py 17t, eval/silhouette_ruler.py
+  12t, eval/fill_color_ruler.py 9t, spike/mask_v3.py 15t) + API 리뷰(함정 8건: bool 마스크
+  계약, 풀프레임 좌표, lab_cov ab 슬라이스, 2-패스 가먼트, 시드 독립성 등). 147 passed.
+- LaMa 윈도 전략: 마스크 bbox+0.12fw 타이트 윈도(pic2 scale 1.0 회복).
+- **오클루더 과발화 수정**: 짙은 수염·그늘 목 피부가 볼 앵커 대비 비피부 판정
+  (occluderFrac 0.545, 마스크 96% 삭제) → 증거 픽셀 제외 후 가드(0.112로 정상화).
+  Codex #10 원칙("skin likelihood는 수염 마스크 hard gate 금지") 재확인.
+- **실루엣 붕괴 발견·완화 경로 확정**: 얼굴+목 단일 거대 홀 → LaMa가 턱 윤곽을 뭉갬
+  (jawShift 0.022fw, corr 0.69 — 실루엣 자가 정확히 hard-fail). 거대 홀 순차 분할은
+  턱 회청색 밴드(fillColor abstain이 포착). **최종 구조: 얼굴측은 v2 검증 레시피
+  (jaw+0.06 분할선 위) 그대로 + 목은 z-증거 밀착 밴드만 별도 패스(청소된 얼굴을
+  문맥으로)** — psd04에서 목수염 소거 성공 + 회색 밴드 소멸, grain 0.756 통과.
+  남은 관찰: 턱 미묘한 회색기(fillColor abstain)·부드러운 실루엣(자 hard-fail) —
+  자들이 시각 관찰과 일치하게 작동.
+- **dev9 v3 원샷 — 수정 라운드 필요한 결함 2건 (모두 빌더가 사전 경고한 리스크)**:
+  (A) 앵커 QC 과엄격: 실사진 4/9 (pic1·psd02·psd03·psd05) reference abstain.
+  (B) 작은 얼굴(pic 계열, crop fw<350 위험 영역)에서 anchor-z 과발화 → 마스크 0.5로
+  폭증, newDark 0.28~0.71, ghost survival ~1.0 — 측정이 아니라 참조 전이의 문제.
+  규율 준수: dev9 결과로 임계값 조정하지 않음. 수정은 reference_bundle 계층에서,
+  Codex #11 교차검증 대상.
