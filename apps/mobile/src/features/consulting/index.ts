@@ -42,6 +42,7 @@ export {
 } from './services/consultingService';
 export {
   getConsultingUnreadRecordIds,
+  clearConsultingReadState,
   getConsultingUnreadState,
   isConsultingMessageStatus,
   isConsultingNotificationStatus,

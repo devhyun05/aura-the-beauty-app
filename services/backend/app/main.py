@@ -12,7 +12,9 @@ from app.core.errors import AppError, app_error_handler, http_error_handler, val
 from app.core.settings import Settings, get_settings
 from app.db.session import database
 from app.services.consulting_schema import ensure_consulting_runtime_schema
+from app.services.account_deletion import ensure_account_deletion_schema
 from app.services.media_deletion import ensure_media_deletion_schema
+from app.services.hair_schema import ensure_hair_schema
 
 
 @asynccontextmanager
@@ -20,6 +22,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
   await database.connect()
   await ensure_consulting_runtime_schema(database)
   await ensure_media_deletion_schema(database)
+  await ensure_account_deletion_schema(database)
+  await ensure_hair_schema(database)
 
   try:
     yield

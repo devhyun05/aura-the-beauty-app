@@ -94,12 +94,12 @@ def test_report_attachment_does_not_change_question_behavior() -> None:
   client = _client()
   base_id = _create(client, prompt)
   base_turn = _turn(client, base_id)
-  base_intent = get_session(base_id)["intent"]
+  base_intent = get_session(base_id, owner_subject="local-dev-user")["intent"]
 
   client2 = _client()
   rep_id = _create(client2, prompt, context={"personalColor": "여름 쿨"})
   rep_turn = _turn(client2, rep_id)
-  rep_intent = get_session(rep_id)["intent"]
+  rep_intent = get_session(rep_id, owner_subject="local-dev-user")["intent"]
 
   assert rep_intent["requiresQuestion"] == base_intent["requiresQuestion"]
   assert rep_intent["broad"] == base_intent["broad"]

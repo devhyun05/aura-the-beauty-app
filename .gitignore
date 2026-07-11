@@ -15,12 +15,14 @@ apps/mobile/.expo/
 .env.*
 !*.env.example
 !**/.env.example
+services/backend/partner-credentials*.json
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 *.log
+.codex-logs/
 
 # Python local state
 __pycache__/
@@ -30,6 +32,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+
+# Local deployment build artifacts
+.codex-build/
+.lambda-build/
+dist/lambda/
 
 # iOS generated build products
 apps/mobile/ios/Pods/

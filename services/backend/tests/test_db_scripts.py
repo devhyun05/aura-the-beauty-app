@@ -53,6 +53,8 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
     table_columns={
       "analysis_reports": set(),
       "community_threads": {"embedding"},
+      "auradin_search_sessions": {"state", "expires_at"},
+      "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
     },
   )
 
@@ -91,6 +93,17 @@ def test_pending_community_core_migration_is_registered() -> None:
   assert "trg_community_threads_updated_at" in migration_sql
 
 
+def test_media_upload_session_migration_enforces_principal_and_object_binding() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:media-upload-sessions-v1"]
+
+  assert "chk_media_upload_sessions_principal" in migration_sql
+  assert "uq_media_upload_sessions_bucket_key" in migration_sql
+  assert "fk_media_upload_sessions_owner_user" in migration_sql
+  assert "fk_media_upload_sessions_partner_account" in migration_sql
+  assert "fk_media_upload_sessions_media_asset" in migration_sql
+  assert "idx_media_upload_sessions_pending_expires" in migration_sql
+
+
 def test_pending_embedding_migration_is_registered() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:community-embeddings-v1"]
 
@@ -104,3 +117,12 @@ def test_pending_search_migration_is_registered() -> None:
   assert "create extension if not exists pg_trgm" in migration_sql
   assert "idx_community_threads_title_trgm" in migration_sql
   assert "idx_community_threads_body_trgm" in migration_sql
+
+
+def test_pending_auradin_session_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:auradin-sessions-v1"]
+
+  assert "create table if not exists auradin_search_sessions" in migration_sql
+  assert "state jsonb not null" in migration_sql
+  assert "expires_at timestamptz not null" in migration_sql
+  assert "idx_auradin_search_sessions_expires_at" in migration_sql

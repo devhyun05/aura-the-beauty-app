@@ -19,6 +19,7 @@ import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 
 const MOCK_ANALYSIS_DELAY_MS = 1400;
 const FEEDBACK_ANALYSIS_TIMEOUT_MS = 120000;
+const FEEDBACK_REPORT_POLL_INTERVAL_MS = 2000;
 const FEEDBACK_GOAL_VALIDATION_ERROR_CODES = new Set([
   'FEEDBACK_GOAL_INVALID',
   'FEEDBACK_GOAL_NEEDS_DETAIL',
@@ -40,6 +41,7 @@ export function getMakeupFeedbackAnalysisErrorMessage(error: unknown): string {
 }
 
 type BackendFeedbackPayload = {
+  error?: {details?: unknown; message?: string | null} | null;
   result?: {
     evaluations?: unknown;
     interpretedGoal?: MakeupFeedbackInterpretedGoal | null;
@@ -58,10 +60,15 @@ type BackendFeedbackJob = {
   id?: string | null;
   score?: number | null;
   sourceLabel?: string | null;
+  status?: 'cancelled' | 'completed' | 'failed' | 'pending' | 'processing' | null;
 };
 
 type CreateFeedbackJobResponse = {
   job: BackendFeedbackJob;
+};
+
+type GetFeedbackReportResponse = {
+  report: BackendFeedbackJob;
 };
 
 function delay(ms: number): Promise<void> {
@@ -225,6 +232,76 @@ function mapBackendJobToFeedbackResult(
   };
 }
 
+async function waitForCompleteFeedbackJob(
+  initialJob: BackendFeedbackJob,
+  selection: MakeupFeedbackPhotoSelection,
+  startedAt: number,
+): Promise<MakeupFeedbackResult> {
+  let currentJob = initialJob;
+
+  while (true) {
+    if (currentJob.feedbackPayload?.result) {
+      console.info('[aura:makeup-feedback] report:ready', {
+        durationMs: Date.now() - startedAt,
+        jobId: currentJob.id ?? null,
+        status: currentJob.status ?? null,
+      });
+      return mapBackendJobToFeedbackResult(currentJob, selection);
+    }
+
+    if (currentJob.status === 'failed') {
+      throw new BackendApiError(
+        currentJob.feedbackPayload?.error?.message ??
+          '\uba54\uc774\ud06c\uc5c5 \ud53c\ub4dc\ubc31 \ubd84\uc11d \uc791\uc5c5\uc774 \uc2e4\ud328\ud588\uc5b4\uc694.',
+        502,
+        'FEEDBACK_JOB_FAILED',
+        {jobId: currentJob.id ?? null},
+      );
+    }
+
+    if (currentJob.status === 'completed') {
+      throw new BackendApiError(
+        '\ud53c\ub4dc\ubc31 \ubcf4\uace0\uc11c \uacb0\uacfc\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.',
+        502,
+        'FEEDBACK_REPORT_RESULT_REQUIRED',
+        {jobId: currentJob.id ?? null},
+      );
+    }
+
+    if (!currentJob.id) {
+      throw new Error('Feedback job did not return a report id.');
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+
+    if (elapsedMs >= FEEDBACK_ANALYSIS_TIMEOUT_MS) {
+      throw new BackendApiError(
+        '\ud53c\ub4dc\ubc31 \ubd84\uc11d\uc774 \uc544\uc9c1 \uc644\ub8cc\ub418\uc9c0 \uc54a\uc558\uc5b4\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574 \uc8fc\uc138\uc694.',
+        504,
+        'FEEDBACK_REPORT_TIMEOUT',
+        {
+          jobId: currentJob.id,
+          status: currentJob.status ?? null,
+        },
+      );
+    }
+
+    console.info('[aura:makeup-feedback] report:poll', {
+      elapsedMs,
+      jobId: currentJob.id,
+      nextPollMs: FEEDBACK_REPORT_POLL_INTERVAL_MS,
+      status: currentJob.status ?? null,
+    });
+
+    await delay(Math.min(FEEDBACK_REPORT_POLL_INTERVAL_MS, FEEDBACK_ANALYSIS_TIMEOUT_MS - elapsedMs));
+
+    const {report} = await requestBackendJson<GetFeedbackReportResponse>(
+      '/feedback/reports/' + currentJob.id,
+    );
+    currentJob = report;
+  }
+}
+
 async function createBackendMakeupFeedback(
   selection: MakeupFeedbackPhotoSelection,
 ): Promise<MakeupFeedbackResult> {
@@ -241,20 +318,15 @@ async function createBackendMakeupFeedback(
     width: selection.imageWidth ?? undefined,
   });
   const feedbackContext = getFeedbackContext(selection);
+  const startedAt = Date.now();
 
   const {job} = await requestBackendJson<CreateFeedbackJobResponse>('/feedback/jobs', {
     body: {
       photoCaptureId: uploadedPhoto.photoCaptureId,
       uploadedMediaId: uploadedPhoto.mediaId,
       requestPayload: {
-        bucket: uploadedPhoto.bucket,
-        cdnUrl: uploadedPhoto.cdnUrl ?? null,
-        contentType: uploadedPhoto.contentType ?? 'image/jpeg',
         feedbackContext,
-        imageUrl: uploadedPhoto.cdnUrl ?? null,
-        objectKey: uploadedPhoto.objectKey,
         source: selection.photoSource,
-        sourceUri: selection.imageUri,
         task: 'makeup_feedback_report_v2',
         topics: MAKEUP_FEEDBACK_TOPICS.map(topic => ({id: topic.id, label: topic.label})),
       },
@@ -266,7 +338,7 @@ async function createBackendMakeupFeedback(
     timeoutMs: FEEDBACK_ANALYSIS_TIMEOUT_MS,
   });
 
-  return mapBackendJobToFeedbackResult(job, selection);
+  return waitForCompleteFeedbackJob(job, selection, startedAt);
 }
 
 export async function analyzeMakeupForFeedback(

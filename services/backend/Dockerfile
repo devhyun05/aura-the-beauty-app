@@ -5,8 +5,16 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libegl1 libgl1 libglib2.0-0 libgomp1 \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY services/backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY services/backend/scripts/download_hair_segmenter.py /tmp/download_hair_segmenter.py
+RUN python /tmp/download_hair_segmenter.py --output /app/models/hair_segmenter.tflite \
+  && rm /tmp/download_hair_segmenter.py
 
 COPY services/backend/app ./app
 COPY docs/backend/schema.sql ./docs/backend/schema.sql

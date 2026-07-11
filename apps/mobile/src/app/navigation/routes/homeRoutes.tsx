@@ -16,11 +16,11 @@ import {
   CommunityHomeScreen,
   CommunityThreadDetailScreen,
   CommunityUserProfileScreen,
-  type CommunityMode,
 } from '../../../features/community';
 import {
   ConsultingHeaderActions,
 } from '../../../features/consulting';
+import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
@@ -209,9 +209,12 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             onOpenFeatureMenu={openFeatureMenu}
             onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
             onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
-            onPressCommunity={() => navigation.navigate('CommunityTab')}
-            onPressConsulting={() => rootNavigation?.navigate('Consulting')}
+            onPressConsulting={() => navigation.navigate('ConsultingTab')}
             onPressHalfMakeup={handleHalfMakeupPress}
+            onPressHairAnalysis={() => rootNavigation?.navigate('HairAnalysisIntro')}
+            onPressHairRemovalSimulation={() =>
+              rootNavigation?.navigate('HairRemovalSimulation')
+            }
             onPressHeroTrendFilter={handleHeroTrendFilterPress}
             onPressMakeupExtraction={handleMakeupExtractionPress}
             onPressMakeupFeedback={handleMakeupFeedbackPress}
@@ -244,17 +247,14 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   );
 }
 
-type CommunityTabRouteScreenProps = MainTabScreenProps<'CommunityTab'> & {
-  communityMode: CommunityMode;
-  onSelectCommunityMode: (mode: CommunityMode) => void;
-};
-
-export function CommunityTabRouteScreen({
-  communityMode,
+export function ConsultingTabRouteScreen({
   navigation,
-  onSelectCommunityMode,
-}: CommunityTabRouteScreenProps) {
+}: MainTabScreenProps<'ConsultingTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
+
+  if (!rootNavigation) {
+    return null;
+  }
 
   return (
     <MainTabChrome
@@ -264,38 +264,29 @@ export function CommunityTabRouteScreen({
           onPressNotifications={() =>
             rootNavigation?.navigate('ConsultingNotifications')
           }
+          onPressHistory={() => rootNavigation?.navigate('ConsultingHistory')}
+          showHistory
         />
       }
       navigation={navigation}
-      routeName="CommunityTab"
+      routeName="ConsultingTab"
       wrapContentInScreen={false}>
-      <CommunityHomeScreen
-        avoidFloatingFooter
-        mode={communityMode}
-        onPressCreate={() => rootNavigation?.navigate('CommunityThreadCreate')}
-        onPressAuthor={author => rootNavigation?.navigate('CommunityUserProfile', {
-          avatarUrl: author.avatarUrl,
-          nickname: author.nickname,
-          userId: author.id,
-        })}
-        onPressEditProfile={() => rootNavigation?.navigate('ProfileEdit')}
-        onPressThread={threadId => rootNavigation?.navigate('CommunityThreadDetail', {threadId})}
-        onSelectMode={onSelectCommunityMode}
-      />
+      {renderConsultingHome(rootNavigation, {topPadding: 'belowOverlayHeader'})}
     </MainTabChrome>
   );
 }
-function navigateCommunityTab(navigation: RootNavigation) {
-  navigateMainTab(navigation, 'CommunityTab');
+
+function navigateCommunity(navigation: RootNavigation) {
+  navigation.navigate('Community');
 }
 
-function navigateBackOrCommunityTab(navigation: RootNavigation) {
+function navigateBackOrCommunity(navigation: RootNavigation) {
   if (navigation.canGoBack()) {
     navigation.goBack();
     return;
   }
 
-  navigateCommunityTab(navigation);
+  navigateCommunity(navigation);
 }
 
 export function HomeFilterStoreRouteScreen({
@@ -382,6 +373,22 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
   );
 }
 
+export function HairRemovalSimulationRouteScreen({
+  navigation,
+}: RootScreenProps<'HairRemovalSimulation'>) {
+  return (
+    <DetailRouteChrome
+      routeName="HairRemovalSimulation"
+      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      <RoutePlaceholder
+        description="제모 시뮬레이션을 준비 중이에요."
+        showHeader={false}
+        title="제모 시뮬레이션"
+      />
+    </DetailRouteChrome>
+  );
+}
+
 export function CommunityThreadDetailRouteScreen({
   navigation,
   route,
@@ -389,10 +396,10 @@ export function CommunityThreadDetailRouteScreen({
   return (
     <DetailRouteChrome
       routeName="CommunityThreadDetail"
-      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      onBack={() => navigateBackOrCommunity(navigation)}>
       <CommunityThreadDetailScreen
         threadId={route.params.threadId}
-        onDeleted={() => navigateCommunityTab(navigation)}
+        onDeleted={() => navigateCommunity(navigation)}
         onPressEditThread={thread => navigation.navigate('CommunityThreadEdit', {threadId: thread.id})}
         onPressAuthor={author => navigation.navigate('CommunityUserProfile', {
           avatarUrl: author.avatarUrl,
@@ -411,7 +418,7 @@ export function CommunityThreadEditRouteScreen({
   return (
     <DetailRouteChrome
       routeName="CommunityThreadEdit"
-      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      onBack={() => navigateBackOrCommunity(navigation)}>
       <CommunityCreateThreadScreen
         mode="edit"
         threadId={route.params.threadId}
@@ -445,7 +452,7 @@ export function CommunityThreadCreateRouteScreen({
   return (
     <DetailRouteChrome
       routeName="CommunityThreadCreate"
-      onBack={() => navigateBackOrCommunityTab(navigation)}>
+      onBack={() => navigateBackOrCommunity(navigation)}>
       <CommunityCreateThreadScreen
         onCreated={thread => navigation.replace('CommunityThreadDetail', {threadId: thread.id})}
       />

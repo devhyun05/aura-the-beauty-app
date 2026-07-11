@@ -178,6 +178,7 @@ export type NativeFaceRatioHairlineDebugArtifacts = {
 
 export type NativeFaceRatioAnalyzeResult = {
   debugArtifacts?: NativeFaceRatioHairlineDebugArtifacts;
+  matteArtifacts?: NativeFaceRatioHairlineDebugArtifacts;
   debugPoints?: Partial<Record<string, NativeFaceRatioPoint>>;
   error?: string;
   faceCount: number;

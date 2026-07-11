@@ -5,6 +5,9 @@ import type {
   FaceAnalysisMakeupGuideline,
   FaceAnalysisReport,
 } from '../types/faceAnalysis';
+import {
+  buildFaceAnalysisRequestPayload,
+} from '../../features/face-capture/services/faceCaptureUploadContract';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
 type FaceAnalysisCaptureInput = {
@@ -718,18 +721,7 @@ export async function createFaceAnalysisReportFromCapture(
       photoCaptureId: capture.photoCaptureId,
       previewMediaId: capture.mediaId,
       reportTitle: '맞춤 분석 보고서',
-      requestPayload: {
-        bucket: capture.bucket ?? null,
-        cdnUrl: capture.cdnUrl ?? null,
-        contentType: capture.contentType ?? 'image/jpeg',
-        // 온디바이스 얼굴 세로 3분할 실측값 — backend가 요청 메타데이터로 AI 프롬프트에 포함한다.
-        ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
-        imageUrl: capture.cdnUrl ?? null,
-        objectKey: capture.objectKey ?? null,
-        source: capture.source ?? 'camera',
-        sourceUri: capture.imageUri ?? null,
-        task: 'face_makeup_recommendation_report_v1',
-      },
+      requestPayload: buildFaceAnalysisRequestPayload(capture, faceVerticalThirds),
       runImmediately: true,
       sourceMediaId: capture.mediaId,
       title: 'AI 맞춤 메이크업 분석',

@@ -15,6 +15,7 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate
+from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.embeddings import embed_text, format_pgvector, report_embedding_text
 from app.services.media_deletion import (
   collect_report_media_refs,
@@ -23,6 +24,11 @@ from app.services.media_deletion import (
   process_media_deletion_outbox_items,
 )
 from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.owned_media import (
+  require_owned_media,
+  resolve_owned_source_media,
+  trusted_media_request_payload,
+)
 from app.services.users import ensure_user
 
 
@@ -180,11 +186,12 @@ def mark_recommended_makeup_images_failed(result: dict) -> list[dict]:
 
 
 async def update_analysis_image_progress(
+  db: Database,
   report_id: UUID,
   payload: AnalysisJobCreate,
   result: dict,
 ) -> None:
-  await database.execute(
+  await db.execute(
     """
     update analysis_reports
     set detail_payload = $2::jsonb
@@ -201,11 +208,12 @@ async def generate_analysis_images_background(
   initial_result: dict,
   settings: Settings,
   prepared_source: tuple[bytes, str] | None = None,
+  db: Database = database,
 ) -> None:
   service = OpenAIAnalysisService(settings)
 
   async def on_card_generated(index: int, generated_card: dict, partial_result: dict) -> None:
-    await update_analysis_image_progress(report_id, payload, partial_result)
+    await update_analysis_image_progress(db, report_id, payload, partial_result)
     logger.info(
       "[aura:analysis-api] image-generation:progress reportId=%s index=%s generatedImageCount=%s",
       report_id,
@@ -265,7 +273,7 @@ async def generate_analysis_images_background(
 
   generated_image_count = count_generated_makeup_images(result)
 
-  await database.execute(
+  await db.execute(
     """
     update analysis_reports
     set status = 'completed',
@@ -291,6 +299,7 @@ def schedule_analysis_images_background(
   initial_result: dict,
   settings: Settings,
   prepared_source: tuple[bytes, str] | None = None,
+  db: Database = database,
 ) -> None:
   task = asyncio.create_task(
     generate_analysis_images_background(
@@ -299,6 +308,7 @@ def schedule_analysis_images_background(
       initial_result,
       settings,
       prepared_source,
+      db,
     ),
   )
   analysis_image_tasks.add(task)
@@ -348,13 +358,16 @@ async def run_analysis_job_background(
   report_id: UUID,
   payload: AnalysisJobCreate,
   settings: Settings,
+  *,
+  db: Database = database,
+  await_image_generation: bool = False,
 ) -> None:
   started_at = time.monotonic()
   logger.info(
     "[aura:analysis-api] background:start reportId=%s",
     report_id,
   )
-  await database.execute(
+  await db.execute(
     "update analysis_reports set status = 'processing' where id = $1",
     report_id,
   )
@@ -404,7 +417,7 @@ async def run_analysis_job_background(
       exc.code,
       exc.details,
     )
-    await mark_analysis_failed(database, report_id, exc.message, payload, exc.details)
+    await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
     return
   except Exception as exc:
     if prepare_source_task is not None:
@@ -412,11 +425,11 @@ async def run_analysis_job_background(
     message = "AI analysis invocation failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
-    await mark_analysis_failed(database, report_id, message, payload, details)
+    await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
   report_status = "completed"
-  report = await database.fetchrow(
+  report = await db.fetchrow(
     """
     update analysis_reports
     set status = $2::job_status,
@@ -463,7 +476,7 @@ async def run_analysis_job_background(
     )
     return
 
-  await update_analysis_report_embedding(database, report)
+  await update_analysis_report_embedding(db, report)
 
   if generates_images:
     prepared_source: tuple[bytes, str] | None = None
@@ -478,12 +491,24 @@ async def run_analysis_job_background(
           exc_info=True,
         )
         prepared_source = None
+    if await_image_generation:
+      await generate_analysis_images_background(
+        report_id,
+        payload,
+        result,
+        settings,
+        prepared_source,
+        db,
+      )
+      return
+
     schedule_analysis_images_background(
       report_id,
       payload,
       result,
       settings,
       prepared_source,
+      db,
     )
     return
 
@@ -491,6 +516,48 @@ async def run_analysis_job_background(
     "[aura:analysis-api] background:completed reportId=%s durationMs=%s",
     report_id,
     round((time.monotonic() - started_at) * 1000),
+  )
+
+
+async def dispatch_analysis_job(
+  db: Database,
+  background_tasks: BackgroundTasks,
+  report_id: UUID,
+  user_id: UUID,
+  payload: AnalysisJobCreate,
+  settings: Settings,
+) -> None:
+  execution_mode = settings.ai_job_execution_mode_normalized
+
+  if execution_mode == "inline":
+    background_tasks.add_task(
+      run_analysis_job_background,
+      report_id,
+      payload,
+      settings,
+    )
+    return
+
+  if execution_mode != "sqs":
+    raise AppError(
+      500,
+      "AI_JOB_EXECUTION_MODE_INVALID",
+      "AI_JOB_EXECUTION_MODE must be either inline or sqs.",
+      {"executionMode": execution_mode},
+    )
+
+  publisher = AIJobQueuePublisher(settings)
+
+  try:
+    result = await asyncio.to_thread(publisher.publish_analysis_job, report_id, user_id)
+  except AppError as exc:
+    await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
+    raise
+
+  logger.info(
+    "[aura:analysis-api] job:queued reportId=%s messageId=%s",
+    report_id,
+    result.get("messageId"),
   )
 
 
@@ -503,10 +570,45 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  execution_mode = settings.ai_job_execution_mode_normalized
+
+  if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
+    raise AppError(
+      500,
+      "AI_JOB_EXECUTION_MODE_INVALID",
+      "AI_JOB_EXECUTION_MODE must be either inline or sqs.",
+      {"executionMode": execution_mode},
+    )
+
+  source_media = await resolve_owned_source_media(
+    db,
+    owner_user_id=user["id"],
+    media_id=payload.source_media_id,
+    photo_capture_id=payload.photo_capture_id,
+    required=payload.run_immediately,
+  )
+  if payload.preview_media_id is not None and (
+    source_media is None or payload.preview_media_id != source_media["id"]
+  ):
+    await require_owned_media(
+      db,
+      media_id=payload.preview_media_id,
+      owner_user_id=user["id"],
+    )
+  payload = payload.model_copy(
+    update={
+      "request_payload": trusted_media_request_payload(
+        settings,
+        payload.request_payload,
+        source_media,
+      ),
+    },
+  )
   logger.info(
-    "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s",
+    "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s executionMode=%s",
     auth.subject,
     payload.run_immediately,
+    execution_mode,
   )
   report = await db.fetchrow(
     """
@@ -535,9 +637,11 @@ async def create_analysis_job(
   )
 
   if payload.run_immediately:
-    background_tasks.add_task(
-      run_analysis_job_background,
+    await dispatch_analysis_job(
+      db,
+      background_tasks,
       report["id"],
+      user["id"],
       payload,
       settings,
     )

@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +50,8 @@ class Settings(BaseSettings):
 
   ai_provider: str = "bedrock"
   image_generation_provider: str = "openai"
+  ai_job_execution_mode: str = "inline"
+  sqs_ai_job_queue_url: str | None = None
   openai_enabled: bool = True
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
@@ -66,7 +69,7 @@ class Settings(BaseSettings):
   auradin_retrieval_backend: str = "auto"
   auradin_vector_index_path: str | None = None
   auradin_vector_index_autobuild: bool = False
-  auradin_session_store: str = "memory"
+  auradin_session_store: str = "postgres"
   auradin_session_ttl_seconds: int = 15 * 60
   # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
   auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
@@ -102,6 +105,19 @@ class Settings(BaseSettings):
   openai_image_input_max_edge: int = 1024
   openai_image_input_quality: int = 82
   openai_image_output_max_edge: int = 1024
+
+  hair_jobs_queue_url: str | None = None
+  hair_style_asset_bucket: str | None = None
+  hair_style_asset_prefix: str = "catalog/hair-styles/v1"
+  hair_style_assets_require_approval: bool = True
+  hair_source_retention_hours: int = Field(default=24, ge=1, le=168)
+  hair_simulations_per_analysis: int = Field(default=3, ge=1, le=12)
+  hair_simulations_per_day: int = Field(default=6, ge=1, le=100)
+  hair_worker_wait_time_seconds: int = Field(default=20, ge=0, le=20)
+  hair_worker_visibility_timeout_seconds: int = Field(default=360, ge=30, le=43200)
+  hair_worker_request_timeout_seconds: int = Field(default=180, ge=30, le=600)
+  hair_generation_quality: Literal["low", "medium", "high", "auto"] = "medium"
+  hair_segmenter_model_path: str = "/app/models/hair_segmenter.tflite"
 
   naver_shopping_client_id: str | None = None
   naver_shopping_client_secret: str | None = None
@@ -142,6 +158,21 @@ class Settings(BaseSettings):
   @property
   def image_generation_provider_normalized(self) -> str:
     return (self.image_generation_provider or "openai").strip().lower()
+
+  @property
+  def ai_job_execution_mode_normalized(self) -> str:
+    return (self.ai_job_execution_mode or "inline").strip().lower()
+
+  @property
+  def ai_job_execution_mode_configured(self) -> bool:
+    return self.ai_job_execution_mode_normalized in {"inline", "sqs"}
+
+  @property
+  def sqs_ai_job_queue_configured(self) -> bool:
+    if self.ai_job_execution_mode_normalized != "sqs":
+      return True
+
+    return bool((self.sqs_ai_job_queue_url or "").strip())
 
   @property
   def effective_bedrock_analysis_region(self) -> str:
@@ -280,6 +311,7 @@ class Settings(BaseSettings):
   def public_config_status(self) -> dict[str, object]:
     analysis_provider = self.analysis_provider
     image_generation_provider = self.image_generation_provider_normalized
+    ai_job_execution_mode = self.ai_job_execution_mode_normalized
     items = {
       "databaseUrl": {
         "configured": self.database_configured,
@@ -348,6 +380,15 @@ class Settings(BaseSettings):
         "requiredWhen": "Recommendation images should be generated.",
         "value": image_generation_provider,
       },
+      "aiJobExecutionMode": {
+        "configured": self.ai_job_execution_mode_configured,
+        "requiredWhen": "AI analysis jobs are created. Use inline for local development and sqs for worker-backed deployments.",
+        "value": ai_job_execution_mode,
+      },
+      "sqsAiJobQueueUrl": {
+        "configured": self.sqs_ai_job_queue_configured,
+        "requiredWhen": "AI_JOB_EXECUTION_MODE=sqs.",
+      },
       "naverShoppingApi": {
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
         "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
@@ -383,6 +424,7 @@ class Settings(BaseSettings):
       "auradinSessionStore": self.auradin_session_store,
       "imageGenerationProvider": image_generation_provider,
       "imageGenerationModel": self.openai_image_model_id if image_generation_provider == "openai" else None,
+      "aiJobExecutionMode": ai_job_execution_mode,
       "items": items,
       "missing": missing,
     }

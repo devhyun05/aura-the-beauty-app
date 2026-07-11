@@ -17,8 +17,11 @@
     "test:generated-brow": "node ../../scripts/mobile/run-generated-brow-contract.mjs",
     "test:personal-color": "node ../../scripts/mobile/run-personal-color-contract.mjs",
     "test:face-ratio-distortion": "node ../../scripts/mobile/run-face-ratio-distortion-contract.mjs",
+    "test:face-capture-upload": "node ../../scripts/mobile/run-face-capture-upload-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
+    "test:ios-bundle-ids": "node ../../scripts/mobile/verify-ios-bundle-identifiers.mjs",
+    "test:ios-privacy": "node ../../scripts/mobile/verify-ios-privacy-settings.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

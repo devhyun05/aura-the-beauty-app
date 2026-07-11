@@ -12,6 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.errors import AppError
 from app.core.settings import Settings
+from app.lambdas.media_postprocess import MediaPostprocessError, process_image_bytes
 from app.services.bedrock_guardrails import build_bedrock_guardrail_invoke_kwargs
 
 
@@ -560,13 +561,18 @@ Request metadata:
 
     return parsed
 
-  def _analyze_sync(self, payload: dict[str, Any], image_bytes: bytes) -> dict[str, Any]:
+  def _analyze_sync(
+    self,
+    payload: dict[str, Any],
+    image_bytes: bytes,
+    content_type: str | None = None,
+  ) -> dict[str, Any]:
     model_id = self.settings.effective_analysis_model_id
 
     if not model_id:
       raise AppError(503, "BEDROCK_ANALYSIS_NOT_CONFIGURED", "A Bedrock Claude model ID or inference profile ID is required.")
 
-    content_type = self._infer_content_type(payload)
+    content_type = content_type or self._infer_content_type(payload)
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     started_at = time.monotonic()
     logger.info(
@@ -622,8 +628,29 @@ Request metadata:
 
   async def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
     image_bytes = await asyncio.to_thread(self._read_image_bytes, payload)
-    return await asyncio.to_thread(self._analyze_sync, payload, image_bytes)
 
+    try:
+      processed = await asyncio.to_thread(process_image_bytes, image_bytes)
+    except MediaPostprocessError as exc:
+      raise AppError(
+        400,
+        "FEEDBACK_SOURCE_IMAGE_INVALID",
+        "The feedback source image is invalid or unsupported.",
+      ) from exc
+
+    logger.info(
+      "[aura:feedback-bedrock] image-sanitize:success bytes=%s->%s contentType=%s exifRemoved=%s",
+      len(image_bytes),
+      len(processed.body),
+      processed.content_type,
+      processed.exif_removed,
+    )
+    return await asyncio.to_thread(
+      self._analyze_sync,
+      payload,
+      processed.body,
+      processed.content_type,
+    )
 
 async def build_makeup_feedback_result_for_request(
   payload: dict[str, Any],

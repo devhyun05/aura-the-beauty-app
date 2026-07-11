@@ -1,15 +1,15 @@
-import type {ImageSourcePropType} from 'react-native';
-
 import {appAssetSource, makeupFilterAssetSource} from '../../../shared/config/mediaAssets';
+import {
+  homeHeroAuradin,
+  homeHeroConsulting,
+  homeHeroFaceDiagnosis,
+  homeHeroMakeupExtraction,
+} from '../config/homeHeroAssets';
 import type {HomeData} from '../types';
 
 const lookOjiGirl = appAssetSource('images/looks/look-ojigirl.png');
 const lookMoriGirl = appAssetSource('images/looks/look-morigirl.png');
 const lookCleanSmoky = appAssetSource('images/looks/look-clean-smoky.png');
-const heroFaceDiagnosis = require('../../../assets/images/home-hero/hero-face-diagnosis.png') as ImageSourcePropType;
-const heroMakeupExtraction = require('../../../assets/images/home-hero/hero-makeup-extraction.png') as ImageSourcePropType;
-const heroConsulting = require('../../../assets/images/home-hero/hero-consulting.png') as ImageSourcePropType;
-const heroAuradin = require('../../../assets/images/home-hero/hero-auradin.png') as ImageSourcePropType;
 const filterJuiceCoral = makeupFilterAssetSource('filter-juice-coral.png');
 const filterGlassSkinNude = makeupFilterAssetSource('filter-glass-skin-nude.png');
 const filterMilkyStrawberryPink = makeupFilterAssetSource('filter-milky-strawberry-pink.png');
@@ -19,7 +19,7 @@ export const homeMock: HomeData = {
     eyebrow: 'AURA 기능 가이드',
     title: '내 얼굴에 맞는 뷰티 루틴',
     description: '진단부터 추출, 전문가 상담, 제품 추천까지 한 번에 이어져요.',
-    imageSource: heroFaceDiagnosis,
+    imageSource: homeHeroFaceDiagnosis,
     notices: [
       {
         id: 'notice-feature-hero',
@@ -35,7 +35,7 @@ export const homeMock: HomeData = {
         id: 'feature-face-diagnosis',
         title: '얼굴진단',
         tone: 'AI 얼굴 분석',
-        imageSource: heroFaceDiagnosis,
+        imageSource: homeHeroFaceDiagnosis,
       },
       {
         ctaLabel: '추출하기',
@@ -44,7 +44,7 @@ export const homeMock: HomeData = {
         id: 'feature-makeup-extraction',
         title: '메이크업 추출',
         tone: '레퍼런스 분석',
-        imageSource: heroMakeupExtraction,
+        imageSource: homeHeroMakeupExtraction,
       },
       {
         ctaLabel: '상담하기',
@@ -53,7 +53,7 @@ export const homeMock: HomeData = {
         id: 'feature-consulting',
         title: '전문가 컨설팅',
         tone: '메이크업 상담',
-        imageSource: heroConsulting,
+        imageSource: homeHeroConsulting,
       },
       {
         ctaLabel: '찾아보기',
@@ -62,7 +62,7 @@ export const homeMock: HomeData = {
         id: 'feature-auradin',
         title: '아우라딘',
         tone: '추천 제품',
-        imageSource: heroAuradin,
+        imageSource: homeHeroAuradin,
       },
     ],
   },

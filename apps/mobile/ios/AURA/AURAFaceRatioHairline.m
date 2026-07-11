@@ -303,7 +303,7 @@ static UIImage *AURAHairlineImageFromMatte(CVPixelBufferRef buffer) {
       8,
       width * 4,
       colorSpace,
-      kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+      (CGBitmapInfo)kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
   CGImageRef imageRef = context ? CGBitmapContextCreateImage(context) : nil;
   UIImage *image = imageRef ? [UIImage imageWithCGImage:imageRef] : nil;
 
@@ -344,7 +344,8 @@ static NSDictionary *AURAHairlineWriteDebugArtifacts(
     AURAHairlineCandidate *candidates,
     NSUInteger candidateCount,
     double hairlineX,
-    double hairlineY) {
+    double hairlineY,
+    BOOL includeDebugOverlay) {
   NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:
       [NSString stringWithFormat:@"aura-hairline-%@", NSUUID.UUID.UUIDString]];
   NSError *directoryError = nil;
@@ -365,6 +366,10 @@ static NSDictionary *AURAHairlineWriteDebugArtifacts(
   }
   if (skinUri) {
     artifacts[@"skinMatteUri"] = skinUri;
+  }
+
+  if (!includeDebugOverlay) {
+    return artifacts.count > 0 ? artifacts : nil;
   }
 
   CGSize size = CGSizeMake(
@@ -788,9 +793,11 @@ NSDictionary *AURAFaceRatioDetectHairline(NSURL *imageFileURL,
   CVPixelBufferUnlockBaseAddress(skinBuffer, kCVPixelBufferLock_ReadOnly);
   CVPixelBufferUnlockBaseAddress(hairBuffer, kCVPixelBufferLock_ReadOnly);
 
-  NSDictionary *debugArtifacts = nil;
-  if (AURAHairlineBoolOption(options, @"debugArtifacts")) {
-    debugArtifacts = AURAHairlineWriteDebugArtifacts(
+  NSDictionary *exportedArtifacts = nil;
+  BOOL requestsDebugArtifacts = AURAHairlineBoolOption(options, @"debugArtifacts");
+  BOOL requestsMatteArtifacts = AURAHairlineBoolOption(options, @"matteArtifacts");
+  if (requestsDebugArtifacts || requestsMatteArtifacts) {
+    exportedArtifacts = AURAHairlineWriteDebugArtifacts(
         hairBuffer,
         skinBuffer,
         roiX0,
@@ -800,7 +807,8 @@ NSDictionary *AURAFaceRatioDetectHairline(NSURL *imageFileURL,
         filteredCandidates,
         filteredCount,
         hairlineX,
-        hairlineY);
+        hairlineY,
+        requestsDebugArtifacts);
   }
 
   NSMutableDictionary *result = [@{
@@ -816,8 +824,20 @@ NSDictionary *AURAFaceRatioDetectHairline(NSURL *imageFileURL,
       @"y": @(hairlineY),
     },
   } mutableCopy];
-  if (debugArtifacts) {
-    result[@"debugArtifacts"] = debugArtifacts;
+  if (exportedArtifacts && requestsDebugArtifacts) {
+    result[@"debugArtifacts"] = exportedArtifacts;
+  }
+  if (exportedArtifacts && requestsMatteArtifacts) {
+    NSMutableDictionary *matteArtifacts = [NSMutableDictionary dictionary];
+    if (exportedArtifacts[@"hairMatteUri"]) {
+      matteArtifacts[@"hairMatteUri"] = exportedArtifacts[@"hairMatteUri"];
+    }
+    if (exportedArtifacts[@"skinMatteUri"]) {
+      matteArtifacts[@"skinMatteUri"] = exportedArtifacts[@"skinMatteUri"];
+    }
+    if (matteArtifacts.count > 0) {
+      result[@"matteArtifacts"] = matteArtifacts;
+    }
   }
 
   free(filteredCandidates);

@@ -301,6 +301,7 @@ def _advance(
 def create_session(
   *,
   prompt: str,
+  owner_subject: str,
   report_id: str | None = None,
   source: str | None = None,
   context: dict[str, Any] | None = None,
@@ -308,6 +309,9 @@ def create_session(
   settings: Settings | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
+  owner_subject = owner_subject.strip()
+  if not owner_subject:
+    raise ValueError("owner_subject is required")
   session_id = f"auradin-{uuid.uuid4().hex[:16]}"
   now = _now()
   intent = parse_intent(prompt, report_id=report_id, source=source, context=context)
@@ -322,6 +326,7 @@ def create_session(
       intent["softPreferences"] = [*intent.get("softPreferences", []), *report_prefs]
   state = {
     "sessionId": session_id,
+    "ownerSubject": owner_subject,
     "phase": "searching",
     "prompt": prompt,
     "context": {
@@ -346,9 +351,9 @@ def create_session(
   return state
 
 
-def get_session(session_id: str) -> dict[str, Any] | None:
+def get_session(session_id: str, *, owner_subject: str) -> dict[str, Any] | None:
   state = _SESSIONS.get(session_id)
-  if not state:
+  if not state or state.get("ownerSubject") != owner_subject:
     return None
   if _now() > float(state.get("expiresAt") or 0):
     state["phase"] = "expired"
@@ -363,12 +368,13 @@ def get_session(session_id: str) -> dict[str, Any] | None:
 def answer_session(
   session_id: str,
   *,
+  owner_subject: str,
   question_id: str,
   option_id: str,
   settings: Settings | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
-  state = get_session(session_id)
+  state = get_session(session_id, owner_subject=owner_subject)
   if not state or state.get("phase") in INACTIVE_PHASES:
     return state
 
@@ -455,6 +461,7 @@ def _refine_recovery(state: dict[str, Any], prompt: str) -> dict[str, Any]:
 def refine_session(
   session_id: str,
   *,
+  owner_subject: str,
   prompt: str | None = None,
   dial: str | None = None,
   settings: Settings | None = None,
@@ -465,7 +472,7 @@ def refine_session(
   후보 0이면 이전 결과를 유지하고 recoveryOptions를 싣는다 — 조용한 완화 금지.
   """
   settings = settings or get_settings()
-  state = get_session(session_id)
+  state = get_session(session_id, owner_subject=owner_subject)
   if not state or state.get("phase") in INACTIVE_PHASES:
     return state
 
@@ -591,7 +598,7 @@ def clear_sessions() -> None:
   _SESSIONS.clear()
 
 
-def cancel_session(session_id: str) -> dict[str, Any] | None:
+def cancel_session(session_id: str, *, owner_subject: str) -> dict[str, Any] | None:
   """§ 사용자가 검색 도중 이탈 → 세션을 종료 상태로 표시한다.
 
   enrich는 요청 내에서 await되므로 취소가 태스크를 죽이는 게 아니라, 세션을 'cancelled'로
@@ -599,7 +606,7 @@ def cancel_session(session_id: str) -> dict[str, Any] | None:
   돌려준다. expired와 같은 lazy-mark 패턴 — 행은 TTL로 정리된다.
   """
   state = _SESSIONS.get(session_id)
-  if not state:
+  if not state or state.get("ownerSubject") != owner_subject:
     return None
   if state.get("phase") not in INACTIVE_PHASES:
     state["phase"] = "cancelled"
@@ -630,7 +637,7 @@ def _postgres_enabled(settings: Settings, db: Database | None) -> bool:
   return bool(settings.auradin_session_store == "postgres" and db and db.is_connected)
 
 
-async def _ensure_postgres_table(db: Database) -> None:
+async def ensure_postgres_session_table(db: Database) -> None:
   global _POSTGRES_TABLE_READY
   if _POSTGRES_TABLE_READY:
     return
@@ -645,11 +652,17 @@ async def _ensure_postgres_table(db: Database) -> None:
     )
     """,
   )
+  await db.execute(
+    """
+    create index if not exists idx_auradin_search_sessions_expires_at
+      on auradin_search_sessions (expires_at)
+    """,
+  )
   _POSTGRES_TABLE_READY = True
 
 
 async def _save_postgres_session(db: Database, state: dict[str, Any]) -> None:
-  await _ensure_postgres_table(db)
+  await ensure_postgres_session_table(db)
   await db.execute(
     """
     insert into auradin_search_sessions (session_id, state, expires_at, updated_at)
@@ -667,7 +680,7 @@ async def _save_postgres_session(db: Database, state: dict[str, Any]) -> None:
 
 
 async def _load_postgres_session(db: Database, session_id: str) -> dict[str, Any] | None:
-  await _ensure_postgres_table(db)
+  await ensure_postgres_session_table(db)
   row = await db.fetchrow(
     """
     select state
@@ -692,6 +705,7 @@ async def _load_postgres_session(db: Database, session_id: str) -> dict[str, Any
 async def create_session_persisted(
   *,
   prompt: str,
+  owner_subject: str,
   report_id: str | None = None,
   source: str | None = None,
   context: dict[str, Any] | None = None,
@@ -702,6 +716,7 @@ async def create_session_persisted(
   settings = settings or get_settings()
   state = create_session(
     prompt=prompt,
+    owner_subject=owner_subject,
     report_id=report_id,
     source=source,
     context=context,
@@ -719,18 +734,25 @@ async def create_session_persisted(
 async def get_session_persisted(
   session_id: str,
   *,
+  owner_subject: str,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
-  state = get_session(session_id)
-  if not state and _postgres_enabled(settings, db):
-    state = await _load_postgres_session(db, session_id)
-    if state:
-      _SESSIONS[session_id] = state
-      state = get_session(session_id)
+  if not _postgres_enabled(settings, db):
+    return get_session(session_id, owner_subject=owner_subject)
 
-  if state and _postgres_enabled(settings, db):
+  state = await _load_postgres_session(db, session_id)
+  if not state:
+    _SESSIONS.pop(session_id, None)
+    return None
+  if state.get("ownerSubject") != owner_subject:
+    return None
+
+  previous_phase = state.get("phase")
+  _SESSIONS[session_id] = state
+  state = get_session(session_id, owner_subject=owner_subject)
+  if state and state.get("phase") != previous_phase:
     await _save_postgres_session(db, state)
 
   return state
@@ -739,17 +761,29 @@ async def get_session_persisted(
 async def answer_session_persisted(
   session_id: str,
   *,
+  owner_subject: str,
   question_id: str,
   option_id: str,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
-  state = await get_session_persisted(session_id, settings=settings, db=db)
+  state = await get_session_persisted(
+    session_id,
+    owner_subject=owner_subject,
+    settings=settings,
+    db=db,
+  )
   if not state:
     return None
 
-  state = answer_session(session_id, question_id=question_id, option_id=option_id, settings=settings)
+  state = answer_session(
+    session_id,
+    owner_subject=owner_subject,
+    question_id=question_id,
+    option_id=option_id,
+    settings=settings,
+  )
   await _enrich_if_results(state, settings)
   await _enrich_if_question(state, settings)
   if state and _postgres_enabled(settings, db):
@@ -761,17 +795,29 @@ async def answer_session_persisted(
 async def refine_session_persisted(
   session_id: str,
   *,
+  owner_subject: str,
   prompt: str | None = None,
   dial: str | None = None,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
-  state = await get_session_persisted(session_id, settings=settings, db=db)
+  state = await get_session_persisted(
+    session_id,
+    owner_subject=owner_subject,
+    settings=settings,
+    db=db,
+  )
   if not state:
     return None
 
-  state = refine_session(session_id, prompt=prompt, dial=dial, settings=settings)
+  state = refine_session(
+    session_id,
+    owner_subject=owner_subject,
+    prompt=prompt,
+    dial=dial,
+    settings=settings,
+  )
   await _enrich_if_results(state, settings)
   await _enrich_if_question(state, settings)
   if state and _postgres_enabled(settings, db):
@@ -783,16 +829,22 @@ async def refine_session_persisted(
 async def cancel_session_persisted(
   session_id: str,
   *,
+  owner_subject: str,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> dict[str, Any] | None:
   settings = settings or get_settings()
   # postgres 백엔드면 먼저 rehydrate — 다른 워커가 만든 세션도 취소 가능하게.
-  state = await get_session_persisted(session_id, settings=settings, db=db)
+  state = await get_session_persisted(
+    session_id,
+    owner_subject=owner_subject,
+    settings=settings,
+    db=db,
+  )
   if not state:
     return None
 
-  state = cancel_session(session_id)
+  state = cancel_session(session_id, owner_subject=owner_subject)
   if state and _postgres_enabled(settings, db):
     await _save_postgres_session(db, state)
 

@@ -35,10 +35,12 @@ class FakeDb:
 
   def __init__(self) -> None:
     self.rows: dict[str, dict] = {}
+    self.state_write_count = 0
 
   async def execute(self, _query: str, *args):
     if args:
       self.rows[str(args[0])] = json.loads(args[1])
+      self.state_write_count += 1
     return "OK"
 
   async def fetchrow(self, _query: str, *args):
@@ -127,14 +129,88 @@ async def test_postgres_session_store_can_restore_search_state() -> None:
 
   created = await create_session_persisted(
     prompt="데일리로 쓸 만한 제품 추천해줘",
+    owner_subject="infra-test-user",
     settings=settings,
     db=db,
   )
   session_id = created["sessionId"]
 
   clear_sessions()
-  restored = await get_session_persisted(session_id, settings=settings, db=db)
+  denied = await get_session_persisted(
+    session_id,
+    owner_subject="other-user",
+    settings=settings,
+    db=db,
+  )
+  assert denied is None
+
+  restored = await get_session_persisted(
+    session_id,
+    owner_subject="infra-test-user",
+    settings=settings,
+    db=db,
+  )
 
   assert restored is not None
   assert restored["sessionId"] == session_id
   assert restored["phase"] == "question"
+
+
+@pytest.mark.asyncio
+async def test_postgres_session_store_prefers_database_state_and_get_is_read_only() -> None:
+  clear_sessions()
+  db = FakeDb()
+  settings = Settings(
+    auradin_session_store="postgres",
+    database_url="postgres://example",
+  )
+
+  created = await create_session_persisted(
+    prompt="데일리 립 추천해줘",
+    owner_subject="infra-test-user",
+    settings=settings,
+    db=db,
+  )
+  session_id = created["sessionId"]
+  writes_after_create = db.state_write_count
+  db.rows[session_id]["phase"] = "results"
+
+  restored = await get_session_persisted(
+    session_id,
+    owner_subject="infra-test-user",
+    settings=settings,
+    db=db,
+  )
+
+  assert restored is not None
+  assert restored["phase"] == "results"
+  assert db.state_write_count == writes_after_create
+
+
+@pytest.mark.asyncio
+async def test_postgres_session_store_does_not_fall_back_to_stale_memory() -> None:
+  clear_sessions()
+  db = FakeDb()
+  settings = Settings(
+    auradin_session_store="postgres",
+    database_url="postgres://example",
+  )
+
+  created = await create_session_persisted(
+    prompt="데일리 립 추천해줘",
+    owner_subject="infra-test-user",
+    settings=settings,
+    db=db,
+  )
+  session_id = created["sessionId"]
+  db.rows.pop(session_id)
+
+  assert (
+    await get_session_persisted(
+      session_id,
+      owner_subject="infra-test-user",
+      settings=settings,
+      db=db,
+    )
+    is None
+  )

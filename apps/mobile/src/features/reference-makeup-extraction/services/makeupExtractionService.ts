@@ -1,7 +1,7 @@
 import {Image} from 'react-native';
 
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
-import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import {referenceMakeupExtractionMock} from '../mocks/referenceMakeupExtraction.mock';
 import type {
   MakeupExtractionProgressUpdate,
@@ -22,6 +22,37 @@ type BackendReferenceMakeupExtractionResponse = {
   loadingSteps?: MakeupExtractionStep[];
   productSource?: string;
 };
+
+const REFERENCE_EXTRACTION_TIMEOUT_MS = 180000;
+const REFERENCE_EXTRACTION_POLL_INTERVAL_MS = 2000;
+
+type BackendFilterExtractionResultPayload = {
+  aiError?: unknown;
+  aiStatus?: string;
+  error?: {message?: string | null} | null;
+  productSource?: string;
+  result?: BackendReferenceMakeupExtractionResponse | null;
+};
+
+type BackendFilterExtractionJob = {
+  id?: string | null;
+  resultPayload?: BackendFilterExtractionResultPayload | null;
+  status?: 'cancelled' | 'completed' | 'failed' | 'pending' | 'processing' | null;
+};
+
+type CreateFilterExtractionJobResponse = {
+  job: BackendFilterExtractionJob;
+};
+
+type GetFilterExtractionReportResponse = {
+  report: BackendFilterExtractionJob;
+};
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
 
 let latestReferenceMakeupExtractionData: ReferenceMakeupExtractionData = referenceMakeupExtractionMock;
 
@@ -48,10 +79,99 @@ function camelizeBackendValue(value: unknown): unknown {
   }, {});
 }
 
-function normalizeBackendExtractionResponse(
-  response: unknown,
-): BackendReferenceMakeupExtractionResponse {
-  return camelizeBackendValue(response) as BackendReferenceMakeupExtractionResponse;
+function extractionResponseFromJob(
+  job: BackendFilterExtractionJob,
+): BackendReferenceMakeupExtractionResponse | null {
+  const payload = job.resultPayload;
+
+  if (!payload?.result) {
+    return null;
+  }
+
+  return {
+    ...payload.result,
+    aiStatus: payload.aiStatus,
+    productSource: payload.productSource,
+  };
+}
+
+async function waitForCompleteFilterExtractionJob(
+  initialJob: BackendFilterExtractionJob,
+  onProgress: ((update: MakeupExtractionProgressUpdate) => void) | undefined,
+  startedAt: number,
+): Promise<BackendReferenceMakeupExtractionResponse> {
+  let currentJob = initialJob;
+
+  while (true) {
+    const completedResponse = extractionResponseFromJob(currentJob);
+
+    if (completedResponse?.extractedMakeupLook) {
+      console.info('[aura:reference-extraction] report:ready', {
+        durationMs: Date.now() - startedAt,
+        jobId: currentJob.id ?? null,
+        status: currentJob.status ?? null,
+      });
+      return completedResponse;
+    }
+
+    if (currentJob.status === 'failed') {
+      throw new BackendApiError(
+        currentJob.resultPayload?.error?.message ?? '레퍼런스 메이크업 추출 작업이 실패했어요.',
+        502,
+        'FILTER_EXTRACTION_JOB_FAILED',
+        {jobId: currentJob.id ?? null},
+      );
+    }
+
+    if (currentJob.status === 'completed') {
+      throw new BackendApiError(
+        '레퍼런스 메이크업 추출 결과를 불러오지 못했어요.',
+        502,
+        'FILTER_EXTRACTION_RESULT_REQUIRED',
+        {jobId: currentJob.id ?? null},
+      );
+    }
+
+    if (!currentJob.id) {
+      throw new Error('Filter extraction job did not return a report id.');
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+
+    if (elapsedMs >= REFERENCE_EXTRACTION_TIMEOUT_MS) {
+      throw new BackendApiError(
+        '레퍼런스 분석이 아직 완료되지 않았어요. 잠시 후 다시 시도해 주세요.',
+        504,
+        'FILTER_EXTRACTION_REPORT_TIMEOUT',
+        {jobId: currentJob.id, status: currentJob.status ?? null},
+      );
+    }
+
+    const progress = Math.min(0.82, 0.46 + (elapsedMs / REFERENCE_EXTRACTION_TIMEOUT_MS) * 0.36);
+    onProgress?.({activeStepId: 'area-guides', phase: 'analyzing', progress});
+
+    console.info('[aura:reference-extraction] report:poll', {
+      elapsedMs,
+      jobId: currentJob.id,
+      nextPollMs: REFERENCE_EXTRACTION_POLL_INTERVAL_MS,
+      status: currentJob.status ?? null,
+    });
+
+    await delay(
+      Math.min(
+        REFERENCE_EXTRACTION_POLL_INTERVAL_MS,
+        REFERENCE_EXTRACTION_TIMEOUT_MS - elapsedMs,
+      ),
+    );
+
+    const response = await requestBackendJson<unknown>(
+      '/filter-extractions/' + currentJob.id,
+    );
+    const normalizedResponse = camelizeBackendValue(
+      response,
+    ) as GetFilterExtractionReportResponse;
+    currentJob = normalizedResponse.report;
+  }
 }
 
 function buildFallbackDataForPhoto(photo?: ReferenceMakeupPhoto | null): ReferenceMakeupExtractionData {
@@ -235,6 +355,8 @@ export async function runReferenceMakeupExtraction(
     onProgress?.({activeStepId: 'core-points', phase: 'uploaded', progress: 0.24});
     onProgress?.({activeStepId: 'area-guides', phase: 'analyzing', progress: 0.46});
 
+    const startedAt = Date.now();
+
     const response = await requestBackendJson<unknown>(
       '/filter-extractions/analyze',
       {
@@ -246,24 +368,24 @@ export async function runReferenceMakeupExtraction(
           subtitle: null,
           title: photo.title,
           requestPayload: {
-            bucket: upload.bucket,
-            cdnUrl: upload.cdnUrl ?? null,
-            contentType: upload.contentType ?? 'image/jpeg',
-            imageUrl: upload.cdnUrl ?? null,
-            objectKey: upload.objectKey,
             referenceImageId: photo.id,
             referenceSource: photo.referenceSource,
             referenceTitle: photo.title,
-            sourceUri: photoUri,
             task: 'reference_makeup_extraction_report_v1',
           },
         },
         method: 'POST',
-        timeoutMs: 120000,
+        timeoutMs: 30000,
       },
     );
-
-    const normalizedResponse = normalizeBackendExtractionResponse(response);
+    const createResponse = camelizeBackendValue(
+      response,
+    ) as CreateFilterExtractionJobResponse;
+    const normalizedResponse = await waitForCompleteFilterExtractionJob(
+      createResponse.job,
+      onProgress,
+      startedAt,
+    );
 
     onProgress?.({activeStepId: 'product-criteria', phase: 'products', progress: 0.86});
 

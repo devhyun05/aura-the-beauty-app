@@ -1,10 +1,12 @@
 # AWS Deployment Checklist
 
-This checklist is for wiring the FastAPI backend into the project architecture:
+This checklist is for wiring the FastAPI backend into the project architecture.
+For the async AI worker deployment order, use `docs/backend/ASYNC_AI_WORKER_DEPLOYMENT_RUNBOOK.md`.
 For the current implementation summary, see `docs/backend/BACKEND_STATUS.md`.
 
 ```text
-Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> RDS/S3/OpenAI API
+Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> SQS -> ECS Worker -> RDS/S3/OpenAI/Bedrock
+S3 ObjectCreated -> Media Postprocess Lambda
 ```
 
 CloudFront must not contain API business logic. Business logic belongs in
@@ -22,6 +24,17 @@ AWS_REGION=ap-northeast-2
 AWS_USE_IAM_ROLE=true
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+
+# Bootstrap with inline until SQS and the worker service are live.
+AI_JOB_EXECUTION_MODE=inline
+SQS_AI_JOB_QUEUE_URL=
+```
+
+After the SQS queue and worker service are deployed, switch the API and worker services to:
+
+```env
+AI_JOB_EXECUTION_MODE=sqs
+SQS_AI_JOB_QUEUE_URL=https://sqs.ap-northeast-2.amazonaws.com/<account-id>/<queue-name>
 ```
 
 Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3. Secrets such as `DATABASE_URL` and `OPENAI_API_KEY` belong in Secrets Manager and are injected into the task definition.
@@ -76,6 +89,21 @@ Authorization: Bearer <Cognito JWT>
 - Kakao/Naver are later provider extensions. Do not block them in DB/provider
   structure, but do not deploy them as required auth paths yet.
 
+### Partner credential rotation
+
+Partner credentials are not issued through an HTTP API. Before deploying this
+change, rotate existing partner credentials from a trusted operator terminal:
+
+```bash
+cd services/backend
+.venv/bin/python scripts/rotate_partner_credentials.py --confirm rotate-partner-credentials --output ./partner-credentials.json
+```
+
+- The output file is created with owner-only permissions and must not already exist.
+- Deliver each credential through an approved secret-sharing channel, then securely remove the file.
+- Rotation replaces legacy password hashes and revokes every existing partner session.
+- Confirm `POST /api/consulting/partner/dev/issue-accounts` returns `404` after deployment.
+
 ## 3. S3 Media Bucket
 
 - Create the media bucket.
@@ -91,10 +119,51 @@ CLOUDFRONT_DOMAIN=
 - Upload flow:
 
 ```text
-POST /api/media/presigned-upload
+POST /api/media/presigned-upload -> uploadId + server-issued target
 mobile PUT to S3
-POST /api/media/complete-upload
+POST /api/media/complete-upload { uploadId }
 ```
+
+- Restrict the ECS task role to the configured media bucket and the
+  `uploads/*` object prefix. Do not grant object access to `arn:aws:s3:::*`.
+  Replace `<media-bucket>` before applying this example:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectTagging"],
+      "Resource": "arn:aws:s3:::<media-bucket>/uploads/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": "arn:aws:s3:::<media-bucket>",
+      "Condition": {"StringLike": {"s3:prefix": ["uploads/*"]}}
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetBucketVersioning",
+      "Resource": "arn:aws:s3:::<media-bucket>"
+    }
+  ]
+}
+```
+
+- S3 ObjectCreated post-processing Lambda:
+
+```text
+handler: app.lambdas.media_postprocess.lambda_handler
+event: separate s3:ObjectCreated:* notifications for uploads/capture/, uploads/makeup_feedback/, and uploads/filter-extraction/
+excluded: uploads/makeup-filters/ and every other app-managed static prefix
+permissions: s3:GetObject, s3:PutObject on the media bucket
+```
+
+- The Lambda rewrites the original object without EXIF and creates a thumbnail under `<original-dir>/thumbnails/`.
+- The handler skips `/thumbnails/` keys and objects with `aura-postprocessed=true` metadata to avoid recursive processing.
+- `media_assets.thumbnail_*` is filled by `POST /api/media/complete-upload` with a short best-effort S3 lookup for the expected thumbnail. Lambda does not connect directly to the database.
 
 ## 4. OpenAI API
 
@@ -111,8 +180,11 @@ OPENAI_IMAGE_SIZE=1024x1024
 ```
 
 - Development path can use `runImmediately=true` on `POST /api/analysis/jobs`.
-- Production can later move execution to SQS/ECS worker without changing the
+- Production can run execution through SQS/ECS worker without changing the
   mobile job status contract.
+- Keep `AI_JOB_EXECUTION_MODE=inline` until the SQS queue and ECS worker service
+  are deployed. After that, set `AI_JOB_EXECUTION_MODE=sqs` and provide
+  `SQS_AI_JOB_QUEUE_URL`.
 
 ## 5. Container Image
 
@@ -122,6 +194,13 @@ Build from repository root:
 docker build -f services/backend/Dockerfile -t aura-backend-api .
 ```
 
+The API service uses the image default command. The AI worker service reuses the same image but overrides the command:
+
+```text
+python -m app.workers.ai_job_worker
+```
+
+Do not reuse the API container `/health` check for the worker service. The worker is not an HTTP server; configure a worker-specific ECS health check or omit the API health check on that service.
 
 ECR push example:
 
@@ -167,22 +246,32 @@ ECS task requirements:
 - ECS should set `AWS_USE_IAM_ROLE=true`; local development can use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 - Logs: send stdout/stderr to CloudWatch
 
-## 6. ECS Service
+## 6. ECS Services And SQS
 
 - Create or confirm ECS cluster.
 - Create task definition for the backend image.
-- Attach task role with S3 permissions.
+- Create the FastAPI API ECS service with the default image command.
+- Create the AI Worker ECS service with command `python -m app.workers.ai_job_worker`.
+- Create an SQS AI job queue and DLQ.
+- Attach API task role permission for `sqs:SendMessage` on the AI job queue.
+- Attach worker task role permissions for `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility`, and `sqs:GetQueueAttributes`.
+- Attach shared S3/RDS/Secrets/Bedrock/OpenAI-related configuration to both API and worker services.
 - Attach execution role for pulling image and writing logs.
-- Configure service desired count.
-- Put ECS behind ALB or API Gateway integration.
+- Configure API service desired count separately from worker desired count.
+- Put only the FastAPI API service behind ALB or API Gateway integration. The worker has no public route.
 
 Record:
 
 ```text
 ECS_CLUSTER_NAME=
-ECS_SERVICE_NAME=
-ECS_TASK_DEFINITION=
-CLOUDWATCH_LOG_GROUP_NAME=
+ECS_API_SERVICE_NAME=
+ECS_WORKER_SERVICE_NAME=
+ECS_API_TASK_DEFINITION=
+ECS_WORKER_TASK_DEFINITION=
+SQS_AI_JOB_QUEUE_URL=
+SQS_AI_JOB_DLQ_URL=
+CLOUDWATCH_API_LOG_GROUP_NAME=
+CLOUDWATCH_WORKER_LOG_GROUP_NAME=
 SECRETS_MANAGER_SECRET_NAME=
 ```
 
@@ -287,6 +376,17 @@ Then test with auth:
 GET /api/users/me
 POST /api/media/presigned-upload
 POST /api/analysis/jobs
+GET /api/analysis/jobs/{jobId}
+```
+
+Async worker checks:
+
+```text
+FastAPI logs include job:queued
+Worker logs include analysis:received
+SQS visible message count returns to 0 after processing
+DLQ remains empty for a successful smoke test
+analysis job reaches completed or failed terminal status
 ```
 
 ## 14. Mobile API Switch
@@ -305,3 +405,15 @@ Only switch one mock service at a time:
 4. analysis jobs and reports
 5. products/likes/styles
 6. feedback/filter/AR flows
+
+## 15. Hair Analysis Worker
+
+헤어 분석·합성은 API ECS 서비스와 별도 SQS worker가 필요하다. 다음 항목을 함께 배포한다.
+
+- `infra/hair-simulation.yaml`: SQS/DLQ, ECS worker, 1~10 autoscaling, 15분 정리 작업
+- API ECS 환경 변수 `HAIR_JOBS_QUEUE_URL`
+- 스타일 레퍼런스 12종 및 승인된 `manifest.json`
+- `scripts/aws/configure-hair-api-routes.sh`
+- `scripts/aws/configure-hair-s3-lifecycle.sh`
+
+private subnet worker가 OpenAI에 접속하려면 NAT egress가 필요하다. 상세 순서와 데이터 보관 정책은 `docs/backend/HAIR_ANALYSIS_SIMULATION.md`를 따른다.

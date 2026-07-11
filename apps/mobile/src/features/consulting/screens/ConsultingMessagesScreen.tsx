@@ -61,6 +61,8 @@ export function ConsultingMessagesScreen({
     new Set(),
   );
   const incomingCallBookingIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const activeRecordsRef = useRef<readonly ConsultingRecord[]>([]);
+  const onPressIncomingCallRef = useRef(onPressIncomingCall);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,6 +105,18 @@ export function ConsultingMessagesScreen({
     () => records.filter(record => isConsultingMessageStatus(record.status)),
     [records],
   );
+  const activeRecordsKey = useMemo(
+    () => activeRecords.map(record => `${record.id}:${record.status}`).join(','),
+    [activeRecords],
+  );
+
+  useEffect(() => {
+    activeRecordsRef.current = activeRecords;
+  }, [activeRecords]);
+
+  useEffect(() => {
+    onPressIncomingCallRef.current = onPressIncomingCall;
+  }, [onPressIncomingCall]);
 
   useEffect(() => {
     if (!authToken) {
@@ -111,7 +125,7 @@ export function ConsultingMessagesScreen({
 
     let isMounted = true;
     void Promise.all(
-      activeRecords.map(async record => ({
+      activeRecordsRef.current.map(async record => ({
         record,
         state: await getConsultingCallState(record.id),
       })),
@@ -129,11 +143,11 @@ export function ConsultingMessagesScreen({
       ]);
       Alert.alert('화상 상담 전화가 왔어요', '전문가가 화상 상담을 시작했습니다.', [
         {text: '나중에'},
-        {text: '입장하기', onPress: () => onPressIncomingCall(incoming.record)},
+        {text: '입장하기', onPress: () => onPressIncomingCallRef.current(incoming.record)},
       ]);
     });
 
-    const sockets: ConsultingConversationSocketClient[] = activeRecords.map(
+    const sockets: ConsultingConversationSocketClient[] = activeRecordsRef.current.map(
       record =>
         connectConsultingConversationSocket({
           authToken,
@@ -162,7 +176,7 @@ export function ConsultingMessagesScreen({
                 {text: '나중에'},
                 {
                   text: '입장하기',
-                  onPress: () => onPressIncomingCall(record),
+                  onPress: () => onPressIncomingCallRef.current(record),
                 },
               ]);
             }
@@ -180,7 +194,7 @@ export function ConsultingMessagesScreen({
       isMounted = false;
       sockets.forEach(socket => socket.close());
     };
-  }, [activeRecords, authToken, onPressIncomingCall]);
+  }, [activeRecordsKey, authToken]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>

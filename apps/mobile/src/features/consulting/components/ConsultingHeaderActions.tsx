@@ -52,7 +52,7 @@ export function ConsultingHeaderActions({
       };
 
       refreshUnreadState();
-      const refreshTimer = setInterval(refreshUnreadState, 5000);
+      const refreshTimer = setInterval(refreshUnreadState, 30000);
 
       return () => {
         isMounted = false;

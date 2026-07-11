@@ -1,15 +1,12 @@
 from typing import Any
 
+from app.core.errors import AppError
 from app.core.security import AuthContext
 from app.db.session import Database
+from app.services.account_identity import hash_auth_subject, normalize_auth_provider
 
 
-SUPPORTED_PROVIDERS = {"google", "kakao", "naver", "apple"}
 PROFILE_PLACEHOLDER_VALUES = {"Local Dev", "dev@example.com"}
-
-
-def normalize_provider(provider: str) -> str:
-  return provider if provider in SUPPORTED_PROVIDERS else "google"
 
 
 def default_nickname(auth: AuthContext) -> str:
@@ -51,41 +48,22 @@ def _with_profile_completion(user: Any) -> dict[str, Any] | None:
 
 
 async def ensure_user(db: Database, auth: AuthContext) -> dict[str, Any]:
-  provider = normalize_provider(auth.provider)
+  provider = normalize_auth_provider(auth.provider)
   row = await db.fetchrow(
     """
-    select *
-    from users
-    where auth_provider = $1
-      and oauth_sub = $2
-      and deleted_at is null
-    limit 1
-    """,
-    provider,
-    auth.subject,
-  )
-
-  if row:
-    updated_user = await db.fetchrow(
-      """
-      update users
-      set email = coalesce($2, email),
-          name = coalesce($3, name),
-          nickname = coalesce(nullif(nickname, ''), $4)
-      where id = $1
-      returning *
-      """,
-      row["id"],
-      auth.email,
-      auth.name,
-      default_nickname(auth),
-    )
-    return _with_profile_completion(updated_user or row) or {}
-
-  created_user = await db.fetchrow(
-    """
     insert into users (auth_provider, oauth_sub, email, name, nickname)
-    values ($1, $2, $3, $4, $5)
+    select $1, $2, $3, $4, $5
+    where not exists (
+      select 1
+      from account_deletion_tombstones
+      where subject_hash = $6
+    )
+    on conflict (auth_provider, oauth_sub)
+      where oauth_sub is not null and deleted_at is null
+    do update set
+      email = coalesce(excluded.email, users.email),
+      name = coalesce(excluded.name, users.name),
+      nickname = coalesce(nullif(users.nickname, ''), excluded.nickname)
     returning *
     """,
     provider,
@@ -93,5 +71,12 @@ async def ensure_user(db: Database, auth: AuthContext) -> dict[str, Any]:
     auth.email,
     auth.name,
     default_nickname(auth),
+    hash_auth_subject(provider, auth.subject),
   )
-  return _with_profile_completion(created_user) or {}
+  if row is None:
+    raise AppError(
+      403,
+      "ACCOUNT_DELETED",
+      "This account has been deleted.",
+  )
+  return _with_profile_completion(row) or {}

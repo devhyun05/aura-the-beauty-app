@@ -23,6 +23,7 @@ def test_presigned_upload_returns_s3_not_configured_without_bucket() -> None:
     json={
       "mediaKind": "capture",
       "contentType": "image/jpeg",
+      "byteSize": 1024,
       "source": "camera",
       "originalFilename": "capture.jpg",
     },

@@ -98,13 +98,13 @@ const expectedHomeServiceShortcutLabels: readonly [
   '필터 스토어',
   '추천 제품',
   '컨설팅',
-  '커뮤니티',
+  '헤어 분석',
 ] = HOME_SERVICE_SHORTCUT_LABELS;
 const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
   '얼굴 분석,메이크업 필터,메이크업 추출,메이크업 피드백';
 const expectedHomeServiceShortcutSecondRowLabels =
-  '필터 스토어,추천 제품,컨설팅,커뮤니티';
+  '필터 스토어,추천 제품,컨설팅,헤어 분석';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
@@ -152,8 +152,8 @@ expectEqual(
 expectEqual(heroCtaLabel, expectedHeroCtaLabel, 'hero CTA label');
 expectEqual(
   HOME_HERO_AUTOSCROLL_INTERVAL_MS,
-  2500,
-  'home hero banner auto-scrolls every 2.5 seconds',
+  4000,
+  'home hero banner auto-scrolls every 4 seconds',
 );
 expectEqual(
   recommendedFilterSectionTitle,
@@ -425,10 +425,10 @@ expectEqual(
 
 let selectedHomeServiceShortcut:
   | 'arFilter'
-  | 'community'
   | 'consulting'
   | 'diagnosis'
   | 'filterStore'
+  | 'hairAnalysis'
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'recommendation'
@@ -462,19 +462,23 @@ arFilterPressHandler();
 
 expectEqual(selectedHomeServiceShortcut, 'arFilter', 'makeup filter service shortcut target');
 
-const communityPressHandler = getHomeServiceShortcutPressHandler('community', {
-  onPressCommunity: () => {
-    selectedHomeServiceShortcut = 'community';
+const hairAnalysisPressHandler = getHomeServiceShortcutPressHandler('hairAnalysis', {
+  onPressHairAnalysis: () => {
+    selectedHomeServiceShortcut = 'hairAnalysis';
   },
 });
 
-if (!communityPressHandler) {
-  throw new Error('community service shortcut should have a press handler');
+if (!hairAnalysisPressHandler) {
+  throw new Error('hair analysis shortcut should have a press handler');
 }
 
-communityPressHandler();
+hairAnalysisPressHandler();
 
-expectEqual(selectedHomeServiceShortcut, 'community', 'community service shortcut target');
+expectEqual(
+  selectedHomeServiceShortcut,
+  'hairAnalysis',
+  'hair analysis shortcut target',
+);
 
 const makeupExtractionPressHandler = getHomeServiceShortcutPressHandler('makeupExtraction', {
   onPressMakeupExtraction: () => {

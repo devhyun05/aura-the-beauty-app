@@ -105,12 +105,15 @@ class ConsultingRealtimeManager:
     async with self._lock:
       connections = list(self._rooms.get(booking_id, set()))
 
-    failed_connections: list[RealtimeConnection] = []
-    for connection in connections:
+    async def safe_send(connection: RealtimeConnection) -> RealtimeConnection | None:
       try:
         await self.send(connection, payload)
+        return None
       except Exception:
-        failed_connections.append(connection)
+        return connection
+
+    results = await asyncio.gather(*(safe_send(connection) for connection in connections))
+    failed_connections = [connection for connection in results if connection is not None]
 
     if failed_connections:
       await self._remove_connections(failed_connections)

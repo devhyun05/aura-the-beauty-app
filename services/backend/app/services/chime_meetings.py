@@ -15,8 +15,13 @@ from app.core.settings import Settings
 class ChimeMeetingsService:
   def __init__(self, settings: Settings) -> None:
     self.settings = settings
+    self._chime_client_cached = None
+    self._translate_client_cached = None
 
   def _client(self):
+    if self._chime_client_cached is not None:
+      return self._chime_client_cached
+
     region = self.settings.effective_chime_region
     client_kwargs = {
       "config": Config(retries={"max_attempts": 3, "mode": "standard"}),
@@ -25,7 +30,8 @@ class ChimeMeetingsService:
     }
 
     if self.settings.aws_profile_name:
-      return boto3.Session(profile_name=self.settings.aws_profile_name).client("chime-sdk-meetings", **client_kwargs)
+      self._chime_client_cached = boto3.Session(profile_name=self.settings.aws_profile_name).client("chime-sdk-meetings", **client_kwargs)
+      return self._chime_client_cached
 
     if (
       self.settings.aws_access_key_id
@@ -39,13 +45,18 @@ class ChimeMeetingsService:
         },
       )
 
-    return boto3.client("chime-sdk-meetings", **client_kwargs)
+    self._chime_client_cached = boto3.client("chime-sdk-meetings", **client_kwargs)
+    return self._chime_client_cached
 
   def _translate_client(self):
+    if self._translate_client_cached is not None:
+      return self._translate_client_cached
+
     client_kwargs = {"region_name": self.settings.effective_chime_region}
 
     if self.settings.aws_profile_name:
-      return boto3.Session(profile_name=self.settings.aws_profile_name).client("translate", **client_kwargs)
+      self._translate_client_cached = boto3.Session(profile_name=self.settings.aws_profile_name).client("translate", **client_kwargs)
+      return self._translate_client_cached
 
     if (
       self.settings.aws_access_key_id
@@ -59,7 +70,8 @@ class ChimeMeetingsService:
         },
       )
 
-    return boto3.client("translate", **client_kwargs)
+    self._translate_client_cached = boto3.client("translate", **client_kwargs)
+    return self._translate_client_cached
 
   async def _call_aws(self, operation, *args, error_code: str, error_message: str, **kwargs):
     try:

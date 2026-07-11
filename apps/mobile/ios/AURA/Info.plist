@@ -46,7 +46,7 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>AURA 얼굴 촬영과 AR 메이크업 기능을 위해 카메라 접근 권한이 필요합니다.</string>
+	<string>AURA 얼굴 촬영, AR 메이크업, 퍼스널 컬러(피부·헤어·입술 색) 분석 기능을 위해 카메라 접근 권한이 필요합니다. 퍼스널 컬러 분석은 기기 내에서만 처리됩니다.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
 	<key>NSLocalNetworkUsageDescription</key>
@@ -57,6 +57,8 @@
 	<string>AURA 화상 상담에서 음성을 전달하기 위해 마이크 접근 권한이 필요합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AURA 사진 업로드와 분석 기능을 위해 사진 보관함 접근 권한이 필요합니다.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>AURA 추천 메이크업 이미지를 사진 앱에 저장하기 위해 권한이 필요합니다.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

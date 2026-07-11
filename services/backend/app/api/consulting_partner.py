@@ -6,8 +6,10 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.media import CompleteUploadRequest, PresignedUploadRequest
 from app.schemas.consulting_partner import (
+  PartnerApplicationCreate,
   PartnerBookingStatusUpdate,
   PartnerLoginRequest,
+  PartnerPasswordChangeRequest,
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
@@ -17,7 +19,12 @@ from app.schemas.consulting_call import (
   ConsultingCaptionTranslateRequest,
   ConsultingTranscriptionStartRequest,
 )
-from app.services.s3 import S3Service
+from app.services.media_uploads import (
+  bind_legacy_thumbnail_session,
+  complete_upload_session,
+  issue_upload_session,
+  resolve_legacy_upload_session_id,
+)
 from app.services import consulting_call, consulting_partner
 from app.services.consulting_realtime import consulting_realtime_manager
 from app.services.consulting_message_store import create_consulting_message
@@ -44,7 +51,7 @@ def _extract_bearer_token(authorization: str | None, session_token: str | None) 
   return None
 
 
-async def get_partner_account(
+async def get_partner_session_account(
   authorization: str | None = Header(default=None),
   session_token: str | None = Header(default=None, alias="X-Partner-Session"),
   db: Database = Depends(require_database),
@@ -60,6 +67,18 @@ async def get_partner_account(
   return account
 
 
+async def get_partner_account(
+  account: dict = Depends(get_partner_session_account),
+) -> dict:
+  if account.get("status") != "active" or account.get("password_change_required"):
+    raise AppError(
+      403,
+      "PARTNER_PASSWORD_CHANGE_REQUIRED",
+      "운영 화면에 접근하기 전에 새 비밀번호를 설정해 주세요.",
+    )
+  return account
+
+
 @router.post("/login")
 async def login_partner(
   payload: PartnerLoginRequest,
@@ -68,17 +87,27 @@ async def login_partner(
   return success(await consulting_partner.login(db, payload.email, payload.password))
 
 
-@router.post("/dev/issue-accounts")
-async def issue_dev_partner_accounts(
-  confirmation: str | None = Header(default=None, alias="X-Partner-Issue-Confirmation"),
-  settings: Settings = Depends(get_settings),
+@router.post("/applications", status_code=201)
+async def create_partner_application(
+  payload: PartnerApplicationCreate,
   db: Database = Depends(require_database),
 ) -> dict:
-  if settings.environment.strip().lower() in {"prod", "production"}:
-    raise AppError(403, "PARTNER_ACCOUNT_ISSUE_DISABLED", "운영 환경에서는 개발용 파트너 계정 발급을 사용할 수 없습니다.")
-  if confirmation != PARTNER_ACCOUNT_ISSUE_CONFIRMATION:
-    raise AppError(400, "PARTNER_ACCOUNT_ISSUE_CONFIRMATION_REQUIRED", "파트너 계정 발급 확인 헤더가 필요합니다.")
-  return success({"accounts": await consulting_partner.issue_default_partner_accounts(db)})
+  await consulting_partner.submit_partner_application(db, payload)
+  return success({"application": {"status": "submitted"}})
+
+
+@router.post("/me/password")
+async def change_partner_password(
+  payload: PartnerPasswordChangeRequest,
+  account: dict = Depends(get_partner_session_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  updated = await consulting_partner.change_partner_password(
+    db,
+    str(account["id"]),
+    payload.new_password,
+  )
+  return success({"account": updated})
 
 
 @router.get("/me")
@@ -538,72 +567,51 @@ async def complete_partner_booking_summary(
 @router.post("/media/presigned-upload")
 async def create_partner_presigned_upload(
   payload: PresignedUploadRequest,
-  _: dict = Depends(get_partner_account),
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  return success(
-    {
-      "upload": S3Service(settings).create_presigned_upload(
-        media_kind=payload.media_kind,
-        content_type=payload.content_type,
-        original_filename=payload.original_filename,
-      ),
-    },
+  upload = await issue_upload_session(
+    db,
+    settings,
+    payload,
+    partner_account_id=account["id"],
   )
+  return success({"upload": upload})
 
 
 @router.post("/media/complete-upload")
 async def complete_partner_upload(
   payload: CompleteUploadRequest,
-  _: dict = Depends(get_partner_account),
+  account: dict = Depends(get_partner_account),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
-  media = await db.fetchrow(
-    """
-    insert into media_assets (
-      owner_user_id,
-      media_kind,
-      source,
-      bucket,
-      object_key,
-      cdn_url,
-      thumbnail_bucket,
-      thumbnail_object_key,
-      thumbnail_cdn_url,
-      thumbnail_content_type,
-      thumbnail_byte_size,
-      thumbnail_width,
-      thumbnail_height,
-      content_type,
-      byte_size,
-      width,
-      height,
-      checksum_sha256,
-      original_filename
+  upload_id = payload.upload_id
+  if upload_id is None:
+    upload_id = await resolve_legacy_upload_session_id(
+      db,
+      settings,
+      bucket=payload.bucket or "",
+      object_key=payload.object_key or "",
+      partner_account_id=account["id"],
     )
-    values (null, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-    returning *
-    """,
-    payload.media_kind,
-    payload.source,
-    payload.bucket,
-    payload.object_key,
-    payload.cdn_url,
-    payload.thumbnail_bucket,
-    payload.thumbnail_object_key,
-    payload.thumbnail_cdn_url,
-    payload.thumbnail_content_type,
-    payload.thumbnail_byte_size,
-    payload.thumbnail_width,
-    payload.thumbnail_height,
-    payload.content_type,
-    payload.byte_size,
-    payload.width,
-    payload.height,
-    payload.checksum_sha256,
-    payload.original_filename,
+    if payload.thumbnail_bucket and payload.thumbnail_object_key:
+      await bind_legacy_thumbnail_session(
+        db,
+        settings,
+        upload_id,
+        thumbnail_bucket=payload.thumbnail_bucket,
+        thumbnail_object_key=payload.thumbnail_object_key,
+        partner_account_id=account["id"],
+      )
+  media = await complete_upload_session(
+    db,
+    settings,
+    upload_id,
+    partner_account_id=account["id"],
   )
-  return success({"media": dict(media)})
+  return success({"media": media})
 
 
 @router.get("/shared-reports")

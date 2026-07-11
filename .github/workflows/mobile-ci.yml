@@ -74,6 +74,12 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Contract — Secure credential storage
+        run: node ../../scripts/mobile/run-secure-store-contract.mjs
+
+      - name: Contract — Face capture and analysis request verification
+        run: npm run test:face-capture-upload
+
       - name: Contract — Unity makeup bridge (랜드마크 요청/응답 포함)
         run: npm run test:unity-bridge
 
@@ -88,3 +94,9 @@ jobs:
 
       - name: Contract — Auradin theme scope
         run: npm run test:auradin-theme-scope
+
+      - name: Contract - iOS bundle identifiers
+        run: npm run test:ios-bundle-ids
+
+      - name: Contract - iOS privacy settings
+        run: npm run test:ios-privacy

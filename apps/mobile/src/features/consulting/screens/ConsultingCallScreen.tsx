@@ -115,6 +115,11 @@ export function ConsultingCallScreen({
     joinResult?.transcription.expertLanguageCode,
     selectedLanguageCode,
   ]);
+  const captionLanguageFallbackRef = useRef(captionLanguageFallback);
+
+  useEffect(() => {
+    captionLanguageFallbackRef.current = captionLanguageFallback;
+  }, [captionLanguageFallback]);
 
   useEffect(() => {
     const subscription = addNativeChimeMeetingListener((event) => {
@@ -155,7 +160,7 @@ export function ConsultingCallScreen({
         }
 
         const nextCaptions = applyPendingCaptionTranslations(
-          mapNativeTranscriptResults(event.results ?? [], captionLanguageFallback),
+          mapNativeTranscriptResults(event.results ?? [], captionLanguageFallbackRef.current),
           pendingCaptionTranslationsRef.current,
         );
         if (nextCaptions.length > 0) {
@@ -186,7 +191,7 @@ export function ConsultingCallScreen({
     });
 
     return () => subscription.remove();
-  }, [captionLanguageFallback]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

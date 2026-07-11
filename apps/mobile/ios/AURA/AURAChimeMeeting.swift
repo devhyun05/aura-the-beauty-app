@@ -14,6 +14,7 @@ private let auraChimeMeetingEventName = "AURAChimeMeetingEvent"
 final class AURAChimeMeeting: RCTEventEmitter {
   private static weak var sharedEmitter: AURAChimeMeeting?
   private var hasListeners = false
+  private var lastAudioLevels: [String: String] = [:]
 
   override init() {
     super.init()
@@ -475,11 +476,17 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
 
   func volumeDidChange(volumeUpdates: [VolumeUpdate]) {
     for update in volumeUpdates {
+      let attendeeId = update.attendeeInfo.attendeeId
+      let level = "\(update.volumeLevel)"
+      guard lastAudioLevels[attendeeId] != level else {
+        continue
+      }
+      lastAudioLevels[attendeeId] = level
       AURAChimeMeeting.emit(
         type: "audioLevelChanged",
         body: [
-          "attendeeId": update.attendeeInfo.attendeeId,
-          "level": "\(update.volumeLevel)",
+          "attendeeId": attendeeId,
+          "level": level,
         ]
       )
     }
@@ -492,10 +499,12 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
   }
 
   func attendeesDidLeave(attendeeInfo: [AttendeeInfo]) {
+    attendeeInfo.forEach { lastAudioLevels.removeValue(forKey: $0.attendeeId) }
     emitPresence(attendeeInfo, present: false)
   }
 
   func attendeesDidDrop(attendeeInfo: [AttendeeInfo]) {
+    attendeeInfo.forEach { lastAudioLevels.removeValue(forKey: $0.attendeeId) }
     emitPresence(attendeeInfo, present: false, dropped: true)
   }
 

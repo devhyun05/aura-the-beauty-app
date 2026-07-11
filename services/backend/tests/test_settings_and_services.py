@@ -47,7 +47,7 @@ def test_s3_presigned_upload_uses_cdn_url_and_file_extension() -> None:
   upload = FakeS3Service(settings).create_presigned_upload(
     media_kind="capture",
     content_type="image/jpeg",
-    original_filename="face.JPG",
+    original_filename="face.jpg.html",
   )
 
   assert upload["bucket"] == "aura-dev-bucket"
@@ -232,6 +232,36 @@ def test_public_config_status_requires_guardrail_when_enabled() -> None:
 
   assert status["items"]["bedrockGuardrail"]["configured"] is False
   assert "bedrockGuardrail" in status["missing"]
+
+
+def test_public_config_status_defaults_ai_jobs_to_inline() -> None:
+  status = Settings().public_config_status()
+
+  assert status["aiJobExecutionMode"] == "inline"
+  assert status["items"]["aiJobExecutionMode"]["configured"] is True
+  assert status["items"]["sqsAiJobQueueUrl"]["configured"] is True
+  assert "sqsAiJobQueueUrl" not in status["missing"]
+
+
+def test_public_config_status_requires_queue_url_for_sqs_ai_jobs() -> None:
+  status = Settings(ai_job_execution_mode="sqs").public_config_status()
+
+  assert status["aiJobExecutionMode"] == "sqs"
+  assert status["items"]["sqsAiJobQueueUrl"]["configured"] is False
+  assert "sqsAiJobQueueUrl" in status["missing"]
+
+
+def test_public_config_status_accepts_queue_url_for_sqs_ai_jobs() -> None:
+  settings = Settings(
+    ai_job_execution_mode="sqs",
+    sqs_ai_job_queue_url="https://sqs.ap-northeast-2.amazonaws.com/123456789012/aura-ai-jobs",
+  )
+
+  status = settings.public_config_status()
+
+  assert status["items"]["sqsAiJobQueueUrl"]["configured"] is True
+  assert "sqsAiJobQueueUrl" not in status["missing"]
+
 
 def test_public_config_status_accepts_iam_role_for_aws_credentials() -> None:
   settings = Settings(aws_use_iam_role=True)

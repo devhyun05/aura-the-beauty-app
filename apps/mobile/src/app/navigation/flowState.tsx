@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -37,6 +38,7 @@ export type NavigationFlowState = {
   savedMakeupLooks: readonly MakeupLookPreview[];
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
+  selectedHairCapture: FaceCaptureUploadResult | null;
   selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
   // 얼굴 분석 세션에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용, 업로드 없음).
   selectedPersonalColor: AuraPersonalColorResult | null;
@@ -48,6 +50,7 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  resetNavigationFlowState: () => void;
   setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
   setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
   setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
@@ -57,6 +60,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSavedMakeupLooks: Dispatch<SetStateAction<readonly MakeupLookPreview[]>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
+  setSelectedHairCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
   setSelectedPersonalColor: Dispatch<SetStateAction<AuraPersonalColorResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
@@ -80,6 +84,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
+    selectedHairCapture: null,
     selectedFaceVerticalThirds: null,
     selectedPersonalColor: null,
     selectedMakeupFeedbackPhoto: {
@@ -107,6 +112,8 @@ export function NavigationFlowStateProvider({
 }: NavigationFlowStateProviderProps) {
   const [selectedFaceCapture, setSelectedFaceCapture] =
     useState<FaceCaptureUploadResult | null>(initialState.selectedFaceCapture);
+  const [selectedHairCapture, setSelectedHairCapture] =
+    useState<FaceCaptureUploadResult | null>(initialState.selectedHairCapture);
   const [selectedFaceAnalysisReport, setSelectedFaceAnalysisReport] =
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedFaceVerticalThirds, setSelectedFaceVerticalThirds] =
@@ -138,6 +145,28 @@ export function NavigationFlowStateProvider({
   const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
     useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
+  const resetNavigationFlowState = useCallback(() => {
+    const nextState = getInitialNavigationFlowState();
+
+    setFloatingActionButtonPosition(nextState.floatingActionButtonPosition);
+    setFloatingActionIds(nextState.floatingActionIds);
+    setFloatingActionInteractionMode(nextState.floatingActionInteractionMode);
+    setLikedMakeupFilterIds(nextState.likedMakeupFilterIds);
+    setMakeupFeedbackResult(nextState.makeupFeedbackResult);
+    setSavedMakeupLook(nextState.savedMakeupLook);
+    setSavedMakeupLooks(nextState.savedMakeupLooks);
+    setSelectedFaceAnalysisReport(nextState.selectedFaceAnalysisReport);
+    setSelectedFaceCapture(nextState.selectedFaceCapture);
+    setSelectedHairCapture(nextState.selectedHairCapture);
+    setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
+    setSelectedPersonalColor(nextState.selectedPersonalColor);
+    setSelectedMakeupFeedbackPhoto(nextState.selectedMakeupFeedbackPhoto);
+    setSelectedRecommendedMakeupFilterId(nextState.selectedRecommendedMakeupFilterId);
+    setSelectedReferenceMakeupPhoto(nextState.selectedReferenceMakeupPhoto);
+    setReferenceMakeupUploadedPhotos(nextState.referenceMakeupUploadedPhotos);
+    setShouldShowBeautyJourneyGuide(nextState.shouldShowBeautyJourneyGuide);
+  }, []);
+
   const value = useMemo(
     () => ({
       floatingActionButtonPosition,
@@ -149,12 +178,14 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      resetNavigationFlowState,
       shouldShowBeautyJourneyGuide,
       setFloatingActionButtonPosition,
       setFloatingActionIds,
@@ -165,6 +196,7 @@ export function NavigationFlowStateProvider({
       setSavedMakeupLooks,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
+      setSelectedHairCapture,
       setSelectedFaceVerticalThirds,
       setSelectedPersonalColor,
       setSelectedMakeupFeedbackPhoto,
@@ -183,12 +215,14 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
+      resetNavigationFlowState,
       shouldShowBeautyJourneyGuide,
     ],
   );

@@ -13,11 +13,13 @@ from app.db.seed_db import SEED_VERSION
 EXPECTED_TABLES = {
   "users",
   "media_assets",
+  "media_upload_sessions",
   "photo_captures",
   "analysis_reports",
   "saved_makeup_styles",
   "products",
   "user_product_likes",
+  "auradin_search_sessions",
   "product_recommendation_runs",
   "ar_filters",
   "user_ar_filter_states",
@@ -49,6 +51,7 @@ EXPECTED_TABLES = {
   "home_recommended_looks",
   "user_consents",
   "data_deletion_requests",
+  "account_deletion_tombstones",
   "audit_logs",
   "schema_migrations",
 }
@@ -58,6 +61,8 @@ EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 EXPECTED_COLUMNS = {
   "analysis_reports": {"embedding"},
   "community_threads": {"embedding"},
+  "auradin_search_sessions": {"state", "expires_at"},
+  "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:

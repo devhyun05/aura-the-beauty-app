@@ -26,7 +26,7 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'capture_type') then
-    create type capture_type as enum ('face_analysis', 'makeup_feedback', 'filter_extraction', 'ar_try_on');
+    create type capture_type as enum ('face_analysis', 'makeup_feedback', 'filter_extraction', 'ar_try_on', 'hair_analysis');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'job_status') then
@@ -54,6 +54,8 @@ begin
   end if;
 end
 $$;
+
+alter type capture_type add value if not exists 'hair_analysis';
 
 -- -----------------------------------------------------------------------------
 -- Tables
@@ -117,6 +119,49 @@ create table if not exists media_assets (
 
 comment on table media_assets is 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.';
 
+create table if not exists media_upload_sessions (
+  id uuid primary key,
+  owner_user_id uuid,
+  partner_account_id uuid,
+  media_kind text not null,
+  source media_source_type not null,
+  bucket text not null,
+  object_key text not null,
+  cdn_url text,
+  content_type text not null,
+  expected_byte_size bigint,
+  width integer,
+  height integer,
+  original_filename text,
+  thumbnail_bucket text,
+  thumbnail_object_key text,
+  thumbnail_cdn_url text,
+  thumbnail_content_type text,
+  thumbnail_expected_byte_size bigint,
+  thumbnail_width integer,
+  thumbnail_height integer,
+  status text not null default 'submitted',
+  media_asset_id uuid,
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint uq_media_upload_sessions_bucket_key unique (bucket, object_key),
+  constraint uq_media_upload_sessions_thumbnail_bucket_key unique (thumbnail_bucket, thumbnail_object_key),
+  constraint chk_media_upload_sessions_principal check (
+    (owner_user_id is not null and partner_account_id is null)
+    or (owner_user_id is null and partner_account_id is not null)
+  ),
+  constraint chk_media_upload_sessions_status check (status in ('pending', 'completed', 'expired')),
+  constraint chk_media_upload_sessions_expected_size check (
+    expected_byte_size is null or expected_byte_size between 1 and 52428800
+  ),
+  constraint chk_media_upload_sessions_thumbnail_expected_size check (
+    thumbnail_expected_byte_size is null or thumbnail_expected_byte_size between 1 and 52428800
+  )
+);
+
+comment on table media_upload_sessions is 'Server-issued, principal-bound S3 upload locations consumed exactly once.';
+
 create table if not exists photo_captures (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -163,6 +208,59 @@ create table if not exists analysis_reports (
 );
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
+
+create table if not exists hair_analyses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  client_request_id uuid not null,
+  photo_capture_id uuid,
+  source_media_id uuid not null,
+  mask_media_id uuid,
+  status text not null default 'queued',
+  analysis_payload jsonb not null default '{}'::jsonb,
+  recommended_style_ids text[] not null default '{}',
+  error_code text,
+  error_message text,
+  attempt_count integer not null default 0,
+  expires_at timestamptz not null default (now() + interval '24 hours'),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_hair_analyses_user_request unique (user_id, client_request_id),
+  constraint chk_hair_analyses_status check (status in ('queued', 'processing', 'completed', 'failed', 'expired')),
+  constraint chk_hair_analyses_attempt_count check (attempt_count >= 0)
+);
+
+comment on table hair_analyses is 'Private 24-hour iOS hair analysis sessions and deterministic style recommendations.';
+
+create table if not exists hair_simulations (
+  id uuid primary key default gen_random_uuid(),
+  analysis_id uuid not null,
+  user_id uuid not null,
+  client_request_id uuid not null,
+  style_id text not null,
+  status text not null default 'queued',
+  result_media_id uuid,
+  provider text,
+  model text,
+  attempt_count integer not null default 0,
+  quality_attempt_count integer not null default 0,
+  quality_payload jsonb not null default '{}'::jsonb,
+  error_code text,
+  error_message text,
+  saved_at timestamptz,
+  expires_at timestamptz default (now() + interval '24 hours'),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_hair_simulations_user_request unique (user_id, client_request_id),
+  constraint uq_hair_simulations_analysis_style unique (analysis_id, style_id),
+  constraint chk_hair_simulations_status check (status in ('queued', 'processing', 'completed', 'failed', 'expired')),
+  constraint chk_hair_simulations_attempt_count check (attempt_count >= 0),
+  constraint chk_hair_simulations_quality_attempt_count check (quality_attempt_count >= 0)
+);
+
+comment on table hair_simulations is 'One generated hairstyle per selected catalog style; unsaved output expires after 24 hours.';
 
 create table if not exists saved_makeup_styles (
   id uuid primary key default gen_random_uuid(),
@@ -214,6 +312,16 @@ create table if not exists user_product_likes (
 );
 
 comment on table user_product_likes is 'LikedProductList and product heart state.';
+
+create table if not exists auradin_search_sessions (
+  session_id text primary key,
+  state jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+comment on table auradin_search_sessions is
+  'Temporary Auradin conversation state. Product likes are stored separately in user_product_likes.';
 
 create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),
@@ -410,6 +518,14 @@ create table if not exists data_deletion_requests (
 
 comment on table data_deletion_requests is 'Account/photo/report/feedback/filter deletion request tracking.';
 
+create table if not exists account_deletion_tombstones (
+  subject_hash text primary key,
+  auth_provider text not null,
+  deleted_at timestamptz not null default now()
+);
+
+comment on table account_deletion_tombstones is 'Hashed auth identities of deleted accounts. Prevents a still-valid token from recreating deleted data.';
+
 create table if not exists audit_logs (
   id uuid primary key default gen_random_uuid(),
   actor_user_id uuid,
@@ -584,6 +700,31 @@ alter table analysis_reports
   drop constraint if exists fk_analysis_reports_preview_media,
   add constraint fk_analysis_reports_preview_media
   foreign key (preview_media_id) references media_assets(id) on delete set null;
+
+alter table hair_analyses
+  drop constraint if exists fk_hair_analyses_user,
+  add constraint fk_hair_analyses_user
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_hair_analyses_photo_capture,
+  add constraint fk_hair_analyses_photo_capture
+  foreign key (photo_capture_id) references photo_captures(id) on delete set null,
+  drop constraint if exists fk_hair_analyses_source_media,
+  add constraint fk_hair_analyses_source_media
+  foreign key (source_media_id) references media_assets(id) on delete restrict,
+  drop constraint if exists fk_hair_analyses_mask_media,
+  add constraint fk_hair_analyses_mask_media
+  foreign key (mask_media_id) references media_assets(id) on delete set null;
+
+alter table hair_simulations
+  drop constraint if exists fk_hair_simulations_analysis,
+  add constraint fk_hair_simulations_analysis
+  foreign key (analysis_id) references hair_analyses(id) on delete cascade,
+  drop constraint if exists fk_hair_simulations_user,
+  add constraint fk_hair_simulations_user
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_hair_simulations_result_media,
+  add constraint fk_hair_simulations_result_media
+  foreign key (result_media_id) references media_assets(id) on delete set null;
 
 alter table saved_makeup_styles
   drop constraint if exists fk_saved_makeup_styles_user,
@@ -779,14 +920,22 @@ create unique index if not exists idx_users_provider_sub
   where oauth_sub is not null and deleted_at is null;
 
 create index if not exists idx_users_email on users (email);
+create index if not exists idx_account_deletion_tombstones_deleted_at on account_deletion_tombstones (deleted_at);
 create index if not exists idx_media_assets_owner_created on media_assets (owner_user_id, created_at desc);
 create index if not exists idx_photo_captures_user_type_created on photo_captures (user_id, capture_type, created_at desc);
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);
+create index if not exists idx_hair_analyses_user_created on hair_analyses (user_id, created_at desc);
+create index if not exists idx_hair_analyses_status_created on hair_analyses (status, created_at);
+create index if not exists idx_hair_analyses_expires on hair_analyses (expires_at) where status <> 'expired';
+create index if not exists idx_hair_simulations_analysis_created on hair_simulations (analysis_id, created_at desc);
+create index if not exists idx_hair_simulations_user_created on hair_simulations (user_id, created_at desc);
+create index if not exists idx_hair_simulations_expires on hair_simulations (expires_at) where saved_at is null and status <> 'expired';
 create index if not exists idx_saved_makeup_styles_user_saved on saved_makeup_styles (user_id, saved_at desc);
 create index if not exists idx_saved_makeup_styles_source_analysis on saved_makeup_styles (source_analysis_report_id);
 create index if not exists idx_saved_makeup_styles_source_filter on saved_makeup_styles (source_filter_extraction_id);
 create index if not exists idx_products_category_active on products (category, is_active);
 create index if not exists idx_user_product_likes_user_liked on user_product_likes (user_id, liked_at desc);
+create index if not exists idx_auradin_search_sessions_expires_at on auradin_search_sessions (expires_at);
 create index if not exists idx_product_recommendation_runs_user_created on product_recommendation_runs (user_id, created_at desc);
 create index if not exists idx_product_recommendation_runs_source_analysis on product_recommendation_runs (source_analysis_report_id);
 create index if not exists idx_ar_filters_category_public on ar_filters (category, is_public);
@@ -839,6 +988,16 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_analysis_reports_updated_at on analysis_reports;
 create trigger trg_analysis_reports_updated_at
 before update on analysis_reports
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_hair_analyses_updated_at on hair_analyses;
+create trigger trg_hair_analyses_updated_at
+before update on hair_analyses
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_hair_simulations_updated_at on hair_simulations;
+create trigger trg_hair_simulations_updated_at
+before update on hair_simulations
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_saved_makeup_styles_updated_at on saved_makeup_styles;
@@ -1097,6 +1256,29 @@ create table if not exists consulting_partner_sessions (
   last_seen_at timestamptz
 );
 
+create table if not exists consulting_partner_applications (
+  id uuid primary key default gen_random_uuid(),
+  email citext not null,
+  name text not null,
+  title text not null,
+  studio_name text,
+  phone text,
+  message text,
+  status text not null default 'pending',
+  expert_id text,
+  rejection_reason text,
+  reviewed_by_subject text,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_consulting_partner_applications_status
+    check (status in ('submitted', 'needs_update', 'approved', 'rejected'))
+);
+
+create unique index if not exists uq_consulting_partner_applications_pending_email
+  on consulting_partner_applications (email) where status in ('submitted', 'needs_update');
+
+
 create table if not exists consulting_message_media (
   id uuid primary key default gen_random_uuid(),
   message_id uuid not null,
@@ -1347,6 +1529,22 @@ alter table consulting_partner_sessions
   add constraint fk_consulting_partner_sessions_account
   foreign key (account_id) references consulting_partner_accounts(id) on delete cascade;
 
+alter table consulting_partner_applications
+  drop constraint if exists fk_consulting_partner_applications_expert,
+  add constraint fk_consulting_partner_applications_expert
+  foreign key (expert_id) references consulting_experts(id) on delete set null;
+
+alter table media_upload_sessions
+  drop constraint if exists fk_media_upload_sessions_owner_user,
+  add constraint fk_media_upload_sessions_owner_user
+  foreign key (owner_user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_media_upload_sessions_partner_account,
+  add constraint fk_media_upload_sessions_partner_account
+  foreign key (partner_account_id) references consulting_partner_accounts(id) on delete cascade,
+  drop constraint if exists fk_media_upload_sessions_media_asset,
+  add constraint fk_media_upload_sessions_media_asset
+  foreign key (media_asset_id) references media_assets(id) on delete set null;
+
 alter table consulting_message_media
   drop constraint if exists fk_consulting_message_media_message,
   add constraint fk_consulting_message_media_message
@@ -1405,6 +1603,9 @@ create index if not exists idx_consulting_messages_booking_created on consulting
 create index if not exists idx_consulting_partner_accounts_expert on consulting_partner_accounts (expert_id);
 create index if not exists idx_consulting_partner_sessions_account_expires on consulting_partner_sessions (account_id, expires_at);
 create index if not exists idx_consulting_message_media_message_order on consulting_message_media (message_id, sort_order);
+create index if not exists idx_media_upload_sessions_owner_status on media_upload_sessions (owner_user_id, status, expires_at);
+create index if not exists idx_media_upload_sessions_partner_status on media_upload_sessions (partner_account_id, status, expires_at);
+create index if not exists idx_media_upload_sessions_pending_expires on media_upload_sessions (expires_at) where status = 'pending';
 drop index if exists idx_consulting_bookings_expert_upcoming_slot;
 alter table consulting_bookings
   drop constraint if exists ex_consulting_bookings_expert_upcoming_time,

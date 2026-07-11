@@ -66,7 +66,7 @@ export function getMainTabHeaderBorderWidth(
   routeName: MainTabRouteName,
 ): 0 | undefined {
   return routeName === 'HomeTab' ||
-    routeName === 'CommunityTab' ||
+    routeName === 'ConsultingTab' ||
     routeName === 'ProfileTab'
     ? 0
     : undefined;
@@ -106,6 +106,11 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
+  if (routeName === 'Community') {
+    navigation.navigate('Community');
+    return;
+  }
+
   if (routeName === 'ProductRecommendation') {
     navigation.navigate('ProductRecommendation');
     return;
@@ -123,16 +128,6 @@ function navigateAppFeatureRootRoute(
 
   if (routeName === 'LikedProductList') {
     navigation.navigate('LikedProductList');
-    return;
-  }
-
-  if (routeName === 'FloatingActionSettings') {
-    navigation.navigate('FloatingActionSettings');
-    return;
-  }
-
-  if (routeName === 'ProfileEdit') {
-    navigation.navigate('ProfileEdit');
     return;
   }
 
