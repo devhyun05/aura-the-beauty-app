@@ -3,7 +3,9 @@
 Fully synthetic (no sample photos): a 960px frame with a hand-built
 478-landmark array where only the indices the module reads are meaningful.
 fw=640 matches our selfie corpus (fw ~650) — the strand black-hat kernel is
-then 7px, the regime the module documents as well-behaved.
+then 7px. The small-face regime (fw ~300, 3px kernel — the one that
+inflated real dev crops, see the module docstring) has its own regression
+block on a proportionally scaled fixture.
 
 Every QC gate has a positive control (a defect that MUST trip it) and the
 clean fixture is the shared identity control. The mandated false-positive
@@ -41,33 +43,38 @@ CHEEK_RAD = int(0.045 * FW)      # 28
 FOREHEAD_RAD = int(0.04 * FW)    # 25
 
 
-def _landmarks() -> np.ndarray:
+def _landmarks(scale: float = 1.0) -> np.ndarray:
     """478 landmarks; only the indices reference_bundle reads are meaningful.
-    Face oval = ellipse with x-extent exactly FW so face_width is honest."""
+    Face oval = ellipse with x-extent exactly FW*scale so face_width is
+    honest. `scale` shrinks the whole face for the small-fw regression."""
     lm = np.zeros((478, 2), np.float32)
     for i, idx in enumerate(FACE_OVAL):
         t = 2.0 * np.pi * i / len(FACE_OVAL)
-        lm[idx] = (480 + 320 * np.cos(t), 480 + 400 * np.sin(t))
-    lm[UPPER_CHEEKS[0]] = CHEEK_L
-    lm[UPPER_CHEEKS[1]] = CHEEK_R
-    lm[FOREHEAD_MID] = (480, 180)
-    lm[BROW_MID] = (480, 260)     # forehead disk (r=25 at y=220) stays above
-    lm[NOSE_BOTTOM] = (480, 520)  # cheek disks (y<=428) stay above
+        lm[idx] = ((480 + 320 * np.cos(t)) * scale,
+                   (480 + 400 * np.sin(t)) * scale)
+    lm[UPPER_CHEEKS[0]] = (CHEEK_L[0] * scale, CHEEK_L[1] * scale)
+    lm[UPPER_CHEEKS[1]] = (CHEEK_R[0] * scale, CHEEK_R[1] * scale)
+    lm[FOREHEAD_MID] = (480 * scale, 180 * scale)
+    lm[BROW_MID] = (480 * scale, 260 * scale)  # forehead disk stays above
+    lm[NOSE_BOTTOM] = (480 * scale, 520 * scale)  # cheek disks stay above
     return lm
 
 
-def _fixture(seed: int, noise_sigma: float, grad_amp: float) -> np.ndarray:
+def _fixture(seed: int, noise_sigma: float, grad_amp: float,
+             size: int = SIZE) -> np.ndarray:
     """Hair-free skin per the spec: base tone + per-pixel grain (sigma 4..7)
-    + strong illumination gradient + 1-2px pore dots, depth 6-10 L, ~1.5%."""
+    + strong illumination gradient + 1-2px pore dots, depth 6-10 L, ~1.5%.
+    At a smaller `size` the same recipe gives a STEEPER per-pixel gradient
+    and relatively larger pores — a harsher FP fixture, deliberately."""
     rng = np.random.RandomState(seed)
-    base = np.full((SIZE, SIZE, 3), SKIN_BGR, np.float32)
-    yy, xx = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32)
-    base += (grad_amp * (xx / SIZE - 0.5)
-             + 0.6 * grad_amp * (yy / SIZE - 0.5))[..., None]
+    base = np.full((size, size, 3), SKIN_BGR, np.float32)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
+    base += (grad_amp * (xx / size - 0.5)
+             + 0.6 * grad_amp * (yy / size - 0.5))[..., None]
     base += rng.normal(0, noise_sigma, base.shape).astype(np.float32)
-    n_pores = int(0.015 * SIZE * SIZE / 2)   # each pore covers 1-4 px
+    n_pores = int(0.015 * size * size / 2)   # each pore covers 1-4 px
     for _ in range(n_pores):
-        y, x = rng.randint(2, SIZE - 2), rng.randint(2, SIZE - 2)
+        y, x = rng.randint(2, size - 2), rng.randint(2, size - 2)
         depth, r = rng.uniform(6, 10), rng.randint(1, 3)
         base[y:y + r, x:x + r] -= depth
     return np.clip(base, 0, 255).astype(np.uint8)
@@ -155,8 +162,11 @@ def test_abstain_when_both_cheeks_dead():
 
 
 def test_nmin_geometric_enforcement():
-    """One healthy cheek + dead forehead: ~0.0054*fw^2 valid px < Nmin =
-    0.008*fw^2, so the builder must abstain rather than serve a thin anchor."""
+    """One healthy cheek + dead forehead: at most ~0.0064*fw^2 valid px (the
+    disk's raw capacity; the outlier-only Mahalanobis trim now keeps nearly
+    all of a clean disk, vs ~0.0054*fw^2 under the old unconditional 15%
+    cut) < Nmin = 0.008*fw^2, so the builder must abstain rather than serve
+    a thin anchor."""
     img = _fixture(2, 5.5, 45.0)
     _whiteout(img, CHEEK_L, CHEEK_RAD)
     _whiteout(img, FOREHEAD_C, FOREHEAD_RAD)
@@ -207,6 +217,43 @@ def test_ladder_share_rule_and_ordering():
     assert rb.select_patch_ladder(
         {"cheek_left": 5000, "cheek_right": 0, "forehead": 2000},
         False, nmin) == (3, ["cheek_left"], True)
+
+
+def test_ladder_level1_forehead_recruit_and_level4_degradation():
+    """New ladder behavior (dev9: 4/9 real selfies abstained on rules, not
+    photos). (a) Level 1 recruits the VERIFIED forehead only when the cheeks
+    alone miss Nmin. (b) Level 4: Nmin met but the 25% share rule is not —
+    a recorded degradation instead of an abstain. (c) The hard guarantees
+    stay: Nmin is never waived, forehead-only is impossible."""
+    nmin = rb.nmin_for(FW)   # 3276.8
+    # (a) cheeks alone short of Nmin, verified forehead completes it.
+    assert rb.select_patch_ladder(
+        {"cheek_left": 1700, "cheek_right": 1500, "forehead": 400},
+        True, nmin) == (1, ["cheek_left", "cheek_right", "forehead"], False)
+    # ... but with the forehead unverified the same counts must NOT pass
+    # level 1 (and end at None: no lone patch reaches Nmin either).
+    assert rb.select_patch_ladder(
+        {"cheek_left": 1700, "cheek_right": 1500, "forehead": 400},
+        False, nmin) is None
+    # (b) share rule failed (900/3900 = 0.23 < 0.25) but Nmin met and no
+    # other level applies -> degraded level 4, single_anchor False.
+    assert rb.select_patch_ladder(
+        {"cheek_left": 3000, "cheek_right": 900}, False, nmin) \
+        == (4, ["cheek_left", "cheek_right"], False)
+    # (c) Nmin itself is never degraded ...
+    assert rb.select_patch_ladder(
+        {"cheek_left": 2500, "cheek_right": 700}, False, nmin) is None
+    # ... and a forehead with no living cheek stays unusable at every level.
+    assert rb.select_patch_ladder(
+        {"cheek_left": 0, "cheek_right": 0, "forehead": 9000},
+        True, nmin) is None
+
+
+def test_bundle_low_conf_flag_default():
+    """Healthy fixture -> level 1 -> low_conf False (the flag is reserved
+    for the level-4 share-rule waiver, asserted at ladder level above)."""
+    b = rb.build_reference_bundle(_fixture(2, 5.5, 45.0), _landmarks(), FW)
+    assert b is not None and b.ladder_level == 1 and b.low_conf is False
 
 
 def test_bundle_determinism():
@@ -301,6 +348,82 @@ def test_healthy_bins_do_not_flag_low_conf():
     for s in stats.scales.values():
         assert np.array_equal(s.bin_low_conf, s.bin_n < 100)
         assert (~s.bin_low_conf).any()   # the fixture must feed real bins
+
+
+# ------------------------------------------------- small-fw regression ------
+
+FW_SMALL = 300.0                 # dev pic corpus regime (fitted fw 273-376)
+SCALE_SMALL = FW_SMALL / FW      # frame 450px, strand kernel 3px
+
+
+def _small_bundle_and_stats(img: np.ndarray):
+    lm = _landmarks(SCALE_SMALL)
+    bundle = rb.build_reference_bundle(img, lm, FW_SMALL)
+    assert bundle is not None    # small faces must build too (dev9 fix A)
+    return bundle, rb.anchor_blackhat_stats(img, lm, FW_SMALL, bundle)
+
+
+def test_small_fw_false_positive_regression():
+    """REGRESSION (dev9 defect B): at fw~300 the 3px strand black-hat on
+    smooth skin is a spike-at-zero, MAD collapses to 0 and the old
+    MAD-only sigma let any textured crop pixel score z>>thr (real pic1-4
+    crops fired on 0.40-0.67 of their area). With the quantile-consistent
+    sigma the hair-free FP area must stay <= 2% (measured 0.04-0.23%)."""
+    size = int(SIZE * SCALE_SMALL)
+    for seed, ns, ga in FP_FIXTURES:
+        img = _fixture(seed, ns, ga, size)
+        _, stats = _small_bundle_and_stats(img)
+        exc = rb.normalized_excess(img, FW_SMALL, stats)
+        frac = float((exc > 0).mean())
+        assert frac <= 0.02, (seed, ns, ga, frac)
+
+
+def test_small_fw_strands_still_fire():
+    """Sensitivity control for the sigma floor: depth-60 strands at fw=300
+    must still light up on >50% of their pixels (measured 0.98-1.00), so
+    the small-fw FP fix cannot silently be 'detect nothing'."""
+    size = int(SIZE * SCALE_SMALL)
+    img = _fixture(2, 5.5, 45.0, size)
+    _, stats = _small_bundle_and_stats(img)
+    res = img.copy()
+    strand = np.zeros((size, size), np.uint8)
+    tone = tuple(c - 60 for c in SKIN_BGR)
+    k = SCALE_SMALL
+    for x in range(int(240 * k), int(720 * k), 12):
+        cv2.line(res, (x, int(560 * k)), (x + 6, int(680 * k)), tone, 1)
+        cv2.line(strand, (x, int(560 * k)), (x + 6, int(680 * k)), 1, 1)
+    exc = rb.normalized_excess(res, FW_SMALL, stats)
+    hit = float((exc[strand > 0] > 0).mean())
+    assert hit > 0.5, hit
+
+
+def test_dark_garment_panel_scores_zero():
+    """REGRESSION (dev9 defect B, second mechanism): on a near-black
+    garment the Weber denominator max(lp,8)*nf bottoms out and 1-2
+    gray-level fabric ripples scored z>>thr (real pic2: ~solid firing on
+    the jacket, half the crop). Pixels below the dark-side validity bound
+    (anchor low edge - 70 L) must score exactly 0 — while strands ON SKIN
+    in the same image keep firing (the bound must not cost sensitivity)."""
+    img = _fixture(2, 5.5, 45.0)
+    rng = np.random.RandomState(7)
+    panel = np.full((260, 560, 3), (28, 26, 30), np.float32)  # black jacket
+    panel += rng.normal(0, 1.2, panel.shape)
+    for row in range(0, 260, 18):          # fabric folds: shallow dark lines
+        panel[row:row + 2] -= 4.0
+    img[660:920, 200:760] = np.clip(panel, 0, 255).astype(np.uint8)
+    _, stats = _bundle_and_stats(img)
+    exc = rb.normalized_excess(img, FW, stats)
+    inner = exc[692:888, 232:728]          # 32px inside the panel: past the
+    assert float(inner.max()) == 0.0       #   lp-blur bleed of the boundary
+    # Positive control on the SAME stats: skin strands above the panel fire.
+    res = img.copy()
+    strand = np.zeros((SIZE, SIZE), np.uint8)
+    tone = tuple(c - 60 for c in SKIN_BGR)
+    for x in range(240, 720, 24):
+        cv2.line(res, (x, 480), (x + 12, 600), tone, 1)
+        cv2.line(strand, (x, 480), (x + 12, 600), 1, 1)
+    exc2 = rb.normalized_excess(res, FW, stats)
+    assert float((exc2[strand > 0] > 0).mean()) > 0.5
 
 
 # ------------------------------------------------- grain reference ring -----

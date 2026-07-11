@@ -36,12 +36,28 @@ ignores structure filling <50% of the window. Re-measured: strand median z
 hair-free false-positive area stays at 0.08-0.21% <= 1% on all three
 mandated fixtures.
 
-Known limit (measured, not fixed here): at fw <= ~350 the strand black-hat
-kernel degenerates to 3px and its response distribution on plain sensor noise
-becomes a spike-at-zero with a heavy tail; median/MAD z-scoring then puts
-z_thr=4.5 near the tail's p90 and the false-positive area rises to 2-10%.
-The quality gate already rejects faces below 0.18 * frame width, and our
-selfie corpus sits at fw ~650 (k=7), where the distribution is well behaved.
+SMALL-fw REGIME (previously a documented known limit, now fixed — measured
+dev9 v3): at fw <= ~376 the 3px strand kernel returns EXACTLY 0 on smooth
+(denoised/beauty-filtered) anchor skin at >50% of pixels, so median and MAD
+both collapse to 0, sigma hits the _SIG_EPS floor, and any nonzero crop q
+scores z in the millions — nz>0 covered 0.40-0.67 of the pic1-4 crops. Two
+repairs, both to the STATISTICS (the maps are untouched):
+
+1. Quantile-consistent robust sigma: sigma = max(1.4826*MAD, (p95-med)/1.645).
+   The two estimators agree on Gaussian data (psd corpus, fw ~650: sigma
+   changes <2x and fired area only drops), but the p95 term stays anchored to
+   the real tail when the distribution degenerates to a spike-at-zero, which
+   MAD cannot see. Measured: pic1-4 fired fraction 0.40-0.67 -> 0.03-0.50.
+
+2. Bounded dark-side extrapolation (_L_SHADOW_MARGIN): the remaining pic2
+   firing was ~solid on a near-black garment (local L 11-52 vs anchor range
+   [155,192]) where the Weber denominator max(lp,8)*nf bottoms out and a
+   1-2 gray-level fabric ripple reads as huge q. The anchor transfer's claim
+   is only meaningful on skin-like luminance: pixels with lp more than 70
+   gray levels below the darkest anchor score 0. 70 is generous — measured
+   GT-region beard shadow sits at most 67 below the anchor low edge (psd03
+   deep chin shadow; p05 over dev9), garments 80-140 below. Measured after
+   both: pic1-4 fired fraction 0.007-0.068, psd unchanged-to-better.
 """
 
 from __future__ import annotations
@@ -73,9 +89,24 @@ _FOREHEAD_R = 0.04        # optional rescue anchor between FOREHEAD_MID/BROW_MID
 
 # --- per-patch QC ------------------------------------------------------------
 _CLIP_LEVEL = 250         # >= this in gray or any channel = clipping/specular
-_COH_MAX = 0.6            # structure-tensor coherence above this = directional
-                          #   structure (hairline wisp, shadow edge), not skin
-_MAHA_DROP = 0.15         # top Mahalanobis fraction dropped after initial fit
+_COH_MAX = 0.6            # coherence gate at fw <= _COH_FW_LO (see _coh_max_for)
+_COH_MAX_HI = 0.75        # coherence gate at fw >= _COH_FW_HI
+_COH_FW_LO = 480.0        # measured dev9: clean-cheek coherence medians are
+_COH_FW_HI = 640.0        #   0.25-0.33 at fw 273-376 but 0.31-0.59 at fw
+                          #   636-697 — coherence_map's FIXED 2px highpass +
+                          #   7px window measures an ever-smaller physical
+                          #   patch as fw grows, and at sub-pore scale clean
+                          #   skin/demosaicing is locally directional. A flat
+                          #   0.6 sat BELOW the cheek median on psd02/05 and
+                          #   killed ~45% of visibly clean disks (3 of the 4
+                          #   dev abstains). The gate therefore ramps with fw.
+_MAHA_TRIM_CUT = 3.0      # a patch pixel is an outlier if maha > this
+                          #   (chi_3 ~p96 on clean Gaussian-ish grain)
+_MAHA_DROP = 0.15         # CAP on the trimmed fraction (was an unconditional
+                          #   top-15% cut, which discarded clean pixels on
+                          #   every patch and, stacked on the coherence gate,
+                          #   made Nmin geometrically unreachable on real
+                          #   photos — dev9: psd03 missed Nmin by 6%)
 _PATCH_MODEL_MIN = 32     # fewer survivors than this cannot carry a robust fit
 _CHEEK_MODEL_MIN = 64     # min pooled cheek px to verify the forehead against
 _FOREHEAD_MAHA = 3.0      # forehead px is a skin-inlier if maha <= this
@@ -95,6 +126,12 @@ _NF_WIN = 7               # noise-floor estimation window
 _NF_EPS = 0.5             # gray levels; below any real sensor's noise floor,
                           #   so the floor only bites on synthetic flat fields
 _SIG_EPS = 1e-6
+_Q_HI = 0.95              # upper quantile for the tail-consistent sigma term
+_Q_HI_Z = 1.645           # Phi^-1(0.95): (p95-med)/1.645 == sigma on a Gaussian
+_L_SHADOW_MARGIN = 70.0   # gray levels BELOW the darkest anchor still judged
+                          #   (dev9-measured: beard-shadow skin bottoms out
+                          #   <= 67 below the anchor low edge, near-black
+                          #   garments sit 80-140 below — see module docstring)
 _L_BINS = 4
 _BIN_MIN_N = 100          # thinner anchor bins fall back to the global stats
 Z_THR = 4.5
@@ -114,14 +151,30 @@ class ReferenceBundle:
     lab_cov: np.ndarray            # (3, 3) float32
     n_valid: int
     patches_used: list[str]        # subset of cheek_left / cheek_right / forehead
-    ladder_level: int              # 1 both cheeks | 2 cheek+forehead | 3 single
+    ladder_level: int              # 1 both cheeks (+verified forehead) |
+                                   # 2 cheek+forehead | 3 single cheek |
+                                   # 4 pooled, share rule waived (low_conf)
     single_anchor: bool
+    low_conf: bool = False         # True only at ladder level 4: Nmin is met
+                                   #   but the 25% per-patch share rule is not —
+                                   #   recorded degradation instead of abstain
 
 
 def nmin_for(face_width: float) -> float:
     """Minimum valid anchor pixels; scales with the face so a far-away face
     cannot pass on a handful of pixels the way the old complement did."""
     return max(_NMIN_FLOOR, _NMIN_RATIO * face_width * face_width)
+
+
+def _coh_max_for(face_width: float) -> float:
+    """Scale-aware coherence gate: 0.6 at fw <= 480 ramping to 0.75 at
+    fw >= 640. coherence_map's scale is fixed in PIXELS (2px highpass, 7px
+    window), so what it calls "directional" drifts with resolution; the
+    measured clean-cheek medians (see the constants block) drift with it.
+    Directional defects the gate exists for — hairline wisps, shadow edges,
+    drawn stripes — measure 0.9+ at any fw and stay rejected."""
+    t = (face_width - _COH_FW_LO) / (_COH_FW_HI - _COH_FW_LO)
+    return _COH_MAX + (_COH_MAX_HI - _COH_MAX) * float(np.clip(t, 0.0, 1.0))
 
 
 def _disk(shape: tuple[int, int], center: np.ndarray, radius: int) -> np.ndarray:
@@ -146,8 +199,12 @@ def _maha(pixels: np.ndarray, med: np.ndarray, sigma: np.ndarray) -> np.ndarray:
 def _qc_patch(lab: np.ndarray, usable: np.ndarray,
               patch: np.ndarray) -> np.ndarray:
     """Clip/specular + coherence pre-filter (in `usable`), then fit a robust
-    Lab model on the patch itself and drop the top 15% Mahalanobis outliers
-    (stray hairs, a mole, a glasses rim crossing the disk)."""
+    Lab model on the patch itself and drop Mahalanobis OUTLIERS (stray hairs,
+    a mole, a glasses rim crossing the disk): maha > 3 (chi_3 ~p96), capped
+    at the top 15%. This trims what is actually outlying instead of the old
+    unconditional top-15% cut, which threw away clean pixels on every patch
+    (measured dev9: stacked on the coherence gate it left psd03 at 94% of
+    Nmin — an abstain caused by the trim, not the photo)."""
     m = patch & usable
     n = int(m.sum())
     if n < _PATCH_MODEL_MIN:
@@ -156,11 +213,15 @@ def _qc_patch(lab: np.ndarray, usable: np.ndarray,
     med, sigma = _robust_model(px)
     d = _maha(px, med, sigma)
     keep_n = int(np.ceil((1.0 - _MAHA_DROP) * n))
-    # Stable sort => deterministic survivor set even on tied distances.
-    keep_idx = np.argsort(d, kind="stable")[:keep_n]
+    # Cap: never trim more than _MAHA_DROP even under heavy contamination
+    # (the ladder/share rules judge what is left, not this cut). Value-based
+    # keep => deterministic; ties at the cut are kept.
+    d_sorted = np.sort(d, kind="stable")
+    cut = max(_MAHA_TRIM_CUT, float(d_sorted[keep_n - 1]))
+    keep = d <= cut
     ys, xs = np.nonzero(m)
     out = np.zeros_like(m)
-    out[ys[keep_idx], xs[keep_idx]] = True
+    out[ys[keep], xs[keep]] = True
     return out
 
 
@@ -168,22 +229,41 @@ def select_patch_ladder(counts: dict[str, int], forehead_ok: bool,
                         nmin: float) -> tuple[int, list[str], bool] | None:
     """Validity ladder over post-QC patch pixel counts.
 
-    (1) both cheeks -> (2) one cheek + verified forehead -> (3) one cheek
-    alone meeting Nmin (single_anchor=True) -> None. Levels 1-2 also require
-    each patch to carry >= 25% of the total, so one dying patch cannot hide
-    behind the other. NOTE: with the spec radii a lone cheek disk holds
-    ~0.0064*fw^2 px < Nmin = 0.008*fw^2, so level 3 is geometrically
-    unreachable today — it exists (and is tested directly) for larger anchor
+    (1) both cheeks — recruiting the verified forehead ONLY when the cheeks
+    alone fall short of Nmin -> (2) one cheek + verified forehead -> (3) one
+    cheek alone meeting Nmin (single_anchor=True) -> (4) all alive patches
+    pooled: Nmin met but the 25% share rule is not — accepted as a RECORDED
+    low_conf degradation (dev9: 4/9 normal selfies abstained; abstain is for
+    occluded/extreme photos, not share imbalance on an otherwise sufficient
+    anchor) -> None.
+
+    Level 1 may recruit the forehead because Nmin(0.008*fw^2) is ~66% of
+    the two disks' raw capacity (0.0127*fw^2): on small faces the Nmin FLOOR
+    (768) can be unreachable from the cheeks alone (dev9 pic1, fw 273:
+    cheeks 731 px post-QC under the old trim, forehead 270 px verified at
+    inlier 1.00 — pooled it passes, and there was no level that pooled it).
+    When the cheeks alone meet Nmin the forehead is NOT added: anchors stay
+    on the safest anatomy unless more support is actually needed. The
+    forehead still only enters via the cheek-model verification;
+    forehead-only remains impossible at every level.
+
+    Levels 1-2 require each patch >= 25% of the pair total, so one dying
+    patch cannot hide behind the other (level 1 applies this to the CHEEK
+    pair; the recruited forehead only adds pixels). NOTE: with the spec
+    radii a lone cheek disk holds ~0.0064*fw^2 px < Nmin = 0.008*fw^2
+    (capacity; QC only lowers it), so level 3 is geometrically unreachable
+    today — it exists (and is tested directly) for larger anchor
     geometries, not as a live escape hatch.
     """
     nl = int(counts.get("cheek_left", 0))
     nr = int(counts.get("cheek_right", 0))
     nf = int(counts.get("forehead", 0)) if forehead_ok else 0
 
-    if nl > 0 and nr > 0:
-        total = nl + nr
-        if total >= nmin and min(nl, nr) / total >= _PATCH_MIN_SHARE:
+    if nl > 0 and nr > 0 and min(nl, nr) / (nl + nr) >= _PATCH_MIN_SHARE:
+        if nl + nr >= nmin:
             return 1, ["cheek_left", "cheek_right"], False
+        if nf > 0 and nl + nr + nf >= nmin:
+            return 1, ["cheek_left", "cheek_right", "forehead"], False
 
     cheeks = sorted((("cheek_left", nl), ("cheek_right", nr)),
                     key=lambda t: -t[1])
@@ -198,6 +278,16 @@ def select_patch_ladder(counts: dict[str, int], forehead_ok: bool,
     for name, n in cheeks:
         if n >= nmin:
             return 3, [name], True
+
+    # Degraded pool: every alive patch (forehead only if verified, and only
+    # alongside at least one alive cheek — the verification itself needed
+    # >= _CHEEK_MODEL_MIN cheek px). Nmin is still HARD; only the share
+    # rule is waived, and the bundle is flagged low_conf for it.
+    if nl + nr > 0 and nl + nr + nf >= nmin:
+        names = [name for name, n in
+                 (("cheek_left", nl), ("cheek_right", nr), ("forehead", nf))
+                 if n > 0]
+        return 4, names, False
     return None
 
 
@@ -214,10 +304,11 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
     cv2.fillPoly(oval, [landmarks[FACE_OVAL].astype(np.int32)], 1)
     oval = oval.astype(bool)
 
-    # Shared pixel-level QC: clipping/specular + directional coherence.
+    # Shared pixel-level QC: clipping/specular + directional coherence
+    # (scale-aware threshold — see _coh_max_for).
     usable = ((gray < _CLIP_LEVEL)
               & (bgr_full.max(axis=2) < _CLIP_LEVEL)
-              & (coh <= _COH_MAX))
+              & (coh <= _coh_max_for(face_width)))
 
     yy = np.arange(h, dtype=np.float32)[:, None]
     cheek_r = max(2, int(_CHEEK_R * face_width))
@@ -269,6 +360,7 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
         patches_used=names,
         ladder_level=level,
         single_anchor=single,
+        low_conf=(level == 4),
     )
 
 
@@ -281,7 +373,8 @@ class AnchorScaleStats:
     """Per-black-hat-scale anchor distribution of the normalized excess q."""
 
     bin_med: np.ndarray       # (4,) effective per-L-bin median (post-fallback)
-    bin_sigma: np.ndarray     # (4,) effective MAD-derived sigma (post-fallback)
+    bin_sigma: np.ndarray     # (4,) effective robust sigma (post-fallback):
+                              #   max(MAD-derived, p95-tail-derived) — _robust_sigma
     bin_n: np.ndarray         # (4,) int anchor samples per bin
     bin_low_conf: np.ndarray  # (4,) bool: bin was too thin, global stats used
     global_med: float
@@ -319,11 +412,23 @@ def _normalized_maps(bgr: np.ndarray,
     return qs, lp
 
 
+def _robust_sigma(vals: np.ndarray, med: float) -> float:
+    """max(1.4826*MAD, (p95-med)/1.645, eps). On Gaussian data the first two
+    agree; when the distribution is a spike-at-zero (3px black-hat on smooth
+    small-fw skin: median = MAD = 0) only the quantile term still measures
+    the tail that z_thr must clear — see the module docstring."""
+    mad = _MAD_SIGMA * float(np.median(np.abs(vals - med)))
+    qhi = (float(np.quantile(vals, _Q_HI)) - med) / _Q_HI_Z
+    return max(mad, qhi, _SIG_EPS)
+
+
 def _bin_index(l_edges: np.ndarray, lp: np.ndarray) -> np.ndarray:
     """L-bin per pixel; values outside the anchor L range clamp to the edge
     bins (a jaw darker than any anchor is still judged, just by the darkest
     anchor bin — abstaining there would blind the ruler exactly where beard
-    shadow lives)."""
+    shadow lives). The dark-side clamp is BOUNDED at _L_SHADOW_MARGIN below
+    the anchor range by normalized_excess; beyond that (near-black garment,
+    void) the pixel scores 0 instead of being judged."""
     return np.clip(np.searchsorted(l_edges, lp, side="right") - 1, 0, _L_BINS - 1)
 
 
@@ -348,7 +453,7 @@ def anchor_blackhat_stats(bgr_full: np.ndarray, landmarks: np.ndarray,
     for name, q in qs.items():
         vals = q[mask].astype(np.float64)
         gmed = float(np.median(vals))
-        gsig = max(_MAD_SIGMA * float(np.median(np.abs(vals - gmed))), _SIG_EPS)
+        gsig = _robust_sigma(vals, gmed)
         med = np.full(_L_BINS, gmed)
         sig = np.full(_L_BINS, gsig)
         n = np.zeros(_L_BINS, np.int64)
@@ -359,8 +464,7 @@ def anchor_blackhat_stats(bgr_full: np.ndarray, landmarks: np.ndarray,
             if v.size >= _BIN_MIN_N:
                 m = float(np.median(v))
                 med[b] = m
-                sig[b] = max(_MAD_SIGMA * float(np.median(np.abs(v - m))),
-                             _SIG_EPS)
+                sig[b] = _robust_sigma(v, m)
                 low[b] = False
         scales[name] = AnchorScaleStats(
             bin_med=med, bin_sigma=sig, bin_n=n, bin_low_conf=low,
@@ -376,15 +480,25 @@ def normalized_excess(bgr_any: np.ndarray, fw: float,
     0 below z_thr, (z - z_thr) above, max over black-hat scales.
 
     `bgr_any` may be a crop with a different origin than the full frame the
-    stats came from — every normalization inside is local."""
+    stats came from — every normalization inside is local.
+
+    Dark-side validity bound: pixels whose local low-pass L sits more than
+    _L_SHADOW_MARGIN gray levels below the darkest anchor score 0. The
+    bottom L-bin clamp still judges everything down to that bound (beard
+    shadow lives there), but beyond it the transfer claim is vacuous and the
+    Weber denominator max(lp,8)*nf is what gets measured, not hair — on a
+    near-black garment a 1-2 gray-level fabric ripple scored z >> z_thr and
+    inflated the pic2 crop's fired area to ~0.5 (see module docstring)."""
     qs, lp = _normalized_maps(bgr_any, fw)
     idx = _bin_index(stats.l_edges, lp)
+    valid = lp >= float(stats.l_edges[0]) - _L_SHADOW_MARGIN
     out: np.ndarray | None = None
     for name, q in qs.items():
         s = stats.scales[name]
         z = (q - s.bin_med[idx]) / s.bin_sigma[idx]
         e = np.maximum(z - z_thr, 0.0)
         out = e if out is None else np.maximum(out, e)
+    out[~valid] = 0.0
     return out.astype(np.float32)
 
 
