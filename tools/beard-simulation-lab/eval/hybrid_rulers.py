@@ -162,17 +162,18 @@ def fill_lift_gate(orig: np.ndarray, result: np.ndarray,
             "fillLiftLQ10": round(float(np.percentile(lift, 10)), 2)}
 
 
-_BYTE_GUARDS = (("lip", "lipIdentical"), ("nostril_core", "nostrilIdentical"),
-                ("below_jaw", "belowJawIdentical"),
-                ("occluder", "occluderIdentical"))
+_BYTE_GUARDS = (("lip", "lipIdentical"), ("aperture", "apertureIdentical"),
+                ("below_jaw", "belowJawIdentical"))
 
 
 def score_photo(orig: np.ndarray, result: np.ndarray, edit_mask: np.ndarray,
                 clean: np.ndarray, thr: dict | None, guards: dict, fw: float,
                 excess_result: np.ndarray | None = None) -> dict:
-    """Byte gates run for whichever guard masks the caller supplies —
-    v3 retired below_jaw (the mask now legitimately crosses the jaw) and
-    added the occluder guard; the gate list follows the guards dict."""
+    """Byte gates run for whichever guard masks the caller supplies — v4
+    (Codex #13) reinstated below_jaw (the composite terminates at the jaw
+    line again), swapped the alae nostril disks for the DETECTED aperture
+    guard, and retired the occluder guard (photo-level abstain replaced
+    pixel subtraction); the gate list follows the guards dict."""
     m: dict = {}
     m.update(grain_gate(orig, result, edit_mask, clean, fw))
     m.update(new_dark_gate(result, edit_mask, thr, fw,
@@ -194,8 +195,8 @@ def score_photo(orig: np.ndarray, result: np.ndarray, edit_mask: np.ndarray,
 def judge(m: dict) -> dict:
     """pass / abstain / hard-fail per the frozen gates."""
     hard, abstain = [], []
-    for k in ("outsideIdentical", "lipIdentical", "nostrilIdentical",
-              "belowJawIdentical", "occluderIdentical"):
+    for k in ("outsideIdentical", "lipIdentical", "apertureIdentical",
+              "belowJawIdentical"):
         if m.get(k) is False:
             hard.append(k)
 

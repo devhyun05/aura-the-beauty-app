@@ -1,18 +1,26 @@
-"""Guarded-LaMa hybrid v3 — coverage-first PRODUCTION configuration (no GT).
+"""Guarded-LaMa hybrid v4 — face-only PRODUCTION configuration (no GT).
 
-User directive (2026-07-11): erase ALL visible beard — neck and face
-silhouette included; texture/boundary detailing layers on top later. The
-below-jaw clip is RETIRED as a mask bound; face-shape safety moved to the
-silhouette ruler, and geometry misses are coverage failures now, not policy
-exclusions (Codex #10). Hair evidence lives in anchor-normalized z-space
-(eval.reference_bundle — the complement-of-zone clean collapsed on hairy
-photos); the mask canvas is face ∪ silhouette tube ∪ neck corridor with
-garment/occluder guards and evidence hysteresis (spike.mask_v3).
+SCOPE DECISION (user, 2026-07-12 / Codex #13): neck beard, occluders and
+harsh shadows are rejected at the CAPTURE gate — this pipeline edits
+well-lit frontal FACES only. Everything neck/garment (corridor, collar
+detectors, dual-seed neck rule, sequential face/neck LaMa windows,
+occluder pixel subtraction) is removed from the product path; obvious
+occlusion or landmark/aperture instability now refuses the WHOLE photo
+(abstain → retake) instead of silently carving pixels out of the mask.
 
-Single-source decision (oracle kill test 2026-07-11): LaMa's own low AND high
-band inside the mask. Donor re-grain is OFF — the corrected quilt still loses
-the visual gate to LaMa's native texture (grid mottle; psd04 nDonors=1);
-re-grain returns only as a grainMatch-gated follow-up.
+Mask contract (Codex #13):
+- canvas = buffered sub-nose FACE_OVAL ∪ face side of the jawline tube
+  (spike.mask_v3); the composite (edit mask) TERMINATES at the jaw line,
+- the LaMa model mask may cross the jaw by ≤ MODEL_JAW_CONTEXT_FW·fw as
+  context cleanup only — the composite never writes below the jaw,
+- canvas top = NOSE_BOTTOM_y − 0.025fw (absorbs ±0.02fw landmark jitter);
+  the nostril APERTURES inside that band are protected by a DETECTED
+  aperture guard (dark compact pair in the nose-bottom ROI). Detection
+  failure is never papered over with a fabricated guard: the photo
+  abstains with retake class "lower_face_uncertain".
+
+Single-source decision (oracle kill test 2026-07-11): LaMa's own low AND
+high band inside the mask. Donor re-grain is OFF.
 
 The GT REGION masks are used by the RULERS for scoring dev photos, never by
 this pipeline — tuning the mask with GT would tune a pipeline that does not
@@ -34,15 +42,11 @@ sys.path.insert(0, str(LAB))
 
 from engine.beard_segmentation import fit_skin_model, segment_beard  # noqa: E402
 from engine.detect_face import (  # noqa: E402
-    CHIN_TIP, FACE_OVAL, JAW_OVAL, LIPS_OUTER, NOSE_BOTTOM, NOSTRILS,
-    detect_face,
+    LIPS_OUTER, NOSE_BOTTOM, NOSTRILS, detect_face,
 )
 from engine.lower_face_roi import build_lower_face_crop, skin_reference_pixels  # noqa: E402
 from eval.fill_color_ruler import score_fill_color  # noqa: E402
-from eval.ghost_ruler import (  # noqa: E402
-    LOW_SIGMA_RATIO, blackhat_maps, clean_thresholds, excess_map,
-    find_candidates,
-)
+from eval.ghost_ruler import find_candidates  # noqa: E402
 from eval.measure_ghost import _apply_exclusions  # noqa: E402
 from eval.measure_waxiness import CLIPSEG_MODEL, CLIPSEG_THR  # noqa: E402
 from eval.reference_bundle import (  # noqa: E402
@@ -50,17 +54,13 @@ from eval.reference_bundle import (  # noqa: E402
 )
 from eval.run_owndomain_eval import _fit  # noqa: E402
 from eval.silhouette_ruler import score_silhouette  # noqa: E402
-from spike import lama_runner  # noqa: E402
-from spike.mask_v3 import (  # noqa: E402
-    build_canvas, garment_boundary, garment_floor_cols, hysteresis_mask,
-    occluder_guard,
-)
-from spike.oracle_kill import _mod8_window, _smoothstep, label  # noqa: E402
+from spike import lama_runner, mask_v3  # noqa: E402
+from spike.mask_v3 import build_canvas, hysteresis_mask  # noqa: E402
+from spike.oracle_kill import _mod8_window, label  # noqa: E402
 
 OUT = LAB / "outputs" / "ghost" / "hybrid"
 
-# v3 coverage-first config — frozen BEFORE the one-shot dev9 run (Codex
-# #9/#10 discipline). Recorded verbatim into every report.json.
+# v4 face-only config (Codex #13). Recorded verbatim into every report.json.
 CONFIG = {
     "lamaMaxDim": 512,
     # Zone edit threshold on the C1∪CLIPSeg union field. Serving ZONE_THR=0.5
@@ -68,62 +68,92 @@ CONFIG = {
     # Sweep on dev9 GT (scoring-only use): 0.06->70%, 0.03->83%, 0.01->91%
     # recall. 0.03 adopted: over-mask under LaMa costs texture, not anatomy.
     "zoneEditThr": 0.03,
-    # Coverage-first canvas (Codex #10): the crop's under-jaw extension must
-    # reach the neck-corridor floor (chin + 0.35*face_height).
-    "underJawExtend": 0.38,
-    # Hysteresis seeds — two INDEPENDENT signals (reviewer risk: passing one
-    # field twice silently disables the dual-seed neck protection):
-    # CLIPSeg union field high-confidence, and anchor-normalized black-hat
-    # z well above the excess onset (z_thr 4.5 + 3.0).
+    # Crop under-jaw extension (×face_height). v3 used 0.38 to reach the
+    # neck-corridor floor; the corridor is gone and the mask now ends at the
+    # jaw, so the crop only needs the jaw tube + model context + ruler bands
+    # below the jaw. Dev check 2026-07-12 (spike -> scratchpad script over
+    # dev9): min below-jaw clearance in-crop is 0.06fw margin + extend·fh;
+    # 0.12 gives >=0.20fw clearance under the lowest jaw pixel on every dev
+    # photo (need ~0.05fw: 0.015 model context + 0.02 seam band + 0.03
+    # grain/fillColor ring), with landmark-jitter headroom; 0.08-0.15 all
+    # passed, 0.12 keeps a 2x safety factor without dragging chest pixels in.
+    "underJawExtend": 0.12,
+    # Hysteresis seeds — either independent signal may seed a component:
+    # CLIPSeg union field high-confidence, or anchor-normalized black-hat
+    # z well above the excess onset (z_thr 4.5 + 3.0). The v3 corridor-only
+    # dual-seed rule left with the corridor.
     "seedClipseg": 0.5,
     "seedZ": 3.0,
-    # Face/neck SPLIT line (not a clip): jaw_y + this*fw. The v2 face-side
-    # fill up to this line was the best result of the whole project (psd04
-    # jaw-margin panel); v3 keeps it verbatim and adds a separate
-    # evidence-tight neck pass below it. A single hole spanning face+neck
-    # washed the silhouette away (v3smoke) and the sequential giant-hole
-    # split painted the chin gray (v3split) — small neck holes with intact
-    # context are LaMa's best regime.
-    "faceNeckSplit": 0.06,
     # model_mask = edit_mask closed + dilated this much: LaMa sees a slightly
     # larger hole so boundary stubble doesn't condition the fill, but the
-    # composite writes edit_mask pixels ONLY (Codex #9 Q4).
+    # composite writes edit_mask pixels ONLY (Codex #9 Q4). Below the jaw the
+    # hole may additionally extend mask_v3.MODEL_JAW_CONTEXT_FW (0.015fw).
     "modelMaskDilate": 0.004,
     "hairHaloDilate": 0.003,
 }
 
-# --- Anatomy guards (Codex #12 stage-1 redesign). --------------------------
-# The old guards re-dilated crop.protect_mask (lips already dilated 0.045fw
-# + THREE nose disks including NOSE_BOTTOM) by another 0.025fw distance —
-# measured philtrum blockage up to 98.6%, and the mouth-side bands were cut
-# too. The inviolable contract is the TRUE lip vermilion and the TRUE
-# nostrils; the philtrum (mustache) and mouth-side bands are first-class
-# edit regions. Guards below are built from raw landmarks, are FINAL once
-# built (no downstream re-dilation), and are exactly the masks the
-# byte-identity gates in eval.hybrid_rulers check.
+# --- Anatomy guards (Codex #12 stage-1 redesign; #13 aperture guard). ------
+# The inviolable contract is the TRUE lip vermilion and the TRUE nostril
+# APERTURES; the philtrum (mustache) and mouth-side bands are first-class
+# edit regions. Guards are built from raw landmarks + real detection, are
+# FINAL once built (no downstream re-dilation), and are exactly the masks
+# the byte-identity gates in eval.hybrid_rulers check.
 LIP_GUARD_DILATE_FW = 0.004    # vermilion polygon + thin blend margin
-NOSTRIL_GUARD_R_FW = 0.012     # tight disk on each NOSTRILS landmark
+
+# --- Nostril aperture guard (Codex #13). -----------------------------------
+# The old r=0.012fw disks sat on the NOSTRILS landmarks — the ALAE (nose
+# wings), which do NOT cover the dark apertures (review-confirmed). The
+# guard is now DETECTED: in a nose-bottom ROI, each side must show one
+# skin-contrasting dark compact component; the pair (size/side/alignment/
+# compactness gated) is dilated slightly and becomes the guard. No pair →
+# no fabricated guard → the photo abstains ("lower_face_uncertain").
+APERTURE_ROI_PAD_FW = 0.02     # ROI x-pad beyond the alae landmarks
+APERTURE_ROI_UP_FW = 0.035     # ROI top above min(alae y, nose bottom y)
+APERTURE_ROI_DOWN_FW = 0.015   # ROI bottom below the nose bottom
+APERTURE_CONTRAST_L = 40.0     # component must be this far under ROI median
+                               #   L (8-bit Lab L, ≈16 L*): apertures are
+                               #   near-black vs philtrum skin
+APERTURE_MIN_AREA_FW = 0.008   # component area >= (0.008fw)^2 (floor 4 px)
+APERTURE_MAX_AREA_FW = 0.06    # and <= (0.06fw)^2 — bigger blobs are beard
+                               #   shadow, not an aperture
+APERTURE_MIN_FILL = 0.30       # area / bbox area: compactness gate
+APERTURE_MAX_DY_FW = 0.03      # L/R centroid vertical misalignment cap
+APERTURE_SPLIT_HALF_FW = 0.005  # center strip excluded so a shadow can't
+                               #   merge both apertures into one component
+APERTURE_DILATE_FW = 0.004     # guard halo (spec allows 0.003..0.005)
+
+ABSTAIN_LOWER_FACE = "lower_face_uncertain"  # retake classification
 
 # Provenance codes (Codex #12 stage 0): per-pixel reason a pixel was NOT
 # edited (0 = edited). Recorded by build_mask, sheeted by run_photo.
 PROV_EDIT, PROV_OUT_CANVAS, PROV_NO_EVIDENCE = 0, 1, 2
-PROV_HYSTERESIS, PROV_LIP, PROV_NOSTRIL, PROV_OCCLUDER = 3, 4, 5, 6
+PROV_HYSTERESIS, PROV_LIP, PROV_APERTURE = 3, 4, 5
 PROV_NAMES = {PROV_EDIT: "edit", PROV_OUT_CANVAS: "outCanvas",
               PROV_NO_EVIDENCE: "noEvidence",
               PROV_HYSTERESIS: "hysteresisDrop", PROV_LIP: "lipGuard",
-              PROV_NOSTRIL: "nostrilGuard", PROV_OCCLUDER: "occluderGuard"}
+              PROV_APERTURE: "apertureGuard"}
 PROV_COLORS = {PROV_EDIT: (0, 200, 0), PROV_OUT_CANVAS: (40, 40, 40),
                PROV_NO_EVIDENCE: (160, 160, 160),
                PROV_HYSTERESIS: (0, 255, 255), PROV_LIP: (0, 0, 255),
-               PROV_NOSTRIL: (255, 0, 255), PROV_OCCLUDER: (255, 128, 0)}
+               PROV_APERTURE: (255, 0, 255)}
 
 
-def production_zone_soft(crop, skin) -> np.ndarray:
-    """Serving zone field in [0,1], crop coords: C1 detector ∪ CLIPSeg
-    raw-sigmoid region (thr 0.06 onset, fw/45 smoothing) — the adopted
-    clipseg_masks union, but WITHOUT the wide protect-mask carving:
-    under-lip beard must stay maskable (Codex #8 Q2); lips get a narrow
-    hard hole later instead."""
+def production_zone_soft(crop, skin) -> dict:
+    """Serving zone signals in crop coords, SEPARATED (Codex #13 task 1).
+
+    The historical max-union (C1 ∪ shadow ∪ CLIPSeg) survives as "union" —
+    the hysteresis growth/seed field keeps its calibration — but the parts
+    are now preserved and returned alongside it, because the mustache
+    activation rules need to know WHICH family fired:
+      semantic : raw CLIPSeg sigmoid heat (fw/45 smoothed, PRE-threshold,
+                 PRE-normalization — spike.mustache_region thresholds it at
+                 the 0.06 onset itself),
+      c1_hard / c1_shadow : the pixel-statistics texture detector fields
+                 (the anchor-z normalized_excess is computed separately in
+                 prepare_unlabeled and travels as ctx["nz"]).
+    Not roi-scoped: the editable-region guard is applied at mask build;
+    scoping the field to roi would zero the evidence exactly where the
+    extension needs it (pic3 mustache flanks)."""
     from eval.bench_models import clipseg_heat
 
     c1 = segment_beard(crop, skin)
@@ -131,15 +161,15 @@ def production_zone_soft(crop, skin) -> np.ndarray:
                         normalize=False)
     heat = cv2.GaussianBlur(heat, (0, 0), sigmaX=max(2.0, crop.face_width / 45))
     region = np.clip((heat - CLIPSEG_THR) / (1.0 - CLIPSEG_THR), 0, 1)
-    # NOT roi-scoped here: the editable-region guard (roi ∪ cheek extension)
-    # is applied at mask build; scoping the field to roi would zero the
-    # evidence exactly where the extension needs it (pic3 mustache flanks).
     union = np.maximum(np.maximum(c1.hard, c1.shadow), region)
-    return union.astype(np.float32)
+    return {"union": union.astype(np.float32),
+            "semantic": heat.astype(np.float32),
+            "c1_hard": c1.hard.astype(np.float32),
+            "c1_shadow": c1.shadow.astype(np.float32)}
 
 
 def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
-    """prepare_photo counterpart, v3: CLIPSeg zone in place of GT, and the
+    """prepare_photo counterpart, v4: CLIPSeg zone in place of GT, and the
     anatomical ReferenceBundle in place of the complement-of-zone clean
     (which collapsed on hairy photos: pic1 kept 2.6k px and black-hat
     thresholds fell 15->2, reading normal skin as hair). All hair evidence
@@ -165,7 +195,8 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
                                  under_jaw_extend=CONFIG["underJawExtend"])
     fw = crop.face_width
 
-    zone_soft = production_zone_soft(crop, skin)
+    zone_parts = production_zone_soft(crop, skin)
+    zone_soft = zone_parts["union"]
     zone = zone_soft > CONFIG["zoneEditThr"]
     # normalization is local, so the CROP may be scored against the
     # full-frame anchor stats directly
@@ -191,23 +222,86 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
 
     return dict(bgr=bgr, det=det, skin=skin, crop=crop, bundle=bundle,
                 stats=stats, nz=nz, zone=zone, zone_soft=zone_soft,
+                semantic_heat=zone_parts["semantic"], zone_parts=zone_parts,
                 lowev=lowev, protect_d=protect_d, cand_zone=cand_zone,
                 cands_ext=cands, name=name)
 
 
-def _anatomy_guards(crop, legacy: bool = False) -> dict:
-    """Tight anatomical no-paint guards, from RAW landmarks only (Codex #12).
+def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
+                             fw: float) -> np.ndarray | None:
+    """Detect the two nostril APERTURES as skin-contrasting dark compact
+    components in a nose-bottom ROI; return their union dilated by
+    APERTURE_DILATE_FW as the guard mask, or None when no valid pair exists
+    (caller must then ABSTAIN — a guard is never fabricated).
 
-    lip          = true LIPS_OUTER polygon + 0.004fw dilation
-    nostril_core = one r=0.012fw disk per NOSTRILS landmark
+    Per-component gates: area within [APERTURE_MIN_AREA_FW², max²],
+    compactness (bbox fill ratio), centroid on its own side of the nose
+    center; pair gate: one component per side + vertical alignment."""
+    h, w = bgr.shape[:2]
+    nose_x, nose_y = (float(v) for v in landmarks[NOSE_BOTTOM])
+    al = landmarks[list(NOSTRILS)].astype(np.float64)
 
-    NOSE_BOTTOM is NOT a guard seed and crop.protect_mask is never reused
-    as guard raw material: the old protect-mask-seeded distance dilation
-    blocked up to 98.6% of the philtrum, which is a first-class edit region
-    (mustache). These masks are final — no re-dilation after this point —
-    and are exactly what eval.hybrid_rulers byte-identity gates check.
+    x0 = int(max(0, np.floor(al[:, 0].min() - APERTURE_ROI_PAD_FW * fw)))
+    x1 = int(min(w, np.ceil(al[:, 0].max() + APERTURE_ROI_PAD_FW * fw) + 1))
+    y0 = int(max(0, np.floor(min(al[:, 1].min(), nose_y)
+                             - APERTURE_ROI_UP_FW * fw)))
+    y1 = int(min(h, np.ceil(nose_y + APERTURE_ROI_DOWN_FW * fw) + 1))
+    if x1 - x0 < 4 or y1 - y0 < 3:
+        return None
 
-    legacy=True reproduces the pre-fix guards verbatim; it exists ONLY so
+    roi_l = cv2.cvtColor(bgr[y0:y1, x0:x1],
+                         cv2.COLOR_BGR2Lab)[..., 0].astype(np.float32)
+    med = float(np.median(roi_l))
+    dark = roi_l < med - APERTURE_CONTRAST_L
+    # center strip out: a philtrum/columella shadow must not merge L and R
+    split = max(1, int(round(APERTURE_SPLIT_HALF_FW * fw)))
+    cx_roi = int(round(nose_x)) - x0
+    dark[:, max(0, cx_roi - split):cx_roi + split + 1] = False
+
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(
+        dark.astype(np.uint8), connectivity=8)
+    min_px = max(4, int((APERTURE_MIN_AREA_FW * fw) ** 2))
+    max_px = int((APERTURE_MAX_AREA_FW * fw) ** 2)
+    best: dict[str, tuple[int, float]] = {}   # side -> (label, area)
+    for i in range(1, n):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        if not min_px <= area <= max_px:
+            continue
+        bw, bh = int(stats[i, cv2.CC_STAT_WIDTH]), int(stats[i, cv2.CC_STAT_HEIGHT])
+        if area / float(max(bw * bh, 1)) < APERTURE_MIN_FILL:
+            continue
+        side = "L" if cents[i, 0] + x0 < nose_x else "R"
+        if side not in best or area > best[side][1]:
+            best[side] = (i, area)
+    if "L" not in best or "R" not in best:
+        return None
+    li, ri = best["L"][0], best["R"][0]
+    if abs(float(cents[li, 1] - cents[ri, 1])) > APERTURE_MAX_DY_FW * fw:
+        return None
+
+    guard = np.zeros((h, w), np.uint8)
+    pair = (labels == li) | (labels == ri)
+    guard[y0:y1, x0:x1] = pair.astype(np.uint8)
+    dk = max(3, int(APERTURE_DILATE_FW * fw) | 1)
+    guard = cv2.dilate(guard, cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (dk, dk)))
+    return guard > 0
+
+
+def _anatomy_guards(crop, legacy: bool = False) -> dict | None:
+    """Tight anatomical no-paint guards (Codex #12 lips; #13 apertures).
+
+    lip      = true LIPS_OUTER polygon + 0.004fw dilation
+    aperture = detect_nostril_apertures() pair, dilated 0.004fw
+
+    Returns None when the aperture pair cannot be detected — the caller
+    ABSTAINS the photo (retake class "lower_face_uncertain"); a fabricated
+    guard would hide exactly the failure it exists to catch. These masks
+    are final — no re-dilation after this point — and are exactly what
+    eval.hybrid_rulers byte-identity gates check.
+
+    legacy=True reproduces the pre-Codex-#12 guards verbatim (protect-mask
+    seeded distance dilation, key "nostril_core"); it exists ONLY so
     spike.mask_eval can measure before/after on the same harness.
     """
     h, w = crop.bgr.shape[:2]
@@ -224,7 +318,7 @@ def _anatomy_guards(crop, legacy: bool = False) -> dict:
         ndist = cv2.distanceTransform((~nostril).astype(np.uint8),
                                       cv2.DIST_L2, 3)
         nostril_core = ndist < max(4.0, 0.025 * fw)
-        return {"lip": lip, "nostril_core": nostril_core}
+        return {"lip": lip, "aperture": nostril_core}
 
     lip_poly = np.zeros((h, w), np.uint8)
     cv2.fillPoly(lip_poly, [crop.landmarks[LIPS_OUTER].astype(np.int32)], 1)
@@ -232,123 +326,105 @@ def _anatomy_guards(crop, legacy: bool = False) -> dict:
     lip = cv2.dilate(lip_poly, cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (lk, lk))) > 0
 
-    nostril_core = np.zeros((h, w), np.uint8)
-    nr = max(2, int(round(NOSTRIL_GUARD_R_FW * fw)))
-    for idx in NOSTRILS:
-        cx, cy = (int(round(float(v))) for v in crop.landmarks[idx])
-        cv2.circle(nostril_core, (cx, cy), nr, 1, -1)
-
-    return {"lip": lip, "nostril_core": nostril_core > 0}
+    aperture = detect_nostril_apertures(crop.bgr, crop.landmarks, fw)
+    if aperture is None:
+        return None
+    return {"lip": lip, "aperture": aperture}
 
 
 def build_mask(ctx: dict, legacy_guards: bool = False,
-               ) -> tuple[np.ndarray, np.ndarray, dict]:
-    """v3 coverage-first mask: canvas = face ∪ silhouette tube ∪ neck
-    corridor (spike.mask_v3), evidence hysteresis with two independent seed
-    signals, garment/occluder guards. edit_mask is what the composite writes;
-    model_mask (slightly dilated) is LaMa's hole.
+               ) -> tuple[np.ndarray | None, np.ndarray | None, dict]:
+    """v4 face-only mask: canvas = buffered sub-nose oval ∪ face side of the
+    jawline tube (spike.mask_v3), seeded evidence hysteresis, lip + detected
+    aperture guards. edit_mask (what the composite writes) TERMINATES at the
+    jaw; model_mask (LaMa's hole) may cross it by MODEL_JAW_CONTEXT_FW only.
+
+    Returns (None, None, {"abstain": ...}) when the aperture pair cannot be
+    detected — photo-level abstain replaces both the fabricated guard AND
+    the v3 per-pixel occluder subtraction.
 
     The returned dict additionally carries "provenance": a uint8 per-pixel
     map of WHY each pixel is not edited (PROV_* codes), plus per-code pixel
     counts in the "mask" info. legacy_guards reproduces the pre-Codex-#12
     guards for before/after measurement only (spike.mask_eval)."""
-    crop, bundle = ctx["crop"], ctx["bundle"]
+    crop = ctx["crop"]
     fw = crop.face_width
-    fh = ctx["det"].face_height
     shape = crop.bgr.shape[:2]
 
-    # Two-pass canvas (reviewer trap #4): geometry first, then the garment
-    # boundary from pixels, then rebuild with the found floor.
-    canvas0 = build_canvas(crop.landmarks, shape, fw, fh)
-    chin_y = float(crop.landmarks[CHIN_TIP][1])
-    # Per-column floor first (V-necks/slanted necklines — row-persistence
-    # returned None on psd04's hoodie and the corridor ran onto fabric with
-    # CLIPSeg+z dual seeds both firing on the dark neckline); scalar
-    # detector as fallback.
-    gy = garment_floor_cols(crop.bgr, canvas0["neck_corridor"], chin_y, fh,
-                            bundle.lab_mean, bundle.lab_cov)
-    if gy is None:
-        gy = garment_boundary(crop.bgr, canvas0["neck_corridor"], chin_y, fh,
-                              bundle.lab_mean, bundle.lab_cov)
-    canvas = build_canvas(crop.landmarks, shape, fw, fh, garment_boundary_y=gy)
+    guards = _anatomy_guards(crop, legacy=legacy_guards)
+    if guards is None:
+        return None, None, {"abstain": ABSTAIN_LOWER_FACE}
 
-    # Hysteresis evidence: seeds from two INDEPENDENT signals; dual seed =
-    # both fire co-located (small dilation each, then AND).
-    clip_strong = ctx["zone_soft"] > CONFIG["seedClipseg"]
-    z_strong = ctx["nz"] > CONFIG["seedZ"]
-    k3 = np.ones((3, 3), np.uint8)
-    dual = (cv2.dilate(clip_strong.astype(np.uint8), k3) > 0) \
-        & (cv2.dilate(z_strong.astype(np.uint8), k3) > 0)
-    seed = clip_strong | z_strong
+    canvas = build_canvas(crop.landmarks, shape, fw)
+
+    # Hysteresis evidence: a component survives iff it carries one strong
+    # seed from EITHER independent signal (CLIPSeg union / anchor-z).
+    seed = (ctx["zone_soft"] > CONFIG["seedClipseg"]) \
+        | (ctx["nz"] > CONFIG["seedZ"])
     growth = ctx["zone"] | (ctx["nz"] > 0) | seed
-    face_and_tube = canvas["face_region"] | canvas["silhouette_tube"]
-
-    # FACE side: the proven v2 recipe — everything above jaw + split margin.
-    jaw_y = _jaw_line(crop)
-    yy = np.arange(shape[0], dtype=np.float32)[:, None]
-    above_split = yy <= jaw_y[None, :] + CONFIG["faceNeckSplit"] * fw
-    face_mask = hysteresis_mask(growth, seed, dual, canvas["canvas"],
-                                face_and_tube) & above_split
+    mask = hysteresis_mask(growth, seed, canvas["canvas"])
 
     # Strict hair components get a small halo (never a blanket dilation).
     hk = max(3, int(CONFIG["hairHaloDilate"] * fw) | 1)
     for c in ctx["cands_ext"]:
         comp = np.zeros(shape, np.uint8)
         comp[c.px[:, 0], c.px[:, 1]] = 1
-        face_mask |= (cv2.dilate(comp, np.ones((hk, hk), np.uint8)) > 0) \
-            & canvas["canvas"] & above_split
-
-    # NECK side: evidence-TIGHT band below the split — only where hair
-    # z-excess actually is, grown by a small closing. Components must carry
-    # a dual seed OR touch the face mask through the split line: a giant
-    # neck hole washed the silhouette away and grayed the chin (v3smoke /
-    # v3split); a thin band with intact context around it is LaMa's best
-    # regime and is exactly what the psd04 under-jaw ring needs.
-    neck_ev = (ctx["nz"] > 0) & ~above_split & canvas["canvas"]
-    neck_ev = cv2.morphologyEx(neck_ev.astype(np.uint8), cv2.MORPH_CLOSE,
-                               np.ones((hk * 2 + 1, hk * 2 + 1),
-                                       np.uint8)) > 0
-    n, labels = cv2.connectedComponents(neck_ev.astype(np.uint8), 8)
-    face_touch = cv2.dilate(face_mask.astype(np.uint8),
-                            np.ones((5, 5), np.uint8)) > 0
-    keep = np.zeros(n, bool)
-    for i in range(1, n):
-        comp = labels == i
-        if (dual[comp].any()
-                or (comp & face_touch).any()):
-            keep[i] = True
-    neck_mask = keep[labels]
+        mask |= (cv2.dilate(comp, np.ones((hk, hk), np.uint8)) > 0) \
+            & canvas["canvas"]
 
     ck = max(3, int(0.01 * fw) | 1)
-    face_mask = cv2.morphologyEx(face_mask.astype(np.uint8), cv2.MORPH_CLOSE,
-                                 np.ones((ck, ck), np.uint8)) > 0
-    face_mask &= above_split
-    mask = face_mask | neck_mask
+    mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE,
+                            np.ones((ck, ck), np.uint8)) > 0
+    mask &= canvas["canvas"]
 
-    guards = _anatomy_guards(crop, legacy=legacy_guards)
-    # Occluder candidates must EXCLUDE beard-evidence pixels first: dense
-    # beard and shaded neck skin are the pixels farthest from the bright
-    # cheek-anchor color model, so a raw non-skin test eats the very beard
-    # we're here to erase (measured psd04: occluderFrac 0.545, 96% of the
-    # mask deleted). Codex #10: skin likelihood must never hard-gate the
-    # beard mask — the guard is for fabric/chains, which carry no evidence.
-    occl = occluder_guard(crop.bgr, canvas["canvas"] & ~growth,
-                          bundle.lab_mean, bundle.lab_cov, fw)
-    occl &= ~growth
-    guards["occluder"] = occl
-    guards["canvas"] = canvas["canvas"]
+    def _guard(mk: np.ndarray, cv_mask: np.ndarray) -> np.ndarray:
+        return mk & ~guards["lip"] & ~guards["aperture"] & cv_mask
+
+    # Mustache region activation (Codex #13): decide presence per subregion
+    # on the SEPARATED signals (raw CLIPSeg semantic + anchor-z texture, both
+    # required); on activation the subregion is filled WHOLE (partial-erase
+    # ban) — fill = R ∩ canvas − lip − aperture. Synthetic-ctx callers
+    # (guard tests) that carry no semantic field skip the stage.
+    mustache_info: dict | None = None
+    if ctx.get("semantic_heat") is not None:
+        from spike import mustache_region
+
+        strict_edit = _guard(mask, canvas["canvas"])
+        subr = mustache_region.mustache_subregions(
+            crop.landmarks, shape, fw)
+        semantic, texture, coincident = mustache_region.region_signals(
+            ctx["semantic_heat"], ctx["nz"], fw)
+        dec = mustache_region.decide(subr, semantic, texture, coincident,
+                                     strict_edit, fw)
+        fill = mustache_region.activation_fill(
+            subr, dec.activated, canvas["canvas"], guards["lip"],
+            guards["aperture"])
+        mask |= fill
+        mustache_info = {"fired": dec.fired, "rules": dec.rules,
+                         "activated": list(dec.activated),
+                         "fillPx": int(fill.sum()),
+                         "detail": dec.detail,
+                         # 무수염 negative kill 검증: 보류 — negative 세트 대기
+                         "negativeKill": "보류: 세트 대기"}
 
     pre_guard = mask.copy()
 
-    def _guard(mk: np.ndarray) -> np.ndarray:
-        return (mk & ~guards["lip"] & ~guards["nostril_core"] & ~occl
-                & canvas["canvas"])
-
-    edit_mask = _guard(mask)
+    edit_mask = _guard(mask, canvas["canvas"])
     mk = max(3, int(CONFIG["modelMaskDilate"] * fw) | 1)
-    model_mask = _guard(cv2.dilate(edit_mask.astype(np.uint8),
-                                   np.ones((mk, mk), np.uint8)) > 0)
-    guards["above_split"] = above_split
+    mdl = cv2.dilate(edit_mask.astype(np.uint8),
+                     np.ones((mk, mk), np.uint8)) > 0
+    # Jaw-context band: the HOLE may continue below the jaw so boundary
+    # stubble doesn't condition the fill (downward-only extension, capped
+    # by model_canvas at jaw + MODEL_JAW_CONTEXT_FW); the composite never
+    # writes there (edit_mask ⊆ canvas ends at the jaw).
+    ext = max(1, int(round(mask_v3.MODEL_JAW_CONTEXT_FW * fw)))
+    for s in range(1, ext + 1):
+        mdl[s:] |= edit_mask[:-s]
+    model_mask = _guard(mdl, canvas["model_canvas"])
+
+    guards["canvas"] = canvas["canvas"]
+    guards["model_canvas"] = canvas["model_canvas"]
+    guards["below_jaw"] = canvas["below_jaw"]
 
     # Provenance (Codex #12 stage 0): why is each pixel NOT edited. Guard
     # footprints are painted regardless of evidence (that is the map's whole
@@ -356,8 +432,7 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
     # wins over guards that morphologically spilled outside.
     prov = np.full(shape, PROV_NO_EVIDENCE, np.uint8)
     prov[growth & ~mask] = PROV_HYSTERESIS
-    prov[occl] = PROV_OCCLUDER
-    prov[guards["nostril_core"]] = PROV_NOSTRIL
+    prov[guards["aperture"]] = PROV_APERTURE
     prov[guards["lip"]] = PROV_LIP
     prov[~canvas["canvas"]] = PROV_OUT_CANVAS
     prov[edit_mask] = PROV_EDIT
@@ -369,41 +444,23 @@ def build_mask(ctx: dict, legacy_guards: bool = False,
                              for c in sorted(PROV_NAMES)},
             "zoneFrac": round(float(ctx["zone"].mean()), 4),
             "modelMaskFrac": round(float(model_mask.mean()), 4),
-            "corridorFloorY": round(float(canvas["corridor_floor_y"]), 1),
-            "garmentY": None if gy is None else round(float(np.median(gy)), 1),
-            "occluderFrac": round(float(occl.mean()), 4),
             "guardExcludedEnergyFrac": round(
                 float((pre_guard & ~edit_mask).sum())
                 / max(float(pre_guard.sum()), 1.0), 4),
-            "seedPx": int(seed.sum()), "dualSeedPx": int(dual.sum()),
+            "seedPx": int(seed.sum()),
+            "mustache": mustache_info,
             "config": CONFIG}
-    return edit_mask, model_mask, {"mask": info, **guards,
-                                   "growth": growth,
-                                   "face_and_tube": face_and_tube}
-
-
-def _jaw_line(crop) -> np.ndarray:
-    """Per-column jaw y from the JAW_OVAL polyline (crop coords)."""
-    jaw = crop.landmarks[JAW_OVAL].astype(np.float32)
-    order = np.argsort(jaw[:, 0])
-    w = crop.bgr.shape[1]
-    return np.interp(np.arange(w, dtype=np.float32),
-                     jaw[order, 0], jaw[order, 1]).astype(np.float32)
+    return edit_mask, model_mask, {"mask": info, **guards, "growth": growth}
 
 
 def _fill_window(ctx: dict, part_mask: np.ndarray,
-                 frame_override: np.ndarray | None = None,
                  ) -> tuple[np.ndarray, dict]:
     """LaMa fill for ONE window: tight bbox around part_mask + 0.12fw real
     context (Codex #10 Q7-3 — always shrinking the whole expanded crop to 512
     wastes effective resolution), mod-8 aligned in the full frame, <=512
-    inference. Returns a crop-sized float fill (valid where part_mask) + info.
-
-    frame_override: full-frame image to condition on instead of the original
-    (the sequential silhouette-split pass fills the face side on a frame
-    whose neck is already cleaned)."""
+    inference. Returns a crop-sized float fill (valid where part_mask) + info."""
     crop = ctx["crop"]
-    bgr = ctx["bgr"] if frame_override is None else frame_override
+    bgr = ctx["bgr"]
     fw = crop.face_width
     cx0, cy0, cx1, cy1 = crop.bbox
     fh, fwd = bgr.shape[:2]
@@ -446,56 +503,16 @@ def _fill_window(ctx: dict, part_mask: np.ndarray,
 
 def run_lama(ctx: dict, edit_mask: np.ndarray, model_mask: np.ndarray,
              ) -> tuple[np.ndarray, dict]:
-    """Deterministic LaMa fill: the model inpaints model_mask (context margin
-    included); the composite writes edit_mask pixels ONLY.
-
-    Face/neck sequential fill at the split line (jaw + faceNeckSplit*fw):
-    the FACE side runs first on the original frame -- byte-for-byte the v2
-    behavior that produced the project's best result -- then the NECK side
-    (an evidence-tight band) runs conditioned on the cleaned face, so it
-    cannot continue hair patterns from an already-erased chin. One hole
-    spanning both sides washed the silhouette away (measured v3smoke:
-    corr 0.69) and a giant sequential split grayed the chin (v3split);
-    the fix is mask separation, never threshold relaxation (Codex #10)."""
+    """Deterministic LaMa fill, single FACE window (v4): the model inpaints
+    model_mask (context margin + jaw-context band included); the composite
+    writes edit_mask pixels ONLY — never below the jaw. The v3 face/neck
+    sequential two-window structure left with the neck scope."""
     crop = ctx["crop"]
-    fw = crop.face_width
-    fh_img = crop.bgr.shape[0]
-
-    jaw_y = _jaw_line(crop)
-    yy = np.arange(fh_img, dtype=np.float32)[:, None]
-    above = yy <= jaw_y[None, :] + CONFIG["faceNeckSplit"] * fw
-    face_model = model_mask & above
-    neck_model = model_mask & ~above
-
-    if not (face_model.any() and neck_model.any()):
-        fill, info = _fill_window(ctx, model_mask)
-        result = crop.bgr.copy()
-        result[edit_mask] = np.clip(np.rint(fill[edit_mask]), 0,
-                                    255).astype(np.uint8)
-        return result, {**info, "windows": 1}
-
-    # Pass 1: face side on the original frame (v2-proven regime).
-    fill_f, inf_f = _fill_window(ctx, face_model)
-    face_edit = edit_mask & above
-    work = ctx["bgr"].copy()
-    cx0, cy0, cx1, cy1 = crop.bbox
-    work_crop = work[cy0:cy1, cx0:cx1]
-    work_crop[face_edit] = np.clip(np.rint(fill_f[face_edit]), 0,
-                                   255).astype(np.uint8)
-
-    # Pass 2: neck band conditioned on the cleaned face.
-    fill_n, inf_n = _fill_window(ctx, neck_model, frame_override=work)
-    neck_edit = edit_mask & ~above
+    fill, info = _fill_window(ctx, model_mask)
     result = crop.bgr.copy()
-    result[face_edit] = work_crop[face_edit]
-    result[neck_edit] = np.clip(np.rint(fill_n[neck_edit]), 0,
+    result[edit_mask] = np.clip(np.rint(fill[edit_mask]), 0,
                                 255).astype(np.uint8)
-    return result, {"lamaSeconds": round(inf_f["lamaSeconds"]
-                                         + inf_n["lamaSeconds"], 2),
-                    "inferenceScale": min(inf_f["inferenceScale"],
-                                          inf_n["inferenceScale"]),
-                    "windowHW": [inf_f["windowHW"], inf_n["windowHW"]],
-                    "windows": 2}
+    return result, {**info, "windows": 1}
 
 
 def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
@@ -512,6 +529,13 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
         print(f"{name}: {ctx['abstain']}")
         return rec
     edit_mask, model_mask, guards = build_mask(ctx)
+    if edit_mask is None:
+        # Aperture pair undetected → photo-level abstain (retake class).
+        rec = {"id": name, "verdict": "abstain",
+               "abstains": [guards["abstain"]],
+               "retakeClass": guards["abstain"]}
+        print(f"{name}: abstain ({guards['abstain']})")
+        return rec
     t_mask = time.perf_counter()
     rec: dict = {"id": name, **guards["mask"]}
     if not edit_mask.any():
@@ -538,8 +562,7 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
     rec.update(score_photo(crop.bgr, result, edit_mask, ctx["lowev"],
                            None, guards, fw, excess_result=nz_result))
 
-    # Silhouette ruler replaces the retired below-jaw byte gate: the mask now
-    # crosses the jaw, so face-shape preservation is measured, not masked.
+    # Silhouette ruler: face-shape preservation is measured, not masked.
     sil = score_silhouette(crop.bgr, result, crop.landmarks, fw)
     rec["silhouette"] = sil
     # ADVISORY for checkpoint-5 (Codex #11): the ruler as built cannot
@@ -555,7 +578,7 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
     # anchor_cov: ab block of the bundle Lab covariance (reviewer trap #3 —
     # [:2,:2] would be L,a).
     exclude = (ctx["zone"] | (ctx["nz"] > 0) | guards["lip"]
-               | guards["nostril_core"] | guards["occluder"])
+               | guards["aperture"])
     fc = score_fill_color(crop.bgr, result, edit_mask, exclude, fw,
                           anchor_cov=bundle.lab_cov[1:, 1:].astype(np.float64))
     rec["fillColor"] = fc
@@ -566,7 +589,6 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
 
     # Ghost gate in anchor-z space, scoped to candidates the mask INTENDED
     # to erase; fringe (in-canvas, out-of-mask) = coverage shortfall flag.
-    # v3 has no policy-outside class: geometry misses ARE coverage failures.
     in_mask, fringe, out_canvas = [], 0, 0
     for c in ctx["cands_ext"]:
         if float(edit_mask[c.px[:, 0], c.px[:, 1]].mean()) > 0.5:
@@ -624,8 +646,8 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
               "SEED:CLIP"),
         label(_tint(ctx["nz"] > CONFIG["seedZ"], (255, 255, 0)), "SEED:Z"),
         label(_tint(edit_mask, (0, 255, 0)), "EDIT"),
-        label(_tint(guards["occluder"] | guards["lip"]
-                    | guards["nostril_core"], (0, 0, 255)), "GUARDS"),
+        label(_tint(guards["lip"] | guards["aperture"], (0, 0, 255)),
+              "GUARDS"),
         label(_tint(guards["canvas"], (255, 128, 0)), "CANVAS"),
     ])
     cv2.imwrite(str(out_dir / f"{name}_layers.png"), layers)

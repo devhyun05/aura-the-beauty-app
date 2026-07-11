@@ -1,13 +1,17 @@
-"""Synthetic controls for the Codex #12 guard redesign (spike.hybrid_recon).
+"""Synthetic controls for the Codex #12 guard redesign (spike.hybrid_recon),
+updated for the Codex #13 DETECTED aperture guard (the r=0.012fw alae disks
+are retired; the guard is the detected dark aperture pair + 0.004fw halo,
+and detection failure ABSTAINS the photo instead of fabricating a guard).
 
 Fully synthetic — no photos, no models: a 478-slot landmark array (ellipse
 FACE_OVAL as in test_mask_v3, plus a lip polygon and nostril points), skin
-bgr, and saturated evidence fields so build_mask's edit mask equals
-"canvas minus guards". Controls:
+bgr with two PAINTED dark aperture blobs, and saturated evidence fields so
+build_mask's edit mask equals "canvas minus guards". Controls:
   (i)   philtrum coverage >= 95% (the old guards blocked up to 98.6% of it),
-  (ii)  ZERO edit pixels on the true lip polygon / true nostril disks,
+  (ii)  ZERO edit pixels on the true lip polygon / painted apertures,
   (iii) no guard re-dilation: guard areas byte-match their tight definitions,
-  (iv)  canvas top gap 0 under the nose bottom.
+  (iv)  canvas top gap 0 under the nose bottom,
+  (v)   no detectable aperture pair -> build_mask abstains (never fabricates).
 """
 from __future__ import annotations
 
@@ -26,8 +30,8 @@ from engine.detect_face import (  # noqa: E402
 )
 from spike import hybrid_recon  # noqa: E402
 from spike.hybrid_recon import (  # noqa: E402
-    LIP_GUARD_DILATE_FW, NOSTRIL_GUARD_R_FW, PROV_EDIT, PROV_OUT_CANVAS,
-    _anatomy_guards, build_mask,
+    ABSTAIN_LOWER_FACE, APERTURE_DILATE_FW, LIP_GUARD_DILATE_FW, PROV_EDIT,
+    PROV_OUT_CANVAS, _anatomy_guards, build_mask, detect_nostril_apertures,
 )
 
 H, W = 520, 400
@@ -61,11 +65,31 @@ def _landmarks() -> np.ndarray:
 LM = _landmarks()
 
 
-def _skin_bgr() -> np.ndarray:
+# Painted aperture blobs (the DETECTED guard's ground truth): dark filled
+# ellipses at the nostril landmark positions, well inside the detector's
+# nose-bottom ROI and its area/compactness gates at FW=220.
+APERTURE_AXES = (4, 2)
+APERTURE_BGR = (25, 25, 25)
+
+
+def _skin_bgr(with_apertures: bool = True) -> np.ndarray:
     rng = np.random.RandomState(20260712)
     img = np.full((H, W, 3), SKIN_BGR, np.float32)
     img += rng.normal(0, 3.0, img.shape).astype(np.float32)
-    return np.clip(img, 0, 255).astype(np.uint8)
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    if with_apertures:
+        for idx in NOSTRILS:
+            cv2.ellipse(img, (int(LM[idx][0]), int(LM[idx][1])),
+                        APERTURE_AXES, 0, 0, 360, APERTURE_BGR, -1)
+    return img
+
+
+def _true_apertures() -> np.ndarray:
+    blobs = np.zeros((H, W), np.uint8)
+    for idx in NOSTRILS:
+        cv2.ellipse(blobs, (int(LM[idx][0]), int(LM[idx][1])),
+                    APERTURE_AXES, 0, 0, 360, 1, -1)
+    return blobs > 0
 
 
 def _ctx() -> dict:
@@ -103,20 +127,12 @@ def _true_lip() -> np.ndarray:
     return lip > 0
 
 
-def _true_nostrils() -> np.ndarray:
-    disks = np.zeros((H, W), np.uint8)
-    nr = max(2, int(round(NOSTRIL_GUARD_R_FW * FW)))
-    for idx in NOSTRILS:
-        cv2.circle(disks, (int(LM[idx][0]), int(LM[idx][1])), nr, 1, -1)
-    return disks > 0
-
-
 def test_philtrum_coverage_at_least_95pct():
     """(i) With saturated evidence the philtrum must be >=95% editable —
     the old protect-mask-seeded guards blocked up to 98.6% of it."""
     ctx = _ctx()
     edit, _, guards = build_mask(ctx)
-    region = _philtrum_region() & ~guards["nostril_core"]
+    region = _philtrum_region() & ~guards["aperture"]
     cov = float((edit & region).sum()) / float(region.sum())
     assert cov >= 0.95, f"philtrum coverage {cov:.3f} < 0.95"
 
@@ -138,22 +154,22 @@ def test_mouth_side_bands_editable():
     assert cov >= 0.95, f"mouth-side coverage {cov:.3f} < 0.95"
 
 
-def test_zero_intrusion_on_true_lip_and_nostrils():
+def test_zero_intrusion_on_true_lip_and_apertures():
     """(ii) The inviolable contract: not one edit pixel on the raw lip
-    polygon or the nostril disks."""
+    polygon or the painted aperture blobs."""
     ctx = _ctx()
     edit, model, _ = build_mask(ctx)
     assert int((edit & _true_lip()).sum()) == 0
-    assert int((edit & _true_nostrils()).sum()) == 0
+    assert int((edit & _true_apertures()).sum()) == 0
     # model_mask (LaMa hole) is guard-subtracted too
     assert int((model & _true_lip()).sum()) == 0
-    assert int((model & _true_nostrils()).sum()) == 0
+    assert int((model & _true_apertures()).sum()) == 0
 
 
 def test_guards_not_redilated():
     """(iii) Guards are final at construction: the returned masks byte-match
-    the tight definitions (lip polygon + 0.004fw ellipse dilation; r=0.012fw
-    nostril disks) — any downstream re-dilation would break equality."""
+    the tight definitions (lip polygon + 0.004fw ellipse dilation; DETECTED
+    aperture pair + 0.004fw halo) — downstream re-dilation breaks equality."""
     ctx = _ctx()
     _, _, guards = build_mask(ctx)
 
@@ -163,15 +179,34 @@ def test_guards_not_redilated():
     expect_lip = cv2.dilate(lip_poly, cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (lk, lk))) > 0
     assert np.array_equal(guards["lip"], expect_lip)
-    assert np.array_equal(guards["nostril_core"], _true_nostrils())
+
+    # The aperture guard byte-matches the detector's own output, which in
+    # turn is exactly the painted blobs + the APERTURE_DILATE_FW halo.
+    direct = detect_nostril_apertures(ctx["crop"].bgr, LM, FW)
+    assert direct is not None
+    assert np.array_equal(guards["aperture"], direct)
+    dk = max(3, int(APERTURE_DILATE_FW * FW) | 1)
+    expect_ap = cv2.dilate(_true_apertures().astype(np.uint8),
+                           cv2.getStructuringElement(
+                               cv2.MORPH_ELLIPSE, (dk, dk))) > 0
+    assert np.array_equal(guards["aperture"], expect_ap)
 
     # Area sanity: the lip guard stays a thin margin (< the area a 0.02fw
-    # dilation would give); nostril guard <= 2 slightly padded disks.
+    # dilation would give).
     fat = cv2.dilate(lip_poly, cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (int(0.02 * FW) | 1, int(0.02 * FW) | 1))) > 0
     assert guards["lip"].sum() < fat.sum()
-    nr = max(2, int(round(NOSTRIL_GUARD_R_FW * FW)))
-    assert guards["nostril_core"].sum() <= 2 * math.pi * (nr + 1.5) ** 2
+
+
+def test_aperture_detection_failure_abstains():
+    """(v) No dark aperture pair in the image -> _anatomy_guards returns
+    None and build_mask abstains (a guard is never fabricated)."""
+    ctx = _ctx()
+    ctx["crop"].bgr = _skin_bgr(with_apertures=False)
+    assert _anatomy_guards(ctx["crop"]) is None
+    edit, model, info = build_mask(ctx)
+    assert edit is None and model is None
+    assert info["abstain"] == ABSTAIN_LOWER_FACE
 
 
 def test_canvas_top_gap_zero():
@@ -220,7 +255,7 @@ def test_legacy_guards_reproduce_old_blockage():
 
     edit_new, _, g_new = build_mask(ctx)
     edit_old, _, _ = build_mask(ctx, legacy_guards=True)
-    region = _philtrum_region() & ~g_new["nostril_core"]
+    region = _philtrum_region() & ~g_new["aperture"]
     cov_old = float((edit_old & region).sum()) / float(region.sum())
     cov_new = float((edit_new & region).sum()) / float(region.sum())
     # The synthetic fixture reproduces the STRUCTURE of the defect (nose-disk
@@ -236,6 +271,7 @@ def test_no_nose_bottom_seed_in_guards():
     bottom (philtrum top) is guard-free."""
     ctx = _ctx()
     guards = _anatomy_guards(ctx["crop"])
+    assert guards is not None
     y, x = int(NOSE_Y) + 3, int(CX)
     assert not guards["lip"][y, x]
-    assert not guards["nostril_core"][y, x]
+    assert not guards["aperture"][y, x]
