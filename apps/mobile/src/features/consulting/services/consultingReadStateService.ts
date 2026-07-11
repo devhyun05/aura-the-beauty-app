@@ -46,9 +46,11 @@ function isRelevantRecord(
 }
 
 function getRecordSignature(record: ConsultingRecord): string {
+  const messageSignature = record.lastExpertMessageAt ?? '';
   return [
     record.id,
     record.status,
+    messageSignature,
     record.dayId ?? '',
     record.slotId ?? '',
     record.dateLabel,
@@ -61,8 +63,36 @@ function getSignatures(
   records: readonly ConsultingRecord[],
 ): readonly string[] {
   return records
-    .filter(record => isRelevantRecord(kind, record))
+    .filter(
+      record =>
+        isRelevantRecord(kind, record) &&
+        (kind !== 'messages' || Boolean(record.lastExpertMessageAt)),
+    )
     .map(getRecordSignature);
+}
+
+/**
+ * Returns the booking ids with an unread expert message.  The messages screen
+ * uses this before marking the inbox read so each card can show its own badge.
+ */
+export async function getConsultingUnreadRecordIds(
+  kind: ConsultingInboxKind,
+  records: readonly ConsultingRecord[],
+): Promise<ReadonlySet<string>> {
+  const signatures = getSignatures(kind, records);
+  if (signatures.length === 0) {
+    return new Set();
+  }
+
+  const readSignatures = await getReadSignatures(kind);
+  return new Set(
+    records
+      .filter(record => {
+        const signature = getRecordSignature(record);
+        return signatures.includes(signature) && !readSignatures.has(signature);
+      })
+      .map(record => record.id),
+  );
 }
 
 async function getReadSignatures(

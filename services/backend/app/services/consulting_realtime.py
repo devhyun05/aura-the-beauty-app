@@ -53,16 +53,20 @@ class ConsultingRealtimeManager:
     async with self._lock:
       self._rooms.setdefault(booking_id, set()).add(connection)
 
-    await self.send(
-      connection,
-      {
-        "type": "connected",
-        "bookingId": booking_id,
-        "connectionId": connection.connection_id,
-        "participantType": participant_type,
-      },
-    )
-    await self.broadcast_presence(booking_id)
+    try:
+      await self.send(
+        connection,
+        {
+          "type": "connected",
+          "bookingId": booking_id,
+          "connectionId": connection.connection_id,
+          "participantType": participant_type,
+        },
+      )
+      await self.broadcast_presence(booking_id)
+    except Exception:
+      await self._remove_connections([connection])
+      raise
     return connection
 
   async def disconnect(self, connection: RealtimeConnection) -> None:
@@ -101,8 +105,26 @@ class ConsultingRealtimeManager:
     async with self._lock:
       connections = list(self._rooms.get(booking_id, set()))
 
+    failed_connections: list[RealtimeConnection] = []
     for connection in connections:
-      await self.send(connection, payload)
+      try:
+        await self.send(connection, payload)
+      except Exception:
+        failed_connections.append(connection)
+
+    if failed_connections:
+      await self._remove_connections(failed_connections)
+
+  async def _remove_connections(self, connections: list[RealtimeConnection]) -> None:
+    async with self._lock:
+      for connection in connections:
+        room = self._rooms.get(connection.booking_id)
+        if room is None:
+          continue
+        room.discard(connection)
+        if not room:
+          self._rooms.pop(connection.booking_id, None)
+          self._message_ids_by_client_id.pop(connection.booking_id, None)
 
   async def broadcast_presence(self, booking_id: str) -> None:
     async with self._lock:

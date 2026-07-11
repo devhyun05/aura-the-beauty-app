@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Response
 
+from app.core.errors import AppError
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.db.session import Database, require_database
@@ -8,11 +9,14 @@ from app.schemas.consulting import (
   AdminBookingSummaryUpsert,
   AdminExpertCreate,
   BookingCreate,
+  ConsultingTextMessageSend,
   ReviewCreate,
 )
 from app.schemas.consulting_call import ConsultingCallJoinRequest
 from app.core.settings import Settings, get_settings
 from app.services import consulting, consulting_call, consulting_places
+from app.services.consulting_realtime import consulting_realtime_manager
+from app.services.consulting_message_store import create_consulting_message
 from app.services.users import ensure_user
 
 
@@ -150,7 +154,17 @@ async def cancel_consulting_booking(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  return success({"record": await consulting.cancel_booking(db, user["id"], booking_id)})
+  record = await consulting.cancel_booking(db, user["id"], booking_id)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": "cancelled",
+      "message": "고객이 예약을 취소했습니다. 이 예약은 취소 기록으로 보관됩니다.",
+    },
+  )
+  return success({"record": record})
 
 
 @router.delete("/bookings/{booking_id}")
@@ -160,8 +174,42 @@ async def delete_consulting_booking(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await consulting.delete_canceled_booking(db, user["id"], booking_id)
-  return success({"deleted": True, "booking_id": booking_id})
+  record = await consulting.get_booking(db, user["id"], booking_id)
+  return success(
+    {
+      "deleted": False,
+      "booking_id": booking_id,
+      "record": record,
+      "message": "취소된 예약은 전문가와 고객의 확인 기록으로 보관되며 삭제할 수 없습니다.",
+    }
+  )
+
+
+@router.post("/bookings/{booking_id}/messages")
+async def send_consulting_text_message(
+  booking_id: str,
+  payload: ConsultingTextMessageSend,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  """Durable HTTP path used when a mobile WebSocket is reconnecting."""
+  user = await ensure_user(db, auth)
+  booking = await consulting.get_booking(db, user["id"], booking_id)
+  if booking["status"] in {"canceled", "completed"}:
+    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "취소되었거나 완료된 예약에는 새 메시지를 보낼 수 없어요.")
+  message, inserted = await create_consulting_message(
+    db,
+    booking_id=booking_id,
+    body=payload.body.strip(),
+    client_message_id=payload.client_message_id,
+    media=[],
+    sender_name=auth.name or auth.email or "고객",
+    sender_type="user",
+    sender_user_id=user["id"],
+  )
+  if inserted:
+    await consulting_realtime_manager.broadcast(booking_id, message)
+  return success({"message": message})
 
 
 @router.get("/bookings/{booking_id}/call")

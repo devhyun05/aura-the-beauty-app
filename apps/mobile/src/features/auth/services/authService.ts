@@ -23,6 +23,16 @@ type TokenResponse = {
   tokenType?: string;
 };
 
+type CognitoTokenPayload = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+  expires_in?: number;
+  id_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+};
+
 type AuthPromptResult =
   | {type: 'success'; params: Record<string, string>}
   | {type: 'cancel' | 'dismiss'}
@@ -385,15 +395,7 @@ async function exchangeAuthorizationCode({
     },
     method: 'POST',
   });
-  const body = await response.json() as {
-    access_token?: string;
-    error?: string;
-    error_description?: string;
-    expires_in?: number;
-    id_token?: string;
-    refresh_token?: string;
-    token_type?: string;
-  };
+  const body = await response.json() as CognitoTokenPayload;
 
   if (!response.ok || body.error || !body.access_token) {
     throw new Error(getAuthErrorMessage(body.error_description, body.error));
@@ -406,6 +408,58 @@ async function exchangeAuthorizationCode({
     refreshToken: body.refresh_token,
     tokenType: body.token_type,
   };
+}
+
+/**
+ * Refreshes an expired Cognito session without making the user sign in again.
+ * The refresh token is intentionally kept device-local and is never sent to
+ * the application backend.
+ */
+export async function refreshAuthSession(session: AuthSession): Promise<AuthSession | null> {
+  if (!session.refreshToken) {
+    return null;
+  }
+
+  try {
+    const config = getCognitoAuthConfig();
+    const response = await withTimeout(
+      fetch(config.discovery.tokenEndpoint, {
+        body: new URLSearchParams({
+          client_id: config.clientId,
+          grant_type: 'refresh_token',
+          refresh_token: session.refreshToken,
+        }).toString(),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        method: 'POST',
+      }),
+      TOKEN_EXCHANGE_TIMEOUT_MS,
+      LOGIN_DELAY_MESSAGE,
+    );
+    const body = await response.json() as CognitoTokenPayload;
+
+    if (!response.ok || body.error || !body.access_token) {
+      return null;
+    }
+
+    const refreshedSession: AuthSession = {
+      ...session,
+      accessToken: body.access_token,
+      expiresIn: body.expires_in,
+      idToken: body.id_token ?? session.idToken,
+      refreshToken: body.refresh_token ?? session.refreshToken,
+      tokenType: body.token_type ?? session.tokenType,
+    };
+
+    try {
+      return await syncAuthSessionWithBackend(refreshedSession);
+    } catch {
+      // A valid Cognito refresh is still useful when the backend is briefly
+      // unavailable; the next authenticated request will retry normally.
+      return refreshedSession;
+    }
+  } catch {
+    return null;
+  }
 }
 
 function decodeBase64UrlJson<T>(token: string | undefined): T | null {

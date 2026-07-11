@@ -31,7 +31,6 @@ import {
 } from '../../../features/consulting';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {
-  navigateMainTab,
   type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
@@ -281,10 +280,13 @@ export function ConsultingBookingCompleteRouteScreen({
         draft={draft}
         expert={expert}
         record={record}
-        onPressHistory={() => navigation.navigate('ConsultingHistory')}
-        onGoToConsultingHome={() =>
-          navigation.navigate('Consulting')
+        onPressConversation={() =>
+          navigation.navigate('ConsultingConversation', {
+            recordId: route.params.bookingId,
+            expertId: draft.expertId,
+          })
         }
+        onPressHistory={() => navigation.navigate('ConsultingHistory')}
       />
     </DetailRouteChrome>
   );
@@ -358,7 +360,7 @@ export function ConsultingHistoryRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingHistory"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToConsulting(navigation)}>
       <ConsultingHistoryScreen
         onPressReview={record =>
           navigation.navigate('ConsultingReview', {
@@ -389,15 +391,24 @@ export function ConsultingHistoryRouteScreen({
 export function ConsultingMessagesRouteScreen({
   navigation,
 }: RootScreenProps<'ConsultingMessages'>) {
+  const {getAuthToken} = useAuthSession();
   return (
     <DetailRouteChrome
       routeName="ConsultingMessages"
       onBack={() => goBackToConsulting(navigation)}>
       <ConsultingMessagesScreen
+        authToken={getAuthToken()}
         onPressConversation={record =>
           navigation.navigate('ConsultingConversation', {
             expertId: record.expertId,
             recordId: record.id,
+          })
+        }
+        onPressIncomingCall={record =>
+          navigation.navigate('ConsultingCall', {
+            bookingId: record.id,
+            durationId: record.durationId ?? 'd30',
+            expertId: record.expertId,
           })
         }
         onPressFindExpert={() => navigation.navigate('ConsultingExpertList')}
@@ -464,6 +475,13 @@ export function ConsultingConversationRouteScreen({
         authToken={getAuthToken()}
         bookingId={route.params.recordId}
         expert={expert}
+        onBookingStatusChange={() => {
+          void getConsultingBooking(route.params.recordId).then(nextRecord => {
+            if (nextRecord) {
+              setRecord(nextRecord);
+            }
+          });
+        }}
         onPressCall={() =>
           navigation.navigate('ConsultingCall', {
             bookingId: record?.id,

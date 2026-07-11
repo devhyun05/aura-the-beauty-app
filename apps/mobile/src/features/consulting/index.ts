@@ -41,6 +41,7 @@ export {
   updateConsultingBooking,
 } from './services/consultingService';
 export {
+  getConsultingUnreadRecordIds,
   getConsultingUnreadState,
   isConsultingMessageStatus,
   isConsultingNotificationStatus,

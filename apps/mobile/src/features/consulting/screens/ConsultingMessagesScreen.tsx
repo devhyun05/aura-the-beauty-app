@@ -1,6 +1,6 @@
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {Pressable, StyleSheet, View as RNView} from 'react-native';
+import {Alert, Pressable, StyleSheet, View as RNView} from 'react-native';
 import {CalendarClock, MessageCircle} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
@@ -25,9 +25,14 @@ import {
   getConsultingExperts,
 } from '../services/consultingService';
 import {
+  getConsultingUnreadRecordIds,
   isConsultingMessageStatus,
   markConsultingInboxRead,
 } from '../services/consultingReadStateService';
+import {
+  connectConsultingConversationSocket,
+  type ConsultingConversationSocketClient,
+} from '../services/consultingRealtimeService';
 import type {
   ConsultingExpert,
   ConsultingRecord,
@@ -35,18 +40,26 @@ import type {
 } from '../types';
 
 type ConsultingMessagesScreenProps = {
+  authToken?: string | null;
   onPressConversation: (record: ConsultingRecord) => void;
+  onPressIncomingCall: (record: ConsultingRecord) => void;
   onPressFindExpert: () => void;
 };
 
 export function ConsultingMessagesScreen({
+  authToken,
   onPressConversation,
+  onPressIncomingCall,
   onPressFindExpert,
 }: ConsultingMessagesScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
   const [experts, setExperts] =
     useState<readonly ConsultingExpert[]>(consultingExperts);
   const [isLoading, setIsLoading] = useState(true);
+  const [unreadMessageBookingIds, setUnreadMessageBookingIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const incomingCallBookingIdsRef = useRef<ReadonlySet<string>>(new Set());
 
   useFocusEffect(
     useCallback(() => {
@@ -58,6 +71,9 @@ export function ConsultingMessagesScreen({
           if (isMounted) {
             setRecords(recordData);
             setExperts(expertData);
+            setUnreadMessageBookingIds(
+              await getConsultingUnreadRecordIds('messages', recordData),
+            );
             await markConsultingInboxRead('messages', recordData);
           }
         })
@@ -77,6 +93,52 @@ export function ConsultingMessagesScreen({
     () => records.filter(record => isConsultingMessageStatus(record.status)),
     [records],
   );
+
+  useEffect(() => {
+    if (!authToken) {
+      return undefined;
+    }
+
+    const sockets: ConsultingConversationSocketClient[] = activeRecords.map(
+      record =>
+        connectConsultingConversationSocket({
+          authToken,
+          bookingId: record.id,
+          onEvent: event => {
+            if (
+              event.type === 'message.new' &&
+              event.senderType !== 'user'
+            ) {
+              setUnreadMessageBookingIds(current => {
+                if (current.has(record.id)) {
+                  return current;
+                }
+                return new Set([...current, record.id]);
+              });
+            }
+            if (event.type === 'call.status' && event.status === 'started') {
+              if (incomingCallBookingIdsRef.current.has(record.id)) {
+                return;
+              }
+              incomingCallBookingIdsRef.current = new Set([
+                ...incomingCallBookingIdsRef.current,
+                record.id,
+              ]);
+              Alert.alert('화상 상담이 시작됐어요', event.message, [
+                {text: '나중에'},
+                {
+                  text: '입장하기',
+                  onPress: () => onPressIncomingCall(record),
+                },
+              ]);
+            }
+          },
+          participantType: 'user',
+        }),
+    );
+
+    return () => sockets.forEach(socket => socket.close());
+  }, [activeRecords, authToken, onPressIncomingCall]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
@@ -102,8 +164,19 @@ export function ConsultingMessagesScreen({
             return (
               <MessageCard
                 expert={expert}
+                hasUnread={unreadMessageBookingIds.has(record.id)}
                 key={record.id}
-                onPress={() => onPressConversation(record)}
+                onPress={() => {
+                  setUnreadMessageBookingIds(current => {
+                    if (!current.has(record.id)) {
+                      return current;
+                    }
+                    const next = new Set(current);
+                    next.delete(record.id);
+                    return next;
+                  });
+                  onPressConversation(record);
+                }}
                 record={record}
               />
             );
@@ -131,10 +204,12 @@ export function ConsultingMessagesScreen({
 
 function MessageCard({
   expert,
+  hasUnread,
   record,
   onPress,
 }: {
   expert: ConsultingExpert;
+  hasUnread: boolean;
   record: ConsultingRecord;
   onPress: () => void;
 }) {
@@ -146,7 +221,10 @@ function MessageCard({
       style={({pressed}) => [styles.card, pressed ? styles.pressed : null]}>
       <RNView style={styles.cardTopRow}>
         <ConsultingStatusBadge status={record.status} />
-        <Text style={styles.cardDate}>{record.dateLabel}</Text>
+        <RNView style={styles.cardMeta}>
+          {hasUnread ? <Text style={styles.unreadBadge}>새 메시지</Text> : null}
+          <Text style={styles.cardDate}>{record.dateLabel}</Text>
+        </RNView>
       </RNView>
       <RNView style={styles.cardBodyRow}>
         <ExpertAvatar expert={expert} size={46} />
@@ -208,6 +286,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
+  },
+  cardMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   cardText: {
     color: consultingColors.textMuted,
@@ -300,5 +383,16 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+  },
+  unreadBadge: {
+    backgroundColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.pill,
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
 });

@@ -75,6 +75,19 @@ export type ConsultingServerSocketEvent =
   | ConsultingCaptionTranslationEvent
   | {
       bookingId: string;
+      message: string;
+      status: string;
+      type: 'booking.status';
+    }
+  | {
+      bookingId: string;
+      callSessionId?: string | null;
+      message: string;
+      status: 'started' | 'ended';
+      type: 'call.status';
+    }
+  | {
+      bookingId: string;
       clientMessageId: string;
       messageId: string;
       sentAt: string;
@@ -121,6 +134,7 @@ type ConnectConsultingConversationSocketOptions = {
 
 export type ConsultingConversationSocketClient = {
   close: () => void;
+  reconnect: () => void;
   send: (event: ConsultingClientSocketEvent) => boolean;
   sendMessage: (payload: {
     body: string;
@@ -281,6 +295,20 @@ export function connectConsultingConversationSocket({
       socket?.close();
       socket = null;
       setStatus('idle');
+    },
+    reconnect: () => {
+      if (closedByClient) {
+        return;
+      }
+      reconnectAttempt = 0;
+      clearReconnectTimer();
+      if (socket) {
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close();
+      }
+      socket = null;
+      connect();
     },
     send,
     sendMessage: payload =>

@@ -2,6 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
+from app.api.consulting_realtime import _parse_client_datetime
+from app.db.session import database
 from app.main import create_app
 from app.services.consulting_message_store import create_consulting_message, message_row_to_event
 from app.services.consulting_realtime import ConsultingRealtimeManager
@@ -17,6 +19,15 @@ class FakeWebSocket:
 
   async def send_json(self, payload: dict) -> None:
     self.sent.append(payload)
+
+
+class ToggleFakeWebSocket(FakeWebSocket):
+  closed = False
+
+  async def send_json(self, payload: dict) -> None:
+    if self.closed:
+      raise RuntimeError("socket already closed")
+    await super().send_json(payload)
 
 
 def _drain_connected(socket) -> None:
@@ -93,7 +104,44 @@ async def test_realtime_manager_acknowledges_duplicate_without_rebroadcast() -> 
   assert sender_acks[0]["messageId"] == sender_acks[1]["messageId"]
 
 
-def test_consulting_websocket_relays_message_between_clients() -> None:
+@pytest.mark.asyncio
+async def test_realtime_manager_removes_closed_connection_during_broadcast() -> None:
+  manager = ConsultingRealtimeManager()
+  open_socket = FakeWebSocket()
+  open_connection = await manager.connect(
+    open_socket,
+    booking_id="booking-stale",
+    participant_name="고객",
+    participant_type="user",
+  )
+  closed_socket = ToggleFakeWebSocket()
+  closed_connection = await manager.connect(
+    closed_socket,
+    booking_id="booking-stale",
+    participant_name="상담사",
+    participant_type="expert",
+  )
+  closed_socket.closed = True
+
+  await manager.broadcast("booking-stale", {"type": "typing"})
+
+  assert manager.room_size("booking-stale") == 1
+  assert open_connection is not closed_connection
+
+
+def test_parse_client_datetime_returns_utc_datetime_for_database_binding() -> None:
+  parsed = _parse_client_datetime("2026-07-11T03:15:00Z")
+
+  assert parsed is not None
+  assert parsed.isoformat() == "2026-07-11T03:15:00+00:00"
+  assert _parse_client_datetime("not-a-date") is None
+
+
+def test_consulting_websocket_relays_message_between_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+  # These are in-memory protocol tests.  Other tests can leave the shared
+  # database singleton connected, which would otherwise turn this into an
+  # accidental database authorization/persistence integration test.
+  monkeypatch.setattr(database, "pool", None)
   client = TestClient(create_app(Settings(auth_required=False)))
 
   with client.websocket_connect("/api/consulting/ws/bookings/booking-1?participantType=user") as user_socket:
@@ -124,7 +172,8 @@ def test_consulting_websocket_relays_message_between_clients() -> None:
       assert received["senderType"] == "user"
 
 
-def test_consulting_websocket_reports_invalid_json_event() -> None:
+def test_consulting_websocket_reports_invalid_json_event(monkeypatch: pytest.MonkeyPatch) -> None:
+  monkeypatch.setattr(database, "pool", None)
   client = TestClient(create_app(Settings(auth_required=False)))
 
   with client.websocket_connect("/api/consulting/ws/bookings/booking-1") as socket:

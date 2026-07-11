@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from app.core.errors import AppError
 from app.core.security import AuthContext
@@ -310,17 +311,20 @@ def _booking_to_web(row: dict[str, Any]) -> dict[str, Any]:
   )
   request_memo = "\n".join(value for value in (question, contact_note) if value) or "앱 예약 신청"
   shared_report_ids = [str(report_id) for report_id in row.get("shared_report_ids") or []]
+  status = _map_booking_status(str(row.get("status") or ""))
+  payment_confirmed = bool(row.get("confirmed_at")) or status in {"confirmed", "scheduled", "in_progress", "completed"}
   return {
     "id": str(row["id"]),
     "customer_id": str(row["user_id"]),
+    "customer_name": _customer_name(row),
     "expert_id": row["expert_id"],
     "business_id": _business_id(row["expert_id"]),
     "starts_at": _iso_datetime(starts_at),
     "ends_at": _iso_datetime(ends_at),
     "duration_minutes": 60 if duration_minutes >= 60 else 30,
     "type": row.get("category_label") or row.get("concern_label") or "뷰티 상담",
-    "status": _map_booking_status(str(row.get("status") or "")),
-    "payment_status": "paid" if int(row.get("price") or 0) > 0 else "pending",
+    "status": status,
+    "payment_status": "paid" if payment_confirmed else "pending",
     "paid_amount": int(row.get("price") or 0),
     "discount_amount": 0,
     "channel": "video" if row.get("session_mode") == "online" else "offline",
@@ -329,9 +333,9 @@ def _booking_to_web(row: dict[str, Any]) -> dict[str, Any]:
     "selected_concern_tags": concern_tags,
     "internal_memo": row.get("operator_note") or "",
     "shared_report_ids": shared_report_ids,
-    "consultation_summary_id": str(row["summary_id"]) if row.get("summary_id") else None,
+    "consultation_summary_id": str(row.get("summary_id")) if row.get("summary_id") else None,
     "refund_request_id": None,
-    "review_id": str(row["review_id"]) if row.get("review_id") else None,
+    "review_id": str(row.get("review_id")) if row.get("review_id") else None,
     "review_request_status": "ready" if row.get("summary_id") else "not_ready",
   }
 
@@ -356,6 +360,7 @@ def _customer_to_web(row: dict[str, Any]) -> dict[str, Any]:
     "total_paid_amount": total_paid_amount,
     "risk_flags": [],
     "preferred_channel": preferred,
+    "latest_booking_status": _map_booking_status(str(row.get("latest_booking_status") or row.get("status") or "requested")),
     "attachments": [],
   }
 
@@ -1092,6 +1097,98 @@ async def update_booking_status(
   return _booking_to_web(dict(row))
 
 
+def _parse_partner_booking_datetime(value: Any) -> datetime | None:
+  if not isinstance(value, str) or not value.strip():
+    return None
+  try:
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+  except ValueError as error:
+    raise AppError(400, "PARTNER_BOOKING_DATETIME_INVALID", "예약 날짜와 시간을 확인해 주세요.") from error
+  return parsed if parsed.tzinfo else parsed.replace(tzinfo=ZoneInfo("Asia/Seoul"))
+
+
+def _append_operator_note(current: str, value: str | None) -> str:
+  normalized = (value or "").strip()
+  if not normalized:
+    return current
+  return "\n".join(part for part in (current.strip(), normalized) if part)
+
+
+async def update_booking_details(
+  db: Database,
+  account: dict[str, Any],
+  booking_id: str,
+  payload: dict[str, Any],
+) -> dict[str, Any]:
+  current = await _booking_row(db, account, booking_id)
+  patch = payload.get("patch") if isinstance(payload.get("patch"), dict) else {}
+  status_value = payload.get("status")
+  next_status = _map_partner_status(str(status_value)) if status_value else str(current.get("status") or "requested")
+  if next_status == "completed":
+    raise AppError(409, "CONSULTING_SUMMARY_REQUIRED", "완료 처리는 AI 요약 생성 후 진행해 주세요.")
+
+  scheduled_at = _parse_partner_booking_datetime(patch.get("starts_at"))
+  duration_value = patch.get("duration_minutes")
+  duration_minutes = int(duration_value) if duration_value in {30, 60, "30", "60"} else None
+  category_label = str(patch.get("type") or "").strip() or None
+  operator_note = str(patch.get("internal_memo") if "internal_memo" in patch else current.get("operator_note") or "")
+  operator_note = _append_operator_note(operator_note, payload.get("note"))
+  cancel_reason = str(payload.get("cancel_reason") or "").strip()
+  if cancel_reason:
+    operator_note = _append_operator_note(operator_note, f"취소 사유: {cancel_reason}")
+  payment_confirmed = bool(payload.get("mark_payment_paid"))
+
+  local_scheduled_at = scheduled_at.astimezone(ZoneInfo("Asia/Seoul")) if scheduled_at else None
+  row = await db.fetchrow(
+    """
+    update consulting_bookings
+    set status = $3,
+        operator_note = $4,
+        scheduled_at = coalesce($5, scheduled_at),
+        scheduled_date = coalesce($6, scheduled_date),
+        slot_id = coalesce($7, slot_id),
+        slot_start_minutes = coalesce($8, slot_start_minutes),
+        duration_minutes = coalesce($9, duration_minutes),
+        duration_label = case when $9 is null then duration_label else $9::text || '분' end,
+        category_label = coalesce($10, category_label),
+        confirmed_at = case
+          when $11 or $3 in ('confirmed', 'scheduled', 'in_progress') then coalesce(confirmed_at, now())
+          else confirmed_at
+        end,
+        updated_at = now()
+    where id::text = $1 and expert_id = $2
+    returning *
+    """,
+    booking_id,
+    account["expert_id"],
+    next_status,
+    operator_note,
+    scheduled_at,
+    local_scheduled_at.date() if local_scheduled_at else None,
+    local_scheduled_at.strftime("%H:%M") if local_scheduled_at else None,
+    (local_scheduled_at.hour * 60 + local_scheduled_at.minute) if local_scheduled_at else None,
+    duration_minutes,
+    category_label,
+    payment_confirmed,
+  )
+  if row is None:
+    raise AppError(404, "PARTNER_BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다.")
+  return _booking_to_web(dict(row))
+
+
+async def mark_booking_payment_paid(
+  db: Database,
+  account: dict[str, Any],
+  booking_id: str,
+) -> dict[str, Any]:
+  return await update_booking_details(
+    db,
+    account,
+    booking_id,
+    {"mark_payment_paid": True, "status": "contacting"},
+  )
+
+
 async def customers(db: Database, account: dict[str, Any], filters: dict[str, Any]) -> list[dict[str, Any]]:
   rows = await db.fetch(
     """
@@ -1108,6 +1205,7 @@ async def customers(db: Database, account: dict[str, Any], filters: dict[str, An
       b.category_label,
       b.concern_label,
       b.question,
+      b.status as latest_booking_status,
       b.created_at,
       max(b.created_at) over (partition by b.user_id) as last_booking_at,
       count(*) over (partition by b.user_id) as total_bookings,
@@ -1128,6 +1226,17 @@ async def customers(db: Database, account: dict[str, Any], filters: dict[str, An
       for customer in result
       if query in " ".join([customer["name"], customer["phone"], customer["email"], customer["memo"]]).lower()
     ]
+  tag = str(filters.get("tag") or "").strip()
+  if tag and tag != "all":
+    result = [customer for customer in result if tag in customer["tags"]]
+  status = str(filters.get("status") or "").strip()
+  if status and status != "all":
+    result = [customer for customer in result if customer["latest_booking_status"] == status]
+  sort = str(filters.get("sort") or "lastActiveDesc")
+  if sort == "nameAsc":
+    return sorted(result, key=lambda item: item["name"])
+  if sort == "paidDesc":
+    return sorted(result, key=lambda item: item["total_paid_amount"], reverse=True)
   return sorted(result, key=lambda item: item["last_active_at"], reverse=True)
 
 

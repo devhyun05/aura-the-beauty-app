@@ -35,6 +35,11 @@ export type ConsultingHomeData = {
   activeRecords: readonly ConsultingRecord[];
 };
 
+export type ConsultingTextMessageDelivery = {
+  id: string;
+  sentAt: string;
+};
+
 function arr<T>(value: unknown, fallback: readonly T[]): readonly T[] {
   return Array.isArray(value) ? (value as T[]) : fallback;
 }
@@ -138,6 +143,8 @@ function coerceRecord(raw: any): ConsultingRecord {
   const estimatedPrice = Number(
     raw?.estimatedPrice ?? raw?.estimated_price ?? raw?.price,
   );
+  const rawLastExpertMessageAt =
+    raw?.lastExpertMessageAt ?? raw?.last_expert_message_at;
 
   return {
     id: String(raw?.id ?? ''),
@@ -157,7 +164,20 @@ function coerceRecord(raw: any): ConsultingRecord {
     contactName: raw?.contactName ? String(raw.contactName) : null,
     contactPhone: raw?.contactPhone ? String(raw.contactPhone) : null,
     preferredContactMethod,
+    lastExpertMessageAt:
+      rawLastExpertMessageAt == null ? null : String(rawLastExpertMessageAt),
   };
+}
+
+function coerceTextMessageDelivery(raw: unknown): ConsultingTextMessageDelivery | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const value = raw as {id?: unknown; sentAt?: unknown};
+  if (typeof value.id !== 'string' || !value.id || typeof value.sentAt !== 'string') {
+    return null;
+  }
+  return {id: value.id, sentAt: value.sentAt};
 }
 
 function withDraftReservationDetails(
@@ -542,11 +562,13 @@ export async function getConsultingShareableReports(): Promise<
 
 export async function getConsultingBookings(
   status?: string,
+  options?: {force?: boolean},
 ): Promise<readonly ConsultingRecord[]> {
   if (!hasBackend()) {
     return filterBookingsByStatus(consultingRecords, status);
   }
-  if (!status || status === 'all') {
+  const forceRefresh = options?.force === true;
+  if ((!status || status === 'all') && !forceRefresh) {
     if (isFresh(bookingsCache)) {
       return bookingsCache.data;
     }
@@ -554,7 +576,7 @@ export async function getConsultingBookings(
     if (bookingsRequest) {
       return bookingsRequest;
     }
-  } else if (isFresh(bookingsCache)) {
+  } else if (!forceRefresh && isFresh(bookingsCache)) {
     return bookingsCache.data.filter(record => record.status === status);
   }
 
@@ -563,23 +585,27 @@ export async function getConsultingBookings(
     : '';
   const request = requestBackendJson<{records?: unknown}>(
     `/consulting/bookings${query}`,
-  )
-    .then(res => (arr<any>(res.records, []) as any[]).map(coerceRecord))
-    .catch(error => {
-      logFallback('bookings', error);
-      return [] as ConsultingRecord[];
-    });
+  ).then(res => (arr<any>(res.records, []) as any[]).map(coerceRecord));
 
   if (!status || status === 'all') {
     bookingsRequest = request
       .then(records => cacheBookings(records))
+      .catch(error => {
+        logFallback('bookings', error);
+        return [] as ConsultingRecord[];
+      })
       .finally(() => {
         bookingsRequest = null;
       });
     return await bookingsRequest;
   }
 
-  return await request;
+  try {
+    return await request;
+  } catch (error) {
+    logFallback('bookings', error);
+    return [];
+  }
 }
 
 export async function getConsultingBooking(
@@ -719,6 +745,27 @@ export async function cancelConsultingBooking(
     logFallback('booking:cancel', error);
     return null;
   }
+}
+
+export async function sendConsultingTextMessage(
+  bookingId: string,
+  payload: {body: string; clientMessageId: string},
+): Promise<ConsultingTextMessageDelivery> {
+  if (!hasBackend()) {
+    throw new Error('상담 메시지 서버에 연결되어 있지 않아요.');
+  }
+  const response = await requestBackendJson<{message?: unknown}>(
+    `/consulting/bookings/${encodeURIComponent(bookingId)}/messages`,
+    {
+      body: payload,
+      method: 'POST',
+    },
+  );
+  const message = coerceTextMessageDelivery(response.message);
+  if (!message) {
+    throw new Error('메시지 전송 결과를 확인하지 못했어요.');
+  }
+  return message;
 }
 
 export async function deleteConsultingBooking(bookingId: string): Promise<boolean> {

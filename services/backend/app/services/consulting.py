@@ -802,6 +802,11 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     "contact_name": row.get("contact_name"),
     "contact_phone": row.get("contact_phone"),
     "preferred_contact_method": row.get("preferred_contact_method"),
+    # The mobile inbox uses the latest expert message timestamp to distinguish
+    # a real incoming chat from an unchanged booking status.  Keep this
+    # metadata on the booking payload so the header can refresh its badge
+    # without opening every conversation.
+    "last_expert_message_at": row.get("last_expert_message_at"),
   }
 
 
@@ -843,7 +848,14 @@ async def _active_bookings(
 ) -> list[dict[str, Any]]:
   rows = await db.fetch(
     """
-    select b.*, r.id as review_id
+    select b.*, r.id as review_id,
+      (
+        select max(m.created_at)
+        from consulting_messages m
+        where m.booking_id = b.id
+          and m.sender_type = 'expert'
+          and m.deleted_at is null
+      ) as last_expert_message_at
     from consulting_bookings b
     left join consulting_expert_reviews r
       on r.booking_id = b.id and r.author_user_id = $1
@@ -866,7 +878,14 @@ async def list_bookings(
   if status and status != "all":
     rows = await db.fetch(
       """
-      select b.*, r.id as review_id
+      select b.*, r.id as review_id,
+        (
+          select max(m.created_at)
+          from consulting_messages m
+          where m.booking_id = b.id
+            and m.sender_type = 'expert'
+            and m.deleted_at is null
+        ) as last_expert_message_at
       from consulting_bookings b
       left join consulting_expert_reviews r
         on r.booking_id = b.id and r.author_user_id = $1
@@ -879,7 +898,14 @@ async def list_bookings(
   else:
     rows = await db.fetch(
       """
-      select b.*, r.id as review_id
+      select b.*, r.id as review_id,
+        (
+          select max(m.created_at)
+          from consulting_messages m
+          where m.booking_id = b.id
+            and m.sender_type = 'expert'
+            and m.deleted_at is null
+        ) as last_expert_message_at
       from consulting_bookings b
       left join consulting_expert_reviews r
         on r.booking_id = b.id and r.author_user_id = $1
@@ -901,7 +927,14 @@ async def list_bookings(
 async def get_booking(db: Database, user_id: str, booking_id: str) -> dict[str, Any]:
   row = await db.fetchrow(
     """
-    select b.*, r.id as review_id
+    select b.*, r.id as review_id,
+      (
+        select max(m.created_at)
+        from consulting_messages m
+        where m.booking_id = b.id
+          and m.sender_type = 'expert'
+          and m.deleted_at is null
+      ) as last_expert_message_at
     from consulting_bookings b
     left join consulting_expert_reviews r
       on r.booking_id = b.id and r.author_user_id = $2
@@ -1203,24 +1236,6 @@ async def cancel_booking(db: Database, user_id: str, booking_id: str) -> dict[st
     booking_id,
   )
   return _record(updated)
-
-
-async def delete_canceled_booking(db: Database, user_id: str, booking_id: str) -> None:
-  row = await db.fetchrow(
-    "select id, status from consulting_bookings where id = $1 and user_id = $2",
-    booking_id,
-    user_id,
-  )
-  if row is None:
-    raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
-  if row["status"] != "canceled":
-    raise AppError(409, "CONSULTING_BOOKING_DELETE_REQUIRES_CANCELED", "취소된 예약만 삭제할 수 있어요.")
-
-  await db.execute(
-    "delete from consulting_bookings where id = $1 and user_id = $2 and status = 'canceled'",
-    booking_id,
-    user_id,
-  )
 
 
 async def update_booking_status(db: Database, booking_id: str, payload: Any) -> dict[str, Any]:

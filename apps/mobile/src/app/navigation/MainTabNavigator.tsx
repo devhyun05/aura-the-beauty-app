@@ -1,7 +1,7 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {createBottomTabNavigator, type BottomTabBarProps} from '@react-navigation/bottom-tabs';
-import type {NavigationProp} from '@react-navigation/native';
+import {useNavigation, type NavigationProp} from '@react-navigation/native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {YStack} from 'tamagui';
 
@@ -22,6 +22,7 @@ import {
   type CommunityMode,
 } from '../../features/community/components/CommunityModeBar';
 import {useNavigationFlowState} from './flowState';
+import {useAuthSession} from '../../features/auth';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {HomeRouteScreen} from './routes/homeRoutes';
@@ -70,6 +71,14 @@ export function shouldShowFloatingActionDismissLayer(isExpanded: boolean): boole
 
 export function MainTabNavigator() {
   const [communityMode, setCommunityMode] = useState<CommunityMode>('home');
+  const {isRestoringSession, session} = useAuthSession();
+  const rootNavigation = useNavigation<NavigationProp<RootStackParamList>>();
+
+  useEffect(() => {
+    if (!isRestoringSession && !session) {
+      rootNavigation.reset({index: 0, routes: [{name: 'Login'}]});
+    }
+  }, [isRestoringSession, rootNavigation, session]);
 
   return (
     <Tab.Navigator

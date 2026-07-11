@@ -11,6 +11,7 @@ from app.schemas.consulting_partner import (
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
+from app.schemas.consulting import ConsultingTextMessageSend
 from app.schemas.consulting_call import (
   ConsultingCallJoinRequest,
   ConsultingCaptionTranslateRequest,
@@ -19,6 +20,7 @@ from app.schemas.consulting_call import (
 from app.services.s3 import S3Service
 from app.services import consulting_call, consulting_partner
 from app.services.consulting_realtime import consulting_realtime_manager
+from app.services.consulting_message_store import create_consulting_message
 
 
 router = APIRouter(prefix="/consulting/partner", tags=["consulting-partner"])
@@ -153,7 +155,107 @@ async def update_partner_booking_status(
     payload.status,
     payload.operator_note,
   )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": booking["status"],
+      "message": _customer_booking_status_message(booking["status"]),
+    },
+  )
   return success({"booking": booking})
+
+
+@router.post("/bookings/{booking_id}/status")
+async def update_partner_booking_status_post(
+  booking_id: str,
+  payload: PartnerBookingStatusUpdate,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  """Accept POST as well for proxies that reject PATCH before it reaches FastAPI."""
+  return await update_partner_booking_status(booking_id, payload, account, db)
+
+
+@router.patch("/bookings/{booking_id}")
+async def update_partner_booking(
+  booking_id: str,
+  payload: dict = Body(default_factory=dict),
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  booking = await consulting_partner.update_booking_details(db, account, booking_id, payload)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": booking["status"],
+      "message": _customer_booking_status_message(booking["status"]),
+    },
+  )
+  return success({"booking": booking})
+
+
+@router.post("/bookings/{booking_id}/payment")
+async def mark_partner_booking_payment_paid(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  booking = await consulting_partner.mark_booking_payment_paid(db, account, booking_id)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": booking["status"],
+      "message": "입금 확인이 완료되었습니다. 전문가의 예약 확정을 기다려 주세요.",
+    },
+  )
+  return success({"booking": booking})
+
+
+def _customer_booking_status_message(status: str) -> str:
+  if status in {"confirmed", "scheduled"}:
+    return "예약이 완료되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, 안내된 시간에 연락을 기다려 주세요."
+  if status == "contacting":
+    return "입금 확인과 일정 조율을 진행하고 있습니다. 전문가의 안내 메시지를 확인해 주세요."
+  if status == "in_progress":
+    return "전문가가 상담을 시작했습니다. 화상 상담에 입장할 수 있어요."
+  if status == "completed":
+    return "상담이 완료되었습니다. 상담 요약을 확인해 주세요."
+  if status in {"cancelled", "canceled", "no_show", "refund_requested"}:
+    return "예약 상태가 변경되었습니다. 채팅방의 안내를 확인해 주세요."
+  return "예약 신청이 접수되었습니다. 전문가가 확인 후 안내드릴게요."
+
+
+@router.post("/chat/threads/{thread_id}/messages")
+async def send_partner_chat_text_message(
+  thread_id: str,
+  payload: ConsultingTextMessageSend,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  """Durable HTTP fallback so an expert can still send text during WS recovery."""
+  detail = await consulting_partner.chat_thread_detail(db, account, thread_id)
+  booking = detail["booking"]
+  if booking["status"] in {"cancelled", "no_show", "refund_requested", "completed"}:
+    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "종료된 예약에는 새 메시지를 보낼 수 없어요.")
+  message, inserted = await create_consulting_message(
+    db,
+    booking_id=thread_id,
+    body=payload.body.strip(),
+    client_message_id=payload.client_message_id,
+    media=[],
+    sender_name=detail["expert"]["name"],
+    sender_type="expert",
+    sender_user_id=None,
+  )
+  if inserted:
+    await consulting_realtime_manager.broadcast(thread_id, message)
+  return success({"message": message})
 
 
 @router.get("/bookings/{booking_id}/call")
@@ -193,17 +295,24 @@ async def join_partner_call(
   db: Database = Depends(require_database),
 ) -> dict:
   _set_sensitive_response_headers(response)
-  return success(
+  call = await consulting_call.join_partner_call(
+    db,
+    account,
+    booking_id,
+    payload.language_code,
+    settings,
+  )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
     {
-      "call": await consulting_call.join_partner_call(
-        db,
-        account,
-        booking_id,
-        payload.language_code,
-        settings,
-      ),
+      "type": "call.status",
+      "bookingId": booking_id,
+      "callSessionId": call.get("call_session_id"),
+      "status": "started",
+      "message": "전문가가 화상 상담을 시작했습니다. 지금 입장해 주세요.",
     },
   )
+  return success({"call": call})
 
 
 @router.post("/bookings/{booking_id}/call/end")
@@ -213,7 +322,18 @@ async def end_partner_call(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(require_database),
 ) -> dict:
-  return success({"call": await consulting_call.end_partner_call(db, account, booking_id, settings)})
+  call = await consulting_call.end_partner_call(db, account, booking_id, settings)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "call.status",
+      "bookingId": booking_id,
+      "callSessionId": call.get("call_session_id"),
+      "status": "ended",
+      "message": "전문가가 화상 상담을 종료했습니다.",
+    },
+  )
+  return success({"call": call})
 
 
 @router.post("/bookings/{booking_id}/call/transcription/start")
@@ -283,6 +403,7 @@ async def translate_partner_call_caption(
 async def get_partner_customers(
   query: str | None = Query(default=None),
   tag: str | None = Query(default=None),
+  status: str | None = Query(default=None),
   sort: str | None = Query(default=None),
   account: dict = Depends(get_partner_account),
   db: Database = Depends(require_database),
@@ -292,7 +413,7 @@ async def get_partner_customers(
       "customers": await consulting_partner.customers(
         db,
         account,
-        {"query": query, "tag": tag, "sort": sort},
+        {"query": query, "tag": tag, "status": status, "sort": sort},
       ),
     },
   )

@@ -1,9 +1,10 @@
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.core.security import AuthContext, verify_cognito_token
 from app.core.settings import Settings, get_settings
@@ -25,6 +26,21 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/consulting", tags=["consulting"])
 logger = logging.getLogger(__name__)
+
+
+def _parse_client_datetime(value: Any) -> datetime | None:
+  if not isinstance(value, str) or not value.strip():
+    return None
+
+  try:
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+  except ValueError:
+    return None
+
+  if parsed.tzinfo is None:
+    return parsed.replace(tzinfo=timezone.utc)
+
+  return parsed.astimezone(timezone.utc)
 
 
 def _dev_auth_context(settings: Settings) -> AuthContext:
@@ -379,6 +395,7 @@ async def _handle_client_event(
 
   if event_type == "read":
     read_at = payload.get("readAt")
+    read_datetime = _parse_client_datetime(read_at)
     if database.is_connected and connection.participant_type in {"expert", "operator"}:
       await database.execute(
         """
@@ -387,7 +404,7 @@ async def _handle_client_event(
         where id::text = $1
         """,
         connection.booking_id,
-        read_at if isinstance(read_at, str) else None,
+        read_datetime,
       )
     await consulting_realtime_manager.broadcast(
       connection.booking_id,
@@ -408,9 +425,11 @@ async def _handle_client_event(
 
 
 @router.websocket("/ws/bookings/{booking_id}")
-async def consulting_booking_socket(websocket: WebSocket, booking_id: str) -> None:
-  settings = get_settings()
-
+async def consulting_booking_socket(
+  websocket: WebSocket,
+  booking_id: str,
+  settings: Settings = Depends(get_settings),
+) -> None:
   try:
     auth = await _get_auth_context(websocket, settings)
   except Exception:

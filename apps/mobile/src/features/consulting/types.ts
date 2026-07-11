@@ -161,6 +161,8 @@ export type ConsultingRecord = {
   contactName?: string | null;
   contactPhone?: string | null;
   preferredContactMethod?: ConsultingPreferredContactMethod | null;
+  /** Latest message sent by the expert, used for the inbox notification badge. */
+  lastExpertMessageAt?: string | null;
 };
 
 export type ConsultingMembershipPlan = {

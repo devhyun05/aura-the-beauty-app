@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.main import create_app
-from app.schemas.consulting import AdminBookingStatusUpdate, BookingCreate
+from app.schemas.consulting import AdminBookingStatusUpdate, BookingCreate, ConsultingTextMessageSend
 from app.schemas.consulting_call import (
   ConsultingCallJoinRequest,
   ConsultingCaptionTranslateRequest,
@@ -82,6 +82,26 @@ def test_booking_create_rejects_kakao_contact_method() -> None:
         "dayId": "2026-07-07",
         "slotId": "18:30",
         "preferredContactMethod": "kakao",
+      },
+    )
+
+
+def test_consulting_text_message_requires_body_and_client_message_id() -> None:
+  payload = ConsultingTextMessageSend.model_validate(
+    {
+      "body": "입금 확인 부탁드립니다.",
+      "clientMessageId": "client-message-1",
+    },
+  )
+
+  assert payload.body == "입금 확인 부탁드립니다."
+  assert payload.client_message_id == "client-message-1"
+
+  with pytest.raises(ValidationError):
+    ConsultingTextMessageSend.model_validate(
+      {
+        "body": "",
+        "clientMessageId": "short",
       },
     )
 

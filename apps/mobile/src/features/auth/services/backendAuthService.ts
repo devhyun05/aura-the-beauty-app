@@ -58,7 +58,9 @@ export async function syncAuthSessionWithBackend(session: AuthSession): Promise<
     return session;
   }
 
-  const token = session.accessToken ?? session.idToken;
+  // The ID token carries the verified profile claims used to populate users.
+  // Access tokens identify the same Cognito subject, but commonly omit email/name.
+  const token = session.idToken ?? session.accessToken;
 
   if (!token) {
     throw new Error('Missing Cognito token for backend user sync.');
