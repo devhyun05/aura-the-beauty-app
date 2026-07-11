@@ -59,6 +59,8 @@ class PresignedUploadRequest(CamelModel):
   def validate_upload_policy(self):
     if self.thumbnail is not None and self.media_kind != "community-thread":
       raise ValueError("Thumbnails are only supported for community uploads.")
+    if self.source == "generated" and self.media_kind != "hair-analysis-mask":
+      raise ValueError("Generated uploads are only supported for hair analysis masks.")
     return self
 
 

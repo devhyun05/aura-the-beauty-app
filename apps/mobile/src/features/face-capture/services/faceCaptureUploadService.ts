@@ -7,7 +7,8 @@ export type FaceCaptureUploadCaptureType =
   | 'makeup_feedback'
   | 'filter_extraction'
   | 'ar_try_on'
-  | 'personal_color';
+  | 'personal_color'
+  | 'hair_analysis';
 
 export type FaceCaptureImageInput = {
   captureType?: FaceCaptureUploadCaptureType;
@@ -27,12 +28,14 @@ export type FaceCaptureUploadResult = {
   bucket: string;
   cdnUrl?: string | null;
   contentType?: string | null;
+  height?: number | null;
   imageUri: string;
   mediaId: string;
   objectKey: string;
   photoCaptureId: string;
   semanticMattes?: {hair: boolean; requested: boolean; skin: boolean};
   source: FaceCaptureImageSource;
+  width?: number | null;
 };
 
 type PresignedUpload = {
@@ -43,6 +46,7 @@ type PresignedUpload = {
   expiresIn: number;
   method: 'PUT';
   objectKey: string;
+  uploadId: string;
   uploadUrl: string;
 };
 
@@ -68,6 +72,8 @@ type PhotoCapture = {
 type PhotoCaptureResponse = {
   photoCapture: PhotoCapture;
 };
+
+const MAX_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export function inferFaceCaptureContentType(uri: string, fallback?: string | null): string {
   if (fallback?.trim()) {
@@ -150,12 +156,18 @@ export async function uploadFaceCaptureImage({
 
   console.info('[aura:capture-upload] start', {
     contentType,
+    height: height ?? null,
     hasLocalUri: Boolean(uri),
     source,
+    width: width ?? null,
   });
 
   const readStartedAt = Date.now();
   const imageBlob = await readImageBlob(uri);
+
+  if (imageBlob.size <= 0 || imageBlob.size > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error('Upload file size must be between 1 byte and 50 MiB.');
+  }
 
   console.info('[aura:capture-upload] image-read:success', {
     byteSize: imageBlob.size,
@@ -165,6 +177,7 @@ export async function uploadFaceCaptureImage({
   console.info('[aura:capture-upload] presigned-upload:start');
   const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
     body: {
+      byteSize: imageBlob.size,
       contentType,
       height,
       mediaKind,
@@ -205,21 +218,9 @@ export async function uploadFaceCaptureImage({
     status: uploadResponse.status,
   });
 
-  const byteSize = imageBlob.size;
   console.info('[aura:capture-upload] media-complete:start');
   const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
-    body: {
-      bucket: upload.bucket,
-      byteSize,
-      cdnUrl: upload.cdnUrl || null,
-      contentType,
-      height,
-      mediaKind,
-      objectKey: upload.objectKey,
-      originalFilename,
-      source,
-      width,
-    },
+    body: {uploadId: upload.uploadId},
     method: 'POST',
   });
 
@@ -254,11 +255,13 @@ export async function uploadFaceCaptureImage({
     bucket: media.bucket,
     cdnUrl: media.cdnUrl ?? null,
     contentType,
+    height: height ?? null,
     imageUri: uri,
     mediaId: media.id,
     objectKey: media.objectKey,
     photoCaptureId: photoCapture.id,
     semanticMattes,
     source,
+    width: width ?? null,
   };
 }

@@ -29,6 +29,8 @@ typedef struct {
 ///   - `debugArtifacts` (NSNumber BOOL, optional): when YES, writes
 ///     apple-hair-matte.png / apple-skin-matte.png / hairline-debug.png into a temp
 ///     directory and returns their file:// URIs under `debugArtifacts`.
+///   - `matteArtifacts` (NSNumber BOOL, optional): exports the same production hair/skin
+///     matte PNGs under `matteArtifacts` without changing the existing debug contract.
 ///
 /// Always returns a non-nil dictionary:
 ///   - `matte`: @{hairAvailable(BOOL), skinAvailable(BOOL), matteWidth(N), matteHeight(N)}

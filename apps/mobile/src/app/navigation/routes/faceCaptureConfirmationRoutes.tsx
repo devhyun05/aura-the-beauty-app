@@ -40,6 +40,10 @@ type FaceCaptureConfirmationRetakeRoute =
   | {
       name: 'ReferenceMakeupExtractionUpload';
       params?: RootStackParamList['ReferenceMakeupExtractionUpload'];
+    }
+  | {
+      name: 'HairAnalysisCapture';
+      params?: undefined;
     };
 
 type FaceCaptureConfirmationRetakeParams = {
@@ -57,6 +61,12 @@ const confirmationCopyByTarget: Record<
     description: '얼굴 분석에 사용할 사진을 확인해 주세요.',
     retakeLabel: '다시 촬영',
     title: '이 사진으로 얼굴 분석을 시작할까요?',
+  },
+  hairAnalysis: {
+    confirmLabel: '헤어 분석 시작',
+    description: '헤어 분석과 시뮬레이션에 사용할 사진을 확인해 주세요.',
+    retakeLabel: '다시 촬영',
+    title: '이 사진으로 헤어를 분석할까요?',
   },
   makeupFeedback: {
     confirmLabel: '메이크업 피드백 시작',
@@ -87,6 +97,10 @@ export function getFaceCaptureConfirmationNextRouteName(
 
   if (target === 'makeupFeedback') {
     return 'MakeupFeedbackGoalInput';
+  }
+
+  if (target === 'hairAnalysis') {
+    return 'HairAnalysisLoading';
   }
 
   return 'ReferenceMakeupExtractionLoading';
@@ -120,6 +134,10 @@ export function getFaceCaptureConfirmationRetakeRoute({
     };
   }
 
+  if (target === 'hairAnalysis') {
+    return {name: 'HairAnalysisCapture'};
+  }
+
   return {
     name: 'ReferenceMakeupExtractionUpload',
     params: {
@@ -138,17 +156,23 @@ function getReferenceMakeupPhotoUri(photo: ReferenceMakeupPhoto | null): string 
 
 function getConfirmationPhotoUri({
   selectedFaceCapture,
+  selectedHairCapture,
   selectedMakeupFeedbackPhoto,
   selectedReferenceMakeupPhoto,
   target,
 }: {
   selectedFaceCapture: FaceCaptureUploadResult | null;
+  selectedHairCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
   target: FaceCaptureConfirmationTarget;
 }): string | null {
   if (target === 'faceAnalysis') {
     return selectedFaceCapture?.imageUri ?? null;
+  }
+
+  if (target === 'hairAnalysis') {
+    return selectedHairCapture?.imageUri ?? null;
   }
 
   if (target === 'makeupFeedback') {
@@ -160,17 +184,23 @@ function getConfirmationPhotoUri({
 
 function getConfirmationPhotoSource({
   selectedFaceCapture,
+  selectedHairCapture,
   selectedMakeupFeedbackPhoto,
   selectedReferenceMakeupPhoto,
   target,
 }: {
   selectedFaceCapture: FaceCaptureUploadResult | null;
+  selectedHairCapture: FaceCaptureUploadResult | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
   target: FaceCaptureConfirmationTarget;
 }): FaceCaptureImageSource {
   if (target === 'faceAnalysis') {
     return selectedFaceCapture?.source ?? 'camera';
+  }
+
+  if (target === 'hairAnalysis') {
+    return selectedHairCapture?.source ?? 'camera';
   }
 
   if (target === 'makeupFeedback') {
@@ -186,11 +216,13 @@ export function FaceCaptureConfirmationRouteScreen({
 }: RootScreenProps<'FaceCaptureConfirmation'>) {
   const {
     selectedFaceCapture,
+    selectedHairCapture,
     selectedMakeupFeedbackPhoto,
     selectedReferenceMakeupPhoto,
     setMakeupFeedbackResult,
     setReferenceMakeupUploadedPhotos,
     setSelectedFaceCapture,
+    setSelectedHairCapture,
     setSelectedMakeupFeedbackPhoto,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
@@ -198,12 +230,14 @@ export function FaceCaptureConfirmationRouteScreen({
   const copy = getFaceCaptureConfirmationCopy(target);
   const photoUri = getConfirmationPhotoUri({
     selectedFaceCapture,
+    selectedHairCapture,
     selectedMakeupFeedbackPhoto,
     selectedReferenceMakeupPhoto,
     target,
   });
   const photoSource = getConfirmationPhotoSource({
     selectedFaceCapture,
+    selectedHairCapture,
     selectedMakeupFeedbackPhoto,
     selectedReferenceMakeupPhoto,
     target,
@@ -225,6 +259,10 @@ export function FaceCaptureConfirmationRouteScreen({
       setSelectedMakeupFeedbackPhoto({photoSource});
     }
 
+    if (target === 'hairAnalysis') {
+      setSelectedHairCapture(null);
+    }
+
     if (target === 'referenceMakeupExtraction') {
       setSelectedReferenceMakeupPhoto(null);
     }
@@ -244,6 +282,11 @@ export function FaceCaptureConfirmationRouteScreen({
       return;
     }
 
+    if (retakeRoute.name === 'HairAnalysisCapture') {
+      navigation.replace('HairAnalysisCapture');
+      return;
+    }
+
     navigation.replace('ReferenceMakeupExtractionUpload', retakeRoute.params);
   }, [
     navigation,
@@ -251,6 +294,7 @@ export function FaceCaptureConfirmationRouteScreen({
     route.params.afterAnalysisRoute,
     setMakeupFeedbackResult,
     setSelectedFaceCapture,
+    setSelectedHairCapture,
     setSelectedMakeupFeedbackPhoto,
     setSelectedReferenceMakeupPhoto,
     target,
@@ -274,6 +318,11 @@ export function FaceCaptureConfirmationRouteScreen({
 
     if (target === 'makeupFeedback') {
       navigation.replace('MakeupFeedbackGoalInput');
+      return;
+    }
+
+    if (target === 'hairAnalysis') {
+      navigation.replace('HairAnalysisLoading');
       return;
     }
 

@@ -26,7 +26,7 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'capture_type') then
-    create type capture_type as enum ('face_analysis', 'makeup_feedback', 'filter_extraction', 'ar_try_on');
+    create type capture_type as enum ('face_analysis', 'makeup_feedback', 'filter_extraction', 'ar_try_on', 'hair_analysis');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'job_status') then
@@ -54,6 +54,8 @@ begin
   end if;
 end
 $$;
+
+alter type capture_type add value if not exists 'hair_analysis';
 
 -- -----------------------------------------------------------------------------
 -- Tables
@@ -206,6 +208,59 @@ create table if not exists analysis_reports (
 );
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
+
+create table if not exists hair_analyses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  client_request_id uuid not null,
+  photo_capture_id uuid,
+  source_media_id uuid not null,
+  mask_media_id uuid,
+  status text not null default 'queued',
+  analysis_payload jsonb not null default '{}'::jsonb,
+  recommended_style_ids text[] not null default '{}',
+  error_code text,
+  error_message text,
+  attempt_count integer not null default 0,
+  expires_at timestamptz not null default (now() + interval '24 hours'),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_hair_analyses_user_request unique (user_id, client_request_id),
+  constraint chk_hair_analyses_status check (status in ('queued', 'processing', 'completed', 'failed', 'expired')),
+  constraint chk_hair_analyses_attempt_count check (attempt_count >= 0)
+);
+
+comment on table hair_analyses is 'Private 24-hour iOS hair analysis sessions and deterministic style recommendations.';
+
+create table if not exists hair_simulations (
+  id uuid primary key default gen_random_uuid(),
+  analysis_id uuid not null,
+  user_id uuid not null,
+  client_request_id uuid not null,
+  style_id text not null,
+  status text not null default 'queued',
+  result_media_id uuid,
+  provider text,
+  model text,
+  attempt_count integer not null default 0,
+  quality_attempt_count integer not null default 0,
+  quality_payload jsonb not null default '{}'::jsonb,
+  error_code text,
+  error_message text,
+  saved_at timestamptz,
+  expires_at timestamptz default (now() + interval '24 hours'),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_hair_simulations_user_request unique (user_id, client_request_id),
+  constraint uq_hair_simulations_analysis_style unique (analysis_id, style_id),
+  constraint chk_hair_simulations_status check (status in ('queued', 'processing', 'completed', 'failed', 'expired')),
+  constraint chk_hair_simulations_attempt_count check (attempt_count >= 0),
+  constraint chk_hair_simulations_quality_attempt_count check (quality_attempt_count >= 0)
+);
+
+comment on table hair_simulations is 'One generated hairstyle per selected catalog style; unsaved output expires after 24 hours.';
 
 create table if not exists saved_makeup_styles (
   id uuid primary key default gen_random_uuid(),
@@ -636,6 +691,31 @@ alter table analysis_reports
   add constraint fk_analysis_reports_preview_media
   foreign key (preview_media_id) references media_assets(id) on delete set null;
 
+alter table hair_analyses
+  drop constraint if exists fk_hair_analyses_user,
+  add constraint fk_hair_analyses_user
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_hair_analyses_photo_capture,
+  add constraint fk_hair_analyses_photo_capture
+  foreign key (photo_capture_id) references photo_captures(id) on delete set null,
+  drop constraint if exists fk_hair_analyses_source_media,
+  add constraint fk_hair_analyses_source_media
+  foreign key (source_media_id) references media_assets(id) on delete restrict,
+  drop constraint if exists fk_hair_analyses_mask_media,
+  add constraint fk_hair_analyses_mask_media
+  foreign key (mask_media_id) references media_assets(id) on delete set null;
+
+alter table hair_simulations
+  drop constraint if exists fk_hair_simulations_analysis,
+  add constraint fk_hair_simulations_analysis
+  foreign key (analysis_id) references hair_analyses(id) on delete cascade,
+  drop constraint if exists fk_hair_simulations_user,
+  add constraint fk_hair_simulations_user
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_hair_simulations_result_media,
+  add constraint fk_hair_simulations_result_media
+  foreign key (result_media_id) references media_assets(id) on delete set null;
+
 alter table saved_makeup_styles
   drop constraint if exists fk_saved_makeup_styles_user,
   add constraint fk_saved_makeup_styles_user
@@ -834,6 +914,12 @@ create index if not exists idx_account_deletion_tombstones_deleted_at on account
 create index if not exists idx_media_assets_owner_created on media_assets (owner_user_id, created_at desc);
 create index if not exists idx_photo_captures_user_type_created on photo_captures (user_id, capture_type, created_at desc);
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);
+create index if not exists idx_hair_analyses_user_created on hair_analyses (user_id, created_at desc);
+create index if not exists idx_hair_analyses_status_created on hair_analyses (status, created_at);
+create index if not exists idx_hair_analyses_expires on hair_analyses (expires_at) where status <> 'expired';
+create index if not exists idx_hair_simulations_analysis_created on hair_simulations (analysis_id, created_at desc);
+create index if not exists idx_hair_simulations_user_created on hair_simulations (user_id, created_at desc);
+create index if not exists idx_hair_simulations_expires on hair_simulations (expires_at) where saved_at is null and status <> 'expired';
 create index if not exists idx_saved_makeup_styles_user_saved on saved_makeup_styles (user_id, saved_at desc);
 create index if not exists idx_saved_makeup_styles_source_analysis on saved_makeup_styles (source_analysis_report_id);
 create index if not exists idx_saved_makeup_styles_source_filter on saved_makeup_styles (source_filter_extraction_id);
@@ -891,6 +977,16 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_analysis_reports_updated_at on analysis_reports;
 create trigger trg_analysis_reports_updated_at
 before update on analysis_reports
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_hair_analyses_updated_at on hair_analyses;
+create trigger trg_hair_analyses_updated_at
+before update on hair_analyses
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_hair_simulations_updated_at on hair_simulations;
+create trigger trg_hair_simulations_updated_at
+before update on hair_simulations
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_saved_makeup_styles_updated_at on saved_makeup_styles;

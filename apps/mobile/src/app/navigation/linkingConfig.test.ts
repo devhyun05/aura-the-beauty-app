@@ -44,6 +44,18 @@ type HairRemovalSimulationPathContract = ExpectType<
     'hair-removal-simulation'
   >
 >;
+type HairAnalysisIntroPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.HairAnalysisIntro, 'hair-analysis'>
+>;
+type HairSimulationLoadingPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.HairSimulationLoading,
+    'hair-analysis/simulation-loading/:analysisId/:styleId'
+  >
+>;
+type SavedHairSimulationsPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.SavedHairSimulations, 'hair-analysis/saved'>
+>;
 type SavedMakeupListPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.SavedMakeupList, 'saved-makeup-list'>
 >;

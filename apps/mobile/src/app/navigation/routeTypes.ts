@@ -16,6 +16,7 @@ export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
 export type FaceCaptureConfirmationTarget =
   | 'faceAnalysis'
+  | 'hairAnalysis'
   | 'makeupFeedback'
   | 'referenceMakeupExtraction';
 export type MakeupFilterEditMode = 'preset' | 'fullFace';
@@ -47,6 +48,13 @@ export type RootStackParamList = {
   ProfileEdit: undefined;
   HomeFilterStore: {initialMakeupFilterId?: string} | undefined;
   HairRemovalSimulation: undefined;
+  HairAnalysisIntro: undefined;
+  HairAnalysisCapture: undefined;
+  HairAnalysisLoading: undefined;
+  HairAnalysisResult: {analysisId: string; sourceImageUri?: string};
+  HairSimulationLoading: {analysisId: string; sourceImageUri?: string; styleId: string};
+  HairSimulationResult: {simulationId: string; sourceImageUri?: string};
+  SavedHairSimulations: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
@@ -152,6 +160,13 @@ export const rootStackRoutes = [
   'ProfileEdit',
   'HomeFilterStore',
   'HairRemovalSimulation',
+  'HairAnalysisIntro',
+  'HairAnalysisCapture',
+  'HairAnalysisLoading',
+  'HairAnalysisResult',
+  'HairSimulationLoading',
+  'HairSimulationResult',
+  'SavedHairSimulations',
   'SavedMakeupList',
   'ProductRecommendation',
   'AuradinSearch',

@@ -5,6 +5,8 @@ ALLOWED_UPLOAD_MEDIA_KINDS = frozenset(
     "community-thread-thumbnail",
     "consulting-chat",
     "filter-extraction",
+    "hair-analysis-mask",
+    "hair-analysis-source",
     "makeup_feedback",
     "profile-avatar",
   },

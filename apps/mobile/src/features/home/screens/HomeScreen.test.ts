@@ -98,13 +98,13 @@ const expectedHomeServiceShortcutLabels: readonly [
   '필터 스토어',
   '추천 제품',
   '컨설팅',
-  '제모 시뮬레이션',
+  '헤어 분석',
 ] = HOME_SERVICE_SHORTCUT_LABELS;
 const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
   '얼굴 분석,메이크업 필터,메이크업 추출,메이크업 피드백';
 const expectedHomeServiceShortcutSecondRowLabels =
-  '필터 스토어,추천 제품,컨설팅,제모 시뮬레이션';
+  '필터 스토어,추천 제품,컨설팅,헤어 분석';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
@@ -428,7 +428,7 @@ let selectedHomeServiceShortcut:
   | 'consulting'
   | 'diagnosis'
   | 'filterStore'
-  | 'hairRemovalSimulation'
+  | 'hairAnalysis'
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'recommendation'
@@ -462,22 +462,22 @@ arFilterPressHandler();
 
 expectEqual(selectedHomeServiceShortcut, 'arFilter', 'makeup filter service shortcut target');
 
-const hairRemovalPressHandler = getHomeServiceShortcutPressHandler('hairRemovalSimulation', {
-  onPressHairRemovalSimulation: () => {
-    selectedHomeServiceShortcut = 'hairRemovalSimulation';
+const hairAnalysisPressHandler = getHomeServiceShortcutPressHandler('hairAnalysis', {
+  onPressHairAnalysis: () => {
+    selectedHomeServiceShortcut = 'hairAnalysis';
   },
 });
 
-if (!hairRemovalPressHandler) {
-  throw new Error('hair removal simulation shortcut should have a press handler');
+if (!hairAnalysisPressHandler) {
+  throw new Error('hair analysis shortcut should have a press handler');
 }
 
-hairRemovalPressHandler();
+hairAnalysisPressHandler();
 
 expectEqual(
   selectedHomeServiceShortcut,
-  'hairRemovalSimulation',
-  'hair removal simulation shortcut target',
+  'hairAnalysis',
+  'hair analysis shortcut target',
 );
 
 const makeupExtractionPressHandler = getHomeServiceShortcutPressHandler('makeupExtraction', {

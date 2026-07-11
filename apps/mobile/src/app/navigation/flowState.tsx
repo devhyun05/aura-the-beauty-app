@@ -38,6 +38,7 @@ export type NavigationFlowState = {
   savedMakeupLooks: readonly MakeupLookPreview[];
   selectedFaceAnalysisReport: FaceAnalysisReport | null;
   selectedFaceCapture: FaceCaptureUploadResult | null;
+  selectedHairCapture: FaceCaptureUploadResult | null;
   selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
   // 얼굴 분석 세션에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용, 업로드 없음).
   selectedPersonalColor: AuraPersonalColorResult | null;
@@ -59,6 +60,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSavedMakeupLooks: Dispatch<SetStateAction<readonly MakeupLookPreview[]>>;
   setSelectedFaceAnalysisReport: Dispatch<SetStateAction<FaceAnalysisReport | null>>;
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
+  setSelectedHairCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
   setSelectedPersonalColor: Dispatch<SetStateAction<AuraPersonalColorResult | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
@@ -82,6 +84,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     savedMakeupLooks: [],
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
+    selectedHairCapture: null,
     selectedFaceVerticalThirds: null,
     selectedPersonalColor: null,
     selectedMakeupFeedbackPhoto: {
@@ -109,6 +112,8 @@ export function NavigationFlowStateProvider({
 }: NavigationFlowStateProviderProps) {
   const [selectedFaceCapture, setSelectedFaceCapture] =
     useState<FaceCaptureUploadResult | null>(initialState.selectedFaceCapture);
+  const [selectedHairCapture, setSelectedHairCapture] =
+    useState<FaceCaptureUploadResult | null>(initialState.selectedHairCapture);
   const [selectedFaceAnalysisReport, setSelectedFaceAnalysisReport] =
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
   const [selectedFaceVerticalThirds, setSelectedFaceVerticalThirds] =
@@ -152,6 +157,7 @@ export function NavigationFlowStateProvider({
     setSavedMakeupLooks(nextState.savedMakeupLooks);
     setSelectedFaceAnalysisReport(nextState.selectedFaceAnalysisReport);
     setSelectedFaceCapture(nextState.selectedFaceCapture);
+    setSelectedHairCapture(nextState.selectedHairCapture);
     setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
     setSelectedPersonalColor(nextState.selectedPersonalColor);
     setSelectedMakeupFeedbackPhoto(nextState.selectedMakeupFeedbackPhoto);
@@ -172,6 +178,7 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedMakeupFeedbackPhoto,
@@ -189,6 +196,7 @@ export function NavigationFlowStateProvider({
       setSavedMakeupLooks,
       setSelectedFaceAnalysisReport,
       setSelectedFaceCapture,
+      setSelectedHairCapture,
       setSelectedFaceVerticalThirds,
       setSelectedPersonalColor,
       setSelectedMakeupFeedbackPhoto,
@@ -207,6 +215,7 @@ export function NavigationFlowStateProvider({
       savedMakeupLooks,
       selectedFaceAnalysisReport,
       selectedFaceCapture,
+      selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedMakeupFeedbackPhoto,

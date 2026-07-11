@@ -18,7 +18,7 @@ import {
   PackageSearch,
   ScanFace,
   ScanSearch,
-  Sparkles,
+  Scissors,
   Store,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -51,6 +51,7 @@ type HomeScreenProps = {
   onPressFaceDiagnosis?: () => void;
   onPressConsulting?: () => void;
   onPressHalfMakeup?: () => void;
+  onPressHairAnalysis?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
@@ -73,6 +74,7 @@ export function HomeScreen({
   onPressHeroTrendFilter,
   onPressConsulting,
   onPressHalfMakeup,
+  onPressHairAnalysis,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
@@ -205,6 +207,7 @@ export function HomeScreen({
             onPressFaceDiagnosis={onPressFaceDiagnosis}
             onPressConsulting={onPressConsulting}
             onPressHalfMakeup={onPressHalfMakeup}
+            onPressHairAnalysis={onPressHairAnalysis}
             onPressHairRemovalSimulation={onPressHairRemovalSimulation}
             onPressMakeupExtraction={onPressMakeupExtraction}
             onPressMakeupFeedback={onPressMakeupFeedback}
@@ -301,7 +304,8 @@ export const heroCtaLabel = '시작하기' as const;
 export const recommendedFilterSectionTitle = '추천 메이크업 필터' as const;
 export const recommendedFilterSectionDescription = undefined;
 export const recommendedFilterMoreButtonLabel = '더보기' as const;
-export const HOME_HERO_BANNER_ASPECT_RATIO = 1.62;
+// Keep enough vertical room for the header actions without crowding the hero image.
+export const HOME_HERO_BANNER_ASPECT_RATIO = 1.5;
 export const HOME_HERO_AUTOSCROLL_INTERVAL_MS = 4000;
 export const homeHeroLayoutMetrics = {
   copyGap: spacing.sm,
@@ -755,7 +759,7 @@ export const HOME_SERVICE_SHORTCUT_LABELS = [
   '필터 스토어',
   '추천 제품',
   '컨설팅',
-  '제모 시뮬레이션',
+  '헤어 분석',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
   HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
@@ -822,11 +826,11 @@ const homeServiceShortcutRows = [
       ),
     },
     {
-      id: 'hairRemovalSimulation',
+      id: 'hairAnalysis',
       label: HOME_SERVICE_SHORTCUT_LABELS[7],
-      accessibilityLabel: '제모 시뮬레이션 열기',
+      accessibilityLabel: '헤어 분석 시작',
       icon: (color: string) => (
-        <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <Scissors color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
   ],
@@ -845,6 +849,7 @@ type HomeServiceShortcutHandlers = {
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressHalfMakeup?: () => void;
+  onPressHairAnalysis?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
@@ -860,6 +865,7 @@ export function getHomeServiceShortcutPressHandler(
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
+    onPressHairAnalysis,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,
@@ -876,8 +882,8 @@ export function getHomeServiceShortcutPressHandler(
     return onPressMakeupFilter;
   }
 
-  if (actionId === 'hairRemovalSimulation') {
-    return onPressHairRemovalSimulation;
+  if (actionId === 'hairAnalysis') {
+    return onPressHairAnalysis;
   }
 
   if (actionId === 'makeupExtraction') {
@@ -930,6 +936,7 @@ function HomeServiceShortcutSection({
   onPressConsulting,
   onPressFaceDiagnosis,
   onPressHalfMakeup,
+  onPressHairAnalysis,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
@@ -942,6 +949,7 @@ function HomeServiceShortcutSection({
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
+    onPressHairAnalysis,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,

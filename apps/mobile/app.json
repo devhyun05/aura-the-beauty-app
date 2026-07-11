@@ -17,8 +17,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aura.mobile",
-      "appleTeamId": "BRA7W3G4QS"
+      "bundleIdentifier": "com.aiarmakeupguides.mobile",
+      "appleTeamId": "G7X4226T2Q"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize"

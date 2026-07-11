@@ -1,4 +1,4 @@
-import {Linking} from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 import {getCognitoAuthConfig} from './cognitoConfig';
 import {syncAuthSessionWithBackend} from './backendAuthService';
@@ -34,6 +34,16 @@ const USER_INFO_TIMEOUT_MS = 10000;
 const LOGIN_DELAY_MESSAGE = '로그인 응답이 지연되고 있어요. 다시 시도해 주세요.';
 const LOGIN_FAILURE_MESSAGE = '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
 const LOGIN_CANCELLED_MESSAGE = '로그인이 취소되었습니다.';
+
+WebBrowser.maybeCompleteAuthSession();
+
+function dismissAuthBrowser() {
+  try {
+    WebBrowser.dismissAuthSession();
+  } catch {
+    // The session may already be closed by a redirect or user cancellation.
+  }
+}
 
 function getAuthErrorMessage(errorDescription?: string, fallback?: string): string {
   if (errorDescription) {
@@ -313,50 +323,31 @@ async function openAuthUrlAndWaitForRedirect(
   authUrl: string,
   redirectUri: string,
 ): Promise<AuthPromptResult> {
-  return new Promise((resolve, reject) => {
-    let subscription: {remove: () => void} | null = null;
-    let didSettle = false;
-    const redirectPrefix = redirectUri.split('?')[0];
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
-    const settle = (result: AuthPromptResult) => {
-      if (didSettle) {
-        return;
-      }
+  if (result.type === 'cancel' || result.type === 'dismiss') {
+    return {type: result.type};
+  }
 
-      didSettle = true;
-      subscription?.remove();
-      resolve(result);
+  if (result.type !== 'success') {
+    return {
+      error: new Error(`인증 브라우저가 완료되지 않았습니다: ${result.type}`),
+      params: {},
+      type: 'error',
     };
+  }
 
-    subscription = Linking.addEventListener('url', event => {
-      if (!event.url.startsWith(redirectPrefix)) {
-        return;
-      }
+  const params = parseRedirectParams(result.url);
 
-      const params = parseRedirectParams(event.url);
+  if (params.error) {
+    return {
+      error: new Error(params.error_description ?? params.error),
+      params,
+      type: 'error',
+    };
+  }
 
-      if (params.error) {
-        settle({
-          error: new Error(params.error_description ?? params.error),
-          params,
-          type: 'error',
-        });
-        return;
-      }
-
-      settle({params, type: 'success'});
-    });
-
-    Linking.openURL(authUrl).catch(error => {
-      if (didSettle) {
-        return;
-      }
-
-      didSettle = true;
-      subscription?.remove();
-      reject(error);
-    });
-  });
+  return {params, type: 'success'};
 }
 
 async function exchangeAuthorizationCode({
@@ -536,6 +527,7 @@ export async function loginWithSocialProvider(
       message: error instanceof Error ? error.message : String(error),
       provider,
     });
+    dismissAuthBrowser();
     throw error;
   }
 

@@ -78,6 +78,14 @@ Google-like user. Production must set `AUTH_REQUIRED=true`.
 - `GET /api/ar/filters`
 - `GET /api/ar/filter-states`
 - `PUT /api/ar/filter-states/{filterId}`
+- `GET /api/hair-styles`
+- `POST /api/hair-analyses`
+- `GET /api/hair-analyses/{analysis_id}`
+- `POST /api/hair-analyses/{analysis_id}/simulations`
+- `GET /api/hair-simulations/{simulation_id}`
+- `POST /api/hair-simulations/{simulation_id}/save`
+- `GET /api/hair-simulations?saved=true`
+- `DELETE /api/hair-simulations/{simulation_id}`
 - `POST /api/consulting/partner/applications`
 - `POST /api/consulting/partner/me/password`
 - `POST /api/consulting/partner/login`
@@ -127,6 +135,14 @@ During the mobile rollout transition, the legacy bucket/objectKey completion
 shape is accepted only as an exact lookup for a still-valid server-issued
 session owned by the same authenticated principal. Those client values are
 never inserted directly into `media_assets`.
+
+### Hair Analysis And Simulation
+
+Hair analysis and simulation are asynchronous SQS-backed jobs. Create requests
+require a stable `clientRequestId`; polling reads `queued`, `processing`,
+`completed`, `failed`, or `expired`. Source photos, masks, and unsaved results
+are private and expire after 24 hours. See
+`docs/backend/HAIR_ANALYSIS_SIMULATION.md` for deployment, quotas, and retention.
 
 ### Account Deletion
 

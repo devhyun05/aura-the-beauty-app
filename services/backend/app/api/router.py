@@ -10,6 +10,7 @@ from app.api import (
   feedback,
   filter_extractions,
   health,
+  hair,
   home,
   makeup_styles,
   media,
@@ -21,6 +22,7 @@ from app.api import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(hair.router)
 api_router.include_router(users.router)
 api_router.include_router(home.router)
 api_router.include_router(community.router)

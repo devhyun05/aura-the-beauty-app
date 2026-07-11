@@ -9,6 +9,7 @@ type ImageContentFit = 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
 export type CachedImageProps = {
   accessibilityLabel?: string;
   accessible?: boolean;
+  cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk';
   contentFit?: ImageContentFit;
   priority?: 'low' | 'normal' | 'high';
   recyclingKey?: string | null;
@@ -25,6 +26,7 @@ export type CachedImageProps = {
  * returning to a screen re-uses the cache instead of re-downloading.
  */
 export function CachedImage({
+  cachePolicy = 'memory-disk',
   contentFit = 'cover',
   priority = 'normal',
   recyclingKey,
@@ -34,7 +36,7 @@ export function CachedImage({
 }: CachedImageProps) {
   return (
     <ExpoImage
-      cachePolicy="memory-disk"
+      cachePolicy={cachePolicy}
       contentFit={contentFit}
       priority={priority}
       recyclingKey={recyclingKey}

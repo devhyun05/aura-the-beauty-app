@@ -61,6 +61,13 @@ export function prefetchImageUri(uri?: string): Promise<boolean> {
   return task;
 }
 
+export function prefetchTransientImageUri(uri?: string): Promise<boolean> {
+  if (!isRemoteImageUri(uri)) {
+    return Promise.resolve(false);
+  }
+  return ExpoImage.prefetch(uri, 'memory').catch(() => false);
+}
+
 export function prefetchImageSource(
   source?: ImageSourcePropType,
 ): Promise<boolean> {

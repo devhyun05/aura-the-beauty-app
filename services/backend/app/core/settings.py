@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -102,6 +103,19 @@ class Settings(BaseSettings):
   openai_image_input_max_edge: int = 1024
   openai_image_input_quality: int = 82
   openai_image_output_max_edge: int = 1024
+
+  hair_jobs_queue_url: str | None = None
+  hair_style_asset_bucket: str | None = None
+  hair_style_asset_prefix: str = "catalog/hair-styles/v1"
+  hair_style_assets_require_approval: bool = True
+  hair_source_retention_hours: int = Field(default=24, ge=1, le=168)
+  hair_simulations_per_analysis: int = Field(default=3, ge=1, le=12)
+  hair_simulations_per_day: int = Field(default=6, ge=1, le=100)
+  hair_worker_wait_time_seconds: int = Field(default=20, ge=0, le=20)
+  hair_worker_visibility_timeout_seconds: int = Field(default=360, ge=30, le=43200)
+  hair_worker_request_timeout_seconds: int = Field(default=180, ge=30, le=600)
+  hair_generation_quality: Literal["low", "medium", "high", "auto"] = "medium"
+  hair_segmenter_model_path: str = "/app/models/hair_segmenter.tflite"
 
   naver_shopping_client_id: str | None = None
   naver_shopping_client_secret: str | None = None
