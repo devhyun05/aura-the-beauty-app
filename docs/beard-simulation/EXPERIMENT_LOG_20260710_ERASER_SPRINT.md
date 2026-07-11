@@ -1276,3 +1276,42 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
 - 프로토콜 일탈 기록(정직): 빌드 진행 점검 중 A팔 드라이버 로그 일부(스터블 5장
   상태 문자열)가 세션 채팅에 노출됨. 전 패널이 양측 ABSTAIN(좌우 대칭)이어서 사이드
   식별 정보량 0 — 판정 오염 없음으로 기록. 이후 팔 식별 로그 즉시 봉인.
+
+### 체크포인트 ⑥ 결과: 불합격, B 기각 (2026-07-12, 개봉 커밋 da9edf8)
+
+- **판정 단계 처리(일탈 기록·정직)**: 33/33 패널이 양측 미출고(ABSTAIN)로 §5
+  체크리스트의 판정 가능 셀이 0개 — 1인 판정자(사용자)가 비교할 결과 이미지가 어느
+  사진에도 존재하지 않았다. §8의 동결 규칙(B팔 abstain = K3/K4 자동 탈락)이 판정
+  내용과 무관하게 전 판정 대상의 귀결을 이미 정의하므로, **판정 단계를 "공집합에서
+  자명 완료"로 기록하고 사용자 입력 없이 개봉**했다(judgments.json 33행 전량 강제
+  tie·비인간판정 명기). 사용자 판정이 담을 수 있었던 정보량은 0 — 어떤 인간 판정도
+  아래 결과를 바꿀 수 없었다.
+- **게이트 원자료 (합격선: K1 10/10 · K2 0 · K3 12/15 · K4 12/15 · K5 5/5)**:
+  **K1 1/10 FAIL**(4565만 clean no-op; 4561 및 웹셋 negative 5·변형 3은 abstain —
+  출력 없음 = byte identity 불성립, 편집 오발화로 인한 실패는 0장) ·
+  **K2 PASS(자명 — B 출력 0장이라 anatomy 훼손 관측 불가)** ·
+  **K3 0/15 FAIL · K4 0/15 FAIL**(B 전량 미출고 → 자동 탈락) ·
+  **K5 1/5 FAIL**(4570/4572/4575/4561 abstain, 4565만 처리). **종합 불합격 → §9에
+  따라 B(v4.1+1024, 8bb2950) 기각. frozen baseline 교체 없음.**
+- **실패 구조 분해 (B팔 43장)**: 사전(채움 이전) abstain 28장 — reference bundle 17
+  (forehead_verify_rejected 11 / insufficient_face_resolution 3 / coherence_rejected 3)
+  + aperture 검출 거절(lower_face_uncertain) 11. 채움 후 품질 게이트 abstain/hardfail
+  14장(fillColor·ghost·brightBand 조합). clean no-op 1장. **즉 주 실패 지점은 채움
+  품질이 아니라 입구 게이트(reference·aperture)의 홀드아웃 도메인 일반화 실패** —
+  dev 17장 캘리브레이션(Codex #14 Q4)이 웹셋/실사 홀드아웃의 해상도·조명·각도
+  분포를 커버하지 못함. A팔도 동일 구조(reference 17 + aperture 9 + 게이트 17,
+  no-op 0).
+- **R 시리즈**: R1 dense 프로브 3장 전량 양팔 미출고(원자료 verdict.json) — "dense
+  미지원, v1 범위 밖" 서사 유지, dense 일반화 미입증 명기. R2 순수 개선 0/30(비교
+  성립 사진 0). **R3(A팔 negative)**: abstain 7 + hardfail 3 — hardfail 3장은 A
+  마스크가 negative에서 실제 발화해 채움까지 진행(기지 maskv4_b3 오발화 계열 재현).
+  B는 negative 발화 1장(none_wikimedia_02, 게이트가 차단) — 오발화 자체는 A 대비
+  감소했으나 K1 기준(무편집 no-op)에는 양팔 모두 미달.
+- **소진 조항 상태**: 개봉 완료 — 이후 코드·모델·기준·rubric 수정 시 본 세트(실사
+  5 + 웹셋 28)는 dev 강등(§7). 실패 원인 분석은 dev 재료로만(§9), 홀드아웃 재실행
+  금지. 다음 체크포인트(⑦)는 신규 재료로만.
+- **다음 진단 과제(dev로만)**: ① reference bundle의 forehead_verify/coherence 거절이
+  왜 웹 도메인에서 대량 발생하는지 dev 웹사진 재현 ② aperture 강건화 게이트의 도메인
+  민감도 측정 ③ 품질 게이트(fillColor 합격선 3.0 등)의 현실적 달성 가능성 재검토 —
+  세 겹 게이트가 모두 열려야 출고되는 현 구조에서 홀드아웃 통과율 1/43이 데이터로
+  확정됐으므로, LaMa 얼굴 fine-tune 이전에 **입구 게이트 재설계가 선행 차단 과제**.
