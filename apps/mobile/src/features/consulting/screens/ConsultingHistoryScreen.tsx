@@ -47,11 +47,10 @@ type HistoryFilterId = 'all' | Exclude<ConsultingRecordStatus, 'unavailable'>;
 
 const historyFilters: readonly {id: HistoryFilterId; label: string}[] = [
   {id: 'all', label: '전체'},
-  {id: 'requested', label: '신청'},
-  {id: 'contacting', label: '확인 중'},
-  {id: 'confirmed', label: '확정'},
-  {id: 'completed', label: '완료'},
-  {id: 'canceled', label: '취소'},
+  {id: 'requested', label: '예약 신청'},
+  {id: 'confirmed', label: '예약 확정'},
+  {id: 'completed', label: '상담 완료'},
+  {id: 'canceled', label: '예약 취소'},
 ];
 
 type ConsultingHistoryScreenProps = {
@@ -156,7 +155,7 @@ export function ConsultingHistoryScreen({
       return visibleRecords;
     }
 
-    return visibleRecords.filter(record => record.status === filter);
+    return visibleRecords.filter(record => groupedHistoryStatus(record.status) === filter);
   }, [filter, visibleRecords]);
 
   return (
@@ -217,8 +216,6 @@ export function ConsultingHistoryScreen({
           <Text style={styles.emptyTitle}>
             {filter === 'requested'
               ? '접수된 신청이 없어요'
-              : filter === 'contacting'
-                ? '확인 중인 신청이 없어요'
               : filter === 'confirmed'
                 ? '확정된 상담이 없어요'
               : filter === 'canceled'
@@ -241,6 +238,15 @@ export function ConsultingHistoryScreen({
       )}
     </ConsultingScreenScaffold>
   );
+}
+
+function groupedHistoryStatus(status: ConsultingRecordStatus): HistoryFilterId {
+  if (status === 'requested' || status === 'contacting') return 'requested';
+  if (status === 'confirmed' || status === 'scheduled' || status === 'in_progress') {
+    return 'confirmed';
+  }
+  if (status === 'completed') return 'completed';
+  return 'canceled';
 }
 
 function isActiveRecordStatus(status: ConsultingRecordStatus): boolean {

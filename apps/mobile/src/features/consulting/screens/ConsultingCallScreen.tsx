@@ -218,6 +218,9 @@ export function ConsultingCallScreen({
         if (state?.chimeEnabled === false) {
           setJoinStatus('not_ready');
           setStatusMessage('Chime 서버 설정이 아직 켜져 있지 않아요');
+        } else if (state?.status !== 'active') {
+          setJoinStatus('not_ready');
+          setStatusMessage('전문가가 화상 상담을 시작하면 전화 알림이 도착해요');
         } else if (!state) {
           setStatusMessage('통화 상태를 확인하지 못했어요. 네트워크를 확인한 뒤 입장해 주세요.');
         }
@@ -254,6 +257,16 @@ export function ConsultingCallScreen({
       authToken,
       bookingId,
       onEvent: (event: ConsultingServerSocketEvent) => {
+        if (event.type === 'call.status' && event.status === 'ended') {
+          void stopNativeChimeMeeting();
+          setJoinResult(null);
+          setJoinStatus('not_ready');
+          setLocalVideoActive(false);
+          setRemoteVideoActive(false);
+          setStatusMessage('전문가가 화상 상담을 종료했어요');
+          onEndCall();
+          return;
+        }
         if (event.type !== 'caption.translation') {
           return;
         }
@@ -268,11 +281,12 @@ export function ConsultingCallScreen({
     });
 
     return () => client.close();
-  }, [authToken, bookingId, joinResult?.callSessionId]);
+  }, [authToken, bookingId, joinResult?.callSessionId, onEndCall]);
 
   const callSessionId = joinResult?.callSessionId ?? callState?.callSessionId ?? null;
+  const expertCallActive = callState?.status === 'active';
   const canAttemptJoin = Boolean(
-    bookingId && joinStatus !== 'joining',
+    bookingId && expertCallActive && joinStatus !== 'joining',
   );
   const visibleCaptions = captions.slice(-4);
   const statusLabel = useMemo(() => {
@@ -304,7 +318,7 @@ export function ConsultingCallScreen({
   }, [onEndCall]);
 
   const handleJoinCall = useCallback(async () => {
-    if (!bookingId || joinStatus === 'joining') {
+    if (!bookingId || !expertCallActive || joinStatus === 'joining') {
       return;
     }
 
@@ -365,7 +379,7 @@ export function ConsultingCallScreen({
         ? 'Chime 서버 설정이 아직 켜져 있지 않아요'
         : '입장 정보를 가져오지 못했어요. 네트워크와 예약 시간을 확인한 뒤 다시 시도해 주세요.',
     );
-  }, [bookingId, callState?.chimeEnabled, joinStatus, selectedLanguageCode]);
+  }, [bookingId, callState?.chimeEnabled, expertCallActive, joinStatus, selectedLanguageCode]);
 
   const handleToggleMic = useCallback(() => {
     const nextMicOn = !micOn;
@@ -525,7 +539,7 @@ export function ConsultingCallScreen({
               pressed ? styles.joinButtonPressed : null,
             ]}>
             <Text style={styles.joinButtonText}>
-              {joinStatus === 'not_ready' ? '다시 입장 시도' : '화상 상담 입장'}
+              {expertCallActive ? '화상 상담 입장' : '전문가의 전화를 기다려 주세요'}
             </Text>
           </Pressable>
         </RNView>

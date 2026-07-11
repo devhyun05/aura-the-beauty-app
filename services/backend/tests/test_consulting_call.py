@@ -301,29 +301,40 @@ def reset_fake_chime() -> None:
 
 
 @pytest.mark.asyncio
-async def test_customer_join_call_creates_chime_session(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_customer_join_call_requires_expert_to_create_session(monkeypatch: pytest.MonkeyPatch) -> None:
   reset_fake_chime()
   monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
   settings = Settings(chime_enabled=True, consulting_call_transcription_enabled=True)
   db = FakeDatabase(make_booking())
 
-  result = await consulting_call.join_customer_call(db, "user-1", "booking-1", "en-US", settings)
+  with pytest.raises(AppError) as error:
+    await consulting_call.join_customer_call(db, "user-1", "booking-1", "en-US", settings)
 
-  assert result["call_session_id"] == "call-1"
+  assert error.value.code == "CONSULTING_CALL_WAITING_FOR_EXPERT"
+  assert db.session is None
+  assert FakeChimeMeetingsService.created_external_meeting_ids == []
+
+
+@pytest.mark.asyncio
+async def test_local_camera_test_can_join_outside_booking_window(monkeypatch: pytest.MonkeyPatch) -> None:
+  reset_fake_chime()
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  settings = Settings(
+    chime_enabled=True,
+    environment="local",
+    consulting_call_allow_outside_window=True,
+  )
+  db = FakeDatabase(make_booking(scheduled_at=datetime.now(timezone.utc) - timedelta(days=1)))
+
+  result = await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
+
   assert result["meeting"]["MeetingId"] == "meeting-1"
-  assert result["attendee"]["JoinToken"] == "token-meeting-1"
-  assert result["participant_type"] == "user"
-  assert result["participant_language_code"] == "en-US"
-  assert result["participant"] == {
-    "id": "user-1",
-    "type": "customer",
-    "language_code": "en-US",
-  }
-  assert db.session is not None
-  assert db.session["transcription_status"] == "stopped"
-  assert db.session["customer_language_code"] == "en-US"
-  assert FakeChimeMeetingsService.created_external_meeting_ids == ["consulting-booking-1"]
-  assert FakeChimeMeetingsService.attendee_external_user_ids == ["customer:booking-1"]
 
 
 @pytest.mark.asyncio
@@ -333,7 +344,6 @@ async def test_customer_and_partner_join_reuse_same_chime_meeting(monkeypatch: p
   settings = Settings(chime_enabled=True)
   db = FakeDatabase(make_booking(status="scheduled"))
 
-  customer_result = await consulting_call.join_customer_call(db, "user-1", "booking-1", "en-US", settings)
   partner_result = await consulting_call.join_partner_call(
     db,
     {
@@ -345,11 +355,12 @@ async def test_customer_and_partner_join_reuse_same_chime_meeting(monkeypatch: p
     "ko-KR",
     settings,
   )
+  customer_result = await consulting_call.join_customer_call(db, "user-1", "booking-1", "en-US", settings)
 
   assert customer_result["call_session_id"] == partner_result["call_session_id"] == "call-1"
   assert customer_result["meeting"]["MeetingId"] == partner_result["meeting"]["MeetingId"] == "meeting-1"
   assert FakeChimeMeetingsService.created_external_meeting_ids == ["consulting-booking-1"]
-  assert FakeChimeMeetingsService.attendee_external_user_ids == ["customer:booking-1", "partner:booking-1"]
+  assert FakeChimeMeetingsService.attendee_external_user_ids == ["partner:booking-1", "customer:booking-1"]
   assert db.session is not None
   assert db.session["customer_language_code"] == "en-US"
   assert db.session["expert_language_code"] == "ko-KR"
@@ -362,15 +373,21 @@ async def test_raced_first_join_uses_existing_session_meeting(monkeypatch: pytes
   settings = Settings(chime_enabled=True)
   db = RacingSessionFakeDatabase(make_booking())
 
-  result = await consulting_call.join_customer_call(db, "user-1", "booking-1", "en-US", settings)
+  result = await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "en-US",
+    settings,
+  )
 
   assert result["call_session_id"] == "call-existing"
   assert result["meeting"]["MeetingId"] == "meeting-existing"
   assert result["attendee"]["JoinToken"] == "token-meeting-existing"
   assert FakeChimeMeetingsService.created_external_meeting_ids == ["consulting-booking-1"]
-  assert FakeChimeMeetingsService.attendee_external_user_ids == ["customer:booking-1"]
+  assert FakeChimeMeetingsService.attendee_external_user_ids == ["partner:booking-1"]
   assert db.session is not None
-  assert db.session["customer_language_code"] == "en-US"
+  assert db.session["expert_language_code"] == "en-US"
 
 
 @pytest.mark.asyncio
@@ -417,7 +434,7 @@ async def test_join_recreates_stale_stored_chime_meeting(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
-async def test_join_recreates_meeting_when_attendee_create_sees_stale_meeting(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_customer_cannot_recreate_meeting_when_attendee_join_sees_stale_meeting(monkeypatch: pytest.MonkeyPatch) -> None:
   reset_fake_chime()
   FakeChimeMeetingsService.stale_attendee_meeting_ids = {"meeting-stale"}
   monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
@@ -430,16 +447,12 @@ async def test_join_recreates_meeting_when_attendee_create_sees_stale_meeting(mo
     provider_meeting_id="meeting-stale",
   )
 
-  result = await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
+  with pytest.raises(AppError) as error:
+    await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
 
-  assert result["call_session_id"] == "call-stale"
-  assert result["meeting"]["MeetingId"] == "meeting-1"
-  assert result["attendee"]["JoinToken"] == "token-meeting-1"
+  assert error.value.code == "CONSULTING_CALL_WAITING_FOR_EXPERT"
   assert FakeChimeMeetingsService.get_meeting_ids == ["meeting-stale"]
-  assert FakeChimeMeetingsService.created_external_meeting_ids[0].startswith("consulting-booking-1-r")
-  assert FakeChimeMeetingsService.attendee_external_user_ids == ["customer:booking-1"]
-  assert db.session is not None
-  assert db.session["provider_meeting_id"] == "meeting-1"
+  assert FakeChimeMeetingsService.created_external_meeting_ids == []
 
 
 @pytest.mark.asyncio
@@ -449,6 +462,13 @@ async def test_customer_end_call_does_not_delete_shared_meeting(monkeypatch: pyt
   settings = Settings(chime_enabled=True)
   db = FakeDatabase(make_booking())
 
+  await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
   await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
   result = await consulting_call.end_customer_call(db, "user-1", "booking-1", settings)
 
@@ -456,6 +476,34 @@ async def test_customer_end_call_does_not_delete_shared_meeting(monkeypatch: pyt
   assert db.session is not None
   assert db.session["status"] == "active"
   assert FakeChimeMeetingsService.deleted_meeting_ids == []
+
+
+@pytest.mark.asyncio
+async def test_partner_can_start_a_new_call_after_previous_call_ended(monkeypatch: pytest.MonkeyPatch) -> None:
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  reset_fake_chime()
+  settings = Settings(chime_enabled=True)
+  booking = make_booking()
+  db = FakeDatabase(booking)
+  db.session = make_existing_call_session(
+    booking,
+    provider_meeting_id="meeting-ended",
+    status="ended",
+    ended_at=datetime.now(timezone.utc),
+  )
+
+  result = await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
+
+  assert result["meeting"]["MeetingId"] == "meeting-1"
+  assert db.session is not None
+  assert db.session["status"] == "active"
+  assert FakeChimeMeetingsService.attendee_external_user_ids == ["partner:booking-1"]
 
 
 @pytest.mark.asyncio
@@ -594,7 +642,13 @@ async def test_caption_translation_does_not_store_transcript_by_default(monkeypa
   monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
   settings = Settings(chime_enabled=True, consulting_call_translation_enabled=True)
   db = FakeDatabase(make_booking())
-  await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
+  await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
 
   result = await consulting_call.translate_partner_caption(
     db,
@@ -627,7 +681,13 @@ async def test_caption_translation_can_store_when_retention_is_enabled(monkeypat
     consulting_transcript_retention_days=7,
   )
   db = FakeDatabase(make_booking())
-  await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
+  await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
 
   result = await consulting_call.translate_partner_caption(
     db,

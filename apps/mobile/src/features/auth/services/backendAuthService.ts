@@ -2,7 +2,10 @@ import type {AuthSession, AuthUser} from '../types';
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 
 type BackendUser = {
+  birthDate?: string | null;
+  birth_date?: string | null;
   email?: string | null;
+  gender?: string | null;
   id: string;
   name?: string | null;
   nickname?: string | null;
@@ -29,6 +32,16 @@ function resolveBackendAuthText(value: string | null | undefined) {
   return normalized;
 }
 
+function hasCompletedBackendProfile(user: BackendUser): boolean {
+  return Boolean(
+    resolveBackendAuthText(user.email) &&
+      resolveBackendAuthText(user.name) &&
+      resolveBackendAuthText(user.nickname) &&
+      (user.birthDate ?? user.birth_date) &&
+      user.gender,
+  );
+}
+
 function mapBackendUser(sessionUser: AuthUser, backendUser: BackendUser): AuthUser {
   const sessionEmail = resolveBackendAuthText(sessionUser.email);
   const sessionName = resolveBackendAuthText(sessionUser.name);
@@ -39,8 +52,13 @@ function mapBackendUser(sessionUser: AuthUser, backendUser: BackendUser): AuthUs
   const email = sessionEmail ?? backendEmail;
   const name = sessionName ?? backendName;
   const nickname = sessionNickname ?? backendNickname ?? name ?? email ?? 'AURA User';
-  const profileCompleted =
-    sessionUser.profileCompleted ?? backendUser.profileCompleted ?? backendUser.profile_completed;
+  const backendProfileCompleted =
+    backendUser.profileCompleted ??
+    backendUser.profile_completed ??
+    hasCompletedBackendProfile(backendUser);
+  // A cached `false` from an earlier login must not override the authoritative
+  // completion state returned by the backend.
+  const profileCompleted = backendProfileCompleted || sessionUser.profileCompleted;
 
   return {
     email: email ?? undefined,

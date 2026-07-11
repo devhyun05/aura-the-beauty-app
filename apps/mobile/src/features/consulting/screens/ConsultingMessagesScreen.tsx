@@ -21,6 +21,7 @@ import {
   findConsultingExpertOrFirst,
 } from '../mocks/consulting.mock';
 import {
+  getConsultingCallState,
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
@@ -108,6 +109,30 @@ export function ConsultingMessagesScreen({
       return undefined;
     }
 
+    let isMounted = true;
+    void Promise.all(
+      activeRecords.map(async record => ({
+        record,
+        state: await getConsultingCallState(record.id),
+      })),
+    ).then(results => {
+      if (!isMounted) return;
+      const incoming = results.find(
+        item =>
+          item.state?.status === 'active' &&
+          !incomingCallBookingIdsRef.current.has(item.record.id),
+      );
+      if (!incoming) return;
+      incomingCallBookingIdsRef.current = new Set([
+        ...incomingCallBookingIdsRef.current,
+        incoming.record.id,
+      ]);
+      Alert.alert('화상 상담 전화가 왔어요', '전문가가 화상 상담을 시작했습니다.', [
+        {text: '나중에'},
+        {text: '입장하기', onPress: () => onPressIncomingCall(incoming.record)},
+      ]);
+    });
+
     const sockets: ConsultingConversationSocketClient[] = activeRecords.map(
       record =>
         connectConsultingConversationSocket({
@@ -141,12 +166,20 @@ export function ConsultingMessagesScreen({
                 },
               ]);
             }
+            if (event.type === 'call.status' && event.status === 'ended') {
+              const nextIncomingCallIds = new Set(incomingCallBookingIdsRef.current);
+              nextIncomingCallIds.delete(record.id);
+              incomingCallBookingIdsRef.current = nextIncomingCallIds;
+            }
           },
           participantType: 'user',
         }),
     );
 
-    return () => sockets.forEach(socket => socket.close());
+    return () => {
+      isMounted = false;
+      sockets.forEach(socket => socket.close());
+    };
   }, [activeRecords, authToken, onPressIncomingCall]);
 
   return (

@@ -115,6 +115,10 @@ def _validate_joinable_booking(
   if scheduled_at is None:
     raise AppError(409, "CONSULTING_CALL_TIME_MISSING", "예약 시간이 없어 화상상담을 열 수 없습니다.")
 
+  is_local_environment = settings.environment.strip().lower() in {"local", "dev", "development", "test"}
+  if settings.consulting_call_allow_outside_window and is_local_environment:
+    return
+
   starts_at = _parse_datetime(scheduled_at)
   if now.tzinfo is None:
     now = now.replace(tzinfo=timezone.utc)
@@ -275,7 +279,7 @@ async def _replace_session_meeting(
         transcription_status = $5,
         transcription_mode = 'fixed',
         transcription_language_code = null,
-        started_at = coalesce(started_at, now()),
+        started_at = case when status = 'ended' then now() else coalesce(started_at, now()) end,
         ended_at = null,
         expires_at = $6,
         updated_at = now()
@@ -316,6 +320,8 @@ async def _meeting_for_session(
   db: Database,
   booking: dict[str, Any],
   settings: Settings,
+  *,
+  allow_create: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
   if not settings.chime_enabled:
     raise AppError(503, "CHIME_NOT_ENABLED", "화상상담 서버 설정이 아직 켜져 있지 않습니다.")
@@ -323,7 +329,15 @@ async def _meeting_for_session(
   chime = ChimeMeetingsService(settings)
   row = await _call_session(db, str(booking["id"]))
   if row and row.get("status") == "ended":
-    raise AppError(409, "CONSULTING_CALL_ALREADY_ENDED", "이미 종료된 화상상담입니다.")
+    if not allow_create:
+      raise AppError(409, "CONSULTING_CALL_WAITING_FOR_EXPERT", "전문가가 새 화상통화를 시작할 때까지 기다려 주세요.")
+    return await _recreate_stale_meeting(
+      db,
+      booking=booking,
+      row=row,
+      settings=settings,
+      chime=chime,
+    )
 
   if row and row.get("provider_meeting_id"):
     _log_call_event(
@@ -337,6 +351,12 @@ async def _meeting_for_session(
     except AppError as error:
       if not _is_stale_chime_meeting_error(error):
         raise
+      if not allow_create:
+        raise AppError(
+          409,
+          "CONSULTING_CALL_WAITING_FOR_EXPERT",
+          "전문가가 화상통화를 다시 시작할 때까지 기다려 주세요.",
+        ) from error
       return await _recreate_stale_meeting(
         db,
         booking=booking,
@@ -357,6 +377,9 @@ async def _meeting_for_session(
       row["id"],
     )
     return meeting, updated or row
+
+  if not allow_create:
+    raise AppError(409, "CONSULTING_CALL_WAITING_FOR_EXPERT", "전문가가 화상통화를 시작하면 입장할 수 있어요.")
 
   meeting = await chime.create_meeting(external_meeting_id=_external_meeting_id(booking["id"]))
   _log_call_event("meeting_created", booking_id=booking["id"])
@@ -431,7 +454,8 @@ async def _join_call(
   settings: Settings,
 ) -> dict[str, Any]:
   normalized_language_code = _language_code(language_code)
-  meeting, session = await _meeting_for_session(db, booking, settings)
+  allow_create = participant_type == "partner"
+  meeting, session = await _meeting_for_session(db, booking, settings, allow_create=allow_create)
   language_column = "customer_language_code" if participant_type == "customer" else "expert_language_code"
   session = await db.fetchrow(
     f"""
@@ -454,6 +478,12 @@ async def _join_call(
   except AppError as error:
     if not _is_stale_chime_meeting_error(error):
       raise
+    if not allow_create:
+      raise AppError(
+        409,
+        "CONSULTING_CALL_WAITING_FOR_EXPERT",
+        "전문가가 화상통화를 다시 시작할 때까지 기다려 주세요.",
+      ) from error
     meeting, session = await _recreate_stale_meeting(
       db,
       booking=booking,

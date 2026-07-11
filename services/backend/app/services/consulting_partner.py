@@ -101,11 +101,15 @@ def _partner_password_for(expert: dict[str, Any]) -> str:
 
 
 def _map_booking_status(status: str) -> str:
-  if status in {"requested", "contacting", "confirmed", "scheduled", "in_progress", "completed"}:
-    return status
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status in {"confirmed", "scheduled", "in_progress"}:
+    return "confirmed"
+  if status == "completed":
+    return "completed"
   if status in {"canceled", "cancelled", "unavailable", "no_show", "refund_requested"}:
     return "cancelled"
-  return "scheduled"
+  return "requested"
 
 
 def _map_partner_status(status: str) -> str:
@@ -113,8 +117,10 @@ def _map_partner_status(status: str) -> str:
     return "completed"
   if status in {"cancelled", "no_show", "refund_requested", "canceled", "unavailable"}:
     return "canceled"
-  if status in {"requested", "contacting", "confirmed", "scheduled", "in_progress"}:
-    return status
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status in {"confirmed", "scheduled", "in_progress"}:
+    return "confirmed"
   return "confirmed"
 
 

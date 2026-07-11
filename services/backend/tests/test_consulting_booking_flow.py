@@ -143,6 +143,7 @@ async def test_closed_customer_booking_rejects_text_fallback(monkeypatch: pytest
 @pytest.mark.asyncio
 async def test_partner_payment_confirmation_broadcasts_customer_completion_notice(monkeypatch: pytest.MonkeyPatch) -> None:
   broadcasts: list[tuple[str, dict]] = []
+  confirmation_messages: list[tuple[object, dict, str]] = []
 
   async def fake_update_status(_db, account: dict, booking_id: str, status: str, note: str | None):
     assert account == PARTNER_ACCOUNT
@@ -153,8 +154,12 @@ async def test_partner_payment_confirmation_broadcasts_customer_completion_notic
   async def fake_broadcast(booking_id: str, event: dict):
     broadcasts.append((booking_id, event))
 
+  async def fake_send_confirmation(db, account: dict, booking_id: str):
+    confirmation_messages.append((db, account, booking_id))
+
   monkeypatch.setattr(partner_api.consulting_partner, "update_booking_status", fake_update_status)
   monkeypatch.setattr(partner_api.consulting_realtime_manager, "broadcast", fake_broadcast)
+  monkeypatch.setattr(partner_api, "_send_booking_confirmation_message", fake_send_confirmation)
 
   result = await partner_api.update_partner_booking_status(
     "booking-1",
@@ -170,6 +175,30 @@ async def test_partner_payment_confirmation_broadcasts_customer_completion_notic
     "status": "confirmed",
     "message": "예약이 완료되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, 안내된 시간에 연락을 기다려 주세요.",
   }
+  assert confirmation_messages[0][1:] == (PARTNER_ACCOUNT, "booking-1")
+
+
+@pytest.mark.asyncio
+async def test_booking_confirmation_message_is_idempotent_and_broadcast_once(monkeypatch: pytest.MonkeyPatch) -> None:
+  created: list[dict] = []
+  broadcasts: list[tuple[str, dict]] = []
+
+  async def fake_create_message(_db, **kwargs):
+    created.append(kwargs)
+    return ({"type": "message.created", "body": kwargs["body"]}, len(created) == 1)
+
+  async def fake_broadcast(booking_id: str, event: dict):
+    broadcasts.append((booking_id, event))
+
+  monkeypatch.setattr(partner_api, "create_consulting_message", fake_create_message)
+  monkeypatch.setattr(partner_api.consulting_realtime_manager, "broadcast", fake_broadcast)
+
+  await partner_api._send_booking_confirmation_message(object(), PARTNER_ACCOUNT, "booking-1")
+  await partner_api._send_booking_confirmation_message(object(), PARTNER_ACCOUNT, "booking-1")
+
+  assert created[0]["client_message_id"] == "booking-confirmed-booking-1"
+  assert created[0]["body"] == partner_api.BOOKING_CONFIRMED_MESSAGE
+  assert len(broadcasts) == 1
 
 
 @pytest.mark.asyncio

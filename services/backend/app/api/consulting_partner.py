@@ -25,6 +25,10 @@ from app.services.consulting_message_store import create_consulting_message
 
 router = APIRouter(prefix="/consulting/partner", tags=["consulting-partner"])
 PARTNER_ACCOUNT_ISSUE_CONFIRMATION = "issue-default-partner-accounts"
+BOOKING_CONFIRMED_MESSAGE = (
+  "예약이 확정되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, "
+  "안내된 시간에 연락을 기다려 주세요."
+)
 
 
 def _set_sensitive_response_headers(response: Response) -> None:
@@ -164,6 +168,8 @@ async def update_partner_booking_status(
       "message": _customer_booking_status_message(booking["status"]),
     },
   )
+  if booking["status"] == "confirmed":
+    await _send_booking_confirmation_message(db, account, booking_id)
   return success({"booking": booking})
 
 
@@ -195,6 +201,8 @@ async def update_partner_booking(
       "message": _customer_booking_status_message(booking["status"]),
     },
   )
+  if booking["status"] == "confirmed":
+    await _send_booking_confirmation_message(db, account, booking_id)
   return success({"booking": booking})
 
 
@@ -229,6 +237,25 @@ def _customer_booking_status_message(status: str) -> str:
   if status in {"cancelled", "canceled", "no_show", "refund_requested"}:
     return "예약 상태가 변경되었습니다. 채팅방의 안내를 확인해 주세요."
   return "예약 신청이 접수되었습니다. 전문가가 확인 후 안내드릴게요."
+
+
+async def _send_booking_confirmation_message(
+  db: Database,
+  account: dict,
+  booking_id: str,
+) -> None:
+  message, inserted = await create_consulting_message(
+    db,
+    booking_id=booking_id,
+    body=BOOKING_CONFIRMED_MESSAGE,
+    client_message_id=f"booking-confirmed-{booking_id}",
+    media=[],
+    sender_name=str(account.get("expert_name") or account.get("name") or "전문가"),
+    sender_type="expert",
+    sender_user_id=None,
+  )
+  if inserted:
+    await consulting_realtime_manager.broadcast(booking_id, message)
 
 
 @router.post("/chat/threads/{thread_id}/messages")

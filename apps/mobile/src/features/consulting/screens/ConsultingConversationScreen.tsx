@@ -37,7 +37,10 @@ import {
   type ConsultingServerSocketEvent,
   type ConsultingSocketStatus,
 } from '../services/consultingRealtimeService';
-import {sendConsultingTextMessage} from '../services/consultingService';
+import {
+  getConsultingCallState,
+  sendConsultingTextMessage,
+} from '../services/consultingService';
 import type {ConsultingExpert, ConsultingRecord} from '../types';
 
 type ChatMessage = {
@@ -77,6 +80,7 @@ export function ConsultingConversationScreen({
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [bookingStatusNotice, setBookingStatusNotice] = useState<string | null>(null);
+  const [isExpertCalling, setIsExpertCalling] = useState(false);
   const lastAutoRetryStatusRef = useRef<ConsultingSocketStatus>('idle');
 
   const connectionLabel = useMemo(
@@ -156,10 +160,13 @@ export function ConsultingConversationScreen({
         setBookingStatusNotice(event.message);
         onBookingStatusChange?.();
         if (event.status === 'started') {
+          setIsExpertCalling(true);
           Alert.alert('화상 상담이 시작됐어요', event.message, [
             {text: '나중에'},
             {text: '입장하기', onPress: onPressCall},
           ]);
+        } else if (event.status === 'ended') {
+          setIsExpertCalling(false);
         }
         return;
       }
@@ -176,6 +183,19 @@ export function ConsultingConversationScreen({
     },
     [bookingId, onBookingStatusChange, onPressCall, upsertSocketMessage],
   );
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsExpertCalling(false);
+    void getConsultingCallState(bookingId).then(state => {
+      if (isMounted) {
+        setIsExpertCalling(state?.status === 'active');
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [bookingId]);
 
   useEffect(() => {
     if (!bookingId || !authToken) {
@@ -418,7 +438,7 @@ export function ConsultingConversationScreen({
 
   const canSendText = input.trim().length > 0;
   const canPickImage = connectionStatus === 'connected' && !isUploadingImage;
-  const callEnabled = canJoinVideoCall(record);
+  const callEnabled = canJoinVideoCall(record) && isExpertCalling;
   const reservationDateLabel = getReservationDateLabel(record);
   const reservationStartTimeLabel = getReservationStartTimeLabel(record);
   const sessionModeLabel = getReservationSessionModeLabel(record);
@@ -461,18 +481,18 @@ export function ConsultingConversationScreen({
           </RNView>
           <RNView style={styles.headerActions}>
             {record ? <ConsultingStatusBadge status={record.status} /> : null}
-            <Pressable
-              accessibilityLabel={callEnabled ? '화상 상담 입장' : '온라인 예약 확정 후 화상 상담 입장'}
-              accessibilityRole="button"
-              disabled={!callEnabled}
-              onPress={onPressCall}
-              style={({pressed}) => [
-                styles.callButton,
-                !callEnabled && styles.callButtonDisabled,
-                pressed && callEnabled ? styles.pressed : null,
-              ]}>
-              <Video color={consultingColors.onAccent} size={18} />
-            </Pressable>
+            {callEnabled ? (
+              <Pressable
+                accessibilityLabel="전문가가 시작한 화상 상담 입장"
+                accessibilityRole="button"
+                onPress={onPressCall}
+                style={({pressed}) => [
+                  styles.callButton,
+                  pressed ? styles.pressed : null,
+                ]}>
+                <Video color={consultingColors.onAccent} size={18} />
+              </Pressable>
+            ) : null}
           </RNView>
         </View>
 

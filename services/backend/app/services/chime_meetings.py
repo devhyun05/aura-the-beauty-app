@@ -6,7 +6,7 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, UnauthorizedSSOTokenError
 
 from app.core.errors import AppError
 from app.core.settings import Settings
@@ -74,6 +74,13 @@ class ChimeMeetingsService:
           {"awsCode": aws_code},
         ) from error
       raise AppError(502, error_code, error_message, {"awsCode": aws_code}) from error
+    except UnauthorizedSSOTokenError as error:
+      raise AppError(
+        502,
+        "CHIME_AWS_SESSION_EXPIRED",
+        "AWS 로그인 세션이 만료되었습니다. 서버에서 AWS SSO 로그인을 다시 진행해 주세요.",
+        {"awsCode": type(error).__name__},
+      ) from error
     except BotoCoreError as error:
       raise AppError(502, error_code, error_message, {"awsCode": type(error).__name__}) from error
 

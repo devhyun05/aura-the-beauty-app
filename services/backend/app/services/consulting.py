@@ -791,7 +791,7 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     if scheduled_at is not None
     else None,
     "slot_id": row.get("slot_id"),
-    "status": row["status"],
+    "status": _public_booking_status(str(row["status"])),
     "category_label": row["category_label"],
     "date_label": row["date_label"],
     "duration_label": row["duration_label"],
@@ -808,6 +808,16 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     # without opening every conversation.
     "last_expert_message_at": row.get("last_expert_message_at"),
   }
+
+
+def _public_booking_status(status: str) -> str:
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status in {"confirmed", "scheduled", "in_progress"}:
+    return "confirmed"
+  if status == "completed":
+    return "completed"
+  return "canceled"
 
 
 def _booking_price(payload: Any, duration: dict[str, Any]) -> int:
