@@ -1257,3 +1257,22 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   가드(--checkpoint-build 없이는 거부), dev 사본으로 결정론·육안 검증.
 - 남은 §6 절차: challenger(B=v4.1+1024, 커밋 8bb2950) 해시 기입 → manifest 커밋 →
   패널 생성 → **사용자 판정** → 개봉.
+
+### 체크포인트 ⑥ §6-1~3 실행 완료 (2026-07-12, 커밋 7a7b072·478d56b·a4e3d61·8e5ab9b·26fba7c)
+
+- **§6-1 동결**: A=cadfe81(mask v4/maskv4_b3 시점, lamaMaxDim 512·dilate 0.004),
+  B=8bb2950(v4.1+채움 factorial, 1024·0.02), 가중치 sha 344c77bb…, venv 해시
+  3003eaad…(python 3.12.4). 실행기 `spike/checkpoint6.py` — §6 전 절차 + served/noop/
+  abstain 어휘 + K1~K5 집계 로직을 결과 실행 **전에** 이 파일에 동결(비-pass=미출고
+  서빙 계약 준수). dev 스모크(pic3·4564)로 기계 검증 후 홀드아웃 첫 접촉은 §6-3b.
+- **§6-2/3a 봉인**: 소스 28장 + 변형 15장(결정론 §2.2/§2.3 선정 재계산 일치 확인)
+  sha256 봉인 — `cp6_run/image_manifest.json`. rubric 앵커 4종(dev 전용) 판정 전 확정.
+- **§6-3b/c**: 43장×2팔 실행, 33 블라인드 패널(`cp6_run/panels/`), 매핑 봉인
+  (`blind_mapping.sealed.json` chmod 400), 팔 디렉터리·드라이버 로그 chmod 000.
+- **공개 사실(좌우 대칭 — 블라인드 무손상)**: **33/33 패널이 양측 ABSTAIN**.
+  두 팔 모두 전 차단 양성·dense 프로브에서 미출고. dev pic3에서 사전 관측된 E2E
+  품질 게이트(grain/fillColor/ghost) 전면 abstain 거동과 일치. negative 10장의 기계
+  측정(K1/R3)은 봉인 상태 — 개봉 시 확정.
+- 프로토콜 일탈 기록(정직): 빌드 진행 점검 중 A팔 드라이버 로그 일부(스터블 5장
+  상태 문자열)가 세션 채팅에 노출됨. 전 패널이 양측 ABSTAIN(좌우 대칭)이어서 사이드
+  식별 정보량 0 — 판정 오염 없음으로 기록. 이후 팔 식별 로그 즉시 봉인.
