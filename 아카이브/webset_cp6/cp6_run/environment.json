@@ -1,0 +1,13 @@
+{
+  "recordedAt": "2026-07-12T06:47:28",
+  "armA": {
+    "commit": "cadfe81ab1c956b6f7505c46ffc2f8dab348f4dc",
+    "weightsSha256": "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9"
+  },
+  "armB": {
+    "commit": "8bb295005c9d0d34a3f3988d3972b1c6df98e18c",
+    "weightsSha256": "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9"
+  },
+  "venvPipFreezeSha256": "3003eaadfb5fdb323ec81e6bf0e89be13234340eda901fb5500058a55705e05a",
+  "python": "3.12.4"
+}

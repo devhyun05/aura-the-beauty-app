@@ -79,11 +79,15 @@ license/note에 1904·19세기 세피아(아이누)가 아닌 항목만 셀 풀�
 
 | 팔 | 정의 | 동결 정보(실행 전 기입, §6 1단계에서 커밋) |
 |---|---|---|
-| **A** | frozen baseline | 커밋 해시: `________________` · 모델 가중치 sha256: `________________` |
-| **B** | challenger (최종 1개만) | 커밋 해시: `________________` · 모델 가중치 sha256: `________________` |
+| **A** | frozen baseline (mask v4 / maskv4_b3 시점, lamaMaxDim 512·dilate 0.004) | 커밋 해시: `cadfe81ab1c956b6f7505c46ffc2f8dab348f4dc` · 모델 가중치 sha256: `344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9` |
+| **B** | challenger (최종 1개만): v4.1 hardening + 채움 factorial 채택(lamaMaxDim 1024·dilate 0.02) | 커밋 해시: `8bb295005c9d0d34a3f3988d3972b1c6df98e18c` · 모델 가중치 sha256: `344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9` |
 
 - challenger는 **정확히 1개**. 여러 후보 비교는 dev에서 끝내고 온다(Codex #14 §Q7).
 - 두 팔 모두 동일 입력 바이트·동일 실행 환경(venv 해시 기록).
+- venv 패키지 해시(sha256 of sorted pip freeze): `3003eaadfb5fdb323ec81e6bf0e89be13234340eda901fb5500058a55705e05a`
+  (python 3.12.4 · 상세: `아카이브/webset_cp6/cp6_run/environment.json`, `pip_freeze.txt`)
+- 실행기: `tools/beard-simulation-lab/spike/checkpoint6.py` (§6 전 절차 + K1~K5 집계
+  로직을 이 파일에 동결; 본 커밋 이후 수정 금지, 수정 시 §7 소진)
 
 ## 4. 블라인드
 
