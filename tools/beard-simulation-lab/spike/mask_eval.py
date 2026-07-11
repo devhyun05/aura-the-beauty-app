@@ -29,6 +29,18 @@ v2 measurement contract (Codex #13):
 Photo pool = dev real photos (GT-labelled) + generated (AI) reference
 photos; the two groups are aggregated separately (real numbers decide,
 gen numbers are reference only).
+
+b3 additions (reviewer round 2):
+  (a) activationSilentOnPositive — on beard-positive photos (GT or real
+      positive pool label), a fully silent mustache activation (psd01
+      class) is counted as its own kill field, never absorbed into the
+      coverage denominator.
+  (b) gtRecallBandPct — unscoped GT recall: denominator = ALL GT px in
+      the anatomical mustache band (L∪C∪R), no canvas scoping; reported
+      next to the canvas-scoped gtRecallCropPct.
+  Pool: + archive real positives (stubble/medium/dense) and a real
+  beardless NEGATIVE pool (false-fire kill: 0 activation + speckle-level
+  editPx, raw px reported).
 """
 from __future__ import annotations
 
@@ -76,6 +88,24 @@ REAL_POOL: list[tuple[str, str, str | None]] = [
      str(PSD_DIR / "group_05_레이어_그룹__layer_01_smartobject_이미지_레이어.png"),
      str(PSD_DIR / "group_05_레이어_그룹__layer_02_pixel_픽셀_레이어.png")),
     ("pic1(cond)", str(SAMPLES / "pic1.png"), str(SAMPLES / "green1.png")),
+    # b3: archive real positives (no GT) — stubble/medium/dense classes.
+    ("IMG_4559(stubble)", str(ARCHIVE / "IMG_4559.PNG"), None),
+    ("IMG_4569(medium)",
+     str(ARCHIVE / "denceKorean" / "IMG_4569.JPG"), None),
+    ("IMG_4573(stubble,laugh)",
+     str(ARCHIVE / "denceKorean" / "IMG_4573.JPG"), None),
+    ("IMG_4574(dense)", str(ARCHIVE / "denceKorean" / "IMG_4574.JPG"), None),
+    ("IMG_4578(medium)",
+     str(ARCHIVE / "denceKorean" / "IMG_4578.JPG"), None),
+]
+
+# b3: real beardless negatives — false-fire kill set. Kill = zero mustache
+# activation AND final edit mask at speckle level (editPx reported raw;
+# the harness never rounds it away).
+NEG_POOL: list[tuple[str, str, str | None]] = [
+    ("IMG_4560(neg)", str(ARCHIVE / "IMG_4560.PNG"), None),
+    ("IMG_4564(neg)", str(ARCHIVE / "IMG_4564.JPG"), None),
+    ("IMG_4567(neg)", str(ARCHIVE / "IMG_4567.JPG"), None),
 ]
 
 
@@ -260,6 +290,7 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
 
     crop = ctx["crop"]
     fw = crop.face_width
+    rec["faceWidth"] = round(fw, 1)   # pic1 conditional flag: fw < 320
     edit, _, g = build_mask(ctx)
     if edit is None:
         # aperture pair undetected -> product path abstains: RETAKE class
@@ -274,6 +305,7 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
     subr = mustache_region.mustache_subregions(crop.landmarks,
                                                crop.bgr.shape[:2], fw)
     activated = tuple(mus["activated"])
+    rec["editPx"] = int(edit.sum())   # negatives: speckle-level or bust
     rec["coverage"] = measure_mustache(edit, g, subr, activated)
 
     # (b) mouth-side, evidence-gated denominator
@@ -288,6 +320,12 @@ def run_photo(name: str, path: str, gt_path: str | None, group: str,
                         "bandPx": int(band.sum())}
     if gt_crop is not None:
         rec["gtRecallCropPct"] = _cov(edit, gt_crop & g["canvas"])
+        # reviewer (b): unscoped recall — denominator = ALL GT px inside the
+        # anatomical mustache band (L∪C∪R), no canvas scoping, so canvas
+        # clipping can never flatter the recall number.
+        band_all = subr["L"] | subr["C"] | subr["R"]
+        rec["gtRecallBandPct"] = _cov(edit, gt_crop & band_all)
+        rec["gtBandPx"] = int((gt_crop & band_all).sum())
 
     # intrusion: true lip polygon + (d) independent aperture darkness
     rec["lipIntrusionPx"] = int((edit & true_lip(crop)).sum())
@@ -343,11 +381,11 @@ def _fmt(v) -> str:
 def table(rows: list[dict]) -> str:
     lines = ["| photo | grp | fired L/C/R (rule) | activated | actCov% "
              "(raw) | mouthSide% (evidence) | lip px | apDark edit/total px "
-             "| perturb min abs % | abstain |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+             "| perturb min abs % | editPx | abstain |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         if "abstain" in r:
-            lines.append(f"| {r['id']} | {r['group']} | | | | | | | | "
+            lines.append(f"| {r['id']} | {r['group']} | | | | | | | | | "
                          f"{r['abstainClass']}: {r['abstain']} |")
             continue
         m = r["mustache"]
@@ -368,17 +406,24 @@ def table(rows: list[dict]) -> str:
             f"| {r['id']} | {r['group']} | {fired} | {act} | "
             f"{_fmt(c['activatedCoverage'])} ({_fmt(c['activatedCoverageRaw'])})"
             f" | {ms_s} | {r['lipIntrusionPx']} | "
-            f"{_fmt(ad['darkEditedPx'])}/{_fmt(ad['darkPx'])} | {pert} | |")
+            f"{_fmt(ad['darkEditedPx'])}/{_fmt(ad['darkPx'])} | {pert} | "
+            f"{r['editPx']} | |")
     return "\n".join(lines)
 
 
-def aggregate(rows: list[dict]) -> dict:
+def aggregate(rows: list[dict], positive: bool = True) -> dict:
+    """positive=True: every measured photo carries a beard label (GT or the
+    real-positive pool label), so a fully silent mustache activation is a
+    KILL event — promoted to activationSilentOnPositive instead of drowning
+    in the coverage denominator (reviewer (a)). positive=False (negative
+    pool): silence is the desired outcome; the field is n/a."""
     ok = [r for r in rows if "abstain" not in r]
     abst: dict[str, int] = {}
     for r in rows:
         if "abstain" in r:
             abst[r["abstainClass"]] = abst.get(r["abstainClass"], 0) + 1
     act_rows = [r for r in ok if r["mustache"]["activated"]]
+    silent = [r["id"] for r in ok if not r["mustache"]["activated"]]
     covs = [r["coverage"]["activatedCoverage"] for r in act_rows
             if r["coverage"]["activatedCoverage"] is not None]
     ms = [r["mouthSide"]["coverage"] for r in ok
@@ -388,6 +433,13 @@ def aggregate(rows: list[dict]) -> dict:
     return {
         "n": len(rows), "measured": len(ok), "abstainsByClass": abst,
         "mustacheActivated": len(act_rows),
+        "activationSilentOnPositive": (len(silent) if positive else None),
+        "activationSilentIds": (silent if positive else None),
+        "activationFiredOnNegative": (None if positive else len(act_rows)),
+        "editPxMax": (max((r["editPx"] for r in ok), default=None)
+                      if ok else None),
+        "editPxByPhoto": ({r["id"]: r["editPx"] for r in ok}
+                          if not positive else None),
         "activatedCoverageMin": min(covs) if covs else None,
         "activatedCoverageMean": (round(float(np.mean(covs)), 1)
                                   if covs else None),
@@ -409,12 +461,13 @@ def aggregate(rows: list[dict]) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("photos", nargs="*", help="subset of photo names")
-    ap.add_argument("--tag", default="maskv4_b2")
+    ap.add_argument("--tag", default="maskv4_b3")
     args = ap.parse_args()
     out_dir = LAB / "outputs" / "ghost" / "hybrid" / args.tag
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pool = ([(n, p, g, "real") for n, p, g in REAL_POOL]
+            + [(n, p, g, "neg") for n, p, g in NEG_POOL]
             + [(n, p, g, "gen") for n, p, g in gen_pool()])
     if args.photos:
         pool = [t for t in pool if t[0] in args.photos]
@@ -426,14 +479,16 @@ def main() -> int:
         print(f"{n}: {json.dumps(r, ensure_ascii=False, default=str)}",
               flush=True)
 
-    agg = {grp: aggregate([r for r in rows if r["group"] == grp])
-           for grp in ("real", "gen")}
+    agg = {grp: aggregate([r for r in rows if r["group"] == grp],
+                          positive=(grp != "neg"))
+           for grp in ("real", "neg", "gen")}
     (out_dir / "report.json").write_text(json.dumps(
         {"perturbFw": PERTURB_FW, "bandFw": [BAND_IN_FW, BAND_OUT_FW],
          "darkGrayThr": DARK_GRAY_THR, "coverageKill": COVERAGE_KILL,
          "aggregate": agg, "photos": rows},
         indent=2, ensure_ascii=False))
     md = (table([r for r in rows if r["group"] == "real"])
+          + "\n\n" + table([r for r in rows if r["group"] == "neg"])
           + "\n\n" + table([r for r in rows if r["group"] == "gen"])
           + "\n\n```json\n" + json.dumps(agg, indent=2, ensure_ascii=False)
           + "\n```")
