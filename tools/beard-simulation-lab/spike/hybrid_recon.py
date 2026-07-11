@@ -114,14 +114,28 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
     protect_d = cv2.dilate(crop.protect_mask, np.ones((pk, pk), np.float32)) > 0.5
 
     maps = blackhat_maps(crop.bgr, fw)
-    # Clean calibration support: same recipe as prepare_photo, zone source
-    # swapped. The CLIPSeg zone is dilated before subtraction so borderline
-    # stubble doesn't contaminate the thresholds.
+    # Clean calibration support. Excluding the (dilated) 0.03-threshold zone
+    # is purest, but on hairy/small crops it starves the calibration: pic1
+    # kept 2.6k px and the thresholds collapsed to strand=2.0 (vs a sane 15),
+    # reading the whole fill's normal texture as hair. Deterministic ladder:
+    # raise the EXCLUSION threshold until enough clean survives; the ladder
+    # level is recorded — higher levels admit borderline stubble into the
+    # reference, so downstream dark gates read conservative, not inflated.
     rk = max(3, int(0.015 * fw) | 1)
     roi_er = cv2.erode((crop.roi_mask > 0.5).astype(np.uint8),
                        np.ones((rk, rk), np.uint8)) > 0
     k15 = np.ones((15, 15), np.uint8)
-    clean = roi_er & ~protect_d & ~(cv2.dilate(zone.astype(np.uint8), k15) > 0)
+    roi_px = float((crop.roi_mask > 0.5).sum())
+    clean = None
+    clean_ladder = None
+    for excl_thr in (CONFIG["zoneEditThr"], 0.06, 0.12, 0.20, 0.50):
+        cand_clean = roi_er & ~protect_d & ~(
+            cv2.dilate((zone_soft > excl_thr).astype(np.uint8), k15) > 0)
+        if cand_clean.sum() >= max(1500, 0.10 * roi_px):
+            clean, clean_ladder = cand_clean, excl_thr
+            break
+    if clean is None:
+        return None
     thr = clean_thresholds(maps, clean)
     if thr is None:
         return None
@@ -141,8 +155,8 @@ def prepare_unlabeled(name: str, img_path: Path) -> dict | None:
 
     return dict(bgr=bgr, det=det, skin=skin, crop=crop, zone=zone,
                 zone_soft=zone_soft, thr=thr, maps=maps, clean=clean,
-                key_zone=key_zone, cand_zone=cand_zone, cands_ext=cands,
-                name=name)
+                clean_ladder=clean_ladder, key_zone=key_zone,
+                cand_zone=cand_zone, cands_ext=cands, name=name)
 
 
 def _anatomy_guards(crop) -> dict:
@@ -315,7 +329,35 @@ def run_photo(name: str, img_path: Path, out_dir: Path) -> dict | None:
         return rec
     result, linfo = run_lama(ctx, edit_mask, model_mask)
     rec.update(linfo)
-    rec.update(quick_metrics(ctx, result, edit_mask, guards))
+    from eval.ghost_ruler import score_result
+    from eval.hybrid_rulers import score_photo
+    crop = ctx["crop"]
+    rec["cleanLadder"] = ctx["clean_ladder"]
+    rec["cleanPx"] = int(ctx["clean"].sum())
+    rec.update(score_photo(crop.bgr, result, edit_mask, ctx["clean"],
+                           ctx["thr"], guards, crop.face_width))
+    # Ghost gate is scoped to candidates the mask INTENDED to erase; fringe
+    # (in-editable, out-of-mask) flags mask under-coverage, policy-outside
+    # (below jaw margin / protected) is by design — recorded, never gated.
+    in_mask, fringe, policy = [], 0, 0
+    for c in ctx["cands_ext"]:
+        if float(edit_mask[c.px[:, 0], c.px[:, 1]].mean()) > 0.5:
+            in_mask.append(c)
+        elif (float(guards["editable"][c.px[:, 0], c.px[:, 1]].mean()) > 0.5
+              and float(guards["below_jaw"][c.px[:, 0], c.px[:, 1]].mean()) < 0.5):
+            fringe += 1
+        else:
+            policy += 1
+    gv = score_result(result, in_mask, ctx["thr"], crop.face_width)
+    rec["ghost"] = {"weightedQ90R": gv.weightedQ90R,
+                    "survival": gv.survivalRate, "nCands": gv.nCandidates,
+                    "fringeCands": fringe, "policyCands": policy}
+    # Frozen ghost gate (Codex #9 Q5).
+    if ((gv.weightedQ90R is not None and gv.weightedQ90R > 0.10)
+            or (gv.survivalRate is not None and gv.survivalRate > 0.05)):
+        rec["abstains"] = rec.get("abstains", []) + ["ghost"]
+        if rec.get("verdict") == "pass":
+            rec["verdict"] = "abstain"
     rec["timings"] = {"prepSeconds": round(t_prep - t0, 2),
                       "maskSeconds": round(t_mask - t_prep, 2),
                       "lamaSeconds": linfo["lamaSeconds"],

@@ -660,3 +660,49 @@ pic1·pic3·psd01·psd04, REGION GT 기반 oracle 마스크(위쪽 확장 + 좁�
 (자체 저+고대역). donor 재주입은 기본 OFF — grainMatch 트립 시의 조건부 후속 과제
 (결정론 스펙트럼 grain 또는 quilt 개선). 근거: 시각 관문에서 LaMa 자체 질감 > quilt,
 Codex #8 Q3의 "erase core donor w=1" 권고는 현행 quilt 품질에서 성립하지 않음.
+
+### Codex #9 (2026-07-11): guarded-LaMa-as-is v1 승인 + 프로덕션 블로커 2
+
+- **판정: LaMa-as-is 메커니즘 GO** (Codex 스스로 #8의 donor-high 권고를 증거로 폐기),
+  HYB(quilt 재주입) NO-GO 확정. 후속 re-grain 후보는 quilt가 아니라 **결정론적
+  phase-scrambled spectral grain**(clean PSD 매칭, 입력 해시로 위상 고정).
+- grain 자 재정의: raw RMS는 품질 순서를 역전시킴(시각 OK pic1 0.54 < 시각 waxy psd01
+  0.66). → relative_grain_map 기반 G50(log-median)·G90, 참조는 마스크에서 0.03fw 이상
+  떨어진 동일 높이대·L-매칭 clean. 초기 밴드 G50 [0.75,1.30]/hard [0.67,1.50],
+  G90 ≤1.45/hard 1.60 — **컨트롤로만 동결**.
+- newDark(Area/Energy/Coherence OR-판정), newBright, lipLeak 추가 요구 (환각 3종 분리).
+- jaw+0.06 채택 동의하되 "∩roi = R5 보장" 반박(roi는 기하 프록시, 목 세그먼테이션 아님).
+- edit_mask/model_mask 분리(합성은 edit만, 모델 홀은 +0.004fw), blanket 팽창 금지,
+  strict hair 성분만 0.003fw 할로.
+- 러너: OMP/MKL setdefault의 외래값 묵인 금지(강제 거부), deterministic flag는
+  프로세스 전역이라 동시 호출 race → forward 직렬화. 동시호출·env 불일치 테스트 추가.
+- 레이턴시: dev9는 512 고정 + 랩 6~7s 허용, 단계별 타이머 분리, 448은 A/B 동등 시에만.
+- 동결 순서: 게이트 즉시 동결 → 합성 컨트롤 6종으로 자 숫자 동결 → dev9 단 한 번.
+  **실패한 dev9를 보고 임계값을 바꾸지 않는다.**
+
+### 프로덕션 파이프라인 v1 + dev9 원샷 (2026-07-11)
+
+구현: spike/hybrid_recon.py (GT-free prepare_unlabeled: C1∪CLIPSeg 합집합 필드,
+zoneEditThr 0.03 — 서빙 0.5는 GT 리콜 6.6%로 사용 불가(스윕: 0.06→70%, 0.03→83%,
+0.01→91%); edit/model 마스크 분리; editable = roi ∪ (얼굴오벌∩코밑) — pic3 flank
+잔존의 roi-밖 가설은 오탐(배경/헤어라인 오검출)으로 반증, 실제는 in-roi 증거 구멍 +
+재생성 혼재). eval/hybrid_rulers.py + 합성 positive control 8종 green (94 passed).
+
+dev9 원샷 결과: 9/9 실행(clean 사다리 후), 판정은 hard-fail 5 / abstain 4 — 그러나
+**1:1 시각 판독과 게이트 판독이 역전**: pic1·pic2·psd04 결과는 눈으로 서비스급인데
+게이트는 전멸 수준. 원인 규명:
+
+1. **clean 캘리브레이션 붕괴**: 0.03 존 팽창 제외 후 pic1 clean 2.6k px →
+   black-hat 임계값 2.0/5.5 (정상 15/19)로 폭락 → 정상 질감 전체가 "털" 판독.
+   → 결정론적 제외 임계값 사다리(0.03→0.06→0.12→0.20→0.50, cleanPx 바닥
+   max(1500, 10% roi), 사다리 레벨 기록) 도입. psd02 prepare 탈락도 이것으로 해소.
+2. **ghost 게이트 오염**: cand_zone이 jaw 클립/보호를 모름 → 정책상 편집 불가
+   구역(턱밑) 후보가 survival을 지배. → 마스크 내 후보만 게이트, fringe(편집 가능
+   구역 내 미커버)/policy(정책 제외) 분리 기록.
+3. 수정 후에도 잔존 문제: **무라벨 hairy 사진에서 clean 참조의 '품질'이 미보장**
+   (사다리는 존재만 보장) — pic2 G90=11, pic1 ghost survival 0.91은 참조 붕괴 서명.
+   실물 잔존(진짜)은 콧구멍 코어 정책 구역의 반점(pic2 인중)과 pic3 flank.
+
+**결론: 메커니즘·마스크는 전진, 측정 참조(clean) 재설계가 다음 블로커.**
+dev9 결과를 보고 임계값을 조정하는 것은 금지(Codex 규율)이므로, 참조 재설계는
+Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
