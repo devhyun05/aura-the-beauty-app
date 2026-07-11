@@ -1047,3 +1047,150 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
 - 현 실사 풀 요약: dev 양성 = pic3·pic4·psd03·psd05(+pic1 조건부)·4559·4573·4569·4578·
   **4574(dense)** / 홀드아웃 양성 = **4572(dense)**·4570(medium)·4575(stubble) /
   negative dev 3(4560·4564·4567)+완화 2 / negative 홀드아웃 2(4561·4565).
+
+### 마스크 v4 착지 (2026-07-12, 커밋 138d04b)
+
+- 구조: 목/가먼트/코리도/faceNeckSplit/2창 LaMa/얼굴 내 occluder 차감 물리 제거(리뷰어
+  grep 완전성 확인), canvas 상단 NOSE_BOTTOM−0.025fw 버퍼, **콧구멍 어퍼처 실검출 가드**
+  (미검출→abstain "lower_face_uncertain"), underJawExtend 0.38→0.12(구조 에이전트가 보고
+  직전 API 오류로 사망해 커밋 메시지로 귀속 보완).
+- 콧수염 활성화(spike/mustache_region.py): semantic/texture 신호 분리, L/C/R 3하위영역,
+  규칙 A/B 동결. **psd GT recall(측정만)**: psd02·03·04 전체 활성 97~100% / **psd01
+  전면 침묵(CLIPSeg max 0.047<0.06) recall 85.9%** / psd05 어퍼처 미검출 abstain(규칙
+  우회 진단 99.9%). pytest 170+3skip.
+- 적대 리뷰: 치명 0·okToCommit, 정직성 재측정 일치. minor: 집계에 활성화-침묵 kill 지표
+  부재, gtRecall canvas 스코프 분모, pic3 perturb 88.2%<95%(스팟), 바이트 게이트 키 부재
+  시 무음 스킵.
+- 측정 에이전트가 64장 실행을 6장에서 중단 반환 → **maskv4_b3로 재실행**(하네스 지적
+  2건 수정 + 신규 실사 dev: dense 4574·negative 오발화 3장 포함, 실사/생성/negative
+  3분리 집계).
+- 열린 리스크: ① psd01형 semantic 침묵(저대비 CLIPSeg 0.06 미달 시 부분 삭제 위험) —
+  negative 세트 확보됐으니 다음 Codex 라운드에서 임계 재검토, ② 어퍼처 검출 recall
+  (psd05 1/5 abstain), ③ lobe 0.08fw·mole 가드 0.03fw는 스펙 밖 초기 동결값 — Codex
+  교차검증 대상.
+
+### maskv4_b3 전체 측정 + 독립 검증 (2026-07-12, 하네스 커밋)
+
+- 72장(real 10/neg 3/gen 59), 검증 에이전트 독립 재측정 **불일치 0건**, 집계 정직성
+  PASS(침묵·perturb abstain·abstain율 모두 분모 조작 없음), pytest 170+3skip.
+- **Kill 판정**: ① 활성 커버리지 PASS(real 4/4 = 100%, raw 97.1~99.1) ⑤ 활성화 침묵
+  0건 PASS / ② 침범 FAIL(IMG_4573 웃음 프로브 어퍼처 어둠 223px — 짙은 콧수염 털
+  가능성 있으나 수치대로) ③ perturb FAIL(y방향 구조적 88~91% — 밴드가 nose_y 앵커라
+  같이 밀림; perturb 중 어퍼처 재검출 abstain 빈발) ④ negative FAIL(**활성화는 완벽
+  침묵했으나 strict hysteresis 마스크가 민낯에 14,549px 연속 blob 오발화** — 스펙클
+  아님, 성분 39개 최대 6,638px) ⑥ abstain율 real 60%(reference 4 + aperture 2).
+- **병목 확정: reference abstain** — 신규 실사 5장 중 4장(첫 dense 4574 포함)이
+  "no valid anchors"로 측정 불가; gen asian_stubble 계열 11장 동일. 다음 라운드 최우선.
+- gtRecallBandPct 신설로 확인: 콧수염 밴드 내 GT는 사실상 전량 커버(99.9~100), canvas
+  스코프와의 격차는 밴드 밖 턱수염 몫. mouthSide는 여전히 약함(50~56%).
+- 검증자 지적 허점 1(미발현): 활성화됐지만 가드 차감 후 분모 0이면 coverage=None으로
+  분모에서 조용히 빠질 수 있음 — assert 추가 예정.
+
+### 사용자 결정 4건 (2026-07-12)
+
+1. **필터(보정) 셀피 = 지원해야 함** — 촬영 게이트에서 거부하지 않는다. 참조 계층
+   재설계(보정 피부에서의 앵커 QC 완화/대체 기준)가 로드맵 우선순위로 승격. 이번에
+   abstain된 신규 실사 4장(4559/4569/4574/4578)은 성가신 예외가 아니라 **인도메인
+   개발 대상**으로 재분류.
+2. **판정자 = 사용자 1인 고정** — 다음 체크포인트는 1인 판정 전제: 절대 기준
+   체크리스트를 촘촘히 하여 주관 편차 최소화, 다수결 불가.
+3. **소진 실사 재사용 금지 유지** — nb1·7·10 등 판정 사용분 봉인 지속. 새 홀드아웃
+   (실사 5장 + 생성 층화)으로 진행.
+4. **S25 기준팔 불가** — 이전 비교는 대여 기기였고 사용자는 아이폰 사용. S25 팔 폐기.
+   (대안 검토 가능: iPhone Clean Up은 온디바이스 비-diffusion으로 확인됨(딥리서치) —
+   지원 기기면 오히려 더 공정한 기준팔. 사용자 의향 확인 필요, 강제 아님.)
+
+### Codex #14 (2026-07-12): v4.1 수리 라운드 설계 + 체크포인트 ⑥ 프로토콜
+
+- **Q1 민낯 오발화 = (a) 중심**: strict hysteresis를 해부학 부위 활성화(볼 L/R·중앙
+  턱·턱선 L/R·입가·콧수염) 아래로 종속 — 활성 부위 안에서만 허용, 전 부위 비활성이면
+  **사진 전체 exact no-op**. (b)는 보조 방어(부위별 semantic+texture 이중 지지·strong-
+  support 밀도 하한·geodesic 성장 거리 제한·저역치 bridge 분리 — 최소 성분 크기 단독은
+  기각: 4564 최대 blob 6,638px이라 살아남고 진짜 스터블 점만 죽음). (c) 별도 무수염
+  분류기는 negative 3장으로 과적합 위험 — 도입 금지. cands_ext도 활성 부위로 종속.
+- **Q2 정정 — 참조 실패 주범은 저해상**: Codex 재실행 실측 — 4578 fw167(raw 411px),
+  4560 fw214(703px), 4574 fw255(QC후 639<768), 4559 볼 594px+이마 inlier 1.3% 폐기,
+  4569 fw531이지만 클리핑 705/1010px+이마 inlier 63.9%<70%. 생성 11장도 전부 Nmin 미달
+  (fw 256~310). 처방: ① build_reference_bundle이 None 대신 **typed 실패 사유**(rawCapacity/
+  clipRejected/coherenceRejected/mahaRejected/foreheadInlier/nmin) 반환, ②
+  rawCapacity<Nmin은 insufficient_face_resolution으로 분리(QC 완화 대상 아님 — 촬영
+  게이트 fw≥320 항목과 정합), ③ 동일 인물 해상도/압축/필터 통제 factorial로 원인 분리,
+  ④ QC 일괄 완화 금지 — 필터 지원은 "필터 여부"가 아니라 좌우 앵커 일치도·통계 안정성
+  기준으로.
+- **Q3**: perturb 분모는 이미 원본 고정(코드 확인) — 88~91%는 가짜가 아니라 **실제 기하
+  민감도**(밴드가 랜드마크에 결박). 분모 조작 금지, 제품 측 uncertainty envelope는
+  negative 침범 별도 검증 후. abstain 방향은 별도 집계(perturbAbstainDirections 등).
+- **Q4**: IMG_4573 223px는 FAIL이 아니라 **inconclusive** — gray<60 휴리스틱이 짙은
+  콧수염 털을 어퍼처로 오분류. 지표 3층 분리(순환 core overlap / 독립 dark-component
+  후보 / **홀드아웃은 수동 어퍼처 annotation**). 어퍼처 검출기에 좌우 대칭·간격·다중
+  임계 유지·perturb 합의 추가.
+- **Q5**: LOBE_EXT 0.08fw는 현 자료로 튜닝 금지(실측 콧수염 외측 p95 annotation 필요),
+  MOLE 가드는 이름(DIAG)과 달리 bbox max-side 구현 — 버그성, 임시 방어로만.
+- **Q6 순서**: 마스크 v4.1 hardening 1라운드 먼저, 단 무기한 금지. **Sprint B 진입 조건
+  5**: ① negative 4장 exact no-op ② 참조 abstain typed 사유 분리 ③ perturb 실패/어퍼처
+  abstain 분리 집계 ④ 4573 재판정 ⑤ coverage=None loophole 봉쇄(분모 0 = invalid/kill).
+  4574(fw255)는 end-to-end 불가 — **oracle 고정 마스크 순수 채움 연구로만** 사용.
+- **Q7 체크포인트 ⑥**: 실사 5장 primary(사전 annotation 후 봉인, negative는 editPx=0 +
+  byte identity, 5/5 처리 필수 — gate 통과 사진의 abstain도 실패) + **신규 생성 15장**
+  secondary(기존 생성물은 dev 전용 — 신규 identity·프롬프트·시드 봉인: positive 12 =
+  밀도3×표정2×보정2, negative 3). 1인 판정: 최종 challenger 1 + frozen baseline 1만,
+  무기명 A/B 좌우 랜덤, 항목별 A/B/tie 1회 판정, rubric은 dev로 동결, 원자료(3/3 등)로만
+  보고. 실행 전 코드/모델 해시+이미지 manifest 커밋, 결과 열람 후 수정 시 5장 전체 소진.
+
+### 체크포인트 ⑥ 사진 자체 조달 (2026-07-12, 아카이브/webset_cp6 — 봉인)
+
+- 웹 라이선스 명시 소스에서 28장 수집, **21장 게이트 통과**: dense 4(전원 19~20세기 초
+  아이누 흑백/세피아 — 현대 컬러 dense는 라이선스 명시 소스에서 0장, 도메인 편향 주의;
+  현대 dense 앵커는 실사 홀드아웃 4572가 담당) / medium 8(봉준호·홍상수·서극 등 CC) /
+  stubble 4(설경구·김기덕·조진웅·릴리 프랭키 — 최약체 층) / 무수염 5(한국 배우 CC BY 3.0
+  + Unsplash). 인물 중복 0, 밀도 정정 3건(정직 강등·정면 초과 탈락).
+- manifest.json(출처·라이선스·저작자) + README(봉인·내부 평가 전용) 작성, 누락 출처 12건
+  병합 완료(잔여 2건 = 라이선스 미상 cand_* 격리 유지). **파이프라인 투입 금지 봉인** —
+  체크포인트 ⑥ 홀드아웃 후보.
+- 체크포인트 ⑥ 재료 충족 상태: 실사 primary 5(4572/4570/4575/4561/4565) + webset 21
+  → Codex #14의 secondary 15장 요구를 생성 없이 실사로 충당 가능. 보강 희망: 정면
+  stubble +2, 현대 컬러 dense +2 (선택).
+
+### 정정 (2026-07-12, 사용자 지적): 아이누 세피아 4장 체크포인트 제외
+
+- 아이누 사진은 "라이선스 명시 ∩ 동아시아 ∩ dense ∩ 정면"의 교집합이 현대 사진에
+  사실상 없어서 나온 기계적 결과 — 그러나 1900년대 세피아/흑백은 컬러 Lab 통계·피부
+  앵커·현대 셀피 도메인 전제와 불일치, 촬영 게이트로도 탈락감. **체크포인트 ⑥ 재료에서
+  제외, webset_cp6에 '극단 프로브 참고용' 라벨로 보관만.**
+- dense 층 정직한 현실: 현대 실사 dense = 홀드아웃 4572 단 1장 → 체크포인트에서 primary
+  1장으로 쓰고 "dense 일반화는 표본 1로 미입증"을 사전등록 한계로 명기. dense 실질 검증은
+  dev 쪽(4574 수동 마스크 채움 factorial)이 담당.
+- webset_cp6 사용 층: medium 8 / stubble 4 / 무수염 5 (+실사 primary 5).
+
+### 범위 결정 (2026-07-12, 사용자 방향 + 오케스트레이터 적용): dense는 v1 목표에서 제외
+
+- 근거: ① 한국인 레이저 제모 수요의 실체는 짙은 스터블~미디엄(청수염)이지 풀비어드가
+  아님 ② 체크포인트 전패도 스터블에서 발생(dense 서사는 이미 금지된 오귀속) ③ 현대
+  실사 dense 표본이 1장뿐이라 통계 불가.
+- 적용: 체크포인트 ⑥ 합격 기준에서 dense 층 삭제 — **stubble·medium이 승부처**. dense
+  (4572 홀드아웃·4574 dev)는 비차단 스트레스 프로브로만 측정·보고. 채움 factorial의
+  4574는 유지(데이터 가치). 추후 제품은 dense 감지 시 "지원 준비 중" abstain 옵션.
+- 효과: "현대 dense 실사 부족" 문제 자연 해소, 아이누 세피아 소동 종결, fine-tune 데이터
+  설계도 스터블~미디엄 분포 중심으로 단순화.
+
+### 범위 결정 (2026-07-12, 사용자): 평가·데이터를 동양인에 국한하지 않음 — 글로벌 앱
+
+- 사용자 지시: "동양인 남성에 국한하지 말고 필요하면 서양인 사용. 앱은 전 세계 대상."
+- 적용: ① 사진 수집 풀을 전 인종으로 확장(약체였던 stubble 층 즉시 보강 가능) ② 평가
+  세트에 피부톤 다양성 포함 — 어두운 피부에서 대비 기반 검출기(black-hat)·피부 앵커
+  거동을 측정 항목으로 추가(기술적으로 유일하게 톤 의존적인 지점) ③ fine-tune 데이터
+  설계도 다인종 분포로(한국인 중심 가정 해제).
+
+### 세션 핸드오프 스냅샷 (2026-07-12, 진행 중 작업의 복구 지점)
+
+- **실행 중 (이 세션 종료 시 소실 — 완료 후 절단 권장)**: ① v4.1 hardening 워크플로
+  (b2 성분 이중신호 게이팅 + 참조 typed 사유/열화 factorial + mask_eval 보강 + 리뷰;
+  hybrid_recon/mustache_region/reference_bundle/mask_eval 편집 중 — 중단 시 git status로
+  잔여 확인, 최악 시 git checkout으로 138d04b/cadfe81 복원) ② 채움 factorial(오라클 4 +
+  4574 수동마스크 × 512/1024 × halo 3 × 1/2-pass → outputs/ghost/fill_factorial_f1/)
+  ③ webset 글로벌 보강 수집(stubble+5 등 → 아카이브/webset_cp6).
+- **다음 절차 (새 세션 재개 시)**: 3개 결과 통합 → Sprint B 진입 조건 5 판정(Codex #14
+  §Q6) → 채움 최선 조합 채택 → 필요 시 Codex #15(b2 편차 비준 + fine-tune go/no-go) →
+  체크포인트 ⑥ (프로토콜: Codex #14 §Q7 로그 참조; 재료 = 실사 5 봉인 + webset_cp6
+  17장(아이누 제외), 합격 기준 stubble·medium만, 1인 무기명 A/B).
+- 마지막 커밋: cadfe81 (mask_eval v2 + maskv4_b3). 로그·메모리는 최신.
