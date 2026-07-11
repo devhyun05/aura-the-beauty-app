@@ -79,7 +79,6 @@ const consultingHeroHairImage = consultingImageSource(
 
 const HERO_BANNER_GAP = spacing.md;
 const INITIAL_DISCOVERY_VISIBLE_COUNT = 2;
-const DISCOVERY_VISIBLE_INCREMENT = 3;
 
 type ConsultingHomeScreenProps = {
   onPressHeroSlide: (categoryId: ConsultingCategoryId | null) => void;
@@ -157,9 +156,6 @@ export function ConsultingHomeScreen({
     activeRecords: [],
   }));
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const [visibleExpertCount, setVisibleExpertCount] = useState(
-    INITIAL_DISCOVERY_VISIBLE_COUNT,
-  );
 
   useFocusEffect(
     useCallback(() => {
@@ -247,8 +243,7 @@ export function ConsultingHomeScreen({
     ];
   }, [heroSlides]);
   const activeRecords = home.activeRecords;
-  const visibleExperts = experts.slice(0, visibleExpertCount);
-  const hasMoreExperts = visibleExpertCount < experts.length;
+  const visibleExperts = experts.slice(0, INITIAL_DISCOVERY_VISIBLE_COUNT);
 
   const handleHeroScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
@@ -376,18 +371,7 @@ export function ConsultingHomeScreen({
       <View style={styles.discoveryListSection}>
         <RNView style={styles.sectionHeader}>
           <ConsultingSectionTitle>섭외 프리랜서</ConsultingSectionTitle>
-          {hasMoreExperts ? (
-            <MoreInlineButton
-              label="더보기"
-              onPress={() =>
-                setVisibleExpertCount(count =>
-                  Math.min(count + DISCOVERY_VISIBLE_INCREMENT, experts.length),
-                )
-              }
-            />
-          ) : (
-            <MoreInlineButton label="전체보기" onPress={onPressExpertList} />
-          )}
+          <MoreInlineButton label="더보기" onPress={onPressExpertList} />
         </RNView>
         <View style={styles.expertList}>
           {visibleExperts.map(expert => (
@@ -533,6 +517,14 @@ function ActiveRequestCard({
 }
 
 function getActiveRequestStatusTitle(status: ConsultingRecord['status']): string {
+  if (status === 'in_progress') {
+    return '상담 진행';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 예정';
+  }
+
   if (status === 'confirmed') {
     return '예약 확정';
   }
@@ -545,8 +537,16 @@ function getActiveRequestStatusTitle(status: ConsultingRecord['status']): string
 }
 
 function getActiveRequestDescription(status: ConsultingRecord['status']): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요. 톡에서 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 시간이 확정됐어요. 톡에서 화상 상담 버튼을 확인하세요.';
+  }
+
   if (status === 'confirmed') {
-    return '예약이 확정됐어요. 톡에서 안내와 통화 버튼을 확인하세요.';
+    return '예약이 확정됐어요. 톡에서 안내와 화상 상담 버튼을 확인하세요.';
   }
 
   if (status === 'contacting') {

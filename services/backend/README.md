@@ -122,8 +122,10 @@ The module also exposes `update_media_asset_postprocess_metadata(...)` for updat
 
 ## Auth mode
 
-Local development defaults to `AUTH_REQUIRED=false`, which injects a local dev
-user. For real API testing and deployment, set:
+Use `AUTH_REQUIRED=true` whenever multiple people or a shared database use the
+backend. `AUTH_REQUIRED=false` ignores bearer-token identity and maps every
+request to the single `DEV_USER_*` account, so it is only safe for isolated
+offline development.
 
 ```env
 AUTH_REQUIRED=true

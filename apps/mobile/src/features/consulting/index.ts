@@ -12,6 +12,7 @@ export {ConsultingNotificationsScreen} from './screens/ConsultingNotificationsSc
 export {ConsultingConversationScreen} from './screens/ConsultingConversationScreen';
 export {ConsultingMembershipScreen} from './screens/ConsultingMembershipScreen';
 export {ConsultingReviewScreen} from './screens/ConsultingReviewScreen';
+export {ChimeVideoView, isNativeChimeVideoViewAvailable} from './components/ChimeVideoView';
 export {ConsultingHeaderActions} from './components/ConsultingHeaderActions';
 export {
   consultingCategories,
@@ -32,11 +33,15 @@ export {
   createConsultingBooking,
   createConsultingReview,
   deleteConsultingBooking,
+  endConsultingCall,
   getConsultingBooking,
   getConsultingBookings,
+  getConsultingCallState,
+  joinConsultingCall,
   updateConsultingBooking,
 } from './services/consultingService';
 export {
+  getConsultingUnreadRecordIds,
   clearConsultingReadState,
   getConsultingUnreadState,
   isConsultingMessageStatus,
@@ -46,6 +51,10 @@ export {
 export type {ConsultingUnreadState} from './services/consultingReadStateService';
 export type {
   ConsultingBookingDraft,
+  ConsultingCallJoinResult,
+  ConsultingCallLanguageCode,
+  ConsultingCallState,
+  ConsultingCallTranscription,
   ConsultingCategoryId,
   ConsultingExpert,
   ConsultingMembershipPlan,

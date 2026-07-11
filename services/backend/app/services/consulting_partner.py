@@ -6,10 +6,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from app.core.errors import AppError
 from app.core.security import AuthContext
-from app.core.settings import get_settings
+from app.core.settings import get_settings as get_app_settings
 from app.db.session import Database
 from app.services.consulting_message_store import list_consulting_messages
 
@@ -114,11 +115,17 @@ def _new_partner_password() -> str:
 
 
 def _map_booking_status(status: str) -> str:
-  if status in {"requested", "contacting", "confirmed", "completed"}:
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status == "confirmed":
+    return "confirmed"
+  if status in {"scheduled", "in_progress"}:
     return status
+  if status == "completed":
+    return "completed"
   if status in {"canceled", "cancelled", "unavailable", "no_show", "refund_requested"}:
     return "cancelled"
-  return "scheduled"
+  return "requested"
 
 
 def _map_partner_status(status: str) -> str:
@@ -126,9 +133,9 @@ def _map_partner_status(status: str) -> str:
     return "completed"
   if status in {"cancelled", "no_show", "refund_requested", "canceled", "unavailable"}:
     return "canceled"
-  if status == "in_progress":
-    return "contacting"
-  if status in {"requested", "contacting", "confirmed"}:
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status in {"confirmed", "scheduled", "in_progress"}:
     return status
   return "confirmed"
 
@@ -284,7 +291,7 @@ def _customer_phone(row: dict[str, Any]) -> str:
 def _customer_email(row: dict[str, Any]) -> str:
   email = row.get("email")
   if isinstance(email, str) and email.strip():
-    settings = get_settings()
+    settings = get_app_settings()
     dev_email = (settings.dev_user_email or "").strip()
     if not settings.auth_required and email.strip().lower() == "dev@example.com" and dev_email:
       return dev_email
@@ -326,28 +333,31 @@ def _booking_to_web(row: dict[str, Any]) -> dict[str, Any]:
   )
   request_memo = "\n".join(value for value in (question, contact_note) if value) or "앱 예약 신청"
   shared_report_ids = [str(report_id) for report_id in row.get("shared_report_ids") or []]
+  status = _map_booking_status(str(row.get("status") or ""))
+  payment_confirmed = bool(row.get("confirmed_at")) or status in {"confirmed", "scheduled", "in_progress", "completed"}
   return {
     "id": str(row["id"]),
     "customer_id": str(row["user_id"]),
+    "customer_name": _customer_name(row),
     "expert_id": row["expert_id"],
     "business_id": _business_id(row["expert_id"]),
     "starts_at": _iso_datetime(starts_at),
     "ends_at": _iso_datetime(ends_at),
     "duration_minutes": 60 if duration_minutes >= 60 else 30,
     "type": row.get("category_label") or row.get("concern_label") or "뷰티 상담",
-    "status": _map_booking_status(str(row.get("status") or "")),
-    "payment_status": "paid" if int(row.get("price") or 0) > 0 else "pending",
+    "status": status,
+    "payment_status": "paid" if payment_confirmed else "pending",
     "paid_amount": int(row.get("price") or 0),
     "discount_amount": 0,
-    "channel": "chat",
+    "channel": "video" if row.get("session_mode") == "online" else "offline",
     "requested_at": _iso_datetime(row.get("created_at")),
     "request_memo": request_memo,
     "selected_concern_tags": concern_tags,
     "internal_memo": row.get("operator_note") or "",
     "shared_report_ids": shared_report_ids,
-    "consultation_summary_id": str(row["summary_id"]) if row.get("summary_id") else None,
+    "consultation_summary_id": str(row.get("summary_id")) if row.get("summary_id") else None,
     "refund_request_id": None,
-    "review_id": str(row["review_id"]) if row.get("review_id") else None,
+    "review_id": str(row.get("review_id")) if row.get("review_id") else None,
     "review_request_status": "ready" if row.get("summary_id") else "not_ready",
   }
 
@@ -372,6 +382,7 @@ def _customer_to_web(row: dict[str, Any]) -> dict[str, Any]:
     "total_paid_amount": total_paid_amount,
     "risk_flags": [],
     "preferred_channel": preferred,
+    "latest_booking_status": _map_booking_status(str(row.get("latest_booking_status") or row.get("status") or "requested")),
     "attachments": [],
   }
 
@@ -513,6 +524,177 @@ def _shared_report_from_feedback(row: dict[str, Any], booking_id: str | None = N
     "summary": summary,
     "attachment_ids": [],
   }
+
+
+def _recommended_makeup_images(detail_payload: dict[str, Any]) -> list[dict[str, Any]]:
+  result = detail_payload.get("result") if isinstance(detail_payload, dict) else None
+  cards = result.get("recommendedMakeups") if isinstance(result, dict) else None
+  if not isinstance(cards, list):
+    return []
+
+  images: list[dict[str, Any]] = []
+  for index, card in enumerate(cards):
+    if not isinstance(card, dict):
+      continue
+    image_url = next(
+      (
+        str(card[key]).strip()
+        for key in ("imageUrl", "cdnUrl", "previewUrl", "image_url")
+        if card.get(key) and str(card[key]).strip()
+      ),
+      "",
+    )
+    if not image_url:
+      continue
+    images.append(
+      {
+        "title": str(card.get("title") or f"AI 추천 메이크업 {index + 1}"),
+        "image_url": image_url,
+      }
+    )
+  return images
+
+
+def _default_partner_operating_hours() -> list[dict[str, Any]]:
+  labels = ["월", "화", "수", "목", "금", "토", "일"]
+  return [
+    {
+      "dayOfWeek": day,
+      "label": labels[day],
+      "opensAt": "10:00",
+      "closesAt": "19:00",
+      "isClosed": day >= 5,
+    }
+    for day in range(7)
+  ]
+
+
+def _manager_operating_hours(value: Any) -> list[dict[str, Any]]:
+  raw_hours = _decode_json(value, [])
+  defaults = _default_partner_operating_hours()
+  if not isinstance(raw_hours, list):
+    raw_hours = []
+
+  by_day: dict[int, dict[str, Any]] = {}
+  for raw in raw_hours:
+    if not isinstance(raw, dict):
+      continue
+    try:
+      day = int(raw.get("day_of_week", raw.get("dayOfWeek")))
+    except (TypeError, ValueError):
+      continue
+    if day < 0 or day > 6:
+      continue
+    default = defaults[day]
+    by_day[day] = {
+      "dayOfWeek": day,
+      "label": str(raw.get("label") or default["label"]),
+      "opensAt": str(raw.get("opens_at", raw.get("opensAt")) or default["opensAt"]),
+      "closesAt": str(raw.get("closes_at", raw.get("closesAt")) or default["closesAt"]),
+      "isClosed": bool(raw.get("is_closed", raw.get("isClosed", default["isClosed"]))),
+    }
+    lunch_start = raw.get("lunch_start", raw.get("lunchStart"))
+    lunch_end = raw.get("lunch_end", raw.get("lunchEnd"))
+    if lunch_start:
+      by_day[day]["lunchStart"] = str(lunch_start)
+    if lunch_end:
+      by_day[day]["lunchEnd"] = str(lunch_end)
+
+  return [by_day.get(day, defaults[day]) for day in range(7)]
+
+
+def _holiday_dates(value: Any) -> list[str]:
+  raw_holidays = _decode_json(value, [])
+  if not isinstance(raw_holidays, list):
+    return []
+  return sorted({str(item)[:10] for item in raw_holidays if str(item or "").strip()})
+
+
+def _settings_payload(account: dict[str, Any], expert: dict[str, Any]) -> dict[str, Any]:
+  return {
+    "operatingHours": _manager_operating_hours(expert.get("operating_hours")),
+    "holidays": _holiday_dates(expert.get("holiday_dates")),
+    "bookingOpenMonths": int(expert.get("booking_open_months") or 1),
+    "notification": {
+      "bookingCreated": True,
+      "bookingReminder": True,
+      "unreadChatDigest": True,
+      "reviewCreated": True,
+    },
+    "integrations": {
+      "phoneProvider": "none",
+      "chatProvider": "websocket",
+      "smsProvider": "none",
+    },
+    "accountRoles": [
+        {
+          "id": str(account.get("id") or account.get("account_id") or ""),
+          "name": str(account.get("expert_name") or account.get("email") or "파트너"),
+          "email": str(account.get("email") or ""),
+        "role": str(account.get("role") or "expert"),
+        "scope": str(account.get("workspace_scope") or "expert_personal"),
+      },
+    ],
+  }
+
+
+def _settings_operating_hours_for_db(value: Any) -> list[dict[str, Any]]:
+  return [
+    {
+      "day_of_week": item["dayOfWeek"],
+      "label": item["label"],
+      "opens_at": item["opensAt"],
+      "closes_at": item["closesAt"],
+      "is_closed": item["isClosed"],
+      **({"lunch_start": item["lunchStart"]} if item.get("lunchStart") else {}),
+      **({"lunch_end": item["lunchEnd"]} if item.get("lunchEnd") else {}),
+    }
+    for item in _manager_operating_hours(value)
+  ]
+
+
+async def get_manager_settings(db: Database, account: dict[str, Any]) -> dict[str, Any]:
+  expert = await db.fetchrow(
+    """
+    select id, operating_hours, holiday_dates, booking_open_months
+    from consulting_experts
+    where id = $1
+    """,
+    account["expert_id"],
+  )
+  if expert is None:
+    raise AppError(404, "PARTNER_EXPERT_NOT_FOUND", "전문가 정보를 찾을 수 없습니다.")
+  return _settings_payload(account, expert)
+
+
+async def update_manager_settings(db: Database, account: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+  current = await get_manager_settings(db, account)
+  next_operating_hours = patch.get("operating_hours", patch.get("operatingHours", current["operatingHours"]))
+  next_holidays = patch.get("holidays", current["holidays"])
+  next_open_months = patch.get("booking_open_months", patch.get("bookingOpenMonths", current["bookingOpenMonths"]))
+  try:
+    booking_open_months = min(max(int(next_open_months), 1), 3)
+  except (TypeError, ValueError):
+    booking_open_months = current["bookingOpenMonths"]
+
+  row = await db.fetchrow(
+    """
+    update consulting_experts
+    set operating_hours = $2::jsonb,
+        holiday_dates = $3::jsonb,
+        booking_open_months = $4,
+        updated_at = now()
+    where id = $1
+    returning id, operating_hours, holiday_dates, booking_open_months
+    """,
+    account["expert_id"],
+    json.dumps(_settings_operating_hours_for_db(next_operating_hours), ensure_ascii=False),
+    json.dumps(_holiday_dates(next_holidays), ensure_ascii=False),
+    booking_open_months,
+  )
+  if row is None:
+    raise AppError(404, "PARTNER_EXPERT_NOT_FOUND", "전문가 정보를 찾을 수 없습니다.")
+  return _settings_payload(account, row)
 
 
 async def ensure_partner_account_schema(db: Database) -> None:
@@ -1177,7 +1359,7 @@ async def update_booking_status(
     update consulting_bookings
     set status = $3,
         operator_note = coalesce($4, operator_note),
-        confirmed_at = case when $3 = 'confirmed' then now() else confirmed_at end
+        confirmed_at = case when $3 in ('confirmed', 'scheduled', 'in_progress') then now() else confirmed_at end
     where id::text = $1 and expert_id = $2
     returning *
     """,
@@ -1187,6 +1369,98 @@ async def update_booking_status(
     operator_note,
   )
   return _booking_to_web(dict(row))
+
+
+def _parse_partner_booking_datetime(value: Any) -> datetime | None:
+  if not isinstance(value, str) or not value.strip():
+    return None
+  try:
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+  except ValueError as error:
+    raise AppError(400, "PARTNER_BOOKING_DATETIME_INVALID", "예약 날짜와 시간을 확인해 주세요.") from error
+  return parsed if parsed.tzinfo else parsed.replace(tzinfo=ZoneInfo("Asia/Seoul"))
+
+
+def _append_operator_note(current: str, value: str | None) -> str:
+  normalized = (value or "").strip()
+  if not normalized:
+    return current
+  return "\n".join(part for part in (current.strip(), normalized) if part)
+
+
+async def update_booking_details(
+  db: Database,
+  account: dict[str, Any],
+  booking_id: str,
+  payload: dict[str, Any],
+) -> dict[str, Any]:
+  current = await _booking_row(db, account, booking_id)
+  patch = payload.get("patch") if isinstance(payload.get("patch"), dict) else {}
+  status_value = payload.get("status")
+  next_status = _map_partner_status(str(status_value)) if status_value else str(current.get("status") or "requested")
+  if next_status == "completed":
+    raise AppError(409, "CONSULTING_SUMMARY_REQUIRED", "완료 처리는 AI 요약 생성 후 진행해 주세요.")
+
+  scheduled_at = _parse_partner_booking_datetime(patch.get("starts_at"))
+  duration_value = patch.get("duration_minutes")
+  duration_minutes = int(duration_value) if duration_value in {30, 60, "30", "60"} else None
+  category_label = str(patch.get("type") or "").strip() or None
+  operator_note = str(patch.get("internal_memo") if "internal_memo" in patch else current.get("operator_note") or "")
+  operator_note = _append_operator_note(operator_note, payload.get("note"))
+  cancel_reason = str(payload.get("cancel_reason") or "").strip()
+  if cancel_reason:
+    operator_note = _append_operator_note(operator_note, f"취소 사유: {cancel_reason}")
+  payment_confirmed = bool(payload.get("mark_payment_paid"))
+
+  local_scheduled_at = scheduled_at.astimezone(ZoneInfo("Asia/Seoul")) if scheduled_at else None
+  row = await db.fetchrow(
+    """
+    update consulting_bookings
+    set status = $3,
+        operator_note = $4,
+        scheduled_at = coalesce($5, scheduled_at),
+        scheduled_date = coalesce($6, scheduled_date),
+        slot_id = coalesce($7, slot_id),
+        slot_start_minutes = coalesce($8, slot_start_minutes),
+        duration_minutes = coalesce($9, duration_minutes),
+        duration_label = case when $9 is null then duration_label else $9::text || '분' end,
+        category_label = coalesce($10, category_label),
+        confirmed_at = case
+          when $11 or $3 in ('confirmed', 'scheduled', 'in_progress') then coalesce(confirmed_at, now())
+          else confirmed_at
+        end,
+        updated_at = now()
+    where id::text = $1 and expert_id = $2
+    returning *
+    """,
+    booking_id,
+    account["expert_id"],
+    next_status,
+    operator_note,
+    scheduled_at,
+    local_scheduled_at.date() if local_scheduled_at else None,
+    local_scheduled_at.strftime("%H:%M") if local_scheduled_at else None,
+    (local_scheduled_at.hour * 60 + local_scheduled_at.minute) if local_scheduled_at else None,
+    duration_minutes,
+    category_label,
+    payment_confirmed,
+  )
+  if row is None:
+    raise AppError(404, "PARTNER_BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다.")
+  return _booking_to_web(dict(row))
+
+
+async def mark_booking_payment_paid(
+  db: Database,
+  account: dict[str, Any],
+  booking_id: str,
+) -> dict[str, Any]:
+  return await update_booking_details(
+    db,
+    account,
+    booking_id,
+    {"mark_payment_paid": True, "status": "contacting"},
+  )
 
 
 async def customers(db: Database, account: dict[str, Any], filters: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1205,6 +1479,7 @@ async def customers(db: Database, account: dict[str, Any], filters: dict[str, An
       b.category_label,
       b.concern_label,
       b.question,
+      b.status as latest_booking_status,
       b.created_at,
       max(b.created_at) over (partition by b.user_id) as last_booking_at,
       count(*) over (partition by b.user_id) as total_bookings,
@@ -1225,6 +1500,17 @@ async def customers(db: Database, account: dict[str, Any], filters: dict[str, An
       for customer in result
       if query in " ".join([customer["name"], customer["phone"], customer["email"], customer["memo"]]).lower()
     ]
+  tag = str(filters.get("tag") or "").strip()
+  if tag and tag != "all":
+    result = [customer for customer in result if tag in customer["tags"]]
+  status = str(filters.get("status") or "").strip()
+  if status and status != "all":
+    result = [customer for customer in result if customer["latest_booking_status"] == status]
+  sort = str(filters.get("sort") or "lastActiveDesc")
+  if sort == "nameAsc":
+    return sorted(result, key=lambda item: item["name"])
+  if sort == "paidDesc":
+    return sorted(result, key=lambda item: item["total_paid_amount"], reverse=True)
   return sorted(result, key=lambda item: item["last_active_at"], reverse=True)
 
 
@@ -1349,14 +1635,22 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
     raise AppError(404, "PARTNER_REPORT_NOT_FOUND", "예약에 연결된 리포트를 찾을 수 없습니다.")
   analysis = await db.fetchrow(
     """
-    select *
-    from analysis_reports
-    where id::text = $1
+    select
+      r.*,
+      coalesce(source.thumbnail_cdn_url, source.cdn_url) as source_image_url,
+      coalesce(preview.thumbnail_cdn_url, preview.cdn_url) as preview_image_url
+    from analysis_reports r
+    left join media_assets source on source.id = r.source_media_id
+    left join media_assets preview on preview.id = r.preview_media_id
+    where r.id::text = $1
     """,
     report_id,
   )
   if analysis is not None:
     row = dict(analysis)
+    detail_payload = _decode_json(row.get("detail_payload"), {})
+    source_image_url = row.get("source_image_url")
+    preview_image_url = row.get("preview_image_url")
     return {
       "report": _shared_report_from_analysis(row),
       "kind": "analysis",
@@ -1371,23 +1665,37 @@ async def report_detail(db: Database, account: dict[str, Any], report_id: str) -
         "skin_analysis_summary": row.get("skin_analysis_summary"),
         "base_makeup_guide": row.get("base_makeup_guide"),
         "tags": row.get("tags") or [],
-        "detail_payload": _decode_json(row.get("detail_payload"), {}),
+        "image_url": preview_image_url or source_image_url,
+        "source_image_url": source_image_url,
+        "preview_image_url": preview_image_url,
+        "recommended_makeup_images": _recommended_makeup_images(detail_payload),
+        "detail_payload": detail_payload,
       },
     }
   feedback = await db.fetchrow(
     """
-    select *
-    from makeup_feedback_reports
-    where id::text = $1
+    select
+      r.*,
+      coalesce(media.thumbnail_cdn_url, media.cdn_url) as uploaded_image_url
+    from makeup_feedback_reports r
+    left join media_assets media on media.id = r.uploaded_media_id
+    where r.id::text = $1
     """,
     report_id,
   )
   if feedback is not None:
     row = dict(feedback)
+    detail = _decode_json(row.get("feedback_payload"), {})
+    if isinstance(detail, dict):
+      detail = {
+        **detail,
+        "image_url": row.get("uploaded_image_url"),
+        "source_image_url": row.get("uploaded_image_url"),
+      }
     return {
       "report": _shared_report_from_feedback(row),
       "kind": "feedback",
-      "detail": _decode_json(row.get("feedback_payload"), {}),
+      "detail": detail,
     }
   raise AppError(404, "PARTNER_REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다.")
 

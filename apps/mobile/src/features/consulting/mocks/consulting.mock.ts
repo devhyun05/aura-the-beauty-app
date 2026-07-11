@@ -589,7 +589,7 @@ export function findConsultingRecord(
 
 export function getUpcomingConsultingRecord(): ConsultingRecord | undefined {
   return consultingRecords.find(record =>
-    ['requested', 'contacting', 'confirmed'].includes(record.status),
+    ['requested', 'contacting', 'confirmed', 'scheduled', 'in_progress'].includes(record.status),
   );
 }
 

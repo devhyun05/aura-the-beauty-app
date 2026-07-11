@@ -34,7 +34,6 @@ import {
 } from '../mocks/consulting.mock';
 import {
   cancelConsultingBooking,
-  deleteConsultingBooking,
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
@@ -48,14 +47,14 @@ type HistoryFilterId = 'all' | Exclude<ConsultingRecordStatus, 'unavailable'>;
 
 const historyFilters: readonly {id: HistoryFilterId; label: string}[] = [
   {id: 'all', label: '전체'},
-  {id: 'requested', label: '신청'},
-  {id: 'contacting', label: '확인 중'},
-  {id: 'confirmed', label: '확정'},
-  {id: 'completed', label: '완료'},
-  {id: 'canceled', label: '취소'},
+  {id: 'requested', label: '예약 신청'},
+  {id: 'confirmed', label: '예약 확정'},
+  {id: 'completed', label: '상담 완료'},
+  {id: 'canceled', label: '예약 취소'},
 ];
 
 type ConsultingHistoryScreenProps = {
+  authToken?: string | null;
   onPressUpcoming: (record: ConsultingRecord) => void;
   onPressReschedule: (record: ConsultingRecord) => void;
   onPressReview: (record: ConsultingRecord) => void;
@@ -63,6 +62,7 @@ type ConsultingHistoryScreenProps = {
 };
 
 export function ConsultingHistoryScreen({
+  authToken,
   onPressUpcoming,
   onPressReschedule,
   onPressReview,
@@ -77,11 +77,19 @@ export function ConsultingHistoryScreen({
   const [cancellingRecordId, setCancellingRecordId] = useState<string | null>(
     null,
   );
-  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+
+      if (!authToken) {
+        setRecords([]);
+        setIsLoading(false);
+        return () => {
+          isMounted = false;
+        };
+      }
+
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()]).then(
@@ -100,7 +108,7 @@ export function ConsultingHistoryScreen({
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [authToken]),
   );
 
   const handleCancel = useCallback((record: ConsultingRecord) => {
@@ -137,41 +145,6 @@ export function ConsultingHistoryScreen({
     );
   }, []);
 
-  const handleDelete = useCallback((record: ConsultingRecord) => {
-    setOpenMenuRecordId(null);
-    Alert.alert(
-      '취소 내역을 삭제할까요?',
-      '삭제하면 내 상담 내역에서 사라져요. 이미 취소된 예약만 삭제할 수 있어요.',
-      [
-        {text: '아니요', style: 'cancel'},
-        {
-          text: '삭제하기',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingRecordId(record.id);
-            try {
-              const deleted = await deleteConsultingBooking(record.id);
-              if (!deleted) {
-                Alert.alert(
-                  '삭제 실패',
-                  '취소 내역을 삭제하지 못했어요. 네트워크와 API 연결을 확인해 주세요.',
-                  [{text: '확인'}],
-                );
-                return;
-              }
-
-              setRecords(current =>
-                current.filter(item => item.id !== record.id),
-              );
-            } finally {
-              setDeletingRecordId(null);
-            }
-          },
-        },
-      ],
-    );
-  }, []);
-
   const visibleRecords = useMemo(
     () => records.filter(record => record.status !== 'unavailable'),
     [records],
@@ -182,7 +155,7 @@ export function ConsultingHistoryScreen({
       return visibleRecords;
     }
 
-    return visibleRecords.filter(record => record.status === filter);
+    return visibleRecords.filter(record => groupedHistoryStatus(record.status) === filter);
   }, [filter, visibleRecords]);
 
   return (
@@ -190,7 +163,8 @@ export function ConsultingHistoryScreen({
       <ScrollView
         contentContainerStyle={styles.filterRow}
         horizontal
-        showsHorizontalScrollIndicator={false}>
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}>
         {historyFilters.map(item => (
           <ConsultingChip
             key={item.id}
@@ -216,7 +190,6 @@ export function ConsultingHistoryScreen({
                   : undefined
               }
               onPressCancel={() => handleCancel(record)}
-              onPressDelete={() => handleDelete(record)}
               onPressReschedule={() => onPressReschedule(record)}
               onPressReview={() => onPressReview(record)}
               menuOpen={openMenuRecordId === record.id}
@@ -227,7 +200,6 @@ export function ConsultingHistoryScreen({
               }
               record={record}
               cancelling={cancellingRecordId === record.id}
-              deleting={deletingRecordId === record.id}
             />
           ))}
         </View>
@@ -244,8 +216,6 @@ export function ConsultingHistoryScreen({
           <Text style={styles.emptyTitle}>
             {filter === 'requested'
               ? '접수된 신청이 없어요'
-              : filter === 'contacting'
-                ? '확인 중인 신청이 없어요'
               : filter === 'confirmed'
                 ? '확정된 상담이 없어요'
               : filter === 'canceled'
@@ -270,8 +240,23 @@ export function ConsultingHistoryScreen({
   );
 }
 
+function groupedHistoryStatus(status: ConsultingRecordStatus): HistoryFilterId {
+  if (status === 'requested' || status === 'contacting') return 'requested';
+  if (status === 'confirmed' || status === 'scheduled' || status === 'in_progress') {
+    return 'confirmed';
+  }
+  if (status === 'completed') return 'completed';
+  return 'canceled';
+}
+
 function isActiveRecordStatus(status: ConsultingRecordStatus): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+  return (
+    status === 'requested' ||
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress'
+  );
 }
 
 function HistoryCard({
@@ -279,32 +264,28 @@ function HistoryCard({
   expert,
   onPress,
   onPressCancel,
-  onPressDelete,
   onPressReschedule,
   onPressReview,
   menuOpen,
   onToggleMenu,
   cancelling,
-  deleting,
 }: {
   record: ConsultingRecord;
   expert: ConsultingExpert;
   onPress: () => void;
   onPressCancel: () => void;
-  onPressDelete: () => void;
   onPressReschedule: () => void;
   onPressReview: () => void;
   menuOpen: boolean;
   onToggleMenu: () => void;
   cancelling: boolean;
-  deleting: boolean;
 }) {
   const isActive = isActiveRecordStatus(record.status);
   const canReschedule =
     record.status === 'requested' || record.status === 'contacting';
   const canCancel = isActive;
   const isCanceled = record.status === 'canceled';
-  const canManage = canCancel || isCanceled;
+  const canManage = canCancel;
   const canReview = record.status === 'completed' && !record.reviewId;
   const handleReviewPress = (event: GestureResponderEvent) => {
     event.stopPropagation();
@@ -322,10 +303,6 @@ function HistoryCard({
   const handleCancelPress = (event: GestureResponderEvent) => {
     event.stopPropagation();
     onPressCancel();
-  };
-  const handleDeletePress = (event: GestureResponderEvent) => {
-    event.stopPropagation();
-    onPressDelete();
   };
 
   return (
@@ -392,21 +369,6 @@ function HistoryCard({
               </Pressable>
             </>
           ) : null}
-          {isCanceled ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={deleting}
-              onPress={handleDeletePress}
-              style={({pressed}) => [
-                styles.actionMenuItem,
-                deleting && styles.actionMenuItemDisabled,
-                pressed && !deleting ? styles.pressed : null,
-              ]}>
-              <Text style={styles.actionMenuDangerText}>
-                {deleting ? '삭제 중' : '취소 내역 삭제'}
-              </Text>
-            </Pressable>
-          ) : null}
         </RNView>
       ) : null}
       <RNView style={styles.cardBodyRow}>
@@ -439,6 +401,11 @@ function HistoryCard({
           </RNView>
         )}
       </RNView>
+      {isCanceled ? (
+        <Text style={styles.canceledNotice}>
+          예약이 취소되었습니다. 전문가와 고객의 확인을 위해 이 내역은 보관됩니다.
+        </Text>
+      ) : null}
       {canReview ? (
         <Pressable
           accessibilityRole="button"
@@ -543,6 +510,12 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
   },
+  canceledNotice: {
+    color: consultingColors.textMuted,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
   completedCta: {
     alignItems: 'center',
     backgroundColor: consultingColors.surfaceMuted,
@@ -635,7 +608,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingRight: spacing.xl,
   },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   list: {
+    alignSelf: 'stretch',
     gap: spacing.md,
   },
   moreButton: {

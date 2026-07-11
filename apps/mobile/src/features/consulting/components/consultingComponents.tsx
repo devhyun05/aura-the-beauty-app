@@ -202,11 +202,21 @@ const statusBadgePresets: Record<
     color: consultingColors.roseText,
   },
   contacting: {
-    label: '확인 중',
-    background: consultingColors.goldSoft,
-    color: consultingColors.goldText,
+    label: '예약 신청',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
   },
   confirmed: {
+    label: '예약 확정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  scheduled: {
+    label: '예약 확정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  in_progress: {
     label: '예약 확정',
     background: consultingColors.roseSoft,
     color: consultingColors.roseText,

@@ -5,6 +5,7 @@ snake_case and get converted to camelCase by ``app.core.responses.success``.
 """
 
 import asyncio
+from calendar import monthrange
 import asyncpg
 import json
 from datetime import date, datetime, timedelta
@@ -39,13 +40,17 @@ CONCERN_LABELS: dict[str, str] = {
 
 _WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 _KST = ZoneInfo("Asia/Seoul")
-_BOOKING_WINDOW_DAYS = 31
-_BOOKING_START_MINUTE = 10 * 60
-_BOOKING_END_MINUTE = 20 * 60
+_DEFAULT_BOOKING_OPEN_MONTHS = 1
+_MAX_BOOKING_OPEN_MONTHS = 3
+_BOOKING_DAY_START_MINUTE = 0
+_BOOKING_DAY_END_MINUTE = 24 * 60
 _BOOKING_INTERVAL_MINUTES = 30
-ACTIVE_BOOKING_STATUSES = ("requested", "contacting", "confirmed")
+_DEFAULT_OPEN_MINUTE = 10 * 60
+_DEFAULT_CLOSE_MINUTE = 19 * 60
+ACTIVE_BOOKING_STATUSES = ("requested", "contacting", "confirmed", "scheduled", "in_progress")
 EDITABLE_BOOKING_STATUSES = ("requested", "contacting")
-SLOT_BLOCKING_STATUSES = ("contacting", "confirmed")
+SLOT_BLOCKING_STATUSES = ("contacting", "confirmed", "scheduled", "in_progress")
+ScheduleSettings = dict[str, Any]
 
 
 def _weekday_label(value: Any) -> str:
@@ -60,11 +65,234 @@ def _booking_slot_labels() -> tuple[str, ...]:
   return tuple(
     f"{minute_offset // 60:02d}:{minute_offset % 60:02d}"
     for minute_offset in range(
-      _BOOKING_START_MINUTE,
-      _BOOKING_END_MINUTE + 1,
+      _BOOKING_DAY_START_MINUTE,
+      _BOOKING_DAY_END_MINUTE,
       _BOOKING_INTERVAL_MINUTES,
     )
   )
+
+
+def _format_slot_label(minute_offset: int) -> str:
+  return f"{minute_offset // 60:02d}:{minute_offset % 60:02d}"
+
+
+def _decode_json_value(value: Any, fallback: Any) -> Any:
+  if isinstance(value, (dict, list)):
+    return value
+  if isinstance(value, str) and value.strip():
+    try:
+      return json.loads(value)
+    except json.JSONDecodeError:
+      return fallback
+  return fallback
+
+
+def _payload_get(value: dict[str, Any], snake_key: str, camel_key: str | None = None) -> Any:
+  if snake_key in value:
+    return value[snake_key]
+  if camel_key and camel_key in value:
+    return value[camel_key]
+  return None
+
+
+def _bool(value: Any) -> bool:
+  if isinstance(value, bool):
+    return value
+  if isinstance(value, str):
+    return value.strip().lower() in {"1", "true", "yes", "y"}
+  return bool(value)
+
+
+def _time_to_minutes(value: Any, fallback: int) -> int:
+  raw = str(value or "").strip()
+  parts = raw.split(":")
+  if len(parts) < 2:
+    return fallback
+  try:
+    hour = int(parts[0])
+    minute = int(parts[1])
+  except ValueError:
+    return fallback
+  if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+    return fallback
+  return hour * 60 + minute
+
+
+def _default_operating_hours() -> list[dict[str, Any]]:
+  return [
+    {
+      "day_of_week": day,
+      "label": label,
+      "opens_at": _format_slot_label(_DEFAULT_OPEN_MINUTE),
+      "closes_at": _format_slot_label(_DEFAULT_CLOSE_MINUTE),
+      "is_closed": day >= 5,
+    }
+    for day, label in enumerate(_WEEKDAYS_KO)
+  ]
+
+
+def _normalize_operating_hours(value: Any) -> list[dict[str, Any]]:
+  raw_hours = _decode_json_value(value, [])
+  defaults = _default_operating_hours()
+  by_day: dict[int, dict[str, Any]] = {}
+  if not isinstance(raw_hours, list):
+    raw_hours = []
+
+  for raw in raw_hours:
+    if not isinstance(raw, dict):
+      continue
+    try:
+      day = int(_payload_get(raw, "day_of_week", "dayOfWeek"))
+    except (TypeError, ValueError):
+      continue
+    if day < 0 or day > 6:
+      continue
+
+    default = defaults[day]
+    raw_closed = _payload_get(raw, "is_closed", "isClosed")
+    is_closed = bool(default["is_closed"]) if raw_closed is None else _bool(raw_closed)
+    opens_at = str(_payload_get(raw, "opens_at", "opensAt") or default["opens_at"])
+    closes_at = str(_payload_get(raw, "closes_at", "closesAt") or default["closes_at"])
+    open_minutes = _time_to_minutes(opens_at, _DEFAULT_OPEN_MINUTE)
+    close_minutes = _time_to_minutes(closes_at, _DEFAULT_CLOSE_MINUTE)
+    if not is_closed and open_minutes >= close_minutes:
+      open_minutes = _DEFAULT_OPEN_MINUTE
+      close_minutes = _DEFAULT_CLOSE_MINUTE
+
+    normalized: dict[str, Any] = {
+      "day_of_week": day,
+      "label": str(_payload_get(raw, "label") or default["label"]),
+      "opens_at": _format_slot_label(open_minutes),
+      "closes_at": _format_slot_label(close_minutes),
+      "is_closed": is_closed,
+    }
+    lunch_start = _payload_get(raw, "lunch_start", "lunchStart")
+    lunch_end = _payload_get(raw, "lunch_end", "lunchEnd")
+    if lunch_start and lunch_end:
+      lunch_start_minutes = _time_to_minutes(lunch_start, -1)
+      lunch_end_minutes = _time_to_minutes(lunch_end, -1)
+      if open_minutes < lunch_start_minutes < lunch_end_minutes < close_minutes:
+        normalized["lunch_start"] = _format_slot_label(lunch_start_minutes)
+        normalized["lunch_end"] = _format_slot_label(lunch_end_minutes)
+    by_day[day] = normalized
+
+  return [by_day.get(day, defaults[day]) for day in range(7)]
+
+
+def _normalize_holidays(value: Any) -> list[str]:
+  raw_holidays = _decode_json_value(value, [])
+  if not isinstance(raw_holidays, list):
+    return []
+  holidays: list[str] = []
+  for item in raw_holidays:
+    raw = str(item or "").strip()
+    if not raw:
+      continue
+    try:
+      normalized = datetime.fromisoformat(raw).date().isoformat()
+    except ValueError:
+      continue
+    if normalized not in holidays:
+      holidays.append(normalized)
+  return sorted(holidays)
+
+
+def _normalize_booking_open_months(value: Any) -> int:
+  try:
+    months = int(value)
+  except (TypeError, ValueError):
+    months = _DEFAULT_BOOKING_OPEN_MONTHS
+  return min(max(months, 1), _MAX_BOOKING_OPEN_MONTHS)
+
+
+def _schedule_settings_from_row(row: dict[str, Any] | None) -> ScheduleSettings:
+  if row is None:
+    return {
+      "operating_hours": _default_operating_hours(),
+      "holidays": [],
+      "booking_open_months": _DEFAULT_BOOKING_OPEN_MONTHS,
+    }
+  return {
+    "operating_hours": _normalize_operating_hours(row.get("operating_hours")),
+    "holidays": _normalize_holidays(row.get("holiday_dates")),
+    "booking_open_months": _normalize_booking_open_months(row.get("booking_open_months")),
+  }
+
+
+def _add_calendar_months(value: date, months: int) -> date:
+  month_index = value.month - 1 + months
+  year = value.year + month_index // 12
+  month = month_index % 12 + 1
+  day = min(value.day, monthrange(year, month)[1])
+  return date(year, month, day)
+
+
+def _booking_window_end(start_day: date, schedule_settings: ScheduleSettings) -> date:
+  return _add_calendar_months(
+    start_day,
+    _normalize_booking_open_months(schedule_settings.get("booking_open_months")),
+  )
+
+
+def _operating_windows_for_day(
+  schedule_settings: ScheduleSettings,
+  slot_date: date,
+) -> tuple[tuple[int, int], ...]:
+  if slot_date.isoformat() in schedule_settings.get("holidays", []):
+    return ()
+
+  operating_hours = schedule_settings.get("operating_hours") or _default_operating_hours()
+  weekday = slot_date.weekday()
+  day_config = (
+    operating_hours[weekday]
+    if isinstance(operating_hours, list) and len(operating_hours) > weekday
+    else _default_operating_hours()[weekday]
+  )
+  if _bool(day_config.get("is_closed")):
+    return ()
+
+  open_minutes = _time_to_minutes(day_config.get("opens_at"), _DEFAULT_OPEN_MINUTE)
+  close_minutes = _time_to_minutes(day_config.get("closes_at"), _DEFAULT_CLOSE_MINUTE)
+  if open_minutes >= close_minutes:
+    return ()
+
+  lunch_start = day_config.get("lunch_start") or day_config.get("lunchStart")
+  lunch_end = day_config.get("lunch_end") or day_config.get("lunchEnd")
+  if lunch_start and lunch_end:
+    lunch_start_minutes = _time_to_minutes(lunch_start, -1)
+    lunch_end_minutes = _time_to_minutes(lunch_end, -1)
+    if open_minutes < lunch_start_minutes < lunch_end_minutes < close_minutes:
+      windows: list[tuple[int, int]] = []
+      if open_minutes < lunch_start_minutes:
+        windows.append((open_minutes, lunch_start_minutes))
+      if lunch_end_minutes < close_minutes:
+        windows.append((lunch_end_minutes, close_minutes))
+      return tuple(windows)
+
+  return ((open_minutes, close_minutes),)
+
+
+def _booking_slot_labels_for_day(
+  schedule_settings: ScheduleSettings,
+  slot_date: date,
+  duration_minutes: int,
+) -> tuple[str, ...]:
+  labels: list[str] = []
+  for start_minute, end_minute in _operating_windows_for_day(schedule_settings, slot_date):
+    latest_start_minute = end_minute - duration_minutes
+    if latest_start_minute < start_minute:
+      continue
+
+    labels.extend(
+      _format_slot_label(minute_offset)
+      for minute_offset in range(
+        start_minute,
+        latest_start_minute + 1,
+        _BOOKING_INTERVAL_MINUTES,
+      )
+    )
+
+  return tuple(dict.fromkeys(labels))
 
 
 def _slot_label_to_minutes(slot_id: str) -> int:
@@ -90,11 +318,13 @@ def _coerce_booking_slot_id(slot_id: str) -> str:
   return value
 
 
-def _validate_booking_day(day_id: date) -> date:
+def _validate_booking_day(day_id: date, schedule_settings: ScheduleSettings | None = None) -> date:
   today = _today_kst()
-  last_day = today + timedelta(days=_BOOKING_WINDOW_DAYS - 1)
+  settings = schedule_settings or _schedule_settings_from_row(None)
+  last_day = _booking_window_end(today, settings)
   if day_id < today or day_id > last_day:
-    raise AppError(400, "CONSULTING_DAY_OUT_OF_RANGE", "예약은 오늘부터 한 달 안에서 선택해 주세요.")
+    months = settings["booking_open_months"]
+    raise AppError(400, "CONSULTING_DAY_OUT_OF_RANGE", f"예약은 오늘부터 {months}개월 안에서 선택해 주세요.")
   return day_id
 
 
@@ -102,16 +332,24 @@ def _build_booking_days(
   booked_intervals_by_day: dict[str, list[tuple[int, int]]] | None = None,
   duration_minutes: int = 30,
   start_day: date | None = None,
+  schedule_settings: ScheduleSettings | None = None,
 ) -> list[dict[str, Any]]:
   booked_intervals_by_day = booked_intervals_by_day or {}
   first_day = start_day or _today_kst()
-  slot_labels = _booking_slot_labels()
+  settings = schedule_settings or _schedule_settings_from_row(None)
+  last_day = _booking_window_end(first_day, settings)
+  day_count = (last_day - first_day).days + 1
 
   days: list[dict[str, Any]] = []
-  for day_offset in range(_BOOKING_WINDOW_DAYS):
+  for day_offset in range(day_count):
     slot_date = first_day + timedelta(days=day_offset)
     day_id = slot_date.isoformat()
     booked_intervals = booked_intervals_by_day.get(day_id, [])
+    slot_labels = _booking_slot_labels_for_day(
+      settings,
+      slot_date,
+      duration_minutes,
+    )
     days.append(
       {
         "id": day_id,
@@ -140,7 +378,7 @@ def _slot_available_for_duration(
   booked_intervals: list[tuple[int, int]],
 ) -> bool:
   start_minute = _slot_label_to_minutes(slot_id)
-  if start_minute + duration_minutes > _BOOKING_END_MINUTE:
+  if start_minute + duration_minutes > _BOOKING_DAY_END_MINUTE:
     return False
 
   return not any(
@@ -151,6 +389,19 @@ def _slot_available_for_duration(
       booked_duration_minutes,
     )
     for booked_start_minute, booked_duration_minutes in booked_intervals
+  )
+
+
+def _slot_in_expert_operating_hours(
+  schedule_settings: ScheduleSettings,
+  day_id: date,
+  slot_id: str,
+  duration_minutes: int,
+) -> bool:
+  return slot_id in _booking_slot_labels_for_day(
+    schedule_settings,
+    day_id,
+    duration_minutes,
   )
 
 
@@ -452,16 +703,21 @@ async def get_expert_slots(
   expert_id: str,
   duration_id: str | None = None,
 ) -> list[dict[str, Any]]:
-  exists = await db.fetchrow(
-    "select 1 from consulting_experts where id = $1 and is_active = true",
+  expert = await db.fetchrow(
+    """
+    select id, operating_hours, holiday_dates, booking_open_months
+    from consulting_experts
+    where id = $1 and is_active = true
+    """,
     expert_id,
   )
-  if exists is None:
+  if expert is None:
     raise AppError(404, "CONSULTING_EXPERT_NOT_FOUND", "전문가를 찾을 수 없어요.")
 
+  schedule_settings = _schedule_settings_from_row(expert)
   duration_minutes = await _duration_minutes_for(db, expert_id, duration_id)
   first_day = _today_kst()
-  last_day = first_day + timedelta(days=_BOOKING_WINDOW_DAYS - 1)
+  last_day = _booking_window_end(first_day, schedule_settings)
   rows = await db.fetch(
     """
     select coalesce(scheduled_date, scheduled_at::date) as booked_date,
@@ -489,7 +745,12 @@ async def get_expert_slots(
         int(row.get("duration_minutes") or 30),
       ),
     )
-  return _build_booking_days(booked_intervals_by_day, duration_minutes, first_day)
+  return _build_booking_days(
+    booked_intervals_by_day,
+    duration_minutes,
+    first_day,
+    schedule_settings=schedule_settings,
+  )
 
 
 # -----------------------------------------------------------------------------
@@ -530,7 +791,7 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     if scheduled_at is not None
     else None,
     "slot_id": row.get("slot_id"),
-    "status": row["status"],
+    "status": _public_booking_status(str(row["status"])),
     "category_label": row["category_label"],
     "date_label": row["date_label"],
     "duration_label": row["duration_label"],
@@ -541,7 +802,22 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     "contact_name": row.get("contact_name"),
     "contact_phone": row.get("contact_phone"),
     "preferred_contact_method": row.get("preferred_contact_method"),
+    # The mobile inbox uses the latest expert message timestamp to distinguish
+    # a real incoming chat from an unchanged booking status.  Keep this
+    # metadata on the booking payload so the header can refresh its badge
+    # without opening every conversation.
+    "last_expert_message_at": row.get("last_expert_message_at"),
   }
+
+
+def _public_booking_status(status: str) -> str:
+  if status in {"requested", "contacting"}:
+    return "requested"
+  if status in {"confirmed", "scheduled", "in_progress"}:
+    return "confirmed"
+  if status == "completed":
+    return "completed"
+  return "canceled"
 
 
 def _booking_price(payload: Any, duration: dict[str, Any]) -> int:
@@ -582,7 +858,14 @@ async def _active_bookings(
 ) -> list[dict[str, Any]]:
   rows = await db.fetch(
     """
-    select b.*, r.id as review_id
+    select b.*, r.id as review_id,
+      (
+        select max(m.created_at)
+        from consulting_messages m
+        where m.booking_id = b.id
+          and m.sender_type = 'expert'
+          and m.deleted_at is null
+      ) as last_expert_message_at
     from consulting_bookings b
     left join consulting_expert_reviews r
       on r.booking_id = b.id and r.author_user_id = $1
@@ -605,7 +888,14 @@ async def list_bookings(
   if status and status != "all":
     rows = await db.fetch(
       """
-      select b.*, r.id as review_id
+      select b.*, r.id as review_id,
+        (
+          select max(m.created_at)
+          from consulting_messages m
+          where m.booking_id = b.id
+            and m.sender_type = 'expert'
+            and m.deleted_at is null
+        ) as last_expert_message_at
       from consulting_bookings b
       left join consulting_expert_reviews r
         on r.booking_id = b.id and r.author_user_id = $1
@@ -618,7 +908,14 @@ async def list_bookings(
   else:
     rows = await db.fetch(
       """
-      select b.*, r.id as review_id
+      select b.*, r.id as review_id,
+        (
+          select max(m.created_at)
+          from consulting_messages m
+          where m.booking_id = b.id
+            and m.sender_type = 'expert'
+            and m.deleted_at is null
+        ) as last_expert_message_at
       from consulting_bookings b
       left join consulting_expert_reviews r
         on r.booking_id = b.id and r.author_user_id = $1
@@ -640,7 +937,14 @@ async def list_bookings(
 async def get_booking(db: Database, user_id: str, booking_id: str) -> dict[str, Any]:
   row = await db.fetchrow(
     """
-    select b.*, r.id as review_id
+    select b.*, r.id as review_id,
+      (
+        select max(m.created_at)
+        from consulting_messages m
+        where m.booking_id = b.id
+          and m.sender_type = 'expert'
+          and m.deleted_at is null
+      ) as last_expert_message_at
     from consulting_bookings b
     left join consulting_expert_reviews r
       on r.booking_id = b.id and r.author_user_id = $2
@@ -656,7 +960,11 @@ async def get_booking(db: Database, user_id: str, booking_id: str) -> dict[str, 
 
 async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, Any]:
   expert = await db.fetchrow(
-    "select id, title from consulting_experts where id = $1 and is_active = true",
+    """
+    select id, title, operating_hours, holiday_dates, booking_open_months
+    from consulting_experts
+    where id = $1 and is_active = true
+    """,
     payload.expert_id,
   )
   if expert is None:
@@ -674,12 +982,24 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
   if duration is None:
     raise AppError(400, "CONSULTING_DURATION_INVALID", "선택한 상담 시간을 확인해 주세요.")
 
-  booking_day = _validate_booking_day(payload.day_id)
+  schedule_settings = _schedule_settings_from_row(expert)
+  booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):
     raise AppError(400, "CONSULTING_SLOT_INVALID", "선택한 시간은 상담 길이에 맞지 않아요.")
+  if not _slot_in_expert_operating_hours(
+    schedule_settings,
+    booking_day,
+    slot_id,
+    duration_minutes,
+  ):
+    raise AppError(
+      400,
+      "CONSULTING_SLOT_OUTSIDE_OPERATING_HOURS",
+      "선택한 시간은 프리랜서 상담 가능 시간이 아니에요.",
+    )
   if await _slot_overlaps_booking(
     db,
     payload.expert_id,
@@ -780,6 +1100,18 @@ async def update_booking(
   if current["expert_id"] != payload.expert_id:
     raise AppError(400, "CONSULTING_EXPERT_CHANGE_UNSUPPORTED", "전문가 변경은 새 예약으로 진행해 주세요.")
 
+  expert = await db.fetchrow(
+    """
+    select id, operating_hours, holiday_dates, booking_open_months
+    from consulting_experts
+    where id = $1 and is_active = true
+    """,
+    payload.expert_id,
+  )
+  if expert is None:
+    raise AppError(404, "CONSULTING_EXPERT_NOT_FOUND", "전문가를 찾을 수 없어요.")
+  schedule_settings = _schedule_settings_from_row(expert)
+
   duration = await db.fetchrow(
     """
     select code, label, minutes, price
@@ -792,12 +1124,23 @@ async def update_booking(
   if duration is None:
     raise AppError(400, "CONSULTING_DURATION_INVALID", "선택한 상담 시간을 확인해 주세요.")
 
-  booking_day = _validate_booking_day(payload.day_id)
+  booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):
     raise AppError(400, "CONSULTING_SLOT_INVALID", "선택한 시간은 상담 길이에 맞지 않아요.")
+  if not _slot_in_expert_operating_hours(
+    schedule_settings,
+    booking_day,
+    slot_id,
+    duration_minutes,
+  ):
+    raise AppError(
+      400,
+      "CONSULTING_SLOT_OUTSIDE_OPERATING_HOURS",
+      "선택한 시간은 프리랜서 상담 가능 시간이 아니에요.",
+    )
   if await _slot_overlaps_booking(
     db,
     payload.expert_id,
@@ -905,24 +1248,6 @@ async def cancel_booking(db: Database, user_id: str, booking_id: str) -> dict[st
   return _record(updated)
 
 
-async def delete_canceled_booking(db: Database, user_id: str, booking_id: str) -> None:
-  row = await db.fetchrow(
-    "select id, status from consulting_bookings where id = $1 and user_id = $2",
-    booking_id,
-    user_id,
-  )
-  if row is None:
-    raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
-  if row["status"] != "canceled":
-    raise AppError(409, "CONSULTING_BOOKING_DELETE_REQUIRES_CANCELED", "취소된 예약만 삭제할 수 있어요.")
-
-  await db.execute(
-    "delete from consulting_bookings where id = $1 and user_id = $2 and status = 'canceled'",
-    booking_id,
-    user_id,
-  )
-
-
 async def update_booking_status(db: Database, booking_id: str, payload: Any) -> dict[str, Any]:
   row = await db.fetchrow(
     "select * from consulting_bookings where id = $1",
@@ -945,7 +1270,7 @@ async def update_booking_status(db: Database, booking_id: str, payload: Any) -> 
       set status = $2,
           operator_note = $3,
           confirmed_at = case
-            when $2 = 'confirmed' and confirmed_at is null then now()
+            when $2 in ('confirmed', 'scheduled', 'in_progress') and confirmed_at is null then now()
             else confirmed_at
           end,
           updated_at = now()
@@ -972,8 +1297,8 @@ async def complete_booking(db: Database, booking_id: str) -> dict[str, Any]:
     raise AppError(409, "CONSULTING_BOOKING_CANCELED", "취소된 상담은 완료 처리할 수 없어요.")
   if row["status"] == "completed":
     return await _attach_summary(db, _record(row), row["id"])
-  if row["status"] != "confirmed":
-    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정된 상담만 완료 처리할 수 있어요.")
+  if row["status"] not in {"confirmed", "scheduled", "in_progress"}:
+    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정 또는 진행 중인 상담만 완료 처리할 수 있어요.")
 
   updated = await db.fetchrow(
     """
@@ -1028,8 +1353,8 @@ async def upsert_booking_summary(db: Database, booking_id: str, payload: Any) ->
     raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
   if row["status"] == "canceled":
     raise AppError(409, "CONSULTING_BOOKING_CANCELED", "취소된 상담에는 요약을 저장할 수 없어요.")
-  if row["status"] not in {"confirmed", "completed"}:
-    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정된 상담에만 요약을 저장할 수 있어요.")
+  if row["status"] not in {"confirmed", "scheduled", "in_progress", "completed"}:
+    raise AppError(409, "CONSULTING_BOOKING_NOT_CONFIRMED", "확정 또는 진행 중인 상담에만 요약을 저장할 수 있어요.")
 
   notes = _summary_notes_from_payload(payload)
   products = _summary_products_from_payload(payload)

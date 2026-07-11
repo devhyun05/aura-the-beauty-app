@@ -54,7 +54,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AURA가 현재 위치 주변의 네이버 뷰티샵을 보여주기 위해 위치 접근 권한이 필요합니다.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
+	<string>AURA 화상 상담에서 음성을 전달하기 위해 마이크 접근 권한이 필요합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AURA 사진 업로드와 분석 기능을 위해 사진 보관함 접근 권한이 필요합니다.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

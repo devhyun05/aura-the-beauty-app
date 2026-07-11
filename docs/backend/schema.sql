@@ -1071,6 +1071,9 @@ create table if not exists consulting_experts (
   response_minutes integer not null default 0,
   intro text not null default '',
   availability_note text,
+  operating_hours jsonb,
+  holiday_dates jsonb,
+  booking_open_months integer not null default 1,
   tags text[] not null default '{}',
   certifications text[] not null default '{}',
   is_active boolean not null default true,
@@ -1163,6 +1166,55 @@ create table if not exists consulting_summaries (
   products jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
+
+create table if not exists consulting_call_sessions (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null unique,
+  user_id uuid not null,
+  expert_id text not null,
+  provider text not null default 'chime',
+  provider_meeting_id text,
+  provider_external_meeting_id text,
+  control_region text not null default 'ap-northeast-2',
+  media_region text,
+  status text not null default 'created',
+  transcription_status text not null default 'disabled',
+  transcription_language_code text,
+  customer_language_code text not null default 'ko-KR',
+  expert_language_code text not null default 'ko-KR',
+  transcription_mode text not null default 'fixed',
+  started_at timestamptz,
+  ended_at timestamptz,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists consulting_transcript_segments (
+  id uuid primary key default gen_random_uuid(),
+  call_session_id uuid not null,
+  booking_id uuid not null,
+  participant_type text not null,
+  participant_id text,
+  language_code text not null,
+  source_text text not null default '',
+  translated_text text,
+  result_id text,
+  speaker_type text not null default 'unknown',
+  source_language_code text,
+  content text,
+  target_language_code text,
+  translated_content text,
+  start_time_ms integer,
+  end_time_ms integer,
+  is_partial boolean not null default false,
+  started_at timestamptz,
+  ended_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+comment on table consulting_transcript_segments is
+  'Optional Chime transcript retention table. MVP translation flow does not write rows when CONSULTING_TRANSCRIPT_RETENTION_DAYS is 0.';
 
 create table if not exists consulting_messages (
   id uuid primary key default gen_random_uuid(),
@@ -1351,7 +1403,7 @@ alter table consulting_bookings
 alter table consulting_bookings
   drop constraint if exists chk_consulting_bookings_status,
   add constraint chk_consulting_bookings_status
-  check (status in ('requested', 'contacting', 'confirmed', 'unavailable', 'completed', 'canceled'));
+  check (status in ('requested', 'contacting', 'confirmed', 'scheduled', 'in_progress', 'unavailable', 'completed', 'canceled'));
 
 alter table consulting_bookings
   drop constraint if exists chk_consulting_bookings_session_mode,
@@ -1362,6 +1414,100 @@ alter table consulting_summaries
   drop constraint if exists fk_consulting_summaries_booking,
   add constraint fk_consulting_summaries_booking
   foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+
+alter table consulting_call_sessions
+  drop constraint if exists fk_consulting_call_sessions_booking,
+  add constraint fk_consulting_call_sessions_booking
+  foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+
+alter table consulting_call_sessions
+  drop constraint if exists fk_consulting_call_sessions_user,
+  add constraint fk_consulting_call_sessions_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table consulting_call_sessions
+  drop constraint if exists fk_consulting_call_sessions_expert,
+  add constraint fk_consulting_call_sessions_expert
+  foreign key (expert_id) references consulting_experts(id) on delete cascade;
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_provider,
+  add constraint chk_consulting_call_sessions_provider
+  check (provider in ('chime'));
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_status,
+  add constraint chk_consulting_call_sessions_status
+  check (status in ('created', 'active', 'ended', 'failed'));
+
+alter table consulting_call_sessions add column if not exists control_region text not null default 'ap-northeast-2';
+alter table consulting_call_sessions add column if not exists customer_language_code text not null default 'ko-KR';
+alter table consulting_call_sessions add column if not exists expert_language_code text not null default 'ko-KR';
+alter table consulting_call_sessions add column if not exists transcription_mode text not null default 'fixed';
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_transcription_status,
+  add constraint chk_consulting_call_sessions_transcription_status
+  check (transcription_status in ('disabled', 'stopped', 'starting', 'active', 'stopping', 'failed'));
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_transcription_language,
+  add constraint chk_consulting_call_sessions_transcription_language
+  check (transcription_language_code is null or transcription_language_code in ('ko-KR', 'en-US'));
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_customer_language,
+  add constraint chk_consulting_call_sessions_customer_language
+  check (customer_language_code in ('ko-KR', 'en-US'));
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_expert_language,
+  add constraint chk_consulting_call_sessions_expert_language
+  check (expert_language_code in ('ko-KR', 'en-US'));
+
+alter table consulting_call_sessions
+  drop constraint if exists chk_consulting_call_sessions_transcription_mode,
+  add constraint chk_consulting_call_sessions_transcription_mode
+  check (transcription_mode in ('fixed', 'identify'));
+
+alter table consulting_transcript_segments add column if not exists result_id text;
+alter table consulting_transcript_segments add column if not exists speaker_type text not null default 'unknown';
+alter table consulting_transcript_segments add column if not exists source_language_code text;
+alter table consulting_transcript_segments add column if not exists content text;
+alter table consulting_transcript_segments add column if not exists target_language_code text;
+alter table consulting_transcript_segments add column if not exists translated_content text;
+alter table consulting_transcript_segments add column if not exists start_time_ms integer;
+alter table consulting_transcript_segments add column if not exists end_time_ms integer;
+
+alter table consulting_transcript_segments
+  drop constraint if exists fk_consulting_transcript_segments_call_session,
+  add constraint fk_consulting_transcript_segments_call_session
+  foreign key (call_session_id) references consulting_call_sessions(id) on delete cascade;
+
+alter table consulting_transcript_segments
+  drop constraint if exists fk_consulting_transcript_segments_booking,
+  add constraint fk_consulting_transcript_segments_booking
+  foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+
+alter table consulting_transcript_segments
+  drop constraint if exists chk_consulting_transcript_segments_participant_type,
+  add constraint chk_consulting_transcript_segments_participant_type
+  check (participant_type in ('customer', 'partner'));
+
+alter table consulting_transcript_segments
+  drop constraint if exists chk_consulting_transcript_segments_language,
+  add constraint chk_consulting_transcript_segments_language
+  check (language_code in ('ko-KR', 'en-US'));
+
+alter table consulting_transcript_segments
+  drop constraint if exists chk_consulting_transcript_segments_speaker,
+  add constraint chk_consulting_transcript_segments_speaker
+  check (speaker_type in ('user', 'expert', 'unknown'));
+
+alter table consulting_transcript_segments
+  drop constraint if exists chk_consulting_transcript_segments_source_language,
+  add constraint chk_consulting_transcript_segments_source_language
+  check (source_language_code is null or source_language_code in ('ko-KR', 'en-US'));
 
 alter table consulting_messages
   drop constraint if exists fk_consulting_messages_booking,
@@ -1446,6 +1592,12 @@ create unique index if not exists idx_consulting_expert_reviews_booking
   where booking_id is not null;
 create index if not exists idx_consulting_bookings_user_status on consulting_bookings (user_id, status, created_at desc);
 create index if not exists idx_consulting_bookings_expert on consulting_bookings (expert_id);
+create index if not exists idx_consulting_call_sessions_booking on consulting_call_sessions (booking_id);
+create index if not exists idx_consulting_call_sessions_expert_status on consulting_call_sessions (expert_id, status, created_at desc);
+create index if not exists idx_consulting_transcript_segments_session_created on consulting_transcript_segments (call_session_id, created_at);
+create unique index if not exists uq_consulting_transcript_segments_result
+  on consulting_transcript_segments (call_session_id, result_id)
+  where result_id is not null;
 create index if not exists idx_consulting_messages_booking_created on consulting_messages (booking_id, created_at desc)
   where deleted_at is null;
 create index if not exists idx_consulting_partner_accounts_expert on consulting_partner_accounts (expert_id);
@@ -1468,7 +1620,7 @@ alter table consulting_bookings
     ) with &&
   )
   where (
-    status in ('contacting', 'confirmed')
+    status in ('contacting', 'confirmed', 'scheduled', 'in_progress')
     and scheduled_date is not null
     and slot_start_minutes is not null
   );
@@ -1489,6 +1641,11 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_consulting_bookings_updated_at on consulting_bookings;
 create trigger trg_consulting_bookings_updated_at
 before update on consulting_bookings
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_consulting_call_sessions_updated_at on consulting_call_sessions;
+create trigger trg_consulting_call_sessions_updated_at
+before update on consulting_call_sessions
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_consulting_membership_plans_updated_at on consulting_membership_plans;
