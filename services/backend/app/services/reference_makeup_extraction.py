@@ -17,6 +17,7 @@ from app.core.errors import AppError
 from app.core.settings import Settings
 from app.db.session import Database
 from app.schemas.analysis import FilterExtractionAnalyzeRequest
+from app.lambdas.media_postprocess import MediaPostprocessError, process_image_bytes
 from app.services.shopping_products import build_product_recommendation_data
 
 
@@ -31,6 +32,17 @@ DEFAULT_CATEGORY_BY_AREA = {
   "cheek": "cheek",
   "lip": "lip",
   "contour": "shadow",
+}
+
+REFERENCE_BEDROCK_MAX_TOKENS = 8192
+REFERENCE_BEDROCK_RETRY_MAX_TOKENS = 12288
+REFERENCE_BEDROCK_INPUT_USD_PER_MILLION_TOKENS = 3.0
+REFERENCE_BEDROCK_OUTPUT_USD_PER_MILLION_TOKENS = 15.0
+REFERENCE_BEDROCK_FATAL_OUTPUT_CODES = {
+  "REFERENCE_BEDROCK_EMPTY_OUTPUT",
+  "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE",
+  "REFERENCE_BEDROCK_OUTPUT_INVALID",
+  "REFERENCE_BEDROCK_OUTPUT_PARSE_FAILED",
 }
 
 REFERENCE_MAKEUP_REPORT_TOOL_NAME = "submit_reference_makeup_report"
@@ -489,6 +501,71 @@ def _normalize_bedrock_payload(
   }
 
 
+def _missing_bedrock_output_fields(parsed: dict[str, Any]) -> list[str]:
+  if not parsed:
+    return ["extractedMakeupLook"]
+
+  raw_look = _get_value(parsed, "extractedMakeupLook", "extracted_makeup_look")
+
+  if not isinstance(raw_look, dict) or not raw_look:
+    return ["extractedMakeupLook"]
+
+  missing: list[str] = []
+
+  for field, aliases in (
+    ("title", ("title",)),
+    ("tags", ("tags",)),
+    ("accuracy", ("accuracy",)),
+    ("points", ("points",)),
+    ("palette", ("palette",)),
+    ("areaGuides", ("areaGuides", "area_guides")),
+  ):
+    value = _get_value(raw_look, *aliases)
+
+    if value is None or value == "" or value == [] or value == {}:
+      missing.append(field)
+
+  area_guides = _get_value(raw_look, "areaGuides", "area_guides")
+  guide_by_id = {
+    _clean_text(guide.get("id")): guide
+    for guide in area_guides
+    if isinstance(guide, dict) and _clean_text(guide.get("id"))
+  } if isinstance(area_guides, list) else {}
+
+  for area_id in AREA_IDS:
+    guide = guide_by_id.get(area_id)
+
+    if not guide:
+      missing.append(f"areaGuides.{area_id}")
+      continue
+
+    for field, aliases in (
+      ("title", ("title",)),
+      ("analysis", ("analysis",)),
+      ("howTo", ("howTo", "how_to")),
+      ("professionalPoint", ("professionalPoint", "professional_point")),
+      ("productRecommendation", ("productRecommendation", "product_recommendation")),
+    ):
+      value = _get_value(guide, *aliases)
+
+      if value is None or value == "" or value == {}:
+        missing.append(f"areaGuides.{area_id}.{field}")
+
+  return missing
+
+
+def _bedrock_usage(response_payload: dict[str, Any]) -> tuple[int, int, float]:
+  usage = response_payload.get("usage")
+  usage = usage if isinstance(usage, dict) else {}
+  input_tokens = int(usage.get("input_tokens") or usage.get("inputTokens") or 0)
+  output_tokens = int(usage.get("output_tokens") or usage.get("outputTokens") or 0)
+  estimated_cost_usd = (
+    input_tokens * REFERENCE_BEDROCK_INPUT_USD_PER_MILLION_TOKENS
+    + output_tokens * REFERENCE_BEDROCK_OUTPUT_USD_PER_MILLION_TOKENS
+  ) / 1_000_000
+  return input_tokens, output_tokens, estimated_cost_usd
+
+
 class ReferenceMakeupBedrockService:
   def __init__(self, settings: Settings) -> None:
     self.settings = settings
@@ -749,7 +826,12 @@ tags는 1개에서 4개 사이로 작성한다.
 
     return parsed
 
-  def _analyze_sync(self, payload: FilterExtractionAnalyzeRequest, image_bytes: bytes) -> dict[str, Any]:
+  def _analyze_sync(
+    self,
+    payload: FilterExtractionAnalyzeRequest,
+    image_bytes: bytes,
+    content_type: str | None = None,
+  ) -> dict[str, Any]:
     model_id = self.settings.effective_analysis_model_id
 
     if not model_id:
@@ -760,7 +842,7 @@ tags는 1개에서 4개 사이로 작성한다.
       )
 
     request_payload = payload.request_payload if isinstance(payload.request_payload, dict) else {}
-    content_type = self._infer_content_type(request_payload)
+    content_type = content_type or self._infer_content_type(request_payload)
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
     started_at = time.monotonic()
     logger.info(
@@ -768,69 +850,147 @@ tags는 1개에서 4개 사이로 작성한다.
       model_id,
       self.settings.effective_bedrock_analysis_region,
     )
-    response = self._bedrock_runtime_client().invoke_model(
-      modelId=model_id,
-      body=json.dumps(
-        {
-          "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 4096,
-          "temperature": 0.2,
-          "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
-          "tools": [REFERENCE_MAKEUP_REPORT_TOOL],
-          "tool_choice": {"type": "tool", "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME},
-          "messages": [
-            {
-              "role": "user",
-              "content": [
-                {"type": "text", "text": self._build_prompt(payload)},
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": content_type,
-                    "data": image_base64,
-                  },
-                },
-              ],
-            },
-          ],
-        },
-        ensure_ascii=False,
-      ),
-      accept="application/json",
-      contentType="application/json",
-    )
-    response_payload = json.loads(response["body"].read())
-    parsed = self._extract_bedrock_tool_input(response_payload)
-    output_text = self._extract_bedrock_output_text(response_payload)
-    output_length = len(json.dumps(parsed, ensure_ascii=False)) if parsed else len(output_text)
-    logger.info(
-      "[aura:reference-bedrock] output:received chars=%s stopReason=%s mode=%s",
-      output_length,
-      response_payload.get("stop_reason") or response_payload.get("stopReason"),
-      "tool" if parsed else "text",
-    )
+    prompt = self._build_prompt(payload)
+    token_limits = (REFERENCE_BEDROCK_MAX_TOKENS, REFERENCE_BEDROCK_RETRY_MAX_TOKENS)
 
-    if parsed is None:
-      if not output_text:
-        raise AppError(
-          502,
-          "REFERENCE_BEDROCK_EMPTY_OUTPUT",
-          "Bedrock reference makeup extraction returned an empty response.",
+    for attempt, max_tokens in enumerate(token_limits, start=1):
+      retry_instruction = ""
+
+      if attempt > 1:
+        retry_instruction = (
+          "\n\nThe previous response exceeded the output limit. "
+          "Return every required field, but keep each string concise."
         )
 
-      parsed = self._parse_json_output(output_text)
-    logger.info(
-      "[aura:reference-bedrock] analyze:success durationMs=%s",
-      round((time.monotonic() - started_at) * 1000),
-    )
+      response = self._bedrock_runtime_client().invoke_model(
+        modelId=model_id,
+        body=json.dumps(
+          {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "temperature": 0.2,
+            "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
+            "tools": [REFERENCE_MAKEUP_REPORT_TOOL],
+            "tool_choice": {"type": "tool", "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME},
+            "messages": [
+              {
+                "role": "user",
+                "content": [
+                  {"type": "text", "text": prompt + retry_instruction},
+                  {
+                    "type": "image",
+                    "source": {
+                      "type": "base64",
+                      "media_type": content_type,
+                      "data": image_base64,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          ensure_ascii=False,
+        ),
+        accept="application/json",
+        contentType="application/json",
+      )
+      response_payload = json.loads(response["body"].read())
+      parsed = self._extract_bedrock_tool_input(response_payload)
+      output_text = self._extract_bedrock_output_text(response_payload)
+      stop_reason = response_payload.get("stop_reason") or response_payload.get("stopReason")
+      input_tokens, output_tokens, estimated_cost_usd = _bedrock_usage(response_payload)
+      output_length = len(json.dumps(parsed, ensure_ascii=False)) if parsed is not None else len(output_text)
+      logger.info(
+        "[aura:reference-bedrock] output:received attempt=%s chars=%s stopReason=%s mode=%s",
+        attempt,
+        output_length,
+        stop_reason,
+        "tool" if parsed is not None else "text",
+      )
+      logger.info(
+        "[aura:reference-bedrock] usage attempt=%s inputTokens=%s outputTokens=%s estimatedCostUsd=%.6f",
+        attempt,
+        input_tokens,
+        output_tokens,
+        estimated_cost_usd,
+      )
 
-    return _normalize_bedrock_payload(parsed, payload)
+      if parsed is None and output_text:
+        try:
+          parsed = self._parse_json_output(output_text)
+        except AppError:
+          if attempt == 1 and stop_reason == "max_tokens":
+            logger.warning(
+              "[aura:reference-bedrock] output:retry attempt=%s reason=max_tokens nextMaxTokens=%s",
+              attempt,
+              token_limits[1],
+            )
+            continue
+          raise
+
+      missing_fields = (
+        ["extractedMakeupLook"]
+        if parsed is None
+        else _missing_bedrock_output_fields(parsed)
+      )
+
+      if not missing_fields:
+        logger.info(
+          "[aura:reference-bedrock] analyze:success attempts=%s durationMs=%s",
+          attempt,
+          round((time.monotonic() - started_at) * 1000),
+        )
+        return _normalize_bedrock_payload(parsed, payload)
+
+      if attempt == 1 and stop_reason == "max_tokens":
+        logger.warning(
+          "[aura:reference-bedrock] output:retry attempt=%s reason=max_tokens missingFields=%s nextMaxTokens=%s",
+          attempt,
+          missing_fields,
+          token_limits[1],
+        )
+        continue
+
+      raise AppError(
+        502,
+        "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE",
+        "Bedrock reference makeup extraction returned an incomplete response.",
+        {
+          "attempt": attempt,
+          "stopReason": stop_reason,
+          "missingFields": missing_fields,
+          "inputTokens": input_tokens,
+          "outputTokens": output_tokens,
+        },
+      )
+
+    raise AssertionError("Reference Bedrock retry loop exited unexpectedly.")
 
   async def analyze(self, payload: FilterExtractionAnalyzeRequest) -> dict[str, Any]:
     image_bytes = await asyncio.to_thread(self._read_reference_image_bytes, payload)
-    return await asyncio.to_thread(self._analyze_sync, payload, image_bytes)
 
+    try:
+      processed = await asyncio.to_thread(process_image_bytes, image_bytes)
+    except MediaPostprocessError as exc:
+      raise AppError(
+        400,
+        "REFERENCE_SOURCE_IMAGE_INVALID",
+        "The reference source image is invalid or unsupported.",
+      ) from exc
+
+    logger.info(
+      "[aura:reference-bedrock] image-sanitize:success bytes=%s->%s contentType=%s exifRemoved=%s",
+      len(image_bytes),
+      len(processed.body),
+      processed.content_type,
+      processed.exif_removed,
+    )
+    return await asyncio.to_thread(
+      self._analyze_sync,
+      payload,
+      processed.body,
+      processed.content_type,
+    )
 
 async def build_reference_makeup_extraction_payload_for_request(
   payload: FilterExtractionAnalyzeRequest,
@@ -847,6 +1007,8 @@ async def build_reference_makeup_extraction_payload_for_request(
       exc.code,
       exc.details,
     )
+    if exc.code in REFERENCE_BEDROCK_FATAL_OUTPUT_CODES:
+      raise
     return (
       build_reference_makeup_extraction_payload(payload),
       "bedrock_failed_fallback",

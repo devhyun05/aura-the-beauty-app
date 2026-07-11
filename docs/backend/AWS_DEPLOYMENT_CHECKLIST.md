@@ -1,10 +1,12 @@
 # AWS Deployment Checklist
 
-This checklist is for wiring the FastAPI backend into the project architecture:
+This checklist is for wiring the FastAPI backend into the project architecture.
+For the async AI worker deployment order, use `docs/backend/ASYNC_AI_WORKER_DEPLOYMENT_RUNBOOK.md`.
 For the current implementation summary, see `docs/backend/BACKEND_STATUS.md`.
 
 ```text
-Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> RDS/S3/OpenAI API
+Mobile App -> CloudFront -> API Gateway or ALB -> ECS/FastAPI -> SQS -> ECS Worker -> RDS/S3/OpenAI/Bedrock
+S3 ObjectCreated -> Media Postprocess Lambda
 ```
 
 CloudFront must not contain API business logic. Business logic belongs in
@@ -22,6 +24,17 @@ AWS_REGION=ap-northeast-2
 AWS_USE_IAM_ROLE=true
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+
+# Bootstrap with inline until SQS and the worker service are live.
+AI_JOB_EXECUTION_MODE=inline
+SQS_AI_JOB_QUEUE_URL=
+```
+
+After the SQS queue and worker service are deployed, switch the API and worker services to:
+
+```env
+AI_JOB_EXECUTION_MODE=sqs
+SQS_AI_JOB_QUEUE_URL=https://sqs.ap-northeast-2.amazonaws.com/<account-id>/<queue-name>
 ```
 
 Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3. Secrets such as `DATABASE_URL` and `OPENAI_API_KEY` belong in Secrets Manager and are injected into the task definition.
@@ -139,6 +152,19 @@ POST /api/media/complete-upload { uploadId }
 }
 ```
 
+- S3 ObjectCreated post-processing Lambda:
+
+```text
+handler: app.lambdas.media_postprocess.lambda_handler
+event: separate s3:ObjectCreated:* notifications for uploads/capture/, uploads/makeup_feedback/, and uploads/filter-extraction/
+excluded: uploads/makeup-filters/ and every other app-managed static prefix
+permissions: s3:GetObject, s3:PutObject on the media bucket
+```
+
+- The Lambda rewrites the original object without EXIF and creates a thumbnail under `<original-dir>/thumbnails/`.
+- The handler skips `/thumbnails/` keys and objects with `aura-postprocessed=true` metadata to avoid recursive processing.
+- `media_assets.thumbnail_*` is filled by `POST /api/media/complete-upload` with a short best-effort S3 lookup for the expected thumbnail. Lambda does not connect directly to the database.
+
 ## 4. OpenAI API
 
 - Create or confirm the OpenAI project API key used by the backend.
@@ -154,8 +180,11 @@ OPENAI_IMAGE_SIZE=1024x1024
 ```
 
 - Development path can use `runImmediately=true` on `POST /api/analysis/jobs`.
-- Production can later move execution to SQS/ECS worker without changing the
+- Production can run execution through SQS/ECS worker without changing the
   mobile job status contract.
+- Keep `AI_JOB_EXECUTION_MODE=inline` until the SQS queue and ECS worker service
+  are deployed. After that, set `AI_JOB_EXECUTION_MODE=sqs` and provide
+  `SQS_AI_JOB_QUEUE_URL`.
 
 ## 5. Container Image
 
@@ -165,6 +194,13 @@ Build from repository root:
 docker build -f services/backend/Dockerfile -t aura-backend-api .
 ```
 
+The API service uses the image default command. The AI worker service reuses the same image but overrides the command:
+
+```text
+python -m app.workers.ai_job_worker
+```
+
+Do not reuse the API container `/health` check for the worker service. The worker is not an HTTP server; configure a worker-specific ECS health check or omit the API health check on that service.
 
 ECR push example:
 
@@ -210,22 +246,32 @@ ECS task requirements:
 - ECS should set `AWS_USE_IAM_ROLE=true`; local development can use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 - Logs: send stdout/stderr to CloudWatch
 
-## 6. ECS Service
+## 6. ECS Services And SQS
 
 - Create or confirm ECS cluster.
 - Create task definition for the backend image.
-- Attach task role with S3 permissions.
+- Create the FastAPI API ECS service with the default image command.
+- Create the AI Worker ECS service with command `python -m app.workers.ai_job_worker`.
+- Create an SQS AI job queue and DLQ.
+- Attach API task role permission for `sqs:SendMessage` on the AI job queue.
+- Attach worker task role permissions for `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility`, and `sqs:GetQueueAttributes`.
+- Attach shared S3/RDS/Secrets/Bedrock/OpenAI-related configuration to both API and worker services.
 - Attach execution role for pulling image and writing logs.
-- Configure service desired count.
-- Put ECS behind ALB or API Gateway integration.
+- Configure API service desired count separately from worker desired count.
+- Put only the FastAPI API service behind ALB or API Gateway integration. The worker has no public route.
 
 Record:
 
 ```text
 ECS_CLUSTER_NAME=
-ECS_SERVICE_NAME=
-ECS_TASK_DEFINITION=
-CLOUDWATCH_LOG_GROUP_NAME=
+ECS_API_SERVICE_NAME=
+ECS_WORKER_SERVICE_NAME=
+ECS_API_TASK_DEFINITION=
+ECS_WORKER_TASK_DEFINITION=
+SQS_AI_JOB_QUEUE_URL=
+SQS_AI_JOB_DLQ_URL=
+CLOUDWATCH_API_LOG_GROUP_NAME=
+CLOUDWATCH_WORKER_LOG_GROUP_NAME=
 SECRETS_MANAGER_SECRET_NAME=
 ```
 
@@ -330,6 +376,17 @@ Then test with auth:
 GET /api/users/me
 POST /api/media/presigned-upload
 POST /api/analysis/jobs
+GET /api/analysis/jobs/{jobId}
+```
+
+Async worker checks:
+
+```text
+FastAPI logs include job:queued
+Worker logs include analysis:received
+SQS visible message count returns to 0 after processing
+DLQ remains empty for a successful smoke test
+analysis job reaches completed or failed terminal status
 ```
 
 ## 14. Mobile API Switch

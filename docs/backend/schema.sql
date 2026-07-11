@@ -313,6 +313,16 @@ create table if not exists user_product_likes (
 
 comment on table user_product_likes is 'LikedProductList and product heart state.';
 
+create table if not exists auradin_search_sessions (
+  session_id text primary key,
+  state jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+comment on table auradin_search_sessions is
+  'Temporary Auradin conversation state. Product likes are stored separately in user_product_likes.';
+
 create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -925,6 +935,7 @@ create index if not exists idx_saved_makeup_styles_source_analysis on saved_make
 create index if not exists idx_saved_makeup_styles_source_filter on saved_makeup_styles (source_filter_extraction_id);
 create index if not exists idx_products_category_active on products (category, is_active);
 create index if not exists idx_user_product_likes_user_liked on user_product_likes (user_id, liked_at desc);
+create index if not exists idx_auradin_search_sessions_expires_at on auradin_search_sessions (expires_at);
 create index if not exists idx_product_recommendation_runs_user_created on product_recommendation_runs (user_id, created_at desc);
 create index if not exists idx_product_recommendation_runs_source_analysis on product_recommendation_runs (source_analysis_report_id);
 create index if not exists idx_ar_filters_category_public on ar_filters (category, is_public);

@@ -418,6 +418,16 @@ POST_SCHEMA_MIGRATIONS = {
       on community_threads using gin (body gin_trgm_ops)
       where deleted_at is null and status = 'active';
   """,
+  "schema.sql:auradin-sessions-v1": """
+    create table if not exists auradin_search_sessions (
+      session_id text primary key,
+      state jsonb not null,
+      expires_at timestamptz not null,
+      updated_at timestamptz not null
+    );
+    create index if not exists idx_auradin_search_sessions_expires_at
+      on auradin_search_sessions (expires_at);
+  """,
   "schema.sql:account-deletion-v1": """
     create table if not exists account_deletion_tombstones (
       subject_hash text primary key,

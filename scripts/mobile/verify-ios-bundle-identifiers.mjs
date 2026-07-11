@@ -11,7 +11,7 @@ const xcodeProjectPath = path.join(
 );
 
 const productionBundleId = 'com.aura.mobile';
-const developmentBundleId = 'com.aura.dev.mobile';
+const developmentBundleId = 'com.aiarmakeupguides.mobile';
 
 const [appJsonSource, xcodeProject] = await Promise.all([
   readFile(appJsonPath, 'utf8'),
@@ -21,9 +21,9 @@ const [appJsonSource, xcodeProject] = await Promise.all([
 const appConfig = JSON.parse(appJsonSource);
 const expoBundleId = appConfig?.expo?.ios?.bundleIdentifier;
 
-if (expoBundleId !== productionBundleId) {
+if (expoBundleId !== developmentBundleId) {
   throw new Error(
-    `Expo production bundle identifier must be ${productionBundleId}; received ${expoBundleId ?? 'undefined'}.`,
+    `Expo development bundle identifier must be ${developmentBundleId}; received ${expoBundleId ?? 'undefined'}.`,
   );
 }
 

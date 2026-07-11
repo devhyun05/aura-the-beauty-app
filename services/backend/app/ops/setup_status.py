@@ -20,6 +20,8 @@ PROFILE_ITEMS = {
     "openAIApiKey",
     "openAIAnalysisModelId",
     "openAIImageModelId",
+    "aiJobExecutionMode",
+    "sqsAiJobQueueUrl",
     "awsCredentialsOrRole",
   ),
   "all": (
@@ -33,6 +35,8 @@ PROFILE_ITEMS = {
     "openAIApiKey",
     "openAIAnalysisModelId",
     "openAIImageModelId",
+    "aiJobExecutionMode",
+    "sqsAiJobQueueUrl",
     "awsCredentialsOrRole",
   ),
 }

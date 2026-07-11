@@ -1,16 +1,18 @@
+import asyncio
 import json
 import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from app.core.errors import AppError
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
-from app.db.session import Database, require_database
+from app.db.session import Database, database, require_database
 from app.schemas.analysis import FeedbackConferenceMessagesCreate, FeedbackJobCreate
+from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.makeup_feedback_analysis import (
   MODEL_VERSION,
   build_makeup_feedback_result_for_request,
@@ -114,20 +116,170 @@ async def resolve_feedback_request_payload(
   return request_payload
 
 
+async def mark_feedback_failed(
+  db: Database,
+  report_id: UUID,
+  request_payload: dict[str, Any],
+  message: str,
+  details: dict[str, Any] | None = None,
+) -> None:
+  await db.execute(
+    """
+    update makeup_feedback_reports
+    set status = 'failed',
+        completed_at = now(),
+        feedback_payload = $2::jsonb
+    where id = $1
+    """,
+    report_id,
+    json.dumps(
+      {
+        "request": request_payload,
+        "error": {"message": message, "details": details or {}},
+      },
+      ensure_ascii=False,
+    ),
+  )
+
+
+async def run_feedback_job_background(
+  report_id: UUID,
+  request_payload: dict[str, Any],
+  settings: Settings,
+  *,
+  db: Database = database,
+) -> None:
+  logger.info("[aura:feedback-api] background:start reportId=%s", report_id)
+  await db.execute(
+    "update makeup_feedback_reports set status = 'processing' where id = $1",
+    report_id,
+  )
+
+  try:
+    result, analysis_status, analysis_error = await build_makeup_feedback_result_for_request(
+      request_payload,
+      settings,
+    )
+  except AppError as exc:
+    logger.warning(
+      "[aura:feedback-api] background:app-error reportId=%s code=%s details=%s",
+      report_id,
+      exc.code,
+      exc.details,
+    )
+    await mark_feedback_failed(db, report_id, request_payload, exc.message, exc.details)
+    return
+  except Exception as exc:
+    message = "Makeup feedback analysis failed."
+    details = {"reason": exc.__class__.__name__}
+    logger.exception("[aura:feedback-api] background:failed reportId=%s", report_id)
+    await mark_feedback_failed(db, report_id, request_payload, message, details)
+    return
+
+  score = result.get("score") if isinstance(result.get("score"), int) else None
+  completed_payload = {
+    "request": request_payload,
+    "result": result,
+    "analysisStatus": analysis_status,
+    "analysisError": analysis_error,
+  }
+  completed_report = await db.fetchrow(
+    """
+    update makeup_feedback_reports
+    set status = 'completed',
+        score = $2,
+        model_version = $3,
+        completed_at = now(),
+        feedback_payload = $4::jsonb
+    where id = $1
+    returning *
+    """,
+    report_id,
+    score,
+    result.get("modelVersion") or MODEL_VERSION,
+    json.dumps(completed_payload, ensure_ascii=False),
+  )
+
+  if completed_report is None:
+    logger.warning("[aura:feedback-api] background:missing-report reportId=%s", report_id)
+    return
+
+  logger.info(
+    "[aura:feedback-api] background:completed reportId=%s analysisStatus=%s score=%s",
+    report_id,
+    analysis_status,
+    score,
+  )
+
+
+async def dispatch_feedback_job(
+  db: Database,
+  background_tasks: BackgroundTasks,
+  report_id: UUID,
+  user_id: UUID,
+  request_payload: dict[str, Any],
+  settings: Settings,
+) -> None:
+  execution_mode = settings.ai_job_execution_mode_normalized
+
+  if execution_mode == "inline":
+    background_tasks.add_task(
+      run_feedback_job_background,
+      report_id,
+      request_payload,
+      settings,
+    )
+    return
+
+  if execution_mode != "sqs":
+    raise AppError(
+      500,
+      "AI_JOB_EXECUTION_MODE_INVALID",
+      "AI_JOB_EXECUTION_MODE must be either inline or sqs.",
+      {"executionMode": execution_mode},
+    )
+
+  publisher = AIJobQueuePublisher(settings)
+
+  try:
+    result = await asyncio.to_thread(publisher.publish_feedback_job, report_id, user_id)
+  except AppError as exc:
+    await mark_feedback_failed(db, report_id, request_payload, exc.message, exc.details)
+    raise
+
+  logger.info(
+    "[aura:feedback-api] job:queued reportId=%s messageId=%s",
+    report_id,
+    result.get("messageId"),
+  )
+
+
 @router.post("/jobs")
 async def create_feedback_job(
   payload: FeedbackJobCreate,
+  background_tasks: BackgroundTasks,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  execution_mode = settings.ai_job_execution_mode_normalized
+
+  if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
+    raise AppError(
+      500,
+      "AI_JOB_EXECUTION_MODE_INVALID",
+      "AI_JOB_EXECUTION_MODE must be either inline or sqs.",
+      {"executionMode": execution_mode},
+    )
+
   request_payload = await resolve_feedback_request_payload(db, user, payload, settings)
   logger.info(
-    "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s",
+    "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s executionMode=%s",
     auth.subject,
     payload.run_immediately,
     payload.source,
+    execution_mode,
   )
   report = await db.fetchrow(
     """
@@ -151,50 +303,17 @@ async def create_feedback_job(
     json.dumps(build_feedback_payload(payload, request_payload), ensure_ascii=False),
   )
 
-  if not payload.run_immediately:
-    return success({"job": normalize_feedback_report_row(report)})
+  if payload.run_immediately:
+    await dispatch_feedback_job(
+      db,
+      background_tasks,
+      report["id"],
+      user["id"],
+      request_payload,
+      settings,
+    )
 
-  await db.execute(
-    "update makeup_feedback_reports set status = 'processing' where id = $1",
-    report["id"],
-  )
-
-  result, analysis_status, analysis_error = await build_makeup_feedback_result_for_request(
-    request_payload,
-    settings,
-  )
-  score = result.get("score") if isinstance(result.get("score"), int) else None
-  completed_payload = {
-    "request": request_payload,
-    "result": result,
-    "analysisStatus": analysis_status,
-    "analysisError": analysis_error,
-  }
-  completed_report = await db.fetchrow(
-    """
-    update makeup_feedback_reports
-    set status = 'completed',
-        score = $2,
-        model_version = $3,
-        completed_at = now(),
-        feedback_payload = $4::jsonb
-    where id = $1
-    returning *
-    """,
-    report["id"],
-    score,
-    result.get("modelVersion") or MODEL_VERSION,
-    json.dumps(completed_payload, ensure_ascii=False),
-  )
-
-  logger.info(
-    "[aura:feedback-api] job:completed reportId=%s analysisStatus=%s score=%s",
-    report["id"],
-    analysis_status,
-    score,
-  )
-
-  return success({"job": normalize_feedback_report_row(completed_report)})
+  return success({"job": normalize_feedback_report_row(report)})
 
 
 @router.post("/conference-messages")

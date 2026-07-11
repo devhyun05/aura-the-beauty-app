@@ -25,13 +25,10 @@ def build_auth_context() -> AuthContext:
 
 class DeletedIdentityDatabase:
   async def fetchrow(self, query: str, *args):
-    if "from users" in query:
-      return None
-
-    if "from account_deletion_tombstones" in query:
-      return {"subject_hash": args[0]}
-
-    raise AssertionError(f"Unexpected query: {query}")
+    assert "insert into users" in query
+    assert "from account_deletion_tombstones" in query
+    assert args[-1] == hash_auth_subject("google", "cognito-user-subject")
+    return None
 
 
 def test_auth_subject_hash_is_stable_and_does_not_store_raw_identity() -> None:
