@@ -1402,3 +1402,25 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   (훼손 8/8·usable 0). 데이터 파이프라인 설계는 딥리서치 결론 승계(역방향 페어,
   법무 리뷰 blocking). ② 입구 게이트 아키텍처 재설계는 fine-tune과 병행 가능한
   독립 트랙. ③ 다음 체크포인트는 fine-tune 착지 후 신규 재료로.
+
+### LaMa 얼굴 fine-tune 트랙 착수 (2026-07-12, 사용자 지시 "재학습을 시작한다")
+
+- **관문 검증(스파이크 전제) 통과**: traced big-lama.pt를 jit.freeze 없이 로드하면
+  **533/533 파라미터 텐서에 그래디언트가 흐르고** AdamW 스텝에서 loss 감소 —
+  advimman/lama 학습 리포 이식 없이 traced 가중치 직접 fine-tune 가능.
+  M1 CPU 256px b1 ~3.4s/step(1,000스텝≈1시간), MPS forward OK(FFT 동작).
+- **설계** (`train/finetune_lama.py` docstring에 동결): 추론과 동일 전처리
+  (detect_face→build_lower_face_crop)로 학습 크롭 생성, **무수염 얼굴**에 수염
+  모양 구멍(인중 밴드+턱 패치+볼 밴드, 랜덤화) → 원본 피부가 타깃. 구멍은 대체로
+  입술 폴리곤을 비켜 감(85%) — vermilion에서 멈추는 법을 학습(cp7 인간 판정
+  "턱·입 변형"의 직접 처방). 콧구멍은 절대 구멍에 불포함(가드 분포와 일치).
+  loss = hole L1 + 0.5·grad L1 + 0.1·context L1. seed 고정.
+- **데이터**: 커먼즈 CC 무수염 정면 남성 수집(라이선스·저작자 per-image manifest)
+  + **CLIPSeg 수염증거 자동 스크리닝**(heat>0.35 비율 ≤6%만 채택 — 수염 있는
+  타깃으로 학습하면 수염을 되그리는 법을 배우므로 차단).
+- **평가** (`train/eval_finetune.py`): 동일 (사진, 마스크)에 base vs fine-tune
+  채움 — dev 강등된 **cp7 인간확인 실패 사례**(medium_cp7_09 등: 턱·입 변형 8/8)
+  + dev pic3. 지표 texRatio(왁스)·dL50(과명도)·dAb50(색이탈) + 육안 시트.
+- **비출시 계약 명시**: 스파이크 가중치는 mechanism evidence 전용. base 가중치
+  라이선스 불명 + 학습 사진 CC 의무 → **상용 전 법무 리뷰 blocking** (기존
+  기록 승계, run_manifest에 shippable:false 각인).
