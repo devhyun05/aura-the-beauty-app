@@ -790,11 +790,23 @@ export function CameraFaceCaptureScreen({
                 faceWidthRatio: nativeEvent.mediaPipe.faceWidthRatio,
                 pitchDeg: nativeEvent.mediaPipe.pitchDeg,
                 poseSource: nativeEvent.mediaPipe.poseSource,
+                projectionEyeTilt: nativeEvent.mediaPipe.projectionEyeTilt ?? null,
                 rollDeg: nativeEvent.mediaPipe.rollDeg,
                 status: nativeEvent.mediaPipe.status,
                 yawDeg: nativeEvent.mediaPipe.yawDeg,
               }
             : null,
+          // 좌표 프레임 자가판정 진단 — 스크린샷 한 장으로 규약 판정/투영
+          // 건전성/중앙 오프셋을 원격 판독하기 위한 필드 (fail-safe 원칙).
+          frameGeometry: {
+            eyeAxis: nativeEvent.eyeAxis ?? null,
+            eyeAxisRatio: nativeEvent.eyeAxisRatio ?? null,
+            frameRotation: nativeEvent.frameRotation ?? null,
+            frameRotationDetected: nativeEvent.frameRotationDetected ?? null,
+            frameRotationLocked: nativeEvent.frameRotationLocked ?? null,
+            imageHeight: nativeEvent.imageHeight ?? null,
+            imageWidth: nativeEvent.imageWidth ?? null,
+          },
           screenInsideGuide: nextScreenInsideGuide,
           sequence: nativeEvent.sequence,
           status: nativeEvent.status,
