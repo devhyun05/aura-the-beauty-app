@@ -1,0 +1,175 @@
+{
+  "protocol": "docs/beard-simulation/CHECKPOINT7_PROTOCOL.md",
+  "sealedAt": "2026-07-12T16:21:20",
+  "sources": {
+    "medium_cp7_01": {
+      "file": "medium_cp7_01.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 11094521,
+      "sha256": "2ae1ce6fc077dc8c66f6bd06b9ac991f88947b26145b32960c216e8f579ecee6"
+    },
+    "medium_cp7_02": {
+      "file": "medium_cp7_02.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 753119,
+      "sha256": "01aead27a3dbd47659a90863afe805337074291a3374c523459b5502e9472f60"
+    },
+    "medium_cp7_03": {
+      "file": "medium_cp7_03.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 94394,
+      "sha256": "b86ba6deedf416d1dd9c259923302a93ce55380ac52c070732fd4b2afea01510"
+    },
+    "medium_cp7_04": {
+      "file": "medium_cp7_04.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 235949,
+      "sha256": "db18a2826e38e29748eb5551711264d6a1785061332b190b4b40e8e916db6f39"
+    },
+    "medium_cp7_05": {
+      "file": "medium_cp7_05.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 588408,
+      "sha256": "72a0e76c461b062170da3839585e55abf672b02835b49dc8abf0d2cbe151b60a"
+    },
+    "medium_cp7_06": {
+      "file": "medium_cp7_06.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 433972,
+      "sha256": "e422066a71618e6d6b0e4363fa61c7b43a6cb81c480cd64f957e2e0848920e7b"
+    },
+    "medium_cp7_07": {
+      "file": "medium_cp7_07.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 94378,
+      "sha256": "273218362ec68ecb59831677b679e441598fcd2eb1ac75457705c077d90e0d08"
+    },
+    "medium_cp7_08": {
+      "file": "medium_cp7_08.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 2266629,
+      "sha256": "4ccd8593af78702e9323caea6892c1059bd4264adbaa7a604d18374c9f9eeaa0"
+    },
+    "medium_cp7_09": {
+      "file": "medium_cp7_09.jpg",
+      "layer": "medium",
+      "kind": "webset",
+      "bytes": 4276373,
+      "sha256": "ed81452bb0db097451fc0e59118d6309539e397e90b54f1014eba9e78569ccc3"
+    },
+    "none_cp7_01": {
+      "file": "none_cp7_01.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 3842394,
+      "sha256": "e83d3e59057c68e813d62e572450084ca6d6bc3ed2b9becc99ea5319088e2796"
+    },
+    "none_cp7_02": {
+      "file": "none_cp7_02.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 13704108,
+      "sha256": "fdafdafba61efd31204fae8f4e3cd488592eceb713583b95d9ae08ffe7a71665"
+    },
+    "none_cp7_03": {
+      "file": "none_cp7_03.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 1604864,
+      "sha256": "fc79342c54298586513c4ebb5cb82193bd3f0b326451fcc6f72159877483b0fa"
+    },
+    "none_cp7_04": {
+      "file": "none_cp7_04.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 9362910,
+      "sha256": "e46278912fe65b1f5cdaac43ff76c4249219efef3ca98ee604ad80583b5a48c9"
+    },
+    "none_cp7_05": {
+      "file": "none_cp7_05.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 868706,
+      "sha256": "a851b49589513876d8d7a70bfd75c9f1acd2b391931d46fe5737209987d7fd12"
+    },
+    "none_cp7_06": {
+      "file": "none_cp7_06.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 1043079,
+      "sha256": "05400c88f5cbfee8b5bd97b1e0989679ed24ba820ad4ded9fa8a2720cc4b6fd3"
+    },
+    "none_cp7_07": {
+      "file": "none_cp7_07.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 1642366,
+      "sha256": "5a3d71f7a75b94a766451370ada03d826901429f65e4012200043250bfe0a678"
+    },
+    "none_cp7_08": {
+      "file": "none_cp7_08.jpg",
+      "layer": "negative",
+      "kind": "webset",
+      "bytes": 1931686,
+      "sha256": "eb1284324c54779619f58a4879ae519867043e34b09522e08edba6b0029f7c8d"
+    },
+    "stubble_cp7_01": {
+      "file": "stubble_cp7_01.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 2378098,
+      "sha256": "27e23e023776d14eca55979f3718e19d503383b3e449cfd6669ca851732660c9"
+    },
+    "stubble_cp7_02": {
+      "file": "stubble_cp7_02.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 243314,
+      "sha256": "691453c9755c685ea4bbe4744ce3c1ed987b0b1a69a8518b290950f78e467236"
+    },
+    "stubble_cp7_03": {
+      "file": "stubble_cp7_03.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 626952,
+      "sha256": "3520c7ea1bd6392bb6d04a71a8f68021e21cbfa21f3b35be925939dfaa85147a"
+    },
+    "stubble_cp7_04": {
+      "file": "stubble_cp7_04.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1378518,
+      "sha256": "844b6cfd66bc7798670a52a3d8747ddc1120993ffeff7c80ca1e95264eab76ac"
+    },
+    "stubble_cp7_05": {
+      "file": "stubble_cp7_05.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 6009568,
+      "sha256": "6244ab8c7753a132c784fbeed42084f78ba829084f80df3175c4c5b9d15ada83"
+    },
+    "stubble_cp7_06": {
+      "file": "stubble_cp7_06.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1688023,
+      "sha256": "2997d15a1edd7df48425bb876de82f946d351c89565a4360f6f33bf824d349f4"
+    },
+    "stubble_cp7_07": {
+      "file": "stubble_cp7_07.jpg",
+      "layer": "stubble",
+      "kind": "webset",
+      "bytes": 1346128,
+      "sha256": "c262b6a6704126ef89c5a036494004d2a1ec4946df6253034d731a28b1177ec9"
+    }
+  },
+  "variants": "pending — §6-3 build only"
+}
