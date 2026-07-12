@@ -146,7 +146,9 @@ static inline CGFloat AURARealtimeScreenEyeLineTilt(CGPoint leftEyeScreen,
 {
   const CGFloat dx = fabs(rightEyeScreen.x - leftEyeScreen.x);
   const CGFloat dy = fabs(rightEyeScreen.y - leftEyeScreen.y);
-  return dy / MAX(dx, (CGFloat)1e-6);
+  // MAX 매크로 대신 fmax — 인자 이중평가 없이 CGFloat 그대로 처리(자매 파일
+  // AURARealtimeFaceCaptureView.m 의 fmax 사용과 일관, gemini 리뷰).
+  return dy / fmax(dx, (CGFloat)1e-6);
 }
 
 #endif  // AURARealtimeGeometry_h
