@@ -1,23 +1,44 @@
 name: Protected Paths Guard
 
-# 보호 경로의 파일을 한 PR 이 대량 삭제(도려내기)하면 실패시킨다.
+# 보호 경로/네이티브 무결성 가드 — 두 개의 독립 잡으로 구성한다.
+#
+#   mass-deletion    보호 파일 대량 삭제(도려내기) 차단. `scope-approved` 라벨로만 skip.
+#   native-integrity CocoaPods·분석기 무결성 3종. 잡 레벨 skip 없음 — 규칙별 라벨 정책이 다름.
+#
+# 잡을 분리한 이유: 이전 구조는 두 검사가 한 잡에 있어 `scope-approved` 라벨
+# 하나가 모든 가드를 동시에 무력화했다. 체크섬 정합처럼 "승인"의 대상이 아닌
+# 불변식까지 꺼지는 결함이라 잡을 나누고 라벨을 규칙별로 세분화했다.
+#
 # 도입 배경: PR #224(020cb33)가 아우라딘 GlassBase 371→41줄, OrbGLCanvas
-# 283줄 삭제(빈 스텁화) 등 다른 오너의 동작 코드를 도려낸 채 머지돼 dev 의
-# UI/3D 가 깨졌다. 이 가드는 "보호 파일에서 삭제 100줄 초과 + 삭제가 추가의
-# 3배 초과"인 파일이 있으면 실패한다. 의도된 대규모 정리는 PR 에
-# `scope-approved` 라벨을 달면 통과한다(오너 승인 전제).
+# 283줄 삭제(빈 스텁화) + Podfile 의 pod 한 줄 삭제로 퍼스널컬러·얼굴비율
+# 분석기를 동시에 무력화한 채 머지돼 dev 가 깨졌다. CI 는 ObjC 를 컴파일하지
+# 않으므로 아래 불변식들이 유일한 자동 방어선이다.
+#
+# 라벨 정책 요약 (required check 지정 전제):
+#   scope-approved  → mass-deletion 잡 전체 skip (의도된 대규모 정리, 오너 승인 전제)
+#   pods-approved   → pod 선언 삭제 규칙만 경고로 강등 (의존성 제거 승인)
+#   native-approved → 분석기 #if 금지 규칙만 경고로 강등 (비상 탈출구)
+#   (Podfile↔lock 체크섬 정합은 어떤 라벨로도 끌 수 없다 — 해소법이 기계적이고
+#    desync 가 정당한 경우가 없기 때문)
 
 on:
   pull_request:
     branches:
       - dev
       - main
+    # labeled/unlabeled 포함: 라벨을 달고 떼는 즉시 가드가 재평가된다.
+    # (이전 구조는 기본 types 라 라벨을 달아도 재실행이 안 돼 수동 re-run 이 필요했다)
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
 
 jobs:
-  guard:
+  # ── 보호 경로 대량 삭제 가드 ──────────────────────────────────────────
+  # "보호 파일에서 삭제 100줄 초과 + 삭제가 추가의 3배 초과"인 파일이 있으면
+  # 실패한다. 의도된 대규모 정리는 PR 에 `scope-approved` 라벨을 달면 잡 자체가
+  # skip 된다(GitHub 는 skipped 를 통과로 처리하므로 required check 지정 안전).
+  mass-deletion:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'scope-approved') }}
@@ -68,3 +89,106 @@ jobs:
             exit 1
           fi
           echo "보호 경로 대량 삭제 없음 ✓"
+
+  # ── 네이티브 무결성 가드 3종 ──────────────────────────────────────────
+  # 대량삭제 가드는 TS 스텁화(아우라딘)를 잡지만, 020cb33 의 다른 절반
+  # ─ CocoaPods pod 제거로 iOS 분석기를 무력화한 것 ─ 은 못 잡는다.
+  # CI 는 ObjC/Podfile 을 컴파일하지 않으므로 아래 3개 불변식으로 대신 막는다.
+  # 셋 다 사고 커밋(020cb33 / 3d5dce0)에 소급 적용해 검출을 확인했다.
+  # 잡 레벨 skip 없음 — 규칙별로 라벨 정책이 다르다(파일 상단 주석 참조).
+  native-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PODS_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'pods-approved') }}
+      NATIVE_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'native-approved') }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --quiet
+
+      # (1) Podfile ↔ Podfile.lock 정합. 라벨로 끌 수 없다.
+      # CocoaPods 는 lock 에 Podfile 의 sha1 을 PODFILE CHECKSUM 으로 남긴다.
+      # 손으로 lock 을 고치거나 pod install 없이 Podfile 을 바꾸면 어긋난다.
+      # (3d5dce0 가 Podfile 근거 없이 lock 에만 MediaPipe 를 되살린 사례,
+      #  b74f609 가 머지 해결로 lock 체크섬만 퇴행시킨 사례 검출)
+      - name: Podfile lockfile checksum integrity
+        run: |
+          set -euo pipefail
+          PODFILE="apps/mobile/ios/Podfile"
+          LOCKFILE="apps/mobile/ios/Podfile.lock"
+
+          if [[ -f "$PODFILE" && -f "$LOCKFILE" ]]; then
+            lock_sum=$(grep '^PODFILE CHECKSUM:' "$LOCKFILE" | awk '{print $3}' || true)
+            real_sum=$(sha1sum "$PODFILE" | awk '{print $1}')
+            if [[ -n "$lock_sum" && "$lock_sum" != "$real_sum" ]]; then
+              echo "::error file=${LOCKFILE}::Podfile.lock 이 Podfile 과 불일치합니다 (lock=${lock_sum} 실제=${real_sum}). 'cd apps/mobile && npm run pods' 로 재생성하세요 — lock 수동 편집 금지. 이 규칙은 라벨로 끌 수 없습니다."
+              exit 1
+            fi
+          fi
+          echo "Podfile ↔ Podfile.lock 정합 ✓"
+
+      # (2) Podfile 에서 pod 선언 삭제 금지.
+      # 020cb33 의 `- pod 'MediaPipeTasksVision', '0.10.35'` 한 줄이
+      # 퍼스널컬러·얼굴비율 분석기를 동시에 죽였다. 의존성 제거는 그 기능
+      # 오너의 승인을 거쳐 `pods-approved` 라벨로만 통과한다.
+      - name: Podfile pod declaration removal guard
+        run: |
+          set -euo pipefail
+          PODFILE="apps/mobile/ios/Podfile"
+          BASE="origin/${{ github.base_ref }}"
+
+          removed_pods=$(git diff "${BASE}...HEAD" -- "$PODFILE" \
+            | grep -E "^-[[:space:]]*pod ['\"]" || true)
+          if [[ -n "$removed_pods" ]]; then
+            if [[ "$PODS_APPROVED" == "true" ]]; then
+              echo "::warning file=${PODFILE}::pod 선언 삭제가 'pods-approved' 라벨로 승인됐습니다:"
+              echo "$removed_pods"
+            else
+              echo "::error file=${PODFILE}::Podfile 에서 pod 선언이 삭제됐습니다. 해당 pod 를 쓰는 네이티브 기능이 조용히 죽을 수 있습니다(020cb33 재현). 오너 승인 후 'pods-approved' 라벨을 다세요:"
+              echo "$removed_pods"
+              exit 1
+            fi
+          fi
+          echo "Podfile pod 선언 삭제 없음 ✓"
+
+      # (3) 정지영상 분석기에 조건부 컴파일(#if) 금지.
+      # 020cb33 은 분석기를 `#if !AURA_PC_HAS_MEDIAPIPE → reject` 로 감싸
+      # 컴파일은 되지만 런타임에 항상 실패하는 껍데기로 만들었다.
+      # 두 파일은 현재 #if 가 0 개이며, 랜드마크는 Unity homuler 가 공급하므로
+      # 조건부 컴파일이 필요할 이유가 없다.
+      # 스코프는 반드시 이 두 파일로 한정할 것 — AURARealtimeFaceCaptureView.m 은
+      # `#if AURA_HAS_MEDIAPIPE` 를 정당하게 사용 중이므로 확장하면 오탐이 난다.
+      - name: Still-image analyzer conditional-compile guard
+        run: |
+          set -euo pipefail
+          ANALYZERS=(
+            "apps/mobile/ios/AURA/AURAPersonalColorAnalyzer.m"
+            "apps/mobile/ios/AURA/AURAFaceRatioAnalyzer.m"
+          )
+
+          violations=0
+          for f in "${ANALYZERS[@]}"; do
+            [[ -f "$f" ]] || continue
+            n=$(grep -c '^#if' "$f" || true)
+            if (( n > 0 )); then
+              if [[ "$NATIVE_APPROVED" == "true" ]]; then
+                echo "::warning file=${f}::분석기의 조건부 컴파일(#if) ${n}개가 'native-approved' 라벨로 승인됐습니다."
+              else
+                echo "::error file=${f}::분석기에 조건부 컴파일(#if) ${n}개가 추가됐습니다. 기능이 런타임에 조용히 무력화될 수 있습니다(020cb33 재현). 정말 필요하면 오너 승인 후 'native-approved' 라벨을 다세요."
+                violations=$((violations + 1))
+              fi
+            fi
+          done
+
+          if (( violations > 0 )); then
+            echo ""
+            echo "분석기 무결성 위반 ${violations}건. CI 는 ObjC 를 컴파일하지 않으므로 이 불변식이 유일한 자동 방어선입니다."
+            exit 1
+          fi
+          echo "정지영상 분석기 조건부 컴파일 없음 ✓"
