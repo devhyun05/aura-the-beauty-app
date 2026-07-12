@@ -1,0 +1,22 @@
+// AURADIN design-system components — barrel.
+export { AuradinGround } from './AuradinGround';
+export { Badge } from './Badge';
+export { Chip } from './Chip';
+export { Composer } from './Composer';
+export { CTAButton } from './CTAButton';
+export { GlassBase } from './GlassBase';
+export { GlassCard } from './GlassCard';
+export { GlassSheet } from './GlassSheet';
+export { HeartButton } from './HeartButton';
+export { LoaderDots } from './LoaderDots';
+export { PaletteSwatches } from './PaletteSwatches';
+export { PersistentOrb, ORB_BY_PHASE } from './PersistentOrb';
+export { OrbGLCanvas } from './OrbGLCanvas';
+export { ORB_ANIM, NOISE, BLOB_VERT, BLOB_FRAG, CAUSTIC_VERT, CAUSTIC_FRAG } from './orbShaders';
+export { ProductThumb } from './ProductThumb';
+export { StatusBarRow } from './StatusBarRow';
+export { SwatchTile } from './SwatchTile';
+export { ThinkingSteps } from './ThinkingSteps';
+export { Toast } from './Toast';
+export { Wordmark } from './Wordmark';
+export { useEnterTransition, usePressScale, useReducedMotion } from './motion';

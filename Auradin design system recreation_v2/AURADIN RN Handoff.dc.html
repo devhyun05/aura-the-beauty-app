@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"><style>
+body{margin:0}
+</style></helmet>
+<div style="display:flex; height:100vh; overflow:hidden; background:linear-gradient(178deg,#cbe2fa 0%,#b4d2f4 26%,#d5daf2 50%,#efd1e5 78%,#eed2ea 100%); font-family:'Pretendard Variable',Pretendard,-apple-system,sans-serif; color:#2b3a52">
+  <aside style="width:302px; flex:none; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,0.55); background:linear-gradient(165deg,rgba(255,255,255,0.44),rgba(255,255,255,0.22) 48%,rgba(255,255,255,0.34)); backdrop-filter:blur(26px) saturate(1.7)">
+    <div style="padding:20px 18px 14px; border-bottom:1px solid rgba(255,255,255,0.45)">
+      <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace; font-weight:700; font-size:13px; letter-spacing:0.32em; color:#2b3a52">AURADIN</div>
+      <div style="margin-top:6px; font-family:'SF Mono',ui-monospace,Menlo,monospace; font-size:9.5px; letter-spacing:0.16em; color:rgba(43,58,82,0.62)">RN PORT · V3 · 33 FILES</div>
+      <div style="margin-top:10px; font-size:11.5px; line-height:1.6; color:rgba(43,58,82,0.62)">RN 0.85 · Expo 56 · TS strict<br>expo-blur · expo-linear-gradient · react-native-svg · safe-area-context · expo-gl · three@0.128</div>
+      <div style="margin-top:8px; font-size:10.5px; line-height:1.55; color:rgba(43,58,82,0.62)">v3: entry 클린 그라디언트 · 전 화면 밀크 글라스 · GL 비눗방울 오브(orbShaders + OrbGLCanvas, SVG 폴백)</div>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:12px 10px 20px">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+        <div style="margin-top:14px">
+          <div style="padding:0 8px 6px; font-family:'SF Mono',ui-monospace,Menlo,monospace; font-size:9.5px; letter-spacing:0.16em; text-transform:uppercase; color:rgba(43,58,82,0.42)">{{ g.label }}</div>
+          <sc-for list="{{ g.files }}" as="f" hint-placeholder-count="5">
+            <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.name }}</button>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </aside>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.5); background:linear-gradient(165deg,rgba(255,255,255,0.5),rgba(255,255,255,0.28)); backdrop-filter:blur(12px) saturate(1.4)">
+      <div style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:'SF Mono',ui-monospace,Menlo,monospace; font-size:11.5px; letter-spacing:0.06em; color:#2b3a52">{{ selPath }}</div>
+      <div style="display:flex; align-items:center; gap:10px; flex:none">
+        <span style="font-family:'SF Mono',ui-monospace,Menlo,monospace; font-size:9.5px; letter-spacing:0.14em; color:rgba(43,58,82,0.42)">{{ selMeta }}</span>
+        <button onClick="{{ copySel }}" style="border:0; cursor:pointer; border-radius:999px; padding:8px 16px; font-family:'SF Mono',ui-monospace,Menlo,monospace; font-size:10px; letter-spacing:0.1em; color:#fff; background:linear-gradient(150deg,#d4569b 0%,#c2417f 38%,#9a41b8 68%,#7b45d6 100%); box-shadow:0 6px 16px rgba(155,68,190,0.42), inset 0 1px 1px rgba(255,255,255,0.65)">{{ copyLabel }}</button>
+      </div>
+    </div>
+    <pre style="flex:1; overflow:auto; margin:0; padding:20px 24px 40px; font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; line-height:1.62; color:#2b3a52; background:rgba(255,255,255,0.34); white-space:pre; tab-size:2">{{ selContent }}</pre>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: "auradin-rn/README.md", contents: {}, copied: false };
+
+  FILES = [
+    ["root", "README.md"], ["root", "types.ts"],
+    ["theme", "theme/auradinTokens.ts"],
+    ["components/ds", "components/ds/AuradinGround.tsx"],
+    ["components/ds", "components/ds/Badge.tsx"],
+    ["components/ds", "components/ds/Chip.tsx"],
+    ["components/ds", "components/ds/Composer.tsx"],
+    ["components/ds", "components/ds/CTAButton.tsx"],
+    ["components/ds", "components/ds/GlassBase.tsx"],
+    ["components/ds", "components/ds/GlassCard.tsx"],
+    ["components/ds", "components/ds/GlassSheet.tsx"],
+    ["components/ds", "components/ds/HeartButton.tsx"],
+    ["components/ds", "components/ds/LoaderDots.tsx"],
+    ["components/ds", "components/ds/PaletteSwatches.tsx"],
+    ["components/ds", "components/ds/PersistentOrb.tsx"],
+    ["components/ds", "components/ds/OrbGLCanvas.tsx"],
+    ["components/ds", "components/ds/orbShaders.ts"],
+    ["components/ds", "components/ds/ProductThumb.tsx"],
+    ["components/ds", "components/ds/StatusBarRow.tsx"],
+    ["components/ds", "components/ds/SwatchTile.tsx"],
+    ["components/ds", "components/ds/ThinkingSteps.tsx"],
+    ["components/ds", "components/ds/Toast.tsx"],
+    ["components/ds", "components/ds/Wordmark.tsx"],
+    ["components/ds", "components/ds/motion.ts"],
+    ["components/ds", "components/ds/index.ts"],
+    ["screens/views", "screens/views/HomeView.tsx"],
+    ["screens/views", "screens/views/SearchingView.tsx"],
+    ["screens/views", "screens/views/QuestionView.tsx"],
+    ["screens/views", "screens/views/ResultsView.tsx"],
+    ["screens/views", "screens/views/DetailView.tsx"],
+    ["screens/views", "screens/views/SavedView.tsx"],
+    ["screens/views", "screens/views/ErrorView.tsx"],
+    ["assets", "assets/bubble-background-desaturated.jpg"],
+  ].map(([group, rel]) => ({ group, rel, path: "auradin-rn/" + rel }));
+
+  componentDidMount() { this.load(this.state.sel); }
+
+  load(path) {
+    if (this.state.contents[path] !== undefined) return;
+    if (path.endsWith(".jpg") || path.endsWith(".jpeg")) {
+      this.setState((s) => ({ contents: { ...s.contents, [path]: "(binary image asset — pre-desaturated bubble photo for AuradinGround's entry-only photo slot)" } }));
+      return;
+    }
+    fetch(path).then((r) => r.text()).then((t) => {
+      this.setState((s) => ({ contents: { ...s.contents, [path]: t } }));
+    }).catch(() => {
+      this.setState((s) => ({ contents: { ...s.contents, [path]: "// failed to load " + path } }));
+    });
+  }
+
+  renderVals() {
+    const { sel, contents, copied } = this.state;
+    const groupsOrder = ["root", "theme", "components/ds", "screens/views", "assets"];
+    const groups = groupsOrder.map((label) => ({
+      label,
+      files: this.FILES.filter((f) => f.group === label).map((f) => {
+        const active = f.path === sel;
+        return {
+          name: f.rel.split("/").pop(),
+          pick: () => { this.setState({ sel: f.path, copied: false }); this.load(f.path); },
+          style: {
+            display: "block", width: "100%", textAlign: "left", border: 0, cursor: "pointer",
+            borderRadius: 10, padding: "7px 8px", marginTop: 1,
+            fontFamily: "'SF Mono',ui-monospace,Menlo,monospace", fontSize: 11,
+            color: active ? "#fff" : "#2b3a52",
+            background: active ? "linear-gradient(150deg,#e0489c,#c85ae0)" : "transparent",
+            boxShadow: active ? "0 4px 12px rgba(224,72,156,0.35)" : "none",
+          },
+        };
+      }),
+    }));
+    const content = contents[sel];
+    const lines = content ? content.split("\n").length : 0;
+    return {
+      groups,
+      selPath: sel,
+      selContent: content === undefined ? "loading…" : content,
+      selMeta: content === undefined ? "" : lines + " LINES",
+      copyLabel: copied ? "COPIED" : "COPY ↗",
+      copySel: () => {
+        const c = this.state.contents[this.state.sel];
+        if (c === undefined) return;
+        navigator.clipboard.writeText(c).then(() => {
+          this.setState({ copied: true });
+          setTimeout(() => this.setState({ copied: false }), 1400);
+        });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

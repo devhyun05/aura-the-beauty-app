@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>body{margin:0;background:linear-gradient(178deg,#cbe2fa 0%,#b4d2f4 26%,#d5daf2 50%,#efd1e5 78%,#eed2ea 100%);height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column}#log{position:fixed;top:4px;left:6px;font:11px monospace;color:#2b3a52;white-space:pre;z-index:9}</style></head>
+<body>
+<div id="log">loading…</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+(async () => {
+  const logEl = document.getElementById('log');
+  const say = (s) => { logEl.textContent += '\n' + s; };
+  try {
+    const src = await (await fetch('../auradin-rn/components/ds/orbShaders.ts')).text();
+    const grab = (name) => {
+      const m = src.match(new RegExp('export const ' + name + ' = /\\* glsl \\*/ `([\\s\\S]*?)`;'));
+      if (!m) throw new Error('missing ' + name);
+      return m[1];
+    };
+    const NOISE = grab('NOISE'), BLOB_VERT = grab('BLOB_VERT'), BLOB_FRAG = grab('BLOB_FRAG'),
+          CAUSTIC_VERT = grab('CAUSTIC_VERT'), CAUSTIC_FRAG = grab('CAUSTIC_FRAG');
+    say('GLSL extracted: ' + [NOISE.length, BLOB_VERT.length, BLOB_FRAG.length, CAUSTIC_VERT.length, CAUSTIC_FRAG.length].join('/'));
+
+    // mirror of ORB_ANIM (visual harness only — source of truth is orbShaders.ts)
+    const TAU = Math.PI * 2;
+    const A = { ROT: 26, TILT: 41, TILT_AMP: 0.16, BOING: 3.6, BOING_AMP: 0.05, AMP: 0.14, FREQ: 1.55, FLOW: 0.3,
+      RIM: 12, SHEEN: 7.5, CAUSTIC_OP: 0.5, CAUSTIC_Y: -1.5, CAUSTIC_SIZE: 3.6, FOV: 32, CAM: [0, 0.85, 9],
+      BUBBLES: [
+        { radius: 0.16, orbitR: 1.5, orbitPeriodS: 19, orbitTiltZ: 0.6, bobPeriodS: 5.2, bobAmp: 0.16, yOffset: 0.55, phase: 0.0, seed: 7.3, amp: 0.05, freq: 2.6 },
+        { radius: 0.1, orbitR: 1.34, orbitPeriodS: 27, orbitTiltZ: 0.55, bobPeriodS: 6.8, bobAmp: 0.2, yOffset: -0.38, phase: 3.6, seed: 2.9, amp: 0.06, freq: 3.1 },
+      ] };
+
+    const W = 430, H = 430;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * 2; canvas.height = H * 2; canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    document.body.appendChild(canvas);
+    // WebGL1 renderer — same GLSL ES 1.00 path expo-gl takes through three r128
+    const renderer = new THREE.WebGL1Renderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setClearColor(0x000000, 0);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(A.FOV, 1, 0.1, 40);
+    camera.position.set(...A.CAM); camera.lookAt(0, 0, 0);
+
+    const uni = (seed, amp, freq, ab, ar) => ({
+      uTime: { value: 0 }, uFlow: { value: A.FLOW }, uAmp: { value: amp }, uFreq: { value: freq },
+      uSeed: { value: seed }, uBoingT: { value: 0 }, uBoingAmp: { value: A.BOING_AMP },
+      uRimT: { value: 0 }, uSheenT: { value: 0 }, uGlow: { value: 0 },
+      uGlowColor: { value: new THREE.Color('#E0489C') },
+      uAlphaBase: { value: ab }, uAlphaRim: { value: ar }, uOpacity: { value: 1 } });
+
+    const causticU = { uTime: { value: 0 }, uGlow: { value: 0 }, uGlowColor: { value: new THREE.Color('#E0489C') }, uOpacity: { value: A.CAUSTIC_OP } };
+    const caustic = new THREE.Mesh(new THREE.PlaneGeometry(A.CAUSTIC_SIZE, A.CAUSTIC_SIZE),
+      new THREE.ShaderMaterial({ vertexShader: CAUSTIC_VERT, fragmentShader: NOISE + CAUSTIC_FRAG, uniforms: causticU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    caustic.rotation.x = -Math.PI / 2; caustic.position.y = A.CAUSTIC_Y; caustic.renderOrder = 0;
+    scene.add(caustic);
+
+    const blobU = uni(0, A.AMP, A.FREQ, 0.78, 0.22);
+    const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 5),
+      new THREE.ShaderMaterial({ vertexShader: NOISE + BLOB_VERT, fragmentShader: NOISE + BLOB_FRAG, uniforms: blobU, transparent: true, depthWrite: true }));
+    blob.renderOrder = 1; scene.add(blob);
+
+    const bubbleUs = [], bubbles = [];
+    A.BUBBLES.forEach((b, i) => {
+      const u = uni(b.seed, b.amp, b.freq, 0.10, 0.85); u.uBoingAmp.value = A.BOING_AMP * 0.4;
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(b.radius, 3),
+        new THREE.ShaderMaterial({ vertexShader: NOISE + BLOB_VERT, fragmentShader: NOISE + BLOB_FRAG, uniforms: u, transparent: true, depthWrite: false }));
+      m.renderOrder = 2 + i; scene.add(m); bubbleUs.push(u); bubbles.push(m);
+    });
+
+    let glowTarget = 0, glow = 0;
+    window.setGlow = (v) => { glowTarget = v; };
+    let t = 0, last = performance.now() / 1000;
+    window.jumpTo = (tt) => { t = tt; };
+    const renderScene = () => {
+      const pulse = 1 - 0.14 * (0.5 + 0.5 * Math.sin(t * TAU / 2.8));
+      const g = glow * pulse;
+      const boingT = t * TAU / A.BOING, rimT = t * TAU / A.RIM, sheenT = t * TAU / A.SHEEN;
+      [blobU, ...bubbleUs].forEach((u, i) => { u.uTime.value = t; u.uBoingT.value = boingT; u.uRimT.value = rimT; u.uSheenT.value = sheenT; u.uGlow.value = i === 0 ? g : g * 0.6; });
+      causticU.uTime.value = t; causticU.uGlow.value = g;
+      blob.rotation.y = t * TAU / A.ROT;
+      blob.rotation.x = Math.sin(t * TAU / A.TILT) * A.TILT_AMP;
+      blob.rotation.z = Math.cos(t * TAU / A.TILT * 0.8) * A.TILT_AMP * 0.6;
+      A.BUBBLES.forEach((b, i) => {
+        const oa = t * TAU / b.orbitPeriodS + b.phase;
+        bubbles[i].position.set(Math.cos(oa) * b.orbitR, b.yOffset + Math.sin(t * TAU / b.bobPeriodS + b.phase) * b.bobAmp, Math.sin(oa) * b.orbitR * b.orbitTiltZ);
+        bubbles[i].rotation.y = -t * 0.5;
+      });
+      renderer.render(scene, camera);
+    };
+    // manual capture driver (RAF is throttled in hidden iframes)
+    window.renderAt = (tt, g) => { t = tt; glow = g === undefined ? glow : g; renderScene(); };
+    const frame = () => {
+      requestAnimationFrame(frame);
+      const now = performance.now() / 1000;
+      t += Math.min(0.1, now - last); last = now;
+      glow += (glowTarget - glow) * 0.055;
+      renderScene();
+    };
+    frame();
+    // surface shader compile errors (three logs async on first render)
+    setTimeout(() => {
+      const progs = renderer.info.programs || [];
+      say('programs: ' + progs.length);
+      progs.forEach((p) => { if (p.diagnostics) say('DIAG: ' + JSON.stringify(p.diagnostics.fragmentShader && p.diagnostics.fragmentShader.log || p.diagnostics)); });
+      say('gl error: ' + renderer.getContext().getError());
+      document.title = 'ORB_OK';
+    }, 600);
+  } catch (e) { say('ERR: ' + (e && e.message)); document.title = 'ORB_ERR'; }
+})();
+</script>
+</body></html>

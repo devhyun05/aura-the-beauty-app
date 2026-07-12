@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+body{margin:0;background:#E9E7E2;}
+a{color:#6E56CF;} a:hover{color:#5942B8;}
+@keyframes bs-scan{0%,8%{transform:translateY(168px)}46%,58%{transform:translateY(256px)}96%,100%{transform:translateY(168px)}}
+@keyframes bs-shimmer{0%{background-position:-160% 0}100%{background-position:260% 0}}
+@keyframes bs-capblink{0%,100%{opacity:0.9}50%{opacity:0.4}}
+@keyframes bs-glint{0%{left:20%}100%{left:80%}}
+@keyframes bs-rot{to{transform:rotate(360deg)}}
+@keyframes bs-pulse{0%,100%{box-shadow:0 0 0 0 rgba(184,164,255,0.35)}50%{box-shadow:0 0 0 7px rgba(184,164,255,0)}}
+@keyframes bs-toast{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:36px 20px;box-sizing:border-box">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ isDark }}" hint-size="402,874">
+<div style="position:relative;width:100%;height:100%;overflow:hidden;background:#07090B;font-family:'Pretendard Variable',Pretendard,-apple-system,system-ui,sans-serif;-webkit-user-select:none;user-select:none">
+
+  <!-- ══════════ 목적 선택 (공통) ══════════ -->
+  <sc-if value="{{ sPurpose }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="목적 선택" style="position:absolute;inset:0;background:#FFFFFF;display:flex;flex-direction:column;padding-top:62px;box-sizing:border-box">
+    <div style="height:48px;display:flex;align-items:center;justify-content:center">
+      <span style="font-size:17px;font-weight:650;color:#111318;letter-spacing:-0.2px">수염 제거</span>
+    </div>
+    <div style="padding:14px 24px 0;flex:1">
+      <h1 style="margin:12px 0 0;font-size:24px;font-weight:750;line-height:1.35;color:#111318;letter-spacing:-0.4px">어떤 방식으로<br>확인할까요?</h1>
+      <p style="margin:12px 0 0;font-size:14.5px;line-height:1.6;color:#767C86;text-wrap:pretty">수염을 분석해 변화를 알아보거나, 사진 속 수염 자국만 자연스럽게 정리할 수 있어요.</p>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:30px">
+        <button onClick="{{ pickAnalysis }}" style="display:flex;align-items:center;gap:16px;padding:20px 18px;border:1.5px solid #E7E9EC;border-radius:20px;background:#FFFFFF;text-align:left;cursor:pointer;font-family:inherit" style-hover="background:#FAFAFB;border-color:#D8DBE0" style-active="background:#F4F5F6">
+          <span style="width:46px;height:46px;border-radius:50%;background:#F3F4F6;display:flex;align-items:center;justify-content:center;flex:none">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111318" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V6a2 2 0 0 1 2-2h2"></path><path d="M16 4h2a2 2 0 0 1 2 2v2"></path><path d="M20 16v2a2 2 0 0 1-2 2h-2"></path><path d="M8 20H6a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg>
+          </span>
+          <span style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:17px;font-weight:680;color:#111318">수염 분석</span>
+            <span style="font-size:13.5px;line-height:1.5;color:#767C86;text-wrap:pretty">현재 수염 패턴과 줄어든 모습을 함께 확인해요.</span>
+            <span style="font-size:12px;color:#9AA0AA;margin-top:3px">설문 포함 · 상세 보고서 제공</span>
+          </span>
+          <span style="font-size:20px;color:#C3C7CE;flex:none">›</span>
+        </button>
+        <button onClick="{{ pickPhoto }}" style="display:flex;align-items:center;gap:16px;padding:20px 18px;border:1.5px solid #E7E9EC;border-radius:20px;background:#FFFFFF;text-align:left;cursor:pointer;font-family:inherit" style-hover="background:#FAFAFB;border-color:#D8DBE0" style-active="background:#F4F5F6">
+          <span style="width:46px;height:46px;border-radius:50%;background:#F3F4F6;display:flex;align-items:center;justify-content:center;flex:none">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111318" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"></rect><circle cx="9" cy="10" r="1.6"></circle><path d="M21 15l-4.5-4.5L8 19"></path></svg>
+          </span>
+          <span style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:17px;font-weight:680;color:#111318">사진 보정</span>
+            <span style="font-size:13.5px;line-height:1.5;color:#767C86;text-wrap:pretty">설문 없이 사진 속 수염 자국만 빠르게 정리해요.</span>
+            <span style="font-size:12px;color:#9AA0AA;margin-top:3px">바로 촬영 · 결과 저장</span>
+          </span>
+          <span style="font-size:20px;color:#C3C7CE;flex:none">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 설문 (수염 분석 전용) ══════════ -->
+  <sc-if value="{{ sSurvey }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="설문" style="position:absolute;inset:0;background:#FFFFFF;display:flex;flex-direction:column;padding-top:62px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;padding:0 12px;height:48px">
+      <button onClick="{{ surveyBack }}" aria-label="이전" style="width:44px;height:44px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111318" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg>
+      </button>
+      <span style="flex:1;text-align:center;font-size:16px;font-weight:650;color:#111318">수염 분석</span>
+      <span style="width:44px;text-align:center;font-size:13px;color:#767C86">{{ stepLabel }}</span>
+    </div>
+    <div style="height:3px;background:#EFF0F2;margin:0 24px;border-radius:99px;overflow:hidden">
+      <div style="height:100%;background:#111318;border-radius:99px;transition:width .3s ease;width:{{ progressPct }}%"></div>
+    </div>
+    <div style="flex:1;overflow:auto;padding:26px 24px 130px;box-sizing:border-box">
+      <sc-if value="{{ st0 }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0;font-size:21px;font-weight:730;color:#111318;letter-spacing:-0.3px">어떤 변화가 가장 궁금한가요?</h2>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px">
+          <sc-for list="{{ v1Opts }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.on }}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:18px;border-radius:16px;cursor:pointer;font-family:inherit;border:1.5px solid {{ item.bc }};background:{{ item.bg }}">
+              <span style="flex:1;font-size:15px;font-weight:600;color:#111318;line-height:1.4">{{ item.label }}</span>
+              <span style="width:22px;height:22px;border-radius:50%;background:#111318;display:flex;align-items:center;justify-content:center;flex:none;transition:opacity .15s;opacity:{{ item.dotOp }}">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ st1 }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0;font-size:21px;font-weight:730;color:#111318;letter-spacing:-0.3px">지금 사진과 가까운 상태를 알려주세요.</h2>
+        <p style="margin:20px 0 0;font-size:13px;font-weight:650;color:#767C86">면도 상태</p>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:12px">
+          <sc-for list="{{ shaveOpts }}" as="item" hint-placeholder-count="4">
+            <button onClick="{{ item.on }}" style="padding:12px 17px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;border:1.5px solid {{ item.bc }};background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+          </sc-for>
+        </div>
+        <p style="margin:26px 0 0;font-size:13px;font-weight:650;color:#767C86">신경 쓰이는 부위 <span style="font-weight:450;color:#9AA0AA">· 복수 선택</span></p>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:12px">
+          <sc-for list="{{ areaOpts }}" as="item" hint-placeholder-count="4">
+            <button onClick="{{ item.on }}" style="padding:12px 17px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;border:1.5px solid {{ item.bc }};background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ st2 }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0;font-size:21px;font-weight:730;color:#111318;letter-spacing:-0.3px">평소 관리 습관을 알려주세요.</h2>
+        <p style="margin:20px 0 0;font-size:13px;font-weight:650;color:#767C86">면도 빈도</p>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:12px">
+          <sc-for list="{{ freqOpts }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.on }}" style="padding:12px 17px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;border:1.5px solid {{ item.bc }};background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+          </sc-for>
+        </div>
+        <p style="margin:26px 0 0;font-size:13px;font-weight:650;color:#767C86">메이크업으로 수염 자국을 가리나요?</p>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:12px">
+          <sc-for list="{{ coverOpts }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.on }}" style="padding:12px 17px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;border:1.5px solid {{ item.bc }};background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+          </sc-for>
+        </div>
+        <p style="margin:26px 0 0;font-size:13px;font-weight:650;color:#767C86">제모 상담을 계획하고 있나요?</p>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:12px">
+          <sc-for list="{{ planOpts }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.on }}" style="padding:12px 17px;border-radius:999px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;border:1.5px solid {{ item.bc }};background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 24px 46px;background:linear-gradient(180deg,rgba(255,255,255,0),#FFFFFF 35%)">
+      <button onClick="{{ surveyNext }}" style="width:100%;height:54px;border:none;border-radius:999px;background:#111318;color:#FFFFFF;font-size:16px;font-weight:650;font-family:inherit;cursor:pointer;transition:opacity .2s;opacity:{{ nextOpacity }};pointer-events:{{ nextPe }}" style-active="transform:scale(0.985)">{{ nextLabel }}</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 촬영 (공통) ══════════ -->
+  <sc-if value="{{ sCamera }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="촬영" style="position:absolute;inset:0;background:#000000">
+    <img src="assets/portrait-original.png" alt="카메라 프리뷰 (데모)" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(0.88)">
+    <div style="position:absolute;left:0;right:0;top:0;height:190px;background:linear-gradient(180deg,rgba(0,0,0,0.72),rgba(0,0,0,0))"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:250px;background:linear-gradient(0deg,rgba(0,0,0,0.78),rgba(0,0,0,0))"></div>
+    <div style="position:absolute;top:62px;left:12px">
+      <button onClick="{{ cameraBack }}" aria-label="이전" style="width:44px;height:44px;border:none;border-radius:50%;background:rgba(20,22,26,0.5);backdrop-filter:blur(8px);cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg>
+      </button>
+    </div>
+    <div style="position:absolute;top:122px;left:28px;right:28px;text-align:center">
+      <p style="margin:0;font-size:17.5px;font-weight:700;color:#FFFFFF;letter-spacing:-0.2px;text-shadow:0 1px 8px rgba(0,0,0,0.4)">수염이 잘 보이는 사진을 준비해 주세요</p>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.5;color:rgba(255,255,255,0.75);text-shadow:0 1px 6px rgba(0,0,0,0.4)">밝은 곳에서 얼굴을 정면으로 맞추고,<br>턱 아래까지 보이게 촬영해 주세요.</p>
+    </div>
+    <div style="position:absolute;top:178px;left:50%;transform:translateX(-50%);width:286px;height:372px;border-radius:50%;transition:border-color .3s;border:2px dashed {{ guideBc }};box-shadow:0 0 0 2000px rgba(0,0,0,0.34)"></div>
+    <div style="position:absolute;bottom:212px;left:0;right:0;display:flex;justify-content:center">
+      <span style="padding:9px 16px;border-radius:999px;font-size:13px;font-weight:650;backdrop-filter:blur(8px);transition:background .3s,color .3s;background:{{ camChipBg }};color:{{ camChipFg }}">{{ camMsg }}</span>
+    </div>
+    <div style="position:absolute;bottom:172px;left:0;right:0;display:flex;justify-content:center">
+      <button onClick="{{ policyTap }}" style="border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:12px;color:rgba(255,255,255,0.6);text-decoration:underline;text-underline-offset:3px">사진 처리 및 삭제 기준</button>
+    </div>
+    <div style="position:absolute;bottom:58px;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:0 48px">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <button onClick="{{ albumPick }}" aria-label="앨범에서 선택" style="width:46px;height:46px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.55);padding:0;overflow:hidden;cursor:pointer;background:#222">
+          <img src="assets/portrait-original.png" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+        </button>
+        <span style="font-size:11px;color:rgba(255,255,255,0.7)">앨범</span>
+      </div>
+      <button onClick="{{ shutterTap }}" aria-label="촬영" style="width:76px;height:76px;border-radius:50%;border:4px solid #FFFFFF;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0" style-active="transform:scale(0.94)">
+        <span style="width:60px;height:60px;border-radius:50%;background:#FFFFFF;transition:opacity .3s;opacity:{{ shutterOp }}"></span>
+      </button>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <button onClick="{{ flipTap }}" aria-label="카메라 전환" style="width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,0.16);backdrop-filter:blur(8px);cursor:pointer;color:#FFFFFF;font-size:19px;display:flex;align-items:center;justify-content:center">↻</button>
+        <span style="font-size:11px;color:rgba(255,255,255,0.7)">전환</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 생성 로딩 (공통) ══════════ -->
+  <sc-if value="{{ sLoading }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="생성 로딩" style="position:absolute;inset:0;background:radial-gradient(130% 55% at 50% 8%,#11151B,#0A0D11 65%);display:flex;flex-direction:column;align-items:center;padding-top:118px;box-sizing:border-box">
+    <div style="position:relative;width:250px;height:350px;border-radius:22px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,0.5)">
+      <img src="assets/portrait-original.png" alt="촬영한 사진" style="width:100%;height:100%;object-fit:cover">
+      <div style="position:absolute;inset:0;background:rgba(7,9,11,0.28)"></div>
+      <div style="position:absolute;left:0;right:0;top:0;height:0;animation:bs-scan 3.6s cubic-bezier(0.42,0,0.58,1) infinite;pointer-events:none">
+        <div style="position:absolute;left:0;right:0;top:-36px;height:72px;mix-blend-mode:screen;background:linear-gradient(180deg,rgba(140,170,220,0) 0%,rgba(150,182,232,0.26) 40%,rgba(196,184,255,0.34) 50%,rgba(150,182,232,0.26) 60%,rgba(140,170,220,0) 100%)"></div>
+        <div style="position:absolute;left:-10%;right:-10%;top:-80px;height:160px;background:radial-gradient(50% 50% at 50% 50%,rgba(145,191,255,0.18),rgba(184,164,255,0.05) 62%,rgba(184,164,255,0) 100%)"></div>
+        <div style="position:absolute;left:0;right:0;top:-44px;height:88px;opacity:0.4;background:repeating-linear-gradient(90deg,rgba(145,191,255,0.22) 0 1px,transparent 1px 6px);mask-image:radial-gradient(46% 50% at 50% 50%,#000,transparent 88%);-webkit-mask-image:radial-gradient(46% 50% at 50% 50%,#000,transparent 88%)"></div>
+        <div style="position:absolute;left:7%;right:7%;top:-1px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#91BFFF 16%,#E4DBFF 50%,#91BFFF 84%,transparent);background-size:220% 100%;animation:bs-shimmer 2.3s linear infinite;box-shadow:0 0 10px rgba(145,191,255,0.85),0 0 32px rgba(184,164,255,0.55)"></div>
+        <div style="position:absolute;top:0;transform:translate(-50%,-50%);width:110px;height:4px;border-radius:4px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.95),transparent);filter:blur(0.6px);animation:bs-glint 1.8s ease-in-out infinite alternate"></div>
+        <div style="position:absolute;left:4.5%;top:-7px;width:2.5px;height:14px;border-radius:2px;background:#CDBEFF;animation:bs-capblink 1.5s ease-in-out infinite"></div>
+        <div style="position:absolute;right:4.5%;top:-7px;width:2.5px;height:14px;border-radius:2px;background:#CDBEFF;animation:bs-capblink 1.5s ease-in-out infinite"></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:17px;margin-top:38px;width:282px">
+      <sc-for list="{{ loadSteps }}" as="item" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:13px">
+          <span style="width:22px;height:22px;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:none;transition:background .3s,border-color .3s;background:{{ item.cBg }};border:1.5px solid {{ item.cBc }};animation:{{ item.cAnim }}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#17131F" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="transition:opacity .25s;opacity:{{ item.ckOp }}"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+          </span>
+          <span style="font-size:14px;transition:color .3s;color:{{ item.fg }}">{{ item.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <sc-if value="{{ loadDelayed }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:26px;max-width:290px;padding:12px 16px;border-radius:14px;background:rgba(27,31,37,0.72);border:1px solid rgba(255,255,255,0.12);font-size:12.5px;line-height:1.55;color:#A7ADB7;text-align:center">평소보다 조금 더 걸리고 있어요.<br>원본 얼굴이 유지됐는지 꼼꼼히 확인하는 중이에요.</div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 실패 / 재촬영 (공통) ══════════ -->
+  <sc-if value="{{ sFailure }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="실패" style="position:absolute;inset:0;background:#0A0D11;display:flex;flex-direction:column;align-items:center;padding:150px 32px 0;box-sizing:border-box">
+    <button onClick="{{ exitFlow }}" aria-label="닫기" style="position:absolute;top:62px;left:12px;width:44px;height:44px;border:none;border-radius:50%;background:rgba(255,255,255,0.07);cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F7F8FA" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+    </button>
+    <span style="width:64px;height:64px;border-radius:50%;border:1.5px solid rgba(184,164,255,0.4);background:rgba(184,164,255,0.08);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#B8A4FF">!</span>
+    <h2 style="margin:26px 0 0;font-size:20px;font-weight:730;color:#F7F8FA;text-align:center;line-height:1.45;letter-spacing:-0.3px;text-wrap:pretty">이 사진으로는 자연스러운 결과를<br>만들기 어려워요</h2>
+    <p style="margin:14px 0 0;font-size:14px;line-height:1.65;color:#A7ADB7;text-align:center;text-wrap:pretty">얼굴형이 달라 보일 수 있는 결과는 만들지 않아요.<br>밝은 곳에서 얼굴을 정면으로 맞춰 다시 촬영해 주세요.</p>
+    <div style="display:flex;gap:8px;margin-top:22px">
+      <span style="padding:8px 14px;border-radius:999px;background:rgba(27,31,37,0.8);border:1px solid rgba(255,255,255,0.12);font-size:12.5px;color:#C6CBD4">조명이 어두워요</span>
+      <span style="padding:8px 14px;border-radius:999px;background:rgba(27,31,37,0.8);border:1px solid rgba(255,255,255,0.12);font-size:12.5px;color:#C6CBD4">턱선이 프레임 밖에 있어요</span>
+    </div>
+    <div style="position:absolute;left:24px;right:24px;bottom:52px;display:flex;flex-direction:column;gap:10px">
+      <button onClick="{{ retryShoot }}" style="height:54px;border:none;border-radius:999px;background:#F7F8FA;color:#111318;font-size:16px;font-weight:650;font-family:inherit;cursor:pointer" style-active="transform:scale(0.985)">다시 촬영하기</button>
+      <button onClick="{{ albumPick }}" style="height:48px;border:1px solid rgba(255,255,255,0.18);border-radius:999px;background:transparent;color:#F7F8FA;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer">다른 사진 선택</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 결과 (공통 · Onyx Glass) ══════════ -->
+  <sc-if value="{{ sResult }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="결과" style="position:absolute;inset:0;background:#07090B">
+    <div ref="{{ compareRef }}" onPointerDown="{{ onCmpDown }}" onPointerMove="{{ onCmpMove }}" onPointerUp="{{ onCmpUp }}" onPointerCancel="{{ onCmpUp }}" style="position:absolute;inset:0;touch-action:none;cursor:ew-resize">
+      <img src="assets/portrait-natural.png" alt="보정 결과 — 자연스럽게" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op0 }}">
+      <img src="assets/portrait-noticeable.png" alt="보정 결과 — 눈에 띄게" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op1 }}">
+      <img src="assets/portrait-strong.png" alt="보정 결과 — 많이 줄인 느낌" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op2 }}">
+      <img src="assets/portrait-original.png" alt="원본" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;clip-path:inset(0 {{ clipR }}% 0 0);transition:{{ clipTrans }}">
+      <div style="position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.92);box-shadow:0 0 12px rgba(0,0,0,0.45);transition:opacity .2s;opacity:{{ dividerOp }};left:{{ divider }}%">
+        <span style="position:absolute;top:41%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;background:#CDBEFF;box-shadow:0 3px 14px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#17131F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l-5 6 5 6"></path><path d="M15 6l5 6-5 6"></path></svg>
+        </span>
+      </div>
+      <span style="position:absolute;top:122px;left:16px;padding:6px 12px;border-radius:9px;background:rgba(15,17,20,0.72);backdrop-filter:blur(6px);font-size:12.5px;font-weight:650;color:#F7F8FA;transition:opacity .2s;opacity:{{ dividerOp }}">현재</span>
+      <span style="position:absolute;top:122px;right:16px;padding:6px 12px;border-radius:9px;background:#CDBEFF;font-size:12.5px;font-weight:700;color:#17131F;transition:opacity .2s;opacity:{{ dividerOp }};white-space:nowrap">보정 후 · {{ intensityLabel }}</span>
+      <sc-if value="{{ showOriginal }}" hint-placeholder-val="{{ false }}">
+        <span style="position:absolute;top:122px;left:50%;transform:translateX(-50%);padding:7px 14px;border-radius:999px;background:rgba(15,17,20,0.78);backdrop-filter:blur(6px);border:1px solid rgba(184,164,255,0.5);font-size:12.5px;font-weight:650;color:#DCCFFF">원본 보는 중</span>
+      </sc-if>
+    </div>
+    <div style="position:absolute;left:0;right:0;top:0;height:140px;background:linear-gradient(180deg,rgba(0,0,0,0.6),rgba(0,0,0,0));pointer-events:none"></div>
+    <div style="position:absolute;top:62px;left:12px;right:12px;display:flex;align-items:center">
+      <button onClick="{{ exitFlow }}" aria-label="닫기" style="width:44px;height:44px;border:none;border-radius:50%;background:rgba(20,22,26,0.5);backdrop-filter:blur(8px);cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+      </button>
+      <span style="flex:1;text-align:center;font-size:17px;font-weight:680;color:#F7F8FA;text-shadow:0 1px 8px rgba(0,0,0,0.5);letter-spacing:-0.2px">{{ resultTitle }}</span>
+      <button onClick="{{ menuToggle }}" aria-label="더보기" style="width:44px;height:44px;border:none;border-radius:50%;background:rgba(20,22,26,0.5);backdrop-filter:blur(8px);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:2.5px">
+        <span style="width:3.5px;height:3.5px;border-radius:50%;background:#FFFFFF"></span><span style="width:3.5px;height:3.5px;border-radius:50%;background:#FFFFFF"></span><span style="width:3.5px;height:3.5px;border-radius:50%;background:#FFFFFF"></span>
+      </button>
+    </div>
+    <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ menuClose }}" style="position:absolute;inset:0"></div>
+      <div style="position:absolute;top:114px;right:14px;width:210px;border-radius:16px;background:rgba(30,34,40,0.92);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.14);box-shadow:0 12px 40px rgba(0,0,0,0.5);overflow:hidden;display:flex;flex-direction:column">
+        <button onClick="{{ resetToCamera }}" style="padding:14px 16px;border:none;background:transparent;text-align:left;font-family:inherit;font-size:14px;font-weight:550;color:#F7F8FA;cursor:pointer" style-hover="background:rgba(255,255,255,0.06)">새 사진으로 다시 시작</button>
+        <div style="height:1px;background:rgba(255,255,255,0.1)"></div>
+        <button onClick="{{ policyTap }}" style="padding:14px 16px;border:none;background:transparent;text-align:left;font-family:inherit;font-size:14px;font-weight:550;color:#F7F8FA;cursor:pointer" style-hover="background:rgba(255,255,255,0.06)">사진 처리 기준</button>
+      </div>
+    </sc-if>
+
+    <div style="position:absolute;left:10px;right:10px;bottom:14px;border-radius:26px;background:rgba(27,31,37,0.72);backdrop-filter:blur(20px) saturate(140%);border:1px solid rgba(255,255,255,0.14);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 14px 44px rgba(0,0,0,0.45);padding:18px 18px 16px;box-sizing:border-box">
+      <p style="margin:0 0 13px;text-align:center;font-size:12.5px;font-weight:600;color:#A7ADB7;letter-spacing:0.2px">강도 조절 <span style="font-weight:450;color:#7C828C">· 선택한 강도 그대로 저장돼요</span></p>
+
+        <div style="position:relative;padding:0 6px">
+          <div style="position:absolute;left:36px;right:36px;top:12px;height:2px;background:rgba(255,255,255,0.22)"></div>
+          <div style="display:flex">
+            <sc-for list="{{ stops }}" as="item" hint-placeholder-count="3">
+              <button onClick="{{ item.on }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;border:none;background:transparent;cursor:pointer;font-family:inherit;padding:0">
+                <span style="width:26px;height:26px;border-radius:50%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;transition:border-color .2s,background .2s;border:1.5px solid {{ item.ringBc }};background:{{ item.ringBg }}">
+                  <span style="width:12px;height:12px;border-radius:50%;transition:background .2s;background:{{ item.dotBg }}"></span>
+                </span>
+                <span style="font-size:12.5px;transition:color .2s;color:{{ item.lFg }};font-weight:{{ item.lFw }}">{{ item.label }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+      <div style="display:flex;align-items:center;gap:14px;margin-top:17px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:64px;flex:none">
+          <button onPointerDown="{{ onHoldDown }}" onPointerUp="{{ onHoldUp }}" onPointerLeave="{{ onHoldCancel }}" onPointerCancel="{{ onHoldCancel }}" aria-label="원본 보기 — 누르고 있는 동안 원본을 보여드려요. 짧게 탭하면 고정돼요." style="width:56px;height:56px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s;border:1.5px solid {{ holdBc }};background:{{ holdBg }};touch-action:none">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{{ holdIcon }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12C5.4 7.2 8.7 5 12 5s6.6 2.2 9.5 7c-2.9 4.8-6.2 7-9.5 7s-6.6-2.2-9.5-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+          <span style="font-size:11px;text-align:center;line-height:1.25;transition:color .2s;color:{{ holdFg }}">{{ holdLabel }}</span>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:9px">
+          <sc-if value="{{ isAnalysis }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ openReport }}" style="height:50px;border:none;border-radius:999px;background:#F7F8FA;color:#111318;font-size:15.5px;font-weight:680;font-family:inherit;cursor:pointer" style-active="transform:scale(0.985)">상세 보고서 보기</button>
+            <button onClick="{{ onSave }}" style="height:46px;border:1px solid rgba(255,255,255,0.2);border-radius:999px;background:rgba(255,255,255,0.07);color:#F7F8FA;font-size:14.5px;font-weight:620;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+              <sc-if value="{{ saving }}" hint-placeholder-val="{{ false }}"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.3);border-top-color:#F7F8FA;animation:bs-rot .8s linear infinite"></span></sc-if>
+              {{ saveLabel }}
+            </button>
+          </sc-if>
+          <sc-if value="{{ isPhotoPath }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ onSave }}" style="height:52px;border:none;border-radius:999px;background:#F7F8FA;color:#111318;font-size:16px;font-weight:680;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-active="transform:scale(0.985)">
+              <sc-if value="{{ saving }}" hint-placeholder-val="{{ false }}"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(17,19,24,0.25);border-top-color:#111318;animation:bs-rot .8s linear infinite"></span></sc-if>
+              {{ saveLabel }}
+            </button>
+            <sc-if value="{{ savedOnce }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ exitFlow }}" style="height:46px;border:1px solid rgba(255,255,255,0.2);border-radius:999px;background:rgba(255,255,255,0.07);color:#F7F8FA;font-size:14.5px;font-weight:620;font-family:inherit;cursor:pointer">완료</button>
+            </sc-if>
+          </sc-if>
+        </div>
+      </div>
+      <p style="margin:13px 4px 0;text-align:center;font-size:11.5px;line-height:1.5;color:#8E939C;text-wrap:pretty">이 이미지는 수염과 수염 자국이 줄었을 때의 참고용 시뮬레이션이에요.</p>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══════════ 상세 보고서 (수염 분석 전용) ══════════ -->
+  <sc-if value="{{ sReport }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="상세 보고서" style="position:absolute;inset:0;background:#0D1014;display:flex;flex-direction:column;padding-top:62px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;padding:0 12px;height:48px">
+      <button onClick="{{ reportBack }}" aria-label="결과로 돌아가기" style="width:44px;height:44px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F7F8FA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg>
+      </button>
+      <span style="flex:1;text-align:center;font-size:16.5px;font-weight:680;color:#F7F8FA;letter-spacing:-0.2px">상세 보고서</span>
+      <span style="width:44px"></span>
+    </div>
+    <div style="display:flex;gap:6px;padding:6px 16px 12px">
+      <sc-for list="{{ rTabs }}" as="item" hint-placeholder-count="4">
+        <button onClick="{{ item.on }}" style="padding:8px 11px;border:none;border-radius:999px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:650;white-space:nowrap;transition:background .2s,color .2s;background:{{ item.bg }};color:{{ item.fg }}">{{ item.label }}</button>
+      </sc-for>
+    </div>
+    <div style="height:1px;background:rgba(255,255,255,0.08)"></div>
+    <div ref="{{ reportRef }}" onScroll="{{ onReportScroll }}" style="flex:1;overflow:auto;position:relative;padding:26px 22px 60px;box-sizing:border-box">
+      <div ref="{{ sec0 }}">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#B8A4FF;letter-spacing:1px">수염 분석</p>
+        <h3 style="margin:8px 0 0;font-size:20px;font-weight:730;color:#F7F8FA;letter-spacing:-0.3px">현재 사진 기준 수염 분석</h3>
+        <p style="margin:16px 0 0;font-size:14.5px;line-height:1.75;color:#C6CBD4;text-wrap:pretty">턱과 인중을 중심으로 수염 그림자가 모여 있어요. 털의 밀도보다 면도 후 남는 푸른 그림자가 더 눈에 띄는 편이에요.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 26px;margin-top:20px">
+          <sc-for list="{{ analysisCells }}" as="item" hint-placeholder-count="6">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.07)">
+              <span style="font-size:12.5px;color:#7C828C">{{ item.k }}</span>
+              <span style="font-size:14px;font-weight:650;color:#F7F8FA">{{ item.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div ref="{{ sec1 }}" style="margin-top:44px">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#B8A4FF;letter-spacing:1px">변화 비교</p>
+        <h3 style="margin:8px 0 0;font-size:20px;font-weight:730;color:#F7F8FA;letter-spacing:-0.3px">현재와 보정 후를 비교해 보세요</h3>
+        <div ref="{{ rCompareRef }}" onPointerDown="{{ onRCmpDown }}" onPointerMove="{{ onRCmpMove }}" onPointerUp="{{ onRCmpUp }}" onPointerCancel="{{ onRCmpUp }}" style="position:relative;height:430px;border-radius:20px;overflow:hidden;margin-top:18px;touch-action:none;cursor:ew-resize">
+          <img src="assets/portrait-natural.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op0 }}">
+          <img src="assets/portrait-noticeable.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op1 }}">
+          <img src="assets/portrait-strong.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s;opacity:{{ op2 }}">
+          <img src="assets/portrait-original.png" alt="원본" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;clip-path:inset(0 {{ rClipR }}% 0 0)">
+          <div style="position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.92);left:{{ rDivider }}%">
+            <span style="position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:#CDBEFF;box-shadow:0 3px 12px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#17131F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l-5 6 5 6"></path><path d="M15 6l5 6-5 6"></path></svg>
+            </span>
+          </div>
+          <span style="position:absolute;top:14px;left:14px;padding:5px 10px;border-radius:8px;background:rgba(15,17,20,0.72);font-size:11.5px;font-weight:650;color:#F7F8FA">현재</span>
+          <span style="position:absolute;top:14px;right:14px;padding:5px 10px;border-radius:8px;background:#CDBEFF;font-size:11.5px;font-weight:700;color:#17131F">보정 후</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B8A4FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+          <span style="font-size:13px;color:#A7ADB7">원본 얼굴 보존이 확인된 결과예요 · 강도: {{ intensityLabel }}</span>
+        </div>
+      </div>
+      <div ref="{{ sec2 }}" style="margin-top:44px">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#B8A4FF;letter-spacing:1px">상담 준비</p>
+        <h3 style="margin:8px 0 0;font-size:20px;font-weight:730;color:#F7F8FA;letter-spacing:-0.3px">상담할 때 이렇게 물어보세요</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <sc-for list="{{ consults }}" as="item" hint-placeholder-count="2">
+            <div style="padding:16px;border:1px solid rgba(255,255,255,0.1);border-radius:16px">
+              <p style="margin:0;font-size:14px;line-height:1.7;color:#E6E9EE;text-wrap:pretty">“{{ item.text }}”</p>
+              <button onClick="{{ item.on }}" style="margin-top:12px;display:flex;align-items:center;gap:6px;border:none;background:transparent;padding:0;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:650;color:#CDBEFF">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#CDBEFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                복사하기
+              </button>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#7C828C;text-wrap:pretty">특정 장비나 시술의 효과를 앱이 추천하거나 보장하지 않아요. 상담은 전문가와 진행해 주세요.</p>
+      </div>
+      <div ref="{{ sec3 }}" style="margin-top:44px">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#B8A4FF;letter-spacing:1px">관리 팁</p>
+        <h3 style="margin:8px 0 0;font-size:20px;font-weight:730;color:#F7F8FA;letter-spacing:-0.3px">수염을 기록하고 관리하는 방법</h3>
+        <div style="display:flex;flex-direction:column;gap:13px;margin-top:16px">
+          <sc-for list="{{ tips }}" as="item" hint-placeholder-count="5">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <span style="width:6px;height:6px;border-radius:50%;background:#B8A4FF;margin-top:8px;flex:none"></span>
+              <p style="margin:0;font-size:14px;line-height:1.65;color:#C6CBD4;flex:1;text-wrap:pretty">{{ item.text }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top:48px;display:flex;flex-direction:column;gap:10px">
+        <p style="margin:0 0 2px;text-align:center;font-size:12px;color:#7C828C">지금 보고 있는 ‘{{ intensityLabel }}’ 결과 1장이 저장돼요</p>
+        <button onClick="{{ onSave }}" style="height:52px;border:none;border-radius:999px;background:#F7F8FA;color:#111318;font-size:15.5px;font-weight:680;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px" style-active="transform:scale(0.985)">
+          <sc-if value="{{ saving }}" hint-placeholder-val="{{ false }}"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(17,19,24,0.25);border-top-color:#111318;animation:bs-rot .8s linear infinite"></span></sc-if>
+          {{ saveLabel }}
+        </button>
+        <button onClick="{{ copyAll }}" style="height:48px;border:1px solid rgba(255,255,255,0.18);border-radius:999px;background:rgba(255,255,255,0.06);color:#F7F8FA;font-size:14.5px;font-weight:620;font-family:inherit;cursor:pointer">상담 멘트 복사</button>
+        <button onClick="{{ askDelete }}" style="height:46px;border:none;border-radius:999px;background:transparent;color:#FF7B72;font-size:14px;font-weight:620;font-family:inherit;cursor:pointer">사진과 결과 삭제</button>
+      </div>
+      <p style="margin:20px 0 0;text-align:center;font-size:11.5px;line-height:1.55;color:#7C828C;text-wrap:pretty">이 이미지는 수염과 수염 자국이 줄었을 때의 참고용 시뮬레이션이에요.<br>의료적 진단이나 결과 예측이 아니에요.</p>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- 삭제 확인 -->
+  <sc-if value="{{ confirmDelete }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.58);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:80">
+    <div style="width:296px;border-radius:22px;background:#171A1F;border:1px solid rgba(255,255,255,0.12);padding:24px 22px 18px;box-sizing:border-box">
+      <p style="margin:0;font-size:17px;font-weight:700;color:#F7F8FA">사진과 결과를 삭제할까요?</p>
+      <p style="margin:9px 0 0;font-size:13.5px;line-height:1.6;color:#A7ADB7">촬영한 사진과 생성된 결과가 함께 삭제되고, 처음 화면으로 돌아가요.</p>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button onClick="{{ cancelDelete }}" style="flex:1;height:46px;border:1px solid rgba(255,255,255,0.18);border-radius:999px;background:transparent;color:#F7F8FA;font-size:14.5px;font-weight:620;font-family:inherit;cursor:pointer">취소</button>
+        <button onClick="{{ doDelete }}" style="flex:1;height:46px;border:none;border-radius:999px;background:#E5484D;color:#FFFFFF;font-size:14.5px;font-weight:650;font-family:inherit;cursor:pointer">삭제</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- 토스트 -->
+  <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;left:20px;right:20px;top:124px;display:flex;justify-content:center;z-index:90;pointer-events:none">
+    <div style="display:flex;align-items:center;gap:9px;max-width:100%;padding:11px 16px;border-radius:999px;background:rgba(24,27,32,0.92);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.14);box-shadow:0 8px 30px rgba(0,0,0,0.45);animation:bs-toast .25s ease;pointer-events:auto">
+      <sc-if value="{{ toastOk }}" hint-placeholder-val="{{ false }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B8A4FF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M4 12.5l5 5L20 6.5"></path></svg>
+      </sc-if>
+      <sc-if value="{{ toastErr }}" hint-placeholder-val="{{ false }}">
+        <span style="width:16px;height:16px;border-radius:50%;background:rgba(229,72,77,0.2);color:#FF9B98;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none">!</span>
+      </sc-if>
+      <span style="font-size:13px;font-weight:600;color:#F7F8FA;line-height:1.4">{{ toastMsg }}</span>
+      <sc-if value="{{ toastRetry }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ onSave }}" style="border:none;background:transparent;padding:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#CDBEFF;text-decoration:underline;text-underline-offset:3px;flex:none">다시 시도</button>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 500, &quot;height&quot;: 960 },
+  &quot;simulateGenerationDelay&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;상태 시뮬레이션&quot; },
+  &quot;simulateGenerationFailure&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;상태 시뮬레이션&quot; },
+  &quot;simulateSaveFailure&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;상태 시뮬레이션&quot; }
+}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      screen: 'purpose', path: null,
+      step: 0, a1: null, shave: null, areas: [], freq: null, cover: null, plan: null,
+      camStage: 0,
+      loadDone: -1, loadActive: 0, loadDelayed: false,
+      intensity: 1, divider: 50, rDivider: 50,
+      holding: false, origPinned: false,
+      saving: false, toast: null,
+      menuOpen: false, confirmDelete: false, rTab: 0, savedOnce: false,
+    };
+    this.t = [];
+    this.dragging = false; this.rDragging = false; this.holdT0 = 0; this.hintShown = false;
+    this.compareRef = React.createRef();
+    this.rCompareRef = React.createRef();
+    this.reportRef = React.createRef();
+    this.secRefs = [React.createRef(), React.createRef(), React.createRef(), React.createRef()];
+    this.I_LABELS = ['자연스럽게', '눈에 띄게', '많이 줄인 느낌'];
+    this.CAM_MSGS = ['얼굴을 정면으로 맞춰주세요', '턱 아래까지 보이게 해주세요', '입 주변의 그림자를 줄여주세요', '촬영 준비가 되었어요'];
+    this.LOAD_STEPS = ['수염과 그림자를 구분하고 있어요', '단계별 이미지를 만들고 있어요', '원본 얼굴이 유지됐는지 확인하고 있어요'];
+    this.CONSULTS = [
+      '인중과 턱에 남는 푸른 수염 자국이 고민입니다. 제 피부와 수염 상태를 기준으로 어떤 점을 확인해야 하는지 상담받고 싶어요.',
+      '면도 후 시간이 지나면 자국이 다시 두드러지는 편인데, 제 상태에서는 어떤 관리 방법을 먼저 알아보면 좋을까요?',
+    ];
+    this.TIPS = [
+      '같은 조명과 각도에서 변화 사진을 남겨 보세요.',
+      '정면과 45도 사진을 함께 기록하면 비교가 쉬워요.',
+      '과도한 사진 필터 없이 비교하는 것이 정확해요.',
+      '면도 도구는 청결하게 관리해 주세요.',
+      '자극이나 피부 이상이 있을 때는 앱이 판단하지 않아요. 전문가와 상담해 주세요.',
+    ];
+  }
+
+  componentWillUnmount() { this.clearT(); clearTimeout(this.toastT); }
+  clearT() { this.t.forEach(clearTimeout); this.t = []; }
+  after(ms, fn) { this.t.push(setTimeout(fn, ms)); }
+
+  go(screen) {
+    this.clearT();
+    this.setState({ screen, menuOpen: false });
+    if (screen === 'camera') this.startCamera();
+    if (screen === 'loading') this.startLoading();
+    if (screen === 'result') this.enterResult();
+  }
+
+  startCamera() {
+    this.setState({ camStage: 0 });
+    [1, 2, 3].forEach(i => this.after(950 * i + 250, () => this.setState({ camStage: i })));
+  }
+
+  startLoading() {
+    this.setState({ loadDone: -1, loadActive: 0, loadDelayed: false });
+    const fail = this.props.simulateGenerationFailure ?? false;
+    const slow = this.props.simulateGenerationDelay ?? false;
+    this.after(1400, () => this.setState({ loadDone: 0, loadActive: 1 }));
+    if (fail) {
+      this.after(2800, () => this.setState({ loadDone: 1, loadActive: 2 }));
+      this.after(4100, () => this.go('failure'));
+      return;
+    }
+    if (slow) {
+      this.after(4600, () => this.setState({ loadDelayed: true }));
+      this.after(7600, () => this.setState({ loadDone: 1, loadActive: 2 }));
+      this.after(9200, () => this.setState({ loadDone: 2 }));
+      this.after(9800, () => this.go('result'));
+      return;
+    }
+    this.after(2800, () => this.setState({ loadDone: 1, loadActive: 2 }));
+    this.after(4200, () => this.setState({ loadDone: 2 }));
+    this.after(4800, () => this.go('result'));
+  }
+
+  enterResult() {
+    if (!this.hintShown) {
+      this.hintShown = true;
+      this.showToast('ok', '누르고 있는 동안 원본을 보여드려요 · 짧게 탭하면 고정할 수 있어요', 3800);
+    }
+  }
+
+  showToast(kind, msg, ms = 2600, retry = false) {
+    clearTimeout(this.toastT);
+    this.setState({ toast: { kind, msg, retry } });
+    this.toastT = setTimeout(() => this.setState({ toast: null }), ms);
+  }
+
+  canNext() {
+    const s = this.state;
+    if (s.step === 0) return s.a1 != null;
+    if (s.step === 1) return s.shave != null && s.areas.length > 0;
+    return s.freq != null && s.cover != null && s.plan != null;
+  }
+
+  pct(e, ref) {
+    const el = ref.current; if (!el) return 50;
+    const r = el.getBoundingClientRect();
+    return Math.max(8, Math.min(92, ((e.clientX - r.left) / r.width) * 100));
+  }
+
+  renderVals() {
+    const s = this.state, P = this.props;
+    const showOriginal = s.holding || s.origPinned;
+    const mk = (label, sel, on) => ({
+      label, on,
+      bc: sel ? '#111318' : '#E7E9EC',
+      bg: sel ? '#F5F5F7' : '#FFFFFF',
+      fg: sel ? '#111318' : '#3E434C',
+      dotOp: sel ? 1 : 0,
+    });
+    const single = (arr, key) => arr.map((l, i) => mk(l, s[key] === i, () => this.setState({ [key]: i })));
+    const toast = s.toast;
+
+    return {
+      // screens
+      sPurpose: s.screen === 'purpose', sSurvey: s.screen === 'survey', sCamera: s.screen === 'camera',
+      sLoading: s.screen === 'loading', sFailure: s.screen === 'failure', sResult: s.screen === 'result',
+      sReport: s.screen === 'report',
+      isDark: s.screen !== 'purpose' && s.screen !== 'survey',
+      st0: s.step === 0, st1: s.step === 1, st2: s.step === 2,
+
+      // purpose
+      pickAnalysis: () => { this.setState({ path: 'analysis', step: 0 }); this.go('survey'); },
+      pickPhoto: () => { this.setState({ path: 'photo' }); this.go('camera'); },
+
+      // survey
+      stepLabel: (s.step + 1) + ' / 3',
+      progressPct: ((s.step + 1) / 3) * 100,
+      v1Opts: single(['푸른 수염 자국을 줄이고 싶어요', '전체적인 수염 밀도를 줄이고 싶어요', '수염이 많이 줄어든 모습을 보고 싶어요'], 'a1'),
+      shaveOpts: single(['면도 직후', '까슬한 수염', '짧게 자란 수염', '비교적 짙은 수염'], 'shave'),
+      areaOpts: ['인중', '턱', '입 양쪽', '턱선'].map((l, i) => mk(l, s.areas.includes(i), () =>
+        this.setState(st => ({ areas: st.areas.includes(i) ? st.areas.filter(x => x !== i) : [...st.areas, i] })))),
+      freqOpts: single(['매일', '2~3일에 한 번', '가끔'], 'freq'),
+      coverOpts: single(['자주 있어요', '가끔 있어요', '아니요'], 'cover'),
+      planOpts: single(['알아보고 있어요', '고민 중이에요', '아니요'], 'plan'),
+      nextLabel: s.step === 2 ? '사진 촬영하기' : '다음',
+      nextOpacity: this.canNext() ? 1 : 0.35,
+      nextPe: this.canNext() ? 'auto' : 'none',
+      surveyNext: () => { if (!this.canNext()) return; if (s.step < 2) this.setState({ step: s.step + 1 }); else this.go('camera'); },
+      surveyBack: () => { if (s.step > 0) this.setState({ step: s.step - 1 }); else this.go('purpose'); },
+
+      // camera
+      camMsg: this.CAM_MSGS[s.camStage],
+      guideBc: s.camStage === 3 ? '#B8A4FF' : 'rgba(255,255,255,0.65)',
+      camChipBg: s.camStage === 3 ? '#B8A4FF' : 'rgba(20,22,26,0.6)',
+      camChipFg: s.camStage === 3 ? '#17131F' : '#FFFFFF',
+      shutterOp: s.camStage === 3 ? 1 : 0.35,
+      cameraBack: () => { if (s.path === 'analysis') this.go('survey'); else this.go('purpose'); },
+      shutterTap: () => { if (s.camStage < 3) return; this.go('loading'); },
+      albumPick: () => { this.showToast('ok', '데모 사진으로 진행해요'); this.after(500, () => this.go('loading')); },
+      flipTap: () => this.showToast('ok', '전면 카메라로 전환했어요 (데모)'),
+      policyTap: () => { this.setState({ menuOpen: false }); this.showToast('ok', '사진 처리 및 삭제 기준 문서로 이동해요 (프로토타입)'); },
+
+      // loading
+      loadSteps: this.LOAD_STEPS.map((label, i) => {
+        const done = s.loadDone >= i, active = !done && s.loadActive === i;
+        return {
+          label,
+          cBg: done ? '#B8A4FF' : 'transparent',
+          cBc: done ? '#B8A4FF' : active ? 'rgba(184,164,255,0.7)' : 'rgba(255,255,255,0.22)',
+          cAnim: active ? 'bs-pulse 1.6s ease-in-out infinite' : 'none',
+          ckOp: done ? 1 : 0,
+          fg: done ? '#F7F8FA' : active ? '#DCCFFF' : '#6B7280',
+        };
+      }),
+      loadDelayed: s.loadDelayed,
+
+      // failure
+      retryShoot: () => this.go('camera'),
+
+      // result
+      resultTitle: s.path === 'photo' ? '수염 자국 정리' : '수염 변화 미리보기',
+      isAnalysis: s.path === 'analysis', isPhotoPath: s.path === 'photo',
+      op0: s.intensity === 0 ? 1 : 0, op1: s.intensity === 1 ? 1 : 0, op2: s.intensity === 2 ? 1 : 0,
+      divider: s.divider, rDivider: s.rDivider,
+      clipR: showOriginal ? 0 : 100 - s.divider,
+      rClipR: 100 - s.rDivider,
+      clipTrans: this.dragging ? 'none' : 'clip-path .25s ease',
+      dividerOp: showOriginal ? 0 : 1,
+      showOriginal,
+      compareRef: this.compareRef, rCompareRef: this.rCompareRef,
+      onCmpDown: (e) => { this.dragging = true; if (e.currentTarget.setPointerCapture) try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} this.setState({ divider: this.pct(e, this.compareRef) }); },
+      onCmpMove: (e) => { if (this.dragging) this.setState({ divider: this.pct(e, this.compareRef) }); },
+      onCmpUp: () => { this.dragging = false; this.forceUpdate(); },
+      onRCmpDown: (e) => { this.rDragging = true; if (e.currentTarget.setPointerCapture) try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} this.setState({ rDivider: this.pct(e, this.rCompareRef) }); },
+      onRCmpMove: (e) => { if (this.rDragging) this.setState({ rDivider: this.pct(e, this.rCompareRef) }); },
+      onRCmpUp: () => { this.rDragging = false; },
+
+      // intensity
+      intensityLabel: this.I_LABELS[s.intensity],
+      stops: this.I_LABELS.map((label, i) => {
+        const a = s.intensity === i;
+        return {
+          label, on: () => this.setState({ intensity: i }),
+          ringBc: a ? 'rgba(184,164,255,0.55)' : 'transparent',
+          ringBg: a ? 'rgba(184,164,255,0.12)' : 'transparent',
+          dotBg: a ? '#B8A4FF' : 'rgba(255,255,255,0.30)',
+          lFg: a ? '#CDBEFF' : '#A7ADB7', lFw: a ? 700 : 500,
+        };
+      }),
+
+      // hold-original
+      holdBc: showOriginal ? '#B8A4FF' : 'rgba(255,255,255,0.25)',
+      holdBg: showOriginal ? 'rgba(184,164,255,0.18)' : 'rgba(255,255,255,0.05)',
+      holdIcon: showOriginal ? '#DCCFFF' : '#F7F8FA',
+      holdFg: showOriginal ? '#DCCFFF' : '#A7ADB7',
+      holdLabel: showOriginal ? '원본 보는 중' : '원본 보기',
+      onHoldDown: (e) => { e.preventDefault(); this.holdT0 = Date.now(); this.setState({ holding: true }); },
+      onHoldUp: () => {
+        const quick = Date.now() - this.holdT0 < 260;
+        this.setState(st => ({ holding: false, origPinned: quick ? !st.origPinned : st.origPinned }));
+      },
+      onHoldCancel: () => this.setState({ holding: false }),
+
+      // save
+      saving: s.saving,
+      saveLabel: s.saving ? '저장 중…' : '사진 저장',
+      onSave: () => {
+        if (s.saving) return;
+        this.setState({ saving: true, menuOpen: false, toast: null });
+        const label = this.I_LABELS[this.state.intensity];
+        this.after(1000, () => {
+          this.setState({ saving: false });
+          if (this.props.simulateSaveFailure ?? false) this.showToast('err', '사진을 저장하지 못했어요', 4200, true);
+          else { this.setState({ savedOnce: true }); this.showToast('ok', '‘' + label + '’ 결과를 사진에 저장했어요', 2800); }
+        });
+      },
+
+      // menu
+      menuOpen: s.menuOpen,
+      menuToggle: () => this.setState(st => ({ menuOpen: !st.menuOpen })),
+      menuClose: () => this.setState({ menuOpen: false }),
+      resetToCamera: () => { this.setState({ menuOpen: false, intensity: 1, divider: 50, origPinned: false, savedOnce: false }); this.go('camera'); },
+      savedOnce: s.savedOnce,
+      exitFlow: () => {
+        this.clearT();
+        this.setState({
+          screen: 'purpose', menuOpen: false, toast: null,
+          intensity: 1, divider: 50, rDivider: 50, origPinned: false, holding: false, savedOnce: false,
+        });
+      },
+
+      // report
+      openReport: () => { this.setState({ rTab: 0, origPinned: false, holding: false }); this.go('report'); },
+      reportBack: () => this.setState({ screen: 'result' }),
+      reportRef: this.reportRef,
+      sec0: this.secRefs[0], sec1: this.secRefs[1], sec2: this.secRefs[2], sec3: this.secRefs[3],
+      rTabs: ['수염 분석', '변화 비교', '상담 준비', '관리 팁'].map((label, i) => ({
+        label,
+        bg: s.rTab === i ? 'rgba(184,164,255,0.16)' : 'transparent',
+        fg: s.rTab === i ? '#CDBEFF' : '#A7ADB7',
+        on: () => {
+          const sc = this.reportRef.current, el = this.secRefs[i].current;
+          if (sc && el) sc.scrollTo({ top: Math.max(0, el.offsetTop - 90), behavior: 'smooth' });
+          this.setState({ rTab: i });
+        },
+      })),
+      onReportScroll: (e) => {
+        const st = e.currentTarget.scrollTop + 140;
+        let idx = 0;
+        this.secRefs.forEach((r, i) => { if (r.current && r.current.offsetTop <= st) idx = i; });
+        if (idx !== this.state.rTab) this.setState({ rTab: idx });
+      },
+      analysisCells: [
+        { k: '수염 타입 요약', v: '그림자 중심' }, { k: '밀도', v: '중간' },
+        { k: '푸른 그림자', v: '두드러지는 편' }, { k: '주요 분포', v: '턱 · 인중' },
+        { k: '촬영 품질', v: '좋음' }, { k: '원본 보존', v: '확인됨' },
+      ],
+      consults: this.CONSULTS.map(text => ({
+        text,
+        on: () => { try { navigator.clipboard.writeText(text); } catch (_) {} this.showToast('ok', '상담 멘트를 복사했어요'); },
+      })),
+      copyAll: () => { try { navigator.clipboard.writeText(this.CONSULTS.join('\n\n')); } catch (_) {} this.showToast('ok', '상담 멘트 2개를 복사했어요'); },
+      tips: this.TIPS.map(text => ({ text })),
+
+      // delete
+      confirmDelete: s.confirmDelete,
+      askDelete: () => this.setState({ confirmDelete: true }),
+      cancelDelete: () => this.setState({ confirmDelete: false }),
+      doDelete: () => {
+        this.clearT();
+        this.setState({
+          confirmDelete: false, screen: 'purpose', path: null,
+          step: 0, a1: null, shave: null, areas: [], freq: null, cover: null, plan: null,
+          intensity: 1, divider: 50, rDivider: 50, origPinned: false, holding: false,
+        });
+        this.showToast('ok', '사진과 결과를 삭제했어요');
+      },
+
+      // toast
+      toastOn: !!toast, toastMsg: toast ? toast.msg : '',
+      toastOk: !!toast && toast.kind === 'ok', toastErr: !!toast && toast.kind === 'err',
+      toastRetry: !!toast && !!toast.retry,
+    };
+  }
+}
+</script>
+</body>
+</html>
