@@ -127,3 +127,6 @@ jobs:
 
       - name: Contract — Brow native landmark indices
         run: npm run test:brow-native
+
+      - name: Contract — Face3D profile/metric contract
+        run: npm run test:face3d

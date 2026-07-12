@@ -44,8 +44,8 @@ Face3D Lab signed Debug app build           PASS
 ```
 
 새 Unity `resources.assets`와 서명된 앱 안에서 mapId와 topology fingerprint를 문자열로
-재확인했다. 앱 번들은 `com.wiseungcheol.aura.face3dlab`, Team은 `9G4K6N63MK`, Metro
-호스트는 `172.21.100.184`로 기록됐다. 문서 작성 시점에는 iPhone의 CoreDevice 상태가
+재확인했다. 앱 번들은 `<local-dev-bundle>`, Team은 `<local-dev-team>`, Metro
+호스트는 `<old-lan-ip>`로 기록됐다. 문서 작성 시점에는 iPhone의 CoreDevice 상태가
 `paired`이지만 tunnel은 `unavailable`이라 Wi-Fi 설치가 아직 성공하지 않았다. 따라서
 `face3d_analyzed`, 20개 이상 유효 프레임, 5개 finite metric은 아직 runtime 증거가 아니다.
 

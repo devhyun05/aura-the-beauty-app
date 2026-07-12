@@ -70,13 +70,13 @@
     "approvedSemanticMapPresent": true,
     "unityFrameworkIncludesApprovedSemanticMap": true,
     "signedLabAppIncludesApprovedSemanticMap": true,
-    "labBundleIdentifier": "com.wiseungcheol.aura.face3dlab",
+    "labBundleIdentifier": "<local-dev-bundle>",
     "labAppInstalledOnIphone": true,
     "runtimeExtractionVerified": true,
     "metroMode": "face-capture-lab_lan_8081",
     "iphoneStateAtRecordedTime": "wifi_connected_metro_lan_8081",
     "installBlocker": "resolved_wifi_install_local_team_signing",
-    "installNotes": "Signed Debug with local team 9G4K6N63MK / bundle com.wiseungcheol.aura.face3dlab (committed team G7X4226T2Q has no account on this Mac). App loaded JS over WiFi after the Mac LAN IP changed; recovered by re-aliasing the baked packager IP. See AGENTS.md iOS Real-Device Build & Verify."
+    "installNotes": "Signed Debug with local team <local-dev-team> / bundle <local-dev-bundle> (committed team G7X4226T2Q has no account on this Mac). App loaded JS over WiFi after the Mac LAN IP changed; recovered by re-aliasing the baked packager IP. See AGENTS.md iOS Real-Device Build & Verify."
   },
   "gates": {
     "G0": {
@@ -104,7 +104,7 @@
         "status": "passed",
         "verifiedAtUtc": "2026-07-12T14:05:00Z",
         "device": "iPhone 16 (iPhone17,3), iOS 26.5",
-        "labBundleIdentifier": "com.wiseungcheol.aura.face3dlab",
+        "labBundleIdentifier": "<local-dev-bundle>",
         "semanticMapMissing": false,
         "topologyFingerprintMatched": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f",
         "meshVertexCount": 1220,

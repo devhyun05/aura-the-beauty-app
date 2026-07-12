@@ -287,7 +287,7 @@ geometry/aggregation/profile 계약이 포함된다. 이는 순수 geometry와 U
 로컬 증거이며, iPhone ARKit 실행 증거와는 별도다.
 
 v7 승인 map과 강화된 Unity loader를 포함한 UnityFramework 빌드, MediaPipe framework
-복사, `com.wiseungcheol.aura.face3dlab` Debug 앱의 자동 서명 빌드까지 통과했다. 빌드된
+복사, `<local-dev-bundle>` Debug 앱의 자동 서명 빌드까지 통과했다. 빌드된
 `resources.assets`에서 mapId `arkit-face3d-g1-reviewed-v1`과 fingerprint
 `57bdaf...f3f`를 다시 확인했다. 2026-07-12 Wi-Fi로 iPhone 16에 설치해 실제
 `face3d_analyzed`, 30/30 유효 프레임, 5개 finite metric을 확인함으로써 runtime smoke를

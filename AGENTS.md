@@ -49,7 +49,7 @@ install, run, and verify a device measurement in one pass. Each step lists the f
 - Get the UDID from `xctrace`, NOT `devicectl`. `xcrun devicectl list devices` prints a
   CoreDevice UUID that expo/xcodebuild reject with "No device UDID or name matching ...".
   Use: `xcrun xctrace list devices | grep -v Simulator | grep iPhone`
-  → real UDID like `00008140-000924DE21BB801C`.
+  → real UDID like `<device-udid>`.
 - Confirm the device is reachable before building: `xcrun devicectl list devices` should
   show `available`. Over WiFi it often shows `unavailable` when the phone is
   locked/asleep; that also blocks `devicectl` log pulls (see Verify).
@@ -57,8 +57,8 @@ install, run, and verify a device measurement in one pass. Each step lists the f
 ### Signing (local dev)
 - The committed Debug team `G7X4226T2Q` has no account on this Mac, so signing fails with
   "No profiles for '...' were found ... Automatic signing is disabled".
-- This Mac's only signing identity is team `9G4K6N63MK`
-  (Apple Development: nicewei@naver.com), bundle `com.wiseungcheol.aura.face3dlab`.
+- This Mac's only signing identity is team `<local-dev-team>`
+  (Apple Development: <local-dev-account>), bundle `<local-dev-bundle>`.
 - Before a device build, set the Debug config in
   `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` to this team + bundle. Keep it a
   LOCAL edit — do NOT commit it. Empty entitlements (`<dict/>`) means no extra
@@ -67,7 +67,7 @@ install, run, and verify a device measurement in one pass. Each step lists the f
 ### Metro host (WiFi)
 - A dev build bakes the Mac's LAN IP at build time. If the Mac's DHCP IP later changes,
   the app shows a red "Could not connect to development server" screen pointing at the
-  OLD IP (e.g. it wants `172.21.100.184` while the Mac is now `172.21.101.239`).
+  OLD IP (e.g. it wants `<old-lan-ip>` while the Mac is now `<current-lan-ip>`).
 - Prevent it: inject the CURRENT IP at build time so the baked URL is correct:
   `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`
 - Phone and Mac must be on the same WiFi/subnet (compare against `ipconfig getifaddr en0`),
