@@ -794,6 +794,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   if (!leftEye || !rightEye || !noseTip) {
     return @{
       @"pitchDeg": @0,
+      @"pitchMeasured": @NO,
       @"yawDeg": @0,
       @"rollDeg": @0,
       @"poseSource": @"geometry_unavailable",
@@ -812,6 +813,11 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   CGFloat rollDeg = AURARealtimeDegrees(atan2(rightY - leftY, rightX - leftX));
   CGFloat yawDeg = (noseX - eyeCenterX) / eyeDistance * 42.0;
   CGFloat pitchDeg = 0.0;
+  // pitch 는 입꼬리 쌍이 있어야만 계측 가능하다. 입꼬리가 없으면 pitchDeg=0 을
+  // 그대로 두되 pitchMeasured=NO 로 표기해, live pose 게이트가 '측정된 0'과
+  // '못 잰 것'을 구분하게 한다 — 표기가 없으면 실제 큰 pitch 가 0 으로 위장돼
+  // live 를 통과하고 사후 게이트에서만 폐기된다(코덱스 #245-4).
+  BOOL pitchMeasured = NO;
 
   if (mouthLeft && mouthRight) {
     CGFloat mouthCenterY =
@@ -821,10 +827,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     CGFloat verticalSpan = fmax(mouthCenterY - eyeCenterY, 0.001);
     CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
     pitchDeg = (noseRatio - 0.48) * 28.0;
+    pitchMeasured = YES;
   }
 
   return @{
     @"pitchDeg": @(pitchDeg),
+    @"pitchMeasured": @(pitchMeasured),
     @"yawDeg": @(yawDeg),
     @"rollDeg": @(rollDeg),
     @"poseSource": @"geometry",
@@ -949,6 +957,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   _facing = nextFacing;
   _isSessionConfigured = NO;
+  // 카메라 전환 시 프레임 회전 잠금을 무효화한다 — front/back 은 orientation 힌트
+  // (Left/Right)·미러가 달라 이전 카메라에서 잠긴 회전이 유효하지 않다(코덱스 #245-3).
+  // 세션이 재구성되며 프레임 전달이 잠시 멈추므로 여기서 직접 리셋해도 안전하다.
+  _hasLockedFrameRotation = NO;
+  _pendingFrameRotation = AURARealtimeFrameRotationUnknown;
+  _rotationDisagreeStreak = 0;
 
   if (self.window != nil) {
     [self startCameraIfPermitted];
@@ -1451,14 +1465,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (void)updateOutputConnections
 {
   for (AVCaptureOutput *output in _session.outputs) {
+    // video data output(_videoOutput)은 회전·미러 없이 raw 로 유지한다. Vision/MPP
+    // 힌트(AURARealtimeVideoOrientation / AURARealtimeMediaPipeImageOrientation)가
+    // raw landscape 버퍼를 전제로 Left/Right 로 '한 번만' 세우기 때문이다. 여기서
+    // 데이터 출력에까지 Portrait 를 걸면 버퍼가 물리 회전돼 이중회전(얼굴 ≈90°)이
+    // 되고, Vision roll≈90° 로 F8 이 올바른 프레임 회전을 Unknown 으로 강등한다
+    // (코덱스 #245-1). 표시용 회전·미러는 preview connection 이 소유한다.
+    BOOL isVideoDataOutput = (output == _videoOutput);
     for (AVCaptureConnection *connection in output.connections) {
-      if ([connection isVideoOrientationSupported]) {
+      if (!isVideoDataOutput && [connection isVideoOrientationSupported]) {
         connection.videoOrientation = AVCaptureVideoOrientationPortrait;
       }
       if ([connection isVideoMirroringSupported]) {
         connection.automaticallyAdjustsVideoMirroring = NO;
         BOOL mirrorsPreviewOnly =
-            [self devicePosition] == AVCaptureDevicePositionFront && output != _videoOutput;
+            [self devicePosition] == AVCaptureDevicePositionFront && !isVideoDataOutput;
         connection.videoMirrored = mirrorsPreviewOnly;
       }
     }
@@ -1842,16 +1863,30 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   //  게이트가 최종 방어선이라 잘못된 분석 결과로는 이어지지 않는다.)
   if (detected != AURARealtimeFrameRotationUpright &&
       detected != AURARealtimeFrameRotationUnknown) {
-    BOOL isFront = [self devicePosition] == AVCaptureDevicePositionFront;
-    NSDictionary *visionPose = AURARealtimePoseFromVisionObservation(face, isFront);
-    double headRollAbs =
-        visionPose ? fabs([visionPose[@"rollDeg"] doubleValue]) : INFINITY;
-    if (!visionPose || headRollAbs > kAURARealtimeMaxHeadRollForFrameRotationDeg) {
+    // F8 은 head roll 하나만 필요하다. Vision 의 roll/yaw/pitch 는 서로 독립
+    // optional 이라 전체 pose payload(AURARealtimePoseFromVisionObservation)를
+    // 요구하면 yaw·pitch 가 없을 때 genuine landscape 까지 Unknown 으로 강등된다
+    // (코덱스 #245-2). roll(VNFaceObservation.roll, 라디안)만 직접 읽는다. |roll|
+    // 은 front/back 미러에 불변이므로 isFront 보정이 불필요하다. roll 이 없으면
+    // 판별 불가로 보고 강등(fail-safe).
+    NSNumber *rollNumber = face.roll;
+    double headRollAbs = rollNumber != nil
+        ? fabs(AURARealtimeDegrees(rollNumber.doubleValue))
+        : INFINITY;
+    if (rollNumber == nil || headRollAbs > kAURARealtimeMaxHeadRollForFrameRotationDeg) {
       detected = AURARealtimeFrameRotationUnknown;
     }
   }
 
   if (detected == AURARealtimeFrameRotationUnknown) {
+    // Unknown 은 진행 중이던 전환 누적을 끊는다 — 잠긴 값과 '연속으로' 같은 후보가
+    // 쌓일 때만 전환해야 하는데, 리셋하지 않으면 X→Unknown→X… 가 Unknown 을
+    // 건너뛰고 누적돼 한 번도 연속이 아닌 값으로 잘못 전환된다(코덱스 #245-3).
+    // 잠긴 값 자체는 유지(fail-safe).
+    if (_hasLockedFrameRotation) {
+      _pendingFrameRotation = _lockedFrameRotation;
+      _rotationDisagreeStreak = 0;
+    }
     return _hasLockedFrameRotation ? _lockedFrameRotation
                                    : AURARealtimeFrameRotationUpright;
   }

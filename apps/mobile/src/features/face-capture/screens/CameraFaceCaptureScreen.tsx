@@ -442,12 +442,17 @@ export function CameraFaceCaptureScreen({
   // greenlight 게이트는 face 모드 + realtime 네이티브 뷰가 있을 때만 활성화한다.
   // realtime 뷰 없이는 mediaPipe/cameraStability 입력이 오지 않아 영구 차단되기 때문.
   const requireGreenlight = shouldValidateFace && realtimeCaptureAvailable;
+  // captureType 미지정 시 기본값을 업로드 계층과 동일한 'face_analysis'로 맞춘다
+  // — 종전엔 화면은 완화 프로파일, 업로드는 face_analysis 로 저장돼 사후 게이트에서
+  // 폐기되는 불일치가 있었다(코덱스 minor). matte/pose 판정 모두 이 값을 써야
+  // prop 생략 시에도 hair/skin matte 가 함께 요청된다(코덱스 #245-6).
+  const effectiveCaptureType = captureType ?? 'face_analysis';
   // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
   const semanticMatteCapture =
     requireGreenlight &&
-    (captureType === 'face_analysis' ||
-      captureType === 'personal_color' ||
-      captureType === 'hair_analysis');
+    (effectiveCaptureType === 'face_analysis' ||
+      effectiveCaptureType === 'personal_color' ||
+      effectiveCaptureType === 'hair_analysis');
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   // 타원 프레이밍 가이드 (기획서 §3.5 비율, 화면 중앙 앵커).
   // 정수리/턱끝이 타원 상하단 점에 맞아야 촬영되므로 얼굴 크기(=촬영 거리)를
@@ -503,10 +508,6 @@ export function CameraFaceCaptureScreen({
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
   );
-  // captureType 미지정 시 기본값을 업로드 계층과 동일한 'face_analysis'로 맞춘다
-  // — 종전엔 화면은 완화 프로파일, 업로드는 face_analysis 로 저장돼 사후 게이트에서
-  // 폐기되는 불일치가 있었다(코덱스 minor).
-  const effectiveCaptureType = captureType ?? 'face_analysis';
   // 촬영 타입별 pose 임계 프로파일. face_analysis 는 사후 품질 게이트에 지터 마진을
   // 뺀 값이라 "촬영은 되는데 분석에서 폐기"가 구조적으로 최소화된다.
   // 두 프로파일 모두 모듈 상수(frozen)라 참조가 안정적 — deps 에 넣어도 재계산 없음.
@@ -531,7 +532,13 @@ export function CameraFaceCaptureScreen({
   const pitchGate = useMemo(
     // face_analysis 는 requireValid=true — pitch 를 못 재면(결측) 통과가 아니라
     // 차단해 "기울기 못 재면 재촬영" 정책과 realtime⇒사후 정합을 맞춘다.
-    () => evaluateFacePitchGate(latestMediaPipe?.pitchDeg, undefined, true),
+    () =>
+      evaluateFacePitchGate(
+        latestMediaPipe?.pitchDeg,
+        undefined,
+        true,
+        latestMediaPipe?.pitchMeasured,
+      ),
     [latestMediaPipe],
   );
   const shouldBlockForPitch = requirePitchGate && !pitchGate.pitchOk;
@@ -795,6 +802,7 @@ export function CameraFaceCaptureScreen({
             ? {
                 faceWidthRatio: nativeEvent.mediaPipe.faceWidthRatio,
                 pitchDeg: nativeEvent.mediaPipe.pitchDeg,
+                pitchMeasured: nativeEvent.mediaPipe.pitchMeasured,
                 poseSource: nativeEvent.mediaPipe.poseSource,
                 projectionEyeTilt: nativeEvent.mediaPipe.projectionEyeTilt ?? null,
                 rollDeg: nativeEvent.mediaPipe.rollDeg,

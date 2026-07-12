@@ -26,10 +26,17 @@ export function evaluateFacePitchGate(
   maxAbsDeg: number = FACE_PITCH_GATE_MAX_ABS_DEG,
   // face_analysis 는 "기울기 못 재면 재촬영" 정책이라 결측 pitch 를 차단(fail-closed).
   requireValid = false,
+  // geometry 폴백이 입꼬리 없이 pitch=0 을 placeholder 로 낸 경우 false.
+  // '측정된 0'과 '못 잰 것'을 구분해, 못 잰 것을 결측으로 처리한다(코덱스 #245-4).
+  pitchMeasured: boolean | undefined = undefined,
 ): FacePitchGateResult {
-  if (typeof pitchDeg !== 'number' || !Number.isFinite(pitchDeg)) {
-    // pitch 값이 없을 때: requireValid 면 차단(pitch 를 확인 못 하면 재촬영),
-    // 아니면 통과(사후 게이트가 최종 안전망).
+  if (
+    pitchMeasured === false ||
+    typeof pitchDeg !== 'number' ||
+    !Number.isFinite(pitchDeg)
+  ) {
+    // pitch 를 확인 못 할 때: requireValid 면 차단(재촬영), 아니면 통과(사후 게이트가
+    // 최종 안전망). pitchMeasured===false 는 입꼬리 결측으로 계측 자체가 불가한 경우.
     return {pitchDeg: null, pitchOk: !requireValid};
   }
 

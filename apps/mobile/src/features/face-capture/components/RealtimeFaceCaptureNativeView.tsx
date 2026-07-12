@@ -44,6 +44,11 @@ export type RealtimeMediaPipePayload = {
   landmarkCount?: number;
   landmarks?: Partial<Record<RealtimeMediaPipeLandmarkKey, RealtimeMediaPipePoint>>;
   pitchDeg?: number;
+  // geometry 폴백에서만 방출: 입꼬리 쌍이 없어 pitch 를 계측하지 못하면 false.
+  // 이때 pitchDeg 는 0(placeholder)이므로 '측정된 0'과 구분해야 한다 — face_analysis
+  // pitch 게이트가 false 를 결측으로 보고 재촬영을 유도한다(코덱스 #245-4).
+  // vision/matrix 경로는 이 키를 방출하지 않으며(=측정됨) undefined 로 남는다.
+  pitchMeasured?: boolean;
   // 'vision': VNFaceObservation 이 직접 제공하는 각도 (Vision 폴백 경로의 기본).
   // 'geometry': 5점 랜드마크 근사 (vision 각도 미제공 시 2차 폴백).
   poseSource?: 'matrix' | 'vision' | 'geometry' | 'geometry_unavailable';
