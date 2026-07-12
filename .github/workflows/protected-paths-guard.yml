@@ -126,7 +126,14 @@ jobs:
           if [[ -f "$PODFILE" && -f "$LOCKFILE" ]]; then
             lock_sum=$(grep '^PODFILE CHECKSUM:' "$LOCKFILE" | awk '{print $3}' || true)
             real_sum=$(sha1sum "$PODFILE" | awk '{print $1}')
-            if [[ -n "$lock_sum" && "$lock_sum" != "$real_sum" ]]; then
+            # PODFILE CHECKSUM 줄 자체가 없으면(머지 충돌 해소 중 유실·손상, b74f609
+            # 가 실제로 이 영역을 망가뜨린 전례) 검사가 조용히 통과되지 않도록
+            # 실패시킨다 — 이 줄 삭제 한 번으로 정합 규칙을 무력화하는 우회를 막는다.
+            if [[ -z "$lock_sum" ]]; then
+              echo "::error file=${LOCKFILE}::Podfile.lock 에 'PODFILE CHECKSUM:' 줄이 없습니다(손상/유실). 'cd apps/mobile && npm run pods' 로 재생성하세요."
+              exit 1
+            fi
+            if [[ "$lock_sum" != "$real_sum" ]]; then
               echo "::error file=${LOCKFILE}::Podfile.lock 이 Podfile 과 불일치합니다 (lock=${lock_sum} 실제=${real_sum}). 'cd apps/mobile && npm run pods' 로 재생성하세요 — lock 수동 편집 금지. 이 규칙은 라벨로 끌 수 없습니다."
               exit 1
             fi
@@ -143,15 +150,24 @@ jobs:
           PODFILE="apps/mobile/ios/Podfile"
           BASE="origin/${{ github.base_ref }}"
 
-          removed_pods=$(git diff "${BASE}...HEAD" -- "$PODFILE" \
-            | grep -E "^-[[:space:]]*pod ['\"]" || true)
-          if [[ -n "$removed_pods" ]]; then
+          # pod '이름' 의 이름만 뽑아 "제거됐고 다시 추가되지 않은" pod 만 삭제로
+          # 본다 — 버전 범프(pod 'X','0.1'→'0.2')는 같은 이름이 -/+ 양쪽에 있어
+          # 오탐이 나던 것을 막는다(일상적 의존성 업그레이드가 매번 막히지 않게).
+          diff_out=$(git diff "${BASE}...HEAD" -- "$PODFILE")
+          removed_names=$(echo "$diff_out" \
+            | grep -E "^-[[:space:]]*pod ['\"]" \
+            | sed -E "s/^-[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u)
+          added_names=$(echo "$diff_out" \
+            | grep -E "^\+[[:space:]]*pod ['\"]" \
+            | sed -E "s/^\+[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u)
+          truly_removed=$(comm -23 <(echo "$removed_names") <(echo "$added_names") | grep -v '^$' || true)
+          if [[ -n "$truly_removed" ]]; then
             if [[ "$PODS_APPROVED" == "true" ]]; then
               echo "::warning file=${PODFILE}::pod 선언 삭제가 'pods-approved' 라벨로 승인됐습니다:"
-              echo "$removed_pods"
+              echo "$truly_removed"
             else
               echo "::error file=${PODFILE}::Podfile 에서 pod 선언이 삭제됐습니다. 해당 pod 를 쓰는 네이티브 기능이 조용히 죽을 수 있습니다(020cb33 재현). 오너 승인 후 'pods-approved' 라벨을 다세요:"
-              echo "$removed_pods"
+              echo "$truly_removed"
               exit 1
             fi
           fi
@@ -175,7 +191,9 @@ jobs:
           violations=0
           for f in "${ANALYZERS[@]}"; do
             [[ -f "$f" ]] || continue
-            n=$(grep -c '^#if' "$f" || true)
+            # 들여쓴 '  #if' 나 '# if'(모두 합법 CPP)까지 잡는다 — 컬럼0 앵커만
+            # 쓰면 020cb33 스타일 래핑을 메서드 안에 들여써서 우회할 수 있다.
+            n=$(grep -cE '^[[:space:]]*#[[:space:]]*if' "$f" || true)
             if (( n > 0 )); then
               if [[ "$NATIVE_APPROVED" == "true" ]]; then
                 echo "::warning file=${f}::분석기의 조건부 컴파일(#if) ${n}개가 'native-approved' 라벨로 승인됐습니다."
