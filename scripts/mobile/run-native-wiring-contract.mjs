@@ -51,8 +51,13 @@ function assertNotContains(source, needle, label) {
   const src = readSource(path);
   assertContains(src, 'RCT_EXPORT_MODULE()', `${path}: RCT_EXPORT_MODULE 이 없다 — RN 모듈 등록이 사라짐`);
   assertContains(src, /RCT_EXPORT_METHOD\(analyze:/, `${path}: analyze 메서드 export 가 없다`);
-  assertContains(src, 'AURAPCLandmarkSetFromJS', `${path}: homuler 랜드마크 적재(AURAPCLandmarkSetFromJS)가 없다`);
+  assertContains(src, 'AURAPCLandmarkSetFromJS', `${path}: homuler 랜드마크 적재 함수(AURAPCLandmarkSetFromJS 정의)가 없다`);
+  // 정의 존재만이 아니라 실제 '적재 호출'을 검증한다 — 정의는 남기고 대입을
+  // `= {0}` 등으로 바꾸면 모든 입력이 런타임 no_face 가 되는데(코덱스 재현),
+  // 문자열 존재 검사만으로는 그 퇴화를 못 잡는다.
+  assertContains(src, /=\s*AURAPCLandmarkSetFromJS\(/, `${path}: homuler 랜드마크 적재 호출(= AURAPCLandmarkSetFromJS(...))이 없다 — 얼굴 검출이 죽어 항상 no_face`);
   assertContains(src, /static AURAPCPoint AURAPCLandmark\(/, `${path}: 랜드마크 접근자(AURAPCLandmark)가 없다`);
+  assertContains(src, /AURAPCLandmark\(landmarks/, `${path}: 적재된 랜드마크(landmarks)를 실제로 샘플링하는 호출이 없다`);
   // 조명 보정(sclera) 배선 — 8164840 포팅으로 도입. 이 심볼들이 사라지면
   // 흰자 샘플링이 죽어 illuminationCorrection 이 조용히 미적용으로 퇴화한다.
   assertContains(src, 'kScleraLeftEyeIndices', `${path}: sclera 랜드마크 인덱스가 없다 — 조명 보정 입력이 사라짐`);
@@ -66,6 +71,8 @@ function assertNotContains(source, needle, label) {
   const src = readSource(path);
   assertContains(src, 'RCT_EXPORT_MODULE()', `${path}: RCT_EXPORT_MODULE 이 없다 — RN 모듈 등록이 사라짐`);
   assertContains(src, /RCT_EXPORT_METHOD\(analyze:/, `${path}: analyze 메서드 export 가 없다`);
+  // 실제 homuler 랜드마크 변환 호출 검증 — 정의만 남기고 호출을 끊는 퇴화 차단.
+  assertContains(src, /=\s*AURAFaceRatioLandmarksFromJS\(/, `${path}: homuler 랜드마크 변환 호출(= AURAFaceRatioLandmarksFromJS(...))이 없다`);
   assertNotContains(src, 'MEDIAPIPE_UNAVAILABLE', `${path}: 020cb33 스텁 마커(MEDIAPIPE_UNAVAILABLE)가 재유입됐다`);
 }
 
