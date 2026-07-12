@@ -18,13 +18,23 @@ export type FaceVerticalThirdsQualityGateResult = {
   statusReason?: string;
 };
 
-function isWithinPoseGate(value: number | undefined, limit: number) {
-  // 비유한(NaN/Infinity)은 '측정값 없음'으로 보고 통과시킨다 — 실시간 게이트도
-  // 동일 철학(pitch 게이트의 Number.isFinite, greenlight 의 `?? 0` 로 NaN 미차단)
-  // 이라, 여기서 NaN 을 차단하면 "실시간 통과 → 사후 pose_gate_failed 폐기"
-  // 구간이 다시 열린다(facePoseGates 불변식 위반). 실제 pose 결측은 얼굴 미검출
-  // 게이트·엔진 신뢰도가 이미 방어한다.
-  return typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) <= limit;
+function isWithinPoseGate(value: number, limit: number) {
+  // 유효성(유한·존재)은 호출 전에 isPoseMeasured 로 검증됐다. 여기선 범위만 본다.
+  return Math.abs(value) <= limit;
+}
+
+// pose 를 실제로 잰 것인지 판정. 0/0/0(결측 기본값)은 "완벽 정면"과 값이 같아
+// 구분 불가이므로, poseSource='unavailable' 또는 결측/비유한을 "못 잼"으로 본다 —
+// face_analysis 는 "기울기 못 재면 재촬영" 정책이라 이 경우 fail-closed 한다.
+function isPoseMeasured(nativeResult: NativeFaceRatioAnalyzeResult): boolean {
+  const pose = nativeResult.pose;
+  return (
+    !!pose &&
+    pose.poseSource !== 'unavailable' &&
+    Number.isFinite(pose.yawDeg) &&
+    Number.isFinite(pose.pitchDeg) &&
+    Number.isFinite(pose.rollDeg)
+  );
 }
 
 function createBlockedResult(
@@ -70,10 +80,22 @@ export function evaluateFaceVerticalThirdsQuality(
     );
   }
 
+  // pose 를 못 쟀으면(결측/비유한/poseSource unavailable) 재촬영으로 차단 —
+  // 0/0/0 을 "완벽 정면"으로 오인해 기울어진 얼굴을 통과시키던 fail-open 방지.
+  if (!isPoseMeasured(nativeResult)) {
+    return createBlockedResult(
+      keypoints,
+      nativeResult,
+      'pose_unavailable',
+      ['pose_unavailable'],
+    );
+  }
+
+  const pose = nativeResult.pose!;
   if (
-    !isWithinPoseGate(nativeResult.pose?.yawDeg, MAX_ABS_YAW_DEG) ||
-    !isWithinPoseGate(nativeResult.pose?.pitchDeg, MAX_ABS_PITCH_DEG) ||
-    !isWithinPoseGate(nativeResult.pose?.rollDeg, MAX_ABS_ROLL_DEG)
+    !isWithinPoseGate(pose.yawDeg, MAX_ABS_YAW_DEG) ||
+    !isWithinPoseGate(pose.pitchDeg, MAX_ABS_PITCH_DEG) ||
+    !isWithinPoseGate(pose.rollDeg, MAX_ABS_ROLL_DEG)
   ) {
     return createBlockedResult(
       keypoints,

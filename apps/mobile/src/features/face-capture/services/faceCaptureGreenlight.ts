@@ -167,7 +167,17 @@ export function evaluateFaceCaptureGreenlight({
       }
     }
 
-    if (
+    // pose 를 못 재면(NaN/결측/geometry_unavailable → 0/0/0) fail-closed:
+    // face_analysis 는 "기울기 못 재면 재촬영" 정책이라 정면인 척 통과시키지 않는다.
+    // 'geometry'(5점 근사)·'vision' 은 실측 각도이므로 유효로 본다.
+    const poseInvalid =
+      !Number.isFinite(mediaPipe.yawDeg) ||
+      !Number.isFinite(mediaPipe.rollDeg) ||
+      mediaPipe.poseSource === undefined ||
+      mediaPipe.poseSource === 'geometry_unavailable';
+    if (poseGate.requireValidPose && poseInvalid) {
+      failureReasons.push('not_forward');
+    } else if (
       Math.abs(mediaPipe.yawDeg ?? 0) > poseGate.maxAbsYawDeg ||
       Math.abs(mediaPipe.rollDeg ?? 0) > poseGate.maxAbsRollDeg
     ) {

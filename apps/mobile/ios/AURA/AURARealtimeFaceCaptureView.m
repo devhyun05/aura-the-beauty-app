@@ -10,15 +10,24 @@
 
 #import "AURARealtimeGeometry.h"
 
-// 프레임 회전 자가판정 킬스위치. NO 면 항상 Upright(=회전 없음)로 동작해
-// 이 기능 도입 이전과 비트 동일하다 — 자가판정이 문제를 일으키면 이 한 줄로
-// 롤백한다. (배경: 파일 내에 'Vision 좌표=upright' 와 'raw landscape' 라는
-// 상반된 규약 주석이 공존했고, 어느 쪽이 실제인지 기기/iOS 버전에 따라 다를
-// 수 있어 규약을 가정하지 않고 매 프레임 판정한다 — AURARealtimeGeometry.h)
+// 프레임 회전 자가판정 킬스위치. NO 면 항상 Upright(=회전 없음)로 동작한다.
+// 주의(정직한 한계): 이는 "종전과 비트 동일"이 아니다 — 버퍼가 실제로 raw
+// landscape 였다면 종전 코드는 pose 계산에서 축 스왑을 했으나 OFF(=upright)는
+// 스왑을 안 한다. OFF 가 종전과 같아지는 것은 버퍼가 이미 upright 인 경우뿐이며,
+// 그 진위는 진단 로그(frameRotation/eyeAxisRatio/projectionEyeTilt)로 실기기에서
+// 확인해야 한다. (배경: 파일 내 'Vision 좌표=upright' vs 'raw landscape' 상반된
+// 규약 주석이 공존했고 기기/iOS 버전차로 어느 쪽이 실제인지 미지수라 규약을
+// 가정하지 않고 매 프레임 판정한다 — AURARealtimeGeometry.h)
 static const BOOL kAURARealtimeRotationDetectionEnabled = YES;
 
-// 회전 잠금 전환에 필요한 연속 불일치 프레임 수 (~0.4s @ 0.08s 스로틀).
+// 회전 잠금 전환에 필요한 "동일 후보" 연속 불일치 프레임 수 (~0.4s @ 0.08s 스로틀).
 static const NSInteger kAURARealtimeRotationSwitchStreak = 5;
+
+// 비-upright 프레임 회전을 신뢰할 최대 head roll(도). 눈선이 세로인 것은
+// (a) 프레임 90° 회전 (b) 고개를 90° 가까이 기울임 둘 다에서 나오는데 눈선
+// 하나로는 못 가른다. Vision 이 독립 추정한 head roll 이 이 값 이하일 때만
+// (=머리가 대체로 똑바를 때만) '세로 눈선 = 프레임 회전'으로 확정한다.
+static const double kAURARealtimeMaxHeadRollForFrameRotationDeg = 20.0;
 
 // MediaPipe was removed from this build (a Unity MediaPipe plugin now provides
 // it; keeping the Pod caused a duplicate-MediaPipe crash). Guard every
@@ -860,9 +869,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   CGSize _latestViewSize;
   NSDictionary *_lastScreenLandmarks;
   // 프레임 회전 자가판정 상태 (vision 큐 전용 접근).
-  // 잠금(hysteresis): 첫 유효 판정으로 잠그고, 연속 kAURARealtimeRotationSwitchStreak
-  // 프레임 동안 다른 값이 나와야 전환한다. Unknown 프레임은 잠긴 값을 유지.
+  // 잠금(hysteresis): 첫 유효 판정으로 잠그고, "동일 후보"가 연속
+  // kAURARealtimeRotationSwitchStreak 프레임 나와야 전환한다. Unknown 프레임은
+  // 잠긴 값을 유지. _pendingFrameRotation 은 현재 누적 중인 전환 후보로,
+  // 다른 후보가 오면 streak 를 리셋해 "플래핑"으로 엉뚱한 값에 잠기는 것을 막는다.
   AURARealtimeFrameRotation _lockedFrameRotation;
+  AURARealtimeFrameRotation _pendingFrameRotation;
   BOOL _hasLockedFrameRotation;
   NSInteger _rotationDisagreeStreak;
   // 진단용 (payload 로 방출): 이번 프레임의 원시 판정과 raw 눈선 축 비율.
@@ -1817,7 +1829,27 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     }
   }
 
-  const AURARealtimeFrameRotation detected = _diagDetectedRotation;
+  // 원시 판정(_diagDetectedRotation)은 진단용으로 보존한다. 적용 결정은 local
+  // 사본에 F8 게이트를 적용한 값으로 한다 — 로그의 frameRotationDetected(원시)와
+  // frameRotation(적용)이 다르면 게이트가 억제했음을 원격 판독할 수 있다.
+  AURARealtimeFrameRotation detected = _diagDetectedRotation;
+
+  // ── F8 게이트: 비-upright 회전은 머리가 똑바를 때만 신뢰 ──
+  // 세로 눈선은 프레임 90° 회전과 고개 90° 기울임을 구분 못 한다(눈선 하나로는
+  // 불가). Vision 이 독립 추정한 head roll 이 작을 때만 프레임 회전으로 확정하고,
+  // 크거나(고개 기울임) 없으면 Unknown 으로 강등해 잠긴 값을 유지한다.
+  // (한계: 방향 힌트가 실제와 어긋난 극단 케이스는 여전히 애매 — 사후 pose
+  //  게이트가 최종 방어선이라 잘못된 분석 결과로는 이어지지 않는다.)
+  if (detected != AURARealtimeFrameRotationUpright &&
+      detected != AURARealtimeFrameRotationUnknown) {
+    BOOL isFront = [self devicePosition] == AVCaptureDevicePositionFront;
+    NSDictionary *visionPose = AURARealtimePoseFromVisionObservation(face, isFront);
+    double headRollAbs =
+        visionPose ? fabs([visionPose[@"rollDeg"] doubleValue]) : INFINITY;
+    if (!visionPose || headRollAbs > kAURARealtimeMaxHeadRollForFrameRotationDeg) {
+      detected = AURARealtimeFrameRotationUnknown;
+    }
+  }
 
   if (detected == AURARealtimeFrameRotationUnknown) {
     return _hasLockedFrameRotation ? _lockedFrameRotation
@@ -1827,16 +1859,27 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   if (!_hasLockedFrameRotation) {
     _lockedFrameRotation = detected;
     _hasLockedFrameRotation = YES;
+    _pendingFrameRotation = detected;
     _rotationDisagreeStreak = 0;
     return _lockedFrameRotation;
   }
 
   if (detected == _lockedFrameRotation) {
+    _pendingFrameRotation = detected;
     _rotationDisagreeStreak = 0;
     return _lockedFrameRotation;
   }
 
-  _rotationDisagreeStreak += 1;
+  // detected != locked: "동일 후보"가 연속으로 쌓일 때만 전환한다. 다른 후보가
+  // 오면 누적을 처음부터 다시 시작 — 서로 다른 값의 불일치가 섞여 누적돼 한 번만
+  // 나온 값으로 잘못 전환되던 플래핑 버그(코덱스 F-hysteresis)를 막는다.
+  if (detected == _pendingFrameRotation) {
+    _rotationDisagreeStreak += 1;
+  } else {
+    _pendingFrameRotation = detected;
+    _rotationDisagreeStreak = 1;
+  }
+
   if (_rotationDisagreeStreak >= kAURARealtimeRotationSwitchStreak) {
     NSLog(@"[aura:face-capture] frame-rotation:switch %@ -> %@ (streak %ld)",
           AURARealtimeFrameRotationName(_lockedFrameRotation),

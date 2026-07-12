@@ -503,11 +503,15 @@ export function CameraFaceCaptureScreen({
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
   );
-  // 촬영 타입별 pose 임계 프로파일. face_analysis 는 사후 품질 게이트와 동치
-  // (8/8/5)라 "촬영은 되는데 분석에서 폐기"가 구조적으로 불가능하다.
+  // captureType 미지정 시 기본값을 업로드 계층과 동일한 'face_analysis'로 맞춘다
+  // — 종전엔 화면은 완화 프로파일, 업로드는 face_analysis 로 저장돼 사후 게이트에서
+  // 폐기되는 불일치가 있었다(코덱스 minor).
+  const effectiveCaptureType = captureType ?? 'face_analysis';
+  // 촬영 타입별 pose 임계 프로파일. face_analysis 는 사후 품질 게이트에 지터 마진을
+  // 뺀 값이라 "촬영은 되는데 분석에서 폐기"가 구조적으로 최소화된다.
   // 두 프로파일 모두 모듈 상수(frozen)라 참조가 안정적 — deps 에 넣어도 재계산 없음.
   const realtimePoseGate =
-    captureType === 'face_analysis'
+    effectiveCaptureType === 'face_analysis'
       ? REALTIME_FACE_ANALYSIS_POSE_GATE
       : REALTIME_DEFAULT_POSE_GATE;
   const greenlightReport = useMemo(
@@ -523,9 +527,11 @@ export function CameraFaceCaptureScreen({
     requireGreenlight && !greenlightReport.finalCaptureGreenlight;
   // 얼굴 세로 비율 촬영에서만 실시간 pitch(고개 숙임/젖힘) 게이트 적용.
   // 세로 비율 최대 왜곡원인데 greenlight는 pitch를 안 보므로 여기서 보강한다.
-  const requirePitchGate = requireGreenlight && captureType === 'face_analysis';
+  const requirePitchGate = requireGreenlight && effectiveCaptureType === 'face_analysis';
   const pitchGate = useMemo(
-    () => evaluateFacePitchGate(latestMediaPipe?.pitchDeg),
+    // face_analysis 는 requireValid=true — pitch 를 못 재면(결측) 통과가 아니라
+    // 차단해 "기울기 못 재면 재촬영" 정책과 realtime⇒사후 정합을 맞춘다.
+    () => evaluateFacePitchGate(latestMediaPipe?.pitchDeg, undefined, true),
     [latestMediaPipe],
   );
   const shouldBlockForPitch = requirePitchGate && !pitchGate.pitchOk;

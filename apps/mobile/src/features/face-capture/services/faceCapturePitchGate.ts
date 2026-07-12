@@ -24,11 +24,13 @@ export type FacePitchGateResult = {
 export function evaluateFacePitchGate(
   pitchDeg: number | undefined,
   maxAbsDeg: number = FACE_PITCH_GATE_MAX_ABS_DEG,
+  // face_analysis 는 "기울기 못 재면 재촬영" 정책이라 결측 pitch 를 차단(fail-closed).
+  requireValid = false,
 ): FacePitchGateResult {
   if (typeof pitchDeg !== 'number' || !Number.isFinite(pitchDeg)) {
-    // pitch 값이 없으면(랜드마크 미검출/기하 폴백) 통과시킨다 — 얼굴 미검출 자체는
-    // greenlight가 이미 막고, 촬영 후 quality gate(±8°)가 최종 안전망이다.
-    return {pitchDeg: null, pitchOk: true};
+    // pitch 값이 없을 때: requireValid 면 차단(pitch 를 확인 못 하면 재촬영),
+    // 아니면 통과(사후 게이트가 최종 안전망).
+    return {pitchDeg: null, pitchOk: !requireValid};
   }
 
   return {pitchDeg, pitchOk: Math.abs(pitchDeg) <= maxAbsDeg};
