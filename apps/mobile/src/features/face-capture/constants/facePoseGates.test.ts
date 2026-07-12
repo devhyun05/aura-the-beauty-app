@@ -147,6 +147,25 @@ expect(
   `스윕 표본이 비정상적으로 적다(${checkedAngles}) — realtimePasses 픽스처가 pose 외 조건에서 실패 중인지 확인`,
 );
 
+// 비유한(NaN/Infinity) pose: 실시간이 통과시키면(결측 취급) 사후도 통과해야 한다.
+// NaN 은 realtime greenlight(`?? 0` 미차단)·pitch gate(Number.isFinite)를 통과하는데,
+// 사후 게이트가 NaN 을 차단하면 폐기 구간이 다시 열린다(회귀 방지 회로).
+for (const badValue of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+  const label = Number.isNaN(badValue) ? 'NaN' : String(badValue);
+  for (const [axis, yaw, pitch, roll] of [
+    ['yaw', badValue, 0, 0],
+    ['pitch', 0, badValue, 0],
+    ['roll', 0, 0, badValue],
+  ] as Array<[string, number, number, number]>) {
+    if (realtimePasses(yaw, pitch, roll)) {
+      expect(
+        postCapturePasses(yaw, pitch, roll),
+        `비유한 ${axis}=${label} 가 실시간을 통과했는데 사후 게이트에서 폐기된다 (NaN 결측 취급 불일치)`,
+      );
+    }
+  }
+}
+
 // 경계 확인: 사후 한계 초과 각도는 실시간에서도 반드시 차단
 expect(
   !realtimePasses(POST_CAPTURE_POSE_GATE.maxAbsYawDeg + 0.5, 0, 0),

@@ -19,7 +19,12 @@ export type FaceVerticalThirdsQualityGateResult = {
 };
 
 function isWithinPoseGate(value: number | undefined, limit: number) {
-  return typeof value !== 'number' || Math.abs(value) <= limit;
+  // 비유한(NaN/Infinity)은 '측정값 없음'으로 보고 통과시킨다 — 실시간 게이트도
+  // 동일 철학(pitch 게이트의 Number.isFinite, greenlight 의 `?? 0` 로 NaN 미차단)
+  // 이라, 여기서 NaN 을 차단하면 "실시간 통과 → 사후 pose_gate_failed 폐기"
+  // 구간이 다시 열린다(facePoseGates 불변식 위반). 실제 pose 결측은 얼굴 미검출
+  // 게이트·엔진 신뢰도가 이미 방어한다.
+  return typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) <= limit;
 }
 
 function createBlockedResult(
