@@ -8,7 +8,12 @@ const providerPath = resolve(
   repoRoot,
   'apps/mobile/ios/AURA/E7NativeLipBoundaryProviders.swift',
 );
-const providerSource = readFileSync(providerPath, 'utf8');
+// 주석을 제거한 뒤 검사한다 — 올바른 배열·매핑을 주석에 남기고 활성 선언을
+// 틀리게 바꿔도 통과하던 우회(코덱스 재현)를 막는다. extractIntArray 의 첫
+// 매치가 주석본을 집던 문제도 함께 해소된다.
+const providerSource = readFileSync(providerPath, 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .replace(/\/\/[^\n]*/g, ' ');
 
 const upstreamRightBrowUnique = [55, 107, 66, 105, 63, 70, 46, 53, 52, 65];
 const upstreamLeftBrowUnique = [285, 336, 296, 334, 293, 300, 276, 283, 295];
