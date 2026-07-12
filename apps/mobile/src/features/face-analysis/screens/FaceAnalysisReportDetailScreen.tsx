@@ -99,19 +99,37 @@ function getVerticalThirdsBlockedMessage(statusReason?: string): string {
   );
 }
 
-// 조명 보정 미적용 사유 → 사용자 안내 문구 (첫 번째로 매칭되는 사유만 표기).
-const CORRECTION_SKIP_MESSAGES: Record<string, string> = {
-  sclera_redness_suspected: '눈이 충혈된 상태로 보여 조명 보정을 보류했어요.',
-  too_few_samples: '눈 흰자 표본이 부족해 조명 보정을 적용하지 못했어요(더 밝은 곳 권장).',
-  left_right_disagree: '좌우 눈의 조명이 달라 보정을 보류했어요(빛을 정면으로 받아 보세요).',
-  sclera_landmarks_unavailable: '눈 영역을 찾지 못해 조명 보정을 적용하지 못했어요.',
-};
+// 조명 보정 미적용 사유 → 사용자 안내 문구.
+// illuminationCorrection.ts 의 실제 사유 코드는 region 접두사(scleraLeft_…)와
+// 조합 코드(sclera_combined_…)를 섞어 쓰므로 정확 키가 아니라 프래그먼트로
+// 매칭한다(우선순위 순). 첫 매칭 사유만 표기.
+const CORRECTION_SKIP_RULES: Array<{fragment: string; message: string}> = [
+  {
+    fragment: 'redness',
+    message: '눈이 충혈된 상태로 보여 조명 보정을 보류했어요.',
+  },
+  {
+    fragment: 'disagree',
+    message: '좌우 눈의 조명이 달라 보정을 보류했어요(빛을 정면으로 받아 보세요).',
+  },
+  {
+    fragment: 'too_few_samples',
+    message: '눈 흰자 표본이 부족해 조명 보정을 적용하지 못했어요(더 밝은 곳 권장).',
+  },
+  {
+    fragment: 'one_eye_only',
+    message: '한쪽 눈만 보여 조명 보정을 적용하지 못했어요(양쪽 눈이 보이게 촬영해 주세요).',
+  },
+  {
+    fragment: 'extreme_cast',
+    message: '조명 색이 치우쳐 있어 보정을 보류했어요(더 자연광에 가까운 곳 권장).',
+  },
+];
 
 function getCorrectionSkipMessage(reasons: readonly string[]): string {
-  for (const reason of reasons) {
-    const message = CORRECTION_SKIP_MESSAGES[reason];
-    if (message) {
-      return message;
+  for (const rule of CORRECTION_SKIP_RULES) {
+    if (reasons.some(reason => reason.includes(rule.fragment))) {
+      return rule.message;
     }
   }
   return '이번 촬영에는 조명 보정을 적용하지 못했어요(측정값은 조명 영향을 받을 수 있어요).';
