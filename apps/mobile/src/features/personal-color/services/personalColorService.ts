@@ -152,6 +152,16 @@ export async function analyzePersonalColorCapture(
       ...correctionReport.sclera.reasons,
       ...correctionReport.wb.reasons,
     ],
+    // baseline vs corrected A/B 상세. analysis:done 가 reported(=보정 적용 시
+    // corrected)만 기록하므로, baseline 재보정 데이터는 여기 남겨 보존한다.
+    baselineTop: result.tone?.top ?? null,
+    baselineAxes: {
+      temperature: result.axes.temperature.value,
+      value: result.axes.value.value,
+      chroma: result.axes.chroma.value,
+      clarity: result.axes.clarity.value,
+      contrast: result.axes.contrast.value,
+    },
     correctedTop: corrected?.result.tone?.top ?? null,
     correctedAxes: corrected
       ? {
@@ -166,13 +176,21 @@ export async function analyzePersonalColorCapture(
 
   let resultJsonUri: string | null = null;
   try {
-    // 화면과 동일한 reported(보정 우선) 결과를 저장 — 보정 적용 여부는 위
-    // illumination:correction 로그로 추적(provenance).
-    resultJsonUri = await writeResultJson(input.sessionId, reported);
+    // 화면과 동일한 reported(보정 우선) 결과를 저장. 보정 provenance 를 결과 JSON 에
+    // 함께 남겨 프로덕션(로그 미기록)에서도 복원 후 보정본 여부를 판독 가능하게 한다.
+    resultJsonUri = await writeResultJson(input.sessionId, reported, {
+      illuminationCorrected: Boolean(corrected),
+      illuminationSource: correctionReport.applied ? correctionReport.source : null,
+      illuminationConfidence: correctionReport.confidence,
+    });
   } catch (error) {
     logger.log('artifact:result_failed', { message: String(error) });
   }
 
+  // analysis:done 은 '실제 보고/저장된' reported 를 일관되게 기록한다 — 종전엔
+  // top 은 reported, axes/relations/regionLab 은 baseline 이 섞여 로그가 자기모순
+  // 이었다(코덱스 #246-1). baseline 의 A/B 상세는 위 illumination:correction 로그의
+  // baselineTop/baselineAxes 로 보존한다(보정 적용 시).
   logger.log('analysis:done', {
     reportedIsCorrected: Boolean(corrected),
     status: reported.status,
@@ -180,18 +198,18 @@ export async function analyzePersonalColorCapture(
     top: reported.tone?.top ?? null,
     secondary: reported.tone?.secondary ?? null,
     isMixed: reported.tone?.isMixed ?? false,
-    // 오분류 진단용: 분류를 좌우하는 5축 실측값을 그대로 남긴다.
+    // 오분류 진단용: 분류를 좌우하는 5축 실측값(reported)을 그대로 남긴다.
     axes: {
-      temperature: result.axes.temperature.value,
-      value: result.axes.value.value,
-      chroma: result.axes.chroma.value,
-      clarity: result.axes.clarity.value,
-      contrast: result.axes.contrast.value,
+      temperature: reported.axes.temperature.value,
+      value: reported.axes.value.value,
+      chroma: reported.axes.chroma.value,
+      clarity: reported.axes.clarity.value,
+      contrast: reported.axes.contrast.value,
     },
     // 축 기준(ref/scale) 재보정용 raw: 부위 간 명도차·색차, 부위 Lab.
-    relations: result.relations,
+    relations: reported.relations,
     regionLab: Object.fromEntries(
-      result.regions.map(r => [
+      reported.regions.map(r => [
         r.region,
         { L: r.lab.L, a: r.lab.a, b: r.lab.b, C: r.lch.C },
       ]),

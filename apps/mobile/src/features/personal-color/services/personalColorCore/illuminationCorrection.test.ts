@@ -200,6 +200,36 @@ export function runIlluminationCorrectionTests() {
   });
   expectTrue(!wbNan.report.wb.available && !wbNan.report.applied, 'NaN wb gains rejected');
 
+  // 7c. 저신뢰 입력 → 최종 신뢰도가 입력 품질에 비례해 낮아진다 (코덱스 #246-2).
+  // 두 눈 모두 native confidence 0.3(trusted 0.6 의 절반) → 최종 ≈ base·0.5,
+  // 고정 0.85 로 승격되지 않는다. 고신뢰(0.85) 대비 확실히 낮아야 한다.
+  const lowConf = deriveIlluminationCorrection(
+    faceWithCast(IDENTITY, { confidence: 0.3 }),
+  );
+  const highConf = deriveIlluminationCorrection(faceWithCast(IDENTITY));
+  expectTrue(lowConf.report.applied && lowConf.report.source === 'sclera', 'low-conf still applied via sclera');
+  expectTrue(
+    lowConf.report.confidence < highConf.report.confidence - 0.2,
+    `low-conf correction confidence reduced (low=${lowConf.report.confidence.toFixed(
+      2,
+    )} vs high=${highConf.report.confidence.toFixed(2)})`,
+  );
+  expectClose(
+    lowConf.report.confidence,
+    ILLUMINATION_CORRECTION.scleraBaseConfidence * (0.3 / ILLUMINATION_CORRECTION.scleraTrustedConfidence),
+    0.02,
+    'low-conf correction confidence tracks input quality',
+  );
+
+  // 7d. 강화된 클립 임계(0.35): 채널 평균은 정상이나 포화 픽셀 비율이 0.4 인 흰자는
+  // 이제 드롭된다 — 종전 0.5 임계에서는 통과하던 저품질 입력(코덱스 #246-2).
+  const overexposed = faceWithCast(IDENTITY, { overexposedRatio: 0.4 });
+  const overexposedOut = deriveIlluminationCorrection(overexposed);
+  expectTrue(
+    !overexposedOut.report.sclera.available,
+    'sclera with 40% overexposed pixels dropped (tightened clip gate)',
+  );
+
   // 8. 소스 없음 → 미적용
   const nothing = deriveIlluminationCorrection(noSclera);
   expectTrue(!nothing.report.applied && nothing.correctedNative == null, 'no source: not applied');

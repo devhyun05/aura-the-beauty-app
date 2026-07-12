@@ -59,7 +59,9 @@ export const ILLUMINATION_CORRECTION = {
   // 채널 평균만 보면, 서로 다른 픽셀이 서로 다른 채널에서 255로 포화된 경우
   // (overexposedRatio=1 인데 평균은 249 미만) 클리핑을 놓친다(코덱스 F14). 포화
   // 픽셀 비율이 이 값 이상이면 그 눈을 드롭 — 복원 불가 정보로 게인 추정이 무의미.
-  scleraMaxOverexposedRatio: 0.5,
+  // 0.5(절반 포화)는 너무 헐거워 게인의 절반이 복원 불가 데이터에서 나왔다(코덱스
+  // #246-2). fail-safe 방향으로 강화 — 초과 시 스킵→baseline 표시(재보정 대상).
+  scleraMaxOverexposedRatio: 0.35,
   // 실제 흰자는 회색이 아니라 약간 웜한 생체 조직(혈관·황색조). 회색 타깃을 쓰면
   // 흰자의 자연 웜기를 "조명 캐스트"로 오인해 전역 red-cut 편향이 생긴다(실기기 확인).
   // ≈ Lab(76, +4, +6), D65. 1차 실측(주광 창가, n=1: a*6.7~7.0/b*5.9~6.2, 단 촬영자
@@ -72,6 +74,11 @@ export const ILLUMINATION_CORRECTION = {
   scleraGainCap: 0.35, // per-channel |g-1| 캡
   eyeAgreementMax: 0.1, // 좌우 log-게인 불일치 허용(초과 = 사이드광/오염 → fail-safe 스킵)
   scleraBaseConfidence: 0.85,
+  // 입력 눈의 native confidence 가 이 값 이상이면 base 신뢰도를 온전히 인정하고,
+  // 그 아래로는 비례해서 깎는다(코덱스 #246-2: 두 눈 0.25 여도 최종 0.85 로 고정되던
+  // 문제). 게이트 하한(scleraMinNativeConfidence 0.25)과 '신뢰할 만한' 흰자 사이의
+  // 기준선 — 재보정 대상.
+  scleraTrustedConfidence: 0.6,
   oneEyePenalty: 0.7,
   // WB 잔여 보정 — 합성·실측 모두 개선 효과 미입증 + 불필요한 오차 주입 확인(적대 검증)
   // → 적용은 끄고 추정치만 로그로 수집(추후 기기 캘리브레이션 데이터 확보용).
@@ -254,7 +261,14 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
     b: Math.exp(logAcc.b / wSum),
   };
 
-  let confidence = c.scleraBaseConfidence;
+  // 최종 신뢰도를 입력 눈 품질에 연동한다 — 게이트 통과만으로 base 를 그대로 주면
+  // 두 눈이 모두 하한(0.25)에 걸친 저신뢰 흰자여도 0.85 로 승격돼, 의심스러운
+  // 보정본이 '메인'으로 표시된다(코덱스 #246-2). sample 가중 native confidence 를
+  // trusted 기준으로 정규화해 곱한다(단조 감소·fail-safe: 나쁜 입력일수록 낮아져
+  // minConfidenceToApply 아래로 떨어지면 baseline 으로 폴백).
+  const weightedInputConf = clamp(wSum / Math.max(EPS, sampleCount), 0, 1);
+  const inputQualityFactor = clamp(weightedInputConf / c.scleraTrustedConfidence, 0, 1);
+  let confidence = c.scleraBaseConfidence * inputQualityFactor;
   let agreement: number | null = null;
   if (candidates.length === 2) {
     agreement = maxAbsLogDiff(candidates[0].gains, candidates[1].gains);

@@ -127,7 +127,7 @@ function assertNotContains(source, needle, label) {
   const path = 'apps/mobile/src/features/personal-color/services/personalColorService.ts';
   const src = readSource(path);
   assertContains(src, /const reported =/, `${path}: reported(보고 메인) 확정 배선이 없다`);
-  assertContains(src, /writeResultJson\(input\.sessionId,\s*reported\)/, `${path}: 저장이 reported 가 아니다 — 화면 corrected/저장 baseline 불일치(F13)`);
+  assertContains(src, /writeResultJson\(input\.sessionId,\s*reported\b/, `${path}: 저장이 reported 가 아니다 — 화면 corrected/저장 baseline 불일치(F13)`);
 }
 
 // ── 7. Xcode Compile Sources 멤버십 (빌드 불변식) ──────────────────────
