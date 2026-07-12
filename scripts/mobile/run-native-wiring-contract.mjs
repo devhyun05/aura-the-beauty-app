@@ -35,8 +35,9 @@ function fail(message) {
 function stripComments(source) {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, ' ') // 블록 주석 (ObjC/TS 공통)
-    .replace(/^\s*\/\/.*$/gm, ' ') // 전체 줄 라인 주석
-    .replace(/\/\/[^\n]*/g, ' '); // 줄 끝 라인 주석
+    // 라인 주석. 콜론 뒤 '//'(예: https://)는 URL 이므로 제외한다 — 이 한 패턴이
+    // 전체 줄 주석까지 커버하므로 별도 '^\s*//' 규칙은 불필요(중복, gemini 리뷰).
+    .replace(/(?<!:)\/\/[^\n]*/g, ' ');
 }
 
 function readSource(relativePath) {
@@ -88,9 +89,9 @@ function assertNotContains(source, needle, label) {
 {
   const path = 'apps/mobile/src/features/face-ratio/services/faceVerticalThirdsService.ts';
   const src = readSource(path);
-  assertContains(src, "from './faceVerticalThirdsQualityGate'", `${path}: 품질 게이트 import 가 없다`);
+  assertContains(src, /from\s+['"`]\.\/faceVerticalThirdsQualityGate['"`]/, `${path}: 품질 게이트 import 가 없다`);
   assertContains(src, /evaluateFaceVerticalThirdsQuality\(/, `${path}: 품질 게이트 호출부가 없다`);
-  assertContains(src, "from './faceVerticalThirdsRollCorrection'", `${path}: 롤 보정 import 가 없다`);
+  assertContains(src, /from\s+['"`]\.\/faceVerticalThirdsRollCorrection['"`]/, `${path}: 롤 보정 import 가 없다`);
   assertContains(src, /applyRollCorrectionToKeypoints\(/, `${path}: 롤 보정 호출부가 없다`);
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다 — 얼굴 검출 없이 분석기가 no_face 로 죽는다`);
 }
@@ -99,9 +100,9 @@ function assertNotContains(source, needle, label) {
 {
   const path = 'apps/mobile/src/features/personal-color/services/personalColorService.ts';
   const src = readSource(path);
-  assertContains(src, "from './personalColorQualityGate'", `${path}: 품질 게이트 import 가 없다`);
+  assertContains(src, /from\s+['"`]\.\/personalColorQualityGate['"`]/, `${path}: 품질 게이트 import 가 없다`);
   assertContains(src, /evaluatePersonalColorQuality\(/, `${path}: 품질 게이트 호출부가 없다`);
-  assertContains(src, "from './personalColorAnalyzerNative'", `${path}: 네이티브 분석기 import 가 없다`);
+  assertContains(src, /from\s+['"`]\.\/personalColorAnalyzerNative['"`]/, `${path}: 네이티브 분석기 import 가 없다`);
   assertContains(src, /analyzePersonalColorPhoto\(/, `${path}: 네이티브 분석기 호출부가 없다`);
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다`);
 }
