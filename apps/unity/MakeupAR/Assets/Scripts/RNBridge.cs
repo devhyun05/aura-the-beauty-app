@@ -505,6 +505,7 @@ public sealed class RNBridge : MonoBehaviour
     [SerializeField] private Material overlayMaterial;
     [SerializeField] private E7SynchronizedCaptureExporter referenceCaptureExporter;
     [SerializeField] private FaceTrackingStatusReporter statusReporter;
+    [SerializeField] private Face3DSessionController face3DSessionController;
 
     private E3RegionMaskOverlay regionMaskOverlay;
     private readonly Dictionary<Renderer, bool> suppressedFaceRendererStates =
@@ -544,6 +545,7 @@ public sealed class RNBridge : MonoBehaviour
         RefreshSceneReferences();
         EnsureRegionMaskOverlay();
         EnsureReferenceCaptureExporter();
+        EnsureFace3DSessionController();
         SetFaceRenderersSuppressed(true);
     }
 
@@ -1069,6 +1071,11 @@ public sealed class RNBridge : MonoBehaviour
         SendUnityEvent(json, "[E5]");
     }
 
+    public void SendFace3DEvent(string json)
+    {
+        SendUnityEvent(json, "[Face3D]");
+    }
+
     public void SendE7MetricSampleEvent(string json)
     {
         SendUnityEvent(json, "[E7]");
@@ -1328,6 +1335,23 @@ public sealed class RNBridge : MonoBehaviour
             Camera.main,
             statusReporter,
             this);
+    }
+
+    private void EnsureFace3DSessionController()
+    {
+        RefreshSceneReferences();
+
+        if (face3DSessionController == null)
+        {
+            face3DSessionController = GetComponent<Face3DSessionController>();
+        }
+
+        if (face3DSessionController == null)
+        {
+            face3DSessionController = gameObject.AddComponent<Face3DSessionController>();
+        }
+
+        face3DSessionController.Configure(faceManager, this);
     }
 
     private void SetFaceRenderersSuppressed(bool suppressed)

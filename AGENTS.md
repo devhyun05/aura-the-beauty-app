@@ -39,3 +39,61 @@
 - Add focused tests for route contracts, API behavior, service mapping, validation, and navigation.
 - Run mobile typecheck when mobile code changes.
 - Do not revert user changes unless explicitly asked.
+
+## iOS Real-Device Build & Verify (WiFi)
+
+The user always connects the iPhone over WiFi (never USB). Follow this order to build,
+install, run, and verify a device measurement in one pass. Each step lists the failure it prevents.
+
+### Device identity
+- Get the UDID from `xctrace`, NOT `devicectl`. `xcrun devicectl list devices` prints a
+  CoreDevice UUID that expo/xcodebuild reject with "No device UDID or name matching ...".
+  Use: `xcrun xctrace list devices | grep -v Simulator | grep iPhone`
+  → real UDID like `00008140-000924DE21BB801C`.
+- Confirm the device is reachable before building: `xcrun devicectl list devices` should
+  show `available`. Over WiFi it often shows `unavailable` when the phone is
+  locked/asleep; that also blocks `devicectl` log pulls (see Verify).
+
+### Signing (local dev)
+- The committed Debug team `G7X4226T2Q` has no account on this Mac, so signing fails with
+  "No profiles for '...' were found ... Automatic signing is disabled".
+- This Mac's only signing identity is team `9G4K6N63MK`
+  (Apple Development: nicewei@naver.com), bundle `com.wiseungcheol.aura.face3dlab`.
+- Before a device build, set the Debug config in
+  `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` to this team + bundle. Keep it a
+  LOCAL edit — do NOT commit it. Empty entitlements (`<dict/>`) means no extra
+  capabilities are needed, so this signs cleanly.
+
+### Metro host (WiFi)
+- A dev build bakes the Mac's LAN IP at build time. If the Mac's DHCP IP later changes,
+  the app shows a red "Could not connect to development server" screen pointing at the
+  OLD IP (e.g. it wants `172.21.100.184` while the Mac is now `172.21.101.239`).
+- Prevent it: inject the CURRENT IP at build time so the baked URL is correct:
+  `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`
+- Phone and Mac must be on the same WiFi/subnet (compare against `ipconfig getifaddr en0`),
+  or the app cannot reach Metro.
+- Emergency recover WITHOUT rebuilding: if only the Mac IP changed and the old baked IP is
+  free (`ping -c1 <OLD_IP>` → no reply), re-add the old IP as an alias, then tap "Reload JS"
+  in the app. The `netmask` keyword is REQUIRED — without it macOS treats the arg as
+  broadcast and defaults the mask to /16, which breaks routing:
+  `sudo ifconfig en0 alias <OLD_IP> netmask 255.255.255.255`
+
+### Install / launch
+- "Cannot launch ... because the device is locked" (xcodebuild exit after a successful
+  build) means the app INSTALLED fine and only auto-launch failed. Unlock the phone and
+  open the app manually; do not rebuild.
+
+### Verify the measurement (arm capture BEFORE the run)
+- The app appends every Face3D event (including `face3d_analyzed` with frame counts and the
+  5 metrics) to `Documents/face3d-runtime-evidence/events.jsonl` when `__DEV__` is true.
+- Set up result capture BEFORE asking for a measurement, so the user only has to run it once:
+  - **WiFi (no USB) via Hermes debugger:** while the app is foregrounded and connected to
+    Metro, `curl http://localhost:8081/json/list` returns a `webSocketDebuggerUrl`. Open a
+    CDP client on it and call `Runtime.evaluate` (with `awaitPromise` + `returnByValue`) to
+    read the file from inside the app via `globalThis.expo.modules` FileSystem
+    (`documentDirectory` + `readAsStringAsync`), or capture the `[aura:face3d] analyzed`
+    console logs. The debug target only exists while the app is on screen — poll
+    `/json/list` until it appears.
+  - **USB:** `xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer --domain-identifier <bundle> --source Documents/face3d-runtime-evidence/events.jsonl --destination ./events.jsonl`
+- A screenshot of the results screen is also acceptable proof (frame count `30/30` + the
+  metric grid), but prefer the log so values are exact.

@@ -828,6 +828,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 @property (nonatomic, assign) BOOL semanticMatteCapture;
 
 - (void)captureWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
+- (void)stopSessionWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
 - (void)restoreCameraAutoModes;
 - (void)startCameraStabilityMonitoringForDevice:(AVCaptureDevice *)device;
 - (void)stopCameraStabilityMonitoring;
@@ -1014,6 +1015,20 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       [self->_session stopRunning];
     }
     self->_isSessionRunning = NO;
+  });
+}
+
+- (void)stopSessionWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject
+{
+  dispatch_async(_sessionQueue, ^{
+    if (self->_session.isRunning) {
+      [self->_session stopRunning];
+    }
+    self->_isSessionRunning = NO;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      resolve(@{ @"stopped": @YES });
+    });
   });
 }
 
@@ -2154,6 +2169,23 @@ RCT_EXPORT_METHOD(capture:(nonnull NSNumber *)reactTag
     }
 
     [(AURARealtimeFaceCaptureView *)view captureWithResolver:resolve rejecter:reject];
+  }];
+}
+
+RCT_EXPORT_METHOD(stopSession:(nonnull NSNumber *)reactTag
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  [self.bridge.uiManager addUIBlock:^(
+      RCTUIManager *uiManager,
+      NSDictionary<NSNumber *, UIView *> *viewRegistry) {
+    UIView *view = viewRegistry[reactTag];
+    if (![view isKindOfClass:[AURARealtimeFaceCaptureView class]]) {
+      reject(@"REALTIME_CAPTURE_VIEW_NOT_FOUND", @"Realtime face capture view was not found.", nil);
+      return;
+    }
+
+    [(AURARealtimeFaceCaptureView *)view stopSessionWithResolver:resolve rejecter:reject];
   }];
 }
 

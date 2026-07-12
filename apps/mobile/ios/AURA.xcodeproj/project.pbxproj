@@ -376,7 +376,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nif [ \"${PLATFORM_NAME}\" != \"iphoneos\" ]; then\n  echo \"[aura:unity] Skipping UnityFramework embed for ${PLATFORM_NAME}.\"\n  exit 0\nfi\n\nUNITY_BUILD_DIR=\"${SRCROOT}/UnityBuild\"\nUNITY_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/UnityFramework.framework\"\nUNITY_DATA_SRC=\"${UNITY_BUILD_DIR}/Data\"\nUNITY_FRAMEWORK_DST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/UnityFramework.framework\"\n\nif [ -d \"${UNITY_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding UnityFramework from ${UNITY_FRAMEWORK_SRC}\"\n  mkdir -p \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\n  rsync -a --delete \"${UNITY_FRAMEWORK_SRC}\" \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/\"\n  if [ -d \"${UNITY_DATA_SRC}\" ]; then\n    rsync -a --delete \"${UNITY_DATA_SRC}/\" \"${UNITY_FRAMEWORK_DST}/Data/\"\n  else\n    echo \"[aura:unity] Data folder not found at ${UNITY_DATA_SRC}; Unity may fail to load assets.\"\n  fi\n  if [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${UNITY_FRAMEWORK_DST}\"\n  fi\nelse\n  echo \"[aura:unity] UnityFramework.framework not found at ${UNITY_FRAMEWORK_SRC}; skipping embed.\"\nfi\n";
+			shellScript = "set -e\n\nif [ \"${PLATFORM_NAME}\" != \"iphoneos\" ]; then\n  echo \"[aura:unity] Skipping Unity frameworks embed for ${PLATFORM_NAME}.\"\n  exit 0\nfi\n\nUNITY_BUILD_DIR=\"${SRCROOT}/UnityBuild\"\nUNITY_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/UnityFramework.framework\"\nUNITY_DATA_SRC=\"${UNITY_BUILD_DIR}/Data\"\nMEDIAPIPE_FRAMEWORK_SRC=\"${UNITY_BUILD_DIR}/MediaPipeUnity.framework\"\nFRAMEWORKS_DST=\"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nUNITY_FRAMEWORK_DST=\"${FRAMEWORKS_DST}/UnityFramework.framework\"\nMEDIAPIPE_FRAMEWORK_DST=\"${FRAMEWORKS_DST}/MediaPipeUnity.framework\"\n\nif [ -d \"${UNITY_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding UnityFramework from ${UNITY_FRAMEWORK_SRC}\"\n  mkdir -p \"${FRAMEWORKS_DST}\"\n  rsync -a --delete \"${UNITY_FRAMEWORK_SRC}\" \"${FRAMEWORKS_DST}/\"\n  if [ -d \"${UNITY_DATA_SRC}\" ]; then\n    rsync -a --delete \"${UNITY_DATA_SRC}/\" \"${UNITY_FRAMEWORK_DST}/Data/\"\n  else\n    echo \"[aura:unity] Data folder not found at ${UNITY_DATA_SRC}; Unity may fail to load assets.\"\n  fi\nelse\n  echo \"[aura:unity] UnityFramework.framework not found at ${UNITY_FRAMEWORK_SRC}; skipping embed.\"\nfi\n\nif [ -d \"${MEDIAPIPE_FRAMEWORK_SRC}\" ]; then\n  echo \"[aura:unity] Embedding MediaPipeUnity from ${MEDIAPIPE_FRAMEWORK_SRC}\"\n  mkdir -p \"${FRAMEWORKS_DST}\"\n  rsync -a --delete \"${MEDIAPIPE_FRAMEWORK_SRC}\" \"${FRAMEWORKS_DST}/\"\nelse\n  echo \"[aura:unity] MediaPipeUnity.framework not found at ${MEDIAPIPE_FRAMEWORK_SRC}; UnityFramework cannot load.\"\n  exit 1\nfi\n\nif [ \"${CODE_SIGNING_ALLOWED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${MEDIAPIPE_FRAMEWORK_DST}\"\n  /usr/bin/codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --preserve-metadata=identifier,entitlements \"${UNITY_FRAMEWORK_DST}\"\nfi\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -412,7 +412,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = G7X4226T2Q;
+				DEVELOPMENT_TEAM = 9G4K6N63MK;
 				ENABLE_BITCODE = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -433,7 +433,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.aiarmakeupguides.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wiseungcheol.aura.face3dlab;
 				PRODUCT_NAME = AURA;
 				SWIFT_OBJC_BRIDGING_HEADER = "AURA/AURA-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
