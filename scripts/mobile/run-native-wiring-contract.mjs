@@ -28,8 +28,19 @@ function fail(message) {
   failures += 1;
 }
 
+// 주석을 제거한다 — "배선을 주석 처리했는데 문자열이 주석에 남아 가드를
+// 통과"하는 우회를 막는다(020cb33 류 조용한 무력화의 흔한 형태). 문자열
+// 리터럴 안의 // 는 드물게 오탐할 수 있으나, 이 가드가 찾는 import/호출
+// 패턴은 문자열 리터럴에 나타나지 않으므로 안전하다.
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ') // 블록 주석 (ObjC/TS 공통)
+    .replace(/^\s*\/\/.*$/gm, ' ') // 전체 줄 라인 주석
+    .replace(/\/\/[^\n]*/g, ' '); // 줄 끝 라인 주석
+}
+
 function readSource(relativePath) {
-  return readFileSync(resolve(repoRoot, relativePath), 'utf8');
+  return stripComments(readFileSync(resolve(repoRoot, relativePath), 'utf8'));
 }
 
 function assertContains(source, needle, label) {
