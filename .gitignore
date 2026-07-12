@@ -22,6 +22,17 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
+# Local agentctl control plane state and secrets
+.agents/approvals/
+.agents/hook-runs/
+.agents/local.env
+.agents/meter/
+.agents/queue/
+.agents/runs/
+.agents/schedule/
+.agents/shims/
+.agents/tmp/
+
 # Python local state
 __pycache__/
 *.py[cod]
@@ -73,3 +84,21 @@ tools/beard-simulation-lab/.venv/
 tools/beard-simulation-lab/external/
 tools/beard-simulation-lab/.hf-cache/
 tools/beard-simulation-lab/.mplconfig/
+
+# Local tool state (session-generated)
+.codegraph/
+.playwright-mcp/
+.vscode/
+
+# Stray local duplicate (do not track; kept on disk)
+AuradinRN 2/
+
+# Lab archive: 기록(json/md)만 커밋, 미디어·개인정보는 로컬 보관
+아카이브/**/*.png
+아카이브/**/*.PNG
+아카이브/**/*.jpg
+아카이브/**/*.JPG
+아카이브/**/*.jpeg
+아카이브/**/*.webp
+아카이브/aihub_faces/
+newbeards/
