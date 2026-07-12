@@ -1,0 +1,370 @@
+{
+ "checkpoint": "cp6-holdout",
+ "sealed": true,
+ "purpose": "체크포인트 ⑥ 홀드아웃 후보 — 내부 평가 전용, 파이프라인/학습 투입 금지",
+ "reviewedAt": "2026-07-12",
+ "reviewer": "정리 담당 에이전트 (전수 육안 재검수: 중복·밀도·촬영 게이트)",
+ "gateCriteria": "정면 ±15° / 균일 조명 / 하관 무가림 / 얼굴 폭 >=320px",
+ "files": {
+  "dense_wikimedia_01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Face_detail,_%22Ainu_leader.%22_Department_of_Anthropology,_Japanese_exhibit,_1904_World%27s_Fair_(cropped).jpg",
+   "license": "Public domain (1904)",
+   "author": "Jessie Tarbox Beals",
+   "beard": "dense",
+   "gateOk": true,
+   "note": "아이누 대표단 리더. 연속 덩어리, 핵심부 피부 ~0%. 얼굴 폭 ~900px. 최상급 keeper. 1920x2388"
+  },
+  "dense_wikimedia_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Man_detail,_%22The_Ainu_Family.%22_(Taken_during_the_1904_World%27s_Fair)_(cropped).jpg",
+   "license": "Public domain (1904)",
+   "author": "Gerhard Sisters",
+   "beard": "dense",
+   "gateOk": true,
+   "note": "재검수 결과 01과 다른 인물로 확인(모자·수염 형태·얼굴형 상이). 같은 1904 대표단이므로 동일인 위험 주석 유지. dense 확정. 1827x2289"
+  },
+  "dense_wikimedia_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tamoto_Kenz%C5%8D_-_Ainu_Man_2.jpg",
+   "license": "Public domain (19세기)",
+   "author": "Tamoto Kenzō",
+   "beard": "dense",
+   "gateOk": true,
+   "note": "경계선 통과: 얼굴 폭 ~330px, 전신 좌상. 수염 결 다소 성기나 뺨~턱 연속 → dense 유지. 1622x2372"
+  },
+  "dense_wikimedia_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ainu_chief,_likely_Penriuku_Hiramura.jpg",
+   "license": "Public domain (19세기 말)",
+   "author": "작자 미상",
+   "beard": "dense",
+   "gateOk": true,
+   "note": "백발 장수염 연속 덩어리, 정면. 얼굴 폭 ~340px 경계선 통과. 824x1199"
+  },
+  "dense_wikimedia_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Sakhalin_Ainu_Man.jpg",
+   "license": "Public domain",
+   "author": "Bronisław Piłsudski",
+   "beard": "dense",
+   "gateOk": false,
+   "note": "dense·정면 확인되나 얼굴 폭 ~270px < 320px → 크기 미달. 보조/여분 전용. 850x1078"
+  },
+  "dense_wikimedia_06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ainu_chief.jpg",
+   "license": "Public domain",
+   "author": "작자 미상 (러시아 소장)",
+   "beard": "dense",
+   "gateOk": false,
+   "note": "고개 ~20° 좌회전 + 얼굴 폭 ~250px 미달. 05와 다른 인물(귀걸이·수염 길이 상이) 확인. 818x1024"
+  },
+  "medium_flickr_91.jpg": {
+   "sourceUrl": "https://www.flickr.com/photos/7901820@N07/3971506159",
+   "license": "CC BY-SA 2.0",
+   "author": "-syauqee- (Flickr)",
+   "beard": "medium",
+   "gateOk": true,
+   "note": "수집 시 dense→medium 정직 강등 확인 동의(콧수염 성김·수염 사이 피부 가시). 시선 비정면·입 벌림이나 요·피치 ±15° 이내, 얼굴 폭 ~450px. 682x1024"
+  },
+  "medium_pexels_01.jpg": {
+   "sourceUrl": "https://www.pexels.com/photo/19473192/",
+   "license": "Pexels License",
+   "author": "Kenzero14",
+   "beard": "medium",
+   "gateOk": true,
+   "note": "성긴 콧수염 + 가는 턱선 수염, 뺨 무모 → medium 확정. 정면·균일광. 1600x2400"
+  },
+  "medium_unsplash_06.jpg": {
+   "sourceUrl": "https://unsplash.com/photos/hr_feH2URs0",
+   "license": "Unsplash License(추정) — 보고 누락, 사용 전 원 URL 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "짙은 콧수염 + 뺨/턱 스터블 혼합 → medium 유지. 정면·스튜디오 균일광. 수집 보고 잘림으로 출처 메타데이터 미확보. 1600x2400"
+  },
+  "medium_unsplash_07_spare.jpg": {
+   "sourceUrl": "https://unsplash.com/photos/l2gQI0hA-HY",
+   "license": "Unsplash License(추정) — 보고 누락, 사용 전 원 URL 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "초근접 크롭. 콧수염+턱 goatee 성김, 뺨 스터블 → medium. 정면, 조명 약간 방향성 있으나 허용. 1600x2844"
+  },
+  "medium_wikimedia_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Odagiri_Joe_%22Foujita%22_at_Opening_Ceremony_of_the_28th_Tokyo_International_Film_Festival_(22427400786)_(cropped).jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": false,
+   "note": "일본 배우 오다기리 조. 고개 ~20° 좌회전 + 시선 비정면 → 정면 게이트 탈락. 밀도는 medium(goatee) 맞음. 1920x2872"
+  },
+  "medium_wikimedia_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bong_Joon-ho_2017.jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "한국 감독 봉준호. 콧수염+턱 goatee 성김 → medium. 정면·포토월 균일광·안경(하관 무가림). 1920x2611"
+  },
+  "medium_wikimedia_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tsui_Hark2011_(cropped).jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "홍콩 감독 서극(徐克). 콧수염 + 성긴 턱수염 → medium. 정면·균일광, 얼굴 폭 대형. 1909x2547"
+  },
+  "medium_wikimedia_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Hong_Sang-soo_Photo_Call_The_Beach_at_Night_Alone_Berlinale_2017.jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "한국 감독 홍상수. 콧수염+턱 goatee → medium. 고개 ~10° 이내, 포토월 균일광. 1279x1705"
+  },
+  "stubble_wikimedia_01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Yokohama_International_Film_Festival_2023_Yamada_Takayuki_(53090639376).jpg",
+   "license": "CC BY 2.0",
+   "author": "Dick Thomas Johnson",
+   "beard": "stubble",
+   "gateOk": false,
+   "note": "야마다 타카유키. 밀도 stubble 맞음(점 분리·피부 가시). 단 재검수 결과 고개 요 ~15–20°로 정면 기준 초과 판정 → 수집 보고(frontal=true) 정정. 여분용. 1920x2880"
+  },
+  "stubble_wikimedia_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Sol_Kyung-gu-9435.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Harald Krichel",
+   "beard": "stubble",
+   "gateOk": true,
+   "note": "설경구. 인중·턱 옅은 스터블 점 분리. 정면 ~10° 이내, 실내 균일광, 얼굴 폭 ~700px. 이어폰은 하관 무가림. 1920x2474"
+  },
+  "stubble_wikimedia_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Lily_Franky_at_2025_Cannes_Photocall_1.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Kacy Bao",
+   "beard": "stubble",
+   "gateOk": true,
+   "note": "릴리 프랭키. 회색 스터블 점 분리. 중절모·대형 안경이나 하관 무가림. 야외 흐린 날 균일광. 1920x2880"
+  },
+  "stubble_wikimedia_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:MJK33879_Chen_Chang_(Mr_Long,_Berlinale_2017).jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Martin Kraft",
+   "beard": "stubble",
+   "gateOk": false,
+   "note": "장첸. 밀도 stubble 맞음(옅은 콧수염·턱 점 분리). 단 재검수 결과 몸+고개 요 ~20–25°의 3/4 뷰 → 정면 기준 초과, 수집 보고(±15° 이내) 정정. 1920x2880"
+  },
+  "stubble_wikimedia_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Kim_Ki-duk_at_the_69th_Venice_International_Film_Festival_(cropped).jpg",
+   "license": "CC BY-SA 2.0",
+   "author": "Tania Volobueva (crop: RanZag)",
+   "beard": "stubble",
+   "gateOk": true,
+   "note": "김기덕. 하관 미세 스터블(매우 옅음 — stubble 하한 경계). 정면 ~10°, 야외 확산광, 얼굴 폭 ~900px. 1920x2585"
+  },
+  "stubble_wikimedia_06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Actor_Cho_Jin-woong_arrives_at_the_red_carpet_event_of_the_Pifan_in_Bucheon_on_July_17,_2014.jpg",
+   "license": "CC BY-SA 2.0",
+   "author": "Korea.net",
+   "beard": "stubble",
+   "gateOk": true,
+   "note": "조진웅. 콧수염+턱 점 분리 스터블. 정면, 실내 포토월 균일광, 얼굴 폭 ~330px(경계선 통과). 안경 하관 무가림. 1426x2077"
+  },
+  "stubble_unsplash_07_spare.jpg": {
+   "sourceUrl": "https://unsplash.com/photos/TBUA5KHJn6k",
+   "license": "Unsplash License(추정) — 보고 누락, 사용 전 원 URL 확인 필요",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "밀도 정정: stubble→medium (콧수염 연속 + 턱 성긴 goatee). 정면. 노을 역광성 조명이나 안면 조도는 균일 — 경계선 통과. 파일명과 층 불일치 주의. 1600x2400"
+  },
+  "none_unsplash_01.jpg": {
+   "sourceUrl": "https://unsplash.com/photos/MYMEeE1_1V4",
+   "license": "Unsplash License(추정) — 보고 누락, 사용 전 원 URL 확인 필요",
+   "author": null,
+   "beard": "none",
+   "gateOk": true,
+   "note": "무수염 전신 스튜디오 컷. 정면·균일광. 원본 3944x7008로 얼굴 폭 환산 ~450px+ 충족"
+  },
+  "none_wikimedia_01.png": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:20260512_Byeon_Woo-seok(1).png",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "none",
+   "gateOk": true,
+   "note": "한국 배우 변우석(추정). 무수염, 정면, 균일광. 검지가 뺨에 닿으나 하관 비가림. 2542x2018"
+  },
+  "none_wikimedia_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Park_Seo-joon_for_Marie_Claire_Korea,_2023_(1).jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "none",
+   "gateOk": true,
+   "note": "한국 배우 박서준(추정). 무수염, 정면, 흰 배경 균일광. 1510x1926"
+  },
+  "none_wikimedia_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:230315_Lee_Do-hyun_(%EC%9D%B4%EB%8F%84%ED%98%84).jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "none",
+   "gateOk": true,
+   "note": "한국 배우 이도현(추정). 무수염, 정면 ~10° 이내. 어두운 배경이나 안면 조도 균일. 손 인사는 하관 비가림. 1853x2188"
+  },
+  "none_wikimedia_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:20210923%E2%80%94Wi_Ha-joon_%EC%9C%84%ED%95%98%EC%A4%80,_Squid_Game_promo,_ELLE_Taiwan_screenshot_(05m43s).jpg",
+   "license": "Wikimedia Commons CC(추정) — 보고 누락, 사용 전 원본 페이지 확인 필요",
+   "author": null,
+   "beard": "none",
+   "gateOk": true,
+   "note": "한국 배우 위하준(추정). 무수염, 정면, 균일광, 얼굴 폭 ~500px. 1503x1528"
+  },
+  "cand_watanabe.jpg": {
+   "sourceUrl": null,
+   "license": "미상 — 보고 누락. 라이선스 확인 전 홀드아웃 집계 제외",
+   "author": null,
+   "beard": "stubble",
+   "gateOk": true,
+   "note": "와타나베 켄. 회색 스터블(점 분리·피부 가시). 정면, 야구모자(하관 무가림), 야외 균일광, 배경 복잡. 촬영 게이트는 통과하나 출처 미상. 1154x1539"
+  },
+  "cand_yeun_crop.jpg": {
+   "sourceUrl": null,
+   "license": "미상 — 보고 누락. 라이선스 확인 전 홀드아웃 집계 제외",
+   "author": null,
+   "beard": "medium",
+   "gateOk": true,
+   "note": "스티븐 연. 콧수염 + 성긴 턱 goatee → medium. 정면 ~10°, 균일광. 촬영 게이트 통과하나 출처 미상. 1275x1698"
+  },
+  "stubble_wikimedia_g01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Jake_Gyllenhaal_2019_by_Glenn_Francis.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Glenn Francis (Toglenn)",
+   "beard": "stubble",
+   "skinTone": "밝음",
+   "gateOk": true,
+   "note": "제이크 질렌할. 뺨·턱 점 분리 스터블(피부 가시). 정면 ~5°, 포토월 균일광, 얼굴 폭 ~900px. g배치(글로벌). 1802x2703"
+  },
+  "stubble_wikimedia_g02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:MJK34322_Charlie_Hunnam_(The_Lost_City_Of_Z,_Berlinale_2017).jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Martin Kraft",
+   "beard": "stubble",
+   "skinTone": "밝음",
+   "gateOk": true,
+   "note": "찰리 허냄. 금발 스터블 점 분리·피부 가시(턱 약간 짙으나 투과). 요 ~10-15° 경계 통과, 베를리날레 포토월 균일광. 1739x2782"
+  },
+  "stubble_wikimedia_g03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Oscar_Isaac_by_Gage_Skidmore.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Gage Skidmore",
+   "beard": "stubble",
+   "skinTone": "중간",
+   "gateOk": true,
+   "note": "오스카 아이작(과테말라계). 전면 스터블 점 분리. 정면 ~5-10°, 실내 패널 조명 균일. 마이크가 우측 턱선 가장자리에 근접하나 하관 비가림. 1808x2574"
+  },
+  "stubble_wikimedia_g04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:John_Boyega_by_Gage_Skidmore.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Gage Skidmore",
+   "beard": "stubble",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "존 보예가. 턱·인중 옅은 스터블(점 분리). 정면 ~5°, 무대 조명 약간 방향성(이마 음영)이나 하관 조도 균일 — 경계 통과. 마이크는 화면 하단, 하관 비가림. 1749x2497"
+  },
+  "stubble_wikimedia_g05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Damson_Idris_Attends_Snowfall_Screening_In_Chicago_On_Alexus_Renee%27s_Celebrity_Myxer.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Celebrity Myxer, LLC.",
+   "beard": "stubble",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "댐슨 이드리스. 턱 옅은 스터블 + 희미한 인중 음영(점 분리). 정면, 포토월 플래시(배경 그림자 있으나 안면 조도 균일). 얼굴 폭 ~370px 통과. 1667x2500"
+  },
+  "stubble_wikimedia_g06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Stephan_James_at_the_2025_Sundance_Film_Festival_1_(cropped).jpg",
+   "license": "CC BY 4.0",
+   "author": "Everwest",
+   "beard": "stubble",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "스테판 제임스. 가는 콧수염 선 + 턱 성긴 wisp — 점 분리·피부 가시로 stubble 판정(연속 goatee 아님). 완전 정면, 균일광, 얼굴 폭 ~700px. 1415x1884"
+  },
+  "medium_wikimedia_g01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Riz_Ahmed_(2016).jpg",
+   "license": "CC BY-SA 2.0",
+   "author": "Red Carpet Report on Mingle Media TV",
+   "beard": "medium",
+   "skinTone": "중간",
+   "gateOk": true,
+   "note": "리즈 아메드(파키스탄계 영국). 콧수염·턱 국소 연속 + 뺨 성긴 스터블 → medium. 정면 ~5°, 프리미어 포토월 균일광. 1217x1783"
+  },
+  "medium_wikimedia_g02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Daniel_Kaluuya_by_Gage_Skidmore.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Gage Skidmore",
+   "beard": "medium",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "대니얼 컬루야. 콧수염 성김 + 턱 goatee 국소 연속 → medium. 정면 ~10°, 발화 중 입 약간 벌림(기존 medium_flickr_91 전례로 허용), 마이크는 얼굴 옆 비가림. 1770x2607"
+  },
+  "medium_wikimedia_g03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_man,_Bihar,_India,_04-2012.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Yann",
+   "beard": "medium",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "인도 비하르 노인. 회백 짧은 풀비어드 — 전체 연속이나 핵심부 피부 가시율 >20%(백모 투과) → dense 아닌 medium 채택. 정면, 야외 그늘 균일광. 2592x3888"
+  },
+  "medium_wikimedia_g04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ncuti_Gatwa-65764.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Harald Krichel",
+   "beard": "medium",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "은쿠티 가트와(르완다계). 다듬은 콧수염 연속 + 턱선 성긴 스터블 → 콧수염 연속 전례(stubble_unsplash_07 정정)에 따라 medium. 완전 정면, 베니스 레드카펫 균일광. 1789x2385"
+  },
+  "none_wikimedia_g01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:President_Barack_Obama,_2012_portrait_crop.jpg",
+   "license": "Public domain (미 연방정부 저작물)",
+   "author": "Pete Souza (Official White House Photo)",
+   "beard": "none",
+   "skinTone": "중간",
+   "gateOk": true,
+   "note": "버락 오바마 2012 공식 초상. 완전 무수염, 정면, 스튜디오 균일광. negative 톤별 오발화 측정용 중간-어두움 톤. 1338x1739"
+  },
+  "none_wikimedia_g02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Timoth%C3%A9e_Chalamet_Berlinale_2017.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Maximilian Bühn",
+   "beard": "none",
+   "skinTone": "밝음",
+   "gateOk": true,
+   "note": "티모테 샬라메. 완전 무수염, 정면 ~10°, 포토월 균일광, 얼굴 폭 ~600px. 1400x2200"
+  },
+  "none_wikimedia_g03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Bukayo_Saka_England_v_Ghana_23_June_2026-057_(cropped).jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Bryan Berlin",
+   "beard": "none",
+   "skinTone": "어두움",
+   "gateOk": true,
+   "note": "부카요 사카. 사실상 무수염(턱 끝 극미세 fuzz — none 하한 경계, negative 판정 시 주의 주석). 정면 ~5°, 흐린 날 야외 균일광, 얼굴 폭 ~600px. 2666x4000"
+  },
+  "dense_wikimedia_g01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Man_with_a_beard,_Jaipur,_Rajasthan,_India.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Yann Forget",
+   "beard": "dense",
+   "skinTone": "중간",
+   "gateOk": true,
+   "note": "인도 자이푸르 남성. 회색 장 풀비어드 연속 덩어리(핵심부 피부 ~0%). 정면, 야외 그늘 균일광. 현대 컬러 dense 프로브 #1. 2271x3086"
+  },
+  "dense_wikimedia_g02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Action_Bronson_Gov_Ball_2016_(cropped).jpg",
+   "license": "CC BY 2.0",
+   "author": "Jordan Uhl",
+   "beard": "dense",
+   "skinTone": "밝음",
+   "gateOk": true,
+   "note": "액션 브론슨. 적갈색 풀비어드 연속 덩어리(핵심부 피부 ~0%). 요 ~5-10°·저각도 촬영 ~10° 경계 통과, 야외 무대광 안면 균일. 현대 컬러 dense 프로브 #2(서양인). 1143x1598"
+  }
+ },
+ "note_global_batch": "g-배치(2026-07-12): 인종 제한 해제 후 글로벌 수집 15장 추가(stubble+6, medium+4, none+3, dense+2). 전원 라이선스 명시(Wikimedia Commons CC/PD), 수집 에이전트 전수 육안 검수 통과. 기존 인물과 중복 없음."
+}

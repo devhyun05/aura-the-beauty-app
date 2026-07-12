@@ -1,0 +1,22 @@
+{
+  "image": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/아카이브/denceKorean/IMG_4572.JPG",
+  "width": 530,
+  "height": 575,
+  "nostrils": [
+    {
+      "center_xy": [
+        333.9,
+        295.9
+      ],
+      "radius_px": 6.0
+    },
+    {
+      "center_xy": [
+        364.9,
+        296.9
+      ],
+      "radius_px": 6.0
+    }
+  ],
+  "note": "aperture = nostril hole; target mask already excludes aperture+2px and lip vermilion+3px"
+}
