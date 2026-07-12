@@ -138,12 +138,19 @@ def test_clipped_cheek_rescued_by_forehead_level2():
 
 def test_forehead_inlier_rejection_forces_abstain():
     """Off-skin forehead (bangs stand-in: plausible texture, wrong color) must
-    fail the cheek-model verification, and with one cheek dead the remaining
-    lone cheek is below Nmin -> None. The level-2 test above is the control:
-    same dead cheek, honest forehead, and the bundle survives."""
+    fail the cheek-model verification, and with one cheek dead and the other
+    SHAVED below the grace band the bundle must abstain. (Post-cap, a fully
+    healthy lone cheek at fw 640 is a legitimate level-3 anchor — the
+    scarcity this test needs is now built by shaving the survivor too.)
+    The level-2 test above is the control: same dead cheek, honest forehead,
+    and the bundle survives."""
     rng = np.random.RandomState(99)
     img = _fixture(2, 5.5, 10.0)
     _whiteout(img, CHEEK_L, CHEEK_RAD)
+    # Shave the right cheek's mid-band: survivor well below 0.9*Nmin=921.6
+    # but still >= _PATCH_MODEL_MIN so the patch itself stays alive.
+    rx, ry = CHEEK_R
+    img[ry - 12:ry + 12, rx - CHEEK_RAD - 2:rx + CHEEK_RAD + 3] = 255
     x, y, r = *FOREHEAD_C, FOREHEAD_RAD + 4
     region = img[y - r:y + r, x - r:x + r].astype(np.float32)
     region[:] = (80.0, 190.0, 110.0)                  # green: far in Lab
@@ -172,17 +179,78 @@ def test_abstain_when_both_cheeks_dead():
 
 
 def test_nmin_geometric_enforcement():
-    """One healthy cheek + dead forehead: at most ~0.0064*fw^2 valid px (the
-    disk's raw capacity; the outlier-only Mahalanobis trim now keeps nearly
-    all of a clean disk, vs ~0.0054*fw^2 under the old unconditional 15%
-    cut) < Nmin = 0.008*fw^2, so the builder must abstain rather than serve
-    a thin anchor."""
-    img = _fixture(2, 5.5, 45.0)
-    _whiteout(img, CHEEK_L, CHEEK_RAD)
-    _whiteout(img, FOREHEAD_C, FOREHEAD_RAD)
-    out = rb.build_reference_bundle(img, _landmarks(), FW)
+    """One healthy cheek + dead forehead in the SMALL-face regime (fw=320,
+    Nmin floor-dominated at 819): a lone cheek holds ~0.0064*fw^2 ~= 655 px,
+    below even the grace band (0.9*819 = 737), so the builder must abstain
+    rather than serve a thin anchor. (At fw=640 the capped Nmin=1024 makes a
+    lone clean cheek ~2600 px a LEGITIMATE level-3 anchor — the quadratic
+    regime this test used to pin was removed by the cp6 postmortem cap.)"""
+    img = _fixture(2, 5.5, 45.0, size=SIZE // 2)
+    _whiteout(img, (CHEEK_L[0] // 2, CHEEK_L[1] // 2), CHEEK_RAD // 2)
+    _whiteout(img, (FOREHEAD_C[0] // 2, FOREHEAD_C[1] // 2), FOREHEAD_RAD // 2)
+    out = rb.build_reference_bundle(img, _landmarks(0.5), FW * 0.5)
     assert isinstance(out, rb.ReferenceAbstain)
     assert out.reason == rb.REASON_CLIP
+
+
+def test_nmin_cap_and_floor():
+    """cp6 postmortem repair 1: the far-face floor stays, the quadratic is
+    capped so high-resolution faces are not held to a 2,500+ px bar."""
+    assert rb.nmin_for(300.0) == 768.0                    # floor regime
+    assert abs(rb.nmin_for(320.0) - 819.2) < 1e-6         # ratio regime
+    assert rb.nmin_for(640.0) == 1024.0                   # capped (was 3276.8)
+    assert rb.nmin_for(1000.0) == 1024.0
+
+
+def test_resolve_ladder_grace_band():
+    """cp6 postmortem repair 2: a 90-100% shortfall passes as a RECORDED
+    grace-band degradation; below 90% still abstains."""
+    picked, grace = rb.resolve_ladder(
+        {"cheek_left": 500, "cheek_right": 460}, False, 1024.0)
+    assert picked == (1, ["cheek_left", "cheek_right"], False) and grace
+    picked, grace = rb.resolve_ladder(
+        {"cheek_left": 500, "cheek_right": 400}, False, 1024.0)
+    assert picked is None and not grace
+    # Full-bar passes must NOT be flagged.
+    picked, grace = rb.resolve_ladder(
+        {"cheek_left": 600, "cheek_right": 500}, False, 1024.0)
+    assert picked is not None and not grace
+
+
+def test_grace_band_bundle_flagged_low_conf():
+    """Build-level integration: dead forehead (no rescue path) + both cheeks
+    shaved symmetrically until the pair lands inside [0.9*Nmin, Nmin) — the
+    bundle must exist AND carry grace_band/low_conf. The shave depth is
+    searched deterministically because QC eats a fixture-dependent margin."""
+    lm = _landmarks()
+    nmin = rb.nmin_for(FW)
+    for half_rows in range(3, 20):
+        img = _fixture(2, 5.5, 45.0)
+        _whiteout(img, FOREHEAD_C, FOREHEAD_RAD)
+        for cx, cy in (CHEEK_L, CHEEK_R):
+            img[cy - half_rows:cy + half_rows,
+                cx - CHEEK_RAD - 2:cx + CHEEK_RAD + 3] = 255
+        out = rb.build_reference_bundle(img, lm, FW)
+        if isinstance(out, rb.ReferenceBundle) and out.n_valid < nmin:
+            assert 0.9 * nmin <= out.n_valid
+            assert out.grace_band and out.low_conf
+            assert out.ladder_level == 1
+            return
+    raise AssertionError("no shave depth landed in the grace band")
+
+
+def test_smoothed_gradient_not_coherence_rejected():
+    """cp6 postmortem repair 3: beauty-filter-like skin (near-zero grain,
+    residual shading gradient — perfectly directional but energy-free) must
+    NOT be eaten by the coherence gate. The positive control (high-contrast
+    strands ARE still rejected) is test_coherent_stripes_trip_the_coherence_qc."""
+    img = np.full((SIZE, SIZE, 3), SKIN_BGR, np.float32)
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32)
+    img += (30.0 * (xx / SIZE - 0.5) + 18.0 * (yy / SIZE - 0.5))[..., None]
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    b = rb.build_reference_bundle(img, _landmarks(), FW)
+    assert isinstance(b, rb.ReferenceBundle)
+    assert b.ladder_level == 1
 
 
 def test_coherent_stripes_trip_the_coherence_qc():
@@ -202,7 +270,8 @@ def test_ladder_level3_single_anchor_direct():
     """Level 3 is geometrically unreachable with the spec disk radii (a lone
     cheek holds ~0.0064*fw^2 < 0.008*fw^2), so the branch is proven directly:
     it must fire only when the lone cheek clears Nmin, and must flag itself."""
-    nmin = rb.nmin_for(FW)   # 3276.8
+    nmin = 3276.8   # explicit bar: ladder mechanics are nmin-agnostic
+                    # (nmin_for itself is capped — see test_nmin_cap_and_floor)
     assert rb.select_patch_ladder(
         {"cheek_left": 5000, "cheek_right": 0}, False, nmin) \
         == (3, ["cheek_left"], True)
@@ -212,7 +281,7 @@ def test_ladder_level3_single_anchor_direct():
 
 
 def test_ladder_share_rule_and_ordering():
-    nmin = rb.nmin_for(FW)
+    nmin = 3276.8   # explicit bar (see test_ladder_level3_single_anchor_direct)
     # Balanced cheeks -> level 1.
     assert rb.select_patch_ladder(
         {"cheek_left": 2000, "cheek_right": 1800}, True, nmin)[0] == 1
@@ -237,7 +306,8 @@ def test_ladder_level1_forehead_recruit_and_level4_degradation():
     alone miss Nmin. (b) Level 4: Nmin met but the 25% share rule is not —
     a recorded degradation instead of an abstain. (c) The hard guarantees
     stay: Nmin is never waived, forehead-only is impossible."""
-    nmin = rb.nmin_for(FW)   # 3276.8
+    nmin = 3276.8   # explicit bar: ladder mechanics are nmin-agnostic
+                    # (nmin_for itself is capped — see test_nmin_cap_and_floor)
     # (a) cheeks alone short of Nmin, verified forehead completes it.
     assert rb.select_patch_ladder(
         {"cheek_left": 1700, "cheek_right": 1500, "forehead": 400},
@@ -291,6 +361,8 @@ def test_forehead_l_offset_still_rejected():
     forehead, level-2 rescue succeeds)."""
     img = _fixture(2, 5.5, 10.0)
     _whiteout(img, CHEEK_L, CHEEK_RAD)   # forehead is needed, as in the control
+    rx, ry = CHEEK_R                     # shave the survivor below the band
+    img[ry - 12:ry + 12, rx - CHEEK_RAD - 2:rx + CHEEK_RAD + 3] = 255
     x, y, r = *FOREHEAD_C, FOREHEAD_RAD + 4
     region = cv2.cvtColor(img[y - r:y + r, x - r:x + r], cv2.COLOR_BGR2Lab)
     region = region.astype(np.float32)

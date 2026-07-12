@@ -153,6 +153,32 @@ APERTURE_CONTRAST_SET = (36.0, 40.0)  # pair must hold at every threshold
 APERTURE_PERTURB_FW = 0.005     # ROI shift magnitude (floor 2 px)
 APERTURE_PERTURB_MIN_HITS = 3   # of the 4 shifted ROIs
 
+# --- Tone-adaptive fallback scan (cp6 postmortem, 2026-07-12). --------------
+# The base scan thresholds at ROI-median-minus-40L, which assumes the ROI is
+# mostly SKIN. Measured failures on the demoted cp6 set broke that premise:
+# medium_wikimedia_g02 (dark skin, large apertures) has ROI median L=11 —
+# the apertures ARE the median, so med-40 goes negative and selects nothing;
+# wide-nose faces merge aperture+shadow into components above the 0.06fw cap
+# (medium_04: 2297 px vs cap 1532). The fallback runs ONLY after the whole
+# base pipeline fails (zero regression on base-detectable photos by
+# construction — measured 12 recoveries / 0 regressions on demoted-43 +
+# dev-10, incl. primary IMG_4570, dark-skin g02 + its 3 filter variants,
+# dev pic4/4559):
+#   ref = max(median, p80 - 12)  — p80 approximates the SKIN level even when
+#         apertures dominate the ROI; the slack keeps ref~=median on
+#         skin-dominated ROIs so the fallback stays near the base behavior.
+#   thr = max(ref - contrast, 0.45*ref) — the relative floor keeps the
+#         threshold meaningful on dark skin where abs-40 bottoms out.
+#   cap 0.085fw (vs 0.06) and ratio <=10 (vs 5): admit the measured real
+#   pairs; fill/dy/gap/x-asym/persistence/perturb all apply unchanged.
+# Fallback detections carry checks["toneFallback"]=True (recorded, like the
+# reference grace band — a flagged degradation, not a silent pass).
+APERTURE_TONE_REF_P = 80          # ROI L percentile ~ skin level
+APERTURE_TONE_REF_SLACK = 12.0    # ref = max(median, p80 - slack)
+APERTURE_TONE_REL = 0.45          # thr >= 0.45*ref (dark-skin floor)
+APERTURE_FB_MAX_AREA_FW = 0.085   # fallback component area cap
+APERTURE_FB_RATIO_MAX = 10.0      # fallback pair area-ratio bound
+
 # Typed rejection reasons (Codex #14 Q4): detection failure always abstains
 # the photo (never a fabricated guard); the reason names the failed gate.
 APERTURE_REJECT_ROI = "aperture_roi_degenerate"
@@ -325,6 +351,7 @@ class ApertureDetection:
 
 def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
                         contrast: float, shift: tuple[int, int] = (0, 0),
+                        fallback: bool = False,
                         ) -> tuple[np.ndarray | None, str | None, dict]:
     """One detection scan: dark compact pair in the (optionally shifted)
     nose-bottom ROI at the given darkness contrast. Returns (pair mask in
@@ -352,7 +379,15 @@ def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
     roi_l = cv2.cvtColor(bgr[y0:y1, x0:x1],
                          cv2.COLOR_BGR2Lab)[..., 0].astype(np.float32)
     med = float(np.median(roi_l))
-    dark = roi_l < med - contrast
+    if fallback:   # tone-adaptive variant — see the constants block
+        ref = max(med, float(np.percentile(roi_l, APERTURE_TONE_REF_P))
+                  - APERTURE_TONE_REF_SLACK)
+        thr = max(ref - contrast, APERTURE_TONE_REL * ref)
+        max_area_fw, ratio_max = APERTURE_FB_MAX_AREA_FW, APERTURE_FB_RATIO_MAX
+    else:
+        thr = med - contrast
+        max_area_fw, ratio_max = APERTURE_MAX_AREA_FW, APERTURE_AREA_RATIO_MAX
+    dark = roi_l < thr
     # center strip out: a philtrum/columella shadow must not merge L and R
     split = max(1, int(round(APERTURE_SPLIT_HALF_FW * fw)))
     cx_roi = int(round(nose_x)) - x0
@@ -361,7 +396,7 @@ def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
     n, labels, stats, cents = cv2.connectedComponentsWithStats(
         dark.astype(np.uint8), connectivity=8)
     min_px = max(4, int((APERTURE_MIN_AREA_FW * fw) ** 2))
-    max_px = int((APERTURE_MAX_AREA_FW * fw) ** 2)
+    max_px = int((max_area_fw * fw) ** 2)
     best: dict[str, tuple[int, float]] = {}   # side -> (label, area)
     for i in range(1, n):
         area = int(stats[i, cv2.CC_STAT_AREA])
@@ -389,7 +424,7 @@ def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
     })
     if checks["dyFw"] > APERTURE_MAX_DY_FW:
         return None, APERTURE_REJECT_DY, checks
-    if checks["areaRatio"] > APERTURE_AREA_RATIO_MAX:
+    if checks["areaRatio"] > ratio_max:
         return None, APERTURE_REJECT_RATIO, checks
     if checks["xAsymFw"] > APERTURE_X_ASYM_MAX_FW:
         return None, APERTURE_REJECT_ASYM, checks
@@ -401,20 +436,15 @@ def _aperture_pair_scan(bgr: np.ndarray, landmarks: np.ndarray, fw: float,
     return pair, None, checks
 
 
-def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
-                             fw: float) -> ApertureDetection:
-    """Detect the two nostril APERTURES as a skin-contrasting dark compact
-    pair in the nose-bottom ROI (Codex #13 base + #14 Q4 robustness).
-
-    Pipeline: base scan at APERTURE_CONTRAST_L (frozen) with the calibrated
-    geometry gates (area ratio / nose-x symmetry / gap bounds) → the pair
-    must PERSIST at every darkness threshold in APERTURE_CONTRAST_SET →
-    the pair must survive >= APERTURE_PERTURB_MIN_HITS of the 4 shifted
-    ROIs (±APERTURE_PERTURB_FW·fw in x and y). Any failure returns
+def _detect_apertures_variant(bgr: np.ndarray, landmarks: np.ndarray,
+                              fw: float, fallback: bool) -> ApertureDetection:
+    """One full detection pipeline (base scan → contrast persistence → ROI
+    perturbation consensus) under a single scan variant. Any failure returns
     ok=False with a typed reason — the caller abstains, a guard is never
     fabricated. confidence = (base + shifted hits) / 5."""
     core, reject, checks = _aperture_pair_scan(bgr, landmarks, fw,
-                                               APERTURE_CONTRAST_L)
+                                               APERTURE_CONTRAST_L,
+                                               fallback=fallback)
     if core is None:
         return ApertureDetection(False, reject, None, None, 0.0, checks)
 
@@ -423,7 +453,8 @@ def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
         if c == APERTURE_CONTRAST_L:
             persist[c] = True
             continue
-        m, _, _ = _aperture_pair_scan(bgr, landmarks, fw, c)
+        m, _, _ = _aperture_pair_scan(bgr, landmarks, fw, c,
+                                      fallback=fallback)
         persist[c] = m is not None
     checks["contrastPersist"] = {str(k): v for k, v in persist.items()}
     if not all(persist.values()):
@@ -434,7 +465,8 @@ def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
     hits = 0
     for sh in ((d, 0), (-d, 0), (0, d), (0, -d)):
         m, _, _ = _aperture_pair_scan(bgr, landmarks, fw,
-                                      APERTURE_CONTRAST_L, shift=sh)
+                                      APERTURE_CONTRAST_L, shift=sh,
+                                      fallback=fallback)
         hits += int(m is not None)
     checks["perturbHits"] = f"{hits}/4"
     confidence = round((1 + hits) / 5.0, 2)
@@ -446,6 +478,29 @@ def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
     halo = cv2.dilate(core.astype(np.uint8), cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (dk, dk))) > 0
     return ApertureDetection(True, None, core, halo, confidence, checks)
+
+
+def detect_nostril_apertures(bgr: np.ndarray, landmarks: np.ndarray,
+                             fw: float) -> ApertureDetection:
+    """Detect the two nostril APERTURES as a skin-contrasting dark compact
+    pair in the nose-bottom ROI (Codex #13 base + #14 Q4 robustness +
+    cp6-postmortem tone-adaptive fallback).
+
+    The base (frozen-calibration) pipeline runs first; only if it fails is
+    the tone-adaptive fallback variant tried (see the APERTURE_TONE_*
+    constants block — zero regression on base-detectable photos by
+    construction). Fallback detections carry checks["toneFallback"]=True;
+    when both variants fail, the BASE reject reason stays the headline and
+    the fallback's reason is recorded as checks["fbReject"]."""
+    det = _detect_apertures_variant(bgr, landmarks, fw, fallback=False)
+    if det.ok:
+        return det
+    fb = _detect_apertures_variant(bgr, landmarks, fw, fallback=True)
+    if fb.ok:
+        fb.checks["toneFallback"] = True
+        return fb
+    det.checks["fbReject"] = fb.reject
+    return det
 
 
 def _anatomy_guards(crop, legacy: bool = False) -> dict:

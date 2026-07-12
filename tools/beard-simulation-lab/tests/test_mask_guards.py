@@ -350,15 +350,46 @@ def _gray_for_lab_l(l_target: float) -> int:
 def test_aperture_contrast_instability_rejects():
     """A mid-dark flood (L = ROI median - 38) is invisible at contrast 40
     but at 36 merges with the left aperture into an over-max-area blob:
-    the pair does not PERSIST across the contrast set -> typed reject."""
+    the pair does not PERSIST across the contrast set -> typed reject.
+    Tested at the VARIANT level (base pipeline): the public API may still
+    rescue this fixture via the tone fallback (larger area cap) — that
+    boundary move is the explicit subject of the rescue test below."""
+    img = _blob_img([(176, 146, 4, 2), (224, 146, 4, 2)])
+    med0 = float(np.median(cv2.cvtColor(img[138:155, 171:230],
+                                        cv2.COLOR_BGR2Lab)[..., 0]))
+    g = _gray_for_lab_l(med0 - 38.0)
+    img[138:145, 171:196] = (g, g, g)   # 7x25 band touching the left blob
+    det = hybrid_recon._detect_apertures_variant(img, LM, FW, fallback=False)
+    assert not det.ok and det.reject == APERTURE_REJECT_CONTRAST
+    assert det.checks["contrastPersist"]["36.0"] is False
+
+
+def test_aperture_small_flood_rescued_by_tone_fallback():
+    """Boundary move (cp6 postmortem, recorded): a SMALL mid-dark flood that
+    breaks base persistence (merged blob > 0.06fw cap) but stays under the
+    fallback cap (0.085fw) is now rescued by the tone-adaptive fallback,
+    flagged toneFallback — the guard covers the merged region (over-guarding
+    is the safe direction; abstain was the old outcome)."""
     img = _blob_img([(176, 146, 4, 2), (224, 146, 4, 2)])
     med0 = float(np.median(cv2.cvtColor(img[138:155, 171:230],
                                         cv2.COLOR_BGR2Lab)[..., 0]))
     g = _gray_for_lab_l(med0 - 38.0)
     img[138:145, 171:196] = (g, g, g)   # 7x25 band touching the left blob
     det = detect_nostril_apertures(img, LM, FW)
-    assert not det.ok and det.reject == APERTURE_REJECT_CONTRAST
-    assert det.checks["contrastPersist"]["36.0"] is False
+    assert det.ok and det.checks.get("toneFallback") is True
+
+
+def test_aperture_dark_skin_tone_fallback():
+    """cp6 postmortem repair (medium_wikimedia_g02 class): on dark skin the
+    ROI median sits near the aperture level, so median-40 selects nothing
+    and the base scan finds no pair — the tone-adaptive fallback must
+    recover the same, clearly visible pair (flagged toneFallback)."""
+    img = _skin_bgr().astype(np.float32)
+    img = np.clip(img * 0.15, 0, 255).astype(np.uint8)   # deep darkening:
+    # ROI median lands near the aperture level (g02 measured median L=11)
+    det = detect_nostril_apertures(img, LM, FW)
+    assert det.ok and det.checks.get("toneFallback") is True
+    assert det.core is not None and det.halo is not None
 
 
 def test_aperture_roi_perturb_consensus_rejects():

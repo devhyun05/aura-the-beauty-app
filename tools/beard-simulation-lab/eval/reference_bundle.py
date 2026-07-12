@@ -76,6 +76,20 @@ surgical fixes (controlled-degradation harness: eval/run_reference_factorial):
    COLOR model (lab_pixels/mean/cov) but keeps it in the gray black-hat
    support (anchor_mask_full) the ladder and anchor stats use.
    Nmin and the coherence gate are UNCHANGED this round.
+
+CHECKPOINT-6 POSTMORTEM ROUND (2026-07-12) — the sealed holdout run measured
+this module as the single largest serve-blocker (17 of 43 photos; typed
+reasons in 아카이브/webset_cp6/cp6_run/armB/driver_report.json). Three
+repairs, each carrying its measured basis on its constant:
+
+1. Nmin is CAPPED (_NMIN_CAP): the quadratic bar demanded 2,500+ surviving
+   px on fw~570 web photos and several landed 3-5 px short of it.
+2. Grace band (_GRACE_FRACTION): a 90-100%-of-Nmin shortfall is now a
+   RECORDED low_conf degradation (grace_band=True), not an abstain cliff.
+3. Coherence rejection requires real texture energy (_COH_ENERGY_MIN):
+   beauty-filter smoothing leaves near-zero grain whose residual gradients
+   are perfectly directional — the ratio test alone read smoothed SKIN as
+   a directional defect (filter-selfie support decision, 2026-07-12).
 """
 
 from __future__ import annotations
@@ -98,7 +112,7 @@ from engine.detect_face import (  # noqa: E402
     NOSE_BOTTOM,
     UPPER_CHEEKS,
 )
-from engine.texture import coherence_map  # noqa: E402
+from engine.texture import coherence_map, grain_map  # noqa: E402
 from eval.ghost_ruler import LOW_SIGMA_RATIO, blackhat_maps  # noqa: E402
 
 # --- anchor geometry (x face width) -----------------------------------------
@@ -146,7 +160,37 @@ _AB_SIGMA_FLOOR = 1.5     # forehead-VERIFY sigma floor on a/b only (Codex #14
 
 # --- validity ----------------------------------------------------------------
 _NMIN_FLOOR = 768.0
-_NMIN_RATIO = 0.008       # Nmin = max(768, 0.008 * fw^2)
+_NMIN_RATIO = 0.008       # Nmin = min(max(768, 0.008 * fw^2), _NMIN_CAP)
+_NMIN_CAP = 1024.0        # cp6 postmortem (2026-07-12): uncapped, the
+                          #   quadratic demanded 2,500+ SURVIVING px on fw~570
+                          #   web photos and the QC trim landed several 3-5 px
+                          #   short (none_g01 2582 vs 2585, medium_g03 2437 vs
+                          #   2633). The statistics only need ~400 px (4 L-bins
+                          #   x _BIN_MIN_N) — 1024 keeps a 2.5x margin. dev9
+                          #   (fw 273-376) sits on the 768 floor: unaffected.
+                          #   The floor still owns the far-face defense; the
+                          #   fw>=320 shooting gate owns tiny faces (cp6
+                          #   primaries at fw~150-200 stay a capture problem).
+_GRACE_FRACTION = 0.9     # survivors in [0.9*Nmin, Nmin) build the bundle as a
+                          #   RECORDED degradation (grace_band + low_conf) in-
+                          #   stead of abstaining: cp6 lost flickr_91__beauty
+                          #   at 889 vs Nmin 893 (4 px). A hard bar always has
+                          #   an edge; the band turns the edge from a cliff
+                          #   into a flag the downstream record carries.
+_COH_ENERGY_MIN = 3.0     # gray levels of grain_map RMS: a coherence rejection
+                          #   additionally requires real texture energy.
+                          #   Measured 2026-07-12 (calib_coh_energy, demoted
+                          #   cp6 set): beauty/down-up-smoothed skin rejections
+                          #   sit at energy med 1.9-2.1 (they are SKIN — the
+                          #   ratio test alone read residual shading gradients
+                          #   as directional defects), dev9 clean-cheek
+                          #   rejections 1.5-2.6, real directional texture
+                          #   (hair wisps/strands, webset originals) med
+                          #   4.5-17.8 -> 3.0 splits with ~1.5x margin both
+                          #   ways. High-contrast strands keep energy >> 3
+                          #   under a beauty filter (bilateral preserves edges
+                          #   by design), so the defense the gate exists for
+                          #   is intact.
 _PATCH_MIN_SHARE = 0.25   # ladder levels 1-2: each patch >= 25% of the total
 
 # --- normalized-excess transfer ----------------------------------------------
@@ -196,9 +240,9 @@ class ReferenceBundle:
                                    # 2 cheek+forehead | 3 single cheek |
                                    # 4 pooled, share rule waived (low_conf)
     single_anchor: bool
-    low_conf: bool = False         # True only at ladder level 4: Nmin is met
-                                   #   but the 25% per-patch share rule is not —
-                                   #   recorded degradation instead of abstain
+    low_conf: bool = False         # True at ladder level 4 (share rule waived)
+                                   #   or in the grace band — recorded
+                                   #   degradation instead of abstain
     cheek_sigma: tuple[float, float, float] | None = None
                                    # diagnostic: PRE-floor robust sigma
                                    #   (1.4826*MAD, Lab) of the pooled cheek
@@ -208,6 +252,9 @@ class ReferenceBundle:
                                    # color-valid subset of anchor_mask_full
                                    #   (source of lab_pixels); None never
                                    #   happens from the builder
+    grace_band: bool = False       # survivors landed in [0.9*Nmin, Nmin)
+                                   #   (cp6 postmortem repair 2) — always
+                                   #   implies low_conf
 
 
 # --- typed abstain reasons (Codex #14 task 1) --------------------------------
@@ -267,8 +314,11 @@ class ReferenceAbstain:
 
 def nmin_for(face_width: float) -> float:
     """Minimum valid anchor pixels; scales with the face so a far-away face
-    cannot pass on a handful of pixels the way the old complement did."""
-    return max(_NMIN_FLOOR, _NMIN_RATIO * face_width * face_width)
+    cannot pass on a handful of pixels the way the old complement did, and
+    is capped so a high-resolution face is not held to a quadratically
+    growing bar the statistics never needed (_NMIN_CAP, cp6 postmortem)."""
+    return min(max(_NMIN_FLOOR, _NMIN_RATIO * face_width * face_width),
+               _NMIN_CAP)
 
 
 def _coh_max_for(face_width: float) -> float:
@@ -359,11 +409,13 @@ def select_patch_ladder(counts: dict[str, int], forehead_ok: bool,
 
     Levels 1-2 require each patch >= 25% of the pair total, so one dying
     patch cannot hide behind the other (level 1 applies this to the CHEEK
-    pair; the recruited forehead only adds pixels). NOTE: with the spec
-    radii a lone cheek disk holds ~0.0064*fw^2 px < Nmin = 0.008*fw^2
-    (capacity; QC only lowers it), so level 3 is geometrically unreachable
-    today — it exists (and is tested directly) for larger anchor
-    geometries, not as a live escape hatch.
+    pair; the recruited forehead only adds pixels). NOTE on level 3: with
+    the spec radii a lone cheek holds ~0.0064*fw^2 px < the RATIO bar
+    0.008*fw^2, so in the ratio regime it is geometrically unreachable —
+    but since the cp6 postmortem CAP (Nmin <= 1024) a lone clean cheek on a
+    large face (fw >= ~400, capacity >= 1024) legitimately carries a bundle,
+    flagged single_anchor=True. That is the bangs-covered-forehead +
+    one-cheek-occluded selfie the filter-support decision needs to serve.
     """
     nl = int(counts.get("cheek_left", 0))
     nr = int(counts.get("cheek_right", 0))
@@ -399,6 +451,19 @@ def select_patch_ladder(counts: dict[str, int], forehead_ok: bool,
                  if n > 0]
         return 4, names, False
     return None
+
+
+def resolve_ladder(counts: dict[str, int], forehead_ok: bool, nmin: float,
+                   ) -> tuple[tuple[int, list[str], bool] | None, bool]:
+    """Ladder at the full bar first; on a miss, once more inside the grace
+    band (cp6 postmortem repair 2). Returns (picked, grace): grace=True means
+    the bundle only exists because of the band and MUST be recorded low_conf
+    (grace_band=True) — a flagged degradation, never a silent pass."""
+    picked = select_patch_ladder(counts, forehead_ok, nmin)
+    if picked is not None:
+        return picked, False
+    picked = select_patch_ladder(counts, forehead_ok, _GRACE_FRACTION * nmin)
+    return picked, picked is not None
 
 
 def _classify_abstain(raw_capacity: int, nmin: float, counts: dict[str, int],
@@ -455,7 +520,12 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
     # saturation invalidates COLOR while the gray black-hat texture is real.
     gray_clip = gray >= _CLIP_LEVEL
     chan_clip = bgr_full.max(axis=2) >= _CLIP_LEVEL
-    coh_bad = coh > _coh_max_for(face_width)
+    # Energy-conditioned coherence (cp6 postmortem repair 3): "directional"
+    # only counts as a defect where there is real texture energy to be
+    # directional WITH. The ratio test alone read beauty-filter-smoothed skin
+    # (near-zero grain, residual shading gradients) as hair-like defects.
+    coh_bad = ((coh > _coh_max_for(face_width))
+               & (grain_map(bgr_full) > _COH_ENERGY_MIN))
     usable_color = ~gray_clip & ~chan_clip & ~coh_bad   # Lab-model tier
     usable_gray = ~gray_clip & ~coh_bad                 # black-hat support tier
 
@@ -527,7 +597,7 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
 
     counts = {name: int(m.sum()) for name, m in qc.items()}
     nmin = nmin_for(face_width)
-    picked = select_patch_ladder(counts, forehead_ok, nmin)
+    picked, grace = resolve_ladder(counts, forehead_ok, nmin)
     if picked is None:
         return ReferenceAbstain(
             reason=_classify_abstain(
@@ -564,9 +634,10 @@ def build_reference_bundle(bgr_full: np.ndarray, landmarks: np.ndarray,
         patches_used=names,
         ladder_level=level,
         single_anchor=single,
-        low_conf=(level == 4),
+        low_conf=(level == 4) or grace,
         cheek_sigma=cheek_sigma,
         anchor_mask_color=color_mask,
+        grace_band=grace,
     )
 
 
