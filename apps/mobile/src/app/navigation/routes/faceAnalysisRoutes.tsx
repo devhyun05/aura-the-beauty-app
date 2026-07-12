@@ -236,7 +236,9 @@ export function FaceAnalysisLoadingRouteScreen({
         if (isMounted) {
           // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
           // 실패 시 baseline 유지 + 미적용 사유를 배지로 노출(조용한 실패 금지).
-          setSelectedPersonalColor(outcome.corrected?.result ?? outcome.result);
+          // reported = 저장(writeResultJson)과 동일한 보고 메인 결과(보정 우선).
+          // 화면과 저장이 갈라지지 않게 서비스가 확정한 값을 그대로 쓴다.
+          setSelectedPersonalColor(outcome.reported);
           setSelectedPersonalColorCorrection({
             applied: Boolean(outcome.corrected),
             reasons: [

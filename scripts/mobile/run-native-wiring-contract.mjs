@@ -96,12 +96,20 @@ function assertNotContains(source, needle, label) {
 }
 
 // ── 5. 보고서 연결 배선 (TS) ───────────────────────────────────────────
-// 보정 결과가 보고서로 흐르는 경로: cameraMetadata pass-through + corrected 우선 표시.
+// 보정 결과가 보고서로 흐르는 경로: cameraMetadata pass-through + 보고 메인(reported).
 {
   const path = 'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx';
   const src = readSource(path);
   assertContains(src, /cameraMetadata:\s*selectedFaceCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
-  assertContains(src, /outcome\.corrected\?\.result \?\? outcome\.result/, `${path}: 보정 우선 표시 배선이 없다`);
+  assertContains(src, /outcome\.reported/, `${path}: 보고 메인 결과(outcome.reported) 배선이 없다 — 화면·저장 정합`);
+}
+
+// ── 6. 화면·저장 정합: 서비스가 reported(보정 우선)를 저장하는가 (F13) ──
+{
+  const path = 'apps/mobile/src/features/personal-color/services/personalColorService.ts';
+  const src = readSource(path);
+  assertContains(src, /const reported =/, `${path}: reported(보고 메인) 확정 배선이 없다`);
+  assertContains(src, /writeResultJson\(input\.sessionId,\s*reported\)/, `${path}: 저장이 reported 가 아니다 — 화면 corrected/저장 baseline 불일치(F13)`);
 }
 
 if (failures > 0) {

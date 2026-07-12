@@ -56,6 +56,10 @@ export const ILLUMINATION_CORRECTION = {
   scleraMinLinearLuma: 0.04, // 그늘진 흰자 제외
   scleraMaxLinearLuma: 0.92, // 날아간 흰자 제외
   scleraChannelClipMax: 249.5, // 채널 평균이 이 이상이면 클리핑 → 그 눈 드롭(복원 불가 정보)
+  // 채널 평균만 보면, 서로 다른 픽셀이 서로 다른 채널에서 255로 포화된 경우
+  // (overexposedRatio=1 인데 평균은 249 미만) 클리핑을 놓친다(코덱스 F14). 포화
+  // 픽셀 비율이 이 값 이상이면 그 눈을 드롭 — 복원 불가 정보로 게인 추정이 무의미.
+  scleraMaxOverexposedRatio: 0.5,
   // 실제 흰자는 회색이 아니라 약간 웜한 생체 조직(혈관·황색조). 회색 타깃을 쓰면
   // 흰자의 자연 웜기를 "조명 캐스트"로 오인해 전역 red-cut 편향이 생긴다(실기기 확인).
   // ≈ Lab(76, +4, +6), D65. 1차 실측(주광 창가, n=1: a*6.7~7.0/b*5.9~6.2, 단 촬영자
@@ -167,11 +171,14 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
       reasons.push(`${key}_low_confidence`);
       continue;
     }
-    // 채널 클리핑: 255 근처로 날아간 채널은 원 정보가 소실돼 게인 추정이 무의미
+    // 채널 클리핑: 255 근처로 날아간 채널은 원 정보가 소실돼 게인 추정이 무의미.
+    // (a) 채널 평균 포화 (b) 포화 픽셀 비율 — 채널마다 다른 픽셀이 포화되면 평균은
+    // 낮아도 데이터는 전부 클리핑이라 overexposedRatio 로 함께 잡는다(F14).
     if (
       stats.rgbMean.r >= c.scleraChannelClipMax ||
       stats.rgbMean.g >= c.scleraChannelClipMax ||
-      stats.rgbMean.b >= c.scleraChannelClipMax
+      stats.rgbMean.b >= c.scleraChannelClipMax ||
+      stats.overexposedRatio >= c.scleraMaxOverexposedRatio
     ) {
       reasons.push(`${key}_channel_clipped`);
       continue;

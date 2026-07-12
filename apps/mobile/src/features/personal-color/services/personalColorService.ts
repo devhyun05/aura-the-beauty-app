@@ -14,13 +14,19 @@ import type { IlluminationCorrectionReport } from './personalColorCore/illuminat
 import type { PersonalColorCaptureInput } from '../types';
 
 export type PersonalColorAnalysisOutcome = {
+  // baseline: 조명 보정 없이 사진 그대로 분석한 결과 (원본 색).
   result: AuraPersonalColorResult;
-  // 조명 보정 실험(A/B): 흰자/WB 기반 캐스트 보정을 같은 캡처에 적용한 결과.
-  // baseline(result)은 불변 — 효과가 실측으로 입증되기 전까지 참고용으로만 병기.
+  // 조명 보정(A/B): 흰자/WB 기반 캐스트 보정을 같은 캡처에 적용한 결과. 사용자
+  // 정책(보정 우선 표시)상 보정 성공 시 화면·저장 모두 이 결과를 메인으로 쓴다.
+  // baseline 은 비교·폴백용으로 보존한다.
   corrected: {
     result: AuraPersonalColorResult;
     report: IlluminationCorrectionReport;
   } | null;
+  // 실제로 보고/저장되는 결과 = corrected 있으면 corrected, 없으면 baseline.
+  // 화면(setSelectedPersonalColor)과 저장(writeResultJson)이 동일 값을 쓰도록
+  // 여기서 확정한다 — "화면 corrected / 저장 baseline" 불일치(코덱스 F13) 방지.
+  reported: AuraPersonalColorResult;
   // 미적용이어도 사유·실측 흰자 확인이 가능하도록 리포트는 항상 노출(현장 진단용)
   correctionReport: IlluminationCorrectionReport;
   artifacts: {
@@ -115,8 +121,17 @@ export async function analyzePersonalColorCapture(
   if (correctedNative && correctionReport.applied) {
     const correctedResult = analyzePersonalColor(correctedNative, engineOptions);
     assertLocalOnly(correctedResult);
+    // 게이트 경고를 corrected 에도 병합 — 보정본이 보고/저장 메인이 되면
+    // skin_matte_unavailable 등 경고가 사용자 표시에서 사라지지 않게(코덱스 minor).
+    for (const w of gate.warnings) {
+      if (!correctedResult.warnings.includes(w)) {
+        correctedResult.warnings.push(w);
+      }
+    }
     corrected = { result: correctedResult, report: correctionReport };
   }
+  // 보고/저장 메인 결과: 보정 성공 시 corrected, 아니면 baseline.
+  const reported = corrected?.result ?? result;
   logger.log('illumination:correction', {
     applied: correctionReport.applied,
     source: correctionReport.source,
@@ -151,17 +166,20 @@ export async function analyzePersonalColorCapture(
 
   let resultJsonUri: string | null = null;
   try {
-    resultJsonUri = await writeResultJson(input.sessionId, result);
+    // 화면과 동일한 reported(보정 우선) 결과를 저장 — 보정 적용 여부는 위
+    // illumination:correction 로그로 추적(provenance).
+    resultJsonUri = await writeResultJson(input.sessionId, reported);
   } catch (error) {
     logger.log('artifact:result_failed', { message: String(error) });
   }
 
   logger.log('analysis:done', {
-    status: result.status,
-    measurementConfidence: result.measurementConfidence,
-    top: result.tone?.top ?? null,
-    secondary: result.tone?.secondary ?? null,
-    isMixed: result.tone?.isMixed ?? false,
+    reportedIsCorrected: Boolean(corrected),
+    status: reported.status,
+    measurementConfidence: reported.measurementConfidence,
+    top: reported.tone?.top ?? null,
+    secondary: reported.tone?.secondary ?? null,
+    isMixed: reported.tone?.isMixed ?? false,
     // 오분류 진단용: 분류를 좌우하는 5축 실측값을 그대로 남긴다.
     axes: {
       temperature: result.axes.temperature.value,
@@ -183,6 +201,7 @@ export async function analyzePersonalColorCapture(
   return {
     result,
     corrected,
+    reported,
     correctionReport,
     artifacts: { sourceUri, resultJsonUri, logUri: logger.logFileUri },
   };

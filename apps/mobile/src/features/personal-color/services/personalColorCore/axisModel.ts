@@ -260,12 +260,17 @@ function computeClarity(
   const nullAxis: AuraAxis = { value: null, confidence: 0, floored: true, basis: RELATIVE };
   if (!skin || skin.qEff < AXIS_Q_FLOOR) return nullAxis;
   const chrSkin = chromaFeature(skin.lab, REFS.cRefSkin, REFS.cScaleSkin);
-  const chrLip = lip ? chromaFeature(lip.lab, REFS.cRefLip, REFS.cScaleLip) : null;
+  // floor 아래 저신뢰 lip 은 clarity 를 35% 움직이면서도 confidence 엔 안 잡혀,
+  // 신뢰 못 할 lip 이 clarity 를 좌우하는 문제가 있었다(코덱스 F15). floor 이상일
+  // 때만 lip 을 쓰고, 쓸 땐 그 품질을 confidence 에도 반영한다.
+  const useLip = !!lip && lip.qEff >= AXIS_Q_FLOOR;
+  const chrLip = useLip ? chromaFeature(lip!.lab, REFS.cRefLip, REFS.cScaleLip) : null;
   const contrastTerm = contrast.value ?? 0;
   const value =
     chrLip != null
       ? clamp(0.45 * chrSkin + 0.35 * chrLip + 0.2 * contrastTerm, -1, 1)
       : clamp(0.7 * chrSkin + 0.3 * contrastTerm, -1, 1);
-  const qClarity = contrast.value != null ? Math.min(skin.qEff, contrast.confidence) : skin.qEff;
+  let qClarity = contrast.value != null ? Math.min(skin.qEff, contrast.confidence) : skin.qEff;
+  if (useLip) qClarity = Math.min(qClarity, lip!.qEff);
   return { value, confidence: clamp(qClarity, 0, 1), floored: false, basis: RELATIVE };
 }
