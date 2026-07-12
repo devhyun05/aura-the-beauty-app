@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {Alert, Pressable, StyleSheet, View as RNView} from 'react-native';
+import {Pressable, StyleSheet, View as RNView} from 'react-native';
 import {CalendarClock, MessageCircle} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
@@ -16,12 +16,8 @@ import {
   ExpertAvatar,
   PrimaryButton,
 } from '../components/consultingComponents';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
-import {
-  getConsultingCallState,
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
@@ -43,26 +39,21 @@ import type {
 type ConsultingMessagesScreenProps = {
   authToken?: string | null;
   onPressConversation: (record: ConsultingRecord) => void;
-  onPressIncomingCall: (record: ConsultingRecord) => void;
   onPressFindExpert: () => void;
 };
 
 export function ConsultingMessagesScreen({
   authToken,
   onPressConversation,
-  onPressIncomingCall,
   onPressFindExpert,
 }: ConsultingMessagesScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [unreadMessageBookingIds, setUnreadMessageBookingIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
-  const incomingCallBookingIdsRef = useRef<ReadonlySet<string>>(new Set());
   const activeRecordsRef = useRef<readonly ConsultingRecord[]>([]);
-  const onPressIncomingCallRef = useRef(onPressIncomingCall);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,10 +92,20 @@ export function ConsultingMessagesScreen({
     }, [authToken]),
   );
 
-  const activeRecords = useMemo(
-    () => records.filter(record => isConsultingMessageStatus(record.status)),
-    [records],
-  );
+  const activeRecords = useMemo(() => {
+    const visibleExpertIds = new Set<string>();
+    return records.filter(record => {
+      if (
+        record.customerLeftAt ||
+        !isConsultingMessageStatus(record.status) ||
+        visibleExpertIds.has(record.expertId)
+      ) {
+        return false;
+      }
+      visibleExpertIds.add(record.expertId);
+      return true;
+    });
+  }, [records]);
   const activeRecordsKey = useMemo(
     () => activeRecords.map(record => `${record.id}:${record.status}`).join(','),
     [activeRecords],
@@ -115,37 +116,9 @@ export function ConsultingMessagesScreen({
   }, [activeRecords]);
 
   useEffect(() => {
-    onPressIncomingCallRef.current = onPressIncomingCall;
-  }, [onPressIncomingCall]);
-
-  useEffect(() => {
     if (!authToken) {
       return undefined;
     }
-
-    let isMounted = true;
-    void Promise.all(
-      activeRecordsRef.current.map(async record => ({
-        record,
-        state: await getConsultingCallState(record.id),
-      })),
-    ).then(results => {
-      if (!isMounted) return;
-      const incoming = results.find(
-        item =>
-          item.state?.status === 'active' &&
-          !incomingCallBookingIdsRef.current.has(item.record.id),
-      );
-      if (!incoming) return;
-      incomingCallBookingIdsRef.current = new Set([
-        ...incomingCallBookingIdsRef.current,
-        incoming.record.id,
-      ]);
-      Alert.alert('화상 상담 전화가 왔어요', '전문가가 화상 상담을 시작했습니다.', [
-        {text: '나중에'},
-        {text: '입장하기', onPress: () => onPressIncomingCallRef.current(incoming.record)},
-      ]);
-    });
 
     const sockets: ConsultingConversationSocketClient[] = activeRecordsRef.current.map(
       record =>
@@ -164,34 +137,12 @@ export function ConsultingMessagesScreen({
                 return new Set([...current, record.id]);
               });
             }
-            if (event.type === 'call.status' && event.status === 'started') {
-              if (incomingCallBookingIdsRef.current.has(record.id)) {
-                return;
-              }
-              incomingCallBookingIdsRef.current = new Set([
-                ...incomingCallBookingIdsRef.current,
-                record.id,
-              ]);
-              Alert.alert('화상 상담이 시작됐어요', event.message, [
-                {text: '나중에'},
-                {
-                  text: '입장하기',
-                  onPress: () => onPressIncomingCallRef.current(record),
-                },
-              ]);
-            }
-            if (event.type === 'call.status' && event.status === 'ended') {
-              const nextIncomingCallIds = new Set(incomingCallBookingIdsRef.current);
-              nextIncomingCallIds.delete(record.id);
-              incomingCallBookingIdsRef.current = nextIncomingCallIds;
-            }
           },
           participantType: 'user',
         }),
     );
 
     return () => {
-      isMounted = false;
       sockets.forEach(socket => socket.close());
     };
   }, [activeRecordsKey, authToken]);
@@ -214,9 +165,7 @@ export function ConsultingMessagesScreen({
       {activeRecords.length > 0 ? (
         <View style={styles.list}>
           {activeRecords.map(record => {
-            const expert =
-              experts.find(item => item.id === record.expertId) ??
-              findConsultingExpertOrFirst(record.expertId);
+            const expert = resolveConsultingExpert(experts, record.expertId);
             return (
               <MessageCard
                 expert={expert}
@@ -315,6 +264,10 @@ function getMessagePreview(status: ConsultingRecordStatus): string {
 
   if (status === 'contacting') {
     return '가능 일정 확인 중이에요. 필요한 메시지를 톡으로 주고받아요.';
+  }
+
+  if (status === 'completed') {
+    return '상담은 완료됐지만 이 톡에서 후속 질문을 계속 주고받을 수 있어요.';
   }
 
   return '신청이 접수됐어요. 아직 예약 완료 전이에요.';

@@ -783,6 +783,9 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
   price = row.get("price")
   return {
     "id": str(row["id"]),
+    "conversation_id": str(row.get("conversation_id") or row["id"]),
+    "customer_left_at": row.get("customer_left_at"),
+    "expert_left_at": row.get("expert_left_at"),
     "expert_id": row["expert_id"],
     "duration_id": row.get("duration_code"),
     "day_id": scheduled_date.isoformat()
@@ -958,6 +961,51 @@ async def get_booking(db: Database, user_id: str, booking_id: str) -> dict[str, 
   return await _attach_summary(db, _record(row), row["id"])
 
 
+async def leave_booking_conversation(db: Database, user_id: str, booking_id: str) -> dict[str, Any]:
+  row = await db.fetchrow(
+    """
+    select coalesce(conversation_id, id) as conversation_id
+    from consulting_bookings
+    where id::text = $1 and user_id = $2::uuid
+    """,
+    booking_id,
+    user_id,
+  )
+  if row is None:
+    raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
+
+  await db.execute(
+    """
+    update consulting_bookings
+    set customer_left_at = coalesce(customer_left_at, now()), updated_at = now()
+    where conversation_id = $1 and user_id = $2::uuid
+    """,
+    row["conversation_id"],
+    user_id,
+  )
+  return {"conversation_id": str(row["conversation_id"]), "left": True}
+
+
+async def _conversation_id_for_new_booking(
+  db: Database,
+  user_id: str,
+  expert_id: str,
+  booking_id: Any,
+) -> Any:
+  return await db.fetchval(
+    """
+    select conversation_id
+    from consulting_bookings
+    where user_id = $1::uuid and expert_id = $2
+      and customer_left_at is null and expert_left_at is null
+    order by created_at desc
+    limit 1
+    """,
+    user_id,
+    expert_id,
+  ) or booking_id
+
+
 async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, Any]:
   expert = await db.fetchrow(
     """
@@ -1030,12 +1078,19 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
   )
   shared_report_ids = list(payload.shared_report_ids or [])
   booking_price = _booking_price(payload, duration)
+  booking_id = uuid4()
+  conversation_id = await _conversation_id_for_new_booking(
+    db,
+    user_id,
+    payload.expert_id,
+    booking_id,
+  )
 
   try:
     row = await db.fetchrow(
       """
       insert into consulting_bookings (
-        user_id, expert_id, duration_code, duration_label, duration_minutes,
+        id, conversation_id, user_id, expert_id, duration_code, duration_label, duration_minutes,
         category_label, scheduled_at, scheduled_date, slot_start_minutes,
         date_label, slot_id, concern_id, concern_label,
         share_reports, shared_report_ids, question,
@@ -1044,16 +1099,18 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
         status, price
       )
       values (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        $10, $11, $12, $13,
-        $14, $15::uuid[], $16,
-        $17, $18, $19,
-        $20,
-        'requested', $21
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17::uuid[], $18,
+        $19, $20, $21,
+        $22,
+        'requested', $23
       )
       returning *
       """,
+      booking_id,
+      conversation_id,
       user_id,
       payload.expert_id,
       duration["code"],

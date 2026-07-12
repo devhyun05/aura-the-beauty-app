@@ -22,7 +22,7 @@ import {
   formatConsultingPrice,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import type {ConsultingExpert, ConsultingRecord, ConsultingSessionMode} from '../types';
 
 type ConsultingDuration = ConsultingExpert['durations'][number];

@@ -9,7 +9,7 @@ from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services import chime_meetings
 from app.services.chime_meetings import ChimeMeetingsService
-from app.services import consulting_call
+from app.services import consulting_call, consulting_partner
 
 
 class FakeChimeMeetingsService:
@@ -115,6 +115,14 @@ class FakeDatabase:
 
   async def fetchrow(self, query: str, *args):
     normalized_query = " ".join(query.lower().split())
+    if "from consulting_partner_accounts" in normalized_query:
+      return {
+        "id": "partner-1",
+        "expert_id": self.booking["expert_id"],
+        "status": "active",
+        "expert_name": "상담사",
+      }
+
     if "from consulting_bookings" in normalized_query:
       if "user_id = $2" in normalized_query and args[1] != self.booking["user_id"]:
         return None
@@ -189,6 +197,8 @@ class FakeDatabase:
         self.session["customer_language_code"] = args[1]
       if "set expert_language_code = $2" in normalized_query:
         self.session["expert_language_code"] = args[1]
+      if "expert_language_code = $3" in normalized_query:
+        self.session["expert_language_code"] = args[2]
       if "transcription_status = 'starting'" in normalized_query:
         self.session["transcription_status"] = "starting"
       if "set transcription_status = 'active'" in normalized_query:
@@ -456,11 +466,18 @@ async def test_customer_cannot_recreate_meeting_when_attendee_join_sees_stale_me
 
 
 @pytest.mark.asyncio
-async def test_customer_end_call_does_not_delete_shared_meeting(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_customer_end_call_completes_and_deletes_shared_meeting(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
   reset_fake_chime()
   settings = Settings(chime_enabled=True)
   db = FakeDatabase(make_booking())
+  completion_calls: list[str] = []
+
+  async def complete_booking(_db, _account, booking_id: str, *, transcript: str | None = None) -> str:
+    completion_calls.append(booking_id)
+    return "succeeded"
+
+  monkeypatch.setattr(consulting_call, "_complete_booking_after_call", complete_booking)
 
   await consulting_call.join_partner_call(
     db,
@@ -472,10 +489,12 @@ async def test_customer_end_call_does_not_delete_shared_meeting(monkeypatch: pyt
   await consulting_call.join_customer_call(db, "user-1", "booking-1", "ko-KR", settings)
   result = await consulting_call.end_customer_call(db, "user-1", "booking-1", settings)
 
-  assert result["status"] == "active"
+  assert result["status"] == "ended"
+  assert result["summary_status"] == "succeeded"
   assert db.session is not None
-  assert db.session["status"] == "active"
-  assert FakeChimeMeetingsService.deleted_meeting_ids == []
+  assert db.session["status"] == "ended"
+  assert FakeChimeMeetingsService.deleted_meeting_ids == ["meeting-1"]
+  assert completion_calls == ["booking-1"]
 
 
 @pytest.mark.asyncio
@@ -536,6 +555,83 @@ async def test_partner_end_call_stops_active_transcription_before_deleting_meeti
     "stop-transcription:meeting-active",
     "delete:meeting-active",
   ]
+
+
+@pytest.mark.asyncio
+async def test_partner_end_call_starts_completion_without_blocking_teardown(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  reset_fake_chime()
+  settings = Settings(chime_enabled=True)
+  booking = make_booking()
+  db = FakeDatabase(booking)
+  db.session = make_existing_call_session(booking, provider_meeting_id="meeting-complete")
+  completion_calls: list[tuple[str, str | None]] = []
+
+  async def complete_booking(_db, _account, booking_id: str, *, transcript: str | None = None) -> str:
+    completion_calls.append((booking_id, transcript))
+    return "succeeded"
+
+  monkeypatch.setattr(consulting_call, "_complete_booking_after_call", complete_booking)
+
+  result = await consulting_call.end_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    settings,
+    transcript="고객 피부 톤에는 로즈 계열이 잘 어울립니다.",
+  )
+
+  assert result["status"] == "ended"
+  assert result["summary_status"] == "succeeded"
+  assert completion_calls == [("booking-1", "고객 피부 톤에는 로즈 계열이 잘 어울립니다.")]
+
+
+@pytest.mark.asyncio
+async def test_complete_booking_after_call_prefers_submitted_transcript(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class CompletionDatabase:
+    def __init__(self) -> None:
+      self.fetch_calls = 0
+      self.execute_calls: list[tuple[str, tuple]] = []
+
+    async def fetchrow(self, _query: str, *_args):
+      return {"expert_id": "exp_sea"}
+
+    async def fetch(self, _query: str, *_args):
+      self.fetch_calls += 1
+      return []
+
+    async def execute(self, query: str, *args):
+      self.execute_calls.append((query, args))
+
+  async def no_existing_summary(_db, _booking_id: str):
+    return None
+
+  completed: list[dict] = []
+
+  async def complete_summary(_db, _account, booking_id: str, **kwargs):
+    completed.append({"booking_id": booking_id, **kwargs})
+    return {"id": "summary-1"}
+
+  monkeypatch.setattr(consulting_partner, "consultation_summary_for_booking", no_existing_summary)
+  monkeypatch.setattr(consulting_partner, "complete_consultation_summary", complete_summary)
+  db = CompletionDatabase()
+
+  status = await consulting_call._complete_booking_after_call(
+    db,
+    {"id": "partner-1", "expert_id": "exp_sea"},
+    "booking-1",
+    transcript="  실제 통화 자막입니다.  ",
+  )
+
+  assert status == "succeeded"
+  assert db.fetch_calls == 0
+  assert completed[0]["transcript"] == "실제 통화 자막입니다."
+  assert completed[0]["visible_to_customer"] is True
+  assert completed[0]["send_review_request"] is True
 
 
 @pytest.mark.asyncio
@@ -637,6 +733,31 @@ async def test_partner_transcription_start_uses_explicit_consent(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_customer_can_start_translation_with_explicit_direction(monkeypatch: pytest.MonkeyPatch) -> None:
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  reset_fake_chime()
+  settings = Settings(chime_enabled=True, consulting_call_transcription_enabled=True)
+  booking = make_booking()
+  db = FakeDatabase(booking)
+  db.session = make_existing_call_session(booking, provider_meeting_id="meeting-1")
+
+  result = await consulting_call.start_customer_transcription(
+    db,
+    "user-1",
+    "booking-1",
+    "en-US",
+    "ko-KR",
+    True,
+    settings,
+  )
+
+  assert result["transcription"]["status"] == "active"
+  assert result["transcription"]["customer_language_code"] == "en-US"
+  assert result["transcription"]["expert_language_code"] == "ko-KR"
+  assert FakeChimeMeetingsService.operation_events == ["start-transcription:meeting-1"]
+
+
+@pytest.mark.asyncio
 async def test_caption_translation_does_not_store_transcript_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
   reset_fake_chime()
   monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
@@ -669,6 +790,34 @@ async def test_caption_translation_does_not_store_transcript_by_default(monkeypa
   assert db.transcript_select_count == 0
   assert db.transcript_insert_count == 0
   assert db.transcript_segments == []
+
+
+@pytest.mark.asyncio
+async def test_customer_can_translate_expert_final_caption(monkeypatch: pytest.MonkeyPatch) -> None:
+  reset_fake_chime()
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  settings = Settings(chime_enabled=True, consulting_call_translation_enabled=True)
+  db = FakeDatabase(make_booking())
+  await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
+
+  result = await consulting_call.translate_customer_caption(
+    db,
+    "user-1",
+    "booking-1",
+    result_id="caption-customer-1",
+    source_language_code="ko-KR",
+    content="반갑습니다",
+    settings=settings,
+  )
+
+  assert result["target_language_code"] == "en"
+  assert result["translated_content"] == "en:반갑습니다"
 
 
 @pytest.mark.asyncio

@@ -111,6 +111,8 @@ EXPECTED_ROUTES = {
   ("GET", "/api/consulting/bookings/{booking_id}/call"),
   ("POST", "/api/consulting/bookings/{booking_id}/call/join"),
   ("POST", "/api/consulting/bookings/{booking_id}/call/end"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/transcription/start"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/captions/translate"),
   ("PATCH", "/api/consulting/bookings/{booking_id}"),
   ("DELETE", "/api/consulting/bookings/{booking_id}"),
 }

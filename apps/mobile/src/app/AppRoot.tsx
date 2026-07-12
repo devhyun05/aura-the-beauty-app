@@ -20,6 +20,7 @@ import {
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
 import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
+import {IncomingConsultingCallGate} from '../features/consulting/components/IncomingConsultingCallGate';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
 import {typography} from '../shared/theme';
 
@@ -89,6 +90,16 @@ export function AppRoot() {
               onReady={() => syncStatusBarStyle(navigationRef.getRootState())}
               onStateChange={state => syncStatusBarStyle(state)}>
               <RootNavigator />
+              <IncomingConsultingCallGate
+                onAnswer={record => {
+                  if (!navigationRef.isReady()) return;
+                  navigationRef.navigate('ConsultingCall', {
+                    bookingId: record.id,
+                    durationId: record.durationId ?? 'd30',
+                    expertId: record.expertId,
+                  });
+                }}
+              />
             </NavigationContainer>
           </NavigationFlowStateProvider>
         </AuthSessionProvider>

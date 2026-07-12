@@ -131,6 +131,7 @@ class Settings(BaseSettings):
   chime_transcribe_supported_languages: str = "ko-KR,en-US"
   chime_transcribe_default_language: str = "ko-KR"
   chime_transcribe_preferred_language: str = "ko-KR"
+  consulting_call_enforce_early_window: bool = True
   consulting_call_join_early_minutes: int = 15
   consulting_call_join_late_minutes: int = 30
   consulting_call_allow_outside_window: bool = False

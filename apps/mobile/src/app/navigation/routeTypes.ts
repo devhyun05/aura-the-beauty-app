@@ -86,7 +86,11 @@ export type RootStackParamList = {
   ConsultingHistory: undefined;
   ConsultingMessages: undefined;
   ConsultingNotifications: undefined;
-  ConsultingConversation: {recordId: string; expertId: string};
+  ConsultingConversation: {
+    recordId: string;
+    expertId: string;
+    record?: ConsultingRecord;
+  };
   ConsultingMembership: undefined;
   ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: undefined;

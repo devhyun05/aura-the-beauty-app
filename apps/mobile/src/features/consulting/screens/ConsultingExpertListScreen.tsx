@@ -9,7 +9,6 @@ import {
 } from '../../../shared/theme';
 import {ConsultingScreenScaffold} from '../components/ConsultingScreenScaffold';
 import {ExpertListCard} from '../components/consultingComponents';
-import {consultingExperts} from '../mocks/consulting.mock';
 import {getConsultingExperts} from '../services/consultingService';
 import type {ConsultingCategoryId, ConsultingExpert} from '../types';
 
@@ -40,8 +39,7 @@ export function ConsultingExpertListScreen({
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterId>(
     initialCategoryId ?? 'all',
   );
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
 
   useEffect(() => {
     let isMounted = true;

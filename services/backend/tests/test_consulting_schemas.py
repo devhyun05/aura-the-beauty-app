@@ -136,6 +136,7 @@ def test_consulting_transcription_start_requires_explicit_consent_flag() -> None
   assert default_payload.transcription_consent_accepted is False
   assert accepted_payload.language_code == "en-US"
   assert accepted_payload.transcription_consent_accepted is True
+  assert accepted_payload.source_language_code is None
 
 
 def test_consulting_caption_translate_accepts_final_caption_payload() -> None:
@@ -224,6 +225,22 @@ def test_consulting_call_respects_join_window() -> None:
       now=now,
       settings=settings,
     )
+
+
+def test_consulting_call_can_disable_early_join_window() -> None:
+  now = datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc)
+  booking = {
+    "status": "confirmed",
+    "session_mode": "online",
+    "scheduled_at": now + timedelta(days=7),
+    "duration_minutes": 30,
+  }
+
+  _validate_joinable_booking(
+    booking,
+    now=now,
+    settings=Settings(consulting_call_enforce_early_window=False),
+  )
 
 
 def test_consulting_days_are_generated_from_booking_rules() -> None:

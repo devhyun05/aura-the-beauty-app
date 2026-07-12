@@ -32,7 +32,8 @@ export function isConsultingMessageStatus(
     status === 'contacting' ||
     status === 'confirmed' ||
     status === 'scheduled' ||
-    status === 'in_progress'
+    status === 'in_progress' ||
+    status === 'completed'
   );
 }
 

@@ -81,6 +81,12 @@ export type ConsultingServerSocketEvent =
     }
   | {
       bookingId: string;
+      message: string;
+      participantType: ConsultingParticipantType;
+      type: 'conversation.left';
+    }
+  | {
+      bookingId: string;
       callSessionId?: string | null;
       message: string;
       status: 'started' | 'ended';

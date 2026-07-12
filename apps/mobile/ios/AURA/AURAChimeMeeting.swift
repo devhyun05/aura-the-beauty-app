@@ -14,7 +14,6 @@ private let auraChimeMeetingEventName = "AURAChimeMeetingEvent"
 final class AURAChimeMeeting: RCTEventEmitter {
   private static weak var sharedEmitter: AURAChimeMeeting?
   private var hasListeners = false
-  private var lastAudioLevels: [String: String] = [:]
 
   override init() {
     super.init()
@@ -253,6 +252,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
   private var remoteTileId: Int?
   private var isLocalVideoEnabled = true
   private var didStart = false
+  private var lastAudioLevels: [String: String] = [:]
 
   func initialize() {}
 
@@ -260,6 +260,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     if tileType == "local" {
       localVideoView = containerView
       containerView.chimeRenderView.mirror = true
+      containerView.chimeRenderView.contentMode = .scaleAspectFill
       if let tileId = localTileId {
         meetingSession?.audioVideo.bindVideoView(videoView: containerView.chimeRenderView, tileId: tileId)
       }
@@ -268,6 +269,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
 
     remoteVideoView = containerView
     containerView.chimeRenderView.mirror = false
+    containerView.chimeRenderView.contentMode = .scaleAspectFit
     if let tileId = remoteTileId {
       meetingSession?.audioVideo.bindVideoView(videoView: containerView.chimeRenderView, tileId: tileId)
     }
@@ -308,7 +310,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     try session.audioVideo.start()
     session.audioVideo.startRemoteVideo()
     if isLocalVideoEnabled {
-      try session.audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 600, simulcastEnabled: false))
+      try session.audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 2500, simulcastEnabled: false))
     }
 
     didStart = true
@@ -361,7 +363,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     }
     if enabled {
       do {
-        try audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 600, simulcastEnabled: false))
+        try audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 2500, simulcastEnabled: false))
       } catch {
         AURAChimeMeeting.emit(type: "meetingError", body: ["error": error.localizedDescription])
       }
@@ -414,9 +416,25 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     AURAChimeMeeting.emit(type: "meetingStateChanged", body: ["state": "videoStopped", "status": "\(sessionStatus.statusCode)"])
   }
 
-  func remoteVideoSourcesDidBecomeAvailable(sources: [RemoteVideoSource]) {}
+  func remoteVideoSourcesDidBecomeAvailable(sources: [RemoteVideoSource]) {
+    let subscriptions = Dictionary(uniqueKeysWithValues: sources.map { source in
+      let configuration = VideoSubscriptionConfiguration()
+      configuration.priority = .highest
+      configuration.targetResolution = .videoResolutionHD
+      return (source, configuration)
+    })
+    meetingSession?.audioVideo.updateVideoSourceSubscriptions(
+      addedOrUpdated: subscriptions,
+      removed: []
+    )
+  }
 
-  func remoteVideoSourcesDidBecomeUnavailable(sources: [RemoteVideoSource]) {}
+  func remoteVideoSourcesDidBecomeUnavailable(sources: [RemoteVideoSource]) {
+    meetingSession?.audioVideo.updateVideoSourceSubscriptions(
+      addedOrUpdated: [:],
+      removed: sources
+    )
+  }
 
   func cameraSendAvailabilityDidChange(available: Bool) {
     AURAChimeMeeting.emit(type: "meetingStateChanged", body: ["state": available ? "cameraAvailable" : "cameraUnavailable"])
@@ -431,12 +449,14 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
       localTileId = tileState.tileId
       if let renderView = localVideoView?.chimeRenderView {
         renderView.mirror = true
+        renderView.contentMode = .scaleAspectFill
         meetingSession?.audioVideo.bindVideoView(videoView: renderView, tileId: tileState.tileId)
       }
     } else {
       remoteTileId = tileState.tileId
       if let renderView = remoteVideoView?.chimeRenderView {
         renderView.mirror = false
+        renderView.contentMode = .scaleAspectFit
         meetingSession?.audioVideo.bindVideoView(videoView: renderView, tileId: tileState.tileId)
       }
     }

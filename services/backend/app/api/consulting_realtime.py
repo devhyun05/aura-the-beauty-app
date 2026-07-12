@@ -11,7 +11,7 @@ from app.core.settings import Settings, get_settings
 from app.db.session import database
 from app.services.consulting_message_store import (
   create_consulting_message,
-  list_consulting_messages,
+  list_consulting_conversation_messages,
 )
 from app.services.consulting_partner import auth_context_for_partner_token
 from app.services.consulting_realtime import (
@@ -243,7 +243,7 @@ async def _booking_accepts_new_messages(booking_id: str) -> bool:
     return True
   row = await database.fetchrow(
     """
-    select status
+    select status, customer_left_at, expert_left_at
     from consulting_bookings
     where id::text = $1
     limit 1
@@ -252,7 +252,11 @@ async def _booking_accepts_new_messages(booking_id: str) -> bool:
   )
   if row is None:
     return True
-  return str(row["status"]) not in {"canceled", "cancelled", "unavailable"}
+  return (
+    str(row["status"]) not in {"canceled", "cancelled", "unavailable"}
+    and row.get("customer_left_at") is None
+    and row.get("expert_left_at") is None
+  )
 
 
 async def _handle_client_event(
@@ -462,7 +466,7 @@ async def consulting_booking_socket(
   history: list[dict[str, Any]] = []
   if database.is_connected:
     try:
-      history = await list_consulting_messages(database, booking_id=booking_id)
+      history = await list_consulting_conversation_messages(database, booking_id=booking_id)
     except Exception:
       logger.exception("Failed to load consulting message history.")
 

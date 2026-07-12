@@ -16,10 +16,7 @@ import {
   ExpertAvatar,
   SecondaryButton,
 } from '../components/consultingComponents';
-import {
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
   getConsultingBookings,
   getConsultingExperts,
@@ -44,8 +41,7 @@ export function ConsultingNotificationsScreen({
   onPressRecord,
 }: ConsultingNotificationsScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useFocusEffect(
@@ -53,7 +49,10 @@ export function ConsultingNotificationsScreen({
       let isMounted = true;
       setIsLoading(true);
 
-      Promise.all([getConsultingBookings(), getConsultingExperts()])
+      Promise.all([
+        getConsultingBookings(undefined, {force: true}),
+        getConsultingExperts(),
+      ])
         .then(async ([recordData, expertData]) => {
           if (isMounted) {
             setRecords(recordData);
@@ -78,9 +77,7 @@ export function ConsultingNotificationsScreen({
       records
         .filter(record => isConsultingNotificationStatus(record.status))
         .map(record => ({
-          expert:
-            experts.find(item => item.id === record.expertId) ??
-            findConsultingExpertOrFirst(record.expertId),
+          expert: resolveConsultingExpert(experts, record.expertId),
           record,
         })),
     [experts, records],

@@ -32,11 +32,7 @@ import {
   ExpertAvatar,
   ExpertListCard,
 } from '../components/consultingComponents';
-import {
-  consultingCategories,
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
   type ConsultingHomeData,
   getConsultingBookings,
@@ -47,6 +43,7 @@ import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import type {
   ConsultingCategory,
   ConsultingCategoryId,
+  ConsultingExpert,
   ConsultingRecord,
 } from '../types';
 
@@ -150,8 +147,8 @@ export function ConsultingHomeScreen({
   const {width} = useWindowDimensions();
   const heroScrollRef = useRef<ScrollView>(null);
   const [home, setHome] = useState<ConsultingHomeData>(() => ({
-    categories: consultingCategories,
-    experts: consultingExperts,
+    categories: [],
+    experts: [],
     activeRecord: null,
     activeRecords: [],
   }));
@@ -351,9 +348,7 @@ export function ConsultingHomeScreen({
             horizontal
             showsHorizontalScrollIndicator={false}>
             {activeRecords.map(record => {
-              const expert =
-                experts.find(item => item.id === record.expertId) ??
-                findConsultingExpertOrFirst(record.expertId);
+              const expert = resolveConsultingExpert(experts, record.expertId);
               return (
                 <ActiveRequestCard
                   expert={expert}
@@ -473,7 +468,7 @@ function ActiveRequestCard({
   width,
   onPress,
 }: {
-  expert: ReturnType<typeof findConsultingExpertOrFirst>;
+  expert: ConsultingExpert;
   record: ConsultingRecord;
   width: number;
   onPress: () => void;

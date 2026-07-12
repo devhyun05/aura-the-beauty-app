@@ -28,10 +28,7 @@ import {
   ConsultingStatusBadge,
   ExpertAvatar,
 } from '../components/consultingComponents';
-import {
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
   cancelConsultingBooking,
   getConsultingBookings,
@@ -70,8 +67,7 @@ export function ConsultingHistoryScreen({
 }: ConsultingHistoryScreenProps) {
   const [filter, setFilter] = useState<HistoryFilterId>('all');
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openMenuRecordId, setOpenMenuRecordId] = useState<string | null>(null);
   const [cancellingRecordId, setCancellingRecordId] = useState<string | null>(
@@ -179,10 +175,7 @@ export function ConsultingHistoryScreen({
         <View style={styles.list}>
           {filteredRecords.map(record => (
             <HistoryCard
-              expert={
-                experts.find(item => item.id === record.expertId) ??
-                findConsultingExpertOrFirst(record.expertId)
-              }
+              expert={resolveConsultingExpert(experts, record.expertId)}
               key={record.id}
               onPress={() =>
                 isActiveRecordStatus(record.status)
@@ -406,15 +399,20 @@ function HistoryCard({
           예약이 취소되었습니다. 전문가와 고객의 확인을 위해 이 내역은 보관됩니다.
         </Text>
       ) : null}
-      {canReview ? (
+      {record.status === 'completed' ? (
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{disabled: !canReview}}
+          disabled={!canReview}
           onPress={handleReviewPress}
           style={({pressed}) => [
             styles.reviewCta,
-            pressed ? styles.pressed : null,
+            !canReview ? styles.reviewCtaDisabled : null,
+            pressed && canReview ? styles.pressed : null,
           ]}>
-          <Text style={styles.reviewCtaText}>리뷰 작성</Text>
+          <Text style={[styles.reviewCtaText, !canReview ? styles.reviewCtaTextDisabled : null]}>
+            {canReview ? '리뷰 작성' : '리뷰 작성 완료'}
+          </Text>
         </Pressable>
       ) : null}
     </Pressable>
@@ -597,11 +595,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
   },
+  reviewCtaDisabled: {
+    backgroundColor: consultingColors.surfaceMuted,
+  },
   reviewCtaText: {
     color: consultingColors.onAccent,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+  },
+  reviewCtaTextDisabled: {
+    color: consultingColors.textMuted,
   },
   filterRow: {
     flexDirection: 'row',

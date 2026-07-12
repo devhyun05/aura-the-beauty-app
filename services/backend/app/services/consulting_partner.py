@@ -337,6 +337,9 @@ def _booking_to_web(row: dict[str, Any]) -> dict[str, Any]:
   payment_confirmed = bool(row.get("confirmed_at")) or status in {"confirmed", "scheduled", "in_progress", "completed"}
   return {
     "id": str(row["id"]),
+    "conversation_id": str(row.get("conversation_id") or row["id"]),
+    "customer_left_at": _iso_datetime(row["customer_left_at"]) if row.get("customer_left_at") else None,
+    "expert_left_at": _iso_datetime(row["expert_left_at"]) if row.get("expert_left_at") else None,
     "customer_id": str(row["user_id"]),
     "customer_name": _customer_name(row),
     "expert_id": row["expert_id"],
@@ -1835,12 +1838,25 @@ async def complete_consultation_summary(
 async def chat_threads_for_account(db: Database, account: dict[str, Any]) -> list[dict[str, Any]]:
   rows = await _booking_rows(db, account)
   details: list[dict[str, Any]] = []
+  conversations: dict[str, list[dict[str, Any]]] = {}
   for row in rows:
-    messages = await _messages_for_booking(db, str(row["id"]))
+    conversation_id = str(row.get("conversation_id") or row["id"])
+    conversations.setdefault(conversation_id, []).append(row)
+
+  for conversation_rows in conversations.values():
+    row = max(conversation_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+    if row.get("expert_left_at") is not None:
+      continue
+    booking_ids = [str(item["id"]) for item in conversation_rows]
+    messages = await _messages_for_bookings(db, booking_ids, str(row["id"]))
     booking = _booking_to_web(row)
     latest_message = messages[-1] if messages else None
-    unread_count = _unread_customer_message_count(messages, row.get("expert_read_at"))
-    is_closed = booking["status"] in {"cancelled", "no_show", "refund_requested"}
+    read_at = max(
+      (value for value in (item.get("expert_read_at") for item in conversation_rows) if value is not None),
+      default=None,
+    )
+    unread_count = _unread_customer_message_count(messages, read_at)
+    is_closed = row.get("customer_left_at") is not None or booking["status"] in {"cancelled", "no_show", "refund_requested"}
     thread = {
       "id": str(row["id"]),
       "customer_id": str(row["user_id"]),
@@ -1870,7 +1886,17 @@ async def chat_threads_for_account(db: Database, account: dict[str, Any]) -> lis
 
 async def chat_thread_detail(db: Database, account: dict[str, Any], thread_id: str) -> dict[str, Any]:
   row = await _booking_row(db, account, thread_id)
-  messages = await _messages_for_booking(db, thread_id)
+  conversation_id = str(row.get("conversation_id") or row["id"])
+  conversation_rows = [
+    item
+    for item in await _booking_rows(db, account)
+    if str(item.get("conversation_id") or item["id"]) == conversation_id
+  ]
+  latest_row = max(conversation_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+  booking_ids = [str(item["id"]) for item in conversation_rows]
+  messages = await _messages_for_bookings(db, booking_ids, str(latest_row["id"]))
+  row = latest_row
+  thread_id = str(row["id"])
   booking = _booking_to_web(row)
   latest_message = messages[-1] if messages else None
   return {
@@ -1881,7 +1907,7 @@ async def chat_thread_detail(db: Database, account: dict[str, Any], thread_id: s
       "assigned_expert_id": row["expert_id"],
       "last_message_at": latest_message["sent_at"] if latest_message else booking["requested_at"],
       "unread_count": 0,
-      "status": "open",
+      "status": "closed" if row.get("customer_left_at") or row.get("expert_left_at") else "open",
       "channel": "app_chat",
     },
     "customer": await customer_detail_for_user(db, account, str(row["user_id"]), row),
@@ -1893,14 +1919,14 @@ async def chat_thread_detail(db: Database, account: dict[str, Any], thread_id: s
 
 
 async def mark_chat_thread_read(db: Database, account: dict[str, Any], thread_id: str) -> dict[str, Any]:
-  await _booking_row(db, account, thread_id)
+  row = await _booking_row(db, account, thread_id)
   await db.execute(
     """
     update consulting_bookings
     set expert_read_at = now()
-    where id::text = $1 and expert_id = $2
+    where coalesce(conversation_id, id) = $1 and expert_id = $2
     """,
-    thread_id,
+    row.get("conversation_id") or row["id"],
     account["expert_id"],
   )
   return await chat_thread_detail(db, account, thread_id)
@@ -1909,6 +1935,32 @@ async def mark_chat_thread_read(db: Database, account: dict[str, Any], thread_id
 async def _messages_for_booking(db: Database, booking_id: str) -> list[dict[str, Any]]:
   events = await list_consulting_messages(db, booking_id=booking_id, limit=100)
   return [_message_event_to_web(event, booking_id) for event in events]
+
+
+async def _messages_for_bookings(db: Database, booking_ids: list[str], thread_id: str) -> list[dict[str, Any]]:
+  events = await list_consulting_messages(
+    db,
+    booking_id=thread_id,
+    booking_ids=booking_ids,
+    limit=100,
+  )
+  return [_message_event_to_web(event, thread_id) for event in events]
+
+
+async def leave_chat_thread(db: Database, account: dict[str, Any], thread_id: str) -> dict[str, Any]:
+  booking_id = thread_id.removeprefix("thread-")
+  row = await _booking_row(db, account, booking_id)
+  conversation_id = row.get("conversation_id") or row["id"]
+  await db.execute(
+    """
+    update consulting_bookings
+    set expert_left_at = coalesce(expert_left_at, now()), updated_at = now()
+    where coalesce(conversation_id, id) = $1 and expert_id = $2
+    """,
+    conversation_id,
+    account["expert_id"],
+  )
+  return {"booking_id": str(row["id"]), "conversation_id": str(conversation_id), "left": True}
 
 
 def _unread_customer_message_count(messages: list[dict[str, Any]], read_at: Any) -> int:

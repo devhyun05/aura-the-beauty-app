@@ -28,7 +28,7 @@ import {
   formatConsultingSlotLabel,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import type {ConsultingBookingDraft, ConsultingExpert, ConsultingRecord} from '../types';
 
 type ConsultingBookingCompleteScreenProps = {

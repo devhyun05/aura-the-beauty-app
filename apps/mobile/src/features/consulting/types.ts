@@ -145,6 +145,9 @@ export type ConsultingRecordStatus =
 
 export type ConsultingRecord = {
   id: string;
+  conversationId?: string;
+  customerLeftAt?: string | null;
+  expertLeftAt?: string | null;
   expertId: string;
   durationId?: string;
   dayId?: string | null;
@@ -232,4 +235,11 @@ export type ConsultingCallJoinResult = {
   meeting: Record<string, unknown>;
   attendee: Record<string, unknown>;
   transcription: ConsultingCallTranscription;
+};
+
+export type ConsultingCaptionTranslation = {
+  resultId: string;
+  sourceLanguageCode: ConsultingCallLanguageCode;
+  targetLanguageCode: 'ko' | 'en';
+  translatedContent: string;
 };

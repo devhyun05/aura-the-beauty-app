@@ -14,19 +14,6 @@ export {ConsultingMembershipScreen} from './screens/ConsultingMembershipScreen';
 export {ConsultingReviewScreen} from './screens/ConsultingReviewScreen';
 export {ChimeVideoView, isNativeChimeVideoViewAvailable} from './components/ChimeVideoView';
 export {ConsultingHeaderActions} from './components/ConsultingHeaderActions';
-export {
-  consultingCategories,
-  consultingExperts,
-  consultingMembershipPlans,
-  consultingRecords,
-  findConsultingCategory,
-  findConsultingExpert,
-  findConsultingExpertOrFirst,
-  findConsultingRecord,
-  getConsultingDurationPrice,
-  getConsultingSessionModeLabel,
-  getUpcomingConsultingRecord,
-} from './mocks/consulting.mock';
 export {useConsultingExpert} from './hooks/useConsultingExpert';
 export {
   cancelConsultingBooking,
@@ -36,6 +23,7 @@ export {
   endConsultingCall,
   getConsultingBooking,
   getConsultingBookings,
+  leaveConsultingConversation,
   getConsultingCallState,
   joinConsultingCall,
   updateConsultingBooking,
