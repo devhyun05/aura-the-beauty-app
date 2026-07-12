@@ -1356,3 +1356,23 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   fillColor/ghost)가 dev 양성 pic1·pic3 포함 대부분을 여전히 abstain —
   ⑦ 설계에서 "판정자에게는 원시 채움을 보여주고(게이트 표기 병행), 서빙 계약
   평가는 별도"로 분리해야 채움 품질의 첫 인간 측정이 성립한다.
+
+### 체크포인트 ⑦ 사전등록 (2026-07-12, 커밋 562e737·61b6d59·c79140b)
+
+- **재료 (webset_cp7, 신규 24장 전량 Wikimedia Commons CC BY/BY-SA)**: stubble 7 /
+  medium 9 / none 8 + 변형 15 = **39장** (분모 stubble 13·medium 15·negative 11).
+  큐레이션 게이트 = 제품 촬영 게이트 프록시(단일 얼굴·정면 asym≤0.10fw·fw≥340·
+  현대 컬러·콧구멍 가시·인물 중복 0, detect_face 측정만 허용). 수집 과정: 커먼즈
+  검색+카테고리 423후보 → 기계 선별(정면성·fw) → 육안 큐레이션 3라운드 →
+  촬영게이트 실측 재검. **cp6 무접촉 이월 후보 4장은 정면성(asym 0.22~0.36)에서
+  전원 탈락** — cp6 웹셋이 제품 도메인보다 가혹했다는 postmortem 결론을 재확인.
+  st101은 밀도 정직 재배정(stubble→medium), 옅은 콧수염 의심 1장은 negative에서
+  제외(안전).
+- **설계 차이 (CHECKPOINT7_PROTOCOL.md §0)**: ① 판정 대상 = **원시 채움**(품질
+  게이트와 무관하게 제시; cp6의 전패널-ABSTAIN 퇴화 방지) + 게이트 verdict는 별도
+  축으로 기록해 R2 "게이트 vs 인간" 교차표 확보 ② 차단 = B 절대 사용성(usable),
+  비교 3항목은 회귀 감지 보고 축 ③ dense·실사 primary 없음(소진).
+- **팔**: A=8bb2950(cp6 기각본), B=78eeb0c(입구 게이트 수리본) — 채움 로직 동일,
+  차이는 입구 게이트뿐. **차단 기준**: K1 negative 서빙 사고 0/11 · K2 anatomy 0 ·
+  K3 stubble usable ≥7/13 · K4 medium usable ≥8/15 · K5 채움 생산 ≥22/28.
+  해석 약속: K3/K4 실패 = LaMa fine-tune go의 직접 근거(§8).
