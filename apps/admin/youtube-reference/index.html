@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AURA final presentation reference workspace</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=20260710-auto1" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Final presentation reference</p>
+        <h1>AURA 팀 발표 레퍼런스 분석</h1>
+        <p class="lede">
+          YouTube 영상 <a href="https://youtu.be/51N580mF6fE" target="_blank" rel="noreferrer">51N580mF6fE</a>를
+          함께 보며 발표 디자인, 대본, 메시지, 구성 방식을 회의에서 바로 정리하는 작업 공간입니다.
+        </p>
+      </div>
+      <div class="status-panel" aria-label="자료 상태">
+        <span class="status-dot" aria-hidden="true"></span>
+        <strong>자료 상태</strong>
+        <span id="statusLabel">메타데이터/자막 수동 확인 필요</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="workspace-grid" aria-label="영상 분석 작업 공간">
+        <article class="player-panel">
+          <div class="section-heading">
+            <p class="eyebrow">Watch together</p>
+            <h2>영상 플레이어</h2>
+          </div>
+          <div class="video-frame">
+            <iframe
+              id="videoFrame"
+              src="https://www.youtube.com/embed/51N580mF6fE?rel=0"
+              title="YouTube reference video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <p class="player-note" id="videoStatus">
+            영상 임베드가 검은 화면이거나 재생되지 않으면 네트워크/YouTube 임베드 제한일 수 있습니다.
+            아래 버튼으로 YouTube에서 직접 열어 회의 메모는 이 페이지에서 계속 작성하세요.
+          </p>
+          <div class="player-actions">
+            <a class="button primary" href="https://youtu.be/51N580mF6fE" target="_blank" rel="noreferrer">YouTube에서 열기</a>
+            <button class="button" type="button" id="exportButton">분석 노트 내보내기</button>
+            <button class="button quiet" type="button" id="resetButton">기본값으로 복원</button>
+          </div>
+          <p class="app-ready-status" id="appReadyStatus">앱 초기화 중...</p>
+          <noscript>
+            <p class="app-ready-status error">
+              JavaScript가 꺼져 있어 메모 저장, 타임코드 추가, 액션 체크 기능을 사용할 수 없습니다.
+            </p>
+          </noscript>
+        </article>
+
+        <aside class="meeting-panel" aria-label="회의용 빠른 입력">
+          <div class="section-heading">
+            <p class="eyebrow">Auto analysis source</p>
+            <h2>자동 분석 근거와 검증</h2>
+          </div>
+          <p class="assumption-copy">
+            기본 내용은 YouTube metadata와 영상 설명을 자동 수집해 생성했습니다. 팀 회의에서는
+            타임코드와 실제 발화만 검증/보강하면 됩니다.
+          </p>
+          <dl class="source-summary" id="sourceSummary"></dl>
+          <label>
+            영상 제목
+            <input data-metadata="title" type="text" placeholder="예: 영상 제목을 회의 중 입력" />
+          </label>
+          <label>
+            채널/발표자
+            <input data-metadata="channel" type="text" placeholder="채널 또는 발표자" />
+          </label>
+          <label>
+            길이/게시일
+            <input data-metadata="duration" type="text" placeholder="예: 12:34 / 2026-..." />
+          </label>
+          <label>
+            검증 상태
+            <select data-metadata="status">
+              <option value="auto_metadata">자동 metadata 분석 완료, 자막 전문 미확인</option>
+              <option value="auto_transcript">자동 transcript 분석 완료</option>
+              <option value="unverified">자동 수집 불가, 수동 확인 전</option>
+              <option value="manual">팀이 수동 입력 중</option>
+              <option value="verified">팀이 영상 확인 완료</option>
+            </select>
+          </label>
+          <label>
+            명시할 가정
+            <textarea data-metadata="assumption" rows="5"></textarea>
+          </label>
+        </aside>
+      </section>
+
+      <nav class="section-nav" aria-label="분석 섹션 바로가기">
+        <a href="#overview">개요</a>
+        <a href="#design">디자인</a>
+        <a href="#delivery">대본/전달</a>
+        <a href="#structure">구성</a>
+        <a href="#timecodes">타임코드</a>
+        <a href="#discussion">토의 질문</a>
+        <a href="#actions">액션</a>
+        <a href="#transcript">Transcript</a>
+      </nav>
+
+      <section id="overview" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">1. Overview</p>
+          <h2>영상 개요와 레퍼런스 목적</h2>
+        </div>
+        <div class="two-column">
+          <article class="analysis-card">
+            <h3>회의 목적</h3>
+            <p>
+              이 사이트는 영상을 단순 감상하는 공간이 아니라, 우리 최종 발표에 적용할 디자인 결정,
+              대본 문장, 메시지 순서, 데모 연결 방식을 빠르게 합의하기 위한 분석 보드입니다.
+            </p>
+          </article>
+          <article class="analysis-card">
+            <h3>검증 기준</h3>
+            <p>
+              영상에서 확인한 장면만 근거로 기록하고, 확인하지 못한 내용은 "가정" 또는
+              "추가 확인 필요"로 표시합니다. transcript가 없으면 발화 요지는 직접 받아 적습니다.
+            </p>
+          </article>
+        </div>
+        <label class="wide-label">
+          우리 팀이 이 영상을 참고하는 이유
+          <textarea data-note="overviewPurpose" rows="5"></textarea>
+        </label>
+      </section>
+
+      <section id="design" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">2. Presentation design</p>
+          <h2>발표 디자인 인사이트</h2>
+        </div>
+        <div class="insight-grid">
+          <article class="analysis-card accent-coral">
+            <h3>첫 화면 신호</h3>
+            <p>첫 10초에 주제, 기대 효과, 발표자의 관점을 어떤 시각 신호로 고정하는지 확인합니다.</p>
+          </article>
+          <article class="analysis-card accent-teal">
+            <h3>슬라이드 밀도</h3>
+            <p>텍스트가 설명을 대신하는지, 발표자의 말과 화면이 서로 보완하는지 구분합니다.</p>
+          </article>
+          <article class="analysis-card accent-gold">
+            <h3>전환 리듬</h3>
+            <p>문제 제기, 근거, 예시, 결론 사이의 화면 전환 속도와 강조 장치를 기록합니다.</p>
+          </article>
+          <article class="analysis-card accent-ink">
+            <h3>데모/증거 배치</h3>
+            <p>실제 화면, 수치, 비교 장면이 메시지 설득력을 높이는 위치를 확인합니다.</p>
+          </article>
+        </div>
+        <label class="wide-label">
+          디자인 분석 메모
+          <textarea data-note="designInsights" rows="7"></textarea>
+        </label>
+      </section>
+
+      <section id="delivery" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">3. Script and message</p>
+          <h2>발표 대본/메시지 전달 방식 분석</h2>
+        </div>
+        <div class="two-column">
+          <article class="analysis-card">
+            <h3>메시지 단위</h3>
+            <p>
+              한 슬라이드에서 하나의 주장만 전달하는지, 핵심 문장을 반복해 청중의 기억에 남기는지
+              확인합니다.
+            </p>
+          </article>
+          <article class="analysis-card">
+            <h3>말의 연결</h3>
+            <p>
+              "왜 중요한가", "그래서 무엇을 만들었나", "청중이 무엇을 기억해야 하나"가 자연스럽게
+              이어지는지 봅니다.
+            </p>
+          </article>
+        </div>
+        <label class="wide-label">
+          대본/메시지 전달 분석 메모
+          <textarea data-note="deliveryAnalysis" rows="7"></textarea>
+        </label>
+      </section>
+
+      <section id="structure" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">4. Content structure</p>
+          <h2>내용 구성 분석</h2>
+        </div>
+        <ol class="structure-list">
+          <li><strong>Hook</strong><span>청중이 바로 이해할 문제 또는 장면으로 시작하는지 확인</span></li>
+          <li><strong>Context</strong><span>왜 지금 이 문제가 중요한지 배경을 짧게 고정</span></li>
+          <li><strong>Solution</strong><span>핵심 아이디어와 제품/서비스의 차별점 제시</span></li>
+          <li><strong>Evidence</strong><span>데모, 수치, 사용자 장면, 비교 자료로 설득 보강</span></li>
+          <li><strong>Close</strong><span>최종 메시지와 다음 행동을 기억 가능한 문장으로 마무리</span></li>
+        </ol>
+        <label class="wide-label">
+          내용 구성 분석 메모
+          <textarea data-note="structureAnalysis" rows="7"></textarea>
+        </label>
+      </section>
+
+      <section id="timecodes" class="analysis-section">
+        <div class="section-heading with-action">
+          <div>
+            <p class="eyebrow">5. Segments</p>
+            <h2>구간 바로가기/타임코드 메모</h2>
+          </div>
+          <span class="small-badge">링크는 YouTube 초 단위로 이동</span>
+        </div>
+        <form id="timecodeForm" class="input-grid">
+          <label>
+            시간
+            <input id="timeInput" type="text" inputmode="numeric" placeholder="00:00 또는 01:23:45" required />
+          </label>
+          <label>
+            구간 이름
+            <input id="timeTitleInput" type="text" placeholder="예: 문제 제기" required />
+          </label>
+          <label>
+            확인할 포인트
+            <input id="timeEvidenceInput" type="text" placeholder="예: 오프닝 문장, 슬라이드 전환" required />
+          </label>
+          <label>
+            우리 발표 적용
+            <input id="timeApplyInput" type="text" placeholder="예: 첫 데모 진입 전 한 문장 추가" required />
+          </label>
+          <button class="button primary form-button" type="submit">타임코드 추가</button>
+        </form>
+        <div id="timecodeList" class="timecode-list" aria-live="polite"></div>
+      </section>
+
+      <section id="discussion" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">6. Team discussion</p>
+          <h2>팀 토의용 질문</h2>
+        </div>
+        <div class="question-list">
+          <article class="analysis-card">
+            <h3>도입</h3>
+            <p>우리 발표의 첫 30초는 청중에게 어떤 한 문장을 남겨야 하는가?</p>
+          </article>
+          <article class="analysis-card">
+            <h3>디자인</h3>
+            <p>슬라이드에서 덜어낼 텍스트와 반드시 보여줄 실제 화면은 무엇인가?</p>
+          </article>
+          <article class="analysis-card">
+            <h3>대본</h3>
+            <p>기술 설명이 길어지는 구간을 어떤 사용자 문제 문장으로 다시 묶을 수 있는가?</p>
+          </article>
+          <article class="analysis-card">
+            <h3>마무리</h3>
+            <p>발표 종료 직전, 심사자가 AURA를 어떤 제품으로 기억해야 하는가?</p>
+          </article>
+        </div>
+        <label class="wide-label">
+          회의 중 합의한 답변
+          <textarea data-note="discussionNotes" rows="7"></textarea>
+        </label>
+      </section>
+
+      <section id="actions" class="analysis-section">
+        <div class="section-heading">
+          <p class="eyebrow">7. Apply to our deck</p>
+          <h2>우리 발표에 적용할 액션 아이템</h2>
+        </div>
+        <form id="actionForm" class="input-grid compact">
+          <label>
+            액션 아이템
+            <input id="actionLabelInput" type="text" placeholder="예: 데모 전 문제 문장 1개 추가" required />
+          </label>
+          <label>
+            담당
+            <input id="actionOwnerInput" type="text" placeholder="예: 발표자/디자인/개발" />
+          </label>
+          <button class="button primary form-button" type="submit">액션 추가</button>
+        </form>
+        <div id="actionList" class="action-list" aria-live="polite"></div>
+      </section>
+
+      <section id="transcript" class="analysis-section">
+        <div class="section-heading with-action">
+          <div>
+            <p class="eyebrow">8. Transcript fallback</p>
+            <h2>Transcript/metadata 수동 입력 구조</h2>
+          </div>
+          <span id="transcriptStats" class="small-badge">0자</span>
+        </div>
+        <p class="assumption-copy">
+          자동 transcript 또는 metadata를 안전하게 가져올 수 없는 경우, 아래에 직접 붙여 넣고
+          타임코드 메모와 연결합니다. 출처가 불분명한 문장은 발표 근거로 사용하지 않습니다.
+        </p>
+        <label class="wide-label">
+          수동 transcript 또는 장면별 받아쓰기
+          <textarea id="transcriptInput" rows="12" placeholder="예: 00:00 발표자가 ... / 00:42 슬라이드에 ..."></textarea>
+        </label>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>AURA internal presentation reference workspace</span>
+      <span>Local-only notes via browser localStorage</span>
+    </footer>
+
+    <script src="./analysis-data.js?v=20260710-auto1"></script>
+    <script src="./app.js?v=20260710-auto1"></script>
+  </body>
+</html>
