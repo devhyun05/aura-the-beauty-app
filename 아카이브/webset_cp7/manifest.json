@@ -1,0 +1,277 @@
+{
+ "checkpoint": 7,
+ "sealed": true,
+ "purpose": "체크포인트 ⑦ 홀드아웃 — 파이프라인 투입 금지(§7), 내부 평가 전용",
+ "curatedAt": "2026-07-12",
+ "curationGate": {
+  "criteria": "단일 얼굴 · 정면(oval asym<=0.10fw) · fw>=340(1536 fit 기준) · 현대 컬러 · 콧구멍 육안 가시 · 인물 중복 없음 · 라이선스 명시(CC BY/BY-SA/CC0/PD)",
+  "allowedTooling": "detect_face 촬영게이트 측정만 — reference/aperture/mask/fill 등 지우기 파이프라인 실행 금지",
+  "note": "cp6 무접촉 이월 후보 4장은 정면성(asym 0.22~0.36)에서 전원 탈락 — cp7은 신규 수집만"
+ },
+ "files": {
+  "medium_cp7_01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Face_%E2%80%93_Alexander.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Genusfotografen (Tomas Gunnarsson) / Wikimedia",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 631,
+   "asym": 0.02,
+   "commonsTitle": "File:Face – Alexander.jpg",
+   "curatedFrom": "medium_me233.jpg"
+  },
+  "medium_cp7_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:FazluSohag.JPG",
+   "license": "CC BY-SA 4.0",
+   "author": "Fa",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 693,
+   "asym": 0.052,
+   "commonsTitle": "File:FazluSohag.JPG",
+   "curatedFrom": "medium_me236.jpg"
+  },
+  "medium_cp7_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Joshua_T._Aldridge.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Joshua_T._Aldridge&action=edit&redlink=1\" cl",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 415,
+   "asym": 0.035,
+   "commonsTitle": "File:Joshua T. Aldridge.jpg",
+   "curatedFrom": "medium_me245.jpg"
+  },
+  "medium_cp7_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:%C3%80lex_Simon_i_Casanovas.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Pola",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 369,
+   "asym": 0.044,
+   "commonsTitle": "File:Àlex Simon i Casanovas.jpg",
+   "curatedFrom": "medium_me282.jpg"
+  },
+  "medium_cp7_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Abyzov_c.jpg",
+   "license": "CC BY 3.0",
+   "author": "",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 389,
+   "asym": 0.057,
+   "commonsTitle": "File:Abyzov c.jpg",
+   "curatedFrom": "medium_st154.jpg"
+  },
+  "medium_cp7_06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Alexander_Smotrov.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Vgrigas",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 558,
+   "asym": 0.008,
+   "commonsTitle": "File:Alexander Smotrov.jpg",
+   "curatedFrom": "medium_st163.jpg"
+  },
+  "medium_cp7_07.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ali_Azari.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Afsane_Tabarian&action=edit&redlink=1\" class",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 498,
+   "asym": 0.031,
+   "commonsTitle": "File:Ali Azari.jpg",
+   "curatedFrom": "medium_st165.jpg"
+  },
+  "medium_cp7_08.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Fidanza,_Carlo-1971.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Foto-AG Gymnasium Melle",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 420,
+   "asym": 0.018,
+   "commonsTitle": "File:Fidanza, Carlo-1971.jpg",
+   "curatedFrom": "medium_st224.jpg"
+  },
+  "none_cp7_01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Frank_Welker_Headshot_2016.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:StartHereMarketing&action=edit&redlink=1\" cl",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 381,
+   "asym": 0.039,
+   "commonsTitle": "File:Frank Welker Headshot 2016.jpg",
+   "curatedFrom": "none_n2027.jpg"
+  },
+  "none_cp7_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Harry_Belden_Headshot_2024.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "MGC23",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 405,
+   "asym": 0.016,
+   "commonsTitle": "File:Harry Belden Headshot 2024.jpg",
+   "curatedFrom": "none_n2029.jpg"
+  },
+  "none_cp7_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Jorge_Vargas(actor).jpg",
+   "license": "CC BY 4.0",
+   "author": "IChinobi",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 473,
+   "asym": 0.088,
+   "commonsTitle": "File:Jorge Vargas(actor).jpg",
+   "curatedFrom": "none_n2039.jpg"
+  },
+  "none_cp7_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pip-Pearce-Headshot-2024.jpg",
+   "license": "CC BY 4.0",
+   "author": "",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 537,
+   "asym": 0.063,
+   "commonsTitle": "File:Pip-Pearce-Headshot-2024.jpg",
+   "curatedFrom": "none_n2045.jpg"
+  },
+  "none_cp7_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Clean_shaven_man_-_02.jpg",
+   "license": "CC BY 2.0",
+   "author": "JoeInQueens from Queens, USA",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 561,
+   "asym": 0.056,
+   "commonsTitle": "File:Clean shaven man - 02.jpg",
+   "curatedFrom": "none_no010.jpg"
+  },
+  "none_cp7_06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Max_Hechtman_Headshot_2024.jpg",
+   "license": "CC BY 4.0",
+   "author": "HM2021",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 524,
+   "asym": 0.002,
+   "commonsTitle": "File:Max Hechtman Headshot 2024.jpg",
+   "curatedFrom": "none_no074.jpg"
+  },
+  "none_cp7_07.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:William_A._Bell,_Sr._(ca._2008).jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Birminghampubinfo&action=edit&redlink=1\" cla",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 402,
+   "asym": 0.088,
+   "commonsTitle": "File:William A. Bell, Sr. (ca. 2008).jpg",
+   "curatedFrom": "none_no078.jpg"
+  },
+  "none_cp7_08.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Self-portrait_of_Kyle_McDonald_(Artist).jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "",
+   "beard": "none",
+   "gateOk": true,
+   "fwFit": 545,
+   "asym": 0.002,
+   "commonsTitle": "File:Self-portrait of Kyle McDonald (Artist).jpg",
+   "curatedFrom": "none_st136.jpg"
+  },
+  "medium_cp7_09.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_man,_Bihar,_India,_04-2012.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Yann (<span",
+   "beard": "medium",
+   "gateOk": true,
+   "fwFit": 573,
+   "asym": 0.032,
+   "commonsTitle": "File:Old man, Bihar, India, 04-2012.jpg",
+   "curatedFrom": "stubble_st101.jpg"
+  },
+  "stubble_cp7_01.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:190411_-_Nazim_Erdem_-_3b_-_2012_Team_processing.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Sport the library",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 391,
+   "asym": 0.102,
+   "commonsTitle": "File:190411 - Nazim Erdem - 3b - 2012 Team processing.jpg",
+   "curatedFrom": "stubble_st146.jpg"
+  },
+  "stubble_cp7_02.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:2017-0720-CUSA-BobbyWilder.jpg",
+   "license": "CC BY 3.0",
+   "author": "Bobak Ha'Eri",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 434,
+   "asym": 0.001,
+   "commonsTitle": "File:2017-0720-CUSA-BobbyWilder.jpg",
+   "curatedFrom": "stubble_st149.jpg"
+  },
+  "stubble_cp7_03.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Anders_Fredricsson.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "Fahs",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 358,
+   "asym": 0.039,
+   "commonsTitle": "File:Anders Fredricsson.jpg",
+   "curatedFrom": "stubble_st166.jpg"
+  },
+  "stubble_cp7_04.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Anthony_Levandowski_Headshot.jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Kaxelrod",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 490,
+   "asym": 0.085,
+   "commonsTitle": "File:Anthony Levandowski Headshot.jpg",
+   "curatedFrom": "stubble_st167.jpg"
+  },
+  "stubble_cp7_05.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Book2.jpg",
+   "license": "CC BY-SA 3.0",
+   "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Pablo_Scorcelli&action=edit&redlink=1\" class",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 347,
+   "asym": 0.038,
+   "commonsTitle": "File:Book2.jpg",
+   "curatedFrom": "stubble_st180.jpg"
+  },
+  "stubble_cp7_06.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Carlos_Castel.JPG",
+   "license": "CC BY-SA 4.0",
+   "author": "Enrique Cidoncha. Fundación AISGE",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 804,
+   "asym": 0.078,
+   "commonsTitle": "File:Carlos Castel.JPG",
+   "curatedFrom": "stubble_st189.jpg"
+  },
+  "stubble_cp7_07.jpg": {
+   "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ethey_Katz_Photo_(cropped).jpg",
+   "license": "CC BY-SA 4.0",
+   "author": "Attila Mokos",
+   "beard": "stubble",
+   "gateOk": true,
+   "fwFit": 544,
+   "asym": 0.009,
+   "commonsTitle": "File:Ethey Katz Photo (cropped).jpg",
+   "curatedFrom": "stubble_st221.jpg"
+  }
+ }
+}
