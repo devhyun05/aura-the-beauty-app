@@ -28,8 +28,19 @@ function fail(message) {
   failures += 1;
 }
 
+// 주석을 제거한다 — "배선을 주석 처리했는데 문자열이 주석에 남아 가드를
+// 통과"하는 우회를 막는다(020cb33 류 조용한 무력화의 흔한 형태). 문자열
+// 리터럴 안의 // 는 드물게 오탐할 수 있으나, 이 가드가 찾는 import/호출
+// 패턴은 문자열 리터럴에 나타나지 않으므로 안전하다.
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ') // 블록 주석 (ObjC/TS 공통)
+    .replace(/^\s*\/\/.*$/gm, ' ') // 전체 줄 라인 주석
+    .replace(/\/\/[^\n]*/g, ' '); // 줄 끝 라인 주석
+}
+
 function readSource(relativePath) {
-  return readFileSync(resolve(repoRoot, relativePath), 'utf8');
+  return stripComments(readFileSync(resolve(repoRoot, relativePath), 'utf8'));
 }
 
 function assertContains(source, needle, label) {
@@ -117,6 +128,36 @@ function assertNotContains(source, needle, label) {
   const src = readSource(path);
   assertContains(src, /const reported =/, `${path}: reported(보고 메인) 확정 배선이 없다`);
   assertContains(src, /writeResultJson\(input\.sessionId,\s*reported\)/, `${path}: 저장이 reported 가 아니다 — 화면 corrected/저장 baseline 불일치(F13)`);
+}
+
+// ── 7. Xcode Compile Sources 멤버십 (빌드 불변식) ──────────────────────
+// 분석기 .m 이 소스 내용상 온전해도 PBXSourcesBuildPhase(Compile Sources)에서
+// 빠지면 컴파일·링크가 안 돼 RN 네이티브 모듈이 런타임에 존재하지 않는다 — 소스만
+// 보는 심볼 검사로는 못 잡던 회귀(코덱스 #244). pbxproj 의 '/* ... */' 는 주석이
+// 아니라 구조의 일부이므로 stripComments 없이 raw 로 읽는다.
+{
+  const path = 'apps/mobile/ios/AURA.xcodeproj/project.pbxproj';
+  const pbx = readFileSync(resolve(repoRoot, path), 'utf8');
+  const begin = pbx.indexOf('/* Begin PBXSourcesBuildPhase section */');
+  const end = pbx.indexOf('/* End PBXSourcesBuildPhase section */');
+  if (begin === -1 || end === -1 || end < begin) {
+    fail(`${path}: PBXSourcesBuildPhase 섹션을 찾지 못함 — Compile Sources 검증 불가`);
+  } else {
+    const sourcesPhase = pbx.slice(begin, end);
+    // Xcode 는 Sources 빌드 페이즈 항목을 '<uuid> /* <name> in Sources */,' 로 쓴다.
+    // 이 문자열이 Sources 페이즈 블록 안에 있어야 실제로 컴파일된다.
+    for (const name of [
+      'AURAPersonalColorAnalyzer.m',
+      'AURAFaceRatioAnalyzer.m',
+      'E7NativeLipBoundaryProviders.swift',
+    ]) {
+      assertContains(
+        sourcesPhase,
+        `${name} in Sources`,
+        `${path}: ${name} 이 Compile Sources(PBXSourcesBuildPhase)에 없다 — 소스는 있어도 빌드/링크에서 빠져 런타임 네이티브 모듈이 사라진다`,
+      );
+    }
+  }
 }
 
 if (failures > 0) {

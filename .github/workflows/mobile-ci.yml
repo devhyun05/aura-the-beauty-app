@@ -18,6 +18,10 @@ on:
 
 permissions:
   contents: read
+  # changes 잡이 pulls/{n}/files API 로 변경 파일을 조회한다. permissions 블록을
+  # 하나라도 선언하면 미지정 권한은 none 이 되므로, private repo 에서 이 API 가
+  # 403 으로 막혀 changes 잡이 계약 실행 전에 실패한다. 명시적으로 부여.
+  pull-requests: read
 
 jobs:
   changes:
@@ -38,9 +42,26 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # PR files API 는 최대 3,000개만 반환한다. 변경 파일 수가 그 이상이면
+          # 열거가 불완전해 모바일 변경을 놓칠 수 있으므로(fail-open) 안전하게 전체
+          # 검사한다. changed_files 는 PR 오브젝트에서 직접 읽는다.
+          changed_files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" \
+            --jq '.changed_files')
+          if [ "${changed_files:-0}" -ge 3000 ]; then
+            echo "변경 파일 ${changed_files}개 — PR files API 3000 상한으로 열거 불완전 → 전체 검사."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # filename 과 previous_filename 을 함께 본다 — 모바일 파일이 비모바일
+          # 경로로 rename-out 되는 경우(filename 만 보면 놓침)도 모바일 변경으로 잡는다.
           files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
-            --paginate --jq '.[].filename')
-          if echo "$files" | grep -qE '^(apps/mobile/|scripts/mobile/|\.github/workflows/mobile-ci\.yml)'; then
+            --paginate --jq '.[] | .filename, (.previous_filename // empty)')
+          # here-string(<<<)으로 검사한다. 'echo "$files" | grep -q' 는 grep -q 가
+          # 매치 즉시 종료할 때 producer(echo)가 SIGPIPE(141)를 받아, 대형 PR
+          # (수천 파일)에서 pipefail 이 그걸 실패로 봐 조건이 false→모바일 변경을
+          # 못 보고 검사를 건너뛰는 버그가 있었다. here-string 은 producer pipe 가
+          # 없어 SIGPIPE 가 나지 않는다.
+          if grep -qE '^(apps/mobile/|scripts/mobile/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
