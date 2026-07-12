@@ -1,0 +1,118 @@
+{
+  "builtAt": "2026-07-12T16:26:37",
+  "sidesPublic": {
+    "medium_cp7_01": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_02": {
+      "L": "noop",
+      "R": "noop"
+    },
+    "medium_cp7_03": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_04": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_05": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_06": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_07": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_07__beauty": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_07__down06": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_07__jpeg40": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_08": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "medium_cp7_09": {
+      "L": "fill",
+      "R": "abstain"
+    },
+    "medium_cp7_09__beauty": {
+      "L": "abstain",
+      "R": "fill"
+    },
+    "medium_cp7_09__down06": {
+      "L": "fill",
+      "R": "fill"
+    },
+    "medium_cp7_09__jpeg40": {
+      "L": "fill",
+      "R": "fill"
+    },
+    "stubble_cp7_01": {
+      "L": "fill",
+      "R": "fill"
+    },
+    "stubble_cp7_02": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_03": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_04": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_05": {
+      "L": "fill",
+      "R": "fill"
+    },
+    "stubble_cp7_06": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_06__beauty": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_06__down06": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_06__jpeg40": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_07": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_07__beauty": {
+      "L": "fill",
+      "R": "abstain"
+    },
+    "stubble_cp7_07__down06": {
+      "L": "abstain",
+      "R": "abstain"
+    },
+    "stubble_cp7_07__jpeg40": {
+      "L": "abstain",
+      "R": "fill"
+    }
+  },
+  "panelCount": 28
+}

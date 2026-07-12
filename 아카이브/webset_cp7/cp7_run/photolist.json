@@ -1,0 +1,275 @@
+[
+  {
+    "stem": "medium_cp7_01",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_01.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_02",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_02.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_03",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_03.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_04",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_04.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_05",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_05.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_06.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_07",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_07.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_08",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_08.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_09",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/medium_cp7_09.jpg",
+    "layer": "medium",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "none_cp7_01",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_01.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_02",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_02.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_03",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_03.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_04",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_04.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_05",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_05.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_06.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_07",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_07.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_08",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/none_cp7_08.jpg",
+    "layer": "negative",
+    "kind": "webset",
+    "judged": false
+  },
+  {
+    "stem": "stubble_cp7_01",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_01.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_02",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_02.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_03",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_03.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_04",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_04.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_05",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_05.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_06.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_07",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/stubble_cp7_07.jpg",
+    "layer": "stubble",
+    "kind": "webset",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_07__beauty",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_07__beauty.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_07__jpeg40",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_07__jpeg40.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_07__down06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_07__down06.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_06__beauty",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_06__beauty.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_06__jpeg40",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_06__jpeg40.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "stubble_cp7_06__down06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/stubble_cp7_06__down06.png",
+    "layer": "stubble",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_07__beauty",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_07__beauty.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_07__jpeg40",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_07__jpeg40.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_07__down06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_07__down06.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_09__beauty",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_09__beauty.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_09__jpeg40",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_09__jpeg40.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "medium_cp7_09__down06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/medium_cp7_09__down06.png",
+    "layer": "medium",
+    "kind": "variant",
+    "judged": true
+  },
+  {
+    "stem": "none_cp7_06__beauty",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/none_cp7_06__beauty.png",
+    "layer": "negative",
+    "kind": "variant",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_06__jpeg40",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/none_cp7_06__jpeg40.png",
+    "layer": "negative",
+    "kind": "variant",
+    "judged": false
+  },
+  {
+    "stem": "none_cp7_06__down06",
+    "path": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/\uc544\uce74\uc774\ube0c/webset_cp7/cp7_run/variants/none_cp7_06__down06.png",
+    "layer": "negative",
+    "kind": "variant",
+    "judged": false
+  }
+]
