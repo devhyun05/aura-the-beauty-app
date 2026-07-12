@@ -166,6 +166,9 @@ def main() -> int:
     ap.add_argument("--batch", type=int, default=2)
     ap.add_argument("--lr", type=float, default=1e-5)
     ap.add_argument("--tag", default="v01")
+    ap.add_argument("--init", type=Path, default=None,
+                    help="resume from a prior run's weights_last.pt instead of base")
+    ap.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"])
     args = ap.parse_args()
 
     out = OUT_ROOT / f"lama_face_{args.tag}"
@@ -180,9 +183,11 @@ def main() -> int:
 
     pairs = _load_pairs(args.data, rng)
     print(f"training pairs: {len(pairs)}", flush=True)
-    assert len(pairs) >= 40, "too few training faces for even a spike"
+    assert len(pairs) >= 30, "too few training faces for even a spike"
 
-    model = torch.jit.load(str(WEIGHTS), map_location="cpu")
+    dev = torch.device(args.device)
+    init_path = args.init or WEIGHTS
+    model = torch.jit.load(str(init_path), map_location="cpu").to(dev)
     model.train(False)                       # eval semantics, grads only
     params = [p for p in model.parameters()]
     for p in params:
@@ -192,11 +197,13 @@ def main() -> int:
     # fixed eval batch for the sample sheets (first 3 pairs, fixed holes)
     ev_rng = random.Random(1)
     ev_imgs, ev_masks = _tile_batch(pairs[:10], ev_rng, 3)
+    ev_imgs, ev_masks = ev_imgs.to(dev), ev_masks.to(dev)
 
     losses = []
     t0 = time.time()
     for step in range(1, args.steps + 1):
         imgs, masks = _tile_batch(pairs, rng, args.batch)
+        imgs, masks = imgs.to(dev), masks.to(dev)
         out_t = model(imgs, masks)
         hole = masks
         l_hole = (torch.abs(out_t - imgs) * hole).sum() / hole.sum().clamp(min=1) / 3
@@ -221,19 +228,21 @@ def main() -> int:
                 ev = model(ev_imgs, ev_masks)
             tiles = []
             for i in range(ev.shape[0]):
-                a = (ev_imgs[i].numpy().transpose(1, 2, 0)[..., ::-1] * 255).astype(np.uint8)
-                b = (ev[i].numpy().transpose(1, 2, 0)[..., ::-1] * 255).clip(0, 255).astype(np.uint8)
-                mm = (ev_masks[i, 0].numpy() * 255).astype(np.uint8)
+                a = (ev_imgs[i].cpu().numpy().transpose(1, 2, 0)[..., ::-1] * 255).astype(np.uint8)
+                b = (ev[i].cpu().numpy().transpose(1, 2, 0)[..., ::-1] * 255).clip(0, 255).astype(np.uint8)
+                mm = (ev_masks[i, 0].cpu().numpy() * 255).astype(np.uint8)
                 tiles.append(np.hstack([a, cv2.cvtColor(mm, cv2.COLOR_GRAY2BGR), b]))
             cv2.imwrite(str(out / "samples" / f"step_{step:05d}.png"),
                         np.vstack(tiles))
-            model.save(str(out / "weights_last.pt"))
+            model.cpu(); model.save(str(out / "weights_last.pt")); model.to(dev)
 
+    model.cpu()
     model.save(str(out / "weights_last.pt"))
     sha = hashlib.sha256((out / "weights_last.pt").read_bytes()).hexdigest()
     (out / "run_manifest.json").write_text(json.dumps({
         "base": "big-lama.pt sha " + json.loads(
             (LAB / "spike" / "lama_manifest.json").read_text())["sha256"],
+        "initFrom": str(init_path), "device": args.device,
         "weightsSha256": sha, "steps": args.steps, "batch": args.batch,
         "lr": args.lr, "seed": SEED, "pairs": len(pairs),
         "dataManifestSha256": hashlib.sha256(
