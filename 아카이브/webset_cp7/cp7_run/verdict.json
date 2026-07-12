@@ -1,0 +1,777 @@
+{
+  "finishedAt": "2026-07-12T16:46:53",
+  "overallPass": false,
+  "gates": {
+    "K1": {
+      "pass": true,
+      "raw": "사고 0/11",
+      "rows": [
+        {
+          "stem": "none_cp7_01",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_02",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_03",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_04",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_05",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_06",
+          "status": "hardfail",
+          "verdict": "hard-fail"
+        },
+        {
+          "stem": "none_cp7_07",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_08",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_06__beauty",
+          "status": "abstain",
+          "verdict": "abstain"
+        },
+        {
+          "stem": "none_cp7_06__jpeg40",
+          "status": "hardfail",
+          "verdict": "hard-fail"
+        },
+        {
+          "stem": "none_cp7_06__down06",
+          "status": "hardfail",
+          "verdict": "hard-fail"
+        }
+      ]
+    },
+    "K2": {
+      "pass": false,
+      "raw": "훼손 8/8 (채움 없음 20 제외)",
+      "photos": [
+        "medium_cp7_09",
+        "medium_cp7_09__beauty",
+        "medium_cp7_09__down06",
+        "medium_cp7_09__jpeg40",
+        "stubble_cp7_01",
+        "stubble_cp7_05",
+        "stubble_cp7_07__beauty",
+        "stubble_cp7_07__jpeg40"
+      ]
+    },
+    "K3": {
+      "pass": false,
+      "raw": "usable 0/13 (합격선 7)",
+      "usable": []
+    },
+    "K4": {
+      "pass": false,
+      "raw": "usable 0/15 (합격선 8)",
+      "usable": []
+    },
+    "K5": {
+      "pass": false,
+      "raw": "채움 생산 8/28 (합격선 22)"
+    }
+  },
+  "R1_regression": {
+    "aWinPhotos": [],
+    "usableA": 0
+  },
+  "R2_gateVsHuman": {
+    "passUsable": 0,
+    "passNot": 0,
+    "abstainUsable": 0,
+    "abstainNot": 3,
+    "hardfailUsable": 0,
+    "hardfailNot": 5
+  },
+  "R3_variants": [
+    {
+      "variant": "medium_cp7_07__beauty",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "medium_cp7_07__down06",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "medium_cp7_07__jpeg40",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "medium_cp7_09__beauty",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "medium_cp7_09__down06",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "medium_cp7_09__jpeg40",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_06__beauty",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_06__down06",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_06__jpeg40",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_07__beauty",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_07__down06",
+      "usableB": false,
+      "baseUsableB": false
+    },
+    {
+      "variant": "stubble_cp7_07__jpeg40",
+      "usableB": false,
+      "baseUsableB": false
+    }
+  ],
+  "R4_armA_negatives": [
+    {
+      "stem": "none_cp7_01",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_02",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_03",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_04",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_05",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_06",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_07",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_08",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_06__beauty",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_06__jpeg40",
+      "status": "abstain"
+    },
+    {
+      "stem": "none_cp7_06__down06",
+      "status": "abstain"
+    }
+  ],
+  "rows": [
+    {
+      "stem": "medium_cp7_01",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_02",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": null,
+      "verdictB": null,
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_03",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_04",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_05",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_06",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_07",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_07__beauty",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_07__down06",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_07__jpeg40",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_08",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "medium_cp7_09",
+      "layer": "medium",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": true,
+      "verdictA": "abstain",
+      "verdictB": "hard-fail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": false,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "medium_cp7_09__beauty",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": true,
+      "verdictA": "abstain",
+      "verdictB": "hard-fail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": false,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "medium_cp7_09__down06",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": true,
+      "fillB": true,
+      "verdictA": "hard-fail",
+      "verdictB": "hard-fail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": true,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "medium_cp7_09__jpeg40",
+      "layer": "medium",
+      "kind": "variant",
+      "fillA": true,
+      "fillB": true,
+      "verdictA": "hard-fail",
+      "verdictB": "hard-fail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": true,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "stubble_cp7_01",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": true,
+      "fillB": true,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": true,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "stubble_cp7_02",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_03",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_04",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_05",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": true,
+      "fillB": true,
+      "verdictA": "hard-fail",
+      "verdictB": "hard-fail",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": true,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "stubble_cp7_06",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_06__beauty",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_06__down06",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_06__jpeg40",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_07",
+      "layer": "stubble",
+      "kind": "webset",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_07__beauty",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": true,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": false,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    },
+    {
+      "stem": "stubble_cp7_07__down06",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": false,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": false,
+      "anatomyA": false,
+      "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+    },
+    {
+      "stem": "stubble_cp7_07__jpeg40",
+      "layer": "stubble",
+      "kind": "variant",
+      "fillA": false,
+      "fillB": true,
+      "verdictA": "abstain",
+      "verdictB": "abstain",
+      "items": {
+        "item1": "tie",
+        "item2": "tie",
+        "item3": "tie"
+      },
+      "aWins": 0,
+      "usableB": false,
+      "usableA": false,
+      "anatomyB": true,
+      "anatomyA": false,
+      "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+    }
+  ]
+}

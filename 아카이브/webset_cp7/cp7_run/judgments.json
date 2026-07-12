@@ -1,0 +1,282 @@
+{
+  "medium_cp7_01": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_02": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_03": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_04": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_05": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_07": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_07__beauty": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_07__down06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_07__jpeg40": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_08": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "medium_cp7_09": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": false,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "medium_cp7_09__beauty": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "medium_cp7_09__down06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "medium_cp7_09__jpeg40": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "stubble_cp7_01": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "stubble_cp7_02": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_03": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_04": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_05": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "stubble_cp7_06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_06__beauty": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_06__down06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_06__jpeg40": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_07": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_07__beauty": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": true,
+    "anatomyR": false,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  },
+  "stubble_cp7_07__down06": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": false,
+    "note": "양측 미출고 — 판정 대상 없음(기계적 강제 기록)"
+  },
+  "stubble_cp7_07__jpeg40": {
+    "item1": "tie",
+    "item2": "tie",
+    "item3": "tie",
+    "usableL": false,
+    "usableR": false,
+    "anatomyL": false,
+    "anatomyR": true,
+    "note": "판정자(2026-07-12): 턱 모양·입 모양 변형(anatomy 훼손), 좌우 우열 없음, 사용 가능 아님"
+  }
+}
