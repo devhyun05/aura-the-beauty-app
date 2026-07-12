@@ -106,6 +106,36 @@ function assertNotContains(source, needle, label) {
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다`);
 }
 
+// ── 5. Xcode Compile Sources 멤버십 (빌드 불변식) ──────────────────────
+// 분석기 .m 이 소스 내용상 온전해도 PBXSourcesBuildPhase(Compile Sources)에서
+// 빠지면 컴파일·링크가 안 돼 RN 네이티브 모듈이 런타임에 존재하지 않는다 — 소스만
+// 보는 심볼 검사로는 못 잡던 회귀(코덱스 #244). pbxproj 의 '/* ... */' 는 주석이
+// 아니라 구조의 일부이므로 stripComments 없이 raw 로 읽는다.
+{
+  const path = 'apps/mobile/ios/AURA.xcodeproj/project.pbxproj';
+  const pbx = readFileSync(resolve(repoRoot, path), 'utf8');
+  const begin = pbx.indexOf('/* Begin PBXSourcesBuildPhase section */');
+  const end = pbx.indexOf('/* End PBXSourcesBuildPhase section */');
+  if (begin === -1 || end === -1 || end < begin) {
+    fail(`${path}: PBXSourcesBuildPhase 섹션을 찾지 못함 — Compile Sources 검증 불가`);
+  } else {
+    const sourcesPhase = pbx.slice(begin, end);
+    // Xcode 는 Sources 빌드 페이즈 항목을 '<uuid> /* <name> in Sources */,' 로 쓴다.
+    // 이 문자열이 Sources 페이즈 블록 안에 있어야 실제로 컴파일된다.
+    for (const name of [
+      'AURAPersonalColorAnalyzer.m',
+      'AURAFaceRatioAnalyzer.m',
+      'E7NativeLipBoundaryProviders.swift',
+    ]) {
+      assertContains(
+        sourcesPhase,
+        `${name} in Sources`,
+        `${path}: ${name} 이 Compile Sources(PBXSourcesBuildPhase)에 없다 — 소스는 있어도 빌드/링크에서 빠져 런타임 네이티브 모듈이 사라진다`,
+      );
+    }
+  }
+}
+
 if (failures > 0) {
   console.error(`[aura:native-wiring] ${failures}건 실패 — 기능 배선이 끊겼습니다. 020cb33 류 회귀인지 확인하세요.`);
   process.exit(1);
