@@ -110,7 +110,7 @@ function assertNotContains(source, needle, label) {
   assertContains(src, /analyzePersonalColorPhoto\(/, `${path}: 네이티브 분석기 호출부가 없다`);
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다`);
   // 조명 보정(A/B) 배선 — 8164840 포팅. import 를 남긴 채 호출만 지우는 퇴화도 잡는다.
-  assertContains(src, "from './personalColorCore/illuminationCorrection'", `${path}: 조명 보정 import 가 없다`);
+  assertContains(src, /from\s+['"`]\.\/personalColorCore\/illuminationCorrection['"`]/, `${path}: 조명 보정 import 가 없다`);
   assertContains(src, /deriveIlluminationCorrection\(/, `${path}: 조명 보정 호출부가 없다 — 보정이 조용히 죽음`);
 }
 
