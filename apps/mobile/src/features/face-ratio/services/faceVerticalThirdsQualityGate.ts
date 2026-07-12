@@ -4,10 +4,13 @@ import type {
   VerticalThirdsKeypointMap,
 } from '../types';
 import {APPLE_HAIRLINE_FULL_CONFIDENCE, HAIRLINE_WARNING} from '../constants';
+import {POST_CAPTURE_POSE_GATE} from '../../face-capture/constants/facePoseGates';
 
-const MAX_ABS_YAW_DEG = 8;
-const MAX_ABS_PITCH_DEG = 8;
-const MAX_ABS_ROLL_DEG = 5;
+// 단일 소스(facePoseGates)에서 온다 — 실시간 게이트와의 정합(실시간 ≤ 사후)은
+// facePoseGates.test.ts 가 CI 에서 강제한다.
+const MAX_ABS_YAW_DEG = POST_CAPTURE_POSE_GATE.maxAbsYawDeg;
+const MAX_ABS_PITCH_DEG = POST_CAPTURE_POSE_GATE.maxAbsPitchDeg;
+const MAX_ABS_ROLL_DEG = POST_CAPTURE_POSE_GATE.maxAbsRollDeg;
 
 export type FaceVerticalThirdsQualityGateResult = {
   keypoints: VerticalThirdsKeypointMap;

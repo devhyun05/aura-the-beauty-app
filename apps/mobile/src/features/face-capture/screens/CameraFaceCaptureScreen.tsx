@@ -45,6 +45,10 @@ import {
   computeFaceEllipseGuideGeometry,
 } from '../constants/faceEllipseGuide';
 import {
+  REALTIME_DEFAULT_POSE_GATE,
+  REALTIME_FACE_ANALYSIS_POSE_GATE,
+} from '../constants/facePoseGates';
+import {
   FACE_PITCH_GATE_MESSAGE,
   evaluateFacePitchGate,
 } from '../services/faceCapturePitchGate';
@@ -499,13 +503,21 @@ export function CameraFaceCaptureScreen({
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
   );
+  // 촬영 타입별 pose 임계 프로파일. face_analysis 는 사후 품질 게이트와 동치
+  // (8/8/5)라 "촬영은 되는데 분석에서 폐기"가 구조적으로 불가능하다.
+  // 두 프로파일 모두 모듈 상수(frozen)라 참조가 안정적 — deps 에 넣어도 재계산 없음.
+  const realtimePoseGate =
+    captureType === 'face_analysis'
+      ? REALTIME_FACE_ANALYSIS_POSE_GATE
+      : REALTIME_DEFAULT_POSE_GATE;
   const greenlightReport = useMemo(
     () => evaluateFaceCaptureGreenlight({
       cameraStability: latestCameraStability,
       guide: screenGuideBounds,
       mediaPipe: latestMediaPipe,
+      poseGate: realtimePoseGate,
     }),
-    [latestCameraStability, latestMediaPipe, screenGuideBounds],
+    [latestCameraStability, latestMediaPipe, realtimePoseGate, screenGuideBounds],
   );
   const shouldBlockForGreenlight =
     requireGreenlight && !greenlightReport.finalCaptureGreenlight;
@@ -747,6 +759,7 @@ export function CameraFaceCaptureScreen({
           cameraStability: nativeEvent.cameraStability,
           guide: screenGuideBounds,
           mediaPipe: nativeEvent.mediaPipe,
+          poseGate: realtimePoseGate,
         });
 
         console.info('[aura:face-capture] realtime-landmark-frame', {
@@ -788,7 +801,7 @@ export function CameraFaceCaptureScreen({
         });
       }
     },
-    [cameraDirection, guideBounds, height, screenGuideBounds, width],
+    [cameraDirection, guideBounds, height, realtimePoseGate, screenGuideBounds, width],
   );
 
   useEffect(() => {
@@ -1063,6 +1076,7 @@ export function CameraFaceCaptureScreen({
             guide: screenGuideBounds,
             mediaPipe: latestMediaPipe,
             nativeCameraMetadata,
+            poseGate: realtimePoseGate,
           })
         : undefined;
       const imageInput: FaceCaptureImageInput = {

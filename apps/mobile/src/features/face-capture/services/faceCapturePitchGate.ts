@@ -4,10 +4,15 @@
 // 전제로 미뤄졌던 부분). ARKit 도입이 취소되어, 네이티브가 이미 매 프레임 보내주는
 // MediaPipe `pitchDeg`(facial transform matrix 기반)로 실시간 pitch를 막는다.
 //
-// MediaPipe pitch는 ARKit보다 지터가 크므로 임계값을 넉넉히 둔다. 부호 방향(들었나
-// 숙였나)은 기기별 검증이 필요해, 방향별 문구 대신 일반 문구를 쓴다.
+// 부호 방향(들었나 숙였나)은 기기별 검증이 필요해, 방향별 문구 대신 일반 문구를 쓴다.
+//
+// 임계값은 facePoseGates 단일 소스에서 온다. 종전 12°는 사후 품질 게이트(8°)보다
+// 헐거워 9~12° 구간이 "촬영은 되는데 분석에서 폐기"였다 — 사후와 동치로 강화.
 
-export const FACE_PITCH_GATE_MAX_ABS_DEG = 12;
+import {REALTIME_FACE_ANALYSIS_POSE_GATE} from '../constants/facePoseGates';
+
+export const FACE_PITCH_GATE_MAX_ABS_DEG =
+  REALTIME_FACE_ANALYSIS_POSE_GATE.maxAbsPitchDeg;
 
 export const FACE_PITCH_GATE_MESSAGE = '고개를 들거나 숙이지 말고 정면을 봐주세요';
 

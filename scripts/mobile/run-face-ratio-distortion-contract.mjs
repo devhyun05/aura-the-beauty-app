@@ -12,7 +12,9 @@ const srcRoot = join(repoRoot, 'apps/mobile/src');
 
 const testPaths = [
   'features/face-capture/constants/faceEllipseGuide.test.ts',
+  'features/face-capture/constants/facePoseGates.test.ts',
   'features/face-capture/services/faceCapturePitchGate.test.ts',
+  'features/face-capture/services/faceCaptureGreenlight.test.ts',
   'features/face-ratio/services/faceVerticalThirdsRollCorrection.test.ts',
 ];
 
