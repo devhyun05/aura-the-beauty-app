@@ -123,20 +123,26 @@ jobs:
           PODFILE="apps/mobile/ios/Podfile"
           LOCKFILE="apps/mobile/ios/Podfile.lock"
 
-          if [[ -f "$PODFILE" && -f "$LOCKFILE" ]]; then
-            lock_sum=$(grep '^PODFILE CHECKSUM:' "$LOCKFILE" | awk '{print $3}' || true)
-            real_sum=$(sha1sum "$PODFILE" | awk '{print $1}')
-            # PODFILE CHECKSUM 줄 자체가 없으면(머지 충돌 해소 중 유실·손상, b74f609
-            # 가 실제로 이 영역을 망가뜨린 전례) 검사가 조용히 통과되지 않도록
-            # 실패시킨다 — 이 줄 삭제 한 번으로 정합 규칙을 무력화하는 우회를 막는다.
-            if [[ -z "$lock_sum" ]]; then
-              echo "::error file=${LOCKFILE}::Podfile.lock 에 'PODFILE CHECKSUM:' 줄이 없습니다(손상/유실). 'cd apps/mobile && npm run pods' 로 재생성하세요."
-              exit 1
-            fi
-            if [[ "$lock_sum" != "$real_sum" ]]; then
-              echo "::error file=${LOCKFILE}::Podfile.lock 이 Podfile 과 불일치합니다 (lock=${lock_sum} 실제=${real_sum}). 'cd apps/mobile && npm run pods' 로 재생성하세요 — lock 수동 편집 금지. 이 규칙은 라벨로 끌 수 없습니다."
-              exit 1
-            fi
+          # 둘 중 하나라도 없으면(삭제/유실) 실패시킨다 — "파일이 있을 때만
+          # 검사"였던 종전 구조는 lock 을 통째로 지우면 검사를 건너뛰고 통과했다
+          # (mass-deletion 보호경로에도 Podfile.lock 은 포함되지 않아 무방비였음).
+          if [[ ! -f "$PODFILE" || ! -f "$LOCKFILE" ]]; then
+            echo "::error::Podfile 또는 Podfile.lock 이 없습니다(삭제/유실). 두 파일은 항상 존재해야 하며 'cd apps/mobile && npm run pods' 로 재생성합니다."
+            exit 1
+          fi
+
+          lock_sum=$(grep '^PODFILE CHECKSUM:' "$LOCKFILE" | awk '{print $3}' || true)
+          real_sum=$(sha1sum "$PODFILE" | awk '{print $1}')
+          # PODFILE CHECKSUM 줄 자체가 없으면(머지 충돌 해소 중 유실·손상, b74f609
+          # 가 실제로 이 영역을 망가뜨린 전례) 검사가 조용히 통과되지 않도록
+          # 실패시킨다 — 이 줄 삭제 한 번으로 정합 규칙을 무력화하는 우회를 막는다.
+          if [[ -z "$lock_sum" ]]; then
+            echo "::error file=${LOCKFILE}::Podfile.lock 에 'PODFILE CHECKSUM:' 줄이 없습니다(손상/유실). 'cd apps/mobile && npm run pods' 로 재생성하세요."
+            exit 1
+          fi
+          if [[ "$lock_sum" != "$real_sum" ]]; then
+            echo "::error file=${LOCKFILE}::Podfile.lock 이 Podfile 과 불일치합니다 (lock=${lock_sum} 실제=${real_sum}). 'cd apps/mobile && npm run pods' 로 재생성하세요 — lock 수동 편집 금지. 이 규칙은 라벨로 끌 수 없습니다."
+            exit 1
           fi
           echo "Podfile ↔ Podfile.lock 정합 ✓"
 
@@ -153,13 +159,17 @@ jobs:
           # pod '이름' 의 이름만 뽑아 "제거됐고 다시 추가되지 않은" pod 만 삭제로
           # 본다 — 버전 범프(pod 'X','0.1'→'0.2')는 같은 이름이 -/+ 양쪽에 있어
           # 오탐이 나던 것을 막는다(일상적 의존성 업그레이드가 매번 막히지 않게).
+          # grep 은 매치가 0건이면 "실패"(exit 1)를 낸다. set -euo pipefail 하에서
+          # 이걸 안 감싸면, Podfile 을 안 건드린 PR(거의 전부)에서 diff 가 비어
+          # grep 이 0건→실패→스크립트 전체가 exit 1 로 죽어 모든 PR 을 막았다.
+          # 각 파이프라인 끝에 '|| true' 로 "0건은 정상"임을 명시한다.
           diff_out=$(git diff "${BASE}...HEAD" -- "$PODFILE")
           removed_names=$(echo "$diff_out" \
             | grep -E "^-[[:space:]]*pod ['\"]" \
-            | sed -E "s/^-[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u)
+            | sed -E "s/^-[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u || true)
           added_names=$(echo "$diff_out" \
             | grep -E "^\+[[:space:]]*pod ['\"]" \
-            | sed -E "s/^\+[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u)
+            | sed -E "s/^\+[[:space:]]*pod ['\"]([^'\"]+).*/\1/" | sort -u || true)
           truly_removed=$(comm -23 <(echo "$removed_names") <(echo "$added_names") | grep -v '^$' || true)
           if [[ -n "$truly_removed" ]]; then
             if [[ "$PODS_APPROVED" == "true" ]]; then
