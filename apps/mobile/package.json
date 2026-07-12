@@ -22,6 +22,8 @@
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
     "test:ios-bundle-ids": "node ../../scripts/mobile/verify-ios-bundle-identifiers.mjs",
     "test:ios-privacy": "node ../../scripts/mobile/verify-ios-privacy-settings.mjs",
+    "test:native-wiring": "node ../../scripts/mobile/run-native-wiring-contract.mjs",
+    "test:brow-native": "node ../../scripts/mobile/check-brow-native-landmark-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

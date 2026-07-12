@@ -100,3 +100,9 @@ jobs:
 
       - name: Contract - iOS privacy settings
         run: npm run test:ios-privacy
+
+      - name: Contract — Native analyzer wiring (020cb33 류 배선 퇴화 방지)
+        run: npm run test:native-wiring
+
+      - name: Contract — Brow native landmark indices
+        run: npm run test:brow-native
