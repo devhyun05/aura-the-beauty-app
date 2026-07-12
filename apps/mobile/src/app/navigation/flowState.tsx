@@ -12,7 +12,10 @@ import React, {
 import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../features/makeup-feedback';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
 import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
-import type {AuraPersonalColorResult} from '../../features/personal-color/types';
+import type {
+  AuraPersonalColorResult,
+  PersonalColorCorrectionStatus,
+} from '../../features/personal-color/types';
 import type {ReferenceMakeupPhoto} from '../../features/reference-makeup-extraction';
 import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
@@ -41,7 +44,10 @@ export type NavigationFlowState = {
   selectedHairCapture: FaceCaptureUploadResult | null;
   selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
   // 얼굴 분석 세션에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용, 업로드 없음).
+  // 조명 보정 성공 시 corrected 결과가 담긴다 (보정 우선 표시 정책).
   selectedPersonalColor: AuraPersonalColorResult | null;
+  // 위 결과의 조명 보정 상태(적용 여부 + 미적용 사유) — 보고서 카드 배지용.
+  selectedPersonalColorCorrection: PersonalColorCorrectionStatus | null;
   selectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection;
   selectedRecommendedMakeupFilterId: string | null;
   selectedReferenceMakeupPhoto: ReferenceMakeupPhoto | null;
@@ -63,6 +69,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedHairCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
   setSelectedPersonalColor: Dispatch<SetStateAction<AuraPersonalColorResult | null>>;
+  setSelectedPersonalColorCorrection: Dispatch<SetStateAction<PersonalColorCorrectionStatus | null>>;
   setSelectedMakeupFeedbackPhoto: Dispatch<SetStateAction<MakeupFeedbackPhotoSelection>>;
   setSelectedRecommendedMakeupFilterId: Dispatch<SetStateAction<string | null>>;
   setSelectedReferenceMakeupPhoto: Dispatch<SetStateAction<ReferenceMakeupPhoto | null>>;
@@ -87,6 +94,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedHairCapture: null,
     selectedFaceVerticalThirds: null,
     selectedPersonalColor: null,
+    selectedPersonalColorCorrection: null,
     selectedMakeupFeedbackPhoto: {
       photoSource: 'camera',
     },
@@ -120,6 +128,10 @@ export function NavigationFlowStateProvider({
     useState<FaceVerticalThirdsResult | null>(initialState.selectedFaceVerticalThirds);
   const [selectedPersonalColor, setSelectedPersonalColor] =
     useState<AuraPersonalColorResult | null>(initialState.selectedPersonalColor);
+  const [selectedPersonalColorCorrection, setSelectedPersonalColorCorrection] =
+    useState<PersonalColorCorrectionStatus | null>(
+      initialState.selectedPersonalColorCorrection,
+    );
   const [selectedMakeupFeedbackPhoto, setSelectedMakeupFeedbackPhoto] =
     useState<MakeupFeedbackPhotoSelection>(initialState.selectedMakeupFeedbackPhoto);
   const [selectedRecommendedMakeupFilterId, setSelectedRecommendedMakeupFilterId] =
@@ -160,6 +172,7 @@ export function NavigationFlowStateProvider({
     setSelectedHairCapture(nextState.selectedHairCapture);
     setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
     setSelectedPersonalColor(nextState.selectedPersonalColor);
+    setSelectedPersonalColorCorrection(nextState.selectedPersonalColorCorrection);
     setSelectedMakeupFeedbackPhoto(nextState.selectedMakeupFeedbackPhoto);
     setSelectedRecommendedMakeupFilterId(nextState.selectedRecommendedMakeupFilterId);
     setSelectedReferenceMakeupPhoto(nextState.selectedReferenceMakeupPhoto);
@@ -181,6 +194,7 @@ export function NavigationFlowStateProvider({
       selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
+      selectedPersonalColorCorrection,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,
@@ -199,6 +213,7 @@ export function NavigationFlowStateProvider({
       setSelectedHairCapture,
       setSelectedFaceVerticalThirds,
       setSelectedPersonalColor,
+      setSelectedPersonalColorCorrection,
       setSelectedMakeupFeedbackPhoto,
       setSelectedRecommendedMakeupFilterId,
       setSelectedReferenceMakeupPhoto,
@@ -218,6 +233,7 @@ export function NavigationFlowStateProvider({
       selectedHairCapture,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
+      selectedPersonalColorCorrection,
       selectedMakeupFeedbackPhoto,
       selectedRecommendedMakeupFilterId,
       selectedReferenceMakeupPhoto,

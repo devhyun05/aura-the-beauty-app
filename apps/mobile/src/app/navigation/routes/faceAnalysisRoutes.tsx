@@ -155,6 +155,7 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceAnalysisReport,
     setSelectedFaceVerticalThirds,
     setSelectedPersonalColor,
+    setSelectedPersonalColorCorrection,
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
@@ -214,6 +215,7 @@ export function FaceAnalysisLoadingRouteScreen({
   // 실패/미지원은 null로 격리해 결과가 준비되면 보고서에 표시된다.
   React.useEffect(() => {
     setSelectedPersonalColor(null);
+    setSelectedPersonalColorCorrection(null);
 
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
       return undefined;
@@ -223,6 +225,8 @@ export function FaceAnalysisLoadingRouteScreen({
     const captureId = selectedFaceCapture.photoCaptureId;
 
     analyzePersonalColorCapture({
+      // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정(sclera/WB)의 입력.
+      cameraMetadata: selectedFaceCapture.cameraMetadata ?? null,
       captureId,
       createdAt: new Date().toISOString(),
       imageUri: selectedFaceCapture.imageUri,
@@ -230,7 +234,19 @@ export function FaceAnalysisLoadingRouteScreen({
     })
       .then(outcome => {
         if (isMounted) {
-          setSelectedPersonalColor(outcome.result);
+          // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
+          // 실패 시 baseline 유지 + 미적용 사유를 배지로 노출(조용한 실패 금지).
+          // reported = 저장(writeResultJson)과 동일한 보고 메인 결과(보정 우선).
+          // 화면과 저장이 갈라지지 않게 서비스가 확정한 값을 그대로 쓴다.
+          setSelectedPersonalColor(outcome.reported);
+          setSelectedPersonalColorCorrection({
+            applied: Boolean(outcome.corrected),
+            reasons: [
+              ...outcome.correctionReport.reasons,
+              ...outcome.correctionReport.sclera.reasons,
+              ...outcome.correctionReport.wb.reasons,
+            ],
+          });
         }
       })
       .catch(error => {
@@ -242,7 +258,7 @@ export function FaceAnalysisLoadingRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [selectedFaceCapture, setSelectedPersonalColor]);
+  }, [selectedFaceCapture, setSelectedPersonalColor, setSelectedPersonalColorCorrection]);
 
   React.useEffect(() => {
     setIsAnalysisReady(false);
@@ -402,6 +418,7 @@ export function FaceAnalysisReportDetailRouteScreen({
     selectedFaceCapture,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
+    selectedPersonalColorCorrection,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
   const handleHeaderShareActionChange = React.useCallback(
@@ -446,6 +463,9 @@ export function FaceAnalysisReportDetailRouteScreen({
             navigation.navigate('ProductRecommendation', {reportId})
           }
           personalColor={route.params?.reportId ? null : selectedPersonalColor}
+          personalColorCorrection={
+            route.params?.reportId ? null : selectedPersonalColorCorrection
+          }
           reportId={route.params?.reportId ?? null}
           verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
         />

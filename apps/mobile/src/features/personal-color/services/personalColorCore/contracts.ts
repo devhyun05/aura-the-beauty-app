@@ -37,7 +37,10 @@ export type NativeRegionKey =
   | 'skinCheekRight'
   | 'skinForehead'
   | 'hair'
-  | 'lip';
+  | 'lip'
+  // 흰자(sclera) — 축 계산에는 불참. 조명 캐스트 추정(illuminationCorrection) 전용.
+  | 'scleraLeft'
+  | 'scleraRight';
 
 export type NativeRegionStats = {
   rgbMean: Rgb;

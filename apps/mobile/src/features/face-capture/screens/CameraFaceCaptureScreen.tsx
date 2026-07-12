@@ -341,6 +341,7 @@ function getScreenLandmarkPoint(
 }
 
 function createLocalFaceCaptureResult({
+  cameraMetadata,
   contentType,
   height,
   semanticMattes,
@@ -352,6 +353,7 @@ function createLocalFaceCaptureResult({
 
   return {
     bucket: 'local',
+    cameraMetadata,
     cdnUrl: null,
     contentType: contentType ?? 'image/jpeg',
     height: height ?? null,
@@ -1106,6 +1108,10 @@ export function CameraFaceCaptureScreen({
           })
         : undefined;
       const imageInput: FaceCaptureImageInput = {
+        // 셔터 시점 카메라 메타(WB gains 등). 네이티브 lock 메타를 우선하고,
+        // 없으면 마지막 실시간 안정도 페이로드로 폴백 — 퍼스널 컬러 조명
+        // 보정(A/B)과 WB 캘리브레이션 데이터 수집에 쓰인다(업로드에는 미사용).
+        cameraMetadata: nativeCameraMetadata ?? latestCameraStability ?? undefined,
         captureType,
         contentType: pictureFormat === 'heic' ? 'image/heic' : undefined,
         height: picture.height,

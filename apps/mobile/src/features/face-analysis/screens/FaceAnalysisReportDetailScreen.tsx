@@ -36,7 +36,10 @@ import {
 } from '../../face-ratio/components/VerticalThirdsOverlay';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import {PersonalColorTypeCard} from '../../personal-color/components/PersonalColorTypeCard';
-import type {AuraPersonalColorResult} from '../../personal-color/types';
+import type {
+  AuraPersonalColorResult,
+  PersonalColorCorrectionStatus,
+} from '../../personal-color/types';
 import {
   faceAnalysisReportCreateFilterButtonAccessibilityLabels,
   faceAnalysisReportLiquidGlassButtonStyle,
@@ -66,12 +69,71 @@ type FaceAnalysisReportDetailScreenProps = {
   onHeaderShareActionChange?: (action: FaceAnalysisReportShareAction | null) => void;
   onPressProducts?: (reportId: string) => void;
   // 세션 내 촬영에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용).
-  // 과거 보고서(id 조회)에는 없고, 판정 불가면 섹션을 렌더하지 않는다.
+  // 과거 보고서(id 조회)에는 없다. 판정 불가(insufficient)여도 섹션을 숨기지
+  // 않고 사유 + 재촬영 안내를 표시한다 (조용한 실패 금지).
   personalColor?: AuraPersonalColorResult | null;
+  // 위 결과의 조명 보정 상태 — applied면 corrected 결과가 메인으로 표시 중.
+  personalColorCorrection?: PersonalColorCorrectionStatus | null;
   // 세션 내 촬영에서 온디바이스로 계산한 얼굴 세로 비율.
   // 과거 보고서(id 조회)에는 없으므로 null이면 섹션을 렌더하지 않는다.
+  // blocked/failed 는 숨기지 않고 사유 + 재촬영 안내를 표시한다.
   verticalThirds?: FaceVerticalThirdsResult | null;
 };
+
+// 사후 게이트 차단 사유 → 사용자 안내 문구. 알 수 없는 코드는 일반 문구로.
+const VERTICAL_THIRDS_BLOCKED_MESSAGES: Record<string, string> = {
+  pose_gate_failed:
+    '고개 각도(상하/좌우 기울임)가 커서 비율을 측정하지 못했어요. 정면을 바라보고 다시 촬영해 주세요.',
+  face_not_detected: '사진에서 얼굴을 찾지 못했어요. 밝은 곳에서 다시 촬영해 주세요.',
+  multiple_faces_detected: '얼굴이 여러 개 감지됐어요. 혼자 나온 사진으로 다시 촬영해 주세요.',
+  required_keypoints_missing:
+    '얼굴 기준점을 찾지 못했어요. 이마와 턱이 가려지지 않게 다시 촬영해 주세요.',
+  vertical_keypoint_order_invalid:
+    '얼굴 기준점이 비정상적으로 측정됐어요. 정면에서 다시 촬영해 주세요.',
+};
+
+function getVerticalThirdsBlockedMessage(statusReason?: string): string {
+  return (
+    (statusReason && VERTICAL_THIRDS_BLOCKED_MESSAGES[statusReason]) ??
+    '얼굴 세로 비율을 측정하지 못했어요. 정면에서 다시 촬영해 주세요.'
+  );
+}
+
+// 조명 보정 미적용 사유 → 사용자 안내 문구.
+// illuminationCorrection.ts 의 실제 사유 코드는 region 접두사(scleraLeft_…)와
+// 조합 코드(sclera_combined_…)를 섞어 쓰므로 정확 키가 아니라 프래그먼트로
+// 매칭한다(우선순위 순). 첫 매칭 사유만 표기.
+const CORRECTION_SKIP_RULES: Array<{fragment: string; message: string}> = [
+  {
+    fragment: 'redness',
+    message: '눈이 충혈된 상태로 보여 조명 보정을 보류했어요.',
+  },
+  {
+    fragment: 'disagree',
+    message: '좌우 눈의 조명이 달라 보정을 보류했어요(빛을 정면으로 받아 보세요).',
+  },
+  {
+    fragment: 'too_few_samples',
+    message: '눈 흰자 표본이 부족해 조명 보정을 적용하지 못했어요(더 밝은 곳 권장).',
+  },
+  {
+    fragment: 'one_eye_only',
+    message: '한쪽 눈만 보여 조명 보정을 적용하지 못했어요(양쪽 눈이 보이게 촬영해 주세요).',
+  },
+  {
+    fragment: 'extreme_cast',
+    message: '조명 색이 치우쳐 있어 보정을 보류했어요(더 자연광에 가까운 곳 권장).',
+  },
+];
+
+function getCorrectionSkipMessage(reasons: readonly string[]): string {
+  for (const rule of CORRECTION_SKIP_RULES) {
+    if (reasons.some(reason => reason.includes(rule.fragment))) {
+      return rule.message;
+    }
+  }
+  return '이번 촬영에는 조명 보정을 적용하지 못했어요(측정값은 조명 영향을 받을 수 있어요).';
+}
 
 type FaceAnalysisReportShareAction = () => void;
 type FaceAnalysisReportShareTarget = 'save-image' | 'share-report';
@@ -250,6 +312,7 @@ export function FaceAnalysisReportDetailScreen({
   capturedPhotoUri,
   headerTitle = '맞춤 분석 보고서',
   personalColor,
+  personalColorCorrection,
   reportId,
   onCreateARFilter,
   onDeleteReport,
@@ -559,22 +622,52 @@ export function FaceAnalysisReportDetailScreen({
           <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
         </ReportSection>
 
-        {verticalThirds &&
-        (verticalThirds.status === 'full_success' ||
-          verticalThirds.status === 'partial_success') ? (
-          <ReportSection title={"얼굴 세로 비율"}>
-            <PhotoStage
-              imageUri={verticalThirds.sourceImage.uri}
-              result={verticalThirds}>
-              <VerticalThirdsOverlay result={verticalThirds} />
-            </PhotoStage>
-          </ReportSection>
+        {verticalThirds ? (
+          verticalThirds.status === 'full_success' ||
+          verticalThirds.status === 'partial_success' ? (
+            <ReportSection title={"얼굴 세로 비율"}>
+              <PhotoStage
+                imageUri={verticalThirds.sourceImage.uri}
+                result={verticalThirds}>
+                <VerticalThirdsOverlay result={verticalThirds} />
+              </PhotoStage>
+            </ReportSection>
+          ) : (
+            // 조용한 실패 금지: 사후 게이트 차단(pose_gate_failed 등)이면 섹션을
+            // 숨기지 않고 사유 + 재촬영 안내를 표시한다.
+            <ReportSection title={"얼굴 세로 비율"}>
+              <Text style={styles.sectionBlockedNotice}>
+                {getVerticalThirdsBlockedMessage(verticalThirds.statusReason)}
+              </Text>
+            </ReportSection>
+          )
         ) : null}
 
-        {personalColor && personalColor.status !== 'insufficient' && personalColor.tone ? (
-          <ReportSection eyebrow="PERSONAL COLOR" title={"퍼스널 컬러 진단"}>
-            <PersonalColorTypeCard result={personalColor} />
-          </ReportSection>
+        {personalColor ? (
+          personalColor.status !== 'insufficient' && personalColor.tone ? (
+            <ReportSection eyebrow="PERSONAL COLOR" title={"퍼스널 컬러 진단"}>
+              <PersonalColorTypeCard result={personalColor} />
+              {personalColorCorrection ? (
+                <Text
+                  style={
+                    personalColorCorrection.applied
+                      ? styles.correctionAppliedBadge
+                      : styles.sectionBlockedNotice
+                  }>
+                  {personalColorCorrection.applied
+                    ? '✓ 조명 보정 적용됨 — 촬영 조명의 색 왜곡을 제거한 결과예요.'
+                    : getCorrectionSkipMessage(personalColorCorrection.reasons)}
+                </Text>
+              ) : null}
+            </ReportSection>
+          ) : (
+            <ReportSection eyebrow="PERSONAL COLOR" title={"퍼스널 컬러 진단"}>
+              <Text style={styles.sectionBlockedNotice}>
+                퍼스널 컬러를 진단하지 못했어요(조명·각도 문제일 수 있어요). 밝고 균일한
+                조명에서 다시 촬영해 주세요.
+              </Text>
+            </ReportSection>
+          )
         ) : null}
 
         {primaryMakeupRecommendation ? (
@@ -1258,6 +1351,21 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
+  },
+  // 측정 불가/보정 미적용 안내 — 섹션을 숨기는 대신 사유를 정직하게 노출.
+  sectionBlockedNotice: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+    marginTop: spacing.xs,
+  },
+  correctionAppliedBadge: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+    marginTop: spacing.xs,
   },
   pointGuideTimeline: {
     backgroundColor: REPORT_PANEL_COLOR,

@@ -24,6 +24,7 @@ const sources = [
   'engine.ts',
   'fixtureInventory.ts',
   'colorLightingGreenlight.ts',
+  'illuminationCorrection.ts',
   'personalColorRepeatability.ts',
 ];
 const tests = [
@@ -32,6 +33,7 @@ const tests = [
   'toneClassifier.test.ts',
   'engine.test.ts',
   'colorLightingGreenlight.test.ts',
+  'illuminationCorrection.test.ts',
   'personalColorRepeatability.test.ts',
 ];
 

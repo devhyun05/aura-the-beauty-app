@@ -70,6 +70,10 @@ function assertNotContains(source, needle, label) {
   assertContains(src, /=\s*AURAPCLandmarkSetFromJS\(/, `${path}: homuler 랜드마크 적재 호출(= AURAPCLandmarkSetFromJS(...))이 없다 — 얼굴 검출이 죽어 항상 no_face`);
   assertContains(src, /static AURAPCPoint AURAPCLandmark\(/, `${path}: 랜드마크 접근자(AURAPCLandmark)가 없다`);
   assertContains(src, /AURAPCLandmark\(landmarks/, `${path}: 적재된 랜드마크(landmarks)를 실제로 샘플링하는 호출이 없다`);
+  // 조명 보정(sclera) 배선 — 8164840 포팅으로 도입. 이 심볼들이 사라지면
+  // 흰자 샘플링이 죽어 illuminationCorrection 이 조용히 미적용으로 퇴화한다.
+  assertContains(src, 'kScleraLeftEyeIndices', `${path}: sclera 랜드마크 인덱스가 없다 — 조명 보정 입력이 사라짐`);
+  assertContains(src, 'scleraLeft', `${path}: sclera 영역(regions.scleraLeft) 방출이 없다`);
   assertNotContains(src, 'MEDIAPIPE_UNAVAILABLE', `${path}: 020cb33 스텁 마커(MEDIAPIPE_UNAVAILABLE)가 재유입됐다 — 분석기가 무조건 reject 하는 껍데기일 수 있음`);
 }
 
@@ -105,9 +109,29 @@ function assertNotContains(source, needle, label) {
   assertContains(src, /from\s+['"`]\.\/personalColorAnalyzerNative['"`]/, `${path}: 네이티브 분석기 import 가 없다`);
   assertContains(src, /analyzePersonalColorPhoto\(/, `${path}: 네이티브 분석기 호출부가 없다`);
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다`);
+  // 조명 보정(A/B) 배선 — 8164840 포팅. import 를 남긴 채 호출만 지우는 퇴화도 잡는다.
+  assertContains(src, /from\s+['"`]\.\/personalColorCore\/illuminationCorrection['"`]/, `${path}: 조명 보정 import 가 없다`);
+  assertContains(src, /deriveIlluminationCorrection\(/, `${path}: 조명 보정 호출부가 없다 — 보정이 조용히 죽음`);
 }
 
-// ── 5. Xcode Compile Sources 멤버십 (빌드 불변식) ──────────────────────
+// ── 5. 보고서 연결 배선 (TS) ───────────────────────────────────────────
+// 보정 결과가 보고서로 흐르는 경로: cameraMetadata pass-through + 보고 메인(reported).
+{
+  const path = 'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx';
+  const src = readSource(path);
+  assertContains(src, /cameraMetadata:\s*selectedFaceCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
+  assertContains(src, /outcome\.reported/, `${path}: 보고 메인 결과(outcome.reported) 배선이 없다 — 화면·저장 정합`);
+}
+
+// ── 6. 화면·저장 정합: 서비스가 reported(보정 우선)를 저장하는가 (F13) ──
+{
+  const path = 'apps/mobile/src/features/personal-color/services/personalColorService.ts';
+  const src = readSource(path);
+  assertContains(src, /const reported =/, `${path}: reported(보고 메인) 확정 배선이 없다`);
+  assertContains(src, /writeResultJson\(input\.sessionId,\s*reported\b/, `${path}: 저장이 reported 가 아니다 — 화면 corrected/저장 baseline 불일치(F13)`);
+}
+
+// ── 7. Xcode Compile Sources 멤버십 (빌드 불변식) ──────────────────────
 // 분석기 .m 이 소스 내용상 온전해도 PBXSourcesBuildPhase(Compile Sources)에서
 // 빠지면 컴파일·링크가 안 돼 RN 네이티브 모듈이 런타임에 존재하지 않는다 — 소스만
 // 보는 심볼 검사로는 못 잡던 회귀(코덱스 #244). pbxproj 의 '/* ... */' 는 주석이
