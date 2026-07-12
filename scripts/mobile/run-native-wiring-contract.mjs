@@ -53,6 +53,10 @@ function assertNotContains(source, needle, label) {
   assertContains(src, /RCT_EXPORT_METHOD\(analyze:/, `${path}: analyze 메서드 export 가 없다`);
   assertContains(src, 'AURAPCLandmarkSetFromJS', `${path}: homuler 랜드마크 적재(AURAPCLandmarkSetFromJS)가 없다`);
   assertContains(src, /static AURAPCPoint AURAPCLandmark\(/, `${path}: 랜드마크 접근자(AURAPCLandmark)가 없다`);
+  // 조명 보정(sclera) 배선 — 8164840 포팅으로 도입. 이 심볼들이 사라지면
+  // 흰자 샘플링이 죽어 illuminationCorrection 이 조용히 미적용으로 퇴화한다.
+  assertContains(src, 'kScleraLeftEyeIndices', `${path}: sclera 랜드마크 인덱스가 없다 — 조명 보정 입력이 사라짐`);
+  assertContains(src, 'scleraLeft', `${path}: sclera 영역(regions.scleraLeft) 방출이 없다`);
   assertNotContains(src, 'MEDIAPIPE_UNAVAILABLE', `${path}: 020cb33 스텁 마커(MEDIAPIPE_UNAVAILABLE)가 재유입됐다 — 분석기가 무조건 reject 하는 껍데기일 수 있음`);
 }
 
@@ -86,6 +90,18 @@ function assertNotContains(source, needle, label) {
   assertContains(src, "from './personalColorAnalyzerNative'", `${path}: 네이티브 분석기 import 가 없다`);
   assertContains(src, /analyzePersonalColorPhoto\(/, `${path}: 네이티브 분석기 호출부가 없다`);
   assertContains(src, /requestFaceLandmarks\(/, `${path}: homuler 랜드마크 요청 호출부가 없다`);
+  // 조명 보정(A/B) 배선 — 8164840 포팅. import 를 남긴 채 호출만 지우는 퇴화도 잡는다.
+  assertContains(src, "from './personalColorCore/illuminationCorrection'", `${path}: 조명 보정 import 가 없다`);
+  assertContains(src, /deriveIlluminationCorrection\(/, `${path}: 조명 보정 호출부가 없다 — 보정이 조용히 죽음`);
+}
+
+// ── 5. 보고서 연결 배선 (TS) ───────────────────────────────────────────
+// 보정 결과가 보고서로 흐르는 경로: cameraMetadata pass-through + corrected 우선 표시.
+{
+  const path = 'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx';
+  const src = readSource(path);
+  assertContains(src, /cameraMetadata:\s*selectedFaceCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
+  assertContains(src, /outcome\.corrected\?\.result \?\? outcome\.result/, `${path}: 보정 우선 표시 배선이 없다`);
 }
 
 if (failures > 0) {

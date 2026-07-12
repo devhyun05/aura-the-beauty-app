@@ -6,13 +6,23 @@ import type { PersonalColorLandmarkInput } from './personalColorAnalyzerNative';
 import { requestFaceLandmarks } from '../../ar/services/unityMakeupBridge';
 import { saveSourceImage, writeResultJson } from './personalColorArtifacts';
 import { analyzePersonalColor } from './personalColorCore/engine';
+import { deriveIlluminationCorrection } from './personalColorCore/illuminationCorrection';
 import { evaluatePersonalColorQuality } from './personalColorQualityGate';
 import { createPersonalColorLogger } from './personalColorLogger';
 import type { AuraPersonalColorResult } from './personalColorCore/contracts';
+import type { IlluminationCorrectionReport } from './personalColorCore/illuminationCorrection';
 import type { PersonalColorCaptureInput } from '../types';
 
 export type PersonalColorAnalysisOutcome = {
   result: AuraPersonalColorResult;
+  // 조명 보정 실험(A/B): 흰자/WB 기반 캐스트 보정을 같은 캡처에 적용한 결과.
+  // baseline(result)은 불변 — 효과가 실측으로 입증되기 전까지 참고용으로만 병기.
+  corrected: {
+    result: AuraPersonalColorResult;
+    report: IlluminationCorrectionReport;
+  } | null;
+  // 미적용이어도 사유·실측 흰자 확인이 가능하도록 리포트는 항상 노출(현장 진단용)
+  correctionReport: IlluminationCorrectionReport;
   artifacts: {
     sourceUri: string | null;
     resultJsonUri: string | null;
@@ -81,11 +91,12 @@ export async function analyzePersonalColorCapture(
     logger.log('quality:gate', { usable: gate.usable, warnings: gate.warnings });
   }
 
-  const result = analyzePersonalColor(native, {
+  const engineOptions = {
     frameCount: input.frameCount,
     calibrationApplied: input.calibrationApplied,
     calibrationVersion: input.calibrationVersion,
-  });
+  };
+  const result = analyzePersonalColor(native, engineOptions);
 
   // 게이트 경고를 결과 경고에 병합(중복 제외)
   for (const w of gate.warnings) {
@@ -95,6 +106,48 @@ export async function analyzePersonalColorCapture(
   }
 
   assertLocalOnly(result);
+
+  // ---- 조명 보정 실험 (A/B) — baseline은 위에서 확정, 여기서는 병기용 계산만 ----
+  const { correctedNative, report: correctionReport } = deriveIlluminationCorrection(native, {
+    whiteBalanceGains: input.cameraMetadata?.whiteBalanceGains ?? null,
+  });
+  let corrected: PersonalColorAnalysisOutcome['corrected'] = null;
+  if (correctedNative && correctionReport.applied) {
+    const correctedResult = analyzePersonalColor(correctedNative, engineOptions);
+    assertLocalOnly(correctedResult);
+    corrected = { result: correctedResult, report: correctionReport };
+  }
+  logger.log('illumination:correction', {
+    applied: correctionReport.applied,
+    source: correctionReport.source,
+    gains: correctionReport.gains,
+    strength: correctionReport.strength,
+    capped: correctionReport.capped,
+    confidence: correctionReport.confidence,
+    scleraEyes: correctionReport.sclera.eyesUsed,
+    scleraSamples: correctionReport.sclera.sampleCount,
+    scleraAgreement: correctionReport.sclera.leftRightAgreement,
+    // 편향 진단·scleraReferenceRgb 재보정용 실측 흰자 (기준 ≈ Lab a*+1.5 b*+6)
+    scleraMeasuredRgb: correctionReport.sclera.measuredRgb,
+    scleraMeasuredLab: correctionReport.sclera.measuredLab,
+    wbRg: correctionReport.wb.rg,
+    wbBg: correctionReport.wb.bg,
+    reasons: [
+      ...correctionReport.reasons,
+      ...correctionReport.sclera.reasons,
+      ...correctionReport.wb.reasons,
+    ],
+    correctedTop: corrected?.result.tone?.top ?? null,
+    correctedAxes: corrected
+      ? {
+          temperature: corrected.result.axes.temperature.value,
+          value: corrected.result.axes.value.value,
+          chroma: corrected.result.axes.chroma.value,
+          clarity: corrected.result.axes.clarity.value,
+          contrast: corrected.result.axes.contrast.value,
+        }
+      : null,
+  });
 
   let resultJsonUri: string | null = null;
   try {
@@ -109,10 +162,28 @@ export async function analyzePersonalColorCapture(
     top: result.tone?.top ?? null,
     secondary: result.tone?.secondary ?? null,
     isMixed: result.tone?.isMixed ?? false,
+    // 오분류 진단용: 분류를 좌우하는 5축 실측값을 그대로 남긴다.
+    axes: {
+      temperature: result.axes.temperature.value,
+      value: result.axes.value.value,
+      chroma: result.axes.chroma.value,
+      clarity: result.axes.clarity.value,
+      contrast: result.axes.contrast.value,
+    },
+    // 축 기준(ref/scale) 재보정용 raw: 부위 간 명도차·색차, 부위 Lab.
+    relations: result.relations,
+    regionLab: Object.fromEntries(
+      result.regions.map(r => [
+        r.region,
+        { L: r.lab.L, a: r.lab.a, b: r.lab.b, C: r.lch.C },
+      ]),
+    ),
   });
 
   return {
     result,
+    corrected,
+    correctionReport,
     artifacts: { sourceUri, resultJsonUri, logUri: logger.logFileUri },
   };
 }

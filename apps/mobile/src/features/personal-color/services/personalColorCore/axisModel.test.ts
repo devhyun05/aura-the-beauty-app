@@ -79,13 +79,75 @@ export function runAxisModelTests() {
     'temperature in range',
   );
 
-  // dropped-region (hair 없음) 시 contrast는 skin-lip으로 계산 (null 아님)
+  // hair 없으면 contrast는 null (lip 단독은 시즌을 뒤집어 신뢰 불가 → 분류에서 드롭)
   const noHair: RegionSignals = {
     skin: signal('skin', { L: 70, a: 10, b: 12 }, 0.85),
     lip: signal('lip', { L: 46, a: 38, b: 9 }, 0.85),
   };
   const noHairAxes = computeAxes(noHair).axes;
-  expectTrue(noHairAxes.contrast.value != null, 'contrast present without hair');
+  expectNull(noHairAxes.contrast.value, 'contrast null without hair');
+  // 그래도 나머지 축(temperature/value/chroma/clarity)은 계산됨
+  expectTrue(noHairAxes.temperature.value != null, 'temperature present without hair');
+  expectTrue(noHairAxes.clarity.value != null, 'clarity present without hair (skin+lip chroma)');
+
+  // 저신뢰 lip이 대비축 전체를 veto하지 못한다(필수 pair skin·hair 신뢰만 반영)
+  const weakLip: RegionSignals = {
+    skin: signal('skin', { L: 66, a: 11, b: 14 }, 0.85),
+    hair: signal('hair', { L: 16, a: 2, b: -1 }, 0.85),
+    lip: signal('lip', { L: 48, a: 40, b: 12 }, 0.05),
+  };
+  const weakLipAxes = computeAxes(weakLip).axes;
+  expectTrue(weakLipAxes.contrast.value != null, 'contrast survives weak lip (no veto)');
+
+  // --- 회귀: 대비/맑기 pinning 방지 (검은 머리라고 모두가 +1로 박히면 안 됨) ---
+  // 저대비 얼굴: 피부-머리 명도차 작음(갈색 머리) + 뮤트 입술.
+  const lowContrast = computeAxes({
+    skin: signal('skin', { L: 58, a: 12, b: 15 }, 0.85),
+    hair: signal('hair', { L: 42, a: 5, b: 8 }, 0.85),
+    lip: signal('lip', { L: 50, a: 20, b: 12 }, 0.85),
+  }).axes;
+  // 고대비 얼굴: 밝은 피부 + 검은 머리 + 선명 입술.
+  const highContrast = computeAxes({
+    skin: signal('skin', { L: 70, a: 10, b: 14 }, 0.85),
+    hair: signal('hair', { L: 12, a: 1, b: -2 }, 0.85),
+    lip: signal('lip', { L: 46, a: 45, b: 18 }, 0.85),
+  }).axes;
+  expectTrue(
+    lowContrast.contrast.value != null && highContrast.contrast.value != null,
+    'contrast present both faces',
+  );
+  expectTrue(
+    (highContrast.contrast.value as number) > (lowContrast.contrast.value as number) + 0.2,
+    'contrast separates high vs low face',
+  );
+  expectTrue(
+    (lowContrast.contrast.value as number) < 0.95,
+    'low-contrast face contrast NOT pinned at +1 (un-pinning)',
+  );
+
+  // 맑기: 채도 선명함에 따라 갈라지고, 뮤트 얼굴이 클리어로 박히지 않음.
+  const mutedFace = computeAxes({
+    skin: signal('skin', { L: 62, a: 10, b: 13 }, 0.85),
+    hair: signal('hair', { L: 20, a: 2, b: 0 }, 0.85),
+    lip: signal('lip', { L: 52, a: 14, b: 10 }, 0.85),
+  }).axes;
+  const vividFace = computeAxes({
+    skin: signal('skin', { L: 62, a: 16, b: 20 }, 0.85),
+    hair: signal('hair', { L: 20, a: 2, b: 0 }, 0.85),
+    lip: signal('lip', { L: 46, a: 50, b: 22 }, 0.85),
+  }).axes;
+  expectTrue(
+    mutedFace.clarity.value != null && vividFace.clarity.value != null,
+    'clarity present both faces',
+  );
+  expectTrue(
+    (vividFace.clarity.value as number) > (mutedFace.clarity.value as number) + 0.15,
+    'clarity separates vivid vs muted face',
+  );
+  expectTrue(
+    (mutedFace.clarity.value as number) < 0.95,
+    'muted face clarity NOT pinned high (un-pinning)',
+  );
 
   console.log('[personal-color] axisModel tests passed');
 }

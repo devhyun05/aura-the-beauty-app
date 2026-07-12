@@ -45,18 +45,27 @@ export const AXIS_WEIGHTS = {
   chroma: { skin: 0.45, hair: 0.0, lip: 0.55 },
 } as const;
 
-// Contrast 관계식 스케일
+// Contrast — pair별 물리 기준으로 센터링(prior). 한국인 검은 머리 + 밝은 피부를
+// "보통 대비 ≈ 0"에 두어, 이전 모델이 검은 머리 명도차(~45 > vcScale 35) 때문에
+// 모두를 고대비(+1)로 클램프하던 구조적 pinning을 해소한다.
+// 전부 calibration target — raw ΔL*·ΔE00 로그 수집 후 재보정.
 export const CONTRAST = {
-  vcWeightSkinHair: 0.7,
-  vcWeightSkinLip: 0.3,
-  ccWeightSkinHair: 0.6,
-  ccWeightSkinLip: 0.4,
-  vcScale: 35, // L* 단위
-  ccScale: 30, // ΔE00 단위
-  scoreWeightVc: 0.65,
-  scoreWeightCc: 0.35,
-  centerScore: 0.5,
-  scale: 0.35,
+  // skin↔hair: 검은 머리라 명도·색차가 크다(인구 중앙 추정).
+  lRefSkinHair: 50, // |ΔL*| — 피부 L*≈63, 검은 머리 L*≈12 → ΔL≈51 근방을 0으로.
+  lScaleSkinHair: 16,
+  eRefSkinHair: 48, // ΔE00 (skin↔black hair는 ΔL 지배라 ΔE00≈ΔL)
+  eScaleSkinHair: 16,
+  // skin↔lip: 작다.
+  lRefSkinLip: 14,
+  lScaleSkinLip: 10,
+  eRefSkinLip: 20,
+  eScaleSkinLip: 12,
+  // pair 결합 가중 (hair 없으면 lip pair만으로 재정규화).
+  pairWeightSkinHair: 0.7,
+  pairWeightSkinLip: 0.3,
+  // 명도대비 vs 색대비 결합.
+  weightLum: 0.6,
+  weightColor: 0.4,
 } as const;
 
 // 12톤 프로토타입 좌표 [Temp, Value, Chroma, Clarity, Contrast]
@@ -101,13 +110,17 @@ export const TYPE_TO_SEASON: Record<PersonalColor12Type, PersonalColorSeason> = 
 
 export const ALL_12_TYPES = Object.keys(PROTOTYPES) as PersonalColor12Type[];
 
-// 축별 신뢰도 가중치 (chroma가 AWB-lock 후 최저 신뢰)
+// 축별 분류 신뢰도 가중치. contrast·clarity를 down-weight한다:
+// - 검은 머리 인구에서 contrast(피부↔머리 명도차)는 사실상 skin 밝기=value와 collinear(r≈−0.78)라
+//   value를 이중 계산 + 조명 의존. 약한 tie-breaker로만 사용.
+// - clarity는 chroma와 거의 collinear(corr≈0.93)라 독립 정보 적음.
+// (적대 검증 수렴 처방. 실측 raw 로그로 재보정 대상.)
 export const AXIS_RELIABILITY: Record<AxisName, number> = {
   temperature: 1.0,
   value: 1.0,
   chroma: 0.6,
-  clarity: 0.8,
-  contrast: 0.9,
+  clarity: 0.4,
+  contrast: 0.45,
 };
 
 // softmax + 앵커 임계값 (확률공간, 스케일 안정) — calibration target
