@@ -22,7 +22,7 @@ import {
   formatConsultingPrice,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import type {ConsultingExpert, ConsultingRecord, ConsultingSessionMode} from '../types';
 
 type ConsultingDuration = ConsultingExpert['durations'][number];
@@ -235,8 +235,16 @@ export function ConsultingExpertProfileScreen({
 }
 
 function getActiveRecordProfileText(status: ConsultingRecord['status']): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요. 톡에서 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 일정이 확정됐어요. 톡에서 화상 상담 버튼을 확인할 수 있어요.';
+  }
+
   if (status === 'confirmed') {
-    return '예약이 확정됐어요. 톡에서 상담 안내와 통화 버튼을 확인할 수 있어요.';
+    return '예약이 확정됐어요. 톡에서 상담 안내와 화상 상담 버튼을 확인할 수 있어요.';
   }
 
   if (status === 'contacting') {

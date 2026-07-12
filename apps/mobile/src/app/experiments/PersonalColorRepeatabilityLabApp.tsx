@@ -50,6 +50,7 @@ function createLabCaptureResult(imageInput: FaceCaptureImageInput): FaceCaptureU
     objectKey: imageInput.uri,
     photoCaptureId: id,
     semanticMattes: imageInput.semanticMattes,
+    cameraMetadata: imageInput.cameraMetadata,
     source: imageInput.source,
   };
 }
@@ -58,6 +59,8 @@ function RepeatabilityLabContent() {
   const [consented, setConsented] = useState<boolean | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [results, setResults] = useState<AuraPersonalColorResult[]>([]);
+  // 조명 보정 실험(A/B): 캡처별 보정 결과(미적용이면 null) 병행 수집
+  const [correctedResults, setCorrectedResults] = useState<(AuraPersonalColorResult | null)[]>([]);
   const [phase, setPhase] = useState<Phase>('capturing');
 
   useEffect(() => {
@@ -78,9 +81,11 @@ function RepeatabilityLabContent() {
       createdAt: new Date().toISOString(),
       sessionId: result.photoCaptureId,
       imageUri: result.imageUri,
+      cameraMetadata: result.cameraMetadata ?? undefined,
       frameCount: 1,
     })
       .then(outcome => {
+        setCorrectedResults(prev => [...prev, outcome.corrected?.result ?? null]);
         setResults(prev => {
           const next = [...prev, outcome.result];
           setPhase(next.length >= TARGET_N ? 'report' : 'capturing');
@@ -111,16 +116,44 @@ function RepeatabilityLabContent() {
 
   if (phase === 'report') {
     const report = computeRepeatability(results.map(toRepeatabilitySample));
+    // 조명 보정 A/B — 부분집합 편향 방지: 전 캡처에 보정이 적용됐을 때만 비교 리포트를
+    // 만든다(일부만 적용되면 "보정이 어려운 캡처가 걸러진" 유리한 비교가 되므로).
+    const correctedAvailable = correctedResults.filter(
+      (r): r is AuraPersonalColorResult => r != null,
+    );
+    const allCorrected =
+      correctedAvailable.length === results.length && correctedAvailable.length >= 2;
+    const correctedReport = allCorrected
+      ? computeRepeatability(correctedAvailable.map(toRepeatabilitySample))
+      : null;
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll}>
           <Text style={styles.title}>재현성 리포트</Text>
           <Text style={styles.subtitle}>같은 얼굴 {results.length}회 촬영의 흔들림</Text>
           <PersonalColorRepeatabilityReportCard report={report} />
+          {correctedReport && (
+            <>
+              <Text style={styles.subtitle}>
+                조명 보정 실험(A/B) — 전 촬영 보정 적용 · 아래는 보정판 재현성
+              </Text>
+              <PersonalColorRepeatabilityReportCard
+                report={correctedReport}
+                footnote="실험: 흰자 기반 조명 보정 결과의 재현성. 위 기본 리포트가 기준입니다."
+              />
+            </>
+          )}
+          {!correctedReport && correctedAvailable.length > 0 && (
+            <Text style={styles.subtitle}>
+              조명 보정 {correctedAvailable.length}/{results.length}회만 적용 — 편향 없는 비교가
+              불가해 보정판 리포트를 생략합니다.
+            </Text>
+          )}
           <Pressable
             style={styles.primaryBtn}
             onPress={() => {
               setResults([]);
+              setCorrectedResults([]);
               setPhase('capturing');
             }}>
             <Text style={styles.primaryBtnText}>다시 시작</Text>

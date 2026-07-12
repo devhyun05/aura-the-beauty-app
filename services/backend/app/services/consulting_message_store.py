@@ -81,9 +81,11 @@ async def list_consulting_messages(
   db: Database,
   *,
   booking_id: str,
+  booking_ids: list[str] | None = None,
   limit: int = DEFAULT_CONSULTING_MESSAGE_HISTORY_LIMIT,
 ) -> list[dict[str, Any]]:
   bounded_limit = min(max(limit, 1), 100)
+  conversation_booking_ids = booking_ids or [booking_id]
   rows = await db.fetch(
     """
     select
@@ -109,7 +111,7 @@ async def list_consulting_messages(
     from consulting_messages m
     left join consulting_message_media cmm on cmm.message_id = m.id
     left join media_assets media on media.id = cmm.media_id and media.deleted_at is null
-    where m.booking_id::text = $1
+    where m.booking_id::text = any($1::text[])
       and m.deleted_at is null
     group by
       m.id,
@@ -122,11 +124,42 @@ async def list_consulting_messages(
     order by m.created_at desc, m.id desc
     limit $2
     """,
-    booking_id,
+    conversation_booking_ids,
     bounded_limit,
   )
 
   return [message_row_to_event(row) for row in reversed(rows)]
+
+
+async def list_consulting_conversation_messages(
+  db: Database,
+  *,
+  booking_id: str,
+  limit: int = DEFAULT_CONSULTING_MESSAGE_HISTORY_LIMIT,
+) -> list[dict[str, Any]]:
+  booking = await db.fetchrow(
+    "select coalesce(conversation_id, id) as conversation_id from consulting_bookings where id::text = $1",
+    booking_id,
+  )
+  if booking is None:
+    return await list_consulting_messages(db, booking_id=booking_id, limit=limit)
+
+  rows = await db.fetch(
+    """
+    select id::text as id
+    from consulting_bookings
+    where coalesce(conversation_id, id) = $1
+    order by created_at desc
+    """,
+    booking["conversation_id"],
+  )
+  booking_ids = [str(row["id"]) for row in rows] or [booking_id]
+  return await list_consulting_messages(
+    db,
+    booking_id=booking_id,
+    booking_ids=booking_ids,
+    limit=limit,
+  )
 
 
 async def get_consulting_message(db: Database, message_id: str) -> dict[str, Any] | None:

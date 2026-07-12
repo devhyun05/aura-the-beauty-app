@@ -1,8 +1,12 @@
 from fastapi.testclient import TestClient
 
+from app.api import consulting as consulting_api
+from app.api import consulting_partner as consulting_partner_api
+from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.db.session import require_database
 from app.main import create_app
+from app.services import consulting_call as consulting_call_service
 
 
 EXPECTED_ROUTES = {
@@ -79,7 +83,18 @@ EXPECTED_ROUTES = {
   ("GET", "/api/consulting/partner/dashboard"),
   ("GET", "/api/consulting/partner/bookings"),
   ("GET", "/api/consulting/partner/bookings/{booking_id}"),
+  ("PATCH", "/api/consulting/partner/bookings/{booking_id}"),
   ("PATCH", "/api/consulting/partner/bookings/{booking_id}/status"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/status"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/payment"),
+  ("GET", "/api/consulting/partner/settings"),
+  ("PATCH", "/api/consulting/partner/settings"),
+  ("GET", "/api/consulting/partner/bookings/{booking_id}/call"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/call/join"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/call/end"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/call/transcription/start"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/call/transcription/stop"),
+  ("POST", "/api/consulting/partner/bookings/{booking_id}/call/captions/translate"),
   ("GET", "/api/consulting/partner/customers"),
   ("GET", "/api/consulting/partner/customers/{customer_id}"),
   ("GET", "/api/consulting/partner/chat/threads"),
@@ -93,6 +108,11 @@ EXPECTED_ROUTES = {
   ("GET", "/api/consulting/partner/shared-reports"),
   ("GET", "/api/consulting/partner/reports/{report_id}"),
   ("GET", "/api/consulting/local-places"),
+  ("GET", "/api/consulting/bookings/{booking_id}/call"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/join"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/end"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/transcription/start"),
+  ("POST", "/api/consulting/bookings/{booking_id}/call/captions/translate"),
   ("PATCH", "/api/consulting/bookings/{booking_id}"),
   ("DELETE", "/api/consulting/bookings/{booking_id}"),
 }
@@ -202,3 +222,160 @@ def test_ar_filters_returns_recommended_makeup_card_contract() -> None:
   assert "imageUrl" not in filter_card
   assert "sourceImageId" not in filter_card
   assert filter_card["filterPayload"]["kind"] == "recommendedMakeupFilter"
+
+
+def test_partner_caption_translate_broadcasts_mobile_caption_event(monkeypatch) -> None:
+  broadcasts: list[tuple[str, dict]] = []
+
+  async def fake_partner_account():
+    return {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"}
+
+  async def fake_translate_partner_caption(_db, _account, booking_id, **kwargs):
+    assert booking_id == "booking-1"
+    assert kwargs["result_id"] == "caption-1"
+    assert kwargs["source_language_code"] == "ko-KR"
+    assert kwargs["content"] == "안녕하세요"
+    return {
+      "result_id": "caption-1",
+      "source_language_code": "ko-KR",
+      "target_language_code": "en",
+      "translated_content": "hello",
+    }
+
+  class FakeRealtimeManager:
+    async def broadcast(self, booking_id: str, payload: dict) -> None:
+      broadcasts.append((booking_id, payload))
+
+  monkeypatch.setattr(consulting_call_service, "translate_partner_caption", fake_translate_partner_caption)
+  monkeypatch.setattr(consulting_partner_api, "consulting_realtime_manager", FakeRealtimeManager())
+
+  app = create_app(Settings())
+  app.dependency_overrides[require_database] = lambda: object()
+  app.dependency_overrides[consulting_partner_api.get_partner_account] = fake_partner_account
+  client = TestClient(app)
+
+  response = client.post(
+    "/api/consulting/partner/bookings/booking-1/call/captions/translate",
+    json={
+      "resultId": "caption-1",
+      "sourceLanguageCode": "ko-KR",
+      "content": "안녕하세요",
+    },
+  )
+
+  assert response.status_code == 200
+  assert response.json()["data"] == {
+    "resultId": "caption-1",
+    "sourceLanguageCode": "ko-KR",
+    "targetLanguageCode": "en",
+    "translatedContent": "hello",
+  }
+  assert broadcasts == [
+    (
+      "booking-1",
+      {
+        "type": "caption.translation",
+        "bookingId": "booking-1",
+        "resultId": "caption-1",
+        "sourceLanguageCode": "ko-KR",
+        "targetLanguageCode": "en",
+        "translatedContent": "hello",
+      },
+    ),
+  ]
+
+
+def _fake_join_response(booking_id: str) -> dict:
+  return {
+    "call_session_id": "call-1",
+    "booking_id": booking_id,
+    "participant_type": "user",
+    "participant_language_code": "ko-KR",
+    "supported_language_codes": ["en-US", "ko-KR"],
+    "participant": {"id": "user-1", "type": "customer", "language_code": "ko-KR"},
+    "meeting": {"MeetingId": "meeting-1", "MediaRegion": "ap-northeast-2"},
+    "attendee": {"AttendeeId": "attendee-1", "ExternalUserId": "customer:booking-1", "JoinToken": "secret-token"},
+    "transcription_status": "stopped",
+    "transcription_mode": "fixed",
+    "transcription": {
+      "enabled": True,
+      "translation_enabled": True,
+      "status": "stopped",
+      "mode": "fixed",
+      "language_code": None,
+      "customer_language_code": "ko-KR",
+      "expert_language_code": "ko-KR",
+    },
+  }
+
+
+def test_customer_call_join_response_is_not_cacheable(monkeypatch) -> None:
+  async def fake_current_user():
+    return AuthContext(
+      subject="user-1",
+      provider="dev",
+      email=None,
+      name=None,
+      claims={},
+    )
+
+  async def fake_ensure_user(_db, auth):
+    return {"id": auth.subject}
+
+  async def fake_join_customer_call(_db, user_id, booking_id, language_code, _settings):
+    assert user_id == "user-1"
+    assert booking_id == "booking-1"
+    assert language_code == "ko-KR"
+    return _fake_join_response(booking_id)
+
+  monkeypatch.setattr(consulting_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(consulting_call_service, "join_customer_call", fake_join_customer_call)
+
+  app = create_app(Settings(auth_required=False))
+  app.dependency_overrides[require_database] = lambda: object()
+  app.dependency_overrides[consulting_api.get_current_user] = fake_current_user
+  client = TestClient(app)
+
+  response = client.post(
+    "/api/consulting/bookings/booking-1/call/join",
+    json={"languageCode": "ko-KR"},
+  )
+
+  assert response.status_code == 200
+  assert response.headers["Cache-Control"] == "no-store"
+  assert response.headers["Pragma"] == "no-cache"
+  assert response.json()["data"]["call"]["attendee"]["JoinToken"] == "secret-token"
+
+
+def test_partner_call_join_response_is_not_cacheable(monkeypatch) -> None:
+  async def fake_partner_account():
+    return {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"}
+
+  async def fake_join_partner_call(_db, account, booking_id, language_code, _settings):
+    assert account["id"] == "partner-1"
+    assert booking_id == "booking-1"
+    assert language_code == "en-US"
+    return {
+      **_fake_join_response(booking_id),
+      "participant_type": "expert",
+      "participant_language_code": "en-US",
+      "participant": {"id": "partner-1", "type": "partner", "language_code": "en-US"},
+      "attendee": {"AttendeeId": "attendee-2", "ExternalUserId": "partner:booking-1", "JoinToken": "partner-token"},
+    }
+
+  monkeypatch.setattr(consulting_call_service, "join_partner_call", fake_join_partner_call)
+
+  app = create_app(Settings())
+  app.dependency_overrides[require_database] = lambda: object()
+  app.dependency_overrides[consulting_partner_api.get_partner_account] = fake_partner_account
+  client = TestClient(app)
+
+  response = client.post(
+    "/api/consulting/partner/bookings/booking-1/call/join",
+    json={"languageCode": "en-US"},
+  )
+
+  assert response.status_code == 200
+  assert response.headers["Cache-Control"] == "no-store"
+  assert response.headers["Pragma"] == "no-cache"
+  assert response.json()["data"]["call"]["attendee"]["JoinToken"] == "partner-token"

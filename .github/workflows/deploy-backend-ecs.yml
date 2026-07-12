@@ -24,6 +24,10 @@ env:
   ECS_CONTAINER_NAME: ${{ vars.ECS_CONTAINER_NAME || 'aura-backend-api' }}
   ECS_SERVICE: ${{ vars.ECS_SERVICE }}
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
+  CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
+  CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
+  CONSULTING_CALL_TRANSCRIPTION_ENABLED: ${{ vars.CONSULTING_CALL_TRANSCRIPTION_ENABLED || 'false' }}
+  CONSULTING_CALL_TRANSLATION_ENABLED: ${{ vars.CONSULTING_CALL_TRANSLATION_ENABLED || 'false' }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
@@ -150,6 +154,11 @@ jobs:
           task-definition: task-definition.json
           container-name: ${{ env.ECS_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            CHIME_ENABLED=${{ env.CHIME_ENABLED }}
+            CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
+            CONSULTING_CALL_TRANSCRIPTION_ENABLED=${{ env.CONSULTING_CALL_TRANSCRIPTION_ENABLED }}
+            CONSULTING_CALL_TRANSLATION_ENABLED=${{ env.CONSULTING_CALL_TRANSLATION_ENABLED }}
 
       - name: Deploy ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2

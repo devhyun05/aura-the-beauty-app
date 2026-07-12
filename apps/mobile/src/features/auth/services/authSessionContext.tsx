@@ -11,6 +11,7 @@
 import * as SecureStore from '../../../shared/services/localSecureStore';
 
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
+import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
 
 export const AUTH_SESSION_PROVIDER_ERROR =
@@ -69,12 +70,12 @@ function isJwtUsable(token: string | undefined): token is string {
 }
 
 function getUsableTokenFromSession(session: AuthSession | null): string | null {
-  if (isJwtUsable(session?.accessToken)) {
-    return session.accessToken;
-  }
-
   if (isJwtUsable(session?.idToken)) {
     return session.idToken;
+  }
+
+  if (isJwtUsable(session?.accessToken)) {
+    return session.accessToken;
   }
 
   return null;
@@ -95,8 +96,7 @@ function parseStoredSession(value: string | null): AuthSession | null {
     if (
       !parsed.accessToken ||
       !parsed.provider ||
-      !parsed.user?.id ||
-      !getUsableTokenFromSession(parsed)
+      !parsed.user?.id
     ) {
       return null;
     }
@@ -131,12 +131,42 @@ export function AuthSessionProvider({
   const [session, setSessionState] = useState<AuthSession | null>(initialUsableSession);
   const [isRestoringSession, setIsRestoringSession] = useState(initialSession === null);
   const sessionRef = useRef<AuthSession | null>(session);
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
 
   const setSession = useCallback(async (nextSession: AuthSession | null) => {
     sessionRef.current = nextSession;
     setSessionState(nextSession);
     await saveSessionToSecureStore(nextSession);
   }, []);
+
+  const refreshSessionIfNeeded = useCallback(async () => {
+    const currentSession = sessionRef.current;
+
+    if (!currentSession || getUsableTokenFromSession(currentSession)) {
+      return true;
+    }
+
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+
+    const refreshPromise = (async () => {
+      const refreshedSession = await refreshAuthSession(currentSession);
+
+      if (!refreshedSession || !getUsableTokenFromSession(refreshedSession)) {
+        await setSession(null);
+        return false;
+      }
+
+      await setSession(refreshedSession);
+      return true;
+    })().finally(() => {
+      refreshInFlightRef.current = null;
+    });
+
+    refreshInFlightRef.current = refreshPromise;
+    return refreshPromise;
+  }, [setSession]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -155,17 +185,24 @@ export function AuthSessionProvider({
       try {
         const storedValue = await SecureStore.getItemAsync(AUTH_SESSION_STORAGE_KEY);
         const storedSession = parseStoredSession(storedValue);
+        const restoredSession =
+          storedSession && !getUsableTokenFromSession(storedSession)
+            ? await refreshAuthSession(storedSession)
+            : storedSession;
 
         if (!isMounted) {
           return;
         }
 
-        if (storedValue && !storedSession) {
+        if (storedValue && !restoredSession) {
           await SecureStore.deleteItemAsync(AUTH_SESSION_STORAGE_KEY);
         }
 
-        sessionRef.current = storedSession;
-        setSessionState(storedSession);
+        sessionRef.current = restoredSession;
+        setSessionState(restoredSession);
+        if (restoredSession) {
+          await saveSessionToSecureStore(restoredSession);
+        }
       } finally {
         if (isMounted) {
           setIsRestoringSession(false);
@@ -186,6 +223,20 @@ export function AuthSessionProvider({
       isMounted = false;
     };
   }, [initialUsableSession]);
+
+  useEffect(() => {
+    if (!session) {
+      return undefined;
+    }
+
+    const refreshTimer = setInterval(() => {
+      void refreshSessionIfNeeded();
+    }, 30000);
+
+    void refreshSessionIfNeeded();
+
+    return () => clearInterval(refreshTimer);
+  }, [refreshSessionIfNeeded, session]);
 
   const clearSession = useCallback(async () => {
     await setSession(null);

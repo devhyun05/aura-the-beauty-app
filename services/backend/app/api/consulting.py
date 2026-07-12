@@ -1,7 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
+from app.core.errors import AppError
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user, require_consulting_admin
 from app.db.session import Database, require_database
@@ -10,18 +11,31 @@ from app.schemas.consulting import (
   AdminBookingSummaryUpsert,
   AdminExpertCreate,
   BookingCreate,
+  ConsultingTextMessageSend,
   ReviewCreate,
+)
+from app.schemas.consulting_call import (
+  ConsultingCallJoinRequest,
+  ConsultingCaptionTranslateRequest,
+  ConsultingTranscriptionStartRequest,
 )
 from app.schemas.consulting_partner import (
   AdminPartnerApplicationApprove,
   AdminPartnerApplicationReject,
 )
 from app.core.settings import Settings, get_settings
-from app.services import consulting, consulting_partner, consulting_places
+from app.services import consulting, consulting_call, consulting_partner, consulting_places
+from app.services.consulting_realtime import consulting_realtime_manager
+from app.services.consulting_message_store import create_consulting_message
 from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/consulting", tags=["consulting"])
+
+
+def _set_sensitive_response_headers(response: Response) -> None:
+  response.headers["Cache-Control"] = "no-store"
+  response.headers["Pragma"] = "no-cache"
 
 
 def _mask_author(nickname: str | None) -> str:
@@ -150,7 +164,37 @@ async def cancel_consulting_booking(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  return success({"record": await consulting.cancel_booking(db, user["id"], booking_id)})
+  record = await consulting.cancel_booking(db, user["id"], booking_id)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": "cancelled",
+      "message": "고객이 예약을 취소했습니다. 이 예약은 취소 기록으로 보관됩니다.",
+    },
+  )
+  return success({"record": record})
+
+
+@router.post("/bookings/{booking_id}/chat/leave")
+async def leave_consulting_chat(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  result = await consulting.leave_booking_conversation(db, user["id"], booking_id)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "conversation.left",
+      "bookingId": booking_id,
+      "participantType": "user",
+      "message": "고객이 대화방을 나갔습니다. 다음 예약은 새 대화방에서 시작됩니다.",
+    },
+  )
+  return success(result)
 
 
 @router.delete("/bookings/{booking_id}")
@@ -160,8 +204,155 @@ async def delete_consulting_booking(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await consulting.delete_canceled_booking(db, user["id"], booking_id)
-  return success({"deleted": True, "booking_id": booking_id})
+  record = await consulting.get_booking(db, user["id"], booking_id)
+  return success(
+    {
+      "deleted": False,
+      "booking_id": booking_id,
+      "record": record,
+      "message": "취소된 예약은 전문가와 고객의 확인 기록으로 보관되며 삭제할 수 없습니다.",
+    }
+  )
+
+
+@router.post("/bookings/{booking_id}/messages")
+async def send_consulting_text_message(
+  booking_id: str,
+  payload: ConsultingTextMessageSend,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  """Durable HTTP path used when a mobile WebSocket is reconnecting."""
+  user = await ensure_user(db, auth)
+  booking = await consulting.get_booking(db, user["id"], booking_id)
+  if booking["status"] == "canceled":
+    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "취소된 예약에는 새 메시지를 보낼 수 없어요.")
+  if booking.get("customer_left_at") or booking.get("expert_left_at"):
+    raise AppError(409, "CONSULTING_CONVERSATION_LEFT", "나간 대화방에는 새 메시지를 보낼 수 없어요.")
+  message, inserted = await create_consulting_message(
+    db,
+    booking_id=booking_id,
+    body=payload.body.strip(),
+    client_message_id=payload.client_message_id,
+    media=[],
+    sender_name=auth.name or auth.email or "고객",
+    sender_type="user",
+    sender_user_id=user["id"],
+  )
+  if inserted:
+    await consulting_realtime_manager.broadcast(booking_id, message)
+  return success({"message": message})
+
+
+@router.get("/bookings/{booking_id}/call")
+async def get_consulting_call_state(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  return success({"call": await consulting_call.get_customer_call_state(db, user["id"], booking_id, settings)})
+
+
+@router.post("/bookings/{booking_id}/call/join")
+async def join_consulting_call(
+  booking_id: str,
+  payload: ConsultingCallJoinRequest,
+  response: Response,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  _set_sensitive_response_headers(response)
+  return success(
+    {
+      "call": await consulting_call.join_customer_call(
+        db,
+        user["id"],
+        booking_id,
+        payload.language_code,
+        settings,
+      ),
+    },
+  )
+
+
+@router.post("/bookings/{booking_id}/call/end")
+async def end_consulting_call(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  call = await consulting_call.end_customer_call(db, user["id"], booking_id, settings)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "call.status",
+      "bookingId": booking_id,
+      "callSessionId": call.get("call_session_id"),
+      "status": "ended",
+      "message": "고객이 화상 상담을 종료했습니다.",
+    },
+  )
+  return success({"call": call})
+
+
+@router.post("/bookings/{booking_id}/call/transcription/start")
+async def start_customer_call_transcription(
+  booking_id: str,
+  payload: ConsultingTranscriptionStartRequest,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  return success({
+    "call": await consulting_call.start_customer_transcription(
+      db,
+      user["id"],
+      booking_id,
+      payload.language_code,
+      payload.source_language_code,
+      payload.transcription_consent_accepted,
+      settings,
+    )
+  })
+
+
+@router.post("/bookings/{booking_id}/call/captions/translate")
+async def translate_customer_call_caption(
+  booking_id: str,
+  payload: ConsultingCaptionTranslateRequest,
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  translated = await consulting_call.translate_customer_caption(
+    db,
+    user["id"],
+    booking_id,
+    result_id=payload.result_id,
+    source_language_code=payload.source_language_code,
+    content=payload.content,
+    settings=settings,
+  )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "caption.translation",
+      "bookingId": booking_id,
+      "resultId": translated["result_id"],
+      "sourceLanguageCode": translated["source_language_code"],
+      "targetLanguageCode": translated["target_language_code"],
+      "translatedContent": translated["translated_content"],
+    },
+  )
+  return success(translated)
 
 
 @router.get("/bookings/{booking_id}/summary")

@@ -1,8 +1,9 @@
 import React from 'react';
-import {Pressable, StyleSheet, View as RNView} from 'react-native';
+import {Pressable, StyleSheet, Text as RNText, View as RNView} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {Bell, CalendarDays, MessageCircle} from 'lucide-react-native';
 
+import {useAuthSession} from '../../auth';
 import {consultingColors, consultingRadius} from '../../../shared/theme';
 import {getConsultingBookings} from '../services/consultingService';
 import {
@@ -23,6 +24,7 @@ export function ConsultingHeaderActions({
   onPressNotifications,
   showHistory = false,
 }: ConsultingHeaderActionsProps) {
+  const {getAuthToken} = useAuthSession();
   const [unreadState, setUnreadState] = React.useState<ConsultingUnreadState>({
     messages: false,
     notifications: false,
@@ -32,18 +34,31 @@ export function ConsultingHeaderActions({
     React.useCallback(() => {
       let isMounted = true;
 
-      getConsultingBookings()
-        .then(records => getConsultingUnreadState(records))
-        .then(nextUnreadState => {
+      const refreshUnreadState = () => {
+        if (!getAuthToken()) {
           if (isMounted) {
-            setUnreadState(nextUnreadState);
+            setUnreadState({messages: false, notifications: false});
           }
-        });
+          return;
+        }
+
+        void getConsultingBookings(undefined, {force: true})
+          .then(records => getConsultingUnreadState(records))
+          .then(nextUnreadState => {
+            if (isMounted) {
+              setUnreadState(nextUnreadState);
+            }
+          });
+      };
+
+      refreshUnreadState();
+      const refreshTimer = setInterval(refreshUnreadState, 30000);
 
       return () => {
         isMounted = false;
+        clearInterval(refreshTimer);
       };
-    }, []),
+    }, [getAuthToken]),
   );
 
   return (
@@ -100,7 +115,11 @@ function ConsultingHeaderActionButton({
         pressed ? styles.pressed : null,
       ]}>
       <Icon color={consultingColors.text} size={21} strokeWidth={2.1} />
-      {showDot ? <RNView style={styles.dot} /> : null}
+      {showDot ? (
+        <RNView style={styles.badge}>
+          <RNText style={styles.badgeText}>1</RNText>
+        </RNView>
+      ) : null}
     </Pressable>
   );
 }
@@ -122,16 +141,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  dot: {
+  badge: {
     backgroundColor: consultingColors.roseStrong,
     borderColor: consultingColors.surface,
     borderRadius: consultingRadius.pill,
     borderWidth: 1,
-    height: 9,
+    height: 17,
     position: 'absolute',
-    right: 5,
-    top: 5,
-    width: 9,
+    right: 1,
+    top: 1,
+    width: 17,
+  },
+  badgeText: {
+    color: consultingColors.surface,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.82,

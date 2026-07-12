@@ -51,16 +51,29 @@ export function getPersonalColorResultJsonUri(sessionId: string): string | null 
   return directoryUri ? `${directoryUri}${RESULT_FILE_NAME}` : null;
 }
 
+// 저장 결과의 조명 보정 provenance. 프로덕션은 로그 파일을 쓰지 않으므로, 복원
+// 후에도 이 결과가 보정본인지/어떤 신뢰도였는지 알 수 있게 결과 JSON 에 함께
+// 남긴다(코덱스 #246-1). AuraPersonalColorResult 타입은 건드리지 않고 sibling 키로 붙인다.
+export type PersonalColorResultProvenance = {
+  illuminationCorrected: boolean;
+  illuminationSource: string | null;
+  illuminationConfidence: number;
+};
+
 export async function writeResultJson(
   sessionId: string,
   result: AuraPersonalColorResult,
+  provenance?: PersonalColorResultProvenance,
 ): Promise<string | null> {
   const directoryUri = await ensureSessionDirectory(sessionId);
   if (!directoryUri) {
     return null;
   }
   const fileUri = `${directoryUri}${RESULT_FILE_NAME}`;
-  await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(result, null, 2));
+  const payload = provenance
+    ? { ...result, illuminationCorrection: provenance }
+    : result;
+  await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(payload, null, 2));
   return fileUri;
 }
 

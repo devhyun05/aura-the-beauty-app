@@ -21,7 +21,7 @@ import type {ConsultingExpert, ConsultingRecordStatus} from '../types';
 import {
   formatConsultingPrice,
   getConsultingDurationPrice,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 
 const avatarToneColors: Record<
   ConsultingExpert['avatarTone'],
@@ -32,41 +32,10 @@ const avatarToneColors: Record<
   mauve: {background: '#E6DCE4', text: '#5F4A5C'},
 };
 
-const consultingCdnBaseUrl = (
-  process.env.EXPO_PUBLIC_CDN_BASE_URL?.trim().replace(/\/+$/, '') ??
-  'https://d3t1pbvtir1lj.cloudfront.net'
-);
-
-function consultingImageSource(fileName: string): ImageSourcePropType {
-  return {
-    uri: `${consultingCdnBaseUrl}/uploads/optimized/consulting/${fileName}`,
-  };
-}
-
-const fallbackExpertImagesById: Record<string, ImageSourcePropType> = {
-  exp_sea: consultingImageSource('expert-sea.jpg'),
-  exp_doa: consultingImageSource('expert-doa.jpg'),
-  exp_lian: consultingImageSource('expert-lian.jpg'),
-};
-
-const fallbackExpertImagesByTone: Record<
-  ConsultingExpert['avatarTone'],
-  ImageSourcePropType
-> = {
-  rose: consultingImageSource('expert-sea.jpg'),
-  mauve: consultingImageSource('expert-doa.jpg'),
-  sand: consultingImageSource('expert-lian.jpg'),
-};
-
-function getFallbackExpertImageSource(expert: ConsultingExpert): ImageSourcePropType {
-  return fallbackExpertImagesById[expert.id] ?? fallbackExpertImagesByTone[expert.avatarTone];
-}
-
-function getExpertImageSource(expert: ConsultingExpert): ImageSourcePropType {
-  return (
-    (expert.imageUrl ? {uri: expert.imageUrl} : expert.imageSource) ??
-    getFallbackExpertImageSource(expert)
-  );
+function getExpertImageSource(
+  expert: ConsultingExpert,
+): ImageSourcePropType | undefined {
+  return expert.imageUrl ? {uri: expert.imageUrl} : expert.imageSource;
 }
 
 export function ConsultingSectionLabel({children}: {children: ReactNode}) {
@@ -86,7 +55,6 @@ export function ExpertAvatar({
 }) {
   const tone = avatarToneColors[expert.avatarTone];
   const imageSource = getExpertImageSource(expert);
-  const fallbackImageSource = getFallbackExpertImageSource(expert);
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -101,13 +69,19 @@ export function ExpertAvatar({
           width: size,
         },
       ]}>
-      <Image
-        accessibilityIgnoresInvertColors
-        onError={() => setImageFailed(true)}
-        resizeMode="cover"
-        source={imageFailed ? fallbackImageSource : imageSource}
-        style={styles.avatarImage}
-      />
+      {imageSource && !imageFailed ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          onError={() => setImageFailed(true)}
+          resizeMode="cover"
+          source={imageSource}
+          style={styles.avatarImage}
+        />
+      ) : (
+        <Text style={[styles.avatarInitials, {color: tone.text, fontSize: size * 0.3}]}>
+          {expert.initials}
+        </Text>
+      )}
     </RNView>
   );
 }
@@ -121,7 +95,6 @@ export function ExpertPortrait({
 }) {
   const tone = avatarToneColors[expert.avatarTone];
   const imageSource = getExpertImageSource(expert);
-  const fallbackImageSource = getFallbackExpertImageSource(expert);
   const [imageFailed, setImageFailed] = useState(false);
 
   return (
@@ -134,13 +107,19 @@ export function ExpertPortrait({
           width: size,
         },
       ]}>
-      <Image
-        accessibilityIgnoresInvertColors
-        onError={() => setImageFailed(true)}
-        resizeMode="cover"
-        source={imageFailed ? fallbackImageSource : imageSource}
-        style={styles.portraitImage}
-      />
+      {imageSource && !imageFailed ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          onError={() => setImageFailed(true)}
+          resizeMode="cover"
+          source={imageSource}
+          style={styles.portraitImage}
+        />
+      ) : (
+        <Text style={[styles.avatarInitials, {color: tone.text, fontSize: size * 0.28}]}>
+          {expert.initials}
+        </Text>
+      )}
     </RNView>
   );
 }
@@ -202,11 +181,21 @@ const statusBadgePresets: Record<
     color: consultingColors.roseText,
   },
   contacting: {
-    label: '확인 중',
-    background: consultingColors.goldSoft,
-    color: consultingColors.goldText,
+    label: '예약 신청',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
   },
   confirmed: {
+    label: '예약 확정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  scheduled: {
+    label: '예약 확정',
+    background: consultingColors.roseSoft,
+    color: consultingColors.roseText,
+  },
+  in_progress: {
     label: '예약 확정',
     background: consultingColors.roseSoft,
     color: consultingColors.roseText,
@@ -401,6 +390,10 @@ const styles = StyleSheet.create({
   avatarImage: {
     height: '100%',
     width: '100%',
+  },
+  avatarInitials: {
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
   },
   avatarPhotoFrame: {
     borderColor: consultingColors.borderSoft,

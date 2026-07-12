@@ -31,6 +31,14 @@ export function srgb8ToLinear(channel8: number): number {
   return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
 }
 
+// 선형 → sRGB 8-bit 채널 (역변환). 정밀도 보존 위해 반올림하지 않은 float(0..255) 반환 —
+// rgbMean은 평균값이라 원래 정수가 아니며, rgb8ToLab이 float를 그대로 소화한다.
+export function linearToSrgb8(linear: number): number {
+  const l = clamp(linear, 0, 1);
+  const s = l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055;
+  return clamp(s * 255, 0, 255);
+}
+
 export function linearRgbToXyz(r: number, g: number, b: number): [number, number, number] {
   const X = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b;
   const Y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b;

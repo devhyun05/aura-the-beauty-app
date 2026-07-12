@@ -5,14 +5,13 @@ import {
 import {prefetchImageSources} from '../../../shared/services/imageCacheService';
 import {getMyPageProfileSummary} from '../../../shared/services/profileService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {
-  consultingCategories,
-  consultingExperts,
-  consultingRecords,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
 import type {
   ConsultingBookingDay,
+  ConsultingCallJoinResult,
+  ConsultingCallLanguageCode,
+  ConsultingCallState,
+  ConsultingCaptionTranslation,
+  ConsultingCallTranscription,
   ConsultingBookingDraft,
   ConsultingCategory,
   ConsultingDurationOption,
@@ -31,6 +30,11 @@ export type ConsultingHomeData = {
   activeRecords: readonly ConsultingRecord[];
 };
 
+export type ConsultingTextMessageDelivery = {
+  id: string;
+  sentAt: string;
+};
+
 function arr<T>(value: unknown, fallback: readonly T[]): readonly T[] {
   return Array.isArray(value) ? (value as T[]) : fallback;
 }
@@ -42,33 +46,17 @@ function logFallback(scope: string, error: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
-// Coercion helpers — the backend already returns camelCase matching the
-// frontend types; these guard against missing/partial fields and fall back to
-// the mock so the UI never renders undefined.
+// Coercion helpers guard against incomplete API fields without inventing
+// consultant profiles or pricing.
 // ---------------------------------------------------------------------------
 function normalizeSessionMode(value: unknown): ConsultingSessionMode {
   return value === 'offline' ? 'offline' : 'online';
 }
 
-function roundConsultingPrice(price: number): number {
-  return Math.round(price / 1000) * 1000;
-}
-
-function getDefaultOfflineConsultingPrice(onlinePrice: number): number {
-  const offlinePrices: Record<number, number> = {
-    49000: 79000,
-    59000: 89000,
-    89000: 129000,
-    99000: 139000,
-    109000: 149000,
-  };
-  return offlinePrices[onlinePrice] ?? roundConsultingPrice(onlinePrice * 1.45);
-}
-
 function coerceDuration(raw: any, index: number): ConsultingDurationOption {
   const onlinePrice = Number(raw?.prices?.online ?? raw?.onlinePrice ?? raw?.price ?? 0);
   const offlinePrice = Number(
-    raw?.prices?.offline ?? raw?.offlinePrice ?? getDefaultOfflineConsultingPrice(onlinePrice),
+    raw?.prices?.offline ?? raw?.offlinePrice ?? onlinePrice,
   );
 
   return {
@@ -86,37 +74,36 @@ function coerceDuration(raw: any, index: number): ConsultingDurationOption {
 }
 
 function coerceExpert(raw: any): ConsultingExpert {
-  const fallback = findConsultingExpertOrFirst(raw?.id);
-  if (!raw || typeof raw !== 'object') {
-    return fallback;
-  }
-  const durations = Array.isArray(raw.durations) && raw.durations.length
-    ? raw.durations.map(coerceDuration)
-    : fallback.durations;
+  const name = String(raw?.name ?? '').trim();
+  const rawAvatarTone = raw?.avatarTone;
+  const avatarTone: ConsultingExpert['avatarTone'] =
+    rawAvatarTone === 'sand' || rawAvatarTone === 'mauve'
+      ? rawAvatarTone
+      : 'rose';
+
   return {
-    id: String(raw.id ?? fallback.id),
-    name: String(raw.name ?? fallback.name),
-    title: String(raw.title ?? fallback.title),
-    signatureLine: String(raw.signatureLine ?? fallback.signatureLine),
-    initials: String(raw.initials ?? fallback.initials),
-    avatarTone: (raw.avatarTone ?? fallback.avatarTone) as ConsultingExpert['avatarTone'],
-    imageSource: fallback.imageSource,
-    imageUrl: raw.imageUrl ? String(raw.imageUrl) : fallback.imageUrl,
-    studioName: raw.studioName ? String(raw.studioName) : fallback.studioName,
-    careerYears: Number(raw.careerYears ?? fallback.careerYears),
-    rating: Number(raw.rating ?? fallback.rating),
-    reviewCount: Number(raw.reviewCount ?? fallback.reviewCount),
-    sessionCount: Number(raw.sessionCount ?? fallback.sessionCount),
-    rebookRate: Number(raw.rebookRate ?? fallback.rebookRate),
-    responseMinutes: Number(raw.responseMinutes ?? fallback.responseMinutes),
-    tags: arr(raw.tags, fallback.tags),
-    intro: String(raw.intro ?? fallback.intro),
-    careerHistory: arr(raw.careerHistory, fallback.careerHistory),
-    certifications: arr(raw.certifications, fallback.certifications),
-    availabilityNote: String(raw.availabilityNote ?? fallback.availabilityNote),
-    categoryIds: arr(raw.categoryIds, fallback.categoryIds),
-    durations,
-    reviews: arr(raw.reviews, fallback.reviews),
+    id: String(raw?.id ?? ''),
+    name,
+    title: String(raw?.title ?? ''),
+    signatureLine: String(raw?.signatureLine ?? ''),
+    initials: String(raw?.initials ?? (name.slice(-2) || 'A')),
+    avatarTone,
+    imageUrl: raw?.imageUrl ? String(raw.imageUrl) : undefined,
+    studioName: raw?.studioName ? String(raw.studioName) : undefined,
+    careerYears: Number(raw?.careerYears ?? 0),
+    rating: Number(raw?.rating ?? 0),
+    reviewCount: Number(raw?.reviewCount ?? 0),
+    sessionCount: Number(raw?.sessionCount ?? 0),
+    rebookRate: Number(raw?.rebookRate ?? 0),
+    responseMinutes: Number(raw?.responseMinutes ?? 0),
+    tags: arr<string>(raw?.tags, []),
+    intro: String(raw?.intro ?? ''),
+    careerHistory: arr(raw?.careerHistory, []),
+    certifications: arr<string>(raw?.certifications, []),
+    availabilityNote: String(raw?.availabilityNote ?? ''),
+    categoryIds: arr(raw?.categoryIds, []),
+    durations: (arr<any>(raw?.durations, []) as any[]).map(coerceDuration),
+    reviews: arr<ConsultingExpertReview>(raw?.reviews, []),
   };
 }
 
@@ -134,9 +121,14 @@ function coerceRecord(raw: any): ConsultingRecord {
   const estimatedPrice = Number(
     raw?.estimatedPrice ?? raw?.estimated_price ?? raw?.price,
   );
+  const rawLastExpertMessageAt =
+    raw?.lastExpertMessageAt ?? raw?.last_expert_message_at;
 
   return {
     id: String(raw?.id ?? ''),
+    conversationId: raw?.conversationId ? String(raw.conversationId) : undefined,
+    customerLeftAt: raw?.customerLeftAt ? String(raw.customerLeftAt) : null,
+    expertLeftAt: raw?.expertLeftAt ? String(raw.expertLeftAt) : null,
     expertId: String(raw?.expertId ?? ''),
     durationId: raw?.durationId ? String(raw.durationId) : undefined,
     dayId: raw?.dayId ? String(raw.dayId) : null,
@@ -153,7 +145,20 @@ function coerceRecord(raw: any): ConsultingRecord {
     contactName: raw?.contactName ? String(raw.contactName) : null,
     contactPhone: raw?.contactPhone ? String(raw.contactPhone) : null,
     preferredContactMethod,
+    lastExpertMessageAt:
+      rawLastExpertMessageAt == null ? null : String(rawLastExpertMessageAt),
   };
+}
+
+function coerceTextMessageDelivery(raw: unknown): ConsultingTextMessageDelivery | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const value = raw as {id?: unknown; sentAt?: unknown};
+  if (typeof value.id !== 'string' || !value.id || typeof value.sentAt !== 'string') {
+    return null;
+  }
+  return {id: value.id, sentAt: value.sentAt};
 }
 
 function withDraftReservationDetails(
@@ -175,6 +180,75 @@ function coerceReview(raw: any): ConsultingExpertReview {
     body: String(raw?.body ?? ''),
     rating: Number(raw?.rating ?? 5),
     dateLabel: String(raw?.dateLabel ?? ''),
+  };
+}
+
+function coerceCallLanguageCode(value: unknown): ConsultingCallLanguageCode | null {
+  return value === 'ko-KR' || value === 'en-US' ? value : null;
+}
+
+function coerceCallTranscription(raw: any): ConsultingCallTranscription {
+  const mode = raw?.mode === 'identify' ? 'identify' : 'fixed';
+  return {
+    enabled: Boolean(raw?.enabled),
+    translationEnabled: Boolean(raw?.translationEnabled),
+    status:
+      raw?.status === 'starting' ||
+      raw?.status === 'active' ||
+      raw?.status === 'stopping' ||
+      raw?.status === 'stopped' ||
+      raw?.status === 'failed'
+        ? raw.status
+        : 'disabled',
+    mode,
+    languageCode: coerceCallLanguageCode(raw?.languageCode),
+    customerLanguageCode: coerceCallLanguageCode(raw?.customerLanguageCode),
+    expertLanguageCode: coerceCallLanguageCode(raw?.expertLanguageCode),
+  };
+}
+
+function coerceCallState(raw: any, bookingId: string): ConsultingCallState {
+  const status = raw?.status;
+  return {
+    callSessionId: raw?.callSessionId ? String(raw.callSessionId) : null,
+    bookingId: String(raw?.bookingId ?? bookingId),
+    provider: 'chime',
+    providerMeetingId: raw?.providerMeetingId ? String(raw.providerMeetingId) : null,
+    mediaRegion: raw?.mediaRegion ? String(raw.mediaRegion) : null,
+    status:
+      status === 'created' ||
+      status === 'active' ||
+      status === 'ended' ||
+      status === 'failed'
+        ? status
+        : 'not_started',
+    startedAt: raw?.startedAt ? String(raw.startedAt) : null,
+    endedAt: raw?.endedAt ? String(raw.endedAt) : null,
+    chimeEnabled: Boolean(raw?.chimeEnabled),
+    transcription: coerceCallTranscription(raw?.transcription),
+  };
+}
+
+function coerceCallJoinResult(raw: any, bookingId: string): ConsultingCallJoinResult | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const languageCode =
+    coerceCallLanguageCode(raw?.participant?.languageCode) ??
+    coerceCallLanguageCode(raw?.participantLanguageCode) ??
+    'ko-KR';
+  const participantType = raw?.participant?.type ?? raw?.participantType;
+  return {
+    callSessionId: String(raw.callSessionId ?? ''),
+    bookingId: String(raw.bookingId ?? bookingId),
+    participant: {
+      id: String(raw?.participant?.id ?? ''),
+      type: participantType === 'partner' || participantType === 'expert' ? 'partner' : 'customer',
+      languageCode,
+    },
+    meeting: raw?.meeting && typeof raw.meeting === 'object' ? raw.meeting : {},
+    attendee: raw?.attendee && typeof raw.attendee === 'object' ? raw.attendee : {},
+    transcription: coerceCallTranscription(raw?.transcription),
   };
 }
 
@@ -234,24 +308,19 @@ function cacheBookings(records: readonly ConsultingRecord[]): readonly Consultin
 }
 
 function isActiveRecordStatus(status: ConsultingRecord['status']): boolean {
-  return status === 'requested' || status === 'contacting' || status === 'confirmed';
+  return (
+    status === 'requested' ||
+    status === 'contacting' ||
+    status === 'confirmed' ||
+    status === 'scheduled' ||
+    status === 'in_progress'
+  );
 }
 
 function activeRecordsFrom(
   records: readonly ConsultingRecord[],
 ): readonly ConsultingRecord[] {
   return records.filter(record => isActiveRecordStatus(record.status));
-}
-
-function filterBookingsByStatus(
-  records: readonly ConsultingRecord[],
-  status?: string,
-): readonly ConsultingRecord[] {
-  if (!status || status === 'all') {
-    return records;
-  }
-
-  return records.filter(record => record.status === status);
 }
 
 function upsertCachedBooking(record: ConsultingRecord): void {
@@ -311,15 +380,14 @@ function removeCachedBooking(bookingId: string): void {
 // Reads
 // ---------------------------------------------------------------------------
 export async function getConsultingHome(): Promise<ConsultingHomeData> {
-  const fallbackActiveRecords = activeRecordsFrom(consultingRecords);
-  const fallback: ConsultingHomeData = {
-    categories: consultingCategories,
-    experts: consultingExperts,
-    activeRecord: fallbackActiveRecords[0] ?? null,
-    activeRecords: fallbackActiveRecords,
+  const empty: ConsultingHomeData = {
+    categories: [],
+    experts: [],
+    activeRecord: null,
+    activeRecords: [],
   };
   if (!hasBackend()) {
-    return fallback;
+    return empty;
   }
   if (isFresh(homeCache)) {
     warmExpertImages(homeCache.data.experts);
@@ -340,8 +408,8 @@ export async function getConsultingHome(): Promise<ConsultingHomeData> {
       activeRecord ? [activeRecord] : [],
     ) as any[]).map(coerceRecord);
     const home = {
-      categories: arr<ConsultingCategory>(res.categories, consultingCategories),
-      experts: (arr<any>(res.experts, consultingExperts) as any[]).map(coerceExpert),
+      categories: arr<ConsultingCategory>(res.categories, []),
+      experts: (arr<any>(res.experts, []) as any[]).map(coerceExpert),
       activeRecord: activeRecord
         ? coerceRecord(activeRecord)
         : activeRecords[0] ?? null,
@@ -352,7 +420,7 @@ export async function getConsultingHome(): Promise<ConsultingHomeData> {
     return home;
   } catch (error) {
     logFallback('home', error);
-    return fallback;
+    return empty;
   }
 }
 
@@ -360,7 +428,7 @@ export async function getConsultingExperts(
   categoryId?: string | null,
 ): Promise<readonly ConsultingExpert[]> {
   if (!hasBackend()) {
-    return consultingExperts;
+    return [];
   }
   const cacheKey = categoryId && categoryId !== 'all' ? categoryId : null;
   const cached = cacheKey ? expertsByCategoryCache.get(cacheKey) ?? null : expertsCache;
@@ -378,21 +446,20 @@ export async function getConsultingExperts(
       `/consulting/experts${query}`,
     );
     return cacheExperts(
-      (arr<any>(res.experts, consultingExperts) as any[]).map(coerceExpert),
+      (arr<any>(res.experts, []) as any[]).map(coerceExpert),
       categoryId,
     );
   } catch (error) {
     logFallback('experts', error);
-    return consultingExperts;
+    return [];
   }
 }
 
 export async function getConsultingExpert(
   expertId: string,
-): Promise<ConsultingExpert> {
-  const fallback = findConsultingExpertOrFirst(expertId);
+): Promise<ConsultingExpert | null> {
   if (!hasBackend()) {
-    return fallback;
+    return null;
   }
   if (isFresh(expertsCache)) {
     const cached = expertsCache.data.find(expert => expert.id === expertId);
@@ -406,10 +473,10 @@ export async function getConsultingExpert(
     const res = await requestBackendJson<{expert?: unknown}>(
       `/consulting/experts/${encodeURIComponent(expertId)}`,
     );
-    return res.expert ? coerceExpert(res.expert) : fallback;
+    return res.expert ? coerceExpert(res.expert) : null;
   } catch (error) {
     logFallback('expert', error);
-    return fallback;
+    return null;
   }
 }
 
@@ -463,11 +530,13 @@ export async function getConsultingShareableReports(): Promise<
 
 export async function getConsultingBookings(
   status?: string,
+  options?: {force?: boolean},
 ): Promise<readonly ConsultingRecord[]> {
   if (!hasBackend()) {
-    return filterBookingsByStatus(consultingRecords, status);
+    return [];
   }
-  if (!status || status === 'all') {
+  const forceRefresh = options?.force === true;
+  if ((!status || status === 'all') && !forceRefresh) {
     if (isFresh(bookingsCache)) {
       return bookingsCache.data;
     }
@@ -475,7 +544,7 @@ export async function getConsultingBookings(
     if (bookingsRequest) {
       return bookingsRequest;
     }
-  } else if (isFresh(bookingsCache)) {
+  } else if (!forceRefresh && isFresh(bookingsCache)) {
     return bookingsCache.data.filter(record => record.status === status);
   }
 
@@ -484,23 +553,27 @@ export async function getConsultingBookings(
     : '';
   const request = requestBackendJson<{records?: unknown}>(
     `/consulting/bookings${query}`,
-  )
-    .then(res => (arr<any>(res.records, []) as any[]).map(coerceRecord))
-    .catch(error => {
-      logFallback('bookings', error);
-      return [] as ConsultingRecord[];
-    });
+  ).then(res => (arr<any>(res.records, []) as any[]).map(coerceRecord));
 
   if (!status || status === 'all') {
     bookingsRequest = request
       .then(records => cacheBookings(records))
+      .catch(error => {
+        logFallback('bookings', error);
+        return [] as ConsultingRecord[];
+      })
       .finally(() => {
         bookingsRequest = null;
       });
     return await bookingsRequest;
   }
 
-  return await request;
+  try {
+    return await request;
+  } catch (error) {
+    logFallback('bookings', error);
+    return [];
+  }
 }
 
 export async function getConsultingBooking(
@@ -516,6 +589,130 @@ export async function getConsultingBooking(
     return res.record ? coerceRecord(res.record) : null;
   } catch (error) {
     logFallback('booking', error);
+    return null;
+  }
+}
+
+export async function leaveConsultingConversation(bookingId: string): Promise<void> {
+  if (!hasBackend()) {
+    return;
+  }
+  await requestBackendJson(`/consulting/bookings/${encodeURIComponent(bookingId)}/chat/leave`, {
+    method: 'POST',
+  });
+  bookingsCache = null;
+  bookingsRequest = null;
+  homeCache = null;
+}
+
+export async function getConsultingCallState(
+  bookingId: string,
+): Promise<ConsultingCallState | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call`,
+    );
+    return res.call ? coerceCallState(res.call, bookingId) : null;
+  } catch (error) {
+    logFallback('call:state', error);
+    return null;
+  }
+}
+
+export async function joinConsultingCall(
+  bookingId: string,
+  languageCode: ConsultingCallLanguageCode = 'ko-KR',
+): Promise<ConsultingCallJoinResult | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/join`,
+      {method: 'POST', body: {languageCode}},
+    );
+    return coerceCallJoinResult(res.call, bookingId);
+  } catch (error) {
+    logFallback('call:join', error);
+    return null;
+  }
+}
+
+export async function endConsultingCall(
+  bookingId: string,
+): Promise<ConsultingCallState | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/end`,
+      {method: 'POST'},
+    );
+    return res.call ? coerceCallState(res.call, bookingId) : null;
+  } catch (error) {
+    logFallback('call:end', error);
+    return null;
+  }
+}
+
+export async function startConsultingCallTranscription(
+  bookingId: string,
+  languageCode: ConsultingCallLanguageCode,
+  sourceLanguageCode: ConsultingCallLanguageCode,
+): Promise<ConsultingCallState | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<{call?: unknown}>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/transcription/start`,
+      {
+        method: 'POST',
+        body: {
+          languageCode,
+          sourceLanguageCode,
+          transcriptionConsentAccepted: true,
+        },
+      },
+    );
+    return res.call ? coerceCallState(res.call, bookingId) : null;
+  } catch (error) {
+    logFallback('call:transcription:start', error);
+    return null;
+  }
+}
+
+export async function translateConsultingCallCaption(
+  bookingId: string,
+  payload: {
+    resultId: string;
+    sourceLanguageCode: ConsultingCallLanguageCode;
+    content: string;
+  },
+): Promise<ConsultingCaptionTranslation | null> {
+  if (!hasBackend()) {
+    return null;
+  }
+  try {
+    const res = await requestBackendJson<Partial<ConsultingCaptionTranslation>>(
+      `/consulting/bookings/${encodeURIComponent(bookingId)}/call/captions/translate`,
+      {method: 'POST', body: payload},
+    );
+    if (!res.resultId || !res.sourceLanguageCode || !res.targetLanguageCode || !res.translatedContent) {
+      return null;
+    }
+    return {
+      resultId: res.resultId,
+      sourceLanguageCode: res.sourceLanguageCode,
+      targetLanguageCode: res.targetLanguageCode,
+      translatedContent: res.translatedContent,
+    };
+  } catch (error) {
+    logFallback('call:caption:translate', error);
     return null;
   }
 }
@@ -559,7 +756,12 @@ export async function createConsultingReview(
       `/consulting/bookings/${encodeURIComponent(bookingId)}/reviews`,
       {method: 'POST', body: draft},
     );
-    return res.review ? coerceReview(res.review) : null;
+    const review = res.review ? coerceReview(res.review) : null;
+    const cachedRecord = bookingsCache?.data.find(record => record.id === bookingId);
+    if (review && cachedRecord) {
+      upsertCachedBooking({...cachedRecord, reviewId: review.id});
+    }
+    return review;
   } catch (error) {
     logFallback('review:create', error);
     return null;
@@ -586,6 +788,27 @@ export async function cancelConsultingBooking(
     logFallback('booking:cancel', error);
     return null;
   }
+}
+
+export async function sendConsultingTextMessage(
+  bookingId: string,
+  payload: {body: string; clientMessageId: string},
+): Promise<ConsultingTextMessageDelivery> {
+  if (!hasBackend()) {
+    throw new Error('상담 메시지 서버에 연결되어 있지 않아요.');
+  }
+  const response = await requestBackendJson<{message?: unknown}>(
+    `/consulting/bookings/${encodeURIComponent(bookingId)}/messages`,
+    {
+      body: payload,
+      method: 'POST',
+    },
+  );
+  const message = coerceTextMessageDelivery(response.message);
+  if (!message) {
+    throw new Error('메시지 전송 결과를 확인하지 못했어요.');
+  }
+  return message;
 }
 
 export async function deleteConsultingBooking(bookingId: string): Promise<boolean> {

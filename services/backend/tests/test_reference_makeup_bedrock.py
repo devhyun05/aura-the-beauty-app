@@ -137,4 +137,4 @@ def test_reference_bedrock_does_not_retry_other_incomplete_responses(monkeypatch
     service._analyze_sync(payload, b"image", "image/jpeg")
 
   assert error.value.code == "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE"
-  assert len(client.calls) == 1
+  assert len(client.calls) == 1

@@ -5,6 +5,10 @@ import type {
   RealtimeMediaPipeLandmarkKey,
   RealtimeMediaPipePayload,
 } from '../components/RealtimeFaceCaptureNativeView';
+import {
+  REALTIME_DEFAULT_POSE_GATE,
+  type PoseGateLimits,
+} from '../constants/facePoseGates';
 
 export type GreenlightFailureReason =
   | 'landmark_missing'
@@ -51,8 +55,8 @@ export type FaceCaptureGreenlightReport = {
 // (realtime-landmark-frame 로그의 metrics.centerOffsetPx 분포로 판단).
 const CENTER_OFFSET_MAX_RATIO = 0.06;
 const CENTER_LINE_SPREAD_MAX_RATIO = 0.1;
-const YAW_MAX_DEG = 10;
-const ROLL_MAX_DEG = 8;
+// yaw/roll 임계값은 facePoseGates 의 프로파일로 주입된다 — 촬영 타입별로
+// 사후 게이트와의 정합(실시간 ≤ 사후)을 한 곳에서 보장하기 위함.
 const FACE_WIDTH_TOO_CLOSE_RATIO = 0.62;
 const FACE_WIDTH_TOO_FAR_RATIO = 0.3;
 
@@ -115,11 +119,15 @@ export function evaluateFaceCaptureGreenlight({
   guide,
   mediaPipe,
   nativeCameraMetadata,
+  poseGate = REALTIME_DEFAULT_POSE_GATE,
 }: {
   cameraStability?: RealtimeCameraStabilityPayload;
   guide: FaceCaptureGreenlightGuide;
   mediaPipe?: RealtimeMediaPipePayload;
   nativeCameraMetadata?: NativeCameraCaptureMetadata;
+  // 촬영 타입별 pose 임계 프로파일. face_analysis 는
+  // REALTIME_FACE_ANALYSIS_POSE_GATE(사후 게이트와 동치)를 전달할 것.
+  poseGate?: PoseGateLimits;
 }): FaceCaptureGreenlightReport {
   const failureReasons: GreenlightFailureReason[] = [];
   const metrics: FaceCaptureGreenlightMetrics = {
@@ -159,9 +167,19 @@ export function evaluateFaceCaptureGreenlight({
       }
     }
 
-    if (
-      Math.abs(mediaPipe.yawDeg ?? 0) > YAW_MAX_DEG ||
-      Math.abs(mediaPipe.rollDeg ?? 0) > ROLL_MAX_DEG
+    // pose 를 못 재면(NaN/결측/geometry_unavailable → 0/0/0) fail-closed:
+    // face_analysis 는 "기울기 못 재면 재촬영" 정책이라 정면인 척 통과시키지 않는다.
+    // 'geometry'(5점 근사)·'vision' 은 실측 각도이므로 유효로 본다.
+    const poseInvalid =
+      !Number.isFinite(mediaPipe.yawDeg) ||
+      !Number.isFinite(mediaPipe.rollDeg) ||
+      mediaPipe.poseSource === undefined ||
+      mediaPipe.poseSource === 'geometry_unavailable';
+    if (poseGate.requireValidPose && poseInvalid) {
+      failureReasons.push('not_forward');
+    } else if (
+      Math.abs(mediaPipe.yawDeg ?? 0) > poseGate.maxAbsYawDeg ||
+      Math.abs(mediaPipe.rollDeg ?? 0) > poseGate.maxAbsRollDeg
     ) {
       failureReasons.push('not_forward');
     }

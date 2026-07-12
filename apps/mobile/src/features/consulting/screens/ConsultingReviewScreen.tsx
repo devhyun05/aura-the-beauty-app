@@ -37,7 +37,8 @@ export function ConsultingReviewScreen({
   const [rating, setRating] = useState(5);
   const [body, setBody] = useState('');
   const trimmedBody = body.trim();
-  const canSubmit = trimmedBody.length >= 10 && !submitting;
+  const reviewCompleted = Boolean(record?.reviewId);
+  const canSubmit = trimmedBody.length >= 10 && !submitting && !reviewCompleted;
   const category = record?.categoryLabel ?? expert.title;
 
   const helperText = useMemo(() => {
@@ -77,7 +78,8 @@ export function ConsultingReviewScreen({
                 <Pressable
                   accessibilityLabel={`${step}점`}
                   accessibilityRole="button"
-                  accessibilityState={{selected: step === rating}}
+                  accessibilityState={{disabled: reviewCompleted, selected: step === rating}}
+                  disabled={reviewCompleted}
                   hitSlop={8}
                   key={step}
                   onPress={() => setRating(step)}
@@ -105,6 +107,7 @@ export function ConsultingReviewScreen({
           <Text style={styles.inputLabel}>리뷰 내용</Text>
           <TextInput
             multiline
+            editable={!reviewCompleted}
             onChangeText={setBody}
             placeholder="예: AI 진단 결과를 제 화장품에 맞춰 설명해줘서 바로 적용할 수 있었어요."
             placeholderTextColor={consultingColors.textSoft}
@@ -119,7 +122,7 @@ export function ConsultingReviewScreen({
       <ConsultingBottomBar>
         <PrimaryButton
           disabled={!canSubmit}
-          label={submitting ? '저장 중...' : '리뷰 저장'}
+          label={reviewCompleted ? '리뷰 작성 완료' : submitting ? '저장 중...' : '리뷰 저장'}
           onPress={() =>
             onSubmit({
               body: trimmedBody,

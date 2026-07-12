@@ -16,10 +16,7 @@ import {
   ExpertAvatar,
   SecondaryButton,
 } from '../components/consultingComponents';
-import {
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
   getConsultingBookings,
   getConsultingExperts,
@@ -44,8 +41,7 @@ export function ConsultingNotificationsScreen({
   onPressRecord,
 }: ConsultingNotificationsScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useFocusEffect(
@@ -53,7 +49,10 @@ export function ConsultingNotificationsScreen({
       let isMounted = true;
       setIsLoading(true);
 
-      Promise.all([getConsultingBookings(), getConsultingExperts()])
+      Promise.all([
+        getConsultingBookings(undefined, {force: true}),
+        getConsultingExperts(),
+      ])
         .then(async ([recordData, expertData]) => {
           if (isMounted) {
             setRecords(recordData);
@@ -78,9 +77,7 @@ export function ConsultingNotificationsScreen({
       records
         .filter(record => isConsultingNotificationStatus(record.status))
         .map(record => ({
-          expert:
-            experts.find(item => item.id === record.expertId) ??
-            findConsultingExpertOrFirst(record.expertId),
+          expert: resolveConsultingExpert(experts, record.expertId),
           record,
         })),
     [experts, records],
@@ -170,6 +167,14 @@ function NotificationCard({
 }
 
 function getNotificationTitle(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 일정이 확정됐어요';
+  }
+
   if (status === 'confirmed') {
     return '예약이 확정됐어요';
   }
@@ -186,8 +191,16 @@ function getNotificationTitle(status: ConsultingRecordStatus): string {
 }
 
 function getNotificationBody(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '톡에서 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '톡에서 안내를 확인하고 상담 시간에 화상 상담을 시작하세요.';
+  }
+
   if (status === 'confirmed') {
-    return '톡에서 안내를 확인하고 상담 시간에 통화를 시작하세요.';
+    return '톡에서 안내를 확인하고 상담 시간에 화상 상담을 시작하세요.';
   }
 
   if (status === 'contacting') {

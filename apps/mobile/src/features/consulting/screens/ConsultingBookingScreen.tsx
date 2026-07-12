@@ -35,7 +35,7 @@ import {
   formatConsultingPrice,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import {
   getConsultingExpertSlots,
   getConsultingShareableReports,

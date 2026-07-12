@@ -22,8 +22,13 @@ class BookingCreate(CamelModel):
   estimated_price: int | None = Field(default=None, alias="estimatedPrice", ge=0)
 
 
+class ConsultingTextMessageSend(CamelModel):
+  body: str = Field(min_length=1, max_length=1000)
+  client_message_id: str = Field(alias="clientMessageId", min_length=8, max_length=120)
+
+
 class AdminBookingStatusUpdate(CamelModel):
-  status: str = Field(pattern="^(requested|contacting|confirmed|unavailable|completed|canceled)$")
+  status: str = Field(pattern="^(requested|contacting|confirmed|scheduled|in_progress|unavailable|completed|canceled)$")
   operator_note: str | None = Field(default=None, alias="operatorNote", max_length=500)
 
 

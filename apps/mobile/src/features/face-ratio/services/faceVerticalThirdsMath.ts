@@ -184,8 +184,12 @@ function buildSuccessSummary(
           : current,
       null,
     );
-    const shortPartLabel = strongestShort?.part === 'upper' ? '상안부' : '하안부';
-    const strength = describeDeltaStrength(Math.abs(strongestShort?.delta ?? 0));
+    if (!strongestShort) {
+      return `중안부가 상대적으로 길어 보여요.${upperExcludedNote}`;
+    }
+
+    const shortPartLabel = strongestShort.part === 'upper' ? '상안부' : '하안부';
+    const strength = describeDeltaStrength(Math.abs(strongestShort.delta));
 
     return `${shortPartLabel}가 평균보다 ${strength} 짧아 중안부가 상대적으로 길어 보여요.${upperExcludedNote}`;
   }

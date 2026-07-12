@@ -4,10 +4,15 @@
 // 전제로 미뤄졌던 부분). ARKit 도입이 취소되어, 네이티브가 이미 매 프레임 보내주는
 // MediaPipe `pitchDeg`(facial transform matrix 기반)로 실시간 pitch를 막는다.
 //
-// MediaPipe pitch는 ARKit보다 지터가 크므로 임계값을 넉넉히 둔다. 부호 방향(들었나
-// 숙였나)은 기기별 검증이 필요해, 방향별 문구 대신 일반 문구를 쓴다.
+// 부호 방향(들었나 숙였나)은 기기별 검증이 필요해, 방향별 문구 대신 일반 문구를 쓴다.
+//
+// 임계값은 facePoseGates 단일 소스에서 온다. 종전 12°는 사후 품질 게이트(8°)보다
+// 헐거워 9~12° 구간이 "촬영은 되는데 분석에서 폐기"였다 — 사후와 동치로 강화.
 
-export const FACE_PITCH_GATE_MAX_ABS_DEG = 12;
+import {REALTIME_FACE_ANALYSIS_POSE_GATE} from '../constants/facePoseGates';
+
+export const FACE_PITCH_GATE_MAX_ABS_DEG =
+  REALTIME_FACE_ANALYSIS_POSE_GATE.maxAbsPitchDeg;
 
 export const FACE_PITCH_GATE_MESSAGE = '고개를 들거나 숙이지 말고 정면을 봐주세요';
 
@@ -19,11 +24,20 @@ export type FacePitchGateResult = {
 export function evaluateFacePitchGate(
   pitchDeg: number | undefined,
   maxAbsDeg: number = FACE_PITCH_GATE_MAX_ABS_DEG,
+  // face_analysis 는 "기울기 못 재면 재촬영" 정책이라 결측 pitch 를 차단(fail-closed).
+  requireValid = false,
+  // geometry 폴백이 입꼬리 없이 pitch=0 을 placeholder 로 낸 경우 false.
+  // '측정된 0'과 '못 잰 것'을 구분해, 못 잰 것을 결측으로 처리한다(코덱스 #245-4).
+  pitchMeasured: boolean | undefined = undefined,
 ): FacePitchGateResult {
-  if (typeof pitchDeg !== 'number' || !Number.isFinite(pitchDeg)) {
-    // pitch 값이 없으면(랜드마크 미검출/기하 폴백) 통과시킨다 — 얼굴 미검출 자체는
-    // greenlight가 이미 막고, 촬영 후 quality gate(±8°)가 최종 안전망이다.
-    return {pitchDeg: null, pitchOk: true};
+  if (
+    pitchMeasured === false ||
+    typeof pitchDeg !== 'number' ||
+    !Number.isFinite(pitchDeg)
+  ) {
+    // pitch 를 확인 못 할 때: requireValid 면 차단(재촬영), 아니면 통과(사후 게이트가
+    // 최종 안전망). pitchMeasured===false 는 입꼬리 결측으로 계측 자체가 불가한 경우.
+    return {pitchDeg: null, pitchOk: !requireValid};
   }
 
   return {pitchDeg, pitchOk: Math.abs(pitchDeg) <= maxAbsDeg};

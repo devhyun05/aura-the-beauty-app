@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {Pressable, StyleSheet, View as RNView} from 'react-native';
 import {CalendarClock, MessageCircle} from 'lucide-react-native';
@@ -16,18 +16,20 @@ import {
   ExpertAvatar,
   PrimaryButton,
 } from '../components/consultingComponents';
-import {
-  consultingExperts,
-  findConsultingExpertOrFirst,
-} from '../mocks/consulting.mock';
+import {resolveConsultingExpert} from '../consultingCatalog';
 import {
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
 import {
+  getConsultingUnreadRecordIds,
   isConsultingMessageStatus,
   markConsultingInboxRead,
 } from '../services/consultingReadStateService';
+import {
+  connectConsultingConversationSocket,
+  type ConsultingConversationSocketClient,
+} from '../services/consultingRealtimeService';
 import type {
   ConsultingExpert,
   ConsultingRecord,
@@ -35,22 +37,36 @@ import type {
 } from '../types';
 
 type ConsultingMessagesScreenProps = {
+  authToken?: string | null;
   onPressConversation: (record: ConsultingRecord) => void;
   onPressFindExpert: () => void;
 };
 
 export function ConsultingMessagesScreen({
+  authToken,
   onPressConversation,
   onPressFindExpert,
 }: ConsultingMessagesScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
-  const [experts, setExperts] =
-    useState<readonly ConsultingExpert[]>(consultingExperts);
+  const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [unreadMessageBookingIds, setUnreadMessageBookingIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const activeRecordsRef = useRef<readonly ConsultingRecord[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+
+      if (!authToken) {
+        setRecords([]);
+        setIsLoading(false);
+        return () => {
+          isMounted = false;
+        };
+      }
+
       setIsLoading(true);
 
       Promise.all([getConsultingBookings(), getConsultingExperts()])
@@ -58,6 +74,9 @@ export function ConsultingMessagesScreen({
           if (isMounted) {
             setRecords(recordData);
             setExperts(expertData);
+            setUnreadMessageBookingIds(
+              await getConsultingUnreadRecordIds('messages', recordData),
+            );
             await markConsultingInboxRead('messages', recordData);
           }
         })
@@ -70,13 +89,63 @@ export function ConsultingMessagesScreen({
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [authToken]),
   );
 
-  const activeRecords = useMemo(
-    () => records.filter(record => isConsultingMessageStatus(record.status)),
-    [records],
+  const activeRecords = useMemo(() => {
+    const visibleExpertIds = new Set<string>();
+    return records.filter(record => {
+      if (
+        record.customerLeftAt ||
+        !isConsultingMessageStatus(record.status) ||
+        visibleExpertIds.has(record.expertId)
+      ) {
+        return false;
+      }
+      visibleExpertIds.add(record.expertId);
+      return true;
+    });
+  }, [records]);
+  const activeRecordsKey = useMemo(
+    () => activeRecords.map(record => `${record.id}:${record.status}`).join(','),
+    [activeRecords],
   );
+
+  useEffect(() => {
+    activeRecordsRef.current = activeRecords;
+  }, [activeRecords]);
+
+  useEffect(() => {
+    if (!authToken) {
+      return undefined;
+    }
+
+    const sockets: ConsultingConversationSocketClient[] = activeRecordsRef.current.map(
+      record =>
+        connectConsultingConversationSocket({
+          authToken,
+          bookingId: record.id,
+          onEvent: event => {
+            if (
+              event.type === 'message.new' &&
+              event.senderType !== 'user'
+            ) {
+              setUnreadMessageBookingIds(current => {
+                if (current.has(record.id)) {
+                  return current;
+                }
+                return new Set([...current, record.id]);
+              });
+            }
+          },
+          participantType: 'user',
+        }),
+    );
+
+    return () => {
+      sockets.forEach(socket => socket.close());
+    };
+  }, [activeRecordsKey, authToken]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
@@ -96,14 +165,23 @@ export function ConsultingMessagesScreen({
       {activeRecords.length > 0 ? (
         <View style={styles.list}>
           {activeRecords.map(record => {
-            const expert =
-              experts.find(item => item.id === record.expertId) ??
-              findConsultingExpertOrFirst(record.expertId);
+            const expert = resolveConsultingExpert(experts, record.expertId);
             return (
               <MessageCard
                 expert={expert}
+                hasUnread={unreadMessageBookingIds.has(record.id)}
                 key={record.id}
-                onPress={() => onPressConversation(record)}
+                onPress={() => {
+                  setUnreadMessageBookingIds(current => {
+                    if (!current.has(record.id)) {
+                      return current;
+                    }
+                    const next = new Set(current);
+                    next.delete(record.id);
+                    return next;
+                  });
+                  onPressConversation(record);
+                }}
                 record={record}
               />
             );
@@ -131,10 +209,12 @@ export function ConsultingMessagesScreen({
 
 function MessageCard({
   expert,
+  hasUnread,
   record,
   onPress,
 }: {
   expert: ConsultingExpert;
+  hasUnread: boolean;
   record: ConsultingRecord;
   onPress: () => void;
 }) {
@@ -146,7 +226,10 @@ function MessageCard({
       style={({pressed}) => [styles.card, pressed ? styles.pressed : null]}>
       <RNView style={styles.cardTopRow}>
         <ConsultingStatusBadge status={record.status} />
-        <Text style={styles.cardDate}>{record.dateLabel}</Text>
+        <RNView style={styles.cardMeta}>
+          {hasUnread ? <Text style={styles.unreadBadge}>새 메시지</Text> : null}
+          <Text style={styles.cardDate}>{record.dateLabel}</Text>
+        </RNView>
       </RNView>
       <RNView style={styles.cardBodyRow}>
         <ExpertAvatar expert={expert} size={46} />
@@ -167,12 +250,24 @@ function MessageCard({
 }
 
 function getMessagePreview(status: ConsultingRecordStatus): string {
+  if (status === 'in_progress') {
+    return '상담이 진행 중이에요. 화상 상담으로 다시 입장할 수 있어요.';
+  }
+
+  if (status === 'scheduled') {
+    return '상담 시간이 확정됐어요. 안내와 화상 상담 버튼을 확인하세요.';
+  }
+
   if (status === 'confirmed') {
-    return '예약이 확정됐어요. 안내와 통화 버튼을 확인하세요.';
+    return '예약이 확정됐어요. 안내와 화상 상담 버튼을 확인하세요.';
   }
 
   if (status === 'contacting') {
     return '가능 일정 확인 중이에요. 필요한 메시지를 톡으로 주고받아요.';
+  }
+
+  if (status === 'completed') {
+    return '상담은 완료됐지만 이 톡에서 후속 질문을 계속 주고받을 수 있어요.';
   }
 
   return '신청이 접수됐어요. 아직 예약 완료 전이에요.';
@@ -200,6 +295,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
+  },
+  cardMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   cardText: {
     color: consultingColors.textMuted,
@@ -292,5 +392,16 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+  },
+  unreadBadge: {
+    backgroundColor: consultingColors.roseSoft,
+    borderRadius: consultingRadius.pill,
+    color: consultingColors.roseStrong,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
 });

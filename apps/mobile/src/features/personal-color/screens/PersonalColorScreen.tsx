@@ -9,15 +9,19 @@ import {
   View,
 } from 'react-native';
 
+import { PersonalColorCorrectionCompareCard } from '../components/PersonalColorCorrectionCompareCard';
 import { PersonalColorTypeCard } from '../components/PersonalColorTypeCard';
 import { deletePersonalColorData, deleteSourceImage } from '../services/personalColorArtifacts';
 import { analyzePersonalColorCapture } from '../services/personalColorService';
 import type { PersonalColorAnalysisOutcome } from '../services/personalColorService';
+import type { PersonalColorCameraMetadata } from '../types';
 
 export type PersonalColorCapture = {
   imageUri: string;
   photoCaptureId: string;
   capturedAt: string;
+  // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정 실험(A/B)용
+  cameraMetadata?: PersonalColorCameraMetadata | null;
 };
 
 type Props = {
@@ -43,6 +47,7 @@ export function PersonalColorScreen({ capture, onRetake }: Props) {
       createdAt: capture.capturedAt,
       sessionId,
       imageUri: capture.imageUri,
+      cameraMetadata: capture.cameraMetadata ?? undefined,
       frameCount: 1,
     })
       .then(async outcome => {
@@ -85,6 +90,24 @@ export function PersonalColorScreen({ capture, onRetake }: Props) {
         )}
 
         {state.phase === 'done' && <PersonalColorTypeCard result={state.outcome.result} />}
+
+        {state.phase === 'done' && state.outcome.corrected && (
+          <PersonalColorCorrectionCompareCard
+            baseline={state.outcome.result}
+            corrected={state.outcome.corrected.result}
+            report={state.outcome.corrected.report}
+          />
+        )}
+
+        {state.phase === 'done' && !state.outcome.corrected && (
+          <Text style={styles.dim}>
+            조명 보정 미적용 —{' '}
+            {[
+              ...state.outcome.correctionReport.reasons,
+              ...state.outcome.correctionReport.sclera.reasons,
+            ].join(', ') || '사유 없음'}
+          </Text>
+        )}
 
         <View style={styles.actions}>
           <Pressable style={styles.primaryBtn} onPress={onRetake}>

@@ -8,6 +8,27 @@
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
 
+#import "AURARealtimeGeometry.h"
+
+// 프레임 회전 자가판정 킬스위치. NO 면 항상 Upright(=회전 없음)로 동작한다.
+// 주의(정직한 한계): 이는 "종전과 비트 동일"이 아니다 — 버퍼가 실제로 raw
+// landscape 였다면 종전 코드는 pose 계산에서 축 스왑을 했으나 OFF(=upright)는
+// 스왑을 안 한다. OFF 가 종전과 같아지는 것은 버퍼가 이미 upright 인 경우뿐이며,
+// 그 진위는 진단 로그(frameRotation/eyeAxisRatio/projectionEyeTilt)로 실기기에서
+// 확인해야 한다. (배경: 파일 내 'Vision 좌표=upright' vs 'raw landscape' 상반된
+// 규약 주석이 공존했고 기기/iOS 버전차로 어느 쪽이 실제인지 미지수라 규약을
+// 가정하지 않고 매 프레임 판정한다 — AURARealtimeGeometry.h)
+static const BOOL kAURARealtimeRotationDetectionEnabled = YES;
+
+// 회전 잠금 전환에 필요한 "동일 후보" 연속 불일치 프레임 수 (~0.4s @ 0.08s 스로틀).
+static const NSInteger kAURARealtimeRotationSwitchStreak = 5;
+
+// 비-upright 프레임 회전을 신뢰할 최대 head roll(도). 눈선이 세로인 것은
+// (a) 프레임 90° 회전 (b) 고개를 90° 가까이 기울임 둘 다에서 나오는데 눈선
+// 하나로는 못 가른다. Vision 이 독립 추정한 head roll 이 이 값 이하일 때만
+// (=머리가 대체로 똑바를 때만) '세로 눈선 = 프레임 회전'으로 확정한다.
+static const double kAURARealtimeMaxHeadRollForFrameRotationDeg = 20.0;
+
 // MediaPipe was removed from this build (a Unity MediaPipe plugin now provides
 // it; keeping the Pod caused a duplicate-MediaPipe crash). Guard every
 // MediaPipe use so this file still compiles and runs when the Pod is absent.
@@ -116,16 +137,26 @@ static NSDictionary *AURARealtimeScreenPoint(CGFloat x, CGFloat y)
   };
 }
 
-static NSDictionary *AURARealtimePointFromImagePoint(CGPoint point, CGSize imageSize)
+// Vision 픽셀 점 → 정준(canonical upright) 정규화 점.
+// 모든 랜드마크 생산이 이 함수를 거치므로, 여기서 프레임 회전을 정준화하면
+// 하류의 모든 휴리스틱(forehead/chin 밴드, 최저점, 입꼬리 극값)이 "x=얼굴
+// 좌우, y=세로" 가정 위에서 구조적으로 옳아진다. rotation 은 매 프레임
+// 자가판정된다(resolveFrameRotationForFace, AURARealtimeGeometry.h).
+static NSDictionary *AURARealtimePointFromImagePoint(CGPoint point,
+                                                     CGSize imageSize,
+                                                     AURARealtimeFrameRotation rotation)
 {
   CGFloat width = fmax(imageSize.width, 1.0);
   CGFloat height = fmax(imageSize.height, 1.0);
-  return AURARealtimePoint(point.x / width, 1.0 - (point.y / height));
+  const CGPoint raw = CGPointMake(point.x / width, 1.0 - (point.y / height));
+  const CGPoint canonical = AURARealtimeCanonicalPoint(raw, rotation);
+  return AURARealtimePoint(canonical.x, canonical.y);
 }
 
 static NSArray<NSDictionary *> *AURARealtimePointsFromRegion(
     VNFaceLandmarkRegion2D *region,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
   if (region == nil || region.pointCount == 0) {
     return @[];
@@ -135,7 +166,7 @@ static NSArray<NSDictionary *> *AURARealtimePointsFromRegion(
   NSMutableArray<NSDictionary *> *result = [NSMutableArray arrayWithCapacity:region.pointCount];
 
   for (NSUInteger index = 0; index < region.pointCount; index += 1) {
-    [result addObject:AURARealtimePointFromImagePoint(points[index], imageSize)];
+    [result addObject:AURARealtimePointFromImagePoint(points[index], imageSize, rotation)];
   }
 
   return result;
@@ -160,16 +191,19 @@ static NSDictionary *AURARealtimeCentroidFromPoints(NSArray<NSDictionary *> *poi
 
 static NSDictionary *AURARealtimeCentroidFromRegion(
     VNFaceLandmarkRegion2D *region,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
-  return AURARealtimeCentroidFromPoints(AURARealtimePointsFromRegion(region, imageSize));
+  return AURARealtimeCentroidFromPoints(
+      AURARealtimePointsFromRegion(region, imageSize, rotation));
 }
 
 static NSDictionary *AURARealtimeLowestPointFromRegion(
     VNFaceLandmarkRegion2D *region,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
-  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize);
+  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize, rotation);
   NSDictionary *lowestPoint = nil;
 
   for (NSDictionary *point in points) {
@@ -184,9 +218,10 @@ static NSDictionary *AURARealtimeLowestPointFromRegion(
 static NSDictionary *AURARealtimeCenteredChinPointFromRegion(
     VNFaceLandmarkRegion2D *region,
     NSDictionary *bounds,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
-  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize);
+  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize, rotation);
 
   if (points.count == 0) {
     return nil;
@@ -215,7 +250,7 @@ static NSDictionary *AURARealtimeCenteredChinPointFromRegion(
   }
 
   if (candidateCount == 0) {
-    return AURARealtimeLowestPointFromRegion(region, imageSize);
+    return AURARealtimeLowestPointFromRegion(region, imageSize, rotation);
   }
 
   CGFloat averageY = sumY / candidateCount;
@@ -227,9 +262,10 @@ static NSDictionary *AURARealtimeCenteredChinPointFromRegion(
 static NSDictionary *AURARealtimeLipCornerFromRegion(
     VNFaceLandmarkRegion2D *region,
     CGSize imageSize,
+    AURARealtimeFrameRotation rotation,
     BOOL wantsLeft)
 {
-  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize);
+  NSArray<NSDictionary *> *points = AURARealtimePointsFromRegion(region, imageSize, rotation);
   NSDictionary *cornerPoint = nil;
 
   for (NSDictionary *point in points) {
@@ -249,14 +285,24 @@ static NSDictionary *AURARealtimeLipCornerFromRegion(
   return cornerPoint;
 }
 
-static NSDictionary *AURARealtimeBoundsFromObservation(VNFaceObservation *face)
+static NSDictionary *AURARealtimeBoundsFromObservation(VNFaceObservation *face,
+                                                       AURARealtimeFrameRotation rotation)
 {
   CGRect box = face.boundingBox;
+  // Vision bottom-left 원점 → raw top-left 정규화 rect 의 두 대각 꼭짓점을
+  // 정준화한 뒤 min/max 로 재조립한다 (90° 회전이면 가로/세로가 맞바뀜).
+  const CGPoint rawTopLeft = CGPointMake(box.origin.x, 1.0 - box.origin.y - box.size.height);
+  const CGPoint rawBottomRight =
+      CGPointMake(box.origin.x + box.size.width, 1.0 - box.origin.y);
+  const CGPoint c1 = AURARealtimeCanonicalPoint(rawTopLeft, rotation);
+  const CGPoint c2 = AURARealtimeCanonicalPoint(rawBottomRight, rotation);
+  const CGFloat minX = fmin(c1.x, c2.x);
+  const CGFloat minY = fmin(c1.y, c2.y);
   return @{
-    @"x": @(AURARealtimeClamp(box.origin.x)),
-    @"y": @(AURARealtimeClamp(1.0 - box.origin.y - box.size.height)),
-    @"width": @(AURARealtimeClamp(box.size.width)),
-    @"height": @(AURARealtimeClamp(box.size.height)),
+    @"x": @(AURARealtimeClamp(minX)),
+    @"y": @(AURARealtimeClamp(minY)),
+    @"width": @(AURARealtimeClamp(fabs(c2.x - c1.x))),
+    @"height": @(AURARealtimeClamp(fabs(c2.y - c1.y))),
   };
 }
 
@@ -270,17 +316,20 @@ static NSDictionary *AURARealtimeBoundsPoint(NSDictionary *bounds, CGFloat xRati
 static NSDictionary *AURARealtimeForeheadPoint(
     VNFaceLandmarks2D *landmarks,
     NSDictionary *bounds,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
   NSMutableArray<NSDictionary *> *browPoints = [NSMutableArray array];
-  [browPoints addObjectsFromArray:AURARealtimePointsFromRegion(landmarks.leftEyebrow, imageSize)];
-  [browPoints addObjectsFromArray:AURARealtimePointsFromRegion(landmarks.rightEyebrow, imageSize)];
+  [browPoints addObjectsFromArray:
+      AURARealtimePointsFromRegion(landmarks.leftEyebrow, imageSize, rotation)];
+  [browPoints addObjectsFromArray:
+      AURARealtimePointsFromRegion(landmarks.rightEyebrow, imageSize, rotation)];
 
   CGFloat faceTop = [bounds[@"y"] doubleValue];
   CGFloat faceHeight = [bounds[@"height"] doubleValue];
   CGFloat faceCenterX = [bounds[@"x"] doubleValue] + [bounds[@"width"] doubleValue] * 0.5;
-  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize);
-  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize);
+  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize, rotation);
+  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize, rotation);
   CGFloat foreheadCenterX = faceCenterX;
 
   if (browPoints.count == 0) {
@@ -313,25 +362,27 @@ static NSDictionary *AURARealtimeForeheadPoint(
 
 static NSMutableDictionary *AURARealtimeLandmarksFromFace(
     VNFaceObservation *face,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
   VNFaceLandmarks2D *landmarks = face.landmarks;
-  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face);
+  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face, rotation);
   NSMutableDictionary *result = [NSMutableDictionary dictionary];
 
   if (landmarks == nil) {
     return result;
   }
 
-  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize);
-  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize);
-  NSDictionary *noseBase = AURARealtimeLowestPointFromRegion(landmarks.nose, imageSize);
+  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize, rotation);
+  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize, rotation);
+  NSDictionary *noseBase = AURARealtimeLowestPointFromRegion(landmarks.nose, imageSize, rotation);
   VNFaceLandmarkRegion2D *lips = landmarks.outerLips ?: landmarks.innerLips;
-  NSDictionary *mouthLeft = AURARealtimeLipCornerFromRegion(lips, imageSize, YES);
-  NSDictionary *mouthRight = AURARealtimeLipCornerFromRegion(lips, imageSize, NO);
-  NSDictionary *chin = AURARealtimeCenteredChinPointFromRegion(landmarks.faceContour, bounds, imageSize) ?:
-      AURARealtimeBoundsPoint(bounds, 0.5, 0.92);
-  NSDictionary *forehead = AURARealtimeForeheadPoint(landmarks, bounds, imageSize);
+  NSDictionary *mouthLeft = AURARealtimeLipCornerFromRegion(lips, imageSize, rotation, YES);
+  NSDictionary *mouthRight = AURARealtimeLipCornerFromRegion(lips, imageSize, rotation, NO);
+  NSDictionary *chin =
+      AURARealtimeCenteredChinPointFromRegion(landmarks.faceContour, bounds, imageSize, rotation) ?:
+          AURARealtimeBoundsPoint(bounds, 0.5, 0.92);
+  NSDictionary *forehead = AURARealtimeForeheadPoint(landmarks, bounds, imageSize, rotation);
 
   if (leftEye) {
     result[@"leftEye"] = leftEye;
@@ -370,78 +421,40 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks);
 static NSDictionary *AURARealtimePoseFromVisionObservation(VNFaceObservation *face,
                                                            BOOL isFront);
 
-// Rotate a raw-frame Vision point into the UPRIGHT PORTRAIT, selfie-mirrored
-// frame that the MediaPipe path emitted (eyes horizontal, origin top-left,
-// user-view left/right).
-//
-// The video-data-output buffer is LANDSCAPE (e.g. 1440x1080), so a frontal
-// upright face arrives 90° rotated: the eye line is VERTICAL in the raw frame.
-// That is why the un-rotated payload showed roll≈-90°, a near-zero eye x-span
-// (faceWidthRatio≈0.045), and a yaw that blew up dividing by that tiny span. The
-// top-level screen dots already undo this via captureDevicePointFromVisionPoint's
-// (x,y)->(y,x) swap; the mediaPipe slot needs the same rotation.
-//
-//   swap axes  (x,y) -> (y,x)     [undo the 90° buffer rotation → eyes horizontal]
-//   front only: mirror x -> 1 - x [selfie view, matches the preview layer]
-//
-// Both raw and upright points are normalized [0,1]; AURARealtimePointFromImagePoint
-// already put raw points at origin top-left, so the swap keeps origin top-left.
-static NSDictionary *AURARealtimeUprightPortraitPoint(
-    NSDictionary *point,
-    BOOL isFront)
-{
-  if (!point) {
-    return nil;
-  }
-
-  CGFloat rawX = AURARealtimeNumberFromPoint(point, @"x");
-  CGFloat rawY = AURARealtimeNumberFromPoint(point, @"y");
-  CGFloat uprightX = rawY;
-  CGFloat uprightY = rawX;
-
-  if (isFront) {
-    uprightX = 1.0 - uprightX;
-  }
-
-  return AURARealtimePoint(uprightX, uprightY);
-}
-
-// Builds the MediaPipe-shaped `landmarks` map in the SAME RAW camera-buffer
-// frame that the top-level Vision landmarks (AURARealtimeLandmarksFromFace) use.
-// This is deliberate: these landmarks feed attachMediaPipeScreenLandmarksToPayload
-// → screenPointFromNormalizedPoint → captureDevicePointFromVisionPoint, the exact
-// converter that already places the top-level forehead/chin dots correctly. So
-// the mediaPipe screenLandmarks (which the greenlight's not_centered check reads)
-// land in the right place only if they share that raw convention. Pose and
-// faceWidthRatio are computed separately from an UPRIGHT copy (see below), NOT
-// from these raw points.
+// Builds the MediaPipe-shaped `landmarks` map in the CANONICAL upright frame —
+// the same frame the top-level Vision landmarks (AURARealtimeLandmarksFromFace)
+// use, because both go through the rotation-aware primitives. These landmarks
+// feed attachMediaPipeScreenLandmarksToPayload → screenPointFromNormalizedPoint
+// → captureDevicePointFromCanonicalPoint, whose contract is canonical input.
+// The greenlight's not_centered check reads the resulting screenLandmarks.
 static NSMutableDictionary *AURARealtimeMediaPipeLandmarksFromVisionFace(
     VNFaceObservation *face,
-    CGSize imageSize)
+    CGSize imageSize,
+    AURARealtimeFrameRotation rotation)
 {
   VNFaceLandmarks2D *landmarks = face.landmarks;
-  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face);
+  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face, rotation);
   NSMutableDictionary *result = [NSMutableDictionary dictionary];
 
   if (landmarks == nil) {
     return result;
   }
 
-  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize);
-  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize);
+  NSDictionary *leftEye = AURARealtimeCentroidFromRegion(landmarks.leftEye, imageSize, rotation);
+  NSDictionary *rightEye = AURARealtimeCentroidFromRegion(landmarks.rightEye, imageSize, rotation);
   VNFaceLandmarkRegion2D *lips = landmarks.outerLips ?: landmarks.innerLips;
-  NSDictionary *mouthLeft = AURARealtimeLipCornerFromRegion(lips, imageSize, YES);
-  NSDictionary *mouthRight = AURARealtimeLipCornerFromRegion(lips, imageSize, NO);
-  NSDictionary *chin = AURARealtimeCenteredChinPointFromRegion(landmarks.faceContour, bounds, imageSize) ?:
-      AURARealtimeBoundsPoint(bounds, 0.5, 0.92);
-  NSDictionary *forehead = AURARealtimeForeheadPoint(landmarks, bounds, imageSize);
+  NSDictionary *mouthLeft = AURARealtimeLipCornerFromRegion(lips, imageSize, rotation, YES);
+  NSDictionary *mouthRight = AURARealtimeLipCornerFromRegion(lips, imageSize, rotation, NO);
+  NSDictionary *chin =
+      AURARealtimeCenteredChinPointFromRegion(landmarks.faceContour, bounds, imageSize, rotation) ?:
+          AURARealtimeBoundsPoint(bounds, 0.5, 0.92);
+  NSDictionary *forehead = AURARealtimeForeheadPoint(landmarks, bounds, imageSize, rotation);
 
-  // noseBridge/noseTip are placed by interpolating between the raw forehead and
-  // chin — the two centerline points that already screen-project correctly (they
-  // drive the top-level dots). Interpolating guarantees all four centerline points
-  // are COLLINEAR on screen, so the greenlight's centerLineSpread ≈ 0 and the
-  // not_centered check passes for a centered face. (Nose-region extreme pickers
-  // are unreliable in the rotated raw frame, so we do not use them here.)
+  // noseBridge/noseTip are placed by interpolating between forehead and chin.
+  // Interpolating guarantees all four centerline points are COLLINEAR on screen,
+  // so the greenlight's centerLineSpread ≈ 0 and the not_centered check passes
+  // for a centered face. (Nose-region extreme pickers are less reliable than the
+  // forehead/chin band heuristics, so we do not use them for the centerline.)
   NSDictionary *noseBridge = nil;
   NSDictionary *noseTip = nil;
   if (forehead && chin) {
@@ -482,48 +495,31 @@ static NSMutableDictionary *AURARealtimeMediaPipeLandmarksFromVisionFace(
   return result;
 }
 
-// Rotates a raw-frame landmark map into the UPRIGHT PORTRAIT frame used ONLY to
-// compute pose (yaw/roll/pitch) and faceWidthRatio. The raw buffer is landscape,
-// so a frontal upright face has its eye line VERTICAL there — feeding raw points
-// straight into AURARealtimePoseFromGeometry produced roll≈-90°, a near-zero eye
-// x-span (faceWidthRatio≈0.045), and a yaw that blew up dividing by that span.
-// After swapping axes the eyes are horizontal, so roll≈0, eye x-span is real, and
-// yaw is well-defined. (The mirror does not change any |magnitude| the greenlight
-// gates on; it only fixes left/right labeling and yaw sign.)
-static NSMutableDictionary *AURARealtimeUprightLandmarks(
-    NSDictionary *rawLandmarks,
-    BOOL isFront)
+// pose/faceWidthRatio 계산용 사본 — 좌/우 라벨을 정준 x 기준으로 재정렬한다.
+// 랜드마크는 이미 정준(upright) 프레임이지만, 회전 판정 전 원 프레임의 라벨이
+// 뒤바뀌어 있을 수 있다 (rollDeg = atan2(rightY-leftY, rightX-leftX) 는 올바른
+// 순서를 요구). 방출되는 landmarks 맵은 건드리지 않는다.
+static NSMutableDictionary *AURARealtimePoseLandmarksFromCanonical(NSDictionary *landmarks)
 {
-  NSMutableDictionary *upright = [NSMutableDictionary dictionary];
+  NSMutableDictionary *poseLandmarks = [landmarks mutableCopy];
 
-  for (NSString *key in rawLandmarks) {
-    NSDictionary *uprightPoint =
-        AURARealtimeUprightPortraitPoint(rawLandmarks[key], isFront);
-    if (uprightPoint) {
-      upright[key] = uprightPoint;
-    }
-  }
-
-  // After the axis swap, the eye/mouth whose upright-X is smaller is the
-  // user-view-left one. Re-order so left/right labels match the MediaPipe
-  // convention (rollDeg = atan2(rightY-leftY, rightX-leftX) needs correct order).
   NSArray<NSArray<NSString *> *> *pairs = @[ @[ @"leftEye", @"rightEye" ], @[ @"mouthLeft", @"mouthRight" ] ];
   for (NSArray<NSString *> *pair in pairs) {
-    NSDictionary *a = upright[pair[0]];
-    NSDictionary *b = upright[pair[1]];
+    NSDictionary *a = poseLandmarks[pair[0]];
+    NSDictionary *b = poseLandmarks[pair[1]];
     if (a && b &&
         AURARealtimeNumberFromPoint(a, @"x") > AURARealtimeNumberFromPoint(b, @"x")) {
-      upright[pair[0]] = b;
-      upright[pair[1]] = a;
+      poseLandmarks[pair[0]] = b;
+      poseLandmarks[pair[1]] = a;
     }
   }
 
-  return upright;
+  return poseLandmarks;
 }
 
 // faceWidthRatio in the MediaPipe scale (thresholds 0.30..0.62 in the
 // greenlight). Reuses the MediaPipe path's eye/mouth-span heuristic so the same
-// thresholds apply; both use UPRIGHT full-image normalized x coordinates.
+// thresholds apply; both use CANONICAL upright full-image normalized x coords.
 static NSNumber *AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(NSDictionary *landmarks)
 {
   NSDictionary *leftEye = landmarks[@"leftEye"];
@@ -544,16 +540,18 @@ static NSNumber *AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(NSDictionary *
   return nil;
 }
 
-// Assembles the full MediaPipe-shaped payload. `landmarks` stay in the RAW frame
-// (so screenLandmarks convert correctly like the top-level dots); pose and
-// faceWidthRatio come from a separate UPRIGHT copy so their values are sane.
+// Assembles the full MediaPipe-shaped payload. `landmarks` are CANONICAL
+// upright (rotation-aware primitives), so screenLandmarks convert correctly and
+// pose/faceWidthRatio can be derived from the same points (좌/우 라벨 재정렬만
+// 별도 사본에서 수행). 실시간 좌표 규약의 단일 계약은 AURARealtimeGeometry.h.
 static NSDictionary *AURARealtimeMediaPipePayloadFromVisionFace(
     VNFaceObservation *face,
     CGSize imageSize,
-    BOOL isFront)
+    BOOL isFront,
+    AURARealtimeFrameRotation rotation)
 {
   NSMutableDictionary *landmarks =
-      AURARealtimeMediaPipeLandmarksFromVisionFace(face, imageSize);
+      AURARealtimeMediaPipeLandmarksFromVisionFace(face, imageSize, rotation);
 
   if (landmarks.count == 0) {
     return @{
@@ -569,19 +567,16 @@ static NSDictionary *AURARealtimeMediaPipePayloadFromVisionFace(
     @"poseSource": @"geometry",
   } mutableCopy];
 
-  // Pose + width need eyes horizontal; derive them from the upright copy.
-  NSMutableDictionary *uprightLandmarks =
-      AURARealtimeUprightLandmarks(landmarks, isFront);
+  // Pose + width: 정준 랜드마크에서 좌/우 라벨만 재정렬한 사본으로 계산.
+  NSMutableDictionary *poseLandmarks = AURARealtimePoseLandmarksFromCanonical(landmarks);
 
   // For yaw, pose needs a REAL nose position, not the on-midline interpolated
-  // noseTip (which would force yaw≈0). The nose-region centroid is rotation-safe,
-  // so override the upright noseTip with it for the pose calc only. This does not
-  // affect the emitted centerline landmarks/screenLandmarks.
+  // noseTip (which would force yaw≈0). Override for the pose calc only — this
+  // does not affect the emitted centerline landmarks/screenLandmarks.
   NSDictionary *noseCentroid =
-      AURARealtimeCentroidFromRegion(face.landmarks.nose, imageSize);
-  NSDictionary *uprightNose = AURARealtimeUprightPortraitPoint(noseCentroid, isFront);
-  if (uprightNose) {
-    uprightLandmarks[@"noseTip"] = uprightNose;
+      AURARealtimeCentroidFromRegion(face.landmarks.nose, imageSize, rotation);
+  if (noseCentroid) {
+    poseLandmarks[@"noseTip"] = noseCentroid;
   }
 
   // Vision 이 관측 자체에 제공하는 head pose 각도(roll/yaw/pitch)를 우선 사용한다.
@@ -591,10 +586,10 @@ static NSDictionary *AURARealtimeMediaPipePayloadFromVisionFace(
   // 차이는 판정에 영향 없다. 각도가 없으면(관측 미제공) geometry 로 폴백.
   NSDictionary *visionPose = AURARealtimePoseFromVisionObservation(face, isFront);
   [payload addEntriesFromDictionary:
-      visionPose ?: AURARealtimePoseFromGeometry(uprightLandmarks)];
+      visionPose ?: AURARealtimePoseFromGeometry(poseLandmarks)];
 
   NSNumber *faceWidthRatio =
-      AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(uprightLandmarks);
+      AURARealtimeMediaPipeFaceWidthRatioFromLandmarks(poseLandmarks);
   if (faceWidthRatio) {
     payload[@"faceWidthRatio"] = faceWidthRatio;
   }
@@ -620,12 +615,27 @@ static VNFaceObservation *AURARealtimeLargestFace(NSArray<VNFaceObservation *> *
 
 static CGImagePropertyOrientation AURARealtimeVideoOrientation(AVCaptureDevicePosition position)
 {
-  // The video data output stays unmirrored. The preview layer owns front-camera
-  // mirroring, so Vision receives upright, unmirrored frames to avoid double
-  // mirroring when converting landmarks back through AVCaptureVideoPreviewLayer.
+  // Vision 검출 힌트. video data output 은 unmirrored 유지 — 미러는 preview
+  // connection 소유. 주의: 이 힌트가 결과 좌표의 프레임을 보장한다고 가정하지
+  // 않는다. 좌표 프레임은 매 프레임 자가판정한다(resolveFrameRotationForFace,
+  // AURARealtimeGeometry.h) — 과거 이 파일에는 'Vision 좌표=upright' 와
+  // 'raw landscape 실측' 이라는 상반된 주석이 공존했고 그 불일치가 중앙선
+  // 어긋남의 근인이었다.
   return position == AVCaptureDevicePositionFront
       ? kCGImagePropertyOrientationLeft
       : kCGImagePropertyOrientationRight;
+}
+
+// 진단 로그/페이로드용 회전 이름.
+static NSString *AURARealtimeFrameRotationName(AURARealtimeFrameRotation rotation)
+{
+  switch (rotation) {
+    case AURARealtimeFrameRotationUpright: return @"upright";
+    case AURARealtimeFrameRotation90CW: return @"rot90cw";
+    case AURARealtimeFrameRotation90CCW: return @"rot90ccw";
+    case AURARealtimeFrameRotation180: return @"rot180";
+    default: return @"unknown";
+  }
 }
 
 static CGFloat AURARealtimeDegrees(CGFloat radians)
@@ -784,6 +794,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   if (!leftEye || !rightEye || !noseTip) {
     return @{
       @"pitchDeg": @0,
+      @"pitchMeasured": @NO,
       @"yawDeg": @0,
       @"rollDeg": @0,
       @"poseSource": @"geometry_unavailable",
@@ -802,6 +813,11 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   CGFloat rollDeg = AURARealtimeDegrees(atan2(rightY - leftY, rightX - leftX));
   CGFloat yawDeg = (noseX - eyeCenterX) / eyeDistance * 42.0;
   CGFloat pitchDeg = 0.0;
+  // pitch 는 입꼬리 쌍이 있어야만 계측 가능하다. 입꼬리가 없으면 pitchDeg=0 을
+  // 그대로 두되 pitchMeasured=NO 로 표기해, live pose 게이트가 '측정된 0'과
+  // '못 잰 것'을 구분하게 한다 — 표기가 없으면 실제 큰 pitch 가 0 으로 위장돼
+  // live 를 통과하고 사후 게이트에서만 폐기된다(코덱스 #245-4).
+  BOOL pitchMeasured = NO;
 
   if (mouthLeft && mouthRight) {
     CGFloat mouthCenterY =
@@ -811,10 +827,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     CGFloat verticalSpan = fmax(mouthCenterY - eyeCenterY, 0.001);
     CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
     pitchDeg = (noseRatio - 0.48) * 28.0;
+    pitchMeasured = YES;
   }
 
   return @{
     @"pitchDeg": @(pitchDeg),
+    @"pitchMeasured": @(pitchMeasured),
     @"yawDeg": @(yawDeg),
     @"rollDeg": @(rollDeg),
     @"poseSource": @"geometry",
@@ -859,6 +877,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   BOOL _semanticMatteRequiresHeic;
   CGSize _latestViewSize;
   NSDictionary *_lastScreenLandmarks;
+  // 프레임 회전 자가판정 상태 (vision 큐 전용 접근).
+  // 잠금(hysteresis): 첫 유효 판정으로 잠그고, "동일 후보"가 연속
+  // kAURARealtimeRotationSwitchStreak 프레임 나와야 전환한다. Unknown 프레임은
+  // 잠긴 값을 유지. _pendingFrameRotation 은 현재 누적 중인 전환 후보로,
+  // 다른 후보가 오면 streak 를 리셋해 "플래핑"으로 엉뚱한 값에 잠기는 것을 막는다.
+  AURARealtimeFrameRotation _lockedFrameRotation;
+  AURARealtimeFrameRotation _pendingFrameRotation;
+  BOOL _hasLockedFrameRotation;
+  NSInteger _rotationDisagreeStreak;
+  // 진단용 (payload 로 방출): 이번 프레임의 원시 판정과 raw 눈선 축 비율.
+  AURARealtimeFrameRotation _diagDetectedRotation;
+  double _diagEyeAxisRatio;
+  BOOL _diagHasEyeAxis;
   NSDictionary *_matteCapability;
   NSDictionary *_pendingCaptureCameraMetadata;
   NSDictionary *_pendingSemanticMattes;
@@ -927,6 +958,12 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   _facing = nextFacing;
   _isSessionConfigured = NO;
+  // 카메라 전환 시 프레임 회전 잠금을 무효화한다 — front/back 은 orientation 힌트
+  // (Left/Right)·미러가 달라 이전 카메라에서 잠긴 회전이 유효하지 않다(코덱스 #245-3).
+  // 세션이 재구성되며 프레임 전달이 잠시 멈추므로 여기서 직접 리셋해도 안전하다.
+  _hasLockedFrameRotation = NO;
+  _pendingFrameRotation = AURARealtimeFrameRotationUnknown;
+  _rotationDisagreeStreak = 0;
 
   if (self.window != nil) {
     [self startCameraIfPermitted];
@@ -1443,14 +1480,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (void)updateOutputConnections
 {
   for (AVCaptureOutput *output in _session.outputs) {
+    // video data output(_videoOutput)은 회전·미러 없이 raw 로 유지한다. Vision/MPP
+    // 힌트(AURARealtimeVideoOrientation / AURARealtimeMediaPipeImageOrientation)가
+    // raw landscape 버퍼를 전제로 Left/Right 로 '한 번만' 세우기 때문이다. 여기서
+    // 데이터 출력에까지 Portrait 를 걸면 버퍼가 물리 회전돼 이중회전(얼굴 ≈90°)이
+    // 되고, Vision roll≈90° 로 F8 이 올바른 프레임 회전을 Unknown 으로 강등한다
+    // (코덱스 #245-1). 표시용 회전·미러는 preview connection 이 소유한다.
+    BOOL isVideoDataOutput = (output == _videoOutput);
     for (AVCaptureConnection *connection in output.connections) {
-      if ([connection isVideoOrientationSupported]) {
+      if (!isVideoDataOutput && [connection isVideoOrientationSupported]) {
         connection.videoOrientation = AVCaptureVideoOrientationPortrait;
       }
       if ([connection isVideoMirroringSupported]) {
         connection.automaticallyAdjustsVideoMirroring = NO;
         BOOL mirrorsPreviewOnly =
-            [self devicePosition] == AVCaptureDevicePositionFront && output != _videoOutput;
+            [self devicePosition] == AVCaptureDevicePositionFront && !isVideoDataOutput;
         connection.videoMirrored = mirrorsPreviewOnly;
       }
     }
@@ -1732,8 +1776,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   }
 
   NSArray<VNFaceObservation *> *faces = request.results ?: @[];
+  VNFaceObservation *primaryFace = AURARealtimeLargestFace(faces);
+  // 좌표 프레임 자가판정 (raw 눈선 축 + 프로브 방향, hysteresis 포함).
+  const AURARealtimeFrameRotation frameRotation =
+      [self resolveFrameRotationForFace:primaryFace imageSize:imageSize];
   NSMutableDictionary *payload =
-      [[self payloadForFaces:faces imageSize:imageSize] mutableCopy];
+      [[self payloadForFaces:faces imageSize:imageSize rotation:frameRotation] mutableCopy];
+
+  // 진단: 스크린샷/로그만으로 좌표 규약 문제를 원격 판독할 수 있게 방출.
+  payload[@"frameRotation"] = AURARealtimeFrameRotationName(frameRotation);
+  payload[@"frameRotationDetected"] = AURARealtimeFrameRotationName(_diagDetectedRotation);
+  payload[@"frameRotationLocked"] = @(_hasLockedFrameRotation);
+  if (_diagHasEyeAxis) {
+    payload[@"eyeAxisRatio"] = @(_diagEyeAxisRatio);
+    payload[@"eyeAxis"] = _diagEyeAxisRatio >= 1.0 ? @"horizontal" : @"vertical";
+  }
 
 #if AURA_HAS_MEDIAPIPE
   // Real MediaPipe present: keep its screen-landmark payload (computed from the
@@ -1746,10 +1803,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // landmarks (forehead/noseBridge/noseTip/chin) + yaw/roll/pitch +
   // faceWidthRatio let finalCaptureGreenlight pass when the face is framed.
   (void)mediaPipePayload;
-  VNFaceObservation *greenlightFace = AURARealtimeLargestFace(faces);
   BOOL isFrontCamera = [self devicePosition] == AVCaptureDevicePositionFront;
-  payload[@"mediaPipe"] = greenlightFace
-      ? AURARealtimeMediaPipePayloadFromVisionFace(greenlightFace, imageSize, isFrontCamera)
+  payload[@"mediaPipe"] = primaryFace
+      ? AURARealtimeMediaPipePayloadFromVisionFace(primaryFace, imageSize, isFrontCamera, frameRotation)
       : @{@"status": @"no_face", @"landmarkCount": @0};
 #endif  // AURA_HAS_MEDIAPIPE
 
@@ -1758,7 +1814,137 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   _isProcessingFrame = NO;
 }
 
-- (NSDictionary *)payloadForFaces:(NSArray<VNFaceObservation *> *)faces imageSize:(CGSize)imageSize
+// 프레임 회전 자가판정 + hysteresis. vision 큐에서만 호출.
+//
+// raw(무회전) 프레임의 눈 센트로이드 2점과 프로브(코 센트로이드, 없으면 입꼬리
+// 중점)로 AURARealtimeDetectFrameRotation 을 돌린다. 첫 유효 판정으로 잠그고,
+// 연속 kAURARealtimeRotationSwitchStreak 프레임 동안 다른 값이 나와야 전환.
+// Unknown/얼굴 없음 프레임은 잠긴 값 유지(없으면 Upright=종전 동작 폴백).
+// 킬스위치 kAURARealtimeRotationDetectionEnabled=NO 면 항상 Upright.
+- (AURARealtimeFrameRotation)resolveFrameRotationForFace:(VNFaceObservation *)face
+                                               imageSize:(CGSize)imageSize
+{
+  _diagDetectedRotation = AURARealtimeFrameRotationUnknown;
+  _diagHasEyeAxis = NO;
+
+  if (!kAURARealtimeRotationDetectionEnabled) {
+    return AURARealtimeFrameRotationUpright;
+  }
+
+  if (face && face.landmarks) {
+    NSDictionary *leftEye = AURARealtimeCentroidFromRegion(
+        face.landmarks.leftEye, imageSize, AURARealtimeFrameRotationUpright);
+    NSDictionary *rightEye = AURARealtimeCentroidFromRegion(
+        face.landmarks.rightEye, imageSize, AURARealtimeFrameRotationUpright);
+    NSDictionary *probe = AURARealtimeCentroidFromRegion(
+        face.landmarks.nose, imageSize, AURARealtimeFrameRotationUpright);
+    if (!probe) {
+      VNFaceLandmarkRegion2D *lips = face.landmarks.outerLips ?: face.landmarks.innerLips;
+      probe = AURARealtimeCentroidFromRegion(
+          lips, imageSize, AURARealtimeFrameRotationUpright);
+    }
+
+    if (leftEye && rightEye) {
+      const CGPoint l = CGPointMake(AURARealtimeNumberFromPoint(leftEye, @"x"),
+                                    AURARealtimeNumberFromPoint(leftEye, @"y"));
+      const CGPoint r = CGPointMake(AURARealtimeNumberFromPoint(rightEye, @"x"),
+                                    AURARealtimeNumberFromPoint(rightEye, @"y"));
+      const CGFloat rawDx = fabs(r.x - l.x);
+      const CGFloat rawDy = fabs(r.y - l.y);
+      if (rawDx > 1e-6 || rawDy > 1e-6) {
+        _diagEyeAxisRatio = rawDx / fmax(rawDy, 1e-6);
+        _diagHasEyeAxis = YES;
+      }
+
+      const CGPoint probePoint = probe
+          ? CGPointMake(AURARealtimeNumberFromPoint(probe, @"x"),
+                        AURARealtimeNumberFromPoint(probe, @"y"))
+          : CGPointZero;
+      _diagDetectedRotation =
+          AURARealtimeDetectFrameRotation(l, r, probePoint, probe != nil);
+    }
+  }
+
+  // 원시 판정(_diagDetectedRotation)은 진단용으로 보존한다. 적용 결정은 local
+  // 사본에 F8 게이트를 적용한 값으로 한다 — 로그의 frameRotationDetected(원시)와
+  // frameRotation(적용)이 다르면 게이트가 억제했음을 원격 판독할 수 있다.
+  AURARealtimeFrameRotation detected = _diagDetectedRotation;
+
+  // ── F8 게이트: 비-upright 회전은 머리가 똑바를 때만 신뢰 ──
+  // 세로 눈선은 프레임 90° 회전과 고개 90° 기울임을 구분 못 한다(눈선 하나로는
+  // 불가). Vision 이 독립 추정한 head roll 이 작을 때만 프레임 회전으로 확정하고,
+  // 크거나(고개 기울임) 없으면 Unknown 으로 강등해 잠긴 값을 유지한다.
+  // (한계: 방향 힌트가 실제와 어긋난 극단 케이스는 여전히 애매 — 사후 pose
+  //  게이트가 최종 방어선이라 잘못된 분석 결과로는 이어지지 않는다.)
+  if (detected != AURARealtimeFrameRotationUpright &&
+      detected != AURARealtimeFrameRotationUnknown) {
+    // F8 은 head roll 하나만 필요하다. Vision 의 roll/yaw/pitch 는 서로 독립
+    // optional 이라 전체 pose payload(AURARealtimePoseFromVisionObservation)를
+    // 요구하면 yaw·pitch 가 없을 때 genuine landscape 까지 Unknown 으로 강등된다
+    // (코덱스 #245-2). roll(VNFaceObservation.roll, 라디안)만 직접 읽는다. |roll|
+    // 은 front/back 미러에 불변이므로 isFront 보정이 불필요하다. roll 이 없으면
+    // 판별 불가로 보고 강등(fail-safe).
+    NSNumber *rollNumber = face.roll;
+    double headRollAbs = rollNumber != nil
+        ? fabs(AURARealtimeDegrees(rollNumber.doubleValue))
+        : INFINITY;
+    if (rollNumber == nil || headRollAbs > kAURARealtimeMaxHeadRollForFrameRotationDeg) {
+      detected = AURARealtimeFrameRotationUnknown;
+    }
+  }
+
+  if (detected == AURARealtimeFrameRotationUnknown) {
+    // Unknown 은 진행 중이던 전환 누적을 끊는다 — 잠긴 값과 '연속으로' 같은 후보가
+    // 쌓일 때만 전환해야 하는데, 리셋하지 않으면 X→Unknown→X… 가 Unknown 을
+    // 건너뛰고 누적돼 한 번도 연속이 아닌 값으로 잘못 전환된다(코덱스 #245-3).
+    // 잠긴 값 자체는 유지(fail-safe).
+    if (_hasLockedFrameRotation) {
+      _pendingFrameRotation = _lockedFrameRotation;
+      _rotationDisagreeStreak = 0;
+    }
+    return _hasLockedFrameRotation ? _lockedFrameRotation
+                                   : AURARealtimeFrameRotationUpright;
+  }
+
+  if (!_hasLockedFrameRotation) {
+    _lockedFrameRotation = detected;
+    _hasLockedFrameRotation = YES;
+    _pendingFrameRotation = detected;
+    _rotationDisagreeStreak = 0;
+    return _lockedFrameRotation;
+  }
+
+  if (detected == _lockedFrameRotation) {
+    _pendingFrameRotation = detected;
+    _rotationDisagreeStreak = 0;
+    return _lockedFrameRotation;
+  }
+
+  // detected != locked: "동일 후보"가 연속으로 쌓일 때만 전환한다. 다른 후보가
+  // 오면 누적을 처음부터 다시 시작 — 서로 다른 값의 불일치가 섞여 누적돼 한 번만
+  // 나온 값으로 잘못 전환되던 플래핑 버그(코덱스 F-hysteresis)를 막는다.
+  if (detected == _pendingFrameRotation) {
+    _rotationDisagreeStreak += 1;
+  } else {
+    _pendingFrameRotation = detected;
+    _rotationDisagreeStreak = 1;
+  }
+
+  if (_rotationDisagreeStreak >= kAURARealtimeRotationSwitchStreak) {
+    NSLog(@"[aura:face-capture] frame-rotation:switch %@ -> %@ (streak %ld)",
+          AURARealtimeFrameRotationName(_lockedFrameRotation),
+          AURARealtimeFrameRotationName(detected),
+          (long)_rotationDisagreeStreak);
+    _lockedFrameRotation = detected;
+    _rotationDisagreeStreak = 0;
+  }
+
+  return _lockedFrameRotation;
+}
+
+- (NSDictionary *)payloadForFaces:(NSArray<VNFaceObservation *> *)faces
+                        imageSize:(CGSize)imageSize
+                         rotation:(AURARealtimeFrameRotation)rotation
 {
   VNFaceObservation *face = AURARealtimeLargestFace(faces);
   NSMutableDictionary *payload = [@{
@@ -1773,8 +1959,8 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     return payload;
   }
 
-  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face);
-  NSMutableDictionary *landmarks = AURARealtimeLandmarksFromFace(face, imageSize);
+  NSDictionary *bounds = AURARealtimeBoundsFromObservation(face, rotation);
+  NSMutableDictionary *landmarks = AURARealtimeLandmarksFromFace(face, imageSize, rotation);
   if (face.landmarks == nil || landmarks.count == 0) {
     payload[@"status"] = @"no_landmarks";
   }
@@ -1870,21 +2056,37 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   NSMutableDictionary *nextMediaPipe = [mediaPipe mutableCopy];
   nextMediaPipe[@"screenLandmarks"] = screenLandmarks;
+
+  // 투영 앵커 원격 계측: visionPose roll≈0 인데 이 값이 크면 정준→device→layer
+  // 변환이 틀렸다는 증거다 (자동 보정에는 쓰지 않고 계측만 — fail-safe 원칙).
+  NSDictionary *leftEyeScreen = screenLandmarks[@"leftEye"];
+  NSDictionary *rightEyeScreen = screenLandmarks[@"rightEye"];
+  if (leftEyeScreen && rightEyeScreen) {
+    const CGFloat tilt = AURARealtimeScreenEyeLineTilt(
+        CGPointMake([leftEyeScreen[@"left"] doubleValue],
+                    [leftEyeScreen[@"top"] doubleValue]),
+        CGPointMake([rightEyeScreen[@"left"] doubleValue],
+                    [rightEyeScreen[@"top"] doubleValue]));
+    nextMediaPipe[@"projectionEyeTilt"] = @(tilt);
+  }
+
   payload[@"mediaPipe"] = nextMediaPipe;
 }
 
-- (CGPoint)captureDevicePointFromVisionPoint:(NSDictionary *)point
+- (CGPoint)captureDevicePointFromCanonicalPoint:(NSDictionary *)point
 {
   CGFloat x = AURARealtimeClamp([point[@"x"] doubleValue]);
   CGFloat y = AURARealtimeClamp([point[@"y"] doubleValue]);
 
-  // Vision landmarks are normalized after the sample buffer is oriented into
-  // upright portrait coordinates. AVCaptureVideoPreviewLayer's point-of-interest
-  // conversion API expects capture-device coordinates, which are rotated
-  // relative to portrait. For the portrait preview used here, swap y/x before
-  // handing the point to the preview layer. Front-camera mirroring is still
-  // applied only by the preview connection, so do not mirror x here.
-  return CGPointMake(y, x);
+  // 입력 계약: 정준(canonical upright portrait, unmirrored) 정규화 점 —
+  // 랜드마크 생산 전 구간이 프레임 회전 자가판정으로 정준화되므로 이 계약이
+  // 구조적으로 성립한다(AURARealtimeGeometry.h). (y,x) 스왑 앵커로
+  // capture-device 좌표를 만들고, videoGravity·crop·전면 미러는
+  // pointForCaptureDevicePointOfInterest(preview connection)가 소유한다.
+  // 이 앵커의 유효성은 mediaPipe.projectionEyeTilt 로그로 원격 계측된다.
+  const CGPoint device = AURARealtimeCaptureDevicePointFromCanonical(
+      CGPointMake(x, y), [self devicePosition] == AVCaptureDevicePositionFront);
+  return device;
 }
 
 - (NSDictionary *)screenPointFromNormalizedPoint:(NSDictionary *)point
@@ -1898,7 +2100,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // point instead of duplicating those transforms by hand.
   CGPoint layerPoint =
       [_previewLayer pointForCaptureDevicePointOfInterest:
-          [self captureDevicePointFromVisionPoint:point]];
+          [self captureDevicePointFromCanonicalPoint:point]];
 
   return AURARealtimeScreenPoint(layerPoint.x, layerPoint.y);
 }
