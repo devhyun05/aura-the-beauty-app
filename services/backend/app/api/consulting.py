@@ -225,8 +225,10 @@ async def send_consulting_text_message(
   """Durable HTTP path used when a mobile WebSocket is reconnecting."""
   user = await ensure_user(db, auth)
   booking = await consulting.get_booking(db, user["id"], booking_id)
-  if booking["status"] == "canceled":
-    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "취소된 예약에는 새 메시지를 보낼 수 없어요.")
+  if not booking.get("chat_available"):
+    raise AppError(409, "CONSULTING_CHAT_NOT_CONFIRMED", "예약 확정 후 채팅을 이용할 수 있어요.")
+  if booking["status"] in {"canceled", "unavailable"}:
+    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "종료된 예약의 대화는 열람만 할 수 있어요.")
   if booking.get("customer_left_at") or booking.get("expert_left_at"):
     raise AppError(409, "CONSULTING_CONVERSATION_LEFT", "나간 대화방에는 새 메시지를 보낼 수 없어요.")
   message, inserted = await create_consulting_message(
@@ -339,19 +341,21 @@ async def translate_customer_call_caption(
     result_id=payload.result_id,
     source_language_code=payload.source_language_code,
     content=payload.content,
+    is_partial=payload.is_partial,
     settings=settings,
   )
-  await consulting_realtime_manager.broadcast(
-    booking_id,
-    {
-      "type": "caption.translation",
-      "bookingId": booking_id,
-      "resultId": translated["result_id"],
-      "sourceLanguageCode": translated["source_language_code"],
-      "targetLanguageCode": translated["target_language_code"],
-      "translatedContent": translated["translated_content"],
-    },
-  )
+  if not payload.is_partial:
+    await consulting_realtime_manager.broadcast(
+      booking_id,
+      {
+        "type": "caption.translation",
+        "bookingId": booking_id,
+        "resultId": translated["result_id"],
+        "sourceLanguageCode": translated["source_language_code"],
+        "targetLanguageCode": translated["target_language_code"],
+        "translatedContent": translated["translated_content"],
+      },
+    )
   return success(translated)
 
 

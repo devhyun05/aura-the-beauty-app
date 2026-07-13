@@ -61,6 +61,7 @@ import type {
 const CALL_BACKGROUND = '#26241F';
 const CALL_SURFACE = 'rgba(255, 255, 255, 0.14)';
 const SELF_VIEW_BACKGROUND = '#4A473F';
+const PARTIAL_CAPTION_TRANSLATION_DELAY_MS = 320;
 
 type CallJoinStatus = 'idle' | 'joining' | 'ready' | 'not_ready';
 type TranslationDirection = 'ko-en' | 'en-ko';
@@ -134,6 +135,9 @@ export function ConsultingCallScreen({
   const [statusMessage, setStatusMessage] = useState('상담 연결을 준비하고 있어요');
   const pendingCaptionTranslationsRef = useRef<readonly CaptionTranslationEvent[]>([]);
   const translatedCaptionRequestIdsRef = useRef(new Set<string>());
+  const captionTranslationRequestKeysRef = useRef(new Set<string>());
+  const latestCaptionContentRef = useRef(new Map<string, string>());
+  const partialCaptionTranslationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translationEnabledRef = useRef(translationEnabled);
   const selectedTranslationDirection = translationDirections[translationDirection];
   const translationDirectionRef = useRef(selectedTranslationDirection);
@@ -179,6 +183,83 @@ export function ConsultingCallScreen({
   }, [selectedTranslationDirection, translationEnabled]);
 
   useEffect(() => {
+    const clearPartialCaptionTranslationTimer = () => {
+      if (partialCaptionTranslationTimerRef.current) {
+        clearTimeout(partialCaptionTranslationTimerRef.current);
+        partialCaptionTranslationTimerRef.current = null;
+      }
+    };
+
+    const requestCaptionTranslation = (
+      caption: ConsultingCaptionViewModel,
+      isPartial: boolean,
+    ) => {
+      if (!bookingId || !translationEnabledRef.current) {
+        return;
+      }
+
+      const normalizedContent = normalizeCaptionText(caption.content);
+      const requestKey = isPartial
+        ? `partial:${caption.resultId}:${normalizedContent}`
+        : `final:${caption.resultId}`;
+      if (
+        captionTranslationRequestKeysRef.current.has(requestKey) ||
+        (!isPartial && translatedCaptionRequestIdsRef.current.has(caption.resultId))
+      ) {
+        return;
+      }
+
+      captionTranslationRequestKeysRef.current.add(requestKey);
+      if (!isPartial) {
+        translatedCaptionRequestIdsRef.current.add(caption.resultId);
+      }
+
+      void translateConsultingCallCaption(bookingId, {
+        resultId: caption.resultId,
+        sourceLanguageCode: caption.sourceLanguageCode,
+        content: caption.content,
+        isPartial,
+      }).then(translation => {
+        if (!translation) {
+          captionTranslationRequestKeysRef.current.delete(requestKey);
+          if (!isPartial) {
+            translatedCaptionRequestIdsRef.current.delete(caption.resultId);
+          }
+          return;
+        }
+        if (
+          isPartial &&
+          normalizeCaptionText(latestCaptionContentRef.current.get(caption.resultId) ?? '') !==
+            normalizedContent
+        ) {
+          return;
+        }
+
+        const translationEvent: CaptionTranslationEvent = {
+          type: 'caption.translation',
+          bookingId,
+          ...translation,
+        };
+        if (!isPartial) {
+          pendingCaptionTranslationsRef.current = rememberCaptionTranslation(
+            pendingCaptionTranslationsRef.current,
+            translationEvent,
+          );
+        }
+        setCaptions(current =>
+          applyCaptionTranslation(current, translationEvent, caption.content),
+        );
+      });
+    };
+
+    const schedulePartialCaptionTranslation = (caption: ConsultingCaptionViewModel) => {
+      clearPartialCaptionTranslationTimer();
+      partialCaptionTranslationTimerRef.current = setTimeout(() => {
+        partialCaptionTranslationTimerRef.current = null;
+        requestCaptionTranslation(caption, true);
+      }, PARTIAL_CAPTION_TRANSLATION_DELAY_MS);
+    };
+
     const subscription = addNativeChimeMeetingListener((event) => {
       if (event.type === 'meetingError') {
         setJoinStatus('not_ready');
@@ -220,6 +301,9 @@ export function ConsultingCallScreen({
           event.results ?? [],
           captionLanguageFallbackRef.current,
         ).filter(caption => caption.speakerType === 'expert');
+        for (const caption of expertCaptions) {
+          latestCaptionContentRef.current.set(caption.resultId, caption.content);
+        }
         const nextCaptions = applyPendingCaptionTranslations(
           expertCaptions,
           pendingCaptionTranslationsRef.current,
@@ -230,35 +314,20 @@ export function ConsultingCallScreen({
         }
         if (translationEnabledRef.current && bookingId) {
           const direction = translationDirectionRef.current;
-          for (const caption of expertCaptions) {
-            if (
-              caption.isPartial ||
-              caption.sourceLanguageCode !== direction.sourceLanguageCode ||
-              translatedCaptionRequestIdsRef.current.has(caption.resultId)
-            ) {
-              continue;
+          const translatableCaptions = expertCaptions.filter(
+            caption => caption.sourceLanguageCode === direction.sourceLanguageCode,
+          );
+          const finalCaptions = translatableCaptions.filter(caption => !caption.isPartial);
+          if (finalCaptions.length > 0) {
+            clearPartialCaptionTranslationTimer();
+            for (const caption of finalCaptions) {
+              requestCaptionTranslation(caption, false);
             }
-            translatedCaptionRequestIdsRef.current.add(caption.resultId);
-            void translateConsultingCallCaption(bookingId, {
-              resultId: caption.resultId,
-              sourceLanguageCode: caption.sourceLanguageCode,
-              content: caption.content,
-            }).then(translation => {
-              if (!translation) {
-                translatedCaptionRequestIdsRef.current.delete(caption.resultId);
-                return;
-              }
-              const translationEvent: CaptionTranslationEvent = {
-                type: 'caption.translation',
-                bookingId,
-                ...translation,
-              };
-              pendingCaptionTranslationsRef.current = rememberCaptionTranslation(
-                pendingCaptionTranslationsRef.current,
-                translationEvent,
-              );
-              setCaptions(current => applyCaptionTranslation(current, translationEvent));
-            });
+          } else {
+            const partialCaption = translatableCaptions.at(-1);
+            if (partialCaption && normalizeCaptionText(partialCaption.content).length >= 2) {
+              schedulePartialCaptionTranslation(partialCaption);
+            }
           }
         }
         return;
@@ -284,8 +353,11 @@ export function ConsultingCallScreen({
       }
     });
 
-    return () => subscription.remove();
-  }, []);
+    return () => {
+      clearPartialCaptionTranslationTimer();
+      subscription.remove();
+    };
+  }, [bookingId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -293,6 +365,8 @@ export function ConsultingCallScreen({
     setUnityMakeupPlayerPaused(true);
     pendingCaptionTranslationsRef.current = [];
     translatedCaptionRequestIdsRef.current.clear();
+    captionTranslationRequestKeysRef.current.clear();
+    latestCaptionContentRef.current.clear();
     setCaptionStatusMessage(null);
     setCaptions([]);
     setJoinResult(null);
@@ -317,7 +391,7 @@ export function ConsultingCallScreen({
         setCallState(state);
         if (state?.chimeEnabled === false) {
           setJoinStatus('not_ready');
-          setStatusMessage('Chime 서버 설정이 아직 켜져 있지 않아요');
+          setStatusMessage('화상 상담 기능을 준비하지 못했어요. 잠시 후 다시 시도해 주세요');
         } else if (state?.status !== 'active') {
           setJoinStatus('not_ready');
           setStatusMessage('전문가가 화상 상담을 시작하면 전화 알림이 도착해요');
@@ -478,8 +552,14 @@ export function ConsultingCallScreen({
     setRemoteVideoActive(false);
     setCaptionStatusMessage(null);
     setCaptions([]);
+    if (partialCaptionTranslationTimerRef.current) {
+      clearTimeout(partialCaptionTranslationTimerRef.current);
+      partialCaptionTranslationTimerRef.current = null;
+    }
     pendingCaptionTranslationsRef.current = [];
     translatedCaptionRequestIdsRef.current.clear();
+    captionTranslationRequestKeysRef.current.clear();
+    latestCaptionContentRef.current.clear();
     setStatusMessage('상담 연결을 준비하고 있어요');
 
     let result: ConsultingCallJoinResult | null = null;
@@ -511,15 +591,15 @@ export function ConsultingCallScreen({
         setStatusMessage(
           getCallScreenErrorMessage(
             error,
-            '네이티브 Chime SDK 연결을 시작하지 못했어요',
+            '기기에서 화상 상담을 시작하지 못했어요',
           ),
         );
         return;
       }
       setStatusMessage(
         nativeStarted
-          ? 'Chime 화상 상담 영상을 연결하고 있어요'
-          : 'Chime 입장 정보가 준비됐어요. iOS 브리지를 연결하면 영상이 표시돼요.',
+          ? '화상 상담 영상을 연결하고 있어요'
+          : '현재 앱에서는 영상을 연결할 수 없어요. 앱을 최신 버전으로 업데이트해 주세요.',
       );
       if (translationEnabled) {
         void ensureTranslationActive();
@@ -530,7 +610,7 @@ export function ConsultingCallScreen({
     setJoinStatus(callState?.chimeEnabled === false ? 'not_ready' : 'idle');
     setStatusMessage(
       callState?.chimeEnabled === false
-        ? 'Chime 서버 설정이 아직 켜져 있지 않아요'
+        ? '화상 상담 기능을 준비하지 못했어요. 잠시 후 다시 시도해 주세요'
         : '입장 정보를 가져오지 못했어요. 네트워크와 예약 시간을 확인한 뒤 다시 시도해 주세요.',
     );
   }, [
@@ -546,6 +626,10 @@ export function ConsultingCallScreen({
   const handleToggleTranslation = useCallback(() => {
     const nextEnabled = !translationEnabled;
     setTranslationEnabled(nextEnabled);
+    if (!nextEnabled && partialCaptionTranslationTimerRef.current) {
+      clearTimeout(partialCaptionTranslationTimerRef.current);
+      partialCaptionTranslationTimerRef.current = null;
+    }
     if (nextEnabled && joinStatus === 'ready') {
       void ensureTranslationActive();
     }
@@ -963,18 +1047,19 @@ function mergeCaptionResults(
   for (const caption of incoming) {
     const existingIndex = next.findIndex(item => item.resultId === caption.resultId);
     if (existingIndex >= 0) {
-      next = next.map((item, index) =>
-        index === existingIndex
-          ? item.isPartial || !caption.isPartial
-            ? {
-                ...item,
-                ...caption,
-                translatedContent: caption.translatedContent ?? item.translatedContent,
-                targetLanguageCode: caption.targetLanguageCode ?? item.targetLanguageCode,
-              }
-            : item
-          : item,
-      );
+      const existing = next[existingIndex];
+      if (existing.isPartial || !caption.isPartial) {
+        const hasSameContent =
+          normalizeCaptionText(existing.content) === normalizeCaptionText(caption.content);
+        next[existingIndex] = hasSameContent
+          ? {
+              ...existing,
+              ...caption,
+              translatedContent: caption.translatedContent ?? existing.translatedContent,
+              targetLanguageCode: caption.targetLanguageCode ?? existing.targetLanguageCode,
+            }
+          : caption;
+      }
     } else {
       next = [...next, caption];
     }
@@ -988,9 +1073,12 @@ function mergeCaptionResults(
 function applyCaptionTranslation(
   current: readonly ConsultingCaptionViewModel[],
   event: CaptionTranslationEvent,
+  expectedContent?: string,
 ): ConsultingCaptionViewModel[] {
   return current.map(caption =>
-    caption.resultId === event.resultId && !caption.isPartial
+    caption.resultId === event.resultId &&
+    (!expectedContent ||
+      normalizeCaptionText(caption.content) === normalizeCaptionText(expectedContent))
       ? {
           ...caption,
           sourceLanguageCode: event.sourceLanguageCode,

@@ -255,6 +255,31 @@ async def mark_partner_booking_payment_paid(
   return success({"booking": booking})
 
 
+@router.post("/bookings/{booking_id}/confirm")
+async def confirm_partner_booking(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  booking = await consulting_partner.update_booking_details(
+    db,
+    account,
+    booking_id,
+    {"mark_payment_paid": True, "status": "confirmed"},
+  )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": booking["status"],
+      "message": _customer_booking_status_message(booking["status"]),
+    },
+  )
+  await _send_booking_confirmation_message(db, account, booking_id)
+  return success({"booking": booking})
+
+
 def _customer_booking_status_message(status: str) -> str:
   if status in {"confirmed", "scheduled"}:
     return "예약이 완료되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, 안내된 시간에 연락을 기다려 주세요."
@@ -449,19 +474,21 @@ async def translate_partner_call_caption(
     result_id=payload.result_id,
     source_language_code=payload.source_language_code,
     content=payload.content,
+    is_partial=payload.is_partial,
     settings=settings,
   )
-  await consulting_realtime_manager.broadcast(
-    booking_id,
-    {
-      "type": "caption.translation",
-      "bookingId": booking_id,
-      "resultId": translated["result_id"],
-      "sourceLanguageCode": translated["source_language_code"],
-      "targetLanguageCode": translated["target_language_code"],
-      "translatedContent": translated["translated_content"],
-    },
-  )
+  if not payload.is_partial:
+    await consulting_realtime_manager.broadcast(
+      booking_id,
+      {
+        "type": "caption.translation",
+        "bookingId": booking_id,
+        "resultId": translated["result_id"],
+        "sourceLanguageCode": translated["source_language_code"],
+        "targetLanguageCode": translated["target_language_code"],
+        "translatedContent": translated["translated_content"],
+      },
+    )
   return success(translated)
 
 

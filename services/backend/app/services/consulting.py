@@ -50,6 +50,8 @@ _DEFAULT_CLOSE_MINUTE = 19 * 60
 ACTIVE_BOOKING_STATUSES = ("requested", "contacting", "confirmed", "scheduled", "in_progress")
 EDITABLE_BOOKING_STATUSES = ("requested", "contacting")
 SLOT_BLOCKING_STATUSES = ("contacting", "confirmed", "scheduled", "in_progress")
+CHAT_VISIBLE_BOOKING_STATUSES = ("confirmed", "scheduled", "in_progress", "completed")
+CHAT_VISIBLE_CLOSED_BOOKING_STATUSES = ("canceled", "cancelled", "unavailable", "no_show", "refund_requested")
 ScheduleSettings = dict[str, Any]
 
 
@@ -795,6 +797,7 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     else None,
     "slot_id": row.get("slot_id"),
     "status": _public_booking_status(str(row["status"])),
+    "chat_available": is_customer_chat_available(row),
     "category_label": row["category_label"],
     "date_label": row["date_label"],
     "duration_label": row["duration_label"],
@@ -811,6 +814,18 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     # without opening every conversation.
     "last_expert_message_at": row.get("last_expert_message_at"),
   }
+
+
+def is_customer_chat_available(booking: dict[str, Any]) -> bool:
+  status = str(booking.get("status") or "")
+  if status in CHAT_VISIBLE_BOOKING_STATUSES:
+    return booking.get("customer_left_at") is None and booking.get("expert_left_at") is None
+  return (
+    status in CHAT_VISIBLE_CLOSED_BOOKING_STATUSES
+    and booking.get("confirmed_at") is not None
+    and booking.get("customer_left_at") is None
+    and booking.get("expert_left_at") is None
+  )
 
 
 def _public_booking_status(status: str) -> str:
@@ -992,9 +1007,9 @@ async def _conversation_id_for_new_booking(
   expert_id: str,
   booking_id: Any,
 ) -> Any:
-  return await db.fetchval(
+  row = await db.fetchrow(
     """
-    select conversation_id
+    select coalesce(conversation_id, id) as conversation_id
     from consulting_bookings
     where user_id = $1::uuid and expert_id = $2
       and customer_left_at is null and expert_left_at is null
@@ -1003,7 +1018,8 @@ async def _conversation_id_for_new_booking(
     """,
     user_id,
     expert_id,
-  ) or booking_id
+  )
+  return row["conversation_id"] if row is not None else booking_id
 
 
 async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, Any]:

@@ -123,9 +123,12 @@ function coerceRecord(raw: any): ConsultingRecord {
   );
   const rawLastExpertMessageAt =
     raw?.lastExpertMessageAt ?? raw?.last_expert_message_at;
+  const rawChatAvailable = raw?.chatAvailable ?? raw?.chat_available;
 
   return {
     id: String(raw?.id ?? ''),
+    chatAvailable:
+      typeof rawChatAvailable === 'boolean' ? rawChatAvailable : undefined,
     conversationId: raw?.conversationId ? String(raw.conversationId) : undefined,
     customerLeftAt: raw?.customerLeftAt ? String(raw.customerLeftAt) : null,
     expertLeftAt: raw?.expertLeftAt ? String(raw.expertLeftAt) : null,
@@ -586,7 +589,11 @@ export async function getConsultingBooking(
     const res = await requestBackendJson<{record?: unknown}>(
       `/consulting/bookings/${encodeURIComponent(bookingId)}`,
     );
-    return res.record ? coerceRecord(res.record) : null;
+    const record = res.record ? coerceRecord(res.record) : null;
+    if (record) {
+      upsertCachedBooking(record);
+    }
+    return record;
   } catch (error) {
     logFallback('booking', error);
     return null;
@@ -692,6 +699,7 @@ export async function translateConsultingCallCaption(
     resultId: string;
     sourceLanguageCode: ConsultingCallLanguageCode;
     content: string;
+    isPartial?: boolean;
   },
 ): Promise<ConsultingCaptionTranslation | null> {
   if (!hasBackend()) {

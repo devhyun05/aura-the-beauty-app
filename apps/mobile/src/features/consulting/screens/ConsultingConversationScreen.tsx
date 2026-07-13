@@ -478,8 +478,12 @@ export function ConsultingConversationScreen({
     );
   };
 
-  const canSendText = input.trim().length > 0 && !isConversationClosed;
-  const canPickImage = connectionStatus === 'connected' && !isUploadingImage && !isConversationClosed;
+  const conversationClosed =
+    isConversationClosed ||
+    record?.status === 'canceled' ||
+    record?.status === 'unavailable';
+  const canSendText = input.trim().length > 0 && !conversationClosed;
+  const canPickImage = connectionStatus === 'connected' && !isUploadingImage && !conversationClosed;
   const callEnabled = canJoinVideoCall(record) && isExpertCalling;
   const reservationDateLabel = getReservationDateLabel(record);
   const reservationStartTimeLabel = getReservationStartTimeLabel(record);
@@ -613,10 +617,10 @@ export function ConsultingConversationScreen({
             <Plus color={consultingColors.text} size={20} />
           </Pressable>
           <TextInput
-            editable={!isConversationClosed}
+            editable={!conversationClosed}
             multiline
             onChangeText={setInput}
-            placeholder={isConversationClosed ? '종료된 대화방입니다' : '상담사에게 메시지 보내기'}
+            placeholder={conversationClosed ? '종료된 예약은 대화 기록만 볼 수 있어요' : '상담사에게 메시지 보내기'}
             placeholderTextColor={consultingColors.textSoft}
             style={styles.messageInput}
             textAlignVertical="center"
