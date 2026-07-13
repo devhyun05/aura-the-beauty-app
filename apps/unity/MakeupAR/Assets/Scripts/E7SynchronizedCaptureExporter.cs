@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Aura.Face3D;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.XR.ARKit;
@@ -652,6 +653,7 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         AppendDisplayMetadata(builder, frameWidth, frameHeight);
         AppendFaceMetadata(builder, face);
         AppendCaptureQuality(builder, face, projectedVertices, frameWidth, frameHeight);
+        AppendFace3DCalibration(builder, face);
         AppendVectorArray(builder, "localVertices", projectedVertices, "local");
         AppendVectorArray(builder, "worldVertices", projectedVertices, "world");
         AppendScreenVertices(builder, projectedVertices);
@@ -687,6 +689,7 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         builder.Append(",\"coordinateSpaceValidated\":false");
         AppendJsonField(builder, "coordinateSpaceValidationStatus", "pending_projected_mesh_overlay_review", false);
         AppendCaptureQuality(builder, face, projectedVertices, frameWidth, frameHeight);
+        AppendFace3DCalibration(builder, face);
         builder.Append(",\"files\":[\"frame.png\",\"arface_export.json\",\"projected_mesh_overlay.png\",\"capture_summary.json\"]");
         builder.Append("}");
         return builder.ToString();
@@ -761,6 +764,75 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         AppendJsonField(builder, "blendShapeCapture", "arface_export.blendShapes", false);
         AppendJsonField(builder, "qualityGate", "pending_visual_review", false);
         builder.Append("}");
+    }
+
+    private static void AppendFace3DCalibration(StringBuilder builder, ARFace face)
+    {
+        builder.Append(",\"face3dCalibration\":{");
+        AppendJsonField(builder, "candidateSchemaVersion", "aura.face3d-semantic-candidate.v1", true);
+        AppendJsonField(builder, "fingerprintSource", "unity_exact_native_arrays", false);
+
+        if (!TryCreateFace3DTopologyFingerprint(face, out Face3DTopologyFingerprintData topology, out string reason))
+        {
+            builder.Append(",\"topologyFingerprint\":null");
+            AppendJsonField(builder, "status", "blocked", false);
+            AppendJsonField(builder, "reason", reason, false);
+            builder.Append("}");
+            return;
+        }
+
+        AppendJsonField(builder, "status", "ready_for_candidate_generation", false);
+        builder.Append(",\"topologyFingerprint\":{");
+        AppendJsonField(builder, "algorithm", topology.algorithm, true);
+        builder.Append(",\"vertexCount\":").Append(topology.vertexCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"indexCount\":").Append(topology.indexCount.ToString(CultureInfo.InvariantCulture));
+        builder.Append(",\"uvCount\":").Append(topology.uvCount.ToString(CultureInfo.InvariantCulture));
+        AppendJsonField(builder, "indicesHash", topology.indicesHash, false);
+        AppendJsonField(builder, "uvHash", topology.uvHash, false);
+        AppendJsonField(builder, "fingerprint", topology.fingerprint, false);
+        builder.Append("}}");
+    }
+
+    private static bool TryCreateFace3DTopologyFingerprint(
+        ARFace face,
+        out Face3DTopologyFingerprintData topology,
+        out string reason)
+    {
+        topology = null;
+        if (face == null
+            || !face.vertices.IsCreated
+            || !face.indices.IsCreated
+            || !face.uvs.IsCreated)
+        {
+            reason = "face_mesh_not_ready";
+            return false;
+        }
+
+        Vector3[] vertices = new Vector3[face.vertices.Length];
+        int[] indices = new int[face.indices.Length];
+        Vector2[] uvs = new Vector2[face.uvs.Length];
+        for (int index = 0; index < vertices.Length; index += 1)
+        {
+            vertices[index] = face.vertices[index];
+        }
+        for (int index = 0; index < indices.Length; index += 1)
+        {
+            indices[index] = face.indices[index];
+        }
+        for (int index = 0; index < uvs.Length; index += 1)
+        {
+            uvs[index] = face.uvs[index];
+        }
+
+        Face3DMeshSnapshot snapshot = new Face3DMeshSnapshot(vertices, indices, uvs, 0.0d);
+        if (!Face3DTopologyFingerprint.TryCreate(snapshot, out Face3DTopologyFingerprint fingerprint, out reason))
+        {
+            return false;
+        }
+
+        topology = fingerprint.ToData();
+        reason = string.Empty;
+        return true;
     }
 
     private static void AppendVectorArray(

@@ -102,6 +102,9 @@ type CameraFaceCaptureScreenProps = {
   allowCameraToggle?: boolean;
   allowGallery?: boolean;
   autoOpenGallery?: boolean;
+  // Unity ARKit처럼 다음 화면이 전면 카메라를 즉시 인수해야 할 때만 켠다.
+  // 네이티브 AVCaptureSession의 stopRunning 완료를 확인한 뒤 onCapture를 호출한다.
+  awaitCameraReleaseBeforeComplete?: boolean;
   captureMode?: CameraFaceCaptureMode;
   captureType?: FaceCaptureUploadCaptureType;
   checks?: FaceCaptureCheckState;
@@ -371,6 +374,7 @@ export function CameraFaceCaptureScreen({
   allowCameraToggle = true,
   allowGallery = true,
   autoOpenGallery = false,
+  awaitCameraReleaseBeforeComplete = false,
   captureMode = 'face',
   captureType,
   checks,
@@ -437,6 +441,19 @@ export function CameraFaceCaptureScreen({
     () => shouldValidateFace && isRealtimeFaceCaptureAvailable(),
     [shouldValidateFace],
   );
+
+  const releaseRealtimeCameraBeforeComplete = async () => {
+    if (!awaitCameraReleaseBeforeComplete || !realtimeCaptureAvailable) {
+      return;
+    }
+
+    const realtimeCamera = realtimeCameraRef.current;
+    if (!realtimeCamera) {
+      throw new Error('촬영 카메라를 안전하게 종료하지 못했어요. 다시 시도해 주세요.');
+    }
+
+    await realtimeCamera.stop();
+  };
   const landmarkDetectorAvailable = useMemo(
     () => shouldValidateFace && !realtimeCaptureAvailable && isFaceLandmarkDetectorAvailable(),
     [realtimeCaptureAvailable, shouldValidateFace],
@@ -1140,6 +1157,7 @@ export function CameraFaceCaptureScreen({
         result = createLocalFaceCaptureResult(imageInput);
       }
 
+      await releaseRealtimeCameraBeforeComplete();
       onCapture?.(result, captureGreenlightReport);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
@@ -1210,6 +1228,7 @@ export function CameraFaceCaptureScreen({
         result = createLocalFaceCaptureResult(imageInput);
       }
 
+      await releaseRealtimeCameraBeforeComplete();
       onCapture?.(result);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');

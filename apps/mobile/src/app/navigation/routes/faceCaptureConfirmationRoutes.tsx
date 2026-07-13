@@ -92,7 +92,9 @@ export function getFaceCaptureConfirmationNextRouteName(
   target: FaceCaptureConfirmationTarget,
 ) {
   if (target === 'faceAnalysis') {
-    return 'FaceAnalysisLoading';
+    // 확인 뒤 ARKit 3D 자동 측정을 거쳐 로딩으로 간다(셔터 1회 UX).
+    // 측정 화면이 자격 미달/미지원이면 스스로 로딩으로 즉시 넘어간다.
+    return 'Face3DMeasurement';
   }
 
   if (target === 'makeupFeedback') {
@@ -307,8 +309,10 @@ export function FaceCaptureConfirmationRouteScreen({
     }
 
     if (target === 'faceAnalysis') {
+      // 3D 자동 측정을 경유(셔터 1회 UX). afterAnalysisRoute는 측정 화면이
+      // 로딩으로 그대로 이어 전달한다(ProductRecommendation 연속 흐름 보존).
       navigation.replace(
-        'FaceAnalysisLoading',
+        'Face3DMeasurement',
         route.params.afterAnalysisRoute
           ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
           : undefined,

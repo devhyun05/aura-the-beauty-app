@@ -30,6 +30,8 @@ import type {
 } from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {Face3DMetricGrid} from '../../face-3d/components/Face3DMetricGrid';
+import type {Face3DProfile} from '../../face-3d/types';
 import {
   PhotoStage,
   VerticalThirdsOverlay,
@@ -61,6 +63,9 @@ type FaceAnalysisReportDetailScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
   bottomOverlayHeight?: number;
+  // 세션 내 ARKit 라이브 측정으로 얻은 3D 프로필(온디바이스, 정규화 5지표).
+  // 과거 보고서(id 조회)나 측정 skip/실패면 null — 섹션을 렌더하지 않는다.
+  face3d?: Face3DProfile | null;
   headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
@@ -310,6 +315,7 @@ export function FaceAnalysisReportDetailScreen({
   analysisReport,
   bottomOverlayHeight = 0,
   capturedPhotoUri,
+  face3d,
   headerTitle = '맞춤 분석 보고서',
   personalColor,
   personalColorCorrection,
@@ -641,6 +647,24 @@ export function FaceAnalysisReportDetailScreen({
               </Text>
             </ReportSection>
           )
+        ) : null}
+
+        {face3d ? (
+          <ReportSection eyebrow="3D FACIAL DEPTH" title={"입체 특성"}>
+            <Face3DMetricGrid profile={face3d} />
+            <Text style={styles.face3dFrameCaption}>
+              유효 프레임 {face3d.validFrameCount}/{face3d.targetFrameCount} · ARKit 얼굴 메시 측정
+            </Text>
+            {face3d.warnings.length > 0 ? (
+              <View style={styles.face3dWarningCard}>
+                {face3d.warnings.map(warning => (
+                  <Text key={warning} selectable style={styles.face3dWarningText}>
+                    • {warning}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </ReportSection>
         ) : null}
 
         {personalColor ? (
@@ -1351,6 +1375,29 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
+  },
+  // 3D 측정 프레임 수 캡션 — 지표 그리드 아래 근거 표시.
+  face3dFrameCaption: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+    marginTop: spacing.sm,
+  },
+  // 3D 측정 경고 카드 — 랩(Face3DAnalysisPanel) warningCard 팔레트와 동일.
+  face3dWarningCard: {
+    backgroundColor: '#FFF8F6',
+    borderColor: '#F4D8D2',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    padding: spacing.lg,
+  },
+  face3dWarningText: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
   },
   // 측정 불가/보정 미적용 안내 — 섹션을 숨기는 대신 사유를 정직하게 노출.
   sectionBlockedNotice: {

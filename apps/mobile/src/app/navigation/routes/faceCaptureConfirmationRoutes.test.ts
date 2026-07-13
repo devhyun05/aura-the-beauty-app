@@ -31,7 +31,7 @@ expectEqual(
 );
 expectEqual(
   getFaceCaptureConfirmationNextRouteName('faceAnalysis'),
-  'FaceAnalysisLoading',
+  'Face3DMeasurement',
   'face analysis confirmation next route',
 );
 expectEqual(

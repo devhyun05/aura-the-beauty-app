@@ -66,15 +66,18 @@ export function buildFaceCaptureCompleteUploadBody(
   };
 }
 
-export function buildFaceAnalysisRequestPayload<TFaceVerticalThirds>(
+export function buildFaceAnalysisRequestPayload<TFaceVerticalThirds, TFace3D = never>(
   capture: FaceAnalysisCaptureRequestInput,
   faceVerticalThirds?: TFaceVerticalThirds,
+  face3d?: TFace3D,
 ) {
   // 구버전 백엔드는 분석 입력 이미지를 requestPayload에서 읽는다. 최신 백엔드는
   // 아래 위치 필드를 제거한 뒤 소유권이 확인된 DB 미디어 값으로 다시 채운다.
   return {
     bucket: capture.bucket ?? null,
     contentType: capture.contentType ?? 'image/jpeg',
+    // ARKit 3D 측정 프로필(정규화 5지표, <1KB) — 있으면 AI 요약 입력에 함께 실린다.
+    ...(face3d ? {face3d} : {}),
     ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
     objectKey: capture.objectKey ?? null,
     source: capture.source ?? 'camera',

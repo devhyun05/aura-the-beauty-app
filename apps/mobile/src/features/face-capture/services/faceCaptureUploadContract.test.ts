@@ -154,3 +154,40 @@ expectEqual(
   'camera',
   'analysis request defaults the capture source',
 );
+expectEqual(
+  'face3d' in defaultAnalysisRequestPayload,
+  false,
+  'analysis request omits face3d when the 3D measurement is absent',
+);
+
+// ARKit 3D 측정 프로필이 있으면 페이로드에 그대로 실린다(faceVerticalThirds와 동일 패턴).
+const face3dProfile = {
+  gateVersion: 'face3d-gate-v1',
+  metrics: {},
+  schemaVersion: 'aura.face3d-profile.v1',
+  source: 'arkit_face_mesh',
+  targetFrameCount: 30,
+  topologyFingerprint: 'synthetic-v8-i12-uv8',
+  validFrameCount: 30,
+  warnings: [],
+};
+const analysisRequestPayloadWithFace3d = buildFaceAnalysisRequestPayload(
+  {
+    bucket: 'media-bucket',
+    objectKey: 'uploads/capture/face.jpg',
+    source: 'camera',
+  },
+  faceVerticalThirds,
+  face3dProfile,
+);
+
+expectEqual(
+  analysisRequestPayloadWithFace3d.face3d,
+  face3dProfile,
+  'analysis request preserves the on-device face3d profile',
+);
+expectEqual(
+  analysisRequestPayloadWithFace3d.faceVerticalThirds,
+  faceVerticalThirds,
+  'face3d does not displace the vertical-thirds payload',
+);

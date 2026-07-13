@@ -151,10 +151,12 @@ type NativeRealtimeFaceCaptureProps = ViewProps & {
 
 type NativeRealtimeFaceCaptureModule = {
   capture?: (reactTag: number) => Promise<RealtimeCameraCaptureResult>;
+  stopSession?: (reactTag: number) => Promise<{stopped: boolean}>;
 };
 
 export type RealtimeFaceCaptureNativeViewHandle = {
   capture: () => Promise<RealtimeCameraCaptureResult>;
+  stop: () => Promise<void>;
 };
 
 const NATIVE_VIEW_NAME = 'AURARealtimeFaceCaptureView';
@@ -205,6 +207,16 @@ export const RealtimeFaceCaptureNativeView = forwardRef<
       }
 
       return nativeModule.capture(reactTag);
+    },
+    async stop() {
+      const nativeModule = getNativeRealtimeFaceCaptureModule();
+      const reactTag = findNodeHandle(nativeViewRef.current);
+
+      if (!nativeModule?.stopSession || !reactTag) {
+        throw new Error('Realtime face capture camera release is not available.');
+      }
+
+      await nativeModule.stopSession(reactTag);
     },
   }));
 

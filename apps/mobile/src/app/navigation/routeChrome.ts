@@ -99,6 +99,12 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
+  Face3DMeasurement: {
+    category: 'capture-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
   FaceAnalysisIntro: {
     category: 'feature-entry',
     contextLabel: 'FACE ANALYSIS',
