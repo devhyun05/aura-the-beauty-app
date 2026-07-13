@@ -10,6 +10,9 @@ import {
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
+import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
+import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
+import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
@@ -110,7 +113,11 @@ export function FaceCaptureRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'FaceCapture'>) {
-  const {setSelectedFaceCapture} = useNavigationFlowState();
+  const {
+    setSelectedFace3DProfile,
+    setSelectedFaceCapture,
+    setSelectedFaceCaptureGreenlight,
+  } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
 
   React.useEffect(() => {
@@ -126,14 +133,22 @@ export function FaceCaptureRouteScreen({
   return (
     <CameraFaceCaptureScreen
       autoOpenGallery={route.params?.initialSource === 'gallery'}
+      // 확인 화면 뒤 Face3D 측정이 Unity ARKit으로 전면 카메라를 즉시 인수한다.
+      // AVCaptureSession stopRunning 완료를 확인한 뒤에만 onCapture로 진행해
+      // 카메라 소유권 경합을 막는다(랩과 동일 패턴).
+      awaitCameraReleaseBeforeComplete
       captureMode="face"
       captureType="face_analysis"
-      onCapture={result => {
+      onCapture={(result, greenlightReport) => {
         if (!result) {
           return;
         }
 
         setSelectedFaceCapture(result);
+        // Face3D 측정 진입 자격 판정용(카메라 촬영 + 그린라이트 3종 충족 여부).
+        setSelectedFaceCaptureGreenlight(greenlightReport ?? null);
+        // 이전 세션의 3D 프로필이 새 사진에 붙지 않도록 촬영 시점에 반드시 비운다.
+        setSelectedFace3DProfile(null);
         navigation.replace(
           'FaceCaptureConfirmation',
           route.params?.afterAnalysisRoute
@@ -146,11 +161,67 @@ export function FaceCaptureRouteScreen({
   );
 }
 
+// 사진 확인 뒤 ARKit 3D 자동 측정 단계(셔터 없음, 셔터 1회 UX).
+// 자격 미달(갤러리/그린라이트 미충족)이나 미지원 기기는 사용자에게 보이기 전에
+// 즉시 로딩으로 넘어가고, 측정 실패도 보고서 생성을 막지 않는다(null 유지).
+export function Face3DMeasurementRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'Face3DMeasurement'>) {
+  const {
+    selectedFaceCapture,
+    selectedFaceCaptureGreenlight,
+    setSelectedFace3DProfile,
+  } = useNavigationFlowState();
+
+  const goToLoading = React.useCallback(() => {
+    // afterAnalysisRoute(ProductRecommendation 연속 흐름)를 그대로 이어 전달한다.
+    navigation.replace(
+      'FaceAnalysisLoading',
+      route.params?.afterAnalysisRoute
+        ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+        : undefined,
+    );
+  }, [navigation, route.params?.afterAnalysisRoute]);
+
+  const shouldMeasure = React.useMemo(() => {
+    if (!selectedFaceCapture || !isUnityMakeupNativeViewSupported()) {
+      return false;
+    }
+
+    return evaluateFace3DEntryEligibility({
+      greenlightReport: selectedFaceCaptureGreenlight ?? undefined,
+      source: selectedFaceCapture.source,
+    }).eligible;
+  }, [selectedFaceCapture, selectedFaceCaptureGreenlight]);
+
+  React.useEffect(() => {
+    if (!shouldMeasure) {
+      setSelectedFace3DProfile(null);
+      goToLoading();
+    }
+  }, [goToLoading, setSelectedFace3DProfile, shouldMeasure]);
+
+  if (!shouldMeasure) {
+    return null;
+  }
+
+  return (
+    <Face3DMeasurementScreen
+      onFinish={profile => {
+        setSelectedFace3DProfile(profile);
+        goToLoading();
+      }}
+    />
+  );
+}
+
 export function FaceAnalysisLoadingRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'FaceAnalysisLoading'>) {
   const {
+    selectedFace3DProfile,
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
     setSelectedFaceVerticalThirds,
@@ -284,6 +355,8 @@ export function FaceAnalysisLoadingRouteScreen({
         createFaceAnalysisReportFromCapture(
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
+          // 3D 측정은 로딩 진입 전에 끝나 있으므로(측정 화면 경유) 대기 없이 그대로 싣는다.
+          selectedFace3DProfile ?? undefined,
         ),
       )
       .then(report => {
@@ -366,12 +439,15 @@ export function FaceAnalysisLoadingRouteScreen({
     setAnalysisRequestKey(currentKey => currentKey + 1);
   }, []);
   const handleAnalysisComplete = React.useCallback(() => {
+    // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
+    // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
+    // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.
     if (route.params?.afterAnalysisRoute === 'ProductRecommendation') {
-      navigation.navigate('ProductRecommendation');
+      navigation.replace('ProductRecommendation');
       return;
     }
 
-    navigation.navigate('FaceAnalysisReportDetail');
+    navigation.replace('FaceAnalysisReportDetail');
   }, [navigation, route.params?.afterAnalysisRoute]);
 
   return (
@@ -414,6 +490,7 @@ export function FaceAnalysisReportDetailRouteScreen({
   const insets = useSafeAreaInsets();
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const {
+    selectedFace3DProfile,
     selectedFaceAnalysisReport,
     selectedFaceCapture,
     selectedFaceVerticalThirds,
@@ -462,6 +539,7 @@ export function FaceAnalysisReportDetailRouteScreen({
           onPressProducts={reportId =>
             navigation.navigate('ProductRecommendation', {reportId})
           }
+          face3d={route.params?.reportId ? null : selectedFace3DProfile}
           personalColor={route.params?.reportId ? null : selectedPersonalColor}
           personalColorCorrection={
             route.params?.reportId ? null : selectedPersonalColorCorrection

@@ -1,4 +1,5 @@
 import { faceAnalysisReportsMock } from '../mocks/faceAnalysis.mock';
+import type {Face3DProfile} from '../../features/face-3d/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import type {
   FaceAnalysisMakeupCard,
@@ -682,6 +683,8 @@ export const deleteFaceAnalysisRecommendedMakeup = async ({
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
+  // ARKit 3D 측정 프로필(정규화 5지표) — 측정 성공 세션에서만 전달된다.
+  face3d?: Face3DProfile,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
@@ -721,7 +724,7 @@ export async function createFaceAnalysisReportFromCapture(
       photoCaptureId: capture.photoCaptureId,
       previewMediaId: capture.mediaId,
       reportTitle: '맞춤 분석 보고서',
-      requestPayload: buildFaceAnalysisRequestPayload(capture, faceVerticalThirds),
+      requestPayload: buildFaceAnalysisRequestPayload(capture, faceVerticalThirds, face3d),
       runImmediately: true,
       sourceMediaId: capture.mediaId,
       title: 'AI 맞춤 메이크업 분석',

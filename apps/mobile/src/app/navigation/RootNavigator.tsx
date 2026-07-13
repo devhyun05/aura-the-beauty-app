@@ -47,6 +47,7 @@ import {
   SavedHairSimulationsRouteScreen,
 } from './routes/hairAnalysisRoutes';
 import {
+  Face3DMeasurementRouteScreen,
   FaceAnalysisIntroRouteScreen,
   FaceAnalysisLoadingRouteScreen,
   FaceAnalysisReportDetailRouteScreen,
@@ -114,6 +115,11 @@ export function RootNavigator() {
         options={{gestureEnabled: false}}
       />
       <Stack.Screen name="FaceAnalysisIntro" component={FaceAnalysisIntroRouteScreen} />
+      <Stack.Screen
+        name="Face3DMeasurement"
+        component={Face3DMeasurementRouteScreen}
+        options={{gestureEnabled: false}}
+      />
       <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
       <Stack.Screen
         name="FaceAnalysisReportsList"
