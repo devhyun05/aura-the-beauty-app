@@ -1,6 +1,7 @@
 name: Mobile CI
 
-# dev/main 으로 가는 PR 에서 모바일 앱의 타입·컨트랙트 회귀를 머지 전에 잡는다.
+# dev/main 으로 가는 PR 에서 모바일 앱의 타입·컨트랙트 회귀를 머지 전에 잡고,
+# dev 병합 직후에도 같은 검사를 다시 실행해 머지 커밋·직접 push 회귀를 확인한다.
 # 도입 배경: 컨트랙트 테스트가 로컬 전용이라 PR #224(020cb33) 같은 회귀가
 # 머지 시점에 걸러지지 않았다. 전부 node 전용(시뮬레이터/기기 불필요)이라 빠르다.
 #
@@ -14,7 +15,19 @@ on:
     branches:
       - dev
       - main
+  push:
+    branches:
+      - dev
+    paths:
+      - "apps/mobile/**"
+      - "scripts/mobile/**"
+      - "scripts/ios/**"
+      - ".github/workflows/mobile-ci.yml"
   workflow_dispatch:
+
+concurrency:
+  group: mobile-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -29,6 +42,7 @@ jobs:
     timeout-minutes: 3
     outputs:
       mobile: ${{ steps.filter.outputs.changed }}
+      native_geometry: ${{ steps.filter.outputs.native_geometry }}
     steps:
       - name: Detect mobile-related changes
         id: filter
@@ -36,36 +50,74 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          mark_all_changed() {
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "native_geometry=true" >> "$GITHUB_OUTPUT"
+          }
+
+          EVENT_NAME="${{ github.event_name }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          if [ -z "${PR_NUMBER}" ]; then
-            # workflow_dispatch 등 PR 컨텍스트 밖에서는 전체 실행
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            mark_all_changed
             exit 0
           fi
-          # PR files API 는 최대 3,000개만 반환한다. 변경 파일 수가 그 이상이면
-          # 열거가 불완전해 모바일 변경을 놓칠 수 있으므로(fail-open) 안전하게 전체
-          # 검사한다. changed_files 는 PR 오브젝트에서 직접 읽는다.
-          changed_files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" \
-            --jq '.changed_files')
-          if [ "${changed_files:-0}" -ge 3000 ]; then
-            echo "변경 파일 ${changed_files}개 — PR files API 3000 상한으로 열거 불완전 → 전체 검사."
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+
+            # 새 브랜치처럼 before 가 0으로만 구성되거나 compare API 가 실패하면
+            # 변경 감지를 추측하지 않고 모든 검사를 실행한다.
+            if [[ "$BEFORE" =~ ^0+$ ]]; then
+              mark_all_changed
+              exit 0
+            fi
+
+            if ! comparison=$(gh api "repos/${{ github.repository }}/compare/${BEFORE}...${AFTER}"); then
+              echo "compare API 실패 — 안전하게 전체 검사"
+              mark_all_changed
+              exit 0
+            fi
+
+            # Compare API 는 파일을 최대 300개까지만 제공한다. 상한에 닿으면
+            # 목록이 불완전할 수 있으므로 전체 검사를 실행한다.
+            compared_files=$(jq '.files | length' <<< "$comparison")
+            if [ "$compared_files" -ge 300 ]; then
+              echo "변경 파일이 compare API 300개 상한에 도달 — 안전하게 전체 검사"
+              mark_all_changed
+              exit 0
+            fi
+
+            files=$(jq -r '.files[] | .filename, (.previous_filename // empty)' <<< "$comparison")
+          else
+            # pull_request 이벤트는 PR files API 로 rename 전·후 경로를 모두 본다.
+            # 최대 3,000개를 넘으면 열거가 불완전하므로 전체 검사한다.
+            changed_files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" \
+              --jq '.changed_files')
+            if [ "${changed_files:-0}" -ge 3000 ]; then
+              echo "변경 파일 ${changed_files}개 — PR files API 3000 상한으로 열거 불완전 → 전체 검사."
+              mark_all_changed
+              exit 0
+            fi
+
+            files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
+              --paginate --jq '.[] | .filename, (.previous_filename // empty)')
           fi
-          # filename 과 previous_filename 을 함께 본다 — 모바일 파일이 비모바일
-          # 경로로 rename-out 되는 경우(filename 만 보면 놓침)도 모바일 변경으로 잡는다.
-          files=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
-            --paginate --jq '.[] | .filename, (.previous_filename // empty)')
-          # here-string(<<<)으로 검사한다. 'echo "$files" | grep -q' 는 grep -q 가
-          # 매치 즉시 종료할 때 producer(echo)가 SIGPIPE(141)를 받아, 대형 PR
-          # (수천 파일)에서 pipefail 이 그걸 실패로 봐 조건이 false→모바일 변경을
-          # 못 보고 검사를 건너뛰는 버그가 있었다. here-string 은 producer pipe 가
-          # 없어 SIGPIPE 가 나지 않는다.
-          if grep -qE '^(apps/mobile/|scripts/mobile/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
+
+          # here-string(<<<)을 써서 grep -q 조기 종료에 따른 SIGPIPE 오판을 막는다.
+          if grep -qE '^(apps/mobile/|scripts/mobile/|scripts/ios/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "모바일 관련 변경 없음 — 본 잡은 skip 되며 Required 체크는 통과 처리된다."
+          fi
+
+          if grep -qE '^(apps/mobile/ios/AURA/AURARealtimeGeometry\.h|scripts/ios/realtimeGeometryGolden\.test\.m|scripts/ios/run-realtime-geometry-golden\.mjs|scripts/mobile/fixtures/realtime-geometry-golden\.json|\.github/workflows/mobile-ci\.yml)$' <<< "$files"; then
+            echo "native_geometry=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "native_geometry=false" >> "$GITHUB_OUTPUT"
           fi
 
   typecheck-and-contracts:
@@ -127,3 +179,22 @@ jobs:
 
       - name: Contract — Brow native landmark indices
         run: npm run test:brow-native
+
+  ios-native-geometry-golden:
+    name: iOS native geometry golden
+    runs-on: macos-15
+    timeout-minutes: 5
+    needs: changes
+    if: needs.changes.outputs.native_geometry == 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify Objective-C realtime geometry vectors
+        run: node scripts/ios/run-realtime-geometry-golden.mjs
