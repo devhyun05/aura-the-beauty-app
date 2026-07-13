@@ -824,10 +824,14 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
         (AURARealtimeNumberFromPoint(mouthLeft, @"y") +
          AURARealtimeNumberFromPoint(mouthRight, @"y")) /
         2.0;
-    CGFloat verticalSpan = fmax(mouthCenterY - eyeCenterY, 0.001);
-    CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
-    pitchDeg = (noseRatio - 0.48) * 28.0;
-    pitchMeasured = YES;
+    // 수식·퇴화 가드는 헤더 순수함수가 소유한다(golden+TS mirror 로 회귀 고정) —
+    // 회전 과도기의 span 붕괴가 ±수천도 pitch 로 발산해 게이트를 오차단하던
+    // 실기기 버그(-1729°)의 재발 방지. measured=NO 프레임은 fail-closed 게이트가
+    // 그 프레임만 막고, 회전 잠금이 정착하면 정상 계측으로 복귀한다.
+    const AURARealtimePitchEstimate pitchEstimate =
+        AURARealtimePitchFromVerticalGeometry(eyeCenterY, noseY, mouthCenterY);
+    pitchDeg = pitchEstimate.pitchDeg;
+    pitchMeasured = pitchEstimate.measured;
   }
 
   return @{
@@ -1919,14 +1923,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // 크거나(고개 기울임) 없으면 Unknown 으로 강등해 잠긴 값을 유지한다.
   // (한계: 방향 힌트가 실제와 어긋난 극단 케이스는 여전히 애매 — 사후 pose
   //  게이트가 최종 방어선이라 잘못된 분석 결과로는 이어지지 않는다.)
-  if (detected != AURARealtimeFrameRotationUpright &&
-      detected != AURARealtimeFrameRotationUnknown) {
+  if (detected == AURARealtimeFrameRotation90CW ||
+      detected == AURARealtimeFrameRotation90CCW) {
     // F8 은 head roll 하나만 필요하다. Vision 의 roll/yaw/pitch 는 서로 독립
     // optional 이라 전체 pose payload(AURARealtimePoseFromVisionObservation)를
     // 요구하면 yaw·pitch 가 없을 때 genuine landscape 까지 Unknown 으로 강등된다
     // (코덱스 #245-2). roll(VNFaceObservation.roll, 라디안)만 직접 읽는다. |roll|
     // 은 front/back 미러에 불변이므로 isFront 보정이 불필요하다. roll 이 없으면
     // 판별 불가로 보고 강등(fail-safe).
+    //
+    // rot180 은 이 게이트에서 제외한다: 90° 회전은 "세로 눈선"이 프레임 회전인지
+    // 고개 기울임인지 roll 없이는 구분 불가하지만, rot180 은 눈선이 수평 그대로에
+    // probe(코/입)의 상하 순서만 뒤집힌 상태라 사람 고개(roll ±180° 불가)와 혼동될
+    // 여지가 없다. 종전에는 rot180 도 roll 부재 시 Unknown 으로 강등돼, Vision 이
+    // roll 을 안 주는 기기에서 잘못된 upright 잠금이 영구 유지됐다(실기기: 검출
+    // orientation 자가보정 후 rot180 실측이 계속 억제 → pitch 발산·좌표 뒤틀림).
     NSNumber *rollNumber = face.roll;
     double headRollAbs = rollNumber != nil
         ? fabs(AURARealtimeDegrees(rollNumber.doubleValue))

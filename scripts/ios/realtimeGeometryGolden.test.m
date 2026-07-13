@@ -137,13 +137,33 @@ int main(int argc, const char *argv[])
                   [NSString stringWithFormat:@"%@.tilt", tiltCase[@"name"]]);
     }
 
+    NSArray *pitchCases = fixture[@"pitchCases"];
+    for (NSDictionary *pitchCase in pitchCases) {
+      NSString *name = pitchCase[@"name"];
+      const AURARealtimePitchEstimate estimate = AURARealtimePitchFromVerticalGeometry(
+          [pitchCase[@"eyeCenterY"] doubleValue],
+          [pitchCase[@"noseY"] doubleValue],
+          [pitchCase[@"mouthCenterY"] doubleValue]);
+      const BOOL expectMeasured = [pitchCase[@"expectMeasured"] boolValue];
+
+      if (estimate.measured != expectMeasured) {
+        failCase([NSString stringWithFormat:@"%@: measured expected %d, got %d",
+                                            name, expectMeasured, estimate.measured]);
+        continue;
+      }
+
+      expectClose(estimate.pitchDeg, [pitchCase[@"expectPitchDeg"] doubleValue],
+                  [name stringByAppendingString:@".pitchDeg"]);
+    }
+
     if (failures > 0) {
       fprintf(stderr, "[aura:geometry-golden] %d failures\n", failures);
       return 1;
     }
 
-    printf("[aura:geometry-golden] PASS (%lu rotation cases, %lu tilt cases)\n",
-           (unsigned long)rotationCases.count, (unsigned long)tiltCases.count);
+    printf("[aura:geometry-golden] PASS (%lu rotation cases, %lu tilt cases, %lu pitch cases)\n",
+           (unsigned long)rotationCases.count, (unsigned long)tiltCases.count,
+           (unsigned long)pitchCases.count);
     return 0;
   }
 }

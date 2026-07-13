@@ -138,6 +138,40 @@ static inline CGPoint AURARealtimeCaptureDevicePointFromCanonical(CGPoint c, BOO
   return CGPointMake(c.y, c.x);
 }
 
+// 5점 geometry pitch 근사 — 정준(upright) y 좌표 3개(눈 중점/코끝/입 중점,
+// 정규화·원점 top-left)에서 pitch(고개 숙임/젖힘)를 추정한다.
+//
+// 정준 좌표에서 입은 눈보다 아래(y 큼)여야 한다. 프레임 회전 잠금이 실제 회전
+// (rot180 등)으로 전환되기 전의 과도기에는 span(입-눈)이 0/음수로 붕괴하는데,
+// 종전 구현의 fmax(span, 0.001) 바닥이 이를 0.001 로 강제해
+// (noseRatio-0.48)*28 이 ±수천도로 발산했다(실기기 -1729° 관측 → pitch 게이트
+// 오차단, 2026-07-13). 기하가 모순인 프레임은 measured=NO 로 표기해 fail-closed
+// 게이트가 그 프레임만 막게 한다. |pitch|>90° 도 물리적으로 불가한 근사 폭주이므로
+// 동일 처리 — 유효 프레임에서는 코가 눈-입 사이(noseRatio∈(0,1))라 이 캡에 절대
+// 걸리지 않는다.
+typedef struct {
+  CGFloat pitchDeg;
+  BOOL measured;
+} AURARealtimePitchEstimate;
+
+static inline AURARealtimePitchEstimate AURARealtimePitchFromVerticalGeometry(
+    CGFloat eyeCenterY,
+    CGFloat noseY,
+    CGFloat mouthCenterY)
+{
+  AURARealtimePitchEstimate estimate = {0.0, NO};
+  const CGFloat verticalSpan = mouthCenterY - eyeCenterY;
+  if (verticalSpan > 0.001) {
+    const CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
+    const CGFloat pitchDeg = (noseRatio - 0.48) * 28.0;
+    if (fabs(pitchDeg) <= 90.0) {
+      estimate.pitchDeg = pitchDeg;
+      estimate.measured = YES;
+    }
+  }
+  return estimate;
+}
+
 // 화면(layer) 공간에서 눈선 기울기 계측 — |Δy| / max(|Δx|, eps).
 // visionPose roll≈0 인데 이 값이 크면 "정준→device→layer 투영 앵커가 틀렸다"는
 // 원격 증거가 된다(스크린샷/로그 기반 검증용, 자동 보정에는 쓰지 않음).

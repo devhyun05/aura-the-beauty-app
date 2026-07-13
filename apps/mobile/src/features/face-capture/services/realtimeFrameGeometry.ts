@@ -115,3 +115,29 @@ export function screenEyeLineTilt(
   const dy = Math.abs(rightEyeScreen.y - leftEyeScreen.y);
   return dy / Math.max(dx, 1e-6);
 }
+
+export type PitchEstimate = {
+  measured: boolean;
+  pitchDeg: number;
+};
+
+// 5점 geometry pitch 근사 — 헤더 AURARealtimePitchFromVerticalGeometry 와 1:1.
+// 정준 좌표에서 입은 눈보다 아래(y 큼)여야 한다. span(입-눈)이 0/음수(프레임
+// 회전 과도기)거나 |pitch|>90°(근사 폭주)면 measured=false 로 계측 불가를
+// 표기한다 — 종전 구현의 fmax(span, 0.001) 바닥이 ±수천도 발산을 만들어 pitch
+// 게이트를 오차단하던 실기기 버그(-1729°, 2026-07-13)의 회귀 고정.
+export function pitchFromVerticalGeometry(
+  eyeCenterY: number,
+  noseY: number,
+  mouthCenterY: number,
+): PitchEstimate {
+  const verticalSpan = mouthCenterY - eyeCenterY;
+  if (verticalSpan > 0.001) {
+    const noseRatio = (noseY - eyeCenterY) / verticalSpan;
+    const pitchDeg = (noseRatio - 0.48) * 28.0;
+    if (Math.abs(pitchDeg) <= 90.0) {
+      return {measured: true, pitchDeg};
+    }
+  }
+  return {measured: false, pitchDeg: 0};
+}
