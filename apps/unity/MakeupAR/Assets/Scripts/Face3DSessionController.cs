@@ -81,6 +81,7 @@ public sealed class Face3DSessionController : MonoBehaviour
     private Face3DExpressionGatePolicy expressionGatePolicy;
     private string neutralExpressionWarning = NeutralExpressionActiveWarning;
     private bool expressionSignalsEverAvailable;
+    private string multipleFaceGateWarning = string.Empty;
     private Face3DProfileCollector collector;
     private string semanticMapReason = "semantic_map_missing";
     private string activeRequestId = string.Empty;
@@ -149,6 +150,7 @@ public sealed class Face3DSessionController : MonoBehaviour
         expressionGatePolicy = new Face3DExpressionGatePolicy(MaximumNeutralExpressionActivation);
         neutralExpressionWarning = NeutralExpressionActiveWarning;
         expressionSignalsEverAvailable = false;
+        multipleFaceGateWarning = string.Empty;
         LoadSemanticMap();
         previousRequestedMaximumFaceCount = Math.Max(1, faceManager.requestedMaximumFaceCount);
         faceCountRestored = false;
@@ -274,6 +276,15 @@ public sealed class Face3DSessionController : MonoBehaviour
         // guarantee explicitly pending rather than silently claiming it passed.
         // While face frames are flowing, the gate path owns the shared status
         // throttle; sending here every frame would starve pose guidance entirely.
+        // Persist the gate state at session scope so CompleteCollection can fold it into the
+        // FINAL profile warnings. The throttled status below is skipped entirely while face
+        // frames are flowing (faceUpdatePending), so relying on the live status event alone
+        // dropped the G5 warning from the extracted profile.
+        string warning = supportedFaceCount == 1
+            ? "g5_multiple_face_gate_unsupported"
+            : "g5_multiple_face_gate_pending";
+        multipleFaceGateWarning = warning;
+
         if (faceUpdatePending)
         {
             return;
@@ -282,9 +293,6 @@ public sealed class Face3DSessionController : MonoBehaviour
         if (now >= nextTrackingStatusSeconds)
         {
             nextTrackingStatusSeconds = now + TrackingStatusIntervalSeconds;
-            string warning = supportedFaceCount == 1
-                ? "g5_multiple_face_gate_unsupported"
-                : "g5_multiple_face_gate_pending";
             SendStatus(
                 "tracking",
                 "다중 얼굴 차단 검증은 보류하고 단일 얼굴 3D 측정을 계속합니다.",
@@ -437,9 +445,14 @@ public sealed class Face3DSessionController : MonoBehaviour
 
         if (!evaluation.IsValid)
         {
-            string reason = string.IsNullOrWhiteSpace(evaluation.Reason)
+            // When the map is null the evaluator can only report the generic
+            // "semantic_map_missing"; the controller knows the precise cause
+            // (truly missing vs. a parse failure) in semanticMapReason, so prefer it.
+            string reason = semanticMap == null && !string.IsNullOrWhiteSpace(semanticMapReason)
                 ? semanticMapReason
-                : evaluation.Reason;
+                : string.IsNullOrWhiteSpace(evaluation.Reason)
+                    ? semanticMapReason
+                    : evaluation.Reason;
             BlockSession(reason);
             return;
         }
@@ -474,6 +487,13 @@ public sealed class Face3DSessionController : MonoBehaviour
 
     private void CompleteCollection(double now)
     {
+        if (collector != null && !string.IsNullOrEmpty(multipleFaceGateWarning))
+        {
+            // G5 multiple-face verification was pending/unsupported this session; fold it into
+            // the final profile warnings so it survives past the live status stream.
+            collector.AddWarning(multipleFaceGateWarning);
+        }
+
         string reason = "collector_unavailable";
         Face3DProfile profile = null;
         if (collector != null
