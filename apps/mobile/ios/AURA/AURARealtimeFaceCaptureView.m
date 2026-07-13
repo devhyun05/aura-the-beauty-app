@@ -890,6 +890,16 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   AURARealtimeFrameRotation _diagDetectedRotation;
   double _diagEyeAxisRatio;
   BOOL _diagHasEyeAxis;
+  // Vision 검출 orientation 자가보정 (vision 큐 전용 접근). 기본 힌트(front=Left)
+  // 로 얼굴을 못 찾는 동안 프레임마다 후보 회전(Up/Right/Down/Left)을 순환 시도하고,
+  // 처음 성공한 힌트를 세션에 고정한다. MediaPipe pod 제거 빌드에서 Vision 폴백이
+  // 실기기 최초 가동될 때 기본 힌트가 어긋나면 no_face 만 반복돼 greenlight 가
+  // 영구 차단되는 문제(2026-07-13 실기기)의 방어선 — 회전 자가판정
+  // (resolveFrameRotationForFace)은 얼굴이 "검출된 뒤"에만 동작하므로 검출 힌트는
+  // 별도로 자가보정해야 한다.
+  BOOL _hasResolvedDetectionOrientation;
+  CGImagePropertyOrientation _resolvedDetectionOrientation;
+  NSUInteger _detectionOrientationAttempt;
   NSDictionary *_matteCapability;
   NSDictionary *_pendingCaptureCameraMetadata;
   NSDictionary *_pendingSemanticMattes;
@@ -964,6 +974,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   _hasLockedFrameRotation = NO;
   _pendingFrameRotation = AURARealtimeFrameRotationUnknown;
   _rotationDisagreeStreak = 0;
+  // 검출 orientation 자가보정도 카메라별로 무효 — front/back 힌트가 다르다.
+  _hasResolvedDetectionOrientation = NO;
+  _detectionOrientationAttempt = 0;
 
   if (self.window != nil) {
     [self startCameraIfPermitted];
@@ -1752,7 +1765,22 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       CVPixelBufferGetHeight(imageBuffer));
   NSDictionary *mediaPipePayload = [self mediaPipePayloadForSampleBuffer:sampleBuffer];
   NSDictionary *cameraStabilityPayload = [self cameraStabilityPayload];
-  CGImagePropertyOrientation orientation = AURARealtimeVideoOrientation([self devicePosition]);
+  // 검출 힌트: 고정된 자가보정 값 > 기본 힌트 > (미검출 지속 시) 후보 순환.
+  static const CGImagePropertyOrientation kAURADetectionOrientationCandidates[] = {
+      kCGImagePropertyOrientationUp,
+      kCGImagePropertyOrientationRight,
+      kCGImagePropertyOrientationDown,
+      kCGImagePropertyOrientationLeft,
+  };
+  CGImagePropertyOrientation orientation;
+  if (_hasResolvedDetectionOrientation) {
+    orientation = _resolvedDetectionOrientation;
+  } else if (_detectionOrientationAttempt == 0) {
+    orientation = AURARealtimeVideoOrientation([self devicePosition]);
+  } else {
+    orientation =
+        kAURADetectionOrientationCandidates[(_detectionOrientationAttempt - 1) % 4];
+  }
   VNDetectFaceLandmarksRequest *request = [[VNDetectFaceLandmarksRequest alloc] init];
   VNImageRequestHandler *handler =
       [[VNImageRequestHandler alloc] initWithCMSampleBuffer:sampleBuffer
@@ -1777,6 +1805,18 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   NSArray<VNFaceObservation *> *faces = request.results ?: @[];
   VNFaceObservation *primaryFace = AURARealtimeLargestFace(faces);
+
+  // 검출 성공 시 이번 힌트를 세션에 고정, 실패가 이어지면 다음 프레임은 다음
+  // 후보로 시도한다(프레임당 1회 검출이라 추가 비용 없음, ≤4프레임 내 수렴).
+  if (primaryFace) {
+    if (!_hasResolvedDetectionOrientation) {
+      _hasResolvedDetectionOrientation = YES;
+      _resolvedDetectionOrientation = orientation;
+    }
+  } else if (!_hasResolvedDetectionOrientation) {
+    _detectionOrientationAttempt += 1;
+  }
+
   // 좌표 프레임 자가판정 (raw 눈선 축 + 프로브 방향, hysteresis 포함).
   const AURARealtimeFrameRotation frameRotation =
       [self resolveFrameRotationForFace:primaryFace imageSize:imageSize];
@@ -1787,6 +1827,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   payload[@"frameRotation"] = AURARealtimeFrameRotationName(frameRotation);
   payload[@"frameRotationDetected"] = AURARealtimeFrameRotationName(_diagDetectedRotation);
   payload[@"frameRotationLocked"] = @(_hasLockedFrameRotation);
+  // 검출 orientation 자가보정 진단 — 어떤 힌트로 검출됐는지 원격 판독용.
+  payload[@"detectionOrientation"] = @(orientation);
+  payload[@"detectionOrientationResolved"] = @(_hasResolvedDetectionOrientation);
   if (_diagHasEyeAxis) {
     payload[@"eyeAxisRatio"] = @(_diagEyeAxisRatio);
     payload[@"eyeAxis"] = _diagEyeAxisRatio >= 1.0 ? @"horizontal" : @"vertical";
