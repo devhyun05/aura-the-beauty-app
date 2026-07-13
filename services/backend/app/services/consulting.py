@@ -992,9 +992,9 @@ async def _conversation_id_for_new_booking(
   expert_id: str,
   booking_id: Any,
 ) -> Any:
-  return await db.fetchval(
+  row = await db.fetchrow(
     """
-    select conversation_id
+    select coalesce(conversation_id, id) as conversation_id
     from consulting_bookings
     where user_id = $1::uuid and expert_id = $2
       and customer_left_at is null and expert_left_at is null
@@ -1003,7 +1003,8 @@ async def _conversation_id_for_new_booking(
     """,
     user_id,
     expert_id,
-  ) or booking_id
+  )
+  return row["conversation_id"] if row is not None else booking_id
 
 
 async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, Any]:

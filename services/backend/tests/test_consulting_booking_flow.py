@@ -25,12 +25,10 @@ class FakeConversationDatabase:
     self.open_conversation_id = open_conversation_id
     self.executed: list[tuple[str, tuple]] = []
 
-  async def fetchval(self, query: str, *args):
-    assert "customer_left_at is null and expert_left_at is null" in query
-    assert args == ("customer-1", "exp-sea")
-    return self.open_conversation_id
-
   async def fetchrow(self, query: str, *args):
+    if "customer_left_at is null and expert_left_at is null" in query:
+      assert args == ("customer-1", "exp-sea")
+      return {"conversation_id": self.open_conversation_id} if self.open_conversation_id else None
     if "select coalesce(conversation_id, id)" in query:
       return {"conversation_id": "conversation-1"}
     return None
