@@ -136,6 +136,13 @@ export function shouldValidateCameraFaceCapture(mode: CameraFaceCaptureMode): bo
   return mode === 'face';
 }
 
+export function shouldClearCameraFaceCaptureValidationMessage(
+  captureValidationMessage: string | null,
+  realtimeGuidanceMessage: string | null,
+): boolean {
+  return captureValidationMessage !== null && realtimeGuidanceMessage === null;
+}
+
 const MEDIAPIPE_CENTERLINE_KEYS = [
   'forehead',
   'noseBridge',
@@ -608,6 +615,17 @@ export function CameraFaceCaptureScreen({
   useEffect(() => {
     guidanceMessageTargetRef.current = rawGuidanceMessage;
   }, [rawGuidanceMessage]);
+  // 촬영 버튼을 눌렀을 때 저장한 실패 문구는 일회성 피드백이다. 이후 최신 프레임이
+  // 통과했는데도 이전 "가까이서" 안내가 남아 현재 수치와 충돌하지 않게 즉시 지운다.
+  useEffect(() => {
+    if (shouldClearCameraFaceCaptureValidationMessage(
+      captureValidationMessage,
+      rawGuidanceMessage,
+    )) {
+      setCaptureValidationMessage(null);
+      setStableGuidanceMessage(null);
+    }
+  }, [captureValidationMessage, rawGuidanceMessage]);
   const captureMessage =
     uploadError ??
     (isUploading

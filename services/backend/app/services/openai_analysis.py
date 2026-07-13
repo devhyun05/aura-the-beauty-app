@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 RECOMMENDED_MAKEUP_COUNT = 1
 
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
-  "Top-level JSON keys: personalColor, faceShape, skinType, toneSummary, "
+  "Top-level JSON keys: faceShape, skinType, "
   "recommendedMood, tags, summary, shortSummary, skinAnalysisSummary, "
   "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
@@ -342,11 +342,10 @@ class OpenAIAnalysisService:
       "사진 속 사용자의 성별 표현과 스타일을 반드시 보존해. 남성으로 보이는 사용자는 남성 그루밍 메이크업 중심으로, 여성으로 보이는 사용자는 여성 메이크업 중심으로 추천해. "
       "메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
       "반드시 한국어 JSON 객체 하나만 반환해. "
-      "앱 상단 요약에 바로 쓰이도록 personalColor, faceShape, toneSummary, recommendedMood를 가장 먼저 정확하고 짧게 채워. "
-      "personalColor는 가장 가능성 높은 시즌/톤 방향으로 작성해. 예: 뉴트럴 웜, 소프트 가을, 라이트 봄처럼 짧게. "
+      "앱 상단 요약에 바로 쓰이도록 faceShape와 recommendedMood를 정확하고 짧게 채워. "
+      "퍼스널 컬러와 톤 요약은 절대 새로 판정하거나 출력하지 마. 기기 측정값은 메이크업 색 선택의 근거로만 사용해. "
       "faceShape는 얼굴형과 인상 특징을 짧게 작성해. "
-      "toneSummary는 18자 이내의 짧은 명사구로 작성하고, recommendedMood는 18자 이내의 짧은 무드명으로 작성해. "
-      "toneSummary와 recommendedMood에는 긴 설명 문장, 이유, 쉼표로 이어지는 긴 문구를 쓰지 마. "
+      "recommendedMood는 18자 이내의 짧은 무드명으로 작성하고, 긴 설명 문장이나 이유, 쉼표로 이어지는 긴 문구를 쓰지 마. "
       "summary는 컬러/메이크업/헤어 방향을 한 번에 이해할 수 있게 두 문장 이내로 작성해. "
       "shortSummary와 skinAnalysisSummary도 각각 두 문장 이내로 제한해. "
       "skinAnalysisSummary는 피부 결, 광, 붉은기, 톤 균일감처럼 사진에서 관찰 가능한 표현만 다루고 의학적 진단은 하지 마. "
@@ -379,7 +378,7 @@ class OpenAIAnalysisService:
       "요청 메타데이터에 measuredPersonalColor(기기에서 조명 보정 후 실측한 퍼스널 컬러: tone.top/secondary 12톤 코드, "
       "axes 5축 -1..1(temperature 쿨→웜, value 라이트→딥, chroma 뮤트→비비드, clarity 소프트→클리어, contrast 저→고대비), "
       "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
-      "personalColor·toneSummary·makeupGuideline의 색 선택 근거로 사진 관찰과 함께 사용하고, 실측과 사진이 다르면 실측 축을 우선해. "
+      "makeupGuideline과 색 선택의 근거로 사진 관찰과 함께 사용하고, 실측과 사진이 다르면 실측 축을 우선해. "
       "단 status가 insufficient이거나 measurementConfidence가 낮으면 사진 관찰을 우선하고, 영문 톤 코드(autumn_muted 등)는 그대로 쓰지 말고 한국어로 풀어 써. "
       "요청 메타데이터의 measurements는 위 실측 지표들의 원본 전체 기록(과거 보고서 복원용)이야 — 요약 필드와 겹치는 값은 요약을 기준으로 해석해. "
       "실측 지표(faceVerticalThirds, face3d, faceGeometry2d, measuredPersonalColor)가 사진 관찰과 다르면 실측 지표를 우선하되, "

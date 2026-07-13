@@ -4,6 +4,7 @@ import {
   CameraFaceCaptureScreen,
   getCameraFaceCaptureCloseButtonPosition,
   getCameraFaceCaptureCameraMode,
+  shouldClearCameraFaceCaptureValidationMessage,
   shouldValidateCameraFaceCapture,
 } from './CameraFaceCaptureScreen';
 
@@ -42,6 +43,15 @@ expectEqual(
   getCameraFaceCaptureCloseButtonPosition(47).position,
   'absolute',
   'camera face capture close button host is absolutely positioned',
+);
+
+expectEqual(
+  shouldClearCameraFaceCaptureValidationMessage(
+    '조금 가까이서 촬영해주세요',
+    null,
+  ),
+  true,
+  'a passing realtime frame clears a stale blocked-capture message',
 );
 
 <CameraFaceCaptureScreen

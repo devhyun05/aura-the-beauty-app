@@ -2,6 +2,10 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { TYPE_LABEL_KO } from '../services/personalColorCore/constants';
+import {
+  getAxisBandPresentation,
+  getPaletteRangePresentation,
+} from '../services/personalColorCore/presentation';
 import type { AuraPersonalColorResult, AxisName } from '../types';
 
 const AXIS_LABELS: Record<AxisName, [string, string]> = {
@@ -22,10 +26,14 @@ const STATUS_KO: Record<AuraPersonalColorResult['status'], string> = {
 function AxisBar({ name, value }: { name: AxisName; value: number | null }) {
   const [lo, hi] = AXIS_LABELS[name];
   const pct = value == null ? 0 : Math.round(((value + 1) / 2) * 100);
+  const activeBand = getAxisBandPresentation(name, value);
   return (
     <View style={styles.axisRow}>
       <Text style={styles.axisEnd}>{lo}</Text>
       <View style={styles.axisTrack}>
+        {['low', 'mid', 'high'].map(key => (
+          <View key={key} style={[styles.axisBand, activeBand.key === key && styles.axisBandActive]} />
+        ))}
         <View style={styles.axisCenterMark} />
         {value != null && (
           <View style={[styles.axisDot, { left: `${pct}%` }]} />
@@ -33,6 +41,7 @@ function AxisBar({ name, value }: { name: AxisName; value: number | null }) {
         {value == null && <Text style={styles.axisNull}>측정 불가</Text>}
       </View>
       <Text style={styles.axisEnd}>{hi}</Text>
+      <Text style={styles.axisCurrent}>현재 위치: {activeBand.labelKo}</Text>
     </View>
   );
 }
@@ -80,14 +89,18 @@ export function PersonalColorTypeCard({
 
       {result.palette.best.length > 0 && (
         <View style={styles.paletteBlock}>
-          <Text style={styles.paletteTitle}>잘 어울리는 색 계열</Text>
+          <Text style={styles.paletteTitle}>추천 색 범위</Text>
           <View style={styles.chipRow}>
             {result.palette.best.slice(0, 4).map(item => (
               <View key={item.family.id} style={styles.bestChip}>
-                <Text style={styles.chipText}>{item.family.labelKo}</Text>
+                <Text style={styles.chipText}>{getPaletteRangePresentation(item).labelKo}</Text>
+                {getPaletteRangePresentation(item).examples.length > 0 && (
+                  <Text style={styles.chipExample}>{getPaletteRangePresentation(item).examples.join(' · ')}</Text>
+                )}
               </View>
             ))}
           </View>
+          <Text style={styles.paletteCaption}>진단명이 아니라 현재 측정값 주변의 추천 범위예요.</Text>
         </View>
       )}
 
@@ -125,18 +138,23 @@ const styles = StyleSheet.create({
   hedge: { fontSize: 13, color: '#8a6d3b', backgroundColor: '#fcf6e6', padding: 8, borderRadius: 8 },
   confidence: { fontSize: 13, color: '#666' },
   axes: { gap: 10, marginTop: 4 },
-  axisRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  axisRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   axisEnd: { width: 48, fontSize: 12, color: '#777', textAlign: 'center' },
-  axisTrack: { flex: 1, height: 20, backgroundColor: '#f1f2f5', borderRadius: 10, justifyContent: 'center' },
+  axisTrack: { flex: 1, height: 20, flexDirection: 'row', backgroundColor: '#f1f2f5', borderRadius: 10, justifyContent: 'center', overflow: 'hidden' },
+  axisBand: { flex: 1, borderRightWidth: 1, borderRightColor: '#d0d3da' },
+  axisBandActive: { backgroundColor: '#cfe1ff' },
   axisCenterMark: { position: 'absolute', left: '50%', width: 1, height: 20, backgroundColor: '#d0d3da' },
   axisDot: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: '#3a6df0', marginLeft: -6, top: 4 },
   axisNull: { textAlign: 'center', fontSize: 11, color: '#aaa' },
+  axisCurrent: { width: '100%', fontSize: 11, color: '#526780', textAlign: 'center' },
   paletteBlock: { gap: 6 },
   paletteTitle: { fontSize: 14, fontWeight: '600', color: '#333' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   bestChip: { backgroundColor: '#e7f0ff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
   worstChip: { backgroundColor: '#f3eef7', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
   chipText: { fontSize: 12, color: '#333' },
+  chipExample: { fontSize: 11, color: '#667', marginTop: 2 },
+  paletteCaption: { fontSize: 11, color: '#777' },
   warnings: { fontSize: 12, color: '#999' },
   footnote: { fontSize: 11, color: '#aaa', marginTop: 4 },
 });

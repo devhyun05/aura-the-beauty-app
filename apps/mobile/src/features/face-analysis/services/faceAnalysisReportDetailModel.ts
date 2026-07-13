@@ -1,4 +1,6 @@
 import {colors, shadows, spacing, typography} from '../../../shared/theme';
+import {getMeasuredPersonalColorSummary} from '../../personal-color/services/personalColorCore/presentation';
+import type {MeasuredPersonalColorView} from './faceAnalysisMeasurements';
 import type {
   FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
@@ -142,11 +144,13 @@ export function getFaceAnalysisReportEditorialPresentation() {
 
 export function getFaceAnalysisReportSummaryItems(
   report: FaceAnalysisReport,
+  personalColor: MeasuredPersonalColorView | null = null,
 ): FaceAnalysisReportSummaryItem[] {
+  const measured = getMeasuredPersonalColorSummary(personalColor ?? {axes: {} as MeasuredPersonalColorView['axes'], tone: null});
   return [
-    {label: '퍼스널 컬러', value: report.personalColor},
+    {label: '퍼스널 컬러', value: measured.personalColor},
     {label: '얼굴형', value: report.faceShape},
-    {label: '톤 요약', value: report.toneSummary},
+    {label: '톤 요약', value: measured.toneSummary},
     {label: '추천 무드', value: report.recommendedMood},
   ];
 }

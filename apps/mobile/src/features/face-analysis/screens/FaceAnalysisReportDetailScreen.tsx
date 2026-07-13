@@ -452,10 +452,6 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportPointGuideItems(report) : []),
     [report],
   );
-  const summaryItems = useMemo(
-    () => (report ? getFaceAnalysisReportSummaryItems(report) : []),
-    [report],
-  );
   const primaryMakeupRecommendation = useMemo(
     () => (report ? getFaceAnalysisReportPrimaryMakeupRecommendation(report, guideItems) : null),
     [guideItems, report],
@@ -491,6 +487,10 @@ export function FaceAnalysisReportDetailScreen({
     (useSessionMeasurements ? personalColorCorrection : null) ??
     measurements?.personalColor?.correctionStatus ??
     null;
+  const summaryItems = useMemo(
+    () => (report ? getFaceAnalysisReportSummaryItems(report, effectivePersonalColor) : []),
+    [effectivePersonalColor, report],
+  );
   const pendingRecommendedMakeupImageCount = useMemo(
     () => countPendingRecommendedMakeupImages(report),
     [report],
