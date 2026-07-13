@@ -383,20 +383,15 @@ export function ConsultingCallRouteScreen({
     return <ConsultingRouteLoading />;
   }
 
-  const handleEndCall = async () => {
+  const handleEndCall = () => {
     if (route.params.bookingId) {
-      await endConsultingCall(route.params.bookingId);
+      void endConsultingCall(route.params.bookingId);
     }
-    navigation.reset({
-      index: 1,
-      routes: [
-        {name: 'MainTabs', params: {screen: 'ConsultingTab'}},
-        {
-          name: 'ConsultingSummary',
-          params: {expertId: expert.id, recordId: route.params.bookingId},
-        },
-      ],
-    });
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigateMainTab(navigation, 'ConsultingTab');
   };
 
   return (
@@ -405,7 +400,7 @@ export function ConsultingCallRouteScreen({
       bookingId={route.params.bookingId}
       durationId={route.params.durationId}
       expert={expert}
-      onEndCall={() => void handleEndCall()}
+      onEndCall={handleEndCall}
     />
   );
 }

@@ -330,11 +330,45 @@ def _validate_booking_day(day_id: date, schedule_settings: ScheduleSettings | No
   return day_id
 
 
+def _booking_slot_is_in_future(
+  day_id: date,
+  slot_id: str,
+  *,
+  now: datetime | None = None,
+) -> bool:
+  current = now or datetime.now(_KST)
+  if current.tzinfo is None:
+    current = current.replace(tzinfo=_KST)
+  else:
+    current = current.astimezone(_KST)
+  starts_at = datetime.combine(
+    day_id,
+    datetime.strptime(slot_id, "%H:%M").time(),
+    tzinfo=_KST,
+  )
+  return starts_at > current
+
+
+def _validate_booking_slot_is_in_future(
+  day_id: date,
+  slot_id: str,
+  *,
+  now: datetime | None = None,
+) -> None:
+  if not _booking_slot_is_in_future(day_id, slot_id, now=now):
+    raise AppError(
+      400,
+      "CONSULTING_SLOT_IN_PAST",
+      "현재 시간 이후의 예약 시간을 선택해 주세요.",
+    )
+
+
 def _build_booking_days(
   booked_intervals_by_day: dict[str, list[tuple[int, int]]] | None = None,
   duration_minutes: int = 30,
   start_day: date | None = None,
   schedule_settings: ScheduleSettings | None = None,
+  now: datetime | None = None,
 ) -> list[dict[str, Any]]:
   booked_intervals_by_day = booked_intervals_by_day or {}
   first_day = start_day or _today_kst()
@@ -361,10 +395,16 @@ def _build_booking_days(
           {
             "id": slot_label,
             "label": slot_label,
-            "available": _slot_available_for_duration(
-              slot_label,
-              duration_minutes,
-              booked_intervals,
+            "available": (
+              _slot_available_for_duration(
+                slot_label,
+                duration_minutes,
+                booked_intervals,
+              )
+              and (
+                now is None
+                or _booking_slot_is_in_future(slot_date, slot_label, now=now)
+              )
             ),
           }
           for slot_label in slot_labels
@@ -752,6 +792,7 @@ async def get_expert_slots(
     duration_minutes,
     first_day,
     schedule_settings=schedule_settings,
+    now=datetime.now(_KST),
   )
 
 
@@ -1049,6 +1090,7 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
   schedule_settings = _schedule_settings_from_row(expert)
   booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
+  _validate_booking_slot_is_in_future(booking_day, slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):
@@ -1199,6 +1241,7 @@ async def update_booking(
 
   booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
+  _validate_booking_slot_is_in_future(booking_day, slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):

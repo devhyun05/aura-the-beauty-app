@@ -1210,6 +1210,49 @@ async def expert_profile(account: dict[str, Any]) -> dict[str, Any]:
   return _expert_to_web(_expert_row_from_account(account), account)
 
 
+async def update_expert_avatar(
+  db: Database,
+  account: dict[str, Any],
+  expert_id: str,
+  media_id: Any,
+) -> dict[str, Any]:
+  if expert_id != account["expert_id"]:
+    raise AppError(403, "PARTNER_EXPERT_FORBIDDEN", "본인 프로필 사진만 변경할 수 있습니다.")
+
+  media = await db.fetchrow(
+    """
+    select coalesce(media.thumbnail_cdn_url, media.cdn_url) as image_url
+    from media_upload_sessions upload
+    join media_assets media on media.id = upload.media_asset_id
+    where upload.media_asset_id = $1::uuid
+      and upload.partner_account_id = $2::uuid
+      and upload.media_kind = 'profile-avatar'
+      and upload.status = 'completed'
+      and media.deleted_at is null
+    limit 1
+    """,
+    media_id,
+    account["id"],
+  )
+  image_url = str(media.get("image_url") or "").strip() if media else ""
+  if not image_url:
+    raise AppError(404, "PARTNER_AVATAR_MEDIA_NOT_FOUND", "업로드한 프로필 사진을 찾을 수 없습니다.")
+
+  updated = await db.fetchrow(
+    """
+    update consulting_experts
+    set image_url = $2
+    where id = $1
+    returning *
+    """,
+    expert_id,
+    image_url,
+  )
+  if updated is None:
+    raise AppError(404, "PARTNER_EXPERT_NOT_FOUND", "전문가 정보를 찾을 수 없습니다.")
+  return _expert_to_web(updated, account)
+
+
 async def dashboard_summary(db: Database, account: dict[str, Any]) -> dict[str, Any]:
   bookings = await list_bookings(db, account, {})
   today = datetime.now(timezone.utc).date().isoformat()

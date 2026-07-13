@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import Field
 
 from app.schemas.base import CamelModel
@@ -19,6 +21,10 @@ class PartnerApplicationCreate(CamelModel):
 
 class PartnerPasswordChangeRequest(CamelModel):
   new_password: str = Field(alias="newPassword", min_length=8, max_length=255)
+
+
+class PartnerExpertAvatarUpdate(CamelModel):
+  media_id: UUID = Field(alias="mediaId")
 
 
 class AdminPartnerApplicationApprove(CamelModel):

@@ -48,9 +48,7 @@ export type {ConsultingUnreadState} from './services/consultingReadStateService'
 export type {
   ConsultingBookingDraft,
   ConsultingCallJoinResult,
-  ConsultingCallLanguageCode,
   ConsultingCallState,
-  ConsultingCallTranscription,
   ConsultingCategoryId,
   ConsultingExpert,
   ConsultingMembershipPlan,
