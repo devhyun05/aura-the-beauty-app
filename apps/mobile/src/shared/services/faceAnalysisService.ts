@@ -1,5 +1,6 @@
 import { faceAnalysisReportsMock } from '../mocks/faceAnalysis.mock';
 import type {Face3DProfile} from '../../features/face-3d/types';
+import type {FaceGeometryAnalysisPayload} from '../../features/face-geometry/services/faceGeometryAiPayload';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import type {
   FaceAnalysisMakeupCard,
@@ -685,6 +686,8 @@ export async function createFaceAnalysisReportFromCapture(
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
   // ARKit 3D 측정 프로필(정규화 5지표) — 측정 성공 세션에서만 전달된다.
   face3d?: Face3DProfile,
+  // 2D 얼굴 기하 압축 요약 — 산출 성공 세션에서만 전달된다.
+  faceGeometry2d?: FaceGeometryAnalysisPayload,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
@@ -692,6 +695,7 @@ export async function createFaceAnalysisReportFromCapture(
   console.info('[aura:analysis] create-report:start', {
     hasBackendApiBaseUrl,
     hasBucket: Boolean(capture?.bucket),
+    hasFaceGeometry2d: Boolean(faceGeometry2d),
     hasFaceVerticalThirds: Boolean(faceVerticalThirds),
     hasObjectKey: Boolean(capture?.objectKey),
     mediaId: capture?.mediaId ?? null,
@@ -724,7 +728,12 @@ export async function createFaceAnalysisReportFromCapture(
       photoCaptureId: capture.photoCaptureId,
       previewMediaId: capture.mediaId,
       reportTitle: '맞춤 분석 보고서',
-      requestPayload: buildFaceAnalysisRequestPayload(capture, faceVerticalThirds, face3d),
+      requestPayload: buildFaceAnalysisRequestPayload(
+        capture,
+        faceVerticalThirds,
+        face3d,
+        faceGeometry2d,
+      ),
       runImmediately: true,
       sourceMediaId: capture.mediaId,
       title: 'AI 맞춤 메이크업 분석',

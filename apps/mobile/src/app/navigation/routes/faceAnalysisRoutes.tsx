@@ -19,6 +19,10 @@ import {
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
+import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
+import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/faceGeometryService';
+import type {FaceGeometryResult} from '../../../features/face-geometry/types';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
 import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types';
@@ -231,6 +235,7 @@ export function FaceAnalysisLoadingRouteScreen({
     selectedFace3DProfile,
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
+    setSelectedFaceGeometry2d,
     setSelectedFaceVerticalThirds,
     setSelectedPersonalColor,
     setSelectedPersonalColorCorrection,
@@ -242,6 +247,10 @@ export function FaceAnalysisLoadingRouteScreen({
   const analysisRetryCountRef = React.useRef(0);
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
+  // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
+  // 효과 재실행으로 이중 POST 가 나므로 반드시 ref 로만 전달한다.
+  const faceGeometry2dPromiseRef =
+    React.useRef<Promise<FaceGeometryResult | null> | null>(null);
   // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
   // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
   const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
@@ -319,6 +328,53 @@ export function FaceAnalysisLoadingRouteScreen({
     };
   }, [selectedFaceCapture, setSelectedFaceVerticalThirds]);
 
+  // 2D 기하 지표도 캡처당 1회 온디바이스로 계산한다. 같은 imageUri 라 Unity
+  // 랜드마크 검출은 requestFaceLandmarks dedup 으로 세로비율과 1회를 공유한다.
+  // 실패는 null 로 격리하고, 보고서 POST 는 ref 의 promise 로만 대기한다.
+  React.useEffect(() => {
+    setSelectedFaceGeometry2d(null);
+    faceGeometry2dPromiseRef.current = null;
+
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    const captureId = selectedFaceCapture.photoCaptureId;
+
+    // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
+    // 서비스가 자체 타임아웃/미탑재를 결과 status 로 흡수한다).
+    faceGeometry2dPromiseRef.current = (
+      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
+    )
+      .then(() =>
+        analyzeFaceGeometry2d({
+          captureId,
+          createdAt: new Date().toISOString(),
+          imageUri: selectedFaceCapture.imageUri,
+          sessionId: captureId,
+        }),
+      )
+      .then(result => {
+        if (isMounted) {
+          setSelectedFaceGeometry2d(result);
+        }
+
+        return result;
+      })
+      .catch(error => {
+        console.info('[aura:face-geometry] analysis:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        return null;
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedFaceCapture, setSelectedFaceGeometry2d]);
+
   // 퍼스널 컬러도 캡처당 1회 온디바이스로 진단한다(로컬 전용·업로드 없음).
   // 백엔드 보고서 생성과 독립적으로 계산해 보고서 흐름을 지연시키지 않고,
   // 실패/미지원은 null로 격리해 결과가 준비되면 보고서에 표시된다.
@@ -388,20 +444,21 @@ export function FaceAnalysisLoadingRouteScreen({
     let isMounted = true;
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const waitForVerticalThirds = Promise.race([
-      verticalThirdsPromiseRef.current ?? Promise.resolve(null),
-      new Promise<null>(resolve => {
-        setTimeout(() => resolve(null), STILL_ANALYSIS_WAIT_TIMEOUT_MS);
-      }),
+    // 축마다 "개별" null 타임아웃 — 공유 race 는 한 축 타임아웃이 이미 해소된
+    // 다른 축 값까지 버리므로 raceWithNullTimeout 으로 독립 강등한다.
+    const waitForOnDeviceAnalyses = Promise.all([
+      raceWithNullTimeout(verticalThirdsPromiseRef.current, STILL_ANALYSIS_WAIT_TIMEOUT_MS),
+      raceWithNullTimeout(faceGeometry2dPromiseRef.current, STILL_ANALYSIS_WAIT_TIMEOUT_MS),
     ]);
 
-    waitForVerticalThirds
-      .then(verticalThirds =>
+    waitForOnDeviceAnalyses
+      .then(([verticalThirds, faceGeometry]) =>
         createFaceAnalysisReportFromCapture(
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
           // 3D 측정은 로딩 진입 전에 끝나 있으므로(측정 화면 경유) 대기 없이 그대로 싣는다.
           selectedFace3DProfile ?? undefined,
+          buildFaceGeometryAnalysisPayload(faceGeometry),
         ),
       )
       .then(report => {
@@ -490,6 +547,7 @@ export function FaceAnalysisLoadingRouteScreen({
 
     void Promise.allSettled([
       verticalThirdsPromiseRef.current ?? Promise.resolve(null),
+      faceGeometry2dPromiseRef.current ?? Promise.resolve(null),
       personalColorSettledPromiseRef.current ?? Promise.resolve(null),
     ]).then(() => {
       if (!cancelled && navigation.isFocused()) {
@@ -563,6 +621,7 @@ export function FaceAnalysisReportDetailRouteScreen({
     selectedFace3DProfile,
     selectedFaceAnalysisReport,
     selectedFaceCapture,
+    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     selectedPersonalColorCorrection,
@@ -610,6 +669,7 @@ export function FaceAnalysisReportDetailRouteScreen({
             navigation.navigate('ProductRecommendation', {reportId})
           }
           face3d={route.params?.reportId ? null : selectedFace3DProfile}
+          faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
           personalColor={route.params?.reportId ? null : selectedPersonalColor}
           personalColorCorrection={
             route.params?.reportId ? null : selectedPersonalColorCorrection

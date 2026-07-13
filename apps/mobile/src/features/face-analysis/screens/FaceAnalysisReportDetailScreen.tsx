@@ -31,6 +31,12 @@ import type {
 import {AppScreen} from '../../../shared/ui';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {Face3DMetricGrid} from '../../face-3d/components/Face3DMetricGrid';
+import {
+  FACE_GEOMETRY_METRIC_KEYS,
+  type FaceGeometryMetric,
+  type FaceGeometryMetricKey,
+  type FaceGeometryResult,
+} from '../../face-geometry/types';
 import type {Face3DProfile} from '../../face-3d/types';
 import {
   PhotoStage,
@@ -66,6 +72,10 @@ type FaceAnalysisReportDetailScreenProps = {
   // 세션 내 ARKit 라이브 측정으로 얻은 3D 프로필(온디바이스, 정규화 5지표).
   // 과거 보고서(id 조회)나 측정 skip/실패면 null — 섹션을 렌더하지 않는다.
   face3d?: Face3DProfile | null;
+  // 세션 내 촬영에서 온디바이스로 계산한 2D 얼굴 기하 지표(로컬 전용).
+  // 과거 보고서(id 조회)에는 없으므로 null이면 섹션을 렌더하지 않는다.
+  // blocked/failed 는 숨기지 않고 사유 + 재촬영 안내를 표시한다.
+  faceGeometry2d?: FaceGeometryResult | null;
   headerTitle?: string;
   reportId?: string | null;
   onBack?: () => void;
@@ -102,6 +112,53 @@ function getVerticalThirdsBlockedMessage(statusReason?: string): string {
     (statusReason && VERTICAL_THIRDS_BLOCKED_MESSAGES[statusReason]) ??
     '얼굴 세로 비율을 측정하지 못했어요. 정면에서 다시 촬영해 주세요.'
   );
+}
+
+const FACE_GEOMETRY_BLOCKED_MESSAGES: Record<string, string> = {
+  face_not_detected: '사진에서 얼굴을 찾지 못했어요. 밝은 곳에서 다시 촬영해 주세요.',
+  image_dimensions_invalid: '사진 정보를 읽지 못해 얼굴 형태 지표를 측정하지 못했어요.',
+  landmark_detection_failed: '얼굴 인식에 실패해 얼굴 형태 지표를 측정하지 못했어요.',
+  landmarks_unavailable: '이 기기에서는 얼굴 형태 지표 측정을 사용할 수 없어요.',
+  required_landmarks_missing:
+    '얼굴 기준점을 찾지 못했어요. 이마와 턱이 가려지지 않게 다시 촬영해 주세요.',
+};
+
+function getFaceGeometryBlockedMessage(statusReason?: string): string {
+  return (
+    (statusReason && FACE_GEOMETRY_BLOCKED_MESSAGES[statusReason]) ??
+    '얼굴 형태 지표를 측정하지 못했어요. 정면에서 다시 촬영해 주세요.'
+  );
+}
+
+// Face3DMetricGrid 는 face3d 프로필 타입 고정이라 2D 기하는 이 화면의 경량
+// 로컬 그리드로 렌더한다. Left/Right 는 피사체(본인) 기준.
+const FACE_GEOMETRY_METRIC_LABELS: Record<FaceGeometryMetricKey, string> = {
+  browSlopeLeftDeg: '눈썹 기울기 · 왼쪽',
+  browSlopeRightDeg: '눈썹 기울기 · 오른쪽',
+  canthalTiltLeftDeg: '눈꼬리 기울기 · 왼쪽',
+  canthalTiltRightDeg: '눈꼬리 기울기 · 오른쪽',
+  eyeBrowGapLeft: '눈-눈썹 간격 · 왼쪽',
+  eyeBrowGapRight: '눈-눈썹 간격 · 오른쪽',
+  eyeOpennessLeft: '눈 개방도 · 왼쪽',
+  eyeOpennessRight: '눈 개방도 · 오른쪽',
+  eyeWidthRatioLeft: '눈 폭 비율 · 왼쪽',
+  eyeWidthRatioRight: '눈 폭 비율 · 오른쪽',
+  interCanthalRatio: '미간 비율',
+  jawWidthRatio: '하악 폭 비율',
+  lipThicknessRatio: '입술 상하 두께비',
+  lowerJawWidthRatio: '아래턱 폭 비율',
+  mouthCornerAsymmetry: '입꼬리 높이차',
+  mouthWidthRatio: '입 폭 비율',
+};
+
+function formatFaceGeometryMetricValue(metric: FaceGeometryMetric): string {
+  if (metric.value === null) {
+    return '측정 불가';
+  }
+
+  return metric.unit === 'deg'
+    ? `${metric.value.toFixed(1)}°`
+    : metric.value.toFixed(2);
 }
 
 // 조명 보정 미적용 사유 → 사용자 안내 문구.
@@ -316,6 +373,7 @@ export function FaceAnalysisReportDetailScreen({
   bottomOverlayHeight = 0,
   capturedPhotoUri,
   face3d,
+  faceGeometry2d,
   headerTitle = '맞춤 분석 보고서',
   personalColor,
   personalColorCorrection,
@@ -665,6 +723,45 @@ export function FaceAnalysisReportDetailScreen({
               </View>
             ) : null}
           </ReportSection>
+        ) : null}
+
+        {faceGeometry2d ? (
+          faceGeometry2d.status === 'full_success' ||
+          faceGeometry2d.status === 'partial_success' ? (
+            <ReportSection eyebrow="FACE GEOMETRY" title={"얼굴 형태 비율"}>
+              <View style={styles.faceGeometryGrid}>
+                {FACE_GEOMETRY_METRIC_KEYS.map(key => {
+                  const metric = faceGeometry2d.metrics[key];
+
+                  return (
+                    <View key={key} style={styles.faceGeometryCard}>
+                      <Text style={styles.faceGeometryLabel}>
+                        {FACE_GEOMETRY_METRIC_LABELS[key]}
+                      </Text>
+                      <Text
+                        style={
+                          metric.value === null
+                            ? styles.faceGeometryUnavailable
+                            : styles.faceGeometryValue
+                        }>
+                        {formatFaceGeometryMetricValue(metric)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+              <Text style={styles.face3dFrameCaption}>
+                정면 사진 2D 실측 · 좌우는 본인 기준 · 비율은 얼굴 크기로 정규화
+              </Text>
+            </ReportSection>
+          ) : (
+            // 조용한 실패 금지: 측정 불가 사유 + 재촬영 안내를 표시한다.
+            <ReportSection eyebrow="FACE GEOMETRY" title={"얼굴 형태 비율"}>
+              <Text style={styles.sectionBlockedNotice}>
+                {getFaceGeometryBlockedMessage(faceGeometry2d.statusReason)}
+              </Text>
+            </ReportSection>
+          )
         ) : null}
 
         {personalColor ? (
@@ -1398,6 +1495,38 @@ const styles = StyleSheet.create({
     color: REPORT_TEXT_SECONDARY,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  faceGeometryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  faceGeometryCard: {
+    backgroundColor: REPORT_PANEL_COLOR,
+    borderColor: REPORT_CARD_BORDER,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexBasis: '47%',
+    flexGrow: 1,
+    gap: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  faceGeometryLabel: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  faceGeometryValue: {
+    color: REPORT_TEXT_PRIMARY,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.md,
+  },
+  faceGeometryUnavailable: {
+    color: REPORT_TEXT_SECONDARY,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
   },
   // 측정 불가/보정 미적용 안내 — 섹션을 숨기는 대신 사유를 정직하게 노출.
   sectionBlockedNotice: {
