@@ -235,6 +235,7 @@ def test_partner_caption_translate_broadcasts_mobile_caption_event(monkeypatch) 
     assert kwargs["result_id"] == "caption-1"
     assert kwargs["source_language_code"] == "ko-KR"
     assert kwargs["content"] == "안녕하세요"
+    assert kwargs["is_partial"] is False
     return {
       "result_id": "caption-1",
       "source_language_code": "ko-KR",
@@ -283,6 +284,49 @@ def test_partner_caption_translate_broadcasts_mobile_caption_event(monkeypatch) 
       },
     ),
   ]
+
+
+def test_partial_caption_translate_returns_preview_without_broadcast(monkeypatch) -> None:
+  broadcasts: list[tuple[str, dict]] = []
+
+  async def fake_partner_account():
+    return {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"}
+
+  async def fake_translate_partner_caption(_db, _account, booking_id, **kwargs):
+    assert booking_id == "booking-1"
+    assert kwargs["is_partial"] is True
+    return {
+      "result_id": kwargs["result_id"],
+      "source_language_code": kwargs["source_language_code"],
+      "target_language_code": "en",
+      "translated_content": "hello",
+    }
+
+  class FakeRealtimeManager:
+    async def broadcast(self, booking_id: str, payload: dict) -> None:
+      broadcasts.append((booking_id, payload))
+
+  monkeypatch.setattr(consulting_call_service, "translate_partner_caption", fake_translate_partner_caption)
+  monkeypatch.setattr(consulting_partner_api, "consulting_realtime_manager", FakeRealtimeManager())
+
+  app = create_app(Settings())
+  app.dependency_overrides[require_database] = lambda: object()
+  app.dependency_overrides[consulting_partner_api.get_partner_account] = fake_partner_account
+  client = TestClient(app)
+
+  response = client.post(
+    "/api/consulting/partner/bookings/booking-1/call/captions/translate",
+    json={
+      "resultId": "caption-partial-1",
+      "sourceLanguageCode": "ko-KR",
+      "content": "안녕",
+      "isPartial": True,
+    },
+  )
+
+  assert response.status_code == 200
+  assert response.json()["data"]["translatedContent"] == "hello"
+  assert broadcasts == []
 
 
 def _fake_join_response(booking_id: str) -> dict:

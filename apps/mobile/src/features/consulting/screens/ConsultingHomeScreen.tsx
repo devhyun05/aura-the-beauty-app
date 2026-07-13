@@ -13,12 +13,14 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  CalendarClock,
   ChevronRight,
   MessageCircle,
   Video,
 } from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
+import {useAuthSession} from '../../auth';
 import {
   consultingColors,
   consultingRadius,
@@ -38,7 +40,11 @@ import {
   getConsultingBookings,
   getConsultingHome,
 } from '../services/consultingService';
-import {isConsultingMessageStatus} from '../services/consultingReadStateService';
+import {
+  isConsultingActiveStatus,
+  isConsultingChatAvailable,
+} from '../services/consultingFlow';
+import {useConsultingBookingStatusSync} from '../hooks/useConsultingBookingStatusSync';
 import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import type {
   ConsultingCategory,
@@ -144,6 +150,7 @@ export function ConsultingHomeScreen({
   onPressUpcoming,
   topPadding,
 }: ConsultingHomeScreenProps) {
+  const {getAuthToken} = useAuthSession();
   const {width} = useWindowDimensions();
   const heroScrollRef = useRef<ScrollView>(null);
   const [home, setHome] = useState<ConsultingHomeData>(() => ({
@@ -153,6 +160,23 @@ export function ConsultingHomeScreen({
     activeRecords: [],
   }));
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+
+  const refreshActiveRecords = useCallback(() => {
+    void getConsultingBookings(undefined, {force: true}).then(records => {
+      const activeRecords = getActiveRecordsFromBookings(records);
+      setHome(current => ({
+        ...current,
+        activeRecord: activeRecords[0] ?? null,
+        activeRecords,
+      }));
+    });
+  }, []);
+
+  useConsultingBookingStatusSync({
+    authToken: getAuthToken(),
+    onStatusChange: refreshActiveRecords,
+    records: home.activeRecords,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -385,7 +409,7 @@ export function ConsultingHomeScreen({
 function getActiveRecordsFromBookings(
   records: readonly ConsultingRecord[],
 ): readonly ConsultingRecord[] {
-  return records.filter(record => isConsultingMessageStatus(record.status));
+  return records.filter(record => isConsultingActiveStatus(record.status));
 }
 
 function HeroBanner({
@@ -473,10 +497,14 @@ function ActiveRequestCard({
   width: number;
   onPress: () => void;
 }) {
+  const chatAvailable = isConsultingChatAvailable(record);
+  const ActionIcon = chatAvailable ? MessageCircle : CalendarClock;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${expert.name} ${getActiveRequestStatusTitle(record.status)} 톡 열기`}
+      accessibilityLabel={`${expert.name} ${getActiveRequestStatusTitle(record.status)} ${
+        chatAvailable ? '톡 열기' : '신청 내역 보기'
+      }`}
       onPress={onPress}
       style={({pressed}) => [
         styles.activeRequestCard,
@@ -500,8 +528,10 @@ function ActiveRequestCard({
       </RNView>
       <RNView style={styles.activeRequestFooter}>
         <RNView style={styles.activeRequestTalkPill}>
-          <MessageCircle color={consultingColors.roseStrong} size={14} />
-          <Text style={styles.activeRequestTalkText}>톡으로 확인</Text>
+          <ActionIcon color={consultingColors.roseStrong} size={14} />
+          <Text style={styles.activeRequestTalkText}>
+            {chatAvailable ? '톡으로 확인' : '신청 내역 보기'}
+          </Text>
         </RNView>
         <Text numberOfLines={1} style={styles.activeRequestCategory}>
           {record.categoryLabel}

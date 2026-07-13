@@ -1,4 +1,8 @@
 import * as SecureStore from '../../../shared/services/localSecureStore';
+import {
+  isConsultingChatAvailable,
+  isConsultingMessageStatus,
+} from './consultingFlow';
 import type {ConsultingRecord, ConsultingRecordStatus} from '../types';
 
 export type ConsultingInboxKind = 'messages' | 'notifications';
@@ -7,6 +11,16 @@ export type ConsultingUnreadState = Record<ConsultingInboxKind, boolean>;
 
 const READ_STATE_KEY_PREFIX = 'aura.consulting.readState.v1';
 const MAX_STORED_SIGNATURES = 160;
+const readStateListeners = new Set<() => void>();
+
+export function subscribeConsultingReadStateChange(listener: () => void): () => void {
+  readStateListeners.add(listener);
+  return () => readStateListeners.delete(listener);
+}
+
+function notifyReadStateChanged(): void {
+  readStateListeners.forEach(listener => listener());
+}
 
 function getReadStateKey(kind: ConsultingInboxKind): string {
   return `${READ_STATE_KEY_PREFIX}.${kind}`;
@@ -16,24 +30,12 @@ export function isConsultingNotificationStatus(
   status: ConsultingRecordStatus,
 ): boolean {
   return (
-    status === 'contacting' ||
-    status === 'confirmed' ||
-    status === 'scheduled' ||
-    status === 'in_progress' ||
-    status === 'unavailable'
-  );
-}
-
-export function isConsultingMessageStatus(
-  status: ConsultingRecordStatus,
-): boolean {
-  return (
     status === 'requested' ||
     status === 'contacting' ||
     status === 'confirmed' ||
     status === 'scheduled' ||
     status === 'in_progress' ||
-    status === 'completed'
+    status === 'unavailable'
   );
 }
 
@@ -43,7 +45,7 @@ function isRelevantRecord(
 ): boolean {
   return kind === 'notifications'
     ? isConsultingNotificationStatus(record.status)
-    : isConsultingMessageStatus(record.status);
+    : isConsultingMessageStatus(record.status) && isConsultingChatAvailable(record);
 }
 
 function getRecordSignature(record: ConsultingRecord): string {
@@ -158,6 +160,7 @@ export async function markConsultingInboxRead(
     const readSignatures = await getReadSignatures(kind);
     signatures.forEach(signature => readSignatures.add(signature));
     await setReadSignatures(kind, readSignatures);
+    notifyReadStateChanged();
   } catch {
     // 읽음 상태 저장 실패는 화면 진입 자체를 막지 않는다.
   }
@@ -168,4 +171,5 @@ export async function clearConsultingReadState(): Promise<void> {
     SecureStore.deleteItemAsync(getReadStateKey('messages')),
     SecureStore.deleteItemAsync(getReadStateKey('notifications')),
   ]);
+  notifyReadStateChanged();
 }

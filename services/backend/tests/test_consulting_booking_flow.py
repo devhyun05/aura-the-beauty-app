@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from app.api import consulting as consulting_api
@@ -163,7 +165,7 @@ async def test_customer_text_fallback_persists_then_broadcasts(monkeypatch: pyte
     return {"id": "customer-1"}
 
   async def fake_get_booking(*_args):
-    return {"id": "booking-1", "status": "requested"}
+    return {"id": "booking-1", "status": "confirmed", "chat_available": True}
 
   async def fake_create_message(_db, **kwargs):
     assert kwargs["booking_id"] == "booking-1"
@@ -202,12 +204,32 @@ async def test_customer_text_fallback_persists_then_broadcasts(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_closed_customer_booking_rejects_text_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_unconfirmed_customer_booking_rejects_text_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
   async def fake_ensure_user(*_args):
     return {"id": "customer-1"}
 
   async def fake_get_booking(*_args):
-    return {"id": "booking-1", "status": "canceled"}
+    return {"id": "booking-1", "status": "requested", "chat_available": False}
+
+  monkeypatch.setattr(consulting_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(consulting_api.consulting, "get_booking", fake_get_booking)
+
+  with pytest.raises(AppError, match="CONSULTING_CHAT_NOT_CONFIRMED"):
+    await consulting_api.send_consulting_text_message(
+      "booking-1",
+      ConsultingTextMessageSend(body="입금했어요", clientMessageId="mobile-message-1"),
+      CUSTOMER_AUTH,
+      object(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_closed_customer_booking_keeps_history_but_rejects_new_text(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_ensure_user(*_args):
+    return {"id": "customer-1"}
+
+  async def fake_get_booking(*_args):
+    return {"id": "booking-1", "status": "canceled", "chat_available": True}
 
   monkeypatch.setattr(consulting_api, "ensure_user", fake_ensure_user)
   monkeypatch.setattr(consulting_api.consulting, "get_booking", fake_get_booking)
@@ -215,7 +237,7 @@ async def test_closed_customer_booking_rejects_text_fallback(monkeypatch: pytest
   with pytest.raises(AppError, match="CONSULTING_BOOKING_CLOSED"):
     await consulting_api.send_consulting_text_message(
       "booking-1",
-      ConsultingTextMessageSend(body="입금했어요", clientMessageId="mobile-message-1"),
+      ConsultingTextMessageSend(body="기록은 보이나요?", clientMessageId="mobile-message-2"),
       CUSTOMER_AUTH,
       object(),
     )
@@ -257,6 +279,110 @@ async def test_partner_payment_confirmation_broadcasts_customer_completion_notic
     "message": "예약이 완료되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, 안내된 시간에 연락을 기다려 주세요.",
   }
   assert confirmation_messages[0][1:] == (PARTNER_ACCOUNT, "booking-1")
+
+
+@pytest.mark.asyncio
+async def test_partner_confirm_endpoint_atomically_confirms_and_creates_chat_notice(monkeypatch: pytest.MonkeyPatch) -> None:
+  updates: list[dict] = []
+  broadcasts: list[tuple[str, dict]] = []
+  confirmation_messages: list[str] = []
+
+  async def fake_update_details(_db, account: dict, booking_id: str, payload: dict):
+    assert account == PARTNER_ACCOUNT
+    updates.append(payload)
+    return {"id": booking_id, "status": "confirmed"}
+
+  async def fake_broadcast(booking_id: str, event: dict):
+    broadcasts.append((booking_id, event))
+
+  async def fake_send_confirmation(_db, _account: dict, booking_id: str):
+    confirmation_messages.append(booking_id)
+
+  monkeypatch.setattr(partner_api.consulting_partner, "update_booking_details", fake_update_details)
+  monkeypatch.setattr(partner_api.consulting_realtime_manager, "broadcast", fake_broadcast)
+  monkeypatch.setattr(partner_api, "_send_booking_confirmation_message", fake_send_confirmation)
+
+  result = await partner_api.confirm_partner_booking("booking-1", PARTNER_ACCOUNT, object())
+
+  assert updates == [{"mark_payment_paid": True, "status": "confirmed"}]
+  assert result["data"]["booking"]["status"] == "confirmed"
+  assert broadcasts[0][1]["status"] == "confirmed"
+  assert confirmation_messages == ["booking-1"]
+
+
+def _chat_booking_row(booking_id: str, status: str, created_at: datetime, confirmed_at=None) -> dict:
+  return {
+    "id": booking_id,
+    "conversation_id": "conversation-1",
+    "user_id": "customer-1",
+    "expert_id": "exp-sea",
+    "status": status,
+    "created_at": created_at,
+    "scheduled_at": created_at,
+    "duration_minutes": 60,
+    "session_mode": "online",
+    "confirmed_at": confirmed_at,
+  }
+
+
+@pytest.mark.asyncio
+async def test_partner_chat_hides_pending_rebooking_until_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+  confirmed_at = datetime(2026, 7, 10, tzinfo=timezone.utc)
+  confirmed = _chat_booking_row("booking-confirmed", "completed", confirmed_at, confirmed_at)
+  pending = _chat_booking_row(
+    "booking-pending",
+    "requested",
+    datetime(2026, 7, 13, tzinfo=timezone.utc),
+  )
+  requested_message_booking_ids: list[list[str]] = []
+
+  async def fake_booking_rows(_db, _account):
+    return [pending, confirmed]
+
+  async def fake_messages(_db, booking_ids: list[str], _thread_id: str):
+    requested_message_booking_ids.append(booking_ids)
+    return []
+
+  async def fake_customer(*_args):
+    return {"id": "customer-1", "name": "고객"}
+
+  async def fake_expert(_account):
+    return {"id": "exp-sea", "name": "김세아"}
+
+  async def fake_reports(*_args):
+    return []
+
+  monkeypatch.setattr(consulting_partner_service, "_booking_rows", fake_booking_rows)
+  monkeypatch.setattr(consulting_partner_service, "_messages_for_bookings", fake_messages)
+  monkeypatch.setattr(consulting_partner_service, "customer_detail_for_user", fake_customer)
+  monkeypatch.setattr(consulting_partner_service, "expert_profile", fake_expert)
+  monkeypatch.setattr(consulting_partner_service, "shared_reports_for_booking", fake_reports)
+
+  threads = await consulting_partner_service.chat_threads_for_account(object(), PARTNER_ACCOUNT)
+
+  assert len(threads) == 1
+  assert threads[0]["booking"]["id"] == "booking-confirmed"
+  assert requested_message_booking_ids == [["booking-confirmed"]]
+
+
+def test_partner_chat_visibility_requires_confirmed_reservation() -> None:
+  now = datetime(2026, 7, 13, tzinfo=timezone.utc)
+
+  assert consulting_partner_service._is_chat_visible_booking_row(_chat_booking_row("1", "requested", now)) is False
+  assert consulting_partner_service._is_chat_visible_booking_row(_chat_booking_row("2", "contacting", now, now)) is False
+  assert consulting_partner_service._is_chat_visible_booking_row(_chat_booking_row("3", "confirmed", now, now)) is True
+  assert consulting_partner_service._is_chat_visible_booking_row(_chat_booking_row("4", "cancelled", now)) is False
+  assert consulting_partner_service._is_chat_visible_booking_row(_chat_booking_row("5", "cancelled", now, now)) is True
+
+
+def test_customer_chat_visibility_requires_confirmed_reservation() -> None:
+  now = datetime(2026, 7, 13, tzinfo=timezone.utc)
+
+  assert consulting_service.is_customer_chat_available(_chat_booking_row("1", "requested", now)) is False
+  assert consulting_service.is_customer_chat_available(_chat_booking_row("2", "contacting", now, now)) is False
+  assert consulting_service.is_customer_chat_available(_chat_booking_row("3", "confirmed", now, now)) is True
+  assert consulting_service.is_customer_chat_available(_chat_booking_row("4", "cancelled", now)) is False
+  assert consulting_service.is_customer_chat_available(_chat_booking_row("5", "cancelled", now, now)) is True
 
 
 @pytest.mark.asyncio

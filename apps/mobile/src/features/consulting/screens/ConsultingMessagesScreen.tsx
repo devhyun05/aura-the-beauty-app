@@ -23,9 +23,12 @@ import {
 } from '../services/consultingService';
 import {
   getConsultingUnreadRecordIds,
-  isConsultingMessageStatus,
   markConsultingInboxRead,
 } from '../services/consultingReadStateService';
+import {
+  isConsultingActiveStatus,
+  isConsultingChatAvailable,
+} from '../services/consultingFlow';
 import {
   connectConsultingConversationSocket,
   type ConsultingConversationSocketClient,
@@ -53,7 +56,17 @@ export function ConsultingMessagesScreen({
   const [unreadMessageBookingIds, setUnreadMessageBookingIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
-  const activeRecordsRef = useRef<readonly ConsultingRecord[]>([]);
+  const subscriptionRecordsRef = useRef<readonly ConsultingRecord[]>([]);
+
+  const refreshRecords = useCallback(() => {
+    void getConsultingBookings(undefined, {force: true}).then(async recordData => {
+      setRecords(recordData);
+      setUnreadMessageBookingIds(
+        await getConsultingUnreadRecordIds('messages', recordData),
+      );
+      await markConsultingInboxRead('messages', recordData);
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,39 +106,57 @@ export function ConsultingMessagesScreen({
   );
 
   const activeRecords = useMemo(() => {
-    const visibleExpertIds = new Set<string>();
+    const visibleConversationIds = new Set<string>();
     return records.filter(record => {
+      const conversationId = record.conversationId ?? record.expertId;
       if (
         record.customerLeftAt ||
-        !isConsultingMessageStatus(record.status) ||
-        visibleExpertIds.has(record.expertId)
+        !isConsultingChatAvailable(record) ||
+        visibleConversationIds.has(conversationId)
       ) {
         return false;
       }
-      visibleExpertIds.add(record.expertId);
+      visibleConversationIds.add(conversationId);
       return true;
     });
   }, [records]);
-  const activeRecordsKey = useMemo(
-    () => activeRecords.map(record => `${record.id}:${record.status}`).join(','),
-    [activeRecords],
+  const subscriptionRecords = useMemo(
+    () =>
+      records.filter(
+        record =>
+          !record.customerLeftAt &&
+          (isConsultingActiveStatus(record.status) ||
+            isConsultingChatAvailable(record)),
+      ),
+    [records],
+  );
+  const subscriptionRecordsKey = useMemo(
+    () =>
+      subscriptionRecords
+        .map(record => `${record.id}:${record.status}:${record.chatAvailable}`)
+        .join(','),
+    [subscriptionRecords],
   );
 
   useEffect(() => {
-    activeRecordsRef.current = activeRecords;
-  }, [activeRecords]);
+    subscriptionRecordsRef.current = subscriptionRecords;
+  }, [subscriptionRecords]);
 
   useEffect(() => {
     if (!authToken) {
       return undefined;
     }
 
-    const sockets: ConsultingConversationSocketClient[] = activeRecordsRef.current.map(
+    const sockets: ConsultingConversationSocketClient[] = subscriptionRecordsRef.current.map(
       record =>
         connectConsultingConversationSocket({
           authToken,
           bookingId: record.id,
           onEvent: event => {
+            if (event.type === 'booking.status' || event.type === 'call.status') {
+              refreshRecords();
+              return;
+            }
             if (
               event.type === 'message.new' &&
               event.senderType !== 'user'
@@ -145,7 +176,7 @@ export function ConsultingMessagesScreen({
     return () => {
       sockets.forEach(socket => socket.close());
     };
-  }, [activeRecordsKey, authToken]);
+  }, [authToken, refreshRecords, subscriptionRecordsKey]);
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
@@ -195,8 +226,8 @@ export function ConsultingMessagesScreen({
           </Text>
           <Text style={styles.emptyText}>
             {isLoading
-              ? '신청 접수와 확정된 상담을 확인하고 있어요.'
-              : '프리랜서에게 예약 신청을 보내면 톡에서 진행 상황을 확인할 수 있어요.'}
+              ? '확정된 상담을 확인하고 있어요.'
+              : '예약이 확정되면 전문가와 나눌 상담 톡이 여기에 열려요.'}
           </Text>
           {!isLoading ? (
             <PrimaryButton label="프리랜서 둘러보기" onPress={onPressFindExpert} />

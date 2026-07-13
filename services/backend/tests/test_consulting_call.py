@@ -865,6 +865,41 @@ async def test_caption_translation_can_store_when_retention_is_enabled(monkeypat
   ]
 
 
+@pytest.mark.asyncio
+async def test_partial_caption_translation_is_never_persisted(monkeypatch: pytest.MonkeyPatch) -> None:
+  reset_fake_chime()
+  monkeypatch.setattr(consulting_call, "ChimeMeetingsService", FakeChimeMeetingsService)
+  settings = Settings(
+    chime_enabled=True,
+    consulting_call_translation_enabled=True,
+    consulting_transcript_retention_days=7,
+  )
+  db = FakeDatabase(make_booking())
+  await consulting_call.join_partner_call(
+    db,
+    {"id": "partner-1", "role": "expert", "expert_id": "exp_sea"},
+    "booking-1",
+    "ko-KR",
+    settings,
+  )
+
+  result = await consulting_call.translate_customer_caption(
+    db,
+    "user-1",
+    "booking-1",
+    result_id="caption-partial-1",
+    source_language_code="ko-KR",
+    content="안녕",
+    is_partial=True,
+    settings=settings,
+  )
+
+  assert result["translated_content"] == "en:안녕"
+  assert db.transcript_select_count == 0
+  assert db.transcript_insert_count == 0
+  assert db.transcript_segments == []
+
+
 def test_chime_transcription_config_uses_fixed_language_for_same_language() -> None:
   service = ChimeMeetingsService(Settings(chime_transcription_enabled=True))
 
@@ -875,6 +910,7 @@ def test_chime_transcription_config_uses_fixed_language_for_same_language() -> N
   assert mode == "fixed"
   assert language_code == "ko-KR"
   assert config["EngineTranscribeSettings"]["LanguageCode"] == "ko-KR"
+  assert config["EngineTranscribeSettings"]["PartialResultsStability"] == "high"
 
 
 def test_chime_transcription_config_identifies_mixed_languages() -> None:
@@ -888,6 +924,8 @@ def test_chime_transcription_config_identifies_mixed_languages() -> None:
   assert language_code is None
   assert config["EngineTranscribeSettings"]["IdentifyLanguage"] is True
   assert config["EngineTranscribeSettings"]["LanguageOptions"] == "ko-KR,en-US"
+  assert config["EngineTranscribeSettings"]["PreferredLanguage"] == "en-US"
+  assert config["EngineTranscribeSettings"]["PartialResultsStability"] == "high"
 
 
 def test_chime_translate_client_uses_settings_credentials(monkeypatch: pytest.MonkeyPatch) -> None:

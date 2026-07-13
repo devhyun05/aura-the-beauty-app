@@ -15,6 +15,14 @@ export {ConsultingReviewScreen} from './screens/ConsultingReviewScreen';
 export {ChimeVideoView, isNativeChimeVideoViewAvailable} from './components/ChimeVideoView';
 export {ConsultingHeaderActions} from './components/ConsultingHeaderActions';
 export {useConsultingExpert} from './hooks/useConsultingExpert';
+export {useConsultingBookingStatusSync} from './hooks/useConsultingBookingStatusSync';
+export {
+  canJoinConsultingCall,
+  isConsultingActiveStatus,
+  isConsultingChatAvailable,
+  isConsultingMessageStatus,
+  isConsultingPendingStatus,
+} from './services/consultingFlow';
 export {
   cancelConsultingBooking,
   createConsultingBooking,
@@ -32,9 +40,9 @@ export {
   getConsultingUnreadRecordIds,
   clearConsultingReadState,
   getConsultingUnreadState,
-  isConsultingMessageStatus,
   isConsultingNotificationStatus,
   markConsultingInboxRead,
+  subscribeConsultingReadStateChange,
 } from './services/consultingReadStateService';
 export type {ConsultingUnreadState} from './services/consultingReadStateService';
 export type {

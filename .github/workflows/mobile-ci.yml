@@ -150,6 +150,9 @@ jobs:
       - name: Contract — Secure credential storage
         run: node ../../scripts/mobile/run-secure-store-contract.mjs
 
+      - name: Contract — Consulting booking and chat flow
+        run: npm run test:consulting-flow
+
       - name: Contract — Face capture and analysis request verification
         run: npm run test:face-capture-upload
 

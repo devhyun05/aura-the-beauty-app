@@ -21,6 +21,7 @@ import {
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
+import {useConsultingBookingStatusSync} from '../hooks/useConsultingBookingStatusSync';
 import {
   isConsultingNotificationStatus,
   markConsultingInboxRead,
@@ -32,17 +33,32 @@ import type {
 } from '../types';
 
 type ConsultingNotificationsScreenProps = {
+  authToken?: string | null;
   onPressHistory: () => void;
   onPressRecord: (record: ConsultingRecord) => void;
 };
 
 export function ConsultingNotificationsScreen({
+  authToken,
   onPressHistory,
   onPressRecord,
 }: ConsultingNotificationsScreenProps) {
   const [records, setRecords] = useState<readonly ConsultingRecord[]>([]);
   const [experts, setExperts] = useState<readonly ConsultingExpert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshRecords = useCallback(() => {
+    void getConsultingBookings(undefined, {force: true}).then(async nextRecords => {
+      setRecords(nextRecords);
+      await markConsultingInboxRead('notifications', nextRecords);
+    });
+  }, []);
+
+  useConsultingBookingStatusSync({
+    authToken,
+    onStatusChange: refreshRecords,
+    records,
+  });
 
   useFocusEffect(
     useCallback(() => {

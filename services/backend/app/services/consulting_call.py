@@ -981,6 +981,7 @@ async def translate_partner_caption(
   result_id: str,
   source_language_code: str,
   content: str,
+  is_partial: bool = False,
   settings: Settings,
 ) -> dict[str, Any]:
   await _partner_booking(db, account, booking_id)
@@ -992,6 +993,7 @@ async def translate_partner_caption(
     result_id=result_id,
     source_language_code=source_language_code,
     content=content,
+    is_partial=is_partial,
     settings=settings,
   )
 
@@ -1004,6 +1006,7 @@ async def translate_customer_caption(
   result_id: str,
   source_language_code: str,
   content: str,
+  is_partial: bool = False,
   settings: Settings,
 ) -> dict[str, Any]:
   await _customer_booking(db, user_id, booking_id)
@@ -1015,6 +1018,7 @@ async def translate_customer_caption(
     result_id=result_id,
     source_language_code=source_language_code,
     content=content,
+    is_partial=is_partial,
     settings=settings,
   )
 
@@ -1028,25 +1032,27 @@ async def _translate_caption(
   result_id: str,
   source_language_code: str,
   content: str,
+  is_partial: bool,
   settings: Settings,
 ) -> dict[str, Any]:
   session = await _call_session(db, booking_id)
   if session is None:
-    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 확정 자막을 번역할 수 있습니다.")
+    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 자막을 번역할 수 있습니다.")
 
   normalized_language_code = _language_code(source_language_code)
-  retain_transcript = settings.consulting_transcript_retention_days > 0
+  retain_transcript = not is_partial and settings.consulting_transcript_retention_days > 0
   if not retain_transcript:
     translated = await ChimeMeetingsService(settings).translate_final_caption(
       source_language_code=normalized_language_code,
       content=content,
     )
     _log_call_event(
-      "caption_translated",
+      "caption_partial_translated" if is_partial else "caption_translated",
       booking_id=booking_id,
       call_session_id=session.get("id"),
       result_id=result_id,
       retained=False,
+      is_partial=is_partial,
       source_language_code=normalized_language_code,
       target_language_code=translated["target_language_code"],
     )

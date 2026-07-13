@@ -2,7 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
-from app.api.consulting_realtime import _parse_client_datetime
+from app.api.consulting_realtime import (
+  _booking_accepts_new_messages,
+  _booking_chat_is_visible,
+  _parse_client_datetime,
+)
 from app.db.session import database
 from app.main import create_app
 from app.services.consulting_message_store import (
@@ -139,6 +143,56 @@ def test_parse_client_datetime_returns_utc_datetime_for_database_binding() -> No
   assert parsed is not None
   assert parsed.isoformat() == "2026-07-11T03:15:00+00:00"
   assert _parse_client_datetime("not-a-date") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("row", "expected"),
+  [
+    ({"status": "requested", "confirmed_at": None, "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "completed", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "confirmed_at": None, "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "confirmed_at": "2026-07-13", "customer_left_at": "2026-07-13", "expert_left_at": None}, False),
+  ],
+)
+async def test_booking_chat_visibility_matches_confirmation_flow(
+  monkeypatch: pytest.MonkeyPatch,
+  row: dict,
+  expected: bool,
+) -> None:
+  async def fake_fetchrow(*_args, **_kwargs):
+    return row
+
+  monkeypatch.setattr(database, "pool", object())
+  monkeypatch.setattr(database, "fetchrow", fake_fetchrow)
+
+  assert await _booking_chat_is_visible("booking-1") is expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("row", "expected"),
+  [
+    ({"status": "requested", "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "completed", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "customer_left_at": None, "expert_left_at": None}, False),
+  ],
+)
+async def test_booking_message_writes_require_open_confirmed_conversation(
+  monkeypatch: pytest.MonkeyPatch,
+  row: dict,
+  expected: bool,
+) -> None:
+  async def fake_fetchrow(*_args, **_kwargs):
+    return row
+
+  monkeypatch.setattr(database, "pool", object())
+  monkeypatch.setattr(database, "fetchrow", fake_fetchrow)
+
+  assert await _booking_accepts_new_messages("booking-1") is expected
 
 
 def test_consulting_websocket_relays_message_between_clients(monkeypatch: pytest.MonkeyPatch) -> None:

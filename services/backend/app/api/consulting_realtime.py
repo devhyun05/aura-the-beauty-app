@@ -27,6 +27,9 @@ from app.services.users import ensure_user
 router = APIRouter(prefix="/consulting", tags=["consulting"])
 logger = logging.getLogger(__name__)
 
+CHAT_VISIBLE_BOOKING_STATUSES = {"confirmed", "scheduled", "in_progress", "completed"}
+CHAT_VISIBLE_CLOSED_BOOKING_STATUSES = {"canceled", "cancelled", "unavailable", "no_show", "refund_requested"}
+
 
 def _parse_client_datetime(value: Any) -> datetime | None:
   if not isinstance(value, str) or not value.strip():
@@ -238,6 +241,31 @@ async def _validate_media_ids(
   return True, None, media
 
 
+async def _booking_chat_is_visible(booking_id: str) -> bool:
+  if not database.is_connected:
+    return True
+  row = await database.fetchrow(
+    """
+    select status, confirmed_at, customer_left_at, expert_left_at
+    from consulting_bookings
+    where id::text = $1
+    limit 1
+    """,
+    booking_id,
+  )
+  if row is None:
+    return False
+  status = str(row["status"])
+  status_is_visible = status in CHAT_VISIBLE_BOOKING_STATUSES or (
+    status in CHAT_VISIBLE_CLOSED_BOOKING_STATUSES and row.get("confirmed_at") is not None
+  )
+  return (
+    status_is_visible
+    and row.get("customer_left_at") is None
+    and row.get("expert_left_at") is None
+  )
+
+
 async def _booking_accepts_new_messages(booking_id: str) -> bool:
   if not database.is_connected:
     return True
@@ -251,9 +279,9 @@ async def _booking_accepts_new_messages(booking_id: str) -> bool:
     booking_id,
   )
   if row is None:
-    return True
+    return False
   return (
-    str(row["status"]) not in {"canceled", "cancelled", "unavailable"}
+    str(row["status"]) in CHAT_VISIBLE_BOOKING_STATUSES
     and row.get("customer_left_at") is None
     and row.get("expert_left_at") is None
   )
@@ -295,8 +323,8 @@ async def _handle_client_event(
     if not await _booking_accepts_new_messages(connection.booking_id):
       await consulting_realtime_manager.send_error(
         connection,
-        code="BOOKING_CLOSED",
-        message="취소된 예약에는 새 메시지를 보낼 수 없어요.",
+        code="CHAT_NOT_WRITABLE",
+        message="예약 확정 후 열린 상담 톡에서만 메시지를 보낼 수 있어요.",
         client_message_id=client_message_id,
       )
       return
@@ -386,6 +414,13 @@ async def _handle_client_event(
     return
 
   if event_type == "typing":
+    if not await _booking_accepts_new_messages(connection.booking_id):
+      await consulting_realtime_manager.send_error(
+        connection,
+        code="CHAT_NOT_WRITABLE",
+        message="종료되었거나 확정 전인 상담 톡에는 입력 상태를 보낼 수 없어요.",
+      )
+      return
     await consulting_realtime_manager.broadcast(
       connection.booking_id,
       {
@@ -398,6 +433,13 @@ async def _handle_client_event(
     return
 
   if event_type == "read":
+    if not await _booking_chat_is_visible(connection.booking_id):
+      await consulting_realtime_manager.send_error(
+        connection,
+        code="CHAT_NOT_VISIBLE",
+        message="예약 확정 후 상담 톡을 확인할 수 있어요.",
+      )
+      return
     read_at = payload.get("readAt")
     read_datetime = _parse_client_datetime(read_at)
     if database.is_connected and connection.participant_type in {"expert", "operator"}:
@@ -464,7 +506,7 @@ async def consulting_booking_socket(
   )
 
   history: list[dict[str, Any]] = []
-  if database.is_connected:
+  if database.is_connected and await _booking_chat_is_visible(booking_id):
     try:
       history = await list_consulting_conversation_messages(database, booking_id=booking_id)
     except Exception:

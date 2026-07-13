@@ -154,7 +154,7 @@ class ChimeMeetingsService:
 
     base_settings: dict[str, Any] = {
       "EnablePartialResultsStabilization": True,
-      "PartialResultsStability": "medium",
+      "PartialResultsStability": "high",
       "Region": self.settings.effective_chime_region,
     }
 
@@ -171,7 +171,7 @@ class ChimeMeetingsService:
           **base_settings,
           "IdentifyLanguage": True,
           "LanguageOptions": ",".join(supported_languages),
-          "PreferredLanguage": self.settings.effective_chime_transcribe_preferred_language,
+          "PreferredLanguage": expert_language,
         },
       },
       "identify",

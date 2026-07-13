@@ -140,6 +140,17 @@ def _map_partner_status(status: str) -> str:
   return "confirmed"
 
 
+_CHAT_VISIBLE_STATUSES = {"confirmed", "scheduled", "in_progress", "completed"}
+_CHAT_VISIBLE_CLOSED_STATUSES = {"canceled", "cancelled", "unavailable", "no_show", "refund_requested"}
+
+
+def _is_chat_visible_booking_row(row: dict[str, Any]) -> bool:
+  status = str(row.get("status") or "").strip().lower()
+  if status in _CHAT_VISIBLE_STATUSES:
+    return True
+  return status in _CHAT_VISIBLE_CLOSED_STATUSES and row.get("confirmed_at") is not None
+
+
 def _collapse_whitespace(value: str | None) -> str:
   return " ".join(str(value or "").split())
 
@@ -1844,15 +1855,18 @@ async def chat_threads_for_account(db: Database, account: dict[str, Any]) -> lis
     conversations.setdefault(conversation_id, []).append(row)
 
   for conversation_rows in conversations.values():
-    row = max(conversation_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+    visible_rows = [row for row in conversation_rows if _is_chat_visible_booking_row(row)]
+    if not visible_rows:
+      continue
+    row = max(visible_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
     if row.get("expert_left_at") is not None:
       continue
-    booking_ids = [str(item["id"]) for item in conversation_rows]
+    booking_ids = [str(item["id"]) for item in visible_rows]
     messages = await _messages_for_bookings(db, booking_ids, str(row["id"]))
     booking = _booking_to_web(row)
     latest_message = messages[-1] if messages else None
     read_at = max(
-      (value for value in (item.get("expert_read_at") for item in conversation_rows) if value is not None),
+      (value for value in (item.get("expert_read_at") for item in visible_rows) if value is not None),
       default=None,
     )
     unread_count = _unread_customer_message_count(messages, read_at)
@@ -1885,15 +1899,20 @@ async def chat_threads_for_account(db: Database, account: dict[str, Any]) -> lis
 
 
 async def chat_thread_detail(db: Database, account: dict[str, Any], thread_id: str) -> dict[str, Any]:
-  row = await _booking_row(db, account, thread_id)
-  conversation_id = str(row.get("conversation_id") or row["id"])
+  requested_row = await _booking_row(db, account, thread_id)
+  if not _is_chat_visible_booking_row(requested_row):
+    raise AppError(404, "PARTNER_CHAT_NOT_CONFIRMED", "예약 확정 후 채팅을 이용할 수 있습니다.")
+  conversation_id = str(requested_row.get("conversation_id") or requested_row["id"])
   conversation_rows = [
     item
     for item in await _booking_rows(db, account)
     if str(item.get("conversation_id") or item["id"]) == conversation_id
   ]
-  latest_row = max(conversation_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
-  booking_ids = [str(item["id"]) for item in conversation_rows]
+  visible_rows = [row for row in conversation_rows if _is_chat_visible_booking_row(row)]
+  if not visible_rows:
+    raise AppError(404, "PARTNER_CHAT_NOT_CONFIRMED", "예약 확정 후 채팅을 이용할 수 있습니다.")
+  latest_row = max(visible_rows, key=lambda item: item.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+  booking_ids = [str(item["id"]) for item in visible_rows]
   messages = await _messages_for_bookings(db, booking_ids, str(latest_row["id"]))
   row = latest_row
   thread_id = str(row["id"])

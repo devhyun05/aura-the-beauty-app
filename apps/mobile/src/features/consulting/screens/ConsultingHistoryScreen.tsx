@@ -34,6 +34,12 @@ import {
   getConsultingBookings,
   getConsultingExperts,
 } from '../services/consultingService';
+import {
+  isConsultingActiveStatus,
+  isConsultingChatAvailable,
+  isConsultingPendingStatus,
+} from '../services/consultingFlow';
+import {useConsultingBookingStatusSync} from '../hooks/useConsultingBookingStatusSync';
 import type {
   ConsultingExpert,
   ConsultingRecord,
@@ -54,6 +60,7 @@ type ConsultingHistoryScreenProps = {
   authToken?: string | null;
   onPressUpcoming: (record: ConsultingRecord) => void;
   onPressReschedule: (record: ConsultingRecord) => void;
+  onPressBookAgain: (record: ConsultingRecord) => void;
   onPressReview: (record: ConsultingRecord) => void;
   onPressFindExpert: () => void;
 };
@@ -62,6 +69,7 @@ export function ConsultingHistoryScreen({
   authToken,
   onPressUpcoming,
   onPressReschedule,
+  onPressBookAgain,
   onPressReview,
   onPressFindExpert,
 }: ConsultingHistoryScreenProps) {
@@ -73,6 +81,16 @@ export function ConsultingHistoryScreen({
   const [cancellingRecordId, setCancellingRecordId] = useState<string | null>(
     null,
   );
+
+  const refreshRecords = useCallback(() => {
+    void getConsultingBookings(undefined, {force: true}).then(setRecords);
+  }, []);
+
+  useConsultingBookingStatusSync({
+    authToken,
+    onStatusChange: refreshRecords,
+    records,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -109,9 +127,12 @@ export function ConsultingHistoryScreen({
 
   const handleCancel = useCallback((record: ConsultingRecord) => {
     setOpenMenuRecordId(null);
+    const isPending = isConsultingPendingStatus(record.status);
     Alert.alert(
-      '신청을 취소할까요?',
-      '취소하면 운영팀과 프리랜서에게 더 이상 일정 확인을 요청하지 않아요.',
+      isPending ? '신청을 취소할까요?' : '예약을 취소할까요?',
+      isPending
+        ? '취소하면 운영팀과 프리랜서에게 더 이상 일정 확인을 요청하지 않아요.'
+        : '확정된 예약이 취소되고 전문가에게 변경된 상태가 전달돼요.',
       [
         {text: '아니요', style: 'cancel'},
         {
@@ -124,7 +145,7 @@ export function ConsultingHistoryScreen({
               if (!canceled) {
                 Alert.alert(
                   '취소 실패',
-                  '신청 상태를 변경하지 못했어요. 네트워크와 API 연결을 확인해 주세요.',
+                  '신청 상태를 변경하지 못했어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
                   [{text: '확인'}],
                 );
                 return;
@@ -178,10 +199,12 @@ export function ConsultingHistoryScreen({
               expert={resolveConsultingExpert(experts, record.expertId)}
               key={record.id}
               onPress={() =>
-                isActiveRecordStatus(record.status)
+                isConsultingPendingStatus(record.status) ||
+                isConsultingChatAvailable(record)
                   ? onPressUpcoming(record)
                   : undefined
               }
+              onPressBookAgain={() => onPressBookAgain(record)}
               onPressCancel={() => handleCancel(record)}
               onPressReschedule={() => onPressReschedule(record)}
               onPressReview={() => onPressReview(record)}
@@ -242,22 +265,13 @@ function groupedHistoryStatus(status: ConsultingRecordStatus): HistoryFilterId {
   return 'canceled';
 }
 
-function isActiveRecordStatus(status: ConsultingRecordStatus): boolean {
-  return (
-    status === 'requested' ||
-    status === 'contacting' ||
-    status === 'confirmed' ||
-    status === 'scheduled' ||
-    status === 'in_progress'
-  );
-}
-
 function HistoryCard({
   record,
   expert,
   onPress,
   onPressCancel,
   onPressReschedule,
+  onPressBookAgain,
   onPressReview,
   menuOpen,
   onToggleMenu,
@@ -268,18 +282,22 @@ function HistoryCard({
   onPress: () => void;
   onPressCancel: () => void;
   onPressReschedule: () => void;
+  onPressBookAgain: () => void;
   onPressReview: () => void;
   menuOpen: boolean;
   onToggleMenu: () => void;
   cancelling: boolean;
 }) {
-  const isActive = isActiveRecordStatus(record.status);
-  const canReschedule =
-    record.status === 'requested' || record.status === 'contacting';
+  const isActive = isConsultingActiveStatus(record.status);
+  const isPending = isConsultingPendingStatus(record.status);
+  const canOpenChat = isConsultingChatAvailable(record);
+  const canOpen = isPending || canOpenChat;
+  const canReschedule = isPending;
   const canCancel = isActive;
   const isCanceled = record.status === 'canceled';
   const canManage = canCancel;
   const canReview = record.status === 'completed' && !record.reviewId;
+  const canBookAgain = record.status === 'completed' || isCanceled || record.status === 'unavailable';
   const handleReviewPress = (event: GestureResponderEvent) => {
     event.stopPropagation();
     onPressReview();
@@ -297,19 +315,24 @@ function HistoryCard({
     event.stopPropagation();
     onPressCancel();
   };
+  const handleBookAgainPress = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    onPressBookAgain();
+  };
 
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={canOpen ? 'button' : undefined}
+      accessibilityState={canOpen ? undefined : {disabled: true}}
       accessibilityLabel={`${expert.name} ${record.dateLabel} 상담 ${
-        isActive ? '신청 대화' : '진행 상태'
+        isPending ? '신청 내용' : canOpenChat ? '상담 톡' : '진행 상태'
       }`}
-      onPress={onPress}
+      onPress={canOpen ? onPress : undefined}
       style={({pressed}) => [
         styles.card,
         isActive && styles.cardUpcoming,
         isCanceled && styles.cardCanceled,
-        pressed && !isCanceled ? styles.pressed : null,
+        pressed && canOpen ? styles.pressed : null,
       ]}>
       <RNView style={styles.cardTopRow}>
         <RNView style={styles.cardStatusRow}>
@@ -357,7 +380,7 @@ function HistoryCard({
                   pressed && !cancelling ? styles.pressed : null,
                 ]}>
                 <Text style={styles.actionMenuDangerText}>
-                  {cancelling ? '취소 중' : '신청 취소'}
+                  {cancelling ? '취소 중' : isPending ? '신청 취소' : '예약 취소'}
                 </Text>
               </Pressable>
             </>
@@ -374,10 +397,14 @@ function HistoryCard({
             {record.categoryLabel}
           </Text>
         </RNView>
-        {isActive ? (
+        {isPending ? (
+          <RNView style={styles.enterCta}>
+            <Text style={styles.enterCtaText}>신청 내용</Text>
+          </RNView>
+        ) : canOpenChat ? (
           <RNView style={styles.enterCta}>
             <MessageCircle color={consultingColors.roseStrong} size={13} />
-            <Text style={styles.enterCtaText}>대화 보기</Text>
+            <Text style={styles.enterCtaText}>톡 보기</Text>
           </RNView>
         ) : isCanceled ? (
           <RNView style={styles.canceledCta}>
@@ -413,6 +440,17 @@ function HistoryCard({
           <Text style={[styles.reviewCtaText, !canReview ? styles.reviewCtaTextDisabled : null]}>
             {canReview ? '리뷰 작성' : '리뷰 작성 완료'}
           </Text>
+        </Pressable>
+      ) : null}
+      {canBookAgain ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleBookAgainPress}
+          style={({pressed}) => [
+            styles.bookAgainCta,
+            pressed ? styles.pressed : null,
+          ]}>
+          <Text style={styles.bookAgainCtaText}>같은 전문가에게 다시 예약</Text>
         </Pressable>
       ) : null}
     </Pressable>
@@ -456,6 +494,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
     padding: 16,
+  },
+  bookAgainCta: {
+    alignItems: 'center',
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  bookAgainCtaText: {
+    color: consultingColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
   },
   cardUpcoming: {
     backgroundColor: consultingColors.surfaceSoft,
