@@ -12,6 +12,10 @@ import {
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
+import {
+  ensureUnityMakeupRunningForStillAnalysis,
+  setUnityMakeupPlayerPaused,
+} from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
@@ -43,8 +47,11 @@ type HeaderShareAction = {
 };
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
-// 세로 비율 온디바이스 분석이 이 시간 안에 끝나지 않으면 비율 없이 보고서 생성을 진행한다.
-const VERTICAL_THIRDS_WAIT_TIMEOUT_MS = 8000;
+// 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
+// 보고서 생성을 진행한다. ⚠️ 예산 연동: ensureUnityMakeupRunningForStillAnalysis
+// 의 ready 폴링 상한 4200ms + requestFaceLandmarks 기본 3500ms = 7700ms < 8000ms.
+// 셋 중 하나를 바꾸면 함께 조정해야 한다.
+const STILL_ANALYSIS_WAIT_TIMEOUT_MS = 8000;
 const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
   '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
 const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
@@ -235,10 +242,34 @@ export function FaceAnalysisLoadingRouteScreen({
   const analysisRetryCountRef = React.useRef(0);
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
+  // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
+  // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
+  const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
+  // end-lease 게이트용 — 퍼스널 컬러 분석의 settle 을 기다렸다가 pause 로 반납한다.
+  const personalColorSettledPromiseRef = React.useRef<Promise<unknown> | null>(null);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  // [Unity still-analysis lease 시작] 아래 정지영상 분석(세로비율·퍼스널컬러)은
+  // Unity homuler(IMAGE 모드) 코루틴에서 돌므로 플레이어 루프가 실행 중이어야
+  // 한다. 직전 3D 측정 화면은 teardown 에서 pause 한다(카메라 반납에 올바름) —
+  // 그래서 로딩이 lease 를 잡아 resume+ready 를 보장하고, 분석이 모두 settle
+  // 하면 아래 end-lease 효과가 pause 로 반납한다.
+  // isFocused 가드: onBack 이 navigate 라 스택 하단에 stale 로딩 인스턴스가
+  // 남을 수 있는데, 그 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
+  React.useEffect(() => {
+    stillAnalysisReadyPromiseRef.current = null;
+
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return;
+    }
+
+    stillAnalysisReadyPromiseRef.current = navigation.isFocused()
+      ? ensureUnityMakeupRunningForStillAnalysis()
+      : Promise.resolve(false);
+  }, [navigation, selectedFaceCapture]);
 
   // 얼굴 세로 비율은 캡처당 1회만 온디바이스로 계산한다.
   // 보고서 재시도(analysisRequestKey)와 분리해 재계산을 막고,
@@ -254,13 +285,20 @@ export function FaceAnalysisLoadingRouteScreen({
     let isMounted = true;
     const captureId = selectedFaceCapture.photoCaptureId;
 
-    verticalThirdsPromiseRef.current = analyzeFaceVerticalThirds({
-      captureId,
-      createdAt: new Date().toISOString(),
-      imageUri: selectedFaceCapture.imageUri,
-      semanticMattes: selectedFaceCapture.semanticMattes,
-      sessionId: captureId,
-    })
+    // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
+    // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).
+    verticalThirdsPromiseRef.current = (
+      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
+    )
+      .then(() =>
+        analyzeFaceVerticalThirds({
+          captureId,
+          createdAt: new Date().toISOString(),
+          imageUri: selectedFaceCapture.imageUri,
+          semanticMattes: selectedFaceCapture.semanticMattes,
+          sessionId: captureId,
+        }),
+      )
       .then(result => {
         if (isMounted) {
           setSelectedFaceVerticalThirds(result);
@@ -287,6 +325,7 @@ export function FaceAnalysisLoadingRouteScreen({
   React.useEffect(() => {
     setSelectedPersonalColor(null);
     setSelectedPersonalColorCorrection(null);
+    personalColorSettledPromiseRef.current = null;
 
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
       return undefined;
@@ -295,14 +334,20 @@ export function FaceAnalysisLoadingRouteScreen({
     let isMounted = true;
     const captureId = selectedFaceCapture.photoCaptureId;
 
-    analyzePersonalColorCapture({
-      // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정(sclera/WB)의 입력.
-      cameraMetadata: selectedFaceCapture.cameraMetadata ?? null,
-      captureId,
-      createdAt: new Date().toISOString(),
-      imageUri: selectedFaceCapture.imageUri,
-      sessionId: captureId,
-    })
+    // settle promise 를 ref 에 남겨 end-lease 효과가 pause 시점을 안다.
+    personalColorSettledPromiseRef.current = (
+      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
+    )
+      .then(() =>
+        analyzePersonalColorCapture({
+          // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정(sclera/WB)의 입력.
+          cameraMetadata: selectedFaceCapture.cameraMetadata ?? null,
+          captureId,
+          createdAt: new Date().toISOString(),
+          imageUri: selectedFaceCapture.imageUri,
+          sessionId: captureId,
+        }),
+      )
       .then(outcome => {
         if (isMounted) {
           // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
@@ -346,7 +391,7 @@ export function FaceAnalysisLoadingRouteScreen({
     const waitForVerticalThirds = Promise.race([
       verticalThirdsPromiseRef.current ?? Promise.resolve(null),
       new Promise<null>(resolve => {
-        setTimeout(() => resolve(null), VERTICAL_THIRDS_WAIT_TIMEOUT_MS);
+        setTimeout(() => resolve(null), STILL_ANALYSIS_WAIT_TIMEOUT_MS);
       }),
     ]);
 
@@ -431,6 +476,31 @@ export function FaceAnalysisLoadingRouteScreen({
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
   ]);
+
+  // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 플레이어를
+  // pause 해 자원(카메라 포함)을 반납한다. unmount 후에는 pause 하지 않는다 —
+  // stale 인스턴스의 뒤늦은 pause 가 다음 Unity 소유 화면(AR 필터·3D 측정)을
+  // 얼리는 것을 막기 위해서다(그 화면들이 자기 생명주기로 관리).
+  React.useEffect(() => {
+    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    void Promise.allSettled([
+      verticalThirdsPromiseRef.current ?? Promise.resolve(null),
+      personalColorSettledPromiseRef.current ?? Promise.resolve(null),
+    ]).then(() => {
+      if (!cancelled && navigation.isFocused()) {
+        setUnityMakeupPlayerPaused(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigation, selectedFaceCapture]);
 
   const handleRetryAnalysis = React.useCallback(() => {
     analysisRetryCountRef.current = 0;
