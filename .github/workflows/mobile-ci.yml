@@ -61,7 +61,7 @@ jobs:
           # (수천 파일)에서 pipefail 이 그걸 실패로 봐 조건이 false→모바일 변경을
           # 못 보고 검사를 건너뛰는 버그가 있었다. here-string 은 producer pipe 가
           # 없어 SIGPIPE 가 나지 않는다.
-          if grep -qE '^(apps/mobile/|scripts/mobile/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
+          if grep -qE '^(apps/mobile/|scripts/mobile/|scripts/face3d/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -130,3 +130,16 @@ jobs:
 
       - name: Contract — Face3D profile/metric contract
         run: npm run test:face3d
+
+      # 시맨틱 맵 오프라인 파이프라인(후보/검증/리뷰보드/승인/진단/반복성)은 순수 node
+      # 스크립트이고 경로를 import.meta.url 기준으로 풀어 CWD 에 무관하므로, 다른 계약과
+      # 동일하게 apps/mobile 에서 ../../ 로 실행한다. scripts/face3d/ 만 바뀐 PR 도 이
+      # 잡을 트리거하도록 위 변경 감지에 scripts/face3d/ 를 추가했다.
+      - name: Contract — Face3D semantic pipeline (offline)
+        run: |
+          node ../../scripts/face3d/test-semantic-candidate-core.mjs
+          node ../../scripts/face3d/test-semantic-validation.mjs
+          node ../../scripts/face3d/test-three-subject-review-board.mjs
+          node ../../scripts/face3d/test-approve-semantic-map.mjs
+          node ../../scripts/face3d/test-evaluate-semantic-candidate.mjs
+          node ../../scripts/face3d/test-analyze-repeatability.mjs

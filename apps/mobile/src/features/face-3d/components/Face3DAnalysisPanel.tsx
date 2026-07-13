@@ -140,12 +140,27 @@ export function Face3DAnalysisPanel({
     semanticCapture.state.status,
   ]);
 
+  // Only one deferred launch may be pending. Both this handler and
+  // handleSemanticCapture schedule onto the SAME startTimerRef, so without a
+  // guard a second tap within the 160ms window (or an analysis tap followed by
+  // a semantic tap) overwrote the ref and left the first timer to fire too —
+  // starting two overlapping ARKit/semantic sessions on one camera.
+  const clearStartTimer = () => {
+    if (startTimerRef.current) {
+      clearTimeout(startTimerRef.current);
+      startTimerRef.current = null;
+    }
+  };
+
   const handlePrimaryAction = () => {
     if (semanticCaptureActive) {
       return;
     }
     if (isActive) {
       cancel();
+      return;
+    }
+    if (startTimerRef.current) {
       return;
     }
 
@@ -159,6 +174,7 @@ export function Face3DAnalysisPanel({
   };
 
   const handleRetake = () => {
+    clearStartTimer();
     cancel();
     semanticCapture.reset();
     setPreviewActive(false);
@@ -168,6 +184,7 @@ export function Face3DAnalysisPanel({
   };
 
   const handleOpenVerticalThirds = () => {
+    clearStartTimer();
     cancel();
     semanticCapture.reset();
     setPreviewActive(false);
@@ -178,6 +195,9 @@ export function Face3DAnalysisPanel({
 
   const handleSemanticCapture = (captureShotKind: Face3DSemanticCaptureShotKind) => {
     if (isActive || semanticCaptureActive) {
+      return;
+    }
+    if (startTimerRef.current) {
       return;
     }
 
@@ -194,6 +214,7 @@ export function Face3DAnalysisPanel({
     if (isActive || semanticCaptureActive) {
       return;
     }
+    clearStartTimer();
     semanticCapture.reset();
     setCompletedSemanticShots([]);
     setSemanticCaptureSetId(createFace3DSemanticCaptureSetId());
