@@ -102,7 +102,7 @@ def validate_catalog_manifest(manifest: dict[str, Any], settings: Settings) -> d
       or not product_name
       or not license_type
       or not source_reference
-      or category not in {"lip", "cheek", "shadow", "liner", "base"}
+      or category not in {"lip", "cheek", "shadow", "liner", "base", "brow"}
     ):
       raise AppError(422, "INVALID_CATALOG_MANIFEST", f"products[{index}] identity/category is invalid.")
     seen_product_ids.add(product_id)

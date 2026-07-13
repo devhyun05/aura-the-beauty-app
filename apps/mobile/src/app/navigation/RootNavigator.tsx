@@ -70,6 +70,7 @@ import {
   ProductDetailRouteScreen,
   ProductPersonalizationSettingsRouteScreen,
   ProductRecommendationRouteScreen,
+  ProductRecommendationShelfRouteScreen,
   ProductSearchResultRouteScreen,
 } from './routes/recommendationRoutes';
 import {
@@ -145,6 +146,7 @@ export function RootNavigator() {
       <Stack.Screen name="SavedHairSimulations" component={SavedHairSimulationsRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
+      <Stack.Screen name="ProductRecommendationShelf" component={ProductRecommendationShelfRouteScreen} />
       <Stack.Screen name="ProductSearchResult" component={ProductSearchResultRouteScreen} />
       <Stack.Screen name="ProductDetail" component={ProductDetailRouteScreen} />
       <Stack.Screen

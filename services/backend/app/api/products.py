@@ -43,7 +43,7 @@ from app.services.product_recommendations import (
 )
 from app.services.product_rate_limit import enforce_product_rate_limit
 from app.services.product_live_seasonal import resolve_live_external_product
-from app.services.shopping_products import build_product_recommendation_data
+from app.services.shopping_products import _safe_naver_result_url, build_product_recommendation_data
 from app.services.users import ensure_user
 
 
@@ -60,6 +60,40 @@ def _liked_product_display_allowed(row: Any, *, now: datetime) -> bool:
     and (not row.get("license_valid_from") or row["license_valid_from"] <= now)
     and (not row.get("license_valid_until") or row["license_valid_until"] > now)
   )
+
+
+def _map_external_like_snapshot(row: Any) -> dict[str, Any]:
+  """Never replay an unsafe persisted seller snapshot to a device."""
+  purchase_url = _safe_naver_result_url(row.get("purchase_url"))
+  image_url = _safe_naver_result_url(row.get("image_url"))
+  identity = {
+    "productId": row["external_product_id"],
+    "externalSource": row["external_source"],
+    "viewerState": {"liked": True},
+    "canUnlike": True,
+  }
+  if not purchase_url or not image_url:
+    return {
+      **identity,
+      "status": "unavailable",
+      "brandName": None,
+      "productName": None,
+      "imageUrl": None,
+      "purchaseUrl": None,
+      "offer": None,
+    }
+  return {
+    **identity,
+    "shadeId": None,
+    "brandName": row["brand_name"],
+    "productName": row["product_name"],
+    "category": row["category"],
+    "imageUrl": image_url,
+    "purchaseUrl": purchase_url,
+    "price": {"amount": row.get("price_amount"), "currency": row["price_currency"], "updatedAt": row.get("source_updated_at")},
+    "status": "active",
+    "canLike": True,
+  }
 
 
 def _is_at_least_14(birth_date: date | None, *, today: date | None = None) -> bool:
@@ -318,21 +352,7 @@ async def get_liked_products(
     user["id"],
   )
   for row in external_rows:
-    items.append({
-      "productId": row["external_product_id"],
-      "shadeId": None,
-      "brandName": row["brand_name"],
-      "productName": row["product_name"],
-      "category": row["category"],
-      "imageUrl": row["image_url"],
-      "purchaseUrl": row["purchase_url"],
-      "price": {"amount": row.get("price_amount"), "currency": row["price_currency"], "updatedAt": row.get("source_updated_at")},
-      "viewerState": {"liked": True},
-      "status": "active",
-      "canUnlike": True,
-      "canLike": True,
-      "externalSource": row["external_source"],
-    })
+    items.append(_map_external_like_snapshot(row))
   response.headers["Cache-Control"] = "private, no-store"
   return success({"products": items})
 
@@ -354,6 +374,10 @@ async def like_external_product(
   )
   if not product:
     raise AppError(404, "EXTERNAL_PRODUCT_NOT_FOUND", "External product is no longer available from the verified source.")
+  purchase_url = _safe_naver_result_url(product.get("purchaseUrl"))
+  image_url = _safe_naver_result_url(product.get("imageUrl"))
+  if not purchase_url or not image_url:
+    raise AppError(422, "UNSAFE_EXTERNAL_PRODUCT", "External product URLs did not pass the HTTPS trust boundary.")
   price = product.get("price") if isinstance(product.get("price"), dict) else {}
   await db.execute(
     """
@@ -373,8 +397,8 @@ async def like_external_product(
     product["brandName"],
     product["productName"],
     product["category"],
-    product["imageUrl"],
-    product["purchaseUrl"],
+    image_url,
+    purchase_url,
     price.get("amount"),
     price.get("currency") or "KRW",
     product.get("sourceUpdatedAt"),

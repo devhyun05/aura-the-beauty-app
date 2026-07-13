@@ -17,6 +17,7 @@ from app.schemas.product_recommendation import ProductEvent
 from app.services.product_catalog import ELIGIBLE_EVIDENCE_TYPES, map_catalog_product, offer_freshness_sql
 from app.services.product_color import delta_e_ciede2000
 from app.services.product_live_seasonal import get_live_seasonal_recommendations
+from app.services.shopping_products import _safe_naver_result_url
 
 
 REGION_LABELS = {"lip": "립", "cheek": "블러셔", "liner": "아이라이너"}
@@ -1074,14 +1075,18 @@ async def get_cohort_recommendations(
       category = str(row.get("category") or "")
       if brands[brand] >= 2 or categories[category] >= 4:
         continue
+      purchase_url = _safe_naver_result_url(row.get("purchase_url"))
+      image_url = _safe_naver_result_url(row.get("image_url"))
+      if not purchase_url or not image_url:
+        continue
       items.append({
         "productId": row["external_product_id"],
         "shadeId": None,
         "brandName": brand,
         "productName": row["product_name"],
         "category": category,
-        "imageUrl": row["image_url"],
-        "purchaseUrl": row["purchase_url"],
+        "imageUrl": image_url,
+        "purchaseUrl": purchase_url,
         "price": {"amount": row.get("price_amount"), "currency": row["price_currency"], "updatedAt": row.get("source_updated_at")},
         "viewerState": {"liked": False},
         "status": "active",

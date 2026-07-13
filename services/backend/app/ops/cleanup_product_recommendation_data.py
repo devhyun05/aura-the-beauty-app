@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from datetime import timedelta
 
 from app.core.settings import get_settings
 from app.db.session import Database
@@ -16,7 +17,7 @@ async def cleanup_product_recommendation_data(db: Database, *, dry_run: bool = T
   }
   result: dict[str, int] = {}
   for name, (table, column, days) in targets.items():
-    interval = f"{days} days"
+    interval = timedelta(days=days)
     row = await db.fetchrow(
       f"select count(*)::int as count from {table} where {column} < now() - $1::interval",
       interval,
@@ -24,7 +25,7 @@ async def cleanup_product_recommendation_data(db: Database, *, dry_run: bool = T
     result[name] = int((row or {}).get("count") or 0)
     if not dry_run:
       await db.execute(f"delete from {table} where {column} < now() - $1::interval", interval)
-  raw_search_interval = f"{settings.product_raw_search_retention_days} days"
+  raw_search_interval = timedelta(days=settings.product_raw_search_retention_days)
   row = await db.fetchrow(
     """
     select count(*)::int as count from product_engagement_events

@@ -1,11 +1,13 @@
 import asyncio
 import hashlib
 import html
+from ipaddress import ip_address
 import json
 import logging
 import math
 import re
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import boto3
@@ -19,19 +21,37 @@ from app.db.session import Database
 
 logger = logging.getLogger(__name__)
 
-PRODUCT_CATEGORIES = ("lip", "cheek", "shadow", "liner", "base")
+PRODUCT_CATEGORIES = ("base", "shadow", "brow", "cheek", "lip", "liner")
 SEMANTIC_MATCH_WEIGHT = 0.35
 MAX_EMBEDDING_TEXT_LENGTH = 6000
 COLOR_MATCH_BONUS = 10
 COLOR_MISMATCH_PENALTY = 12
 
+
+def _safe_naver_result_url(value: Any) -> str | None:
+  """Accept only public HTTPS URLs before a Naver result reaches a device."""
+  parsed = urlparse(str(value or "").strip())
+  host = (parsed.hostname or "").lower().rstrip(".")
+  if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+    return None
+  try:
+    ip_address(host)
+  except ValueError:
+    pass
+  else:
+    return None
+  if "." not in host or host.endswith(".local"):
+    return None
+  return parsed.geturl()
+
 TABS = [
   {"id": "all", "label": "전체"},
-  {"id": "lip", "label": "립"},
-  {"id": "cheek", "label": "블러셔"},
-  {"id": "shadow", "label": "아이섀도우"},
-  {"id": "liner", "label": "아이라이너"},
   {"id": "base", "label": "베이스"},
+  {"id": "shadow", "label": "아이섀도우"},
+  {"id": "brow", "label": "아이브로우"},
+  {"id": "cheek", "label": "치크"},
+  {"id": "lip", "label": "립"},
+  {"id": "liner", "label": "아이라이너"},
 ]
 
 CATEGORY_CONFIG = {
@@ -52,6 +72,12 @@ CATEGORY_CONFIG = {
     "label": "아이섀도우",
     "palette": ["#D6A394", "#C98082", "#8B5F55", "#5F4039"],
     "reason": "눈매 음영과 추천 무드를 같이 살리기 좋은 아이 제품이에요.",
+  },
+  "brow": {
+    "query": "아이브로우 브로우 펜슬 화장품",
+    "label": "아이브로우",
+    "palette": ["#6A5146", "#8A7165"],
+    "reason": "눈썹 결을 자연스럽게 채우고 전체 인상을 정돈하기 좋은 브로우 후보예요.",
   },
   "liner": {
     "query": "아이라이너 화장품",
@@ -142,6 +168,7 @@ CATEGORY_GUIDE_KEYS = {
   "liner": ("makeupGuideline.eyeliner",),
   "lip": ("makeupGuideline.lip",),
   "shadow": ("makeupGuideline.eyeshadow",),
+  "brow": ("makeupGuideline.brow",),
 }
 CATEGORY_MATCH_TERMS = {
   "base": (
@@ -158,6 +185,7 @@ CATEGORY_MATCH_TERMS = {
     "파우더",
   ),
   "cheek": ("blush", "블러셔", "블러쉬", "볼터치", "치크"),
+  "brow": ("brow", "eyebrow", "브로우", "아이브로우", "눈썹", "브로우펜슬"),
   "liner": ("eyeliner", "라이너", "리퀴드라이너", "아이라이너", "젤라이너", "펜라이너"),
   "lip": ("gloss", "lip", "립", "립글로스", "립밤", "립스틱", "립틴트", "틴트"),
   "shadow": ("eyeshadow", "섀도우", "아이섀도우", "아이팔레트", "팔레트"),
@@ -175,6 +203,7 @@ CATEGORY_STRICT_PRODUCT_TERMS = {
     "파운데이션",
   ),
   "cheek": ("blusher", "블러셔", "볼터치", "치크 팝", "치크팝"),
+  "brow": ("brow pencil", "eyebrow", "브로우 마스카라", "브로우펜슬", "아이브로우", "아이브로우 펜슬"),
   "liner": (
     "eyeliner",
     "리퀴드 아이라이너",
@@ -197,6 +226,7 @@ CATEGORY_STRICT_PRODUCT_TERMS = {
 CATEGORY_FALLBACK_QUERIES = {
   "base": ("쿠션 파운데이션 화장품", "베이스메이크업 파운데이션", "톤업 쿠션 화장품"),
   "cheek": ("블러셔 화장품", "치크 블러셔", "볼터치 블러셔"),
+  "brow": ("아이브로우 화장품", "브로우 펜슬", "아이브로우 마스카라"),
   "liner": ("아이라이너 화장품", "리퀴드 아이라이너", "젤 아이라이너"),
   "lip": ("립틴트 화장품", "립스틱 화장품", "립글로스 화장품"),
   "shadow": ("아이섀도우 화장품", "아이섀도우 팔레트", "섀도우 팔레트"),
@@ -731,7 +761,7 @@ def _score_product_match(
 
   if has_color_match:
     score += COLOR_MATCH_BONUS
-  elif has_color_target and category in {"lip", "cheek", "shadow", "base"}:
+  elif has_color_target and category in {"lip", "cheek", "shadow", "base", "brow"}:
     score -= COLOR_MISMATCH_PENALTY
 
   score -= min(index, 6)
@@ -985,7 +1015,7 @@ def _color_match_adjustment(
   if product_colors & target_colors:
     return COLOR_MATCH_BONUS
 
-  if category in {"lip", "cheek", "shadow", "base"}:
+  if category in {"lip", "cheek", "shadow", "base", "brow"}:
     return -COLOR_MISMATCH_PENALTY
 
   return 0
@@ -1194,6 +1224,10 @@ def _map_naver_item(
 
   if not title or not link or not image_url or not product_id:
     return None
+  link = _safe_naver_result_url(link)
+  image_url = _safe_naver_result_url(image_url)
+  if not link or not image_url:
+    return None
 
   if not _is_naver_cosmetic_item_for_category(item, category):
     return None
@@ -1224,6 +1258,7 @@ def _map_naver_item(
   return {
     "id": f"naver-{product_id}" if product_id else _stable_external_id("naver", link),
     "brandName": brand_name,
+    "sellerName": mall_name or (urlparse(link).hostname or "외부 판매처"),
     "productName": _localized_product_name(title, category),
     "shadeName": "",
     "category": category,
@@ -1378,11 +1413,19 @@ async def fetch_live_naver_products_for_queries(
     )
   products: list[dict[str, Any]] = []
   seen_ids: set[str] = set()
+  successful_results: list[list[dict[str, Any]]] = []
   for result in results:
     if isinstance(result, Exception):
       logger.info("live seasonal product query failed", exc_info=result)
       continue
-    for product in result[:per_category]:
+    successful_results.append(result[:per_category])
+  # Round-robin keeps a 12-item hub shelf balanced across all six categories
+  # instead of exhausting the first four category queries before truncation.
+  for position in range(per_category):
+    for result in successful_results:
+      if position >= len(result):
+        continue
+      product = result[position]
       if product["id"] in seen_ids:
         continue
       seen_ids.add(product["id"])

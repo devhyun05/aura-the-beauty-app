@@ -45,6 +45,7 @@ function mapBackendProduct(product: BackendProduct): Product | null {
       isLiked: true,
       status: 'unavailable',
       canUnlike: true,
+      externalSource: product.externalSource ?? null,
     };
   }
   if (!brandName || !productName || !imageUrl) return null;

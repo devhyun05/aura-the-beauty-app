@@ -38,7 +38,7 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'product_category') then
-    create type product_category as enum ('lip', 'cheek', 'shadow', 'liner', 'base');
+    create type product_category as enum ('lip', 'cheek', 'shadow', 'liner', 'base', 'brow');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'filter_category') then
@@ -56,6 +56,7 @@ end
 $$;
 
 alter type capture_type add value if not exists 'hair_analysis';
+alter type product_category add value if not exists 'brow';
 alter type consent_type add value if not exists 'engagement_personalization';
 alter type consent_type add value if not exists 'color_cohort';
 

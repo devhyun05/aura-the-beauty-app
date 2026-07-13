@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -87,6 +88,11 @@ async def test_retention_job_deletes_expired_data_and_minimizes_old_search_text(
   assert sum("delete from" in query.lower() for query, _ in db.executed) == 5
   assert any("delete from auradin_search_sessions" in query.lower() for query, _ in db.executed)
   assert any("context=context - 'query'" in query for query, _ in db.executed)
+  assert all(
+    isinstance(args[0], timedelta)
+    for _query, args in db.executed
+    if args
+  )
 
 
 class _CohortDb:

@@ -18,15 +18,14 @@ import type {
   ArRecommendationData,
   CatalogProduct,
   PersonalizedRecommendationData,
+  ProductRecommendationShelf,
   SeasonalRecommendationData,
 } from '../types';
 import {ProductRail} from './ProductRail';
 import {ProductSearchBar} from './ProductSearchBar';
-import {RecommendationProductCard} from './RecommendationProductCard';
 import {RecommendationSectionState} from './RecommendationSectionState';
 
 type SectionLoad<T> = {status: 'loading' | 'ready' | 'error'; data?: T; message?: string};
-type CatalogShelf = 'ar' | 'seasonal' | 'personalized' | 'cohort';
 
 export function ProductRecommendationHubContent({
   arStyleId,
@@ -34,6 +33,7 @@ export function ProductRecommendationHubContent({
   onCreateArLook,
   onOpenPersonalizationSettings,
   onOpenProduct,
+  onOpenShelf,
   onSearch,
   onToggleLike,
   onSectionLayout,
@@ -44,9 +44,10 @@ export function ProductRecommendationHubContent({
   onCreateArLook: () => void;
   onOpenPersonalizationSettings: () => void;
   onOpenProduct: (product: CatalogProduct) => void;
+  onOpenShelf: (shelf: ProductRecommendationShelf, title: string, arStyleId?: string | null) => void;
   onSearch: (query: string) => void;
   onToggleLike: (product: CatalogProduct) => void;
-  onSectionLayout?: (section: CatalogShelf, y: number) => void;
+  onSectionLayout?: (section: ProductRecommendationShelf, y: number) => void;
   refreshKey?: number;
 }) {
   const [ar, setAr] = useState<SectionLoad<ArRecommendationData>>({status: 'loading'});
@@ -55,7 +56,6 @@ export function ProductRecommendationHubContent({
   const [cohort, setCohort] = useState<SectionLoad<PersonalizedRecommendationData>>({status: 'loading'});
   const [activeRegion, setActiveRegion] = useState<'lip' | 'cheek' | 'liner'>('lip');
   const [selectedArStyleId, setSelectedArStyleId] = useState<string | null>(arStyleId ?? null);
-  const [expandedShelf, setExpandedShelf] = useState<CatalogShelf | null>(null);
   const [lookPickerVisible, setLookPickerVisible] = useState(false);
   const [lookOptions, setLookOptions] = useState<SectionLoad<SavedArLookOption[]>>({status: 'loading'});
   const requestRefs = useRef({ar: 0, seasonal: 0, personalized: 0, cohort: 0, looks: 0});
@@ -141,28 +141,12 @@ export function ProductRecommendationHubContent({
     onOpenProduct(product);
   };
 
-  const expandedItems = useMemo(() => {
-    if (expandedShelf === 'ar') return withLikeState(activeArGroup?.items ?? []);
-    if (expandedShelf === 'seasonal') return withLikeState(seasonal.data?.items ?? []);
-    if (expandedShelf === 'personalized') return withLikeState(personalized.data?.items ?? []);
-    if (expandedShelf === 'cohort') return withLikeState(cohort.data?.items ?? []);
-    return [];
-  }, [activeArGroup?.items, cohort.data?.items, expandedShelf, personalized.data?.items, seasonal.data?.items, withLikeState]);
-  const expandedTitle = expandedShelf === 'ar' ? 'AR 필터 기반 추천제품' : expandedShelf === 'seasonal' ? '시즌 상품' : expandedShelf === 'personalized' ? personalizedTitle : cohortTitle;
-  const expandedEmptyMessage = expandedShelf === 'ar'
-    ? '저장한 AR 룩이 생기면 실제 shade 색상과 피니시가 가까운 제품을 보여드려요.'
-    : expandedShelf === 'seasonal'
-      ? '현재 트렌드 신호와 실제 판매 상품을 확인하고 있어요.'
-      : expandedShelf === 'personalized'
-        ? '동의한 좋아요·검색·클릭 기록이 더 쌓이면 이 선반이 열려요.'
-        : '동의한 실제 사용자가 개인정보 기준을 충족할 만큼 모이면 이 선반이 열려요.';
-
   return (
     <View style={styles.root}>
       <ProductSearchBar onSubmit={onSearch} />
 
       <View onLayout={event => onSectionLayout?.('ar', event.nativeEvent.layout.y)}>
-        <Section title="AR 필터 기반 추천제품" onAction={() => setExpandedShelf('ar')}>
+        <Section title="AR 필터 기반 추천제품" onAction={() => onOpenShelf('ar', 'AR 필터 기반 추천제품', selectedArStyleId)}>
           {ar.status === 'loading' ? <RecommendationSectionState kind="loading" message="저장한 AR 룩과 실제 색상을 비교하고 있어요." /> : null}
           {ar.status === 'error' ? <RecommendationSectionState kind="error" message={ar.message ?? 'AR 추천을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={loadAr} /> : null}
           {ar.status === 'ready' && ['noArStyle', 'unavailable'].includes(ar.data?.status ?? '') ? <RecommendationSectionState kind="empty" message="저장한 AR 룩이 아직 없어요. 룩을 저장하면 색상과 피니시가 가까운 제품을 보여드려요." actionLabel="AR 룩 만들기" onAction={onCreateArLook} /> : null}
@@ -177,13 +161,13 @@ export function ProductRecommendationHubContent({
       </View>
 
       <View onLayout={event => onSectionLayout?.('personalized', event.nativeEvent.layout.y)}>
-        <Section title={personalizedTitle} onAction={() => setExpandedShelf('personalized')}>
+        <Section title={personalizedTitle} onAction={() => onOpenShelf('personalized', personalizedTitle)}>
           <PersonalizedBody section="personalized" state={personalized} onRetry={loadPersonalized} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onOpenSettings={onOpenPersonalizationSettings} onToggleLike={onToggleLike} />
         </Section>
       </View>
 
       <View onLayout={event => onSectionLayout?.('seasonal', event.nativeEvent.layout.y)}>
-        <Section title="시즌 상품" onAction={() => setExpandedShelf('seasonal')}>
+        <Section title="시즌 상품" onAction={() => onOpenShelf('seasonal', '시즌 상품')}>
           {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="지금 주목받는 메이크업과 실제 상품을 찾고 있어요." /> : null}
           {seasonal.status === 'error' ? <RecommendationSectionState kind="error" message={seasonal.message ?? '시즌 상품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={loadSeasonal} /> : null}
           {seasonal.status === 'ready' && seasonal.data?.status !== 'ready' ? <RecommendationSectionState kind="empty" message="확인 가능한 최신 시즌 상품을 준비하고 있어요." actionLabel="새로고침" onAction={loadSeasonal} /> : null}
@@ -198,18 +182,12 @@ export function ProductRecommendationHubContent({
       </View>
 
       <View onLayout={event => onSectionLayout?.('cohort', event.nativeEvent.layout.y)}>
-        <Section title={cohortTitle} onAction={() => setExpandedShelf('cohort')}>
+        <Section title={cohortTitle} onAction={() => onOpenShelf('cohort', cohortTitle)}>
           <PersonalizedBody section="cohort" state={cohort} onRetry={loadCohort} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onOpenSettings={onOpenPersonalizationSettings} onToggleLike={onToggleLike} />
         </Section>
       </View>
 
       <Pressable accessibilityRole="button" onPress={onOpenPersonalizationSettings} style={styles.privacyLink}><SlidersHorizontal color={colors.textSecondary} size={iconSize.xs} /><Text style={styles.privacyText}>개인화 데이터와 개인정보 설정</Text><ChevronRight color={colors.textSecondary} size={iconSize.xs} /></Pressable>
-
-      <CatalogShelfModal emptyMessage={expandedEmptyMessage} items={expandedItems} onClose={() => setExpandedShelf(null)} onOpen={(product, position) => {
-        if (expandedShelf === 'ar') openArProduct(product, position);
-        else if (expandedShelf === 'seasonal') openSeasonalProduct(product, position);
-        else {queuePreferenceEvent(expandedShelf === 'cohort' ? 'cohort' : 'personalized', expandedShelf === 'cohort' ? cohort.data : personalized.data, 'product_open', product, position); onOpenProduct(product);}
-      }} onToggleLike={onToggleLike} title={expandedTitle} visible={Boolean(expandedShelf)} />
 
       <Modal animationType="fade" onRequestClose={() => setLookPickerVisible(false)} transparent visible={lookPickerVisible}>
         <View accessibilityViewIsModal style={styles.modalBackdrop}><View style={styles.modalCard}><View style={styles.modalHeader}><Text accessibilityRole="header" style={styles.collectionTitle}>기준 AR 룩 변경</Text><Pressable accessibilityLabel="기준 AR 룩 선택 닫기" accessibilityRole="button" onPress={() => setLookPickerVisible(false)} style={styles.modalClose}><X color={colors.textPrimary} size={iconSize.sm} /></Pressable></View>
@@ -236,10 +214,6 @@ function PersonalizedBody({section, state, onRetry, likedProductIds, onOpenProdu
   if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? '같은 컬러 취향의 실제 동의 사용자가 100명 이상 모이면 추천을 시작해요.' : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
   const items = state.data.items.map(item => ({...item, viewerState: {liked: item.canLike === false ? false : likedProductIds.has(item.productId)}}));
   return <View style={styles.stack}>{state.data.description ? <Text style={styles.meta}>{state.data.description}</Text> : null}{section === 'cohort' && state.data.cohortSizeBand ? <Text style={styles.meta}>익명 집계 모수 {state.data.cohortSizeBand}</Text> : null}<ProductRail items={items} onImpression={(product, position) => queuePreferenceEvent(section, state.data, 'impression', product, position)} onOpen={(product, position) => {queuePreferenceEvent(section, state.data, 'product_open', product, position); onOpenProduct(product);}} onToggleLike={onToggleLike} /></View>;
-}
-
-function CatalogShelfModal({emptyMessage, items, onClose, onOpen, onToggleLike, title, visible}: {emptyMessage: string; items: CatalogProduct[]; onClose: () => void; onOpen: (product: CatalogProduct, position: number) => void; onToggleLike: (product: CatalogProduct) => void; title: string; visible: boolean}) {
-  return <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}><View accessibilityViewIsModal style={styles.modalBackdrop}><View style={styles.catalogModalCard}><View style={styles.modalHeader}><Text accessibilityRole="header" style={styles.catalogModalTitle}>{title}</Text><Pressable accessibilityLabel={`${title} 닫기`} accessibilityRole="button" onPress={onClose} style={styles.modalClose}><X color={colors.textPrimary} size={iconSize.sm} /></Pressable></View><ScrollView contentContainerStyle={styles.catalogGrid} showsVerticalScrollIndicator={false}>{items.length ? items.map((product, index) => <RecommendationProductCard key={`${product.productId}:${product.shadeId ?? 'family'}`} product={product} onOpen={() => onOpen(product, index)} onToggleLike={() => onToggleLike(product)} />) : <RecommendationSectionState kind="empty" message={emptyMessage} />}</ScrollView></View></View></Modal>;
 }
 
 function Section({title, onAction, children}: {title: string; onAction: () => void; children: ReactNode}) {
@@ -276,9 +250,6 @@ const styles = StyleSheet.create({
   privacyText: {color: colors.textSecondary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm},
   modalBackdrop: {backgroundColor: 'rgba(0,0,0,0.42)', flex: 1, justifyContent: 'flex-end', padding: spacing.sm},
   modalCard: {backgroundColor: colors.background, borderRadius: radius.lg, gap: spacing.md, maxHeight: '72%', padding: spacing.lg},
-  catalogModalCard: {backgroundColor: colors.background, borderRadius: radius.lg, gap: spacing.md, maxHeight: '90%', padding: spacing.md},
-  catalogModalTitle: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg, lineHeight: typography.lineHeight.lg},
-  catalogGrid: {flexDirection: 'row', flexGrow: 1, flexWrap: 'wrap', gap: spacing.md, justifyContent: 'space-between', paddingBottom: spacing.xxl},
   modalHeader: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between'},
   modalClose: {alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 44},
   lookList: {gap: spacing.sm},

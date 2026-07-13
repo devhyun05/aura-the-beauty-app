@@ -69,6 +69,11 @@ expectEqual(
   'product recommendation detail route title',
 );
 expectEqual(
+  getDetailRouteTitle('ProductRecommendationShelf'),
+  '추천 제품 전체보기',
+  'product recommendation shelf route title',
+);
+expectEqual(
   getDetailRouteTitle('FloatingActionSettings'),
   '빠른 실행 설정',
   'floating action settings detail route title',

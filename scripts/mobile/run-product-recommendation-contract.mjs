@@ -55,6 +55,8 @@ const auradinScreen = source('apps/mobile/src/features/recommendation/screens/Au
 const legacyAuradinService = source('apps/mobile/src/features/recommendation/services/auradinService.ts');
 const auradinOrb = source('apps/mobile/src/features/recommendation/components/AuradinFloatingOrb.tsx');
 const recommendationScreen = source('apps/mobile/src/features/recommendation/screens/ProductRecommendationScreen.tsx');
+const recommendationShelfScreen = source('apps/mobile/src/features/recommendation/screens/ProductRecommendationShelfScreen.tsx');
+const productShelfCategories = source('apps/mobile/src/features/recommendation/services/productShelfCategories.ts');
 const appScreen = source('apps/mobile/src/shared/ui/AppScreen.tsx');
 const backendApi = source('apps/mobile/src/shared/services/backendApi.ts');
 const productHubService = source('apps/mobile/src/features/recommendation/services/productHubService.ts');
@@ -101,7 +103,7 @@ requireContract(
   'Home 추천 제품 must open ProductRecommendation.',
 );
 requireContract(
-  routeTypes.includes("arStyleId?: string") && routeTypes.includes("initialSection?: 'ar' | 'seasonal' | 'personalized'"),
+  routeTypes.includes("arStyleId?: string") && routeTypes.includes("initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort'"),
   'ProductRecommendation route must carry only saved style identity and initial section.',
 );
 requireContract(
@@ -223,6 +225,45 @@ requireContract(
     hubContent.includes('requestRefs.current.seasonal === requestId') &&
     hubContent.includes('getSeasonalRecommendations(refreshKey)'),
   'hub must expose four purpose-specific shopping shelves, horizontal product rails, more actions, and stale-response protection.',
+);
+requireContract(
+  routeTypes.includes('ProductRecommendationShelf:') &&
+    rootNavigator.includes('name="ProductRecommendationShelf"') &&
+    recommendationRoutes.includes("navigation.navigate('ProductRecommendationShelf'") &&
+    hubContent.includes("onOpenShelf('ar'") &&
+    hubContent.includes("onOpenShelf('personalized'") &&
+    hubContent.includes("onOpenShelf('seasonal'") &&
+    hubContent.includes("onOpenShelf('cohort'") &&
+    !hubContent.includes('CatalogShelfModal') &&
+    recommendationShelfScreen.includes('PRODUCT_SHELF_CATEGORY_TABS') &&
+    recommendationShelfScreen.includes('numColumns={2}') &&
+    recommendationShelfScreen.includes('showReason'),
+  'each shelf more action must open a dedicated two-column category page while preserving recommendation reasons.',
+);
+requireContract(
+  productShelfCategories.includes("{id: 'base', label: '베이스'}") &&
+    productShelfCategories.includes("{id: 'shadow', label: '아이섀도우'}") &&
+    productShelfCategories.includes("{id: 'brow', label: '아이브로우'}") &&
+    productShelfCategories.includes("{id: 'cheek', label: '치크'}") &&
+    productShelfCategories.includes("{id: 'lip', label: '립'}") &&
+    productShelfCategories.includes("{id: 'liner', label: '아이라이너'}"),
+  'the shelf page must expose the requested commercial makeup category tabs.',
+);
+
+const productShelfCategoryModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/productShelfCategories.ts',
+  {},
+);
+const categoryFixture = [
+  {productId: 'base-product', category: 'cushion'},
+  {productId: 'brow-product', category: 'eyebrow'},
+  {productId: 'liner-product', category: 'liner'},
+];
+requireContract(
+  productShelfCategoryModule.filterProductShelfItems(categoryFixture, 'base')[0]?.productId === 'base-product' &&
+    productShelfCategoryModule.filterProductShelfItems(categoryFixture, 'brow')[0]?.productId === 'brow-product' &&
+    productShelfCategoryModule.filterProductShelfItems(categoryFixture, 'all').length === 3,
+  'category aliases and all-products filtering must execute deterministically.',
 );
 requireContract(
   recommendationRoutes.includes('headerMode="standard"') &&

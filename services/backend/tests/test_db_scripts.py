@@ -88,6 +88,11 @@ def test_product_event_shade_parent_migration_is_registered() -> None:
   assert "not valid" in migration_sql
 
 
+def test_product_brow_category_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-category-brow-v1"]
+  assert "alter type product_category add value if not exists 'brow'" in migration_sql
+
+
 def test_existing_consulting_call_session_orphans_do_not_block_schema_upgrade() -> None:
   schema = get_schema_path().read_text(encoding="utf-8")
   constraint_sql = schema.split(

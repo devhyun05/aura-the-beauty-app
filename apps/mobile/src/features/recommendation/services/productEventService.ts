@@ -21,7 +21,7 @@ export type ProductClientEvent = {
   searchRequestId?: string;
   position: number;
   exposureToken?: string | null;
-  context?: {viewportRatio?: number; visibleMs?: number; screen?: string; source?: string};
+  context?: {category?: string; viewportRatio?: number; visibleMs?: number; screen?: string; source?: string};
 };
 
 let enabled = false;

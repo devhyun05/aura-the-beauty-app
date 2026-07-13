@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -28,6 +29,16 @@ class SeasonalTheme:
   reason: str
 
 
+DEFAULT_CATEGORY_QUERIES = {
+  "base": "쿠션 파운데이션 베이스 화장품",
+  "shadow": "아이섀도우 팔레트 화장품",
+  "brow": "아이브로우 펜슬 화장품",
+  "cheek": "블러셔 치크 화장품",
+  "lip": "립틴트 립스틱 화장품",
+  "liner": "아이라이너 화장품",
+}
+
+
 THEMES = (
   SeasonalTheme(
     slug="glossy-lip-flushed-cheek",
@@ -39,6 +50,8 @@ THEMES = (
       "cheek": "크림 블러셔 촉촉 치크",
       "base": "글로우 쿠션 파운데이션",
       "shadow": "쉬머 아이섀도우 글리터",
+      "brow": "여름 지속력 아이브로우 펜슬",
+      "liner": "여름 지속력 브라운 아이라이너",
     },
     reason="2026 여름의 글로시 립·플러시 치크 흐름과 맞는 상품이에요.",
   ),
@@ -52,6 +65,8 @@ THEMES = (
       "shadow": "쉬머 글리터 아이섀도우",
       "base": "롱래스팅 쿠션 여름",
       "lip": "워터 틴트 글로시",
+      "brow": "워터프루프 아이브로우 마스카라",
+      "cheek": "여름 지속력 크림 블러셔",
     },
     reason="여름철 지속력과 반사광 포인트 흐름에 맞는 상품이에요.",
   ),
@@ -65,6 +80,8 @@ THEMES = (
       "lip": "블러 틴트 소프트 매트",
       "cheek": "파우더 블러셔 블러 치크",
       "shadow": "매트 아이섀도우 팔레트",
+      "brow": "내추럴 브로우 펜슬",
+      "liner": "소프트 브라운 아이라이너",
     },
     reason="얇은 세미매트 피부와 소프트 블러 메이크업 흐름에 맞는 상품이에요.",
   ),
@@ -116,6 +133,8 @@ async def _select_theme(settings: Settings, now: datetime) -> tuple[SeasonalThem
 
 
 def _map_product(product: dict[str, Any], *, theme: SeasonalTheme, generated_at: datetime) -> dict[str, Any]:
+  purchase_url = str(product.get("purchaseUrl") or "")
+  seller_domain = (urlparse(purchase_url).hostname or "").lower()
   return {
     "productId": product["id"],
     "shadeId": None,
@@ -133,8 +152,8 @@ def _map_product(product: dict[str, Any], *, theme: SeasonalTheme, generated_at:
     },
     "offer": {
       "offerId": f"external-{product['id']}",
-      "sellerName": "NAVER 쇼핑",
-      "sellerDomain": "search.shopping.naver.com",
+      "sellerName": product.get("sellerName") or seller_domain,
+      "sellerDomain": seller_domain,
       "availability": "external",
       "affiliateType": "none",
       "disclosureLabel": None,
@@ -146,7 +165,7 @@ def _map_product(product: dict[str, Any], *, theme: SeasonalTheme, generated_at:
     "reasonCodes": ["CURRENT_SEASON_TREND"],
     "reasonLabels": [theme.reason],
     "status": "active",
-    "purchaseUrl": product.get("purchaseUrl"),
+    "purchaseUrl": purchase_url,
     "canLike": True,
     "externalSource": "naver_shopping_search",
   }
@@ -160,12 +179,13 @@ async def get_live_seasonal_recommendations(
   now: datetime | None = None,
 ) -> dict[str, Any]:
   generated_at = now or datetime.now(timezone.utc)
-  cache_key = locale
+  cache_key = f"{locale}:{limit}"
   cached = _CACHE.get(cache_key)
   if cached and cached[0] > time.monotonic():
     return cached[1]
   theme, provider_status = await _select_theme(settings, generated_at)
-  products = await fetch_live_naver_products_for_queries(settings, theme.queries, per_category=3)
+  queries = {**DEFAULT_CATEGORY_QUERIES, **theme.queries}
+  products = await fetch_live_naver_products_for_queries(settings, queries, per_category=3)
   items = [_map_product(product, theme=theme, generated_at=generated_at) for product in products[:limit]]
   response = {
     "status": "ready" if items else "empty",

@@ -7,6 +7,7 @@ import {
   ProductDetailScreen,
   ProductPersonalizationSettingsScreen,
   ProductRecommendationScreen,
+  ProductRecommendationShelfScreen,
   ProductSearchResultScreen,
 } from '../../../features/recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
@@ -69,8 +70,44 @@ export function ProductRecommendationRouteScreen({
               : {}),
           })
         }
+        onOpenShelf={(shelf, title, selectedArStyleId) =>
+          navigation.navigate('ProductRecommendationShelf', {
+            shelf,
+            title,
+            ...(selectedArStyleId ? {arStyleId: selectedArStyleId} : {}),
+          })
+        }
         onSearch={query => navigation.navigate('ProductSearchResult', {query})}
         sourceReportId={sourceReportId}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ProductRecommendationShelfRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductRecommendationShelf'>) {
+  return (
+    <DetailRouteChrome
+      headerMode="standard"
+      routeName="ProductRecommendationShelf"
+      onBack={() => navigation.goBack()}>
+      <ProductRecommendationShelfScreen
+        arStyleId={route.params.arStyleId}
+        initialTitle={route.params.title}
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenProduct={product =>
+          navigation.navigate('ProductDetail', {
+            productId: product.productId,
+            ...(product.shadeId ? {shadeId: product.shadeId} : {}),
+            ...(product.disclosureLabel ? {disclosureLabel: product.disclosureLabel} : {}),
+            ...(product.reasonLabels?.length ? {reasonLabels: product.reasonLabels} : {}),
+            ...(product.sponsored !== undefined ? {sponsored: product.sponsored} : {}),
+            ...(product.sponsorshipType ? {sponsorshipType: product.sponsorshipType} : {}),
+          })
+        }
+        shelf={route.params.shelf}
       />
     </DetailRouteChrome>
   );

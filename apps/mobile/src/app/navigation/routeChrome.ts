@@ -266,6 +266,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '제품 추천',
   },
+  ProductRecommendationShelf: {
+    category: 'list',
+    contextLabel: 'RECOMMENDED PRODUCTS',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '추천 제품 전체보기',
+  },
   ProductSearchResult: {
     category: 'list',
     contextLabel: 'PRODUCT SEARCH',

@@ -2,11 +2,18 @@ import type {ImageSourcePropType} from 'react-native';
 
 export type ProductRecommendationCategory =
   | 'all'
-  | 'lip'
-  | 'cheek'
+  | 'base'
   | 'shadow'
-  | 'liner'
-  | 'base';
+  | 'brow'
+  | 'cheek'
+  | 'lip'
+  | 'liner';
+
+export type ProductRecommendationShelf =
+  | 'ar'
+  | 'personalized'
+  | 'seasonal'
+  | 'cohort';
 
 export type ProductRecommendationTab = {
   id: ProductRecommendationCategory;

@@ -42,9 +42,15 @@ export async function getProductRecommendationFeatures(): Promise<{
   return requestBackendJson('/products/features');
 }
 
-export async function getArRecommendations(styleId?: string | null): Promise<ArRecommendationData> {
+export async function getArRecommendations(
+  styleId?: string | null,
+  perRegionLimit = 6,
+): Promise<ArRecommendationData> {
   requireBackend();
-  const params = new URLSearchParams({regions: 'lip,cheek,liner', per_region_limit: '6'});
+  const params = new URLSearchParams({
+    regions: 'lip,cheek,liner',
+    per_region_limit: String(Math.min(20, Math.max(1, perRegionLimit))),
+  });
   if (styleId) params.set('style_id', styleId);
   return requestBackendJson(`/products/recommendations/ar?${params.toString()}`);
 }
@@ -68,23 +74,29 @@ export async function getSavedArLookOptions(): Promise<SavedArLookOption[]> {
     }));
 }
 
-export async function getSeasonalRecommendations(entryKey?: number): Promise<SeasonalRecommendationData> {
+export async function getSeasonalRecommendations(
+  entryKey?: number,
+  limit = 12,
+): Promise<SeasonalRecommendationData> {
   if (!getBackendApiBaseUrl()) {
     return {status: 'unavailable', collection: null, items: []};
   }
-  const params = new URLSearchParams({locale: 'ko-KR', limit: '12'});
+  const params = new URLSearchParams({
+    locale: 'ko-KR',
+    limit: String(Math.min(30, Math.max(1, limit))),
+  });
   if (entryKey !== undefined) params.set('entry', String(entryKey));
   return requestBackendJson(`/products/recommendations/seasonal?${params.toString()}`);
 }
 
-export async function getPersonalizedRecommendations(): Promise<PersonalizedRecommendationData> {
+export async function getPersonalizedRecommendations(limit = 12): Promise<PersonalizedRecommendationData> {
   requireBackend();
-  return requestBackendJson('/products/recommendations/personalized?limit=12');
+  return requestBackendJson(`/products/recommendations/personalized?limit=${Math.min(30, Math.max(1, limit))}`);
 }
 
-export async function getCohortRecommendations(): Promise<PersonalizedRecommendationData> {
+export async function getCohortRecommendations(limit = 12): Promise<PersonalizedRecommendationData> {
   requireBackend();
-  return requestBackendJson('/products/recommendations/cohort?limit=12');
+  return requestBackendJson(`/products/recommendations/cohort?limit=${Math.min(30, Math.max(1, limit))}`);
 }
 
 export async function searchTrustedProducts(query: string): Promise<ProductSearchData> {

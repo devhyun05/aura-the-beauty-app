@@ -4,12 +4,12 @@ from uuid import uuid4
 import pytest
 from fastapi import Response
 
-from app.api.products import _liked_product_display_allowed, search_products
+from app.api.products import _liked_product_display_allowed, _map_external_like_snapshot, search_products
 from app.core.settings import Settings
 from app.core.errors import AppError
 from app.services.product_catalog import ensure_like_eligible, offer_freshness_sql, validate_external_https_url
 from app.services.product_recommendations import rank_ar_candidates
-from app.services.shopping_products import _map_db_product
+from app.services.shopping_products import _map_db_product, _safe_naver_result_url
 
 
 class ProductLikeDatabase:
@@ -154,6 +154,38 @@ def test_seller_url_requires_https_and_an_allowlisted_domain() -> None:
   ):
     with pytest.raises(AppError):
       validate_external_https_url(unsafe, ["example.com"], kind="Seller")
+
+
+def test_live_naver_result_urls_reject_http_credentials_and_ip_hosts() -> None:
+  assert _safe_naver_result_url("https://shop.example.com/products/1") == "https://shop.example.com/products/1"
+  for unsafe in (
+    "http://shop.example.com/products/1",
+    "https://user:password@shop.example.com/products/1",
+    "https://127.0.0.1/products/1",
+    "https://localhost/products/1",
+  ):
+    assert _safe_naver_result_url(unsafe) is None
+
+
+def test_persisted_external_like_snapshot_becomes_an_unlikeable_tombstone_when_url_is_unsafe() -> None:
+  row = {
+    "external_source": "naver_shopping_search",
+    "external_product_id": "naver-1",
+    "brand_name": "Brand",
+    "product_name": "Brow",
+    "category": "brow",
+    "image_url": "https://cdn.example.com/brow.png",
+    "purchase_url": "http://127.0.0.1/internal",
+    "price_amount": 12000,
+    "price_currency": "KRW",
+    "source_updated_at": datetime.now(timezone.utc),
+  }
+  mapped = _map_external_like_snapshot(row)
+  assert mapped["status"] == "unavailable"
+  assert mapped["purchaseUrl"] is None
+  assert mapped["imageUrl"] is None
+  assert mapped["canUnlike"] is True
+  assert mapped["externalSource"] == "naver_shopping_search"
 
 
 def test_legacy_recommendation_mapping_uses_only_trusted_asset_and_offer_urls() -> None:

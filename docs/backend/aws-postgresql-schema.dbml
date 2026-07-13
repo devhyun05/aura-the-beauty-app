@@ -52,6 +52,7 @@ Enum product_category {
   shadow
   liner
   base
+  brow
 }
 
 Enum filter_category {

@@ -59,8 +59,13 @@ export type RootStackParamList = {
   ProductRecommendation: {
     reportId?: string;
     arStyleId?: string;
-    initialSection?: 'ar' | 'seasonal' | 'personalized';
+    initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort';
   } | undefined;
+  ProductRecommendationShelf: {
+    shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
+    title?: string;
+    arStyleId?: string;
+  };
   ProductSearchResult: {query: string};
   ProductDetail: {
     productId: string;
@@ -183,6 +188,7 @@ export const rootStackRoutes = [
   'SavedHairSimulations',
   'SavedMakeupList',
   'ProductRecommendation',
+  'ProductRecommendationShelf',
   'ProductSearchResult',
   'ProductDetail',
   'ProductPersonalizationSettings',

@@ -45,6 +45,7 @@ import type {
   RecommendedProduct,
   ProductRecommendationLook,
   ProductRecommendationLookOption,
+  ProductRecommendationShelf,
   ProductRecommendationTab,
   CatalogProduct,
 } from '../types';
@@ -157,10 +158,15 @@ type ProductRecommendationScreenProps = {
     shadeId?: string | null,
     recommendationContext?: ProductDetailRecommendationContext,
   ) => void;
+  onOpenShelf?: (
+    shelf: ProductRecommendationShelf,
+    title: string,
+    arStyleId?: string | null,
+  ) => void;
   onPickGalleryPhoto?: () => void;
   onSearch?: (query: string) => void;
   sourceReportId?: string | null;
-  initialSection?: 'ar' | 'seasonal' | 'personalized';
+  initialSection?: ProductRecommendationShelf;
 };
 
 export function ProductRecommendationScreen({
@@ -171,6 +177,7 @@ export function ProductRecommendationScreen({
   onOpenLikedProducts,
   onOpenPersonalizationSettings,
   onOpenProduct,
+  onOpenShelf,
   onPickGalleryPhoto,
   onSearch,
   sourceReportId,
@@ -554,6 +561,7 @@ export function ProductRecommendationScreen({
         onCreateArLook={onCreateArLook ?? onCapturePhoto ?? (() => undefined)}
         onOpenPersonalizationSettings={onOpenPersonalizationSettings ?? (() => undefined)}
         onOpenProduct={handleOpenCatalogProduct}
+        onOpenShelf={onOpenShelf ?? (() => undefined)}
         onSearch={onSearch ?? (() => undefined)}
         onToggleLike={handleToggleCatalogLike}
         refreshKey={hubRefreshKey}

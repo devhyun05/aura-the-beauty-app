@@ -49,7 +49,7 @@ from app.services.product_seasonal import (
   suspend_seasonal_collection,
   validate_seasonal_manifest,
 )
-from app.services.product_live_seasonal import _series_score
+from app.services.product_live_seasonal import DEFAULT_CATEGORY_QUERIES, THEMES, _series_score
 from app.services.product_trends import NaverShoppingInsightProvider, TrendRequest
 from app.services.saved_ar_looks import normalize_saved_ar_look
 
@@ -350,6 +350,28 @@ def test_catalog_manifest_accepts_only_complete_rights_evidence() -> None:
   normalized = validate_catalog_manifest(_catalog_manifest(), _catalog_settings())
   assert normalized["products"][0]["shades"][0]["srgbHex"] == "#B96872"
   assert normalized["products"][0]["offers"][0]["sellerDomain"] == "shop.example.com"
+
+
+def test_catalog_manifest_accepts_brow_as_a_first_class_product_category() -> None:
+  manifest = _catalog_manifest()
+  manifest["products"][0]["externalKey"] = "partner:brow:1"
+  manifest["products"][0]["productName"] = "Reviewed Brow"
+  manifest["products"][0]["category"] = "brow"
+  manifest["products"][0]["shades"][0]["productRegion"] = "brow"
+  normalized = validate_catalog_manifest(manifest, _catalog_settings())
+  assert normalized["products"][0]["category"] == "brow"
+  assert normalized["products"][0]["shades"][0]["productRegion"] == "brow"
+
+
+def test_brow_can_be_a_privacy_safe_broad_preference_bucket() -> None:
+  assert broad_preference_bucket({"category:brow": 3}) == "category-brow"
+
+
+def test_every_live_seasonal_theme_queries_all_commercial_makeup_categories() -> None:
+  expected = {"base", "shadow", "brow", "cheek", "lip", "liner"}
+  assert set(DEFAULT_CATEGORY_QUERIES) == expected
+  for theme in THEMES:
+    assert set({**DEFAULT_CATEGORY_QUERIES, **theme.queries}) == expected
 
 
 @pytest.mark.parametrize(

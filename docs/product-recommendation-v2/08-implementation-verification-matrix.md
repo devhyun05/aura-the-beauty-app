@@ -11,6 +11,7 @@
 | 1 | 제품 추천 허브 진입 복원 | `homeRoutes.tsx`, `RootNavigator.tsx`, 모바일 제품추천 계약 검사 | 자동 검증 완료 |
 | 2 | 기존 화면/API 회귀 보존 | `ProductRecommendationScreen.tsx`, legacy `/products/recommendations`, 전체 backend suite | 자동 검증 완료 |
 | 3 | 제품 검색 | `ProductSearchResultScreen.tsx`, trusted `search_catalog`, 검색 이벤트·private cache 테스트 | 자동 검증 완료 |
+| 3-a | 추천 목적별 전체보기·카테고리 탐색 | 독립 `ProductRecommendationShelf` route, 전체·베이스·아이섀도우·아이브로우·치크·립·아이라이너 탭, 2열 반응형 grid, 목적별 reason 유지 | 자동·실기기 route 검증 완료 |
 | 4 | 이동형 AURADIN orb | `AuradinFloatingOrb.tsx`, edge snap/long press/drag/Reduce Motion 정적 계약 | 자동 검증 완료, 촉감 QA 대기 |
 | 5 | 시즌 상품 end-to-end | signed manifest, editor/reviewer/publisher RBAC, two-person publish, ETag, stale 표시, manual suspend/rollback, automated expiry, PostgreSQL 계약 | 자동 검증 완료 |
 | 6 | AR 룩 저장과 완료 연결 | `savedArLookService.ts`, idempotent `clientRequestId`, 저장 완료 `arStyleId` route, PostgreSQL round-trip | 자동 검증 완료 |
@@ -22,7 +23,7 @@
 | 12 | 동의·철회·삭제·보존 | 목적별 consent, 즉시 파생 데이터 삭제, account cascade, retention cleanup | 자동 검증 완료 |
 | 13 | 보안·catalog 신뢰 경계 | signed import, catalog-admin RBAC, allowlist/SSRF, rights/provenance, configurable offer freshness read gate, monitor exit gate, composite FK, audit/quarantine/rollback | 자동 검증 완료 |
 | 14 | 모바일·backend·DB·알고리즘 테스트 | mobile type/contract/theme, full pytest, actual PostgreSQL schema/integration | 자동 검증 완료 |
-| 15 | 실제 앱 전체 흐름 | 사용자 지시에 따라 연결 알림 전 앱/Simulator/실기기 미실행 | 실기기 연결 대기 |
+| 15 | 실제 앱 전체 흐름 | iPhone 13 개발 앱 실행, 홈/허브, 개인화·시즌 전체보기 route, 좋아요/동의 API, 6개 시즌 카테고리 응답 확인 | 부분 실기기 완료; AR camera·접근성·오프라인 촉감 QA 대기 |
 
 외부 상품 사용권·운영 secret·실제 모수·법무 승인이 없는 기능은 가짜 데이터로 대체하지
 않는다. 해당 section은 feature flag 아래 비활성 또는 명시적 empty/off 상태를 유지한다.
@@ -57,3 +58,14 @@ AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL=<isolated-postgres-url> \
 ```
 
 실제 앱 실행, Simulator 부팅, 실기기 설치는 이 자동 검증 명령에 포함하지 않는다.
+
+## 2026-07-13 실기기·로컬 통합 확인
+
+- 연결 기기: iPhone 13 (`iPhone14,5`). Simulator는 사용하지 않았다.
+- 설치된 개발 앱을 Metro에 연결해 새 번들을 실행했고 홈 API와 제품추천 section API가 200으로 응답했다.
+- 개인화 `더보기`가 `/products/recommendations/personalized?limit=30`, 시즌 `더보기`가 `/products/recommendations/seasonal?limit=30`을 호출하는 독립 화면으로 열렸다.
+- 시즌 전체보기는 실제 외부 판매 결과 18개를 반환했고 6개 카테고리가 각 3개씩 포함됐다. 허브 limit 12 응답은 round-robin으로 각 카테고리 2개씩 포함했다.
+- 시즌 상품·이미지 URL은 전부 HTTPS 신뢰 경계를 통과했으며 위험 URL은 0개였다.
+- 개발 PostgreSQL에 `schema.sql:product-category-brow-v1`을 적용했고 schema check가 통과했다.
+- 자동 회귀 결과: backend `623 passed, 2 skipped`, mobile typecheck·제품추천 계약·AURADIN theme scope 통과.
+- 남은 수동 QA: 수정 후 탭 높이 시각 확인, AURADIN drag/snap 촉감, AR camera 저장 왕복, 네트워크 단절/복구, Dynamic Type, VoiceOver, Reduce Motion.

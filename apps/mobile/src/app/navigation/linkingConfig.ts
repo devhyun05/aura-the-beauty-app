@@ -70,6 +70,7 @@ export const rootStackLinkingScreens = {
   SavedHairSimulations: 'hair-analysis/saved',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
+  ProductRecommendationShelf: 'product-recommendation/:shelf',
   ProductSearchResult: 'product-search',
   ProductDetail: 'product/:productId',
   ProductPersonalizationSettings: 'product-personalization-settings',

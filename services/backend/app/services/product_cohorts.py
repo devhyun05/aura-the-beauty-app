@@ -61,7 +61,7 @@ def broad_preference_bucket(preference_payload: Any) -> str | None:
   categories = Counter()
   for key, raw_score in _payload(preference_payload).items():
     feature, separator, value = str(key).partition(":")
-    if feature != "category" or not separator or value not in {"lip", "cheek", "shadow", "liner", "base"}:
+    if feature != "category" or not separator or value not in {"lip", "cheek", "shadow", "liner", "base", "brow"}:
       continue
     try:
       categories[value] += max(0.0, float(raw_score))

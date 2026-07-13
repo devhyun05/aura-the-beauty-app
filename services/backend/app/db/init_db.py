@@ -11,6 +11,9 @@ from app.db.connection_config import DatabaseConfigurationError, connect_databas
 SCHEMA_VERSION = "schema.sql:v5-external-product-likes"
 
 POST_SCHEMA_MIGRATIONS = {
+  "schema.sql:product-category-brow-v1": """
+    alter type product_category add value if not exists 'brow';
+  """,
   "schema.sql:product-operator-rbac-v1": """
     create table if not exists product_recommendation_operators (
       user_id uuid primary key,
