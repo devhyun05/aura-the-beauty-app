@@ -23,7 +23,7 @@
 - 마지막 질문에서는 별도 턴을 만들지 않고 `+ 조건 추가`를 펼쳐 추가 요청을 함께 제출할 수 있게 한다.
 - 결과는 하나의 정답이 아니라 안전한 선택, 더 과감한 선택, 예상 밖의 발견을 함께 제공한다.
 - 사용자가 직접 작성한 최신 요청을 AI 추론이나 과거 취향보다 우선한다.
-- 다른 팀원이 소유한 아우라딘 구현은 수정하거나 내부 코드에 결합하지 않는다.
+- 다른 팀원이 소유한 아우라딘 구현은 수정하거나 런타임 의존성으로 결합하지 않는다. 개발 및 QA에서는 동일 조건의 결과를 비교하는 선택적 provider로만 사용할 수 있다.
 
 ## 3. 첫 화면: 오늘의 메이크업 시나리오
 
@@ -213,6 +213,8 @@ type MakeupScenarioPrompt = {
 
 MVP의 대표 이미지는 검수된 레퍼런스 룩 이미지 또는 서버가 제공하는 룩 이미지 URL을 사용한다. 사용자 얼굴 합성 이미지를 추천 생성의 필수 조건으로 두지 않는다. 사용자가 룩을 고르면 기존 AR 적용 흐름으로 연결한다.
 
+제품 추천은 새 기능이 소유한 provider 계약을 통해 완성 룩과 조화를 이루는 세트로 제공한다. MVP 기본 provider는 검수된 제품 fixture와 결정적 추천 규칙을 사용한다. 개발 및 QA 빌드에서는 같은 룩 조건을 아우라딘에 보내 결과 품질을 나란히 비교할 수 있지만, 사용자용 기본 흐름은 아우라딘의 가용성이나 변경에 의존하지 않는다.
+
 ### 5.3 결과 데이터 모델
 
 ```ts
@@ -235,13 +237,38 @@ type MakeupRecommendationStep = {
   instruction: string;
   order: number;
 };
+
+type MakeupRecommendationProduct = {
+  id: string;
+  area: 'base' | 'eye' | 'brow' | 'cheek' | 'lip';
+  brandName: string;
+  productName: string;
+  shadeName?: string;
+  reason: string;
+  imageUrl?: string;
+  purchaseUrl?: string;
+};
+
+type MakeupProductRecommendationInput = {
+  lookId: string;
+  title: string;
+  summary: string;
+  appliedConditions: string[];
+  steps: MakeupRecommendationStep[];
+  budgetKrw?: number;
+  preferredChannel?: string;
+};
+
+type ProductRecommendationProvider = {
+  recommendProducts(input: MakeupProductRecommendationInput): Promise<MakeupRecommendationProduct[]>;
+};
 ```
 
 ## 6. 시스템 경계와 데이터 흐름
 
 ### 6.1 모바일 경계
 
-새 경험은 메이크업 룩 추천이라는 독립 기능 경계로 둔다. 새 코드는 `features/makeup-recommendation` 아래에 두고, 공용 `shared` 계층의 테마 토큰, UI 및 `requestBackendJson`만 재사용한다. 아우라딘 전용 디자인 시스템, 타입, 화면, 서비스 또는 상태를 import하지 않는다.
+새 경험은 메이크업 룩 추천이라는 독립 기능 경계로 둔다. 새 코드는 `features/makeup-recommendation` 아래에 두고, 공용 `shared` 계층의 테마 토큰, UI 및 `requestBackendJson`만 재사용한다. 아우라딘 전용 디자인 시스템, 타입, 화면, 서비스 또는 상태를 사용자용 기능에서 import하지 않는다.
 
 모바일의 논리 단위는 다음과 같다.
 
@@ -269,7 +296,9 @@ type MakeupRecommendationStep = {
 
 기존 코드의 아이디어나 외부 동작을 참고할 수는 있지만 파일을 수정하거나 내부 함수를 import해 결합하지 않는다. 새 기능 때문에 기존 아우라딘 테스트의 기대값을 변경하지도 않는다.
 
-아우라딘의 공개 `/search/sessions` API를 변경 없이 호출하는 black-box 연동은 기술적으로 가능하고 제품 후보 품질에 도움이 될 수 있다. 그러나 이 API는 완성 룩과 부위별 방법이 아니라 제품 검색에 최적화되어 있으며, 새 기능을 다른 팀 소유 서비스에 결합하는 비용이 있다. 따라서 MVP에서는 사용하지 않는다. 향후 팀 소유자와 사용자가 명시적으로 승인한 경우에만 결과 생성 뒤 제품 후보를 보강하는 선택적 adapter로 추가한다.
+아우라딘은 완성 룩과 부위별 방법이 아니라 개별 제품 검색에 최적화되어 있으므로 새 기능의 기본 추천 엔진으로 사용하지 않는다. 새 기능은 독립적으로 동작하며 아우라딘이 변경되거나 사용할 수 없어도 사용자 경험이 유지되어야 한다.
+
+비교가 필요할 때만 개발 및 QA 전용 `AuradinComparisonProvider`가 공개 API를 black-box로 호출할 수 있다. 이 provider는 feature flag 뒤에 두고 사용자용 결과를 결정하지 않는다. 비교 결과는 같은 입력에 대한 관련성, 룩 전체 조화, 구매 가능성, 지연 시간, 추가 질문 수를 평가하는 용도로만 사용한다. 아우라딘 내부 코드를 import하거나 수정하지 않는다.
 
 ### 6.3 백엔드 경계
 
@@ -277,7 +306,7 @@ type MakeupRecommendationStep = {
 
 메이크업 룩 추천은 별도 API, 서비스, 타입 및 저장소 계약을 사용한다. 구현 방식은 프로젝트의 일반적인 인증 및 DB 패턴을 따르되 아우라딘 파일을 수정하거나 내부 구현을 호출하지 않는다.
 
-MVP 제품 추천은 새 기능이 소유하는 검수된 fixture와 adapter에서 제공한다. 이 데이터는 룩별 핵심 제품과 대체 제품을 구조화해 보관하며 아우라딘 카탈로그를 읽거나 복제하지 않는다. 실제 상용 제품 데이터 소스 연결은 adapter 뒤에서 교체할 수 있게 하되 MVP 완료 조건에는 포함하지 않는다.
+MVP 제품 provider는 새 기능이 소유하는 검수된 fixture와 룩 전체의 색상, 질감, 상황, 예산을 함께 고려하는 결정적 매칭 규칙을 사용한다. 제품 데이터에는 브랜드, 제품명, 색상, 부위, 추천 근거, 이미지 및 구매 링크를 담을 수 있다. 실제 상용 상품 검색으로 교체할 때도 `ProductRecommendationProvider` 계약 뒤에서 변경한다.
 
 - 인증된 세션 소유권
 - PostgreSQL 또는 메모리 세션 저장
@@ -285,7 +314,7 @@ MVP 제품 추천은 새 기능이 소유하는 검수된 fixture와 adapter에�
 - 구조화된 질문과 답변
 - 질문 수 제한
 - 결과 생성 실패 시 결정적 fallback
-- 새 기능이 소유한 제품 데이터 adapter와 대체 제품 매핑
+- 독립 제품 provider와 대체 제품 매핑
 
 권장 API 계약은 다음과 같다.
 
@@ -320,8 +349,12 @@ POST /api/makeup/recommendation-sessions/{sessionId}/refine
 → 모바일이 선택 또는 자유 답변 제출
 → 마지막 답변에는 펼쳐진 추가 조건을 함께 제출
 → 서버가 anchor, bold, discovery 룩 생성
-→ 새 기능의 제품 adapter에서 핵심 및 대체 제품 연결
+→ 독립 제품 provider가 룩별 제품 세트를 연결
 → 모바일 결과 화면과 AR 진입 제공
+
+개발 및 QA 비교가 켜진 경우에만:
+→ 같은 조건을 AuradinComparisonProvider에 전달
+→ 자체 결과와 아우라딘 결과를 비교 지표로 기록
 ```
 
 ## 7. 상태 및 실패 처리
@@ -343,7 +376,7 @@ POST /api/makeup/recommendation-sessions/{sessionId}/refine
 - 세션 만료: 기존 프롬프트와 답변을 유지한 채 새 세션으로 다시 시작할 수 있게 한다.
 - 일부 룩 생성 실패: 성공한 결과를 먼저 보여주고 부족한 슬롯만 다시 시도한다.
 - 대표 이미지 실패: 이미지 placeholder와 텍스트 추천을 유지한다.
-- 제품 후보 없음: 룩 방법은 유지하고 제품 영역에 대체 검색 또는 미제공 상태를 표시한다.
+- 제품 provider 실패: 룩 방법은 유지하고 검수된 fallback 제품 세트를 표시한다.
 - refine 실패: 기존 결과를 유지하고 재시도 메시지만 표시한다.
 - 사용자가 이탈: 세션 취소는 best-effort로 처리하고 화면 이탈을 막지 않는다.
 
@@ -371,6 +404,7 @@ POST /api/makeup/recommendation-sessions/{sessionId}/refine
 - 세 가지 결과 역할 및 상세 매핑
 - loading, empty, error, retry, 만료 및 partial 상태
 - 저장 및 AR 네비게이션 계약
+- provider 교체와 QA 비교 flag가 사용자용 결과를 바꾸지 않는지 검증
 - 모바일 typecheck
 
 ### 9.2 백엔드
@@ -385,7 +419,8 @@ POST /api/makeup/recommendation-sessions/{sessionId}/refine
 - 조건 충돌 및 후보 부족 시 명시적 복구 응답
 - anchor, bold, discovery 결과의 역할 및 다양성
 - 부분 생성 및 enrichment 실패 fallback
-- 제품과 대체 제품 매핑
+- 독립 제품 provider와 대체 제품 매핑
+- 동일 입력에 대한 선택적 아우라딘 비교 provider 격리
 - 취소, 만료 및 refine 계약
 
 ### 9.3 제품 지표
@@ -411,7 +446,9 @@ MVP에 포함한다.
 - 최대 3회의 적응형 질문
 - 마지막 질문의 인라인 `+ 조건 추가`
 - 세 가지 완성 룩, 방법, 제품 결과
+- 독립 제품 provider와 검수된 MVP fixture
 - 저장, refine 및 기존 AR 흐름 진입
+- 개발 및 QA 전용 아우라딘 비교 provider 계약
 - 모바일 및 백엔드 핵심 계약 테스트
 
 MVP에서 제외한다.
@@ -422,7 +459,7 @@ MVP에서 제외한다.
 - 첫 화면 진입을 막는 실시간 AI 문구 생성
 - 사용자의 사적 관계나 경제적 배경 추정
 - 아우라딘 모바일 또는 백엔드 코드 수정
-- 아우라딘 내부 구현 import 또는 공개 API 의존
+- 아우라딘 내부 구현 import 또는 사용자용 런타임 의존
 
 ## 11. 완료 기준
 
@@ -430,6 +467,6 @@ MVP에서 제외한다.
 - 시나리오 세트는 상황극, 장난, 프리미엄 말투가 균형 있게 섞인다.
 - AI는 기존 사용자 정보와 현재 프롬프트를 이용해 필요한 질문만 최대 3회 한다.
 - 마지막 질문에서는 별도 턴 없이 조건을 추가할 수 있다.
-- 결과는 서로 구별되는 세 가지 룩과 부위별 방법 및 제품을 제공한다.
+- 결과는 서로 구별되는 세 가지 룩과 부위별 방법 및 조화로운 제품 세트를 독립적으로 제공한다.
 - 실패하거나 오프라인이어도 첫 화면과 데모 흐름을 사용할 수 있다.
-- 기존 아우라딘 제품 검색과 AR 흐름의 파일 및 동작을 변경하지 않는다.
+- 아우라딘은 개발 및 QA 비교에만 선택적으로 사용하며 기존 파일과 동작을 변경하지 않는다.
