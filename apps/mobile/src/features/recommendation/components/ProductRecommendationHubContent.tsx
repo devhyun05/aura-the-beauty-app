@@ -64,31 +64,31 @@ export function ProductRecommendationHubContent({
 
   const loadAr = useCallback(() => {
     const requestId = ++requestRefs.current.ar;
-    setAr({status: 'loading'});
+    setAr(current => current.data ? current : {status: 'loading'});
     getArRecommendations(selectedArStyleId)
       .then(data => {if (requestRefs.current.ar === requestId) setAr({status: 'ready', data});})
-      .catch(error => {if (requestRefs.current.ar === requestId) setAr({status: 'error', message: error instanceof Error ? error.message : 'AR 추천을 불러오지 못했어요.'});});
+      .catch(error => {if (requestRefs.current.ar === requestId) setAr(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : 'AR 추천을 불러오지 못했어요.'});});
   }, [selectedArStyleId]);
   const loadSeasonal = useCallback(() => {
     const requestId = ++requestRefs.current.seasonal;
-    setSeasonal({status: 'loading'});
+    setSeasonal(current => current.data ? current : {status: 'loading'});
     getSeasonalRecommendations(refreshKey)
       .then(data => {if (requestRefs.current.seasonal === requestId) setSeasonal({status: 'ready', data});})
-      .catch(error => {if (requestRefs.current.seasonal === requestId) setSeasonal({status: 'error', message: error instanceof Error ? error.message : '시즌 상품을 불러오지 못했어요.'});});
+      .catch(error => {if (requestRefs.current.seasonal === requestId) setSeasonal(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '시즌 상품을 불러오지 못했어요.'});});
   }, [refreshKey]);
   const loadPersonalized = useCallback(() => {
     const requestId = ++requestRefs.current.personalized;
-    setPersonalized({status: 'loading'});
+    setPersonalized(current => current.data ? current : {status: 'loading'});
     getPersonalizedRecommendations()
       .then(data => {if (requestRefs.current.personalized === requestId) setPersonalized({status: 'ready', data});})
-      .catch(error => {if (requestRefs.current.personalized === requestId) setPersonalized({status: 'error', message: error instanceof Error ? error.message : '개인화 추천을 불러오지 못했어요.'});});
+      .catch(error => {if (requestRefs.current.personalized === requestId) setPersonalized(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '개인화 추천을 불러오지 못했어요.'});});
   }, []);
   const loadCohort = useCallback(() => {
     const requestId = ++requestRefs.current.cohort;
-    setCohort({status: 'loading'});
+    setCohort(current => current.data ? current : {status: 'loading'});
     getCohortRecommendations()
       .then(data => {if (requestRefs.current.cohort === requestId) setCohort({status: 'ready', data});})
-      .catch(error => {if (requestRefs.current.cohort === requestId) setCohort({status: 'error', message: error instanceof Error ? error.message : '컬러 취향 추천을 불러오지 못했어요.'});});
+      .catch(error => {if (requestRefs.current.cohort === requestId) setCohort(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '컬러 취향 추천을 불러오지 못했어요.'});});
   }, []);
   const openLookPicker = useCallback(() => {
     const requestId = ++requestRefs.current.looks;

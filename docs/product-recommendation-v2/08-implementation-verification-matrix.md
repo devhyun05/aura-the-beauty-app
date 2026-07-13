@@ -66,6 +66,7 @@ AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL=<isolated-postgres-url> \
 - 개인화 `더보기`가 `/products/recommendations/personalized?limit=30`, 시즌 `더보기`가 `/products/recommendations/seasonal?limit=30`을 호출하는 독립 화면으로 열렸다.
 - 시즌 전체보기는 실제 외부 판매 결과 18개를 반환했고 6개 카테고리가 각 3개씩 포함됐다. 허브 limit 12 응답은 round-robin으로 각 카테고리 2개씩 포함했다.
 - 시즌 상품·이미지 URL은 전부 HTTPS 신뢰 경계를 통과했으며 위험 URL은 0개였다.
+- 허브 재진입 갱신은 이미 표시한 상품을 유지한 채 백그라운드에서 수행하고, 검색·상세 화면은 늦게 끝난 이전 요청이 최신 결과를 덮지 않도록 request generation을 검증한다.
 - 개발 PostgreSQL에 `schema.sql:product-category-brow-v1`을 적용했고 schema check가 통과했다.
 - 자동 회귀 결과: backend `623 passed, 2 skipped`, mobile typecheck·제품추천 계약·AURADIN theme scope 통과.
 - 남은 수동 QA: 수정 후 탭 높이 시각 확인, AURADIN drag/snap 촉감, AR camera 저장 왕복, 네트워크 단절/복구, Dynamic Type, VoiceOver, Reduce Motion.

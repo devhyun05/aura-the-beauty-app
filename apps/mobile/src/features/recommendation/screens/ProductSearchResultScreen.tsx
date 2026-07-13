@@ -26,14 +26,25 @@ export function ProductSearchResultScreen({
   const {showToast, toast} = useTransientToast(2600);
   const insets = useSafeAreaInsets();
   const impressed = useRef(new Set<string>());
+  const requestIdRef = useRef(0);
   const impressionRef = useRef<(product: CatalogProduct, position: number) => void>(() => undefined);
   const viewabilityConfig = useRef({itemVisiblePercentThreshold: 60, minimumViewTime: 700}).current;
-  const load = () => {
+  const load = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     setState({status: 'loading'});
-    searchTrustedProducts(query).then(data => setState({status: 'ready', data})).catch(error => setState({status: 'error', message: error instanceof Error ? error.message : '검색하지 못했어요.'}));
-  };
+    searchTrustedProducts(query)
+      .then(data => {
+        if (requestIdRef.current === requestId) setState({status: 'ready', data});
+      })
+      .catch(error => {
+        if (requestIdRef.current === requestId) setState({status: 'error', message: error instanceof Error ? error.message : '검색하지 못했어요.'});
+      });
+  }, [query]);
   useEffect(() => {void initializeProductEventCollection();}, []);
-  useEffect(load, [query]);
+  useEffect(() => {
+    load();
+    return () => {requestIdRef.current += 1;};
+  }, [load]);
   useFocusEffect(useCallback(() => {
     let active = true;
     getLikedProducts().then(products => {

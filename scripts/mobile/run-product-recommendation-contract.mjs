@@ -241,6 +241,14 @@ requireContract(
   'each shelf more action must open a dedicated two-column category page while preserving recommendation reasons.',
 );
 requireContract(
+  hubContent.includes("setSeasonal(current => current.data ? current : {status: 'loading'})") &&
+    hubContent.includes("setPersonalized(current => current.data ? current : {status: 'loading'})") &&
+    searchScreen.includes('const requestIdRef = useRef(0)') &&
+    searchScreen.includes('if (requestIdRef.current === requestId)') &&
+    detailScreen.includes('if (requestIdRef.current !== requestId) return;'),
+  'background shelf refreshes must preserve visible content and search/detail screens must reject stale responses.',
+);
+requireContract(
   productShelfCategories.includes("{id: 'base', label: '베이스'}") &&
     productShelfCategories.includes("{id: 'shadow', label: '아이섀도우'}") &&
     productShelfCategories.includes("{id: 'brow', label: '아이브로우'}") &&

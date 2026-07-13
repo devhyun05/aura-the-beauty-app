@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {Image, Linking, Pressable, StyleSheet, View} from 'react-native';
 import {ExternalLink, Heart} from 'lucide-react-native';
 import {Text} from 'tamagui';
@@ -27,19 +27,34 @@ export function ProductDetailScreen({
   const [loading, setLoading] = useState(!initialProduct);
   const [error, setError] = useState<string | null>(null);
   const [openingOffer, setOpeningOffer] = useState(false);
+  const requestIdRef = useRef(0);
   const {showToast, toast} = useTransientToast(2600);
-  const load = () => {
+  const load = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     setLoading(true); setError(null);
-    getTrustedProductDetail(productId, shadeId).then(next => setProduct(current => ({
-      ...next,
-      disclosureLabel: recommendationContext?.disclosureLabel ?? current?.disclosureLabel ?? next.disclosureLabel,
-      reasonCodes: current?.reasonCodes ?? next.reasonCodes,
-      reasonLabels: recommendationContext?.reasonLabels ?? current?.reasonLabels ?? next.reasonLabels,
-      sponsored: recommendationContext?.sponsored ?? current?.sponsored ?? next.sponsored,
-      sponsorshipType: recommendationContext?.sponsorshipType ?? current?.sponsorshipType ?? next.sponsorshipType,
-    }))).catch(value => setError(value instanceof Error ? value.message : '제품 상세를 불러오지 못했어요.')).finally(() => setLoading(false));
-  };
-  useEffect(load, [productId, recommendationContext, shadeId]);
+    getTrustedProductDetail(productId, shadeId)
+      .then(next => {
+        if (requestIdRef.current !== requestId) return;
+        setProduct(current => ({
+          ...next,
+          disclosureLabel: recommendationContext?.disclosureLabel ?? current?.disclosureLabel ?? next.disclosureLabel,
+          reasonCodes: current?.reasonCodes ?? next.reasonCodes,
+          reasonLabels: recommendationContext?.reasonLabels ?? current?.reasonLabels ?? next.reasonLabels,
+          sponsored: recommendationContext?.sponsored ?? current?.sponsored ?? next.sponsored,
+          sponsorshipType: recommendationContext?.sponsorshipType ?? current?.sponsorshipType ?? next.sponsorshipType,
+        }));
+      })
+      .catch(value => {
+        if (requestIdRef.current === requestId) setError(value instanceof Error ? value.message : '제품 상세를 불러오지 못했어요.');
+      })
+      .finally(() => {
+        if (requestIdRef.current === requestId) setLoading(false);
+      });
+  }, [productId, recommendationContext, shadeId]);
+  useEffect(() => {
+    load();
+    return () => {requestIdRef.current += 1;};
+  }, [load]);
   if (loading && !product) return <AppScreen topPadding="none"><RecommendationSectionState kind="loading" message="제품 정보를 확인하고 있어요." /></AppScreen>;
   if (error && !product) return <AppScreen topPadding="none"><RecommendationSectionState kind="error" message={error} actionLabel="다시 시도" onAction={load} /></AppScreen>;
   if (!product) return <AppScreen topPadding="none"><RecommendationSectionState kind="empty" message="표시할 수 있는 제품이 없어요." /></AppScreen>;
