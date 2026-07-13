@@ -3,15 +3,23 @@ import {StyleSheet, Text, View} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {
-  FACE_3D_METRIC_KEYS,
+  FACE_3D_EXPOSED_METRIC_KEYS,
   type Face3DMetricKey,
   type Face3DProfile,
 } from '../types';
 
+// 노출 화이트리스트에 편입될 수 있는 모든 키의 라벨 — Tier-2 키는 repeatability
+// (3명×3 neutral) 지표별 pass 후 FACE_3D_EXPOSED_METRIC_KEYS 에 추가될 때 노출된다.
 const METRIC_LABELS: Record<Face3DMetricKey, string> = {
+  alarWidth: '콧볼 폭',
   centralProjectionScore: '중앙부 입체감',
   chinProjection: '턱 전방점 돌출',
   lowerLipToELine: '아랫입술 · E-line',
+  malarProjectionLeft: '광대 돌출 · 왼쪽',
+  malarProjectionRight: '광대 돌출 · 오른쪽',
+  nasalAxisDeviation: '코축 치우침',
+  nasalBridgeStraightness: '콧대 직선도',
+  noseLength: '코 길이',
   noseTipProjection: '코끝 돌출',
   upperLipToELine: '윗입술 · E-line',
 };
@@ -29,8 +37,14 @@ export function Face3DMetricGrid({profile}: {profile: Face3DProfile}) {
       </View>
 
       <View style={styles.grid}>
-        {FACE_3D_METRIC_KEYS.map(key => {
+        {FACE_3D_EXPOSED_METRIC_KEYS.map(key => {
           const metric = profile.metrics[key];
+
+          // 노출 리스트의 Tier-2 키가 구버전 프레임워크 프로필에는 없을 수 있다
+          // (optional 계약) — 그 키만 조용히 건너뛴다.
+          if (!metric) {
+            return null;
+          }
 
           return (
             <View key={key} style={styles.metricCard}>

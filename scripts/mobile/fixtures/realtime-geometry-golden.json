@@ -172,5 +172,61 @@
       "rightEyeScreen": [260, 240],
       "expectTilt": 0
     }
+  ],
+  "pitchCases": [
+    {
+      "$case": "정면 기준점 — 코가 눈-입 span 의 48% 지점이면 pitch 0",
+      "name": "pitch-frontal-zero",
+      "eyeCenterY": 0.4,
+      "noseY": 0.496,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "코가 기준보다 아래(ratio 0.6) → 양의 pitch (0.6-0.48)*28",
+      "name": "pitch-nose-low",
+      "eyeCenterY": 0.4,
+      "noseY": 0.52,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": 3.36
+    },
+    {
+      "$case": "코가 기준보다 위(ratio 0.25) → 음의 pitch (0.25-0.48)*28",
+      "name": "pitch-nose-high",
+      "eyeCenterY": 0.4,
+      "noseY": 0.45,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": -6.44
+    },
+    {
+      "$case": "rot180 과도기: 입이 눈보다 위(span<0) → 계측 불가. 종전 fmax 바닥은 ratio=-100, pitch=-2813.44° 를 냈다(실기기 -1729° 버그의 회귀 고정)",
+      "name": "pitch-inverted-span-unmeasured",
+      "eyeCenterY": 0.6,
+      "noseY": 0.5,
+      "mouthCenterY": 0.4,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "퇴화 span(0.0005 ≤ 0.001 바닥) → 계측 불가",
+      "name": "pitch-degenerate-span-unmeasured",
+      "eyeCenterY": 0.5,
+      "noseY": 0.4,
+      "mouthCenterY": 0.5005,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "span 은 유효(0.002)하나 근사 폭주(≈1386.56° > 90°) → 계측 불가",
+      "name": "pitch-runaway-capped-unmeasured",
+      "eyeCenterY": 0.5,
+      "noseY": 0.6,
+      "mouthCenterY": 0.502,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    }
   ]
 }

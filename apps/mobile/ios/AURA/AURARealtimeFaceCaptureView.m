@@ -824,10 +824,14 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
         (AURARealtimeNumberFromPoint(mouthLeft, @"y") +
          AURARealtimeNumberFromPoint(mouthRight, @"y")) /
         2.0;
-    CGFloat verticalSpan = fmax(mouthCenterY - eyeCenterY, 0.001);
-    CGFloat noseRatio = (noseY - eyeCenterY) / verticalSpan;
-    pitchDeg = (noseRatio - 0.48) * 28.0;
-    pitchMeasured = YES;
+    // 수식·퇴화 가드는 헤더 순수함수가 소유한다(golden+TS mirror 로 회귀 고정) —
+    // 회전 과도기의 span 붕괴가 ±수천도 pitch 로 발산해 게이트를 오차단하던
+    // 실기기 버그(-1729°)의 재발 방지. measured=NO 프레임은 fail-closed 게이트가
+    // 그 프레임만 막고, 회전 잠금이 정착하면 정상 계측으로 복귀한다.
+    const AURARealtimePitchEstimate pitchEstimate =
+        AURARealtimePitchFromVerticalGeometry(eyeCenterY, noseY, mouthCenterY);
+    pitchDeg = pitchEstimate.pitchDeg;
+    pitchMeasured = pitchEstimate.measured;
   }
 
   return @{
@@ -872,6 +876,13 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // YES once the current capture has already been retried without semantic
   // mattes (the stall fallback); a second stall then rejects instead of looping.
   BOOL _pendingCaptureIsFallback;
+  // 현재 유효한 촬영 요청의 AVCapturePhotoSettings.uniqueID. watchdog fallback 이
+  // 발행되면 원 요청과 fallback 이 같은 delegate 로 동시 비행한다 — delegate 는
+  // photo.resolvedSettings.uniqueID 가 이 값과 일치할 때만 공용 resolver 를
+  // 소비한다. 없으면 지연 도착한 stale 콜백이 (a) fallback 의 promise 를 가로채
+  // 실패 처리하거나 (b) 다음 촬영의 promise 를 이전 사진으로 완료하거나
+  // (c) format/matte 메타데이터를 오표기할 수 있다(코덱스 2026-07-13 HIGH).
+  int64_t _pendingCaptureUniqueID;
   BOOL _hasCameraStabilityObservers;
   BOOL _semanticMatteCapture;
   BOOL _semanticMatteRequiresHeic;
@@ -890,6 +901,16 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   AURARealtimeFrameRotation _diagDetectedRotation;
   double _diagEyeAxisRatio;
   BOOL _diagHasEyeAxis;
+  // Vision 검출 orientation 자가보정 (vision 큐 전용 접근). 기본 힌트(front=Left)
+  // 로 얼굴을 못 찾는 동안 프레임마다 후보 회전(Up/Right/Down/Left)을 순환 시도하고,
+  // 처음 성공한 힌트를 세션에 고정한다. MediaPipe pod 제거 빌드에서 Vision 폴백이
+  // 실기기 최초 가동될 때 기본 힌트가 어긋나면 no_face 만 반복돼 greenlight 가
+  // 영구 차단되는 문제(2026-07-13 실기기)의 방어선 — 회전 자가판정
+  // (resolveFrameRotationForFace)은 얼굴이 "검출된 뒤"에만 동작하므로 검출 힌트는
+  // 별도로 자가보정해야 한다.
+  BOOL _hasResolvedDetectionOrientation;
+  CGImagePropertyOrientation _resolvedDetectionOrientation;
+  NSUInteger _detectionOrientationAttempt;
   NSDictionary *_matteCapability;
   NSDictionary *_pendingCaptureCameraMetadata;
   NSDictionary *_pendingSemanticMattes;
@@ -958,12 +979,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   _facing = nextFacing;
   _isSessionConfigured = NO;
-  // 카메라 전환 시 프레임 회전 잠금을 무효화한다 — front/back 은 orientation 힌트
-  // (Left/Right)·미러가 달라 이전 카메라에서 잠긴 회전이 유효하지 않다(코덱스 #245-3).
-  // 세션이 재구성되며 프레임 전달이 잠시 멈추므로 여기서 직접 리셋해도 안전하다.
-  _hasLockedFrameRotation = NO;
-  _pendingFrameRotation = AURARealtimeFrameRotationUnknown;
-  _rotationDisagreeStreak = 0;
+  // 카메라 전환 시 프레임 회전 잠금·검출 orientation 자가보정을 무효화한다 —
+  // front/back 은 orientation 힌트(Left/Right)·미러가 달라 이전 카메라의 잠금이
+  // 유효하지 않다(코덱스 #245-3). 이 ivar 들은 vision 큐 전용 접근 계약인데,
+  // setFacing: 은 메인 스레드(RCT prop setter)에서 불린다 — 세션 재구성은 이
+  // 리셋 "이후" 비동기로 실행되므로 그 사이 vision 큐가 구 카메라 프레임을
+  // 처리하며 동시 접근(data race)이 가능했다(Gemini 리뷰). serial vision 큐에
+  // 디스패치하면 in-flight 구 프레임(구 상태 사용이 정당) 뒤·신 카메라 첫
+  // 프레임(리셋 후 enqueue) 앞에 정확히 실행된다.
+  dispatch_async(_visionQueue, ^{
+    self->_hasLockedFrameRotation = NO;
+    self->_pendingFrameRotation = AURARealtimeFrameRotationUnknown;
+    self->_rotationDisagreeStreak = 0;
+    self->_hasResolvedDetectionOrientation = NO;
+    self->_detectionOrientationAttempt = 0;
+  });
 
   if (self.window != nil) {
     [self startCameraIfPermitted];
@@ -1041,13 +1071,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     if (!self->_session.isRunning) {
       [self->_session startRunning];
     }
-    self->_isSessionRunning = YES;
+    // startRunning 은 동기 호출이며 실패할 수 있다(자원 경합 등) — 실제 상태를
+    // 반영해야 capture() 진입 가드가 죽은 세션에 촬영을 걸지 않는다.
+    self->_isSessionRunning = self->_session.isRunning;
+    if (!self->_isSessionRunning) {
+      [self emitCameraError:@"camera_unavailable"];
+    }
   });
 }
 
 - (void)stopSession
 {
   dispatch_async(_sessionQueue, ^{
+    [self rejectPendingCaptureForStop];
     if (self->_session.isRunning) {
       [self->_session stopRunning];
     }
@@ -1058,6 +1094,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (void)stopSessionWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject
 {
   dispatch_async(_sessionQueue, ^{
+    [self rejectPendingCaptureForStop];
     if (self->_session.isRunning) {
       [self->_session stopRunning];
     }
@@ -1067,6 +1104,36 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       resolve(@{ @"stopped": @YES });
     });
   });
+}
+
+// Runs on _sessionQueue. 세션 stop 시 진행 중 촬영을 즉시 reject 하고 상태를
+// 정리한다. 종전에는 pending 상태가 그대로 남아 (a) 같은 view 인스턴스로
+// 재진입한 촬영이 워치독 만료(최대 7+4초)까지 REALTIME_CAMERA_BUSY 로 거부되고
+// (b) 워치독이 멈춘 카메라에 fallback 촬영을 발행했다(코덱스 2026-07-13).
+// generation 증가가 예약된 워치독을 무효화하고, 지연 도착 콜백은 delegate 의
+// uniqueID/hasPending 가드가 차단한다.
+- (void)rejectPendingCaptureForStop
+{
+  if (!_hasPendingCapture) {
+    return;
+  }
+
+  RCTPromiseRejectBlock reject = _captureReject;
+  _captureResolve = nil;
+  _captureReject = nil;
+  _pendingCaptureCameraMetadata = nil;
+  _pendingSemanticMattes = nil;
+  _pendingCaptureFormat = nil;
+  _pendingCaptureIsFallback = NO;
+  _hasPendingCapture = NO;
+  ++_captureGeneration;
+  [self restoreCameraAutoModes];
+  NSLog(@"[aura:face-capture] capture:cancelled-by-stop rejecting pending capture");
+  if (reject) {
+    reject(@"REALTIME_CAPTURE_CANCELLED",
+           @"Realtime face capture was cancelled because the camera session stopped.",
+           nil);
+  }
 }
 
 - (NSDictionary *)semanticMatteCapabilityForRung:(NSInteger)rung
@@ -1187,11 +1254,20 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     return NO;
   }
 
-  if ([_session canAddInput:input]) {
-    [_session addInput:input];
-    _videoInput = input;
-    [self startCameraStabilityMonitoringForDevice:device];
+  // input/output 추가 실패는 즉시 구성 실패로 처리한다. 종전에는 조용히
+  // 건너뛰어 "구성 성공·프레임 없음" 상태가 됐다 — input 이 없으면 검출이
+  // 영원히 no_face, photo output 이 없으면 촬영 불가인데 JS 는 카메라가
+  // 정상이라고 믿는다(코덱스 2026-07-13). canAdd* 실패는 다른 세션의 자원
+  // 점유 등 회복 가능성이 있는 상태라, 오류를 방출해 사용자가 재시도(화면
+  // 재진입)할 근거를 준다.
+  if (![_session canAddInput:input]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"input_unavailable"];
+    return NO;
   }
+  [_session addInput:input];
+  _videoInput = input;
+  [self startCameraStabilityMonitoringForDevice:device];
 
   AVCaptureVideoDataOutput *videoOutput = [AVCaptureVideoDataOutput new];
   videoOutput.alwaysDiscardsLateVideoFrames = YES;
@@ -1200,16 +1276,22 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   };
   [videoOutput setSampleBufferDelegate:self queue:_visionQueue];
 
-  if ([_session canAddOutput:videoOutput]) {
-    [_session addOutput:videoOutput];
-    _videoOutput = videoOutput;
+  if (![_session canAddOutput:videoOutput]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"camera_unavailable"];
+    return NO;
   }
+  [_session addOutput:videoOutput];
+  _videoOutput = videoOutput;
 
   AVCapturePhotoOutput *photoOutput = [AVCapturePhotoOutput new];
-  if ([_session canAddOutput:photoOutput]) {
-    [_session addOutput:photoOutput];
-    _photoOutput = photoOutput;
+  if (![_session canAddOutput:photoOutput]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"camera_unavailable"];
+    return NO;
   }
+  [_session addOutput:photoOutput];
+  _photoOutput = photoOutput;
 
   if (_semanticMatteCapture) {
     _matteCapability = [self configureSemanticMatteDeliveryForDevice:device];
@@ -1752,7 +1834,22 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       CVPixelBufferGetHeight(imageBuffer));
   NSDictionary *mediaPipePayload = [self mediaPipePayloadForSampleBuffer:sampleBuffer];
   NSDictionary *cameraStabilityPayload = [self cameraStabilityPayload];
-  CGImagePropertyOrientation orientation = AURARealtimeVideoOrientation([self devicePosition]);
+  // 검출 힌트: 고정된 자가보정 값 > 기본 힌트 > (미검출 지속 시) 후보 순환.
+  static const CGImagePropertyOrientation kAURADetectionOrientationCandidates[] = {
+      kCGImagePropertyOrientationUp,
+      kCGImagePropertyOrientationRight,
+      kCGImagePropertyOrientationDown,
+      kCGImagePropertyOrientationLeft,
+  };
+  CGImagePropertyOrientation orientation;
+  if (_hasResolvedDetectionOrientation) {
+    orientation = _resolvedDetectionOrientation;
+  } else if (_detectionOrientationAttempt == 0) {
+    orientation = AURARealtimeVideoOrientation([self devicePosition]);
+  } else {
+    orientation =
+        kAURADetectionOrientationCandidates[(_detectionOrientationAttempt - 1) % 4];
+  }
   VNDetectFaceLandmarksRequest *request = [[VNDetectFaceLandmarksRequest alloc] init];
   VNImageRequestHandler *handler =
       [[VNImageRequestHandler alloc] initWithCMSampleBuffer:sampleBuffer
@@ -1777,6 +1874,18 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   NSArray<VNFaceObservation *> *faces = request.results ?: @[];
   VNFaceObservation *primaryFace = AURARealtimeLargestFace(faces);
+
+  // 검출 성공 시 이번 힌트를 세션에 고정, 실패가 이어지면 다음 프레임은 다음
+  // 후보로 시도한다(프레임당 1회 검출이라 추가 비용 없음, ≤4프레임 내 수렴).
+  if (primaryFace) {
+    if (!_hasResolvedDetectionOrientation) {
+      _hasResolvedDetectionOrientation = YES;
+      _resolvedDetectionOrientation = orientation;
+    }
+  } else if (!_hasResolvedDetectionOrientation) {
+    _detectionOrientationAttempt += 1;
+  }
+
   // 좌표 프레임 자가판정 (raw 눈선 축 + 프로브 방향, hysteresis 포함).
   const AURARealtimeFrameRotation frameRotation =
       [self resolveFrameRotationForFace:primaryFace imageSize:imageSize];
@@ -1787,6 +1896,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   payload[@"frameRotation"] = AURARealtimeFrameRotationName(frameRotation);
   payload[@"frameRotationDetected"] = AURARealtimeFrameRotationName(_diagDetectedRotation);
   payload[@"frameRotationLocked"] = @(_hasLockedFrameRotation);
+  // 검출 orientation 자가보정 진단 — 어떤 힌트로 검출됐는지 원격 판독용.
+  payload[@"detectionOrientation"] = @(orientation);
+  payload[@"detectionOrientationResolved"] = @(_hasResolvedDetectionOrientation);
   if (_diagHasEyeAxis) {
     payload[@"eyeAxisRatio"] = @(_diagEyeAxisRatio);
     payload[@"eyeAxis"] = _diagEyeAxisRatio >= 1.0 ? @"horizontal" : @"vertical";
@@ -1876,14 +1988,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // 크거나(고개 기울임) 없으면 Unknown 으로 강등해 잠긴 값을 유지한다.
   // (한계: 방향 힌트가 실제와 어긋난 극단 케이스는 여전히 애매 — 사후 pose
   //  게이트가 최종 방어선이라 잘못된 분석 결과로는 이어지지 않는다.)
-  if (detected != AURARealtimeFrameRotationUpright &&
-      detected != AURARealtimeFrameRotationUnknown) {
+  if (detected == AURARealtimeFrameRotation90CW ||
+      detected == AURARealtimeFrameRotation90CCW) {
     // F8 은 head roll 하나만 필요하다. Vision 의 roll/yaw/pitch 는 서로 독립
     // optional 이라 전체 pose payload(AURARealtimePoseFromVisionObservation)를
     // 요구하면 yaw·pitch 가 없을 때 genuine landscape 까지 Unknown 으로 강등된다
     // (코덱스 #245-2). roll(VNFaceObservation.roll, 라디안)만 직접 읽는다. |roll|
     // 은 front/back 미러에 불변이므로 isFront 보정이 불필요하다. roll 이 없으면
     // 판별 불가로 보고 강등(fail-safe).
+    //
+    // rot180 은 이 게이트에서 제외한다: 90° 회전은 "세로 눈선"이 프레임 회전인지
+    // 고개 기울임인지 roll 없이는 구분 불가하지만, rot180 은 눈선이 수평 그대로에
+    // probe(코/입)의 상하 순서만 뒤집힌 상태라 사람 고개(roll ±180° 불가)와 혼동될
+    // 여지가 없다. 종전에는 rot180 도 roll 부재 시 Unknown 으로 강등돼, Vision 이
+    // roll 을 안 주는 기기에서 잘못된 upright 잠금이 영구 유지됐다(실기기: 검출
+    // orientation 자가보정 후 rot180 실측이 계속 억제 → pitch 발산·좌표 뒤틀림).
     NSNumber *rollNumber = face.roll;
     double headRollAbs = rollNumber != nil
         ? fabs(AURARealtimeDegrees(rollNumber.doubleValue))
@@ -2151,6 +2270,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
         ? [AVCapturePhotoSettings photoSettingsWithFormat:@{AVVideoCodecKey: AVVideoCodecTypeHEVC}]
         : [AVCapturePhotoSettings photoSettings];
     settings.flashMode = AVCaptureFlashModeOff;
+    self->_pendingCaptureUniqueID = settings.uniqueID;
     self->_pendingCaptureFormat = useHeic ? @"heic" : @"jpg";
     self->_pendingSemanticMattes =
         AURARealtimeSemanticMatteAvailability(requestsSemanticMattes, NO, NO);
@@ -2207,6 +2327,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
     AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
     settings.flashMode = AVCaptureFlashModeOff;
+    // fallback 이 유효 요청이 된다 — 이후 원(matte) 요청의 지연 콜백은 uniqueID
+    // 불일치로 무시된다.
+    _pendingCaptureUniqueID = settings.uniqueID;
     [_photoOutput capturePhotoWithSettings:settings delegate:self];
 
     dispatch_after(
@@ -2243,6 +2366,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
                        error:(NSError *)error
 {
   dispatch_async(_sessionQueue, ^{
+    // stale 콜백 가드: watchdog fallback 발행 후 뒤늦게 도착한 원 요청의 콜백,
+    // 또는 이미 정리(타임아웃/stop)된 요청의 콜백은 현재 유효 요청의 상태를
+    // 건드리면 안 된다 — promise 가로채기·format 오표기의 원인. 촬영 요청과
+    // 콜백은 photo.resolvedSettings.uniqueID 로 1:1 대응된다.
+    if (!self->_hasPendingCapture ||
+        photo.resolvedSettings.uniqueID != self->_pendingCaptureUniqueID) {
+      NSLog(@"[aura:face-capture] capture:stale-callback ignored uniqueID=%lld pending=%lld hasPending=%d",
+            (long long)photo.resolvedSettings.uniqueID,
+            (long long)self->_pendingCaptureUniqueID,
+            self->_hasPendingCapture);
+      return;
+    }
+
     RCTPromiseResolveBlock resolve = self->_captureResolve;
     RCTPromiseRejectBlock reject = self->_captureReject;
     NSDictionary *cameraMetadata = self->_pendingCaptureCameraMetadata;

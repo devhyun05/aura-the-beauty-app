@@ -1,5 +1,9 @@
 // 오케스트레이터: 캡처 → 네이티브 색통계 → 엔진(5축·12톤) → 아티팩트 → JSONL → 결과.
-// 프라이버시 불변식(localOnly)을 assert하고, personal_color는 어떤 업로드 경로도 호출하지 않는다.
+// 이 서비스 자체는 업로드를 호출하지 않는다. 단, 측정 데이터 3-반영 규칙(2026-07-13)에
+// 따라 호출측(보고서 생성)이 reported 요약·원본을 requestPayload 에 실어 서버
+// detail_payload 에 저장한다 — privacy 필드는 "이 결과 객체(원시 프레임 포함 계보)의
+// 온디바이스 계약"을 뜻하며, 보고서 첨부 전송과 모순되지 않도록 wire 계약
+// (faceAnalysisMeasurements)에서는 privacy 필드를 제거하고 보낸다.
 
 import { analyzePersonalColorPhoto } from './personalColorAnalyzerNative';
 import type { PersonalColorLandmarkInput } from './personalColorAnalyzerNative';
@@ -36,7 +40,10 @@ export type PersonalColorAnalysisOutcome = {
   };
 };
 
-// 온디바이스 전용 invariant. 위반 시 즉시 throw(개발 중 오배선 차단).
+// 엔진 산출물의 privacy 계약 확인. 위반 시 즉시 throw(개발 중 오배선 차단).
+// 의미: 이 "결과 객체" 자체를 임의 경로로 통째 업로드하지 않는다는 기기 계약 —
+// 보고서 생성 시 privacy 필드를 뗀 측정 사본이 서버에 저장되는 것(3-반영 규칙)은
+// 이 계약의 예외가 아니라 별도의 명시적 wire 계약(faceAnalysisMeasurements)이다.
 function assertLocalOnly(result: AuraPersonalColorResult): void {
   if (result.privacy.localOnly !== true || result.privacy.offDeviceUpload !== false) {
     throw new Error('personal-color privacy invariant violated: must be local-only, no upload');
@@ -49,12 +56,16 @@ export async function analyzePersonalColorCapture(
   const logger = createPersonalColorLogger(input.sessionId, input.createdAt);
   logger.log('capture:received', { captureId: input.captureId, imageUri: input.imageUri });
 
-  let sourceUri: string | null = null;
-  try {
-    sourceUri = await saveSourceImage(input.sessionId, input.imageUri);
-  } catch (error) {
+  // 소스 사진 복사는 결과 산출과 무관한 진단용 IO — 크리티컬 패스(보고서 POST 의
+  // 8초 게이트가 이 outcome 을 기다림)에서 떼어 분석과 병렬로 돌리고, 결과 조립
+  // 직전에만 합류한다(Codex D2 반영: 비필수 artifact 쓰기로 인한 지연 제거).
+  const sourceUriPromise: Promise<string | null> = saveSourceImage(
+    input.sessionId,
+    input.imageUri,
+  ).catch(error => {
     logger.log('artifact:source_failed', { message: String(error) });
-  }
+    return null;
+  });
 
   // homuler(Unity IMAGE 모드)에서 얼굴 랜드마크를 받아온다. 미탑재/타임아웃/에러는
   // undefined 로 격리 → 네이티브가 unsupported 로 처리(로컬 전용, 업로드 없음).
@@ -215,6 +226,8 @@ export async function analyzePersonalColorCapture(
       ]),
     ),
   });
+
+  const sourceUri = await sourceUriPromise;
 
   return {
     result,

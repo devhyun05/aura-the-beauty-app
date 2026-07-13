@@ -143,9 +143,11 @@ type NativeRealtimeFaceCaptureProps = ViewProps & {
   onLandmarksDetected?: (
     event: NativeSyntheticEvent<RealtimeFaceCaptureLandmarkPayload>,
   ) => void;
-  // 기본 false. true(face-capture-lab 전용)일 때만 네이티브가 TrueDepth/semantic matte
-  // delivery를 구성한다 — main 앱 세션 설정은 불변. 네이티브 RCT_EXPORT_VIEW_PROPERTY와
-  // 함께 사용해야 하며, 네이티브 구현 전에 이 prop을 전달하면 안 된다.
+  // 기본 false. true 면 네이티브가 TrueDepth/semantic matte delivery 를 구성한다.
+  // lab 전용이 아니다 — CameraFaceCaptureScreen 이 face_analysis/personal_color/
+  // hair_analysis 촬영(greenlight 요구 시)에서 켠다(코덱스 #245-6 으로 주 흐름
+  // 편입, 2026-07-13 주석 정정). matte 촬영은 stall 시 watchdog fallback 경로
+  // (AURARealtimeFaceCaptureView.m)를 타므로 주 흐름 품질에 직접 영향한다.
   semanticMatteCapture?: boolean;
 };
 

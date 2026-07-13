@@ -28,6 +28,16 @@ namespace Aura.Face3D
         public int[] chinReferenceRightIndices;
         public int[] chinReferenceUpperIndices;
         public int[] centralRegionIndices;
+
+        // Tier-2 optional groups (docs/face3d/TIER2_METRIC_CONTRACT.md §1).
+        // JsonUtility 는 JSON 에 없는 배열 필드를 null 로 둔다 — null = 부재(g1, 허용),
+        // 존재하면 기존 그룹과 동일한 검증(비어있지 않음·범위·disjoint)을 통과해야 한다.
+        public int[] nasionIndices;
+        public int[] noseBridgeMidlineIndices;
+        public int[] alarLeftIndices;
+        public int[] alarRightIndices;
+        public int[] malarApexLeftIndices;
+        public int[] malarApexRightIndices;
     }
 
     public sealed class Face3DSemanticMap
@@ -35,6 +45,8 @@ namespace Aura.Face3D
         private const int LandmarkMinimumCount = 3;
         private const int ReferenceMinimumCount = 8;
         private const int CentralRegionMinimumCount = 16;
+        // 콧대 중앙선은 선적합 잔차의 자유도를 위해 landmark 급보다 많이 요구한다.
+        private const int MidlineMinimumCount = 4;
 
         private readonly int[] noseTipIndices;
         private readonly int[] chinIndices;
@@ -48,6 +60,13 @@ namespace Aura.Face3D
         private readonly int[] chinReferenceRightIndices;
         private readonly int[] chinReferenceUpperIndices;
         private readonly int[] centralRegionIndices;
+        // Tier-2 optional — null = 그룹 부재(g1 맵).
+        private readonly int[] nasionIndices;
+        private readonly int[] noseBridgeMidlineIndices;
+        private readonly int[] alarLeftIndices;
+        private readonly int[] alarRightIndices;
+        private readonly int[] malarApexLeftIndices;
+        private readonly int[] malarApexRightIndices;
 
         private Face3DSemanticMap(
             string mapId,
@@ -71,6 +90,12 @@ namespace Aura.Face3D
             chinReferenceRightIndices = Clone(data.chinReferenceRightIndices);
             chinReferenceUpperIndices = Clone(data.chinReferenceUpperIndices);
             centralRegionIndices = Clone(data.centralRegionIndices);
+            nasionIndices = CloneOptional(data.nasionIndices);
+            noseBridgeMidlineIndices = CloneOptional(data.noseBridgeMidlineIndices);
+            alarLeftIndices = CloneOptional(data.alarLeftIndices);
+            alarRightIndices = CloneOptional(data.alarRightIndices);
+            malarApexLeftIndices = CloneOptional(data.malarApexLeftIndices);
+            malarApexRightIndices = CloneOptional(data.malarApexRightIndices);
         }
 
         public string SchemaVersion { get; private set; }
@@ -137,6 +162,37 @@ namespace Aura.Face3D
         public IReadOnlyList<int> CentralRegionIndices
         {
             get { return centralRegionIndices; }
+        }
+
+        // Tier-2 게터 — 그룹 부재 시 null (호출측은 null 이면 해당 지표를 계산하지 않는다).
+        public IReadOnlyList<int> NasionIndices
+        {
+            get { return nasionIndices; }
+        }
+
+        public IReadOnlyList<int> NoseBridgeMidlineIndices
+        {
+            get { return noseBridgeMidlineIndices; }
+        }
+
+        public IReadOnlyList<int> AlarLeftIndices
+        {
+            get { return alarLeftIndices; }
+        }
+
+        public IReadOnlyList<int> AlarRightIndices
+        {
+            get { return alarRightIndices; }
+        }
+
+        public IReadOnlyList<int> MalarApexLeftIndices
+        {
+            get { return malarApexLeftIndices; }
+        }
+
+        public IReadOnlyList<int> MalarApexRightIndices
+        {
+            get { return malarApexRightIndices; }
         }
 
         public static bool TryParseJson(
@@ -264,6 +320,19 @@ namespace Aura.Face3D
                 return false;
             }
 
+            // Tier-2 optional 그룹: 부재(null)는 허용(g1 호환), 존재하면 기존 규칙으로 검증.
+            if (!TryValidateOptionalIndexGroup(data.nasionIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.noseBridgeMidlineIndices, topology.VertexCount, MidlineMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.alarLeftIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.alarRightIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.malarApexLeftIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.malarApexRightIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateTier2Disjointness(data))
+            {
+                reason = "semantic_map_tier2_indices_invalid";
+                return false;
+            }
+
             semanticMap = new Face3DSemanticMap(data.mapId.Trim(), topology, data);
             reason = string.Empty;
             return true;
@@ -309,7 +378,13 @@ namespace Aura.Face3D
                 chinReferenceLeftIndices = Clone(chinReferenceLeftIndices),
                 chinReferenceRightIndices = Clone(chinReferenceRightIndices),
                 chinReferenceUpperIndices = Clone(chinReferenceUpperIndices),
-                centralRegionIndices = Clone(centralRegionIndices)
+                centralRegionIndices = Clone(centralRegionIndices),
+                nasionIndices = CloneOptional(nasionIndices),
+                noseBridgeMidlineIndices = CloneOptional(noseBridgeMidlineIndices),
+                alarLeftIndices = CloneOptional(alarLeftIndices),
+                alarRightIndices = CloneOptional(alarRightIndices),
+                malarApexLeftIndices = CloneOptional(malarApexLeftIndices),
+                malarApexRightIndices = CloneOptional(malarApexRightIndices)
             };
         }
 
@@ -332,6 +407,67 @@ namespace Aura.Face3D
                     || !uniqueIndices.Add(vertexIndex))
                 {
                     return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryValidateOptionalIndexGroup(
+            int[] indices,
+            int vertexCount,
+            int minimumCount)
+        {
+            // null = JSON 에 필드 자체가 없음(g1) — 유효. 존재하면 기존 규칙 그대로.
+            return indices == null
+                || TryValidateIndexGroup(indices, vertexCount, minimumCount);
+        }
+
+        // Tier-2 그룹은 서로·기존 12그룹 전부와 겹치면 안 된다(계약 §1) —
+        // 겹침은 authoring 실수이며 지표 간 독립성이 깨진다.
+        private static bool TryValidateTier2Disjointness(Face3DSemanticMapData data)
+        {
+            HashSet<int> baseIndices = new HashSet<int>();
+            AddIndices(baseIndices, data.noseTipIndices);
+            AddIndices(baseIndices, data.chinIndices);
+            AddIndices(baseIndices, data.chinBottomIndices);
+            AddIndices(baseIndices, data.upperLipIndices);
+            AddIndices(baseIndices, data.lowerLipIndices);
+            AddIndices(baseIndices, data.midfaceReferenceLeftIndices);
+            AddIndices(baseIndices, data.midfaceReferenceRightIndices);
+            AddIndices(baseIndices, data.midfaceReferenceUpperIndices);
+            AddIndices(baseIndices, data.chinReferenceLeftIndices);
+            AddIndices(baseIndices, data.chinReferenceRightIndices);
+            AddIndices(baseIndices, data.chinReferenceUpperIndices);
+            AddIndices(baseIndices, data.centralRegionIndices);
+
+            int[][] tier2Groups =
+            {
+                data.nasionIndices,
+                data.noseBridgeMidlineIndices,
+                data.alarLeftIndices,
+                data.alarRightIndices,
+                data.malarApexLeftIndices,
+                data.malarApexRightIndices
+            };
+
+            HashSet<int> seenTier2Indices = new HashSet<int>();
+            for (int group = 0; group < tier2Groups.Length; group += 1)
+            {
+                int[] indices = tier2Groups[group];
+                if (indices == null)
+                {
+                    continue;
+                }
+
+                for (int index = 0; index < indices.Length; index += 1)
+                {
+                    int vertexIndex = indices[index];
+                    if (baseIndices.Contains(vertexIndex)
+                        || !seenTier2Indices.Add(vertexIndex))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -380,6 +516,13 @@ namespace Aura.Face3D
         private static int[] Clone(int[] values)
         {
             return values == null ? Array.Empty<int>() : (int[])values.Clone();
+        }
+
+        // optional 그룹 전용: null(부재)을 빈 배열로 승격하지 않고 그대로 보존한다 —
+        // "부재"와 "존재하지만 비어있음(무효)"을 구분해야 g1 호환이 성립한다.
+        private static int[] CloneOptional(int[] values)
+        {
+            return values == null ? null : (int[])values.Clone();
         }
     }
 }

@@ -24,6 +24,16 @@ namespace Aura.Face3D
         public const string UpperLipToELine = "upperLipToELine";
         public const string LowerLipToELine = "lowerLipToELine";
         public const string CentralProjectionScore = "centralProjectionScore";
+
+        // Tier-2 (docs/face3d/TIER2_METRIC_CONTRACT.md). Optional end to end:
+        // the semantic-map groups may be absent (g1), in which case these are
+        // serialized as value:null. They never gate frame validity.
+        public const string NoseLength = "noseLength";
+        public const string NasalBridgeStraightness = "nasalBridgeStraightness";
+        public const string NasalAxisDeviation = "nasalAxisDeviation";
+        public const string AlarWidth = "alarWidth";
+        public const string MalarProjectionLeft = "malarProjectionLeft";
+        public const string MalarProjectionRight = "malarProjectionRight";
     }
 
     public enum Face3DTrackingFaceGateStatus
@@ -116,13 +126,25 @@ namespace Aura.Face3D
             float chinProjection,
             float upperLipToELine,
             float lowerLipToELine,
-            float centralProjectionScore)
+            float centralProjectionScore,
+            float? noseLength = null,
+            float? nasalBridgeStraightness = null,
+            float? nasalAxisDeviation = null,
+            float? alarWidth = null,
+            float? malarProjectionLeft = null,
+            float? malarProjectionRight = null)
         {
             NoseTipProjection = noseTipProjection;
             ChinProjection = chinProjection;
             UpperLipToELine = upperLipToELine;
             LowerLipToELine = lowerLipToELine;
             CentralProjectionScore = centralProjectionScore;
+            NoseLength = SanitizeOptional(noseLength);
+            NasalBridgeStraightness = SanitizeOptional(nasalBridgeStraightness);
+            NasalAxisDeviation = SanitizeOptional(nasalAxisDeviation);
+            AlarWidth = SanitizeOptional(alarWidth);
+            MalarProjectionLeft = SanitizeOptional(malarProjectionLeft);
+            MalarProjectionRight = SanitizeOptional(malarProjectionRight);
         }
 
         public float NoseTipProjection { get; private set; }
@@ -131,6 +153,16 @@ namespace Aura.Face3D
         public float LowerLipToELine { get; private set; }
         public float CentralProjectionScore { get; private set; }
 
+        // Tier-2 — null = 그룹 부재(g1) 또는 이 프레임에서 측정 불가.
+        public float? NoseLength { get; private set; }
+        public float? NasalBridgeStraightness { get; private set; }
+        public float? NasalAxisDeviation { get; private set; }
+        public float? AlarWidth { get; private set; }
+        public float? MalarProjectionLeft { get; private set; }
+        public float? MalarProjectionRight { get; private set; }
+
+        // 프레임 유효성은 기본 5지표만으로 판정한다(계약 §0) — Tier-2는 지표 단위로
+        // 격리되며 프레임을 Blocked로 만들 수 없다.
         public bool IsFinite
         {
             get
@@ -141,6 +173,11 @@ namespace Aura.Face3D
                     && Face3DNumeric.IsFinite(LowerLipToELine)
                     && Face3DNumeric.IsFinite(CentralProjectionScore);
             }
+        }
+
+        private static float? SanitizeOptional(float? value)
+        {
+            return value.HasValue && Face3DNumeric.IsFinite(value.Value) ? value : null;
         }
     }
 
@@ -246,13 +283,25 @@ namespace Aura.Face3D
             Face3DProfileMetric chinProjection,
             Face3DProfileMetric upperLipToELine,
             Face3DProfileMetric lowerLipToELine,
-            Face3DProfileMetric centralProjectionScore)
+            Face3DProfileMetric centralProjectionScore,
+            Face3DProfileMetric noseLength = null,
+            Face3DProfileMetric nasalBridgeStraightness = null,
+            Face3DProfileMetric nasalAxisDeviation = null,
+            Face3DProfileMetric alarWidth = null,
+            Face3DProfileMetric malarProjectionLeft = null,
+            Face3DProfileMetric malarProjectionRight = null)
         {
             NoseTipProjection = noseTipProjection;
             ChinProjection = chinProjection;
             UpperLipToELine = upperLipToELine;
             LowerLipToELine = lowerLipToELine;
             CentralProjectionScore = centralProjectionScore;
+            NoseLength = noseLength;
+            NasalBridgeStraightness = nasalBridgeStraightness;
+            NasalAxisDeviation = nasalAxisDeviation;
+            AlarWidth = alarWidth;
+            MalarProjectionLeft = malarProjectionLeft;
+            MalarProjectionRight = malarProjectionRight;
         }
 
         public Face3DProfileMetric NoseTipProjection { get; private set; }
@@ -260,6 +309,14 @@ namespace Aura.Face3D
         public Face3DProfileMetric UpperLipToELine { get; private set; }
         public Face3DProfileMetric LowerLipToELine { get; private set; }
         public Face3DProfileMetric CentralProjectionScore { get; private set; }
+
+        // Tier-2 — null 이어도 직렬화는 value:null 로 항상 키를 내보낸다.
+        public Face3DProfileMetric NoseLength { get; private set; }
+        public Face3DProfileMetric NasalBridgeStraightness { get; private set; }
+        public Face3DProfileMetric NasalAxisDeviation { get; private set; }
+        public Face3DProfileMetric AlarWidth { get; private set; }
+        public Face3DProfileMetric MalarProjectionLeft { get; private set; }
+        public Face3DProfileMetric MalarProjectionRight { get; private set; }
     }
 
     public sealed class Face3DProfile
@@ -342,6 +399,14 @@ namespace Aura.Face3D
             AppendMetric(json, Face3DContract.UpperLipToELine, profile.Metrics.UpperLipToELine, false);
             AppendMetric(json, Face3DContract.LowerLipToELine, profile.Metrics.LowerLipToELine, false);
             AppendMetric(json, Face3DContract.CentralProjectionScore, profile.Metrics.CentralProjectionScore, false);
+            // Tier-2: 항상 키를 포함하고 미산출이면 value:null (AppendMetric의
+            // metric==null 경로) — RN 파서는 이 키들을 optional 로 읽는다.
+            AppendMetric(json, Face3DContract.NoseLength, profile.Metrics.NoseLength, false);
+            AppendMetric(json, Face3DContract.NasalBridgeStraightness, profile.Metrics.NasalBridgeStraightness, false);
+            AppendMetric(json, Face3DContract.NasalAxisDeviation, profile.Metrics.NasalAxisDeviation, false);
+            AppendMetric(json, Face3DContract.AlarWidth, profile.Metrics.AlarWidth, false);
+            AppendMetric(json, Face3DContract.MalarProjectionLeft, profile.Metrics.MalarProjectionLeft, false);
+            AppendMetric(json, Face3DContract.MalarProjectionRight, profile.Metrics.MalarProjectionRight, false);
             json.Append("}}");
             return json.ToString();
         }

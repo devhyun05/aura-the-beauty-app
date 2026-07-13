@@ -6,6 +6,7 @@ import {
   canonicalPoint,
   captureDevicePointFromCanonical,
   detectFrameRotation,
+  pitchFromVerticalGeometry,
   screenEyeLineTilt,
   visionPointFromCanonical,
   type FrameRotation,
@@ -34,10 +35,20 @@ type TiltCase = {
   expectTilt: number;
 };
 
+type PitchCase = {
+  name: string;
+  eyeCenterY: number;
+  noseY: number;
+  mouthCenterY: number;
+  expectMeasured: boolean;
+  expectPitchDeg: number;
+};
+
 type GoldenFixture = {
   tolerance: number;
   rotationCases: RotationCase[];
   tiltCases: TiltCase[];
+  pitchCases: PitchCase[];
 };
 
 function expect(condition: boolean, message: string) {
@@ -124,6 +135,19 @@ for (const tiltCase of fixture.tiltCases) {
   expectClose(tilt, tiltCase.expectTilt, `${tiltCase.name}.tilt`);
 }
 
+for (const pitchCase of fixture.pitchCases) {
+  const estimate = pitchFromVerticalGeometry(
+    pitchCase.eyeCenterY,
+    pitchCase.noseY,
+    pitchCase.mouthCenterY,
+  );
+  expect(
+    estimate.measured === pitchCase.expectMeasured,
+    `${pitchCase.name}: measured expected ${pitchCase.expectMeasured}, got ${estimate.measured}`,
+  );
+  expectClose(estimate.pitchDeg, pitchCase.expectPitchDeg, `${pitchCase.name}.pitchDeg`);
+}
+
 console.log(
-  `realtimeFrameGeometry tests passed (${fixture.rotationCases.length} rotation cases, ${fixture.tiltCases.length} tilt cases)`,
+  `realtimeFrameGeometry tests passed (${fixture.rotationCases.length} rotation cases, ${fixture.tiltCases.length} tilt cases, ${fixture.pitchCases.length} pitch cases)`,
 );

@@ -41,6 +41,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedFaceCaptureGreenlight: null,
+    selectedFaceGeometry2d: null,
     selectedFaceVerticalThirds: null,
     selectedHairCapture: null,
     selectedPersonalColor: null,

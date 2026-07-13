@@ -1,6 +1,15 @@
 import { faceAnalysisReportsMock } from '../mocks/faceAnalysis.mock';
 import type {Face3DProfile} from '../../features/face-3d/types';
+import {
+  buildFaceAnalysisMeasurementsPayload,
+  buildMeasuredPersonalColorAiPayload,
+  parseFaceAnalysisMeasurements,
+  type PersonalColorMeasurementInput,
+} from '../../features/face-analysis/services/faceAnalysisMeasurements';
+import type {FaceGeometryAnalysisPayload} from '../../features/face-geometry/services/faceGeometryAiPayload';
+import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
+import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
 import type {
   FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
@@ -70,6 +79,9 @@ type BackendAnalysisRequest = {
   cdnUrl?: string | null;
   imageObjectKey?: string | null;
   imageUrl?: string | null;
+  // 측정 원본 4축(faceAnalysisMeasurements 계약) — camelize 응답이므로 unknown 으로
+  // 받아 parseFaceAnalysisMeasurements 로 깊은 검증·역정규화한다.
+  measurements?: unknown;
   objectKey?: string | null;
   previewUrl?: string | null;
   sourceObjectKey?: string | null;
@@ -276,6 +288,27 @@ export function resolveFaceAnalysisReportImageSource(
   );
 
   return objectKeyUrl ? {uri: objectKeyUrl} : undefined;
+}
+
+// imageSource 는 ImageSourcePropType(배열·번들 number 도 허용)이라 `?.uri` 접근이
+// 타입 안전하지 않다 — 문자열 URL 만 필요한 소비자(measurements 복원)용 resolver.
+export function resolveFaceAnalysisReportImageUrl(
+  job: BackendAnalysisJob,
+  capture?: FaceAnalysisCaptureInput | null,
+): string | undefined {
+  const source = resolveFaceAnalysisReportImageSource(job, capture);
+
+  if (
+    source &&
+    typeof source === 'object' &&
+    !Array.isArray(source) &&
+    'uri' in source &&
+    typeof source.uri === 'string'
+  ) {
+    return source.uri;
+  }
+
+  return undefined;
 }
 
 function firstStringArray(
@@ -543,6 +576,10 @@ function mapBackendJobToFaceAnalysisReport(
     id: reportId,
     analyzedAt:
       firstText(job.analyzedAt, fallback.analyzedAt) ?? fallback.analyzedAt,
+    // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
+    measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
+      imageUrl: resolveFaceAnalysisReportImageUrl(job, capture),
+    }),
     baseMakeupGuide:
       firstText(result.baseMakeupGuide, job.baseMakeupGuide, fallback.baseMakeupGuide) ??
       fallback.baseMakeupGuide,
@@ -625,9 +662,20 @@ export const getLatestFaceAnalysisReport =
       return Promise.resolve(faceAnalysisReportsMock[0] ?? null);
     }
 
-    const reports = await getFaceAnalysisReports();
+    // 목록 응답은 measurements 를 제외해 경량화되므로(백엔드 #- 처리),
+    // 최신 1건을 고른 뒤 상세 GET 으로 측정 원본까지 받은 전체본을 돌려준다.
+    const reports = await getFaceAnalysisReports({limit: 1});
+    const latest = reports[0];
 
-    return reports[0] ?? null;
+    if (!latest) {
+      return null;
+    }
+
+    try {
+      return (await getFaceAnalysisReportById(latest.id)) ?? latest;
+    } catch {
+      return latest;
+    }
   };
 
 export const getFaceAnalysisReportById = async (
@@ -680,19 +728,37 @@ export const deleteFaceAnalysisRecommendedMakeup = async ({
   return mapBackendJobToFaceAnalysisReport(report);
 };
 
+// 측정 데이터 3-반영 규칙의 저장·복원층 입력 — 원본 Result 4축.
+// AI 요약층(faceVerticalThirds/face3d/faceGeometry2d 파라미터)과 별개로
+// measurements(원본)와 measuredPersonalColor(AI 요약)를 여기서 함께 만든다.
+export type FaceAnalysisOnDeviceMeasurementsInput = {
+  face3d: Face3DProfile | null;
+  faceGeometry2d: FaceGeometryResult | null;
+  faceVerticalThirds: FaceVerticalThirdsResult | null;
+  personalColor: PersonalColorMeasurementInput | null;
+};
+
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
   // ARKit 3D 측정 프로필(정규화 5지표) — 측정 성공 세션에서만 전달된다.
   face3d?: Face3DProfile,
+  // 2D 얼굴 기하 요약 — 산출 성공 세션에서만 전달된다.
+  faceGeometry2d?: FaceGeometryAnalysisPayload,
+  onDeviceMeasurements?: FaceAnalysisOnDeviceMeasurementsInput,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
+  const measuredPersonalColor = buildMeasuredPersonalColorAiPayload(
+    onDeviceMeasurements?.personalColor ?? null,
+  );
 
   console.info('[aura:analysis] create-report:start', {
     hasBackendApiBaseUrl,
     hasBucket: Boolean(capture?.bucket),
+    hasFaceGeometry2d: Boolean(faceGeometry2d),
     hasFaceVerticalThirds: Boolean(faceVerticalThirds),
+    hasMeasuredPersonalColor: Boolean(measuredPersonalColor),
     hasObjectKey: Boolean(capture?.objectKey),
     mediaId: capture?.mediaId ?? null,
     photoCaptureId: capture?.photoCaptureId ?? null,
@@ -724,7 +790,22 @@ export async function createFaceAnalysisReportFromCapture(
       photoCaptureId: capture.photoCaptureId,
       previewMediaId: capture.mediaId,
       reportTitle: '맞춤 분석 보고서',
-      requestPayload: buildFaceAnalysisRequestPayload(capture, faceVerticalThirds, face3d),
+      requestPayload: buildFaceAnalysisRequestPayload(
+        capture,
+        faceVerticalThirds,
+        face3d,
+        faceGeometry2d,
+        measuredPersonalColor,
+        onDeviceMeasurements
+          ? buildFaceAnalysisMeasurementsPayload({
+              captureId: capture.photoCaptureId,
+              face3d: onDeviceMeasurements.face3d,
+              faceGeometry2d: onDeviceMeasurements.faceGeometry2d,
+              faceVerticalThirds: onDeviceMeasurements.faceVerticalThirds,
+              personalColor: onDeviceMeasurements.personalColor,
+            })
+          : undefined,
+      ),
       runImmediately: true,
       sourceMediaId: capture.mediaId,
       title: 'AI 맞춤 메이크업 분석',

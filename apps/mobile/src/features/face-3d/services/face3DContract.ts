@@ -1,8 +1,10 @@
 import {
-  FACE_3D_METRIC_KEYS,
+  FACE_3D_OPTIONAL_METRIC_KEYS,
+  FACE_3D_REQUIRED_METRIC_KEYS,
   type Face3DEvent,
   type Face3DMetric,
   type Face3DMetrics,
+  type Face3DOptionalMetricKey,
   type Face3DProfile,
   type Face3DStartRequest,
   type Face3DStatus,
@@ -117,7 +119,7 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
   const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
   const validFrameCount = readNonNegativeInteger(value.validFrameCount);
   const targetFrameCount = readNonNegativeInteger(value.targetFrameCount);
-  const parsedMetrics = FACE_3D_METRIC_KEYS.map(key => [
+  const parsedMetrics = FACE_3D_REQUIRED_METRIC_KEYS.map(key => [
     key,
     parseMetric(metricsRecord[key]),
   ] as const);
@@ -132,7 +134,27 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
     return null;
   }
 
-  const metrics = Object.fromEntries(parsedMetrics) as Face3DMetrics;
+  // Tier-2 optional 키: 있으면 파싱해 싣고, 없거나 형식이 깨졌으면 그 키만
+  // 생략한다 — v1(필수 5지표) 프로필의 파싱 성공 여부에는 영향을 주지 않는다.
+  const optionalMetrics: Partial<Record<Face3DOptionalMetricKey, Face3DMetric>> = {};
+  for (const key of FACE_3D_OPTIONAL_METRIC_KEYS) {
+    if (!(key in metricsRecord)) {
+      continue;
+    }
+
+    const metric = parseMetric(metricsRecord[key]);
+    if (metric) {
+      optionalMetrics[key] = metric;
+    }
+  }
+
+  const metrics = {
+    ...(Object.fromEntries(parsedMetrics) as Record<
+      (typeof FACE_3D_REQUIRED_METRIC_KEYS)[number],
+      Face3DMetric
+    >),
+    ...optionalMetrics,
+  } as Face3DMetrics;
 
   return {
     gateVersion,

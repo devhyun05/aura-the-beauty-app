@@ -13,6 +13,7 @@ import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../fea
 import type {Face3DProfile} from '../../features/face-3d/types';
 import type {FaceCaptureGreenlightReport} from '../../features/face-capture/services/faceCaptureGreenlight';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
+import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
 import type {
   AuraPersonalColorResult,
@@ -49,6 +50,9 @@ export type NavigationFlowState = {
   // 촬영 화면이 산출한 그린라이트 리포트 — Face3D 측정 진입 자격 판정용.
   selectedFaceCaptureGreenlight: FaceCaptureGreenlightReport | null;
   selectedHairCapture: FaceCaptureUploadResult | null;
+  // 얼굴 분석 세션에서 온디바이스로 계산한 2D 기하 지표(로컬 전용, 세션 한정).
+  // 실패/미지원 시 null — 보고서 섹션은 null이면 렌더하지 않는다.
+  selectedFaceGeometry2d: FaceGeometryResult | null;
   selectedFaceVerticalThirds: FaceVerticalThirdsResult | null;
   // 얼굴 분석 세션에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용, 업로드 없음).
   // 조명 보정 성공 시 corrected 결과가 담긴다 (보정 우선 표시 정책).
@@ -76,6 +80,7 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   setSelectedFaceCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
   setSelectedFaceCaptureGreenlight: Dispatch<SetStateAction<FaceCaptureGreenlightReport | null>>;
   setSelectedHairCapture: Dispatch<SetStateAction<FaceCaptureUploadResult | null>>;
+  setSelectedFaceGeometry2d: Dispatch<SetStateAction<FaceGeometryResult | null>>;
   setSelectedFaceVerticalThirds: Dispatch<SetStateAction<FaceVerticalThirdsResult | null>>;
   setSelectedPersonalColor: Dispatch<SetStateAction<AuraPersonalColorResult | null>>;
   setSelectedPersonalColorCorrection: Dispatch<SetStateAction<PersonalColorCorrectionStatus | null>>;
@@ -103,6 +108,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedFaceCapture: null,
     selectedFaceCaptureGreenlight: null,
     selectedHairCapture: null,
+    selectedFaceGeometry2d: null,
     selectedFaceVerticalThirds: null,
     selectedPersonalColor: null,
     selectedPersonalColorCorrection: null,
@@ -141,6 +147,8 @@ export function NavigationFlowStateProvider({
     useState<FaceCaptureUploadResult | null>(initialState.selectedHairCapture);
   const [selectedFaceAnalysisReport, setSelectedFaceAnalysisReport] =
     useState<FaceAnalysisReport | null>(initialState.selectedFaceAnalysisReport);
+  const [selectedFaceGeometry2d, setSelectedFaceGeometry2d] =
+    useState<FaceGeometryResult | null>(initialState.selectedFaceGeometry2d);
   const [selectedFaceVerticalThirds, setSelectedFaceVerticalThirds] =
     useState<FaceVerticalThirdsResult | null>(initialState.selectedFaceVerticalThirds);
   const [selectedPersonalColor, setSelectedPersonalColor] =
@@ -189,6 +197,7 @@ export function NavigationFlowStateProvider({
     setSelectedFaceCapture(nextState.selectedFaceCapture);
     setSelectedFaceCaptureGreenlight(nextState.selectedFaceCaptureGreenlight);
     setSelectedHairCapture(nextState.selectedHairCapture);
+    setSelectedFaceGeometry2d(nextState.selectedFaceGeometry2d);
     setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
     setSelectedPersonalColor(nextState.selectedPersonalColor);
     setSelectedPersonalColorCorrection(nextState.selectedPersonalColorCorrection);
@@ -213,6 +222,7 @@ export function NavigationFlowStateProvider({
       selectedFaceCapture,
       selectedFaceCaptureGreenlight,
       selectedHairCapture,
+      selectedFaceGeometry2d,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedPersonalColorCorrection,
@@ -234,6 +244,7 @@ export function NavigationFlowStateProvider({
       setSelectedFaceCapture,
       setSelectedFaceCaptureGreenlight,
       setSelectedHairCapture,
+      setSelectedFaceGeometry2d,
       setSelectedFaceVerticalThirds,
       setSelectedPersonalColor,
       setSelectedPersonalColorCorrection,
@@ -256,6 +267,7 @@ export function NavigationFlowStateProvider({
       selectedFaceCapture,
       selectedFaceCaptureGreenlight,
       selectedHairCapture,
+      selectedFaceGeometry2d,
       selectedFaceVerticalThirds,
       selectedPersonalColor,
       selectedPersonalColorCorrection,
