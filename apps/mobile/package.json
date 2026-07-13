@@ -19,6 +19,7 @@
     "test:face-ratio-distortion": "node ../../scripts/mobile/run-face-ratio-distortion-contract.mjs",
     "test:face3d": "node ../../scripts/mobile/run-face3d-contract.mjs",
     "test:face-geometry": "node ../../scripts/mobile/run-face-geometry-contract.mjs",
+    "test:face-analysis-measurements": "node ../../scripts/mobile/run-face-analysis-measurements-contract.mjs",
     "test:face-capture-upload": "node ../../scripts/mobile/run-face-capture-upload-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",

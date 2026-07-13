@@ -1,4 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
+import type { FaceAnalysisReportMeasurements } from '../../features/face-analysis/services/faceAnalysisMeasurements';
 
 export interface FaceAnalysisMakeupGuideline {
   brow: string;
@@ -39,4 +40,7 @@ export interface FaceAnalysisReport {
   makeupGuideline: FaceAnalysisMakeupGuideline;
   recommendedMakeups: FaceAnalysisMakeupCard[];
   avoidedMakeups: FaceAnalysisMakeupCard[];
+  // 서버 detail_payload.request.measurements 에서 복원한 온디바이스 측정 원본 —
+  // 과거 보고서에서도 측정 섹션을 렌더한다. 구버전 보고서(저장 이전)는 undefined.
+  measurements?: FaceAnalysisReportMeasurements;
 }

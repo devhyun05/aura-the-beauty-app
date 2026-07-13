@@ -19,6 +19,7 @@ import {
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
 import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/faceGeometryService';
@@ -28,7 +29,10 @@ import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/f
 import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
-import {analyzePersonalColorCapture} from '../../../features/personal-color/services/personalColorService';
+import {
+  analyzePersonalColorCapture,
+  type PersonalColorAnalysisOutcome,
+} from '../../../features/personal-color/services/personalColorService';
 import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
@@ -254,8 +258,10 @@ export function FaceAnalysisLoadingRouteScreen({
   // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
   // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
   const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
-  // end-lease 게이트용 — 퍼스널 컬러 분석의 settle 을 기다렸다가 pause 로 반납한다.
-  const personalColorSettledPromiseRef = React.useRef<Promise<unknown> | null>(null);
+  // 퍼스널 컬러 outcome 전달 + end-lease 게이트 겸용. 보고서 POST 가 이 ref 로
+  // outcome(보정 후 결과 포함)을 받아 measurements·measuredPersonalColor 를 싣는다.
+  const personalColorOutcomePromiseRef =
+    React.useRef<Promise<PersonalColorAnalysisOutcome | null> | null>(null);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
@@ -375,13 +381,13 @@ export function FaceAnalysisLoadingRouteScreen({
     };
   }, [selectedFaceCapture, setSelectedFaceGeometry2d]);
 
-  // 퍼스널 컬러도 캡처당 1회 온디바이스로 진단한다(로컬 전용·업로드 없음).
-  // 백엔드 보고서 생성과 독립적으로 계산해 보고서 흐름을 지연시키지 않고,
-  // 실패/미지원은 null로 격리해 결과가 준비되면 보고서에 표시된다.
+  // 퍼스널 컬러도 캡처당 1회 온디바이스로 진단한다. 측정 데이터 3-반영 규칙:
+  // outcome(보정 후 reported)은 화면 표시와 함께 보고서 POST(AI 입력·서버 저장)
+  // 에도 실린다. 실패는 null 격리 — 보고서 생성 자체는 막지 않는다.
   React.useEffect(() => {
     setSelectedPersonalColor(null);
     setSelectedPersonalColorCorrection(null);
-    personalColorSettledPromiseRef.current = null;
+    personalColorOutcomePromiseRef.current = null;
 
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
       return undefined;
@@ -390,8 +396,9 @@ export function FaceAnalysisLoadingRouteScreen({
     let isMounted = true;
     const captureId = selectedFaceCapture.photoCaptureId;
 
-    // settle promise 를 ref 에 남겨 end-lease 효과가 pause 시점을 안다.
-    personalColorSettledPromiseRef.current = (
+    // outcome 을 반환해 ref 에 남긴다 — POST 의 measurements 입력 + end-lease
+    // settle 게이트 겸용 (undefined resolve 였던 종전 체인의 버그 수정).
+    personalColorOutcomePromiseRef.current = (
       stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
     )
       .then(() =>
@@ -409,22 +416,20 @@ export function FaceAnalysisLoadingRouteScreen({
           // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
           // 실패 시 baseline 유지 + 미적용 사유를 배지로 노출(조용한 실패 금지).
           // reported = 저장(writeResultJson)과 동일한 보고 메인 결과(보정 우선).
-          // 화면과 저장이 갈라지지 않게 서비스가 확정한 값을 그대로 쓴다.
           setSelectedPersonalColor(outcome.reported);
-          setSelectedPersonalColorCorrection({
-            applied: Boolean(outcome.corrected),
-            reasons: [
-              ...outcome.correctionReport.reasons,
-              ...outcome.correctionReport.sclera.reasons,
-              ...outcome.correctionReport.wb.reasons,
-            ],
-          });
+          setSelectedPersonalColorCorrection(
+            derivePersonalColorCorrectionStatus(outcome),
+          );
         }
+
+        return outcome;
       })
       .catch(error => {
         console.info('[aura:personal-color] analysis:error', {
           message: error instanceof Error ? error.message : String(error),
         });
+
+        return null;
       });
 
     return () => {
@@ -446,21 +451,42 @@ export function FaceAnalysisLoadingRouteScreen({
 
     // 축마다 "개별" null 타임아웃 — 공유 race 는 한 축 타임아웃이 이미 해소된
     // 다른 축 값까지 버리므로 raceWithNullTimeout 으로 독립 강등한다.
+    // 강등(축 null)은 균일 정책(행 방지)이며, 발생 시 경고 로그로 관측한다.
     const waitForOnDeviceAnalyses = Promise.all([
       raceWithNullTimeout(verticalThirdsPromiseRef.current, STILL_ANALYSIS_WAIT_TIMEOUT_MS),
       raceWithNullTimeout(faceGeometry2dPromiseRef.current, STILL_ANALYSIS_WAIT_TIMEOUT_MS),
+      raceWithNullTimeout(
+        personalColorOutcomePromiseRef.current,
+        STILL_ANALYSIS_WAIT_TIMEOUT_MS,
+      ),
     ]);
 
     waitForOnDeviceAnalyses
-      .then(([verticalThirds, faceGeometry]) =>
-        createFaceAnalysisReportFromCapture(
+      .then(([verticalThirds, faceGeometry, personalColorOutcome]) => {
+        if (!verticalThirds || !faceGeometry || !personalColorOutcome) {
+          console.warn('[aura:analysis] on-device-axis:degraded', {
+            faceGeometry2d: Boolean(faceGeometry),
+            faceVerticalThirds: Boolean(verticalThirds),
+            personalColor: Boolean(personalColorOutcome),
+            timeoutMs: STILL_ANALYSIS_WAIT_TIMEOUT_MS,
+          });
+        }
+
+        return createFaceAnalysisReportFromCapture(
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
           // 3D 측정은 로딩 진입 전에 끝나 있으므로(측정 화면 경유) 대기 없이 그대로 싣는다.
           selectedFace3DProfile ?? undefined,
           buildFaceGeometryAnalysisPayload(faceGeometry),
-        ),
-      )
+          // 측정 원본 4축 — 서버 저장(detail_payload)·AI 입력·과거 보고서 복원용.
+          {
+            face3d: selectedFace3DProfile ?? null,
+            faceGeometry2d: faceGeometry,
+            faceVerticalThirds: verticalThirds,
+            personalColor: personalColorOutcome,
+          },
+        );
+      })
       .then(report => {
         if (!isMounted) {
           return;
@@ -548,7 +574,7 @@ export function FaceAnalysisLoadingRouteScreen({
     void Promise.allSettled([
       verticalThirdsPromiseRef.current ?? Promise.resolve(null),
       faceGeometry2dPromiseRef.current ?? Promise.resolve(null),
-      personalColorSettledPromiseRef.current ?? Promise.resolve(null),
+      personalColorOutcomePromiseRef.current ?? Promise.resolve(null),
     ]).then(() => {
       if (!cancelled && navigation.isFocused()) {
         setUnityMakeupPlayerPaused(true);
@@ -675,6 +701,10 @@ export function FaceAnalysisReportDetailRouteScreen({
             route.params?.reportId ? null : selectedPersonalColorCorrection
           }
           reportId={route.params?.reportId ?? null}
+          // 세션 캡처 ID — 화면이 "세션 props vs 서버 복원 measurements" 를
+          // identity(captureId 일치)로 판정하는 기준. id 없는 진입(AR 복귀 등)
+          // 에서 다른 보고서에 stale 세션 측정값이 얹히는 것을 막는다.
+          sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
           verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
         />
         <FaceAnalysisReportBottomNav

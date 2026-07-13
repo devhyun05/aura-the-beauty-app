@@ -232,3 +232,53 @@ expectEqual(
   faceVerticalThirds,
   'faceGeometry2d does not displace the vertical-thirds payload',
 );
+expectEqual(
+  'measuredPersonalColor' in analysisRequestPayloadWithGeometry,
+  false,
+  'analysis request omits measuredPersonalColor when absent',
+);
+expectEqual(
+  'measurements' in analysisRequestPayloadWithGeometry,
+  false,
+  'analysis request omits measurements when absent',
+);
+
+// 측정 데이터 3-반영 규칙: 실측 퍼스널 컬러 요약과 측정 원본 4축이 함께 실린다.
+const measuredPersonalColorPayload = {
+  measurementConfidence: 0.72,
+  status: 'definitive',
+  tone: {top: 'autumn_muted'},
+};
+const measurementsPayload = {
+  captureId: 'capture-1',
+  faceGeometry2d: {status: 'partial_success'},
+  schemaVersion: 'aura-face-analysis-measurements-v1',
+};
+const analysisRequestPayloadWithMeasurements = buildFaceAnalysisRequestPayload(
+  {
+    bucket: 'media-bucket',
+    objectKey: 'uploads/capture/face.jpg',
+    source: 'camera',
+  },
+  faceVerticalThirds,
+  face3dProfile,
+  faceGeometry2dPayload,
+  measuredPersonalColorPayload,
+  measurementsPayload,
+);
+
+expectEqual(
+  analysisRequestPayloadWithMeasurements.measuredPersonalColor,
+  measuredPersonalColorPayload,
+  'analysis request preserves measuredPersonalColor',
+);
+expectEqual(
+  analysisRequestPayloadWithMeasurements.measurements,
+  measurementsPayload,
+  'analysis request preserves the measurements payload',
+);
+expectEqual(
+  analysisRequestPayloadWithMeasurements.faceGeometry2d,
+  faceGeometry2dPayload,
+  'measurements do not displace the 2D geometry payload',
+);

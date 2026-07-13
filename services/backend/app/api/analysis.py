@@ -69,6 +69,14 @@ ANALYSIS_MEDIA_SELECT = """
   preview_media.height as preview_media_ref_height
 """
 
+# 목록 응답 경량화: 측정 원본(request.measurements)은 목록에서 제외하고 상세
+# GET 에서만 전량 내려준다. r.* 뒤에 같은 이름(detail_payload)으로 축약본을
+# 재선택하면 normalize 의 dict(row) 변환에서 마지막 값이 이겨 축약본이 남는다.
+ANALYSIS_MEDIA_LIST_SELECT = (
+  ANALYSIS_MEDIA_SELECT
+  + ",\n  (r.detail_payload #- '{request,measurements}') as detail_payload"
+)
+
 
 def decode_json_object(value: object) -> dict:
   if isinstance(value, dict):
@@ -693,7 +701,7 @@ async def list_analysis_reports(
     )
 
   query = f"""
-    select {ANALYSIS_MEDIA_SELECT}
+    select {ANALYSIS_MEDIA_LIST_SELECT}
     from analysis_reports r
     left join media_assets source_media on source_media.id = r.source_media_id
     left join media_assets preview_media on preview_media.id = r.preview_media_id

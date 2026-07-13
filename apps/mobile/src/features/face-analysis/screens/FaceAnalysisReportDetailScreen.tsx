@@ -44,6 +44,8 @@ import {
 } from '../../face-ratio/components/VerticalThirdsOverlay';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import {PersonalColorTypeCard} from '../../personal-color/components/PersonalColorTypeCard';
+import {MeasurementDetailSection} from '../components/MeasurementDetailSection';
+import {shouldUseSessionMeasurements} from '../services/faceAnalysisMeasurements';
 import type {
   AuraPersonalColorResult,
   PersonalColorCorrectionStatus,
@@ -78,6 +80,10 @@ type FaceAnalysisReportDetailScreenProps = {
   faceGeometry2d?: FaceGeometryResult | null;
   headerTitle?: string;
   reportId?: string | null;
+  // 현재 세션 캡처 ID — 세션 측정 props 를 "이 세션의 보고서"에만 쓰기 위한
+  // identity 대조 기준(shouldUseSessionMeasurements). 과거 보고서 위에 stale
+  // 세션 측정값이 얹히는 것을 막는다.
+  sessionCaptureId?: string | null;
   onBack?: () => void;
   onCreateARFilter?: () => void;
   onDeleteReport?: (reportId: string) => Promise<void> | void;
@@ -378,6 +384,7 @@ export function FaceAnalysisReportDetailScreen({
   personalColor,
   personalColorCorrection,
   reportId,
+  sessionCaptureId,
   onCreateARFilter,
   onDeleteReport,
   onHeaderShareActionChange,
@@ -453,7 +460,37 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportPrimaryMakeupRecommendation(report, guideItems) : null),
     [guideItems, report],
   );
-  const heroImageSource = resolveFaceAnalysisReportHeroImageSource(capturedPhotoUri, report);
+  // 명시적 과거 조회(reportId)에서는 세션 촬영 사진이 hero 를 오염시키지 않게 한다.
+  const heroImageSource = resolveFaceAnalysisReportHeroImageSource(
+    reportId ? undefined : capturedPhotoUri,
+    report,
+  );
+  const measurements = report?.measurements;
+  // 세션 측정 props 는 화면의 보고서가 이 세션 캡처의 것일 때만 쓴다 — 아니면
+  // 서버 저장분(measurements)으로 복원한다(측정 데이터 3-반영 규칙의 "과거 표시").
+  const useSessionMeasurements = shouldUseSessionMeasurements({
+    explicitReportId: reportId ?? null,
+    reportCaptureId: measurements?.captureId ?? null,
+    sessionCaptureId: sessionCaptureId ?? null,
+  });
+  const effectiveVerticalThirds =
+    (useSessionMeasurements ? verticalThirds : null) ??
+    measurements?.faceVerticalThirds ??
+    null;
+  const effectiveFace3d =
+    (useSessionMeasurements ? face3d : null) ?? measurements?.face3d ?? null;
+  const effectiveFaceGeometry2d =
+    (useSessionMeasurements ? faceGeometry2d : null) ??
+    measurements?.faceGeometry2d ??
+    null;
+  const effectivePersonalColor =
+    (useSessionMeasurements ? personalColor : null) ??
+    measurements?.personalColor?.reported ??
+    null;
+  const effectivePersonalColorCorrection =
+    (useSessionMeasurements ? personalColorCorrection : null) ??
+    measurements?.personalColor?.correctionStatus ??
+    null;
   const pendingRecommendedMakeupImageCount = useMemo(
     () => countPendingRecommendedMakeupImages(report),
     [report],
@@ -686,36 +723,44 @@ export function FaceAnalysisReportDetailScreen({
           <AnalysisSummaryBlock summary={report.skinAnalysisSummary || report.shortSummary} />
         </ReportSection>
 
-        {verticalThirds ? (
-          verticalThirds.status === 'full_success' ||
-          verticalThirds.status === 'partial_success' ? (
+        {effectiveVerticalThirds ? (
+          effectiveVerticalThirds.status === 'full_success' ||
+          effectiveVerticalThirds.status === 'partial_success' ? (
             <ReportSection title={"얼굴 세로 비율"}>
-              <PhotoStage
-                imageUri={verticalThirds.sourceImage.uri}
-                result={verticalThirds}>
-                <VerticalThirdsOverlay result={verticalThirds} />
-              </PhotoStage>
+              {effectiveVerticalThirds.sourceImage.uri ? (
+                <PhotoStage
+                  imageUri={effectiveVerticalThirds.sourceImage.uri}
+                  result={effectiveVerticalThirds}>
+                  <VerticalThirdsOverlay result={effectiveVerticalThirds} />
+                </PhotoStage>
+              ) : (
+                // 복원 경로에서 보고서 이미지 URL 을 못 구한 경우(소스 미디어 삭제
+                // 등) 오버레이 대신 해석 요약을 표시한다 — 조용한 실패 금지.
+                <Text style={styles.sectionBlockedNotice}>
+                  {effectiveVerticalThirds.interpretation.summary}
+                </Text>
+              )}
             </ReportSection>
           ) : (
             // 조용한 실패 금지: 사후 게이트 차단(pose_gate_failed 등)이면 섹션을
             // 숨기지 않고 사유 + 재촬영 안내를 표시한다.
             <ReportSection title={"얼굴 세로 비율"}>
               <Text style={styles.sectionBlockedNotice}>
-                {getVerticalThirdsBlockedMessage(verticalThirds.statusReason)}
+                {getVerticalThirdsBlockedMessage(effectiveVerticalThirds.statusReason)}
               </Text>
             </ReportSection>
           )
         ) : null}
 
-        {face3d ? (
+        {effectiveFace3d ? (
           <ReportSection eyebrow="3D FACIAL DEPTH" title={"입체 특성"}>
-            <Face3DMetricGrid profile={face3d} />
+            <Face3DMetricGrid profile={effectiveFace3d} />
             <Text style={styles.face3dFrameCaption}>
-              유효 프레임 {face3d.validFrameCount}/{face3d.targetFrameCount} · ARKit 얼굴 메시 측정
+              유효 프레임 {effectiveFace3d.validFrameCount}/{effectiveFace3d.targetFrameCount} · ARKit 얼굴 메시 측정
             </Text>
-            {face3d.warnings.length > 0 ? (
+            {effectiveFace3d.warnings.length > 0 ? (
               <View style={styles.face3dWarningCard}>
-                {face3d.warnings.map(warning => (
+                {effectiveFace3d.warnings.map(warning => (
                   <Text key={warning} selectable style={styles.face3dWarningText}>
                     • {warning}
                   </Text>
@@ -725,13 +770,13 @@ export function FaceAnalysisReportDetailScreen({
           </ReportSection>
         ) : null}
 
-        {faceGeometry2d ? (
-          faceGeometry2d.status === 'full_success' ||
-          faceGeometry2d.status === 'partial_success' ? (
+        {effectiveFaceGeometry2d ? (
+          effectiveFaceGeometry2d.status === 'full_success' ||
+          effectiveFaceGeometry2d.status === 'partial_success' ? (
             <ReportSection eyebrow="FACE GEOMETRY" title={"얼굴 형태 비율"}>
               <View style={styles.faceGeometryGrid}>
                 {FACE_GEOMETRY_METRIC_KEYS.map(key => {
-                  const metric = faceGeometry2d.metrics[key];
+                  const metric = effectiveFaceGeometry2d.metrics[key];
 
                   return (
                     <View key={key} style={styles.faceGeometryCard}>
@@ -758,26 +803,26 @@ export function FaceAnalysisReportDetailScreen({
             // 조용한 실패 금지: 측정 불가 사유 + 재촬영 안내를 표시한다.
             <ReportSection eyebrow="FACE GEOMETRY" title={"얼굴 형태 비율"}>
               <Text style={styles.sectionBlockedNotice}>
-                {getFaceGeometryBlockedMessage(faceGeometry2d.statusReason)}
+                {getFaceGeometryBlockedMessage(effectiveFaceGeometry2d.statusReason)}
               </Text>
             </ReportSection>
           )
         ) : null}
 
-        {personalColor ? (
-          personalColor.status !== 'insufficient' && personalColor.tone ? (
+        {effectivePersonalColor ? (
+          effectivePersonalColor.status !== 'insufficient' && effectivePersonalColor.tone ? (
             <ReportSection eyebrow="PERSONAL COLOR" title={"퍼스널 컬러 진단"}>
-              <PersonalColorTypeCard result={personalColor} />
-              {personalColorCorrection ? (
+              <PersonalColorTypeCard result={effectivePersonalColor} />
+              {effectivePersonalColorCorrection ? (
                 <Text
                   style={
-                    personalColorCorrection.applied
+                    effectivePersonalColorCorrection.applied
                       ? styles.correctionAppliedBadge
                       : styles.sectionBlockedNotice
                   }>
-                  {personalColorCorrection.applied
+                  {effectivePersonalColorCorrection.applied
                     ? '✓ 조명 보정 적용됨 — 촬영 조명의 색 왜곡을 제거한 결과예요.'
-                    : getCorrectionSkipMessage(personalColorCorrection.reasons)}
+                    : getCorrectionSkipMessage(effectivePersonalColorCorrection.reasons)}
                 </Text>
               ) : null}
             </ReportSection>
@@ -789,6 +834,20 @@ export function FaceAnalysisReportDetailScreen({
               </Text>
             </ReportSection>
           )
+        ) : null}
+
+        {effectiveVerticalThirds || effectiveFaceGeometry2d || effectivePersonalColor ? (
+          <ReportSection eyebrow="MEASUREMENT DETAIL" title={"측정 상세"}>
+            <MeasurementDetailSection
+              faceGeometry2d={effectiveFaceGeometry2d}
+              personalColor={effectivePersonalColor}
+              personalColorCorrection={effectivePersonalColorCorrection}
+              personalColorCorrectionReport={
+                measurements?.personalColor?.correctionReport ?? null
+              }
+              verticalThirds={effectiveVerticalThirds}
+            />
+          </ReportSection>
         ) : null}
 
         {primaryMakeupRecommendation ? (

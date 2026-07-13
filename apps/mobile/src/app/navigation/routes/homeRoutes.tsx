@@ -347,7 +347,12 @@ export function SavedMakeupListRouteScreen({
         latestAnalysisReport={selectedFaceAnalysisReport}
         onPressMakeup={savedMakeup => {
           setSelectedFaceAnalysisReport(savedMakeup.report);
-          navigation.navigate('FaceAnalysisReportDetail');
+          // 과거 보고서는 항상 reportId 경유로 연다 — id 없이 열면 상세 화면이
+          // 현재 세션의 측정 props·촬영 사진을 이 과거 보고서 위에 얹는다
+          // (identity 버그, Codex 주장5). id 경로는 서버 재조회 + 세션 props 차단.
+          navigation.navigate('FaceAnalysisReportDetail', {
+            reportId: savedMakeup.report.id,
+          });
         }}
       />
     </DetailRouteChrome>

@@ -37,7 +37,14 @@ function AxisBar({ name, value }: { name: AxisName; value: number | null }) {
   );
 }
 
-export function PersonalColorTypeCard({ result }: { result: AuraPersonalColorResult }) {
+// privacy 필드를 제외한 구조 타입 — 서버 저장분에서 복원한 측정 뷰(과거 보고서,
+// faceAnalysisMeasurements)도 이 카드로 그대로 렌더된다. 세션의 원본 결과
+// (AuraPersonalColorResult)는 구조상 이 타입에 그대로 할당된다.
+export function PersonalColorTypeCard({
+  result,
+}: {
+  result: Omit<AuraPersonalColorResult, 'privacy'>;
+}) {
   const { tone, status, measurementConfidence } = result;
   const confidencePct = Math.round(measurementConfidence * 100);
 

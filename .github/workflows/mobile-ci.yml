@@ -190,6 +190,9 @@ jobs:
       - name: Contract — Face geometry 2D metrics (합성 랜드마크 기지값)
         run: npm run test:face-geometry
 
+      - name: Contract — Face analysis measurements (저장·복원 wire 계약)
+        run: npm run test:face-analysis-measurements
+
       # 시맨틱 맵 오프라인 파이프라인(후보/검증/리뷰보드/승인/진단/반복성)은 순수 node
       # 스크립트이고 경로를 import.meta.url 기준으로 풀어 CWD 에 무관하므로, 다른 계약과
       # 동일하게 apps/mobile 에서 ../../ 로 실행한다. scripts/face3d/ 만 바뀐 PR 도 이
