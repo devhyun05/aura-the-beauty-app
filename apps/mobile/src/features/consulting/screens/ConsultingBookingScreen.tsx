@@ -40,6 +40,10 @@ import {
   getConsultingExpertSlots,
   getConsultingShareableReports,
 } from '../services/consultingService';
+import {
+  disablePastConsultingSlots,
+  isConsultingSlotInFuture,
+} from '../services/consultingBookingTime';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {
   ConsultingBookingDay,
@@ -152,9 +156,11 @@ export function ConsultingBookingScreen({
         return;
       }
 
-      const normalizedDays = initialRecord
-        ? restoreCurrentSlotAvailability(data, initialRecord)
-        : data;
+      const normalizedDays = disablePastConsultingSlots(
+        initialRecord
+          ? restoreCurrentSlotAvailability(data, initialRecord)
+          : data,
+      );
 
       if (normalizedDays.length === 0) {
         setDays([]);
@@ -282,9 +288,12 @@ export function ConsultingBookingScreen({
   );
   const sessionModeLabel = getConsultingSessionModeLabel(selectedSessionMode);
 
+  const selectedSlot = selectedDay?.slots.find(
+    slot => slot.id === selectedSlotId,
+  );
   const canProceed = Boolean(
     selectedDay &&
-      selectedSlotId &&
+      selectedSlot?.available &&
       contactName.trim() &&
       contactPhone.trim(),
   );
@@ -327,6 +336,10 @@ export function ConsultingBookingScreen({
 
   const handleNext = () => {
     if (!selectedDay || !selectedSlotId) {
+      return;
+    }
+    if (!isConsultingSlotInFuture(selectedDay.id, selectedSlotId)) {
+      setSelectedSlotId(null);
       return;
     }
 

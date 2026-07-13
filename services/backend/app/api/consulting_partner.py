@@ -8,18 +8,13 @@ from app.schemas.media import CompleteUploadRequest, PresignedUploadRequest
 from app.schemas.consulting_partner import (
   PartnerApplicationCreate,
   PartnerBookingStatusUpdate,
+  PartnerExpertAvatarUpdate,
   PartnerLoginRequest,
   PartnerPasswordChangeRequest,
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
 from app.schemas.consulting import ConsultingTextMessageSend
-from app.schemas.consulting_call import (
-  ConsultingCallEndRequest,
-  ConsultingCallJoinRequest,
-  ConsultingCaptionTranslateRequest,
-  ConsultingTranscriptionStartRequest,
-)
 from app.services.media_uploads import (
   bind_legacy_thumbnail_session,
   complete_upload_session,
@@ -130,6 +125,22 @@ async def get_partner_experts(
   account: dict = Depends(get_partner_account),
 ) -> dict:
   return success({"experts": [await consulting_partner.expert_profile(account)]})
+
+
+@router.patch("/experts/{expert_id}/avatar")
+async def update_partner_expert_avatar(
+  expert_id: str,
+  payload: PartnerExpertAvatarUpdate,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  expert = await consulting_partner.update_expert_avatar(
+    db,
+    account,
+    expert_id,
+    payload.media_id,
+  )
+  return success({"expert": expert})
 
 
 @router.get("/dashboard")
@@ -372,7 +383,6 @@ async def update_partner_settings(
 @router.post("/bookings/{booking_id}/call/join")
 async def join_partner_call(
   booking_id: str,
-  payload: ConsultingCallJoinRequest,
   response: Response,
   account: dict = Depends(get_partner_account),
   settings: Settings = Depends(get_settings),
@@ -383,7 +393,6 @@ async def join_partner_call(
     db,
     account,
     booking_id,
-    payload.language_code,
     settings,
   )
   await consulting_realtime_manager.broadcast(
@@ -402,7 +411,6 @@ async def join_partner_call(
 @router.post("/bookings/{booking_id}/call/end")
 async def end_partner_call(
   booking_id: str,
-  payload: ConsultingCallEndRequest | None = Body(default=None),
   account: dict = Depends(get_partner_account),
   settings: Settings = Depends(get_settings),
   db: Database = Depends(require_database),
@@ -412,7 +420,6 @@ async def end_partner_call(
     account,
     booking_id,
     settings,
-    transcript=payload.transcript if payload else None,
   )
   await consulting_realtime_manager.broadcast(
     booking_id,
@@ -425,71 +432,6 @@ async def end_partner_call(
     },
   )
   return success({"call": call})
-
-
-@router.post("/bookings/{booking_id}/call/transcription/start")
-async def start_partner_call_transcription(
-  booking_id: str,
-  payload: ConsultingTranscriptionStartRequest,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  return success(
-    {
-      "call": await consulting_call.start_partner_transcription(
-        db,
-        account,
-        booking_id,
-        payload.language_code,
-        payload.transcription_consent_accepted,
-        settings,
-      ),
-    },
-  )
-
-
-@router.post("/bookings/{booking_id}/call/transcription/stop")
-async def stop_partner_call_transcription(
-  booking_id: str,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  return success({"call": await consulting_call.stop_partner_transcription(db, account, booking_id, settings)})
-
-
-@router.post("/bookings/{booking_id}/call/captions/translate")
-async def translate_partner_call_caption(
-  booking_id: str,
-  payload: ConsultingCaptionTranslateRequest,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  translated = await consulting_call.translate_partner_caption(
-    db,
-    account,
-    booking_id,
-    result_id=payload.result_id,
-    source_language_code=payload.source_language_code,
-    content=payload.content,
-    is_partial=payload.is_partial,
-    settings=settings,
-  )
-  if not payload.is_partial:
-    await consulting_realtime_manager.broadcast(
-      booking_id,
-      {
-        "type": "caption.translation",
-        "bookingId": booking_id,
-        "resultId": translated["result_id"],
-        "sourceLanguageCode": translated["source_language_code"],
-        "targetLanguageCode": translated["target_language_code"],
-        "translatedContent": translated["translated_content"],
-      },
-    )
-  return success(translated)
 
 
 @router.get("/customers")

@@ -10,7 +10,6 @@ from app.db.session import Database
 from app.services.chime_meetings import ChimeMeetingsService
 
 
-SUPPORTED_LANGUAGE_CODES = {"ko-KR", "en-US"}
 JOINABLE_BOOKING_STATUSES = {"confirmed", "scheduled", "in_progress"}
 STALE_MEETING_AWS_CODES = {"NotFoundException", "ResourceNotFoundException", "NotFound"}
 _DEFAULT_DURATION_MINUTES = 30
@@ -59,24 +58,6 @@ def _duration_minutes(booking: dict[str, Any]) -> int:
   return value if value > 0 else _DEFAULT_DURATION_MINUTES
 
 
-def _language_code(value: str | None) -> str:
-  language_code = (value or "ko-KR").strip()
-  if language_code not in SUPPORTED_LANGUAGE_CODES:
-    raise AppError(400, "CONSULTING_CALL_LANGUAGE_UNSUPPORTED", "화상상담 언어는 ko-KR 또는 en-US만 지원합니다.")
-  return language_code
-
-
-def _transcription_status(settings: Settings, status: str | None = None) -> str:
-  if not settings.effective_consulting_call_transcription_enabled:
-    return "disabled"
-  return status or "stopped"
-
-
-def _transcription_mode(row: dict[str, Any] | None) -> str:
-  mode = row.get("transcription_mode") if row else None
-  return mode if mode in {"fixed", "identify"} else "fixed"
-
-
 def _is_stale_chime_meeting_error(error: AppError) -> bool:
   if error.code not in {"CHIME_MEETING_GET_FAILED", "CHIME_ATTENDEE_CREATE_FAILED"}:
     return False
@@ -84,7 +65,7 @@ def _is_stale_chime_meeting_error(error: AppError) -> bool:
 
 
 def _is_stale_cleanup_error(error: AppError) -> bool:
-  if error.code not in {"CHIME_TRANSCRIPTION_STOP_FAILED", "CHIME_MEETING_END_FAILED"}:
+  if error.code != "CHIME_MEETING_END_FAILED":
     return False
   return str(error.details.get("awsCode") or "") in STALE_MEETING_AWS_CODES
 
@@ -160,20 +141,6 @@ def _session_payload(row: dict[str, Any] | None, settings: Settings, booking_id:
     "started_at": _iso(row.get("started_at")) if row else None,
     "ended_at": _iso(row.get("ended_at")) if row else None,
     "chime_enabled": settings.chime_enabled,
-    "transcription": _transcription_payload(row, settings),
-  }
-
-
-def _transcription_payload(row: dict[str, Any] | None, settings: Settings) -> dict[str, Any]:
-  status = row.get("transcription_status") if row else None
-  return {
-    "enabled": settings.effective_consulting_call_transcription_enabled,
-    "translation_enabled": settings.effective_consulting_call_translation_enabled,
-    "status": _transcription_status(settings, status),
-    "mode": _transcription_mode(row),
-    "language_code": row.get("transcription_language_code") if row else None,
-    "customer_language_code": row.get("customer_language_code") if row else "ko-KR",
-    "expert_language_code": row.get("expert_language_code") if row else "ko-KR",
   }
 
 
@@ -230,12 +197,11 @@ async def _create_or_activate_session(
     """
     insert into consulting_call_sessions (
       booking_id, user_id, expert_id, provider, provider_meeting_id,
-      provider_external_meeting_id, media_region, status, transcription_status,
-      transcription_mode, started_at, expires_at
+      provider_external_meeting_id, media_region, status, started_at, expires_at
     )
     values (
       $1, $2, $3, 'chime', $4,
-      $5, $6, 'active', $7, 'fixed', now(), $8
+      $5, $6, 'active', now(), $7
     )
     on conflict (booking_id) do update set
       provider_meeting_id = coalesce(consulting_call_sessions.provider_meeting_id, excluded.provider_meeting_id),
@@ -245,8 +211,6 @@ async def _create_or_activate_session(
       ),
       media_region = coalesce(consulting_call_sessions.media_region, excluded.media_region),
       status = 'active',
-      transcription_status = excluded.transcription_status,
-      transcription_mode = excluded.transcription_mode,
       started_at = coalesce(consulting_call_sessions.started_at, now()),
       ended_at = null,
       updated_at = now()
@@ -258,7 +222,6 @@ async def _create_or_activate_session(
     provider_meeting_id,
     external_meeting_id,
     settings.effective_chime_media_region,
-    "stopped" if settings.effective_consulting_call_transcription_enabled else "disabled",
     _parse_datetime(booking["scheduled_at"]) + timedelta(minutes=_duration_minutes(booking) + 60),
   )
 
@@ -281,12 +244,9 @@ async def _replace_session_meeting(
         provider_external_meeting_id = $3,
         media_region = $4,
         status = 'active',
-        transcription_status = $5,
-        transcription_mode = 'fixed',
-        transcription_language_code = null,
         started_at = case when status = 'ended' then now() else coalesce(started_at, now()) end,
         ended_at = null,
-        expires_at = $6,
+        expires_at = $5,
         updated_at = now()
     where id = $1
     returning *
@@ -295,7 +255,6 @@ async def _replace_session_meeting(
     provider_meeting_id,
     external_meeting_id,
     settings.effective_chime_media_region,
-    "stopped" if settings.effective_consulting_call_transcription_enabled else "disabled",
     _parse_datetime(booking["scheduled_at"]) + timedelta(minutes=_duration_minutes(booking) + 60),
   ) or row
 
@@ -415,7 +374,6 @@ async def join_customer_call(
   db: Database,
   user_id: str,
   booking_id: str,
-  language_code: str | None,
   settings: Settings,
 ) -> dict[str, Any]:
   booking = await _customer_booking(db, user_id, booking_id)
@@ -425,7 +383,6 @@ async def join_customer_call(
     booking,
     participant_type="customer",
     participant_id=user_id,
-    language_code=language_code,
     settings=settings,
   )
 
@@ -434,7 +391,6 @@ async def join_partner_call(
   db: Database,
   account: dict[str, Any],
   booking_id: str,
-  language_code: str | None,
   settings: Settings,
 ) -> dict[str, Any]:
   booking = await _partner_booking(db, account, booking_id)
@@ -444,7 +400,6 @@ async def join_partner_call(
     booking,
     participant_type="partner",
     participant_id=str(account.get("id") or account.get("account_id") or account.get("expert_id") or "partner"),
-    language_code=language_code,
     settings=settings,
   )
 
@@ -455,24 +410,10 @@ async def _join_call(
   *,
   participant_type: str,
   participant_id: str,
-  language_code: str | None,
   settings: Settings,
 ) -> dict[str, Any]:
-  normalized_language_code = _language_code(language_code)
   allow_create = participant_type == "partner"
   meeting, session = await _meeting_for_session(db, booking, settings, allow_create=allow_create)
-  language_column = "customer_language_code" if participant_type == "customer" else "expert_language_code"
-  session = await db.fetchrow(
-    f"""
-    update consulting_call_sessions
-    set {language_column} = $2,
-        updated_at = now()
-    where id = $1
-    returning *
-    """,
-    session["id"],
-    normalized_language_code,
-  ) or session
   chime = ChimeMeetingsService(settings)
   external_user_id = f"{participant_type}:{booking['id']}"
   try:
@@ -504,27 +445,19 @@ async def _join_call(
     "participant_joined",
     booking_id=booking["id"],
     call_session_id=session.get("id"),
-    language_code=normalized_language_code,
     participant_type=participant_type,
-    transcription_status=_transcription_payload(session, settings)["status"],
   )
   plan_participant_type = "user" if participant_type == "customer" else "expert"
   return {
     "call_session_id": str(session["id"]),
     "booking_id": str(booking["id"]),
     "participant_type": plan_participant_type,
-    "participant_language_code": normalized_language_code,
-    "supported_language_codes": sorted(SUPPORTED_LANGUAGE_CODES),
     "participant": {
       "id": participant_id,
       "type": participant_type,
-      "language_code": normalized_language_code,
     },
     "meeting": meeting,
     "attendee": attendee,
-    "transcription": _transcription_payload(session, settings),
-    "transcription_status": _transcription_payload(session, settings)["status"],
-    "transcription_mode": _transcription_mode(session),
   }
 
 
@@ -586,8 +519,6 @@ async def end_partner_call(
   account: dict[str, Any],
   booking_id: str,
   settings: Settings,
-  *,
-  transcript: str | None = None,
 ) -> dict[str, Any]:
   await _partner_booking(db, account, booking_id)
   call = await _end_call(db, booking_id, settings)
@@ -596,7 +527,6 @@ async def end_partner_call(
       db,
       account,
       booking_id,
-      transcript=transcript,
     )
   except Exception:  # Call teardown must succeed even if summary persistence fails.
     logger.exception("consulting_call.summary_after_end_failed booking_id=%s", booking_id)
@@ -608,8 +538,6 @@ async def _complete_booking_after_call(
   db: Database,
   account: dict[str, Any],
   booking_id: str,
-  *,
-  transcript: str | None = None,
 ) -> str:
   from app.services import consulting_partner
 
@@ -638,30 +566,11 @@ async def _complete_booking_after_call(
       completed["expert_id"],
     )
 
-  clean_transcript = (transcript or "").strip()
-  if not clean_transcript:
-    transcript_rows = await db.fetch(
-      """
-      select coalesce(nullif(content, ''), nullif(source_text, '')) as content
-      from consulting_transcript_segments
-      where booking_id = $1 and is_partial = false
-      order by created_at asc
-      """,
-      booking_id,
-    )
-    clean_transcript = "\n".join(
-      str(row["content"]).strip()
-      for row in transcript_rows
-      if row.get("content") and str(row["content"]).strip()
-    )
-  if not clean_transcript:
-    clean_transcript = "화상 상담이 정상적으로 완료되었습니다. 상담사가 확인한 내용을 기준으로 후속 안내를 제공합니다."
-
   await consulting_partner.complete_consultation_summary(
     db,
     account,
     booking_id,
-    transcript=clean_transcript,
+    transcript="화상 상담이 정상적으로 완료되었습니다. 상담사가 확인한 내용을 기준으로 후속 안내를 제공합니다.",
     visible_to_customer=True,
     send_review_request=True,
   )
@@ -676,20 +585,6 @@ async def _end_call(db: Database, booking_id: str, settings: Settings) -> dict[s
   provider_meeting_id = session.get("provider_meeting_id")
   if settings.chime_enabled and provider_meeting_id and session.get("status") != "ended":
     chime = ChimeMeetingsService(settings)
-    if session.get("transcription_status") == "active":
-      try:
-        await chime.stop_transcription(meeting_id=str(provider_meeting_id))
-        _log_call_event("transcription_stopped_for_end", booking_id=booking_id, call_session_id=session.get("id"))
-      except AppError as error:
-        if not _is_stale_cleanup_error(error):
-          raise
-        _log_call_event(
-          "transcription_stop_skipped_stale_meeting",
-          booking_id=booking_id,
-          call_session_id=session.get("id"),
-          provider_meeting_id=provider_meeting_id,
-        )
-
     try:
       await chime.delete_meeting(meeting_id=str(provider_meeting_id))
       _log_call_event("meeting_deleted", booking_id=booking_id, call_session_id=session.get("id"))
@@ -707,10 +602,6 @@ async def _end_call(db: Database, booking_id: str, settings: Settings) -> dict[s
     """
     update consulting_call_sessions
     set status = 'ended',
-        transcription_status = case
-          when transcription_status = 'disabled' then 'disabled'
-          else 'stopped'
-        end,
         ended_at = coalesce(ended_at, now()),
         updated_at = now()
     where booking_id = $1
@@ -725,418 +616,3 @@ async def _end_call(db: Database, booking_id: str, settings: Settings) -> dict[s
     status=(updated or session).get("status"),
   )
   return _session_payload(updated or session, settings, booking_id)
-
-
-async def start_partner_transcription(
-  db: Database,
-  account: dict[str, Any],
-  booking_id: str,
-  language_code: str | None,
-  transcription_consent_accepted: bool,
-  settings: Settings,
-) -> dict[str, Any]:
-  await _partner_booking(db, account, booking_id)
-  if not transcription_consent_accepted:
-    raise AppError(
-      400,
-      "CONSULTING_CALL_TRANSCRIPTION_CONSENT_REQUIRED",
-      "실시간 자막을 시작하려면 고객과 상담사의 음성 인식 동의 확인이 필요합니다.",
-    )
-
-  session = await _call_session(db, booking_id)
-  if session is None or not session.get("provider_meeting_id"):
-    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 실시간 자막을 시작할 수 있습니다.")
-  if session.get("transcription_status") in {"active", "starting"}:
-    return _session_payload(session, settings, booking_id)
-
-  normalized_language_code = _language_code(language_code)
-  _log_call_event(
-    "transcription_start_requested",
-    booking_id=booking_id,
-    call_session_id=session.get("id"),
-    expert_language_code=normalized_language_code,
-  )
-  session = await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set expert_language_code = $2,
-        transcription_status = 'starting',
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-    normalized_language_code,
-  ) or session
-  try:
-    transcription_mode, transcription_language_code = await ChimeMeetingsService(settings).start_transcription(
-      meeting_id=str(session["provider_meeting_id"]),
-      participant_languages={
-        "customer": str(session.get("customer_language_code") or "ko-KR"),
-        "partner": str(session.get("expert_language_code") or normalized_language_code),
-      },
-    )
-  except AppError:
-    await db.fetchrow(
-      """
-      update consulting_call_sessions
-      set transcription_status = 'failed',
-          updated_at = now()
-      where booking_id = $1
-      returning *
-      """,
-      booking_id,
-    )
-    _log_call_event(
-      "transcription_start_failed",
-      booking_id=booking_id,
-      call_session_id=session.get("id"),
-    )
-    raise
-  updated = await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set transcription_status = 'active',
-        transcription_language_code = $2,
-        transcription_mode = $3,
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-    transcription_language_code,
-    transcription_mode,
-  )
-  _log_call_event(
-    "transcription_active",
-    booking_id=booking_id,
-    call_session_id=(updated or session).get("id"),
-    mode=transcription_mode,
-    language_code=transcription_language_code,
-  )
-  return _session_payload(updated or session, settings, booking_id)
-
-
-async def start_customer_transcription(
-  db: Database,
-  user_id: str,
-  booking_id: str,
-  language_code: str | None,
-  source_language_code: str | None,
-  transcription_consent_accepted: bool,
-  settings: Settings,
-) -> dict[str, Any]:
-  await _customer_booking(db, user_id, booking_id)
-  if not transcription_consent_accepted:
-    raise AppError(
-      400,
-      "CONSULTING_CALL_TRANSCRIPTION_CONSENT_REQUIRED",
-      "실시간 번역을 시작하려면 음성 인식 동의가 필요합니다.",
-    )
-
-  session = await _call_session(db, booking_id)
-  if session is None or not session.get("provider_meeting_id"):
-    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 실시간 번역을 시작할 수 있습니다.")
-  if session.get("transcription_status") in {"active", "starting"}:
-    return _session_payload(session, settings, booking_id)
-
-  customer_language_code = _language_code(language_code)
-  expert_language_code = _language_code(
-    source_language_code or str(session.get("expert_language_code") or "ko-KR")
-  )
-  _log_call_event(
-    "customer_transcription_start_requested",
-    booking_id=booking_id,
-    call_session_id=session.get("id"),
-    customer_language_code=customer_language_code,
-    expert_language_code=expert_language_code,
-  )
-  session = await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set customer_language_code = $2,
-        expert_language_code = $3,
-        transcription_status = 'starting',
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-    customer_language_code,
-    expert_language_code,
-  ) or session
-  try:
-    transcription_mode, transcription_language_code = await ChimeMeetingsService(settings).start_transcription(
-      meeting_id=str(session["provider_meeting_id"]),
-      participant_languages={
-        "customer": customer_language_code,
-        "partner": expert_language_code,
-      },
-    )
-  except AppError:
-    await db.fetchrow(
-      """
-      update consulting_call_sessions
-      set transcription_status = 'failed',
-          updated_at = now()
-      where booking_id = $1
-      returning *
-      """,
-      booking_id,
-    )
-    _log_call_event(
-      "customer_transcription_start_failed",
-      booking_id=booking_id,
-      call_session_id=session.get("id"),
-    )
-    raise
-  updated = await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set transcription_status = 'active',
-        transcription_language_code = $2,
-        transcription_mode = $3,
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-    transcription_language_code,
-    transcription_mode,
-  )
-  _log_call_event(
-    "customer_transcription_active",
-    booking_id=booking_id,
-    call_session_id=(updated or session).get("id"),
-    mode=transcription_mode,
-    language_code=transcription_language_code,
-  )
-  return _session_payload(updated or session, settings, booking_id)
-
-
-async def stop_partner_transcription(
-  db: Database,
-  account: dict[str, Any],
-  booking_id: str,
-  settings: Settings,
-) -> dict[str, Any]:
-  await _partner_booking(db, account, booking_id)
-  session = await _call_session(db, booking_id)
-  if session is None or not session.get("provider_meeting_id"):
-    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 실시간 자막을 중지할 수 있습니다.")
-
-  await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set transcription_status = 'stopping',
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-  )
-  _log_call_event("transcription_stop_requested", booking_id=booking_id, call_session_id=session.get("id"))
-  try:
-    await ChimeMeetingsService(settings).stop_transcription(meeting_id=str(session["provider_meeting_id"]))
-  except AppError:
-    await db.fetchrow(
-      """
-      update consulting_call_sessions
-      set transcription_status = 'failed',
-          updated_at = now()
-      where booking_id = $1
-      returning *
-      """,
-      booking_id,
-    )
-    _log_call_event(
-      "transcription_stop_failed",
-      booking_id=booking_id,
-      call_session_id=session.get("id"),
-    )
-    raise
-  updated = await db.fetchrow(
-    """
-    update consulting_call_sessions
-    set transcription_status = 'stopped',
-        updated_at = now()
-    where booking_id = $1
-    returning *
-    """,
-    booking_id,
-  )
-  _log_call_event(
-    "transcription_stopped",
-    booking_id=booking_id,
-    call_session_id=(updated or session).get("id"),
-  )
-  return _session_payload(updated or session, settings, booking_id)
-
-
-async def translate_partner_caption(
-  db: Database,
-  account: dict[str, Any],
-  booking_id: str,
-  *,
-  result_id: str,
-  source_language_code: str,
-  content: str,
-  is_partial: bool = False,
-  settings: Settings,
-) -> dict[str, Any]:
-  await _partner_booking(db, account, booking_id)
-  return await _translate_caption(
-    db,
-    booking_id,
-    participant_type="partner",
-    participant_id=str(account.get("id") or account.get("account_id") or account.get("expert_id") or "partner"),
-    result_id=result_id,
-    source_language_code=source_language_code,
-    content=content,
-    is_partial=is_partial,
-    settings=settings,
-  )
-
-
-async def translate_customer_caption(
-  db: Database,
-  user_id: str,
-  booking_id: str,
-  *,
-  result_id: str,
-  source_language_code: str,
-  content: str,
-  is_partial: bool = False,
-  settings: Settings,
-) -> dict[str, Any]:
-  await _customer_booking(db, user_id, booking_id)
-  return await _translate_caption(
-    db,
-    booking_id,
-    participant_type="customer",
-    participant_id=user_id,
-    result_id=result_id,
-    source_language_code=source_language_code,
-    content=content,
-    is_partial=is_partial,
-    settings=settings,
-  )
-
-
-async def _translate_caption(
-  db: Database,
-  booking_id: str,
-  *,
-  participant_type: str,
-  participant_id: str,
-  result_id: str,
-  source_language_code: str,
-  content: str,
-  is_partial: bool,
-  settings: Settings,
-) -> dict[str, Any]:
-  session = await _call_session(db, booking_id)
-  if session is None:
-    raise AppError(409, "CONSULTING_CALL_NOT_STARTED", "화상상담 입장 후 자막을 번역할 수 있습니다.")
-
-  normalized_language_code = _language_code(source_language_code)
-  retain_transcript = not is_partial and settings.consulting_transcript_retention_days > 0
-  if not retain_transcript:
-    translated = await ChimeMeetingsService(settings).translate_final_caption(
-      source_language_code=normalized_language_code,
-      content=content,
-    )
-    _log_call_event(
-      "caption_partial_translated" if is_partial else "caption_translated",
-      booking_id=booking_id,
-      call_session_id=session.get("id"),
-      result_id=result_id,
-      retained=False,
-      is_partial=is_partial,
-      source_language_code=normalized_language_code,
-      target_language_code=translated["target_language_code"],
-    )
-    return {
-      "result_id": result_id,
-      "source_language_code": normalized_language_code,
-      "target_language_code": translated["target_language_code"],
-      "translated_content": translated["translated_content"],
-    }
-
-  existing = await db.fetchrow(
-    """
-    select result_id, source_language_code, target_language_code, translated_content
-    from consulting_transcript_segments
-    where call_session_id = $1 and result_id = $2 and is_partial = false
-    """,
-    session["id"],
-    result_id,
-  )
-  if existing and existing.get("translated_content"):
-    _log_call_event(
-      "caption_translation_reused",
-      booking_id=booking_id,
-      call_session_id=session.get("id"),
-      result_id=result_id,
-      source_language_code=existing.get("source_language_code"),
-      target_language_code=existing.get("target_language_code"),
-    )
-    return {
-      "result_id": str(existing["result_id"]),
-      "source_language_code": str(existing["source_language_code"]),
-      "target_language_code": str(existing["target_language_code"]),
-      "translated_content": str(existing["translated_content"]),
-    }
-
-  translated = await ChimeMeetingsService(settings).translate_final_caption(
-    source_language_code=normalized_language_code,
-    content=content,
-  )
-  stored = await db.fetchrow(
-    f"""
-    insert into consulting_transcript_segments (
-      call_session_id, booking_id, participant_type, participant_id,
-      language_code, source_text, translated_text, is_partial,
-      result_id, speaker_type, source_language_code, content,
-      target_language_code, translated_content
-    )
-    values (
-      $1, $2, '{participant_type}', $3,
-      $4, $5, $6, false,
-      $7, 'unknown', $4, $5,
-      $8, $6
-    )
-    on conflict (call_session_id, result_id) where result_id is not null do update set
-      translated_text = excluded.translated_text,
-      translated_content = excluded.translated_content
-    returning result_id, source_language_code, target_language_code, translated_content
-    """,
-    session["id"],
-    booking_id,
-    participant_id,
-    normalized_language_code,
-    content,
-    translated["translated_content"],
-    result_id,
-    translated["target_language_code"],
-  )
-  row = stored or {
-    "result_id": result_id,
-    "source_language_code": normalized_language_code,
-    "target_language_code": translated["target_language_code"],
-    "translated_content": translated["translated_content"],
-  }
-  _log_call_event(
-    "caption_translated",
-    booking_id=booking_id,
-    call_session_id=session.get("id"),
-    result_id=result_id,
-    source_language_code=row["source_language_code"],
-    target_language_code=row["target_language_code"],
-  )
-  return {
-    "result_id": str(row["result_id"]),
-    "source_language_code": str(row["source_language_code"]),
-    "target_language_code": str(row["target_language_code"]),
-    "translated_content": str(row["translated_content"]),
-  }

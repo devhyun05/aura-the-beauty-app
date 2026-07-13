@@ -8,18 +8,16 @@ from app.core.errors import AppError
 from app.core.settings import Settings
 from app.main import create_app
 from app.schemas.consulting import AdminBookingStatusUpdate, BookingCreate, ConsultingTextMessageSend
-from app.schemas.consulting_call import (
-  ConsultingCallJoinRequest,
-  ConsultingCaptionTranslateRequest,
-  ConsultingTranscriptionStartRequest,
-)
 from app.services.consulting_places import (
   LOCAL_PLACE_CATEGORY_QUERIES,
   _map_naver_local_item,
   build_local_place_query,
   build_local_place_queries,
 )
-from app.services.consulting import _build_booking_days
+from app.services.consulting import (
+  _build_booking_days,
+  _validate_booking_slot_is_in_future,
+)
 from app.services.consulting_call import _validate_joinable_booking
 
 
@@ -113,56 +111,6 @@ def test_admin_booking_status_accepts_video_call_runtime_statuses(status: str) -
   assert payload.status == status
 
 
-def test_consulting_call_join_accepts_supported_language_codes() -> None:
-  payload = ConsultingCallJoinRequest.model_validate({"languageCode": "en-US"})
-
-  assert payload.language_code == "en-US"
-
-
-def test_consulting_call_join_rejects_unsupported_language_code() -> None:
-  with pytest.raises(ValidationError):
-    ConsultingCallJoinRequest.model_validate({"languageCode": "ja-JP"})
-
-
-def test_consulting_transcription_start_requires_explicit_consent_flag() -> None:
-  default_payload = ConsultingTranscriptionStartRequest.model_validate({"languageCode": "ko-KR"})
-  accepted_payload = ConsultingTranscriptionStartRequest.model_validate(
-    {
-      "languageCode": "en-US",
-      "transcriptionConsentAccepted": True,
-    },
-  )
-
-  assert default_payload.transcription_consent_accepted is False
-  assert accepted_payload.language_code == "en-US"
-  assert accepted_payload.transcription_consent_accepted is True
-  assert accepted_payload.source_language_code is None
-
-
-def test_consulting_caption_translate_accepts_final_caption_payload() -> None:
-  payload = ConsultingCaptionTranslateRequest.model_validate(
-    {
-      "resultId": "caption-1",
-      "sourceLanguageCode": "ko-KR",
-      "content": "이 색상이 잘 어울려요.",
-    },
-  )
-
-  assert payload.result_id == "caption-1"
-  assert payload.source_language_code == "ko-KR"
-
-
-def test_consulting_caption_translate_rejects_unsupported_language_code() -> None:
-  with pytest.raises(ValidationError):
-    ConsultingCaptionTranslateRequest.model_validate(
-      {
-        "resultId": "caption-1",
-        "sourceLanguageCode": "ja-JP",
-        "content": "테스트",
-      },
-    )
-
-
 def test_consulting_call_allows_confirmed_online_booking_in_join_window() -> None:
   now = datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc)
   booking = {
@@ -205,7 +153,11 @@ def test_consulting_call_rejects_unconfirmed_or_offline_booking() -> None:
 
 def test_consulting_call_respects_join_window() -> None:
   now = datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc)
-  settings = Settings(consulting_call_join_early_minutes=15, consulting_call_join_late_minutes=30)
+  settings = Settings(
+    consulting_call_enforce_early_window=True,
+    consulting_call_join_early_minutes=15,
+    consulting_call_join_late_minutes=30,
+  )
   base_booking = {
     "status": "confirmed",
     "session_mode": "online",
@@ -262,6 +214,33 @@ def test_consulting_days_are_generated_from_booking_rules() -> None:
   assert slots["19:00"]["available"] is True
   assert "19:30" not in slots
   assert "20:00" not in slots
+
+
+def test_consulting_days_disable_today_slots_before_current_korea_time() -> None:
+  now = datetime(2026, 7, 13, 10, 15, tzinfo=timezone(timedelta(hours=9)))
+  days = _build_booking_days(
+    duration_minutes=30,
+    start_day=date(2026, 7, 13),
+    schedule_settings=_schedule_settings(
+      _hours({0: ("10:00", "12:00")}),
+    ),
+    now=now,
+  )
+
+  slots = {slot["id"]: slot for slot in days[0]["slots"]}
+  assert slots["10:00"]["available"] is False
+  assert slots["10:30"]["available"] is True
+  assert slots["11:00"]["available"] is True
+
+
+def test_consulting_booking_rejects_slot_at_or_before_current_time() -> None:
+  now = datetime(2026, 7, 13, 10, 30, tzinfo=timezone(timedelta(hours=9)))
+
+  with pytest.raises(AppError) as exc_info:
+    _validate_booking_slot_is_in_future(date(2026, 7, 13), "10:30", now=now)
+
+  assert exc_info.value.code == "CONSULTING_SLOT_IN_PAST"
+  _validate_booking_slot_is_in_future(date(2026, 7, 13), "11:00", now=now)
 
 
 def test_consulting_days_follow_persisted_operating_hours() -> None:
