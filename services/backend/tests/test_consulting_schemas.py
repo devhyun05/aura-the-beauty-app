@@ -153,7 +153,11 @@ def test_consulting_call_rejects_unconfirmed_or_offline_booking() -> None:
 
 def test_consulting_call_respects_join_window() -> None:
   now = datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc)
-  settings = Settings(consulting_call_join_early_minutes=15, consulting_call_join_late_minutes=30)
+  settings = Settings(
+    consulting_call_enforce_early_window=True,
+    consulting_call_join_early_minutes=15,
+    consulting_call_join_late_minutes=30,
+  )
   base_booking = {
     "status": "confirmed",
     "session_mode": "online",
