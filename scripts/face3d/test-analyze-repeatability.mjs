@@ -7,6 +7,7 @@ import {
   analyzeRepeatability,
   median,
   medianAbsoluteDeviation,
+  validateRepeatabilityManifest,
   FACE3D_METRIC_KEYS,
 } from './analyze-repeatability.mjs';
 
@@ -104,6 +105,82 @@ test('madFloor keeps discriminability finite for a noiseless subject', () => {
   for (const key of FACE3D_METRIC_KEYS) {
     assert.ok(Number.isFinite(result.metrics[key].discriminability));
     assert.ok(result.metrics[key].within >= 1e-4);
+  }
+});
+
+// ── 표본 구성 게이트(B2 강화판): 정확히 3명 × 각 3회 neutral 만 통과 ─────────
+
+function manifestEntries(subjectCaptureCounts, shotKind = 'neutral') {
+  const entries = [];
+  for (const [subjectId, count] of Object.entries(subjectCaptureCounts)) {
+    for (let i = 0; i < count; i += 1) {
+      entries.push({subjectId, shotKind, capturePath: `${subjectId}-${i}.jsonl`});
+    }
+  }
+  return entries;
+}
+
+test('manifest gate accepts exactly 3 subjects x 3 neutral captures', () => {
+  const result = validateRepeatabilityManifest(
+    manifestEntries({'subject-01': 3, 'subject-02': 3, 'subject-03': 3}),
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.reasons, []);
+});
+
+test('manifest gate rejects 2 subjects even with 3 captures each', () => {
+  const result = validateRepeatabilityManifest(
+    manifestEntries({'subject-01': 3, 'subject-02': 3}),
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.some(reason => reason.includes('expected exactly 3')));
+});
+
+test('manifest gate rejects a subject with only 2 captures', () => {
+  const result = validateRepeatabilityManifest(
+    manifestEntries({'subject-01': 3, 'subject-02': 3, 'subject-03': 2}),
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.reasons.some(reason => reason.includes('subject-03')));
+});
+
+test('manifest gate rejects non-neutral and missing shotKind (fail-closed)', () => {
+  const smiling = validateRepeatabilityManifest(
+    manifestEntries({'subject-01': 3, 'subject-02': 3, 'subject-03': 3}, 'smile'),
+  );
+  assert.equal(smiling.ok, false);
+
+  // shotKind 키 자체가 없는 항목(기존 매니페스트 형식) — fail-closed 로 거부.
+  const undeclared = validateRepeatabilityManifest(
+    manifestEntries({'subject-01': 3, 'subject-02': 3, 'subject-03': 3}).map(
+      ({shotKind: _shotKind, ...rest}) => rest,
+    ),
+  );
+  assert.equal(undeclared.ok, false);
+  assert.ok(undeclared.reasons.some(reason => reason.includes('shotKind')));
+});
+
+test('analyzer itself refuses per-metric pass below 3 subjects (gate bypass hole closed)', () => {
+  // 두 사람이 크게 다르고 반복이 극도로 안정적이어도, 3명 미만 표본으로는
+  // 어떤 지표도 pass 가 되면 안 된다(과거: 2명·1반복으로 pass 가능).
+  const captures = [];
+  for (const [subjectId, base] of [
+    ['subject-01', 0.2],
+    ['subject-02', 0.6],
+  ]) {
+    for (const delta of [-0.001, 0, 0.001]) {
+      captures.push({
+        subjectId,
+        metrics: metrics(base + delta, base + delta, base + delta, base + delta, base + delta),
+      });
+    }
+  }
+
+  const result = analyzeRepeatability(captures, {minDiscriminability: 2.0});
+  assert.equal(result.overallPass, false);
+  assert.equal(result.evaluableMetricCount, 0);
+  for (const key of FACE3D_METRIC_KEYS) {
+    assert.equal(result.metrics[key].pass, false);
   }
 });
 

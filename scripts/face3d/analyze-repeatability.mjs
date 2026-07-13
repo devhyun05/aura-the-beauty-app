@@ -37,15 +37,70 @@ export function medianAbsoluteDeviation(values) {
   return median(values.map(v => Math.abs(v - center)));
 }
 
+// 노출 게이트 표본 요구량 — 정확히 3명 × 각 3회 neutral 캡처(별도 세트).
+// 2명·1반복 같은 미달 표본이 지표별 pass 를 만들어내던 구멍을 봉쇄한다.
+export const REPEATABILITY_REQUIRED_SUBJECTS = 3;
+export const REPEATABILITY_REQUIRED_CAPTURES_PER_SUBJECT = 3;
+
+/**
+ * 매니페스트 표본 구성 검증(fail-closed). captures 항목은 subjectId 와 함께
+ * shotKind 를 선언해야 하며 전부 'neutral' 이어야 한다 — 미선언도 거부.
+ * @param {Array<{subjectId?: string, shotKind?: string}>} entries
+ * @param {{requiredSubjects?: number, requiredCapturesPerSubject?: number}} [options]
+ * @returns {{ok: boolean, reasons: string[]}}
+ */
+export function validateRepeatabilityManifest(entries, options = {}) {
+  const requiredSubjects = options.requiredSubjects ?? REPEATABILITY_REQUIRED_SUBJECTS;
+  const requiredCapturesPerSubject =
+    options.requiredCapturesPerSubject ?? REPEATABILITY_REQUIRED_CAPTURES_PER_SUBJECT;
+  const reasons = [];
+  const list = Array.isArray(entries) ? entries : [];
+  const bySubject = new Map();
+
+  list.forEach((entry, index) => {
+    if (!entry || typeof entry.subjectId !== 'string' || entry.subjectId.length === 0) {
+      reasons.push(`captures[${index}]: subjectId missing`);
+      return;
+    }
+    if (entry.shotKind !== 'neutral') {
+      reasons.push(
+        `captures[${index}] (${entry.subjectId}): shotKind must be "neutral", got ` +
+          `${JSON.stringify(entry.shotKind ?? null)}`,
+      );
+    }
+    bySubject.set(entry.subjectId, (bySubject.get(entry.subjectId) ?? 0) + 1);
+  });
+
+  if (bySubject.size !== requiredSubjects) {
+    reasons.push(`subjects: expected exactly ${requiredSubjects}, got ${bySubject.size}`);
+  }
+  for (const [subjectId, count] of bySubject) {
+    if (count !== requiredCapturesPerSubject) {
+      reasons.push(
+        `subject ${subjectId}: expected exactly ${requiredCapturesPerSubject} ` +
+          `neutral captures, got ${count}`,
+      );
+    }
+  }
+
+  return {ok: reasons.length === 0, reasons};
+}
+
 /**
  * @param {Array<{subjectId: string, metrics: Record<string, number>}>} captures
- * @param {{minDiscriminability?: number, madFloor?: number}} [options]
+ * @param {{minDiscriminability?: number, madFloor?: number,
+ *          minSubjects?: number, minRepeatedSubjects?: number}} [options]
  */
 export function analyzeRepeatability(captures, options = {}) {
   const minDiscriminability = options.minDiscriminability ?? 2.0;
   // A subject can be perfectly stable (MAD 0); floor the within-spread so discriminability
   // stays finite instead of exploding to Infinity on a single noiseless subject.
   const madFloor = options.madFloor ?? 1e-4;
+  // 지표별 pass 하한 — 매니페스트 게이트를 우회한 호출도 미달 표본으로는
+  // pass 를 만들 수 없게 분석기 자체에도 같은 기준을 둔다.
+  const minSubjects = options.minSubjects ?? REPEATABILITY_REQUIRED_SUBJECTS;
+  const minRepeatedSubjects =
+    options.minRepeatedSubjects ?? REPEATABILITY_REQUIRED_SUBJECTS;
 
   const bySubject = new Map();
   for (const capture of captures) {
@@ -85,14 +140,16 @@ export function analyzeRepeatability(captures, options = {}) {
       subjectCount: subjectMedians.length,
       repeatedSubjectCount: withinSpreads.length,
       pass:
-        withinSpreads.length >= 1 &&
-        subjectMedians.length >= 2 &&
+        withinSpreads.length >= minRepeatedSubjects &&
+        subjectMedians.length >= minSubjects &&
         discriminability >= minDiscriminability,
     };
   }
 
   const evaluable = FACE3D_METRIC_KEYS.filter(
-    k => metrics[k].repeatedSubjectCount >= 1 && metrics[k].subjectCount >= 2,
+    k =>
+      metrics[k].repeatedSubjectCount >= minRepeatedSubjects &&
+      metrics[k].subjectCount >= minSubjects,
   );
   const overallPass = evaluable.length === FACE3D_METRIC_KEYS.length &&
     FACE3D_METRIC_KEYS.every(k => metrics[k].pass);
@@ -101,6 +158,8 @@ export function analyzeRepeatability(captures, options = {}) {
     schemaVersion: 'aura.face3d-repeatability.v1',
     minDiscriminability,
     madFloor,
+    minSubjects,
+    minRepeatedSubjects,
     subjectCount: bySubject.size,
     captureCount: captures.length,
     metrics,
@@ -155,22 +214,40 @@ function runCli(argv) {
   if (manifestFlag === -1 || !argv[manifestFlag + 1]) {
     console.error(
       'Usage: node analyze-repeatability.mjs --manifest <manifest.json> [--output <summary.json>]\n' +
-        'manifest: { "captures": [ { "subjectId": "subject-01", "capturePath": "..." }, ... ] }',
+        'manifest: { "captures": [ { "subjectId": "subject-01", "shotKind": "neutral", "capturePath": "..." }, ... ] }\n' +
+        `표본 요구량: 정확히 ${REPEATABILITY_REQUIRED_SUBJECTS}명 × 각 ` +
+        `${REPEATABILITY_REQUIRED_CAPTURES_PER_SUBJECT}회 neutral 캡처(미달·초과·비-neutral 거부)`,
     );
     process.exit(2);
   }
 
   const manifestPath = argv[manifestFlag + 1];
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+  // 표본 구성 게이트(fail-closed): 캡처 파일을 읽기 전에 매니페스트만으로 거부한다.
+  const validation = validateRepeatabilityManifest(manifest.captures ?? []);
+  if (!validation.ok) {
+    console.error(JSON.stringify({manifestValidation: validation}, null, 2));
+    console.error('G4_REPEATABILITY_REJECTED');
+    process.exit(2);
+  }
+
   const captures = (manifest.captures ?? []).map(entry => ({
     subjectId: entry.subjectId,
     metrics: extractMetricsFromCaptureFile(entry.capturePath),
   }));
 
-  const summary = analyzeRepeatability(captures, {
-    minDiscriminability: manifest.minDiscriminability,
-    madFloor: manifest.madFloor,
-  });
+  const summary = {
+    ...analyzeRepeatability(captures, {
+      minDiscriminability: manifest.minDiscriminability,
+      madFloor: manifest.madFloor,
+    }),
+    manifestValidation: {
+      ok: true,
+      requiredSubjects: REPEATABILITY_REQUIRED_SUBJECTS,
+      requiredCapturesPerSubject: REPEATABILITY_REQUIRED_CAPTURES_PER_SUBJECT,
+    },
+  };
 
   const rendered = JSON.stringify(summary, null, 2);
   if (outputFlag !== -1 && argv[outputFlag + 1]) {
