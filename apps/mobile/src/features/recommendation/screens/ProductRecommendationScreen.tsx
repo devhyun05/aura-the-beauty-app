@@ -1199,8 +1199,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1,
-    height: 38,
     justifyContent: 'center',
+    minHeight: 44,
   },
   lookPickerActionText: {
     color: colors.white,
@@ -1248,8 +1248,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    height: 30,
     justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
   },
   changePhotoButtonText: {
@@ -1428,7 +1428,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     justifyContent: 'center',
     marginTop: spacing.md,
-    minHeight: 38,
+    minHeight: 44,
     paddingHorizontal: spacing.lg,
   },
   retryButtonText: {
@@ -1577,9 +1577,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    height: 36,
     justifyContent: 'center',
     maxWidth: 128,
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
   },
   sortMenu: {
@@ -1591,18 +1591,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'absolute',
     right: 0,
-    top: 42,
+    top: 50,
     zIndex: 3,
     ...sharedCardShadow,
   },
   sortMenuItem: {
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
   sortMenuItemActive: {
     backgroundColor: colors.surfaceMuted,
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
   sortMenuItemText: {
     color: colors.textSecondary,
@@ -1637,6 +1639,8 @@ const styles = StyleSheet.create({
     flexGrow: productCategoryTabWidthMode === 'labelContent' ? 0 : 1,
     flexShrink: 0,
     gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.xs,
   },
   tabIndicator: {

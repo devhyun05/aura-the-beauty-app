@@ -257,6 +257,12 @@ requireContract(
     productShelfCategories.includes("{id: 'liner', label: '아이라이너'}"),
   'the shelf page must expose the requested commercial makeup category tabs.',
 );
+requireContract(
+  recommendationShelfScreen.includes('tabScroller: {flexGrow: 0, height: 44}') &&
+    recommendationScreen.includes('minHeight: 44') &&
+    hubContent.includes("chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44"),
+  'category, sorting, and AR-region controls must keep a 44pt minimum touch target without expanding the shelf viewport.',
+);
 
 const productShelfCategoryModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productShelfCategories.ts',
