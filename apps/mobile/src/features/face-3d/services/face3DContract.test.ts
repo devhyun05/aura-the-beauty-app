@@ -141,6 +141,62 @@ expectEqual(
   'unknown schema rejected',
 );
 
+// ── Tier-2 optional 키 계약 (docs/face3d/TIER2_METRIC_CONTRACT.md §3) ─────────
+// 위 케이스들이 v1(필수 5지표) 파싱 회귀를 고정한다. 여기서는 optional 키의
+// 유/무/훼손이 v1 파싱 성공 여부에 영향을 주지 않음을 고정한다.
+const tier2Metric = {
+  confidence: 0.8,
+  mad: 0.002,
+  unit: 'normalized' as const,
+  validFrameCount: 27,
+  value: 0.41,
+};
+
+const profileWithTier2 = parseFace3DProfile({
+  ...profile,
+  metrics: {
+    ...profile.metrics,
+    malarProjectionLeft: tier2Metric,
+    noseLength: tier2Metric,
+  },
+});
+expect(profileWithTier2 !== null, 'tier-2 keys parse alongside required metrics');
+expectEqual(
+  profileWithTier2?.metrics.noseLength?.value,
+  0.41,
+  'tier-2 metric value preserved',
+);
+expectEqual(
+  profileWithTier2?.metrics.malarProjectionLeft?.confidence,
+  0.8,
+  'tier-2 confidence preserved',
+);
+
+const profileWithoutTier2 = parseFace3DProfile(profile);
+expect(
+  profileWithoutTier2 !== null,
+  'g1 profile without tier-2 keys still parses (v1 regression)',
+);
+expectEqual(
+  profileWithoutTier2?.metrics.noseLength,
+  undefined,
+  'absent tier-2 key stays undefined',
+);
+
+const profileWithBrokenTier2 = parseFace3DProfile({
+  ...profile,
+  metrics: {...profile.metrics, alarWidth: {unit: 'mm', value: 3}},
+});
+expect(
+  profileWithBrokenTier2 !== null,
+  'malformed tier-2 key does not reject the profile',
+);
+expectEqual(
+  profileWithBrokenTier2?.metrics.alarWidth,
+  undefined,
+  'malformed tier-2 key is dropped',
+);
+
 let state = reduceFace3DAnalysisState(INITIAL_FACE_3D_ANALYSIS_STATE, {
   request,
   type: 'start_requested',
