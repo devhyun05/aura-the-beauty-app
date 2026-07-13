@@ -256,11 +256,31 @@ namespace Aura.Face3D
             Face3DRobustAggregationResult central = Aggregate(
                 delegate(Face3DMetrics metrics) { return metrics.CentralProjectionScore; });
 
+            // Tier-2: 프레임별로 존재한 표본만 집계 — 전부 부재(g1)면 value:null 지표.
+            Face3DRobustAggregationResult noseLength = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.NoseLength; });
+            Face3DRobustAggregationResult nasalBridgeStraightness = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.NasalBridgeStraightness; });
+            Face3DRobustAggregationResult nasalAxisDeviation = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.NasalAxisDeviation; });
+            Face3DRobustAggregationResult alarWidth = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.AlarWidth; });
+            Face3DRobustAggregationResult malarProjectionLeft = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.MalarProjectionLeft; });
+            Face3DRobustAggregationResult malarProjectionRight = AggregateOptional(
+                delegate(Face3DMetrics metrics) { return metrics.MalarProjectionRight; });
+
             AddAggregationWarning(Face3DContract.NoseTipProjection, noseTip);
             AddAggregationWarning(Face3DContract.ChinProjection, chin);
             AddAggregationWarning(Face3DContract.UpperLipToELine, upperLip);
             AddAggregationWarning(Face3DContract.LowerLipToELine, lowerLip);
             AddAggregationWarning(Face3DContract.CentralProjectionScore, central);
+            AddOptionalAggregationWarning(Face3DContract.NoseLength, noseLength);
+            AddOptionalAggregationWarning(Face3DContract.NasalBridgeStraightness, nasalBridgeStraightness);
+            AddOptionalAggregationWarning(Face3DContract.NasalAxisDeviation, nasalAxisDeviation);
+            AddOptionalAggregationWarning(Face3DContract.AlarWidth, alarWidth);
+            AddOptionalAggregationWarning(Face3DContract.MalarProjectionLeft, malarProjectionLeft);
+            AddOptionalAggregationWarning(Face3DContract.MalarProjectionRight, malarProjectionRight);
             if (samples.Count < policy.TargetFrameCount)
             {
                 warnings.Add("target_frame_count_not_reached");
@@ -278,7 +298,13 @@ namespace Aura.Face3D
                     chin.Metric,
                     upperLip.Metric,
                     lowerLip.Metric,
-                    central.Metric));
+                    central.Metric,
+                    noseLength.Metric,
+                    nasalBridgeStraightness.Metric,
+                    nasalAxisDeviation.Metric,
+                    alarWidth.Metric,
+                    malarProjectionLeft.Metric,
+                    malarProjectionRight.Metric));
             reason = string.Empty;
             return true;
         }
@@ -289,6 +315,24 @@ namespace Aura.Face3D
             for (int index = 0; index < samples.Count; index += 1)
             {
                 values.Add(selector(samples[index]));
+            }
+
+            return Face3DRobustMetricAggregator.Aggregate(values, policy);
+        }
+
+        // Tier-2: null(그룹 부재·프레임 결측) 표본은 집계에서 제외한다. 표본이 하나도
+        // 없으면 Aggregate 가 value:null 지표를 반환한다.
+        private Face3DRobustAggregationResult AggregateOptional(
+            Func<Face3DMetrics, float?> selector)
+        {
+            List<float> values = new List<float>(samples.Count);
+            for (int index = 0; index < samples.Count; index += 1)
+            {
+                float? value = selector(samples[index]);
+                if (value.HasValue)
+                {
+                    values.Add(value.Value);
+                }
             }
 
             return Face3DRobustMetricAggregator.Aggregate(values, policy);
@@ -307,6 +351,20 @@ namespace Aura.Face3D
             {
                 warnings.Add(metricName + "_inliers_below_minimum");
             }
+        }
+
+        // Tier-2 는 그룹 부재(표본 0)가 정상 상태(g1)라 그때는 경고를 내지 않는다 —
+        // 표본이 있었는데 최소치에 못 미친 경우만 데이터 품질 신호다.
+        private void AddOptionalAggregationWarning(
+            string metricName,
+            Face3DRobustAggregationResult result)
+        {
+            if (result.InputCount == 0)
+            {
+                return;
+            }
+
+            AddAggregationWarning(metricName, result);
         }
 
         private Face3DCollectionUpdate BuildUpdate(

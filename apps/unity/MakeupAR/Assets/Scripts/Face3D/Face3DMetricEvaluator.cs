@@ -158,12 +158,80 @@ namespace Aura.Face3D
                 midfaceNormal,
                 faceScale);
 
+            // ── Tier-2 (optional 그룹) — 부재·퇴화는 해당 지표만 null, 절대 Blocked 아님.
+            // 정규화는 각 헬퍼/SignedPlaneProjection 내부 1곳에서만 수행한다(계약 §0-2).
+
+            // 중선(midsagittal) 평면: origin=midfaceOrigin, normal=정규화 midfaceHorizontal.
+            // 전후 기준면(midfaceNormal)과 다른, 좌/우 부호를 갖는 유일한 평면.
+            // 양수 = 맵의 midfaceReferenceRight 쪽 — 부호 방향은 G1 오버레이 검증에서 확정.
+            Vector3 midsagittalNormal = midfaceHorizontal / faceScale;
+
+            float? noseLength = null;
+            float? nasalBridgeStraightness = null;
+            float? nasalAxisDeviation = null;
+            float? alarWidth = null;
+            float? malarProjectionLeft = null;
+            float? malarProjectionRight = null;
+
+            bool hasNasion = TryCentroid(vertices, semanticMap.NasionIndices, out Vector3 nasion);
+            if (hasNasion)
+            {
+                noseLength = NormalizedDistance(nasion, noseTip, faceScale);
+            }
+
+            List<Vector3> bridgePoints = CollectPoints(vertices, semanticMap.NoseBridgeMidlineIndices);
+            if (bridgePoints != null)
+            {
+                // 직선은 nasion 중심→noseTip 중심의 "이상적 콧대 축"에 고정한다(계약 §2) —
+                // nasion 그룹이 없으면 축을 정의할 수 없어 straightness 도 null.
+                if (hasNasion)
+                {
+                    nasalBridgeStraightness = NormalizedResidualRmsToLine(
+                        bridgePoints,
+                        nasion,
+                        noseTip - nasion,
+                        faceScale);
+                }
+
+                nasalAxisDeviation = MeanSignedPlaneProjection(
+                    bridgePoints,
+                    midfaceOrigin,
+                    midsagittalNormal,
+                    faceScale);
+            }
+
+            if (TryCentroid(vertices, semanticMap.AlarLeftIndices, out Vector3 alarLeft)
+                && TryCentroid(vertices, semanticMap.AlarRightIndices, out Vector3 alarRight))
+            {
+                alarWidth = NormalizedDistance(alarLeft, alarRight, faceScale);
+            }
+
+            // malar 는 ROI 내 vertex 별 전후 투영의 최댓값(표면 최고점) — 좌우 평균 금지(계약 §2).
+            malarProjectionLeft = MaxSignedPlaneProjection(
+                vertices,
+                semanticMap.MalarApexLeftIndices,
+                midfaceOrigin,
+                midfaceNormal,
+                faceScale);
+            malarProjectionRight = MaxSignedPlaneProjection(
+                vertices,
+                semanticMap.MalarApexRightIndices,
+                midfaceOrigin,
+                midfaceNormal,
+                faceScale);
+
             Face3DMetrics metrics = new Face3DMetrics(
                 noseTipProjection,
                 chinProjection,
                 upperLipToELine,
                 lowerLipToELine,
-                centralProjectionScore);
+                centralProjectionScore,
+                noseLength,
+                nasalBridgeStraightness,
+                nasalAxisDeviation,
+                alarWidth,
+                malarProjectionLeft,
+                malarProjectionRight);
             if (!metrics.IsFinite)
             {
                 return Face3DEvaluationResult.Blocked("face3d_metric_not_finite", topology);
@@ -214,6 +282,118 @@ namespace Aura.Face3D
 
             normal.Normalize();
             return true;
+        }
+
+        // ── Tier-2 헬퍼 — 나눗셈(faceScale 정규화)은 여기 내부 1곳씩만. 반환 null =
+        //    입력 퇴화(호출측은 지표 null 로 격리).
+
+        private static float? NormalizedDistance(Vector3 a, Vector3 b, float faceScale)
+        {
+            float distance = (b - a).magnitude / faceScale;
+            return Face3DNumeric.IsFinite(distance) ? distance : (float?)null;
+        }
+
+        private static float? NormalizedResidualRmsToLine(
+            List<Vector3> points,
+            Vector3 lineOrigin,
+            Vector3 lineAxis,
+            float faceScale)
+        {
+            float axisLength = lineAxis.magnitude;
+            if (!Face3DNumeric.IsFinite(axisLength) || axisLength <= GeometryEpsilon)
+            {
+                return null;
+            }
+
+            Vector3 direction = lineAxis / axisLength;
+            float sumSquared = 0.0f;
+            for (int index = 0; index < points.Count; index += 1)
+            {
+                Vector3 offset = points[index] - lineOrigin;
+                Vector3 residual = offset - (Vector3.Dot(offset, direction) * direction);
+                sumSquared += residual.sqrMagnitude;
+            }
+
+            float rms = Mathf.Sqrt(sumSquared / points.Count) / faceScale;
+            return Face3DNumeric.IsFinite(rms) ? rms : (float?)null;
+        }
+
+        private static float? MeanSignedPlaneProjection(
+            List<Vector3> points,
+            Vector3 planeOrigin,
+            Vector3 planeNormal,
+            float faceScale)
+        {
+            float sum = 0.0f;
+            for (int index = 0; index < points.Count; index += 1)
+            {
+                sum += SignedPlaneProjection(points[index], planeOrigin, planeNormal, faceScale);
+            }
+
+            float mean = sum / points.Count;
+            return Face3DNumeric.IsFinite(mean) ? mean : (float?)null;
+        }
+
+        private static float? MaxSignedPlaneProjection(
+            IReadOnlyList<Vector3> vertices,
+            IReadOnlyList<int> indices,
+            Vector3 planeOrigin,
+            Vector3 planeNormal,
+            float faceScale)
+        {
+            List<Vector3> points = CollectPoints(vertices, indices);
+            if (points == null)
+            {
+                return null;
+            }
+
+            float max = float.NegativeInfinity;
+            for (int index = 0; index < points.Count; index += 1)
+            {
+                float projection = SignedPlaneProjection(
+                    points[index],
+                    planeOrigin,
+                    planeNormal,
+                    faceScale);
+                if (projection > max)
+                {
+                    max = projection;
+                }
+            }
+
+            return Face3DNumeric.IsFinite(max) ? max : (float?)null;
+        }
+
+        // 그룹 부재(null)·빈 그룹·범위 밖·비유한 vertex 는 전부 null 반환 — Tier-2 는
+        // 프레임을 Blocked 로 만들지 않고 지표 단위로만 빠진다.
+        private static List<Vector3> CollectPoints(
+            IReadOnlyList<Vector3> vertices,
+            IReadOnlyList<int> indices)
+        {
+            if (vertices == null || indices == null || indices.Count == 0)
+            {
+                return null;
+            }
+
+            List<Vector3> points = new List<Vector3>(indices.Count);
+            for (int index = 0; index < indices.Count; index += 1)
+            {
+                int vertexIndex = indices[index];
+                if (vertexIndex < 0 || vertexIndex >= vertices.Count)
+                {
+                    return null;
+                }
+
+                Vector3 vertex = vertices[vertexIndex];
+                if (!Face3DNumeric.IsFinite(vertex))
+                {
+                    return null;
+                }
+
+                points.Add(vertex);
+            }
+
+            return points;
         }
 
         private static bool TryCentroid(

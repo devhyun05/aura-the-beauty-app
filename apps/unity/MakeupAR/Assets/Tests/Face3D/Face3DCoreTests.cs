@@ -359,6 +359,271 @@ namespace Aura.Face3D.Tests
             Assert.That(json, Does.Not.Contain("NaN"));
         }
 
+        // ── Tier-2 (docs/face3d/TIER2_METRIC_CONTRACT.md) ──────────────────────────
+
+        [Test]
+        public void SemanticMap_AcceptsAbsentTier2GroupsAndKeepsGettersNull()
+        {
+            // g1 호환 회귀: tier2 필드가 없는(null) 맵은 지금과 동일하게 로드된다.
+            Face3DMeshSnapshot snapshot = CreateSnapshot(0.0f, false, false);
+            Face3DSemanticMap semanticMap = CreateSemanticMap(snapshot);
+
+            Assert.That(semanticMap.NasionIndices, Is.Null);
+            Assert.That(semanticMap.NoseBridgeMidlineIndices, Is.Null);
+            Assert.That(semanticMap.AlarLeftIndices, Is.Null);
+            Assert.That(semanticMap.AlarRightIndices, Is.Null);
+            Assert.That(semanticMap.MalarApexLeftIndices, Is.Null);
+            Assert.That(semanticMap.MalarApexRightIndices, Is.Null);
+            // ToData 왕복에서도 "부재"가 빈 배열로 승격되면 안 된다.
+            Assert.That(semanticMap.ToData().nasionIndices, Is.Null);
+        }
+
+        [Test]
+        public void SemanticMap_RejectsInvalidTier2Groups()
+        {
+            Face3DMeshSnapshot snapshot = CreateTier2Snapshot();
+            Assert.That(Face3DTopologyFingerprint.TryCreate(
+                snapshot,
+                out Face3DTopologyFingerprint topology,
+                out string fingerprintReason), Is.True, fingerprintReason);
+
+            // 범위 밖 인덱스
+            Face3DSemanticMapData data = CreateTier2SemanticMapData(topology);
+            data.nasionIndices = new[] { 73, 74, 9999 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out string reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // 기존 그룹과 겹침 (noseTip 24 재사용)
+            data = CreateTier2SemanticMapData(topology);
+            data.nasionIndices = new[] { 24, 73, 74 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // tier2 그룹끼리 겹침
+            data = CreateTier2SemanticMapData(topology);
+            data.alarLeftIndices = new[] { 80, 81, 76 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // 콧대 중앙선 최소 4점 미달
+            data = CreateTier2SemanticMapData(topology);
+            data.noseBridgeMidlineIndices = new[] { 76, 77, 78 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+        }
+
+        [Test]
+        public void Evaluator_EmitsNullTier2MetricsWhenGroupsAbsent()
+        {
+            // 기본 5지표 회귀 + tier2 null 격리: g1 맵으로는 절대 Blocked 가 아니다.
+            Face3DMeshSnapshot snapshot = CreateSnapshot(0.0f, false, false);
+            Face3DEvaluationResult evaluation = Face3DMetricEvaluator.Evaluate(
+                snapshot,
+                CreateSemanticMap(snapshot));
+
+            Assert.That(evaluation.IsValid, Is.True, evaluation.Reason);
+            Assert.That(evaluation.Metrics.IsFinite, Is.True);
+            Assert.That(evaluation.Metrics.NoseLength, Is.Null);
+            Assert.That(evaluation.Metrics.NasalBridgeStraightness, Is.Null);
+            Assert.That(evaluation.Metrics.NasalAxisDeviation, Is.Null);
+            Assert.That(evaluation.Metrics.AlarWidth, Is.Null);
+            Assert.That(evaluation.Metrics.MalarProjectionLeft, Is.Null);
+            Assert.That(evaluation.Metrics.MalarProjectionRight, Is.Null);
+        }
+
+        [Test]
+        public void Evaluator_ComputesTier2MetricsFromOptionalGroups()
+        {
+            Face3DMeshSnapshot snapshot = CreateTier2Snapshot();
+            Face3DEvaluationResult evaluation = Face3DMetricEvaluator.Evaluate(
+                snapshot,
+                CreateTier2SemanticMap(snapshot));
+
+            Assert.That(evaluation.IsValid, Is.True, evaluation.Reason);
+
+            // 합성 기하 기지값 (faceScale=2):
+            // noseLength = |(0,0.5,1)-(0,0.8,0.4)| / 2 = sqrt(0.45)/2
+            Assert.That(evaluation.Metrics.NoseLength.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.NoseLength.Value,
+                Is.EqualTo(Mathf.Sqrt(0.45f) / 2.0f).Within(0.0001f));
+            // 중앙선 4점은 nasion→noseTip 직선에서 x+0.2 평행 이동 → 잔차 0.2/2
+            Assert.That(evaluation.Metrics.NasalBridgeStraightness.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.NasalBridgeStraightness.Value,
+                Is.EqualTo(0.1f).Within(0.0001f));
+            // 중선 평면 부호거리 평균 = +0.2/2 (양수 = midfaceReferenceRight 쪽)
+            Assert.That(evaluation.Metrics.NasalAxisDeviation.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.NasalAxisDeviation.Value,
+                Is.EqualTo(0.1f).Within(0.0001f));
+            // alarWidth = 0.6/2
+            Assert.That(evaluation.Metrics.AlarWidth.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.AlarWidth.Value,
+                Is.EqualTo(0.3f).Within(0.0001f));
+            // malar = ROI 내 전후 투영 "최댓값" (z 최대 vertex): 0.62/2, 0.55/2
+            Assert.That(evaluation.Metrics.MalarProjectionLeft.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.MalarProjectionLeft.Value,
+                Is.EqualTo(0.31f).Within(0.0001f));
+            Assert.That(evaluation.Metrics.MalarProjectionRight.HasValue, Is.True);
+            Assert.That(
+                evaluation.Metrics.MalarProjectionRight.Value,
+                Is.EqualTo(0.275f).Within(0.0001f));
+        }
+
+        [Test]
+        public void Collector_AggregatesOptionalTier2AndEmitsNullWhenAbsent()
+        {
+            // tier2 있는 맵: 값이 중앙값으로 집계된다.
+            Face3DMeshSnapshot tier2Snapshot = CreateTier2Snapshot();
+            Face3DEvaluationResult tier2Evaluation = Face3DMetricEvaluator.Evaluate(
+                tier2Snapshot,
+                CreateTier2SemanticMap(tier2Snapshot));
+            Face3DProfileCollector tier2Collector = new Face3DProfileCollector(0.0);
+            for (int index = 0; index < 30; index += 1)
+            {
+                tier2Collector.AddEvaluation(tier2Evaluation, index * 0.05);
+            }
+
+            Assert.That(tier2Collector.TryBuildProfile(
+                3.0,
+                out Face3DProfile tier2Profile,
+                out string tier2Reason), Is.True, tier2Reason);
+            Assert.That(tier2Profile.Metrics.AlarWidth.Value.HasValue, Is.True);
+            Assert.That(
+                tier2Profile.Metrics.AlarWidth.Value.Value,
+                Is.EqualTo(0.3f).Within(0.0001f));
+            Assert.That(tier2Profile.Metrics.AlarWidth.ValidFrameCount, Is.EqualTo(30));
+
+            // g1 맵: tier2 는 value:null 이고, 부재는 경고를 만들지 않는다.
+            Face3DMeshSnapshot baseSnapshot = CreateSnapshot(0.0f, false, false);
+            Face3DEvaluationResult baseEvaluation = Face3DMetricEvaluator.Evaluate(
+                baseSnapshot,
+                CreateSemanticMap(baseSnapshot));
+            Face3DProfileCollector baseCollector = new Face3DProfileCollector(0.0);
+            for (int index = 0; index < 30; index += 1)
+            {
+                baseCollector.AddEvaluation(baseEvaluation, index * 0.05);
+            }
+
+            Assert.That(baseCollector.TryBuildProfile(
+                3.0,
+                out Face3DProfile baseProfile,
+                out string baseReason), Is.True, baseReason);
+            Assert.That(baseProfile.Metrics.NoseLength.Value.HasValue, Is.False);
+            Assert.That(baseProfile.Metrics.NoseLength.ValidFrameCount, Is.EqualTo(0));
+            foreach (string warning in baseProfile.Warnings)
+            {
+                Assert.That(warning, Does.Not.Contain("noseLength"));
+                Assert.That(warning, Does.Not.Contain("alarWidth"));
+            }
+        }
+
+        [Test]
+        public void ProfileJson_AlwaysEmitsTier2KeysWithNullWhenAbsent()
+        {
+            Face3DProfileMetric available = new Face3DProfileMetric(0.2f, 1.0f, 30, 0.0f);
+            Face3DProfile profile = new Face3DProfile(
+                "topology",
+                30,
+                30,
+                new string[0],
+                new Face3DProfileMetrics(
+                    available,
+                    available,
+                    available,
+                    available,
+                    available));
+
+            string json = profile.ToCanonicalJson();
+
+            // v1 파서(기존 5키 필수)와 신규 파서(6키 optional) 모두가 읽을 수 있는 형태.
+            Assert.That(json, Does.Contain("\"noseLength\":{\"value\":null"));
+            Assert.That(json, Does.Contain("\"nasalBridgeStraightness\":{\"value\":null"));
+            Assert.That(json, Does.Contain("\"nasalAxisDeviation\":{\"value\":null"));
+            Assert.That(json, Does.Contain("\"alarWidth\":{\"value\":null"));
+            Assert.That(json, Does.Contain("\"malarProjectionLeft\":{\"value\":null"));
+            Assert.That(json, Does.Contain("\"malarProjectionRight\":{\"value\":null"));
+            Assert.That(json, Does.Not.Contain("NaN"));
+        }
+
+        // tier2 그룹용 vertex 클러스터를 뒤에 덧붙인 합성 메시 — 기존 그룹 인덱스는
+        // CreateSnapshot 과 동일해 기본 5지표 기하가 변하지 않는다.
+        private static Face3DMeshSnapshot CreateTier2Snapshot()
+        {
+            List<Vector3> vertices = new List<Vector3>();
+            AppendRepeated(vertices, new Vector3(-1.0f, 0.0f, 0.0f), 8);
+            AppendRepeated(vertices, new Vector3(1.0f, 0.0f, 0.0f), 8);
+            AppendRepeated(vertices, new Vector3(0.0f, 1.0f, 0.0f), 8);
+            AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 1.0f), 3);
+            AppendRepeated(vertices, new Vector3(0.0f, -1.0f, 1.0f), 3);
+            AppendRepeated(vertices, new Vector3(0.0f, 0.0f, 0.8f), 8);
+            AppendRepeated(vertices, new Vector3(0.0f, -0.4f, 0.7f), 8);
+            AppendRepeated(vertices, new Vector3(-1.0f, -0.5f, 0.5f), 8);
+            AppendRepeated(vertices, new Vector3(1.0f, -0.5f, 0.5f), 8);
+            AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 0.5f), 8);
+            AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 0.5f), 3);
+
+            // 73-75: nasion
+            AppendRepeated(vertices, new Vector3(0.0f, 0.8f, 0.4f), 3);
+            // 76-79: 콧대 중앙선 — nasion→noseTip 직선을 x+0.2 평행 이동한 4점
+            for (int step = 1; step <= 4; step += 1)
+            {
+                float t = step * 0.2f;
+                vertices.Add(new Vector3(0.2f, 0.8f - (0.3f * t), 0.4f + (0.6f * t)));
+            }
+
+            // 80-85: alar 좌/우
+            AppendRepeated(vertices, new Vector3(-0.3f, 0.2f, 0.6f), 3);
+            AppendRepeated(vertices, new Vector3(0.3f, 0.2f, 0.6f), 3);
+            // 86-91: malar 좌/우 ROI (z 최대가 각각 0.62 / 0.55)
+            vertices.Add(new Vector3(-0.8f, 0.1f, 0.5f));
+            vertices.Add(new Vector3(-0.8f, 0.1f, 0.62f));
+            vertices.Add(new Vector3(-0.8f, 0.1f, 0.3f));
+            vertices.Add(new Vector3(0.8f, 0.1f, 0.4f));
+            vertices.Add(new Vector3(0.8f, 0.1f, 0.55f));
+            vertices.Add(new Vector3(0.8f, 0.1f, 0.2f));
+
+            int[] indices = { 0, 8, 16, 24, 27, 30, 24, 30, 38, 46, 54, 62 };
+            Vector2[] uvs = new Vector2[vertices.Count];
+            for (int index = 0; index < uvs.Length; index += 1)
+            {
+                float x = (float)index / (uvs.Length - 1);
+                float y = (index % 10) * 0.05f;
+                uvs[index] = new Vector2(x, y);
+            }
+
+            return new Face3DMeshSnapshot(vertices, indices, uvs, 1.0);
+        }
+
+        private static Face3DSemanticMap CreateTier2SemanticMap(Face3DMeshSnapshot snapshot)
+        {
+            Assert.That(Face3DTopologyFingerprint.TryCreate(
+                snapshot,
+                out Face3DTopologyFingerprint topology,
+                out string fingerprintReason), Is.True, fingerprintReason);
+            Assert.That(Face3DSemanticMap.TryCreate(
+                CreateTier2SemanticMapData(topology),
+                out Face3DSemanticMap semanticMap,
+                out string mapReason), Is.True, mapReason);
+            return semanticMap;
+        }
+
+        private static Face3DSemanticMapData CreateTier2SemanticMapData(
+            Face3DTopologyFingerprint topology)
+        {
+            Face3DSemanticMapData data = CreateSemanticMapData(topology);
+            data.nasionIndices = CreateIndexRange(73, 3);
+            data.noseBridgeMidlineIndices = CreateIndexRange(76, 4);
+            data.alarLeftIndices = CreateIndexRange(80, 3);
+            data.alarRightIndices = CreateIndexRange(83, 3);
+            data.malarApexLeftIndices = CreateIndexRange(86, 3);
+            data.malarApexRightIndices = CreateIndexRange(89, 3);
+            return data;
+        }
+
         private static Face3DMeshSnapshot CreateSnapshot(
             float deformation,
             bool alterIndices,
