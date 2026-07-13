@@ -1450,3 +1450,29 @@ Codex #10 교차검증 대상. 레이턴시: warm 2.4~7.3s/장 (512, M1).
   근거 — v02에서 CLIPSeg 임계 강화 + 육안 스팟체크 추가.
 - **K-FACE**: 자료요청서·활용계획서 PDF 작성 완료(활용계획서에 본인 계정
   Drive/Colab 사용 명시). 승인 대기와 무관하게 커먼즈 트랙으로 진행.
+
+### v02 전략 교차검증 — Codex(gpt-5.6-sol xhigh) 평결로 계획 전면 수정 (2026-07-13)
+
+- **원계획(A 공식 fine-tune 주력) 기각**: 256px 학습→1536px 서빙의 일반화는 구조
+  이지 모공 재현이 아님(big-lama는 450만 장·8×V100 체제 — 수백 장 fine-tune과
+  다른 체제). A는 **1일 한정 반증 실험(A-lite)**으로 축소. anime-lama/GLaMa를
+  선례로 든 것은 과장이었음을 인정.
+- **B(역방향 합성 페어) 단독 기각**: CVPR 2020 수염 합성 연구 ablation이 직접
+  반증 — 합성 3만 장 단독 FID 278 vs 실제 1.3천 장 앵커 혼합 53. 합성 페어는
+  **통제된 데이터 공장**으로만(8개 통제: 마스크 내 합성, 보호영역, ΔE·ArcFace
+  드리프트 페어 폐기, leave-one-generator-out, residual-only 출력, no-op 예제).
+- **채택: C 주력 — 수염을 '구멍'이 아닌 '반투명 레이어'로 분해**: soft alpha
+  예측 → 옅은 수염은 strand residual만 제거(하부 피부·음영 보존), 불투명 core만
+  LaMa 구조 채움, 본인 피부 패치를 texture bank로 쓰는 고주파 residual 리파이너.
+  binary hole 방식이 "남아있는 피부 정보를 스스로 버리는" 구조적 오류였음.
+- **근본 한계 공식화**: 짙은 수염 아래 점·흉터는 관측 불가(ill-posed) — 제품
+  문구를 "레이저 제모 결과 예측"이 아닌 "무수염 모습 시뮬레이션"으로 제한,
+  MVP는 옅은 수염·면도자국 우선 검토.
+- **평가 개편**: 8/8 정합은 단일 클래스 일치일 뿐. hard gate 추가(마스크 밖
+  bit-exact, 무수염 no-op, landmark/ArcFace 드리프트 가드레일, 경계 ring 불연속,
+  해시 결정론 회귀), texRatio → PSD slope·DISTS 보강, FID 금지(소표본 편향).
+  cp7 8장은 dev로 확정, 신규 sealed set 별도.
+- **2주 시퀀스**: 1주차 = oracle mask로 마스크/채움 오류 분리 → 무학습 상한
+  (MAT/FcF/diffusion research-only) → A-lite 1일 + B 파일럿 100–200쌍(지문 검사).
+  2주차 = C+B-hybrid(masked residual/alpha student + 리파이너), 실제 면도 전후
+  앵커 확보 시 혼합. 전문: XVAL_20260713_V02_STRATEGY_CODEX.md
