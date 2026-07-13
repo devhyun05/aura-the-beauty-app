@@ -876,6 +876,13 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   // YES once the current capture has already been retried without semantic
   // mattes (the stall fallback); a second stall then rejects instead of looping.
   BOOL _pendingCaptureIsFallback;
+  // 현재 유효한 촬영 요청의 AVCapturePhotoSettings.uniqueID. watchdog fallback 이
+  // 발행되면 원 요청과 fallback 이 같은 delegate 로 동시 비행한다 — delegate 는
+  // photo.resolvedSettings.uniqueID 가 이 값과 일치할 때만 공용 resolver 를
+  // 소비한다. 없으면 지연 도착한 stale 콜백이 (a) fallback 의 promise 를 가로채
+  // 실패 처리하거나 (b) 다음 촬영의 promise 를 이전 사진으로 완료하거나
+  // (c) format/matte 메타데이터를 오표기할 수 있다(코덱스 2026-07-13 HIGH).
+  int64_t _pendingCaptureUniqueID;
   BOOL _hasCameraStabilityObservers;
   BOOL _semanticMatteCapture;
   BOOL _semanticMatteRequiresHeic;
@@ -1058,13 +1065,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     if (!self->_session.isRunning) {
       [self->_session startRunning];
     }
-    self->_isSessionRunning = YES;
+    // startRunning 은 동기 호출이며 실패할 수 있다(자원 경합 등) — 실제 상태를
+    // 반영해야 capture() 진입 가드가 죽은 세션에 촬영을 걸지 않는다.
+    self->_isSessionRunning = self->_session.isRunning;
+    if (!self->_isSessionRunning) {
+      [self emitCameraError:@"camera_unavailable"];
+    }
   });
 }
 
 - (void)stopSession
 {
   dispatch_async(_sessionQueue, ^{
+    [self rejectPendingCaptureForStop];
     if (self->_session.isRunning) {
       [self->_session stopRunning];
     }
@@ -1075,6 +1088,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (void)stopSessionWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject
 {
   dispatch_async(_sessionQueue, ^{
+    [self rejectPendingCaptureForStop];
     if (self->_session.isRunning) {
       [self->_session stopRunning];
     }
@@ -1084,6 +1098,36 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       resolve(@{ @"stopped": @YES });
     });
   });
+}
+
+// Runs on _sessionQueue. 세션 stop 시 진행 중 촬영을 즉시 reject 하고 상태를
+// 정리한다. 종전에는 pending 상태가 그대로 남아 (a) 같은 view 인스턴스로
+// 재진입한 촬영이 워치독 만료(최대 7+4초)까지 REALTIME_CAMERA_BUSY 로 거부되고
+// (b) 워치독이 멈춘 카메라에 fallback 촬영을 발행했다(코덱스 2026-07-13).
+// generation 증가가 예약된 워치독을 무효화하고, 지연 도착 콜백은 delegate 의
+// uniqueID/hasPending 가드가 차단한다.
+- (void)rejectPendingCaptureForStop
+{
+  if (!_hasPendingCapture) {
+    return;
+  }
+
+  RCTPromiseRejectBlock reject = _captureReject;
+  _captureResolve = nil;
+  _captureReject = nil;
+  _pendingCaptureCameraMetadata = nil;
+  _pendingSemanticMattes = nil;
+  _pendingCaptureFormat = nil;
+  _pendingCaptureIsFallback = NO;
+  _hasPendingCapture = NO;
+  ++_captureGeneration;
+  [self restoreCameraAutoModes];
+  NSLog(@"[aura:face-capture] capture:cancelled-by-stop rejecting pending capture");
+  if (reject) {
+    reject(@"REALTIME_CAPTURE_CANCELLED",
+           @"Realtime face capture was cancelled because the camera session stopped.",
+           nil);
+  }
 }
 
 - (NSDictionary *)semanticMatteCapabilityForRung:(NSInteger)rung
@@ -1204,11 +1248,20 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     return NO;
   }
 
-  if ([_session canAddInput:input]) {
-    [_session addInput:input];
-    _videoInput = input;
-    [self startCameraStabilityMonitoringForDevice:device];
+  // input/output 추가 실패는 즉시 구성 실패로 처리한다. 종전에는 조용히
+  // 건너뛰어 "구성 성공·프레임 없음" 상태가 됐다 — input 이 없으면 검출이
+  // 영원히 no_face, photo output 이 없으면 촬영 불가인데 JS 는 카메라가
+  // 정상이라고 믿는다(코덱스 2026-07-13). canAdd* 실패는 다른 세션의 자원
+  // 점유 등 회복 가능성이 있는 상태라, 오류를 방출해 사용자가 재시도(화면
+  // 재진입)할 근거를 준다.
+  if (![_session canAddInput:input]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"input_unavailable"];
+    return NO;
   }
+  [_session addInput:input];
+  _videoInput = input;
+  [self startCameraStabilityMonitoringForDevice:device];
 
   AVCaptureVideoDataOutput *videoOutput = [AVCaptureVideoDataOutput new];
   videoOutput.alwaysDiscardsLateVideoFrames = YES;
@@ -1217,16 +1270,22 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   };
   [videoOutput setSampleBufferDelegate:self queue:_visionQueue];
 
-  if ([_session canAddOutput:videoOutput]) {
-    [_session addOutput:videoOutput];
-    _videoOutput = videoOutput;
+  if (![_session canAddOutput:videoOutput]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"camera_unavailable"];
+    return NO;
   }
+  [_session addOutput:videoOutput];
+  _videoOutput = videoOutput;
 
   AVCapturePhotoOutput *photoOutput = [AVCapturePhotoOutput new];
-  if ([_session canAddOutput:photoOutput]) {
-    [_session addOutput:photoOutput];
-    _photoOutput = photoOutput;
+  if (![_session canAddOutput:photoOutput]) {
+    [_session commitConfiguration];
+    [self emitCameraError:@"camera_unavailable"];
+    return NO;
   }
+  [_session addOutput:photoOutput];
+  _photoOutput = photoOutput;
 
   if (_semanticMatteCapture) {
     _matteCapability = [self configureSemanticMatteDeliveryForDevice:device];
@@ -2205,6 +2264,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
         ? [AVCapturePhotoSettings photoSettingsWithFormat:@{AVVideoCodecKey: AVVideoCodecTypeHEVC}]
         : [AVCapturePhotoSettings photoSettings];
     settings.flashMode = AVCaptureFlashModeOff;
+    self->_pendingCaptureUniqueID = settings.uniqueID;
     self->_pendingCaptureFormat = useHeic ? @"heic" : @"jpg";
     self->_pendingSemanticMattes =
         AURARealtimeSemanticMatteAvailability(requestsSemanticMattes, NO, NO);
@@ -2261,6 +2321,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
     AVCapturePhotoSettings *settings = [AVCapturePhotoSettings photoSettings];
     settings.flashMode = AVCaptureFlashModeOff;
+    // fallback 이 유효 요청이 된다 — 이후 원(matte) 요청의 지연 콜백은 uniqueID
+    // 불일치로 무시된다.
+    _pendingCaptureUniqueID = settings.uniqueID;
     [_photoOutput capturePhotoWithSettings:settings delegate:self];
 
     dispatch_after(
@@ -2297,6 +2360,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
                        error:(NSError *)error
 {
   dispatch_async(_sessionQueue, ^{
+    // stale 콜백 가드: watchdog fallback 발행 후 뒤늦게 도착한 원 요청의 콜백,
+    // 또는 이미 정리(타임아웃/stop)된 요청의 콜백은 현재 유효 요청의 상태를
+    // 건드리면 안 된다 — promise 가로채기·format 오표기의 원인. 촬영 요청과
+    // 콜백은 photo.resolvedSettings.uniqueID 로 1:1 대응된다.
+    if (!self->_hasPendingCapture ||
+        photo.resolvedSettings.uniqueID != self->_pendingCaptureUniqueID) {
+      NSLog(@"[aura:face-capture] capture:stale-callback ignored uniqueID=%lld pending=%lld hasPending=%d",
+            (long long)photo.resolvedSettings.uniqueID,
+            (long long)self->_pendingCaptureUniqueID,
+            self->_hasPendingCapture);
+      return;
+    }
+
     RCTPromiseResolveBlock resolve = self->_captureResolve;
     RCTPromiseRejectBlock reject = self->_captureReject;
     NSDictionary *cameraMetadata = self->_pendingCaptureCameraMetadata;
