@@ -7,11 +7,12 @@
 // 한쪽만 조정되는 드리프트도 재발 위험이었다. 이 모듈이 유일한 정의처다.
 //
 // 정책 (2026-07-13 확정): 사후 게이트가 존재하는 face_analysis 촬영의
-// 실시간 게이트는 사후와 "동치"로 맞춘다 — 실시간을 통과한 각도는 사후
-// 게이트도 반드시 통과한다(경계 포함). 셔터 순간의 지터로 경계 탈락이
-// 잦아지면 REALTIME_POSE_JITTER_MARGIN_DEG 하나만 올리면 된다(예: 1이면
-// 실시간 7/7/4). 불변식 "실시간 ≤ 사후"는 facePoseGates.test.ts 가 CI 에서
-// 강제하므로 실시간이 사후보다 헐거워지는 역주행은 커밋될 수 없다.
+// 실시간 게이트는 사후와 "동치"로 맞춘다(마진 0) — 실시간을 통과한 각도는
+// 사후 게이트도 반드시 통과한다(경계 포함). 현재 값은 실시간·사후 모두
+// yaw 8 / pitch 12 / roll 5 (pitch 12 는 셀피 usability 결정 — 아래 참조).
+// 셔터 순간의 지터로 경계 탈락이 잦아지면 REALTIME_POSE_JITTER_MARGIN_DEG
+// 하나만 올리면 된다(예: 1 이면 실시간 7/11/4). 불변식 "실시간 ≤ 사후"는
+// facePoseGates.test.ts 가 CI 에서 강제하므로 역주행은 커밋될 수 없다.
 
 export type PoseGateLimits = {
   maxAbsYawDeg: number;
@@ -27,22 +28,30 @@ export type PoseGateLimits = {
 };
 
 // 사후(촬영된 사진 분석) 게이트 — faceVerticalThirdsQualityGate 가 사용.
-// 근거: pitch/yaw 는 세로 삼등분 비율의 원근 왜곡원이고(±8° 이내면 비율
-// 판정 임계 0.08 을 뒤집지 못함), roll 은 ±5° 까지만 사후 수학 보정으로
-// 살릴 수 있다(faceVerticalThirdsRollCorrection). 셋 다 측정 설계 문서의
-// 실측 기준값.
+// 근거:
+// - yaw 8°: 세로 삼등분 비율의 원근 왜곡원. 측정 설계 문서 실측 기준값.
+// - roll 5°: 사후 수학 보정(faceVerticalThirdsRollCorrection)이 살릴 수 있는
+//   상한과 묶임. 5° 초과는 보정 불가 → 반드시 이 값 유지(12°로 못 올림).
+// - pitch 12°(2026-07-13 사용자 결정): 핸드헬드 셀피는 폰을 눈높이보다 낮게 드는
+//   게 자연스러워 정면 얼굴도 pitch 가 8°를 쉽게 넘는다(실기기 확인). 8°는 촬영을
+//   과하게 막았다. 종전 실시간 12°/사후 8° 조합은 8~12° 촬영을 "셔터는 되고 사후
+//   폐기"시키던 문제였는데, 실시간·사후를 둘 다 12°로 통일해 그 조용한 폐기를
+//   없앤다. 대가: 8~12° pitch 촬영의 세로비율 정확도가 소폭 하락(cos(12°)=0.978
+//   vs 0.990, 비율 추가 왜곡 최악 ~2~4%p → 경계 판정만 가끔 영향). usability 우선
+//   결정. (헤어라인 confidence 의 별도 pitch 정규화는 AURAFaceRatioHairline.m 에
+//   8°로 남아 있어, 8~12° 촬영은 헤어라인 신뢰도가 낮게 잡힐 수 있음 — 별도 검토.)
 export const POST_CAPTURE_POSE_GATE = Object.freeze({
   maxAbsYawDeg: 8,
-  maxAbsPitchDeg: 8,
+  maxAbsPitchDeg: 12,
   maxAbsRollDeg: 5,
 });
 
-// 지터 마진(°): 실시간 = 사후 − 마진. 실시간(Vision pose)과 사후(homuler matrix
-// pose)는 서로 다른 추정기라, 임계값을 같게(0) 둬도 셔터 순간 지터 + 추정기
-// 계통 편차로 "실시간 통과했는데 사후 경계 초과로 폐기"가 남는다(코덱스 F11).
-// 양(+)의 마진으로 실시간을 조금 더 엄격히 해 그 편차를 흡수한다. 정확한 값은
-// 진단 로그(실시간 Vision pose ↔ 업로드 matrix pose 쌍)로 재조정한다.
-export const REALTIME_POSE_JITTER_MARGIN_DEG = 1.5;
+// 지터 마진(°): 실시간 = 사후 − 마진. 0 = 실시간과 사후를 동치로(사용자 확정).
+// 실시간(Vision pose)과 사후(homuler matrix pose)는 서로 다른 추정기라 마진 0 이면
+// 셔터 순간 지터/추정기 편차로 경계 각도에서 "실시간 통과·사후 경계초과 폐기"가
+// 드물게 남을 수 있으나(코덱스 F11), 사용자는 촬영 성공률(usability)을 우선한다.
+// 경계 폐기가 잦아지면 이 값만 올리면 된다(불변식 "실시간 ≤ 사후"는 유지).
+export const REALTIME_POSE_JITTER_MARGIN_DEG = 0;
 
 // face_analysis(얼굴 분석 보고서) 촬영의 실시간 게이트.
 // 사후 게이트에서 파생 — 값을 직접 수정하지 말고 마진을 조정할 것.
