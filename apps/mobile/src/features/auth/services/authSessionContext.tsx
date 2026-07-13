@@ -11,6 +11,7 @@
 import * as SecureStore from '../../../shared/services/localSecureStore';
 
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
+import {resetProductEventCollection} from '../../recommendation/services/productEventService';
 import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
 
@@ -171,6 +172,11 @@ export function AuthSessionProvider({
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    // Optional product events must never cross an account switch or logout.
+    resetProductEventCollection();
+  }, [session?.user.id]);
 
   useEffect(() => {
     setBackendAuthTokenProvider(() => getTokenFromSession(sessionRef.current));

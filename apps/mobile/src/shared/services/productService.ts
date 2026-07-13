@@ -8,29 +8,19 @@ type BackendProduct = {
   brandName?: string | null;
   id?: string | null;
   imageUrl?: string | null;
-  price?: number | null;
+  price?: number | {amount?: number | null} | null;
   priceKrw?: number | null;
   productName?: string | null;
+  productId?: string | null;
+  shadeId?: string | null;
+  status?: 'active' | 'soldOut' | 'unavailable';
+  canUnlike?: boolean;
+  externalSource?: string | null;
+  purchaseUrl?: string | null;
 };
 
 type BackendLikedProductsResponse = {
   products?: BackendProduct[] | null;
-};
-
-export type ProductLikePayload = {
-  brandName: string;
-  category?: string;
-  id: string;
-  imageUrl?: string;
-  matchRate?: number;
-  palette?: string[];
-  price: number;
-  productInfo?: Record<string, unknown>;
-  productName: string;
-  purchaseUrl?: string;
-  reason?: string;
-  shadeName?: string;
-  tags?: string[];
 };
 
 function firstText(...values: Array<string | null | undefined>): string | undefined {
@@ -38,17 +28,30 @@ function firstText(...values: Array<string | null | undefined>): string | undefi
 }
 
 function mapBackendProduct(product: BackendProduct): Product | null {
-  const id = firstText(product.id);
+  const id = firstText(product.productId, product.id);
   const brandName = firstText(product.brandName);
   const productName = firstText(product.productName);
   const imageUrl = firstText(product.imageUrl);
 
-  if (!id || !brandName || !productName || !imageUrl) {
+  if (!id) {
     return null;
   }
+  if (product.status === 'unavailable' && product.canUnlike) {
+    return {
+      id,
+      brandName: '',
+      productName: '',
+      price: 0,
+      isLiked: true,
+      status: 'unavailable',
+      canUnlike: true,
+    };
+  }
+  if (!brandName || !productName || !imageUrl) return null;
 
   return {
     id,
+    shadeId: product.shadeId ?? null,
     brandName,
     productName,
     price:
@@ -56,36 +59,37 @@ function mapBackendProduct(product: BackendProduct): Product | null {
         ? product.price
         : typeof product.priceKrw === 'number'
           ? product.priceKrw
+          : typeof product.price === 'object' && typeof product.price?.amount === 'number'
+            ? product.price.amount
           : 0,
     imageSource: {uri: imageUrl} as ImageSourcePropType,
     isLiked: true,
+    status: product.status ?? 'active',
+    canUnlike: product.canUnlike ?? true,
+    externalSource: product.externalSource ?? null,
+    purchaseUrl: product.purchaseUrl ?? null,
   };
 }
 
 export const getProducts = async (): Promise<Product[]> => {
-  return Promise.resolve(productsMock);
+  return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
+    ? productsMock
+    : [];
 };
 
 export const getLikedProducts = async (): Promise<Product[]> => {
   if (!getBackendApiBaseUrl()) {
-    return productsMock.filter((product) => product.isLiked);
-  }
-
-  try {
-    const response = await requestBackendJson<BackendLikedProductsResponse>('/products/liked');
-
-    return Array.isArray(response.products)
-      ? response.products
-          .map(mapBackendProduct)
-          .filter((product): product is Product => Boolean(product))
+    return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
+      ? productsMock.filter((product) => product.isLiked)
       : [];
-  } catch (error) {
-    console.info('[aura:products] liked:fallback-empty', {
-      message: error instanceof Error ? error.message : String(error),
-    });
-
-    return [];
   }
+
+  const response = await requestBackendJson<BackendLikedProductsResponse>('/products/liked');
+  return Array.isArray(response.products)
+    ? response.products
+        .map(mapBackendProduct)
+        .filter((product): product is Product => Boolean(product))
+    : [];
 };
 
 export const getLikedProductPreviews = async (
@@ -96,29 +100,49 @@ export const getLikedProductPreviews = async (
   return products.slice(0, limit);
 };
 
-export const likeProduct = async (product: ProductLikePayload): Promise<boolean> => {
+export const likeProduct = async (
+  productId: string,
+  sourceShadeId?: string | null,
+): Promise<boolean> => {
   if (!getBackendApiBaseUrl()) {
-    return true;
+    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
+    throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
   }
 
   await requestBackendJson<{liked: boolean; productId: string}>(
-    `/products/${encodeURIComponent(product.id)}/like`,
+    `/products/${encodeURIComponent(productId)}/like`,
     {
       method: 'POST',
-      body: {product},
+      body: sourceShadeId ? {sourceShadeId} : {},
     },
   );
 
   return true;
 };
 
-export const unlikeProduct = async (productId: string): Promise<boolean> => {
+export const likeExternalProduct = async (
+  productId: string,
+  externalSource: string,
+): Promise<boolean> => {
+  if (!getBackendApiBaseUrl()) throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
+  await requestBackendJson<{liked: boolean; productId: string}>(
+    `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`,
+    {method: 'POST'},
+  );
+  return true;
+};
+
+export const unlikeProduct = async (productId: string, externalSource?: string | null): Promise<boolean> => {
   if (!getBackendApiBaseUrl()) {
-    return true;
+    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
+    throw new Error('좋아요를 취소할 서버가 연결되지 않았어요.');
   }
 
+  const path = externalSource
+    ? `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`
+    : `/products/${encodeURIComponent(productId)}/like`;
   await requestBackendJson<{liked: boolean; productId: string}>(
-    `/products/${encodeURIComponent(productId)}/like`,
+    path,
     {method: 'DELETE'},
   );
 

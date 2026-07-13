@@ -33,6 +33,19 @@ export class BackendApiError extends Error {
   }
 }
 
+export class BackendNetworkError extends Error {
+  code = 'NETWORK_UNAVAILABLE' as const;
+
+  constructor(message = '네트워크 연결을 확인한 뒤 다시 시도해 주세요.') {
+    super(message);
+    this.name = 'BackendNetworkError';
+  }
+}
+
+export function isBackendNetworkError(error: unknown): error is BackendNetworkError {
+  return error instanceof BackendNetworkError;
+}
+
 /**
  * 사용자가 의도적으로 취소(홈 복귀·화면 이탈)해 요청이 abort된 경우. 타임아웃과 구분해
  * 호출부가 조용히 삼킬 수 있게 별도 타입으로 던진다 (실패 화면을 띄우면 안 됨).
@@ -109,6 +122,15 @@ function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function isNetworkFailure(error: unknown): boolean {
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /network request failed|failed to fetch|networkerror|internet connection/i.test(message);
+}
+
 export async function requestBackendJson<T>(
   path: string,
   init: BackendJsonRequestInit = {},
@@ -169,6 +191,15 @@ export async function requestBackendJson<T>(
         timeoutMs,
       });
       throw new Error('서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.');
+    }
+
+    if (isNetworkFailure(error)) {
+      console.info('[aura:api] request:network-unavailable', {
+        durationMs: Date.now() - startedAt,
+        method,
+        path,
+      });
+      throw new BackendNetworkError();
     }
 
     throw error;

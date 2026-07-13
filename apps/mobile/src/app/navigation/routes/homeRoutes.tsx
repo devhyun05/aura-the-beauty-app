@@ -71,6 +71,10 @@ export function getHomeRecommendedFilterMoreRouteName(): 'HomeFilterStore' {
   return 'HomeFilterStore';
 }
 
+export function getHomeProductRecommendationRouteName(): 'ProductRecommendation' {
+  return 'ProductRecommendation';
+}
+
 export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
@@ -219,7 +223,9 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             onPressMakeupExtraction={handleMakeupExtractionPress}
             onPressMakeupFeedback={handleMakeupFeedbackPress}
             onPressMakeupFilter={handleMakeupFilterPress}
-            onPressProductRecommendations={() => rootNavigation?.navigate('AuradinSearch')}
+            onPressProductRecommendations={() =>
+              rootNavigation?.navigate(getHomeProductRecommendationRouteName())
+            }
             onPressRecommendedFilterMore={() =>
               rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
             }

@@ -67,7 +67,10 @@ import {
   AuradinSearchRouteScreen,
   LikedProductListRouteScreen,
   MakeupLookListRouteScreen,
+  ProductDetailRouteScreen,
+  ProductPersonalizationSettingsRouteScreen,
   ProductRecommendationRouteScreen,
+  ProductSearchResultRouteScreen,
 } from './routes/recommendationRoutes';
 import {
   ReferenceMakeupExtractionLoadingRouteScreen,
@@ -93,11 +96,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function RootNavigator() {
   return (
     <Stack.Navigator
-      // QA·데모 전용: AURADIN 드라이브 플래그가 있으면 검색 화면에서 시작 (기본은 Login).
-      // __DEV__ 가드 — 릴리즈/실기기 테스트 빌드에는 절대 반영되지 않는다.
-      initialRouteName={
-        __DEV__ && process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE ? 'AuradinSearch' : 'Login'
-      }
+      initialRouteName="Login"
       screenOptions={{headerShown: false}}>
       <Stack.Screen name="Login" component={LoginRouteScreen} />
       <Stack.Screen name="ProfileSetup" component={ProfileSetupRouteScreen} />
@@ -146,6 +145,12 @@ export function RootNavigator() {
       <Stack.Screen name="SavedHairSimulations" component={SavedHairSimulationsRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
+      <Stack.Screen name="ProductSearchResult" component={ProductSearchResultRouteScreen} />
+      <Stack.Screen name="ProductDetail" component={ProductDetailRouteScreen} />
+      <Stack.Screen
+        name="ProductPersonalizationSettings"
+        component={ProductPersonalizationSettingsRouteScreen}
+      />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
       <Stack.Screen name="CommunityThreadDetail" component={CommunityThreadDetailRouteScreen} />

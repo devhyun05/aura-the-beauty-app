@@ -25,6 +25,7 @@ export type RecommendedProduct = {
   imageUrl?: string;
   imageSource: ImageSourcePropType;
   purchaseUrl?: string;
+  offerId?: string;
   palette: string[];
   productInfo?: {
     brand?: string;
@@ -38,6 +39,141 @@ export type RecommendedProduct = {
     tones?: string[];
   };
   reason: string;
+};
+
+export type ProductSectionStatus =
+  | 'ready'
+  | 'empty'
+  | 'unavailable'
+  | 'noArStyle'
+  | 'unsupportedRecipe'
+  | 'noEligibleProducts'
+  | 'personalizationOff'
+  | 'insufficientData'
+  | 'control';
+
+export type CatalogProductPrice = {
+  amount: number | null;
+  currency: string;
+  updatedAt?: string | null;
+};
+
+export type CatalogProductOffer = {
+  offerId: string;
+  sellerName: string;
+  sellerDomain: string;
+  availability: string;
+  affiliateType: 'none' | 'affiliate' | 'sponsored' | string;
+  disclosureLabel?: string | null;
+};
+
+export type CatalogProduct = {
+  productId: string;
+  shadeId?: string | null;
+  brandName: string;
+  productName: string;
+  category: string;
+  shadeName?: string | null;
+  shadeHex?: string | null;
+  finish?: string | null;
+  imageUrl?: string | null;
+  price: CatalogProductPrice;
+  offer?: CatalogProductOffer | null;
+  viewerState: {liked: boolean};
+  catalogVersion?: string;
+  sourceUpdatedAt?: string | null;
+  sponsored?: boolean;
+  sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
+  disclosureLabel?: string | null;
+  reasonCodes?: string[];
+  reasonLabels?: string[];
+  exposureToken?: string | null;
+  status?: 'active' | 'soldOut' | 'unavailable';
+  canUnlike?: boolean;
+  canLike?: boolean;
+  purchaseUrl?: string | null;
+  externalSource?: string | null;
+};
+
+export type ProductDetailRecommendationContext = {
+  disclosureLabel?: string | null;
+  reasonLabels?: string[];
+  sponsored?: boolean;
+  sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
+};
+
+export type ProductRecommendationFeatureFlags = {
+  productHubV2: boolean;
+  seasonalRecommendationsV1: boolean;
+  arRecipePersistenceV1: boolean;
+  arProductRecommendationsV1: boolean;
+  engagementPersonalizationV1: boolean;
+  cohortRecommendationsV1: boolean;
+  legacyNaverProductSearch: boolean;
+  naverShoppingInsightEnabled: boolean;
+};
+
+export type ArRecommendationGroup = {
+  region: 'lip' | 'cheek' | 'liner';
+  label: string;
+  status: ProductSectionStatus;
+  items: CatalogProduct[];
+  nextCursor?: string | null;
+};
+
+export type ArRecommendationData = {
+  status: ProductSectionStatus;
+  runId?: string;
+  basedOn?: {
+    styleId: string;
+    styleTitle?: string | null;
+    envelopeVersion?: string;
+    recipeVersion?: number;
+    colorSemantics?: 'authoring_color';
+  } | null;
+  groups: ArRecommendationGroup[];
+};
+
+export type SeasonalRecommendationData = {
+  status: ProductSectionStatus;
+  collection?: {
+    id: string;
+    slug: string;
+    title: string;
+    summary: string;
+    validFrom: string;
+    validUntil: string;
+    reviewedAt: string;
+    sourceLabels: string[];
+    sourceLinks?: string[];
+    sourceUpdatedAt?: string | null;
+    trendWindow: string;
+    revision: number;
+    isStale: boolean;
+    isLive?: boolean;
+    providerStatus?: 'shoppingInsight' | 'editorialFallback' | string;
+    refreshAfterSeconds?: number;
+  } | null;
+  items: CatalogProduct[];
+  nextCursor?: string | null;
+};
+
+export type PersonalizedRecommendationData = {
+  status: ProductSectionStatus;
+  runId?: string | null;
+  title?: string | null;
+  description?: string | null;
+  algorithmVersion?: string;
+  cohortSizeBand?: string;
+  minimumCohortSize?: number;
+  items: CatalogProduct[];
+};
+
+export type ProductSearchData = {
+  status: ProductSectionStatus;
+  searchRequestId: string;
+  items: CatalogProduct[];
+  nextCursor?: string | null;
 };
 
 export type ProductRecommendationLook = {
@@ -120,6 +256,7 @@ export type AuradinAppliedFilter = {
 
 export type AuradinCandidateProduct = {
   id: string;
+  shadeId?: string;
   brandName: string;
   productName: string;
   shadeName: string;
@@ -135,6 +272,7 @@ export type AuradinCandidateProduct = {
   reasonCopy?: string; // §6 가산 카피 — 구조화 reason이 권위값, 카피는 읽기용
   matchRate?: number;
   purchaseUrl?: string;
+  offerId?: string;
   imageUrl?: string;
   category?: string;
 };
