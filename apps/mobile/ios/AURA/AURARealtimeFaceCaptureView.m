@@ -979,15 +979,21 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   _facing = nextFacing;
   _isSessionConfigured = NO;
-  // 카메라 전환 시 프레임 회전 잠금을 무효화한다 — front/back 은 orientation 힌트
-  // (Left/Right)·미러가 달라 이전 카메라에서 잠긴 회전이 유효하지 않다(코덱스 #245-3).
-  // 세션이 재구성되며 프레임 전달이 잠시 멈추므로 여기서 직접 리셋해도 안전하다.
-  _hasLockedFrameRotation = NO;
-  _pendingFrameRotation = AURARealtimeFrameRotationUnknown;
-  _rotationDisagreeStreak = 0;
-  // 검출 orientation 자가보정도 카메라별로 무효 — front/back 힌트가 다르다.
-  _hasResolvedDetectionOrientation = NO;
-  _detectionOrientationAttempt = 0;
+  // 카메라 전환 시 프레임 회전 잠금·검출 orientation 자가보정을 무효화한다 —
+  // front/back 은 orientation 힌트(Left/Right)·미러가 달라 이전 카메라의 잠금이
+  // 유효하지 않다(코덱스 #245-3). 이 ivar 들은 vision 큐 전용 접근 계약인데,
+  // setFacing: 은 메인 스레드(RCT prop setter)에서 불린다 — 세션 재구성은 이
+  // 리셋 "이후" 비동기로 실행되므로 그 사이 vision 큐가 구 카메라 프레임을
+  // 처리하며 동시 접근(data race)이 가능했다(Gemini 리뷰). serial vision 큐에
+  // 디스패치하면 in-flight 구 프레임(구 상태 사용이 정당) 뒤·신 카메라 첫
+  // 프레임(리셋 후 enqueue) 앞에 정확히 실행된다.
+  dispatch_async(_visionQueue, ^{
+    self->_hasLockedFrameRotation = NO;
+    self->_pendingFrameRotation = AURARealtimeFrameRotationUnknown;
+    self->_rotationDisagreeStreak = 0;
+    self->_hasResolvedDetectionOrientation = NO;
+    self->_detectionOrientationAttempt = 0;
+  });
 
   if (self.window != nil) {
     [self startCameraIfPermitted];
