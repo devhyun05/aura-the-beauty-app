@@ -14,6 +14,11 @@ POST_SCHEMA_MIGRATIONS = {
   "schema.sql:product-category-brow-v1": """
     alter type product_category add value if not exists 'brow';
   """,
+  "schema.sql:product-event-query-minimization-v1": """
+    update product_engagement_events
+    set context = context - 'query'
+    where context ? 'query';
+  """,
   "schema.sql:product-operator-rbac-v1": """
     create table if not exists product_recommendation_operators (
       user_id uuid primary key,

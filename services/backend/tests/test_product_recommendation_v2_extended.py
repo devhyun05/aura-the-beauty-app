@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.api.products import _is_at_least_14
+from app.api.products import _is_at_least_14, _search_event_context
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.schemas.makeup import MakeupStyleCreate
@@ -546,6 +546,18 @@ def test_event_context_rejects_sensitive_or_oversized_client_metadata() -> None:
     ProductEvent(**base, context={"faceLandmarks": [1, 2, 3]})
   with pytest.raises(ValidationError):
     ProductEvent(**base, context={"source": "x" * 2100})
+  with pytest.raises(ValidationError):
+    ProductEvent(**base, context={"query": "사용자 원문 검색어"})
+  with pytest.raises(ValidationError):
+    ProductEvent(**base, context={"category": "unsupported"})
+  accepted = ProductEvent(**base, context={"screen": "product_shelf", "category": "liner"})
+  assert accepted.context == {"screen": "product_shelf", "category": "liner"}
+
+
+def test_search_event_context_drops_raw_query_and_allows_only_known_category() -> None:
+  assert _search_event_context("lip") == {"category": "lip"}
+  assert _search_event_context("unknown") == {}
+  assert _search_event_context(None) == {}
 
 
 def test_like_contract_rejects_client_authored_product_metadata() -> None:

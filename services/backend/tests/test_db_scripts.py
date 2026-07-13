@@ -93,6 +93,14 @@ def test_product_brow_category_migration_is_registered() -> None:
   assert "alter type product_category add value if not exists 'brow'" in migration_sql
 
 
+def test_product_event_query_minimization_migration_removes_raw_query_context() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-event-query-minimization-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+  assert "update product_engagement_events" in normalized
+  assert "context = context - 'query'" in normalized
+  assert "where context ? 'query'" in normalized
+
+
 def test_existing_consulting_call_session_orphans_do_not_block_schema_upgrade() -> None:
   schema = get_schema_path().read_text(encoding="utf-8")
   constraint_sql = schema.split(

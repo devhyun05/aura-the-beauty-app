@@ -128,6 +128,12 @@ requireContract(
   'optional event queue must be bounded by count, TTL, and retries.',
 );
 requireContract(
+  eventService.includes('export type ProductEventCategory') &&
+    eventService.includes("| 'liner';") &&
+    !eventService.includes('context?: {category?: string;'),
+  'product shelf analytics must send only a closed makeup-category enum.',
+);
+requireContract(
   arSave.includes('SENSITIVE_RECIPE_KEY') &&
     arSave.includes("schemaVersion: 'saved_ar_look_v1'") &&
     arSave.includes("recipeContract: 'FullFaceMakeupRecipe'"),

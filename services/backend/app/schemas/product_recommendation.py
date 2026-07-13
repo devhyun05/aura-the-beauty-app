@@ -10,6 +10,7 @@ from app.schemas.base import CamelModel
 
 ProductEventType = Literal["impression", "product_open", "search_result_open", "hide"]
 ProductSection = Literal["legacy", "ar", "seasonal", "search", "personalized", "cohort", "auradin"]
+PRODUCT_EVENT_CATEGORIES = frozenset({"all", "base", "shadow", "brow", "cheek", "lip", "liner"})
 
 
 class ProductEvent(CamelModel):
@@ -29,12 +30,14 @@ class ProductEvent(CamelModel):
   @field_validator("context")
   @classmethod
   def validate_context(cls, value: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"viewportRatio", "visibleMs", "screen", "source"}
+    allowed = {"category", "viewportRatio", "visibleMs", "screen", "source"}
     if any(key not in allowed for key in value):
       raise ValueError("Event context contains an unsupported field.")
     for key in ("screen", "source"):
       if key in value and (not isinstance(value[key], str) or len(value[key]) > 80):
         raise ValueError(f"Event context {key} must be a short string.")
+    if "category" in value and value["category"] not in PRODUCT_EVENT_CATEGORIES:
+      raise ValueError("Event context category is unsupported.")
     if len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()) > 2048:
       raise ValueError("Event context exceeds 2 KiB.")
     return value

@@ -285,8 +285,8 @@ seasonScore =
 | `impression` | 실제로 viewport에 노출 | 중복/스크롤 spam 제거, denominator |
 | `product_open` | 인앱 상세 열기 | accidental tap 필터 |
 | `like` / `unlike` | 명시적 선호 | 가장 강한 신호, 취소 반영 |
-| `search_submit` | 사용자가 제출한 query | 원문 최소화/보존기간, 민감어 처리 |
-| `search_result_open` | query 결과 선택 | run/query와 연결 |
+| `search_submit` | 사용자가 검색을 제출함 | 원문 미저장, `searchRequestId`와 허용 category filter만 기록 |
+| `search_result_open` | 검색 결과 선택 | `searchRequestId`로 연결하고 원문 query를 재전송하지 않음 |
 | `seller_outbound` | 판매처 이동 | 실제 구매로 표현 금지 |
 | `hide` | 보고 싶지 않음 | 강한 음성 신호 |
 

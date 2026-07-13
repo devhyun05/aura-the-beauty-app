@@ -9,6 +9,15 @@ export type ProductEventSection =
   | 'cohort'
   | 'auradin';
 
+export type ProductEventCategory =
+  | 'all'
+  | 'base'
+  | 'shadow'
+  | 'brow'
+  | 'cheek'
+  | 'lip'
+  | 'liner';
+
 export type ProductClientEvent = {
   eventId: string;
   eventType: 'impression' | 'product_open' | 'search_result_open' | 'hide';
@@ -21,7 +30,7 @@ export type ProductClientEvent = {
   searchRequestId?: string;
   position: number;
   exposureToken?: string | null;
-  context?: {category?: string; viewportRatio?: number; visibleMs?: number; screen?: string; source?: string};
+  context?: {category?: ProductEventCategory; viewportRatio?: number; visibleMs?: number; screen?: string; source?: string};
 };
 
 let enabled = false;

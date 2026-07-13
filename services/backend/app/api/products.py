@@ -14,6 +14,7 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, get_database, require_database
 from app.schemas.product_recommendation import (
+  PRODUCT_EVENT_CATEGORIES,
   ProductConsentUpdate,
   ProductEventBatch,
   ProductLikeRequest,
@@ -48,6 +49,11 @@ from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/products", tags=["products"])
+
+
+def _search_event_context(category: str | None) -> dict[str, str]:
+  """Keep search analytics useful without persisting the user's raw query."""
+  return {"category": category} if category in PRODUCT_EVENT_CATEGORIES else {}
 
 
 def _liked_product_display_allowed(row: Any, *, now: datetime) -> bool:
@@ -268,7 +274,7 @@ async def search_products(
         event_type="search_submit",
         section="search",
         search_request_id=request_id,
-        context={"query": " ".join(q.strip().split())},
+        context=_search_event_context(category),
       )
   return success(
     {"status": "ready", "searchRequestId": str(request_id), "items": items, "nextCursor": None},

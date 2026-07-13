@@ -25,22 +25,19 @@ async def cleanup_product_recommendation_data(db: Database, *, dry_run: bool = T
     result[name] = int((row or {}).get("count") or 0)
     if not dry_run:
       await db.execute(f"delete from {table} where {column} < now() - $1::interval", interval)
-  raw_search_interval = timedelta(days=settings.product_raw_search_retention_days)
   row = await db.fetchrow(
     """
     select count(*)::int as count from product_engagement_events
-    where section='search' and occurred_at < now() - $1::interval and context ? 'query'
+    where context ? 'query'
     """,
-    raw_search_interval,
   )
   result["rawSearchQueries"] = int((row or {}).get("count") or 0)
   if not dry_run:
     await db.execute(
       """
       update product_engagement_events set context=context - 'query'
-      where section='search' and occurred_at < now() - $1::interval and context ? 'query'
+      where context ? 'query'
       """,
-      raw_search_interval,
     )
   return result
 

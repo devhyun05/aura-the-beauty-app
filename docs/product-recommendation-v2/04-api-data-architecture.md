@@ -169,7 +169,7 @@ P1/P2에서 추가한다. 동의가 없으면 `status: personalizationOff`를 �
 검색 query 규칙:
 
 - 길이·문자 범위 제한
-- 로그에는 필요 최소한만 저장하고 raw query 보존기간 분리
+- 로그·event context에는 raw query를 저장하지 않고 `searchRequestId`와 허용 category filter만 기록
 - SQL parameter binding
 - 외부 provider 호출 시 timeout/circuit breaker
 - LLM이 만든 filter는 schema validation

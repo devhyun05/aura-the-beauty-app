@@ -85,7 +85,7 @@
 | raw engagement event | 90일 | 이후 비식별·집계 또는 삭제 |
 | 파생 취향 profile | 최근 활동 후 180일 | 동의 철회 시 재계산/삭제 |
 | recommendation run | 30일 | 모델 품질용 집계만 장기 보존 |
-| raw search query | 30일 이하 우선 | 해시/범주 집계로 대체 검토 |
+| raw search query | 미저장 | `searchRequestId`와 허용 category 집계만 사용; 기존 context key는 migration/cleanup에서 제거 |
 | likes | unlike 또는 계정 삭제까지 | 관계 row 삭제 |
 | provider raw response | 계약이 허용한 최소 기간 | 약관·라이선스에 맞춰 삭제 |
 | 감사로그 | 보안/법무 승인 기간 | 민감 payload 금지 |
