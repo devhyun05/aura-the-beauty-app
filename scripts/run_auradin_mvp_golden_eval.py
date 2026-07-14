@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -108,12 +109,47 @@ def _status(result: dict[str, Any]) -> str:
   return "PASS"
 
 
-def render_report(results: list[dict[str, Any]], *, run_date: str, snapshot: dict[str, Any]) -> str:
+def _git_evidence() -> tuple[str, bool]:
+  commit = subprocess.run(
+    ["git", "rev-parse", "HEAD"],
+    cwd=REPO_ROOT,
+    check=True,
+    capture_output=True,
+    text=True,
+  ).stdout.strip()
+  status = subprocess.run(
+    ["git", "status", "--porcelain"],
+    cwd=REPO_ROOT,
+    check=True,
+    capture_output=True,
+    text=True,
+  ).stdout
+  return commit, bool(status.strip())
+
+
+def _output_paths(run_date: str, output_prefix: Path | None) -> tuple[Path, Path]:
+  if output_prefix is None:
+    prefix = REPO_ROOT / "reports" / "auradin" / f"mvp_agent_eval_{run_date}"
+  else:
+    prefix = output_prefix if output_prefix.is_absolute() else REPO_ROOT / output_prefix
+  return Path(f"{prefix}.md"), Path(f"{prefix}.json")
+
+
+def render_report(
+  results: list[dict[str, Any]],
+  *,
+  run_date: str,
+  snapshot: dict[str, Any],
+  app_commit_sha: str,
+  working_tree_dirty: bool,
+) -> str:
   lines = [
     f"# Auradin MVP Agent Golden Eval ({run_date})",
     "",
     "## Summary",
     "",
+    f"- appCommitSha: `{app_commit_sha}`",
+    f"- workingTreeDirty: `{str(working_tree_dirty).lower()}`",
     f"- Snapshot source: `{snapshot['snapshotSource']}`",
     f"- Snapshot manifest: `{snapshot['snapshotManifestPath']}`",
     f"- Snapshot manifest SHA-256: `{snapshot['snapshotManifestSha256']}`",
@@ -168,8 +204,32 @@ def render_report(results: list[dict[str, Any]], *, run_date: str, snapshot: dic
 def main() -> None:
   parser = argparse.ArgumentParser()
   parser.add_argument("--run-date", default=RUN_DATE)
+  parser.add_argument(
+    "--manifest-path",
+    type=Path,
+    help="Resolve the golden run against this explicit snapshot manifest (local/dev/test only).",
+  )
+  parser.add_argument(
+    "--output-prefix",
+    type=Path,
+    help="Write evidence to <prefix>.md and <prefix>.json instead of the legacy fixed path.",
+  )
+  parser.add_argument(
+    "--require-clean-worktree",
+    action="store_true",
+    help="Abort before evaluation when git reports tracked or untracked changes.",
+  )
   args = parser.parse_args()
+  try:
+    app_commit_sha, working_tree_dirty = _git_evidence()
+  except (OSError, subprocess.CalledProcessError) as exc:
+    parser.error(f"unable to capture git evidence: {exc}")
+  if args.require_clean_worktree and working_tree_dirty:
+    parser.error("--require-clean-worktree requires an empty git status --porcelain result")
+
   settings = get_settings()
+  if args.manifest_path is not None:
+    settings.auradin_snapshot_manifest = str(args.manifest_path)
   descriptor = resolve_and_validate_snapshot(settings, force=True)
   if descriptor.run_date != args.run_date:
     parser.error(
@@ -212,18 +272,26 @@ def main() -> None:
       },
     ),
   }
-  output_path = REPO_ROOT / "reports" / "auradin" / f"mvp_agent_eval_{args.run_date}.md"
+  output_path, evidence_path = _output_paths(args.run_date, args.output_prefix)
   output_path.parent.mkdir(parents=True, exist_ok=True)
+  evidence_path.parent.mkdir(parents=True, exist_ok=True)
   output_path.write_text(
-    render_report(evaluated_results, run_date=args.run_date, snapshot=snapshot),
+    render_report(
+      evaluated_results,
+      run_date=args.run_date,
+      snapshot=snapshot,
+      app_commit_sha=app_commit_sha,
+      working_tree_dirty=working_tree_dirty,
+    ),
     encoding="utf-8",
   )
-  evidence_path = REPO_ROOT / "reports" / "auradin" / f"mvp_agent_eval_{args.run_date}.json"
   passed = sum(result["status"] == "PASS" for result in evaluated_results)
   failed = len(evaluated_results) - passed
   evidence_path.write_text(
     json.dumps(
       {
+        "appCommitSha": app_commit_sha,
+        "workingTreeDirty": working_tree_dirty,
         "snapshot": snapshot,
         "summary": {
           "status": "PASS" if failed == 0 else "FAIL",
