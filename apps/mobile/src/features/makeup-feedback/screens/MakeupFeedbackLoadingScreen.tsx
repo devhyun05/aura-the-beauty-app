@@ -15,6 +15,8 @@ import {
   MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
   buildMakeupFeedbackClosingConferenceMessages,
   buildMakeupFeedbackConferencePreviewContext,
+  buildMakeupFeedbackSafeConferenceMessages,
+  buildMakeupFeedbackWaitingConferenceMessages,
   canCommitMakeupFeedbackConferenceMessage,
   canRevealMakeupFeedbackResult,
   getNextMakeupFeedbackConferenceMessage,
@@ -37,6 +39,9 @@ import type {
 const CLOSING_GENERATION_GRACE_MS = 9500;
 const EXPECTED_PREVIEW_CONFERENCE_MESSAGE_COUNT = 4;
 const EXPECTED_CLOSING_CONFERENCE_MESSAGE_COUNT = 6;
+// 대기(waiting) 진행 대화는 분석이 끝나기 전 침묵을 메우는 용도라, 기본 노출
+// 간격에 이 값을 더해 풀 소진 속도를 늦춘다(10개 기준 약 60~80초 커버).
+const WAITING_MESSAGE_EXTRA_EXPOSURE_DELAY_MS = 3200;
 const PRE_RESULT_PROGRESS_INITIAL = 0.08;
 const PRE_RESULT_PROGRESS_CAP = 0.58;
 const PRE_RESULT_PROGRESS_TICK_MS = 1000;
@@ -128,12 +133,14 @@ function getNextTypingAgentId({
   isPreviewGenerationSettled,
   messages,
   previewMessages,
+  waitingMessages,
 }: {
   analysisResult: MakeupFeedbackResult | null;
   closingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
   isPreviewGenerationSettled: boolean;
   messages: readonly MakeupFeedbackAgentConferenceMessage[];
   previewMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  waitingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
 }): MakeupFeedbackAgentId {
   const previewMessageCount = countPreviewConferenceMessages(messages);
   const nextPreviewMessage = previewMessages[previewMessageCount];
@@ -142,11 +149,16 @@ function getNextTypingAgentId({
     return nextPreviewMessage?.agentId ?? 'photo';
   }
 
+  // 대기 진행 대화 구간 — 다음 대기 메시지의 화자가 타이핑 중인 것으로 보여준다.
+  if (!analysisResult || closingMessages.length === 0) {
+    const waitingMessageCount = countMessagesByPhase(messages, 'waiting');
+
+    return waitingMessages[waitingMessageCount]?.agentId ?? 'photo';
+  }
+
   const closingMessageCount = countMessagesByPhase(messages, 'closing');
 
-  return analysisResult
-    ? closingMessages[closingMessageCount]?.agentId ?? 'coach'
-    : 'photo';
+  return closingMessages[closingMessageCount]?.agentId ?? 'coach';
 }
 
 function getConferenceProgress({
@@ -209,6 +221,9 @@ export function MakeupFeedbackLoadingScreen({
   const [closingConferenceMessages, setClosingConferenceMessages] = useState<
     readonly MakeupFeedbackAgentConferenceMessage[]
   >([]);
+  const [waitingConferenceMessages, setWaitingConferenceMessages] = useState<
+    readonly MakeupFeedbackAgentConferenceMessage[]
+  >([]);
   const [conferenceMessages, setConferenceMessages] = useState<
     MakeupFeedbackAgentConferenceMessage[]
   >([]);
@@ -226,6 +241,7 @@ export function MakeupFeedbackLoadingScreen({
         isPreviewGenerationSettled,
         messages: conferenceMessages,
         previewMessages: previewConferenceMessages,
+        waitingMessages: waitingConferenceMessages,
       }),
     [
       analysisResult,
@@ -233,6 +249,7 @@ export function MakeupFeedbackLoadingScreen({
       conferenceMessages,
       isPreviewGenerationSettled,
       previewConferenceMessages,
+      waitingConferenceMessages,
     ],
   );
   const conferenceProgress = useMemo(
@@ -257,6 +274,12 @@ export function MakeupFeedbackLoadingScreen({
       : isConferenceComplete
         ? '정리 완료'
         : '함께 정리 중';
+  // 분석은 끝났지만 크루 대화가 아직 진행 중인 구간에만 결과로 건너뛸 수 있다.
+  const canSkipToResult =
+    Boolean(analysisResult) &&
+    !retakeOutcome &&
+    !analysisErrorMessage &&
+    !isConferenceComplete;
   const reviewProgressAccessibilityLabel = analysisErrorMessage
     ? '피드백 구성이 중단되었어요'
     : retakeOutcome
@@ -329,14 +352,28 @@ export function MakeupFeedbackLoadingScreen({
     setClosingPreviewContext(null);
     setIsPreviewGenerationSettled(false);
     setClosingConferenceMessages([]);
+    setWaitingConferenceMessages(buildMakeupFeedbackWaitingConferenceMessages(selection));
     setConferenceMessages([]);
     setIsConferenceTyping(true);
     setIsConferenceComplete(false);
     setPreResultProgress(PRE_RESULT_PROGRESS_INITIAL);
 
-    const settlePreviewUnavailable = () => {
+    // 재촬영/분석 오류처럼 대화를 이어가지 않는 종단 상태 — 프리뷰를 비우고 정지.
+    const settlePreviewForTerminalState = () => {
       setPreviewConferenceMessages([]);
       setClosingPreviewContext(null);
+      setIsPreviewGenerationSettled(true);
+    };
+
+    // 백엔드 프리뷰 생성이 실패해도 오프닝 대화는 로컬 대본으로 항상 시작한다.
+    // 대본은 결과를 주장하지 않는 safe 문구라 이후 클로징 근거와 충돌하지 않는다.
+    const settlePreviewWithLocalScript = () => {
+      const safeMessages = buildMakeupFeedbackSafeConferenceMessages(selection);
+
+      setPreviewConferenceMessages(safeMessages);
+      setClosingPreviewContext(
+        buildMakeupFeedbackConferencePreviewContext({messages: safeMessages}),
+      );
       setIsPreviewGenerationSettled(true);
     };
 
@@ -358,7 +395,7 @@ export function MakeupFeedbackLoadingScreen({
               count: preview.messages.length,
               generationStatus: preview.generationStatus ?? null,
             });
-            settlePreviewUnavailable();
+            settlePreviewWithLocalScript();
             return;
           }
 
@@ -373,14 +410,15 @@ export function MakeupFeedbackLoadingScreen({
           setIsPreviewGenerationSettled(true);
         })
         .catch(error => {
-          if (!isCurrentRun()) {
+          // abort는 재촬영/오류 종단 경로에서 이미 상태를 정리한 뒤이므로 무시.
+          if (!isCurrentRun() || previewController.signal.aborted) {
             return;
           }
 
           console.info('[aura:makeup-feedback] conference-preview:unavailable', {
             message: error instanceof Error ? error.message : String(error),
           });
-          settlePreviewUnavailable();
+          settlePreviewWithLocalScript();
         });
     };
 
@@ -395,7 +433,7 @@ export function MakeupFeedbackLoadingScreen({
           setAnalysisResult(outcome);
         } else {
           previewController.abort();
-          settlePreviewUnavailable();
+          settlePreviewForTerminalState();
           setRetakeOutcome(outcome);
           setIsConferenceTyping(false);
           setIsConferenceComplete(true);
@@ -409,7 +447,7 @@ export function MakeupFeedbackLoadingScreen({
 
         if (isCurrentRun()) {
           previewController.abort();
-          settlePreviewUnavailable();
+          settlePreviewForTerminalState();
           retryRequestedRef.current = false;
           setAnalysisErrorMessage(getMakeupFeedbackAnalysisErrorMessage(error));
           setIsConferenceTyping(false);
@@ -526,6 +564,7 @@ export function MakeupFeedbackLoadingScreen({
       displayedMessages: conferenceMessages,
       previewGenerationSettled: isPreviewGenerationSettled,
       previewMessages: previewConferenceMessages,
+      waitingMessages: waitingConferenceMessages,
     });
 
     if (!nextMessage) {
@@ -555,7 +594,11 @@ export function MakeupFeedbackLoadingScreen({
     const elapsedSinceLastMessage = lastMessage
       ? Math.max(Date.now() - lastMessageShownAtRef.current, 0)
       : 0;
-    const remainingExposureDelay = Math.max(exposureDelay - elapsedSinceLastMessage, 0);
+    // 대기 진행 대화는 침묵을 메우는 용도라 일반 메시지보다 천천히 흐르게 한다.
+    const waitingExtraDelay =
+      nextMessage.phase === 'waiting' ? WAITING_MESSAGE_EXTRA_EXPOSURE_DELAY_MS : 0;
+    const remainingExposureDelay =
+      Math.max(exposureDelay - elapsedSinceLastMessage, 0) + waitingExtraDelay;
     const scheduledAnalysisRunId = analysisRunIdRef.current;
     let typingTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -606,6 +649,7 @@ export function MakeupFeedbackLoadingScreen({
     isPreviewGenerationSettled,
     retakeOutcome,
     previewConferenceMessages,
+    waitingConferenceMessages,
   ]);
 
 
@@ -620,9 +664,24 @@ export function MakeupFeedbackLoadingScreen({
         <YStack style={styles.heroCopy}>
           <XStack style={styles.crewHeader}>
             <Text style={styles.crewTitle}>AURA 리뷰 크루</Text>
-            <Text style={styles.crewStatus}>
-              {reviewStatusLabel}
-            </Text>
+            {canSkipToResult ? (
+              // 분석 완료 + 대화 진행 중 — 채팅(타이핑 효과)을 가리지 않도록
+              // 하단이 아니라 헤더 오른쪽에서 결과로 건너뛰게 한다.
+              <Pressable
+                accessibilityLabel="대화 건너뛰고 결과로 건너뛰기"
+                accessibilityRole="button"
+                onPress={handleComplete}
+                style={({pressed}) => [
+                  styles.skipToResultButton,
+                  pressed && styles.resultButtonPressed,
+                ]}>
+                <Text style={styles.skipToResultButtonText}>결과로 건너뛰기</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.crewStatus}>
+                {reviewStatusLabel}
+              </Text>
+            )}
           </XStack>
           <View
             accessibilityLabel={reviewProgressAccessibilityLabel}
@@ -1018,9 +1077,12 @@ function ResultRevealButton({
         accessibilityLabel={'메이크업 피드백 ' + label}
         accessibilityRole="button"
         onPress={onPress}
-        style={({pressed}) => [styles.resultButton, pressed && styles.resultButtonPressed]}>
+        style={({pressed}) => [
+          styles.compactResultButton,
+          pressed && styles.resultButtonPressed,
+        ]}>
         <Text style={styles.resultButtonText}>{label}</Text>
-        <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2.4} />
+        <ArrowRight color={colors.white} size={iconSize.xs} strokeWidth={2.4} />
       </Pressable>
     </Animated.View>
   );
@@ -1519,6 +1581,34 @@ const styles = StyleSheet.create({
 
   resultButtonAnimated: {
     width: '100%',
+  },
+  // 대화 하단의 결과 이동 버튼 2종은 대화 흐름을 가리지 않게 콤팩트 pill 로 쓴다.
+  compactResultButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+  // 헤더 우측의 결과 건너뛰기 — 결과 보기 버튼과 같은 검정 pill 형식의 축소판.
+  skipToResultButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 30,
+    paddingHorizontal: spacing.md,
+  },
+  skipToResultButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
   },
   resultButton: {
     alignItems: 'center',

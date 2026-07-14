@@ -8,6 +8,7 @@ import {
   buildMakeupFeedbackConferencePreviewContext,
   buildMakeupFeedbackConferenceResultPayload,
   buildMakeupFeedbackSafeConferenceMessages,
+  buildMakeupFeedbackWaitingConferenceMessages,
   buildPreviewConferenceRequestPayload,
   canCommitMakeupFeedbackConferenceMessage,
   canRevealMakeupFeedbackResult,
@@ -534,6 +535,90 @@ expectEqual(
   }),
   fallbackMessages[0],
   'grounded closing starts after AI preview messages are drained',
+);
+
+const waitingPool = buildMakeupFeedbackWaitingConferenceMessages();
+const waitingText = waitingPool.map(item => item.text).join(' ');
+expectEqual(waitingPool.length, 10, 'waiting pool size');
+expectEqual(
+  waitingPool.every(item => item.phase === 'waiting'),
+  true,
+  'waiting phase only',
+);
+expectEqual(
+  waitingPool.some(
+    (item, index) => index > 0 && waitingPool[index - 1]?.agentId === item.agentId,
+  ),
+  false,
+  'waiting pool has no consecutive speaker',
+);
+expectOmits(waitingText, 'Visible strength', 'waiting talk cannot claim a result strength');
+expectOmits(waitingText, 'Visible improvement', 'waiting talk cannot claim a result point');
+expectOmits(waitingText, '72점', 'waiting talk cannot claim a score');
+const goalWaitingText = buildMakeupFeedbackWaitingConferenceMessages(selection)
+  .map(item => item.text)
+  .join(' ');
+expectIncludes(goalWaitingText, '친구 결혼식 야외 촬영', 'waiting talk references the user goal');
+expectOmits(waitingText, '친구 결혼식', 'goal quote only appears when a selection is given');
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: false,
+    closingMessages: [],
+    displayedMessages: previewGenerated,
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+    waitingMessages: waitingPool,
+  }),
+  waitingPool[0],
+  'waiting talk starts when preview is drained and analysis is pending',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: false,
+    closingMessages: [],
+    displayedMessages: [...previewGenerated, waitingPool[0]!],
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+    waitingMessages: waitingPool,
+  }),
+  waitingPool[1],
+  'waiting talk continues in displayed order',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: true,
+    closingMessages: [],
+    displayedMessages: previewGenerated,
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+    waitingMessages: waitingPool,
+  }),
+  waitingPool[0],
+  'waiting talk also covers the closing-generation window',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: true,
+    closingMessages: fallbackMessages,
+    displayedMessages: [...previewGenerated, waitingPool[0]!],
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+    waitingMessages: waitingPool,
+  }),
+  fallbackMessages[0],
+  'closing starts immediately once ready even after waiting talk was shown',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: false,
+    closingMessages: [],
+    displayedMessages: [],
+    previewGenerationSettled: false,
+    previewMessages: [],
+    waitingMessages: waitingPool,
+  }),
+  undefined,
+  'waiting talk never precedes the opening conversation',
 );
 
 const continuedFallbackMessages = buildMakeupFeedbackClosingConferenceMessages(

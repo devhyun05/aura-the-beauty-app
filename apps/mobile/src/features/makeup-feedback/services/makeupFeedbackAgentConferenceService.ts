@@ -14,7 +14,7 @@ export type MakeupFeedbackAgentConferenceMessage = {
   id: string;
   agentId: MakeupFeedbackAgentId;
   text: string;
-  phase: 'safe' | 'preview' | 'closing';
+  phase: 'safe' | 'preview' | 'waiting' | 'closing';
   /** Grounding traces are validated by the backend and intentionally not rendered. */
   contextRefs?: readonly string[];
   evidenceRefs?: readonly string[];
@@ -188,6 +188,84 @@ export function buildMakeupFeedbackSafeConferenceMessages(
   return withSessionIds([
     message('safe-goal-seed', 'goal', seedCopy),
     ...pickVariant(fallbackTails),
+  ]);
+}
+
+/**
+ * 프리뷰 대화 소진 후 분석 결과(및 클로징 생성)를 기다리는 구간을 잇는 로컬 진행
+ * 대화. 결과가 아직 없는 시점이므로 관찰·점수 등 사실 주장은 절대 넣지 않는다.
+ * 화자 순서는 인접 중복이 없도록 고정 배열로 관리하고, selection 이 주어지면
+ * goal(모아) 대사가 사용자 목적 문구를 인용해 실제 분석 맥락과 이어지게 한다.
+ */
+export function buildMakeupFeedbackWaitingConferenceMessages(
+  selection?: MakeupFeedbackPhotoSelection,
+): readonly MakeupFeedbackAgentConferenceMessage[] {
+  const goalLabel = selection
+    ? getGoalLabel(selection)
+        ?.replace(/[.!?。！？]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    : undefined;
+  const goalAlignText = goalLabel
+    ? `“${goalLabel}” 목적 기준에서 벗어나는 관찰이 없는지 중간 점검하고 있어요.`
+    : '요청하신 목적 기준에서 벗어나는 관찰이 없는지 중간 점검하고 있어요.';
+
+  return withSessionIds([
+    message(
+      'waiting-detail-scan',
+      'detail',
+      '지금 부위별로 확인되는 경계를 하나씩 대조하고 있어요. 확인되는 것만 근거로 남길게요.',
+      'waiting',
+    ),
+    message(
+      'waiting-photo-lighting',
+      'photo',
+      '저는 조명이 색 판단을 흔들 만한 지점을 걸러내는 중이에요. 애매한 값은 보수적으로 볼게요.',
+      'waiting',
+    ),
+    message('waiting-goal-align', 'goal', goalAlignText, 'waiting'),
+    message(
+      'waiting-coach-order',
+      'coach',
+      '저는 정리된 관찰을 바로 실행할 수 있는 순서로 미리 묶어두고 있어요.',
+      'waiting',
+    ),
+    message(
+      'waiting-detail-crosscheck',
+      'detail',
+      '세부 관찰이 거의 모였어요. 서로 어긋나는 근거가 없는지 교차 확인 중이에요.',
+      'waiting',
+    ),
+    message(
+      'waiting-photo-limit',
+      'photo',
+      '사진 상태 때문에 판단을 제한해야 하는 부분이 있는지 한 번 더 살펴보고 있어요.',
+      'waiting',
+    ),
+    message(
+      'waiting-goal-fit',
+      'goal',
+      '기준과 관찰이 잘 맞물리는지 마지막으로 맞춰보는 중이에요. 조금만 기다려주세요.',
+      'waiting',
+    ),
+    message(
+      'waiting-coach-brief',
+      'coach',
+      '확인이 끝난 항목부터 짧고 분명하게 전달할 준비를 하고 있어요.',
+      'waiting',
+    ),
+    message(
+      'waiting-detail-final',
+      'detail',
+      '마지막으로 남은 부위의 근거를 한 번 더 확인하고 있어요.',
+      'waiting',
+    ),
+    message(
+      'waiting-coach-soon',
+      'coach',
+      '좋아요, 거의 다 왔어요. 정리되는 대로 결과 이야기를 이어갈게요.',
+      'waiting',
+    ),
   ]);
 }
 
@@ -578,12 +656,14 @@ export function getNextMakeupFeedbackConferenceMessage({
   displayedMessages,
   previewGenerationSettled,
   previewMessages,
+  waitingMessages = [],
 }: {
   analysisReady: boolean;
   closingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
   displayedMessages: readonly MakeupFeedbackAgentConferenceMessage[];
   previewGenerationSettled: boolean;
   previewMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  waitingMessages?: readonly MakeupFeedbackAgentConferenceMessage[];
 }): MakeupFeedbackAgentConferenceMessage | undefined {
   const previewMessageCount = displayedMessages.filter(
     message => message.phase === 'preview' || message.phase === 'safe',
@@ -594,8 +674,18 @@ export function getNextMakeupFeedbackConferenceMessage({
     return nextPreviewMessage;
   }
 
-  if (!previewGenerationSettled || !analysisReady) {
+  if (!previewGenerationSettled) {
     return undefined;
+  }
+
+  // 프리뷰 소진 후 분석 완료(또는 클로징 대화 도착) 전까지는 로컬 진행 대화로
+  // 토의를 잇는다. 풀이 소진되면 undefined → 기존처럼 타이핑 표시로 대기.
+  if (!analysisReady || closingMessages.length === 0) {
+    const waitingMessageCount = displayedMessages.filter(
+      message => message.phase === 'waiting',
+    ).length;
+
+    return waitingMessages[waitingMessageCount];
   }
 
   const closingMessageCount = displayedMessages.filter(
