@@ -7,7 +7,8 @@ import re
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import ClientError, ReadTimeoutError
 from pydantic import ValidationError
 
 from app.core.errors import AppError
@@ -16,6 +17,12 @@ from app.schemas.makeup_recommendation import GeneratedMakeupRecommendation, Gen
 
 
 logger = logging.getLogger(__name__)
+
+BEDROCK_CONVERSE_CONFIG = Config(
+  read_timeout=50,
+  connect_timeout=10,
+  retries={"max_attempts": 1, "mode": "standard"},
+)
 
 
 QUESTION_SYSTEM_PROMPT = """너는 사용자가 직접 메이크업을 설계하게 만드는 설문지가 아니라, 사용자가 원하는 장면과 캐릭터를 발견하도록 돕는 재치 있는 에디토리얼 디렉터다.
@@ -146,12 +153,12 @@ def apply_refinement_contract(
 
 
 def _converse(settings: Settings, model_id: str, system: str, prompt: str) -> dict[str, Any]:
-  client = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+  client = boto3.client("bedrock-runtime", region_name=settings.aws_region, config=BEDROCK_CONVERSE_CONFIG)
   response = client.converse(
     modelId=model_id,
     system=[{"text": system}],
     messages=[{"role": "user", "content": [{"text": prompt}]}],
-    inferenceConfig={"maxTokens": 6000, "temperature": 0.45},
+    inferenceConfig={"maxTokens": 3500, "temperature": 0.35},
   )
   text = "".join(
     block.get("text", "")
@@ -189,6 +196,14 @@ async def generate_json(settings: Settings, model_id: str, system: str, prompt: 
 
 
 def _bedrock_app_error(exc: Exception) -> AppError:
+  if isinstance(exc, ReadTimeoutError):
+    return AppError(
+      504,
+      "BEDROCK_REQUEST_TIMEOUT",
+      "The Bedrock request timed out.",
+      {"providerCode": "ReadTimeoutError"},
+    )
+
   if not isinstance(exc, ClientError):
     return AppError(502, "BEDROCK_REQUEST_FAILED", "The Bedrock request failed.")
 
@@ -549,7 +564,7 @@ async def generate_recommendation(
     '"productName":"string","shadeName":"string","reason":"string"}]}]}'
   )
   validation_errors: list[dict[str, Any]] = []
-  for _attempt in range(2):
+  for _attempt in range(1):
     response = await generate_json(
       settings,
       settings.effective_recommendation_model_id,

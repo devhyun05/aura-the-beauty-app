@@ -2,7 +2,8 @@ import json
 from uuid import UUID
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import ClientError, ReadTimeoutError
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
@@ -56,6 +57,24 @@ class FakeBedrockClient:
     }
 
 
+def test_converse_uses_bounded_bedrock_timeout_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(Settings(), "model-id", "system", "prompt")
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert config.read_timeout <= 55
+  assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
 def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: FakeBedrockClient())
 
@@ -64,13 +83,13 @@ def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> No
   assert result["items"][0]["text"] == "퇴근 후 약속"
 
 
-def test_converse_allows_complete_three_look_recommendation_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_converse_uses_bounded_three_look_recommendation_payload(monkeypatch: pytest.MonkeyPatch) -> None:
   client = FakeBedrockClient()
   monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: client)
 
   _converse(Settings(), "model-id", "system", "prompt")
 
-  assert client.calls[0]["inferenceConfig"]["maxTokens"] >= 5000
+  assert 3000 <= client.calls[0]["inferenceConfig"]["maxTokens"] <= 4000
   assert client.calls[0]["inferenceConfig"]["temperature"] <= 0.5
 
 
@@ -92,6 +111,14 @@ def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:
     "providerRequestId": "request-123",
   }
   assert "role is not authorized" not in error.message
+
+
+def test_bedrock_read_timeout_is_reported_as_timeout() -> None:
+  error = _bedrock_app_error(ReadTimeoutError(endpoint_url="https://bedrock-runtime.example.com"))
+
+  assert error.status_code == 504
+  assert error.code == "BEDROCK_REQUEST_TIMEOUT"
+  assert error.details == {"providerCode": "ReadTimeoutError"}
 
 
 def test_product_only_refinement_preserves_makeup_and_replaces_products() -> None:
@@ -413,6 +440,13 @@ def test_user_can_list_saved_recommendation_reports(monkeypatch: pytest.MonkeyPa
 
 
 def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pytest.MonkeyPatch) -> None:
+  recommendation = {
+    "looks": [
+      {"id": role, "role": role, "title": role, "summary": role}
+      for role in ("anchor", "bold", "discovery")
+    ],
+  }
+
   class PollDatabase:
     async def fetchrow(self, query: str, *args):
       assert "from makeup_recommendation_reports" in query
@@ -420,10 +454,10 @@ def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pyt
       return {
         "id": REPORT_ID,
         "scenario_text": "퇴근 후 약속",
-        "scenario_tags": ["차분"],
-        "questions": [],
-        "answers": [],
-        "recommendation": {"looks": []},
+        "scenario_tags": json.dumps(["차분"], ensure_ascii=False),
+        "questions": json.dumps([{"id": "mood"}], ensure_ascii=False),
+        "answers": json.dumps([{"questionId": "mood", "optionId": "soft"}], ensure_ascii=False),
+        "recommendation": json.dumps(recommendation, ensure_ascii=False),
         "image_status": "processing",
         "image_url": None,
         "image_error": None,
@@ -446,6 +480,10 @@ def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pyt
   assert response.status_code == 200
   assert response.json()["data"]["scenarioText"] == "퇴근 후 약속"
   assert response.json()["data"]["imageStatus"] == "processing"
+  assert response.json()["data"]["scenarioTags"] == ["차분"]
+  assert response.json()["data"]["questions"] == [{"id": "mood"}]
+  assert response.json()["data"]["answers"] == [{"questionId": "mood", "optionId": "soft"}]
+  assert response.json()["data"]["recommendation"] == recommendation
   assert "image_error" not in response.json()["data"]
 
 

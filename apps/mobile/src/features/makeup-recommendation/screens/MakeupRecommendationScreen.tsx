@@ -48,6 +48,7 @@ export type MakeupRecommendationScreenProps = {
 };
 
 const HISTORY_PAGE_SIZE = 20;
+const IMAGE_POLL_MAX_FAILURES = 3;
 
 function getMakeupRecommendationErrorDiagnostic(error: unknown): string {
   if (!__DEV__ || !(error instanceof BackendApiError) || !error.code) return '';
@@ -95,6 +96,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
   const scenarioRequestInFlight = useRef(false);
   const localScenarioSeed = useRef(initialScenarioSeed.current + 12);
+  const imagePollFailureCount = useRef(0);
   const workflowRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const mutationRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const operationSequence = useRef(0);
@@ -152,8 +154,10 @@ export const MakeupRecommendationScreen = forwardRef<
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
     const operation = beginOperation(workflowRequest);
     lastStartInput.current = input;
+    imagePollFailureCount.current = 0;
     setPhase('loading');
     setErrorMessage('');
+    setImageRetryError('');
 
     Promise.resolve()
       .then(() => startGeneratedMakeupRecommendation(
@@ -201,6 +205,8 @@ export const MakeupRecommendationScreen = forwardRef<
   };
 
   const openHistoryReport = (report: MakeupRecommendationReportHistoryItem) => {
+    imagePollFailureCount.current = 0;
+    setImageRetryError('');
     setSession(restoreMakeupRecommendationReport(report));
     setPhase('results');
   };
@@ -226,8 +232,10 @@ export const MakeupRecommendationScreen = forwardRef<
   const handleAnswer = (answer: MakeupRecommendationAnswer) => {
     if (!session) return;
     const operation = beginOperation(workflowRequest);
+    imagePollFailureCount.current = 0;
     setPhase('loading');
     setErrorMessage('');
+    setImageRetryError('');
 
     Promise.resolve()
       .then(() => answerGeneratedMakeupRecommendationQuestion(
@@ -298,6 +306,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setErrorMessage('');
     setRefinementError('');
     setImageRetryError('');
+    imagePollFailureCount.current = 0;
     lastStartInput.current = undefined;
     lastRefinement.current = undefined;
   }, []);
@@ -310,10 +319,23 @@ export const MakeupRecommendationScreen = forwardRef<
     const poll = () => {
       void refreshGeneratedMakeupRecommendation(session, controller.signal)
         .then(nextSession => {
-          if (!cancelled) setSession(nextSession);
+          if (!cancelled) {
+            imagePollFailureCount.current = 0;
+            setSession(nextSession);
+          }
         })
         .catch(error => {
-          if (!cancelled && !isRequestAbortedError(error)) retryTimer = setTimeout(poll, 5000);
+          if (cancelled || isRequestAbortedError(error)) return;
+          imagePollFailureCount.current += 1;
+          if (imagePollFailureCount.current >= IMAGE_POLL_MAX_FAILURES) {
+            setImageRetryError('이미지 상태를 확인하지 못했어요. 추천 내용은 그대로 볼 수 있어요.');
+            setSession(current => {
+              if (!current || current.reportId !== session.reportId) return current;
+              return {...current, imageStatus: 'failed', imageError: '이미지 상태 확인 실패'};
+            });
+            return;
+          }
+          retryTimer = setTimeout(poll, 5000);
         });
     };
     const timer = setTimeout(() => {

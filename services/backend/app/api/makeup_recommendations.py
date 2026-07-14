@@ -41,6 +41,16 @@ def _json_value(value, fallback):
   return value if isinstance(value, type(fallback)) else fallback
 
 
+def _recommendation_report_response(report: dict) -> dict:
+  return {
+    **report,
+    "scenario_tags": _json_value(report.get("scenario_tags"), []),
+    "questions": _json_value(report.get("questions"), []),
+    "answers": _json_value(report.get("answers"), []),
+    "recommendation": _json_value(report.get("recommendation"), {}),
+  }
+
+
 async def run_recommendation_image_job(
   report_id: UUID,
   user_id: UUID,
@@ -374,4 +384,4 @@ async def get_recommendation_report(
   )
   if report is None:
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
-  return success(report)
+  return success(_recommendation_report_response(report))

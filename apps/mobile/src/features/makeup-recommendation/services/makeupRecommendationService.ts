@@ -65,7 +65,7 @@ type BackendLook = {
 };
 type BackendRecommendation = {
   looks?: BackendLook[];
-};
+} | string;
 type BackendRecommendationReport = {
   id: string;
   scenarioText?: string;
@@ -438,9 +438,10 @@ export function mapBackendRecommendationLooks({
   questions: MakeupRecommendationQuestion[];
   answers: MakeupRecommendationAnswer[];
 }): MakeupLookRecommendation[] {
+  const parsedRecommendation = parseBackendRecommendation(recommendation);
   const conditions = [prompt, ...selectedAnswerLabels(questions, answers)];
   const validRoles: MakeupLookRecommendation['role'][] = ['anchor', 'bold', 'discovery'];
-  return (recommendation.looks ?? []).flatMap((look, index) => {
+  return (parsedRecommendation.looks ?? []).flatMap((look, index) => {
     const role = validRoles.includes(look.role as MakeupLookRecommendation['role'])
       ? look.role as MakeupLookRecommendation['role']
       : undefined;
@@ -475,6 +476,17 @@ export function mapBackendRecommendationLooks({
       })),
     }];
   });
+}
+
+function parseBackendRecommendation(recommendation: BackendRecommendation | null | undefined): {looks?: BackendLook[]} {
+  if (!recommendation) return {};
+  if (typeof recommendation !== 'string') return recommendation;
+  try {
+    const parsed = JSON.parse(recommendation) as unknown;
+    return parsed && typeof parsed === 'object' ? parsed as {looks?: BackendLook[]} : {};
+  } catch {
+    return {};
+  }
 }
 
 export function mapBackendRecommendationReports(
@@ -617,23 +629,25 @@ export async function answerGeneratedMakeupRecommendationQuestion(
 export async function refreshGeneratedMakeupRecommendation(
   session: MakeupRecommendationSession,
   signal?: AbortSignal,
+  backendRequest: typeof requestBackendJson = requestBackendJson,
 ): Promise<MakeupRecommendationSession> {
   if (!session.reportId) return session;
-  const report = await requestBackendJson<BackendRecommendationReport>(
+  const report = await backendRequest<BackendRecommendationReport>(
     `/makeup-recommendations/${session.reportId}`,
     {signal},
   );
+  const refreshedResults = mapBackendRecommendationLooks({
+    reportId: session.reportId,
+    recommendation: report.recommendation,
+    prompt: session.prompt,
+    questions: session.questions,
+    answers: session.answers,
+  });
   return {
     ...session,
     imageStatus: report.imageStatus,
     imageError: report.imageError,
-    results: mapBackendRecommendationLooks({
-      reportId: session.reportId,
-      recommendation: report.recommendation,
-      prompt: session.prompt,
-      questions: session.questions,
-      answers: session.answers,
-    }),
+    results: refreshedResults.length > 0 ? refreshedResults : session.results,
   };
 }
 

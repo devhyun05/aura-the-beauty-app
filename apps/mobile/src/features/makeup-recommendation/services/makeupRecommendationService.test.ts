@@ -10,6 +10,7 @@ import {
   mapBackendRecommendationLooks,
   refineGeneratedMakeupRecommendation,
   refineMakeupRecommendation,
+  refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
   startGeneratedMakeupRecommendation,
   startMakeupRecommendation,
@@ -524,6 +525,58 @@ async function expectGeneratedRecommendationFailureIsSurfaced() {
   expectEqual((error as Error).message, 'recommendation unavailable', 'recommendation failure is not replaced by fixtures');
 }
 
+async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
+  const backendRecommendation = {
+    looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+      id: `poll-look-${index + 1}`,
+      role,
+      title: `폴링 추천 ${index + 1}`,
+      summary: `폴링 뒤에도 남는 추천 ${index + 1}`,
+      reasons: ['저장된 추천을 유지해요.'],
+      appliedConditions: ['공항 출국 레전드'],
+      durationMinutes: 25,
+      difficulty: 'medium',
+      steps: [{order: 1, area: 'base', instruction: '얇게 정리해요.'}],
+      products: [{area: 'base', brandName: '브랜드', productName: '제품', reason: '잘 맞아요.'}],
+    })),
+  };
+  const initialResults = mapBackendRecommendationLooks({
+    reportId: 'report-poll',
+    recommendation: backendRecommendation,
+    prompt: '공항 출국 레전드',
+    questions: [],
+    answers: [],
+  });
+  const session: MakeupRecommendationSession = {
+    id: 'report-poll',
+    reportId: 'report-poll',
+    phase: 'results',
+    prompt: '공항 출국 레전드',
+    questions: [],
+    currentQuestionIndex: 0,
+    answers: [],
+    results: initialResults,
+    useProfile: false,
+    imageStatus: 'pending',
+    generationMode: 'backend',
+  };
+
+  async function backendRequest<T>(): Promise<T> {
+    return {
+      id: 'report-poll',
+      scenarioText: '공항 출국 레전드',
+      recommendation: JSON.stringify(backendRecommendation),
+      imageStatus: 'processing',
+    } as T;
+  }
+
+  const refreshed = await refreshGeneratedMakeupRecommendation(session, undefined, backendRequest);
+
+  expectEqual(refreshed.imageStatus, 'processing', 'polling image status updates');
+  expectEqual(refreshed.results.length, 3, 'polling keeps all three looks from json string recommendation');
+  expectEqual(refreshed.results[0].title, '폴링 추천 1', 'polling parses saved recommendation copy');
+}
+
 async function runAsyncContracts() {
   await expectGeneratedQuestionFailureIsSurfaced();
   await expectGeneratedQuestionsRejectSixOptions();
@@ -531,6 +584,7 @@ async function runAsyncContracts() {
   await expectAbortSignalIsForwarded();
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
   await expectGeneratedRecommendationFailureIsSurfaced();
+  await expectPollingParsesJsonStringRecommendationAndKeepsResults();
 }
 
 void runAsyncContracts().catch(error => {
