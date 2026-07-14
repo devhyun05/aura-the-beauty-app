@@ -438,3 +438,47 @@ export function isAuradinAbort(error: unknown): boolean {
     (error instanceof Error && error.name === 'AbortError')
   );
 }
+
+// ------------------------------------------------------------------ A5 events (§7.2)
+
+// 모바일이 직접 방출하는 상호작용 이벤트 부분집합 — 서버사이드 수집(session_start/
+// question_answered/impression/refine_*)은 백엔드가 담당한다.
+export type AuradinClientEventType =
+  | 'product_open'
+  | 'purchase_click'
+  | 'save'
+  | 'unsave'
+  | 'hide'
+  | 'unhide';
+
+export type AuradinClientEvent = {
+  clientEventId: string; // 재시도 멱등 키 — 서버 유니크는 (owner, clientEventId)
+  eventType: AuradinClientEventType;
+  occurredAt: string; // ISO — 클라이언트 발생 시각 (서버 수신 시각과 분리)
+  sessionId?: string;
+  turnId?: string;
+  resultSetId?: string;
+  productId?: string;
+  category?: string;
+  rank?: number;
+  role?: string;
+  matchRate?: number;
+  // 구조화 값만 — raw 검색어/프롬프트 원문은 절대 싣지 않는다 (서버 allowlist가 한 번 더 거른다).
+  payload?: Record<string, unknown>;
+};
+
+// A5 §7.2 — POST /search/events fire-and-forget 배치. 실패·오프라인·백엔드 미설정은
+// 조용히 삼킨다(fail-open): 이벤트 기록이 추천 UX에 영향을 주면 안 된다.
+// dev fallback 인증이면 서버가 skip 후 204를 돌려준다 (익명식별 RFC).
+export function postAuradinEvents(events: AuradinClientEvent[]): void {
+  if (!getBackendApiBaseUrl() || events.length === 0) {
+    return;
+  }
+  void requestBackendJson<{accepted?: number}>('/search/events', {
+    method: 'POST',
+    timeoutMs: 4000,
+    body: {events},
+  }).catch(() => {
+    // best-effort — 재전송은 상위 UX 이벤트가 다시 발생할 때 새 clientEventId로 이뤄진다.
+  });
+}

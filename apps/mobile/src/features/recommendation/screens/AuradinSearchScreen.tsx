@@ -28,6 +28,7 @@ import {
   isAuradinAbort,
   makeClientRequestId,
   pollAuradinSearchTurn,
+  postAuradinEvents,
   refineAuradinSearch,
   similarAuradinSearch,
 } from '../services/auradinSearchService';
@@ -318,7 +319,27 @@ export function AuradinSearchScreen({
     })();
   };
 
+  // A5 이벤트 방출 — fire-and-forget. 실패·백엔드 미설정·dev 인증은 조용히 무시된다(fail-open).
+  const emitProductEvent = (
+    eventType: 'product_open' | 'purchase_click' | 'save' | 'unsave',
+    product: AuradinCandidateProduct,
+  ) => {
+    postAuradinEvents([
+      {
+        clientEventId: makeClientRequestId(),
+        eventType,
+        occurredAt: new Date().toISOString(),
+        sessionId: sessionIdRef.current ?? undefined,
+        productId: product.id,
+        category: product.category,
+        role: product.role,
+        matchRate: product.matchRate,
+      },
+    ]);
+  };
+
   const openDetail = (product: AuradinCandidateProduct) => {
+    emitProductEvent('product_open', product);
     setSelected(product);
     setPhase('detail');
   };
@@ -479,7 +500,12 @@ export function AuradinSearchScreen({
                 ? undefined
                 : (intent) => similar(selected, intent)
             }
-            onToggleSave={() => toggleSave(selected)}
+            onPurchase={() => emitProductEvent('purchase_click', selected)}
+            onToggleSave={() => {
+              // A5 save/unsave — 로컬 토글 직전 상태로 방향을 정한다 (보관함 영속화와 독립).
+              emitProductEvent(savedIds.has(selected.id) ? 'unsave' : 'save', selected);
+              toggleSave(selected);
+            }}
             product={selected}
             similarLoading={similarLoading}
           />

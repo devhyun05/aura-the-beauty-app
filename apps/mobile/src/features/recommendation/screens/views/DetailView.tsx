@@ -34,6 +34,8 @@ export type DetailViewProps = {
   product: AuradinCandidateProduct;
   liked: boolean;
   onToggleSave: () => void;
+  // A5: 구매 링크 이동 직전 purchase_click 이벤트 훅 — fire-and-forget, 이동을 막지 않는다.
+  onPurchase?: () => void;
   onBack: () => void;
   onHome: () => void;
   // B6 §10.3-2: '이 제품과 비슷한 것' 의향 버튼 — 큐레이션 제품에서만 내려온다
@@ -81,6 +83,7 @@ export function DetailView({
   product: p,
   liked,
   onToggleSave,
+  onPurchase,
   onBack,
   onHome,
   onSimilar,
@@ -107,7 +110,10 @@ export function DetailView({
 
   const r = p.reason;
   const openBuy = () => {
-    if (p.purchaseUrl) Linking.openURL(p.purchaseUrl).catch(() => {});
+    if (p.purchaseUrl) {
+      onPurchase?.(); // A5 purchase_click — 링크 이동을 막지 않는 fire-and-forget
+      Linking.openURL(p.purchaseUrl).catch(() => {});
+    }
   };
 
   return (
