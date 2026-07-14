@@ -17,7 +17,7 @@ from .catalog_loader import get_catalog
 from .enrichment import enrich_question, enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
-from .report_profile import personal_color_to_soft_preferences
+from .report_profile import report_context_to_soft_preferences
 from .taste_profile import get_taste_profile
 from .ranking import attribute_similarity, build_slice_result, normalized_brand, price_filter_label
 from .retrieval_service import FilterDeltaContractViolation, retrieve_and_rank
@@ -553,15 +553,15 @@ def create_session(
   session_id = f"auradin-{uuid.uuid4().hex[:16]}"
   now = _now()
   intent = parse_intent(prompt, report_id=report_id, source=source, context=context)
-  # §3: 얼굴분석 리포트 → undertone 소프트 선호 병합 (§9: soft만, hard 금지).
+  # §3/C4: 얼굴분석 리포트 → soft 선호 병합 (§9: soft만, hard 금지).
+  # personalColor→undertone에 더해 skinType→finish 확장, conf<0.5 신호는 주입 0.
   # report_context.personalColor(client-relay) 또는 API가 로드한 리포트에서 온다.
   personal_color = str((report_context or {}).get("personalColor") or "").strip()
-  if personal_color:
-    report_prefs = personal_color_to_soft_preferences(personal_color)
-    if report_prefs:
-      # 리포트 선호는 재랭킹에만 참여한다 — requiresQuestion 등 질문 동작은 프롬프트가
-      # 정한 그대로 둔다. 구체 프롬프트에 리포트를 얹었다고 질문을 강제하면 안 됨.
-      intent["softPreferences"] = [*intent.get("softPreferences", []), *report_prefs]
+  report_prefs = report_context_to_soft_preferences(report_context)
+  if report_prefs:
+    # 리포트 선호는 재랭킹에만 참여한다 — requiresQuestion 등 질문 동작은 프롬프트가
+    # 정한 그대로 둔다. 구체 프롬프트에 리포트를 얹었다고 질문을 강제하면 안 됨.
+    intent["softPreferences"] = [*intent.get("softPreferences", []), *report_prefs]
   state = {
     "sessionId": session_id,
     "ownerSubject": owner_subject,
