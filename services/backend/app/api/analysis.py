@@ -15,8 +15,15 @@ from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
 from app.schemas.analysis import AnalysisJobCreate
+from app.schemas.face_analysis_v2 import FaceAnalysisStageRetryRequest
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.embeddings import embed_text, format_pgvector, report_embedding_text
+from app.services.face_analysis_ai import FaceAnalysisAI
+from app.services.face_analysis_pipeline import (
+  FaceAnalysisPipeline,
+  initialize_face_analysis_v2,
+  project_legacy_analysis_result,
+)
 from app.services.media_deletion import (
   collect_report_media_refs,
   enqueue_unreferenced_report_media_deletions,
@@ -74,7 +81,13 @@ ANALYSIS_MEDIA_SELECT = """
 # 재선택하면 normalize 의 dict(row) 변환에서 마지막 값이 이겨 축약본이 남는다.
 ANALYSIS_MEDIA_LIST_SELECT = (
   ANALYSIS_MEDIA_SELECT
-  + ",\n  (r.detail_payload #- '{request,measurements}') as detail_payload"
+  + ",\n  ((((((r.detail_payload #- '{request,measurements}')"
+  " #- '{result,faceAnalysisV2,coverage}')"
+  " #- '{result,faceAnalysisV2,aiMeasurements}')"
+  " #- '{result,faceAnalysisV2,faceProfile}')"
+  " #- '{result,faceAnalysisV2,derived}')"
+  " #- '{result,faceAnalysisV2,perception}')"
+  " #- '{result,faceAnalysisV2,consulting}') as detail_payload"
 )
 
 
@@ -178,6 +191,25 @@ def require_complete_makeup_recommendations(result: dict | None) -> None:
 
 def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> dict:
   return {"request": payload.request_payload, "result": result}
+
+
+def build_initial_analysis_detail_payload(
+  payload: AnalysisJobCreate,
+  *,
+  face_analysis_v2_enabled: bool,
+) -> dict:
+  measurements = payload.request_payload.get("measurements")
+  if not (
+    face_analysis_v2_enabled
+    and isinstance(measurements, dict)
+    and measurements.get("schemaVersion") == "aura-face-analysis-measurements-v1"
+  ):
+    return {"request": payload.request_payload}
+
+  face_analysis_v2 = initialize_face_analysis_v2(payload.request_payload)
+  result = project_legacy_analysis_result(face_analysis_v2)
+  result["faceAnalysisV2"] = face_analysis_v2.model_dump(by_alias=True, mode="json")
+  return build_analysis_detail_payload(payload, result)
 
 
 def mark_recommended_makeup_images_failed(result: dict) -> list[dict]:
@@ -398,7 +430,29 @@ async def run_analysis_job_background(
       settings.analysis_provider,
       settings.effective_analysis_model_id,
     )
-    result = await analysis_service.analyze_text(payload.request_payload)
+    if settings.face_analysis_v2_enabled:
+      source_image_bytes = await analysis_service.read_source_image_bytes(
+        payload.request_payload,
+      )
+      face_analysis_v2 = await FaceAnalysisPipeline(
+        db=db,
+        settings=settings,
+        ai=FaceAnalysisAI(analysis_service),
+      ).run(
+        report_id=report_id,
+        request_payload=payload.request_payload,
+        source_image_bytes=source_image_bytes,
+      )
+      if face_analysis_v2.consulting is None:
+        result = await analysis_service.analyze_text(payload.request_payload)
+      else:
+        result = project_legacy_analysis_result(face_analysis_v2)
+      result["faceAnalysisV2"] = face_analysis_v2.model_dump(
+        by_alias=True,
+        mode="json",
+      )
+    else:
+      result = await analysis_service.analyze_text(payload.request_payload)
     image_generation_status = (
       "processing"
       if generates_images
@@ -641,7 +695,12 @@ async def create_analysis_job(
     payload.title,
     payload.report_title or payload.title,
     payload.environment_label,
-    json.dumps({"request": payload.request_payload}),
+    json.dumps(
+      build_initial_analysis_detail_payload(
+        payload,
+        face_analysis_v2_enabled=settings.face_analysis_v2_enabled,
+      ),
+    ),
   )
 
   if payload.run_immediately:

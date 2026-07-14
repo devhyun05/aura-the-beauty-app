@@ -8,8 +8,13 @@
 
 import json
 
-from app.api.analysis import ANALYSIS_MEDIA_LIST_SELECT, ANALYSIS_MEDIA_SELECT
+from app.api.analysis import (
+  ANALYSIS_MEDIA_LIST_SELECT,
+  ANALYSIS_MEDIA_SELECT,
+  build_initial_analysis_detail_payload,
+)
 from app.core.settings import Settings
+from app.schemas.analysis import AnalysisJobCreate
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.owned_media import trusted_media_request_payload
 
@@ -196,6 +201,24 @@ def test_prompt_metadata_size_is_bounded() -> None:
 
 def test_list_select_strips_measurements_but_detail_keeps() -> None:
   assert "#- '{request,measurements}'" in ANALYSIS_MEDIA_LIST_SELECT
+  assert "#- '{result,faceAnalysisV2,faceProfile}'" in ANALYSIS_MEDIA_LIST_SELECT
+  assert "#- '{result,faceAnalysisV2,pipeline}'" not in ANALYSIS_MEDIA_LIST_SELECT
   assert "#- '{request,measurements}'" not in ANALYSIS_MEDIA_SELECT
   # 축약본이 dict(row) 변환에서 원본을 덮도록 같은 별칭으로 뒤에 온다.
   assert ANALYSIS_MEDIA_LIST_SELECT.rstrip().endswith("as detail_payload")
+
+
+def test_initial_v2_payload_makes_camera_report_immediately_renderable() -> None:
+  request = AnalysisJobCreate(
+    requestPayload=build_worst_case_request_payload(),
+  )
+
+  detail = build_initial_analysis_detail_payload(
+    request,
+    face_analysis_v2_enabled=True,
+  )
+
+  result = detail["result"]
+  assert result["faceAnalysisV2"]["schemaVersion"] == "aura-face-analysis-v2"
+  assert result["faceAnalysisV2"]["pipeline"]["overall"] == "processing"
+  assert result["faceShape"]
