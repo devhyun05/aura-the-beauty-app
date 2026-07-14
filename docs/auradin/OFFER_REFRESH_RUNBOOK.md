@@ -135,3 +135,56 @@ lock 파일이 남아 있으면 먼저 실제 실행 중인 러너 프로세스�
 | | | | 0.50 | 0.15 | | | 초기값 유지/변경 사유 | |
 
 임계값을 변경하면 코드·테스트·본 표를 같은 변경으로 갱신하고, 과거 run의 봉인 파일은 수정하지 않는다.
+
+## 9. 월1회 확장 트랙 (B4)
+
+주간 트랙이 기존 618개의 오퍼만 갱신하는 것과 달리, 확장 트랙은 **신규 제품 + 속성**을 월 1회 편입한다(§6.2 확장 트랙). 오케스트레이터는 `scripts/run_auradin_monthly_expansion.py`이며 기존 자산만 체이닝한다 — 신규 인프라 없음.
+
+```
+① collect      run_auradin_naver_collection --all-templates (전 카테고리)
+② supplement   build_auradin_base_supplement_seed --category {cat} (정규화 이름 키로 신규 판별)
+③ spotcheck    사람 스팟체크 큐 — 체인이 여기서 멈춘다 (자동 통과 없음)
+④ merge        merge_auradin_seed_supplement (카테고리별 supplement 순차 병합)
+⑤ promote-prep run_auradin_weekly_offer_refresh --from preprocess --seed-path {merged}
+```
+
+### 9.1 cron 등록
+
+매월 1일 04:00, 주간 트랙(월요일 03:00)과 시간대가 겹치지 않게 잡는다. 오케스트레이터는 스팟체크 게이트에서 스스로 멈추므로 cron은 게이트 앞까지만 자동이다.
+
+```cron
+0 4 1 * * cd <repo> && mkdir -p logs && ./.venv/bin/python scripts/run_auradin_monthly_expansion.py >> logs/monthly_expansion.log 2>&1
+```
+
+실행 계획만 미리 보려면 `--plan-only`를 쓴다.
+
+```bash
+./.venv/bin/python scripts/run_auradin_monthly_expansion.py --plan-only
+```
+
+### 9.2 스팟체크 절차 (사람 게이트)
+
+1. 오케스트레이터가 `halted_for_spotcheck`로 멈추면 `data/auradin/review/{category}_supplement_spotcheck_{RUN_DATE}.csv`가 카테고리별로 생성돼 있다(브랜드 층화 표본, 기본 30건).
+2. 검토자는 각 행의 추출 속성(texture/finish/colorFamily/undertone)을 구매 URL 원문과 대조해 `verdict`(`pass`/`fix`/`drop`)와 `checkedBy`를 기입한다. `fix`는 `correctedField`·`correctedValue`를 함께 기입한다. **verdict와 checkedBy는 사람만 기입한다 — 러너·git user가 대신 채우지 않는다.**
+3. 모든 CSV가 채워지면 검토된 CSV가 있는 디렉터리로 재실행한다.
+
+```bash
+./.venv/bin/python scripts/run_auradin_monthly_expansion.py --date <RUN_DATE> \
+  --spotcheck-dir data/auradin/review >> logs/monthly_expansion.log 2>&1
+```
+
+4. 재실행은 ②를 `--apply-spotcheck` 모드로 다시 돌려 drop/fix를 반영하고 ④ merge → ⑤ promote-prep(preprocess→vector→prepare→golden)까지 진행한다.
+
+LLM 배치 추출(`scripts/run_auradin_llm_attribute_extraction.py`, B3)의 결과도 같은 원칙을 따른다: 추출 결과는 `data/auradin/review/` 아래 review 큐 파일로만 나오고 시드에 직접 병합하지 않는다. `hardFilterEligible` 승격은 field-specific confidence ≥ 0.70 **그리고** 사람 스팟체크 통과 배치만 가능하다.
+
+### 9.3 C급 baseline 재승인
+
+대규모 카탈로그 재생성은 골든 정책상 **C급(체계 변경)**이다 — "무회귀"가 아니라 **전체 baseline 재승인**(골든 스냅샷 재생성 + 사람 검수)을 요구한다. 확장 트랙으로 카탈로그 구성이 크게 바뀐 달에는 §5의 승인 절차에 더해 골든 corpus 9질의 결과를 사람이 재검수하고 새 baseline으로 명시 승인한다.
+
+승인 파일에서 다음 값은 **사람만 기입한다** (§5와 동일 계약 — 러너·git user 대필 금지):
+
+- `approvedBy`
+- `reviewedAt`
+- `approvalConclusion`: `pending` → `approved`
+
+승인 전까지 activate를 실행하지 않으며, 승격 거부는 롤백이 아니다 — active pointer가 바뀌지 않았으므로 기존 스냅샷이 계속 서빙된다.

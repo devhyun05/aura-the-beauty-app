@@ -20,7 +20,10 @@ from app.services.auradin_agent.quality_policy import is_quality_cut  # noqa: E4
 from app.services.auradin_agent.ranking import normalized_product_key  # noqa: E402
 from app.services.auradin_agent.snapshot_manifest import a8_quality_summary  # noqa: E402
 from app.services.auradin_agent.title_keyword_extractor import normalize_product_name  # noqa: E402
-from app.services.auradin_catalog.metadata_extractor import infer_title_metadata  # noqa: E402
+from app.services.auradin_catalog.metadata_extractor import (  # noqa: E402
+  infer_brand_clean_undertone_evidence,
+  infer_title_metadata,
+)
 
 
 INFERRED_FIELDS = ("colorFamily", "undertone", "intensity", "finish", "texture")
@@ -90,8 +93,13 @@ def _stable_catalog_id(brand: str, product_name: str) -> str:
   return f"auradin-seed-{digest}"
 
 
-def candidate_to_seed(candidate: dict[str, Any], *, run_date: str) -> dict[str, Any] | None:
-  if str(candidate.get("category") or "").strip() != "base":
+def candidate_to_seed(
+  candidate: dict[str, Any],
+  *,
+  run_date: str,
+  category: str = "base",
+) -> dict[str, Any] | None:
+  if str(candidate.get("category") or "").strip() != category:
     return None
 
   brand = str(candidate.get("brandNormalized") or candidate.get("brandName") or "").strip()
@@ -107,7 +115,7 @@ def candidate_to_seed(candidate: dict[str, Any], *, run_date: str) -> dict[str, 
 
   metadata, evidence, confidence = infer_title_metadata(
     title=raw_title,
-    category="base",
+    category=category,
     source_url=purchase_url,
     brand=brand,
   )
@@ -116,6 +124,21 @@ def candidate_to_seed(candidate: dict[str, Any], *, run_date: str) -> dict[str, 
     for field in INFERRED_FIELDS
     if metadata.get(field) not in {None, ""}
   }
+  # A8 사전 정합: cool undertone은 브랜드-클린 근거(콜라보 축약·호수명 '쿨' 등 브랜드 부분열 배제)가
+  # 있을 때만 유지 — a8_quality_summary와 동일 술어를 추출 시점에 적용해 게이트 late-fail을 막는다.
+  if str(attributes.get("undertone") or "") == "cool":
+    brand_clean_support = infer_brand_clean_undertone_evidence(
+      title=raw_title, category=category, brand=brand,
+    )
+    if not any(
+      support.get("field") == "undertone" and support.get("value") == "cool"
+      for support in brand_clean_support
+    ):
+      attributes.pop("undertone", None)
+      evidence = [
+        item for item in evidence
+        if not (item.get("field") == "undertone" and item.get("value") == "cool")
+      ]
   field_confidence = {
     field: float(confidence[field])
     for field in attributes
@@ -129,11 +152,11 @@ def candidate_to_seed(candidate: dict[str, Any], *, run_date: str) -> dict[str, 
   return {
     "catalogItemId": _stable_catalog_id(brand, product_name),
     "sourceCandidateId": str(candidate.get("id") or candidate.get("naverProductId") or "").strip(),
-    "sourceGrain": "naver_base_supplement_candidate",
+    "sourceGrain": f"naver_{category}_supplement_candidate",
     "brandName": brand,
     "productName": product_name,
     "rawTitle": raw_title,
-    "category": "base",
+    "category": category,
     "shadeOptions": shade_options,
     "attributes": attributes,
     "attributeConfidence": field_confidence,
@@ -146,7 +169,7 @@ def candidate_to_seed(candidate: dict[str, Any], *, run_date: str) -> dict[str, 
       "imageUrl": image_url,
     },
     "collectionStatus": "partial",
-    "schema": "ProductCatalogItemSeed.baseSupplement.v1",
+    "schema": f"ProductCatalogItemSeed.{category}Supplement.v1",
     "updatedAt": f"{run_date[:4]}-{run_date[4:6]}-{run_date[6:8]}T00:00:00+09:00",
   }
 
@@ -156,6 +179,7 @@ def build_supplement_rows(
   existing_seed: list[dict[str, Any]],
   *,
   run_date: str,
+  category: str = "base",
 ) -> list[dict[str, Any]]:
   existing_ids = {
     str(row.get("catalogItemId") or "").strip()
@@ -172,7 +196,7 @@ def build_supplement_rows(
     key = _candidate_key(candidate)
     if not key or key in existing_keys or key in seen_keys:
       continue
-    seed = candidate_to_seed(candidate, run_date=run_date)
+    seed = candidate_to_seed(candidate, run_date=run_date, category=category)
     if seed is None:
       continue
     item_id = str(seed["catalogItemId"])
@@ -298,6 +322,7 @@ def validate_supplement(
   supplement_rows: list[dict[str, Any]],
   *,
   target_post_cut: int,
+  category: str = "base",
 ) -> SupplementValidation:
   combined_catalog = build_mvp_catalog([*existing_seed, *supplement_rows])
   summary = a8_quality_summary(combined_catalog)
@@ -314,11 +339,11 @@ def validate_supplement(
   base_post_cut = sum(
     1
     for item in combined_catalog
-    if item.get("category") == "base" and not is_quality_cut(item)
+    if item.get("category") == category and not is_quality_cut(item)
   )
   if base_post_cut < target_post_cut:
     raise SupplementBuildError(
-      f"post-cut base target not met: {base_post_cut} < {target_post_cut}",
+      f"post-cut {category} target not met: {base_post_cut} < {target_post_cut}",
     )
   return SupplementValidation(
     base_post_cut=base_post_cut,
@@ -336,12 +361,22 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Build a reviewed Auradin base supplement seed.")
+  parser = argparse.ArgumentParser(description="Build a reviewed Auradin category supplement seed.")
   parser.add_argument("--candidates", type=Path, required=True)
   parser.add_argument("--existing-seed", type=Path, required=True)
   parser.add_argument("--run-date", required=True)
+  parser.add_argument(
+    "--category",
+    default="base",
+    help="확장 대상 카테고리 (B4 월1회 확장 트랙 — 기본 base로 기존 동작 유지).",
+  )
   parser.add_argument("--spotcheck-size", type=int, default=30)
-  parser.add_argument("--target-post-cut", type=int, default=80)
+  parser.add_argument(
+    "--target-post-cut",
+    type=int,
+    default=None,
+    help="post-cut 최소 행수 게이트 (기본: base=80, 그 외 카테고리=0).",
+  )
   parser.add_argument("--apply-spotcheck", type=Path)
   parser.add_argument("--output", type=Path)
   parser.add_argument("--spotcheck-output", type=Path)
@@ -353,13 +388,24 @@ def main() -> int:
   try:
     if len(args.run_date) != 8 or not args.run_date.isdigit():
       raise SupplementBuildError("run-date must be YYYYMMDD")
+    category = str(args.category or "").strip()
+    if not category:
+      raise SupplementBuildError("category must be a non-empty string")
+    target_post_cut = args.target_post_cut
+    if target_post_cut is None:
+      target_post_cut = 80 if category == "base" else 0
     candidates = read_jsonl(args.candidates)
     existing_seed = read_jsonl(args.existing_seed)
-    rows = build_supplement_rows(candidates, existing_seed, run_date=args.run_date)
+    rows = build_supplement_rows(
+      candidates,
+      existing_seed,
+      run_date=args.run_date,
+      category=category,
+    )
     review_rows = select_brand_stratified_spotcheck(rows, size=args.spotcheck_size)
     review_ids = {str(row["catalogItemId"]) for row in review_rows}
     spotcheck_path = args.spotcheck_output or (
-      REPO_ROOT / "data" / "auradin" / "review" / f"base_supplement_spotcheck_{args.run_date}.csv"
+      REPO_ROOT / "data" / "auradin" / "review" / f"{category}_supplement_spotcheck_{args.run_date}.csv"
     )
     if args.apply_spotcheck:
       decisions = read_spotcheck_decisions(args.apply_spotcheck, expected_ids=review_ids)
@@ -370,17 +416,19 @@ def main() -> int:
     validation = validate_supplement(
       existing_seed,
       rows,
-      target_post_cut=args.target_post_cut,
+      target_post_cut=target_post_cut,
+      category=category,
     )
     output_path = args.output or (
-      REPO_ROOT / "data" / "auradin" / "catalog" / f"base_supplement_seed_{args.run_date}.jsonl"
+      REPO_ROOT / "data" / "auradin" / "catalog" / f"{category}_supplement_seed_{args.run_date}.jsonl"
     )
     write_jsonl(output_path, rows)
     print(
       json.dumps(
         {
           "a8InvalidCoolCount": validation.a8_summary["invalidCoolCount"],
-          "basePostCut": validation.base_post_cut,
+          "category": category,
+          "categoryPostCut": validation.base_post_cut,
           "combinedCatalogCount": validation.combined_catalog_count,
           "output": str(output_path),
           "spotcheck": str(args.apply_spotcheck or spotcheck_path),
