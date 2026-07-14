@@ -38,7 +38,11 @@ REFINED_REPORT_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 
 class FakeBedrockClient:
-  def converse(self, **_kwargs):
+  def __init__(self):
+    self.calls: list[dict] = []
+
+  def converse(self, **kwargs):
+    self.calls.append(kwargs)
     return {
       "output": {
         "message": {
@@ -58,6 +62,16 @@ def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> No
   result = _converse(Settings(), "model-id", "system", "prompt")
 
   assert result["items"][0]["text"] == "퇴근 후 약속"
+
+
+def test_converse_allows_complete_three_look_recommendation_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+  client = FakeBedrockClient()
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: client)
+
+  _converse(Settings(), "model-id", "system", "prompt")
+
+  assert client.calls[0]["inferenceConfig"]["maxTokens"] >= 5000
+  assert client.calls[0]["inferenceConfig"]["temperature"] <= 0.5
 
 
 def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:
@@ -561,11 +575,13 @@ def test_makeup_report_is_part_of_schema_contract() -> None:
 def test_makeup_prompt_contract_accepts_full_generated_seed_prompt() -> None:
   prompt = "가" * 240
 
-  question = makeup_api.MakeupQuestionRequest.model_validate({"scenarioText": prompt})
-  recommendation = makeup_api.MakeupRecommendationRequest.model_validate({"scenarioText": prompt})
+  question = makeup_api.MakeupQuestionRequest.model_validate({"scenarioText": prompt, "scenarioLabel": "공항 출국 레전드"})
+  recommendation = makeup_api.MakeupRecommendationRequest.model_validate({"scenarioText": prompt, "scenarioLabel": "공항 출국 레전드"})
 
   assert question.scenario_text == prompt
+  assert question.scenario_label == "공항 출국 레전드"
   assert recommendation.scenario_text == prompt
+  assert recommendation.scenario_label == "공항 출국 레전드"
 
 
 @pytest.mark.asyncio
@@ -743,6 +759,43 @@ async def test_makeup_generators_route_to_configured_model_ids(monkeypatch: pyte
   await generate_recommendation(settings, "퇴근 후 약속", [], [], [])
 
   assert calls == ["scenario-haiku", "question-haiku", "recommendation-sonnet"]
+
+
+@pytest.mark.asyncio
+async def test_question_prompt_asks_for_story_direction_instead_of_makeup_specs(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured: dict[str, str] = {}
+
+  async def fake_generate_json(_settings, _model_id, system, prompt):
+    captured["system"] = system
+    captured["prompt"] = prompt
+    return {
+      "questions": [{
+        "id": "presence",
+        "title": "평소보다 얼마나 과감해질까요?",
+        "options": [
+          {"id": "familiar", "label": "평소의 나답게"},
+          {"id": "different", "label": "조금 낯설게"},
+          {"id": "bold", "label": "확실히 달라지게"},
+          {"id": "ai_pick", "label": "AI가 골라줘"},
+        ],
+      }],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  await generate_questions(
+    Settings(),
+    "사진에서 또렷하되 과하게 꾸민 느낌은 피하는 메이크업",
+    ["공항", "사진"],
+    "공항 출국 레전드",
+  )
+
+  assert "어디에서 어떻게 보이고 싶은지" in captured["system"]
+  assert "어떤 분위기가 끌리는지" in captured["system"]
+  assert "평소보다 얼마나 과감해지고 싶은지" in captured["system"]
+  assert "시간과 난이도를 어느 정도 감수할지" in captured["system"]
+  assert "색상, 질감, 강조 부위" in captured["system"]
+  assert "공항 출국 레전드" in captured["prompt"]
 
 
 @pytest.mark.asyncio

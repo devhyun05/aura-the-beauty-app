@@ -64,6 +64,7 @@ export type MakeupRecommendationSession = {
   id: string;
   phase: 'question' | 'results';
   prompt: string;
+  scenarioLabel?: string;
   questions: MakeupRecommendationQuestion[];
   currentQuestionIndex: number;
   answers: MakeupRecommendationAnswer[];
@@ -74,7 +75,7 @@ export type MakeupRecommendationSession = {
   reportId?: string;
   imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
   imageError?: string;
-  generationMode?: 'backend' | 'localFallback';
+  generationMode?: 'backend';
 };
 export type MakeupRecommendationReportHistoryItem = {
   reportId: string;

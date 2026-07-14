@@ -15,6 +15,7 @@ import {
   startMakeupRecommendation,
 } from './makeupRecommendationService';
 import {BackendApiError, requestBackendJson} from '../../../shared/services/backendApi';
+import type {MakeupRecommendationSession} from '../types';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -293,41 +294,27 @@ expectEqual(
   'repeated refinement does not duplicate summary',
 );
 
-async function expectGeneratedFlowFallsBackLocally() {
+async function expectGeneratedQuestionFailureIsSurfaced() {
   async function failingBackendRequest<T>(): Promise<T> {
     throw new Error('backend unavailable');
   }
 
-  const fallbackStarted = await startGeneratedMakeupRecommendation(
-    {
-      prompt: scenarios[0].seedPrompt,
-      scenarioId: scenarios[0].id,
-      useProfile: false,
-    },
-    scenarios[0].intentTags,
-    failingBackendRequest,
-  );
-  expectEqual(fallbackStarted.generationMode, 'localFallback', 'question failure uses local fallback');
-
-  let fallbackCompleted = fallbackStarted;
-  for (const question of fallbackStarted.questions) {
-    fallbackCompleted = await answerGeneratedMakeupRecommendationQuestion(
-      fallbackCompleted,
-      {questionId: question.id, optionId: question.options[0].id},
+  let error: unknown;
+  try {
+    await startGeneratedMakeupRecommendation(
+      {
+        prompt: scenarios[0].seedPrompt,
+        scenarioId: scenarios[0].id,
+        useProfile: false,
+      },
       scenarios[0].intentTags,
       failingBackendRequest,
     );
+  } catch (caught) {
+    error = caught;
   }
-  expectEqual(fallbackCompleted.phase, 'results', 'fallback flow completes');
-  expectEqual(fallbackCompleted.results.length, 3, 'fallback flow returns three looks');
-  expectEqual(fallbackCompleted.generationMode, 'localFallback', 'fallback mode remains visible');
-
-  const refinedFallback = await refineGeneratedMakeupRecommendation(fallbackCompleted, 'natural');
-  expectEqual(
-    refinedFallback.results[0].appliedConditions[0],
-    '더 자연스럽게',
-    'fallback results refine locally without a report id',
-  );
+  expectEqual(error instanceof Error, true, 'question generation failure is surfaced');
+  expectEqual((error as Error).message, 'backend unavailable', 'question failure is not replaced by local fallback');
 }
 
 async function expectGeneratedQuestionsPreserveSixOptions() {
@@ -404,8 +391,13 @@ async function expectAbortSignalIsForwarded() {
 
 async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
   let callCount = 0;
-  async function successfulBackendRequest<T>(path: string): Promise<T> {
+  const requestBodies: unknown[] = [];
+  async function successfulBackendRequest<T>(
+    path: string,
+    init?: Parameters<typeof requestBackendJson>[1],
+  ): Promise<T> {
     callCount += 1;
+    requestBodies.push(init?.body);
     if (path.endsWith('/questions')) {
       return {
         questions: [{
@@ -440,8 +432,14 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
     } as T;
   }
 
+  const startInput = {
+    prompt: '사진에서 또렷하되 과하게 꾸민 느낌은 피하는 메이크업',
+    scenarioId: 'airport-legend',
+    scenarioLabel: '공항 출국 레전드',
+    useProfile: false,
+  };
   const started = await startGeneratedMakeupRecommendation(
-    {prompt: '퇴근 후 약속', useProfile: false},
+    startInput,
     [],
     successfulBackendRequest,
   );
@@ -453,6 +451,21 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
   );
 
   expectEqual(callCount, 2, 'successful backend flow makes question and recommendation requests');
+  expectEqual(
+    (requestBodies[0] as {scenarioLabel?: string}).scenarioLabel,
+    '공항 출국 레전드',
+    'question request includes selected card copy',
+  );
+  expectEqual(
+    (requestBodies[1] as {scenarioLabel?: string}).scenarioLabel,
+    '공항 출국 레전드',
+    'recommendation request includes selected card copy',
+  );
+  expectEqual(
+    (started as MakeupRecommendationSession & {scenarioLabel?: string}).scenarioLabel,
+    '공항 출국 레전드',
+    'question session preserves selected card copy',
+  );
   expectEqual(completed.phase, 'results', 'successful backend flow reaches results');
   expectEqual(completed.generationMode, 'backend', 'successful flow remains in backend mode');
   expectEqual(completed.reportId, 'report-success', 'saved report id is retained');
@@ -460,12 +473,54 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
   expectEqual(completed.results.length, 3, 'all three backend roles are mapped');
 }
 
+async function expectGeneratedRecommendationFailureIsSurfaced() {
+  let callCount = 0;
+  async function failingRecommendationRequest<T>(): Promise<T> {
+    callCount += 1;
+    if (callCount === 1) {
+      return {
+        questions: [{
+          id: 'presence',
+          title: '평소보다 얼마나 과감해질까요?',
+          options: [
+            {id: 'familiar', label: '평소의 나답게'},
+            {id: 'different', label: '조금 낯설게'},
+            {id: 'bold', label: '확실히 달라지게'},
+            {id: 'ai_pick', label: 'AI가 골라줘'},
+          ],
+        }],
+      } as T;
+    }
+    throw new Error('recommendation unavailable');
+  }
+
+  const started = await startGeneratedMakeupRecommendation(
+    {prompt: '공항 사진에서 또렷하게 보이는 메이크업', useProfile: false},
+    [],
+    failingRecommendationRequest,
+  );
+  let error: unknown;
+  try {
+    await answerGeneratedMakeupRecommendationQuestion(
+      started,
+      {questionId: 'presence', optionId: 'familiar'},
+      [],
+      failingRecommendationRequest,
+    );
+  } catch (caught) {
+    error = caught;
+  }
+
+  expectEqual((error as Error).message, 'recommendation unavailable', 'recommendation failure is not replaced by fixtures');
+}
+
 async function runAsyncContracts() {
-  await expectGeneratedFlowFallsBackLocally();
+  await expectGeneratedQuestionFailureIsSurfaced();
   await expectGeneratedQuestionsPreserveSixOptions();
   await expectAuthFailureDoesNotMasqueradeAsFallback();
   await expectAbortSignalIsForwarded();
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
+  await expectGeneratedRecommendationFailureIsSurfaced();
 }
 
 void runAsyncContracts().catch(error => {

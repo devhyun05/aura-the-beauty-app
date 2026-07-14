@@ -152,7 +152,7 @@ async def create_scenarios(
 
 @router.post("/questions")
 async def create_questions(payload: MakeupQuestionRequest, settings: Settings = Depends(get_settings), _: AuthContext = Depends(get_current_user)) -> dict:
-  return success(await generate_questions(settings, payload.scenario_text, payload.scenario_tags))
+  return success(await generate_questions(settings, payload.scenario_text, payload.scenario_tags, payload.scenario_label))
 
 
 @router.post("")
@@ -164,7 +164,14 @@ async def create_recommendation(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  recommendation = await generate_recommendation(settings, payload.scenario_text, payload.scenario_tags, payload.questions, payload.answers)
+  recommendation = await generate_recommendation(
+    settings,
+    payload.scenario_text,
+    payload.scenario_tags,
+    payload.questions,
+    payload.answers,
+    payload.scenario_label,
+  )
   row = await db.fetchrow(
     """
     insert into makeup_recommendation_reports
@@ -174,7 +181,7 @@ async def create_recommendation(
     returning id
     """,
     user["id"],
-    payload.scenario_text,
+    payload.scenario_label or payload.scenario_text,
     json.dumps(payload.scenario_tags, ensure_ascii=False),
     json.dumps(payload.questions, ensure_ascii=False),
     json.dumps(payload.answers, ensure_ascii=False),

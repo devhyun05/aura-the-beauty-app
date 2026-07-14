@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useMemo, useRef, useState} from 'react';
 import {StyleSheet, View, useWindowDimensions} from 'react-native';
 
 import {spacing} from '../../../shared/theme';
@@ -23,21 +23,28 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
 }) {
   const {fontScale} = useWindowDimensions();
   const [containerWidth, setContainerWidth] = useState(0);
-  const [measurements, setMeasurements] = useState<Record<string, number>>({});
-  const scenarioKey = scenarios.map(item => item.id).join('|');
-
-  useEffect(() => setMeasurements({}), [containerWidth, fontScale, scenarioKey]);
+  const layoutKey = `${containerWidth}:${fontScale}`;
+  const layoutKeyRef = useRef(layoutKey);
+  layoutKeyRef.current = layoutKey;
+  const [measurementCache, setMeasurementCache] = useState<{
+    heights: Record<string, number>;
+    layoutKey: string;
+  }>({heights: {}, layoutKey});
+  const measurements = measurementCache.layoutKey === layoutKey ? measurementCache.heights : {};
 
   const cellWidth = containerWidth > 0 ? (containerWidth - GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT : 0;
   const placements = useMemo(() => {
-    if (!cellWidth || scenarios.some(item => !measurements[item.id])) return [];
+    if (!cellWidth) return [];
     return packScenarioPuzzle({
       columnCount: COLUMN_COUNT,
-      items: scenarios.map((item, index) => ({
-        id: item.id,
-        columnSpan: getBalancedSpan(index, item.displayText, item.preferredColumnSpan),
-        rowSpan: getPuzzleRowSpan({contentHeight: measurements[item.id], rowGap: GAP, rowHeight: ROW_HEIGHT}),
-      })),
+      items: scenarios.flatMap((item, index) => {
+        const contentHeight = measurements[item.id];
+        return contentHeight > 0 ? [{
+          id: item.id,
+          columnSpan: getBalancedSpan(index, item.displayText, item.preferredColumnSpan),
+          rowSpan: getPuzzleRowSpan({contentHeight, rowGap: GAP, rowHeight: ROW_HEIGHT}),
+        }] : [];
+      }),
     });
   }, [cellWidth, measurements, scenarios]);
 
@@ -58,7 +65,8 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
 
   return (
     <View onLayout={event => setContainerWidth(event.nativeEvent.layout.width)} style={[styles.container, {height}]}>
-      {containerWidth > 0 && placements.length === 0 ? scenarios.map((scenario, index) => {
+      {containerWidth > 0 ? scenarios.map((scenario, index) => {
+        if (measurements[scenario.id] > 0) return null;
         const span = getBalancedSpan(index, scenario.displayText, scenario.preferredColumnSpan);
         const width = cellWidth * span + GAP * (span - 1);
         return (
@@ -68,9 +76,12 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
               // React Native pools layout events; capture the primitive before
               // the functional state update runs asynchronously.
               const height = event.nativeEvent.layout.height;
-              setMeasurements(previous => scenario.id in previous
-                ? previous
-                : {...previous, [scenario.id]: height});
+              setMeasurementCache(previous => {
+                if (layoutKeyRef.current !== layoutKey) return previous;
+                const heights = previous.layoutKey === layoutKey ? previous.heights : {};
+                if (heights[scenario.id] === height) return previous;
+                return {layoutKey, heights: {...heights, [scenario.id]: height}};
+              });
             }}
             pointerEvents="none"
             style={[styles.measurement, {width}]}

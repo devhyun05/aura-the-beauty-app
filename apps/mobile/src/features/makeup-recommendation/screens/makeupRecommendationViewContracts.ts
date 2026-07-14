@@ -2,8 +2,8 @@ import type {MakeupLookRole} from '../types';
 
 export const makeupRecommendationDiscoveryCopy = {
   eyebrow: '',
-  title: '어떤 모습이 끌리나요?',
-  description: '마음에 걸리는 한 문장에서 시작해보세요.',
+  title: '지금 끌리는 한 문장에서 시작해보세요.',
+  description: '',
   placeholder: '내 이야기로 추천 받기',
   profile: '내 분석 결과 반영',
   submit: '확인',
@@ -44,13 +44,8 @@ export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string
 export const makeupRecommendationImageStatusCopy = {
   failedAction: '이미지 다시 만들기',
 } as const;
-export const makeupRecommendationFallbackCopy = {
-  description: 'AI 연결이 잠시 불안정해 검수된 임시 추천을 보여드려요. 이 결과는 보고서에 저장되지 않았어요.',
-  retryAction: 'AI 추천 다시 연결하기',
-} as const;
 export const makeupRecommendationReportStatusCopy = {
   saved: '보고서 저장됨',
-  temporary: '임시 추천',
 } as const;
 export function toggleExpandedLookId(previous: Set<string>, lookId: string): Set<string> {
   const next = new Set(previous);

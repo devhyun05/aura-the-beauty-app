@@ -51,15 +51,13 @@ export function ScenarioDiscoveryView({
               <Text style={styles.historyLabel}>{makeupRecommendationHistoryCopy.action}</Text>
             </Pressable>
           </View>
-          <Text style={styles.description}>{makeupRecommendationDiscoveryCopy.description}</Text>
+          {makeupRecommendationDiscoveryCopy.description ? (
+            <Text style={styles.description}>{makeupRecommendationDiscoveryCopy.description}</Text>
+          ) : null}
         </View>
 
         <View style={styles.scenarioSection}>
-          <View style={styles.sectionHeadingRow}>
-            <View style={styles.sectionHeading}>
-              <Text style={styles.sectionTitle}>지금 끌리는 한 문장</Text>
-              <Text style={styles.sectionDescription}>마음 가는 문장을 골라보세요.</Text>
-            </View>
+          <View style={styles.scenarioActions}>
             <Pressable accessibilityRole="button" disabled={isLoadingScenarios} onPress={onRefreshScenarios} style={styles.refreshButton}>
               {isLoadingScenarios ? <ActivityIndicator color={colors.textSecondary} size="small" /> : (
                 <Text style={styles.refreshLabel}>{makeupRecommendationDiscoveryCopy.refresh} ↻</Text>
@@ -124,10 +122,7 @@ const styles = StyleSheet.create({
   composerCard: {flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm},
   input: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.md, lineHeight: typography.lineHeight.md, minHeight: 36, padding: 0},
   scenarioSection: {gap: spacing.lg},
-  sectionHeadingRow: {alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between'},
-  sectionHeading: {flex: 1, gap: spacing.xs},
-  sectionTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg},
-  sectionDescription: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm},
+  scenarioActions: {alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end'},
   refreshButton: {justifyContent: 'center', minHeight: 44, paddingLeft: spacing.md},
   refreshLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.xs},
   moreButton: {alignItems: 'center', alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg},

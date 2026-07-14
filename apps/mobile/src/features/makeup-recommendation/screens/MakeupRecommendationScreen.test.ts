@@ -5,7 +5,6 @@ import {
   makeupRecommendationDiscoveryCopy,
   makeupRecommendationResultRoleLabels,
   makeupRecommendationImageStatusCopy,
-  makeupRecommendationFallbackCopy,
   makeupRecommendationHistoryCopy,
   makeupRecommendationReportStatusCopy,
   shouldHandleMakeupRecommendationBack,
@@ -20,9 +19,10 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(
   makeupRecommendationDiscoveryCopy.title,
-  '어떤 모습이 끌리나요?',
+  '지금 끌리는 한 문장에서 시작해보세요.',
   'discovery title',
 );
+expectEqual(makeupRecommendationDiscoveryCopy.description, '', 'discovery description is consolidated into title');
 expectEqual(
   makeupRecommendationDiscoveryCopy.refresh,
   '새로 보기',
@@ -64,14 +64,8 @@ expectEqual(
   '이미지 다시 만들기',
   'failed image retry action',
 );
-expectEqual(
-  makeupRecommendationFallbackCopy.retryAction,
-  'AI 추천 다시 연결하기',
-  'local fallback retry action',
-);
 expectEqual(makeupRecommendationHistoryCopy.title, '지난 추천', 'history title');
 expectEqual(makeupRecommendationReportStatusCopy.saved, '보고서 저장됨', 'saved report status');
-expectEqual(makeupRecommendationReportStatusCopy.temporary, '임시 추천', 'temporary report status');
 expectEqual(
   formatMakeupRecommendationHistoryDate('2026-07-14T12:34:56Z'),
   '2026. 07. 14.',

@@ -151,7 +151,7 @@ export const MakeupRecommendationScreen = forwardRef<
       })
       .catch(error => {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
-        setErrorMessage(error instanceof Error ? error.message : '추천을 시작하지 못했어요.');
+        setErrorMessage('AI 질문을 만들지 못했어요. 잠시 후 다시 시도해주세요.');
         setPhase('error');
       });
   }, [beginOperation]);
@@ -200,6 +200,7 @@ export const MakeupRecommendationScreen = forwardRef<
     runStart({
       prompt: scenario.seedPrompt,
       scenarioId: scenario.id,
+      scenarioLabel: scenario.displayText,
       useProfile: false,
     });
   };
@@ -225,7 +226,7 @@ export const MakeupRecommendationScreen = forwardRef<
       })
       .catch(error => {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
-        setErrorMessage(error instanceof Error ? error.message : '답변을 반영하지 못했어요.');
+        setErrorMessage('AI 추천을 만들지 못했어요. 잠시 후 다시 시도해주세요.');
         setPhase('error');
       });
   };
@@ -379,6 +380,7 @@ export const MakeupRecommendationScreen = forwardRef<
           onBack={reset}
           question={question}
           questionCount={session.questions.length}
+          scenarioLabel={session.scenarioLabel}
         />
       );
     }
@@ -397,7 +399,6 @@ export const MakeupRecommendationScreen = forwardRef<
         refinementError={refinementError}
         results={session.results}
         imageStatus={session.imageStatus}
-        generationMode={session.generationMode}
         isReportSaved={Boolean(session.reportId)}
         imageRetryError={imageRetryError}
         isRefining={isRefining}
