@@ -478,6 +478,16 @@ def test_makeup_report_is_part_of_schema_contract() -> None:
   }
 
 
+def test_makeup_prompt_contract_accepts_full_generated_seed_prompt() -> None:
+  prompt = "가" * 240
+
+  question = makeup_api.MakeupQuestionRequest.model_validate({"scenarioText": prompt})
+  recommendation = makeup_api.MakeupRecommendationRequest.model_validate({"scenarioText": prompt})
+
+  assert question.scenario_text == prompt
+  assert recommendation.scenario_text == prompt
+
+
 @pytest.mark.asyncio
 async def test_scenarios_retry_until_they_are_new_and_unique(monkeypatch: pytest.MonkeyPatch) -> None:
   responses = iter(

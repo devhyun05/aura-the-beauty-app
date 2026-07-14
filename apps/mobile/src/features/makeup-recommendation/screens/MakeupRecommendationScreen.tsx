@@ -3,6 +3,7 @@ import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {isRequestAbortedError} from '../../../shared/services/backendApi';
 import {
   answerGeneratedMakeupRecommendationQuestion,
   fetchGeneratedMakeupScenarios,
@@ -46,6 +47,8 @@ export type MakeupRecommendationScreenProps = {
   personalColor?: string;
 };
 
+const HISTORY_PAGE_SIZE = 20;
+
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
@@ -66,12 +69,24 @@ export const MakeupRecommendationScreen = forwardRef<
   const [historyItems, setHistoryItems] = useState<MakeupRecommendationReportHistoryItem[]>([]);
   const [historyError, setHistoryError] = useState('');
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const activeScenarioTags = useRef<string[]>([]);
   const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
   const scenarioRequestInFlight = useRef(false);
   const localScenarioSeed = useRef(initialScenarioSeed.current + 12);
+  const workflowRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
+  const mutationRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
+  const operationSequence = useRef(0);
+
+  const beginOperation = useCallback((slot: typeof workflowRequest) => {
+    slot.current?.controller.abort();
+    const operation = {controller: new AbortController(), id: ++operationSequence.current};
+    slot.current = operation;
+    return operation;
+  }, []);
 
   const loadScenarios = useCallback(async (mode: 'replace' | 'append') => {
     if (scenarioRequestInFlight.current) return;
@@ -117,33 +132,50 @@ export const MakeupRecommendationScreen = forwardRef<
   }, [loadScenarios]);
 
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
+    const operation = beginOperation(workflowRequest);
     lastStartInput.current = input;
     setPhase('loading');
     setErrorMessage('');
 
     Promise.resolve()
-      .then(() => startGeneratedMakeupRecommendation(input, activeScenarioTags.current))
+      .then(() => startGeneratedMakeupRecommendation(
+        input,
+        activeScenarioTags.current,
+        undefined,
+        operation.controller.signal,
+      ))
       .then(nextSession => {
+        if (workflowRequest.current?.id !== operation.id) return;
         setSession(nextSession);
         setPhase(nextSession.phase);
       })
       .catch(error => {
+        if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
         setErrorMessage(error instanceof Error ? error.message : '추천을 시작하지 못했어요.');
         setPhase('error');
       });
-  }, []);
+  }, [beginOperation]);
 
-  const loadHistory = useCallback(async () => {
-    setIsLoadingHistory(true);
+  const loadHistory = useCallback(async (mode: 'replace' | 'append' = 'replace') => {
+    if (mode === 'append') setIsLoadingMoreHistory(true);
+    else setIsLoadingHistory(true);
     setHistoryError('');
     try {
-      setHistoryItems(await fetchGeneratedMakeupRecommendationReports());
+      const offset = mode === 'append' ? historyItems.length : 0;
+      const reports = await fetchGeneratedMakeupRecommendationReports({limit: HISTORY_PAGE_SIZE, offset});
+      setHistoryItems(previous => {
+        if (mode === 'replace') return reports;
+        const known = new Set(previous.map(item => item.reportId));
+        return [...previous, ...reports.filter(item => !known.has(item.reportId))];
+      });
+      setHasMoreHistory(reports.length === HISTORY_PAGE_SIZE);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : '지난 추천을 불러오지 못했어요.');
     } finally {
       setIsLoadingHistory(false);
+      setIsLoadingMoreHistory(false);
     }
-  }, []);
+  }, [historyItems.length]);
 
   const openHistory = () => {
     setPhase('history');
@@ -174,16 +206,25 @@ export const MakeupRecommendationScreen = forwardRef<
 
   const handleAnswer = (answer: MakeupRecommendationAnswer) => {
     if (!session) return;
+    const operation = beginOperation(workflowRequest);
     setPhase('loading');
     setErrorMessage('');
 
     Promise.resolve()
-      .then(() => answerGeneratedMakeupRecommendationQuestion(session, answer, activeScenarioTags.current))
+      .then(() => answerGeneratedMakeupRecommendationQuestion(
+        session,
+        answer,
+        activeScenarioTags.current,
+        undefined,
+        operation.controller.signal,
+      ))
       .then(nextSession => {
+        if (workflowRequest.current?.id !== operation.id) return;
         setSession(nextSession);
         setPhase(nextSession.phase);
       })
       .catch(error => {
+        if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
         setErrorMessage(error instanceof Error ? error.message : '답변을 반영하지 못했어요.');
         setPhase('error');
       });
@@ -191,34 +232,47 @@ export const MakeupRecommendationScreen = forwardRef<
 
   const handleRefine = (refinement: MakeupRecommendationRefinement) => {
     if (!session) return;
+    const operation = beginOperation(mutationRequest);
     lastRefinement.current = refinement;
     setRefinementError('');
     setIsRefining(true);
 
     Promise.resolve()
-      .then(() => refineGeneratedMakeupRecommendation(session, refinement))
+      .then(() => refineGeneratedMakeupRecommendation(session, refinement, operation.controller.signal))
       .then(nextSession => {
+        if (mutationRequest.current?.id !== operation.id) return;
         setSession(nextSession);
       })
       .catch(error => {
+        if (isRequestAbortedError(error) || mutationRequest.current?.id !== operation.id) return;
         setRefinementError(
           error instanceof Error ? error.message : '조정하지 못했어요. 기존 추천은 그대로 두었어요.',
         );
       })
-      .finally(() => setIsRefining(false));
+      .finally(() => {
+        if (mutationRequest.current?.id === operation.id) setIsRefining(false);
+      });
   };
 
   const handleRetryImages = () => {
     if (!session) return;
+    const operation = beginOperation(mutationRequest);
     setImageRetryError('');
-    void retryGeneratedMakeupRecommendationImages(session)
-      .then(setSession)
+    void retryGeneratedMakeupRecommendationImages(session, operation.controller.signal)
+      .then(nextSession => {
+        if (mutationRequest.current?.id === operation.id) setSession(nextSession);
+      })
       .catch(error => {
+        if (isRequestAbortedError(error) || mutationRequest.current?.id !== operation.id) return;
         setImageRetryError(error instanceof Error ? error.message : '이미지를 다시 만들지 못했어요.');
       });
   };
 
   const reset = useCallback(() => {
+    workflowRequest.current?.controller.abort();
+    mutationRequest.current?.controller.abort();
+    workflowRequest.current = undefined;
+    mutationRequest.current = undefined;
     setPhase('discovery');
     setSession(undefined);
     setPrompt('');
@@ -231,12 +285,27 @@ export const MakeupRecommendationScreen = forwardRef<
 
   useEffect(() => {
     if (phase !== 'results' || !session?.reportId || !['pending', 'processing'].includes(session.imageStatus ?? '')) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      void refreshGeneratedMakeupRecommendation(session, controller.signal)
+        .then(nextSession => {
+          if (!cancelled) setSession(nextSession);
+        })
+        .catch(error => {
+          if (!cancelled && !isRequestAbortedError(error)) retryTimer = setTimeout(poll, 5000);
+        });
+    };
     const timer = setTimeout(() => {
-      void refreshGeneratedMakeupRecommendation(session)
-        .then(setSession)
-        .catch(() => undefined);
+      poll();
     }, 2500);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [phase, session]);
 
   useImperativeHandle(
@@ -279,9 +348,12 @@ export const MakeupRecommendationScreen = forwardRef<
       <RecommendationHistoryView
         error={historyError}
         isLoading={isLoadingHistory}
+        isLoadingMore={isLoadingMoreHistory}
         items={historyItems}
+        canLoadMore={hasMoreHistory}
         onBack={() => setPhase('discovery')}
         onRefresh={() => void loadHistory()}
+        onLoadMore={() => void loadHistory('append')}
         onSelect={openHistoryReport}
       />
     );

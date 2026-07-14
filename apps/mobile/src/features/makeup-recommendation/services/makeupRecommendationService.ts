@@ -3,7 +3,11 @@ import {
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
 } from '../mocks/makeupRecommendation.mock';
-import {requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  BackendApiError,
+  isRequestAbortedError,
+  requestBackendJson,
+} from '../../../shared/services/backendApi';
 import type {
   MakeupLookRecommendation,
   MakeupQuestionDimension,
@@ -410,7 +414,7 @@ function mapBackendQuestions(questions: readonly BackendQuestion[]): MakeupRecom
       title: question.title.trim(),
       options: question.options
         .filter(option => option.id?.trim() && option.label?.trim())
-        .slice(0, 4)
+        .slice(0, 6)
         .map(option => ({id: option.id, label: option.label.trim()})),
     }));
 }
@@ -529,10 +533,17 @@ export async function fetchGeneratedMakeupRecommendationReports({
   return mapBackendRecommendationReports(response.reports ?? []);
 }
 
+function shouldUseLocalFallback(error: unknown): boolean {
+  if (isRequestAbortedError(error)) return false;
+  if (error instanceof BackendApiError) return error.status >= 500;
+  return true;
+}
+
 export async function startGeneratedMakeupRecommendation(
   input: StartMakeupRecommendationInput,
   scenarioTags: readonly string[] = [],
   backendRequest: typeof requestBackendJson = requestBackendJson,
+  signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   try {
     const response = await backendRequest<{questions: BackendQuestion[]}>(
@@ -540,6 +551,7 @@ export async function startGeneratedMakeupRecommendation(
       {
         method: 'POST',
         body: {scenarioText: input.prompt.trim(), scenarioTags},
+        signal,
       },
     );
     const questions = mapBackendQuestions(response.questions ?? []);
@@ -548,7 +560,8 @@ export async function startGeneratedMakeupRecommendation(
       ...buildQuestionSession({...input, useProfile: false, personalColor: undefined}, questions),
       generationMode: 'backend',
     };
-  } catch {
+  } catch (error) {
+    if (!shouldUseLocalFallback(error)) throw error;
     return {
       ...startMakeupRecommendation({...input, useProfile: false, personalColor: undefined}),
       generationMode: 'localFallback',
@@ -561,6 +574,7 @@ export async function answerGeneratedMakeupRecommendationQuestion(
   answer: MakeupRecommendationAnswer,
   scenarioTags: readonly string[] = [],
   backendRequest: typeof requestBackendJson = requestBackendJson,
+  signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   const expected = session.questions[session.currentQuestionIndex];
   if (!expected || expected.id !== answer.questionId) throw new Error('현재 질문과 맞지 않는 답변이에요.');
@@ -592,6 +606,7 @@ export async function answerGeneratedMakeupRecommendationQuestion(
         answers,
       },
       timeoutMs: 90000,
+      signal,
     });
     return {
       ...session,
@@ -611,7 +626,8 @@ export async function answerGeneratedMakeupRecommendationQuestion(
       personalColor: undefined,
       generationMode: 'backend',
     };
-  } catch {
+  } catch (error) {
+    if (!shouldUseLocalFallback(error)) throw error;
     return {
       ...answerMakeupRecommendationQuestion(session, answer),
       generationMode: 'localFallback',
@@ -621,10 +637,12 @@ export async function answerGeneratedMakeupRecommendationQuestion(
 
 export async function refreshGeneratedMakeupRecommendation(
   session: MakeupRecommendationSession,
+  signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   if (!session.reportId) return session;
   const report = await requestBackendJson<BackendRecommendationReport>(
     `/makeup-recommendations/${session.reportId}`,
+    {signal},
   );
   return {
     ...session,
@@ -642,22 +660,28 @@ export async function refreshGeneratedMakeupRecommendation(
 
 export async function retryGeneratedMakeupRecommendationImages(
   session: MakeupRecommendationSession,
+  signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   if (!session.reportId) throw new Error('다시 만들 추천 보고서를 찾지 못했어요.');
   const response = await requestBackendJson<{
     reportId: string;
     imageStatus: BackendRecommendationReport['imageStatus'];
-  }>(`/makeup-recommendations/${session.reportId}/image/retry`, {method: 'POST'});
+  }>(`/makeup-recommendations/${session.reportId}/image/retry`, {method: 'POST', signal});
   return {...session, imageStatus: response.imageStatus, imageError: undefined};
 }
 
 export async function refineGeneratedMakeupRecommendation(
   session: MakeupRecommendationSession,
   refinement: MakeupRecommendationRefinement,
+  signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
-  if (!session.reportId || session.phase !== 'results') {
+  if (session.phase !== 'results') {
     throw new Error('추천 결과가 나온 뒤에 조정할 수 있어요.');
   }
+  if (session.generationMode === 'localFallback') {
+    return refineMakeupRecommendation(session, refinement);
+  }
+  if (!session.reportId) throw new Error('조정할 추천 보고서를 찾지 못했어요.');
   const response = await requestBackendJson<{
     reportId: string;
     recommendation: BackendRecommendation;
@@ -666,6 +690,7 @@ export async function refineGeneratedMakeupRecommendation(
     method: 'POST',
     body: {refinement},
     timeoutMs: 90000,
+    signal,
   });
   return {
     ...session,

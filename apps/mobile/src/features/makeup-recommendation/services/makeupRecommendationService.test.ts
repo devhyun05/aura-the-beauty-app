@@ -8,11 +8,13 @@ import {
   mapBackendScenarioItems,
   mapBackendRecommendationReports,
   mapBackendRecommendationLooks,
+  refineGeneratedMakeupRecommendation,
   refineMakeupRecommendation,
   restoreMakeupRecommendationReport,
   startGeneratedMakeupRecommendation,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
+import {BackendApiError, requestBackendJson} from '../../../shared/services/backendApi';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -319,9 +321,95 @@ async function expectGeneratedFlowFallsBackLocally() {
   expectEqual(fallbackCompleted.phase, 'results', 'fallback flow completes');
   expectEqual(fallbackCompleted.results.length, 3, 'fallback flow returns three looks');
   expectEqual(fallbackCompleted.generationMode, 'localFallback', 'fallback mode remains visible');
+
+  const refinedFallback = await refineGeneratedMakeupRecommendation(fallbackCompleted, 'natural');
+  expectEqual(
+    refinedFallback.results[0].appliedConditions[0],
+    '더 자연스럽게',
+    'fallback results refine locally without a report id',
+  );
 }
 
-void expectGeneratedFlowFallsBackLocally().catch(error => {
+async function expectGeneratedQuestionsPreserveSixOptions() {
+  async function sixOptionBackendRequest<T>(): Promise<T> {
+    return {
+      questions: [{
+        id: 'mood',
+        title: '어떤 방향이 좋아요?',
+        options: Array.from({length: 6}, (_, index) => ({
+          id: `option-${index + 1}`,
+          label: index === 5 ? 'AI가 골라줘' : `선택 ${index + 1}`,
+        })),
+      }],
+    } as T;
+  }
+
+  const session = await startGeneratedMakeupRecommendation(
+    {prompt: '긴 하루 뒤 약속', useProfile: false},
+    [],
+    sixOptionBackendRequest,
+  );
+
+  expectEqual(session.questions[0].options.length, 6, 'all six backend options remain visible');
+}
+
+async function expectAuthFailureDoesNotMasqueradeAsFallback() {
+  async function unauthorizedBackendRequest<T>(): Promise<T> {
+    throw new BackendApiError('로그인이 만료됐어요.', 401, 'AUTH_REQUIRED');
+  }
+
+  let error: unknown;
+  try {
+    await startGeneratedMakeupRecommendation(
+      {prompt: '긴 하루 뒤 약속', useProfile: false},
+      [],
+      unauthorizedBackendRequest,
+    );
+  } catch (caught) {
+    error = caught;
+  }
+
+  expectEqual(error instanceof BackendApiError, true, 'auth error is surfaced instead of local fallback');
+}
+
+async function expectAbortSignalIsForwarded() {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | null | undefined;
+  async function backendRequest<T>(
+    _path: string,
+    init?: Parameters<typeof requestBackendJson>[1],
+  ): Promise<T> {
+    receivedSignal = init?.signal;
+    return {
+      questions: [{
+        id: 'mood',
+        title: '어떤 방향이 좋아요?',
+        options: Array.from({length: 4}, (_, index) => ({
+          id: `option-${index + 1}`,
+          label: index === 3 ? 'AI가 골라줘' : `선택 ${index + 1}`,
+        })),
+      }],
+    } as T;
+  }
+
+  await startGeneratedMakeupRecommendation(
+    {prompt: '긴 하루 뒤 약속', useProfile: false},
+    [],
+    backendRequest,
+    controller.signal,
+  );
+
+  expectEqual(receivedSignal, controller.signal, 'screen cancellation signal reaches backend request');
+}
+
+async function runAsyncContracts() {
+  await expectGeneratedFlowFallsBackLocally();
+  await expectGeneratedQuestionsPreserveSixOptions();
+  await expectAuthFailureDoesNotMasqueradeAsFallback();
+  await expectAbortSignalIsForwarded();
+}
+
+void runAsyncContracts().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

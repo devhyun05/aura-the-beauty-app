@@ -85,6 +85,7 @@ export function ScenarioDiscoveryView({
             <AppCard style={styles.composerCard}>
               <TextInput
                 accessibilityLabel="원하는 메이크업 직접 입력"
+                maxLength={240}
                 multiline
                 onChangeText={onChangePrompt}
                 placeholder={makeupRecommendationDiscoveryCopy.placeholder}

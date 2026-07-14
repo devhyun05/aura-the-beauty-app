@@ -9,19 +9,25 @@ import {
 } from './makeupRecommendationViewContracts';
 
 type RecommendationHistoryViewProps = {
+  canLoadMore: boolean;
   error?: string;
   isLoading: boolean;
+  isLoadingMore: boolean;
   items: readonly MakeupRecommendationReportHistoryItem[];
   onBack: () => void;
+  onLoadMore: () => void;
   onRefresh: () => void;
   onSelect: (item: MakeupRecommendationReportHistoryItem) => void;
 };
 
 export function RecommendationHistoryView({
+  canLoadMore,
   error,
   isLoading,
+  isLoadingMore,
   items,
   onBack,
+  onLoadMore,
   onRefresh,
   onSelect,
 }: RecommendationHistoryViewProps) {
@@ -92,6 +98,18 @@ export function RecommendationHistoryView({
               </AppCard>
             );
           })}
+          {canLoadMore ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{disabled: isLoadingMore}}
+              disabled={isLoadingMore}
+              onPress={onLoadMore}
+              style={styles.loadMoreButton}
+            >
+              {isLoadingMore ? <ActivityIndicator color={colors.textPrimary} size="small" /> : null}
+              <Text style={styles.loadMoreLabel}>{isLoadingMore ? '더 불러오는 중…' : '지난 추천 더보기'}</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
     </AppScreen>
@@ -122,4 +140,6 @@ const styles = StyleSheet.create({
   cardMeta: {color: colors.textTertiary, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs},
   scenario: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg, lineHeight: typography.lineHeight.lg},
   lookNames: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  loadMoreButton: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', minHeight: 48},
+  loadMoreLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
 });

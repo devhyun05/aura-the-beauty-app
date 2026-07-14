@@ -119,6 +119,7 @@ export function RecommendationQuestionView({
           <Text style={styles.freeTextLabel}>선택지에 없다면 직접 말해도 좋아요</Text>
           <TextInput
             accessibilityLabel="질문에 직접 답하기"
+            maxLength={240}
             multiline
             onChangeText={value => {
               setFreeText(value);
@@ -136,6 +137,7 @@ export function RecommendationQuestionView({
             {conditionInputVisible ? (
               <TextInput
                 accessibilityLabel="추가 조건 입력"
+                maxLength={240}
                 onChangeText={setAdditionalConstraints}
                 placeholder="예: 글리터 제외, 립 강조, 15분 이내"
                 placeholderTextColor={colors.textTertiary}

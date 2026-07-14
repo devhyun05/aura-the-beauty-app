@@ -12,12 +12,12 @@ class MakeupScenarioRequest(CamelModel):
 
 
 class MakeupQuestionRequest(CamelModel):
-  scenario_text: str = Field(alias="scenarioText", min_length=1, max_length=120)
+  scenario_text: str = Field(alias="scenarioText", min_length=1, max_length=240)
   scenario_tags: list[str] = Field(default_factory=list, alias="scenarioTags", max_length=8)
 
 
 class MakeupRecommendationRequest(CamelModel):
-  scenario_text: str = Field(alias="scenarioText", min_length=1, max_length=120)
+  scenario_text: str = Field(alias="scenarioText", min_length=1, max_length=240)
   scenario_tags: list[str] = Field(default_factory=list, alias="scenarioTags", max_length=8)
   questions: list[dict[str, Any]] = Field(default_factory=list, max_length=6)
   answers: list[dict[str, Any]] = Field(default_factory=list, max_length=6)
