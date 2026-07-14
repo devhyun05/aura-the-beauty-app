@@ -393,6 +393,35 @@ jobs:
             --query 'services[0].{status:status,runningCount:runningCount,pendingCount:pendingCount,deployments:deployments[*].{id:id,status:status,rolloutState:rolloutState,rolloutStateReason:rolloutStateReason,taskDefinition:taskDefinition},events:events[0:15].[createdAt,message]}' \
             --output json
 
+          running_task_arn="$(aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --service-name "$ECS_SERVICE" \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' \
+            --output text)"
+          if [ -n "$running_task_arn" ] && [ "$running_task_arn" != "None" ]; then
+            running_task_definition="$(aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$running_task_arn" \
+              --query 'tasks[0].taskDefinitionArn' \
+              --output text)"
+            running_log_group="$(aws ecs describe-task-definition \
+              --task-definition "$running_task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
+              --output text)"
+            start_time="$((($(date +%s) - 7200) * 1000))"
+            echo "Recent makeup recommendation logs: $running_log_group"
+            aws logs filter-log-events \
+              --log-group-name "$running_log_group" \
+              --start-time "$start_time" \
+              --filter-pattern '"aura:makeup-recommendation"' \
+              --limit 200 \
+              --query 'events[*].[timestamp,message]' \
+              --output text || true
+          else
+            echo "No running API task was returned."
+          fi
+
           mapfile -t task_arns < <(aws ecs list-tasks \
             --cluster "$ECS_CLUSTER" \
             --service-name "$ECS_SERVICE" \
