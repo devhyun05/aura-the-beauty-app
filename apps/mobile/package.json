@@ -24,6 +24,7 @@
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
     "test:consulting-flow": "node ../../scripts/mobile/run-consulting-flow-contract.mjs",
+    "test:makeup-recommendation": "node ../../scripts/mobile/run-makeup-recommendation-contract.mjs",
     "test:ios-bundle-ids": "node ../../scripts/mobile/verify-ios-bundle-identifiers.mjs",
     "test:ios-privacy": "node ../../scripts/mobile/verify-ios-privacy-settings.mjs",
     "test:native-wiring": "node ../../scripts/mobile/run-native-wiring-contract.mjs",

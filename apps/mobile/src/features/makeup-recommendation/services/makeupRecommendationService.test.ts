@@ -24,6 +24,23 @@ function expectThrows(action: () => unknown, label: string) {
 const scenarios = getMakeupScenarioSet({seed: 0});
 expectEqual(scenarios.length, 36, 'scenario set count');
 expectEqual(new Set(scenarios.slice(0, 6).map(item => item.tone)).size, 3, 'first six tone coverage');
+expectEqual(new Set(scenarios.map(item => item.copyStyle)).size, 5, 'five copy styles represented');
+expectEqual(
+  scenarios.every(item => item.preferredColumnSpan >= 3 && item.preferredColumnSpan <= 8),
+  true,
+  'puzzle spans stay in range',
+);
+expectEqual(scenarios.some(item => item.palette === 'accent'), true, 'accent chips represented');
+expectEqual(
+  scenarios.some(item => /여신|남신|고명딸/.test(item.displayText)),
+  false,
+  'default copy is gender neutral',
+);
+expectEqual(
+  scenarios.filter(item => item.displayText.includes('오늘')).length <= 2,
+  true,
+  'today copy is not overused',
+);
 
 const started = startMakeupRecommendation({
   prompt: scenarios[0].seedPrompt,

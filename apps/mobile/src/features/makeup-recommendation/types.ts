@@ -2,6 +2,9 @@ import type {ImageSourcePropType} from 'react-native';
 
 export type MakeupScenarioTone = 'narrative' | 'playful' | 'premium';
 export type MakeupScenarioSource = 'curated' | 'personalized' | 'trend' | 'wildcard';
+export type MakeupScenarioCopyStyle = 'editorial' | 'scene' | 'monologue' | 'narrative' | 'character';
+export type MakeupScenarioVisualEmphasis = 'compact' | 'standard' | 'featured';
+export type MakeupScenarioPalette = 'paper' | 'ink' | 'muted' | 'accent';
 export type MakeupQuestionDimension = 'occasion' | 'mood' | 'boldness' | 'timeSkill';
 export type MakeupLookRole = 'anchor' | 'bold' | 'discovery';
 export type MakeupArea = 'base' | 'eye' | 'brow' | 'cheek' | 'lip';
@@ -15,6 +18,10 @@ export type MakeupScenarioPrompt = {
   knownDimensions: MakeupQuestionDimension[];
   tone: MakeupScenarioTone;
   source: MakeupScenarioSource;
+  copyStyle: MakeupScenarioCopyStyle;
+  visualEmphasis: MakeupScenarioVisualEmphasis;
+  palette: MakeupScenarioPalette;
+  preferredColumnSpan: 3 | 4 | 5 | 6 | 7 | 8;
 };
 
 export type MakeupRecommendationQuestionOption = {id: string; label: string};
