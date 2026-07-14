@@ -3,6 +3,7 @@ import {
   MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES,
   MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
   buildMakeupFeedbackClosingConferenceMessages,
+  buildMakeupFeedbackConferencePreviewRequestBody,
   buildMakeupFeedbackConferencePreviewContext,
   buildMakeupFeedbackConferenceResultPayload,
   buildMakeupFeedbackSafeConferenceMessages,
@@ -292,10 +293,25 @@ const previewRequestPayload = buildPreviewConferenceRequestPayload(
 );
 const serializedPreviewRequestPayload = JSON.stringify(previewRequestPayload);
 const aiFirstPreviewRequestPayload = buildPreviewConferenceRequestPayload(selection);
+const immediatePreviewBody = buildMakeupFeedbackConferencePreviewRequestBody({selection});
+const reportLinkedPreviewBody = buildMakeupFeedbackConferencePreviewRequestBody({
+  analysisId: 'analysis-123',
+  selection,
+});
 expectEqual(
   'conversationSeed' in aiFirstPreviewRequestPayload,
   false,
   'AI-first preview request omits local fixed seed',
+);
+expectEqual(
+  Object.prototype.hasOwnProperty.call(immediatePreviewBody, 'reportId'),
+  false,
+  'immediate preview can start without waiting for a report id',
+);
+expectEqual(
+  reportLinkedPreviewBody.reportId,
+  'analysis-123',
+  'preview request keeps a report id when one is already available',
 );
 expectEqual(previewRequestPayload.conversationSeed!.agentId, 'goal', 'payload includes seed agent');
 expectEqual(previewRequestPayload.conversationSeed!.text, safeMessages[0]!.text, 'payload includes seed text');

@@ -339,9 +339,8 @@ export function MakeupFeedbackLoadingScreen({
       setIsPreviewGenerationSettled(true);
     };
 
-    const startGeneratedPreview = (analysisId: string) => {
+    const startGeneratedPreview = () => {
       requestMakeupFeedbackGeneratedPreviewMessages({
-        analysisId,
         selection,
         signal: previewController.signal,
       })
@@ -384,7 +383,8 @@ export function MakeupFeedbackLoadingScreen({
         });
     };
 
-    analyzeMakeupForFeedback(selection, {onAnalysisCreated: startGeneratedPreview})
+    startGeneratedPreview();
+    analyzeMakeupForFeedback(selection)
       .then(outcome => {
         if (!isCurrentRun()) {
           return;

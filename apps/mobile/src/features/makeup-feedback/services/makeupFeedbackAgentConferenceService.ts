@@ -734,13 +734,28 @@ export function buildPreviewConferenceRequestPayload(
   };
 }
 
+export function buildMakeupFeedbackConferencePreviewRequestBody({
+  analysisId,
+  conversationSeed,
+  selection,
+}: {
+  analysisId?: string;
+  conversationSeed?: MakeupFeedbackConferenceConversationSeed;
+  selection: MakeupFeedbackPhotoSelection;
+}) {
+  return {
+    ...(analysisId ? {reportId: analysisId} : {}),
+    requestPayload: buildPreviewConferenceRequestPayload(selection, conversationSeed),
+  };
+}
+
 export async function requestMakeupFeedbackGeneratedPreviewMessages({
   analysisId,
   conversationSeed,
   selection,
   signal,
 }: {
-  analysisId: string;
+  analysisId?: string;
   conversationSeed?: MakeupFeedbackConferenceConversationSeed;
   selection: MakeupFeedbackPhotoSelection;
   signal?: AbortSignal;
@@ -752,10 +767,11 @@ export async function requestMakeupFeedbackGeneratedPreviewMessages({
   const response = await requestBackendJson<BackendConferencePreviewResponse>(
     '/feedback/conference-preview-messages',
     {
-      body: {
-        reportId: analysisId,
-        requestPayload: buildPreviewConferenceRequestPayload(selection, conversationSeed),
-      },
+      body: buildMakeupFeedbackConferencePreviewRequestBody({
+        analysisId,
+        conversationSeed,
+        selection,
+      }),
       method: 'POST',
       signal,
       timeoutMs: 13000,
