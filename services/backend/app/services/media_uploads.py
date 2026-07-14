@@ -114,11 +114,13 @@ async def issue_upload_session(
       thumbnail_expected_byte_size,
       thumbnail_width,
       thumbnail_height,
+      status,
       expires_at
     )
     values (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
       $14, $15, $16, $17, $18, $19, $20,
+      'pending',
       now() + ($21::int * interval '1 second')
     )
     returning id

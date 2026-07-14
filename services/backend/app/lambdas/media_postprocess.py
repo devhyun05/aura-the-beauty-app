@@ -8,12 +8,19 @@ from urllib.parse import unquote_plus
 import boto3
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+try:
+  from pillow_heif import register_heif_opener
+
+  register_heif_opener()
+except ImportError:  # pragma: no cover - production requirements include pillow-heif.
+  pass
+
 
 
 AURA_POSTPROCESSED_METADATA_KEY = "aura-postprocessed"
 MAX_IMAGE_PIXELS = 25_000_000
-SUPPORTED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+SUPPORTED_CONTENT_TYPES = {"image/heic", "image/heif", "image/jpeg", "image/png", "image/webp"}
+SUPPORTED_EXTENSIONS = (".heic", ".heif", ".jpg", ".jpeg", ".png", ".webp")
 POSTPROCESS_SOURCE_PREFIXES = (
   "uploads/capture/",
   "uploads/makeup_feedback/",

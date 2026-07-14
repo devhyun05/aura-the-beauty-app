@@ -52,6 +52,7 @@ EXPECTED_ROUTES = {
   ("POST", "/api/makeup-styles"),
   ("POST", "/api/feedback/jobs"),
   ("POST", "/api/feedback/conference-messages"),
+  ("POST", "/api/feedback/conference-preview-messages"),
   ("GET", "/api/feedback/reports"),
   ("POST", "/api/filter-extractions/jobs"),
   ("POST", "/api/filter-extractions/analyze"),

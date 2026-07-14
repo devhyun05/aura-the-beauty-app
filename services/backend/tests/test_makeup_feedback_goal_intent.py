@@ -3,11 +3,23 @@ import pytest
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.makeup_feedback_goal_intent import (
-  DEFAULT_MAKEUP_FEEDBACK_GOAL,
   classify_makeup_feedback_goal_text,
+  localize_makeup_feedback_intensity_terms,
   normalize_feedback_goal_context,
   normalize_feedback_goal_context_for_request,
 )
+@pytest.mark.parametrize(
+  ("raw", "expected"),
+  [
+    ("사진에서 관찰되어 light로 요약했습니다.", "사진에서 관찰되어 가벼운 표현으로 요약했습니다."),
+    ("현재 강도는 medium입니다.", "현재 강도는 적당한 강도입니다."),
+    ("bold한 색조지만 highlight는 유지합니다.", "선명한 색조지만 highlight는 유지합니다."),
+  ],
+)
+def test_localize_makeup_feedback_intensity_terms(raw: str, expected: str) -> None:
+  assert localize_makeup_feedback_intensity_terms(raw) == expected
+
+
 
 
 @pytest.mark.parametrize(
@@ -57,12 +69,12 @@ def test_goal_intent_requests_more_detail_for_ambiguous_context(value: str) -> N
     "\ub098 \uc5b4\ub5bb\uac8c \ubcf4\uc5ec?",
   ],
 )
-def test_goal_intent_maps_generic_request_to_default_goal(value: str) -> None:
+def test_goal_intent_preserves_generic_request_text(value: str) -> None:
   result = classify_makeup_feedback_goal_text(value)
 
   assert result == {
     "intentType": "generic_default",
-    "normalizedGoalText": DEFAULT_MAKEUP_FEEDBACK_GOAL,
+    "normalizedGoalText": value,
     "originalGoalText": value,
   }
 
@@ -102,17 +114,18 @@ def test_normalize_feedback_goal_context_updates_payload() -> None:
 
   assert payload["feedbackContext"]["goalIntentType"] == "generic_default"
   assert payload["feedbackContext"]["originalGoalText"] == "\uc804\uccb4\uc801\uc73c\ub85c \ubd10\uc918"
-  assert payload["feedbackContext"]["userGoalText"] == DEFAULT_MAKEUP_FEEDBACK_GOAL
-  assert payload["feedbackContext"]["normalizedGoalText"] == DEFAULT_MAKEUP_FEEDBACK_GOAL
+  assert payload["feedbackContext"]["userGoalText"] == "\uc804\uccb4\uc801\uc73c\ub85c \ubd10\uc918"
+  assert payload["feedbackContext"]["normalizedGoalText"] == "\uc804\uccb4\uc801\uc73c\ub85c \ubd10\uc918"
 
 
-def test_normalize_feedback_goal_context_uses_original_goal_when_frontend_sends_normalized_generic() -> None:
+def test_normalize_feedback_goal_context_restores_original_goal_when_frontend_sends_legacy_default() -> None:
+  legacy_default = "전체적인 메이크업 균형과 자연스러움 기준으로 피드백"
   payload = {
     "feedbackContext": {
       "goalIntentType": "generic_default",
-      "normalizedGoalText": DEFAULT_MAKEUP_FEEDBACK_GOAL,
+      "normalizedGoalText": legacy_default,
       "originalGoalText": "\ubd84\uc11d\ud574\uc918",
-      "userGoalText": DEFAULT_MAKEUP_FEEDBACK_GOAL,
+      "userGoalText": legacy_default,
     },
   }
 
@@ -120,7 +133,8 @@ def test_normalize_feedback_goal_context_uses_original_goal_when_frontend_sends_
 
   assert payload["feedbackContext"]["goalIntentType"] == "generic_default"
   assert payload["feedbackContext"]["originalGoalText"] == "\ubd84\uc11d\ud574\uc918"
-  assert payload["feedbackContext"]["userGoalText"] == DEFAULT_MAKEUP_FEEDBACK_GOAL
+  assert payload["feedbackContext"]["userGoalText"] == "\ubd84\uc11d\ud574\uc918"
+  assert payload["feedbackContext"]["normalizedGoalText"] == "\ubd84\uc11d\ud574\uc918"
 
 
 def test_normalize_feedback_goal_context_raises_for_noise_goal() -> None:

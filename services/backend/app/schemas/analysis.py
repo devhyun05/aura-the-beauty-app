@@ -26,7 +26,14 @@ class FeedbackJobCreate(CamelModel):
 
 
 class FeedbackConferenceMessagesCreate(CamelModel):
+  report_id: UUID | None = Field(default=None, alias="reportId")
   result: dict = Field(default_factory=dict)
+  request_payload: dict = Field(default_factory=dict, alias="requestPayload")
+  preview_context: dict = Field(default_factory=dict, alias="previewContext")
+
+
+class FeedbackConferencePreviewCreate(CamelModel):
+  report_id: UUID | None = Field(default=None, alias="reportId")
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")
 
 
