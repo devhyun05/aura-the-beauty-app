@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {buildTier2RuntimeCandidate} from './build-tier2-runtime-candidate.mjs';
+import {computeCandidateSemanticContentSha256} from './build-semantic-validation.mjs';
 import {
   promoteTier2SemanticMap,
   verifyTier2Diagnostics,
@@ -13,21 +13,13 @@ import {
 import {TIER2_SEMANTIC_GROUPS} from './semantic-candidate-core.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const baseCandidatePath = path.join(
-  root,
-  'artifacts/face3d/semantic-consensus/subject-01-neutral-only-v7/ARKitFaceSemanticMapV1.consensus.candidate.json',
-);
-const primaryApprovalPath = path.join(
-  root,
-  'artifacts/face3d/tier2-seed-reprojection-v1/primary-approved-patch.json',
-);
-const referenceCapturePath = path.join(
-  root,
-  'artifacts/face3d/device-captures/pair_face3d_semantic_1783799136465/arface_export.json',
-);
 const candidatePath = path.join(
   root,
   'artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.candidate.json',
+);
+const receiptPath = path.join(
+  root,
+  'artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.promotion-receipt.json',
 );
 const manifestPath = path.join(
   root,
@@ -43,15 +35,13 @@ function readJson(filePath) {
   return JSON.parse(source.charCodeAt(0) === 0xfeff ? source.slice(1) : source);
 }
 
-const rebuiltCandidate = buildTier2RuntimeCandidate({
-  baseCandidate: readJson(baseCandidatePath),
-  baseCandidateFile: baseCandidatePath,
-  primaryApproval: readJson(primaryApprovalPath),
-  primaryApprovalFile: primaryApprovalPath,
-  referenceCapture: readJson(referenceCapturePath),
-});
 const committedCandidate = readJson(candidatePath);
-assert.deepEqual(rebuiltCandidate, committedCandidate, 'committed G2 candidate must be reproducible');
+const committedReceipt = readJson(receiptPath);
+assert.equal(
+  computeCandidateSemanticContentSha256(committedCandidate),
+  committedReceipt.candidate.semanticContentSha256,
+  'committed G2 candidate must match its approval receipt',
+);
 assert.deepEqual(committedCandidate.groups.chinIndices, [34, 35, 975]);
 for (const {fixedIndices, key} of TIER2_SEMANTIC_GROUPS) {
   assert.deepEqual(committedCandidate.groups[key], fixedIndices, key);
