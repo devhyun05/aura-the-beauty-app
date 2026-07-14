@@ -15,8 +15,8 @@ import {
   MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
   buildMakeupFeedbackClosingConferenceMessages,
   buildMakeupFeedbackConferencePreviewContext,
-  buildMakeupFeedbackSafeConferenceMessages,
   canCommitMakeupFeedbackConferenceMessage,
+  getNextMakeupFeedbackConferenceMessage,
   getMakeupFeedbackInitialTypingDelayMs,
   getMakeupFeedbackMessageExposureDelayMs,
   getMakeupFeedbackTypingDelayMs,
@@ -124,22 +124,28 @@ function countPreviewConferenceMessages(
 function getNextTypingAgentId({
   analysisResult,
   closingMessages,
+  isPreviewGenerationSettled,
   messages,
   previewMessages,
 }: {
   analysisResult: MakeupFeedbackResult | null;
   closingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  isPreviewGenerationSettled: boolean;
   messages: readonly MakeupFeedbackAgentConferenceMessage[];
   previewMessages: readonly MakeupFeedbackAgentConferenceMessage[];
 }): MakeupFeedbackAgentId {
   const previewMessageCount = countPreviewConferenceMessages(messages);
-  const closingMessageCount = countMessagesByPhase(messages, 'closing');
+  const nextPreviewMessage = previewMessages[previewMessageCount];
 
-  if (analysisResult) {
-    return closingMessages[closingMessageCount]?.agentId ?? 'coach';
+  if (nextPreviewMessage || !isPreviewGenerationSettled) {
+    return nextPreviewMessage?.agentId ?? 'photo';
   }
 
-  return previewMessages[previewMessageCount]?.agentId ?? 'photo';
+  const closingMessageCount = countMessagesByPhase(messages, 'closing');
+
+  return analysisResult
+    ? closingMessages[closingMessageCount]?.agentId ?? 'coach'
+    : 'photo';
 }
 
 function getConferenceProgress({
@@ -188,7 +194,6 @@ export function MakeupFeedbackLoadingScreen({
   const conferenceRunIdRef = useRef(0);
   const conferenceMessagesRef = useRef<MakeupFeedbackAgentConferenceMessage[]>([]);
   const lastMessageShownAtRef = useRef(0);
-  const hasAnalysisSettledRef = useRef(false);
   const hasCompletedRef = useRef(false);
   const retryRequestedRef = useRef(false);
   const [analysisResult, setAnalysisResult] = useState<MakeupFeedbackResult | null>(null);
@@ -199,6 +204,7 @@ export function MakeupFeedbackLoadingScreen({
   >([]);
   const [closingPreviewContext, setClosingPreviewContext] =
     useState<MakeupFeedbackConferencePreviewContext | null>(null);
+  const [isPreviewGenerationSettled, setIsPreviewGenerationSettled] = useState(false);
   const [closingConferenceMessages, setClosingConferenceMessages] = useState<
     readonly MakeupFeedbackAgentConferenceMessage[]
   >([]);
@@ -216,10 +222,17 @@ export function MakeupFeedbackLoadingScreen({
       getNextTypingAgentId({
         analysisResult,
         closingMessages: closingConferenceMessages,
+        isPreviewGenerationSettled,
         messages: conferenceMessages,
         previewMessages: previewConferenceMessages,
       }),
-    [analysisResult, closingConferenceMessages, conferenceMessages, previewConferenceMessages],
+    [
+      analysisResult,
+      closingConferenceMessages,
+      conferenceMessages,
+      isPreviewGenerationSettled,
+      previewConferenceMessages,
+    ],
   );
   const conferenceProgress = useMemo(
     () =>
@@ -301,15 +314,11 @@ export function MakeupFeedbackLoadingScreen({
     analysisRunIdRef.current = runId;
     conferenceRunIdRef.current += 1;
     let isActive = true;
-    let acceptsPreview = true;
     const previewController = new AbortController();
     const isCurrentRun = () => isActive && analysisRunIdRef.current === runId;
-    const localPreviewMessages = buildMakeupFeedbackSafeConferenceMessages(selection);
-    const conversationSeedMessage = localPreviewMessages[0]!;
 
     conferenceMessagesRef.current = [];
     lastMessageShownAtRef.current = 0;
-    hasAnalysisSettledRef.current = false;
     hasCompletedRef.current = false;
 
     setAnalysisResult(null);
@@ -317,24 +326,27 @@ export function MakeupFeedbackLoadingScreen({
     setAnalysisErrorMessage(null);
     setPreviewConferenceMessages([]);
     setClosingPreviewContext(null);
+    setIsPreviewGenerationSettled(false);
     setClosingConferenceMessages([]);
     setConferenceMessages([]);
     setIsConferenceTyping(true);
     setIsConferenceComplete(false);
     setPreResultProgress(PRE_RESULT_PROGRESS_INITIAL);
 
+    const settlePreviewUnavailable = () => {
+      setPreviewConferenceMessages([]);
+      setClosingPreviewContext(null);
+      setIsPreviewGenerationSettled(true);
+    };
+
     const startGeneratedPreview = (analysisId: string) => {
       requestMakeupFeedbackGeneratedPreviewMessages({
         analysisId,
-        conversationSeed: {
-          agentId: conversationSeedMessage.agentId,
-          text: conversationSeedMessage.text,
-        },
         selection,
         signal: previewController.signal,
       })
         .then(preview => {
-          if (!isCurrentRun() || !acceptsPreview) {
+          if (!isCurrentRun()) {
             return;
           }
 
@@ -346,19 +358,29 @@ export function MakeupFeedbackLoadingScreen({
               count: preview.messages.length,
               generationStatus: preview.generationStatus ?? null,
             });
+            settlePreviewUnavailable();
             return;
           }
 
           setPreviewConferenceMessages(preview.messages);
+          setClosingPreviewContext(
+            buildMakeupFeedbackConferencePreviewContext({
+              lastSpeaker: preview.lastSpeaker,
+              messages: preview.messages,
+              summary: preview.summary,
+            }),
+          );
+          setIsPreviewGenerationSettled(true);
         })
         .catch(error => {
-          if (!isCurrentRun() || !acceptsPreview) {
+          if (!isCurrentRun()) {
             return;
           }
 
           console.info('[aura:makeup-feedback] conference-preview:unavailable', {
             message: error instanceof Error ? error.message : String(error),
           });
+          settlePreviewUnavailable();
         });
     };
 
@@ -368,25 +390,11 @@ export function MakeupFeedbackLoadingScreen({
           return;
         }
 
-        hasAnalysisSettledRef.current = true;
-        acceptsPreview = false;
-        previewController.abort();
-
         if (outcome.analysisDecision === 'completed') {
-          const displayedPreviewMessages = conferenceMessagesRef.current.filter(
-            isPreviewConferenceMessage,
-          );
-          const previewContext = displayedPreviewMessages.length > 0
-            ? buildMakeupFeedbackConferencePreviewContext({
-                messages: displayedPreviewMessages,
-              })
-            : null;
-
-          setPreviewConferenceMessages([]);
-          setClosingPreviewContext(previewContext);
           setAnalysisResult(outcome);
         } else {
-          setPreviewConferenceMessages([]);
+          previewController.abort();
+          settlePreviewUnavailable();
           setRetakeOutcome(outcome);
           setIsConferenceTyping(false);
           setIsConferenceComplete(true);
@@ -399,10 +407,8 @@ export function MakeupFeedbackLoadingScreen({
         });
 
         if (isCurrentRun()) {
-          hasAnalysisSettledRef.current = true;
-          acceptsPreview = false;
           previewController.abort();
-          setPreviewConferenceMessages([]);
+          settlePreviewUnavailable();
           retryRequestedRef.current = false;
           setAnalysisErrorMessage(getMakeupFeedbackAnalysisErrorMessage(error));
           setIsConferenceTyping(false);
@@ -412,7 +418,6 @@ export function MakeupFeedbackLoadingScreen({
 
     return () => {
       isActive = false;
-      acceptsPreview = false;
       previewController.abort();
     };
   }, [analysisAttempt, selection]);
@@ -438,7 +443,7 @@ export function MakeupFeedbackLoadingScreen({
   }, [analysisErrorMessage, analysisResult, conferenceProgress, retakeOutcome]);
 
   useEffect(() => {
-    if (!analysisResult) {
+    if (!analysisResult || !isPreviewGenerationSettled) {
       return;
     }
 
@@ -505,7 +510,7 @@ export function MakeupFeedbackLoadingScreen({
       clearTimeout(graceTimeoutId);
       controller.abort();
     };
-  }, [analysisResult, closingPreviewContext, selection]);
+  }, [analysisResult, closingPreviewContext, isPreviewGenerationSettled, selection]);
 
   useEffect(() => {
     if (analysisErrorMessage || retakeOutcome || isConferenceComplete) {
@@ -514,13 +519,22 @@ export function MakeupFeedbackLoadingScreen({
 
     const previewMessageCount = countPreviewConferenceMessages(conferenceMessages);
     const closingMessageCount = countMessagesByPhase(conferenceMessages, 'closing');
-    const nextMessage = analysisResult
-      ? closingConferenceMessages[closingMessageCount]
-      : previewConferenceMessages[previewMessageCount];
+    const nextMessage = getNextMakeupFeedbackConferenceMessage({
+      analysisReady: Boolean(analysisResult),
+      closingMessages: closingConferenceMessages,
+      displayedMessages: conferenceMessages,
+      previewGenerationSettled: isPreviewGenerationSettled,
+      previewMessages: previewConferenceMessages,
+    });
 
     if (!nextMessage) {
+      const previewMessagesDrained =
+        isPreviewGenerationSettled
+        && previewMessageCount >= previewConferenceMessages.length;
+
       if (
         analysisResult &&
+        previewMessagesDrained &&
         closingConferenceMessages.length > 0 &&
         closingMessageCount >= closingConferenceMessages.length
       ) {
@@ -551,8 +565,6 @@ export function MakeupFeedbackLoadingScreen({
       typingTimeoutId = setTimeout(() => {
         if (!canCommitMakeupFeedbackConferenceMessage({
           activeAnalysisRunId: analysisRunIdRef.current,
-          analysisSettled: hasAnalysisSettledRef.current,
-          messagePhase: nextMessage.phase,
           scheduledAnalysisRunId,
         })) {
           return;
@@ -561,8 +573,6 @@ export function MakeupFeedbackLoadingScreen({
         setConferenceMessages(currentMessages => {
           if (!canCommitMakeupFeedbackConferenceMessage({
             activeAnalysisRunId: analysisRunIdRef.current,
-            analysisSettled: hasAnalysisSettledRef.current,
-            messagePhase: nextMessage.phase,
             scheduledAnalysisRunId,
           })) {
             return currentMessages;
@@ -592,6 +602,7 @@ export function MakeupFeedbackLoadingScreen({
     closingConferenceMessages,
     conferenceMessages,
     isConferenceComplete,
+    isPreviewGenerationSettled,
     retakeOutcome,
     previewConferenceMessages,
   ]);

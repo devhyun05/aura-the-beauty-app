@@ -572,21 +572,47 @@ export function mergeMakeupFeedbackPreviewMessages(
   return merged;
 }
 
+export function getNextMakeupFeedbackConferenceMessage({
+  analysisReady,
+  closingMessages,
+  displayedMessages,
+  previewGenerationSettled,
+  previewMessages,
+}: {
+  analysisReady: boolean;
+  closingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  displayedMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  previewGenerationSettled: boolean;
+  previewMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+}): MakeupFeedbackAgentConferenceMessage | undefined {
+  const previewMessageCount = displayedMessages.filter(
+    message => message.phase === 'preview' || message.phase === 'safe',
+  ).length;
+  const nextPreviewMessage = previewMessages[previewMessageCount];
+
+  if (nextPreviewMessage) {
+    return nextPreviewMessage;
+  }
+
+  if (!previewGenerationSettled || !analysisReady) {
+    return undefined;
+  }
+
+  const closingMessageCount = displayedMessages.filter(
+    message => message.phase === 'closing',
+  ).length;
+
+  return closingMessages[closingMessageCount];
+}
+
 export function canCommitMakeupFeedbackConferenceMessage({
   activeAnalysisRunId,
-  analysisSettled,
-  messagePhase,
   scheduledAnalysisRunId,
 }: {
   activeAnalysisRunId: number;
-  analysisSettled: boolean;
-  messagePhase: MakeupFeedbackAgentConferenceMessage['phase'];
   scheduledAnalysisRunId: number;
 }) {
-  return (
-    activeAnalysisRunId === scheduledAnalysisRunId &&
-    (messagePhase === 'closing' || !analysisSettled)
-  );
+  return activeAnalysisRunId === scheduledAnalysisRunId;
 }
 
 export function buildMakeupFeedbackConferenceResultPayload(
@@ -687,12 +713,12 @@ function buildConferenceRequestPayload(selection: MakeupFeedbackPhotoSelection) 
 
 export function buildPreviewConferenceRequestPayload(
   selection: MakeupFeedbackPhotoSelection,
-  conversationSeed: MakeupFeedbackConferenceConversationSeed,
+  conversationSeed?: MakeupFeedbackConferenceConversationSeed,
 ) {
   const feedbackContext = selection.feedbackContext;
 
   return {
-    conversationSeed,
+    ...(conversationSeed ? {conversationSeed} : {}),
     feedbackContext: feedbackContext
       ? {
           originalGoalText: feedbackContext.originalGoalText,
@@ -715,7 +741,7 @@ export async function requestMakeupFeedbackGeneratedPreviewMessages({
   signal,
 }: {
   analysisId: string;
-  conversationSeed: MakeupFeedbackConferenceConversationSeed;
+  conversationSeed?: MakeupFeedbackConferenceConversationSeed;
   selection: MakeupFeedbackPhotoSelection;
   signal?: AbortSignal;
 }): Promise<MakeupFeedbackConferencePreview> {
@@ -732,7 +758,7 @@ export async function requestMakeupFeedbackGeneratedPreviewMessages({
       },
       method: 'POST',
       signal,
-      timeoutMs: 18000,
+      timeoutMs: 13000,
     },
   );
   const messages = mapMakeupFeedbackBackendConferenceMessages(response.messages, 'preview');

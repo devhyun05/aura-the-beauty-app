@@ -9,6 +9,7 @@ import {
   buildPreviewConferenceRequestPayload,
   canCommitMakeupFeedbackConferenceMessage,
   getMakeupFeedbackInitialTypingDelayMs,
+  getNextMakeupFeedbackConferenceMessage,
   getMakeupFeedbackMessageExposureDelayMs,
   getMakeupFeedbackTypingDelayMs,
   mapMakeupFeedbackBackendConferenceMessages,
@@ -290,8 +291,14 @@ const previewRequestPayload = buildPreviewConferenceRequestPayload(
   {agentId: safeMessages[0]!.agentId, text: safeMessages[0]!.text},
 );
 const serializedPreviewRequestPayload = JSON.stringify(previewRequestPayload);
-expectEqual(previewRequestPayload.conversationSeed.agentId, 'goal', 'payload includes seed agent');
-expectEqual(previewRequestPayload.conversationSeed.text, safeMessages[0]!.text, 'payload includes seed text');
+const aiFirstPreviewRequestPayload = buildPreviewConferenceRequestPayload(selection);
+expectEqual(
+  'conversationSeed' in aiFirstPreviewRequestPayload,
+  false,
+  'AI-first preview request omits local fixed seed',
+);
+expectEqual(previewRequestPayload.conversationSeed!.agentId, 'goal', 'payload includes seed agent');
+expectEqual(previewRequestPayload.conversationSeed!.text, safeMessages[0]!.text, 'payload includes seed text');
 expectEqual(previewRequestPayload.source, 'gallery', 'payload keeps safe photo source');
 expectOmits(serializedPreviewRequestPayload, 'PRIVATE_FILE', 'preview payload omits file name');
 expectOmits(serializedPreviewRequestPayload, 'PRIVATE_IMAGE', 'preview payload omits image uri');
@@ -411,44 +418,19 @@ expectEqual(getMakeupFeedbackMessageExposureDelayMs('a'.repeat(91), 1), 4200, 'l
 expectEqual(
   canCommitMakeupFeedbackConferenceMessage({
     activeAnalysisRunId: 2,
-    analysisSettled: false,
-    messagePhase: 'preview',
     scheduledAnalysisRunId: 2,
   }),
   true,
-  'current preview can commit before analysis settles',
-);
-expectEqual(
-  canCommitMakeupFeedbackConferenceMessage({
-    activeAnalysisRunId: 2,
-    analysisSettled: true,
-    messagePhase: 'preview',
-    scheduledAnalysisRunId: 2,
-  }),
-  false,
-  'preview cannot commit after analysis settles',
+  'current-run preview can still commit after analysis becomes ready',
 );
 expectEqual(
   canCommitMakeupFeedbackConferenceMessage({
     activeAnalysisRunId: 3,
-    analysisSettled: true,
-    messagePhase: 'closing',
     scheduledAnalysisRunId: 2,
   }),
   false,
-  'stale run cannot commit a closing message',
+  'stale run cannot commit a conference message',
 );
-expectEqual(
-  canCommitMakeupFeedbackConferenceMessage({
-    activeAnalysisRunId: 2,
-    analysisSettled: true,
-    messagePhase: 'closing',
-    scheduledAnalysisRunId: 2,
-  }),
-  true,
-  'current closing message can commit after analysis settles',
-);
-
 const legacy = mapMakeupFeedbackBackendConferenceMessages([
   {agentId: 'tone', text: 'legacy tone'},
   {agentId: 'color', text: 'legacy color'},
@@ -473,6 +455,39 @@ const fallbackMessages = buildMakeupFeedbackClosingConferenceMessages(result);
 const fallbackText = fallbackMessages.map(item => item.text).join(' ');
 const fallbackSequence = fallbackMessages.map(item => item.agentId).join(',');
 const fallbackRefs = fallbackMessages.map(item => (item.evidenceRefs ?? []).join(','));
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: true,
+    closingMessages: fallbackMessages,
+    displayedMessages: previewGenerated.slice(0, 1),
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+  }),
+  previewGenerated[1],
+  'analysis result cannot skip remaining AI preview messages',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: true,
+    closingMessages: fallbackMessages,
+    displayedMessages: [],
+    previewGenerationSettled: false,
+    previewMessages: [],
+  }),
+  undefined,
+  'grounded closing waits while AI preview generation is pending',
+);
+expectEqual(
+  getNextMakeupFeedbackConferenceMessage({
+    analysisReady: true,
+    closingMessages: fallbackMessages,
+    displayedMessages: previewGenerated,
+    previewGenerationSettled: true,
+    previewMessages: previewGenerated,
+  }),
+  fallbackMessages[0],
+  'grounded closing starts after AI preview messages are drained',
+);
 
 const continuedFallbackMessages = buildMakeupFeedbackClosingConferenceMessages(
   result,
