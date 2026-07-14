@@ -36,12 +36,12 @@ expectEqual(
 );
 expectEqual(
   makeupRecommendationResultRoleLabels.anchor,
-  '가장 잘 어울리는 룩',
+  '가장 잘 어울리는 메이크업',
   'anchor label',
 );
 expectEqual(
   makeupRecommendationResultRoleLabels.bold,
-  '조금 더 과감한 룩',
+  '조금 더 과감한 메이크업',
   'bold label',
 );
 expectEqual(

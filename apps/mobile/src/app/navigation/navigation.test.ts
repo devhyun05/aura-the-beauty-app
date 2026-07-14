@@ -75,7 +75,7 @@ expectEqual(
 );
 expectEqual(
   getDetailRouteTitle('MakeupRecommendation'),
-  'AI 메이크업 추천',
+  '메이크업 추천',
   'makeup recommendation title',
 );
 expectEqual(

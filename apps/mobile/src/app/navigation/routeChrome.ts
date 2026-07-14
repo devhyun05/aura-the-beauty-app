@@ -278,7 +278,7 @@ export const routeChromeByRoute = {
     depth: 'sub',
     kind: 'detail',
     statusBarStyle: 'dark',
-    title: 'AI 메이크업 추천',
+    title: '메이크업 추천',
   },
   AuradinSearch: {
     category: 'list',

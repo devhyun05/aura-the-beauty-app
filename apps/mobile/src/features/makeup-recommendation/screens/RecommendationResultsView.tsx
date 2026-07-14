@@ -169,7 +169,7 @@ export function RecommendationResultsView({
     <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
       <View style={styles.resultsHeading}>
         <Text style={styles.eyebrow}>세 가지 방향으로 골라봤어요</Text>
-        <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 룩</Text>
+        <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
         <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 취향까지 비교해보세요.</Text>
       </View>
 

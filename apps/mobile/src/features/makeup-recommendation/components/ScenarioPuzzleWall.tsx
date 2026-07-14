@@ -9,6 +9,13 @@ import {getPuzzleRowSpan, packScenarioPuzzle} from './scenarioPuzzleLayout';
 const COLUMN_COUNT = 12;
 const GAP = spacing.sm;
 const ROW_HEIGHT = 44;
+const BALANCED_SPANS = [7, 5, 5, 7, 8, 4, 6, 6] as const;
+
+function getBalancedSpan(index: number, displayText: string, preferredColumnSpan: number): number {
+  return displayText.length <= 10
+    ? preferredColumnSpan
+    : BALANCED_SPANS[index % BALANCED_SPANS.length];
+}
 
 export function ScenarioPuzzleWall({onSelect, scenarios}: {
   onSelect: (scenario: MakeupScenarioPrompt) => void;
@@ -26,9 +33,9 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
     if (!cellWidth || scenarios.some(item => !measurements[item.id])) return [];
     return packScenarioPuzzle({
       columnCount: COLUMN_COUNT,
-      items: scenarios.map(item => ({
+      items: scenarios.map((item, index) => ({
         id: item.id,
-        columnSpan: item.preferredColumnSpan,
+        columnSpan: getBalancedSpan(index, item.displayText, item.preferredColumnSpan),
         rowSpan: getPuzzleRowSpan({contentHeight: measurements[item.id], rowGap: GAP, rowHeight: ROW_HEIGHT}),
       })),
     });
@@ -51,14 +58,20 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
 
   return (
     <View onLayout={event => setContainerWidth(event.nativeEvent.layout.width)} style={[styles.container, {height}]}>
-      {containerWidth > 0 && placements.length === 0 ? scenarios.map(scenario => {
-        const width = cellWidth * scenario.preferredColumnSpan + GAP * (scenario.preferredColumnSpan - 1);
+      {containerWidth > 0 && placements.length === 0 ? scenarios.map((scenario, index) => {
+        const span = getBalancedSpan(index, scenario.displayText, scenario.preferredColumnSpan);
+        const width = cellWidth * span + GAP * (span - 1);
         return (
           <View
             key={`measure-${scenario.id}`}
-            onLayout={event => setMeasurements(previous => scenario.id in previous
-              ? previous
-              : {...previous, [scenario.id]: event.nativeEvent.layout.height})}
+            onLayout={event => {
+              // React Native pools layout events; capture the primitive before
+              // the functional state update runs asynchronously.
+              const height = event.nativeEvent.layout.height;
+              setMeasurements(previous => scenario.id in previous
+                ? previous
+                : {...previous, [scenario.id]: height});
+            }}
             pointerEvents="none"
             style={[styles.measurement, {width}]}
           >

@@ -22,7 +22,7 @@ function expectThrows(action: () => unknown, label: string) {
 }
 
 const scenarios = getMakeupScenarioSet({seed: 0});
-expectEqual(scenarios.length, 36, 'scenario set count');
+expectEqual(scenarios.length, 49, 'scenario set count');
 expectEqual(new Set(scenarios.slice(0, 6).map(item => item.tone)).size, 3, 'first six tone coverage');
 expectEqual(new Set(scenarios.map(item => item.copyStyle)).size, 5, 'five copy styles represented');
 expectEqual(

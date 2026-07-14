@@ -133,7 +133,7 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
       },
       {
         id: 'makeupRecommendation',
-        label: 'AI 메이크업 추천',
+        label: '메이크업 추천',
         description: '오늘의 시나리오를 고르고 나만의 룩을 추천받아요.',
         target: {kind: 'root', routeName: 'MakeupRecommendation'},
       },

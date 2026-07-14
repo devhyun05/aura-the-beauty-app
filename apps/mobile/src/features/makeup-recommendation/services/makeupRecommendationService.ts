@@ -54,7 +54,7 @@ export function getMakeupScenarioSet({seed}: {seed: number}): MakeupScenarioProm
   return [
     ...firstSix,
     ...rotated.filter(item => !firstSix.some(first => first.id === item.id)),
-  ].slice(0, 36);
+  ].slice(0, 49);
 }
 
 function inferKnownDimensions(prompt: string): MakeupQuestionDimension[] {

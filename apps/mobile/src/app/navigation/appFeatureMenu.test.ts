@@ -86,7 +86,7 @@ expectEqual(
   'makeup recommendation target route',
 );
 expectEqual(
-  analysisSection?.items.some(item => item.label === 'AI 메이크업 추천'),
+  analysisSection?.items.some(item => item.label === '메이크업 추천'),
   true,
   'analysis menu includes makeup recommendation',
 );
