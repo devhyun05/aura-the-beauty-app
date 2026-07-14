@@ -25,17 +25,23 @@ raw TrueDepth depth map은 메시 품질을 대조하는 Lab 전용 후속 검�
 ## 첫 MVP metric
 
 - `noseTipProjection`: 코끝과 국소 중안면 기준면 사이 signed distance / 3D 얼굴 폭
-- `chinProjection`: 턱 전방점과 국소 하관 기준면 사이 signed distance / 3D 얼굴 폭
-- `upperLipToELine`: 코끝-턱 전방점 E-line과 윗입술 사이 signed distance / 3D 얼굴 폭
-- `lowerLipToELine`: 코끝-턱 전방점 E-line과 아랫입술 사이 signed distance / 3D 얼굴 폭
+- `chinProjection`: 중앙 턱 표면 patch 안에서 고른 연조직 Pogonion과 방향이 고정된 중안면 기준면 사이 signed distance / 3D 얼굴 폭
+- `upperLipToELine`: 코끝-연조직 Pogonion E-line과 윗입술 사이 signed distance / 3D 얼굴 폭
+- `lowerLipToELine`: 코끝-연조직 Pogonion E-line과 아랫입술 사이 signed distance / 3D 얼굴 폭
 - `centralProjectionScore`: 중앙 얼굴 ROI와 좌우 볼 기준의 전후 차 / 3D 얼굴 폭
 
 이는 해부학·의료 계측값이 아니라 ARKit template-fit 표면의 상대적인 외관 trait다.
 
-`chinIndices`는 E-line과 돌출도에 쓰는 턱 전방점(Pogonion)이고,
-`chinBottomIndices`는 얼굴 윤곽이 끝나는 턱 최하단(Menton)이다. 둘을 같은 `턱끝`으로
-취급하지 않는다. Menton은 semantic map에 보존하지만 위 첫 5개 metric에는 아직
-직접 사용하지 않으며 이후 3D 얼굴 길이·수직 비율 metric의 기준점으로 사용한다.
+`chinIndices=[34,35,975]`는 아랫입술 아래의 labiomental fold(`31..33`)를 제외하고
+턱의 볼록면만 덮는 **연결된 중앙 턱 표면 patch**다. 런타임은 코끝 쪽이 양의 전방이
+되도록 방향을 고정한 중안면 기준면에 대해
+patch 각 정점의 signed projection을 계산하고, 그 값이 가장 큰 정점 하나를 연조직
+Pogonion으로 고른다. `chinProjection`은 이 최댓값을 사용하며, 같은 winner 정점을
+윗입술·아랫입술 E-line의 턱 쪽 endpoint로 재사용한다.
+
+`chinBottomIndices=[913,914,1047]`는 얼굴 윤곽이 끝나는 턱 최하단(Menton)이다. Pogonion과 Menton을 같은
+`턱끝`으로 취급하지 않는다. Menton은 semantic map에 그대로 보존하지만 위 첫 5개 metric과
+현재 턱 돌출도에는 사용하지 않으며 이후 3D 얼굴 길이·수직 비율 metric의 기준점으로 사용한다.
 
 ## 런타임 흐름
 
@@ -94,6 +100,11 @@ upperLip 0.015, lowerLip 0.036, central 0.239)을 확인했다. 이 실행은 po
 "iOS Real-Device Build & Verify" 참고. 참고: chin metric은 inlier 18개(<20)로
 이번 회차 신뢰도가 가장 낮았다(품질 노트, 집계 확정 경계는 미변경).
 
+후속 Pogonion 계약을 반영한 현재 live semantic map의 `mapId`는
+`arkit-face3d-g1-reviewed-v2-pogonion`이다. 이는 `[34,35,975]` patch와 새 런타임 선택식을
+식별하는 현재 자산 계약이며, 위 2026-07-12 `v1` 실기기 smoke 결과를 `v2` 실행 증거로
+소급 해석하지 않는다.
+
 ## 구현 상태
 
 완료된 로컬 구현:
@@ -124,8 +135,8 @@ upperLip 0.015, lowerLip 0.036, central 0.239)을 확인했다. 이 실행은 po
 - Lab 전용 raw TrueDepth depth-map 대조 캡처
 
 초기 캘리브레이션 앱은 semantic map이 없어서 `semantic_map_missing`으로 멈추는 것이
-정상이었다. v7 승인 이후에는 다음 경로에 검증 완료 map이 있으며, 새 UnityFramework와
-서명된 Lab 앱에도 동일한 `mapId`와 fingerprint가 들어 있다.
+정상이었다. 현재 다음 경로의 live map은 `arkit-face3d-g1-reviewed-v2-pogonion`이며,
+새 UnityFramework와 서명된 Lab 앱도 이 `mapId`와 동일한 fingerprint를 포함해야 한다.
 
 ```text
 apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json
@@ -181,7 +192,7 @@ face3d-semantic-review/
 추가·제거할 수 있다. 번호는 사용자가 받아 적지 않고 도구가 자동 저장한다.
 
 - 빨강: 코끝
-- 파랑: 턱 전방점(Pogonion/E-line)
+- 파랑: 중앙 턱 표면 patch(Pogonion 탐색/E-line)
 - 분홍: 턱 최하단(Menton)
 - 노랑/주황: 윗입술/아랫입술 중앙
 - 초록/청록: 중안면 기준 영역
@@ -197,7 +208,7 @@ face3d-semantic-review/
 apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json
 ```
 
-현재 v7 후보 생성 규칙은 코끝·턱 전방점·턱 최하단·입술 중앙의 검토된 topology seed와,
+현재 후보 생성 규칙은 코끝·Pogonion용 중앙 턱 표면 patch·턱 최하단·입술 중앙의 검토된 topology seed와,
 화면 정규화 위치·카메라 깊이·삼각형 연결 관계로 고른 기준 영역 patch를 결합한다.
 좌우 중안면/턱 기준군은 독립적으로 고르지 않는다. topology UV를 `u -> 1-u`로 반사해
 상호 최근접인 정점쌍만 만들고, 왼쪽과 오른쪽 원본 mesh edge가 모두 존재하는 pair
@@ -210,8 +221,11 @@ intersection graph에서 15쌍씩 연결 성장시킨다. 정책 버전은
 승인만으로 G1을 통과하지 않으며, 최소 서로 다른 얼굴 3명과 각 사람의 정면/약한 좌우
 회전 오버레이를 대조한 뒤 mapId를 고정한다.
 
-v7에서 측정 landmark는 코끝 `7,8,9`, Pogonion `31,32,33`, Menton
-`913,914,1047`, 윗입술 `1,21,22`, 아랫입술 `26,27,28`로 고정했다. 이 다섯 측정군은
+v7 승인 당시 측정 landmark는 코끝 `7,8,9`, Pogonion 후보 `31,32,33`, Menton
+`913,914,1047`, 윗입술 `1,21,22`, 아랫입술 `26,27,28`로 고정했다. 후속 Pogonion 결정은
+`chinIndices`를 labiomental fold를 제외한 연결된 중앙 턱 볼록면 patch `34,35,975`로 확정하고, 그 안의 중안면
+기준면 signed projection 최댓값 정점을 런타임 Pogonion 및 E-line endpoint로 사용한다.
+Menton 배열은 변경하지 않으며 현재 턱 돌출도에는 사용하지 않는다. 이 다섯 측정군은
 중안면/턱 기준면 6개 그룹에 들어갈 수 없다. 코끝과 `centralRegionIndices`처럼 기준면이
 아닌 ROI의 의도된 overlap은 허용한다. 이 정책과 좌우 exact pair 계약은 후보 생성기,
 수동 후보 validator, 재투영/진단, 승인 변환기, Unity runtime loader에서 검사한다.

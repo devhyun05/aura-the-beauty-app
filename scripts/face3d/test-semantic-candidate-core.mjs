@@ -313,8 +313,8 @@ assert.equal(
 
 const invalidOverlapGroups = structuredClone(candidate.groups);
 invalidOverlapGroups.chinReferenceUpperIndices = [...new Set([
-  31,
-  32,
+  34,
+  35,
   28,
   ...invalidOverlapGroups.chinReferenceUpperIndices,
 ])].slice(0, 13);
@@ -325,7 +325,7 @@ const invalidOverlapErrors = validateCandidateGroups(
 assert.equal(
   invalidOverlapErrors.some(error =>
     error.includes('chinIndices ↔ chinReferenceUpperIndices')
-      && error.includes('31, 32')),
+      && error.includes('34, 35')),
   true,
   'Pogonion vertices must be rejected from the chin reference plane',
 );

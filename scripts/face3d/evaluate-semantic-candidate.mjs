@@ -323,6 +323,28 @@ function signedPlaneProjection(point, planeOrigin, planeNormal, faceScale) {
   return dot(subtract(point, planeOrigin), planeNormal) / faceScale;
 }
 
+function selectPogonionVertex(vertices, indices, planeOrigin, planeNormal, faceScale) {
+  const candidates = indices.map(index => {
+    const point = vertices[index];
+    requireCondition(isFiniteTuple(point, 3), 'semantic_landmark_geometry_invalid', `chinIndices 정점 ${index} 좌표가 잘못되었습니다.`);
+    const projection = signedPlaneProjection(
+      point,
+      planeOrigin,
+      planeNormal,
+      faceScale,
+    );
+    requireCondition(Number.isFinite(projection), 'semantic_landmark_geometry_invalid', `chinIndices 정점 ${index}의 중안면 plane projection이 유한하지 않습니다.`);
+    return {index, point, projection};
+  });
+  requireCondition(candidates.length > 0, 'semantic_landmark_geometry_invalid', 'chinIndices 후보 패치가 비었습니다.');
+
+  const maximumProjection = Math.max(...candidates.map(({projection}) => projection));
+  const selected = candidates
+    .filter(({projection}) => maximumProjection - projection <= GEOMETRY_EPSILON)
+    .sort((left, right) => left.index - right.index)[0];
+  return selected;
+}
+
 function signedDistanceToLine(point, lineOrigin, lineDirection, depthAxis, faceScale) {
   const relative = subtract(point, lineOrigin);
   const closestPoint = add(lineOrigin, multiply(lineDirection, dot(relative, lineDirection)));
@@ -331,7 +353,6 @@ function signedDistanceToLine(point, lineOrigin, lineDirection, depthAxis, faceS
 
 export function evaluateMetrics(localVertices, groups) {
   const noseTip = centroid(localVertices, groups.noseTipIndices, 'noseTipIndices');
-  const chin = centroid(localVertices, groups.chinIndices, 'chinIndices');
   const upperLip = centroid(localVertices, groups.upperLipIndices, 'upperLipIndices');
   const lowerLip = centroid(localVertices, groups.lowerLipIndices, 'lowerLipIndices');
   const midfaceLeft = centroid(localVertices, groups.midfaceReferenceLeftIndices, 'midfaceReferenceLeftIndices');
@@ -357,13 +378,21 @@ export function evaluateMetrics(localVertices, groups) {
     midfaceNormal = multiply(midfaceNormal, -1);
   }
 
+  const pogonion = selectPogonionVertex(
+    localVertices,
+    groups.chinIndices,
+    midfacePlane.origin,
+    midfaceNormal,
+    faceScale,
+  );
+
   const chinPlaneAlignment = dot(chinNormal, midfaceNormal);
   requireCondition(Number.isFinite(chinPlaneAlignment) && Math.abs(chinPlaneAlignment) > GEOMETRY_EPSILON, 'chin_reference_plane_orientation_ambiguous', '턱 reference plane 방향을 결정할 수 없습니다.');
   if (chinPlaneAlignment < 0) {
     chinNormal = multiply(chinNormal, -1);
   }
 
-  const eLine = subtract(chin, noseTip);
+  const eLine = subtract(pogonion.point, noseTip);
   const eLineLength = magnitude(eLine);
   requireCondition(Number.isFinite(eLineLength) && eLineLength > GEOMETRY_EPSILON, 'esthetic_line_degenerate', '코끝과 턱 전방점(Pogonion)의 E-line이 퇴화했습니다.');
   const eLineDirection = multiply(eLine, 1 / eLineLength);
@@ -386,13 +415,17 @@ export function evaluateMetrics(localVertices, groups) {
     noseTipProjection: signedPlaneProjection(noseTip, midfacePlane.origin, midfaceNormal, faceScale),
     // C1: chin vs the face-spanning midface plane (mirrors noseTip/central), not the chin's
     // own neighbor plane. Keeps parity with the runtime Face3DMetricEvaluator change.
-    chinProjection: signedPlaneProjection(chin, midfacePlane.origin, midfaceNormal, faceScale),
+    chinProjection: signedPlaneProjection(pogonion.point, midfacePlane.origin, midfaceNormal, faceScale),
     upperLipToELine: signedDistanceToLine(upperLip, noseTip, eLineDirection, eLineDepthAxis, faceScale),
     lowerLipToELine: signedDistanceToLine(lowerLip, noseTip, eLineDirection, eLineDepthAxis, faceScale),
     centralProjectionScore: signedPlaneProjection(centralRegion, midfacePlane.origin, midfaceNormal, faceScale),
   };
   requireCondition(Object.values(metrics).every(Number.isFinite), 'face3d_metric_not_finite', '계산된 Face3D metric에 유한하지 않은 값이 있습니다.');
-  return {faceScale, metrics};
+  return {
+    faceScale,
+    metrics,
+    selectedPogonionVertexIndex: pogonion.index,
+  };
 }
 
 function median(values) {
@@ -445,6 +478,7 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       localVerticesFinite: true,
       derivedGeometry: {
         faceScale: evaluation.faceScale,
+        selectedPogonionVertexIndex: evaluation.selectedPogonionVertexIndex,
       },
       metrics: evaluation.metrics,
     };
@@ -473,6 +507,7 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       evaluator: 'Unity Face3DMetricEvaluator formula parity (offline approximation)',
       geometryEpsilon: GEOMETRY_EPSILON,
       metricUnit: 'normalized',
+      pogonionSelection: 'maximum signed projection to oriented midface plane; ties within 1e-6 choose smaller vertex index',
       summaryMethod: 'median_and_raw_mad_without_outlier_rejection',
       madDefinition: 'median(abs(value - median))',
       numericPrecision: 'exported localVertices rounded to 6 decimals; JavaScript float64 differs from Unity native float32 runtime',
@@ -508,13 +543,13 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       validatedButUnusedByCurrentMetrics: {
         chinBottomIndices: 'Menton (턱 최하단); current five metrics do not consume this group',
       },
-      chinProjectionLandmark: 'chinIndices (soft-tissue Pogonion / E-line endpoint)',
+      chinProjectionLandmark: 'chinIndices fixed candidate patch; each capture selects the maximum signed projection to the oriented midface plane as the soft-tissue Pogonion / E-line endpoint (ties within 1e-6 choose the smaller vertex index)',
     },
     captures,
     metricSummary,
     warnings: [
       'provisional_candidate_diagnostics: 이 결과는 후보 정점의 수치 진단이며 human overlay 승인이나 runtime map 승인이 아닙니다.',
-      'chinProjection과 E-line은 chinIndices(Pogonion)를 사용합니다. chinBottomIndices(Menton)는 검증만 하며 현재 5개 metric 계산에는 사용하지 않습니다.',
+      'chinProjection과 E-line은 chinIndices 고정 후보 패치에서 캡처별로 선택한 동일한 soft-tissue Pogonion 정점을 사용합니다. chinBottomIndices(Menton)는 검증만 하며 현재 5개 metric 계산에는 사용하지 않습니다.',
       '오프라인 수식은 Unity와 같지만 JSON localVertices 반올림과 JavaScript/Unity 수치 정밀도 차이로 bit-identical runtime 결과는 아닙니다.',
       '포즈가 다른 소수 캡처의 median/MAD/range는 실험용 안정성 지표이며 모집단 일반화 근거가 아닙니다.',
     ],

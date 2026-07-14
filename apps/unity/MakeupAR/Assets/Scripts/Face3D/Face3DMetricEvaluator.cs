@@ -40,7 +40,6 @@ namespace Aura.Face3D
 
             IReadOnlyList<Vector3> vertices = snapshot.Vertices;
             if (!TryCentroid(vertices, semanticMap.NoseTipIndices, out Vector3 noseTip)
-                || !TryCentroid(vertices, semanticMap.ChinIndices, out Vector3 chin)
                 || !TryCentroid(vertices, semanticMap.UpperLipIndices, out Vector3 upperLip)
                 || !TryCentroid(vertices, semanticMap.LowerLipIndices, out Vector3 lowerLip)
                 || !TryCentroid(vertices, semanticMap.MidfaceReferenceLeftIndices, out Vector3 midfaceLeft)
@@ -102,6 +101,24 @@ namespace Aura.Face3D
                 chinReferenceNormal = -chinReferenceNormal;
             }
 
+            // Soft-tissue Pogonion is the most anterior midline point on the chin, not
+            // the centroid of a fixed set and not Menton (the inferior chin endpoint).
+            // Keep a fixed topology patch, then select its person-specific anterior
+            // extreme against the same oriented midface plane used by chinProjection.
+            if (!TryMaxSignedPlaneProjectionPoint(
+                vertices,
+                semanticMap.ChinIndices,
+                midfaceOrigin,
+                midfaceNormal,
+                faceScale,
+                out Vector3 chin,
+                out float chinProjection))
+            {
+                return Face3DEvaluationResult.Blocked(
+                    "semantic_landmark_geometry_invalid",
+                    topology);
+            }
+
             Vector3 eLine = chin - noseTip;
             float eLineLength = eLine.magnitude;
             if (!Face3DNumeric.IsFinite(eLineLength) || eLineLength <= GeometryEpsilon)
@@ -129,17 +146,9 @@ namespace Aura.Face3D
                 midfaceOrigin,
                 midfaceNormal,
                 faceScale);
-            // C1: measure chin prominence against the face-spanning MIDFACE plane (the same
-            // reference noseTipProjection and centralProjectionScore use), not the chin's own
-            // neighbor plane. The neighbor plane differenced away true prominence and only kept
-            // local curvature; a labelled 3-subject offline test gave better between-person
-            // discriminability (23.7 vs 16.5). The fixed-index chin centroid is kept. The chin
-            // reference plane above is retained only as an unchanged frame-admission guard.
-            float chinProjection = SignedPlaneProjection(
-                chin,
-                midfaceOrigin,
-                midfaceNormal,
-                faceScale);
+            // C1/C2: chinProjection is the selected soft-tissue Pogonion's projection
+            // against the face-spanning midface plane. The same selected point anchors
+            // E-line above. The chin neighbor plane remains only a frame-admission guard.
             float upperLipToELine = SignedDistanceToLine(
                 upperLip,
                 noseTip,
@@ -362,6 +371,77 @@ namespace Aura.Face3D
             }
 
             return Face3DNumeric.IsFinite(max) ? max : (float?)null;
+        }
+
+        private static bool TryMaxSignedPlaneProjectionPoint(
+            IReadOnlyList<Vector3> vertices,
+            IReadOnlyList<int> indices,
+            Vector3 planeOrigin,
+            Vector3 planeNormal,
+            float faceScale,
+            out Vector3 selectedPoint,
+            out float selectedProjection)
+        {
+            selectedPoint = Vector3.zero;
+            selectedProjection = float.NegativeInfinity;
+            if (vertices == null || indices == null || indices.Count == 0)
+            {
+                return false;
+            }
+
+            float maximumProjection = float.NegativeInfinity;
+            for (int index = 0; index < indices.Count; index += 1)
+            {
+                int vertexIndex = indices[index];
+                if (vertexIndex < 0 || vertexIndex >= vertices.Count)
+                {
+                    return false;
+                }
+
+                Vector3 point = vertices[vertexIndex];
+                if (!Face3DNumeric.IsFinite(point))
+                {
+                    return false;
+                }
+
+                float projection = SignedPlaneProjection(
+                    point,
+                    planeOrigin,
+                    planeNormal,
+                    faceScale);
+                if (!Face3DNumeric.IsFinite(projection))
+                {
+                    return false;
+                }
+
+                if (projection > maximumProjection)
+                {
+                    maximumProjection = projection;
+                }
+            }
+
+            int selectedVertexIndex = int.MaxValue;
+            for (int index = 0; index < indices.Count; index += 1)
+            {
+                int vertexIndex = indices[index];
+                Vector3 point = vertices[vertexIndex];
+                float projection = SignedPlaneProjection(
+                    point,
+                    planeOrigin,
+                    planeNormal,
+                    faceScale);
+                if (maximumProjection - projection <= GeometryEpsilon
+                    && vertexIndex < selectedVertexIndex)
+                {
+                    selectedPoint = point;
+                    selectedProjection = projection;
+                    selectedVertexIndex = vertexIndex;
+                }
+            }
+
+            return selectedVertexIndex != int.MaxValue
+                && Face3DNumeric.IsFinite(selectedPoint)
+                && Face3DNumeric.IsFinite(selectedProjection);
         }
 
         // 그룹 부재(null)·빈 그룹·범위 밖·비유한 vertex 는 전부 null 반환 — Tier-2 는

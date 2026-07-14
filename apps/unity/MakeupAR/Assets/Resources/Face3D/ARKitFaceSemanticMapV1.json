@@ -1,6 +1,6 @@
 {
   "schemaVersion": "aura.face3d-semantic-map.v1",
-  "mapId": "arkit-face3d-g1-reviewed-v1",
+  "mapId": "arkit-face3d-g1-reviewed-v2-pogonion",
   "source": "arkit_face_mesh",
   "gateVersion": "face3d-gate-v1",
   "topologyFingerprint": {
@@ -18,9 +18,9 @@
     9
   ],
   "chinIndices": [
-    31,
-    32,
-    33
+    34,
+    35,
+    975
   ],
   "chinBottomIndices": [
     913,
