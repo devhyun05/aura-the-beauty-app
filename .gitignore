@@ -37,6 +37,7 @@ __pycache__/
 .codex-build/
 .lambda-build/
 dist/lambda/
+services/backend/models/
 
 # iOS generated build products
 apps/mobile/ios/Pods/

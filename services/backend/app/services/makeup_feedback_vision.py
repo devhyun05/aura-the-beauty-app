@@ -4,6 +4,7 @@ import io
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -11,8 +12,12 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 try:
   import mediapipe as mp
+  from mediapipe.tasks import python as mp_tasks
+  from mediapipe.tasks.python import vision as mp_tasks_vision
 except Exception:  # noqa: BLE001 - MediaPipe is an optional runtime capability for this module.
   mp = None
+  mp_tasks = None
+  mp_tasks_vision = None
 
 
 MAX_INPUT_PIXELS = 25_000_000
@@ -302,17 +307,31 @@ def _estimate_pose(landmarks: Mapping[str, NormalizedPoint]) -> FacePose | None:
 
 
 def _default_face_detector(image: Image.Image) -> FaceDetectorResult:
-  if mp is None or not hasattr(mp, "solutions"):
+  # mediapipe 0.10.24+ 는 레거시 mp.solutions API가 제거되어 Tasks API
+  # FaceLandmarker(IMAGE 모드)로 검출한다. 478 랜드마크 인덱스는 FaceMesh
+  # (refine_landmarks=True)와 동일해 _MEDIAPIPE_LANDMARK_INDICES 를 그대로 쓴다.
+  # 모델 자산은 hair segmenter와 같은 패턴으로 배포된다
+  # (scripts/download_face_landmarker.py + Dockerfile RUN).
+  if mp is None or mp_tasks is None or mp_tasks_vision is None:
     return FaceDetectorResult(available=False, error="mediapipe_unavailable")
 
+  from app.core.settings import get_settings
+
+  model_path = Path(get_settings().face_landmarker_model_path)
+  if not model_path.exists():
+    return FaceDetectorResult(available=False, error="face_landmarker_model_missing")
+
   try:
-    with mp.solutions.face_mesh.FaceMesh(  # type: ignore[attr-defined]
-      static_image_mode=True,
-      max_num_faces=3,
-      refine_landmarks=True,
-      min_detection_confidence=0.5,
-    ) as detector:
-      detected = detector.process(np.asarray(image))
+    options = mp_tasks_vision.FaceLandmarkerOptions(
+      base_options=mp_tasks.BaseOptions(model_asset_path=str(model_path)),
+      running_mode=mp_tasks_vision.RunningMode.IMAGE,
+      num_faces=3,
+      min_face_detection_confidence=0.5,
+    )
+    with mp_tasks_vision.FaceLandmarker.create_from_options(options) as detector:
+      detected = detector.detect(
+        mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(image)),
+      )
   except Exception as exc:  # noqa: BLE001 - detector failure is a soft runtime capability issue.
     return FaceDetectorResult(
       available=False,
@@ -320,8 +339,7 @@ def _default_face_detector(image: Image.Image) -> FaceDetectorResult:
     )
 
   observations: list[FaceObservation] = []
-  for detected_face in list(detected.multi_face_landmarks or []):
-    raw_landmarks = detected_face.landmark
+  for raw_landmarks in list(detected.face_landmarks or []):
     all_x = [float(value.x) for value in raw_landmarks]
     all_y = [float(value.y) for value in raw_landmarks]
     bbox = NormalizedBox(

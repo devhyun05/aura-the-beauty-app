@@ -17,6 +17,10 @@ COPY services/backend/scripts/download_hair_segmenter.py /tmp/download_hair_segm
 RUN python /tmp/download_hair_segmenter.py --output /app/models/hair_segmenter.tflite \
   && rm /tmp/download_hair_segmenter.py
 
+COPY services/backend/scripts/download_face_landmarker.py /tmp/download_face_landmarker.py
+RUN python /tmp/download_face_landmarker.py --output /app/models/face_landmarker.task \
+  && rm /tmp/download_face_landmarker.py
+
 COPY services/backend/app ./app
 COPY docs/backend/schema.sql ./docs/backend/schema.sql
 COPY docs/backend/seed.sql ./docs/backend/seed.sql
