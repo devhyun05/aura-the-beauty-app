@@ -171,10 +171,12 @@ function buildCompletedSession(
 
 export function startMakeupRecommendation(input: StartMakeupRecommendationInput): MakeupRecommendationSession {
   const scenario = MAKEUP_SCENARIOS.find(item => item.id === input.scenarioId);
-  const known = new Set(scenario?.knownDimensions ?? inferKnownDimensions(input.prompt));
+  const inferredDimensions = inferKnownDimensions(input.prompt);
+  const known = new Set(scenario?.knownDimensions ?? inferredDimensions);
+  const questionCap = !input.scenarioId && inferredDimensions.length === 0 ? 3 : 2;
   const questions = QUESTION_PRIORITY
     .filter(dimension => !known.has(dimension))
-    .slice(0, 3)
+    .slice(0, questionCap)
     .map(dimension => MAKEUP_QUESTIONS[dimension]);
   return questions.length === 0
     ? buildCompletedSession(input, [])
@@ -189,11 +191,20 @@ export function answerMakeupRecommendationQuestion(
   if (!expected || expected.id !== answer.questionId) {
     throw new Error('현재 질문과 맞지 않는 답변이에요.');
   }
+  const selectedOption = expected.options.find(option => option.id === answer.optionId);
+  if (answer.optionId && !selectedOption) {
+    throw new Error('현재 질문에 없는 선택지예요.');
+  }
+  if (!selectedOption && !answer.freeText?.trim()) {
+    throw new Error('선택지를 고르거나 답변을 입력해 주세요.');
+  }
   const answers = [...session.answers, answer];
   const nextIndex = session.currentQuestionIndex + 1;
+  const additionalConstraints =
+    answer.additionalConstraints?.trim() || session.additionalConstraints;
   return nextIndex >= session.questions.length
-    ? completeSession(session, answers, answer.additionalConstraints?.trim() || undefined)
-    : {...session, answers, currentQuestionIndex: nextIndex};
+    ? completeSession(session, answers, additionalConstraints)
+    : {...session, answers, currentQuestionIndex: nextIndex, additionalConstraints};
 }
 
 function applyFixtureRefinement(
