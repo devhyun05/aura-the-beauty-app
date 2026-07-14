@@ -700,13 +700,26 @@ def passes_floor(
 
 
 def _attribute_signature(item: dict[str, Any]) -> set[str]:
+  # §10.3-3: colorFamily/finish/texture에 priceTier·category 추가 — 속성 커버리지가
+  # 낮은 슬라이스에서 유사도가 '브랜드 다양성'으로 퇴화(F5)하는 것을 완화한다.
   attrs = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
   signature: set[str] = set()
   for field in ("colorFamily", "finish", "texture"):
     value = _clean(attrs.get(field))
     if value:
       signature.add(f"{field}:{value}")
+  category = _clean(item.get("category"))
+  if category:
+    signature.add(f"category:{category}")
+  price_tier = _clean((item.get("liveOffer") or {}).get("priceTier"))
+  if price_tier:
+    signature.add(f"priceTier:{price_tier}")
   return signature
+
+
+def normalized_brand(value: Any) -> str:
+  """브랜드 동일성 비교용 정규화 — 유사도 페널티·B6 '다른 브랜드' 필터 공용."""
+  return re.sub(r"[^0-9a-z가-힣]+", "", _clean(value).lower())
 
 
 def _similarity(item_a: dict[str, Any], item_b: dict[str, Any]) -> float:
@@ -715,10 +728,16 @@ def _similarity(item_a: dict[str, Any], item_b: dict[str, Any]) -> float:
   sig_b = _attribute_signature(item_b)
   union = sig_a | sig_b
   jaccard = len(sig_a & sig_b) / len(union) if union else 0.0
-  brand_a = re.sub(r"[^0-9a-z가-힣]+", "", _clean(item_a.get("brandName")).lower())
-  brand_b = re.sub(r"[^0-9a-z가-힣]+", "", _clean(item_b.get("brandName")).lower())
+  brand_a = normalized_brand(item_a.get("brandName"))
+  brand_b = normalized_brand(item_b.get("brandName"))
   same_brand = bool(brand_a) and brand_a == brand_b
   return min(1.0, jaccard + (0.34 if same_brand else 0.0))
+
+
+def attribute_similarity(item_a: dict[str, Any], item_b: dict[str, Any]) -> float:
+  """B6 §10.3-2: 기준 제품 대비 속성 시그니처 유사도(0~1) — similar 액션의
+  임시 soft preference 부스트로 쓰인다 (시그니처는 §10.3-3 확장분 포함)."""
+  return _similarity(item_a, item_b)
 
 
 def mmr_rerank(
@@ -890,7 +909,9 @@ def build_slice_result(
   # open the floor inside passes_floor itself; an unmatched/unknown row must not
   # be silently restored afterward. Keep the response field for compatibility.
   floor_fallback = False
-  reranked = mmr_rerank(floored, lambda_=lambda_)
+  # F17: 역할 배치는 상위 소수만 소비하는데 floor 통과 전체를 O(n³) 재랭킹하면
+  # 카탈로그 확장(618→2천+) 시 지연이 직결된다 — 역할 수 대비 여유 있는 12로 캡.
+  reranked = mmr_rerank(floored, lambda_=lambda_, top_n=max(12, top_n * 4))
   roled = assign_roles(reranked, top_n=top_n)
   products = [
     to_result_product(
