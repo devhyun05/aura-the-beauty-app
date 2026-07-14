@@ -212,8 +212,13 @@ function applyFixtureRefinement(
   refinement: MakeupRecommendationRefinement,
 ): MakeupLookRecommendation[] {
   if (refinement === 'replaceProducts') {
-    return results.map((look, index) => {
-      const nextFixture = MAKEUP_LOOK_FIXTURES[(index + 1) % MAKEUP_LOOK_FIXTURES.length];
+    return results.map(look => {
+      const currentProductId = look.products[0]?.id;
+      const currentFixtureIndex = MAKEUP_LOOK_FIXTURES.findIndex(fixture =>
+        fixture.products.some(product => product.id === currentProductId),
+      );
+      const nextFixtureIndex = (Math.max(currentFixtureIndex, 0) + 1) % MAKEUP_LOOK_FIXTURES.length;
+      const nextFixture = MAKEUP_LOOK_FIXTURES[nextFixtureIndex];
       return {...cloneLook(look), products: fixtureProductProvider.recommendProducts(nextFixture.id)};
     });
   }
@@ -224,11 +229,18 @@ function applyFixtureRefinement(
     differentColor: {summary: '주조색을 반대 온도로 바꾼 새로운 색 조합', condition: '다른 색으로'},
   }[refinement];
 
-  return results.map(look => ({
-    ...cloneLook(look),
-    summary: `${look.summary} · ${copy.summary}`,
-    appliedConditions: [copy.condition, ...look.appliedConditions.filter(item => item !== copy.condition)],
-  }));
+  const refinementConditions = ['더 자연스럽게', '더 힙하게', '다른 색으로'];
+  return results.map(look => {
+    const baseSummary = MAKEUP_LOOK_FIXTURES.find(fixture => fixture.id === look.id)?.summary ?? look.summary;
+    return {
+      ...cloneLook(look),
+      summary: `${baseSummary} · ${copy.summary}`,
+      appliedConditions: [
+        copy.condition,
+        ...look.appliedConditions.filter(item => !refinementConditions.includes(item)),
+      ],
+    };
+  });
 }
 
 export function refineMakeupRecommendation(

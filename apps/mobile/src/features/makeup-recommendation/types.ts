@@ -41,6 +41,7 @@ export type MakeupRecommendationProduct = {
 };
 export type MakeupLookRecommendation = {
   id: string;
+  arFilterId: string;
   role: MakeupLookRole;
   title: string;
   summary: string;

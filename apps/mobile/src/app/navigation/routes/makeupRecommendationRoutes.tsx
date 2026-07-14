@@ -1,6 +1,7 @@
 import React from 'react';
 
 import {MakeupRecommendationScreen} from '../../../features/makeup-recommendation';
+import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import type {RootScreenProps} from './routeUtils';
@@ -16,7 +17,9 @@ export function MakeupRecommendationRouteScreen({
       routeName="MakeupRecommendation"
     >
       <MakeupRecommendationScreen
-        onApplyAR={() => navigation.navigate('ARFilter', {source: 'recommendedFilter'})}
+        onApplyAR={look =>
+          navigation.navigate('ARFilter', getRecommendedFilterRouteParams(look.arFilterId))
+        }
         personalColor={selectedFaceAnalysisReport?.personalColor}
       />
     </DetailRouteChrome>

@@ -1,6 +1,7 @@
 import {
   answerMakeupRecommendationQuestion,
   getMakeupScenarioSet,
+  refineMakeupRecommendation,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
 
@@ -95,4 +96,32 @@ expectEqual(
   constrainedCompleted.results[0].appliedConditions[0],
   '향료 성분 제외',
   'latest constraints are first result condition',
+);
+
+expectEqual(
+  constrainedCompleted.results.map(result => result.arFilterId).join(','),
+  'filter-milky-strawberry-pink,filter-clean-smoky-city,filter-plum-syrup-gloss',
+  'results map to distinct AR filters',
+);
+
+const productsOnce = refineMakeupRecommendation(constrainedCompleted, 'replaceProducts');
+const productsTwice = refineMakeupRecommendation(productsOnce, 'replaceProducts');
+expectEqual(
+  productsOnce.results[0].products[0].id === productsTwice.results[0].products[0].id,
+  false,
+  'repeated product replacement rotates products',
+);
+
+const natural = refineMakeupRecommendation(constrainedCompleted, 'natural');
+const hipAfterNatural = refineMakeupRecommendation(natural, 'hip');
+const hipRepeated = refineMakeupRecommendation(hipAfterNatural, 'hip');
+expectEqual(
+  hipAfterNatural.results[0].appliedConditions.includes('더 자연스럽게'),
+  false,
+  'new refinement replaces old condition',
+);
+expectEqual(
+  hipRepeated.results[0].summary,
+  hipAfterNatural.results[0].summary,
+  'repeated refinement does not duplicate summary',
 );

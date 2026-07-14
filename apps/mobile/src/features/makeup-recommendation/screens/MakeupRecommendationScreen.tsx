@@ -38,7 +38,9 @@ export function MakeupRecommendationScreen({
   const [useProfile, setUseProfile] = useState(Boolean(personalColor));
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [errorMessage, setErrorMessage] = useState('');
+  const [refinementError, setRefinementError] = useState('');
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
+  const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const scenarios = useMemo(
     () => getMakeupScenarioSet({seed: scenarioSeed}),
     [scenarioSeed],
@@ -96,18 +98,18 @@ export function MakeupRecommendationScreen({
 
   const handleRefine = (refinement: MakeupRecommendationRefinement) => {
     if (!session) return;
-    setPhase('loading');
-    setErrorMessage('');
+    lastRefinement.current = refinement;
+    setRefinementError('');
 
     Promise.resolve()
       .then(() => refineMakeupRecommendation(session, refinement))
       .then(nextSession => {
         setSession(nextSession);
-        setPhase('results');
       })
       .catch(error => {
-        setErrorMessage(error instanceof Error ? error.message : '추천을 조정하지 못했어요.');
-        setPhase('error');
+        setRefinementError(
+          error instanceof Error ? error.message : '조정하지 못했어요. 기존 추천은 그대로 두었어요.',
+        );
       });
   };
 
@@ -116,7 +118,9 @@ export function MakeupRecommendationScreen({
     setSession(undefined);
     setPrompt('');
     setErrorMessage('');
+    setRefinementError('');
     lastStartInput.current = undefined;
+    lastRefinement.current = undefined;
   };
 
   const retry = () => {
@@ -173,6 +177,10 @@ export function MakeupRecommendationScreen({
         onRefine={handleRefine}
         onReset={reset}
         onRetry={retry}
+        onRetryRefinement={() => {
+          if (lastRefinement.current) handleRefine(lastRefinement.current);
+        }}
+        refinementError={refinementError}
         results={session.results}
       />
     );

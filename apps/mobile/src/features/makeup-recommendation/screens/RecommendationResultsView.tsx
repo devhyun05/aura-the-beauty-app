@@ -42,6 +42,8 @@ type RecommendationResultsViewProps = {
   onRefine: (refinement: MakeupRecommendationRefinement) => void;
   onReset: () => void;
   onRetry: () => void;
+  onRetryRefinement: () => void;
+  refinementError?: string;
   results: readonly MakeupLookRecommendation[];
 };
 
@@ -82,6 +84,19 @@ function ResultCard({
           {look.reasons.map(reason => <Text key={reason} style={styles.reason}>• {reason}</Text>)}
         </View>
 
+        {look.appliedConditions.length > 0 ? (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailTitle}>반영된 조건</Text>
+            <View style={styles.conditionList}>
+              {look.appliedConditions.map(condition => (
+                <View key={condition} style={styles.conditionChip}>
+                  <Text style={styles.conditionLabel}>{condition}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.detailSection}>
           <Text style={styles.detailTitle}>이렇게 완성해요</Text>
           {[...look.steps].sort((a, b) => a.order - b.order).map(step => (
@@ -120,6 +135,8 @@ export function RecommendationResultsView({
   onRefine,
   onReset,
   onRetry,
+  onRetryRefinement,
+  refinementError,
   results,
 }: RecommendationResultsViewProps) {
   const [savedLookIds, setSavedLookIds] = useState<Set<string>>(() => new Set());
@@ -176,6 +193,18 @@ export function RecommendationResultsView({
             </Pressable>
           ))}
         </View>
+        {refinementError ? (
+          <View accessibilityRole="alert" style={styles.refinementError}>
+            <Text style={styles.refinementErrorCopy}>{refinementError}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onRetryRefinement}
+              style={styles.refinementRetryButton}
+            >
+              <Text style={styles.refinementRetryLabel}>다시 조정하기</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <Pressable accessibilityRole="button" onPress={onReset} style={styles.resetButton}>
@@ -246,6 +275,18 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
   },
+  conditionList: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm},
+  conditionChip: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  conditionLabel: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+  },
   detailSection: {gap: spacing.md},
   detailTitle: {
     color: colors.textPrimary,
@@ -288,6 +329,23 @@ const styles = StyleSheet.create({
   },
   refinementSection: {gap: spacing.md},
   refinementActions: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm},
+  refinementError: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  refinementErrorCopy: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+  },
+  refinementRetryButton: {alignSelf: 'flex-start', justifyContent: 'center', minHeight: 48},
+  refinementRetryLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+  },
   refinementButton: {
     borderColor: colors.borderStrong,
     borderRadius: radius.pill,
