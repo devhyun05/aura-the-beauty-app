@@ -77,6 +77,20 @@ def _default_run_date() -> str:
   return (datetime.now(tz=UTC) + timedelta(hours=9)).strftime("%Y%m%d")
 
 
+def _load_local_env() -> None:
+  for env_path in (REPO_ROOT / ".env", BACKEND_ROOT / ".env"):
+    if not env_path.is_file():
+      continue
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+      stripped = line.strip()
+      if not stripped or stripped.startswith("#") or "=" not in stripped:
+        continue
+      key, value = stripped.split("=", 1)
+      key = key.strip()
+      if key and key not in os.environ:
+        os.environ[key] = value.strip().strip('"').strip("'")
+
+
 def load_active_manifest(data_root: Path) -> dict[str, Any]:
   pointer = json.loads((data_root / "active_snapshot.json").read_text(encoding="utf-8"))
   manifest_path = data_root / Path(str(pointer["manifestPath"])).relative_to("data/auradin") \
@@ -422,6 +436,9 @@ def main(
 
     state_path = offer_root / "refresh_state.json"
     stale_state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
+
+    if not args.resume_run and fetcher is None:
+      _load_local_env()  # cron에서도 source 없이 동작 — 기존 수집기 관례(.env 2곳, 기존 env 우선)
 
     if args.resume_run:
       run_id = args.resume_run
