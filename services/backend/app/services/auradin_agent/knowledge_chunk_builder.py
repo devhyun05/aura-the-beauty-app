@@ -418,6 +418,8 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
     "schema": "AuradinMvpCatalogItem.20260703.v1",
     "updatedAt": _clean(seed.get("updatedAt")) or "2026-07-03T00:00:00+09:00",
   }
+  if isinstance(seed.get("offerRefreshEvidence"), dict):
+    catalog_item["offerRefreshEvidence"] = dict(seed["offerRefreshEvidence"])
   return catalog_item
 
 
