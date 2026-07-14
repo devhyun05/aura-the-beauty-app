@@ -8,7 +8,8 @@ from typing import Any
 from app.core.settings import Settings, get_settings
 from app.db.session import Database
 
-from .catalog_loader import get_catalog
+from .catalog_loader import AuradinCatalog, get_catalog
+from .knowledge_chunk_builder import build_knowledge_chunks
 from .enrichment import enrich_question, enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
@@ -34,6 +35,17 @@ _POSTGRES_TABLE_READY = False
 
 def _now() -> float:
   return time.time()
+
+
+def purge_in_memory_owner_sessions(owner_subject: str) -> int:
+  session_ids = [
+    session_id
+    for session_id, state in _SESSIONS.items()
+    if state.get("ownerSubject") == owner_subject
+  ]
+  for session_id in session_ids:
+    _SESSIONS.pop(session_id, None)
+  return len(session_ids)
 
 
 def _thinking(phase: str) -> list[dict[str, str]]:
@@ -169,8 +181,15 @@ def _ranked_cache(ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
   ]
 
 
+def _catalog_for_state(state: dict[str, Any]) -> AuradinCatalog:
+  if "catalogItems" not in state:
+    return get_catalog()
+  items = state.get("catalogItems") if isinstance(state.get("catalogItems"), list) else []
+  return AuradinCatalog(items, build_knowledge_chunks(items))
+
+
 def _ranked_from_cache(state: dict[str, Any]) -> list[dict[str, Any]]:
-  catalog = get_catalog()
+  catalog = _catalog_for_state(state)
   rows: list[dict[str, Any]] = []
   for cached in state.get("rankedCache") or []:
     item = catalog.get(str(cached.get("id") or ""))
@@ -203,7 +222,9 @@ def _build_result(
   products = [
     product
     for product in slice_result["products"]
-    if product.get("imageUrl") and product.get("purchaseUrl") and int(product.get("priceKrw") or 0) > 0
+    if product.get("imageUrl")
+    and (product.get("purchaseUrl") or product.get("offerId"))
+    and int(product.get("priceKrw") or 0) > 0
   ]
   return {
     "headerLabel": "답변 기준으로 후보를 좁혔어요" if state.get("answers") else "조건에 가까운 제품을 골랐어요",
@@ -241,7 +262,7 @@ def _advance(
     state["updatedAt"] = _now()
     return
 
-  catalog = get_catalog()
+  catalog = _catalog_for_state(state)
   retrieval = retrieve_and_rank(
     catalog,
     intent,
@@ -306,6 +327,7 @@ def create_session(
   source: str | None = None,
   context: dict[str, Any] | None = None,
   report_context: dict[str, Any] | None = None,
+  catalog_items: list[dict[str, Any]] | None = None,
   settings: Settings | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
@@ -346,6 +368,8 @@ def create_session(
     "updatedAt": now,
     "expiresAt": now + max(60, int(settings.auradin_session_ttl_seconds or SESSION_TTL_SECONDS)),
   }
+  if catalog_items is not None:
+    state["catalogItems"] = catalog_items
   _SESSIONS[session_id] = state
   _advance(state, settings=settings)
   return state
@@ -514,7 +538,7 @@ def refine_session(
     state["refinePrompt"] = prompt
 
     retrieval = retrieve_and_rank(
-      get_catalog(),
+      _catalog_for_state(state),
       state["intent"],
       state.get("answers", []),
       settings=settings,
@@ -531,7 +555,7 @@ def refine_session(
     if not used_cache:
       # 캐시 소실(프로세스 재시작 등) → 동일 조건 재랭킹 폴백. 조건은 그대로라 완화 아님.
       retrieval = retrieve_and_rank(
-        get_catalog(),
+        _catalog_for_state(state),
         state["intent"],
         state.get("answers", []),
         settings=settings,
@@ -584,7 +608,7 @@ def to_search_turn(state: dict[str, Any]) -> dict[str, Any]:
     "sessionId": state.get("sessionId"),
     "phase": phase,
     "thinking": _thinking(phase),
-    "contextSummary": state.get("result", {}).get("contextSummary") or "립·치크·아이섀도우·베이스·브로우·라이너 catalog 기준",
+    "contextSummary": (state.get("result") or {}).get("contextSummary") or "립·치크·아이섀도우·베이스·브로우·라이너 catalog 기준",
     "appliedFilters": _applied_filters(state),
     "question": state.get("lastQuestion") if phase == "question" else None,
     "result": state.get("result") if phase == "results" else None,
@@ -714,6 +738,30 @@ async def create_session_persisted(
   db: Database | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
+  catalog_items = None
+  if not settings.legacy_naver_product_search:
+    from app.services.auradin_trusted_catalog import load_trusted_auradin_items
+
+    trusted_catalog_items = (
+      await load_trusted_auradin_items(
+        db,
+        limit=300,
+        offer_max_age_hours=settings.product_offer_max_age_hours,
+      )
+      if db
+      else []
+    )
+    # Keep licensed catalog rows first. Until that feed is populated, the
+    # production-safe discovery flag permits the packaged external catalog;
+    # leaving catalogItems absent lets the ranker read the full packaged pool
+    # without copying hundreds of rows into every persisted session.
+    catalog_items = (
+      trusted_catalog_items
+      if trusted_catalog_items
+      else None
+      if settings.auradin_live_discovery_enabled
+      else []
+    )
   state = create_session(
     prompt=prompt,
     owner_subject=owner_subject,
@@ -721,6 +769,7 @@ async def create_session_persisted(
     source=source,
     context=context,
     report_context=report_context,
+    catalog_items=catalog_items,
     settings=settings,
   )
   await _enrich_if_results(state, settings)
@@ -756,6 +805,86 @@ async def get_session_persisted(
     await _save_postgres_session(db, state)
 
   return state
+
+
+def _find_result_product_in_state(
+  state: dict[str, Any] | None,
+  *,
+  owner_subject: str,
+  product_id: str,
+) -> dict[str, Any] | None:
+  if not state or state.get("ownerSubject") != owner_subject:
+    return None
+  if _now() > float(state.get("expiresAt") or 0):
+    return None
+  result = state.get("result")
+  products = result.get("products") if isinstance(result, dict) else None
+  if not isinstance(products, list):
+    return None
+  for product in products:
+    if isinstance(product, dict) and str(product.get("id") or "") == product_id:
+      return dict(product)
+  return None
+
+
+async def resolve_auradin_result_product(
+  *,
+  owner_subject: str,
+  product_id: str,
+  settings: Settings,
+  db: Database | None,
+) -> dict[str, Any] | None:
+  """Resolve a product only from the authenticated owner's active search result."""
+
+  normalized_owner = owner_subject.strip()
+  normalized_product_id = product_id.strip()
+  if not normalized_owner or not normalized_product_id:
+    return None
+  for state in sorted(
+    _SESSIONS.values(),
+    key=lambda value: float(value.get("updatedAt") or 0),
+    reverse=True,
+  ):
+    product = _find_result_product_in_state(
+      state,
+      owner_subject=normalized_owner,
+      product_id=normalized_product_id,
+    )
+    if product:
+      return product
+
+  if not _postgres_enabled(settings, db):
+    return None
+  await ensure_postgres_session_table(db)  # type: ignore[arg-type]
+  row = await db.fetchrow(  # type: ignore[union-attr]
+    """
+    select result_product as product
+    from auradin_search_sessions session
+    cross join lateral jsonb_array_elements(
+      case
+        when jsonb_typeof(session.state->'result'->'products')='array'
+          then session.state->'result'->'products'
+        else '[]'::jsonb
+      end
+    ) result_product
+    where session.state->>'ownerSubject'=$1
+      and session.expires_at>now()
+      and result_product->>'id'=$2
+    order by session.updated_at desc
+    limit 1
+    """,
+    normalized_owner,
+    normalized_product_id,
+  )
+  if not row:
+    return None
+  product = row.get("product")
+  if isinstance(product, str):
+    try:
+      product = json.loads(product)
+    except json.JSONDecodeError:
+      return None
+  return dict(product) if isinstance(product, dict) else None
 
 
 async def answer_session_persisted(

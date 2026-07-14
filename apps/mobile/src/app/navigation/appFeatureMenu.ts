@@ -13,6 +13,7 @@ export type AppFeatureMenuItemId =
   | 'makeupFeedback'
   | 'faceAnalysis'
   | 'recommendedFilters'
+  | 'makeupRecommendation'
   | 'productRecommendation'
   | 'savedMakeup'
   | 'makeupLooks'
@@ -28,6 +29,7 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'HomeFilterStore'
   | 'Community'
   | 'Consulting'
+  | 'MakeupRecommendation'
   | 'ProductRecommendation'
   | 'SavedMakeupList'
   | 'MakeupLookList'
@@ -128,6 +130,12 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         label: '추천 필터',
         description: '전체 추천 메이크업 필터를 둘러봐요.',
         target: {kind: 'root', routeName: 'HomeFilterStore'},
+      },
+      {
+        id: 'makeupRecommendation',
+        label: '메이크업 추천',
+        description: '오늘의 시나리오를 고르고 나만의 룩을 추천받아요.',
+        target: {kind: 'root', routeName: 'MakeupRecommendation'},
       },
       {
         id: 'productRecommendation',

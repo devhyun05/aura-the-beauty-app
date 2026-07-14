@@ -51,13 +51,13 @@ python -m app.db.init_db
 Expected first run:
 
 ```text
-Applied schema.sql:v1.
+Applied schema.sql:v<current-version>.
 ```
 
 Expected repeated run:
 
 ```text
-Skipped schema.sql:v1; already applied.
+Skipped schema.sql:v<current-version>; already applied.
 ```
 
 ## 6. Apply development seed data
@@ -116,7 +116,59 @@ Run the smoke checker:
 python -m app.ops.smoke_api --base-url http://localhost:8000 --require-db
 ```
 
-## 10. First AWS-dependent checks
+## 10. Verify the product recommendation page with the local DB
+
+The privacy-safe defaults keep engagement personalization and cohort ranking
+disabled. For an isolated local demo, add these values to `.env` before
+starting Uvicorn:
+
+```env
+AUTH_REQUIRED=false
+ENGAGEMENT_PERSONALIZATION_V1=true
+COHORT_RECOMMENDATIONS_V1=true
+PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT=100
+PRODUCT_COHORT_EXPERIMENT_PERCENT=100
+PRODUCT_EVENT_SIGNING_SECRET=local-only-product-events-change-me
+```
+
+Check the APIs used by the recommendation hub:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/api/products/features
+Invoke-RestMethod "http://localhost:8000/api/products/recommendations/seasonal?limit=18"
+Invoke-RestMethod "http://localhost:8000/api/products/recommendations/seasonal?limit=60&category=lip"
+Invoke-RestMethod "http://localhost:8000/api/products/recommendations/personalized?limit=18"
+Invoke-RestMethod "http://localhost:8000/api/products/recommendations/cohort?limit=18"
+Invoke-RestMethod "http://localhost:8000/api/products/recommendations/ar?limit=18"
+Invoke-RestMethod "http://localhost:8000/api/products/liked?limit=18"
+```
+
+Expected behavior for a fresh local user:
+
+- `features` reports the bundled Auradin catalog as ready with at least 500
+  displayable products and non-empty base, shadow, brow, cheek, lip, and liner
+  categories.
+- seasonal, personalized, and cohort endpoints return non-empty, unique,
+  catalog-backed products. Personalized/cohort may explain that popular
+  fallback products are being shown until the user has enough consented data.
+- AR reports `noArStyle` until the user saves an AR look, but still supplies
+  catalog-backed popular products in its region groups. The mobile client
+  renders those products and keeps the AR look creation action available;
+  exact color/texture matching starts after a look is saved.
+- liked products are empty for a new user, then appear after the same local
+  user likes a product.
+
+For a physical phone, set `apps/mobile/.env` to the development machine's LAN
+address; `localhost` points to the phone itself:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://<LAN-IP>:8000/api
+```
+
+Keep Uvicorn bound to `0.0.0.0`, and keep the phone and development machine on
+the same WiFi network.
+
+## 11. First AWS-dependent checks
 
 Do these only after setting the required values in `docs/backend/SETUP_REQUIRED.md`.
 

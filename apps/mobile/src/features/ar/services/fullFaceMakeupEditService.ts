@@ -29,8 +29,13 @@ export type FullFaceMakeupSavedContract = {
   editState: FullFaceMakeupEditState;
   recipe: FullFaceMakeupRecipe;
   savedPackageId: string;
-  source: 'face-analysis-full-face';
+  source: SavedArLookSource;
 };
+
+export type SavedArLookSource =
+  | 'face-analysis-full-face'
+  | 'ar_editor'
+  | 'preset';
 
 export const FULL_FACE_MAKEUP_EDIT_REGIONS = MAKEUP_RECIPE_REGIONS;
 
@@ -209,16 +214,18 @@ export function createFullFaceMakeupSavedContract({
   editState,
   recipe,
   savedAtMs = Date.now(),
+  source = 'face-analysis-full-face',
 }: {
   editState: FullFaceMakeupEditState;
   recipe: FullFaceMakeupRecipe;
   savedAtMs?: number;
+  source?: SavedArLookSource;
 }): FullFaceMakeupSavedContract {
   return {
     editState,
     recipe,
     savedPackageId: `full-face-saved-${savedAtMs}`,
-    source: 'face-analysis-full-face',
+    source,
   };
 }
 

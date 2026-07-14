@@ -8,9 +8,156 @@ from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
 
 
-SCHEMA_VERSION = "schema.sql:v3"
+SCHEMA_VERSION = "schema.sql:v5-external-product-likes"
 
 POST_SCHEMA_MIGRATIONS = {
+  "schema.sql:external-product-like-auradin-source-v1": """
+    alter table external_product_likes
+      drop constraint if exists chk_external_product_likes_source,
+      add constraint chk_external_product_likes_source
+        check (external_source in ('naver_shopping_search','auradin_search','auradin_catalog'));
+  """,
+  "schema.sql:external-product-catalog-events-v1": """
+    alter table external_product_likes
+      drop constraint if exists chk_external_product_likes_source,
+      add constraint chk_external_product_likes_source
+        check (external_source in ('naver_shopping_search','auradin_search','auradin_catalog'));
+    alter table product_engagement_events
+      add column if not exists external_source text,
+      add column if not exists external_product_id text;
+    alter table product_engagement_events
+      drop constraint if exists chk_product_engagement_source,
+      drop constraint if exists chk_product_engagement_external_source,
+      add constraint chk_product_engagement_source check (
+        (
+          event_type = 'search_submit'
+          and search_request_id is not null
+          and product_id is null
+          and shade_id is null
+          and external_source is null
+          and external_product_id is null
+        )
+        or (
+          event_type <> 'search_submit'
+          and (
+            (product_id is not null and external_source is null and external_product_id is null)
+            or (product_id is null and external_source is not null and external_product_id is not null)
+          )
+          and (shade_id is null or product_id is not null)
+        )
+      ),
+      add constraint chk_product_engagement_external_source check (
+        (external_source is null and external_product_id is null)
+        or (
+          external_source in ('naver_shopping_search','auradin_search','auradin_catalog')
+          and char_length(external_product_id) between 1 and 160
+        )
+      );
+    create index if not exists idx_product_engagement_external_product_type
+      on product_engagement_events (external_source, external_product_id, event_type, occurred_at desc)
+      where external_source is not null;
+  """,
+  "schema.sql:external-product-legacy-auradin-seed-likes-v1": """
+    insert into external_product_likes (
+      user_id,external_source,external_product_id,brand_name,product_name,category,
+      image_url,purchase_url,price_amount,price_currency,source_updated_at,liked_at
+    )
+    select user_id,'auradin_catalog',external_product_id,brand_name,product_name,category,
+      image_url,purchase_url,price_amount,price_currency,source_updated_at,liked_at
+    from external_product_likes
+    where external_source='auradin_search' and external_product_id like 'auradin-seed-%'
+    on conflict (user_id,external_source,external_product_id) do nothing;
+    delete from external_product_likes
+    where external_source='auradin_search' and external_product_id like 'auradin-seed-%';
+  """,
+  "schema.sql:product-category-brow-v1": """
+    alter type product_category add value if not exists 'brow';
+  """,
+  "schema.sql:product-event-query-minimization-v1": """
+    update product_engagement_events
+    set context = context - 'query'
+    where context ? 'query';
+  """,
+  "schema.sql:product-operator-rbac-v1": """
+    create table if not exists product_recommendation_operators (
+      user_id uuid primary key,
+      roles text[] not null,
+      is_active boolean not null default true,
+      granted_by uuid,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_product_recommendation_operator_roles check (
+        cardinality(roles) > 0 and roles <@ array[
+          'catalog_admin','seasonal_editor','seasonal_reviewer',
+          'seasonal_publisher','seasonal_operator'
+        ]::text[]
+      )
+    );
+    alter table product_recommendation_operators
+      drop constraint if exists fk_product_recommendation_operator_user,
+      add constraint fk_product_recommendation_operator_user
+        foreign key (user_id) references users(id) on delete cascade,
+      drop constraint if exists fk_product_recommendation_operator_granted_by,
+      add constraint fk_product_recommendation_operator_granted_by
+        foreign key (granted_by) references users(id) on delete set null;
+    create index if not exists idx_product_recommendation_operators_active_roles
+      on product_recommendation_operators using gin (roles) where is_active=true;
+  """,
+  "schema.sql:product-event-shade-parent-v1": """
+    do $$
+    begin
+      if not exists (select 1 from pg_constraint where conname='fk_product_engagement_shade_product') then
+        alter table product_engagement_events
+          add constraint fk_product_engagement_shade_product
+          foreign key (shade_id, product_id) references product_shades(id, product_id)
+          on delete set null (shade_id) not valid;
+      end if;
+    end $$;
+  """,
+  "schema.sql:user-product-like-shade-parent-v1": """
+    do $$
+    begin
+      if not exists (select 1 from pg_constraint where conname='fk_user_product_likes_shade_product') then
+        alter table user_product_likes
+          add constraint fk_user_product_likes_shade_product
+          foreign key (source_shade_id, product_id) references product_shades(id, product_id)
+          on delete set null (source_shade_id) not valid;
+      end if;
+    end $$;
+  """,
+  "schema.sql:product-shade-parent-integrity-v1": """
+    do $$
+    begin
+      if not exists (select 1 from pg_constraint where conname='uq_product_shades_id_product') then
+        alter table product_shades
+          add constraint uq_product_shades_id_product unique (id, product_id);
+      end if;
+      if not exists (select 1 from pg_constraint where conname='fk_product_assets_shade_product') then
+        alter table product_assets
+          add constraint fk_product_assets_shade_product
+          foreign key (shade_id, product_id) references product_shades(id, product_id)
+          on delete cascade not valid;
+      end if;
+      if not exists (select 1 from pg_constraint where conname='fk_product_offers_shade_product') then
+        alter table product_offers
+          add constraint fk_product_offers_shade_product
+          foreign key (shade_id, product_id) references product_shades(id, product_id)
+          on delete set null (shade_id) not valid;
+      end if;
+      if not exists (select 1 from pg_constraint where conname='fk_product_seasonal_items_shade_product') then
+        alter table product_seasonal_collection_items
+          add constraint fk_product_seasonal_items_shade_product
+          foreign key (shade_id, product_id) references product_shades(id, product_id)
+          on delete set null (shade_id) not valid;
+      end if;
+    end $$;
+  """,
+  "schema.sql:product-consent-ordering-v1": """
+    alter table user_consents
+      add column if not exists recorded_at timestamptz not null default clock_timestamp();
+    create index if not exists idx_user_consents_user_type_recorded
+      on user_consents (user_id, consent_type, recorded_at desc);
+  """,
   "schema.sql:community-core-v1": """
     create extension if not exists vector;
     create extension if not exists pg_trgm;
@@ -452,7 +599,7 @@ POST_SCHEMA_MIGRATIONS = {
     alter table consulting_call_sessions
       drop constraint if exists fk_consulting_call_sessions_booking,
       add constraint fk_consulting_call_sessions_booking
-      foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+      foreign key (booking_id) references consulting_bookings(id) on delete cascade not valid;
     alter table consulting_call_sessions
       drop constraint if exists fk_consulting_call_sessions_user,
       add constraint fk_consulting_call_sessions_user
@@ -502,6 +649,8 @@ POST_SCHEMA_MIGRATIONS = {
     );
     create index if not exists idx_auradin_search_sessions_expires_at
       on auradin_search_sessions (expires_at);
+    create index if not exists idx_auradin_search_sessions_owner_subject
+      on auradin_search_sessions ((state ->> 'ownerSubject'));
   """,
   "schema.sql:account-deletion-v1": """
     create table if not exists account_deletion_tombstones (

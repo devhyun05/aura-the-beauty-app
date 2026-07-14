@@ -23,22 +23,36 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {
   getLikedProducts,
+  likeExternalProduct,
   likeProduct,
   unlikeProduct,
-  type ProductLikePayload,
 } from '../../../shared/services/productService';
 import {getFaceAnalysisReports} from '../../../shared/services/faceAnalysisService';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {AppScreen} from '../../../shared/ui';
-import {getProductRecommendations} from '../services/productRecommendationService';
+import type {Product} from '../../../shared/types/profile';
+import {AppScreen, useTransientToast} from '../../../shared/ui';
+import {AuradinFloatingOrb} from '../components/AuradinFloatingOrb';
+import {ProductRecommendationHubContent} from '../components/ProductRecommendationHubContent';
+import {RecommendationSectionState} from '../components/RecommendationSectionState';
+import {
+  getProductRecommendations,
+  isTrustedCatalogProductId,
+} from '../services/productRecommendationService';
+import {
+  productEventIdentity,
+  queueProductEvent,
+} from '../services/productEventService';
 import type {
+  ProductDetailRecommendationContext,
   ProductRecommendationCategory,
   ProductRecommendationData,
   RecommendedProduct,
   ProductRecommendationLook,
   ProductRecommendationLookOption,
+  ProductRecommendationShelf,
   ProductRecommendationTab,
+  CatalogProduct,
 } from '../types';
 
 const formatPrice = (price: number) =>
@@ -137,54 +151,77 @@ function getSortablePrice(product: RecommendedProduct): number {
   return product.price > 0 ? product.price : Number.MAX_SAFE_INTEGER;
 }
 
-function toProductLikePayload(product: RecommendedProduct): ProductLikePayload {
-  return {
-    brandName: product.brandName,
-    category: product.category,
-    id: product.id,
-    imageUrl: product.imageUrl,
-    matchRate: product.matchRate,
-    palette: product.palette,
-    price: product.price,
-    productInfo: product.productInfo as Record<string, unknown> | undefined,
-    productName: product.productName,
-    purchaseUrl: product.purchaseUrl,
-    reason: product.reason,
-    shadeName: product.shadeName,
-    tags: product.tags,
-  };
-}
-
 type ProductRecommendationScreenProps = {
+  arStyleId?: string | null;
   onCapturePhoto?: () => void;
+  onCreateArLook?: () => void;
+  onOpenAuradin?: () => void;
+  onOpenLikedProducts?: () => void;
+  onOpenPersonalizationSettings?: () => void;
+  onOpenProduct?: (
+    productId: string,
+    shadeId?: string | null,
+    recommendationContext?: ProductDetailRecommendationContext,
+  ) => void;
+  onOpenShelf?: (
+    shelf: ProductRecommendationShelf,
+    title: string,
+    arStyleId?: string | null,
+  ) => void;
   onPickGalleryPhoto?: () => void;
+  onSearch?: (query: string) => void;
   sourceReportId?: string | null;
+  initialSection?: ProductRecommendationShelf;
 };
 
 export function ProductRecommendationScreen({
+  arStyleId,
   onCapturePhoto,
+  onCreateArLook,
+  onOpenAuradin,
+  onOpenLikedProducts,
+  onOpenPersonalizationSettings,
+  onOpenProduct,
+  onOpenShelf,
   onPickGalleryPhoto,
+  onSearch,
   sourceReportId,
+  initialSection,
 }: ProductRecommendationScreenProps = {}) {
   const {height, width} = useWindowDimensions();
+  const {showToast, toast} = useTransientToast(2600);
   const productScrollRef = useRef<ScrollView | null>(null);
+  const legacySectionYRef = useRef(0);
+  const pendingLegacyScrollRef = useRef(false);
+  const didScrollToInitialSectionRef = useRef(false);
   const [data, setData] = useState<ProductRecommendationData | null>(null);
+  const [legacyStatus, setLegacyStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
+  const [likedProducts, setLikedProducts] = useState<Product[]>([]);
   const [reports, setReports] = useState<FaceAnalysisReport[]>([]);
-  const [isReportListLoaded, setIsReportListLoaded] = useState(false);
+  const [isReportListLoaded, setIsReportListLoaded] = useState(true);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     sourceReportId ?? null,
   );
   const [sortOption, setSortOption] = useState<ProductSortOption>('matchDesc');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isLookPickerOpen, setIsLookPickerOpen] = useState(false);
+  const [isLegacyExpanded, setIsLegacyExpanded] = useState(false);
   const [isRecommendationRefreshing, setIsRecommendationRefreshing] = useState(false);
   const [selectedLookIndex, setSelectedLookIndex] = useState(0);
+  const [orbScrollState, setOrbScrollState] = useState<'idle' | 'compact' | 'hidden'>('idle');
+  const [hubRefreshKey, setHubRefreshKey] = useState(0);
+  const hasFocusedHubRef = useRef(false);
   const hasLoadedRecommendationsRef = useRef(false);
+  useEffect(() => {
+    didScrollToInitialSectionRef.current = false;
+  }, [arStyleId, initialSection]);
   const isVeryCompactHeight = height < 700;
   const isCompactHeight = height < 780;
-  const contentWidth = width - spacing.screenX * 2;
+  const contentPaddingLeft = spacing.screenX;
+  const contentPaddingRight = spacing.screenX;
+  const contentWidth = width - contentPaddingLeft - contentPaddingRight;
   const cardGap = width < 380 ? spacing.sm : spacing.md;
   const cardWidth = Math.floor((contentWidth - cardGap) / 2);
   const lookImageSize = isVeryCompactHeight ? 54 : isCompactHeight ? 62 : 70;
@@ -257,6 +294,10 @@ export function ProductRecommendationScreen({
       };
     }
 
+    if (!hasLoadedRecommendationsRef.current) {
+      setLegacyStatus('loading');
+    }
+
     if (shouldShowRefresh) {
       setIsRecommendationRefreshing(true);
     }
@@ -271,8 +312,10 @@ export function ProductRecommendationScreen({
 
       if (recommendationsResult.status === 'fulfilled') {
         setData(recommendationsResult.value);
+        setLegacyStatus('ready');
         hasLoadedRecommendationsRef.current = true;
       } else {
+        setLegacyStatus('error');
         console.info('[aura:products] recommendations:load-failed', {
           message: recommendationsResult.reason instanceof Error
             ? recommendationsResult.reason.message
@@ -281,6 +324,7 @@ export function ProductRecommendationScreen({
       }
 
       if (likedProductsResult.status === 'fulfilled') {
+        setLikedProducts(likedProductsResult.value);
         setLikedProductIds(new Set(likedProductsResult.value.map((product) => product.id)));
       } else {
         console.info('[aura:products] likes:load-failed', {
@@ -300,13 +344,37 @@ export function ProductRecommendationScreen({
     };
   }, [isReportListLoaded, recommendationReportId, selectedLookIndex, sourceReportId]);
 
-  useFocusEffect(loadRecommendations);
+  useFocusEffect(useCallback(() => {
+    let isMounted = true;
+    if (hasFocusedHubRef.current) setHubRefreshKey(current => current + 1);
+    else hasFocusedHubRef.current = true;
+    getLikedProducts()
+      .then(nextProducts => {
+        if (isMounted) {
+          setLikedProducts(nextProducts);
+          setLikedProductIds(new Set(nextProducts.map(product => product.id)));
+        }
+      })
+      .catch(error => {
+        console.info('[aura:products] likes:load-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    const cleanupRecommendations = isLegacyExpanded ? loadRecommendations() : undefined;
+    return () => {
+      isMounted = false;
+      cleanupRecommendations?.();
+    };
+  }, [isLegacyExpanded, loadRecommendations]));
 
   useEffect(() => {
     setSelectedReportId(sourceReportId ?? null);
   }, [sourceReportId]);
 
   useEffect(() => {
+    if (!isLegacyExpanded) {
+      return undefined;
+    }
     let isMounted = true;
 
     getFaceAnalysisReports({limit: 20})
@@ -334,7 +402,7 @@ export function ProductRecommendationScreen({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isLegacyExpanded]);
 
   const products = useMemo(() => {
     if (!data) {
@@ -388,6 +456,9 @@ export function ProductRecommendationScreen({
   }, []);
 
   const handleToggleLike = useCallback(async (product: RecommendedProduct) => {
+    if (!isTrustedCatalogProductId(product.id) && !product.externalSource) {
+      return;
+    }
     const wasLiked = likedProductIds.has(product.id);
     const nextLikedIds = new Set(likedProductIds);
 
@@ -401,9 +472,13 @@ export function ProductRecommendationScreen({
 
     try {
       if (wasLiked) {
-        await unlikeProduct(product.id);
+        await unlikeProduct(product.id, product.externalSource);
       } else {
-        await likeProduct(toProductLikePayload(product));
+        if (product.externalSource) await likeExternalProduct(product.id, product.externalSource);
+        else await likeProduct(product.id);
+        showToast('좋아요한 제품에 저장했어요', onOpenLikedProducts
+          ? {label: '보기', onPress: onOpenLikedProducts}
+          : undefined);
       }
     } catch (error) {
       console.info('[aura:products] like:toggle-failed', {
@@ -412,7 +487,71 @@ export function ProductRecommendationScreen({
       });
       setLikedProductIds(likedProductIds);
     }
-  }, [likedProductIds]);
+  }, [likedProductIds, onOpenLikedProducts, showToast]);
+
+  const handleOpenLegacyProduct = useCallback((product: RecommendedProduct, position: number) => {
+    queueProductEvent({
+      eventType: 'product_open',
+      section: 'legacy',
+      ...productEventIdentity({
+        productId: product.id,
+        externalSource: product.externalSource,
+      }),
+      position,
+      context: {screen: 'product_recommendation'},
+    });
+    if (onOpenProduct && isTrustedCatalogProductId(product.id)) {
+      onOpenProduct(product.id);
+      return;
+    }
+    void openProductPurchaseUrl(product).then(opened => {
+      if (!opened) showToast('판매처 페이지를 열 수 없어요. 잠시 후 다시 시도해 주세요.');
+    });
+  }, [onOpenProduct, showToast]);
+
+  const handleToggleCatalogLike = useCallback(async (product: CatalogProduct) => {
+    const wasLiked = likedProductIds.has(product.productId);
+    const nextLikedIds = new Set(likedProductIds);
+    if (wasLiked) nextLikedIds.delete(product.productId);
+    else nextLikedIds.add(product.productId);
+    setLikedProductIds(nextLikedIds);
+    try {
+      if (wasLiked) await unlikeProduct(product.productId, product.externalSource);
+      else {
+        if (product.externalSource) await likeExternalProduct(product.productId, product.externalSource);
+        else await likeProduct(product.productId, product.shadeId);
+        showToast('좋아요한 제품에 저장했어요', onOpenLikedProducts
+          ? {label: '보기', onPress: onOpenLikedProducts}
+          : undefined);
+      }
+      setHubRefreshKey(current => current + 1);
+    } catch {
+      setLikedProductIds(likedProductIds);
+    }
+  }, [likedProductIds, onOpenLikedProducts, showToast]);
+
+  const handleOpenCatalogProduct = useCallback(async (product: CatalogProduct) => {
+    if (product.externalSource) {
+      if (!product.purchaseUrl) {
+        showToast('판매처 정보를 확인할 수 없어요.');
+        return;
+      }
+      try {
+        const supported = await Linking.canOpenURL(product.purchaseUrl);
+        if (!supported) throw new Error('Unsupported seller URL');
+        await Linking.openURL(product.purchaseUrl);
+      } catch {
+        showToast('판매처 페이지를 열 수 없어요. 잠시 후 다시 시도해 주세요.');
+      }
+      return;
+    }
+    onOpenProduct?.(product.productId, product.shadeId, {
+      disclosureLabel: product.disclosureLabel ?? product.offer?.disclosureLabel,
+      reasonLabels: product.reasonLabels,
+      sponsored: product.sponsored,
+      sponsorshipType: product.sponsorshipType,
+    });
+  }, [onOpenProduct, showToast]);
 
   const handleOpenLookPicker = useCallback(() => {
     setIsLookPickerOpen(true);
@@ -439,21 +578,94 @@ export function ProductRecommendationScreen({
     setIsLookPickerOpen(false);
     onCapturePhoto?.();
   }, [onCapturePhoto]);
-
-  if (!data) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>추천 제품을 불러오는 중이에요.</Text>
-      </View>
-    );
-  }
+  const handleExpandLegacyRecommendations = useCallback(() => {
+    pendingLegacyScrollRef.current = true;
+    setIsLegacyExpanded(true);
+  }, []);
+  const handleLegacySectionLayout = useCallback((y: number) => {
+    legacySectionYRef.current = y;
+    if (!pendingLegacyScrollRef.current) return;
+    pendingLegacyScrollRef.current = false;
+    requestAnimationFrame(() => productScrollRef.current?.scrollTo({
+      animated: true,
+      y: Math.max(0, y - spacing.md),
+    }));
+  }, []);
+  const hasLegacyContext = Boolean(
+    data && (data.products.length > 0 || data.makeupLook.imageUrl),
+  );
 
   return (
+    <View style={styles.screenRoot}>
     <AppScreen
-      bottomPadding={spacing.sm}
-      contentGap={sectionGap}
-      scroll={false}
+      bottomPadding={spacing.xxl * 2}
+      contentGap={spacing.xxl}
+      horizontalPaddingLeft={contentPaddingLeft}
+      horizontalPaddingRight={contentPaddingRight}
+      scroll
+      scrollViewRef={productScrollRef}
+      onScrollActivityChange={(active, fast) => {
+        setOrbScrollState(!active ? 'idle' : fast ? 'hidden' : 'compact');
+      }}
       topPadding="none">
+      <ProductRecommendationHubContent
+        arStyleId={arStyleId}
+        likedProducts={likedProducts}
+        likedProductIds={likedProductIds}
+        onCreateArLook={onCreateArLook ?? onCapturePhoto ?? (() => undefined)}
+        onOpenPersonalizationSettings={onOpenPersonalizationSettings ?? (() => undefined)}
+        onOpenProduct={handleOpenCatalogProduct}
+        onOpenShelf={onOpenShelf ?? (() => undefined)}
+        onSearch={onSearch ?? (() => undefined)}
+        onToggleLike={handleToggleCatalogLike}
+        refreshKey={hubRefreshKey}
+        onSectionLayout={(section, y) => {
+          if (section === initialSection && !didScrollToInitialSectionRef.current) {
+            didScrollToInitialSectionRef.current = true;
+            requestAnimationFrame(() => productScrollRef.current?.scrollTo({animated: true, y: Math.max(0, y - spacing.md)}));
+          }
+        }}
+      />
+
+      {!isLegacyExpanded ? (
+        <Pressable
+          accessibilityHint="보고서, 룩, 카테고리와 정렬 기준을 선택할 수 있는 전체 추천을 엽니다."
+          accessibilityLabel="얼굴 분석 기준 전체 추천 열기"
+          accessibilityRole="button"
+          onPress={handleExpandLegacyRecommendations}
+          style={styles.legacyEntryCard}>
+          <View style={styles.legacyEntryCopy}>
+            <Text style={styles.legacyEntryTitle}>얼굴 분석 기준 전체 추천</Text>
+            <Text style={styles.legacyEntryDescription}>
+              내 분석 리포트와 메이크업 룩을 기준으로 카테고리·정렬을 바꿔 더 많은 제품을 찾아보세요.
+            </Text>
+          </View>
+          <View style={styles.legacyEntryAction}>
+            <Text style={styles.legacyEntryActionText}>전체 추천 보기</Text>
+          </View>
+        </Pressable>
+      ) : null}
+
+      {isLegacyExpanded ? <>
+      <View
+        onLayout={event => handleLegacySectionLayout(event.nativeEvent.layout.y)}
+        style={styles.legacySectionHeader}>
+        <View style={styles.legacySectionTitleRow}>
+          <Text style={styles.legacySectionTitle}>분석 기준 추천 전체보기</Text>
+          <Pressable
+            accessibilityLabel="분석 기준 추천 접기"
+            accessibilityRole="button"
+            onPress={() => setIsLegacyExpanded(false)}
+            style={styles.legacyCollapseButton}>
+            <Text style={styles.legacyCollapseText}>접기</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.legacySectionDescription}>보고서·룩·카테고리·정렬 기준을 바꿔 전체 상품을 탐색할 수 있어요.</Text>
+      </View>
+      {legacyStatus === 'loading' && !data ? <RecommendationSectionState kind="loading" message="기존 분석 기준 추천을 불러오는 중이에요." /> : null}
+      {legacyStatus === 'error' ? <RecommendationSectionState kind="error" message="기존 분석 기준 추천을 불러오지 못했어요. AR·시즌 추천은 계속 이용할 수 있어요." actionLabel="다시 시도" onAction={() => {loadRecommendations();}} /> : null}
+      {legacyStatus === 'ready' && !hasLegacyContext ? <RecommendationSectionState kind="empty" message="현재 표시할 수 있는 기존 분석 기준 상품이 없어요. 검증된 catalog 상품이 준비되면 표시돼요." /> : null}
+      {data && hasLegacyContext ? <>
       <ReportSelector
         onSelectReport={handleSelectReport}
         reports={reports}
@@ -535,14 +747,8 @@ export function ProductRecommendationScreen({
         </View>
 
         {products.length > 0 ? (
-          <ScrollView
-            bounces={false}
-            horizontal={getIsProductListHorizontal(productListScrollAxis)}
-            ref={productScrollRef}
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
-            style={styles.productListScroller}
-            contentContainerStyle={[
+          <View
+            style={[
               styles.productGrid,
               {
                 columnGap: cardGap,
@@ -550,31 +756,29 @@ export function ProductRecommendationScreen({
                 paddingBottom: spacing.sm,
               },
             ]}>
-            {products.map((product) => (
+            {products.map((product, position) => (
               <ProductCard
                 height={cardHeight}
                 imageHeight={productImageHeight}
                 key={product.id}
                 isLiked={likedProductIds.has(product.id)}
                 onToggleLike={handleToggleLike}
+                onOpenProduct={() => handleOpenLegacyProduct(product, position)}
                 product={product}
                 width={cardWidth}
               />
             ))}
-          </ScrollView>
+          </View>
         ) : (
           <View style={styles.emptyProductState}>
             <Text style={styles.emptyProductText}>
-              네이버 스토어 상품을 불러오지 못했어요. 백엔드 배포와 쇼핑 API 설정을 확인해 주세요.
+              구매 가능한 기존 분석 기준 상품이 아직 없어요.
             </Text>
             <Pressable
               accessibilityLabel="추천 제품 다시 불러오기"
               accessibilityRole="button"
               onPress={() => {
-                getProductRecommendations({
-                  lookIndex: selectedLookIndex,
-                  reportId: recommendationReportId,
-                }).then(setData);
+                loadRecommendations();
               }}
               style={styles.retryButton}>
               <Text style={styles.retryButtonText}>다시 불러오기</Text>
@@ -582,7 +786,16 @@ export function ProductRecommendationScreen({
           </View>
         )}
       </View>
+      </> : null}
+      </> : null}
     </AppScreen>
+    <AuradinFloatingOrb
+      compact={orbScrollState !== 'idle'}
+      hidden={orbScrollState === 'hidden'}
+      onOpen={onOpenAuradin ?? (() => undefined)}
+    />
+    {toast}
+    </View>
   );
 }
 
@@ -669,7 +882,13 @@ function LookSummaryCard({
   return (
     <View style={styles.makeupLookCard}>
       <View style={[styles.makeupLookImageFrame, {height: imageSize, width: imageSize}]}>
-        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
+        {makeupLook.imageUrl ? (
+          <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
+        ) : (
+          <View style={[styles.makeupLookImage, styles.missingImagePlaceholder]}>
+            <ImagePlus color={colors.textTertiary} size={iconSize.sm} strokeWidth={1.8} />
+          </View>
+        )}
         <View style={styles.makeupLookCheck}>
           <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
         </View>
@@ -763,11 +982,17 @@ function LookPickerModal({
                   key={`${option.index}-${option.title}`}
                   onPress={() => onSelectLookOption(option)}
                   style={isSelected ? styles.lookOptionCardActive : styles.lookOptionCard}>
-                  <Image
-                    resizeMode="cover"
-                    source={option.imageSource}
-                    style={styles.lookOptionImage}
-                  />
+                  {option.imageUrl ? (
+                    <Image
+                      resizeMode="cover"
+                      source={option.imageSource}
+                      style={styles.lookOptionImage}
+                    />
+                  ) : (
+                    <View style={[styles.lookOptionImage, styles.missingImagePlaceholder]}>
+                      <ImagePlus color={colors.textTertiary} size={iconSize.sm} strokeWidth={1.8} />
+                    </View>
+                  )}
                   <Text numberOfLines={1} style={styles.lookOptionTitle}>
                     {option.title}
                   </Text>
@@ -845,6 +1070,7 @@ function ProductCard({
   imageHeight,
   isLiked,
   onToggleLike,
+  onOpenProduct,
   product,
   width,
 }: {
@@ -852,10 +1078,12 @@ function ProductCard({
   imageHeight: number;
   isLiked: boolean;
   onToggleLike: (product: RecommendedProduct) => void;
+  onOpenProduct?: () => void;
   product: RecommendedProduct;
   width: number;
 }) {
   const productDisplayName = getProductDisplayName(product);
+  const canLike = isTrustedCatalogProductId(product.id) || Boolean(product.externalSource);
   const handlePressLike = (event: GestureResponderEvent) => {
     event.stopPropagation();
     onToggleLike(product);
@@ -866,16 +1094,14 @@ function ProductCard({
       accessibilityHint={product.purchaseUrl ? '상품 구매 페이지를 엽니다.' : undefined}
       accessibilityLabel={`${product.brandName} ${productDisplayName}`}
       accessibilityRole="button"
-      onPress={() => {
-        void openProductPurchaseUrl(product);
-      }}
+      onPress={() => {if (onOpenProduct) onOpenProduct(); else void openProductPurchaseUrl(product);}}
       style={({pressed}) => [styles.productCard, {height, width}, pressed && styles.pressed]}>
       <View style={[styles.productImageFrame, {height: imageHeight}]}>
         <Image resizeMode="contain" source={product.imageSource} style={styles.productImage} />
         <View style={styles.matchBadge}>
-          <Text style={styles.matchText}>{product.matchRate}% 매치</Text>
+          <Text numberOfLines={2} style={styles.matchText}>{product.reason}</Text>
         </View>
-        <Pressable
+        {canLike ? <Pressable
           accessibilityLabel={`${product.productName} ${isLiked ? '찜 해제' : '찜하기'}`}
           accessibilityRole="button"
           accessibilityState={{selected: isLiked}}
@@ -887,7 +1113,7 @@ function ProductCard({
             size={iconSize.xs}
             strokeWidth={2}
           />
-        </Pressable>
+        </Pressable> : null}
       </View>
 
       <YStack style={styles.productCopy}>
@@ -922,6 +1148,81 @@ const sharedCardShadow = {
 } as const;
 
 const styles = StyleSheet.create({
+  screenRoot: {
+    flex: 1,
+  },
+  legacyEntryCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md,
+    ...sharedCardShadow,
+  },
+  legacyEntryCopy: {
+    gap: spacing.xs,
+  },
+  legacyEntryTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
+  },
+  legacyEntryDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  legacyEntryAction: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  legacyEntryActionText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  legacySectionHeader: {
+    gap: spacing.xs,
+  },
+  legacySectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  legacySectionTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    lineHeight: typography.lineHeight.lg,
+  },
+  legacyCollapseButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
+  },
+  legacyCollapseText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  legacySectionDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
   brandName: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
@@ -934,12 +1235,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 30,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
     right: spacing.xs,
     top: spacing.xs,
-    width: 30,
+    width: 44,
   },
   heartButtonLiked: {
     alignItems: 'center',
@@ -947,12 +1248,12 @@ const styles = StyleSheet.create({
     borderColor: colors.textPrimary,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 30,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
     right: spacing.xs,
     top: spacing.xs,
-    width: 30,
+    width: 44,
   },
   emptyProductState: {
     alignItems: 'center',
@@ -1020,8 +1321,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
     flex: 1,
-    height: 38,
     justifyContent: 'center',
+    minHeight: 44,
   },
   lookPickerActionText: {
     color: colors.white,
@@ -1069,8 +1370,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    height: 30,
     justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
   },
   changePhotoButtonText: {
@@ -1117,6 +1418,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     width: 74,
+  },
+  missingImagePlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    justifyContent: 'center',
   },
   makeupLookTags: {
     flexDirection: 'row',
@@ -1249,7 +1555,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     justifyContent: 'center',
     marginTop: spacing.md,
-    minHeight: 38,
+    minHeight: 44,
     paddingHorizontal: spacing.lg,
   },
   retryButtonText: {
@@ -1398,9 +1704,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    height: 36,
     justifyContent: 'center',
     maxWidth: 128,
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
   },
   sortMenu: {
@@ -1412,18 +1718,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'absolute',
     right: 0,
-    top: 42,
+    top: 50,
     zIndex: 3,
     ...sharedCardShadow,
   },
   sortMenuItem: {
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
   sortMenuItemActive: {
     backgroundColor: colors.surfaceMuted,
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
   sortMenuItemText: {
     color: colors.textSecondary,
@@ -1458,6 +1766,8 @@ const styles = StyleSheet.create({
     flexGrow: productCategoryTabWidthMode === 'labelContent' ? 0 : 1,
     flexShrink: 0,
     gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 44,
     paddingHorizontal: spacing.xs,
   },
   tabIndicator: {
