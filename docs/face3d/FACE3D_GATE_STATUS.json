@@ -1,6 +1,6 @@
 {
   "schemaVersion": "aura.face3d-gate-status.v2",
-  "recordedAtUtc": "2026-07-14T19:49:52Z",
+  "recordedAtUtc": "2026-07-14T20:10:05Z",
   "source": "arkit_face_mesh",
   "profileSchemaVersion": "aura.face3d-profile.v1",
   "topologyFingerprint": {
@@ -75,10 +75,12 @@
   "currentValidation": {
     "face3dNodeContractSuite": "passed",
     "mobileFace3dAndMeasurementTests": "passed",
+    "mobileCleanInstall": "passed_after_origin_dev_lockfile_sync",
+    "mobileCiContractSuite": "passed",
     "mobileTypecheck": "passed",
     "backendFullPytest": {
-      "passed": 647,
-      "skipped": 2,
+      "passed": 563,
+      "skipped": 1,
       "warnings": 78
     },
     "gitDiffCheck": "passed",
@@ -87,8 +89,8 @@
       "total": 59,
       "passed": 59,
       "failed": 0,
-      "resultPath": "/tmp/face3d-g2-final5-editmode-results.xml",
-      "note": "The final run used the Aura.Face3D.Tests namespace after clearing only the ignored Unity Bee compilation cache; all 59 tests executed."
+      "resultPath": "/tmp/face3d-g2-devbase-editmode-results.xml",
+      "note": "All 59 Aura.Face3D.Tests ran against the latest origin/dev AR stencil integration base."
     }
   },
   "historicalDeviceEvidence": {
