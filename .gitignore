@@ -23,6 +23,7 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 .codex-logs/
+.worktrees/
 
 # Python local state
 __pycache__/
