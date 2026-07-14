@@ -93,6 +93,64 @@ export function mapBackendScenarioItems(items: readonly BackendScenarioItem[]): 
     }));
 }
 
+const GENERIC_SCENARIO_WORDS = ['메이크업', '스타일', '분위기', '느낌', '감성', '무드', '사진', '오늘', '하루', '룩'] as const;
+
+function scenarioCopyKey(text: string): string {
+  let normalized = text.toLocaleLowerCase();
+  GENERIC_SCENARIO_WORDS.forEach(word => {
+    normalized = normalized.replaceAll(word, '');
+  });
+  return normalized.replace(/[^0-9a-z가-힣]/g, '');
+}
+
+function bigrams(value: string): string[] {
+  return Array.from({length: Math.max(0, value.length - 1)}, (_, index) => value.slice(index, index + 2));
+}
+
+function scenarioCopyIsSimilar(left: string, right: string): boolean {
+  const rawLeft = left.toLocaleLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  const rawRight = right.toLocaleLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  if (rawLeft && rawLeft === rawRight) return true;
+  const leftKey = scenarioCopyKey(left);
+  const rightKey = scenarioCopyKey(right);
+  if (!leftKey || !rightKey) return false;
+  if (leftKey === rightKey) return true;
+  const [shorter, longer] = [leftKey, rightKey].sort((a, b) => a.length - b.length);
+  if (shorter.length >= 4 && longer.includes(shorter)) return true;
+  const leftBigrams = bigrams(leftKey);
+  const rightBigrams = bigrams(rightKey);
+  if (leftBigrams.length === 0 || rightBigrams.length === 0) return false;
+  const remaining = [...rightBigrams];
+  const overlap = leftBigrams.reduce((count, pair) => {
+    const index = remaining.indexOf(pair);
+    if (index < 0) return count;
+    remaining.splice(index, 1);
+    return count + 1;
+  }, 0);
+  return (2 * overlap) / (leftBigrams.length + rightBigrams.length) >= 0.78;
+}
+
+export function composeMakeupScenarioRefresh(
+  curated: readonly MakeupScenarioPrompt[],
+  generated: readonly MakeupScenarioPrompt[],
+): MakeupScenarioPrompt[] {
+  return [...curated.slice(0, 6), ...generated];
+}
+
+export function filterFreshMakeupScenarios(
+  candidates: readonly MakeupScenarioPrompt[],
+  excludeTexts: readonly string[],
+): MakeupScenarioPrompt[] {
+  const accepted: MakeupScenarioPrompt[] = [];
+  const seen = [...excludeTexts];
+  candidates.forEach(candidate => {
+    if (seen.some(text => scenarioCopyIsSimilar(candidate.displayText, text))) return;
+    accepted.push(candidate);
+    seen.push(candidate.displayText);
+  });
+  return accepted;
+}
+
 export async function fetchGeneratedMakeupScenarios({
   count = 12,
   excludeTexts = [],

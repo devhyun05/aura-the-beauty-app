@@ -7,6 +7,8 @@ import {
   answerGeneratedMakeupRecommendationQuestion,
   fetchGeneratedMakeupScenarios,
   fetchGeneratedMakeupRecommendationReports,
+  composeMakeupScenarioRefresh,
+  filterFreshMakeupScenarios,
   getFallbackMakeupScenarios,
   getMakeupScenarioSet,
   refineGeneratedMakeupRecommendation,
@@ -48,7 +50,9 @@ export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
 >(function MakeupRecommendationScreen({onApplyAR}, ref) {
-  const initialScenarios = useRef(getMakeupScenarioSet({seed: 0}).slice(0, 12));
+  const initialScenarioSeed = useRef(Math.floor(Math.random() * 10_000));
+  const initialScenarios = useRef(getMakeupScenarioSet({seed: initialScenarioSeed.current}).slice(0, 12));
+  const curatedScenarioTexts = useRef(getMakeupScenarioSet({seed: 0}).map(item => item.displayText));
   const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
   const [prompt, setPrompt] = useState('');
   const [scenarios, setScenarios] = useState<MakeupScenarioPrompt[]>(initialScenarios.current);
@@ -67,7 +71,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const activeScenarioTags = useRef<string[]>([]);
   const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
   const scenarioRequestInFlight = useRef(false);
-  const localScenarioSeed = useRef(12);
+  const localScenarioSeed = useRef(initialScenarioSeed.current + 12);
 
   const loadScenarios = useCallback(async (mode: 'replace' | 'append') => {
     if (scenarioRequestInFlight.current) return;
@@ -75,21 +79,27 @@ export const MakeupRecommendationScreen = forwardRef<
     setIsLoadingScenarios(true);
     setScenarioError('');
     try {
+      const generationExclusions = [...new Set([
+        ...curatedScenarioTexts.current,
+        ...seenScenarioTexts.current,
+      ])];
       const generated = await fetchGeneratedMakeupScenarios({
         count: 12,
-        excludeTexts: [...seenScenarioTexts.current].slice(-100),
+        excludeTexts: generationExclusions.slice(-100),
       });
-      const fresh = generated.filter(item => !seenScenarioTexts.current.has(item.displayText));
+      const fresh = filterFreshMakeupScenarios(generated, generationExclusions);
       if (fresh.length === 0) throw new Error('새 문장을 준비하지 못했어요.');
       fresh.forEach(item => seenScenarioTexts.current.add(item.displayText));
-      setScenarios(previous => mode === 'replace' ? fresh : [...previous, ...fresh]);
+      if (mode === 'replace') {
+        const curated = getMakeupScenarioSet({seed: localScenarioSeed.current}).slice(0, 6);
+        localScenarioSeed.current += 17;
+        curated.forEach(item => seenScenarioTexts.current.add(item.displayText));
+        setScenarios(composeMakeupScenarioRefresh(curated, fresh));
+      } else {
+        setScenarios(previous => [...previous, ...fresh]);
+      }
     } catch (error) {
-      const fallback = getFallbackMakeupScenarios({
-        count: 12,
-        excludeTexts: [...seenScenarioTexts.current],
-        seed: localScenarioSeed.current,
-      });
-      localScenarioSeed.current += 12;
+      const fallback = getFallbackMakeupScenarios({count: 12, excludeTexts: [...seenScenarioTexts.current], seed: localScenarioSeed.current});
       if (fallback.length > 0) {
         fallback.forEach(item => seenScenarioTexts.current.add(item.displayText));
         setScenarios(previous => mode === 'replace' ? fallback : [...previous, ...fallback]);
@@ -103,8 +113,8 @@ export const MakeupRecommendationScreen = forwardRef<
   }, []);
 
   useEffect(() => {
-    void loadScenarios('replace');
-  }, []); // Initial fixture cards stay visible if the network request fails.
+    void loadScenarios('append');
+  }, [loadScenarios]);
 
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
     lastStartInput.current = input;

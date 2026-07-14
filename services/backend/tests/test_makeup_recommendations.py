@@ -403,6 +403,141 @@ async def test_scenarios_retry_until_they_are_new_and_unique(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
+async def test_scenarios_reject_near_duplicate_paraphrases(monkeypatch: pytest.MonkeyPatch) -> None:
+  responses = iter(
+    [
+      {
+        "items": [
+          {
+            "id": "near-duplicate",
+            "text": "공항 출국 사진 레전드",
+            "seedPrompt": "공항 사진에서 또렷하게 보이는 메이크업",
+            "tags": ["공항", "사진"],
+          },
+          {
+            "id": "fresh-1",
+            "text": "새벽 서점의 온도",
+            "seedPrompt": "차분한 브라운과 낮은 채도의 지적인 메이크업",
+            "tags": ["차분", "브라운"],
+          },
+        ],
+      },
+      {
+        "items": [
+          {
+            "id": "fresh-2",
+            "text": "첫 회의의 여유",
+            "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+            "tags": ["업무", "단정"],
+          },
+        ],
+      },
+    ],
+  )
+
+  async def fake_generate_json(*_args, **_kwargs):
+    return next(responses)
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 2, ["공항 출국 레전드"])
+
+  assert [item["text"] for item in result["items"]] == ["새벽 서점의 온도", "첫 회의의 여유"]
+
+
+@pytest.mark.asyncio
+async def test_scenario_prompt_uses_curated_copy_direction(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured: dict[str, str] = {}
+
+  async def fake_generate_json(_settings, _model_id, system, prompt):
+    captured["system"] = system
+    captured["prompt"] = prompt
+    return {
+      "items": [
+        {
+          "id": "fresh",
+          "text": "첫 회의의 여유",
+          "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+          "tags": ["업무", "단정"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  await generate_scenarios(Settings(), 1, [])
+
+  assert "공항 출국 레전드" in captured["prompt"]
+  assert "점 하나 찍고 컴백" in captured["prompt"]
+  assert "증명사진 잘 나오기" in captured["prompt"]
+  assert "나다운 프로필 사진" in captured["prompt"]
+  assert "성수동 느좋 감성" in captured["prompt"]
+  assert "generic" in captured["system"].casefold()
+
+
+@pytest.mark.asyncio
+async def test_generated_scenario_ids_do_not_depend_on_repeated_model_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "items": [
+        {
+          "id": "scenario-1",
+          "text": "새벽 서점의 온도",
+          "seedPrompt": "차분한 브라운과 낮은 채도의 지적인 메이크업",
+          "tags": ["차분"],
+        },
+        {
+          "id": "scenario-1",
+          "text": "첫 회의의 여유",
+          "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+          "tags": ["업무"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 2, [])
+
+  ids = [item["id"] for item in result["items"]]
+  assert len(set(ids)) == 2
+  assert all(value.startswith("generated-") for value in ids)
+
+
+@pytest.mark.asyncio
+async def test_scenarios_reject_exact_duplicates_with_generic_only_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "items": [
+        {
+          "id": "generic-1",
+          "text": "오늘 하루",
+          "seedPrompt": "가볍고 편안한 데일리 메이크업",
+          "tags": ["데일리"],
+        },
+        {
+          "id": "generic-2",
+          "text": "오늘 하루",
+          "seedPrompt": "가볍고 편안한 데일리 메이크업",
+          "tags": ["데일리"],
+        },
+        {
+          "id": "fresh",
+          "text": "첫 회의의 여유",
+          "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+          "tags": ["업무"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 2, [])
+
+  assert [item["text"] for item in result["items"]] == ["오늘 하루", "첫 회의의 여유"]
+
+
+@pytest.mark.asyncio
 async def test_questions_reject_malformed_option_counts(monkeypatch: pytest.MonkeyPatch) -> None:
   async def fake_generate_json(*_args, **_kwargs):
     return {
