@@ -24,7 +24,11 @@ import type {
 import {RecommendationQuestionView} from './RecommendationQuestionView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
-import {shouldHandleMakeupRecommendationBack, type MakeupRecommendationScreenPhase} from './makeupRecommendationViewContracts';
+import {
+  makeupRecommendationDiscoveryCopy,
+  shouldHandleMakeupRecommendationBack,
+  type MakeupRecommendationScreenPhase,
+} from './makeupRecommendationViewContracts';
 export {shouldHandleMakeupRecommendationBack, type MakeupRecommendationScreenPhase} from './makeupRecommendationViewContracts';
 
 export type MakeupRecommendationScreenHandle = {
@@ -83,7 +87,7 @@ export const MakeupRecommendationScreen = forwardRef<
         fallback.forEach(item => seenScenarioTexts.current.add(item.displayText));
         setScenarios(previous => mode === 'replace' ? fallback : [...previous, ...fallback]);
       } else {
-        setScenarioError(error instanceof Error ? error.message : '새 문장을 불러오지 못했어요.');
+        setScenarioError(makeupRecommendationDiscoveryCopy.scenarioLoadError);
       }
     } finally {
       scenarioRequestInFlight.current = false;

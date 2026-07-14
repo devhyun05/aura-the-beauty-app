@@ -25,6 +25,11 @@ expectEqual(
   '새로 보기',
   'refresh copy',
 );
+expectEqual(
+  makeupRecommendationDiscoveryCopy.scenarioLoadError,
+  '새 카드를 더 만들지 못했어요. 잠시 후 다시 눌러주세요.',
+  'scenario load error copy',
+);
 expectEqual(makeupRecommendationDiscoveryCopy.profile, '내 분석 결과 반영', 'profile copy');
 expectEqual(
   getQuestionActionMode({currentQuestionIndex: 0, questionCount: 2}),
