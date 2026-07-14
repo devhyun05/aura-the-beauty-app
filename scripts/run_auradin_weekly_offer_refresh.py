@@ -393,8 +393,14 @@ def main(
 
   try:
     run_ts = f"{args.run_date[:4]}-{args.run_date[4:6]}-{args.run_date[6:8]}T03:00:00+09:00"
-    active_seed_path = REPO_ROOT / str(active["payload"]["seedPath"]) \
-      if not Path(str(active["payload"]["seedPath"])).is_absolute() else Path(str(active["payload"]["seedPath"]))
+    # manifest-lite 계약: seedPath는 data/auradin 기준 상대경로다 (절대경로는 테스트 픽스처용).
+    raw_seed_path = str(active["payload"]["seedPath"])
+    if Path(raw_seed_path).is_absolute():
+      active_seed_path = Path(raw_seed_path)
+    elif raw_seed_path.startswith("data/auradin/"):
+      active_seed_path = data_root / raw_seed_path.removeprefix("data/auradin/")
+    else:
+      active_seed_path = data_root / raw_seed_path
     seed_input = args.seed_path or active_seed_path
     seed_rows = _read_jsonl(seed_input)
 
