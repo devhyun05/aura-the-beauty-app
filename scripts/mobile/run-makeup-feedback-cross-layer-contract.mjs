@@ -25,6 +25,7 @@ const conferenceTestPath = join(
   'features/makeup-feedback/services/makeupFeedbackAgentConferenceService.test.ts',
 );
 const tscPath = join(repositoryRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
+const mobileTypeRoots = join(repositoryRoot, 'apps/mobile/node_modules/@types');
 const pythonCandidates = [
   join(repositoryRoot, 'services/backend/.venv/Scripts/python.exe'),
   join(repositoryRoot, 'services/backend/.venv/bin/python'),
@@ -66,6 +67,8 @@ run(process.execPath, [
   '--skipLibCheck',
   '--types',
   'node',
+  '--typeRoots',
+  mobileTypeRoots,
   '--rootDir',
   mobileSourceRoot,
   '--outDir',
