@@ -69,6 +69,12 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
         "status",
         "usage_count",
         "model_id",
+        "last_served_at",
+      },
+      "makeup_scenario_generation_limits": {
+        "user_id",
+        "window_started_at",
+        "request_count",
       },
     },
   )

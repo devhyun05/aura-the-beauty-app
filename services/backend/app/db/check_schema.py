@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
   "makeup_feedback_reports",
   "makeup_recommendation_reports",
   "makeup_scenario_library",
+  "makeup_scenario_generation_limits",
   "community_threads",
   "community_thread_media",
   "community_replies",
@@ -79,6 +80,12 @@ EXPECTED_COLUMNS = {
     "status",
     "usage_count",
     "model_id",
+    "last_served_at",
+  },
+  "makeup_scenario_generation_limits": {
+    "user_id",
+    "window_started_at",
+    "request_count",
   },
 }
 

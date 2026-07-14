@@ -404,6 +404,13 @@ def test_makeup_report_is_part_of_schema_contract() -> None:
     "status",
     "usage_count",
     "model_id",
+    "last_served_at",
+  }
+  assert "makeup_scenario_generation_limits" in EXPECTED_TABLES
+  assert EXPECTED_COLUMNS["makeup_scenario_generation_limits"] >= {
+    "user_id",
+    "window_started_at",
+    "request_count",
   }
 
 

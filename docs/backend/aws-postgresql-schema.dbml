@@ -265,15 +265,25 @@ Table makeup_scenario_library {
   prompt_version text [not null, default: 'makeup-scenario-v2']
   status text [not null, default: 'active', note: 'active | disabled']
   usage_count integer [not null, default: 0]
+  last_served_at timestamptz
   created_by_user_id uuid
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
     (status, usage_count, created_at)
+    (source, status, usage_count, last_served_at, created_at)
   }
 
   Note: 'Shared library of validated AI-generated makeup situation cards. Active cards can be reused across users.'
+}
+
+Table makeup_scenario_generation_limits {
+  user_id uuid [pk]
+  window_started_at timestamptz [not null, default: `now()`]
+  request_count integer [not null, default: 0, note: '0..4; 4 represents a throttled live window']
+
+  Note: 'One bounded rolling-window counter per user for scenario generation cost control.'
 }
 
 Table hair_analyses {
@@ -1135,6 +1145,7 @@ Ref: analysis_reports.preview_media_id > media_assets.id
 Ref: makeup_recommendation_reports.user_id > users.id
 Ref: makeup_recommendation_reports.parent_report_id > makeup_recommendation_reports.id
 Ref: makeup_scenario_library.created_by_user_id > users.id
+Ref: makeup_scenario_generation_limits.user_id - users.id
 
 Ref: hair_analyses.user_id > users.id
 Ref: hair_analyses.photo_capture_id > photo_captures.id

@@ -13,6 +13,7 @@ create table if not exists makeup_scenario_library (
   prompt_version text not null default 'makeup-scenario-v2',
   status text not null default 'active',
   usage_count integer not null default 0,
+  last_served_at timestamptz,
   created_by_user_id uuid references users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -23,8 +24,19 @@ create table if not exists makeup_scenario_library (
   constraint chk_makeup_scenario_library_seed_prompt_length check (char_length(seed_prompt) between 1 and 240)
 );
 
+alter table makeup_scenario_library add column if not exists last_served_at timestamptz;
+
 create index if not exists idx_makeup_scenario_library_active_usage
   on makeup_scenario_library (status, usage_count, created_at desc);
+create index if not exists idx_makeup_scenario_library_replacement
+  on makeup_scenario_library (source, status, usage_count, last_served_at, created_at);
+
+create table if not exists makeup_scenario_generation_limits (
+  user_id uuid primary key references users(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  request_count integer not null default 0,
+  constraint chk_makeup_scenario_generation_limit_count check (request_count between 0 and 4)
+);
 
 create table if not exists makeup_recommendation_reports (
   id uuid primary key default gen_random_uuid(),
