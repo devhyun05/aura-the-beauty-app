@@ -121,7 +121,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push backend image
+      - name: Build backend image
         id: build-image
         env:
           IMAGE_TAG: ${{ github.sha }}
@@ -136,11 +136,39 @@ jobs:
             -t "$latest_uri" \
             .
 
-          docker push "$image_uri"
-          docker push "$latest_uri"
-
           echo "image=$image_uri" >> "$GITHUB_OUTPUT"
+          echo "latest-image=$latest_uri" >> "$GITHUB_OUTPUT"
 
+      - name: Install verified Trivy scanner
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSLO "$base_url/$archive"
+          curl -fsSLo trivy-checksums.txt "$base_url/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  $archive$" trivy-checksums.txt | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/trivy" trivy
+          echo "$RUNNER_TEMP/trivy" >> "$GITHUB_PATH"
+
+      - name: Block deploy on critical or high vulnerabilities
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          --no-progress
+          "${{ steps.build-image.outputs.image }}"
+
+      - name: Push verified backend image
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+          LATEST_URI: ${{ steps.build-image.outputs.latest-image }}
+        run: |
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
       - name: Download current ECS task definition
         run: |
           aws ecs describe-task-definition \
@@ -215,6 +243,13 @@ jobs:
               )
           ' ai-worker-task-definition.raw.json > ai-worker-task-definition.json
 
+          mv ai-worker-task-definition.json ai-worker-task-definition.base.json
+          jq --arg worker_container "$AI_WORKER_CONTAINER_NAME" '
+            .containerDefinitions |= map(
+              if .name == $worker_container then .stopTimeout = 120 else . end
+            )
+          ' ai-worker-task-definition.base.json > ai-worker-task-definition.json
+
       - name: Render AI worker task definition
         if: ${{ env.AI_WORKER_SERVICE != '' }}
         id: render-ai-worker-task-definition
@@ -223,6 +258,57 @@ jobs:
           task-definition: ai-worker-task-definition.json
           container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy API ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15
+
+      - name: Wait for AI job queue to drain
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        run: |
+          queue_url="$(
+            jq -r --arg container "$AI_WORKER_CONTAINER_NAME" '
+              .containerDefinitions[]
+              | select(.name == $container)
+              | (.environment // [])[]
+              | select(.name == "SQS_AI_JOB_QUEUE_URL")
+              | .value
+            ' ai-worker-task-definition.json
+          )"
+
+          if [ -z "$queue_url" ] || [ "$queue_url" = "null" ]; then
+            echo "SQS_AI_JOB_QUEUE_URL was not found in the AI worker task definition." >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            attributes="$(
+              aws sqs get-queue-attributes \
+                --queue-url "$queue_url" \
+                --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+                --output json
+            )"
+            visible="$(jq -r '.Attributes.ApproximateNumberOfMessages // "0"' <<< "$attributes")"
+            in_flight="$(jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible // "0"' <<< "$attributes")"
+
+            if [ "$visible" = "0" ] && [ "$in_flight" = "0" ]; then
+              echo "AI job queue is drained."
+              break
+            fi
+
+            if [ "$attempt" = "60" ]; then
+              echo "AI job queue did not drain within 10 minutes: visible=$visible inFlight=$in_flight" >&2
+              exit 1
+            fi
+
+            echo "Waiting for AI job queue: visible=$visible inFlight=$in_flight"
+            sleep 10
+          done
 
       - name: Deploy AI worker ECS service
         if: ${{ env.AI_WORKER_SERVICE != '' }}
@@ -233,16 +319,6 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
           wait-max-delay-seconds: 15
-
-      - name: Deploy ECS service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-          wait-max-delay-seconds: 15
-
       - name: Download current hair worker task definition
         if: ${{ env.HAIR_WORKER_SERVICE != '' }}
         run: |

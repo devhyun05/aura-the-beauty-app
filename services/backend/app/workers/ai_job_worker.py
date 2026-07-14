@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import signal
 from typing import Any
 
 from app.core.errors import AppError
@@ -102,10 +103,11 @@ class SQSAIJobWorker:
     )
     return True
 
-  async def run_forever(self) -> None:
+  async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
     logger.info("[aura:ai-job-worker] started queueUrl=%s", self.queue_url)
+    shutdown_requested = stop_event or asyncio.Event()
 
-    while True:
+    while not shutdown_requested.is_set():
       await self.poll_once()
 
 
@@ -122,6 +124,24 @@ def build_parser() -> argparse.ArgumentParser:
 async def run_worker(args: argparse.Namespace) -> None:
   settings = get_settings()
   await database.connect()
+  stop_event = asyncio.Event()
+  loop = asyncio.get_running_loop()
+  registered_signals: list[signal.Signals] = []
+
+  def request_shutdown() -> None:
+    if not stop_event.is_set():
+      logger.info("[aura:ai-job-worker] shutdown-requested")
+    stop_event.set()
+
+  for signal_name in (signal.SIGINT, signal.SIGTERM):
+    try:
+      loop.add_signal_handler(signal_name, request_shutdown)
+      registered_signals.append(signal_name)
+    except (NotImplementedError, RuntimeError):
+      logger.debug(
+        "[aura:ai-job-worker] signal-handler-unavailable signal=%s",
+        signal_name.name,
+      )
 
   try:
     worker = SQSAIJobWorker(
@@ -136,8 +156,10 @@ async def run_worker(args: argparse.Namespace) -> None:
       await worker.poll_once()
       return
 
-    await worker.run_forever()
+    await worker.run_forever(stop_event)
   finally:
+    for signal_name in registered_signals:
+      loop.remove_signal_handler(signal_name)
     await database.close()
 
 

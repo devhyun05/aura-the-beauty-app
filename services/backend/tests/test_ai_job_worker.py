@@ -1,3 +1,4 @@
+import asyncio
 import json
 from uuid import UUID
 
@@ -257,6 +258,29 @@ async def test_worker_keeps_message_when_dispatch_fails() -> None:
 
   assert received == 1
   assert sqs_client.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_worker_finishes_current_poll_then_stops_after_shutdown_request() -> None:
+  stop_event = asyncio.Event()
+
+  class StopAfterCurrentPollWorker(SQSAIJobWorker):
+    poll_count = 0
+
+    async def poll_once(self) -> int:
+      self.poll_count += 1
+      stop_event.set()
+      return 0
+
+  worker = StopAfterCurrentPollWorker(
+    Settings(sqs_ai_job_queue_url=QUEUE_URL),
+    db=object(),
+    client=FakeSQSClient(),
+  )
+
+  await worker.run_forever(stop_event)
+
+  assert worker.poll_count == 1
 
 
 def test_worker_requires_queue_url() -> None:
