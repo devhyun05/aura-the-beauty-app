@@ -175,16 +175,18 @@ async def assert_bedrock_guardrail_input_allowed(
     return
 
   if response.get("action") == "GUARDRAIL_INTERVENED":
-    logger.info(
-      "[aura:bedrock-guardrail] apply:blocked context=%s reason=%s",
+    details = _safe_guardrail_details(response)
+    logger.warning(
+      "[aura:bedrock-guardrail] apply:blocked context=%s reason=%s detected=%s",
       context,
       response.get("actionReason"),
+      details.get("detected"),
     )
     raise AppError(
       400,
       "FEEDBACK_GOAL_GUARDRAIL_BLOCKED",
       GUARDRAIL_BLOCKED_MESSAGE,
-      _safe_guardrail_details(response),
+      details,
     )
 
   logger.info("[aura:bedrock-guardrail] apply:allowed context=%s", context)
