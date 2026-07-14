@@ -14,6 +14,7 @@ import {
   toPixelLandmarkMap,
 } from './faceGeometryCore/faceGeometryMath';
 import {FACE_GEOMETRY_REQUIRED_INDICES} from './faceGeometryCore/landmarkIndices';
+import {appendFaceGeometryRuntimeEvidence} from './faceGeometryRuntimeEvidenceLogger';
 
 export type FaceGeometryInput = {
   captureId: string;
@@ -158,7 +159,7 @@ export async function analyzeFaceGeometry2d(
     status,
   });
 
-  return {
+  const result: FaceGeometryResult = {
     captureId: input.captureId,
     createdAt: input.createdAt,
     metrics,
@@ -170,4 +171,10 @@ export async function analyzeFaceGeometry2d(
     status,
     statusReason: nullCount === 0 ? undefined : 'some_metrics_unavailable',
   };
+
+  // 실기기 증적(__DEV__ 전용, 원시 좌표·로컬 uri 미포함). fire-and-forget —
+  // 분석 반환을 막지 않는다. 실패는 로거 내부에서 삼킨다.
+  void appendFaceGeometryRuntimeEvidence(result);
+
+  return result;
 }

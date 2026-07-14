@@ -20,6 +20,7 @@ const sources = [
 ];
 const tests = [
   'face-geometry/services/faceGeometryCore/faceGeometryMath.test.ts',
+  'face-geometry/services/faceGeometryRuntimeEvidence.test.ts',
   'face-analysis/services/stillAnalysisWait.test.ts',
 ];
 
