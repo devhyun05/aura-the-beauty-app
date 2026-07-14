@@ -1,6 +1,10 @@
+import {makeRedirectUri} from 'expo-auth-session';
+
+import {selectCognitoRedirectUri} from './cognitoRedirectUri';
 import type {SocialLoginProvider} from '../types';
 
 const DEFAULT_SCOPES = ['openid', 'email', 'profile'];
+const DEFAULT_REDIRECT_SCHEME = 'aiarmakeup';
 const DEFAULT_REDIRECT_PATH = 'auth/callback';
 
 type CognitoEnvironment = {
@@ -9,6 +13,7 @@ type CognitoEnvironment = {
   domainPrefix?: string;
   region?: string;
   redirectUri?: string;
+  redirectUriOverrideEnabled?: string;
   scopes?: string;
   prompt?: string;
   appleIdp?: string;
@@ -37,6 +42,7 @@ const env: CognitoEnvironment = {
   domainPrefix: process.env.EXPO_PUBLIC_COGNITO_DOMAIN_PREFIX,
   region: process.env.EXPO_PUBLIC_COGNITO_REGION,
   redirectUri: process.env.EXPO_PUBLIC_COGNITO_REDIRECT_URI,
+  redirectUriOverrideEnabled: process.env.EXPO_PUBLIC_COGNITO_REDIRECT_URI_OVERRIDE_ENABLED,
   scopes: process.env.EXPO_PUBLIC_COGNITO_SCOPES,
   prompt: process.env.EXPO_PUBLIC_COGNITO_PROMPT,
   appleIdp: process.env.EXPO_PUBLIC_COGNITO_APPLE_IDP,
@@ -91,13 +97,18 @@ function resolveClientId(): string {
 }
 
 function resolveRedirectUri(): string {
-  const configuredRedirectUri = normalizeOptional(env.redirectUri);
+  const automaticRedirectUri = makeRedirectUri({
+    native: `${DEFAULT_REDIRECT_SCHEME}://${DEFAULT_REDIRECT_PATH}`,
+    path: DEFAULT_REDIRECT_PATH,
+    scheme: DEFAULT_REDIRECT_SCHEME,
+  });
 
-  if (configuredRedirectUri) {
-    return configuredRedirectUri;
-  }
-
-  return `aiarmakeup://${DEFAULT_REDIRECT_PATH}`;
+  return selectCognitoRedirectUri({
+    automaticRedirectUri,
+    allowConfiguredOverride:
+      normalizeOptional(env.redirectUriOverrideEnabled)?.toLowerCase() === 'true',
+    configuredRedirectUri: env.redirectUri,
+  });
 }
 
 function resolveScopes(): string[] {
