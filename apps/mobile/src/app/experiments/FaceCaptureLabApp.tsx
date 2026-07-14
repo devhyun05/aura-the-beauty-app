@@ -7,6 +7,9 @@ import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../../tamagui.config';
 import {CameraFaceCaptureScreen} from '../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {Face3DEntryBlockedScreen} from '../../features/face-3d/screens/Face3DEntryBlockedScreen';
+import {Face3DLabScreen} from '../../features/face-3d/screens/Face3DLabScreen';
+import {evaluateFace3DEntryEligibility} from '../../features/face-3d/services/face3DEntryEligibility';
 import {FaceVerticalThirdsScreen} from '../../features/face-ratio/screens/FaceVerticalThirdsScreen';
 import {
   inferFaceCaptureContentType,
@@ -51,12 +54,50 @@ function createLabCaptureResult(imageInput: FaceCaptureImageInput): LabCapture {
 
 function FaceCaptureLabContent() {
   const [capture, setCapture] = useState<LabCapture | null>(null);
+  const [resultMode, setResultMode] = useState<
+    'face3d' | 'face3d-blocked' | 'vertical-thirds'
+  >('face3d');
 
   const uploadImage = useCallback(async (imageInput: FaceCaptureImageInput) => {
     return createLabCaptureResult(imageInput);
   }, []);
 
   if (capture) {
+    if (resultMode === 'face3d-blocked') {
+      const eligibility = evaluateFace3DEntryEligibility({
+        greenlightReport: capture.greenlightReport,
+        source: capture.source,
+      });
+
+      return (
+        <Face3DEntryBlockedScreen
+          message={eligibility.eligible ? '3D 측정을 다시 시작해 주세요.' : eligibility.message}
+          onOpenVerticalThirds={() => setResultMode('vertical-thirds')}
+          onRetake={() => {
+            setCapture(null);
+            setResultMode('face3d');
+          }}
+        />
+      );
+    }
+
+    if (resultMode === 'face3d') {
+      return (
+        <Face3DLabScreen
+          capture={{
+            capturedAt: capture.capturedAt,
+            imageUri: capture.imageUri,
+            photoCaptureId: capture.photoCaptureId,
+          }}
+          onOpenVerticalThirds={() => setResultMode('vertical-thirds')}
+          onRetake={() => {
+            setCapture(null);
+            setResultMode('face3d');
+          }}
+        />
+      );
+    }
+
     return (
       <FaceVerticalThirdsScreen
         capture={{
@@ -67,13 +108,17 @@ function FaceCaptureLabContent() {
           source: capture.source,
         }}
         debug
-        onRetake={() => setCapture(null)}
+        onRetake={() => {
+          setCapture(null);
+          setResultMode('face3d');
+        }}
       />
     );
   }
 
   return (
     <CameraFaceCaptureScreen
+      awaitCameraReleaseBeforeComplete
       captureMode="face"
       captureType="face_analysis"
       onCapture={(result, greenlightReport) => {
@@ -84,6 +129,13 @@ function FaceCaptureLabContent() {
           };
 
           setCapture(nextCapture);
+          const eligibility = evaluateFace3DEntryEligibility({
+            greenlightReport,
+            source: result.source,
+          });
+          setResultMode(
+            eligibility.eligible ? 'face3d' : 'face3d-blocked',
+          );
 
           if (greenlightReport) {
             void appendGreenlightEvent({

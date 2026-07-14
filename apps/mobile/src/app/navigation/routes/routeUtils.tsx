@@ -116,6 +116,11 @@ function navigateAppFeatureRootRoute(
     return;
   }
 
+  if (routeName === 'MakeupRecommendation') {
+    navigation.navigate('MakeupRecommendation');
+    return;
+  }
+
   if (routeName === 'SavedMakeupList') {
     navigation.navigate('SavedMakeupList');
     return;

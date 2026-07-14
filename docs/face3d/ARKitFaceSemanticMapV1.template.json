@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "aura.face3d-semantic-map.v1",
+  "mapId": "replace-after-g1-overlay-review",
+  "source": "arkit_face_mesh",
+  "gateVersion": "face3d-gate-v1",
+  "topologyFingerprint": {
+    "algorithm": "sha256-le-v1",
+    "vertexCount": 0,
+    "indexCount": 0,
+    "uvCount": 0,
+    "indicesHash": "replace-with-64-char-sha256",
+    "uvHash": "replace-with-64-char-sha256",
+    "fingerprint": "replace-with-64-char-sha256"
+  },
+  "noseTipIndices": [],
+  "chinIndices": [],
+  "chinBottomIndices": [],
+  "upperLipIndices": [],
+  "lowerLipIndices": [],
+  "midfaceReferenceLeftIndices": [],
+  "midfaceReferenceRightIndices": [],
+  "midfaceReferenceUpperIndices": [],
+  "chinReferenceLeftIndices": [],
+  "chinReferenceRightIndices": [],
+  "chinReferenceUpperIndices": [],
+  "centralRegionIndices": []
+}

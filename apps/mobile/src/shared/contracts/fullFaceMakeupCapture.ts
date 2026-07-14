@@ -14,7 +14,7 @@ export type UnitySynchronizedCaptureRequest = {
   captureSetId: string;
   captureShotKind: FullFaceCaptureShotKind;
   requestedAtMs: number;
-  requestedBy: 'aura-full-face';
+  requestedBy: 'aura-face3d-lab' | 'aura-full-face';
   purpose: string;
 };
 

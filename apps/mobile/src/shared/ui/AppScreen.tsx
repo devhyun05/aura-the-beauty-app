@@ -1,5 +1,5 @@
 import {createContext, type ReactNode, type Ref, useContext, useEffect, useRef} from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import {ScrollView, StyleSheet, type ScrollViewProps} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'tamagui';
 
@@ -101,6 +101,7 @@ type AppScreenProps = {
   horizontalPadding?: number;
   horizontalPaddingLeft?: number;
   horizontalPaddingRight?: number;
+  keyboardShouldPersistTaps?: ScrollViewProps['keyboardShouldPersistTaps'];
   topPadding?: AppScreenTopPadding;
   scrollViewRef?: Ref<ScrollView>;
   onScrollActivityChange?: (active: boolean, fast: boolean) => void;
@@ -115,6 +116,7 @@ export function AppScreen({
   horizontalPadding = spacing.screenX,
   horizontalPaddingLeft = horizontalPadding,
   horizontalPaddingRight = horizontalPadding,
+  keyboardShouldPersistTaps,
   topPadding = 'standalone',
   scrollViewRef,
   onScrollActivityChange,
@@ -169,6 +171,7 @@ export function AppScreen({
       contentContainerStyle={contentStyle}
       contentInset={{bottom: 0, left: 0, right: 0, top: 0}}
       contentInsetAdjustmentBehavior="never"
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       onMomentumScrollBegin={() => setScrollActive(true)}
       onMomentumScrollEnd={() => setScrollActive(false)}
       onScroll={event => {

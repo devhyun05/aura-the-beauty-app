@@ -8,8 +8,11 @@ import {consultingColors, consultingRadius} from '../../../shared/theme';
 import {getConsultingBookings} from '../services/consultingService';
 import {
   getConsultingUnreadState,
+  subscribeConsultingReadStateChange,
   type ConsultingUnreadState,
 } from '../services/consultingReadStateService';
+import {useConsultingBookingStatusSync} from '../hooks/useConsultingBookingStatusSync';
+import type {ConsultingRecord} from '../types';
 
 type ConsultingHeaderActionsProps = {
   onPressHistory?: () => void;
@@ -29,36 +32,43 @@ export function ConsultingHeaderActions({
     messages: false,
     notifications: false,
   });
+  const [records, setRecords] = React.useState<readonly ConsultingRecord[]>([]);
+
+  const refreshUnreadState = React.useCallback(() => {
+    if (!getAuthToken()) {
+      setRecords([]);
+      setUnreadState({messages: false, notifications: false});
+      return;
+    }
+
+    void getConsultingBookings(undefined, {force: true})
+      .then(nextRecords => {
+        setRecords(nextRecords);
+        return getConsultingUnreadState(nextRecords);
+      })
+      .then(setUnreadState);
+  }, [getAuthToken]);
+
+  useConsultingBookingStatusSync({
+    authToken: getAuthToken(),
+    onStatusChange: refreshUnreadState,
+    records,
+  });
+
+  React.useEffect(
+    () => subscribeConsultingReadStateChange(refreshUnreadState),
+    [refreshUnreadState],
+  );
 
   useFocusEffect(
     React.useCallback(() => {
-      let isMounted = true;
-
-      const refreshUnreadState = () => {
-        if (!getAuthToken()) {
-          if (isMounted) {
-            setUnreadState({messages: false, notifications: false});
-          }
-          return;
-        }
-
-        void getConsultingBookings(undefined, {force: true})
-          .then(records => getConsultingUnreadState(records))
-          .then(nextUnreadState => {
-            if (isMounted) {
-              setUnreadState(nextUnreadState);
-            }
-          });
-      };
-
       refreshUnreadState();
       const refreshTimer = setInterval(refreshUnreadState, 30000);
 
       return () => {
-        isMounted = false;
         clearInterval(refreshTimer);
       };
-    }, [getAuthToken]),
+    }, [refreshUnreadState]),
   );
 
   return (

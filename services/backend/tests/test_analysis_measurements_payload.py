@@ -1,0 +1,201 @@
+"""측정 데이터 3-반영 규칙의 백엔드 계약.
+
+- requestPayload.measurements/measuredPersonalColor 가 신뢰화 필터를 통과해 저장된다.
+- 프롬프트가 두 필드를 메타데이터로 주입하고 해설 문장을 갖는다(measurements 제외 없음).
+- worst-case 직렬화 크기가 상한 안에 있다(프롬프트 토큰 예산 고정).
+- 목록 SELECT 만 measurements 를 제외하고 상세 SELECT 는 전량 유지한다.
+"""
+
+import json
+
+from app.api.analysis import ANALYSIS_MEDIA_LIST_SELECT, ANALYSIS_MEDIA_SELECT
+from app.core.settings import Settings
+from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.owned_media import trusted_media_request_payload
+
+
+PERSONAL_COLOR_TYPES = [
+  "spring_light", "spring_bright", "spring_true",
+  "summer_light", "summer_true", "summer_muted",
+  "autumn_muted", "autumn_true", "autumn_deep",
+  "winter_bright", "winter_true", "winter_deep",
+]
+
+GEOMETRY_METRIC_KEYS = [
+  "browSlopeLeftDeg", "browSlopeRightDeg", "canthalTiltLeftDeg", "canthalTiltRightDeg",
+  "eyeBrowGapLeft", "eyeBrowGapRight", "eyeOpennessLeft", "eyeOpennessRight",
+  "eyeWidthRatioLeft", "eyeWidthRatioRight", "interCanthalRatio", "jawWidthRatio",
+  "lipThicknessRatio", "lowerJawWidthRatio", "mouthCornerAsymmetry", "mouthWidthRatio",
+]
+
+FACE3D_METRIC_KEYS = [
+  "noseTipProjection", "chinProjection", "upperLipToELine", "lowerLipToELine",
+  "centralProjectionScore", "noseLength", "nasalBridgeStraightness",
+  "nasalAxisDeviation", "alarWidth", "malarProjectionLeft", "malarProjectionRight",
+]
+
+
+def build_worst_case_request_payload() -> dict:
+  """RN 계약(faceAnalysisMeasurements)의 최대 형태 근사 — 모든 축·경고 포함."""
+  tone_records = {key: 0.0833 for key in PERSONAL_COLOR_TYPES}
+  keypoint = {"confidence": 0.9, "method": "mediapipe", "provider": "mediapipe", "x": 540.5, "y": 960.5}
+  region = {
+    "areaRatio": 0.123, "colorSpace": "srgb",
+    "lab": {"L": 62.15, "a": 12.42, "b": 16.83}, "lch": {"C": 20.92, "h": 53.61},
+    "overExposedRatio": 0.01, "qEff": 0.82, "qNative": 0.85,
+    "region": "skin", "underExposedRatio": 0.02,
+    "warnings": ["skin_matte_unavailable"],
+  }
+  measured_personal_color = {
+    "axes": {axis: {"confidence": 0.8, "value": 0.32} for axis in
+             ["temperature", "value", "chroma", "clarity", "contrast"]},
+    "calibrationApplied": False,
+    "correction": {
+      "applied": True, "capped": False, "confidence": 0.6,
+      "gains": {"r": 0.97, "g": 1.0, "b": 1.04},
+      "reasons": ["wb_low_confidence"],
+      "scleraSummary": {"eyesUsed": 2, "leftRightAgreement": 0.02,
+                        "measuredLab": {"L": 78.2, "a": 3.1, "b": 5.4}, "sampleCount": 140},
+      "source": "sclera", "strength": 0.05, "wbRatio": {"bg": 1.02, "rg": 0.98},
+    },
+    "measurementConfidence": 0.72,
+    "regions": [dict(region, region=name) for name in ["skin", "hair", "lip"]],
+    "relations": {"skinHairColorDelta": 21.3, "skinHairLightnessDelta": 18.2,
+                  "skinLipColorDelta": 12.8, "skinLipLightnessDelta": 9.4},
+    "status": "definitive",
+    "tone": {"distances": tone_records, "gap": 0.13, "isMixed": False,
+             "probabilities": tone_records, "season": "autumn",
+             "secondary": "autumn_true", "top": "autumn_muted", "typeScore": 0.41},
+    "warnings": ["skin_matte_unavailable"],
+  }
+  reported = dict(measured_personal_color)
+  reported.pop("correction")
+  measurements = {
+    "captureId": "11111111-1111-1111-1111-111111111111",
+    "schemaVersion": "aura-face-analysis-measurements-v1",
+    "faceVerticalThirds": {
+      "captureId": "11111111-1111-1111-1111-111111111111",
+      "createdAt": "2026-07-13T00:00:00.000Z",
+      "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+      "interpretation": {"dominantPart": "middle", "summary": "중안부가 비교적 긴 편이에요.",
+                         "title": "중안부 우세"},
+      "keypoints": {"G": keypoint, "H": keypoint, "Me": keypoint, "Sn": keypoint},
+      "postCorrection": {"applied": True, "center": {"x": 540, "y": 960},
+                         "method": "mediapipe_pose_roll", "rollCorrectionDeg": 0.6},
+      "quality": {"pitch": -2.8, "roll": 0.6, "usable": True,
+                  "warnings": ["hairline_low_confidence"], "yaw": 1.2},
+      "schemaVersion": "aura-face-vertical-thirds-v1",
+      "sessionId": "s", "sourceImage": {"height": 1920, "width": 1080},
+      "status": "partial_success", "statusReason": None,
+      "verticalThirds": {"confidence": 0.82,
+                         "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
+                         "lowerNormalized": 0.354, "lowerPx": 345.2,
+                         "middleNormalized": 0.328, "middlePx": 320.4, "totalPx": 975.2,
+                         "upperNormalized": 0.318, "upperPx": 310.1,
+                         "warnings": ["upper_ratio_estimated"]},
+    },
+    "face3d": {
+      "gateVersion": "face3d-gate-v1",
+      "metrics": {key: {"confidence": 0.97, "mad": 0.0012, "unit": "normalized",
+                        "validFrameCount": 30, "value": 0.2134}
+                  for key in FACE3D_METRIC_KEYS},
+      "schemaVersion": "aura.face3d-profile.v1", "source": "arkit_face_mesh",
+      "targetFrameCount": 30, "topologyFingerprint": "v:1220|i:6912|u:abcd1234",
+      "validFrameCount": 30, "warnings": ["target_frame_count_not_reached"],
+    },
+    "faceGeometry2d": {
+      "captureId": "11111111-1111-1111-1111-111111111111",
+      "createdAt": "2026-07-13T00:00:00.000Z",
+      "metrics": {key: {"unit": "deg" if key.endswith("Deg") else "ratio",
+                        "value": 0.512, "warnings": ["roll_out_of_range"]}
+                  for key in GEOMETRY_METRIC_KEYS},
+      "pose": {"pitchDeg": -2.8, "rollDeg": 0.6, "yawDeg": 1.2},
+      "rollCorrection": {"applied": True, "rollCorrectionDeg": -0.6},
+      "schemaVersion": "aura-face-geometry-v1", "sessionId": "s",
+      "sourceImage": {"height": 1920, "width": 1080},
+      "status": "partial_success", "statusReason": "some_metrics_unavailable",
+    },
+    "personalColor": {
+      "correctionReport": {
+        "applied": True, "capped": False, "confidence": 0.6,
+        "gains": {"r": 0.97, "g": 1.0, "b": 1.04}, "reasons": [],
+        "sclera": {"available": True, "eyesUsed": 2, "leftRightAgreement": 0.02,
+                   "measuredLab": {"L": 78.2, "a": 3.1, "b": 5.4},
+                   "measuredRgb": {"r": 201, "g": 196, "b": 188},
+                   "rawGains": {"r": 0.96, "g": 1.0, "b": 1.05},
+                   "reasons": [], "sampleCount": 140},
+        "source": "sclera", "strength": 0.05,
+        "wb": {"available": True, "bg": 1.02, "rawGains": None,
+               "reasons": ["wb_low_confidence"], "rg": 0.98},
+      },
+      "correctionStatus": {"applied": True, "reasons": ["wb_low_confidence"]},
+      "reported": reported,
+    },
+  }
+
+  return {
+    "bucket": "client-bucket",
+    "contentType": "image/jpeg",
+    "faceVerticalThirds": {"confidence": 0.82, "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
+                           "dominantPart": "middle", "status": "partial_success",
+                           "summary": "중안부가 비교적 긴 편이에요."},
+    "faceGeometry2d": {"metrics": measurements["faceGeometry2d"]["metrics"],
+                       "pose": measurements["faceGeometry2d"]["pose"],
+                       "rollCorrection": {"applied": True, "rollCorrectionDeg": -0.6,
+                                          "skippedReason": None},
+                       "status": "partial_success", "statusReason": None},
+    "face3d": measurements["face3d"],
+    "measuredPersonalColor": measured_personal_color,
+    "measurements": measurements,
+    "objectKey": "client-key",
+    "source": "camera",
+    "task": "face_makeup_recommendation_report_v1",
+  }
+
+
+def test_trusted_media_payload_keeps_measurement_fields() -> None:
+  payload = build_worst_case_request_payload()
+
+  trusted = trusted_media_request_payload(Settings(), payload, None)
+
+  # 미디어 위치 키만 제거되고 측정 필드는 전부 통과해 detail_payload 에 저장된다.
+  assert "bucket" not in trusted
+  assert "objectKey" not in trusted
+  assert trusted["measurements"]["captureId"] == "11111111-1111-1111-1111-111111111111"
+  assert trusted["measuredPersonalColor"]["tone"]["top"] == "autumn_muted"
+  assert trusted["measurements"]["personalColor"]["correctionReport"]["sclera"]["sampleCount"] == 140
+
+
+def test_prompt_injects_and_explains_measurements() -> None:
+  payload = build_worst_case_request_payload()
+  payload["imageUrl"] = "https://cdn.example.com/x.jpg"
+
+  service = OpenAIAnalysisService(Settings())
+  prompt = service._build_analysis_prompt(payload)
+
+  # 해설 문장(모델 지시)과 메타데이터 주입(실제 값) 둘 다 있어야 한다.
+  assert "measuredPersonalColor(" in prompt
+  assert "measurements" in prompt
+  assert '"measuredPersonalColor"' in prompt
+  assert '"measurements"' in prompt
+  assert '"autumn_muted"' in prompt
+  # 원본 4축이 프롬프트에서 제외되지 않는다(측정 데이터 3-반영 규칙).
+  assert '"faceVerticalThirds"' in prompt
+  # 이미지 위치 필드는 여전히 제외된다.
+  assert "https://cdn.example.com/x.jpg" not in prompt
+
+
+def test_prompt_metadata_size_is_bounded() -> None:
+  # worst-case 측정 payload 직렬화 상한 — 프롬프트 토큰 예산 고정. 계약이 커져
+  # 이 값을 넘으면 상한을 올리기 전에 payload 설계를 재검토할 것.
+  payload = build_worst_case_request_payload()
+  serialized = json.dumps(payload, ensure_ascii=False)
+
+  assert len(serialized) < 15_000, f"measurement payload too large: {len(serialized)} chars"
+
+
+def test_list_select_strips_measurements_but_detail_keeps() -> None:
+  assert "#- '{request,measurements}'" in ANALYSIS_MEDIA_LIST_SELECT
+  assert "#- '{request,measurements}'" not in ANALYSIS_MEDIA_SELECT
+  # 축약본이 dict(row) 변환에서 원본을 덮도록 같은 별칭으로 뒤에 온다.
+  assert ANALYSIS_MEDIA_LIST_SELECT.rstrip().endswith("as detail_payload")

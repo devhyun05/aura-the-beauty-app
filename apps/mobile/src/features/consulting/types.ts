@@ -145,6 +145,10 @@ export type ConsultingRecordStatus =
 
 export type ConsultingRecord = {
   id: string;
+  chatAvailable?: boolean;
+  conversationId?: string;
+  customerLeftAt?: string | null;
+  expertLeftAt?: string | null;
   expertId: string;
   durationId?: string;
   dayId?: string | null;
@@ -182,32 +186,6 @@ export type ConsultingReviewDraft = {
   category?: string;
 };
 
-export type ConsultingCallLanguageCode = 'ko-KR' | 'en-US';
-
-export type ConsultingCaptionViewModel = {
-  resultId: string;
-  attendeeId?: string;
-  externalUserId?: string;
-  speakerType: 'user' | 'expert' | 'unknown';
-  sourceLanguageCode: ConsultingCallLanguageCode;
-  content: string;
-  isPartial: boolean;
-  targetLanguageCode?: 'ko' | 'en';
-  translatedContent?: string;
-  startTimeMs?: number;
-  endTimeMs?: number;
-};
-
-export type ConsultingCallTranscription = {
-  enabled: boolean;
-  translationEnabled: boolean;
-  status: 'disabled' | 'stopped' | 'starting' | 'active' | 'stopping' | 'failed';
-  mode: 'fixed' | 'identify';
-  languageCode?: ConsultingCallLanguageCode | null;
-  customerLanguageCode?: ConsultingCallLanguageCode | null;
-  expertLanguageCode?: ConsultingCallLanguageCode | null;
-};
-
 export type ConsultingCallState = {
   callSessionId: string | null;
   bookingId: string;
@@ -218,7 +196,6 @@ export type ConsultingCallState = {
   startedAt?: string | null;
   endedAt?: string | null;
   chimeEnabled: boolean;
-  transcription: ConsultingCallTranscription;
 };
 
 export type ConsultingCallJoinResult = {
@@ -227,9 +204,7 @@ export type ConsultingCallJoinResult = {
   participant: {
     id: string;
     type: 'customer' | 'partner';
-    languageCode: ConsultingCallLanguageCode;
   };
   meeting: Record<string, unknown>;
   attendee: Record<string, unknown>;
-  transcription: ConsultingCallTranscription;
 };

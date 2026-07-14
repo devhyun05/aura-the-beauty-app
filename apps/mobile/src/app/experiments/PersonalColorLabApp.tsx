@@ -34,6 +34,7 @@ function createLabCaptureResult(imageInput: FaceCaptureImageInput): LabCapture {
     objectKey: imageInput.uri,
     photoCaptureId: id,
     semanticMattes: imageInput.semanticMattes,
+    cameraMetadata: imageInput.cameraMetadata,
     source: imageInput.source,
   };
 }
@@ -78,6 +79,7 @@ function PersonalColorLabContent() {
           imageUri: capture.imageUri,
           photoCaptureId: capture.photoCaptureId,
           capturedAt: capture.capturedAt,
+          cameraMetadata: capture.cameraMetadata,
         }}
         onRetake={() => setCapture(null)}
       />

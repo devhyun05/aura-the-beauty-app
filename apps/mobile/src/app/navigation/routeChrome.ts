@@ -99,6 +99,12 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
+  Face3DMeasurement: {
+    category: 'capture-runtime',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'light',
+  },
   FaceAnalysisIntro: {
     category: 'feature-entry',
     contextLabel: 'FACE ANALYSIS',
@@ -297,6 +303,14 @@ export const routeChromeByRoute = {
     kind: 'detail',
     statusBarStyle: 'dark',
     title: '제품 개인화 설정',
+  },
+  MakeupRecommendation: {
+    category: 'feature-entry',
+    contextLabel: 'MAKEUP RECOMMENDATION',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 추천',
   },
   AuradinSearch: {
     category: 'list',

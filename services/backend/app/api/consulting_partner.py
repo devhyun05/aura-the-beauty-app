@@ -8,17 +8,13 @@ from app.schemas.media import CompleteUploadRequest, PresignedUploadRequest
 from app.schemas.consulting_partner import (
   PartnerApplicationCreate,
   PartnerBookingStatusUpdate,
+  PartnerExpertAvatarUpdate,
   PartnerLoginRequest,
   PartnerPasswordChangeRequest,
   PartnerSummaryCompleteRequest,
   PartnerSummaryGenerateRequest,
 )
 from app.schemas.consulting import ConsultingTextMessageSend
-from app.schemas.consulting_call import (
-  ConsultingCallJoinRequest,
-  ConsultingCaptionTranslateRequest,
-  ConsultingTranscriptionStartRequest,
-)
 from app.services.media_uploads import (
   bind_legacy_thumbnail_session,
   complete_upload_session,
@@ -129,6 +125,22 @@ async def get_partner_experts(
   account: dict = Depends(get_partner_account),
 ) -> dict:
   return success({"experts": [await consulting_partner.expert_profile(account)]})
+
+
+@router.patch("/experts/{expert_id}/avatar")
+async def update_partner_expert_avatar(
+  expert_id: str,
+  payload: PartnerExpertAvatarUpdate,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  expert = await consulting_partner.update_expert_avatar(
+    db,
+    account,
+    expert_id,
+    payload.media_id,
+  )
+  return success({"expert": expert})
 
 
 @router.get("/dashboard")
@@ -254,6 +266,31 @@ async def mark_partner_booking_payment_paid(
   return success({"booking": booking})
 
 
+@router.post("/bookings/{booking_id}/confirm")
+async def confirm_partner_booking(
+  booking_id: str,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  booking = await consulting_partner.update_booking_details(
+    db,
+    account,
+    booking_id,
+    {"mark_payment_paid": True, "status": "confirmed"},
+  )
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "booking.status",
+      "bookingId": booking_id,
+      "status": booking["status"],
+      "message": _customer_booking_status_message(booking["status"]),
+    },
+  )
+  await _send_booking_confirmation_message(db, account, booking_id)
+  return success({"booking": booking})
+
+
 def _customer_booking_status_message(status: str) -> str:
   if status in {"confirmed", "scheduled"}:
     return "예약이 완료되었습니다. 예약일에 전문가가 먼저 화상 상담을 시작하니, 안내된 시간에 연락을 기다려 주세요."
@@ -297,11 +334,13 @@ async def send_partner_chat_text_message(
   """Durable HTTP fallback so an expert can still send text during WS recovery."""
   detail = await consulting_partner.chat_thread_detail(db, account, thread_id)
   booking = detail["booking"]
-  if booking["status"] in {"cancelled", "no_show", "refund_requested", "completed"}:
+  if booking["status"] in {"cancelled", "no_show", "refund_requested"}:
     raise AppError(409, "CONSULTING_BOOKING_CLOSED", "종료된 예약에는 새 메시지를 보낼 수 없어요.")
+  if booking.get("customer_left_at") or booking.get("expert_left_at"):
+    raise AppError(409, "CONSULTING_CONVERSATION_LEFT", "나간 대화방에는 새 메시지를 보낼 수 없어요.")
   message, inserted = await create_consulting_message(
     db,
-    booking_id=thread_id,
+    booking_id=booking["id"],
     body=payload.body.strip(),
     client_message_id=payload.client_message_id,
     media=[],
@@ -310,7 +349,7 @@ async def send_partner_chat_text_message(
     sender_user_id=None,
   )
   if inserted:
-    await consulting_realtime_manager.broadcast(thread_id, message)
+    await consulting_realtime_manager.broadcast(booking["id"], message)
   return success({"message": message})
 
 
@@ -344,7 +383,6 @@ async def update_partner_settings(
 @router.post("/bookings/{booking_id}/call/join")
 async def join_partner_call(
   booking_id: str,
-  payload: ConsultingCallJoinRequest,
   response: Response,
   account: dict = Depends(get_partner_account),
   settings: Settings = Depends(get_settings),
@@ -355,7 +393,6 @@ async def join_partner_call(
     db,
     account,
     booking_id,
-    payload.language_code,
     settings,
   )
   await consulting_realtime_manager.broadcast(
@@ -378,7 +415,12 @@ async def end_partner_call(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(require_database),
 ) -> dict:
-  call = await consulting_call.end_partner_call(db, account, booking_id, settings)
+  call = await consulting_call.end_partner_call(
+    db,
+    account,
+    booking_id,
+    settings,
+  )
   await consulting_realtime_manager.broadcast(
     booking_id,
     {
@@ -390,69 +432,6 @@ async def end_partner_call(
     },
   )
   return success({"call": call})
-
-
-@router.post("/bookings/{booking_id}/call/transcription/start")
-async def start_partner_call_transcription(
-  booking_id: str,
-  payload: ConsultingTranscriptionStartRequest,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  return success(
-    {
-      "call": await consulting_call.start_partner_transcription(
-        db,
-        account,
-        booking_id,
-        payload.language_code,
-        payload.transcription_consent_accepted,
-        settings,
-      ),
-    },
-  )
-
-
-@router.post("/bookings/{booking_id}/call/transcription/stop")
-async def stop_partner_call_transcription(
-  booking_id: str,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  return success({"call": await consulting_call.stop_partner_transcription(db, account, booking_id, settings)})
-
-
-@router.post("/bookings/{booking_id}/call/captions/translate")
-async def translate_partner_call_caption(
-  booking_id: str,
-  payload: ConsultingCaptionTranslateRequest,
-  account: dict = Depends(get_partner_account),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(require_database),
-) -> dict:
-  translated = await consulting_call.translate_partner_caption(
-    db,
-    account,
-    booking_id,
-    result_id=payload.result_id,
-    source_language_code=payload.source_language_code,
-    content=payload.content,
-    settings=settings,
-  )
-  await consulting_realtime_manager.broadcast(
-    booking_id,
-    {
-      "type": "caption.translation",
-      "bookingId": booking_id,
-      "resultId": translated["result_id"],
-      "sourceLanguageCode": translated["source_language_code"],
-      "targetLanguageCode": translated["target_language_code"],
-      "translatedContent": translated["translated_content"],
-    },
-  )
-  return success(translated)
 
 
 @router.get("/customers")
@@ -508,6 +487,26 @@ async def mark_partner_chat_thread_read(
   db: Database = Depends(require_database),
 ) -> dict:
   return success({"detail": await consulting_partner.mark_chat_thread_read(db, account, thread_id)})
+
+
+@router.post("/chat/threads/{thread_id}/leave")
+async def leave_partner_chat_thread(
+  thread_id: str,
+  account: dict = Depends(get_partner_account),
+  db: Database = Depends(require_database),
+) -> dict:
+  result = await consulting_partner.leave_chat_thread(db, account, thread_id)
+  booking_id = result["booking_id"]
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "conversation.left",
+      "bookingId": booking_id,
+      "participantType": "expert",
+      "message": "상담사가 대화방을 나갔습니다. 다음 예약은 새 대화방에서 시작됩니다.",
+    },
+  )
+  return success(result)
 
 
 @router.get("/summaries/{booking_id}")

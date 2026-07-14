@@ -16,8 +16,11 @@ export type RotatablePoint = {
   y: number;
 };
 
-// gate/quality gate roll 한계(±5°)와 맞춘다. 초과분은 보정으로 살리지 않는다.
-export const ROLL_CORRECTION_MAX_ABS_DEG = 5;
+// quality gate roll 한계와 같은 값을 단일 소스(facePoseGates)에서 가져온다.
+// 초과분은 보정으로 살리지 않는다. 기존 import 경로 호환을 위해 re-export.
+import {ROLL_CORRECTION_MAX_ABS_DEG} from '../../face-capture/constants/facePoseGates';
+
+export {ROLL_CORRECTION_MAX_ABS_DEG};
 
 export function rotatePointAroundCenter(
   point: RotatablePoint,

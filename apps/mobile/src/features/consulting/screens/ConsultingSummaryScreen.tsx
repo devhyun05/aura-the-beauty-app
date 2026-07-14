@@ -15,7 +15,7 @@ import {
   PrimaryButton,
   SecondaryButton,
 } from '../components/consultingComponents';
-import {formatConsultingPrice} from '../mocks/consulting.mock';
+import {formatConsultingPrice} from '../consultingCatalog';
 import type {
   ConsultingExpert,
   ConsultingRecommendedProduct,
@@ -34,6 +34,8 @@ type ConsultingSummaryScreenProps = {
   heroTitle?: string;
   onGoToConsultingHome: () => void;
   onPressHistory: () => void;
+  onPressReview?: () => void;
+  reviewCompleted?: boolean;
 };
 
 export function ConsultingSummaryScreen({
@@ -42,8 +44,11 @@ export function ConsultingSummaryScreen({
   heroTitle = '상담이 완료됐어요',
   onGoToConsultingHome,
   onPressHistory,
+  onPressReview,
+  reviewCompleted = false,
 }: ConsultingSummaryScreenProps) {
   const hasSummary = Boolean(summary);
+  const hasReviewAction = Boolean(onPressReview) || reviewCompleted;
 
   return (
     <RNView style={styles.root}>
@@ -102,8 +107,17 @@ export function ConsultingSummaryScreen({
       </ConsultingScreenScaffold>
 
       <ConsultingBottomBar>
-        <PrimaryButton label="내 상담 내역 보기" onPress={onPressHistory} />
-        <SecondaryButton label="컨설팅 홈으로" onPress={onGoToConsultingHome} />
+        {reviewCompleted ? (
+          <PrimaryButton disabled label="리뷰 작성 완료" onPress={() => undefined} />
+        ) : onPressReview ? (
+          <PrimaryButton label="리뷰 작성" onPress={onPressReview} />
+        ) : (
+          <PrimaryButton label="내 상담 내역 보기" onPress={onPressHistory} />
+        )}
+        <SecondaryButton
+          label={hasReviewAction ? '내 상담 내역 보기' : '컨설팅 홈으로'}
+          onPress={hasReviewAction ? onPressHistory : onGoToConsultingHome}
+        />
       </ConsultingBottomBar>
     </RNView>
   );

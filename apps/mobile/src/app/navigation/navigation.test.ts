@@ -74,6 +74,16 @@ expectEqual(
   'product recommendation shelf route title',
 );
 expectEqual(
+  getRouteChrome('MakeupRecommendation').kind,
+  'detail',
+  'makeup recommendation chrome',
+);
+expectEqual(
+  getDetailRouteTitle('MakeupRecommendation'),
+  '메이크업 추천',
+  'makeup recommendation title',
+);
+expectEqual(
   getDetailRouteTitle('FloatingActionSettings'),
   '빠른 실행 설정',
   'floating action settings detail route title',

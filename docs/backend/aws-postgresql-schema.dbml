@@ -1124,11 +1124,6 @@ Table consulting_call_sessions {
   control_region text [not null, default: 'ap-northeast-2']
   media_region text
   status text [not null, default: 'created', note: 'created | active | ended | failed']
-  transcription_status text [not null, default: 'disabled', note: 'disabled | stopped | starting | active | stopping | failed']
-  transcription_language_code text
-  customer_language_code text [not null, default: 'ko-KR']
-  expert_language_code text [not null, default: 'ko-KR']
-  transcription_mode text [not null, default: 'fixed', note: 'fixed | identify']
   started_at timestamptz
   ended_at timestamptz
   expires_at timestamptz
@@ -1141,36 +1136,6 @@ Table consulting_call_sessions {
   }
 
   Note: 'Amazon Chime meeting sessions for confirmed online consulting bookings.'
-}
-
-Table consulting_transcript_segments {
-  id uuid [pk, default: `gen_random_uuid()`]
-  call_session_id uuid [not null]
-  booking_id uuid [not null]
-  participant_type text [not null, note: 'customer | partner']
-  participant_id text
-  language_code text [not null, note: 'ko-KR | en-US']
-  source_text text [not null, default: '']
-  translated_text text
-  result_id text
-  speaker_type text [not null, default: 'unknown', note: 'user | expert | unknown']
-  source_language_code text [note: 'ko-KR | en-US']
-  content text
-  target_language_code text [note: 'ko | en']
-  translated_content text
-  start_time_ms integer
-  end_time_ms integer
-  is_partial boolean [not null, default: false]
-  started_at timestamptz
-  ended_at timestamptz
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (call_session_id, created_at)
-    (call_session_id, result_id) [unique, name: 'uq_consulting_transcript_segments_result']
-  }
-
-  Note: 'Optional Chime live transcription retention table. MVP translation flow does not write rows when CONSULTING_TRANSCRIPT_RETENTION_DAYS is 0.'
 }
 
 Table consulting_messages {
@@ -1488,8 +1453,6 @@ Ref: consulting_summaries.booking_id > consulting_bookings.id
 Ref: consulting_call_sessions.booking_id > consulting_bookings.id
 Ref: consulting_call_sessions.user_id > users.id
 Ref: consulting_call_sessions.expert_id > consulting_experts.id
-Ref: consulting_transcript_segments.call_session_id > consulting_call_sessions.id
-Ref: consulting_transcript_segments.booking_id > consulting_bookings.id
 Ref: consulting_messages.booking_id > consulting_bookings.id
 Ref: consulting_messages.sender_user_id > users.id
 Ref: consulting_partner_accounts.expert_id > consulting_experts.id

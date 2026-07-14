@@ -1,0 +1,21 @@
+{
+    "name": "Aura.Face3D.Tests",
+    "rootNamespace": "Aura.Face3D.Tests",
+    "references": [
+        "Aura.Face3D"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

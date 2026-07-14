@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "aura.face3d-semantic-approval.v1",
+  "candidateId": "replace-with-candidate-id",
+  "mapId": "arkit-face3d-g1-reviewed-v1",
+  "reviewer": "reviewer-01",
+  "reviewedAtUtc": "2026-07-12T05:30:00Z",
+  "approved": true,
+  "distinctPeopleConfirmed": true,
+  "subjects": [
+    {
+      "subjectId": "subject-01",
+      "validationSummaryPath": "../../artifacts/face3d/semantic-validation/subject-01/semantic_validation_summary.json",
+      "samePersonConfirmed": true
+    },
+    {
+      "subjectId": "subject-02",
+      "validationSummaryPath": "../../artifacts/face3d/semantic-validation/subject-02/semantic_validation_summary.json"
+    },
+    {
+      "subjectId": "subject-03",
+      "validationSummaryPath": "../../artifacts/face3d/semantic-validation/subject-03/semantic_validation_summary.json"
+    }
+  ]
+}

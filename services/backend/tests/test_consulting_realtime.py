@@ -2,10 +2,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
-from app.api.consulting_realtime import _parse_client_datetime
+from app.api.consulting_realtime import (
+  _booking_accepts_new_messages,
+  _booking_chat_is_visible,
+  _parse_client_datetime,
+)
 from app.db.session import database
 from app.main import create_app
-from app.services.consulting_message_store import create_consulting_message, message_row_to_event
+from app.services.consulting_message_store import (
+  create_consulting_message,
+  list_consulting_conversation_messages,
+  message_row_to_event,
+)
 from app.services.consulting_realtime import ConsultingRealtimeManager
 
 
@@ -137,6 +145,56 @@ def test_parse_client_datetime_returns_utc_datetime_for_database_binding() -> No
   assert _parse_client_datetime("not-a-date") is None
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("row", "expected"),
+  [
+    ({"status": "requested", "confirmed_at": None, "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "completed", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "confirmed_at": "2026-07-13", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "confirmed_at": None, "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "confirmed_at": "2026-07-13", "customer_left_at": "2026-07-13", "expert_left_at": None}, False),
+  ],
+)
+async def test_booking_chat_visibility_matches_confirmation_flow(
+  monkeypatch: pytest.MonkeyPatch,
+  row: dict,
+  expected: bool,
+) -> None:
+  async def fake_fetchrow(*_args, **_kwargs):
+    return row
+
+  monkeypatch.setattr(database, "pool", object())
+  monkeypatch.setattr(database, "fetchrow", fake_fetchrow)
+
+  assert await _booking_chat_is_visible("booking-1") is expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("row", "expected"),
+  [
+    ({"status": "requested", "customer_left_at": None, "expert_left_at": None}, False),
+    ({"status": "confirmed", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "completed", "customer_left_at": None, "expert_left_at": None}, True),
+    ({"status": "cancelled", "customer_left_at": None, "expert_left_at": None}, False),
+  ],
+)
+async def test_booking_message_writes_require_open_confirmed_conversation(
+  monkeypatch: pytest.MonkeyPatch,
+  row: dict,
+  expected: bool,
+) -> None:
+  async def fake_fetchrow(*_args, **_kwargs):
+    return row
+
+  monkeypatch.setattr(database, "pool", object())
+  monkeypatch.setattr(database, "fetchrow", fake_fetchrow)
+
+  assert await _booking_accepts_new_messages("booking-1") is expected
+
+
 def test_consulting_websocket_relays_message_between_clients(monkeypatch: pytest.MonkeyPatch) -> None:
   # These are in-memory protocol tests.  Other tests can leave the shared
   # database singleton connected, which would otherwise turn this into an
@@ -225,6 +283,53 @@ def test_message_row_to_event_maps_persisted_message_contract() -> None:
     "mediaIds": ["media-1"],
     "sentAt": "2026-07-08T00:00:00Z",
   }
+
+
+class FakeConversationHistoryDatabase:
+  async def fetchrow(self, query: str, *_args):
+    if "select coalesce(conversation_id, id) as conversation_id" in query:
+      return {"conversation_id": "conversation-1"}
+    return None
+
+  async def fetch(self, query: str, *args):
+    if "select id::text as id" in query and "from consulting_bookings" in query:
+      return [{"id": "booking-new"}, {"id": "booking-old"}]
+    if "from consulting_messages m" in query:
+      assert args[0] == ["booking-new", "booking-old"]
+      return [
+        {
+          "id": "message-new",
+          "booking_id": "booking-new",
+          "client_message_id": "client-new",
+          "sender_type": "expert",
+          "sender_name": "상담사",
+          "body": "새 예약 안내",
+          "created_at": "2026-07-13T00:00:00Z",
+          "media": [],
+        },
+        {
+          "id": "message-old",
+          "booking_id": "booking-old",
+          "client_message_id": "client-old",
+          "sender_type": "user",
+          "sender_name": "고객",
+          "body": "이전 상담 질문",
+          "created_at": "2026-07-01T00:00:00Z",
+          "media": [],
+        },
+      ]
+    return []
+
+
+@pytest.mark.asyncio
+async def test_conversation_history_combines_only_bookings_in_same_conversation() -> None:
+  history = await list_consulting_conversation_messages(
+    FakeConversationHistoryDatabase(),
+    booking_id="booking-new",
+  )
+
+  assert [message["body"] for message in history] == ["이전 상담 질문", "새 예약 안내"]
+  assert [message["bookingId"] for message in history] == ["booking-old", "booking-new"]
 
 
 class FakeConsultingMessageDatabase:

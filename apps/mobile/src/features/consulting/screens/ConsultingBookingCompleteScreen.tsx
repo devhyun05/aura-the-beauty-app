@@ -4,7 +4,7 @@ import {
   Check,
   CreditCard,
   MapPin,
-  MessageCircle,
+  Phone,
   Video,
 } from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -28,14 +28,14 @@ import {
   formatConsultingSlotLabel,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import type {ConsultingBookingDraft, ConsultingExpert, ConsultingRecord} from '../types';
 
 type ConsultingBookingCompleteScreenProps = {
   expert: ConsultingExpert;
   draft: ConsultingBookingDraft;
   record?: ConsultingRecord;
-  onPressConversation: () => void;
+  onPressConsultingHome: () => void;
   onPressHistory: () => void;
 };
 
@@ -43,7 +43,7 @@ export function ConsultingBookingCompleteScreen({
   expert,
   draft,
   record,
-  onPressConversation,
+  onPressConsultingHome,
   onPressHistory,
 }: ConsultingBookingCompleteScreenProps) {
   const duration = findConsultingDuration(expert, draft.durationId);
@@ -86,14 +86,14 @@ export function ConsultingBookingCompleteScreen({
           <Text style={styles.pendingLabel}>현재 상태 · 신청 접수</Text>
           <Text style={styles.pendingTitle}>입금 확인 후 최종 예약이 확정돼요</Text>
           <Text style={styles.pendingDescription}>
-            전문가가 문자 또는 톡으로 일정과 입금 방법을 안내해 드려요. 안내받은
+            전문가가 등록한 연락처로 일정과 입금 방법을 안내해 드려요. 안내받은
             계좌로 입금한 뒤 전문가가 확인하면 예약 확정 알림이 도착해요.
           </Text>
         </View>
 
         <View style={styles.flowCard}>
           <Text style={styles.flowTitle}>예약 확정까지 이렇게 진행돼요</Text>
-          <FlowStep icon={MessageCircle} number="1" text="전문가가 문자 또는 톡으로 연락해요" />
+          <FlowStep icon={Phone} number="1" text="전문가가 등록한 연락처로 안내해요" />
           <FlowStep icon={CreditCard} number="2" text="안내받은 방법으로 입금해요" />
           <FlowStep icon={CalendarCheck} number="3" text="입금 확인 후 예약이 최종 확정돼요" />
         </View>
@@ -119,8 +119,8 @@ export function ConsultingBookingCompleteScreen({
       </ConsultingScreenScaffold>
 
       <ConsultingBottomBar>
-        <PrimaryButton label="전문가 톡 확인하기" onPress={onPressConversation} />
-        <SecondaryButton label="내 상담 내역 보기" onPress={onPressHistory} />
+        <PrimaryButton label="내 상담 내역 보기" onPress={onPressHistory} />
+        <SecondaryButton label="컨설팅 홈으로" onPress={onPressConsultingHome} />
       </ConsultingBottomBar>
     </RNView>
   );
@@ -131,7 +131,7 @@ function FlowStep({
   number,
   text,
 }: {
-  icon: typeof MessageCircle;
+    icon: typeof Phone;
   number: string;
   text: string;
 }) {

@@ -4,10 +4,13 @@ import type {
   VerticalThirdsKeypointMap,
 } from '../types';
 import {APPLE_HAIRLINE_FULL_CONFIDENCE, HAIRLINE_WARNING} from '../constants';
+import {POST_CAPTURE_POSE_GATE} from '../../face-capture/constants/facePoseGates';
 
-const MAX_ABS_YAW_DEG = 8;
-const MAX_ABS_PITCH_DEG = 8;
-const MAX_ABS_ROLL_DEG = 5;
+// 단일 소스(facePoseGates)에서 온다 — 실시간 게이트와의 정합(실시간 ≤ 사후)은
+// facePoseGates.test.ts 가 CI 에서 강제한다.
+const MAX_ABS_YAW_DEG = POST_CAPTURE_POSE_GATE.maxAbsYawDeg;
+const MAX_ABS_PITCH_DEG = POST_CAPTURE_POSE_GATE.maxAbsPitchDeg;
+const MAX_ABS_ROLL_DEG = POST_CAPTURE_POSE_GATE.maxAbsRollDeg;
 
 export type FaceVerticalThirdsQualityGateResult = {
   keypoints: VerticalThirdsKeypointMap;
@@ -15,8 +18,23 @@ export type FaceVerticalThirdsQualityGateResult = {
   statusReason?: string;
 };
 
-function isWithinPoseGate(value: number | undefined, limit: number) {
-  return typeof value !== 'number' || Math.abs(value) <= limit;
+function isWithinPoseGate(value: number, limit: number) {
+  // 유효성(유한·존재)은 호출 전에 isPoseMeasured 로 검증됐다. 여기선 범위만 본다.
+  return Math.abs(value) <= limit;
+}
+
+// pose 를 실제로 잰 것인지 판정. 0/0/0(결측 기본값)은 "완벽 정면"과 값이 같아
+// 구분 불가이므로, poseSource='unavailable' 또는 결측/비유한을 "못 잼"으로 본다 —
+// face_analysis 는 "기울기 못 재면 재촬영" 정책이라 이 경우 fail-closed 한다.
+function isPoseMeasured(nativeResult: NativeFaceRatioAnalyzeResult): boolean {
+  const pose = nativeResult.pose;
+  return (
+    !!pose &&
+    pose.poseSource !== 'unavailable' &&
+    Number.isFinite(pose.yawDeg) &&
+    Number.isFinite(pose.pitchDeg) &&
+    Number.isFinite(pose.rollDeg)
+  );
 }
 
 function createBlockedResult(
@@ -62,10 +80,22 @@ export function evaluateFaceVerticalThirdsQuality(
     );
   }
 
+  // pose 를 못 쟀으면(결측/비유한/poseSource unavailable) 재촬영으로 차단 —
+  // 0/0/0 을 "완벽 정면"으로 오인해 기울어진 얼굴을 통과시키던 fail-open 방지.
+  if (!isPoseMeasured(nativeResult)) {
+    return createBlockedResult(
+      keypoints,
+      nativeResult,
+      'pose_unavailable',
+      ['pose_unavailable'],
+    );
+  }
+
+  const pose = nativeResult.pose!;
   if (
-    !isWithinPoseGate(nativeResult.pose?.yawDeg, MAX_ABS_YAW_DEG) ||
-    !isWithinPoseGate(nativeResult.pose?.pitchDeg, MAX_ABS_PITCH_DEG) ||
-    !isWithinPoseGate(nativeResult.pose?.rollDeg, MAX_ABS_ROLL_DEG)
+    !isWithinPoseGate(pose.yawDeg, MAX_ABS_YAW_DEG) ||
+    !isWithinPoseGate(pose.pitchDeg, MAX_ABS_PITCH_DEG) ||
+    !isWithinPoseGate(pose.rollDeg, MAX_ABS_ROLL_DEG)
   ) {
     return createBlockedResult(
       keypoints,

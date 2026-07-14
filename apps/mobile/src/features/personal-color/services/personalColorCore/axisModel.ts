@@ -197,12 +197,18 @@ export function computeAxes(signals: RegionSignals): AxisComputation {
   });
 
   // Clarity (복합; skin 필수)
-  const clarity = computeClarity(skin, contrast);
+  const clarity = computeClarity(skin, lip, contrast);
 
   return {
     axes: { temperature, value, chroma, clarity, contrast },
     relations: { dL_skinHair, dL_skinLip, dE00_skinHair, dE00_skinLip },
   };
+}
+
+// pair별로 물리 기준에 센터링된 명도/색 대비 (±1). 검은 머리라는 상수 요인이
+// 축을 +1로 박지 않도록, "보통" 명도차/색차를 0으로 둔다.
+function pairContrast(delta: number, ref: number, scale: number): number {
+  return clamp((Math.abs(delta) - ref) / scale, -1, 1);
 }
 
 function computeContrast(
@@ -217,48 +223,54 @@ function computeContrast(
   },
 ): AuraAxis {
   const nullAxis: AuraAxis = { value: null, confidence: 0, floored: true, basis: RELATIVE };
-  if (!skin || (!hair && !lip)) return nullAxis;
+  // 대비는 skin↔hair 관계가 지배적·신뢰 가능. hair가 없으면 lip 단독은 부호가
+  // 뒤집혀 시즌을 흔들므로(적대 검증 확정) 축을 null 처리해 분류에서 드롭한다.
+  if (!skin || !hair || rel.dL_skinHair == null || rel.dE00_skinHair == null) return nullAxis;
 
-  // 존재하는 pair만 가중 (renormalize)
-  let vcNum = 0;
-  let vcDen = 0;
-  let ccNum = 0;
-  let ccDen = 0;
-  const involved: number[] = [skin.qEff];
+  // 필수 pair: skin↔hair (자기 물리 기준에 센터링).
+  let lumNum = CONTRAST.pairWeightSkinHair * pairContrast(rel.dL_skinHair, CONTRAST.lRefSkinHair, CONTRAST.lScaleSkinHair);
+  let lumDen = CONTRAST.pairWeightSkinHair;
+  let colNum = CONTRAST.pairWeightSkinHair * pairContrast(rel.dE00_skinHair, CONTRAST.eRefSkinHair, CONTRAST.eScaleSkinHair);
+  let colDen = CONTRAST.pairWeightSkinHair;
 
-  if (hair && rel.dL_skinHair != null && rel.dE00_skinHair != null) {
-    vcNum += CONTRAST.vcWeightSkinHair * Math.abs(rel.dL_skinHair);
-    vcDen += CONTRAST.vcWeightSkinHair;
-    ccNum += CONTRAST.ccWeightSkinHair * rel.dE00_skinHair;
-    ccDen += CONTRAST.ccWeightSkinHair;
-    involved.push(hair.qEff);
+  // 선택 pair: skin↔lip — lip 자체 신뢰가 충분할 때만 가산(약한 lip이 축을 veto하지 못하게).
+  if (lip && lip.qEff >= AXIS_Q_FLOOR && rel.dL_skinLip != null && rel.dE00_skinLip != null) {
+    lumNum += CONTRAST.pairWeightSkinLip * pairContrast(rel.dL_skinLip, CONTRAST.lRefSkinLip, CONTRAST.lScaleSkinLip);
+    lumDen += CONTRAST.pairWeightSkinLip;
+    colNum += CONTRAST.pairWeightSkinLip * pairContrast(rel.dE00_skinLip, CONTRAST.eRefSkinLip, CONTRAST.eScaleSkinLip);
+    colDen += CONTRAST.pairWeightSkinLip;
   }
-  if (lip && rel.dL_skinLip != null && rel.dE00_skinLip != null) {
-    vcNum += CONTRAST.vcWeightSkinLip * Math.abs(rel.dL_skinLip);
-    vcDen += CONTRAST.vcWeightSkinLip;
-    ccNum += CONTRAST.ccWeightSkinLip * rel.dE00_skinLip;
-    ccDen += CONTRAST.ccWeightSkinLip;
-    involved.push(lip.qEff);
-  }
-  if (vcDen === 0 || ccDen === 0) return nullAxis;
 
-  const VC = vcNum / vcDen;
-  const CC = ccNum / ccDen;
-  const contrastScore =
-    CONTRAST.scoreWeightVc * (VC / CONTRAST.vcScale) + CONTRAST.scoreWeightCc * (CC / CONTRAST.ccScale);
-  const value = clamp((contrastScore - CONTRAST.centerScore) / CONTRAST.scale, -1, 1);
-  const qContrast = Math.min(...involved);
+  const lumTerm = lumNum / lumDen;
+  const colTerm = colNum / colDen;
+  const value = clamp(CONTRAST.weightLum * lumTerm + CONTRAST.weightColor * colTerm, -1, 1);
+  // 신뢰도는 필수 pair(skin·hair)에서만 — 약한 lip이 축 전체를 veto하지 않도록.
+  const qContrast = Math.min(skin.qEff, hair.qEff);
   if (qContrast < AXIS_Q_FLOOR) return nullAxis;
   return { value, confidence: clamp(qContrast, 0, 1), floored: false, basis: RELATIVE };
 }
 
-function computeClarity(skin: RegionSignal | undefined, contrast: AuraAxis): AuraAxis {
+// Clarity = 채도 선명함 + (센터링된) 대비. 이전의 −varSkin 항은 matte 평균이 피부
+// 분산을 늘 낮게 만들어 모두를 '클리어'로 박아버려 제거했다.
+function computeClarity(
+  skin: RegionSignal | undefined,
+  lip: RegionSignal | undefined,
+  contrast: AuraAxis,
+): AuraAxis {
   const nullAxis: AuraAxis = { value: null, confidence: 0, floored: true, basis: RELATIVE };
   if (!skin || skin.qEff < AXIS_Q_FLOOR) return nullAxis;
   const chrSkin = chromaFeature(skin.lab, REFS.cRefSkin, REFS.cScaleSkin);
-  const varSkin = clamp(skin.sigma / REFS.sigmaRef - 1, -1, 1);
+  // floor 아래 저신뢰 lip 은 clarity 를 35% 움직이면서도 confidence 엔 안 잡혀,
+  // 신뢰 못 할 lip 이 clarity 를 좌우하는 문제가 있었다(코덱스 F15). floor 이상일
+  // 때만 lip 을 쓰고, 쓸 땐 그 품질을 confidence 에도 반영한다.
+  const useLip = !!lip && lip.qEff >= AXIS_Q_FLOOR;
+  const chrLip = useLip ? chromaFeature(lip!.lab, REFS.cRefLip, REFS.cScaleLip) : null;
   const contrastTerm = contrast.value ?? 0;
-  const value = clamp(0.5 * chrSkin + 0.3 * -varSkin + 0.2 * contrastTerm, -1, 1);
-  const qClarity = contrast.value != null ? Math.min(skin.qEff, contrast.confidence) : skin.qEff;
+  const value =
+    chrLip != null
+      ? clamp(0.45 * chrSkin + 0.35 * chrLip + 0.2 * contrastTerm, -1, 1)
+      : clamp(0.7 * chrSkin + 0.3 * contrastTerm, -1, 1);
+  let qClarity = contrast.value != null ? Math.min(skin.qEff, contrast.confidence) : skin.qEff;
+  if (useLip) qClarity = Math.min(qClarity, lip!.qEff);
   return { value, confidence: clamp(qClarity, 0, 1), floored: false, basis: RELATIVE };
 }

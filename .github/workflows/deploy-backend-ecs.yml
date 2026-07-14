@@ -24,6 +24,8 @@ env:
   ECS_CONTAINER_NAME: ${{ vars.ECS_CONTAINER_NAME || 'aura-backend-api' }}
   ECS_SERVICE: ${{ vars.ECS_SERVICE }}
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
+  CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
+  CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
@@ -133,15 +135,29 @@ jobs:
             --query taskDefinition \
             --output json > task-definition.raw.json
 
-          jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' task-definition.raw.json > task-definition.json
+          jq '
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | .containerDefinitions |= map(
+                .environment = ((.environment // []) | map(select(
+                  .name != "CONSULTING_CALL_TRANSCRIPTION_ENABLED" and
+                  .name != "CHIME_TRANSCRIPTION_ENABLED" and
+                  .name != "CHIME_TRANSCRIBE_SUPPORTED_LANGUAGES" and
+                  .name != "CHIME_TRANSCRIBE_DEFAULT_LANGUAGE" and
+                  .name != "CHIME_TRANSCRIBE_PREFERRED_LANGUAGE" and
+                  .name != "CONSULTING_TRANSCRIPT_RETENTION_DAYS" and
+                  .name != "CONSULTING_CALL_TRANSLATION_ENABLED" and
+                  .name != "CHIME_TRANSLATE_ENABLED"
+                )))
+              )
+          ' task-definition.raw.json > task-definition.json
 
       - name: Render ECS task definition
         id: render-task-definition
@@ -150,6 +166,9 @@ jobs:
           task-definition: task-definition.json
           container-name: ${{ env.ECS_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            CHIME_ENABLED=${{ env.CHIME_ENABLED }}
+            CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
 
       - name: Deploy ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2

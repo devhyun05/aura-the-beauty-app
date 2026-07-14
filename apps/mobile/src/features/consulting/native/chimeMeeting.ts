@@ -1,9 +1,6 @@
 import {NativeEventEmitter, NativeModules} from 'react-native';
 
-import type {
-  ConsultingCallJoinResult,
-  ConsultingCallLanguageCode,
-} from '../types';
+import type {ConsultingCallJoinResult} from '../types';
 
 const NATIVE_MODULE_NAME = 'AURAChimeMeeting';
 const NATIVE_EVENT_NAME = 'AURAChimeMeetingEvent';
@@ -21,50 +18,21 @@ type NativeChimeMeetingModule = {
 export type ChimeMeetingEvent = {
   attendeeId?: string;
   error?: string;
-  eventKind?: 'transcript' | 'transcriptionStatus' | 'unknown';
   externalUserId?: string;
   dropped?: boolean;
   isLocal?: boolean;
   level?: string;
   muted?: boolean;
   present?: boolean;
-  results?: ChimeTranscriptResult[];
   state?: string;
   tileId?: number;
-  transcript?: unknown;
-  transcriptionStatus?: ChimeTranscriptionStatus;
   type:
     | 'meetingStateChanged'
     | 'attendeePresenceChanged'
     | 'videoTileAdded'
     | 'videoTileRemoved'
     | 'audioLevelChanged'
-    | 'transcriptEvent'
     | 'meetingError';
-};
-
-export type ChimeTranscriptResult = {
-  attendeeId?: string;
-  channelId?: string;
-  content?: string;
-  endTimeMs?: number;
-  externalUserId?: string;
-  isPartial?: boolean;
-  languageIdentification?: Array<{
-    languageCode?: string;
-    score?: number;
-  }>;
-  resultId?: string;
-  sourceLanguageCode?: ConsultingCallLanguageCode;
-  speakerType?: 'user' | 'expert' | 'unknown';
-  startTimeMs?: number;
-};
-
-export type ChimeTranscriptionStatus = {
-  eventTimeMs?: number;
-  message?: string;
-  status?: 'started' | 'interrupted' | 'resumed' | 'stopped' | 'failed' | 'unknown';
-  transcriptionRegion?: string;
 };
 
 function getNativeChimeMeetingModule(): NativeChimeMeetingModule | undefined {

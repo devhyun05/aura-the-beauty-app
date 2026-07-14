@@ -14,7 +14,6 @@ private let auraChimeMeetingEventName = "AURAChimeMeetingEvent"
 final class AURAChimeMeeting: RCTEventEmitter {
   private static weak var sharedEmitter: AURAChimeMeeting?
   private var hasListeners = false
-  private var lastAudioLevels: [String: String] = [:]
 
   override init() {
     super.init()
@@ -240,7 +239,7 @@ private final class AURAChimeVideoContainerView: UIView {
 }
 
 #if canImport(AmazonChimeSDK)
-private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, VideoTileObserver, RealtimeObserver, TranscriptEventObserver {
+private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, VideoTileObserver, RealtimeObserver {
   static let shared = AURAChimeMeetingRuntime()
 
   let isAvailable = true
@@ -253,6 +252,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
   private var remoteTileId: Int?
   private var isLocalVideoEnabled = true
   private var didStart = false
+  private var lastAudioLevels: [String: String] = [:]
 
   func initialize() {}
 
@@ -260,6 +260,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     if tileType == "local" {
       localVideoView = containerView
       containerView.chimeRenderView.mirror = true
+      containerView.chimeRenderView.contentMode = .scaleAspectFill
       if let tileId = localTileId {
         meetingSession?.audioVideo.bindVideoView(videoView: containerView.chimeRenderView, tileId: tileId)
       }
@@ -268,6 +269,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
 
     remoteVideoView = containerView
     containerView.chimeRenderView.mirror = false
+    containerView.chimeRenderView.contentMode = .scaleAspectFit
     if let tileId = remoteTileId {
       meetingSession?.audioVideo.bindVideoView(videoView: containerView.chimeRenderView, tileId: tileId)
     }
@@ -304,11 +306,10 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     session.audioVideo.addAudioVideoObserver(observer: self)
     session.audioVideo.addVideoTileObserver(observer: self)
     session.audioVideo.addRealtimeObserver(observer: self)
-    session.audioVideo.addRealtimeTranscriptEventObserver?(observer: self)
     try session.audioVideo.start()
     session.audioVideo.startRemoteVideo()
     if isLocalVideoEnabled {
-      try session.audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 600, simulcastEnabled: false))
+      try session.audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 2500, simulcastEnabled: false))
     }
 
     didStart = true
@@ -329,7 +330,6 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     if let tileId = remoteTileId {
       session.audioVideo.unbindVideoView(tileId: tileId)
     }
-    session.audioVideo.removeRealtimeTranscriptEventObserver?(observer: self)
     session.audioVideo.removeRealtimeObserver(observer: self)
     session.audioVideo.removeVideoTileObserver(observer: self)
     session.audioVideo.removeAudioVideoObserver(observer: self)
@@ -361,7 +361,7 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     }
     if enabled {
       do {
-        try audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 600, simulcastEnabled: false))
+        try audioVideo.startLocalVideo(config: LocalVideoConfiguration(maxBitRateKbps: 2500, simulcastEnabled: false))
       } catch {
         AURAChimeMeeting.emit(type: "meetingError", body: ["error": error.localizedDescription])
       }
@@ -414,9 +414,25 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
     AURAChimeMeeting.emit(type: "meetingStateChanged", body: ["state": "videoStopped", "status": "\(sessionStatus.statusCode)"])
   }
 
-  func remoteVideoSourcesDidBecomeAvailable(sources: [RemoteVideoSource]) {}
+  func remoteVideoSourcesDidBecomeAvailable(sources: [RemoteVideoSource]) {
+    let subscriptions = Dictionary(uniqueKeysWithValues: sources.map { source in
+      let configuration = VideoSubscriptionConfiguration()
+      configuration.priority = .highest
+      configuration.targetResolution = .videoResolutionHD
+      return (source, configuration)
+    })
+    meetingSession?.audioVideo.updateVideoSourceSubscriptions(
+      addedOrUpdated: subscriptions,
+      removed: []
+    )
+  }
 
-  func remoteVideoSourcesDidBecomeUnavailable(sources: [RemoteVideoSource]) {}
+  func remoteVideoSourcesDidBecomeUnavailable(sources: [RemoteVideoSource]) {
+    meetingSession?.audioVideo.updateVideoSourceSubscriptions(
+      addedOrUpdated: [:],
+      removed: sources
+    )
+  }
 
   func cameraSendAvailabilityDidChange(available: Bool) {
     AURAChimeMeeting.emit(type: "meetingStateChanged", body: ["state": available ? "cameraAvailable" : "cameraUnavailable"])
@@ -431,12 +447,14 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
       localTileId = tileState.tileId
       if let renderView = localVideoView?.chimeRenderView {
         renderView.mirror = true
+        renderView.contentMode = .scaleAspectFill
         meetingSession?.audioVideo.bindVideoView(videoView: renderView, tileId: tileState.tileId)
       }
     } else {
       remoteTileId = tileState.tileId
       if let renderView = remoteVideoView?.chimeRenderView {
         renderView.mirror = false
+        renderView.contentMode = .scaleAspectFit
         meetingSession?.audioVideo.bindVideoView(videoView: renderView, tileId: tileState.tileId)
       }
     }
@@ -514,149 +532,6 @@ private final class AURAChimeMeetingRuntime: NSObject, AudioVideoObserver, Video
 
   func attendeesDidUnmute(attendeeInfo: [AttendeeInfo]) {
     emitPresence(attendeeInfo, present: true, muted: false)
-  }
-
-  func transcriptEventDidReceive(transcriptEvent: TranscriptEvent) {
-    if let transcript = transcriptEvent as? Transcript {
-      AURAChimeMeeting.emit(
-        type: "transcriptEvent",
-        body: [
-          "eventKind": "transcript",
-          "results": transcript.results.compactMap { serializeTranscriptResult($0) },
-        ]
-      )
-      return
-    }
-
-    if let status = transcriptEvent as? TranscriptionStatus {
-      AURAChimeMeeting.emit(
-        type: "transcriptEvent",
-        body: [
-          "eventKind": "transcriptionStatus",
-          "transcriptionStatus": serializeTranscriptionStatus(status),
-        ]
-      )
-      return
-    }
-
-    AURAChimeMeeting.emit(
-      type: "transcriptEvent",
-      body: [
-        "eventKind": "unknown",
-        "transcript": "\(transcriptEvent)",
-      ]
-    )
-  }
-
-  private func serializeTranscriptResult(_ result: TranscriptResult) -> [String: Any]? {
-    guard let alternative = result.alternatives.first else {
-      return nil
-    }
-
-    let content = alternative.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !content.isEmpty else {
-      return nil
-    }
-
-    var body: [String: Any] = [
-      "resultId": result.resultId,
-      "content": content,
-      "isPartial": result.isPartial,
-      "startTimeMs": result.startTimeMs,
-      "endTimeMs": result.endTimeMs,
-    ]
-
-    if let channelId = result.channelId {
-      body["channelId"] = channelId
-    }
-
-    if let sourceLanguageCode = normalizedTranscriptLanguage(result.languageCode) ?? highestScoredLanguage(result.languageIdentification) {
-      body["sourceLanguageCode"] = sourceLanguageCode
-    }
-
-    if let languageIdentification = result.languageIdentification {
-      body["languageIdentification"] = languageIdentification.map {
-        [
-          "languageCode": $0.languageCode,
-          "score": $0.score,
-        ]
-      }
-    }
-
-    if let attendee = transcriptAttendee(from: alternative) {
-      body["attendeeId"] = attendee.attendeeId
-      body["externalUserId"] = attendee.externalUserId
-      body["speakerType"] = speakerType(for: attendee.externalUserId)
-    } else {
-      body["speakerType"] = "unknown"
-    }
-
-    return body
-  }
-
-  private func serializeTranscriptionStatus(_ status: TranscriptionStatus) -> [String: Any] {
-    var body: [String: Any] = [
-      "status": transcriptionStatusName(status.type),
-      "eventTimeMs": status.eventTimeMs,
-      "transcriptionRegion": status.transcriptionRegion,
-    ]
-    if let message = status.message {
-      body["message"] = message
-    }
-    return body
-  }
-
-  private func transcriptAttendee(from alternative: TranscriptAlternative) -> AttendeeInfo? {
-    if let pronunciationItem = alternative.items.first(where: { $0.type == .pronunciation }) {
-      return pronunciationItem.attendee
-    }
-    return alternative.items.first?.attendee
-  }
-
-  private func speakerType(for externalUserId: String) -> String {
-    if externalUserId.hasPrefix("customer:") {
-      return "user"
-    }
-    if externalUserId.hasPrefix("partner:") || externalUserId.hasPrefix("expert:") {
-      return "expert"
-    }
-    return "unknown"
-  }
-
-  private func normalizedTranscriptLanguage(_ languageCode: String?) -> String? {
-    guard let languageCode else {
-      return nil
-    }
-    if languageCode == "ko-KR" || languageCode == "en-US" {
-      return languageCode
-    }
-    return nil
-  }
-
-  private func highestScoredLanguage(_ languages: [TranscriptLanguageWithScore]?) -> String? {
-    guard let language = languages?.max(by: { $0.score < $1.score }) else {
-      return nil
-    }
-    return normalizedTranscriptLanguage(language.languageCode)
-  }
-
-  private func transcriptionStatusName(_ status: TranscriptionStatusType) -> String {
-    switch status {
-    case .started:
-      return "started"
-    case .interrupted:
-      return "interrupted"
-    case .resumed:
-      return "resumed"
-    case .stopped:
-      return "stopped"
-    case .failed:
-      return "failed"
-    case .unknown:
-      return "unknown"
-    @unknown default:
-      return "unknown"
-    }
   }
 
   private func emitPresence(_ attendeeInfo: [AttendeeInfo], present: Bool, dropped: Bool = false, muted: Bool? = nil) {

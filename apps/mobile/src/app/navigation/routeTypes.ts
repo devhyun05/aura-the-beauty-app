@@ -37,6 +37,8 @@ export type RootStackParamList = {
   };
   UnityMakeupCapture: undefined;
   FaceAnalysisIntro: undefined;
+  // 사진 확인 뒤 ARKit 3D 자동 측정(셔터 없음) — 완료/실패/skip 시 로딩으로 이어진다.
+  Face3DMeasurement: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail: {reportId?: string} | undefined;
@@ -76,6 +78,7 @@ export type RootStackParamList = {
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
   ProductPersonalizationSettings: undefined;
+  MakeupRecommendation: undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
@@ -105,7 +108,11 @@ export type RootStackParamList = {
   ConsultingHistory: undefined;
   ConsultingMessages: undefined;
   ConsultingNotifications: undefined;
-  ConsultingConversation: {recordId: string; expertId: string};
+  ConsultingConversation: {
+    recordId: string;
+    expertId: string;
+    record?: ConsultingRecord;
+  };
   ConsultingMembership: undefined;
   ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: undefined;
@@ -168,6 +175,7 @@ export const rootStackRoutes = [
   'FaceCaptureConfirmation',
   'UnityMakeupCapture',
   'FaceAnalysisIntro',
+  'Face3DMeasurement',
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',
   'FaceAnalysisReportDetail',
@@ -192,6 +200,7 @@ export const rootStackRoutes = [
   'ProductSearchResult',
   'ProductDetail',
   'ProductPersonalizationSettings',
+  'MakeupRecommendation',
   'AuradinSearch',
   'Community',
   'CommunityThreadDetail',

@@ -36,8 +36,18 @@ function pct(v: number | null): string {
 function num(v: number | null): string {
   return v == null ? '—' : v.toFixed(3);
 }
+// 부호를 명확히 보여주는 축 평균값(−1…+1). 분류를 좌우하는 실제 측정 위치.
+function signed(v: number | null): string {
+  return v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}`;
+}
 
-export function PersonalColorRepeatabilityReportCard({ report }: { report: RepeatabilityReport }) {
+export function PersonalColorRepeatabilityReportCard({
+  report,
+  footnote,
+}: {
+  report: RepeatabilityReport;
+  footnote?: string;
+}) {
   const meta = VERDICT_META[report.verdict];
   const axisNames: AxisName[] = ['temperature', 'value', 'chroma', 'clarity', 'contrast'];
 
@@ -65,15 +75,17 @@ export function PersonalColorRepeatabilityReportCard({ report }: { report: Repea
         </Text>
       )}
 
-      <Text style={styles.sectionTitle}>축별 재현성 (표준편차 / 범위)</Text>
+      <Text style={styles.sectionTitle}>축별 값 (평균 / 표준편차 / 범위)</Text>
+      <Text style={styles.axisHint}>평균 = 측정된 축 위치(−1…+1). 12톤 분류는 이 5개 값으로 결정됩니다.</Text>
       {axisNames.map(name => {
         const a = report.axes[name];
         return (
           <View key={name} style={styles.axisRow}>
             <Text style={styles.axisName}>{AXIS_KO[name]}</Text>
+            <Text style={styles.axisMean}>{signed(a.mean)}</Text>
             <Text style={styles.axisStat}>σ {num(a.stdev)}</Text>
             <Text style={styles.axisStat}>범위 {num(a.spread)}</Text>
-            <Text style={styles.axisCount}>n={a.presentCount}</Text>
+            <Text style={styles.axisCount}>n{a.presentCount}</Text>
           </View>
         );
       })}
@@ -87,7 +99,7 @@ export function PersonalColorRepeatabilityReportCard({ report }: { report: Repea
       )}
 
       <Text style={styles.footnote}>
-        보정 전 참고. 시즌이 뒤집히면(fail) ROI·조명·lock부터 점검하세요.
+        {footnote ?? '보정 전 참고. 시즌이 뒤집히면(fail) ROI·조명·lock부터 점검하세요.'}
       </Text>
     </View>
   );
@@ -113,10 +125,12 @@ const styles = StyleSheet.create({
   metricLabel: { fontSize: 12, color: '#777', marginTop: 2 },
   mode: { fontSize: 14, color: '#333' },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#333', marginTop: 4 },
-  axisRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  axisName: { width: 56, fontSize: 13, color: '#555' },
-  axisStat: { fontSize: 13, color: '#333', minWidth: 78 },
-  axisCount: { fontSize: 12, color: '#aaa' },
+  axisHint: { fontSize: 11, color: '#999', marginTop: -4, marginBottom: 2 },
+  axisRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  axisName: { width: 48, fontSize: 13, color: '#555' },
+  axisMean: { width: 52, fontSize: 14, fontWeight: '700', color: '#222' },
+  axisStat: { fontSize: 12, color: '#666', minWidth: 62 },
+  axisCount: { fontSize: 11, color: '#bbb' },
   reasons: { backgroundColor: '#faf9f7', borderRadius: 10, padding: 12, gap: 4 },
   reason: { fontSize: 13, color: '#8a6d3b' },
   footnote: { fontSize: 11, color: '#aaa', marginTop: 4 },

@@ -50,6 +50,8 @@ _DEFAULT_CLOSE_MINUTE = 19 * 60
 ACTIVE_BOOKING_STATUSES = ("requested", "contacting", "confirmed", "scheduled", "in_progress")
 EDITABLE_BOOKING_STATUSES = ("requested", "contacting")
 SLOT_BLOCKING_STATUSES = ("contacting", "confirmed", "scheduled", "in_progress")
+CHAT_VISIBLE_BOOKING_STATUSES = ("confirmed", "scheduled", "in_progress", "completed")
+CHAT_VISIBLE_CLOSED_BOOKING_STATUSES = ("canceled", "cancelled", "unavailable", "no_show", "refund_requested")
 ScheduleSettings = dict[str, Any]
 
 
@@ -328,11 +330,45 @@ def _validate_booking_day(day_id: date, schedule_settings: ScheduleSettings | No
   return day_id
 
 
+def _booking_slot_is_in_future(
+  day_id: date,
+  slot_id: str,
+  *,
+  now: datetime | None = None,
+) -> bool:
+  current = now or datetime.now(_KST)
+  if current.tzinfo is None:
+    current = current.replace(tzinfo=_KST)
+  else:
+    current = current.astimezone(_KST)
+  starts_at = datetime.combine(
+    day_id,
+    datetime.strptime(slot_id, "%H:%M").time(),
+    tzinfo=_KST,
+  )
+  return starts_at > current
+
+
+def _validate_booking_slot_is_in_future(
+  day_id: date,
+  slot_id: str,
+  *,
+  now: datetime | None = None,
+) -> None:
+  if not _booking_slot_is_in_future(day_id, slot_id, now=now):
+    raise AppError(
+      400,
+      "CONSULTING_SLOT_IN_PAST",
+      "현재 시간 이후의 예약 시간을 선택해 주세요.",
+    )
+
+
 def _build_booking_days(
   booked_intervals_by_day: dict[str, list[tuple[int, int]]] | None = None,
   duration_minutes: int = 30,
   start_day: date | None = None,
   schedule_settings: ScheduleSettings | None = None,
+  now: datetime | None = None,
 ) -> list[dict[str, Any]]:
   booked_intervals_by_day = booked_intervals_by_day or {}
   first_day = start_day or _today_kst()
@@ -359,10 +395,16 @@ def _build_booking_days(
           {
             "id": slot_label,
             "label": slot_label,
-            "available": _slot_available_for_duration(
-              slot_label,
-              duration_minutes,
-              booked_intervals,
+            "available": (
+              _slot_available_for_duration(
+                slot_label,
+                duration_minutes,
+                booked_intervals,
+              )
+              and (
+                now is None
+                or _booking_slot_is_in_future(slot_date, slot_label, now=now)
+              )
             ),
           }
           for slot_label in slot_labels
@@ -750,6 +792,7 @@ async def get_expert_slots(
     duration_minutes,
     first_day,
     schedule_settings=schedule_settings,
+    now=datetime.now(_KST),
   )
 
 
@@ -783,6 +826,9 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
   price = row.get("price")
   return {
     "id": str(row["id"]),
+    "conversation_id": str(row.get("conversation_id") or row["id"]),
+    "customer_left_at": row.get("customer_left_at"),
+    "expert_left_at": row.get("expert_left_at"),
     "expert_id": row["expert_id"],
     "duration_id": row.get("duration_code"),
     "day_id": scheduled_date.isoformat()
@@ -792,6 +838,7 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     else None,
     "slot_id": row.get("slot_id"),
     "status": _public_booking_status(str(row["status"])),
+    "chat_available": is_customer_chat_available(row),
     "category_label": row["category_label"],
     "date_label": row["date_label"],
     "duration_label": row["duration_label"],
@@ -808,6 +855,18 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
     # without opening every conversation.
     "last_expert_message_at": row.get("last_expert_message_at"),
   }
+
+
+def is_customer_chat_available(booking: dict[str, Any]) -> bool:
+  status = str(booking.get("status") or "")
+  if status in CHAT_VISIBLE_BOOKING_STATUSES:
+    return booking.get("customer_left_at") is None and booking.get("expert_left_at") is None
+  return (
+    status in CHAT_VISIBLE_CLOSED_BOOKING_STATUSES
+    and booking.get("confirmed_at") is not None
+    and booking.get("customer_left_at") is None
+    and booking.get("expert_left_at") is None
+  )
 
 
 def _public_booking_status(status: str) -> str:
@@ -958,6 +1017,52 @@ async def get_booking(db: Database, user_id: str, booking_id: str) -> dict[str, 
   return await _attach_summary(db, _record(row), row["id"])
 
 
+async def leave_booking_conversation(db: Database, user_id: str, booking_id: str) -> dict[str, Any]:
+  row = await db.fetchrow(
+    """
+    select coalesce(conversation_id, id) as conversation_id
+    from consulting_bookings
+    where id::text = $1 and user_id = $2::uuid
+    """,
+    booking_id,
+    user_id,
+  )
+  if row is None:
+    raise AppError(404, "CONSULTING_BOOKING_NOT_FOUND", "예약을 찾을 수 없어요.")
+
+  await db.execute(
+    """
+    update consulting_bookings
+    set customer_left_at = coalesce(customer_left_at, now()), updated_at = now()
+    where conversation_id = $1 and user_id = $2::uuid
+    """,
+    row["conversation_id"],
+    user_id,
+  )
+  return {"conversation_id": str(row["conversation_id"]), "left": True}
+
+
+async def _conversation_id_for_new_booking(
+  db: Database,
+  user_id: str,
+  expert_id: str,
+  booking_id: Any,
+) -> Any:
+  row = await db.fetchrow(
+    """
+    select coalesce(conversation_id, id) as conversation_id
+    from consulting_bookings
+    where user_id = $1::uuid and expert_id = $2
+      and customer_left_at is null and expert_left_at is null
+    order by created_at desc
+    limit 1
+    """,
+    user_id,
+    expert_id,
+  )
+  return row["conversation_id"] if row is not None else booking_id
+
+
 async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, Any]:
   expert = await db.fetchrow(
     """
@@ -985,6 +1090,7 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
   schedule_settings = _schedule_settings_from_row(expert)
   booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
+  _validate_booking_slot_is_in_future(booking_day, slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):
@@ -1030,12 +1136,19 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
   )
   shared_report_ids = list(payload.shared_report_ids or [])
   booking_price = _booking_price(payload, duration)
+  booking_id = uuid4()
+  conversation_id = await _conversation_id_for_new_booking(
+    db,
+    user_id,
+    payload.expert_id,
+    booking_id,
+  )
 
   try:
     row = await db.fetchrow(
       """
       insert into consulting_bookings (
-        user_id, expert_id, duration_code, duration_label, duration_minutes,
+        id, conversation_id, user_id, expert_id, duration_code, duration_label, duration_minutes,
         category_label, scheduled_at, scheduled_date, slot_start_minutes,
         date_label, slot_id, concern_id, concern_label,
         share_reports, shared_report_ids, question,
@@ -1044,16 +1157,18 @@ async def create_booking(db: Database, user_id: str, payload: Any) -> dict[str, 
         status, price
       )
       values (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        $10, $11, $12, $13,
-        $14, $15::uuid[], $16,
-        $17, $18, $19,
-        $20,
-        'requested', $21
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11,
+        $12, $13, $14, $15,
+        $16, $17::uuid[], $18,
+        $19, $20, $21,
+        $22,
+        'requested', $23
       )
       returning *
       """,
+      booking_id,
+      conversation_id,
       user_id,
       payload.expert_id,
       duration["code"],
@@ -1126,6 +1241,7 @@ async def update_booking(
 
   booking_day = _validate_booking_day(payload.day_id, schedule_settings)
   slot_id = _coerce_booking_slot_id(payload.slot_id)
+  _validate_booking_slot_is_in_future(booking_day, slot_id)
   slot_start_minutes = _slot_label_to_minutes(slot_id)
   duration_minutes = int(duration["minutes"])
   if not _slot_available_for_duration(slot_id, duration_minutes, []):

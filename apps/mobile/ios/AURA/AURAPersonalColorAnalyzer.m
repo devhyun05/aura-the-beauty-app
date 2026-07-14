@@ -49,6 +49,28 @@ static const int kLeftCheekIndices[] = {50, 101, 118, 119, 205, 36};
 static const int kRightCheekIndices[] = {280, 330, 347, 348, 425, 266};
 static const int kForeheadIndices[] = {10, 151, 9, 107, 336};
 
+// 흰자(sclera) — 조명 캐스트 추정용(illuminationCorrection). 눈꺼풀 링 폴리곤 내부에서
+// 어두운 픽셀(홍채/동공/속눈썹)·고채도 픽셀(홍채색/메이크업)을 로컬 게이트로 제외.
+// 인덱스 저역=scleraLeft(피사체 우측 눈, cheek 명명 규약과 동일), 고역=scleraRight.
+static const int kScleraLeftEyeIndices[] = {33, 7, 163, 144, 145, 153, 154, 155,
+                                            133, 173, 157, 158, 159, 160, 161, 246};
+static const int kScleraRightEyeIndices[] = {263, 249, 390, 373, 374, 380, 381, 382,
+                                             362, 398, 384, 385, 386, 387, 388, 466};
+static const int kScleraEyeIndexCount = 16;
+// 그리드 밀도 — 코너/하단 trim·코호트 게이트로 잃는 표본을 보상(실기기 자리 촬영
+// too_few_samples 해결). 중복 픽셀은 bbox 픽셀 클램프가 방지.
+static const int kScleraGridStepsX = 36;
+static const int kScleraGridStepsY = 22;
+static const uint8_t kScleraDarkMin = 60; // 절대 하한 floor (홍채/동공/속눈썹)
+static const int kScleraSatRelPctMax = 28; // (mx-mn) ≤ mx의 28% — 상대 채도(밝기 적응). 홍채색/메이크업 배제
+// 오염 방어(실기기에서 붉은기 오염 → 전역 red-cut 편향 확인):
+static const double kScleraMinOpenRatio = 0.2;  // 픽셀 공간 세로/가로 비 이 미만 = 감은/가는 눈 → 스킵
+static const double kScleraCornerTrim = 0.2;    // bbox 좌우 각 20% 제외 — 눈물언덕(분홍) 등 코너 조직 배제
+static const double kScleraLowerTrim = 0.18;    // bbox 하단 18% 제외 — 아래 눈꺼풀 waterline(밝고 분홍·글로시)이
+                                                // 밝기 코호트를 통과해 red 오염을 만드는 것을 차단(실기기 눈 사진 확인)
+static const double kScleraBrightQuantile = 0.90; // 1차 스캔 밝기 상위 분위 (calibration target)
+static const double kScleraBrightFraction = 0.75; // p90의 75% 이상만 채택 — 상위 코호트(진짜 흰자)만
+
 #pragma mark - 기본 헬퍼
 
 static double AURAPCClamp01(double v) { return fmax(0.0, fmin(1.0, v)); }
@@ -583,6 +605,99 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
       }
     } else {
       [warnings addObject:@"lip_landmarks_unavailable"];
+    }
+  }
+
+  // ---- Sclera 좌/우 (눈꺼풀 링 폴리곤; 축 계산 불참 — 조명 캐스트 추정 전용) ----
+  {
+    const int *eyeIdx[2] = {kScleraLeftEyeIndices, kScleraRightEyeIndices};
+    NSString *eyeKeys[2] = {@"scleraLeft", @"scleraRight"};
+    BOOL anyValid = NO;
+    for (int e = 0; e < 2; e++) {
+      double ringX[kScleraEyeIndexCount], ringY[kScleraEyeIndexCount];
+      BOOL valid = YES;
+      double minX = 1.0, maxX = 0.0, minY = 1.0, maxY = 0.0;
+      for (int i = 0; i < kScleraEyeIndexCount; i++) {
+        AURAPCPoint p = AURAPCLandmark(landmarks, eyeIdx[e][i]);
+        if (!p.valid) { valid = NO; break; }
+        ringX[i] = p.x; ringY[i] = p.y;
+        minX = fmin(minX, p.x); maxX = fmax(maxX, p.x);
+        minY = fmin(minY, p.y); maxY = fmax(maxY, p.y);
+      }
+      if (!valid || maxX <= minX || maxY <= minY) continue;
+      // 감은/블링크 눈 fail-safe: 픽셀 공간 종횡비로 판정(정규화 좌표는 이미지
+      // 비율에 왜곡됨). 링이 슬리버로 붕괴하면 눈꺼풀 피부가 흰자로 오염된다.
+      double bboxW = maxX - minX;
+      double bboxH = maxY - minY;
+      double ringWpx = bboxW * (double)imgW;
+      double ringHpx = bboxH * (double)imgH;
+      if (ringHpx < ringWpx * kScleraMinOpenRatio) continue;
+      anyValid = YES;
+      // 눈 코너(눈물언덕 등 분홍 조직) 제외 — 중앙 밴드만 샘플
+      double bandMinX = minX + bboxW * kScleraCornerTrim;
+      double bandMaxX = maxX - bboxW * kScleraCornerTrim;
+      // 아래 눈꺼풀 waterline(밝은 분홍) 제외 — bbox 하단 밴드 차단
+      double bandMaxY = maxY - bboxH * kScleraLowerTrim;
+      // 작은 눈에서 같은 픽셀 중복 샘플로 sampleCount가 부풀지 않게 그리드를 bbox 픽셀 크기로 클램프
+      int stepsX = (int)fmax(1.0, fmin((double)kScleraGridStepsX, floor(ringWpx)));
+      int stepsY = (int)fmax(1.0, fmin((double)kScleraGridStepsY, floor(ringHpx)));
+      // 1차 스캔: 폴리곤 내부 밝기 히스토그램 → 상위 코호트(진짜 흰자) 임계 산출.
+      // 캐스트는 흰자·홍채를 함께 스케일하므로 상대 임계는 캐스트 불변.
+      int lumaHist[256] = {0};
+      long lumaCount = 0;
+      for (int gy = 0; gy < stepsY; gy++) {
+        for (int gx = 0; gx < stepsX; gx++) {
+          double nx = minX + bboxW * ((double)gx + 0.5) / stepsX;
+          double ny = minY + bboxH * ((double)gy + 0.5) / stepsY;
+          if (nx < bandMinX || nx > bandMaxX || ny > bandMaxY) continue;
+          if (!AURAPCInsidePolygon(ringX, ringY, kScleraEyeIndexCount, nx, ny)) continue;
+          uint8_t r, g, b;
+          AURAPCPixel(colorBuf, nx, ny, &r, &g, &b);
+          uint8_t mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+          lumaHist[mx] += 1;
+          lumaCount += 1;
+        }
+      }
+      if (lumaCount == 0) continue;
+      long remaining = (long)ceil((double)lumaCount * (1.0 - kScleraBrightQuantile));
+      int p90 = 255;
+      for (int v = 255; v >= 0; v--) {
+        remaining -= lumaHist[v];
+        if (remaining <= 0) { p90 = v; break; }
+      }
+      uint8_t brightMin = (uint8_t)fmax((double)kScleraDarkMin, kScleraBrightFraction * (double)p90);
+      // 2차 스캔: 게이트 통과 픽셀만 집계
+      AURAPCAcc acc;
+      AURAPCAccInit(&acc);
+      long gridSampled = 0, gridGated = 0;
+      for (int gy = 0; gy < stepsY; gy++) {
+        for (int gx = 0; gx < stepsX; gx++) {
+          double nx = minX + bboxW * ((double)gx + 0.5) / stepsX;
+          double ny = minY + bboxH * ((double)gy + 0.5) / stepsY;
+          gridSampled += 1;
+          if (nx < bandMinX || nx > bandMaxX || ny > bandMaxY) continue;
+          if (!AURAPCInsidePolygon(ringX, ringY, kScleraEyeIndexCount, nx, ny)) continue;
+          uint8_t r, g, b;
+          AURAPCPixel(colorBuf, nx, ny, &r, &g, &b);
+          uint8_t mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+          uint8_t mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+          if (mx < brightMin) continue; // 홍채/속눈썹/그늘 — 상위 밝기 코호트만
+          if ((int)(mx - mn) * 100 > kScleraSatRelPctMax * (int)mx) continue; // 상대 채도: 홍채색/메이크업
+          gridGated += 1;
+          AURAPCAccAdd(&acc, r, g, b, 1.0); // 내장 specular 게이트가 글린트 제거
+        }
+      }
+      NSDictionary *stats = AURAPCFinalizeRegion(&acc);
+      if (stats) {
+        double coverage = gridSampled > 0 ? (double)gridGated / (double)gridSampled : 0.0;
+        NSMutableDictionary *m = [stats mutableCopy];
+        m[@"areaRatio"] = @(coverage);
+        m[@"matteCoverage"] = @(1.0);
+        regions[eyeKeys[e]] = m;
+      }
+    }
+    if (!anyValid) {
+      [warnings addObject:@"sclera_landmarks_unavailable"];
     }
   }
 

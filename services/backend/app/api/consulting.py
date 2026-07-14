@@ -14,7 +14,6 @@ from app.schemas.consulting import (
   ConsultingTextMessageSend,
   ReviewCreate,
 )
-from app.schemas.consulting_call import ConsultingCallJoinRequest
 from app.schemas.consulting_partner import (
   AdminPartnerApplicationApprove,
   AdminPartnerApplicationReject,
@@ -173,6 +172,26 @@ async def cancel_consulting_booking(
   return success({"record": record})
 
 
+@router.post("/bookings/{booking_id}/chat/leave")
+async def leave_consulting_chat(
+  booking_id: str,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  result = await consulting.leave_booking_conversation(db, user["id"], booking_id)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "conversation.left",
+      "bookingId": booking_id,
+      "participantType": "user",
+      "message": "고객이 대화방을 나갔습니다. 다음 예약은 새 대화방에서 시작됩니다.",
+    },
+  )
+  return success(result)
+
+
 @router.delete("/bookings/{booking_id}")
 async def delete_consulting_booking(
   booking_id: str,
@@ -201,8 +220,12 @@ async def send_consulting_text_message(
   """Durable HTTP path used when a mobile WebSocket is reconnecting."""
   user = await ensure_user(db, auth)
   booking = await consulting.get_booking(db, user["id"], booking_id)
-  if booking["status"] in {"canceled", "completed"}:
-    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "취소되었거나 완료된 예약에는 새 메시지를 보낼 수 없어요.")
+  if not booking.get("chat_available"):
+    raise AppError(409, "CONSULTING_CHAT_NOT_CONFIRMED", "예약 확정 후 채팅을 이용할 수 있어요.")
+  if booking["status"] in {"canceled", "unavailable"}:
+    raise AppError(409, "CONSULTING_BOOKING_CLOSED", "종료된 예약의 대화는 열람만 할 수 있어요.")
+  if booking.get("customer_left_at") or booking.get("expert_left_at"):
+    raise AppError(409, "CONSULTING_CONVERSATION_LEFT", "나간 대화방에는 새 메시지를 보낼 수 없어요.")
   message, inserted = await create_consulting_message(
     db,
     booking_id=booking_id,
@@ -232,7 +255,6 @@ async def get_consulting_call_state(
 @router.post("/bookings/{booking_id}/call/join")
 async def join_consulting_call(
   booking_id: str,
-  payload: ConsultingCallJoinRequest,
   response: Response,
   auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
@@ -246,7 +268,6 @@ async def join_consulting_call(
         db,
         user["id"],
         booking_id,
-        payload.language_code,
         settings,
       ),
     },
@@ -261,7 +282,18 @@ async def end_consulting_call(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  return success({"call": await consulting_call.end_customer_call(db, user["id"], booking_id, settings)})
+  call = await consulting_call.end_customer_call(db, user["id"], booking_id, settings)
+  await consulting_realtime_manager.broadcast(
+    booking_id,
+    {
+      "type": "call.status",
+      "bookingId": booking_id,
+      "callSessionId": call.get("call_session_id"),
+      "status": "ended",
+      "message": "고객이 화상 상담을 종료했습니다.",
+    },
+  )
+  return success({"call": call})
 
 
 @router.get("/bookings/{booking_id}/summary")

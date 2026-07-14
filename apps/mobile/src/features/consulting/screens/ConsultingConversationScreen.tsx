@@ -10,7 +10,7 @@ import {
   View as RNView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import {CalendarClock, Plus, Send, Video} from 'lucide-react-native';
+import {CalendarClock, LogOut, Plus, Send, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {
@@ -29,7 +29,7 @@ import {
 import {
   formatConsultingPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
 import {
   connectConsultingConversationSocket,
   type ConsultingConversationSocketClient,
@@ -39,6 +39,7 @@ import {
 } from '../services/consultingRealtimeService';
 import {
   getConsultingCallState,
+  leaveConsultingConversation,
   sendConsultingTextMessage,
 } from '../services/consultingService';
 import type {ConsultingExpert, ConsultingRecord} from '../types';
@@ -59,6 +60,7 @@ type ConsultingConversationScreenProps = {
   bookingId: string;
   expert: ConsultingExpert;
   onBookingStatusChange?: () => void;
+  onConversationLeft: () => void;
   record: ConsultingRecord | null;
   onPressCall: () => void;
 };
@@ -70,6 +72,7 @@ export function ConsultingConversationScreen({
   bookingId,
   expert,
   onBookingStatusChange,
+  onConversationLeft,
   record,
   onPressCall,
 }: ConsultingConversationScreenProps) {
@@ -81,7 +84,15 @@ export function ConsultingConversationScreen({
   const [input, setInput] = useState('');
   const [bookingStatusNotice, setBookingStatusNotice] = useState<string | null>(null);
   const [isExpertCalling, setIsExpertCalling] = useState(false);
+  const [isLeavingConversation, setIsLeavingConversation] = useState(false);
+  const [isConversationClosed, setIsConversationClosed] = useState(
+    Boolean(record?.customerLeftAt || record?.expertLeftAt),
+  );
   const lastAutoRetryStatusRef = useRef<ConsultingSocketStatus>('idle');
+
+  useEffect(() => {
+    setIsConversationClosed(Boolean(record?.customerLeftAt || record?.expertLeftAt));
+  }, [record?.customerLeftAt, record?.expertLeftAt]);
 
   const connectionLabel = useMemo(
     () => getConnectionLabel(connectionStatus),
@@ -156,15 +167,17 @@ export function ConsultingConversationScreen({
         return;
       }
 
+      if (event.type === 'conversation.left') {
+        setBookingStatusNotice(event.message);
+        setIsConversationClosed(true);
+        return;
+      }
+
       if (event.type === 'call.status') {
         setBookingStatusNotice(event.message);
         onBookingStatusChange?.();
         if (event.status === 'started') {
           setIsExpertCalling(true);
-          Alert.alert('화상 상담이 시작됐어요', event.message, [
-            {text: '나중에'},
-            {text: '입장하기', onPress: onPressCall},
-          ]);
         } else if (event.status === 'ended') {
           setIsExpertCalling(false);
         }
@@ -436,8 +449,41 @@ export function ConsultingConversationScreen({
     }
   };
 
-  const canSendText = input.trim().length > 0;
-  const canPickImage = connectionStatus === 'connected' && !isUploadingImage;
+  const handleLeaveConversation = () => {
+    if (isLeavingConversation) {
+      return;
+    }
+    Alert.alert(
+      '대화방 나가기',
+      '대화 기록은 보관되지만 목록에서 숨겨져요. 같은 상담사에게 다시 예약하면 새 대화방에서 시작합니다.',
+      [
+        {text: '취소', style: 'cancel'},
+        {
+          text: '나가기',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLeavingConversation(true);
+            try {
+              await leaveConsultingConversation(bookingId);
+              socketRef.current?.close();
+              onConversationLeft();
+            } catch {
+              Alert.alert('대화방 나가기', '대화방에서 나가지 못했어요. 잠시 후 다시 시도해 주세요.');
+            } finally {
+              setIsLeavingConversation(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const conversationClosed =
+    isConversationClosed ||
+    record?.status === 'canceled' ||
+    record?.status === 'unavailable';
+  const canSendText = input.trim().length > 0 && !conversationClosed;
+  const canPickImage = connectionStatus === 'connected' && !isUploadingImage && !conversationClosed;
   const callEnabled = canJoinVideoCall(record) && isExpertCalling;
   const reservationDateLabel = getReservationDateLabel(record);
   const reservationStartTimeLabel = getReservationStartTimeLabel(record);
@@ -481,6 +527,19 @@ export function ConsultingConversationScreen({
           </RNView>
           <RNView style={styles.headerActions}>
             {record ? <ConsultingStatusBadge status={record.status} /> : null}
+            <Pressable
+              accessibilityLabel="대화방 나가기"
+              accessibilityRole="button"
+              accessibilityState={{disabled: isLeavingConversation}}
+              disabled={isLeavingConversation}
+              onPress={handleLeaveConversation}
+              style={({pressed}) => [
+                styles.leaveButton,
+                isLeavingConversation ? styles.callButtonDisabled : null,
+                pressed ? styles.pressed : null,
+              ]}>
+              <LogOut color={consultingColors.danger} size={17} />
+            </Pressable>
             {callEnabled ? (
               <Pressable
                 accessibilityLabel="전문가가 시작한 화상 상담 입장"
@@ -558,9 +617,10 @@ export function ConsultingConversationScreen({
             <Plus color={consultingColors.text} size={20} />
           </Pressable>
           <TextInput
+            editable={!conversationClosed}
             multiline
             onChangeText={setInput}
-            placeholder="상담사에게 메시지 보내기"
+            placeholder={conversationClosed ? '종료된 예약은 대화 기록만 볼 수 있어요' : '상담사에게 메시지 보내기'}
             placeholderTextColor={consultingColors.textSoft}
             style={styles.messageInput}
             textAlignVertical="center"
@@ -911,6 +971,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  leaveButton: {
+    alignItems: 'center',
+    backgroundColor: consultingColors.surfaceMuted,
+    borderColor: consultingColors.borderSoft,
+    borderRadius: consultingRadius.pill,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
   },
   infoLabel: {
     color: consultingColors.textMuted,

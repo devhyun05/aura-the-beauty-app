@@ -1,0 +1,232 @@
+{
+  "$comment": "실시간 좌표 기하(AURARealtimeGeometry.h ↔ realtimeFrameGeometry.ts) 공용 골든벡터. 좌표는 정규화 [0,1], 원점 top-left. rotation 은 'vision 프레임 점 → 정준(upright portrait) 프레임' 변환을 뜻한다: rot90cw c=(1-y,x) / rot90ccw c=(y,1-x) / rot180 c=(1-x,1-y). device 는 정준→captureDevice 앵커 (y,x) 스왑. 두 구현이 이 파일 하나를 통과해야 하며, 수치는 손계산 검증본 — 수정 시 양쪽 구현과 함께 재검증할 것.",
+  "tolerance": 1e-6,
+  "rotationCases": [
+    {
+      "name": "upright-centered",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectRotation": "upright",
+      "expectCanonical": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectDevice": {
+        "leftEye": [0.4, 0.42],
+        "rightEye": [0.4, 0.58],
+        "probe": [0.52, 0.5]
+      }
+    },
+    {
+      "name": "rot90cw-centered",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.4, 0.58],
+        "rightEye": [0.4, 0.42],
+        "probe": [0.52, 0.5]
+      },
+      "expectRotation": "rot90cw",
+      "expectCanonical": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectDevice": {
+        "leftEye": [0.4, 0.42],
+        "rightEye": [0.4, 0.58],
+        "probe": [0.52, 0.5]
+      }
+    },
+    {
+      "name": "rot90ccw-centered",
+      "isFront": false,
+      "vision": {
+        "leftEye": [0.6, 0.42],
+        "rightEye": [0.6, 0.58],
+        "probe": [0.48, 0.5]
+      },
+      "expectRotation": "rot90ccw",
+      "expectCanonical": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectDevice": {
+        "leftEye": [0.4, 0.42],
+        "rightEye": [0.4, 0.58],
+        "probe": [0.52, 0.5]
+      }
+    },
+    {
+      "name": "rot180-centered",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.58, 0.6],
+        "rightEye": [0.42, 0.6],
+        "probe": [0.5, 0.48]
+      },
+      "expectRotation": "rot180",
+      "expectCanonical": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectDevice": {
+        "leftEye": [0.4, 0.42],
+        "rightEye": [0.4, 0.58],
+        "probe": [0.52, 0.5]
+      }
+    },
+    {
+      "name": "rot90ccw-offset-face-left",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.58, 0.3],
+        "rightEye": [0.58, 0.46],
+        "probe": [0.46, 0.38]
+      },
+      "expectRotation": "rot90ccw",
+      "expectCanonical": {
+        "leftEye": [0.3, 0.42],
+        "rightEye": [0.46, 0.42],
+        "probe": [0.38, 0.54]
+      },
+      "expectDevice": {
+        "leftEye": [0.42, 0.3],
+        "rightEye": [0.42, 0.46],
+        "probe": [0.54, 0.38]
+      }
+    },
+    {
+      "name": "upright-roll20",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.42482459, 0.37263839],
+        "rightEye": [0.57517541, 0.42736161],
+        "probe": [0.5, 0.52]
+      },
+      "expectRotation": "upright",
+      "expectCanonical": {
+        "leftEye": [0.42482459, 0.37263839],
+        "rightEye": [0.57517541, 0.42736161],
+        "probe": [0.5, 0.52]
+      },
+      "expectDevice": {
+        "leftEye": [0.37263839, 0.42482459],
+        "rightEye": [0.42736161, 0.57517541],
+        "probe": [0.52, 0.5]
+      }
+    },
+    {
+      "name": "probe-at-eye-level-unknown",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": [0.62, 0.4]
+      },
+      "expectRotation": "unknown"
+    },
+    {
+      "name": "probe-missing",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.42, 0.4],
+        "rightEye": [0.58, 0.4],
+        "probe": null
+      },
+      "expectRotation": "unknown"
+    },
+    {
+      "name": "degenerate-coincident-eyes",
+      "isFront": true,
+      "vision": {
+        "leftEye": [0.5, 0.4],
+        "rightEye": [0.5, 0.4],
+        "probe": [0.5, 0.52]
+      },
+      "expectRotation": "unknown"
+    }
+  ],
+  "tiltCases": [
+    {
+      "name": "near-horizontal",
+      "leftEyeScreen": [100, 200],
+      "rightEyeScreen": [200, 202],
+      "expectTilt": 0.02
+    },
+    {
+      "name": "vertical-eye-line",
+      "leftEyeScreen": [100, 200],
+      "rightEyeScreen": [102, 300],
+      "expectTilt": 50
+    },
+    {
+      "name": "perfectly-horizontal",
+      "leftEyeScreen": [100, 240],
+      "rightEyeScreen": [260, 240],
+      "expectTilt": 0
+    }
+  ],
+  "pitchCases": [
+    {
+      "$case": "정면 기준점 — 코가 눈-입 span 의 48% 지점이면 pitch 0",
+      "name": "pitch-frontal-zero",
+      "eyeCenterY": 0.4,
+      "noseY": 0.496,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "코가 기준보다 아래(ratio 0.6) → 양의 pitch (0.6-0.48)*28",
+      "name": "pitch-nose-low",
+      "eyeCenterY": 0.4,
+      "noseY": 0.52,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": 3.36
+    },
+    {
+      "$case": "코가 기준보다 위(ratio 0.25) → 음의 pitch (0.25-0.48)*28",
+      "name": "pitch-nose-high",
+      "eyeCenterY": 0.4,
+      "noseY": 0.45,
+      "mouthCenterY": 0.6,
+      "expectMeasured": true,
+      "expectPitchDeg": -6.44
+    },
+    {
+      "$case": "rot180 과도기: 입이 눈보다 위(span<0) → 계측 불가. 종전 fmax 바닥은 ratio=-100, pitch=-2813.44° 를 냈다(실기기 -1729° 버그의 회귀 고정)",
+      "name": "pitch-inverted-span-unmeasured",
+      "eyeCenterY": 0.6,
+      "noseY": 0.5,
+      "mouthCenterY": 0.4,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "퇴화 span(0.0005 ≤ 0.001 바닥) → 계측 불가",
+      "name": "pitch-degenerate-span-unmeasured",
+      "eyeCenterY": 0.5,
+      "noseY": 0.4,
+      "mouthCenterY": 0.5005,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    },
+    {
+      "$case": "span 은 유효(0.002)하나 근사 폭주(≈1386.56° > 90°) → 계측 불가",
+      "name": "pitch-runaway-capped-unmeasured",
+      "eyeCenterY": 0.5,
+      "noseY": 0.6,
+      "mouthCenterY": 0.502,
+      "expectMeasured": false,
+      "expectPitchDeg": 0
+    }
+  ]
+}

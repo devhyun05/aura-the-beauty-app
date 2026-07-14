@@ -62,6 +62,9 @@ type SavedMakeupListPathContract = ExpectType<
 type ProductRecommendationPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.ProductRecommendation, 'product-recommendation'>
 >;
+type MakeupRecommendationPathContract = ExpectType<
+  TypeEquals<typeof rootStackLinkingScreens.MakeupRecommendation, 'makeup-recommendation'>
+>;
 type FaceAnalysisIntroPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.FaceAnalysisIntro, 'face-analysis-intro'>
 >;
@@ -150,6 +153,11 @@ expectEqual(
   navigationLinking.prefixes.includes(`${APP_DEEP_LINK_SCHEME}://`),
   true,
   'navigation prefixes include native app scheme',
+);
+expectEqual(
+  rootStackLinkingScreens.MakeupRecommendation,
+  'makeup-recommendation',
+  'makeup recommendation path',
 );
 expectEqual(
   navigationLinking.prefixes.includes('exp://127.0.0.1:8082/--/'),

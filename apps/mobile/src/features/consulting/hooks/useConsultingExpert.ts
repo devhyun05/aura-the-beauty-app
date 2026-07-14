@@ -1,23 +1,16 @@
 import {useEffect, useState} from 'react';
 
-import {findConsultingExpertOrFirst} from '../mocks/consulting.mock';
 import {getConsultingExpert} from '../services/consultingService';
 import type {ConsultingExpert} from '../types';
 
-/**
- * Resolves a consulting expert by id, seeded synchronously from the mock so the
- * UI renders immediately, then replaced with the backend detail once loaded.
- */
 export function useConsultingExpert(
   expertId: string | undefined,
-): ConsultingExpert {
-  const [expert, setExpert] = useState<ConsultingExpert>(() =>
-    findConsultingExpertOrFirst(expertId),
-  );
+): ConsultingExpert | null {
+  const [expert, setExpert] = useState<ConsultingExpert | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    setExpert(findConsultingExpertOrFirst(expertId));
+    setExpert(null);
 
     if (expertId) {
       getConsultingExpert(expertId).then(data => {

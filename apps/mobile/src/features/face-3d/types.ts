@@ -1,0 +1,112 @@
+// v1 필수 5지표 — 파서가 전부 존재를 강제한다. 키 추가/제거 금지(스키마 v1 계약).
+export const FACE_3D_REQUIRED_METRIC_KEYS = [
+  'noseTipProjection',
+  'chinProjection',
+  'upperLipToELine',
+  'lowerLipToELine',
+  'centralProjectionScore',
+] as const;
+
+// Tier-2 optional 지표(코 형태·광대) — g1 맵/구버전 프레임워크 프로필에는 없다.
+// 있으면 파싱, 없으면 생략(프로필 전체 파싱 실패 아님).
+// 계약: docs/face3d/TIER2_METRIC_CONTRACT.md
+export const FACE_3D_OPTIONAL_METRIC_KEYS = [
+  'noseLength',
+  'nasalBridgeStraightness',
+  'nasalAxisDeviation',
+  'alarWidth',
+  'malarProjectionLeft',
+  'malarProjectionRight',
+] as const;
+
+export type Face3DRequiredMetricKey = (typeof FACE_3D_REQUIRED_METRIC_KEYS)[number];
+export type Face3DOptionalMetricKey = (typeof FACE_3D_OPTIONAL_METRIC_KEYS)[number];
+export type Face3DMetricKey = Face3DRequiredMetricKey | Face3DOptionalMetricKey;
+
+// 사용자 노출 화이트리스트 — repeatability(정확히 3명×3 neutral) 지표별 pass 를
+// 통과한 키만 편입한다(TIER2_METRIC_CONTRACT.md §4). Tier-2 키는 B2 통과 전이므로
+// 아직 없다. 편입 시 FACE3D_GATE_STATUS.json 의 근거 기록과 함께 추가할 것.
+export const FACE_3D_EXPOSED_METRIC_KEYS: readonly Face3DMetricKey[] = [
+  ...FACE_3D_REQUIRED_METRIC_KEYS,
+];
+
+export type Face3DStatus =
+  | 'idle'
+  | 'preparing'
+  | 'tracking'
+  | 'collecting'
+  | 'completed'
+  | 'blocked'
+  | 'error';
+
+export type Face3DMetric = {
+  confidence: number;
+  mad: number | null;
+  unit: 'normalized';
+  validFrameCount: number;
+  value: number | null;
+};
+
+// 필수 5지표는 전량 존재, Tier-2 는 있을 때만 존재하는 교차 타입.
+export type Face3DMetrics = Record<Face3DRequiredMetricKey, Face3DMetric> &
+  Partial<Record<Face3DOptionalMetricKey, Face3DMetric>>;
+
+export type Face3DProfile = {
+  gateVersion: 'face3d-gate-v1';
+  metrics: Face3DMetrics;
+  schemaVersion: 'aura.face3d-profile.v1';
+  source: 'arkit_face_mesh';
+  targetFrameCount: number;
+  topologyFingerprint: string;
+  validFrameCount: number;
+  warnings: string[];
+};
+
+export type Face3DStartRequest = {
+  gateVersion: 'face3d-gate-v1';
+  maximumDurationMs: number;
+  minimumValidFrames: number;
+  requestId: string;
+  targetValidFrames: number;
+};
+
+export type Face3DStatusEvent = {
+  currentMaximumFaceCount?: number;
+  message?: string;
+  meshIndexCount?: number;
+  meshUvCount?: number;
+  meshVertexCount?: number;
+  requestId: string;
+  sessionSequence?: number;
+  status: Face3DStatus;
+  supportedFaceCount?: number;
+  targetFrameCount: number;
+  topologyFingerprint?: string;
+  type: 'face3d_status';
+  validFrameCount: number;
+  warnings: string[];
+};
+
+export type Face3DAnalyzedEvent = {
+  profile: Face3DProfile;
+  requestId: string;
+  type: 'face3d_analyzed';
+};
+
+export type Face3DEvent = Face3DStatusEvent | Face3DAnalyzedEvent;
+
+export type Face3DAnalysisState = {
+  currentMaximumFaceCount?: number;
+  message?: string;
+  meshIndexCount?: number;
+  meshUvCount?: number;
+  meshVertexCount?: number;
+  profile: Face3DProfile | null;
+  requestId: string | null;
+  status: Face3DStatus;
+  supportedFaceCount?: number;
+  targetFrameCount: number;
+  topologyFingerprint?: string;
+  validFrameCount: number;
+  warnings: string[];
+};

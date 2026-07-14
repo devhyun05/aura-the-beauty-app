@@ -1139,8 +1139,62 @@ function getNativeUnityMakeupBridge(): NativeUnityMakeupBridge | undefined {
 // matte) doesn't OOM/jetsam-kill the app while Unity is resident. Unlike the
 // ARSession.enabled toggle (setUnityMakeupSessionPaused), the player pause does
 // not corrupt Unity's state, so resume(false) restores it cleanly.
+//
+// Pause 소유권 계약(얼굴 분석 플로): pause 상태는 화면 간 암묵 공유 자원이다.
+//  - 촬영 화면: mount 에 pause — 네이티브 카메라(전면+Depth+Vision+matte)와 동시
+//    상주하면 jetsam. unmount 에 resume.
+//  - 3D 측정 화면: 진입 시 resume, 종료 시 pause(카메라 반납 — Unity 측 취소는
+//    ARSession 을 끄지 않으므로 pause 가 유일한 카메라 해제 수단이다).
+//  - 로딩 화면: lease 소유 — 진입 시 ensureUnityMakeupRunningForStillAnalysis 로
+//    resume+ready 를 보장(정지영상 랜드마크 분석은 플레이어 루프 필수)하고,
+//    분석이 모두 settle 하면 pause 로 반납한다.
+//  - 그 외: 무거운 네이티브 카메라를 여는 화면이 pause 를 소유한다.
 export function setUnityMakeupPlayerPaused(paused: boolean): void {
   getNativeUnityMakeupBridge()?.setPlayerPaused?.(paused);
+}
+
+// 정지영상 랜드마크 분석(세로비율·퍼스널컬러·2D 기하) 진입 전, Unity 플레이어가
+// 실제로 돌고 있음을 보장하는 lease 진입 헬퍼. 직전 화면(3D 측정 등)이 pause 한
+// 채 진입해도 분석이 타임아웃으로 죽지 않게 한다.
+//  - framework 미탑재면 즉시 false — Unity 없는 빌드에서는 각 분석이 자체
+//    미탑재/타임아웃 경로로 null 강등된다.
+//  - resume(멱등) 후 ready 면 true, 아니면 prepareUnityMakeupRuntime() 후
+//    isUnityMakeupReady() 폴링(UnityMakeupCaptureScreen 의 준비 폴링과 동일 모델).
+//  - 항상 resolve 하고 reject 하지 않는다 — 실패는 boolean 으로만 알린다.
+// ⚠️ 예산 연동: timeoutMs 4200 + requestFaceLandmarks 기본 3500 = 7700ms
+//   < faceAnalysisRoutes 의 STILL_ANALYSIS_WAIT_TIMEOUT_MS 8000ms.
+//   셋 중 하나를 바꾸면 함께 조정해야 한다.
+export function ensureUnityMakeupRunningForStillAnalysis({
+  pollIntervalMs = 160,
+  timeoutMs = 4200,
+}: {pollIntervalMs?: number; timeoutMs?: number} = {}): Promise<boolean> {
+  if (!isUnityMakeupFrameworkAvailable()) {
+    return Promise.resolve(false);
+  }
+
+  setUnityMakeupPlayerPaused(false);
+
+  if (isUnityMakeupReady()) {
+    return Promise.resolve(true);
+  }
+
+  prepareUnityMakeupRuntime();
+
+  return new Promise(resolve => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (isUnityMakeupReady()) {
+        clearInterval(timer);
+        resolve(true);
+        return;
+      }
+
+      if (Date.now() - startedAt > timeoutMs) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, pollIntervalMs);
+  });
 }
 
 type NativeUnityPostMetadata = {

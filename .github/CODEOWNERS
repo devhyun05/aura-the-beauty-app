@@ -23,6 +23,9 @@
 # ── iOS 네이티브 ────────────────────────────────────────────────
 # 카메라·분석기 네이티브는 AR 브릿지와 한 폴더를 공유하므로 두 오너 공동.
 /apps/mobile/ios/AURA/                               @devhyun05 @nicewei77-lang
+# Xcode 프로젝트(Compile Sources 멤버십) — 분석기 .m 을 빌드에서 빼는 회귀도
+# 오너 리뷰를 거치게 한다. AURA/ 소스 폴더와 sibling 이라 위 규칙이 안 덮는다.
+/apps/mobile/ios/AURA.xcodeproj/                     @devhyun05 @nicewei77-lang
 /apps/mobile/ios/Podfile                             @devhyun05 @nicewei77-lang
 /apps/mobile/ios/Podfile.lock                        @devhyun05 @nicewei77-lang
 
@@ -32,3 +35,6 @@
 
 # ── CI / 인프라 ─────────────────────────────────────────────────
 /.github/                                            @devhyun05
+
+# 계약 테스트 스크립트 — 가드 자체를 무력화하는 우회(스크립트 도려내기)를 막는다.
+/scripts/mobile/                                     @devhyun05 @nicewei77-lang

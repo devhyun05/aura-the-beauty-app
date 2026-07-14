@@ -22,7 +22,8 @@ import {
   formatConsultingPrice,
   getConsultingDurationPrice,
   getConsultingSessionModeLabel,
-} from '../mocks/consulting.mock';
+} from '../consultingCatalog';
+import {isConsultingChatAvailable} from '../services/consultingFlow';
 import type {ConsultingExpert, ConsultingRecord, ConsultingSessionMode} from '../types';
 
 type ConsultingDuration = ConsultingExpert['durations'][number];
@@ -65,6 +66,9 @@ export function ConsultingExpertProfileScreen({
   );
   const [selectedSessionMode, setSelectedSessionMode] =
     useState<ConsultingSessionMode>('online');
+  const activeChatAvailable = Boolean(
+    activeRecord && isConsultingChatAvailable(activeRecord),
+  );
 
   return (
     <RNView style={styles.root}>
@@ -94,13 +98,19 @@ export function ConsultingExpertProfileScreen({
               <ConsultingStatusBadge status={activeRecord.status} />
               <Text style={styles.activeRecordDate}>{activeRecord.dateLabel}</Text>
             </RNView>
-            <Text style={styles.activeRecordTitle}>이미 신청한 전문가예요</Text>
+            <Text style={styles.activeRecordTitle}>진행 중인 신청이 있어요</Text>
             <Text style={styles.activeRecordText}>
               {getActiveRecordProfileText(activeRecord.status)}
             </Text>
             <RNView style={styles.activeRecordCta}>
-              <MessageCircle color={consultingColors.roseStrong} size={14} />
-              <Text style={styles.activeRecordCtaText}>톡에서 진행상황 보기</Text>
+              {activeChatAvailable ? (
+                <MessageCircle color={consultingColors.roseStrong} size={14} />
+              ) : (
+                <CalendarClock color={consultingColors.roseStrong} size={14} />
+              )}
+              <Text style={styles.activeRecordCtaText}>
+                {activeChatAvailable ? '상담 톡 보기' : '신청 내역 보기'}
+              </Text>
             </RNView>
           </Pressable>
         ) : null}
@@ -222,7 +232,13 @@ export function ConsultingExpertProfileScreen({
 
       <ConsultingBottomBar>
         <PrimaryButton
-          label={activeRecord ? '신청 진행상황 보기' : '예약 신청하기'}
+          label={
+            activeRecord
+              ? activeChatAvailable
+                ? '상담 톡 보기'
+                : '신청 내용 보기'
+              : '예약 신청하기'
+          }
           onPress={() =>
             activeRecord
               ? onPressActiveRecord(activeRecord)
@@ -248,10 +264,10 @@ function getActiveRecordProfileText(status: ConsultingRecord['status']): string 
   }
 
   if (status === 'contacting') {
-    return '운영팀과 프리랜서가 가능 여부를 확인 중이에요. 톡에서 추가 안내를 확인하세요.';
+    return '운영팀과 프리랜서가 가능 여부를 확인 중이에요. 확정 전에는 신청 내역에서 상태를 확인할 수 있어요.';
   }
 
-  return '아직 예약 완료가 아니라 신청 접수 상태예요. 확정되면 알림과 톡으로 안내돼요.';
+  return '아직 예약 완료가 아니라 신청 접수 상태예요. 확정되면 알림이 오고 상담 톡이 열려요.';
 }
 
 function StatCell({label, value}: {label: string; value: string}) {

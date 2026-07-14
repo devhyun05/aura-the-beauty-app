@@ -154,3 +154,131 @@ expectEqual(
   'camera',
   'analysis request defaults the capture source',
 );
+expectEqual(
+  'face3d' in defaultAnalysisRequestPayload,
+  false,
+  'analysis request omits face3d when the 3D measurement is absent',
+);
+
+// ARKit 3D 측정 프로필이 있으면 페이로드에 그대로 실린다(faceVerticalThirds와 동일 패턴).
+const face3dProfile = {
+  gateVersion: 'face3d-gate-v1',
+  metrics: {},
+  schemaVersion: 'aura.face3d-profile.v1',
+  source: 'arkit_face_mesh',
+  targetFrameCount: 30,
+  topologyFingerprint: 'synthetic-v8-i12-uv8',
+  validFrameCount: 30,
+  warnings: [],
+};
+const analysisRequestPayloadWithFace3d = buildFaceAnalysisRequestPayload(
+  {
+    bucket: 'media-bucket',
+    objectKey: 'uploads/capture/face.jpg',
+    source: 'camera',
+  },
+  faceVerticalThirds,
+  face3dProfile,
+);
+
+expectEqual(
+  analysisRequestPayloadWithFace3d.face3d,
+  face3dProfile,
+  'analysis request preserves the on-device face3d profile',
+);
+expectEqual(
+  analysisRequestPayloadWithFace3d.faceVerticalThirds,
+  faceVerticalThirds,
+  'face3d does not displace the vertical-thirds payload',
+);
+expectEqual(
+  'faceGeometry2d' in analysisRequestPayloadWithFace3d,
+  false,
+  'analysis request omits faceGeometry2d when the 2D geometry is absent',
+);
+
+// 2D 기하 압축 요약이 있으면 페이로드에 그대로 실린다(face3d와 동일 패턴).
+const faceGeometry2dPayload = {
+  metrics: {
+    canthalTiltLeftDeg: {unit: 'deg', value: 5.2},
+    mouthWidthRatio: {unit: 'ratio', value: 0.35},
+  },
+  rollCorrectionApplied: true,
+  status: 'full_success',
+};
+const analysisRequestPayloadWithGeometry = buildFaceAnalysisRequestPayload(
+  {
+    bucket: 'media-bucket',
+    objectKey: 'uploads/capture/face.jpg',
+    source: 'camera',
+  },
+  faceVerticalThirds,
+  face3dProfile,
+  faceGeometry2dPayload,
+);
+
+expectEqual(
+  analysisRequestPayloadWithGeometry.faceGeometry2d,
+  faceGeometry2dPayload,
+  'analysis request preserves the on-device 2D geometry payload',
+);
+expectEqual(
+  analysisRequestPayloadWithGeometry.face3d,
+  face3dProfile,
+  'faceGeometry2d does not displace the face3d payload',
+);
+expectEqual(
+  analysisRequestPayloadWithGeometry.faceVerticalThirds,
+  faceVerticalThirds,
+  'faceGeometry2d does not displace the vertical-thirds payload',
+);
+expectEqual(
+  'measuredPersonalColor' in analysisRequestPayloadWithGeometry,
+  false,
+  'analysis request omits measuredPersonalColor when absent',
+);
+expectEqual(
+  'measurements' in analysisRequestPayloadWithGeometry,
+  false,
+  'analysis request omits measurements when absent',
+);
+
+// 측정 데이터 3-반영 규칙: 실측 퍼스널 컬러 요약과 측정 원본 4축이 함께 실린다.
+const measuredPersonalColorPayload = {
+  measurementConfidence: 0.72,
+  status: 'definitive',
+  tone: {top: 'autumn_muted'},
+};
+const measurementsPayload = {
+  captureId: 'capture-1',
+  faceGeometry2d: {status: 'partial_success'},
+  schemaVersion: 'aura-face-analysis-measurements-v1',
+};
+const analysisRequestPayloadWithMeasurements = buildFaceAnalysisRequestPayload(
+  {
+    bucket: 'media-bucket',
+    objectKey: 'uploads/capture/face.jpg',
+    source: 'camera',
+  },
+  faceVerticalThirds,
+  face3dProfile,
+  faceGeometry2dPayload,
+  measuredPersonalColorPayload,
+  measurementsPayload,
+);
+
+expectEqual(
+  analysisRequestPayloadWithMeasurements.measuredPersonalColor,
+  measuredPersonalColorPayload,
+  'analysis request preserves measuredPersonalColor',
+);
+expectEqual(
+  analysisRequestPayloadWithMeasurements.measurements,
+  measurementsPayload,
+  'analysis request preserves the measurements payload',
+);
+expectEqual(
+  analysisRequestPayloadWithMeasurements.faceGeometry2d,
+  faceGeometry2dPayload,
+  'measurements do not displace the 2D geometry payload',
+);

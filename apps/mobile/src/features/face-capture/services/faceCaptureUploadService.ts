@@ -13,7 +13,21 @@ export type FaceCaptureUploadCaptureType =
   | 'personal_color'
   | 'hair_analysis';
 
+// 셔터 시점 카메라 메타데이터(기기 로컬 분석 전용 — 백엔드 업로드에는 싣지 않는다).
+// RealtimeCameraStabilityPayload / NativeCameraCaptureMetadata와 구조 호환(전부 optional).
+export type FaceCaptureCameraMetadata = {
+  iso?: number;
+  exposureDurationMs?: number;
+  whiteBalanceGains?: {red?: number; green?: number; blue?: number};
+  adjustingWhiteBalance?: boolean;
+  adjustingExposure?: boolean;
+  adjustingFocus?: boolean;
+  isStable?: boolean | number;
+};
+
 export type FaceCaptureImageInput = {
+  // 셔터 시점 카메라 메타(WB gains 등) — 퍼스널 컬러 조명 보정(A/B)용 pass-through.
+  cameraMetadata?: FaceCaptureCameraMetadata | null;
   captureType?: FaceCaptureUploadCaptureType;
   contentType?: string | null;
   fileName?: string | null;
@@ -29,6 +43,7 @@ export type FaceCaptureImageInput = {
 
 export type FaceCaptureUploadResult = {
   bucket: string;
+  cameraMetadata?: FaceCaptureCameraMetadata | null;
   cdnUrl?: string | null;
   contentType?: string | null;
   height?: number | null;
@@ -143,6 +158,7 @@ async function readImageBlob(uri: string): Promise<Blob> {
 }
 
 export async function uploadFaceCaptureImage({
+  cameraMetadata,
   captureType = 'face_analysis',
   contentType: providedContentType,
   fileName,
@@ -265,6 +281,8 @@ export async function uploadFaceCaptureImage({
 
   return {
     bucket: media.bucket,
+    // 기기 로컬 분석용 pass-through — 백엔드 요청 바디에는 싣지 않는다.
+    cameraMetadata,
     cdnUrl: media.cdnUrl ?? null,
     contentType,
     height: height ?? null,

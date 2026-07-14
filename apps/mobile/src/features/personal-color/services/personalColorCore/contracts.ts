@@ -37,7 +37,10 @@ export type NativeRegionKey =
   | 'skinCheekRight'
   | 'skinForehead'
   | 'hair'
-  | 'lip';
+  | 'lip'
+  // 흰자(sclera) — 축 계산에는 불참. 조명 캐스트 추정(illuminationCorrection) 전용.
+  | 'scleraLeft'
+  | 'scleraRight';
 
 export type NativeRegionStats = {
   rgbMean: Rgb;
@@ -138,6 +141,11 @@ export type ReferencePointSnapshot = {
   fixedRefsVersion: string;
 };
 
+// 이 "결과 객체" 자체의 온디바이스 계약: 원시 프레임을 장기 보관하지 않고, 결과
+// 객체를 임의 경로로 통째 업로드하지 않는다. 측정 데이터 3-반영 규칙(2026-07-13)에
+// 따른 보고서 첨부 저장은 privacy 필드를 제거한 별도 wire 계약
+// (face-analysis/faceAnalysisMeasurements)으로 이뤄진다 — 이 필드를 서버 복원
+// 데이터에 재부착하면 안 된다.
 export type PersonalColorPrivacy = {
   localOnly: true;
   offDeviceUpload: false;

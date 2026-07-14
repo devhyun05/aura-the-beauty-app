@@ -45,6 +45,10 @@ import {
   computeFaceEllipseGuideGeometry,
 } from '../constants/faceEllipseGuide';
 import {
+  REALTIME_DEFAULT_POSE_GATE,
+  REALTIME_FACE_ANALYSIS_POSE_GATE,
+} from '../constants/facePoseGates';
+import {
   FACE_PITCH_GATE_MESSAGE,
   evaluateFacePitchGate,
 } from '../services/faceCapturePitchGate';
@@ -98,6 +102,9 @@ type CameraFaceCaptureScreenProps = {
   allowCameraToggle?: boolean;
   allowGallery?: boolean;
   autoOpenGallery?: boolean;
+  // Unity ARKit처럼 다음 화면이 전면 카메라를 즉시 인수해야 할 때만 켠다.
+  // 네이티브 AVCaptureSession의 stopRunning 완료를 확인한 뒤 onCapture를 호출한다.
+  awaitCameraReleaseBeforeComplete?: boolean;
   captureMode?: CameraFaceCaptureMode;
   captureType?: FaceCaptureUploadCaptureType;
   checks?: FaceCaptureCheckState;
@@ -127,6 +134,13 @@ export function getCameraFaceCaptureCloseButtonPosition(safeAreaTop: number) {
 
 export function shouldValidateCameraFaceCapture(mode: CameraFaceCaptureMode): boolean {
   return mode === 'face';
+}
+
+export function shouldClearCameraFaceCaptureValidationMessage(
+  captureValidationMessage: string | null,
+  realtimeGuidanceMessage: string | null,
+): boolean {
+  return captureValidationMessage !== null && realtimeGuidanceMessage === null;
 }
 
 const MEDIAPIPE_CENTERLINE_KEYS = [
@@ -337,6 +351,7 @@ function getScreenLandmarkPoint(
 }
 
 function createLocalFaceCaptureResult({
+  cameraMetadata,
   contentType,
   height,
   semanticMattes,
@@ -348,6 +363,7 @@ function createLocalFaceCaptureResult({
 
   return {
     bucket: 'local',
+    cameraMetadata,
     cdnUrl: null,
     contentType: contentType ?? 'image/jpeg',
     height: height ?? null,
@@ -365,6 +381,7 @@ export function CameraFaceCaptureScreen({
   allowCameraToggle = true,
   allowGallery = true,
   autoOpenGallery = false,
+  awaitCameraReleaseBeforeComplete = false,
   captureMode = 'face',
   captureType,
   checks,
@@ -431,6 +448,19 @@ export function CameraFaceCaptureScreen({
     () => shouldValidateFace && isRealtimeFaceCaptureAvailable(),
     [shouldValidateFace],
   );
+
+  const releaseRealtimeCameraBeforeComplete = async () => {
+    if (!awaitCameraReleaseBeforeComplete || !realtimeCaptureAvailable) {
+      return;
+    }
+
+    const realtimeCamera = realtimeCameraRef.current;
+    if (!realtimeCamera) {
+      throw new Error('촬영 카메라를 안전하게 종료하지 못했어요. 다시 시도해 주세요.');
+    }
+
+    await realtimeCamera.stop();
+  };
   const landmarkDetectorAvailable = useMemo(
     () => shouldValidateFace && !realtimeCaptureAvailable && isFaceLandmarkDetectorAvailable(),
     [realtimeCaptureAvailable, shouldValidateFace],
@@ -438,12 +468,17 @@ export function CameraFaceCaptureScreen({
   // greenlight 게이트는 face 모드 + realtime 네이티브 뷰가 있을 때만 활성화한다.
   // realtime 뷰 없이는 mediaPipe/cameraStability 입력이 오지 않아 영구 차단되기 때문.
   const requireGreenlight = shouldValidateFace && realtimeCaptureAvailable;
+  // captureType 미지정 시 기본값을 업로드 계층과 동일한 'face_analysis'로 맞춘다
+  // — 종전엔 화면은 완화 프로파일, 업로드는 face_analysis 로 저장돼 사후 게이트에서
+  // 폐기되는 불일치가 있었다(코덱스 minor). matte/pose 판정 모두 이 값을 써야
+  // prop 생략 시에도 hair/skin matte 가 함께 요청된다(코덱스 #245-6).
+  const effectiveCaptureType = captureType ?? 'face_analysis';
   // Apple semantic matte(헤어라인)는 얼굴 분석 촬영에서만 요청한다.
   const semanticMatteCapture =
     requireGreenlight &&
-    (captureType === 'face_analysis' ||
-      captureType === 'personal_color' ||
-      captureType === 'hair_analysis');
+    (effectiveCaptureType === 'face_analysis' ||
+      effectiveCaptureType === 'personal_color' ||
+      effectiveCaptureType === 'hair_analysis');
   const blockedFaceCaptureChecks = useMemo(() => createBlockedFaceCaptureChecks(), []);
   // 타원 프레이밍 가이드 (기획서 §3.5 비율, 화면 중앙 앵커).
   // 정수리/턱끝이 타원 상하단 점에 맞아야 촬영되므로 얼굴 크기(=촬영 거리)를
@@ -499,21 +534,37 @@ export function CameraFaceCaptureScreen({
     () => evaluateFaceCaptureGuidance(effectiveChecks),
     [effectiveChecks],
   );
+  // 촬영 타입별 pose 임계 프로파일. face_analysis 는 사후 품질 게이트에 지터 마진을
+  // 뺀 값이라 "촬영은 되는데 분석에서 폐기"가 구조적으로 최소화된다.
+  // 두 프로파일 모두 모듈 상수(frozen)라 참조가 안정적 — deps 에 넣어도 재계산 없음.
+  const realtimePoseGate =
+    effectiveCaptureType === 'face_analysis'
+      ? REALTIME_FACE_ANALYSIS_POSE_GATE
+      : REALTIME_DEFAULT_POSE_GATE;
   const greenlightReport = useMemo(
     () => evaluateFaceCaptureGreenlight({
       cameraStability: latestCameraStability,
       guide: screenGuideBounds,
       mediaPipe: latestMediaPipe,
+      poseGate: realtimePoseGate,
     }),
-    [latestCameraStability, latestMediaPipe, screenGuideBounds],
+    [latestCameraStability, latestMediaPipe, realtimePoseGate, screenGuideBounds],
   );
   const shouldBlockForGreenlight =
     requireGreenlight && !greenlightReport.finalCaptureGreenlight;
   // 얼굴 세로 비율 촬영에서만 실시간 pitch(고개 숙임/젖힘) 게이트 적용.
   // 세로 비율 최대 왜곡원인데 greenlight는 pitch를 안 보므로 여기서 보강한다.
-  const requirePitchGate = requireGreenlight && captureType === 'face_analysis';
+  const requirePitchGate = requireGreenlight && effectiveCaptureType === 'face_analysis';
   const pitchGate = useMemo(
-    () => evaluateFacePitchGate(latestMediaPipe?.pitchDeg),
+    // face_analysis 는 requireValid=true — pitch 를 못 재면(결측) 통과가 아니라
+    // 차단해 "기울기 못 재면 재촬영" 정책과 realtime⇒사후 정합을 맞춘다.
+    () =>
+      evaluateFacePitchGate(
+        latestMediaPipe?.pitchDeg,
+        undefined,
+        true,
+        latestMediaPipe?.pitchMeasured,
+      ),
     [latestMediaPipe],
   );
   const shouldBlockForPitch = requirePitchGate && !pitchGate.pitchOk;
@@ -564,6 +615,17 @@ export function CameraFaceCaptureScreen({
   useEffect(() => {
     guidanceMessageTargetRef.current = rawGuidanceMessage;
   }, [rawGuidanceMessage]);
+  // 촬영 버튼을 눌렀을 때 저장한 실패 문구는 일회성 피드백이다. 이후 최신 프레임이
+  // 통과했는데도 이전 "가까이서" 안내가 남아 현재 수치와 충돌하지 않게 즉시 지운다.
+  useEffect(() => {
+    if (shouldClearCameraFaceCaptureValidationMessage(
+      captureValidationMessage,
+      rawGuidanceMessage,
+    )) {
+      setCaptureValidationMessage(null);
+      setStableGuidanceMessage(null);
+    }
+  }, [captureValidationMessage, rawGuidanceMessage]);
   const captureMessage =
     uploadError ??
     (isUploading
@@ -747,6 +809,7 @@ export function CameraFaceCaptureScreen({
           cameraStability: nativeEvent.cameraStability,
           guide: screenGuideBounds,
           mediaPipe: nativeEvent.mediaPipe,
+          poseGate: realtimePoseGate,
         });
 
         console.info('[aura:face-capture] realtime-landmark-frame', {
@@ -776,19 +839,32 @@ export function CameraFaceCaptureScreen({
             ? {
                 faceWidthRatio: nativeEvent.mediaPipe.faceWidthRatio,
                 pitchDeg: nativeEvent.mediaPipe.pitchDeg,
+                pitchMeasured: nativeEvent.mediaPipe.pitchMeasured,
                 poseSource: nativeEvent.mediaPipe.poseSource,
+                projectionEyeTilt: nativeEvent.mediaPipe.projectionEyeTilt ?? null,
                 rollDeg: nativeEvent.mediaPipe.rollDeg,
                 status: nativeEvent.mediaPipe.status,
                 yawDeg: nativeEvent.mediaPipe.yawDeg,
               }
             : null,
+          // 좌표 프레임 자가판정 진단 — 스크린샷 한 장으로 규약 판정/투영
+          // 건전성/중앙 오프셋을 원격 판독하기 위한 필드 (fail-safe 원칙).
+          frameGeometry: {
+            eyeAxis: nativeEvent.eyeAxis ?? null,
+            eyeAxisRatio: nativeEvent.eyeAxisRatio ?? null,
+            frameRotation: nativeEvent.frameRotation ?? null,
+            frameRotationDetected: nativeEvent.frameRotationDetected ?? null,
+            frameRotationLocked: nativeEvent.frameRotationLocked ?? null,
+            imageHeight: nativeEvent.imageHeight ?? null,
+            imageWidth: nativeEvent.imageWidth ?? null,
+          },
           screenInsideGuide: nextScreenInsideGuide,
           sequence: nativeEvent.sequence,
           status: nativeEvent.status,
         });
       }
     },
-    [cameraDirection, guideBounds, height, screenGuideBounds, width],
+    [cameraDirection, guideBounds, height, realtimePoseGate, screenGuideBounds, width],
   );
 
   useEffect(() => {
@@ -1063,9 +1139,14 @@ export function CameraFaceCaptureScreen({
             guide: screenGuideBounds,
             mediaPipe: latestMediaPipe,
             nativeCameraMetadata,
+            poseGate: realtimePoseGate,
           })
         : undefined;
       const imageInput: FaceCaptureImageInput = {
+        // 셔터 시점 카메라 메타(WB gains 등). 네이티브 lock 메타를 우선하고,
+        // 없으면 마지막 실시간 안정도 페이로드로 폴백 — 퍼스널 컬러 조명
+        // 보정(A/B)과 WB 캘리브레이션 데이터 수집에 쓰인다(업로드에는 미사용).
+        cameraMetadata: nativeCameraMetadata ?? latestCameraStability ?? undefined,
         captureType,
         contentType: pictureFormat === 'heic' ? 'image/heic' : undefined,
         height: picture.height,
@@ -1094,6 +1175,7 @@ export function CameraFaceCaptureScreen({
         result = createLocalFaceCaptureResult(imageInput);
       }
 
+      await releaseRealtimeCameraBeforeComplete();
       onCapture?.(result, captureGreenlightReport);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
@@ -1164,6 +1246,7 @@ export function CameraFaceCaptureScreen({
         result = createLocalFaceCaptureResult(imageInput);
       }
 
+      await releaseRealtimeCameraBeforeComplete();
       onCapture?.(result);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
