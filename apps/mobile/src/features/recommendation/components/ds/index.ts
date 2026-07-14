@@ -16,6 +16,7 @@ export { ORB_ANIM, NOISE, BLOB_VERT, BLOB_FRAG } from './orbShaders';
 export { ProductThumb } from './ProductThumb';
 export { StatusBarRow } from './StatusBarRow';
 export { SwatchTile } from './SwatchTile';
+export { TextureSwatch } from './TextureSwatch';
 export { ThinkingSteps } from './ThinkingSteps';
 export { Toast } from './Toast';
 export { Wordmark } from './Wordmark';

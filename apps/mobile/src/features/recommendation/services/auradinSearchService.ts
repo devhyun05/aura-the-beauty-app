@@ -21,6 +21,8 @@ import type {
   AuradinReason,
   AuradinSearchPhase,
   AuradinSearchTurn,
+  AuradinSwatch,
+  AuradinTextureKind,
 } from '../types';
 
 // ------------------------------------------------------------------ backend shapes
@@ -104,20 +106,44 @@ export function makeClientRequestId(): string {
 
 // ------------------------------------------------------------------ mapping helpers
 
-const NEUTRAL_SWATCH = '#E4D6D2'; // 색 질문이 아닌 옵션 타일용 (라벨이 의미 전달)
+const NEUTRAL_SWATCH = '#E4D6D2'; // 스와치 매핑이 없는 옵션 타일용 (라벨이 의미 전달)
 
-const COLOR_FAMILY_HEX: Record<string, string> = {
-  pink: '#F2A6B8',
-  rose: '#D98BA0',
-  coral: '#F2896B',
-  red: '#D65563',
-  orange: '#E8844A',
-  mauve: '#B58AA6',
-  brown: '#8B5E4E',
-  nude: '#D8B79E',
-  peach: '#F0A488',
-  burgundy: '#7B2E3B',
-  plum: '#8E5A79',
+// §8.2-3 colorFamily 스와치: 단색 → 계열 내 밝기 범위 3색 그라데이션 (light → base → deep).
+// 가운데 스톱은 기존 단색 hex를 유지해 계열 아이덴티티가 흔들리지 않게 한다.
+const COLOR_FAMILY_GRADIENT: Record<string, [string, string, string]> = {
+  pink: ['#F8CBD7', '#F2A6B8', '#D97E95'],
+  rose: ['#EAB6C3', '#D98BA0', '#B96A82'],
+  coral: ['#F8B39C', '#F2896B', '#D6684C'],
+  red: ['#EA8B95', '#D65563', '#AC3A48'],
+  orange: ['#F3AC7E', '#E8844A', '#C56430'],
+  mauve: ['#D2B3C6', '#B58AA6', '#936785'],
+  brown: ['#B28B79', '#8B5E4E', '#663F31'],
+  nude: ['#EAD5C4', '#D8B79E', '#BA9276'],
+  peach: ['#F7C6B1', '#F0A488', '#D67F60'],
+  burgundy: ['#A4576A', '#7B2E3B', '#571C27'],
+  plum: ['#B0879F', '#8E5A79', '#6B3F5A'],
+};
+
+// §8.2-1 finish/texture 옵션 → 추상 질감 스와치 4종 매핑. 자체 제작 렌더만 사용 —
+// 대표 제품 썸네일(§8.2-2)·생성형 발색 이미지(§8.2-5)는 금지. 매핑이 애매한 값
+// (satin/sheer는 광택 계열로 근사, palette는 제형이 아니라 포맷)은 중립 폴백.
+const FINISH_TEXTURE_KIND: Record<string, Record<string, AuradinTextureKind>> = {
+  finish: {
+    glossy: 'glossy',
+    matte: 'matte',
+    velvet: 'velvet',
+    shimmer: 'shimmer',
+    satin: 'glossy',
+    sheer: 'glossy',
+  },
+  texture: {
+    gloss: 'glossy',
+    tint: 'glossy',
+    liquid: 'glossy',
+    balm: 'velvet',
+    cream: 'velvet',
+    powder: 'matte',
+  },
 };
 
 const VALID_PHASES: readonly AuradinSearchPhase[] = [
@@ -150,14 +176,20 @@ function normalizeReason(reason: Partial<AuradinReason> | null | undefined): Aur
   };
 }
 
-function optionSwatch(option: BackendQuestionOption): string | undefined {
+function optionSwatch(option: BackendQuestionOption): AuradinSwatch | undefined {
   const delta = option.filterDelta ?? undefined;
   if (!delta || delta.op === 'noop') {
     return undefined; // noop("상관 없어요") → skip 타일 (QuestionView가 swatch 없는 걸 skip으로 렌더)
   }
-  if (delta.attribute === 'colorFamily') {
-    const value = (delta.values ?? [])[0] ?? '';
-    return COLOR_FAMILY_HEX[value] ?? NEUTRAL_SWATCH;
+  const attribute = delta.attribute ?? '';
+  const value = (delta.values ?? [])[0] ?? '';
+  if (attribute === 'colorFamily') {
+    const gradient = COLOR_FAMILY_GRADIENT[value];
+    return gradient ? {kind: 'gradient', colors: gradient} : NEUTRAL_SWATCH;
+  }
+  const texture = FINISH_TEXTURE_KIND[attribute]?.[value];
+  if (texture) {
+    return {kind: 'texture', texture};
   }
   return NEUTRAL_SWATCH;
 }
