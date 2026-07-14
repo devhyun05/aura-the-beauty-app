@@ -1,90 +1,64 @@
-import {StyleSheet, Text, type ViewStyle} from 'react-native';
+import {Pressable, StyleSheet, Text, type StyleProp, type ViewStyle} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
-import {AppCard} from '../../../shared/ui';
-import type {MakeupScenarioPrompt, MakeupScenarioTone} from '../types';
+import {makeupRecommendationColors} from '../theme/makeupRecommendationTokens';
+import type {MakeupScenarioPrompt} from '../types';
 
-export type ScenarioCardEmphasis = 'featured' | 'regular';
-
-type ScenarioPromptCardProps = {
-  emphasis: ScenarioCardEmphasis;
+export function ScenarioPromptCard({fill = false, onPress, scenario, style}: {
+  fill?: boolean;
   onPress: () => void;
   scenario: MakeupScenarioPrompt;
-  style?: ViewStyle;
-};
-
-const toneStyles: Record<MakeupScenarioTone, ViewStyle> = {
-  narrative: {
-    backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-  },
-  playful: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.liquidGlassBorder,
-  },
-  premium: {
-    backgroundColor: colors.white,
-    borderColor: colors.textPrimary,
-  },
-};
-
-export function ScenarioPromptCard({
-  emphasis,
-  onPress,
-  scenario,
-  style,
-}: ScenarioPromptCardProps) {
-  const featured = emphasis === 'featured';
-
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
-    <AppCard
+    <Pressable
       accessibilityLabel={`${scenario.displayText} 시나리오 선택`}
+      accessibilityRole="button"
       onPress={onPress}
-      padded={false}
-      style={[
+      style={({pressed}) => [
         styles.card,
-        toneStyles[scenario.tone],
-        featured ? styles.featured : styles.regular,
+        fill ? styles.fill : null,
+        paletteStyles[scenario.palette],
         style,
+        pressed ? styles.pressed : null,
       ]}
     >
-      <Text
-        numberOfLines={2}
-        style={[styles.label, featured ? styles.featuredLabel : null]}
-      >
+      <Text style={[styles.label, emphasisStyles[scenario.visualEmphasis], textPaletteStyles[scenario.palette]]}>
         {scenario.displayText}
       </Text>
-    </AppCard>
+    </Pressable>
   );
 }
 
+const paletteStyles = StyleSheet.create({
+  paper: {backgroundColor: colors.surface, borderColor: colors.borderStrong},
+  ink: {backgroundColor: colors.textPrimary, borderColor: colors.textPrimary},
+  muted: {backgroundColor: colors.surfaceMuted, borderColor: colors.divider},
+  accent: {backgroundColor: makeupRecommendationColors.accent, borderColor: makeupRecommendationColors.accent},
+});
+const textPaletteStyles = StyleSheet.create({
+  paper: {color: colors.textPrimary},
+  ink: {color: colors.white},
+  muted: {color: colors.textPrimary},
+  accent: {color: makeupRecommendationColors.accentText},
+});
+const emphasisStyles = StyleSheet.create({
+  compact: {fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
+  standard: {fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  featured: {fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.md, lineHeight: typography.lineHeight.md},
+});
 const styles = StyleSheet.create({
   card: {
-    justifyContent: 'center',
-    minHeight: 52,
-    overflow: 'hidden',
-  },
-  featured: {
-    minHeight: 76,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    width: '100%',
-  },
-  regular: {
+    alignItems: 'flex-start',
     borderRadius: radius.md,
-    minHeight: 64,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    overflow: 'visible',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  label: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  featuredLabel: {
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-  },
+  fill: {height: '100%', width: '100%'},
+  label: {fontFamily: typography.fontFamily.semibold, flexShrink: 1},
+  pressed: {opacity: 0.72},
 });

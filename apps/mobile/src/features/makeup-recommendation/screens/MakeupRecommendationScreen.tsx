@@ -20,19 +20,8 @@ import type {
 import {RecommendationQuestionView} from './RecommendationQuestionView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
-
-export type MakeupRecommendationScreenPhase =
-  | 'discovery'
-  | 'loading'
-  | 'question'
-  | 'results'
-  | 'error';
-
-export function shouldHandleMakeupRecommendationBack(
-  phase: MakeupRecommendationScreenPhase,
-): boolean {
-  return phase !== 'discovery';
-}
+import {shouldHandleMakeupRecommendationBack, type MakeupRecommendationScreenPhase} from './makeupRecommendationViewContracts';
+export {shouldHandleMakeupRecommendationBack, type MakeupRecommendationScreenPhase} from './makeupRecommendationViewContracts';
 
 export type MakeupRecommendationScreenHandle = {
   handleBack: () => boolean;

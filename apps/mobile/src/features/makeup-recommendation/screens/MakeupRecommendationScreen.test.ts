@@ -1,10 +1,11 @@
 import {
-  getScenarioCardEmphasis,
+  getQuestionActionMode,
+  getQuestionProgressSegments,
   makeupRecommendationDiscoveryCopy,
-} from './ScenarioDiscoveryView';
-import {getQuestionActionMode} from './RecommendationQuestionView';
-import {makeupRecommendationResultRoleLabels} from './RecommendationResultsView';
-import {shouldHandleMakeupRecommendationBack} from './MakeupRecommendationScreen';
+  makeupRecommendationResultRoleLabels,
+  shouldHandleMakeupRecommendationBack,
+  toggleExpandedLookId,
+} from './makeupRecommendationViewContracts';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -14,17 +15,15 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 
 expectEqual(
   makeupRecommendationDiscoveryCopy.title,
-  '오늘, 어떤 내가 되어볼까요?',
+  '어떤 모습이 끌리나요?',
   'discovery title',
 );
 expectEqual(
   makeupRecommendationDiscoveryCopy.refresh,
-  '새로운 시나리오 보여줘',
+  '새로 보기',
   'refresh copy',
 );
-expectEqual(getScenarioCardEmphasis(0), 'featured', 'first card emphasis');
-expectEqual(getScenarioCardEmphasis(1), 'regular', 'second card emphasis');
-expectEqual(getScenarioCardEmphasis(6), 'featured', 'seventh card emphasis');
+expectEqual(makeupRecommendationDiscoveryCopy.profile, '내 분석 결과 반영', 'profile copy');
 expectEqual(
   getQuestionActionMode({currentQuestionIndex: 0, questionCount: 2}),
   'advance',
@@ -65,3 +64,11 @@ expectEqual(
   true,
   'results back returns to discovery',
 );
+expectEqual(
+  getQuestionProgressSegments({currentQuestionIndex: 1, questionCount: 3}).join(','),
+  'complete,complete,pending',
+  'segmented question progress',
+);
+const opened = toggleExpandedLookId(new Set<string>(), 'look-a');
+expectEqual(opened.has('look-a'), true, 'result detail opens');
+expectEqual(toggleExpandedLookId(opened, 'look-a').has('look-a'), false, 'result detail closes');
