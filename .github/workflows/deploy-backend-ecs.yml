@@ -12,6 +12,12 @@ on:
       - "data/auradin/knowledge/**"
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
+    inputs:
+      artifact_only:
+        description: Build and scan an image artifact without AWS deployment
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -35,7 +41,95 @@ env:
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
 jobs:
+  build_artifact:
+    name: Build and scan backend image artifact
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_only }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r services/backend/requirements.txt
+
+      - name: Run backend security and regression tests
+        env:
+          AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        working-directory: services/backend
+        run: python -m pytest -q
+
+      - name: Build backend image
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: docker build -f services/backend/Dockerfile -t "$LOCAL_IMAGE" .
+
+      - name: Install verified Trivy scanner
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSLO "$base_url/$archive"
+          curl -fsSLo trivy-checksums.txt "$base_url/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  $archive$" trivy-checksums.txt | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/trivy" trivy
+          echo "$RUNNER_TEMP/trivy" >> "$GITHUB_PATH"
+
+      - name: Block artifact on critical or high vulnerabilities
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          --no-progress
+          "$LOCAL_IMAGE"
+
+      - name: Export verified image
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: |
+          docker save "$LOCAL_IMAGE" --output "$RUNNER_TEMP/aura-backend.tar"
+          sha256sum "$RUNNER_TEMP/aura-backend.tar" > "$RUNNER_TEMP/aura-backend.tar.sha256"
+
+      - name: Upload verified image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-backend-image-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/aura-backend.tar
+            ${{ runner.temp }}/aura-backend.tar.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   deploy:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.artifact_only }}
     name: Build image and deploy service
     runs-on: ubuntu-latest
     services:
