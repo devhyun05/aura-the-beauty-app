@@ -72,6 +72,13 @@ SCORE_WEIGHTS = {
   "evidence": 0.20,
   "liveOffer": 0.10,
 }
+SCORE_WEIGHTS_V2 = {
+  "rule": 0.15,
+  "semantic": 0.10,
+  "preference": 0.35,
+  "evidence": 0.30,
+  "liveOffer": 0.10,
+}
 
 W_PREFERENCE = SCORE_WEIGHTS["preference"]
 CAP_PROMPT = 0.11
@@ -171,6 +178,11 @@ def clamp01(value: float) -> float:
   return max(0.0, min(1.0, float(value)))
 
 
+def score_weights(*, score_weights_v2: bool = False) -> dict[str, float]:
+  """Return the flag-selected B8 weights without mutating the legacy baseline."""
+  return SCORE_WEIGHTS_V2 if score_weights_v2 else SCORE_WEIGHTS
+
+
 def _confidence(value: Any, *, default: float = 0.5) -> float:
   """Confidence contract: missing/None -> default, explicit 0.0 stays zero."""
   if value is None:
@@ -245,8 +257,11 @@ def _live_offer_score(item: dict[str, Any]) -> float:
 def preference_deltas(
   item: dict[str, Any],
   resolution: dict[str, Any] | list[dict[str, Any]] | None,
+  *,
+  score_weights_v2: bool = False,
 ) -> dict[str, Any]:
   """R2a source-capped preference deltas in final-score units."""
+  preference_weight = score_weights(score_weights_v2=score_weights_v2)["preference"]
   raw = {"prompt": 0.0, "report": 0.0}
   labels: list[str] = []
   item_confidence = (
@@ -280,8 +295,10 @@ def preference_deltas(
       * _confidence(item_confidence.get(attribute))
     )
 
-  prompt_delta = max(-CAP_PROMPT, min(CAP_PROMPT, raw["prompt"] * W_PREFERENCE))
-  report_delta = max(-CAP_REPORT, min(CAP_REPORT, raw["report"] * W_PREFERENCE))
+  # R2a caps stay in final-score units under both weight sets. Only the raw
+  # preference-component conversion follows the active W_PREF.
+  prompt_delta = max(-CAP_PROMPT, min(CAP_PROMPT, raw["prompt"] * preference_weight))
+  report_delta = max(-CAP_REPORT, min(CAP_REPORT, raw["report"] * preference_weight))
   return {
     "promptPreferenceDelta": prompt_delta,
     "reportPreferenceDelta": report_delta,
@@ -358,24 +375,27 @@ def compute_score_components(
   live_offer_score: float,
   prompt_preference_delta: float,
   report_preference_delta: float,
+  score_weights_v2: bool = False,
 ) -> dict[str, float]:
   """Single unrounded R2a score function; every delta is in final-score units."""
-  preference_base = 0.5 * W_PREFERENCE
+  weights = score_weights(score_weights_v2=score_weights_v2)
+  preference_weight = weights["preference"]
+  preference_base = 0.5 * preference_weight
   score_before_clamp = (
-    SCORE_WEIGHTS["rule"] * rule_score
-    + SCORE_WEIGHTS["semantic"] * semantic_score
+    weights["rule"] * rule_score
+    + weights["semantic"] * semantic_score
     + preference_base
     + prompt_preference_delta
     + report_preference_delta
-    + SCORE_WEIGHTS["evidence"] * evidence_score
-    + SCORE_WEIGHTS["liveOffer"] * live_offer_score
+    + weights["evidence"] * evidence_score
+    + weights["liveOffer"] * live_offer_score
   )
   return {
     "preferenceBase": preference_base,
     "promptPreferenceDelta": prompt_preference_delta,
     "reportPreferenceDelta": report_preference_delta,
     "answerScore": clamp01(
-      0.5 + (prompt_preference_delta + report_preference_delta) / W_PREFERENCE,
+      0.5 + (prompt_preference_delta + report_preference_delta) / preference_weight,
     ),
     "scoreBeforeClamp": score_before_clamp,
     "score": clamp01(score_before_clamp),
@@ -425,6 +445,7 @@ def rank_candidates(
   hard_filters: list[dict[str, Any]],
   soft_preferences: list[dict[str, Any]],
   semantic_scores: dict[str, float] | None = None,
+  score_weights_v2: bool = False,
 ) -> list[dict[str, Any]]:
   ranked: list[dict[str, Any]] = []
   semantic_scores = semantic_scores or {}
@@ -436,7 +457,11 @@ def rank_candidates(
     semantic_score = float(semantic_scores.get(item["id"], 0.0))
     evidence_score = _evidence_score(item)
     live_offer_score = _live_offer_score(item)
-    deltas = preference_deltas(item, preference_resolution)
+    deltas = preference_deltas(
+      item,
+      preference_resolution,
+      score_weights_v2=score_weights_v2,
+    )
     explicit_match = evaluate_explicit_preference_match(
       item,
       preference_resolution,
@@ -450,6 +475,7 @@ def rank_candidates(
       live_offer_score=live_offer_score,
       prompt_preference_delta=float(deltas["promptPreferenceDelta"]),
       report_preference_delta=float(deltas["reportPreferenceDelta"]),
+      score_weights_v2=score_weights_v2,
     )
     # rank_candidates is the current ranked-row serialization boundary: calculate
     # from raw values once, then round public numbers.  Exact arithmetic remains
@@ -468,6 +494,7 @@ def rank_candidates(
       # keeping it inside components lets the existing compact rankedCache retain
       # exact MMR/gap ordering without a session-manager schema change.
       "_scoreRaw": score_components["score"],
+      "_scoreWeightsV2": score_weights_v2,
       "matchedExplicitPref": explicit_match["matchedExplicitPref"],
       "matchedKnownHardConstraint": explicit_match["matchedKnownHardConstraint"],
       "preferenceProvenance": explicit_match["provenance"],
@@ -973,7 +1000,6 @@ def to_result_product(
 ) -> dict[str, Any]:
   item = row["item"]
   live_offer = item.get("liveOffer") if isinstance(item.get("liveOffer"), dict) else {}
-  match_rate = max(1, min(99, int(round(float(row["score"]) * 100))))
   tags = _tags(item, row.get("matchedLabels", []))
   soft_only_fields = [
     field
@@ -982,6 +1008,19 @@ def to_result_product(
   ]
   # §6 구조화 근거 (matchedOn/inferred/caveat) — 자유 문장 금지.
   reason = _build_reason(item, hard_filters=hard_filters, extra_caveats=extra_caveats)
+  components = row.get("components") if isinstance(row.get("components"), dict) else {}
+  if components.get("_scoreWeightsV2"):
+    # R3 display score is deliberately independent from ranking score. Confirmed
+    # evidence saturates at three chips so catalogue richness cannot dominate.
+    confirmed_score = min(len(reason["matchedOn"]), 3) / 3
+    display_score = (
+      0.45 * clamp01(float(components.get("answerScore") or 0.0))
+      + 0.40 * clamp01(float(components.get("evidenceScore") or 0.0))
+      + 0.15 * confirmed_score
+    )
+    match_rate = max(1, min(99, int(round(display_score * 100))))
+  else:
+    match_rate = max(1, min(99, int(round(float(row["score"]) * 100))))
   return {
     "id": item["id"],
     "role": role,  # §5 3역할: anchor | diverse | discovery (미배치 시 None)

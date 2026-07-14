@@ -803,6 +803,7 @@ async def _enrich_live_discovery(
     eligible,
     hard_filters=hard_filters,
     soft_preferences=state.get("softPreferences") or [],
+    score_weights_v2=bool(settings.auradin_score_weights_v2),
   )
   # A4/F18은 라이브 후보에도 동일한 순서로 적용한다. confirmed conflict는
   # 재삽입하지 않고, semantic unavailable을 0으로 둔 상태에서 floor를 통과한

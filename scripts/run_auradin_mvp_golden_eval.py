@@ -48,7 +48,10 @@ def _product_summary(turn: dict[str, Any]) -> list[dict[str, Any]]:
   return [
     {
       "id": product.get("id"),
+      "brandName": product.get("brandName"),
+      "productName": product.get("productName"),
       "category": product.get("category"),
+      "matchRate": product.get("matchRate"),
       "priceKrw": product.get("priceKrw") or product.get("price"),
       "hasImage": bool(product.get("imageUrl")),
       "hasPurchase": bool(product.get("purchaseUrl")),
@@ -156,6 +159,7 @@ def render_report(
     f"- Catalog: `{snapshot['catalogPath']}` (`{snapshot['catalogSha256']}`)",
     f"- Chunks: `{snapshot['chunksPath']}` (`{snapshot['chunksSha256']}`)",
     f"- Vector: `{snapshot['vectorPath']}` (`{snapshot['vectorSha256']}`)",
+    f"- Score weights v2: `{str(snapshot['scoreWeightsV2']).lower()}`",
     "",
     "| Prompt | Status | First phase | First question | Final phase | Questions | Products/Error |",
     "|---|---|---|---|---|---:|---|",
@@ -271,6 +275,7 @@ def main() -> None:
         if log.get("retrievalStatus") or log.get("retrievalStatusAfter")
       },
     ),
+    "scoreWeightsV2": bool(getattr(settings, "auradin_score_weights_v2", False)),
   }
   output_path, evidence_path = _output_paths(args.run_date, args.output_prefix)
   output_path.parent.mkdir(parents=True, exist_ok=True)

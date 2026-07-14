@@ -359,6 +359,7 @@ def retrieve_and_rank(
     hard_filters=hard_filters,
     soft_preferences=soft_preferences,
     semantic_scores=semantic.scores,
+    score_weights_v2=bool(settings.auradin_score_weights_v2),
   )
   return {
     "candidateCountBefore": len(candidates_before),

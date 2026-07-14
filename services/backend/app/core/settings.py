@@ -79,6 +79,8 @@ class Settings(BaseSettings):
   # A9 create 멱등성 retention — 세션 TTL과 별개로 (owner, clientRequestId) 귀속을 유지하는 기간.
   auradin_idempotency_retention_seconds: int = 86400
   # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
+  # B8/R3는 골든 baseline 사람 재승인 전까지 비활성으로 배포한다.
+  auradin_score_weights_v2: bool = False
   auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
   auradin_floor_semantic: float = 0.5  # floor 게이트 semantic 문턱
   # 점수갭 즉답 종료 임계 (하드 조건 + raw #1-#2 갭≥θ → 질문 스킵).
