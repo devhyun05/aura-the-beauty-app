@@ -15,20 +15,29 @@ from app.services.consulting_schema import ensure_consulting_runtime_schema
 from app.services.account_deletion import ensure_account_deletion_schema
 from app.services.media_deletion import ensure_media_deletion_schema
 from app.services.hair_schema import ensure_hair_schema
+from app.services.auradin_agent.catalog_loader import reset_catalog_cache
+from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-  await database.connect()
-  await ensure_consulting_runtime_schema(database)
-  await ensure_media_deletion_schema(database)
-  await ensure_account_deletion_schema(database)
-  await ensure_hair_schema(database)
-
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+  # Snapshot integrity is a startup invariant and must fail before opening a DB
+  # connection. This prevents a catalog-only deploy from silently degrading to
+  # lexical retrieval or lazy runtime regeneration.
+  app.state.auradin_snapshot = resolve_and_validate_snapshot(app.state.settings)
+  bind_process_snapshot(app.state.auradin_snapshot)
+  reset_catalog_cache()
   try:
+    await database.connect()
+    await ensure_consulting_runtime_schema(database)
+    await ensure_media_deletion_schema(database)
+    await ensure_account_deletion_schema(database)
+    await ensure_hair_schema(database)
     yield
   finally:
     await database.close()
+    bind_process_snapshot(None)
+    reset_catalog_cache()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -39,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     debug=settings.debug,
     lifespan=lifespan,
   )
+  app.state.settings = settings
 
   if settings.cors_enabled:
     app.add_middleware(

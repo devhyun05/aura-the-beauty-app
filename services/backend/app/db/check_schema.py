@@ -61,8 +61,44 @@ EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 EXPECTED_COLUMNS = {
   "analysis_reports": {"embedding"},
   "community_threads": {"embedding"},
-  "auradin_search_sessions": {"state", "expires_at"},
+  "auradin_search_sessions": {
+    "state",
+    "expires_at",
+    # A9 v2 (schema.sql:auradin-sessions-v2) — 멱등성·CAS 컬럼
+    "owner_subject",
+    "version",
+    "client_request_id",
+    "request_fingerprint",
+    "idempotency_expires_at",
+  },
   "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+}
+
+EXPECTED_COLUMN_CONTRACTS = {
+  "auradin_search_sessions.owner_subject": {"is_nullable": "NO"},
+  "auradin_search_sessions.version": {"is_nullable": "NO", "default_contains": "0"},
+}
+
+EXPECTED_CONSTRAINT_CONTRACTS = {
+  "chk_auradin_sessions_idempotency_fields": (
+    "(client_request_id is null) = (request_fingerprint is null)",
+    "(client_request_id is null) = (idempotency_expires_at is null)",
+    " and ",
+  ),
+}
+
+EXPECTED_INDEX_CONTRACTS = {
+  "idx_auradin_search_sessions_expires_at": ("expires_at",),
+  "uq_auradin_sessions_owner_client_request": (
+    "unique",
+    "owner_subject",
+    "client_request_id",
+    "where (client_request_id is not null)",
+  ),
+  "idx_auradin_sessions_idempotency_expires": (
+    "idempotency_expires_at",
+    "where (idempotency_expires_at is not null)",
+  ),
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
@@ -90,6 +126,47 @@ async def fetch_table_columns(connection: asyncpg.Connection) -> dict[str, set[s
   for row in rows:
     columns.setdefault(row["table_name"], set()).add(row["column_name"])
   return columns
+
+
+async def fetch_column_contracts(connection: asyncpg.Connection) -> dict[str, dict[str, str | None]]:
+  rows = await connection.fetch(
+    """
+    select table_name, column_name, is_nullable, column_default
+    from information_schema.columns
+    where table_schema = 'public'
+    """,
+  )
+  return {
+    f"{row['table_name']}.{row['column_name']}": {
+      "is_nullable": row["is_nullable"],
+      "column_default": row["column_default"],
+    }
+    for row in rows
+  }
+
+
+async def fetch_constraints(connection: asyncpg.Connection) -> dict[str, str]:
+  rows = await connection.fetch(
+    """
+    select conname, pg_get_constraintdef(oid) as definition
+    from pg_constraint
+    where conrelid = 'public.auradin_search_sessions'::regclass
+    """,
+  )
+  return {str(row["conname"]): str(row["definition"]).lower() for row in rows}
+
+
+async def fetch_indexes(connection: asyncpg.Connection) -> dict[str, str]:
+  rows = await connection.fetch(
+    """
+    select indexname, indexdef
+    from pg_indexes
+    where schemaname = 'public'
+    """,
+  )
+  return {str(row["indexname"]): str(row["indexdef"]).lower() for row in rows}
+
+
 async def fetch_extensions(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch("select extname from pg_extension")
   return {row["extname"] for row in rows}
@@ -109,6 +186,9 @@ def build_schema_report(
   require_seed: bool = False,
   table_columns: dict[str, set[str]] | None = None,
   installed_extensions: set[str] | None = None,
+  column_contracts: dict[str, dict[str, str | None]] | None = None,
+  constraints: set[str] | dict[str, str] | None = None,
+  indexes: dict[str, str] | None = None,
 ) -> dict[str, object]:
   expected_versions = {SCHEMA_VERSION, *POST_SCHEMA_MIGRATIONS}
 
@@ -127,15 +207,54 @@ def build_schema_report(
       for table, columns in EXPECTED_COLUMNS.items()
       if columns - table_columns.get(table, set())
     }
+  invalid_column_contracts = []
+  if column_contracts is not None:
+    for column, expected in EXPECTED_COLUMN_CONTRACTS.items():
+      actual = column_contracts.get(column, {})
+      nullable = expected.get("is_nullable")
+      default_contains = expected.get("default_contains")
+      if nullable and actual.get("is_nullable") != nullable:
+        invalid_column_contracts.append(f"{column}.nullability")
+      if default_contains and default_contains not in str(actual.get("column_default") or ""):
+        invalid_column_contracts.append(f"{column}.default")
+  missing_constraints = []
+  invalid_constraints = []
+  if constraints is not None:
+    constraint_names = set(constraints)
+    missing_constraints = sorted(set(EXPECTED_CONSTRAINT_CONTRACTS) - constraint_names)
+    if isinstance(constraints, dict):
+      for name, fragments in EXPECTED_CONSTRAINT_CONTRACTS.items():
+        definition = constraints.get(name, "")
+        if definition and any(fragment not in definition for fragment in fragments):
+          invalid_constraints.append(name)
+  invalid_indexes = []
+  if indexes is not None:
+    for name, fragments in EXPECTED_INDEX_CONTRACTS.items():
+      definition = indexes.get(name, "")
+      if not definition or any(fragment not in definition for fragment in fragments):
+        invalid_indexes.append(name)
 
   return {
-    "ok": not missing_tables and not missing_versions and not missing_columns and not missing_extensions,
+    "ok": not any((
+      missing_tables,
+      missing_versions,
+      missing_columns,
+      missing_extensions,
+      invalid_column_contracts,
+      missing_constraints,
+      invalid_constraints,
+      invalid_indexes,
+    )),
     "expectedTables": sorted(EXPECTED_TABLES),
     "missingTables": missing_tables,
     "expectedExtensions": sorted(EXPECTED_EXTENSIONS),
     "missingExtensions": missing_extensions,
     "expectedColumns": {table: sorted(columns) for table, columns in EXPECTED_COLUMNS.items()},
     "missingColumns": missing_columns,
+    "invalidColumnContracts": sorted(invalid_column_contracts),
+    "missingConstraints": missing_constraints,
+    "invalidConstraints": sorted(invalid_constraints),
+    "invalidIndexes": sorted(invalid_indexes),
     "appliedVersions": sorted(applied_versions),
     "missingVersions": missing_versions,
   }
@@ -156,6 +275,9 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
   try:
     table_names = await fetch_table_names(connection)
     table_columns = await fetch_table_columns(connection)
+    column_contracts = await fetch_column_contracts(connection)
+    constraints = await fetch_constraints(connection)
+    indexes = await fetch_indexes(connection)
     installed_extensions = await fetch_extensions(connection)
     applied_versions = await fetch_applied_versions(connection)
   finally:
@@ -167,6 +289,9 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     require_seed=require_seed,
     table_columns=table_columns,
     installed_extensions=installed_extensions,
+    column_contracts=column_contracts,
+    constraints=constraints,
+    indexes=indexes,
   )
 
 
@@ -177,6 +302,10 @@ def format_schema_report(report: dict[str, object]) -> str:
   missing_tables = report["missingTables"]
   missing_extensions = report["missingExtensions"]
   missing_columns = report["missingColumns"]
+  invalid_column_contracts = report["invalidColumnContracts"]
+  missing_constraints = report["missingConstraints"]
+  invalid_indexes = report["invalidIndexes"]
+  invalid_constraints = report["invalidConstraints"]
   missing_versions = report["missingVersions"]
 
   if missing_tables:
@@ -196,7 +325,32 @@ def format_schema_report(report: dict[str, object]) -> str:
     lines.append("Missing migration markers:")
     lines.extend(f"- {version}" for version in missing_versions)
 
-  if not missing_tables and not missing_versions and not missing_columns and not missing_extensions:
+  if invalid_column_contracts:
+    lines.append("Invalid column contracts:")
+    lines.extend(f"- {name}" for name in invalid_column_contracts)
+
+  if missing_constraints:
+    lines.append("Missing constraints:")
+    lines.extend(f"- {name}" for name in missing_constraints)
+
+  if invalid_constraints:
+    lines.append("Invalid constraints:")
+    lines.extend(f"- {name}" for name in invalid_constraints)
+
+  if invalid_indexes:
+    lines.append("Missing or invalid indexes:")
+    lines.extend(f"- {name}" for name in invalid_indexes)
+
+  if not any((
+    missing_tables,
+    missing_versions,
+    missing_columns,
+    missing_extensions,
+    invalid_column_contracts,
+    missing_constraints,
+    invalid_constraints,
+    invalid_indexes,
+  )):
     lines.append("All expected tables and migration markers are present.")
 
   return "\n".join(lines)

@@ -350,12 +350,19 @@ Table auradin_search_sessions {
   state jsonb [not null]
   expires_at timestamptz [not null]
   updated_at timestamptz [not null]
+  owner_subject text [not null]
+  version integer [not null, default: 0]
+  client_request_id text
+  request_fingerprint text
+  idempotency_expires_at timestamptz
 
   indexes {
     expires_at
+    (owner_subject, client_request_id) [unique, note: 'partial: client_request_id is not null']
+    idempotency_expires_at [note: 'partial: idempotency_expires_at is not null']
   }
 
-  Note: 'Temporary Auradin conversation state. Product likes remain in user_product_likes.'
+  Note: 'Temporary Auradin conversation state. Product likes remain in user_product_likes. A9 v2: create 멱등성(client_request_id+fingerprint+retention)과 mutator version CAS.'
 }
 
 Table product_recommendation_runs {

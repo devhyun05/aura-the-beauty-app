@@ -26,9 +26,11 @@ import {
   cancelAuradinSearchSession,
   createAuradinSearchSession,
   isAuradinAbort,
+  makeClientRequestId,
   pollAuradinSearchTurn,
   refineAuradinSearch,
 } from '../services/auradinSearchService';
+import {BackendApiError} from '../../../shared/services/backendApi';
 import type {
   AuradinCandidateProduct,
   AuradinPhase,
@@ -80,6 +82,13 @@ export function AuradinSearchScreen({
   const [selected, setSelected] = useState<AuradinCandidateProduct | null>(null);
   const [saved, setSaved] = useState<AuradinCandidateProduct[]>([]);
   const sessionIdRef = useRef<string | null>(null);
+  // A9 create 멱등 키 — 논리적 submit 단위로 보존: 같은 fingerprint의 네트워크 재시도는
+  // 같은 id, 요청 내용이 바뀌면 새 id. 410(만료)·409(키 재사용) 수신 시 ref를 비운다.
+  const submitKeyRef = useRef<{
+    fingerprint: string;
+    id: string;
+    status: 'in_flight' | 'resolved';
+  } | null>(null);
   const cancelled = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 진행 중인 세션 요청의 컨트롤러 — 새 검색/취소/이탈 시 in-flight fetch·poll을 중단한다.
@@ -140,7 +149,12 @@ export function AuradinSearchScreen({
         phase: 'failed',
         thinking: [],
         candidates: [],
-        error: {message: '검색을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.'},
+        error: {
+          message:
+            error instanceof BackendApiError
+              ? error.message
+              : '검색을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        },
       });
       setPhase('failed');
     }
@@ -161,10 +175,37 @@ export function AuradinSearchScreen({
     setAnswering(false);
     setSelected(null);
     const context = parts.context.personalColor ? {personalColor: parts.context.personalColor} : undefined;
+    // A9: 같은 논리적 submit(동일 fingerprint)의 재시도는 같은 clientRequestId를 재사용.
+    const fingerprint = JSON.stringify({
+      prompt,
+      reportId: parts.reportId ?? null,
+      personalColor: context?.personalColor ?? null,
+    });
+    if (submitKeyRef.current?.fingerprint !== fingerprint) {
+      submitKeyRef.current = {fingerprint, id: makeClientRequestId(), status: 'in_flight'};
+    }
+    const clientRequestId = submitKeyRef.current.id;
+    submitKeyRef.current.status = 'in_flight';
     const {signal} = beginRequest();
     void runWithSearching(SEARCH_MS, signal, async () => {
-      const created = await createAuradinSearchSession({prompt, reportId: parts.reportId, context}, signal);
+      let created;
+      try {
+        created = await createAuradinSearchSession(
+          {prompt, reportId: parts.reportId, context, clientRequestId},
+          signal,
+        );
+      } catch (error) {
+        // 410 SESSION_EXPIRED(retention 내 원 세션 만료)·409 IDEMPOTENCY_KEY_REUSED →
+        // 키를 비워 다음 시도가 새 id로 새 검색을 시작하게 한다.
+        if (error instanceof BackendApiError && (error.status === 410 || error.status === 409)) {
+          submitKeyRef.current = null;
+        }
+        throw error;
+      }
       sessionIdRef.current = created.sessionId;
+      if (submitKeyRef.current?.id === clientRequestId) {
+        submitKeyRef.current.status = 'resolved';
+      }
       return pollAuradinSearchTurn(created.sessionId, {signal});
     });
   };
@@ -194,8 +235,25 @@ export function AuradinSearchScreen({
     setAnswering(true);
     const {signal} = beginRequest();
     void runWithSearching(PICK_MS, signal, async () => {
-      await answerAuradinQuestion(sessionId, questionId, optionId, signal);
+      try {
+        await answerAuradinQuestion(sessionId, questionId, optionId, signal);
+      } catch (error) {
+        // A9: conflict(409)/stale(409)/invalid option(422)/expired(410)은 세션 재조회로
+        // 서버 상태를 복원한다 — 실패 화면 대체가 아니라 authoritative 상태 표시 (계약 변경).
+        if (
+          error instanceof BackendApiError &&
+          (error.status === 409 || error.status === 410 || error.status === 422)
+        ) {
+          return pollAuradinSearchTurn(sessionId, {signal});
+        }
+        throw error;
+      }
       return pollAuradinSearchTurn(sessionId, {signal});
+    }).finally(() => {
+      // invalid/stale/conflict의 authoritative 재조회가 끝나면 로컬 선택 잠금을 되돌린다.
+      if (!cancelled.current && !signal.aborted) {
+        setAnswering(false);
+      }
     });
   };
 
@@ -245,6 +303,7 @@ export function AuradinSearchScreen({
       void cancelAuradinSearchSession(sid); // 서버 세션도 종료 (best-effort)
     }
     sessionIdRef.current = null;
+    submitKeyRef.current = null; // 새 논리 검색은 취소된 세션의 clientRequestId를 재사용하지 않는다.
     setTurn(null);
     setQuery(''); // 입력창 잔존 질의 초기화 — 다음 홈 진입 시 placeholder만 보이게
     setAnswering(false);

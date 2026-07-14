@@ -1,9 +1,17 @@
-from app.services.auradin_agent.catalog_loader import MVP_CATALOG_PATH, MVP_CHUNK_PATH, read_jsonl
+from app.core.settings import get_settings
+from app.services.auradin_agent.catalog_loader import read_jsonl
+from app.services.auradin_agent.snapshot_manifest import resolve_and_validate_snapshot
+
+
+def _active_paths():
+  descriptor = resolve_and_validate_snapshot(get_settings())
+  return descriptor.catalog_path, descriptor.chunks_path
 
 
 def test_mvp_preprocessing_outputs_are_purchasable() -> None:
-  catalog = read_jsonl(MVP_CATALOG_PATH)
-  chunks = read_jsonl(MVP_CHUNK_PATH)
+  catalog_path, chunk_path = _active_paths()
+  catalog = read_jsonl(catalog_path)
+  chunks = read_jsonl(chunk_path)
 
   # 618 unique products across all 6 served categories in the enriched 20260708 seed
   # (official-name attribute extraction folded in; base/brow/liner serving opened).
@@ -19,7 +27,8 @@ def test_mvp_preprocessing_outputs_are_purchasable() -> None:
 
 
 def test_title_residual_keywords_remain_soft_only() -> None:
-  catalog = read_jsonl(MVP_CATALOG_PATH)
+  catalog_path, _chunk_path = _active_paths()
+  catalog = read_jsonl(catalog_path)
   inferred_items = [item for item in catalog if item.get("residualTitleKeywords")]
 
   assert inferred_items

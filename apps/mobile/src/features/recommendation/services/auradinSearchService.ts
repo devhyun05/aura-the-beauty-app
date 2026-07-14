@@ -62,7 +62,13 @@ type BackendProduct = {
   reasonCopy?: string | null; // §6 가산 카피 (구조화 reason이 권위값)
 };
 
-type BackendAppliedFilter = {label?: string | null; source?: string | null; confidence?: number | null};
+type BackendAppliedFilter = {
+  label?: string | null;
+  source?: string | null;
+  confidence?: number | null;
+  coverage?: string | null;
+  coverageCaveat?: string | null;
+};
 
 type BackendSearchTurn = {
   sessionId?: string | null;
@@ -83,7 +89,18 @@ export type CreateAuradinSessionRequest = {
   source?: string;
   // §3 리포트 톤 client-relay (로컬/무DB에서도 톤 반영). 향후 자료도 여기로 확장.
   context?: {personalColor?: string} | null;
+  // A9 create 멱등성 — 같은 논리적 submit의 네트워크 재시도는 같은 id를 재사용한다.
+  clientRequestId?: string;
 };
+
+// A9: RN 환경에 crypto.randomUUID가 없어 v4 형식을 직접 생성한다 — 멱등 키 용도로 충분.
+export function makeClientRequestId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = (Math.random() * 16) | 0;
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
 
 // ------------------------------------------------------------------ mapping helpers
 
@@ -188,7 +205,11 @@ function mapAppliedFilters(filters: BackendAppliedFilter[] | null | undefined): 
     return [];
   }
   return filters
-    .map((filter) => ({label: String(filter?.label ?? '').trim(), source: String(filter?.source ?? 'prompt')}))
+    .map((filter) => {
+      const baseLabel = String(filter?.label ?? '').trim();
+      const unknownSuffix = filter?.coverage === 'partial_unknown' ? ' · 정보 미상 포함' : '';
+      return {label: `${baseLabel}${baseLabel ? unknownSuffix : ''}`, source: String(filter?.source ?? 'prompt')};
+    })
     .filter((filter) => filter.label.length > 0);
 }
 
@@ -263,6 +284,7 @@ export async function createAuradinSearchSession(
       reportId: request.reportId,
       source: request.source,
       context: request.context ?? undefined,
+      clientRequestId: request.clientRequestId ?? undefined,
     },
   });
 }

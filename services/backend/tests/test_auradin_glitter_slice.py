@@ -77,10 +77,11 @@ def test_glitter_reason_is_structured_three_bucket() -> None:
     assert GLITTER_CAVEAT in reason["caveat"]
 
 
-def test_floor_gate_cuts_unjustified_candidates() -> None:
-  """§5 floor 게이트: 정당화 미달 후보가 정렬 전 컷된다."""
+def test_known_category_lock_is_a_real_floor_justification() -> None:
+  """F18: 알려진 category hard match는 semantic이 약해도 floor를 연다."""
   slice_result = _run_glitter_slice()["slice"]
-  assert slice_result["floorCount"] < slice_result["rankedCount"]
+  assert slice_result["floorCount"] == slice_result["rankedCount"]
+  assert slice_result["floorFallback"] is False
 
 
 def test_category_hard_filter_contributes_to_score() -> None:

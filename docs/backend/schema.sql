@@ -317,11 +317,31 @@ create table if not exists auradin_search_sessions (
   session_id text primary key,
   state jsonb not null,
   expires_at timestamptz not null,
-  updated_at timestamptz not null
+  updated_at timestamptz not null,
+  -- A9 v2 (schema.sql:auradin-sessions-v2): 멱등성·동시성
+  owner_subject text not null,
+  version integer not null default 0,
+  client_request_id text,
+  request_fingerprint text,
+  idempotency_expires_at timestamptz,
+  constraint chk_auradin_sessions_idempotency_fields check (
+    ((client_request_id is null) = (request_fingerprint is null))
+    and ((client_request_id is null) = (idempotency_expires_at is null))
+  )
 );
 
+create unique index if not exists uq_auradin_sessions_owner_client_request
+  on auradin_search_sessions (owner_subject, client_request_id)
+  where client_request_id is not null;
+
+create index if not exists idx_auradin_sessions_idempotency_expires
+  on auradin_search_sessions (idempotency_expires_at)
+  where idempotency_expires_at is not null;
+
 comment on table auradin_search_sessions is
-  'Temporary Auradin conversation state. Product likes are stored separately in user_product_likes.';
+  'Temporary Auradin conversation state. Product likes are stored separately in user_product_likes. '
+  'client_request_id/request_fingerprint/idempotency_expires_at: A9 create 멱등성 (retention은 세션 TTL과 별개), '
+  'version: mutator CAS.';
 
 create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),

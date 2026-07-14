@@ -1,0 +1,26 @@
+{
+  "item": "Stage 0 — A9 session idempotency (F13)",
+  "baseCommit": "7724e1c249f83b2bc3e9600cb46c046a847d1358",
+  "changes": [
+    "non-destructive accepted/duplicate/expired/conflict/stale/invalid/not-answerable judgement",
+    "session lock spans load through enrich and CAS commit with rollback on failure",
+    "bounded memory tombstone sweep and cancellation-safe create reservation",
+    "database version CAS and idempotent create contract",
+    "schema v2 synchronized across SQL, DBML, init and schema checker",
+    "HTTP 200/409/410/422 mapping and mobile authoritative-state recovery"
+  ],
+  "focusedTests": [
+    "session/idempotency/API/schema/cleanup: 56 passed",
+    "latest API/schema/M1 integration subset: 31 passed"
+  ],
+  "realPostgres": {
+    "status": "UNVERIFIED_REAL_POSTGRES",
+    "reason": "no local PostgreSQL fixture was available",
+    "requiredBeforeDeployment": [
+      "three-way concurrent answer applies exactly once",
+      "bounded CAS retry exhaustion preserves authoritative version",
+      "v1 to v2 migration and restart resend"
+    ]
+  },
+  "goldenDiff": "none; session transport and persistence layer only"
+}

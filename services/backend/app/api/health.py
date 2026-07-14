@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
+from app.core.errors import AppError
 from app.core.responses import success
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, get_database
+from app.services.auradin_agent.snapshot_manifest import (
+  SnapshotValidationError,
+  resolve_and_validate_snapshot,
+)
 
 
 router = APIRouter(tags=["health"])
@@ -10,9 +15,13 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health(
+  request: Request,
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
+  descriptor = getattr(request.app.state, "auradin_snapshot", None)
+  if descriptor is None:
+    descriptor = resolve_and_validate_snapshot(settings)
   return success(
     {
       "status": "ok",
@@ -20,8 +29,23 @@ async def health(
       "environment": settings.environment,
       "database": "connected" if db.is_connected else "not_configured",
       "auth": "required" if settings.auth_required else "dev_optional",
+      **descriptor.public_status(),
     },
   )
+
+
+@router.get("/health/ready")
+async def health_ready(
+  request: Request,
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  try:
+    descriptor = getattr(request.app.state, "auradin_snapshot", None)
+    if descriptor is None:
+      descriptor = resolve_and_validate_snapshot(settings)
+  except SnapshotValidationError as exc:
+    raise AppError(503, "AURADIN_SNAPSHOT_NOT_READY", "Auradin snapshot validation failed.") from exc
+  return success({"status": "ready", **descriptor.public_status()})
 
 
 @router.get("/health/db")

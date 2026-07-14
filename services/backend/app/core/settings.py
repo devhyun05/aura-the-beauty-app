@@ -67,10 +67,17 @@ class Settings(BaseSettings):
   embedding_dimension: int = 1024
 
   auradin_retrieval_backend: str = "auto"
+  # Immutable data snapshot selection. Production always follows
+  # data/auradin/active_snapshot.json; this override is reserved for local
+  # golden/verification processes.
+  auradin_snapshot_manifest: str | None = None
+  auradin_snapshot_dev_regeneration: bool = False
   auradin_vector_index_path: str | None = None
   auradin_vector_index_autobuild: bool = False
   auradin_session_store: str = "postgres"
   auradin_session_ttl_seconds: int = 15 * 60
+  # A9 create 멱등성 retention — 세션 TTL과 별개로 (owner, clientRequestId) 귀속을 유지하는 기간.
+  auradin_idempotency_retention_seconds: int = 86400
   # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
   auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
   auradin_floor_semantic: float = 0.5  # floor 게이트 semantic 문턱

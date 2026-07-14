@@ -53,13 +53,67 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
     table_columns={
       "analysis_reports": set(),
       "community_threads": {"embedding"},
-      "auradin_search_sessions": {"state", "expires_at"},
+      "auradin_search_sessions": {
+        "state",
+        "expires_at",
+        "owner_subject",
+        "version",
+        "client_request_id",
+        "request_fingerprint",
+        "idempotency_expires_at",
+      },
       "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
     },
   )
 
   assert report["ok"] is False
   assert report["missingColumns"] == {"analysis_reports": ["embedding"]}
+
+
+def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    column_contracts={
+      "auradin_search_sessions.owner_subject": {"is_nullable": "YES", "column_default": None},
+      "auradin_search_sessions.version": {"is_nullable": "NO", "column_default": None},
+    },
+    constraints=set(),
+    indexes={
+      "idx_auradin_search_sessions_expires_at": "create index on auradin_search_sessions (expires_at)",
+      "uq_auradin_sessions_owner_client_request": (
+        "create unique index on auradin_search_sessions (owner_subject, client_request_id)"
+      ),
+    },
+  )
+
+  assert report["ok"] is False
+  assert report["invalidColumnContracts"] == [
+    "auradin_search_sessions.owner_subject.nullability",
+    "auradin_search_sessions.version.default",
+  ]
+  assert report["missingConstraints"] == ["chk_auradin_sessions_idempotency_fields"]
+  assert report["invalidIndexes"] == [
+    "idx_auradin_sessions_idempotency_expires",
+    "uq_auradin_sessions_owner_client_request",
+  ]
+
+
+def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    constraints={
+      "chk_auradin_sessions_idempotency_fields": (
+        "check (((client_request_id is null) = (request_fingerprint is null)) "
+        "or ((client_request_id is null) = (idempotency_expires_at is null)))"
+      ),
+    },
+  )
+
+  assert report["ok"] is False
+  assert report["missingConstraints"] == []
+  assert report["invalidConstraints"] == ["chk_auradin_sessions_idempotency_fields"]
 
 def test_schema_report_lists_missing_vector_extension() -> None:
   report = build_schema_report(
@@ -120,9 +174,15 @@ def test_pending_search_migration_is_registered() -> None:
 
 
 def test_pending_auradin_session_migration_is_registered() -> None:
-  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:auradin-sessions-v1"]
+  migration_v1 = POST_SCHEMA_MIGRATIONS["schema.sql:auradin-sessions-v1"]
+  migration_v2 = POST_SCHEMA_MIGRATIONS["schema.sql:auradin-sessions-v2"]
 
-  assert "create table if not exists auradin_search_sessions" in migration_sql
-  assert "state jsonb not null" in migration_sql
-  assert "expires_at timestamptz not null" in migration_sql
-  assert "idx_auradin_search_sessions_expires_at" in migration_sql
+  assert "create table if not exists auradin_search_sessions" in migration_v1
+  assert "state jsonb not null" in migration_v1
+  assert "expires_at timestamptz not null" in migration_v1
+  assert "idx_auradin_search_sessions_expires_at" in migration_v1
+  assert "alter column owner_subject set not null" in migration_v2
+  assert "alter column version set default 0" in migration_v2
+  assert "chk_auradin_sessions_idempotency_fields" in migration_v2
+  assert "uq_auradin_sessions_owner_client_request" in migration_v2
+  assert "idx_auradin_sessions_idempotency_expires" in migration_v2

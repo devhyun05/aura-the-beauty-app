@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.services.auradin_catalog.brand_aliases import remove_brand_alias_spans
+
 
 TITLE_INFERENCE_SOURCE = "title_residual_rule_inferred"
 
@@ -102,18 +104,38 @@ def normalize_product_name(raw_title: str, brand_name: str | None = None) -> str
 
 
 def _residual_text(raw_title: str, product_name: str, brand_name: str | None) -> str:
-  residual = normalize_for_match(raw_title)
-  product = normalize_for_match(product_name)
-  brand = normalize_for_match(brand_name)
-
-  for token in [brand, product]:
-    if token:
-      residual = residual.replace(token, " ")
-
+  # A8: attributes may legitimately live in the product name itself. Removing
+  # the whole product name loses controls such as 여쿨라/그레이쉬쿨/앙쿨모브;
+  # re-attaching the original title, however, reintroduces the brand token and
+  # made "투쿨포스쿨" infer undertone=cool. Search the complete title after
+  # blanking only the canonical product brand aliases.
+  del product_name  # kept in the public signature for compatibility/provenance.
+  brand_cleaned, _spans = remove_brand_alias_spans(raw_title, brand_name)
+  residual = normalize_for_match(brand_cleaned)
   for token in GENERIC_TITLE_TERMS:
     residual = residual.replace(token.lower(), " ")
-
   return re.sub(r"\s+", " ", residual).strip()
+
+
+def _find_keyword_span(text: str, term: str) -> tuple[int, int, str] | None:
+  """Return a raw-coordinate term match with narrow cooling false-positive guards."""
+
+  for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE):
+    token = match.group(0)
+    normalized = normalize_for_match(term)
+    # Keep Korean compound controls (여쿨라, 그레이쉬쿨, 앙쿨모브), but never
+    # turn the unrelated product-property word "쿨링" into an undertone.
+    if normalized == "쿨" and text[match.end():match.end() + 1] == "링":
+      continue
+    # `cool` is meaningful as a token; `cooling` is not. `cooltone` has its
+    # own longer alias and is evaluated first below.
+    if normalized == "cool":
+      before = text[match.start() - 1:match.start()]
+      after = text[match.end():match.end() + 1]
+      if (before and before.isascii() and before.isalpha()) or (after and after.isascii() and after.isalpha()):
+        continue
+    return match.start(), match.end(), token
+  return None
 
 
 def extract_residual_keywords(
@@ -121,26 +143,34 @@ def extract_residual_keywords(
   product_name: str,
   brand_name: str | None = None,
 ) -> list[dict[str, Any]]:
-  residual = _residual_text(raw_title, product_name, brand_name)
-  searchable = f"{normalize_for_match(raw_title)} {residual}"
+  brand_cleaned_title, brand_spans = remove_brand_alias_spans(raw_title, brand_name)
+  # Keep raw-title length/coordinates. `_residual_text` remains the normalized
+  # compatibility surface, while extraction below records auditable raw spans.
+  _residual_text(raw_title, product_name, brand_name)
+  searchable = brand_cleaned_title
   keywords: list[dict[str, Any]] = []
   seen: set[tuple[str, str, str]] = set()
 
   for field, values in FIELD_KEYWORDS.items():
     for value, terms in values.items():
-      for term in terms:
+      for term in sorted(terms, key=lambda candidate: (-len(candidate), candidate.casefold())):
         normalized_term = normalize_for_match(term)
-        if normalized_term and normalized_term in searchable:
+        span = _find_keyword_span(searchable, term) if normalized_term else None
+        if span:
           key = (field, value, normalized_term)
           if key in seen:
             continue
           seen.add(key)
+          start, end, matched_token = span
           keywords.append(
             {
               "field": field,
               "value": value,
-              "matchedToken": term,
+              "matchedToken": matched_token,
               "normalizedToken": normalized_term,
+              "matchedStart": start,
+              "matchedEnd": end,
+              "removedBrandSpans": brand_spans,
               "confidence": 0.56 if field in {"finish", "texture"} else 0.5,
               "sourceType": TITLE_INFERENCE_SOURCE,
               "hardFilterEligible": False,
@@ -149,4 +179,3 @@ def extract_residual_keywords(
           break
 
   return keywords
-

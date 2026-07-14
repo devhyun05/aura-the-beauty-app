@@ -118,11 +118,16 @@ const filtersTurn = mapSearchTurn({
   result: {headerLabel: 'x', products: []},
   appliedFilters: [
     {label: '립', source: 'prompt'},
-    {label: '쿨톤 참고', source: 'report'},
+    {label: '쿨톤 참고', source: 'report', coverage: 'partial_unknown'},
     {label: '', source: 'prompt'}, // 빈 label은 제거돼야
   ],
 });
 expectEqual(filtersTurn.appliedFilters?.length, 2, 'appliedFilters drops empty labels');
 expectEqual(filtersTurn.appliedFilters?.[0].label, '립', 'appliedFilters label passthrough');
 expectEqual(filtersTurn.appliedFilters?.[1].source, 'report', 'appliedFilters report source passthrough');
+expectEqual(
+  filtersTurn.appliedFilters?.[1].label,
+  '쿨톤 참고 · 정보 미상 포함',
+  'partial unknown coverage appends an honest chip suffix',
+);
 expectEqual(mapSearchTurn({phase: 'results'}).appliedFilters?.length, 0, 'missing appliedFilters → []');

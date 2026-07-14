@@ -36,7 +36,9 @@ def test_specific_lip_prompt_asks_question_and_preserves_price_filter() -> None:
   after = _answer_first_non_noop(state)
 
   assert after["phase"] in {"question", "results"}
-  assert state["logs"][-2]["candidateCountAfter"] != state["logs"][-2]["candidateCountBefore"]
+  # F11: question hard keeps unknown metadata, so a channel clarification may
+  # legitimately preserve the candidate count; it must never increase it.
+  assert state["logs"][-2]["candidateCountAfter"] <= state["logs"][-2]["candidateCountBefore"]
 
 
 def test_broad_prompt_starts_with_category_question_and_does_not_repeat_attribute() -> None:
