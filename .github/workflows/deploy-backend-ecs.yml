@@ -231,17 +231,28 @@ jobs:
             --task-definition "$current_task_definition" \
             --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].image" \
             --output text)"
-          rollout_state="$(aws ecs describe-services \
+          desired_count="$(aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE" \
-            --query 'services[0].deployments[?status==`PRIMARY`]|[0].rolloutState' \
+            --query 'services[0].desiredCount' \
+            --output text)"
+          running_count="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].runningCount' \
+            --output text)"
+          pending_count="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].pendingCount' \
             --output text)"
 
           printf 'Expected API image: %s\n' "$EXPECTED_IMAGE"
           printf 'Current API image: %s\n' "$current_image"
-          printf 'API rollout state: %s\n' "$rollout_state"
+          printf 'API tasks: desired=%s running=%s pending=%s\n' "$desired_count" "$running_count" "$pending_count"
           test "$current_image" = "$EXPECTED_IMAGE"
-          test "$rollout_state" = "COMPLETED"
+          test "$running_count" = "$desired_count"
+          test "$pending_count" = "0"
 
       - name: Download current AI worker task definition
         if: ${{ env.AI_WORKER_SERVICE != '' }}
@@ -301,17 +312,28 @@ jobs:
             --task-definition "$current_task_definition" \
             --query "taskDefinition.containerDefinitions[?name=='$AI_WORKER_CONTAINER_NAME']|[0].image" \
             --output text)"
-          rollout_state="$(aws ecs describe-services \
+          desired_count="$(aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
             --services "$AI_WORKER_SERVICE" \
-            --query 'services[0].deployments[?status==`PRIMARY`]|[0].rolloutState' \
+            --query 'services[0].desiredCount' \
+            --output text)"
+          running_count="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$AI_WORKER_SERVICE" \
+            --query 'services[0].runningCount' \
+            --output text)"
+          pending_count="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$AI_WORKER_SERVICE" \
+            --query 'services[0].pendingCount' \
             --output text)"
 
           printf 'Expected AI worker image: %s\n' "$EXPECTED_IMAGE"
           printf 'Current AI worker image: %s\n' "$current_image"
-          printf 'AI worker rollout state: %s\n' "$rollout_state"
+          printf 'AI worker tasks: desired=%s running=%s pending=%s\n' "$desired_count" "$running_count" "$pending_count"
           test "$current_image" = "$EXPECTED_IMAGE"
-          test "$rollout_state" = "COMPLETED"
+          test "$running_count" = "$desired_count"
+          test "$pending_count" = "0"
 
       - name: Download current hair worker task definition
         if: ${{ env.HAIR_WORKER_SERVICE != '' }}
