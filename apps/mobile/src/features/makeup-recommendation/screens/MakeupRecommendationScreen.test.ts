@@ -4,6 +4,7 @@ import {
 } from './ScenarioDiscoveryView';
 import {getQuestionActionMode} from './RecommendationQuestionView';
 import {makeupRecommendationResultRoleLabels} from './RecommendationResultsView';
+import {shouldHandleMakeupRecommendationBack} from './MakeupRecommendationScreen';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -48,4 +49,19 @@ expectEqual(
   makeupRecommendationResultRoleLabels.discovery,
   '예상 밖의 발견',
   'discovery label',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('discovery'),
+  false,
+  'discovery back exits route',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('question'),
+  true,
+  'question back returns to discovery',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('results'),
+  true,
+  'results back returns to discovery',
 );

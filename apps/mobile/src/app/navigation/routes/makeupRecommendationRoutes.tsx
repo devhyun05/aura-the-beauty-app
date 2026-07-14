@@ -1,6 +1,9 @@
 import React from 'react';
 
-import {MakeupRecommendationScreen} from '../../../features/makeup-recommendation';
+import {
+  MakeupRecommendationScreen,
+  type MakeupRecommendationScreenHandle,
+} from '../../../features/makeup-recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -10,10 +13,22 @@ export function MakeupRecommendationRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupRecommendation'>) {
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const screenRef = React.useRef<MakeupRecommendationScreenHandle>(null);
+  const handleBack = React.useCallback(() => {
+    if (!screenRef.current?.handleBack()) navigation.goBack();
+  }, [navigation]);
+
+  React.useEffect(
+    () =>
+      navigation.addListener('beforeRemove', event => {
+        if (screenRef.current?.handleBack()) event.preventDefault();
+      }),
+    [navigation],
+  );
 
   return (
     <DetailRouteChrome
-      onBack={() => navigation.goBack()}
+      onBack={handleBack}
       routeName="MakeupRecommendation"
     >
       <MakeupRecommendationScreen
@@ -21,6 +36,7 @@ export function MakeupRecommendationRouteScreen({
           navigation.navigate('ARFilter', getRecommendedFilterRouteParams(look.arFilterId))
         }
         personalColor={selectedFaceAnalysisReport?.personalColor}
+        ref={screenRef}
       />
     </DetailRouteChrome>
   );

@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
@@ -21,18 +21,33 @@ import {RecommendationQuestionView} from './RecommendationQuestionView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 
-type ScreenPhase = 'discovery' | 'loading' | 'question' | 'results' | 'error';
+export type MakeupRecommendationScreenPhase =
+  | 'discovery'
+  | 'loading'
+  | 'question'
+  | 'results'
+  | 'error';
+
+export function shouldHandleMakeupRecommendationBack(
+  phase: MakeupRecommendationScreenPhase,
+): boolean {
+  return phase !== 'discovery';
+}
+
+export type MakeupRecommendationScreenHandle = {
+  handleBack: () => boolean;
+};
 
 export type MakeupRecommendationScreenProps = {
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   personalColor?: string;
 };
 
-export function MakeupRecommendationScreen({
-  onApplyAR,
-  personalColor,
-}: MakeupRecommendationScreenProps) {
-  const [phase, setPhase] = useState<ScreenPhase>('discovery');
+export const MakeupRecommendationScreen = forwardRef<
+  MakeupRecommendationScreenHandle,
+  MakeupRecommendationScreenProps
+>(function MakeupRecommendationScreen({onApplyAR, personalColor}, ref) {
+  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
   const [prompt, setPrompt] = useState('');
   const [scenarioSeed, setScenarioSeed] = useState(0);
   const [useProfile, setUseProfile] = useState(Boolean(personalColor));
@@ -113,7 +128,7 @@ export function MakeupRecommendationScreen({
       });
   };
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setPhase('discovery');
     setSession(undefined);
     setPrompt('');
@@ -121,7 +136,19 @@ export function MakeupRecommendationScreen({
     setRefinementError('');
     lastStartInput.current = undefined;
     lastRefinement.current = undefined;
-  };
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      handleBack() {
+        if (!shouldHandleMakeupRecommendationBack(phase)) return false;
+        reset();
+        return true;
+      },
+    }),
+    [phase, reset],
+  );
 
   const retry = () => {
     const input = lastStartInput.current;
@@ -198,7 +225,7 @@ export function MakeupRecommendationScreen({
       </Pressable>
     </AppScreen>
   );
-}
+});
 
 const styles = StyleSheet.create({
   loadingTitle: {
