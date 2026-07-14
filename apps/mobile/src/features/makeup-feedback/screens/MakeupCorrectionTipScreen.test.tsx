@@ -4,6 +4,7 @@ import type {MakeupFeedbackCorrectionPoint} from '../types';
 import {MakeupCorrectionTipScreen} from './MakeupCorrectionTipScreen';
 
 const point = {
+  actionSteps: ['Keep the eyeliner angle thin and aligned with the outer corner.'],
   actionLabel: '보완 포인트',
   description: '눈꼬리 끝 각도를 조금만 맞추면 눈매가 더 안정적으로 보여요.',
   id: 'eyeliner-point',

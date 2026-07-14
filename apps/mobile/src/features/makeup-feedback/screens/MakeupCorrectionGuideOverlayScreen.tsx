@@ -75,7 +75,7 @@ export function MakeupCorrectionGuideOverlayScreen({
             <GuideOverlay activeCategory={activeCategory} />
             <View style={styles.photoBadge}>
               <Text style={styles.photoBadgeText}>
-                {GUIDE_TABS.find((tab) => tab.id === activeCategory)?.label} 가이드
+                {GUIDE_TABS.find((tab) => tab.id === activeCategory)?.label} 일반 가이드
               </Text>
             </View>
           </View>
@@ -108,9 +108,9 @@ export function MakeupCorrectionGuideOverlayScreen({
               <Sparkles color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
             </View>
             <View style={styles.summaryCopy}>
-              <Text style={styles.summaryTitle}>사진 위 형태점를 기준으로 수정해요</Text>
+              <Text style={styles.summaryTitle}>일반 참고 가이드</Text>
               <Text style={styles.summaryText}>
-                탭을 누르면 같은 사진 안에서 해당 부위의 가이드 라인만 강조돼요.
+                AI 실분석 좌표가 아닌 공통 예시예요. 탭을 누르면 해당 부위의 참고 선을 강조해요.
               </Text>
             </View>
           </View>

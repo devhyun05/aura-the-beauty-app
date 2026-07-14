@@ -1,6 +1,7 @@
 import {
-  MAKEUP_FEEDBACK_DEFAULT_GOAL_TEXT,
+  buildMakeupFeedbackGoalContext,
   classifyMakeupFeedbackGoalText,
+  localizeMakeupFeedbackIntensityTerms,
 } from './makeupFeedbackGoalIntentService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -8,6 +9,22 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
   }
 }
+
+expectEqual(
+  localizeMakeupFeedbackIntensityTerms('사진에서 표현이 관찰되어 light로 요약했습니다.'),
+  '사진에서 표현이 관찰되어 가벼운 표현으로 요약했습니다.',
+  'light intensity copy',
+);
+expectEqual(
+  localizeMakeupFeedbackIntensityTerms('현재 강도는 medium입니다.'),
+  '현재 강도는 적당한 강도입니다.',
+  'medium intensity copy',
+);
+expectEqual(
+  localizeMakeupFeedbackIntensityTerms('bold한 색조지만 highlight는 유지합니다.'),
+  '선명한 색조지만 highlight는 유지합니다.',
+  'bold copy without replacing a substring',
+);
 
 for (const value of ['ㅗㅗㅗㅗㅗㅗ', 'ㅋㅋㅋㅋㅋㅋ', 'ㅎㅎㅎㅎㅎㅎ', 'ㄱㄱㄱㄱ', '....', '!!!', 'asdfasdf', 'qwerqwer', 'qwerty', 'sdfghj', '123123', 'a', '.']) {
   const result = classifyMakeupFeedbackGoalText(value);
@@ -25,9 +42,21 @@ for (const value of ['여친', '여자친구', '여자친구랑', '이거', '그
 for (const value of ['평가해줘', '분석해줘', '알아서 해줘', '아무거나', '그냥', '봐줘', '어때', '전체적으로 봐줘', '나 어떻게 보여?']) {
   const result = classifyMakeupFeedbackGoalText(value);
   expectEqual(result.intentType, 'generic_default', `${value} intent`);
-  expectEqual(result.normalizedGoalText, MAKEUP_FEEDBACK_DEFAULT_GOAL_TEXT, `${value} normalized goal`);
+  expectEqual(result.normalizedGoalText, value, `${value} normalized goal`);
   expectEqual(result.originalGoalText, value, `${value} original goal`);
 }
+const genericGoalText = '\uC804\uCCB4\uC801\uC73C\uB85C \uBD10\uC918';
+const genericContext = buildMakeupFeedbackGoalContext(
+  classifyMakeupFeedbackGoalText(genericGoalText),
+);
+
+if (!genericContext) {
+  throw new Error('generic request should build a feedback context');
+}
+
+expectEqual(genericContext.userGoalText, genericGoalText, 'generic context user goal');
+expectEqual(genericContext.normalizedGoalText, genericGoalText, 'generic context normalized goal');
+
 
 for (const value of [
   '립이 너무 진한지 봐줘',
