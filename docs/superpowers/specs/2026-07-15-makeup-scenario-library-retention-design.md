@@ -33,7 +33,7 @@ The runtime schema, canonical SQL, DBML, and schema checker must stay aligned.
 
 ## Rate limiting
 
-Use the backend's existing authenticated rate-limit mechanism with a scenario-generation-specific key and a 3-per-60-second policy. A rejected request returns HTTP 429 in the normal error envelope and does not invoke Bedrock.
+Store one bounded counter row per user in `makeup_scenario_generation_limits`, keyed by `user_id`, with `window_started_at` and `request_count`. An atomic PostgreSQL upsert resets an expired window or increments the live window. The policy is 3 requests per 60 seconds. A rejected request returns HTTP 429 in the normal error envelope and does not invoke Bedrock. Rows are deleted with their user, so request volume cannot grow this table.
 
 ## Failure behavior
 
@@ -46,5 +46,5 @@ Use the backend's existing authenticated rate-limit mechanism with a scenario-ge
 
 - Unit tests prove insert-below-cap, replace-at-cap, no-replace-when-all-recent, disabled/curated preservation, duplicate handling, and concurrent-cap SQL locking.
 - Route tests prove the fourth request in 60 seconds is rejected before generation.
-- Schema tests cover `last_served_at` and the supporting index.
+- Schema tests cover `last_served_at`, the supporting index, and the bounded per-user generation-limit table.
 - Existing makeup recommendation tests and mobile typecheck remain green.
