@@ -56,6 +56,9 @@ class Settings(BaseSettings):
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
+  bedrock_scenario_model_id: str | None = None
+  bedrock_question_model_id: str | None = None
+  bedrock_recommendation_model_id: str | None = None
   bedrock_analysis_region: str | None = None
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
@@ -196,6 +199,18 @@ class Settings(BaseSettings):
     return (self.openai_analysis_model_id or "").strip()
 
   @property
+  def effective_scenario_model_id(self) -> str:
+    return (self.bedrock_scenario_model_id or self.effective_analysis_model_id).strip()
+
+  @property
+  def effective_question_model_id(self) -> str:
+    return (self.bedrock_question_model_id or self.effective_scenario_model_id).strip()
+
+  @property
+  def effective_recommendation_model_id(self) -> str:
+    return (self.bedrock_recommendation_model_id or self.effective_analysis_model_id).strip()
+
+  @property
   def effective_embedding_model_id(self) -> str:
     return (self.bedrock_embedding_model_id or "").strip()
 
@@ -313,6 +328,21 @@ class Settings(BaseSettings):
         "requiredWhen": "AI_PROVIDER=bedrock.",
         "value": self.effective_analysis_model_id if analysis_provider == "bedrock" else None,
       },
+      "bedrockScenarioModelId": {
+        "configured": bool(self.effective_scenario_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup scenario generation is enabled.",
+        "value": self.effective_scenario_model_id if analysis_provider == "bedrock" else None,
+      },
+      "bedrockQuestionModelId": {
+        "configured": bool(self.effective_question_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup question generation is enabled.",
+        "value": self.effective_question_model_id if analysis_provider == "bedrock" else None,
+      },
+      "bedrockRecommendationModelId": {
+        "configured": bool(self.effective_recommendation_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup recommendation generation is enabled.",
+        "value": self.effective_recommendation_model_id if analysis_provider == "bedrock" else None,
+      },
       "bedrockEmbeddingModelId": {
         "configured": bool(self.effective_embedding_model_id),
         "requiredWhen": "Embedding-backed recommendations or semantic search are used.",
@@ -382,6 +412,9 @@ class Settings(BaseSettings):
       "awsRegion": self.aws_region,
       "aiProvider": analysis_provider,
       "analysisModel": self.effective_analysis_model_id,
+      "makeupScenarioModel": self.effective_scenario_model_id,
+      "makeupQuestionModel": self.effective_question_model_id,
+      "makeupRecommendationModel": self.effective_recommendation_model_id,
       "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,

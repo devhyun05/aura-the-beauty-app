@@ -225,6 +225,35 @@ Table analysis_reports {
   Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
 }
 
+Table makeup_recommendation_reports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  parent_report_id uuid
+  refinement_type text [note: 'natural | hip | differentColor | replaceProducts']
+  scenario_text text [not null]
+  scenario_tags jsonb [not null, default: `'[]'::jsonb`]
+  questions jsonb [not null, default: `'[]'::jsonb`]
+  answers jsonb [not null, default: `'[]'::jsonb`]
+  recommendation jsonb [not null]
+  image_status text [not null, default: 'pending', note: 'pending | processing | completed | failed']
+  image_url text
+  image_error text
+  scenario_model_id text
+  question_model_id text
+  recommendation_model_id text
+  image_model_id text
+  prompt_version text [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+    (parent_report_id)
+  }
+
+  Note: 'Stores generated situation context, answers, recommendation, model provenance, and image generation state. Face analysis is intentionally excluded.'
+}
+
 Table hair_analyses {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
@@ -1081,6 +1110,8 @@ Ref: analysis_reports.user_id > users.id
 Ref: analysis_reports.photo_capture_id > photo_captures.id
 Ref: analysis_reports.source_media_id > media_assets.id
 Ref: analysis_reports.preview_media_id > media_assets.id
+Ref: makeup_recommendation_reports.user_id > users.id
+Ref: makeup_recommendation_reports.parent_report_id > makeup_recommendation_reports.id
 
 Ref: hair_analyses.user_id > users.id
 Ref: hair_analyses.photo_capture_id > photo_captures.id

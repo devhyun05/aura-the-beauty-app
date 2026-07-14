@@ -3,6 +3,7 @@ import {
   getQuestionProgressSegments,
   makeupRecommendationDiscoveryCopy,
   makeupRecommendationResultRoleLabels,
+  makeupRecommendationImageStatusCopy,
   shouldHandleMakeupRecommendationBack,
   toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
@@ -48,6 +49,11 @@ expectEqual(
   makeupRecommendationResultRoleLabels.discovery,
   '예상 밖의 발견',
   'discovery label',
+);
+expectEqual(
+  makeupRecommendationImageStatusCopy.failedAction,
+  '이미지 다시 만들기',
+  'failed image retry action',
 );
 expectEqual(
   shouldHandleMakeupRecommendationBack('discovery'),

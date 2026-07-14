@@ -71,6 +71,9 @@ export type MakeupRecommendationSession = {
   results: MakeupLookRecommendation[];
   useProfile: boolean;
   personalColor?: string;
+  reportId?: string;
+  imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  imageError?: string;
 };
 export type ProductRecommendationProvider = {
   recommendProducts(lookId: string): MakeupRecommendationProduct[];

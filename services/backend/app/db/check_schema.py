@@ -25,6 +25,7 @@ EXPECTED_TABLES = {
   "user_ar_filter_states",
   "filter_extraction_reports",
   "makeup_feedback_reports",
+  "makeup_recommendation_reports",
   "community_threads",
   "community_thread_media",
   "community_replies",
@@ -63,6 +64,14 @@ EXPECTED_COLUMNS = {
   "community_threads": {"embedding"},
   "auradin_search_sessions": {"state", "expires_at"},
   "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+  "makeup_recommendation_reports": {
+    "recommendation",
+    "image_status",
+    "image_url",
+    "recommendation_model_id",
+    "parent_report_id",
+    "refinement_type",
+  },
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:

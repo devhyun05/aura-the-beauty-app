@@ -55,6 +55,14 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
       "community_threads": {"embedding"},
       "auradin_search_sessions": {"state", "expires_at"},
       "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+      "makeup_recommendation_reports": {
+        "recommendation",
+        "image_status",
+        "image_url",
+        "recommendation_model_id",
+        "parent_report_id",
+        "refinement_type",
+      },
     },
   )
 

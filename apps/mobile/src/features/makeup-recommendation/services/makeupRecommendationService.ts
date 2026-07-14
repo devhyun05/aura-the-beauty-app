@@ -3,6 +3,7 @@ import {
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
 } from '../mocks/makeupRecommendation.mock';
+import {requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupLookRecommendation,
   MakeupQuestionDimension,
@@ -30,6 +31,78 @@ const QUESTION_PRIORITY: readonly MakeupQuestionDimension[] = [
   'timeSkill',
 ];
 const TONES: readonly MakeupScenarioTone[] = ['narrative', 'playful', 'premium'];
+const COPY_STYLES: readonly MakeupScenarioPrompt['copyStyle'][] = ['editorial', 'scene', 'monologue', 'narrative', 'character'];
+const EMPHASES: readonly MakeupScenarioPrompt['visualEmphasis'][] = ['compact', 'featured', 'standard', 'whisper', 'hero'];
+const PALETTES: readonly MakeupScenarioPrompt['palette'][] = ['paper', 'muted', 'mid', 'soft', 'ink', 'accent'];
+const COLUMN_SPANS: readonly MakeupScenarioPrompt['preferredColumnSpan'][] = [7, 5, 5, 7, 8, 4, 6, 6];
+
+type BackendScenarioItem = {id: string; text: string; seedPrompt?: string; tags?: string[]};
+type BackendQuestion = {
+  id: string;
+  title: string;
+  options: Array<{id: string; label: string}>;
+};
+type BackendLook = {
+  id?: string;
+  role?: string;
+  title?: string;
+  summary?: string;
+  reasons?: string[];
+  appliedConditions?: string[];
+  durationMinutes?: number;
+  difficulty?: string;
+  steps?: Array<{order?: number; area?: string; instruction?: string}>;
+  products?: Array<{
+    area?: string;
+    brandName?: string;
+    productName?: string;
+    shadeName?: string;
+    reason?: string;
+  }>;
+  imageUrl?: string;
+};
+type BackendRecommendation = {
+  looks?: BackendLook[];
+};
+type BackendRecommendationReport = {
+  id: string;
+  recommendation: BackendRecommendation;
+  imageStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  imageUrl?: string;
+  imageError?: string;
+};
+
+export function mapBackendScenarioItems(items: readonly BackendScenarioItem[]): MakeupScenarioPrompt[] {
+  return items
+    .filter(item => item.id?.trim() && item.text?.trim())
+    .map((item, index) => ({
+      id: item.id,
+      displayText: item.text.trim(),
+      seedPrompt: item.seedPrompt?.trim() || item.text.trim(),
+      intentTags: (item.tags ?? []).filter(Boolean),
+      knownDimensions: [],
+      tone: TONES[index % TONES.length],
+      source: 'personalized',
+      copyStyle: COPY_STYLES[index % COPY_STYLES.length],
+      visualEmphasis: EMPHASES[index % EMPHASES.length],
+      palette: PALETTES[index % PALETTES.length],
+      preferredColumnSpan: COLUMN_SPANS[index % COLUMN_SPANS.length],
+    }));
+}
+
+export async function fetchGeneratedMakeupScenarios({
+  count = 12,
+  excludeTexts = [],
+}: {
+  count?: number;
+  excludeTexts?: readonly string[];
+} = {}): Promise<MakeupScenarioPrompt[]> {
+  const response = await requestBackendJson<{items: BackendScenarioItem[]}>(
+    '/makeup-recommendations/scenarios',
+    {method: 'POST', body: {count, excludeTexts}},
+  );
+  return mapBackendScenarioItems(response.items ?? []);
+}
 
 function ensureToneCoverage(scenarios: MakeupScenarioPrompt[]): MakeupScenarioPrompt[] {
   const selected = scenarios.slice(0, 6);
@@ -249,4 +322,207 @@ export function refineMakeupRecommendation(
 ): MakeupRecommendationSession {
   if (session.phase !== 'results') throw new Error('추천 결과가 나온 뒤에 조정할 수 있어요.');
   return {...session, results: applyFixtureRefinement(session.results, refinement)};
+}
+
+function mapBackendQuestions(questions: readonly BackendQuestion[]): MakeupRecommendationQuestion[] {
+  return questions
+    .filter(question => question.id?.trim() && question.title?.trim() && question.options?.length)
+    .slice(0, 3)
+    .map((question, index) => ({
+      id: question.id,
+      dimension: QUESTION_PRIORITY[index] ?? 'mood',
+      title: question.title.trim(),
+      options: question.options
+        .filter(option => option.id?.trim() && option.label?.trim())
+        .slice(0, 4)
+        .map(option => ({id: option.id, label: option.label.trim()})),
+    }));
+}
+
+function normalizedArea(value: string | undefined): MakeupLookRecommendation['steps'][number]['area'] {
+  return value === 'base' || value === 'brow' || value === 'eye' || value === 'cheek' || value === 'lip'
+    ? value
+    : 'base';
+}
+
+export function mapBackendRecommendationLooks({
+  reportId,
+  recommendation,
+  prompt,
+  questions,
+  answers,
+}: {
+  reportId: string;
+  recommendation: BackendRecommendation;
+  prompt: string;
+  questions: MakeupRecommendationQuestion[];
+  answers: MakeupRecommendationAnswer[];
+}): MakeupLookRecommendation[] {
+  const conditions = [prompt, ...selectedAnswerLabels(questions, answers)];
+  const validRoles: MakeupLookRecommendation['role'][] = ['anchor', 'bold', 'discovery'];
+  return (recommendation.looks ?? []).flatMap((look, index) => {
+    const role = validRoles.includes(look.role as MakeupLookRecommendation['role'])
+      ? look.role as MakeupLookRecommendation['role']
+      : undefined;
+    if (!role) return [];
+    const fixture = MAKEUP_LOOK_FIXTURES.find(item => item.role === role) ?? MAKEUP_LOOK_FIXTURES[index % MAKEUP_LOOK_FIXTURES.length];
+    const difficulty = look.difficulty === 'easy' || look.difficulty === 'medium' || look.difficulty === 'advanced'
+      ? look.difficulty
+      : 'medium';
+    return [{
+      id: look.id?.trim() || `${reportId}-${role}`,
+      arFilterId: fixture.arFilterId,
+      role,
+      title: look.title?.trim() || fixture.title,
+      summary: look.summary?.trim() || fixture.summary,
+      imageSource: look.imageUrl ? {uri: look.imageUrl} : fixture.imageSource,
+      reasons: look.reasons?.filter(Boolean) ?? [look.summary?.trim() || '선택한 상황과 답변을 함께 반영했어요.'],
+      appliedConditions: [...new Set((look.appliedConditions?.length ? look.appliedConditions : conditions).filter(Boolean))],
+      durationMinutes: look.durationMinutes ?? fixture.durationMinutes,
+      difficulty,
+      steps: (look.steps ?? []).filter(step => step.instruction?.trim()).map((step, stepIndex) => ({
+        area: normalizedArea(step.area),
+        instruction: step.instruction?.trim() ?? '',
+        order: step.order ?? stepIndex + 1,
+      })),
+      products: (look.products ?? []).filter(product => product.productName?.trim()).map((product, productIndex) => ({
+        id: `${reportId}-${role}-product-${productIndex + 1}`,
+        area: normalizedArea(product.area),
+        brandName: product.brandName?.trim() || '추천 제품',
+        productName: product.productName?.trim() ?? '',
+        shadeName: product.shadeName?.trim() || undefined,
+        reason: product.reason?.trim() || '추천 방향과 조화를 이루는 제품이에요.',
+      })),
+    }];
+  });
+}
+
+export async function startGeneratedMakeupRecommendation(
+  input: StartMakeupRecommendationInput,
+  scenarioTags: readonly string[] = [],
+): Promise<MakeupRecommendationSession> {
+  const response = await requestBackendJson<{questions: BackendQuestion[]}>(
+    '/makeup-recommendations/questions',
+    {
+      method: 'POST',
+      body: {scenarioText: input.prompt.trim(), scenarioTags},
+    },
+  );
+  const questions = mapBackendQuestions(response.questions ?? []);
+  if (questions.length === 0) throw new Error('추천 질문을 준비하지 못했어요.');
+  return buildQuestionSession({...input, useProfile: false, personalColor: undefined}, questions);
+}
+
+export async function answerGeneratedMakeupRecommendationQuestion(
+  session: MakeupRecommendationSession,
+  answer: MakeupRecommendationAnswer,
+  scenarioTags: readonly string[] = [],
+): Promise<MakeupRecommendationSession> {
+  const expected = session.questions[session.currentQuestionIndex];
+  if (!expected || expected.id !== answer.questionId) throw new Error('현재 질문과 맞지 않는 답변이에요.');
+  const selectedOption = expected.options.find(option => option.id === answer.optionId);
+  if (answer.optionId && !selectedOption) throw new Error('현재 질문에 없는 선택지예요.');
+  if (!selectedOption && !answer.freeText?.trim()) throw new Error('선택지를 고르거나 답변을 입력해 주세요.');
+
+  const answers = [...session.answers, answer];
+  const nextIndex = session.currentQuestionIndex + 1;
+  if (nextIndex < session.questions.length) {
+    return {...session, answers, currentQuestionIndex: nextIndex};
+  }
+
+  const response = await requestBackendJson<{
+    reportId: string;
+    recommendation: BackendRecommendation;
+    imageStatus: BackendRecommendationReport['imageStatus'];
+  }>('/makeup-recommendations', {
+    method: 'POST',
+    body: {
+      scenarioText: session.prompt,
+      scenarioTags,
+      questions: session.questions,
+      answers,
+    },
+    timeoutMs: 90000,
+  });
+  return {
+    ...session,
+    phase: 'results',
+    currentQuestionIndex: session.questions.length,
+    answers,
+    results: mapBackendRecommendationLooks({
+      reportId: response.reportId,
+      recommendation: response.recommendation,
+      prompt: session.prompt,
+      questions: session.questions,
+      answers,
+    }),
+    reportId: response.reportId,
+    imageStatus: response.imageStatus,
+    useProfile: false,
+    personalColor: undefined,
+  };
+}
+
+export async function refreshGeneratedMakeupRecommendation(
+  session: MakeupRecommendationSession,
+): Promise<MakeupRecommendationSession> {
+  if (!session.reportId) return session;
+  const report = await requestBackendJson<BackendRecommendationReport>(
+    `/makeup-recommendations/${session.reportId}`,
+  );
+  return {
+    ...session,
+    imageStatus: report.imageStatus,
+    imageError: report.imageError,
+    results: mapBackendRecommendationLooks({
+      reportId: session.reportId,
+      recommendation: report.recommendation,
+      prompt: session.prompt,
+      questions: session.questions,
+      answers: session.answers,
+    }),
+  };
+}
+
+export async function retryGeneratedMakeupRecommendationImages(
+  session: MakeupRecommendationSession,
+): Promise<MakeupRecommendationSession> {
+  if (!session.reportId) throw new Error('다시 만들 추천 보고서를 찾지 못했어요.');
+  const response = await requestBackendJson<{
+    reportId: string;
+    imageStatus: BackendRecommendationReport['imageStatus'];
+  }>(`/makeup-recommendations/${session.reportId}/image/retry`, {method: 'POST'});
+  return {...session, imageStatus: response.imageStatus, imageError: undefined};
+}
+
+export async function refineGeneratedMakeupRecommendation(
+  session: MakeupRecommendationSession,
+  refinement: MakeupRecommendationRefinement,
+): Promise<MakeupRecommendationSession> {
+  if (!session.reportId || session.phase !== 'results') {
+    throw new Error('추천 결과가 나온 뒤에 조정할 수 있어요.');
+  }
+  const response = await requestBackendJson<{
+    reportId: string;
+    recommendation: BackendRecommendation;
+    imageStatus: BackendRecommendationReport['imageStatus'];
+  }>(`/makeup-recommendations/${session.reportId}/refine`, {
+    method: 'POST',
+    body: {refinement},
+    timeoutMs: 90000,
+  });
+  return {
+    ...session,
+    id: response.reportId,
+    reportId: response.reportId,
+    imageStatus: response.imageStatus,
+    imageError: undefined,
+    results: mapBackendRecommendationLooks({
+      reportId: response.reportId,
+      recommendation: response.recommendation,
+      prompt: session.prompt,
+      questions: session.questions,
+      answers: session.answers,
+    }),
+  };
 }

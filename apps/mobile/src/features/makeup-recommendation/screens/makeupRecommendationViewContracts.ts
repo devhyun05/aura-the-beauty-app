@@ -27,6 +27,9 @@ export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string
   bold: '조금 더 과감한 메이크업',
   discovery: '예상 밖의 발견',
 };
+export const makeupRecommendationImageStatusCopy = {
+  failedAction: '이미지 다시 만들기',
+} as const;
 export function toggleExpandedLookId(previous: Set<string>, lookId: string): Set<string> {
   const next = new Set(previous);
   if (next.has(lookId)) next.delete(lookId);

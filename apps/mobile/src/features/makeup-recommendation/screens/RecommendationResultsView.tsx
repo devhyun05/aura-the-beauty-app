@@ -8,7 +8,7 @@ import type {
   MakeupLookRecommendation,
   MakeupRecommendationRefinement,
 } from '../types';
-import {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
+import {makeupRecommendationImageStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
 const difficultyLabels: Record<MakeupLookRecommendation['difficulty'], string> = {
@@ -39,6 +39,10 @@ type RecommendationResultsViewProps = {
   onRetryRefinement: () => void;
   refinementError?: string;
   results: readonly MakeupLookRecommendation[];
+  imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  imageRetryError?: string;
+  isRefining: boolean;
+  onRetryImages: () => void;
 };
 
 function ResultCard({
@@ -141,6 +145,10 @@ export function RecommendationResultsView({
   onRetryRefinement,
   refinementError,
   results,
+  imageStatus,
+  imageRetryError,
+  isRefining,
+  onRetryImages,
 }: RecommendationResultsViewProps) {
   const [savedLookIds, setSavedLookIds] = useState<Set<string>>(() => new Set());
   const [expandedLookIds, setExpandedLookIds] = useState<Set<string>>(() => new Set());
@@ -168,9 +176,20 @@ export function RecommendationResultsView({
   return (
     <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
       <View style={styles.resultsHeading}>
-        <Text style={styles.eyebrow}>세 가지 방향으로 골라봤어요</Text>
+        <Text style={styles.eyebrow}>세 가지 방향으로 풀어봤어요</Text>
         <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
-        <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 취향까지 비교해보세요.</Text>
+        <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 발견까지 비교해보세요.</Text>
+        {imageStatus === 'pending' || imageStatus === 'processing' ? (
+          <Text style={styles.imageStatus}>세 가지 추천 이미지를 만들고 있어요. 완성되면 자동으로 바뀌어요.</Text>
+        ) : imageStatus === 'failed' ? (
+          <View style={styles.imageFailureRow}>
+            <Text style={styles.imageStatus}>이미지는 준비하지 못했지만 추천 내용은 그대로 볼 수 있어요.</Text>
+            <Pressable accessibilityRole="button" onPress={onRetryImages} style={styles.imageRetryButton}>
+              <Text style={styles.imageRetryLabel}>{makeupRecommendationImageStatusCopy.failedAction}</Text>
+            </Pressable>
+            {imageRetryError ? <Text accessibilityRole="alert" style={styles.imageStatus}>{imageRetryError}</Text> : null}
+          </View>
+        ) : null}
       </View>
 
       {results.map(look => (
@@ -191,11 +210,13 @@ export function RecommendationResultsView({
           {refinementActions.map(action => (
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{disabled: isRefining}}
+              disabled={isRefining}
               key={action.value}
               onPress={() => onRefine(action.value)}
               style={styles.refinementButton}
             >
-              <Text style={styles.refinementLabel}>{action.label}</Text>
+              <Text style={styles.refinementLabel}>{isRefining ? '조정 중…' : action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -239,6 +260,19 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  imageStatus: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  imageFailureRow: {alignItems: 'flex-start', gap: spacing.xs},
+  imageRetryButton: {justifyContent: 'center', minHeight: 44},
+  imageRetryLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
   },
   resultCard: {overflow: 'hidden'},
   lookImage: {backgroundColor: colors.surfaceMuted, height: 230, width: '100%'},

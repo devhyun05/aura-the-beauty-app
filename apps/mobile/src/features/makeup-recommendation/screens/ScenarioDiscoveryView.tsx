@@ -1,7 +1,5 @@
-import {Check} from 'lucide-react-native';
-import {KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {useEffect, useMemo, useState} from 'react';
 
 import {ScenarioPuzzleWall} from '../components/ScenarioPuzzleWall';
 import type {MakeupScenarioPrompt} from '../types';
@@ -12,36 +10,29 @@ export {makeupRecommendationDiscoveryCopy} from './makeupRecommendationViewContr
 
 type ScenarioDiscoveryViewProps = {
   onChangePrompt: (value: string) => void;
-  onChangeUseProfile: (value: boolean) => void;
+  onLoadMoreScenarios: () => void;
   onRefreshScenarios: () => void;
   onSelectScenario: (scenario: MakeupScenarioPrompt) => void;
   onSubmitPrompt: () => void;
-  personalColor?: string;
+  isLoadingScenarios: boolean;
   prompt: string;
+  scenarioError?: string;
   scenarios: readonly MakeupScenarioPrompt[];
-  useProfile: boolean;
 };
 
 export function ScenarioDiscoveryView({
   onChangePrompt,
-  onChangeUseProfile,
+  onLoadMoreScenarios,
   onRefreshScenarios,
   onSelectScenario,
   onSubmitPrompt,
-  personalColor,
+  isLoadingScenarios,
   prompt,
+  scenarioError,
   scenarios,
-  useProfile,
 }: ScenarioDiscoveryViewProps) {
   const insets = useSafeAreaInsets();
-  const [visibleScenarioCount, setVisibleScenarioCount] = useState(12);
-  useEffect(() => setVisibleScenarioCount(12), [scenarios]);
-  const visibleScenarios = useMemo(
-    () => scenarios.slice(0, visibleScenarioCount),
-    [scenarios, visibleScenarioCount],
-  );
   const disabled = !prompt.trim();
-  const profileEnabled = Boolean(personalColor) && useProfile;
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
       <AppScreen bottomPadding={230 + insets.bottom} contentGap={spacing.xl} keyboardShouldPersistTaps="handled" topPadding="belowShellHeader">
@@ -53,40 +44,28 @@ export function ScenarioDiscoveryView({
           <Text style={styles.description}>{makeupRecommendationDiscoveryCopy.description}</Text>
         </View>
 
-        <Pressable
-          accessibilityLabel={makeupRecommendationDiscoveryCopy.profile}
-          accessibilityRole="checkbox"
-          accessibilityState={{checked: profileEnabled, disabled: !personalColor}}
-          disabled={!personalColor}
-          onPress={() => onChangeUseProfile(!profileEnabled)}
-          style={({pressed}) => [styles.profileOption, !personalColor && styles.profileDisabled, pressed && styles.pressed]}
-        >
-          <View style={[styles.checkbox, profileEnabled && styles.checkboxChecked]}>
-            {profileEnabled ? <Check color={colors.white} size={12} strokeWidth={2.5} /> : null}
-          </View>
-          <Text style={[styles.profileLabel, !personalColor && styles.profileLabelDisabled]}>{makeupRecommendationDiscoveryCopy.profile}</Text>
-        </Pressable>
-
         <View style={styles.scenarioSection}>
           <View style={styles.sectionHeadingRow}>
             <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>지금 끌리는 한 문장</Text>
               <Text style={styles.sectionDescription}>마음 가는 문장을 골라보세요.</Text>
             </View>
-            <Pressable accessibilityRole="button" onPress={onRefreshScenarios} style={styles.refreshButton}>
-              <Text style={styles.refreshLabel}>{makeupRecommendationDiscoveryCopy.refresh} ↻</Text>
+            <Pressable accessibilityRole="button" disabled={isLoadingScenarios} onPress={onRefreshScenarios} style={styles.refreshButton}>
+              {isLoadingScenarios ? <ActivityIndicator color={colors.textSecondary} size="small" /> : (
+                <Text style={styles.refreshLabel}>{makeupRecommendationDiscoveryCopy.refresh} ↻</Text>
+              )}
             </Pressable>
           </View>
-          <ScenarioPuzzleWall onSelect={onSelectScenario} scenarios={visibleScenarios} />
-          {visibleScenarioCount < scenarios.length ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setVisibleScenarioCount(count => Math.min(count + 12, scenarios.length))}
-              style={styles.moreButton}
-            >
-              <Text style={styles.moreLabel}>카드 더보기</Text>
-            </Pressable>
-          ) : null}
+          <ScenarioPuzzleWall onSelect={onSelectScenario} scenarios={scenarios} />
+          {scenarioError ? <Text accessibilityRole="alert" style={styles.scenarioError}>{scenarioError}</Text> : null}
+          <Pressable
+            accessibilityRole="button"
+            disabled={isLoadingScenarios}
+            onPress={onLoadMoreScenarios}
+            style={styles.moreButton}
+          >
+            <Text style={styles.moreLabel}>{isLoadingScenarios ? '새 카드를 만드는 중…' : '카드 더보기'}</Text>
+          </Pressable>
         </View>
       </AppScreen>
 
@@ -130,12 +109,6 @@ const styles = StyleSheet.create({
   composerRow: {alignItems: 'stretch', flexDirection: 'row', gap: spacing.sm},
   composerCard: {flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm},
   input: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.md, lineHeight: typography.lineHeight.md, minHeight: 36, padding: 0},
-  profileOption: {alignItems: 'center', alignSelf: 'flex-start', backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md},
-  profileDisabled: {opacity: 0.48},
-  checkbox: {alignItems: 'center', borderColor: colors.borderStrong, borderRadius: 5, borderWidth: 1, height: 18, justifyContent: 'center', width: 18},
-  checkboxChecked: {backgroundColor: colors.textPrimary, borderColor: colors.textPrimary},
-  profileLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.xs},
-  profileLabelDisabled: {color: colors.textTertiary},
   scenarioSection: {gap: spacing.lg},
   sectionHeadingRow: {alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between'},
   sectionHeading: {flex: 1, gap: spacing.xs},
@@ -145,6 +118,7 @@ const styles = StyleSheet.create({
   refreshLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.xs},
   moreButton: {alignItems: 'center', alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg},
   moreLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
+  scenarioError: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.xs, textAlign: 'center'},
   floatingHost: {bottom: 0, left: 0, paddingHorizontal: spacing.screenX, position: 'absolute', right: 0},
   floatingSurface: {backgroundColor: colors.bottomSheetSurface, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.sm},
   submitButton: {alignItems: 'center', backgroundColor: colors.textPrimary, borderRadius: radius.pill, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md},

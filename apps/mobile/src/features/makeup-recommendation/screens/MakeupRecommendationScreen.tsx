@@ -1,13 +1,16 @@
-import {forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState} from 'react';
+import {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {
-  answerMakeupRecommendationQuestion,
+  answerGeneratedMakeupRecommendationQuestion,
+  fetchGeneratedMakeupScenarios,
   getMakeupScenarioSet,
-  refineMakeupRecommendation,
-  startMakeupRecommendation,
+  refineGeneratedMakeupRecommendation,
+  refreshGeneratedMakeupRecommendation,
+  retryGeneratedMakeupRecommendationImages,
+  startGeneratedMakeupRecommendation,
   type StartMakeupRecommendationInput,
 } from '../services/makeupRecommendationService';
 import type {
@@ -35,20 +38,49 @@ export type MakeupRecommendationScreenProps = {
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
->(function MakeupRecommendationScreen({onApplyAR, personalColor}, ref) {
+>(function MakeupRecommendationScreen({onApplyAR}, ref) {
+  const initialScenarios = useRef(getMakeupScenarioSet({seed: 0}).slice(0, 12));
   const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
   const [prompt, setPrompt] = useState('');
-  const [scenarioSeed, setScenarioSeed] = useState(0);
-  const [useProfile, setUseProfile] = useState(Boolean(personalColor));
+  const [scenarios, setScenarios] = useState<MakeupScenarioPrompt[]>(initialScenarios.current);
+  const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
+  const [scenarioError, setScenarioError] = useState('');
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [errorMessage, setErrorMessage] = useState('');
   const [refinementError, setRefinementError] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+  const [imageRetryError, setImageRetryError] = useState('');
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
-  const scenarios = useMemo(
-    () => getMakeupScenarioSet({seed: scenarioSeed}),
-    [scenarioSeed],
-  );
+  const activeScenarioTags = useRef<string[]>([]);
+  const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
+  const scenarioRequestInFlight = useRef(false);
+
+  const loadScenarios = useCallback(async (mode: 'replace' | 'append') => {
+    if (scenarioRequestInFlight.current) return;
+    scenarioRequestInFlight.current = true;
+    setIsLoadingScenarios(true);
+    setScenarioError('');
+    try {
+      const generated = await fetchGeneratedMakeupScenarios({
+        count: 12,
+        excludeTexts: [...seenScenarioTexts.current].slice(-100),
+      });
+      const fresh = generated.filter(item => !seenScenarioTexts.current.has(item.displayText));
+      if (fresh.length === 0) throw new Error('새 문장을 준비하지 못했어요.');
+      fresh.forEach(item => seenScenarioTexts.current.add(item.displayText));
+      setScenarios(previous => mode === 'replace' ? fresh : [...previous, ...fresh]);
+    } catch (error) {
+      setScenarioError(error instanceof Error ? error.message : '새 문장을 불러오지 못했어요.');
+    } finally {
+      scenarioRequestInFlight.current = false;
+      setIsLoadingScenarios(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadScenarios('replace');
+  }, []); // Initial fixture cards stay visible if the network request fails.
 
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
     lastStartInput.current = input;
@@ -56,7 +88,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setErrorMessage('');
 
     Promise.resolve()
-      .then(() => startMakeupRecommendation(input))
+      .then(() => startGeneratedMakeupRecommendation(input, activeScenarioTags.current))
       .then(nextSession => {
         setSession(nextSession);
         setPhase(nextSession.phase);
@@ -70,16 +102,17 @@ export const MakeupRecommendationScreen = forwardRef<
   const startFromPrompt = () => {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) return;
-    runStart({prompt: trimmedPrompt, useProfile, personalColor});
+    activeScenarioTags.current = [];
+    runStart({prompt: trimmedPrompt, useProfile: false});
   };
 
   const startFromScenario = (scenario: MakeupScenarioPrompt) => {
     setPrompt(scenario.displayText);
+    activeScenarioTags.current = [...scenario.intentTags];
     runStart({
       prompt: scenario.seedPrompt,
       scenarioId: scenario.id,
-      useProfile,
-      personalColor,
+      useProfile: false,
     });
   };
 
@@ -89,7 +122,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setErrorMessage('');
 
     Promise.resolve()
-      .then(() => answerMakeupRecommendationQuestion(session, answer))
+      .then(() => answerGeneratedMakeupRecommendationQuestion(session, answer, activeScenarioTags.current))
       .then(nextSession => {
         setSession(nextSession);
         setPhase(nextSession.phase);
@@ -104,9 +137,10 @@ export const MakeupRecommendationScreen = forwardRef<
     if (!session) return;
     lastRefinement.current = refinement;
     setRefinementError('');
+    setIsRefining(true);
 
     Promise.resolve()
-      .then(() => refineMakeupRecommendation(session, refinement))
+      .then(() => refineGeneratedMakeupRecommendation(session, refinement))
       .then(nextSession => {
         setSession(nextSession);
       })
@@ -114,6 +148,17 @@ export const MakeupRecommendationScreen = forwardRef<
         setRefinementError(
           error instanceof Error ? error.message : '조정하지 못했어요. 기존 추천은 그대로 두었어요.',
         );
+      })
+      .finally(() => setIsRefining(false));
+  };
+
+  const handleRetryImages = () => {
+    if (!session) return;
+    setImageRetryError('');
+    void retryGeneratedMakeupRecommendationImages(session)
+      .then(setSession)
+      .catch(error => {
+        setImageRetryError(error instanceof Error ? error.message : '이미지를 다시 만들지 못했어요.');
       });
   };
 
@@ -123,9 +168,20 @@ export const MakeupRecommendationScreen = forwardRef<
     setPrompt('');
     setErrorMessage('');
     setRefinementError('');
+    setImageRetryError('');
     lastStartInput.current = undefined;
     lastRefinement.current = undefined;
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'results' || !session?.reportId || !['pending', 'processing'].includes(session.imageStatus ?? '')) return;
+    const timer = setTimeout(() => {
+      void refreshGeneratedMakeupRecommendation(session)
+        .then(setSession)
+        .catch(() => undefined);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [phase, session]);
 
   useImperativeHandle(
     ref,
@@ -149,14 +205,14 @@ export const MakeupRecommendationScreen = forwardRef<
     return (
       <ScenarioDiscoveryView
         onChangePrompt={setPrompt}
-        onChangeUseProfile={setUseProfile}
-        onRefreshScenarios={() => setScenarioSeed(seed => seed + 7)}
+        onLoadMoreScenarios={() => void loadScenarios('append')}
+        onRefreshScenarios={() => void loadScenarios('replace')}
         onSelectScenario={startFromScenario}
         onSubmitPrompt={startFromPrompt}
-        personalColor={personalColor}
+        isLoadingScenarios={isLoadingScenarios}
         prompt={prompt}
+        scenarioError={scenarioError}
         scenarios={scenarios}
-        useProfile={useProfile}
       />
     );
   }
@@ -198,6 +254,10 @@ export const MakeupRecommendationScreen = forwardRef<
         }}
         refinementError={refinementError}
         results={session.results}
+        imageStatus={session.imageStatus}
+        imageRetryError={imageRetryError}
+        isRefining={isRefining}
+        onRetryImages={handleRetryImages}
       />
     );
   }

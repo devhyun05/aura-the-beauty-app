@@ -28,6 +28,10 @@ AWS_SECRET_ACCESS_KEY=
 # Bootstrap with inline until SQS and the worker service are live.
 AI_JOB_EXECUTION_MODE=inline
 SQS_AI_JOB_QUEUE_URL=
+
+BEDROCK_SCENARIO_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_QUESTION_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_RECOMMENDATION_MODEL_ID=anthropic.claude-sonnet-4-6
 ```
 
 After the SQS queue and worker service are deployed, switch the API and worker services to:
@@ -38,6 +42,19 @@ SQS_AI_JOB_QUEUE_URL=https://sqs.ap-northeast-2.amazonaws.com/<account-id>/<queu
 ```
 
 Do not put long-lived AWS access keys in ECS task environment variables. The backend container should use the ECS task role for S3. Secrets such as `DATABASE_URL` and `OPENAI_API_KEY` belong in Secrets Manager and are injected into the task definition.
+
+When deploying makeup recommendations, update both `aura-backend-api` and
+`aura-ai-worker` to the same backend image/task-definition revision. Confirm the
+worker also receives `DATABASE_URL`, `SQS_AI_JOB_QUEUE_URL`, `OPENAI_API_KEY`,
+`OPENAI_IMAGE_MODEL_ID`, `S3_BUCKET_NAME`, and the CDN base URL. The API task
+role needs Bedrock invoke and SQS send permission; the worker task role needs
+SQS receive/delete and S3 put permission.
+
+For GitHub Actions deployment, set repository variables
+`AI_WORKER_SERVICE=aura-ai-worker`, `AI_WORKER_TASK_DEFINITION` to its task
+definition family, and `AI_WORKER_CONTAINER_NAME` to the container name. When
+these variables are present, `deploy-backend-ecs.yml` deploys the API and AI
+worker with the exact same immutable image tag.
 
 Mobile deployment should point to CloudFront, not a local LAN IP:
 

@@ -26,6 +26,9 @@ env:
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
+  AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
+  AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
+  AI_WORKER_TASK_DEFINITION: ${{ vars.AI_WORKER_TASK_DEFINITION || vars.AI_WORKER_SERVICE }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
@@ -86,6 +89,11 @@ jobs:
 
           if [ -n "$HAIR_WORKER_SERVICE" ] && [ -z "$HAIR_WORKER_TASK_DEFINITION" ]; then
             printf 'HAIR_WORKER_TASK_DEFINITION is required when HAIR_WORKER_SERVICE is set.\n' >&2
+            exit 1
+          fi
+
+          if [ -n "$AI_WORKER_SERVICE" ] && [ -z "$AI_WORKER_TASK_DEFINITION" ]; then
+            printf 'AI_WORKER_TASK_DEFINITION is required when AI_WORKER_SERVICE is set.\n' >&2
             exit 1
           fi
 
@@ -175,6 +183,43 @@ jobs:
         with:
           task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15
+
+      - name: Download current AI worker task definition
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$AI_WORKER_TASK_DEFINITION" \
+            --query taskDefinition \
+            --output json > ai-worker-task-definition.raw.json
+
+          jq 'del(
+            .taskDefinitionArn,
+            .revision,
+            .status,
+            .requiresAttributes,
+            .compatibilities,
+            .registeredAt,
+            .registeredBy
+          )' ai-worker-task-definition.raw.json > ai-worker-task-definition.json
+
+      - name: Render AI worker task definition
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        id: render-ai-worker-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ai-worker-task-definition.json
+          container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy AI worker ECS service
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-ai-worker-task-definition.outputs.task-definition }}
+          service: ${{ env.AI_WORKER_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
           wait-max-delay-seconds: 15

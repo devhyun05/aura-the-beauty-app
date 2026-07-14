@@ -74,6 +74,9 @@ The analysis pipeline is split by provider:
 ```env
 AI_PROVIDER=bedrock
 BEDROCK_ANALYSIS_MODEL_ID=<claude-model-or-inference-profile>
+BEDROCK_SCENARIO_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_QUESTION_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_RECOMMENDATION_MODEL_ID=anthropic.claude-sonnet-4-6
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
 IMAGE_GENERATION_PROVIDER=openai
 OPENAI_IMAGE_MODEL_ID=gpt-image-2
@@ -107,6 +110,28 @@ python -m app.workers.ai_job_worker --once
 ```
 
 The worker polls SQS, restores the `analysis` job from `analysis_reports`, runs the existing analysis pipeline, and deletes the SQS message only after the handler succeeds.
+It also handles `makeup_recommendation` jobs, generates one OpenAI image for each
+`anchor`, `bold`, and `discovery` look, uploads them to S3, and stores the URLs
+back in `makeup_recommendation_reports`.
+
+## Makeup recommendation API
+
+Protected endpoints use the authenticated user and never include face-analysis
+or personal-color data in this flow:
+
+```text
+POST /api/makeup-recommendations/scenarios
+POST /api/makeup-recommendations/questions
+POST /api/makeup-recommendations
+GET  /api/makeup-recommendations
+GET  /api/makeup-recommendations/{reportId}
+POST /api/makeup-recommendations/{reportId}/refine
+POST /api/makeup-recommendations/{reportId}/image/retry
+```
+
+The API service and AI worker must run the same backend image revision. The API
+service invokes Bedrock and publishes SQS messages; the worker needs the DB,
+queue, OpenAI, S3/CDN configuration, and the corresponding task-role permissions.
 
 ## Media postprocess Lambda
 

@@ -7,6 +7,7 @@ from uuid import UUID
 from app.api.analysis import run_analysis_job_background
 from app.api.feedback import run_feedback_job_background
 from app.api.filter_extractions import run_filter_extraction_job_background
+from app.api.makeup_recommendations import run_recommendation_image_job
 from app.core.settings import Settings
 from app.db.session import Database
 from app.schemas.analysis import AnalysisJobCreate, FilterExtractionAnalyzeRequest
@@ -157,6 +158,9 @@ class AIJobDispatcher:
     if message.job_type == "filter_extraction":
       await self.dispatch_filter_extraction(message)
       return
+    if message.job_type == "makeup_recommendation":
+      await self.dispatch_makeup_recommendation(message)
+      return
     raise AIJobUnsupportedTypeError(f"Unsupported AI job type: {message.job_type}")
 
   async def dispatch_analysis(self, message: ParsedAIJobMessage) -> None:
@@ -212,6 +216,19 @@ class AIJobDispatcher:
       self.settings,
       db=self.db,
       await_image_generation=True,
+    )
+
+  async def dispatch_makeup_recommendation(self, message: ParsedAIJobMessage) -> None:
+    logger.info(
+      "[aura:ai-job-worker] makeup-recommendation:received jobId=%s userId=%s",
+      message.job_id,
+      message.user_id,
+    )
+    await run_recommendation_image_job(
+      message.job_id,
+      message.user_id,
+      self.settings,
+      db=self.db,
     )
 
   async def dispatch_feedback(self, message: ParsedAIJobMessage) -> None:

@@ -1,6 +1,8 @@
 import {
   answerMakeupRecommendationQuestion,
   getMakeupScenarioSet,
+  mapBackendScenarioItems,
+  mapBackendRecommendationLooks,
   refineMakeupRecommendation,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
@@ -41,6 +43,38 @@ expectEqual(
   true,
   'today copy is not overused',
 );
+
+const generatedScenarios = mapBackendScenarioItems([
+  {id: 'generated-1', text: '비 오는 날', seedPrompt: '비 오는 날 차분한 메이크업', tags: ['차분']},
+  {id: 'generated-2', text: '기분 전환', seedPrompt: '산뜻한 색으로 기분을 바꾸는 메이크업', tags: ['산뜻']},
+]);
+expectEqual(generatedScenarios.length, 2, 'backend scenarios are mapped');
+expectEqual(generatedScenarios[0].displayText, '비 오는 날', 'backend display text is preserved');
+expectEqual(generatedScenarios[0].intentTags[0], '차분', 'backend tags are preserved');
+expectEqual(generatedScenarios[0].seedPrompt, '비 오는 날 차분한 메이크업', 'backend seed prompt is preserved');
+
+const generatedLooks = mapBackendRecommendationLooks({
+  reportId: 'report-1',
+  prompt: '퇴근 후 약속',
+  questions: [],
+  answers: [],
+  recommendation: {
+    looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+      id: `look-${index + 1}`,
+      role,
+      title: role,
+      summary: `${role} summary`,
+      reasons: ['선택 이유'],
+      appliedConditions: ['퇴근 후 약속'],
+      durationMinutes: 15,
+      difficulty: 'medium',
+      steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
+      products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
+    })),
+  },
+});
+expectEqual(generatedLooks.length, 3, 'three backend looks are mapped');
+expectEqual(generatedLooks.map(look => look.role).join(','), 'anchor,bold,discovery', 'backend look roles are preserved');
 
 const started = startMakeupRecommendation({
   prompt: scenarios[0].seedPrompt,
