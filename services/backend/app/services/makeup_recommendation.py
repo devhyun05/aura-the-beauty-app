@@ -245,6 +245,33 @@ def _scenario_library_item(row: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+async def enforce_scenario_generation_limit(db: Any, user_id: Any) -> None:
+  row = await db.fetchrow(
+    """
+    insert into makeup_scenario_generation_limits (user_id, window_started_at, request_count)
+    values ($1, now(), 1)
+    on conflict (user_id) do update set
+      window_started_at = case
+        when makeup_scenario_generation_limits.window_started_at <= now() - interval '60 seconds' then now()
+        else makeup_scenario_generation_limits.window_started_at
+      end,
+      request_count = case
+        when makeup_scenario_generation_limits.window_started_at <= now() - interval '60 seconds' then 1
+        else least(makeup_scenario_generation_limits.request_count + 1, 4)
+      end
+    returning request_count
+    """,
+    user_id,
+  )
+  if row is None or int(row.get("request_count") or 0) > 3:
+    raise AppError(
+      429,
+      "MAKEUP_SCENARIO_RATE_LIMITED",
+      "잠시 후 카드를 더 만들어 주세요.",
+      {"limit": 3, "windowSeconds": 60},
+    )
+
+
 async def generate_shared_scenarios(
   settings: Settings,
   db: Any,

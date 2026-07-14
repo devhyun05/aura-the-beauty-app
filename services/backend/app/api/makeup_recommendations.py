@@ -16,7 +16,13 @@ from app.schemas.makeup_recommendation import (
   MakeupRecommendationRequest,
   MakeupScenarioRequest,
 )
-from app.services.makeup_recommendation import apply_refinement_contract, generate_questions, generate_recommendation, generate_shared_scenarios
+from app.services.makeup_recommendation import (
+  apply_refinement_contract,
+  enforce_scenario_generation_limit,
+  generate_questions,
+  generate_recommendation,
+  generate_shared_scenarios,
+)
 from app.services.makeup_recommendation_image import generate_recommendation_images
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.users import ensure_user
@@ -135,6 +141,7 @@ async def create_scenarios(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_scenario_generation_limit(db, user["id"])
   return success(await generate_shared_scenarios(settings, db, payload.count, payload.exclude_texts, user["id"]))
 
 

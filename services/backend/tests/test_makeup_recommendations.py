@@ -13,6 +13,7 @@ from app.db.session import require_database
 from app.main import create_app
 from app.db.check_schema import EXPECTED_COLUMNS, EXPECTED_TABLES
 from app.services.ai_job_queue import AIJobQueuePublisher
+from app.services import makeup_recommendation as makeup_service
 from app.core.errors import AppError
 from app.services.makeup_recommendation import (
   _bedrock_app_error,
@@ -205,11 +206,15 @@ def test_scenario_endpoint_uses_shared_library_for_authenticated_user(monkeypatc
   async def fake_ensure_user(_db, _auth):
     return {"id": USER_ID}
 
+  async def fake_limit(passed_db, user_id):
+    captured.update({"limitDb": passed_db, "limitUserId": user_id})
+
   async def fake_shared(_settings, passed_db, count, exclude_texts, user_id):
     captured.update({"db": passed_db, "count": count, "excludeTexts": exclude_texts, "userId": user_id})
     return {"items": [{"id": "shared-1", "text": "새벽 서점의 온도", "seedPrompt": "차분한 브라운", "tags": []}]}
 
   monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "enforce_scenario_generation_limit", fake_limit)
   monkeypatch.setattr(makeup_api, "generate_shared_scenarios", fake_shared)
 
   response = TestClient(app).post(
@@ -219,7 +224,66 @@ def test_scenario_endpoint_uses_shared_library_for_authenticated_user(monkeypatc
 
   assert response.status_code == 200
   assert response.json()["data"]["items"][0]["text"] == "새벽 서점의 온도"
-  assert captured == {"db": db, "count": 6, "excludeTexts": ["공항 출국 레전드"], "userId": USER_ID}
+  assert captured == {
+    "limitDb": db,
+    "limitUserId": USER_ID,
+    "db": db,
+    "count": 6,
+    "excludeTexts": ["공항 출국 레전드"],
+    "userId": USER_ID,
+  }
+
+
+class GenerationLimitDatabase:
+  def __init__(self, request_count: int) -> None:
+    self.request_count = request_count
+    self.queries: list[tuple[str, tuple]] = []
+
+  async def fetchrow(self, query: str, *args):
+    self.queries.append((query, args))
+    return {"request_count": self.request_count}
+
+
+@pytest.mark.asyncio
+async def test_generation_limit_rejects_fourth_live_window() -> None:
+  db = GenerationLimitDatabase(request_count=4)
+
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.enforce_scenario_generation_limit(db, USER_ID)
+
+  assert exc_info.value.status_code == 429
+  assert exc_info.value.code == "MAKEUP_SCENARIO_RATE_LIMITED"
+  assert db.queries[0][1] == (USER_ID,)
+  assert "least(makeup_scenario_generation_limits.request_count + 1, 4)" in db.queries[0][0]
+
+
+def test_scenario_route_checks_limit_before_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+  db = SharedScenarioDatabase()
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+  generated = False
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  async def reject_limit(_db, _user_id):
+    raise AppError(429, "MAKEUP_SCENARIO_RATE_LIMITED", "잠시 후 카드를 더 만들어 주세요.")
+
+  async def fake_shared(*_args, **_kwargs):
+    nonlocal generated
+    generated = True
+    return {"items": []}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "enforce_scenario_generation_limit", reject_limit, raising=False)
+  monkeypatch.setattr(makeup_api, "generate_shared_scenarios", fake_shared)
+
+  response = TestClient(app).post("/api/makeup-recommendations/scenarios", json={"count": 6})
+
+  assert response.status_code == 429
+  assert response.json()["error"]["code"] == "MAKEUP_SCENARIO_RATE_LIMITED"
+  assert generated is False
 
 
 def test_recommendation_saves_report_without_face_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
