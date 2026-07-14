@@ -798,6 +798,89 @@ export async function requestMakeupFeedbackGeneratedPreviewMessages({
   };
 }
 
+const PREVIEW_PREFETCH_TTL_MS = 30000;
+let previewPrefetchEntry: {
+  createdAt: number;
+  key: string;
+  promise: Promise<MakeupFeedbackConferencePreview>;
+} | null = null;
+
+export function buildMakeupFeedbackConferencePreviewCacheKey(
+  selection: MakeupFeedbackPhotoSelection,
+) {
+  return JSON.stringify({
+    imageUri: selection.imageUri ?? null,
+    requestPayload: buildPreviewConferenceRequestPayload(selection),
+  });
+}
+
+export function canRevealMakeupFeedbackResult({
+  analysisReady,
+  conferenceComplete,
+  retakeRequired,
+}: {
+  analysisReady: boolean;
+  conferenceComplete: boolean;
+  retakeRequired: boolean;
+}) {
+  return analysisReady && conferenceComplete && !retakeRequired;
+}
+
+export function prefetchMakeupFeedbackGeneratedPreviewMessages(
+  selection: MakeupFeedbackPhotoSelection,
+) {
+  const key = buildMakeupFeedbackConferencePreviewCacheKey(selection);
+  const now = Date.now();
+
+  if (
+    previewPrefetchEntry
+    && previewPrefetchEntry.key === key
+    && now - previewPrefetchEntry.createdAt <= PREVIEW_PREFETCH_TTL_MS
+  ) {
+    return previewPrefetchEntry.promise;
+  }
+
+  const promise = requestMakeupFeedbackGeneratedPreviewMessages({selection});
+  previewPrefetchEntry = {createdAt: now, key, promise};
+  void promise.then(
+    preview => {
+      if (
+        preview.generationStatus !== 'bedrock_completed'
+        && previewPrefetchEntry?.promise === promise
+      ) {
+        previewPrefetchEntry = null;
+      }
+    },
+    () => {
+      if (previewPrefetchEntry?.promise === promise) {
+        previewPrefetchEntry = null;
+      }
+    },
+  );
+  return promise;
+}
+
+export function requestMakeupFeedbackGeneratedPreviewMessagesWithPrefetch({
+  selection,
+  signal,
+}: {
+  selection: MakeupFeedbackPhotoSelection;
+  signal?: AbortSignal;
+}) {
+  const key = buildMakeupFeedbackConferencePreviewCacheKey(selection);
+  const now = Date.now();
+
+  if (
+    previewPrefetchEntry
+    && previewPrefetchEntry.key === key
+    && now - previewPrefetchEntry.createdAt <= PREVIEW_PREFETCH_TTL_MS
+  ) {
+    return previewPrefetchEntry.promise;
+  }
+
+  return requestMakeupFeedbackGeneratedPreviewMessages({selection, signal});
+}
+
 export async function requestMakeupFeedbackGeneratedConferenceMessages({
   previewContext,
   result,

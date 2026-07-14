@@ -16,12 +16,13 @@ import {
   buildMakeupFeedbackClosingConferenceMessages,
   buildMakeupFeedbackConferencePreviewContext,
   canCommitMakeupFeedbackConferenceMessage,
+  canRevealMakeupFeedbackResult,
   getNextMakeupFeedbackConferenceMessage,
   getMakeupFeedbackInitialTypingDelayMs,
   getMakeupFeedbackMessageExposureDelayMs,
   getMakeupFeedbackTypingDelayMs,
   requestMakeupFeedbackGeneratedConferenceMessages,
-  requestMakeupFeedbackGeneratedPreviewMessages,
+  requestMakeupFeedbackGeneratedPreviewMessagesWithPrefetch,
   type MakeupFeedbackAgentConferenceMessage,
   type MakeupFeedbackAgentId,
   type MakeupFeedbackConferencePreviewContext,
@@ -340,7 +341,7 @@ export function MakeupFeedbackLoadingScreen({
     };
 
     const startGeneratedPreview = () => {
-      requestMakeupFeedbackGeneratedPreviewMessages({
+      requestMakeupFeedbackGeneratedPreviewMessagesWithPrefetch({
         selection,
         signal: previewController.signal,
       })
@@ -726,9 +727,13 @@ export function MakeupFeedbackLoadingScreen({
                 </Pressable>
               ) : null}
             </YStack>
-          ) : analysisResult && !retakeOutcome ? (
+          ) : canRevealMakeupFeedbackResult({
+              analysisReady: Boolean(analysisResult),
+              conferenceComplete: isConferenceComplete,
+              retakeRequired: Boolean(retakeOutcome),
+            }) ? (
             <ResultRevealButton
-              label={isConferenceComplete ? '결과 보기' : '결과 먼저 보기'}
+              label="결과 보기"
               onPress={handleComplete}
             />
           ) : null}
@@ -1286,7 +1291,7 @@ const styles = StyleSheet.create({
   },
   conversationContent: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingBottom: spacing.sm,
   },
   conversationFrame: {
@@ -1295,7 +1300,7 @@ const styles = StyleSheet.create({
   },
   conversationList: {
     gap: spacing.sm,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     minHeight: 0,
   },
   heroCopy: {

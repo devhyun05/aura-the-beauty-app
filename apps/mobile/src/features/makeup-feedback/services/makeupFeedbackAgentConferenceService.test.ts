@@ -3,12 +3,14 @@ import {
   MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES,
   MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
   buildMakeupFeedbackClosingConferenceMessages,
+  buildMakeupFeedbackConferencePreviewCacheKey,
   buildMakeupFeedbackConferencePreviewRequestBody,
   buildMakeupFeedbackConferencePreviewContext,
   buildMakeupFeedbackConferenceResultPayload,
   buildMakeupFeedbackSafeConferenceMessages,
   buildPreviewConferenceRequestPayload,
   canCommitMakeupFeedbackConferenceMessage,
+  canRevealMakeupFeedbackResult,
   getMakeupFeedbackInitialTypingDelayMs,
   getNextMakeupFeedbackConferenceMessage,
   getMakeupFeedbackMessageExposureDelayMs,
@@ -293,6 +295,11 @@ const previewRequestPayload = buildPreviewConferenceRequestPayload(
 );
 const serializedPreviewRequestPayload = JSON.stringify(previewRequestPayload);
 const aiFirstPreviewRequestPayload = buildPreviewConferenceRequestPayload(selection);
+const previewCacheKey = buildMakeupFeedbackConferencePreviewCacheKey(selection);
+const otherPhotoPreviewCacheKey = buildMakeupFeedbackConferencePreviewCacheKey({
+  ...selection,
+  imageUri: 'file:///other-feedback.jpg',
+});
 const immediatePreviewBody = buildMakeupFeedbackConferencePreviewRequestBody({selection});
 const reportLinkedPreviewBody = buildMakeupFeedbackConferencePreviewRequestBody({
   analysisId: 'analysis-123',
@@ -312,6 +319,11 @@ expectEqual(
   reportLinkedPreviewBody.reportId,
   'analysis-123',
   'preview request keeps a report id when one is already available',
+);
+expectEqual(
+  previewCacheKey === otherPhotoPreviewCacheKey,
+  false,
+  'preview cache never reuses a different selected photo',
 );
 expectEqual(previewRequestPayload.conversationSeed!.agentId, 'goal', 'payload includes seed agent');
 expectEqual(previewRequestPayload.conversationSeed!.text, safeMessages[0]!.text, 'payload includes seed text');
@@ -447,6 +459,25 @@ expectEqual(
   false,
   'stale run cannot commit a conference message',
 );
+expectEqual(
+  canRevealMakeupFeedbackResult({
+    analysisReady: true,
+    conferenceComplete: false,
+    retakeRequired: false,
+  }),
+  false,
+  'result stays hidden while the review crew is still talking',
+);
+expectEqual(
+  canRevealMakeupFeedbackResult({
+    analysisReady: true,
+    conferenceComplete: true,
+    retakeRequired: false,
+  }),
+  true,
+  'result appears after the review crew completes',
+);
+
 const legacy = mapMakeupFeedbackBackendConferenceMessages([
   {agentId: 'tone', text: 'legacy tone'},
   {agentId: 'color', text: 'legacy color'},

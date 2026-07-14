@@ -18,6 +18,7 @@ import {
   buildMakeupFeedbackGoalContext,
   classifyMakeupFeedbackGoalText,
 } from '../services/makeupFeedbackGoalIntentService';
+import {prefetchMakeupFeedbackGeneratedPreviewMessages} from '../services/makeupFeedbackAgentConferenceService';
 import {makeupFeedbackLoadingPreviewSource} from '../services/makeupFeedbackLoadingService';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 
@@ -27,6 +28,24 @@ type MakeupFeedbackGoalInputScreenProps = {
 };
 
 const goalTextMaxLength = 180;
+const previewPrefetchHeadStartMs = 3500;
+
+async function waitForPreviewPrefetchHeadStart(prefetchPromise: Promise<unknown>) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      prefetchPromise.catch(() => undefined),
+      new Promise<void>(resolve => {
+        timeoutId = setTimeout(resolve, previewPrefetchHeadStartMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 export function MakeupFeedbackGoalInputScreen({
   selection,
@@ -34,18 +53,23 @@ export function MakeupFeedbackGoalInputScreen({
 }: MakeupFeedbackGoalInputScreenProps) {
   const insets = useSafeAreaInsets();
   const [goalText, setGoalText] = useState(selection.feedbackContext?.originalGoalText ?? selection.feedbackContext?.userGoalText ?? '');
+  const [isPreparingReviewCrew, setIsPreparingReviewCrew] = useState(false);
   const goalIntent = useMemo(() => classifyMakeupFeedbackGoalText(goalText), [goalText]);
   const isBlockingGoalIntent =
     goalIntent.intentType === 'noise' ||
     goalIntent.intentType === 'needs_detail';
   const shouldShowGoalError = goalText.trim().length > 0 && isBlockingGoalIntent;
-  const isStartDisabled = isBlockingGoalIntent;
+  const isStartDisabled = isBlockingGoalIntent || isPreparingReviewCrew;
   const previewSource = useMemo(
     () => (selection.imageUri ? {uri: selection.imageUri} : makeupFeedbackLoadingPreviewSource),
     [selection.imageUri],
   );
 
-  const handleStartFeedback = () => {
+  const handleStartFeedback = async () => {
+    if (isPreparingReviewCrew) {
+      return;
+    }
+
     const nextFeedbackContext = buildMakeupFeedbackGoalContext(
       goalIntent,
       selection.feedbackContext?.profileGender,
@@ -55,13 +79,18 @@ export function MakeupFeedbackGoalInputScreen({
       return;
     }
 
-    onStartFeedback({
+    const nextSelection = {
       ...selection,
       feedbackContext: {
         ...selection.feedbackContext,
         ...nextFeedbackContext,
       },
-    });
+    };
+
+    setIsPreparingReviewCrew(true);
+    const prefetchPromise = prefetchMakeupFeedbackGeneratedPreviewMessages(nextSelection);
+    await waitForPreviewPrefetchHeadStart(prefetchPromise);
+    onStartFeedback(nextSelection);
   };
 
   return (
@@ -140,7 +169,9 @@ export function MakeupFeedbackGoalInputScreen({
                 isStartDisabled && styles.primaryButtonDisabled,
                 pressed && !isStartDisabled && styles.pressed,
               ]}>
-              <Text style={styles.primaryButtonText}>AI 피드백 시작</Text>
+              <Text style={styles.primaryButtonText}>
+                {isPreparingReviewCrew ? '리뷰 크루 준비 중...' : 'AI 피드백 시작'}
+              </Text>
             </Pressable>
           </YStack>
         </KeyboardAvoidingView>
