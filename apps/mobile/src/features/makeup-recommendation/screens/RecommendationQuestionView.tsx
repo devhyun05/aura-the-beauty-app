@@ -12,16 +12,8 @@ import {
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen} from '../../../shared/ui';
 import type {MakeupRecommendationAnswer, MakeupRecommendationQuestion} from '../types';
-
-export function getQuestionActionMode({
-  currentQuestionIndex,
-  questionCount,
-}: {
-  currentQuestionIndex: number;
-  questionCount: number;
-}): 'advance' | 'complete' {
-  return currentQuestionIndex >= questionCount - 1 ? 'complete' : 'advance';
-}
+import {getQuestionActionMode, getQuestionProgressSegments} from './makeupRecommendationViewContracts';
+export {getQuestionActionMode, getQuestionProgressSegments} from './makeupRecommendationViewContracts';
 
 type RecommendationQuestionViewProps = {
   currentQuestionIndex: number;
@@ -91,6 +83,12 @@ export function RecommendationQuestionView({
             <Text style={styles.backLabel}>처음으로</Text>
           </Pressable>
           <Text style={styles.progress}>{currentQuestionIndex + 1} / {questionCount}</Text>
+        </View>
+
+        <View accessibilityLabel={`추천 질문 ${currentQuestionIndex + 1}/${questionCount}`} style={styles.progressTrack}>
+          {getQuestionProgressSegments({currentQuestionIndex, questionCount}).map((segment, index) => (
+            <View key={index} style={[styles.progressSegment, segment === 'complete' && styles.progressSegmentComplete]} />
+          ))}
         </View>
 
         <View style={styles.heading}>
@@ -200,6 +198,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
   },
+  progressTrack: {flexDirection: 'row', gap: spacing.xs},
+  progressSegment: {backgroundColor: colors.borderStrong, borderRadius: radius.pill, flex: 1, height: 3},
+  progressSegmentComplete: {backgroundColor: colors.textPrimary},
   heading: {gap: spacing.sm},
   eyebrow: {
     color: colors.textSecondary,
@@ -216,9 +217,11 @@ const styles = StyleSheet.create({
   options: {gap: spacing.sm},
   optionCard: {
     justifyContent: 'center',
-    minHeight: 56,
+    minHeight: 62,
+    borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    width: '100%',
   },
   optionCardSelected: {
     backgroundColor: colors.textPrimary,

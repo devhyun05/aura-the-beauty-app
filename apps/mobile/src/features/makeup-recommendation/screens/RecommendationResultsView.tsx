@@ -6,15 +6,10 @@ import {AppCard, AppScreen} from '../../../shared/ui';
 import type {
   MakeupArea,
   MakeupLookRecommendation,
-  MakeupLookRole,
   MakeupRecommendationRefinement,
 } from '../types';
-
-export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string> = {
-  anchor: '가장 잘 어울리는 룩',
-  bold: '조금 더 과감한 룩',
-  discovery: '예상 밖의 발견',
-};
+import {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
+export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
 const difficultyLabels: Record<MakeupLookRecommendation['difficulty'], string> = {
   easy: '쉬움',
@@ -36,7 +31,6 @@ const refinementActions: readonly {label: string; value: MakeupRecommendationRef
   {label: '다른 색으로', value: 'differentColor'},
   {label: '제품만 바꾸기', value: 'replaceProducts'},
 ];
-
 type RecommendationResultsViewProps = {
   onApplyAR: (look: MakeupLookRecommendation) => void;
   onRefine: (refinement: MakeupRecommendationRefinement) => void;
@@ -50,11 +44,15 @@ type RecommendationResultsViewProps = {
 function ResultCard({
   look,
   onApplyAR,
+  expanded,
+  onToggleExpanded,
   onToggleSave,
   saved,
 }: {
   look: MakeupLookRecommendation;
   onApplyAR: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onToggleSave: () => void;
   saved: boolean;
 }) {
@@ -80,15 +78,11 @@ function ResultCard({
           <Text style={styles.meta}>{look.durationMinutes}분 · {difficultyLabels[look.difficulty]}</Text>
         </View>
 
-        <View style={styles.reasonList}>
-          {look.reasons.map(reason => <Text key={reason} style={styles.reason}>• {reason}</Text>)}
-        </View>
-
         {look.appliedConditions.length > 0 ? (
           <View style={styles.detailSection}>
             <Text style={styles.detailTitle}>반영된 조건</Text>
             <View style={styles.conditionList}>
-              {look.appliedConditions.map(condition => (
+              {look.appliedConditions.slice(0, 3).map(condition => (
                 <View key={condition} style={styles.conditionChip}>
                   <Text style={styles.conditionLabel}>{condition}</Text>
                 </View>
@@ -97,34 +91,43 @@ function ResultCard({
           </View>
         ) : null}
 
-        <View style={styles.detailSection}>
-          <Text style={styles.detailTitle}>이렇게 완성해요</Text>
-          {[...look.steps].sort((a, b) => a.order - b.order).map(step => (
-            <View key={`${step.order}-${step.area}`} style={styles.detailRow}>
-              <Text style={styles.areaLabel}>{step.order}. {areaLabels[step.area]}</Text>
-              <Text style={styles.detailCopy}>{step.instruction}</Text>
+        {expanded ? (
+          <>
+            <View style={styles.reasonList}>
+              {look.reasons.map(reason => <Text key={reason} style={styles.reason}>• {reason}</Text>)}
             </View>
-          ))}
-        </View>
-
-        <View style={styles.detailSection}>
-          <Text style={styles.detailTitle}>함께 쓰면 좋은 제품</Text>
-          {look.products.map(product => (
-            <View key={product.id} style={styles.productRow}>
-              <Text style={styles.areaLabel}>{areaLabels[product.area]}</Text>
-              <View style={styles.productCopy}>
-                <Text style={styles.productName}>{product.brandName} {product.productName}</Text>
-                <Text style={styles.detailCopy}>
-                  {[product.shadeName, product.reason].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
+            <View style={styles.detailSection}>
+              <Text style={styles.detailTitle}>이렇게 완성해요</Text>
+              {[...look.steps].sort((a, b) => a.order - b.order).map(step => (
+                <View key={`${step.order}-${step.area}`} style={styles.detailRow}>
+                  <Text style={styles.areaLabel}>{step.order}. {areaLabels[step.area]}</Text>
+                  <Text style={styles.detailCopy}>{step.instruction}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+            <View style={styles.detailSection}>
+              <Text style={styles.detailTitle}>함께 쓰면 좋은 제품</Text>
+              {look.products.map(product => (
+                <View key={product.id} style={styles.productRow}>
+                  <Text style={styles.areaLabel}>{areaLabels[product.area]}</Text>
+                  <View style={styles.productCopy}>
+                    <Text style={styles.productName}>{product.brandName} {product.productName}</Text>
+                    <Text style={styles.detailCopy}>{[product.shadeName, product.reason].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
-        <Pressable accessibilityRole="button" onPress={onApplyAR} style={styles.arButton}>
-          <Text style={styles.arButtonLabel}>AR로 적용하기</Text>
-        </Pressable>
+        <View style={styles.cardActions}>
+          <Pressable accessibilityRole="button" accessibilityState={{expanded}} onPress={onToggleExpanded} style={styles.detailButton}>
+            <Text style={styles.detailButtonLabel}>{expanded ? '접기' : '자세히 보기'}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onApplyAR} style={styles.arButton}>
+            <Text style={styles.arButtonLabel}>AR로 적용하기</Text>
+          </Pressable>
+        </View>
       </View>
     </AppCard>
   );
@@ -140,6 +143,7 @@ export function RecommendationResultsView({
   results,
 }: RecommendationResultsViewProps) {
   const [savedLookIds, setSavedLookIds] = useState<Set<string>>(() => new Set());
+  const [expandedLookIds, setExpandedLookIds] = useState<Set<string>>(() => new Set());
 
   if (results.length === 0) {
     return (
@@ -172,9 +176,11 @@ export function RecommendationResultsView({
       {results.map(look => (
         <ResultCard
           key={look.id}
+          expanded={expandedLookIds.has(look.id)}
           look={look}
           onApplyAR={() => onApplyAR(look)}
           onToggleSave={() => toggleSaved(look.id)}
+          onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, look.id))}
           saved={savedLookIds.has(look.id)}
         />
       ))}
@@ -319,6 +325,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textPrimary,
     borderRadius: radius.pill,
     justifyContent: 'center',
+    flex: 1,
     minHeight: 48,
     paddingHorizontal: spacing.lg,
   },
@@ -327,6 +334,9 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
   },
+  cardActions: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm},
+  detailButton: {alignItems: 'center', borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 48, paddingHorizontal: spacing.md},
+  detailButtonLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.xs},
   refinementSection: {gap: spacing.md},
   refinementActions: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm},
   refinementError: {
