@@ -3,7 +3,7 @@
 > Wave B0 산출물. 이 문서가 동결되기 전에는 Tier-2 코드(B1)를 시작하지 않는다.
 > 근거: 얼굴 측정 통합 도입 계획 v2(Codex REWORK 병합본). 기존 v1 계약
 > (`aura.face3d-profile.v1`, gateVersion `face3d-gate-v1`, live 맵
-> `arkit-face3d-g1-reviewed-v1`)은 그대로 유지되며, Tier-2는 전부 **optional**이다.
+> `arkit-face3d-g1-reviewed-v2-pogonion`)은 그대로 유지되며, Tier-2는 전부 **optional**이다.
 
 ## 0. 원칙
 
@@ -65,7 +65,7 @@
    `Face3DProfileCollector.cs`(optional 집계).
 2. **live 자산 + 로더**: template(`docs/face3d/ARKitFaceSemanticMapV1.template.json`)뿐
    아니라 live 리소스 `Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json`
-   (mapId `arkit-face3d-g1-reviewed-v1`)과 `Face3DSessionController.cs` 로더 경로
+   (mapId `arkit-face3d-g1-reviewed-v2-pogonion`)과 `Face3DSessionController.cs` 로더 경로
    (`SemanticMapResourcePath`) 기준으로 **g1 맵이 신규 그룹 없이 로드 통과**함을
    회귀 테스트로 증명. g2 전환 = live 리소스 교체 + mapId 갱신 + receipt.
 3. RN: `face-3d/types.ts`를 3-리스트로 분리 —

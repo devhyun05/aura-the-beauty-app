@@ -21,9 +21,9 @@ export const SEMANTIC_GROUPS = Object.freeze([
   {
     color: '#007aff',
     depthWeight: 0.18,
-    fixedIndices: [31, 32, 33],
+    fixedIndices: [34, 35, 975],
     key: 'chinIndices',
-    label: '턱 전방점(Pogonion/E-line)',
+    label: '턱 전방 후보 패치(Pogonion/E-line)',
     minimumCount: 3,
     radiusX: 0.09,
     radiusY: 0.08,
@@ -783,7 +783,7 @@ export function buildSemanticCandidate(payload, options = {}) {
     warnings: [
       '이 파일은 자동 후보이며 런타임 시맨틱 맵이 아닙니다.',
       '정면과 측면 오버레이를 사람이 검수한 뒤에만 승인 맵으로 변환하세요.',
-      '파란 턱 전방점은 E-line 용도의 soft-tissue Pogonion 영역인지 확인하세요.',
+      '파란 턱 볼록면 후보 패치 [34,35,975]가 labiomental fold를 제외하고 soft-tissue Pogonion을 포함하는지 확인하세요. 실제 측정점은 캡처별 전방 최댓값으로 선택합니다.',
       '분홍 턱 최하단은 얼굴 윤곽의 Menton 영역인지 확인하세요.',
     ],
   };
@@ -866,7 +866,7 @@ export function buildSemanticConsensusCandidate(payloads, options = {}) {
       '이 파일은 여러 정면 neutral 캡처의 평균 위치로 만든 자동 합의 후보이며 런타임 시맨틱 맵이 아닙니다.',
       '좌우 회전 캡처는 후보 생성에 섞지 말고 동일 정점 집합을 재투영해 검증하세요.',
       '서로 다른 얼굴과 약한 좌우 회전 오버레이를 사람이 검수한 뒤에만 승인 맵으로 변환하세요.',
-      '파란 턱 전방점은 E-line 용도의 soft-tissue Pogonion 영역인지 확인하세요.',
+      '파란 턱 볼록면 후보 패치 [34,35,975]가 labiomental fold를 제외하고 soft-tissue Pogonion을 포함하는지 확인하세요. 실제 측정점은 캡처별 전방 최댓값으로 선택합니다.',
       '분홍 턱 최하단은 얼굴 윤곽의 Menton 영역인지 확인하세요.',
     ],
   };

@@ -8,6 +8,7 @@ import path from 'node:path';
 
 import {
   createTopologyFingerprint,
+  evaluateMetrics,
   evaluateSemanticCandidateData,
   Face3DCandidateDiagnosticsError,
   METRIC_KEYS,
@@ -41,6 +42,11 @@ for (const {key, minimumCount} of SEMANTIC_GROUPS) {
     BASE_VERTICES.push([...GROUP_CENTERS[key]]);
   }
 }
+
+const chinDefinition = SEMANTIC_GROUPS.find(({key}) => key === 'chinIndices');
+assert.deepEqual(chinDefinition?.fixedIndices, [34, 35, 975]);
+assert.equal(chinDefinition?.minimumCount, 3);
+assert.equal(chinDefinition?.targetCount, 3);
 
 const INDICES = [];
 for (let index = 1; index < BASE_VERTICES.length - 1; index += 1) {
@@ -254,6 +260,13 @@ assert.match(
   /Menton/,
 );
 assert.equal(diagnostics.captures.length, 2);
+for (const capture of diagnostics.captures) {
+  assert.equal(
+    capture.derivedGeometry.selectedPogonionVertexIndex,
+    GROUPS.chinIndices[0],
+    'equal Pogonion projections must select the smaller vertex index',
+  );
+}
 for (const key of METRIC_KEYS) {
   assert.ok(Number.isFinite(diagnostics.captures[0].metrics[key]));
   assert.ok(Math.abs(
@@ -278,6 +291,48 @@ for (const [key, expected] of Object.entries(unityGoldenMetrics)) {
     `${key} must match the Unity Face3DCoreTests golden value`,
   );
 }
+
+const clearlyForwardPogonionIndex = GROUPS.chinIndices.at(-1);
+const clearlyForwardVertices = structuredClone(BASE_VERTICES);
+clearlyForwardVertices[clearlyForwardPogonionIndex] = [0.25, -0.8, 2];
+const clearlyForwardEvaluation = evaluateMetrics(clearlyForwardVertices, GROUPS);
+assert.equal(
+  clearlyForwardEvaluation.selectedPogonionVertexIndex,
+  clearlyForwardPogonionIndex,
+  'Pogonion must be the chin patch vertex with maximum signed midface-plane projection',
+);
+
+const selectedPointOnlyVertices = structuredClone(clearlyForwardVertices);
+for (const index of GROUPS.chinIndices) {
+  selectedPointOnlyVertices[index] = [0.25, -0.8, 2];
+}
+const selectedPointOnlyEvaluation = evaluateMetrics(selectedPointOnlyVertices, GROUPS);
+for (const key of ['chinProjection', 'upperLipToELine', 'lowerLipToELine']) {
+  assert.ok(
+    Math.abs(
+      clearlyForwardEvaluation.metrics[key]
+        - selectedPointOnlyEvaluation.metrics[key]
+    ) < 1e-12,
+    `${key} must use the same selected Pogonion vertex instead of the chin patch centroid`,
+  );
+}
+
+const smallerPogonionIndex = GROUPS.chinIndices[0];
+const largerPogonionIndex = GROUPS.chinIndices.at(-1);
+const tiedPogonionVertices = structuredClone(BASE_VERTICES);
+tiedPogonionVertices[smallerPogonionIndex] = [0, -1, 2];
+tiedPogonionVertices[largerPogonionIndex] = [0.4, -0.8, 2.0000015];
+assert.equal(
+  evaluateMetrics(tiedPogonionVertices, GROUPS).selectedPogonionVertexIndex,
+  smallerPogonionIndex,
+  'normalized projections within 1e-6 must select the smaller vertex index',
+);
+tiedPogonionVertices[largerPogonionIndex][2] = 2.000003;
+assert.equal(
+  evaluateMetrics(tiedPogonionVertices, GROUPS).selectedPogonionVertexIndex,
+  largerPogonionIndex,
+  'a projection more than 1e-6 ahead must win even when its vertex index is larger',
+);
 assert.equal('sourceLabel' in diagnostics.captures[0], false);
 
 assertNoRawPayloadKeys(diagnostics);

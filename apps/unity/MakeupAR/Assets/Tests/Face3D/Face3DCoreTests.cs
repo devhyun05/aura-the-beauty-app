@@ -91,6 +91,26 @@ namespace Aura.Face3D.Tests
         }
 
         [Test]
+        public void Evaluate_SelectsMostAnteriorPogonionCandidateForProjectionAndELine()
+        {
+            Face3DMeshSnapshot snapshot = CreateSnapshot(
+                0.0f,
+                false,
+                false,
+                varyChinDepth: true);
+            Face3DSemanticMap semanticMap = CreateSemanticMap(snapshot);
+
+            Face3DEvaluationResult result = Face3DMetricEvaluator.Evaluate(snapshot, semanticMap);
+
+            Assert.That(result.IsValid, Is.True, result.Reason);
+            // faceScale=2 and the most anterior chin candidate has z=1.4.
+            Assert.That(result.Metrics.ChinProjection, Is.EqualTo(0.7f).Within(0.00001f));
+            // E-line must use that same candidate, not the old chin-patch centroid.
+            Assert.That(result.Metrics.UpperLipToELine, Is.EqualTo(-0.16103916f).Within(0.00001f));
+            Assert.That(result.Metrics.LowerLipToELine, Is.EqualTo(-0.26088343f).Within(0.00001f));
+        }
+
+        [Test]
         public void SemanticMap_RejectsUnsupportedSchemaAndInventedOutOfRangeIndex()
         {
             Face3DMeshSnapshot snapshot = CreateSnapshot(0.0f, false, false);
@@ -627,7 +647,8 @@ namespace Aura.Face3D.Tests
         private static Face3DMeshSnapshot CreateSnapshot(
             float deformation,
             bool alterIndices,
-            bool alterUvs)
+            bool alterUvs,
+            bool varyChinDepth = false)
         {
             List<Vector3> vertices = new List<Vector3>();
             AppendRepeated(vertices, new Vector3(-1.0f, 0.0f, deformation), 8);
@@ -635,6 +656,12 @@ namespace Aura.Face3D.Tests
             AppendRepeated(vertices, new Vector3(0.0f, 1.0f, 0.0f), 8);
             AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 1.0f + deformation), 3);
             AppendRepeated(vertices, new Vector3(0.0f, -1.0f, 1.0f + deformation), 3);
+            if (varyChinDepth)
+            {
+                vertices[27] = new Vector3(0.0f, -1.0f, 0.6f);
+                vertices[28] = new Vector3(0.0f, -1.0f, 1.4f);
+                vertices[29] = new Vector3(0.0f, -1.0f, 0.9f);
+            }
             AppendRepeated(vertices, new Vector3(0.0f, 0.0f, 0.8f + deformation), 8);
             AppendRepeated(vertices, new Vector3(0.0f, -0.4f, 0.7f + deformation), 8);
             AppendRepeated(vertices, new Vector3(-1.0f, -0.5f, 0.5f), 8);
