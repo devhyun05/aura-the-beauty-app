@@ -52,6 +52,7 @@ Enum product_category {
   shadow
   liner
   base
+  brow // R1 (schema.sql:product-category-brow-v1) — Auradin 브로우 찜 카테고리 손실 방지
 }
 
 Enum filter_category {

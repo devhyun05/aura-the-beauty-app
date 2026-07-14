@@ -21,9 +21,11 @@ def _clean_text(value: Any) -> str:
 
 
 def _normalize_category(value: Any) -> str:
+  # R1: product_category enum(schema.sql:product-category-brow-v1)과 동기 —
+  # brow가 빠지면 Auradin 브로우 찜이 lip으로 저장되는 카테고리 손실이 재발한다.
   category = _clean_text(value)
 
-  return category if category in {"lip", "cheek", "shadow", "liner", "base"} else "lip"
+  return category if category in {"lip", "cheek", "shadow", "liner", "base", "brow"} else "lip"
 
 
 def _as_text_list(value: Any) -> list[str]:

@@ -633,6 +633,12 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_media_upload_sessions_pending_expires
       on media_upload_sessions (expires_at) where status = 'pending';
   """,
+  "schema.sql:product-category-brow-v1": """
+    -- R1 brow 카테고리 손실 수정 — Auradin 브로우 찜이 lip으로 저장되던 결함.
+    -- add value if not exists = 멱등. 이 트랜잭션 안에서 'brow' 값을 사용하지 않으므로
+    -- PG12+에서 트랜잭션 내 실행이 안전하다 (schema.sql capture_type 선례와 동일).
+    alter type product_category add value if not exists 'brow';
+  """,
 }
 
 def get_schema_path() -> Path:

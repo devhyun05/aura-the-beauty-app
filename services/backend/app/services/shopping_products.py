@@ -20,6 +20,9 @@ from app.db.session import Database
 logger = logging.getLogger(__name__)
 
 PRODUCT_CATEGORIES = ("lip", "cheek", "shadow", "liner", "base")
+# R1: 저장 카탈로그(products.category enum)는 brow 포함 6종 — Auradin 브로우 찜의
+# like→liked 왕복이 여기서 유실되면 안 된다. 추천 fan-out은 PRODUCT_CATEGORIES(5종) 유지.
+STORED_PRODUCT_CATEGORIES = (*PRODUCT_CATEGORIES, "brow")
 SEMANTIC_MATCH_WEIGHT = 0.35
 MAX_EMBEDDING_TEXT_LENGTH = 6000
 COLOR_MATCH_BONUS = 10
@@ -64,6 +67,13 @@ CATEGORY_CONFIG = {
     "label": "베이스",
     "palette": ["#E4C5A8", "#F4DDC8"],
     "reason": "추천 메이크업의 피부 표현을 맞추기 좋은 베이스 후보예요.",
+  },
+  # R1: 저장 전용(찜 왕복 서빙) — 추천 fan-out(PRODUCT_CATEGORIES)에는 포함되지 않는다.
+  "brow": {
+    "query": "아이브로우 브로우 펜슬 화장품",
+    "label": "브로우",
+    "palette": ["#6B4A3A", "#8A6A52"],
+    "reason": "눈썹 결과 모발 컬러를 자연스럽게 맞추기 좋은 브로우 후보예요.",
   },
 }
 
@@ -272,6 +282,14 @@ def _stable_external_id(prefix: str, value: str) -> str:
 
 def _normalize_category(category: str | None) -> str | None:
   if category in PRODUCT_CATEGORIES:
+    return category
+
+  return None
+
+
+def _normalize_stored_category(category: str | None) -> str | None:
+  # R1: DB에 저장된 행(찜 포함)은 brow까지 유효 — liked 목록에서 브로우가 유실되면 안 된다.
+  if category in STORED_PRODUCT_CATEGORIES:
     return category
 
   return None
@@ -1319,7 +1337,7 @@ def _map_db_product(
   index: int,
   profile: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-  category = _normalize_category(row.get("category"))
+  category = _normalize_stored_category(row.get("category"))
 
   if not category:
     return None

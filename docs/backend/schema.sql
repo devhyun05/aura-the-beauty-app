@@ -37,8 +37,9 @@ begin
     create type makeup_style_type as enum ('look', 'filter', 'recipe');
   end if;
 
+  -- R1 (schema.sql:product-category-brow-v1): brow 포함 — Auradin 브로우 찜의 카테고리 손실 방지.
   if not exists (select 1 from pg_type where typname = 'product_category') then
-    create type product_category as enum ('lip', 'cheek', 'shadow', 'liner', 'base');
+    create type product_category as enum ('lip', 'cheek', 'shadow', 'liner', 'base', 'brow');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'filter_category') then
@@ -56,6 +57,8 @@ end
 $$;
 
 alter type capture_type add value if not exists 'hair_analysis';
+-- R1 (schema.sql:product-category-brow-v1): 기존 DB 소급 — add value if not exists = 멱등.
+alter type product_category add value if not exists 'brow';
 
 -- -----------------------------------------------------------------------------
 -- Tables

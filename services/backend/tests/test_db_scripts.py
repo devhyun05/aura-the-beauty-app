@@ -1,4 +1,9 @@
-from app.db.check_schema import EXPECTED_COLUMNS, EXPECTED_TABLES, build_schema_report
+from app.db.check_schema import (
+  EXPECTED_COLUMNS,
+  EXPECTED_ENUM_VALUES,
+  EXPECTED_TABLES,
+  build_schema_report,
+)
 from app.db.init_db import POST_SCHEMA_MIGRATIONS, SCHEMA_VERSION, get_schema_path
 from app.db.seed_db import SEED_VERSION, get_seed_path
 
@@ -198,6 +203,40 @@ def test_pending_search_migration_is_registered() -> None:
   assert "create extension if not exists pg_trgm" in migration_sql
   assert "idx_community_threads_title_trgm" in migration_sql
   assert "idx_community_threads_body_trgm" in migration_sql
+
+
+def test_pending_product_category_brow_migration_is_registered() -> None:
+  """R1: brow enum 마이그레이션(멱등) 등록 + schema.sql 정본과 동기."""
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-category-brow-v1"]
+
+  assert "alter type product_category add value if not exists 'brow'" in migration_sql
+
+  schema = get_schema_path().read_text(encoding="utf-8")
+  # 신규 설치(enum create)와 기존 DB 소급(alter ... if not exists) 모두 brow 포함.
+  assert "'lip', 'cheek', 'shadow', 'liner', 'base', 'brow'" in schema
+  assert "alter type product_category add value if not exists 'brow';" in schema
+
+
+def test_schema_report_lists_missing_brow_enum_value() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    enum_values={"product_category": {"lip", "cheek", "shadow", "liner", "base"}},
+  )
+
+  assert report["ok"] is False
+  assert report["missingEnumValues"] == {"product_category": ["brow"]}
+
+
+def test_schema_report_passes_with_full_product_category_enum() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    enum_values={name: set(values) for name, values in EXPECTED_ENUM_VALUES.items()},
+  )
+
+  assert report["ok"] is True
+  assert report["missingEnumValues"] == {}
 
 
 def test_pending_auradin_session_migration_is_registered() -> None:

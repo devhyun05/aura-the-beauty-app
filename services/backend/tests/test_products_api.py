@@ -113,6 +113,63 @@ async def test_auradin_catalog_item_like_unlike_roundtrip() -> None:
 
 
 @pytest.mark.asyncio
+async def test_auradin_brow_like_roundtrip_preserves_category() -> None:
+  """R1: brow 찜이 lip으로 강등되지 않는다 — like 업서트가 category='brow'로 저장하고,
+  liked 목록 매핑(_map_db_product)에서도 brow 그대로 서빙된다 (like→liked 왕복)."""
+  from app.services.shopping_products import _map_db_product
+
+  db = ProductLikeRoundtripDatabase()
+  catalog_item_id = "auradin-brow-0003"
+  payload = {
+    "brandName": "데이지크",
+    "category": "brow",
+    "id": catalog_item_id,
+    "imageUrl": "https://example.com/brow.jpg",
+    "matchRate": 91,
+    "palette": ["#6B4A3A"],
+    "price": 14000,
+    "productName": "섀도우 아이브로우",
+    "purchaseUrl": "https://example.com/buy/auradin-brow-0003",
+    "reason": "모발 컬러와 자연스럽게 이어져요.",
+    "tags": ["브로우", "내추럴"],
+  }
+
+  liked_product_id = await _resolve_product_id_for_like(db, catalog_item_id, payload)
+
+  assert isinstance(liked_product_id, UUID)
+  assert db.upsert_args is not None
+  assert db.upsert_args[4] == "brow"  # 결함: brow가 정규화 화이트리스트에 없어 lip으로 저장됐음
+
+  # liked 목록 서빙: like가 만든 행 모양대로 매핑해도 brow가 유실(None 반환)되지 않는다.
+  liked_row = {
+    "id": liked_product_id,
+    "external_key": catalog_item_id,
+    "brand_name": db.upsert_args[1],
+    "product_name": db.upsert_args[2],
+    "shade_name": db.upsert_args[3],
+    "category": db.upsert_args[4],
+    "price_krw": db.upsert_args[5],
+    "tags": db.upsert_args[6],
+    "palette": db.upsert_args[7],
+    "product_payload": {
+      "imageUrl": payload["imageUrl"],
+      "matchRate": payload["matchRate"],
+      "purchaseUrl": payload["purchaseUrl"],
+      "reason": payload["reason"],
+    },
+  }
+  mapped = _map_db_product(liked_row, 0)
+
+  assert mapped is not None, "brow row must survive liked-list mapping"
+  assert mapped["category"] == "brow"
+  assert mapped["id"] == catalog_item_id
+  assert mapped["purchaseUrl"] == payload["purchaseUrl"]
+
+  # unlike 왕복: 같은 catalogItemId가 like가 만든 행으로 해소된다.
+  assert await _resolve_product_id_for_unlike(db, catalog_item_id) == liked_product_id
+
+
+@pytest.mark.asyncio
 async def test_auradin_like_requires_product_payload() -> None:
   """비-UUID id에 payload 없이 like 하면 400 — 어댑터가 payload를 실어야 하는 계약."""
   from app.core.errors import AppError

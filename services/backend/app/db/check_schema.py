@@ -141,6 +141,11 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
   ),
 }
 
+# R1 (schema.sql:product-category-brow-v1) — brow가 빠지면 Auradin 브로우 찜이 lip으로 강등된다.
+EXPECTED_ENUM_VALUES = {
+  "product_category": {"lip", "cheek", "shadow", "liner", "base", "brow"},
+}
+
 EXPECTED_INDEX_CONTRACTS = {
   "idx_auradin_search_sessions_expires_at": ("expires_at",),
   "uq_auradin_sessions_owner_client_request": (
@@ -230,6 +235,20 @@ async def fetch_indexes(connection: asyncpg.Connection) -> dict[str, str]:
   return {str(row["indexname"]): str(row["indexdef"]).lower() for row in rows}
 
 
+async def fetch_enum_values(connection: asyncpg.Connection) -> dict[str, set[str]]:
+  rows = await connection.fetch(
+    """
+    select t.typname, e.enumlabel
+    from pg_enum e
+    join pg_type t on t.oid = e.enumtypid
+    """,
+  )
+  values: dict[str, set[str]] = {}
+  for row in rows:
+    values.setdefault(str(row["typname"]), set()).add(str(row["enumlabel"]))
+  return values
+
+
 async def fetch_extensions(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch("select extname from pg_extension")
   return {row["extname"] for row in rows}
@@ -252,6 +271,7 @@ def build_schema_report(
   column_contracts: dict[str, dict[str, str | None]] | None = None,
   constraints: set[str] | dict[str, str] | None = None,
   indexes: dict[str, str] | None = None,
+  enum_values: dict[str, set[str]] | None = None,
 ) -> dict[str, object]:
   expected_versions = {SCHEMA_VERSION, *POST_SCHEMA_MIGRATIONS}
 
@@ -296,6 +316,13 @@ def build_schema_report(
       definition = indexes.get(name, "")
       if not definition or any(fragment not in definition for fragment in fragments):
         invalid_indexes.append(name)
+  missing_enum_values = {}
+  if enum_values is not None:
+    missing_enum_values = {
+      enum_name: sorted(expected - enum_values.get(enum_name, set()))
+      for enum_name, expected in EXPECTED_ENUM_VALUES.items()
+      if expected - enum_values.get(enum_name, set())
+    }
 
   return {
     "ok": not any((
@@ -307,6 +334,7 @@ def build_schema_report(
       missing_constraints,
       invalid_constraints,
       invalid_indexes,
+      missing_enum_values,
     )),
     "expectedTables": sorted(EXPECTED_TABLES),
     "missingTables": missing_tables,
@@ -314,6 +342,8 @@ def build_schema_report(
     "missingExtensions": missing_extensions,
     "expectedColumns": {table: sorted(columns) for table, columns in EXPECTED_COLUMNS.items()},
     "missingColumns": missing_columns,
+    "expectedEnumValues": {name: sorted(values) for name, values in EXPECTED_ENUM_VALUES.items()},
+    "missingEnumValues": missing_enum_values,
     "invalidColumnContracts": sorted(invalid_column_contracts),
     "missingConstraints": missing_constraints,
     "invalidConstraints": sorted(invalid_constraints),
@@ -342,6 +372,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     constraints = await fetch_constraints(connection)
     indexes = await fetch_indexes(connection)
     installed_extensions = await fetch_extensions(connection)
+    enum_values = await fetch_enum_values(connection)
     applied_versions = await fetch_applied_versions(connection)
   finally:
     await connection.close()
@@ -355,6 +386,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     column_contracts=column_contracts,
     constraints=constraints,
     indexes=indexes,
+    enum_values=enum_values,
   )
 
 
@@ -365,6 +397,7 @@ def format_schema_report(report: dict[str, object]) -> str:
   missing_tables = report["missingTables"]
   missing_extensions = report["missingExtensions"]
   missing_columns = report["missingColumns"]
+  missing_enum_values = report["missingEnumValues"]
   invalid_column_contracts = report["invalidColumnContracts"]
   missing_constraints = report["missingConstraints"]
   invalid_indexes = report["invalidIndexes"]
@@ -383,6 +416,11 @@ def format_schema_report(report: dict[str, object]) -> str:
     lines.append("Missing columns:")
     for table, columns in missing_columns.items():
       lines.extend(f"- {table}.{column}" for column in columns)
+
+  if missing_enum_values:
+    lines.append("Missing enum values:")
+    for enum_name, values in missing_enum_values.items():
+      lines.extend(f"- {enum_name}.{value}" for value in values)
 
   if missing_versions:
     lines.append("Missing migration markers:")
@@ -409,6 +447,7 @@ def format_schema_report(report: dict[str, object]) -> str:
     missing_versions,
     missing_columns,
     missing_extensions,
+    missing_enum_values,
     invalid_column_contracts,
     missing_constraints,
     invalid_constraints,
