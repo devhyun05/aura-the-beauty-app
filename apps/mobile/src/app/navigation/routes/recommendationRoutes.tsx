@@ -7,6 +7,8 @@ import {
   ProductRecommendationScreen,
 } from '../../../features/recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {isAuradinPrimarySurfaceEnabled} from '../../../shared/config/featureFlags';
+import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisService';
 import {
   getLikedMakeupFilterLooks,
   mergeSavedAndLikedMakeupLooks,
@@ -14,16 +16,32 @@ import {
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
+  resolveAuradinLandingReport,
+  type AuradinLandingReport,
+} from './auradinLandingReport';
+import {
   navigateMainTab,
   type RootScreenProps,
 } from './routeUtils';
 
+// R1(B1) 표면 전환 — auradinPrimarySurface가 켜지면 얼굴분석 완료·리포트 상세의 추천
+// 랜딩을 Auradin(personalColor 자동 첨부)으로 바꾼다. 진입 경로 전부가 이 라우트로
+// 수렴하므로 분기는 여기 1지점이다. 기본 false — 레거시 유지 (§13 R1).
 export function ProductRecommendationRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ProductRecommendation'>) {
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
   const sourceReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+
+  if (isAuradinPrimarySurfaceEnabled()) {
+    return (
+      <AuradinPrimaryLandingScreen
+        paramReportId={route.params?.reportId ?? null}
+        selectedReport={selectedFaceAnalysisReport}
+      />
+    );
+  }
 
   return (
     <DetailRouteChrome
@@ -43,6 +61,56 @@ export function ProductRecommendationRouteScreen({
       />
     </DetailRouteChrome>
   );
+}
+
+// R1 게이트 2: Auradin 랜딩의 리포트 첨부 해석.
+// AuradinSearchScreen은 마운트 시점에만 availableReport를 첨부로 시드하므로,
+// 과거 리포트 상세 → 추천 진입(fetch 필요)은 personalColor 해석이 끝난 뒤 마운트한다.
+function AuradinPrimaryLandingScreen({
+  paramReportId,
+  selectedReport,
+}: {
+  paramReportId: string | null;
+  selectedReport: {id: string; personalColor?: string | null} | null;
+}) {
+  const resolution = resolveAuradinLandingReport(paramReportId, selectedReport);
+  const fetchReportId = resolution.kind === 'fetch' ? resolution.reportId : null;
+  const [fetchedReport, setFetchedReport] = React.useState<AuradinLandingReport | null>(null);
+  const [resolving, setResolving] = React.useState(fetchReportId != null);
+
+  React.useEffect(() => {
+    if (!fetchReportId) {
+      return undefined;
+    }
+
+    let alive = true;
+    getFaceAnalysisReportById(fetchReportId)
+      .then(report => {
+        if (alive && report?.personalColor) {
+          setFetchedReport({id: report.id, personalColor: report.personalColor});
+        }
+      })
+      .catch(() => {
+        // 상세 조회 실패 → 첨부 없이 진입 (broad 흐름, 검색 자체는 정상 동작)
+      })
+      .finally(() => {
+        if (alive) {
+          setResolving(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [fetchReportId]);
+
+  if (resolving) {
+    return null; // 짧은 상세 GET 동안 대기 — 첨부 시드가 마운트 시점에 확정돼야 한다
+  }
+
+  const availableReport = resolution.kind === 'ready' ? resolution.report : fetchedReport;
+
+  return <AuradinSearchScreen availableReport={availableReport} />;
 }
 
 // AURADIN 검색 — 자체 글라스 지반·워드마크를 갖는 풀스크린 경험 (DetailRouteChrome 미사용).
