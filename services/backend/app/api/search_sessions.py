@@ -13,6 +13,7 @@ from app.schemas.auradin_search import (
   AnswerSearchSessionRequest,
   CreateSearchSessionRequest,
   RefineSearchSessionRequest,
+  SimilarSearchSessionRequest,
 )
 from app.services.auradin_agent.session_manager import (
   ANSWER_ACCEPTED,
@@ -29,6 +30,9 @@ from app.services.auradin_agent.session_manager import (
   MUTATION_VERSION_CONFLICT,
   REFINE_ACCEPTED,
   REFINE_DIALS,
+  SIMILAR_ACCEPTED,
+  SIMILAR_INTENTS,
+  SIMILAR_UNKNOWN_PRODUCT,
   SessionVersionConflictError,
   IdempotencyKeyReuseError,
   IdempotentSessionExpiredError,
@@ -37,6 +41,7 @@ from app.services.auradin_agent.session_manager import (
   create_session_persisted,
   get_session_persisted,
   refine_session_persisted,
+  similar_session_persisted,
   to_search_turn,
 )
 from app.services.auradin_agent.event_logger import (
@@ -284,6 +289,59 @@ async def refine_search_session(
     dial=dial,
     refined_with_prompt=bool(prompt),
   )
+  return success(
+    {
+      "sessionId": session_id,
+      "phase": "searching",
+      "retryAfterMs": 350,
+    },
+  )
+
+
+@router.post("/{session_id}/similar")
+async def similar_search_session(
+  session_id: str,
+  payload: Annotated[SimilarSearchSessionRequest, Body()],
+  auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+  db: Database = Depends(get_database),
+) -> dict:
+  # B6 §10.3-2: 신규 검색이 아니라 rankedCache 내 λ=0.9 재랭킹 — refine과 같은
+  # ack/poll 계약(200 + searching + retryAfterMs)이며, M1 phase 계약(results에서만)을 따른다.
+  product_id = str(payload.productId or "").strip()
+  if not product_id:
+    raise AppError(400, "PRODUCT_REQUIRED", "productId is required.")
+  intent = str(payload.intent or "").strip() or None
+  if intent and intent not in SIMILAR_INTENTS:
+    raise AppError(
+      400,
+      "INVALID_SIMILAR_INTENT",
+      "intent must be 'keep_color', 'cheaper' or 'other_brand'.",
+    )
+
+  outcome, state = await similar_session_persisted(
+    session_id,
+    product_id=product_id,
+    intent=intent,
+    owner_subject=auth.subject,
+    settings=settings,
+    db=db,
+  )
+  if state is None:
+    raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
+  if outcome != SIMILAR_ACCEPTED:
+    if outcome == SIMILAR_UNKNOWN_PRODUCT:
+      raise AppError(422, "UNKNOWN_PRODUCT", "기준 제품을 후보 카탈로그에서 찾을 수 없어요.")
+    if outcome == FILTER_DELTA_CONTRACT_VIOLATION:
+      raise AppError(500, "FILTER_DELTA_CONTRACT_VIOLATION", "검색 조건 처리 계약을 확인해야 해요.")
+    if outcome == MUTATION_VERSION_CONFLICT:
+      raise AppError(409, "CONCURRENT_UPDATE", "다른 요청이 먼저 처리됐어요. 세션을 다시 조회해 주세요.")
+    raise AppError(
+      409,
+      "SESSION_NOT_SIMILARABLE",
+      "지금은 비슷한 제품을 찾을 수 없는 상태예요. 결과 화면에서 다시 시도해 주세요.",
+    )
+
   return success(
     {
       "sessionId": session_id,

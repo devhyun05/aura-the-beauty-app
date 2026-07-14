@@ -34,6 +34,12 @@ class RefineSearchSessionRequest(CamelModel):
   dial: str | None = None
 
 
+class SimilarSearchSessionRequest(CamelModel):
+  # B6 §10.3-2 — 기준 제품 id + 사용자 의향(색 유지/더 저렴/다른 브랜드, optional).
+  productId: str
+  intent: str | None = None
+
+
 # A5 (§7.2) — 이벤트 타입 정본 11종. SQL enum과 1:1 (test_auradin_events가 동기화를 검증).
 AuradinEventType = Literal[
   "session_start",
