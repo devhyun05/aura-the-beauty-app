@@ -26,6 +26,9 @@ env:
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
+  BEDROCK_SCENARIO_MODEL_ID: ${{ vars.BEDROCK_SCENARIO_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
+  BEDROCK_QUESTION_MODEL_ID: ${{ vars.BEDROCK_QUESTION_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
+  BEDROCK_RECOMMENDATION_MODEL_ID: ${{ vars.BEDROCK_RECOMMENDATION_MODEL_ID || 'global.anthropic.claude-sonnet-4-6' }}
   AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
   AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
   AI_WORKER_TASK_DEFINITION: ${{ vars.AI_WORKER_TASK_DEFINITION || vars.AI_WORKER_SERVICE }}
@@ -177,6 +180,9 @@ jobs:
           environment-variables: |
             CHIME_ENABLED=${{ env.CHIME_ENABLED }}
             CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
+            BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
+            BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
+            BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
 
       - name: Deploy ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -213,6 +219,10 @@ jobs:
           task-definition: ai-worker-task-definition.json
           container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
+            BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
+            BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
 
       - name: Deploy AI worker ECS service
         if: ${{ env.AI_WORKER_SERVICE != '' }}

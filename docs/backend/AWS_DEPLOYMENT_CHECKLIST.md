@@ -29,9 +29,9 @@ AWS_SECRET_ACCESS_KEY=
 AI_JOB_EXECUTION_MODE=inline
 SQS_AI_JOB_QUEUE_URL=
 
-BEDROCK_SCENARIO_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
-BEDROCK_QUESTION_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
-BEDROCK_RECOMMENDATION_MODEL_ID=anthropic.claude-sonnet-4-6
+BEDROCK_SCENARIO_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_QUESTION_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_RECOMMENDATION_MODEL_ID=global.anthropic.claude-sonnet-4-6
 ```
 
 After the SQS queue and worker service are deployed, switch the API and worker services to:

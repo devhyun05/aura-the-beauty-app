@@ -74,9 +74,9 @@ The analysis pipeline is split by provider:
 ```env
 AI_PROVIDER=bedrock
 BEDROCK_ANALYSIS_MODEL_ID=<claude-model-or-inference-profile>
-BEDROCK_SCENARIO_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
-BEDROCK_QUESTION_MODEL_ID=anthropic.claude-haiku-4-5-20251001-v1:0
-BEDROCK_RECOMMENDATION_MODEL_ID=anthropic.claude-sonnet-4-6
+BEDROCK_SCENARIO_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_QUESTION_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0
+BEDROCK_RECOMMENDATION_MODEL_ID=global.anthropic.claude-sonnet-4-6
 BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
 IMAGE_GENERATION_PROVIDER=openai
 OPENAI_IMAGE_MODEL_ID=gpt-image-2
