@@ -402,11 +402,70 @@ async function expectAbortSignalIsForwarded() {
   expectEqual(receivedSignal, controller.signal, 'screen cancellation signal reaches backend request');
 }
 
+async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
+  let callCount = 0;
+  async function successfulBackendRequest<T>(path: string): Promise<T> {
+    callCount += 1;
+    if (path.endsWith('/questions')) {
+      return {
+        questions: [{
+          id: 'mood',
+          title: '어떤 방향이 좋아요?',
+          options: [
+            {id: 'soft', label: '은은하게'},
+            {id: 'clear', label: '또렷하게'},
+            {id: 'bold', label: '과감하게'},
+            {id: 'ai', label: 'AI가 골라줘'},
+          ],
+        }],
+      } as T;
+    }
+    return {
+      reportId: 'report-success',
+      imageStatus: 'pending',
+      recommendation: {
+        looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+          id: `look-${index + 1}`,
+          role,
+          title: `추천 ${index + 1}`,
+          summary: `서로 다른 추천 ${index + 1}`,
+          reasons: ['선택한 조건을 반영했어요.'],
+          appliedConditions: ['퇴근 후 약속'],
+          durationMinutes: 20,
+          difficulty: 'medium',
+          steps: [{order: 1, area: 'base', instruction: '얇게 표현해요.'}],
+          products: [{area: 'base', brandName: '브랜드', productName: '제품', reason: '조화로워요.'}],
+        })),
+      },
+    } as T;
+  }
+
+  const started = await startGeneratedMakeupRecommendation(
+    {prompt: '퇴근 후 약속', useProfile: false},
+    [],
+    successfulBackendRequest,
+  );
+  const completed = await answerGeneratedMakeupRecommendationQuestion(
+    started,
+    {questionId: 'mood', optionId: 'soft'},
+    [],
+    successfulBackendRequest,
+  );
+
+  expectEqual(callCount, 2, 'successful backend flow makes question and recommendation requests');
+  expectEqual(completed.phase, 'results', 'successful backend flow reaches results');
+  expectEqual(completed.generationMode, 'backend', 'successful flow remains in backend mode');
+  expectEqual(completed.reportId, 'report-success', 'saved report id is retained');
+  expectEqual(completed.imageStatus, 'pending', 'pending image state is retained for polling');
+  expectEqual(completed.results.length, 3, 'all three backend roles are mapped');
+}
+
 async function runAsyncContracts() {
   await expectGeneratedFlowFallsBackLocally();
   await expectGeneratedQuestionsPreserveSixOptions();
   await expectAuthFailureDoesNotMasqueradeAsFallback();
   await expectAbortSignalIsForwarded();
+  await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
 }
 
 void runAsyncContracts().catch(error => {

@@ -50,19 +50,20 @@ async def run_recommendation_image_job(
 ) -> None:
   report = await db.fetchrow(
     """
-    select id, user_id, scenario_text, recommendation, image_status
-    from makeup_recommendation_reports
+    update makeup_recommendation_reports
+    set image_status = 'processing', image_error = null, updated_at = now()
     where id = $1 and user_id = $2
+      and (
+        image_status = 'pending'
+        or (image_status = 'processing' and updated_at < now() - interval '15 minutes')
+      )
+    returning id, user_id, scenario_text, recommendation, image_status
     """,
     report_id,
     user_id,
   )
-  if report is None or report.get("image_status") == "completed":
+  if report is None:
     return
-  await db.execute(
-    "update makeup_recommendation_reports set image_status = 'processing', image_error = null where id = $1",
-    report_id,
-  )
   try:
     recommendation = report.get("recommendation")
     if isinstance(recommendation, str):
@@ -82,7 +83,11 @@ async def run_recommendation_image_job(
     message = exc.message if isinstance(exc, AppError) else "Recommendation image generation failed."
     logger.exception("[aura:makeup-recommendation] image:failed reportId=%s", report_id)
     await db.execute(
-      "update makeup_recommendation_reports set image_status = 'failed', image_error = $2 where id = $1",
+      """
+      update makeup_recommendation_reports
+      set image_status = 'failed', image_error = $2, updated_at = now()
+      where id = $1 and image_status = 'processing'
+      """,
       report_id,
       message,
     )
@@ -91,7 +96,7 @@ async def run_recommendation_image_job(
     """
     update makeup_recommendation_reports
     set image_status = 'completed', recommendation = $2::jsonb, image_url = $3, image_error = null
-    where id = $1
+    where id = $1 and image_status = 'processing'
     """,
     report_id,
     json.dumps(completed_recommendation, ensure_ascii=False),
@@ -231,13 +236,27 @@ async def retry_recommendation_images(
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
   if report.get("image_status") == "completed":
     return success({"reportId": report_id, "imageStatus": "completed"})
-  if report.get("image_status") == "processing":
-    raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING", "Recommendation images are already being generated.")
+  if report.get("image_status") == "pending":
+    raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PENDING", "Recommendation images are already waiting to be generated.")
 
-  await db.execute(
-    "update makeup_recommendation_reports set image_status = 'pending', image_error = null where id = $1",
+  claimed = await db.fetchrow(
+    """
+    update makeup_recommendation_reports
+    set image_status = 'pending', image_error = null, updated_at = now()
+    where id = $1 and user_id = $2
+      and (
+        image_status = 'failed'
+        or (image_status = 'processing' and updated_at < now() - interval '15 minutes')
+      )
+    returning id
+    """,
     report_id,
+    user["id"],
   )
+  if claimed is None:
+    if report.get("image_status") == "processing":
+      raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING", "Recommendation images are already being generated.")
+    raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PENDING", "Recommendation images are already waiting to be generated.")
   image_status = await dispatch_recommendation_image_job(
     db=db,
     background_tasks=background_tasks,
