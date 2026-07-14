@@ -3,7 +3,7 @@ import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
-import {isRequestAbortedError} from '../../../shared/services/backendApi';
+import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
 import {
   answerGeneratedMakeupRecommendationQuestion,
   fetchGeneratedMakeupScenarios,
@@ -48,6 +48,24 @@ export type MakeupRecommendationScreenProps = {
 };
 
 const HISTORY_PAGE_SIZE = 20;
+
+function getMakeupRecommendationErrorDiagnostic(error: unknown): string {
+  if (!__DEV__ || !(error instanceof BackendApiError) || !error.code) return '';
+  const providerCode = typeof error.details?.providerCode === 'string' ? error.details.providerCode : '';
+  const validationErrors = Array.isArray(error.details?.validationErrors) ? error.details.validationErrors : [];
+  const validationSummary = validationErrors
+    .slice(0, 3)
+    .map(item => {
+      if (!item || typeof item !== 'object') return '';
+      const validationError = item as Record<string, unknown>;
+      const loc = Array.isArray(validationError.loc) ? validationError.loc.join('.') : '';
+      const type = typeof validationError.type === 'string' ? validationError.type : '';
+      return [loc, type].filter(Boolean).join(':');
+    })
+    .filter(Boolean)
+    .join(', ');
+  return ` (${[error.code, providerCode, validationSummary].filter(Boolean).join(' / ')})`;
+}
 
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
@@ -226,7 +244,7 @@ export const MakeupRecommendationScreen = forwardRef<
       })
       .catch(error => {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
-        setErrorMessage('AI 추천을 만들지 못했어요. 잠시 후 다시 시도해주세요.');
+        setErrorMessage(`AI 추천을 만들지 못했어요. 잠시 후 다시 시도해주세요.${getMakeupRecommendationErrorDiagnostic(error)}`);
         setPhase('error');
       });
   };

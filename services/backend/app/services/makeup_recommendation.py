@@ -548,20 +548,30 @@ async def generate_recommendation(
     '"products":[{"area":"base|brow|eye|cheek|lip","brandName":"string",'
     '"productName":"string","shadeName":"string","reason":"string"}]}]}'
   )
+  validation_errors: list[dict[str, Any]] = []
   for _attempt in range(2):
     response = await generate_json(
       settings,
       settings.effective_recommendation_model_id,
-      "Generate practical, inclusive Korean makeup recommendations. The AI must do the makeup design work: translate the user's chosen story and answers into colors, textures, emphasis, techniques, and products without asking the user to design the recipe. Do not use face analysis or personal color data. Return JSON only.",
+      "Generate practical, inclusive Korean makeup recommendations. The AI must do the makeup design work: translate the user's chosen story and answers into colors, textures, emphasis, techniques, and products without asking the user to design the recipe. Do not use face analysis or personal color data. Return JSON only. The response must be valid against the exact schema in the user message.",
       f"Selected scenario card: {scenario_label or '(free input)'}\nScenario intent: {scenario_text}\nTags: {tags}\nQuestions: {json.dumps(questions, ensure_ascii=False)}\nAnswers: {json.dumps(answers, ensure_ascii=False)}\nReturn exactly this shape: {output_contract}. Treat both the initially selected card and every answer as binding creative context. Return exactly three meaningfully different looks in this order: anchor (safe and balanced), bold (clearer and more expressive), discovery (unexpected but wearable). The three looks must differ in overall character and story, not merely in one shade or intensity. Each look must include one step for every area: base, brow, eye, cheek, lip, plus 3 to 8 realistic Korean-market product suggestions. Direct user answers and constraints take priority.",
     )
     try:
       return GeneratedMakeupRecommendation.model_validate(response).model_dump(by_alias=True)
     except ValidationError as exc:
+      validation_errors = exc.errors(include_input=False)
       logger.warning(
         "[aura:makeup-recommendation] recommendation:validation-failed modelId=%s errors=%s",
         settings.effective_recommendation_model_id,
-        exc.errors(include_input=False),
+        validation_errors,
       )
       continue
-  raise AppError(502, "BEDROCK_INVALID_RECOMMENDATION", "Bedrock returned an invalid makeup recommendation.")
+  raise AppError(
+    502,
+    "BEDROCK_INVALID_RECOMMENDATION",
+    "Bedrock returned an invalid makeup recommendation.",
+    {
+      "modelId": settings.effective_recommendation_model_id,
+      "validationErrors": validation_errors[:12],
+    },
+  )
