@@ -18,3 +18,18 @@ def test_build_query_plan_supports_subset() -> None:
 
   assert len(queries) == 1
   assert queries[0].query == "라카 블러셔"
+
+
+def test_build_query_plan_all_templates_and_zero_limit_are_unbounded() -> None:
+  queries = build_query_plan(
+    brands=["라카"],
+    categories=["base"],
+    max_queries=0,
+    all_templates=True,
+  )
+
+  assert [query.query for query in queries] == [
+    "라카 쿠션",
+    "라카 파운데이션",
+    "라카 베이스",
+  ]
