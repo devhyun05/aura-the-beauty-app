@@ -49,7 +49,7 @@ from app.services.auradin_agent.session_manager import (
 from app.services.auradin_agent.event_logger import (
   ANON_TOKEN_HEADER,
   derive_event_owner,
-  record_search_turn_events,
+  schedule_search_turn_events,
 )
 from app.services.auradin_agent.retrieval_service import FilterDeltaContractViolation
 
@@ -122,8 +122,9 @@ async def create_search_session(
       "검색 조건 처리 계약을 확인해야 해요.",
     )
   # A5 §7.2 수집 지점 — state["logs"]에 이미 있는 결정의 영속화(session_start + 즉답 시 impression).
-  # 기록은 부수 작업: state/version을 바꾸지 않고, 실패해도 응답을 막지 않는다(fail-open).
-  await record_search_turn_events(
+  # 기록은 부수 작업: CAS 완료 후 bounded background 큐로 넘긴다 — 응답은 이벤트 insert를
+  # 기다리지 않으며, 실패·큐 초과도 응답을 막지 않는다(fail-open).
+  schedule_search_turn_events(
     state,
     trigger="create",
     owner_subject=_event_owner(request, auth, settings),
@@ -193,7 +194,8 @@ async def answer_search_session(
     if outcome == ANSWER_ACCEPTED:
       # A5 수집 지점 — question_answered(+결과 도달 시 impression). duplicate는 기록하지 않지만,
       # 기록해도 결정론적 client_event_id가 (owner, client_event_id) 유니크에서 dedup된다.
-      await record_search_turn_events(
+      # CAS 완료 후 background 큐 — 응답은 이벤트 insert를 기다리지 않는다.
+      schedule_search_turn_events(
         state,
         trigger="answer",
         owner_subject=_event_owner(request, auth, settings),
@@ -281,8 +283,10 @@ async def refine_search_session(
       "지금은 조건을 다듬을 수 없는 상태예요. 결과 화면에서 다시 시도해 주세요.",
     )
 
-  # A5 수집 지점 — refine_dial/refine_prompt(+새 결과 impression). raw prompt 원문은 싣지 않는다.
-  await record_search_turn_events(
+  # A5 수집 지점 — refine_prompt/refine_dial(+새 결과 impression). prompt+dial 동시 적용이면
+  # 두 이벤트를 각각 기록한다. raw prompt 원문은 싣지 않는다. CAS 완료 후 background 큐 —
+  # 응답은 이벤트 insert를 기다리지 않는다.
+  schedule_search_turn_events(
     state,
     trigger="refine",
     owner_subject=_event_owner(request, auth, settings),

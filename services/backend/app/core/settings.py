@@ -1,8 +1,9 @@
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -100,7 +101,8 @@ class Settings(BaseSettings):
   # 수집 시작 금지(D8). 기록 실패는 어떤 경우에도 추천 응답을 막지 않는다(fail-open).
   auradin_events_enabled: bool = False
   # Release Manifest 귀속 정본 — 배포 파이프라인이 앱 커밋 SHA(또는 release manifest id)를 주입.
-  # 미설정이면 이벤트에 "unknown"으로 기록된다 (M2 Release Manifest 착지 전 임시).
+  # 미설정이면 이벤트는 귀속 불가로 drop된다 — "unknown" 영속 금지(교차 리뷰 A5-2).
+  # auradin_events_enabled=True와 함께 미설정이면 Settings 검증이 경고를 남긴다.
   auradin_release_manifest_id: str | None = None
   # 익명식별 RFC §2.1 — 클라이언트 anon token을 HMAC해 anon:v1:<digest> owner를 만들 서버 비밀키.
   # 미설정이면 anon owner를 만들 수 없어 익명 이벤트는 fail-open으로 건너뛴다.
@@ -167,6 +169,17 @@ class Settings(BaseSettings):
       return False
 
     return value
+
+  @model_validator(mode="after")
+  def warn_events_enabled_without_release_manifest(self) -> "Settings":
+    # A5 교차 리뷰: events flag ON + release manifest 미설정이면 모든 이벤트가 귀속 불가로
+    # drop된다("unknown" 영속 금지). 배포 설정 실수를 부팅 시점에 명확히 드러낸다.
+    if self.auradin_events_enabled and not str(self.auradin_release_manifest_id or "").strip():
+      logging.getLogger(__name__).warning(
+        "[aura:auradin-events] auradin_events_enabled=True but auradin_release_manifest_id "
+        "is unset — every event will be dropped (no 'unknown' attribution is persisted)",
+      )
+    return self
 
   @property
   def analysis_provider(self) -> str:

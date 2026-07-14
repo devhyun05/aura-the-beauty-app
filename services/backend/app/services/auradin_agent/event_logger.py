@@ -7,12 +7,17 @@
   dev fallback subject(``settings.dev_user_sub``)에는 적재 금지 — owner가 없으면 조용히 skip.
 - 멱등성은 전역 ID가 아니라 (owner_subject, client_event_id) 복합 — insert는 on conflict do nothing.
 - payload는 schema-versioned allowlist 구조화 값만. **raw query/prompt 원문은 저장하지 않는다.**
+  키별 typed 모델(schemas.auradin_search)로 재귀 검증 — 자유 텍스트는 중첩 깊이 무관 drop.
 - manifest 귀속: data_manifest_id = active snapshot manifest SHA(정본), release_manifest_id =
-  settings.auradin_release_manifest_id 또는 "unknown". catalog_run_date는 조회 편의용 중복.
+  settings.auradin_release_manifest_id. 둘 중 하나라도 유효하지 않으면 이벤트를 기록하지 않고
+  drop + 카운터로 남긴다 — "unknown" 영속 금지(교차 리뷰 A5-2). catalog_run_date는 조회 편의용 중복.
+- 세션 API 수집 지점은 CAS 완료 후 bounded background 큐(asyncio.create_task)로 기록한다 —
+  응답은 이벤트 insert를 기다리지 않는다. 큐 상한 초과분은 drop + 카운터(교차 리뷰 A5-3).
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -23,6 +28,7 @@ from typing import Any
 
 from app.core.settings import Settings, get_settings
 from app.db.session import Database
+from app.schemas.auradin_search import EVENT_PAYLOAD_ALLOWED_KEYS, sanitize_event_payload
 
 from .catalog_loader import get_catalog
 
@@ -47,10 +53,9 @@ EVENT_TYPES: tuple[str, ...] = (
   "unhide",
 )
 
-# RFC §3.4 — payload allowlist. raw query/prompt/리포트 원문/연락처류는 키 자체가 없어 구조적으로 배제된다.
-PAYLOAD_ALLOWED_KEYS = frozenset(
-  {"scoreSnapshot", "filterDelta", "dial", "lambda", "appVersion", "platform", "locale", "consent", "source"},
-)
+# RFC §3.4 — payload allowlist 정본은 schemas.auradin_search의 키별 typed 검증기.
+# 최상위 키 filter가 아니라 재귀 typed 검증이다 — 중첩 dict로 raw 원문을 실을 수 없다.
+PAYLOAD_ALLOWED_KEYS = EVENT_PAYLOAD_ALLOWED_KEYS
 
 ANON_OWNER_PREFIX = "anon:v1:"
 USER_OWNER_PREFIX = "user:v1:"
@@ -59,6 +64,14 @@ ANON_TOKEN_HEADER = "x-auradin-anon-token"
 
 # RFC §3.1 — 기록 실패율 운영 지표(로그 외 카운터). 프로세스 로컬 best-effort.
 EVENT_WRITE_FAILURES = {"count": 0}
+# 교차 리뷰 A5-2 — manifest 귀속 불가로 drop된 이벤트 배치 수 ("unknown" 영속 금지).
+EVENT_ATTRIBUTION_DROPS = {"count": 0}
+# 교차 리뷰 A5-3 — background 큐 상한 초과로 drop된 수집 지점 수.
+EVENT_QUEUE_DROPS = {"count": 0}
+
+# 세션 API 수집 지점의 background 기록 큐 상한 — 초과분은 drop + 카운터(fail-open 유지).
+EVENT_TASK_QUEUE_LIMIT = 64
+_PENDING_EVENT_TASKS: set[asyncio.Task[None]] = set()
 
 _EVENTS_TABLE_READY = False
 
@@ -152,27 +165,38 @@ def derive_event_owner(
 
 
 def sanitize_payload(payload: Any) -> dict[str, Any] | None:
-  """allowlist 밖 키 제거 — raw query 원문(query/prompt/text 등)은 여기서 구조적으로 걸러진다."""
-  if not isinstance(payload, dict):
-    return None
-  clean = {key: value for key, value in payload.items() if key in PAYLOAD_ALLOWED_KEYS}
-  return clean or None
+  """DB 삽입 직전 최종 방벽 — 요청 스키마와 같은 typed allowlist를 다시 지난다(교차 리뷰 A5-1).
+
+  키별 typed 모델(schemas.auradin_search.sanitize_event_payload)로 재귀 검증한다.
+  allowlist 밖 키·자유 텍스트 문자열 값(한글/장문 포함)은 어떤 중첩 깊이에서도
+  fail-closed로 drop된다 — raw query/prompt 원문은 구조적으로 영속화될 수 없다.
+  """
+  return sanitize_event_payload(payload)
+
+
+def _valid_manifest_id(value: Any) -> bool:
+  """귀속 ID 유효성 — 빈 값과 sentinel "unknown"은 영속 불가."""
+  text = str(value or "").strip()
+  return bool(text) and text.lower() != "unknown"
 
 
 def manifest_attribution(settings: Settings | None = None) -> dict[str, Any]:
-  """§7.2 귀속 정본 — active snapshot manifest SHA + release manifest id(미설정 시 "unknown")."""
+  """§7.2 귀속 정본 — active snapshot manifest SHA + release manifest id.
+
+  유효하지 않은 귀속은 None으로 드러낸다 — "unknown" 같은 sentinel을 만들어내지 않는다
+  (교차 리뷰 A5-2). record_events가 귀속 불가 배치를 drop + 카운터로 처리한다(fail-open).
+  """
   settings = settings or get_settings()
-  data_manifest_id = "unknown"
+  data_manifest_id = None
   catalog_run_date = None
   try:
     snapshot = getattr(get_catalog(), "snapshot", None)
     if snapshot is not None:
-      data_manifest_id = str(snapshot.manifest_sha256)
+      data_manifest_id = str(snapshot.manifest_sha256).strip() or None
       catalog_run_date = str(snapshot.run_date)
   except Exception:
-    # 귀속 실패도 fail-open — 이벤트를 버리기보다 "unknown"으로 남기고 로그로 드러낸다.
     logger.warning("[aura:auradin-events] snapshot attribution unavailable", exc_info=True)
-  release_manifest_id = str(getattr(settings, "auradin_release_manifest_id", "") or "").strip() or "unknown"
+  release_manifest_id = str(getattr(settings, "auradin_release_manifest_id", "") or "").strip() or None
   return {
     "dataManifestId": data_manifest_id,
     "catalogRunDate": catalog_run_date,
@@ -282,6 +306,18 @@ async def record_events(
     return 0
 
   attribution = manifest_attribution(settings)
+  if not _valid_manifest_id(attribution["dataManifestId"]) or not _valid_manifest_id(attribution["releaseManifestId"]):
+    # 교차 리뷰 A5-2 — 귀속 불가 이벤트는 "unknown"으로 영속하지 않고 drop한다(fail-open 유지).
+    EVENT_ATTRIBUTION_DROPS["count"] += 1
+    logger.warning(
+      "[aura:auradin-events] drop %d event(s): manifest attribution unavailable "
+      "(data=%s release=%s drops=%d)",
+      len(events),
+      attribution["dataManifestId"],
+      attribution["releaseManifestId"],
+      EVENT_ATTRIBUTION_DROPS["count"],
+    )
+    return 0
   rows = []
   for event in events[:MAX_EVENTS_PER_BATCH]:
     args = _event_row_args(event, str(owner_subject), attribution)
@@ -417,19 +453,34 @@ def build_search_turn_events(
     )
   elif trigger == "refine":
     # 멱등 키에 mutator CAS version을 태워 같은 refine의 CAS 재시도는 1행, 새 refine은 새 행.
+    # prompt+dial 동시 적용이면 두 동작을 각각 기록한다 — 접미사(:prompt/:dial)로
+    # 결정적 clientEventId를 분리한다(교차 리뷰 A5-4).
     version = int(state.get("version") or 0)
-    event_type = "refine_prompt" if refined_with_prompt else "refine_dial"
-    events.append(
-      {
-        "clientEventId": f"srv:{session_id}:refine:{version}",
-        "eventType": event_type,
-        "occurredAt": _now_iso(),
-        "sessionId": session_id,
-        "turnId": f"refine-{version}",
-        # raw prompt 원문 저장 금지 — dial 값만 구조화 payload로.
-        "payload": {"dial": dial} if dial else None,
-      },
-    )
+    occurred_at = _now_iso()
+    if refined_with_prompt:
+      events.append(
+        {
+          "clientEventId": f"srv:{session_id}:refine:{version}:prompt",
+          "eventType": "refine_prompt",
+          "occurredAt": occurred_at,
+          "sessionId": session_id,
+          "turnId": f"refine-{version}",
+          # raw prompt 원문 저장 금지 — refine_prompt는 payload 없이 발생 사실만.
+          "payload": None,
+        },
+      )
+    if dial:
+      events.append(
+        {
+          "clientEventId": f"srv:{session_id}:refine:{version}:dial",
+          "eventType": "refine_dial",
+          "occurredAt": occurred_at,
+          "sessionId": session_id,
+          "turnId": f"refine-{version}",
+          # dial 값만 구조화 payload로.
+          "payload": {"dial": dial},
+        },
+      )
 
   events.extend(_impression_events(state))
   return events
@@ -463,3 +514,73 @@ async def record_search_turn_events(
   except Exception:
     EVENT_WRITE_FAILURES["count"] += 1
     logger.warning("[aura:auradin-events] turn event capture failed (fail-open)", exc_info=True)
+
+
+def schedule_search_turn_events(
+  state: dict[str, Any] | None,
+  *,
+  trigger: str,
+  owner_subject: str | None,
+  settings: Settings | None = None,
+  db: Database | None = None,
+  question_id: str | None = None,
+  option_id: str | None = None,
+  dial: str | None = None,
+  refined_with_prompt: bool = False,
+) -> asyncio.Task[None] | None:
+  """세션 API 수집 지점용 — CAS 완료 후 이벤트 기록을 bounded background 큐로 넘긴다.
+
+  응답은 이벤트 insert를 기다리지 않는다(교차 리뷰 A5-3). 동시 대기 task가
+  ``EVENT_TASK_QUEUE_LIMIT``를 넘으면 drop + 카운터(fail-open 유지). 배치 엔드포인트
+  (POST /search/events)는 전용 경로라 동기(record_events)를 유지한다.
+  """
+  if not state:
+    return None
+  if len(_PENDING_EVENT_TASKS) >= EVENT_TASK_QUEUE_LIMIT:
+    EVENT_QUEUE_DROPS["count"] += 1
+    logger.warning(
+      "[aura:auradin-events] background queue full (limit=%d) — drop turn events trigger=%s drops=%d",
+      EVENT_TASK_QUEUE_LIMIT,
+      trigger,
+      EVENT_QUEUE_DROPS["count"],
+    )
+    return None
+  try:
+    task = asyncio.create_task(
+      record_search_turn_events(
+        state,
+        trigger=trigger,
+        owner_subject=owner_subject,
+        settings=settings,
+        db=db,
+        question_id=question_id,
+        option_id=option_id,
+        dial=dial,
+        refined_with_prompt=refined_with_prompt,
+      ),
+    )
+  except RuntimeError:
+    # 실행 중인 이벤트 루프 밖(동기 컨텍스트) — fail-open: drop + 카운터.
+    EVENT_QUEUE_DROPS["count"] += 1
+    logger.warning(
+      "[aura:auradin-events] no running event loop — drop turn events trigger=%s drops=%d",
+      trigger,
+      EVENT_QUEUE_DROPS["count"],
+    )
+    return None
+  _PENDING_EVENT_TASKS.add(task)
+  task.add_done_callback(_PENDING_EVENT_TASKS.discard)
+  return task
+
+
+async def flush_search_turn_event_tasks() -> None:
+  """테스트·graceful shutdown용 — background 큐에 남은 이벤트 기록을 모두 완료한다."""
+  while _PENDING_EVENT_TASKS:
+    await asyncio.gather(*tuple(_PENDING_EVENT_TASKS), return_exceptions=True)
+
+
+def reset_event_queue_state() -> None:
+  """테스트 격리용 — background 큐 레지스트리와 drop 카운터 초기화."""
+  _PENDING_EVENT_TASKS.clear()
+  EVENT_QUEUE_DROPS["count"] = 0
+  EVENT_ATTRIBUTION_DROPS["count"] = 0
