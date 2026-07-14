@@ -6,6 +6,7 @@ from typing import Any
 
 from .attribute_evaluator import evaluate_attribute
 from .preference_policy import EXPLICIT_PREFERENCE_SOURCES, resolve_preferences
+from .quality_policy import quality_caveats
 from .title_keyword_extractor import normalize_product_name
 
 
@@ -932,6 +933,9 @@ def _build_reason(
     caveat.append("톤은 제품 단서 기반 참고용이며 확정 아님")
   if inferred:
     caveat.append("색·마감은 제품명·옵션 단서 기반이라 확정 아님")
+  for quality_caveat in quality_caveats(item):
+    if quality_caveat not in caveat:
+      caveat.append(quality_caveat)
 
   return {"matchedOn": matched_on, "inferred": inferred, "caveat": caveat}
 

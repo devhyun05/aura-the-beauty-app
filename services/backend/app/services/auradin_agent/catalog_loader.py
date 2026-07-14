@@ -8,6 +8,7 @@ from typing import Any
 from app.core.settings import Settings, get_settings
 
 from .knowledge_chunk_builder import build_knowledge_chunks, build_mvp_catalog
+from .quality_policy import is_quality_cut
 from .snapshot_manifest import (
   NON_PRODUCTION_ENVIRONMENTS,
   SnapshotDescriptor,
@@ -65,8 +66,16 @@ class AuradinCatalog:
     *,
     snapshot: SnapshotDescriptor | None = None,
   ) -> None:
-    self.items = [item for item in items if is_purchasable(item)]
-    self.chunks = chunks or []
+    self.items = [
+      item for item in items if is_purchasable(item) and not is_quality_cut(item)
+    ]
+    surviving_ids = {str(item.get("id") or "").strip() for item in self.items}
+    self.chunks = [
+      chunk
+      for chunk in (chunks or [])
+      if isinstance(chunk, dict)
+      and str(chunk.get("catalogItemId") or "").strip() in surviving_ids
+    ]
     self.by_id = {item["id"]: item for item in self.items}
     self.snapshot = snapshot
 

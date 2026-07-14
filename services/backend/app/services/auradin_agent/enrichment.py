@@ -31,6 +31,7 @@ from app.services.bedrock_guardrails import build_bedrock_guardrail_invoke_kwarg
 from .attribute_evaluator import evaluate_attribute
 from .catalog_loader import get_catalog
 from .knowledge_chunk_builder import build_mvp_catalog_item
+from .quality_policy import is_quality_cut
 from .ranking import (
   ATTRIBUTE_LABELS,
   CATEGORY_LABELS,
@@ -724,8 +725,8 @@ def _live_catalog_item(
   catalog_item = build_mvp_catalog_item(seed)
   if not catalog_item:
     return None
-  if catalog_item.get("qualityFlags"):
-    return None  # 세트/리필/미니 등 노이즈 컷
+  if is_quality_cut(catalog_item):
+    return None
   return catalog_item
 
 
