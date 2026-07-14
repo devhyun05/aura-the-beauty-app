@@ -71,7 +71,6 @@ export const rootStackLinkingScreens = {
   SavedHairSimulations: 'hair-analysis/saved',
   SavedMakeupList: 'saved-makeup-list',
   ProductRecommendation: 'product-recommendation',
-  MakeupRecommendation: 'makeup-recommendation',
   AuradinSearch: 'auradin-search',
   Community: 'community',
   CommunityThreadDetail: 'community/thread/:threadId',

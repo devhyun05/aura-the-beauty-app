@@ -19,7 +19,6 @@ const makeupFeedbackTarget = getAppFeatureMenuTarget('makeupFeedback');
 const consultingTarget = getAppFeatureMenuTarget('consulting');
 const communityTarget = getAppFeatureMenuTarget('community');
 const appSettingsTarget = getAppFeatureMenuTarget('appSettings');
-const makeupRecommendationTarget = getAppFeatureMenuTarget('makeupRecommendation');
 
 expectEqual(
   sectionLabels.join(','),
@@ -74,19 +73,4 @@ expectEqual(
   appSettingsTarget.kind === 'root' ? appSettingsTarget.routeName : null,
   'AppSettings',
   'app settings menu route',
-);
-expectEqual(
-  makeupRecommendationTarget.kind,
-  'root',
-  'makeup recommendation target kind',
-);
-expectEqual(
-  makeupRecommendationTarget.kind === 'root' ? makeupRecommendationTarget.routeName : null,
-  'MakeupRecommendation',
-  'makeup recommendation target route',
-);
-expectEqual(
-  analysisSection?.items.some(item => item.label === '메이크업 추천'),
-  true,
-  'analysis menu includes makeup recommendation',
 );

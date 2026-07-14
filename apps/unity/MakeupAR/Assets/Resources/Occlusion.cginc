@@ -1,0 +1,83 @@
+// 세그멘테이션 오클루전 공통 게이트 (설계 §11 — "개입점 = 한 곳, 한 줄").
+//
+// 모든 메이크업 셰이더가 이미 계산하는 grabPos(스크린 좌표)를 받아, SelfieMulticlass
+// face-skin 확률(R 채널)로 최종 알파에 곱할 게이트를 돌려준다. 손·머리카락·옷이
+// 얼굴 앞을 가리면 그 픽셀의 face-skin 확률이 낮아 색소가 제외된다.
+//
+// 전역 유니폼만 사용 — SegmentationSource가 프레임당 1회 기록(머티리얼별 세팅 0).
+// _SegOn=0(패키지 미설치·모델 부재·추론 실패·스테일)이면 게이트가 항상 1 →
+// 완전 무영향 폴백(§11 불변식).
+//
+// 좌표 정합 (근거 — FramePresenter/CameraFeed 실코드 판단):
+//  - 마스크는 카메라 이미지 UV에 정렬돼 있고(세그 입력 = 캡처 프레임 그 자체),
+//    FramePresenter의 배경 쿼드는 aspect-fill(coverScale)이라 화면보다 크게 걸린다 —
+//    즉 스크린 UV ≠ 이미지 UV이고, 90°스텝 회전·미러·커버스케일을 지나는
+//    뷰포트→이미지 역매핑이 반드시 필요하다. 그 역매핑(∘ 마스크 회전 보정)을
+//    CPU(SegmentationSource.PublishMask)가 아핀 행 _SegScreenToMask*로 합성해 주므로
+//    셰이더는 dot 2번이면 된다.
+//  - 워프(§10)와의 교차: 배경은 워프 역샘플(src)로 그려지고 메이크업 정점은 순방향
+//    워프 위치에 있으므로, 이 픽셀이 실제로 보여주는 원본 이미지 위치는 src(q)다.
+//    엄밀히는 마스크도 src(q)에서 샘플해야 하지만 역워프는 프래그먼트당 24옵×4회
+//    고정점 반복 — "한 줄" 게이트에 과중해 워프 후 위치 q로 근사한다. 오차는 워프
+//    변위(슬라이더 캡 기준 수%UV 이하)로 유계이고, 256px 소프트 확률맵 +
+//    _OccLo/_OccHi 페더 폭 아래라 실효 차이가 없다. // 실기기 확인 항목
+//
+// 눈썹 화이트리스트 검증(§14): hair 채널을 "지우개"로 쓰면 짙은 눈썹이 머리카락으로
+// 오분류될 때 눈썹 메이크업이 통째로 지워진다(§14 치명적 함정). 여기는 hair를 쓰지
+// 않고 face-skin "양성 게이트"만 쓰므로 그 함정 자체가 없다 — 눈썹이 일부 hair로
+// 새더라도 face-skin 확률이 0으로 떨어지지 않는 한(256px에서 눈썹은 얼굴 영역 안,
+// hair 클래스는 두피 머리카락 학습) _OccLo(하한) 위에 남는다 → 별도 화이트리스트
+// 불필요. 반대로 이마로 내려온 "진짜 앞머리"는 face-skin이 낮아져 눈썹 메이크업이
+// 가려진다 — 이것은 원하는 동작(§14 앞머리 오클루전). 헤어라인 부근 부작용은
+// _OccLo/_OccHi 페더로 완화. // 실기기 튜닝 대상
+#ifndef ARMAKEUP_OCCLUSION_INCLUDED
+#define ARMAKEUP_OCCLUSION_INCLUDED
+
+sampler2D _SegMask;       // RGBA = face-skin / hair / body-skin(목·귀·손) / 기타 확률
+float _SegOn;             // 0 = 폴백(게이트 1), 1 = 마스크 유효
+float _OccLo;             // face-skin 페더 하한 (SegmentationSource.OccFeatherLo) // 실기기 튜닝 대상
+float _OccHi;             // face-skin 페더 상한 (SegmentationSource.OccFeatherHi) // 실기기 튜닝 대상
+float4 _SegScreenToMaskX; // 뷰포트 UV → 마스크 UV 아핀 행 (xy=선형부, z=오프셋)
+float4 _SegScreenToMaskY;
+
+// grabPos(ComputeGrabScreenPos) → 진짜 뷰포트 UV(원점 좌하단) 원복.
+// 그랩 UV는 그랩 텍스처의 "저장 방향" 기준이라 UNITY_UV_STARTS_AT_TOP(Metal/D3D)에서
+// 백버퍼 직행(_ProjectionParams.x > 0)이면 뷰포트와 y가 뒤집혀 있고, RT 렌더(투영
+// 플립, x < 0)면 이미 일치한다. GL 계열은 항상 일치. — ComputeScreenPos 인터폴레이터를
+// 새로 태우는 대신 기존 grabPos를 재활용해 "셰이더당 한 줄" 원칙을 지킨다.
+inline float2 OccViewportUV(float4 grabPos)
+{
+    float2 uv = grabPos.xy / max(grabPos.w, 1e-6);
+#if UNITY_UV_STARTS_AT_TOP
+    if (_ProjectionParams.x > 0) uv.y = 1.0 - uv.y;
+#endif
+    return uv;
+}
+
+inline half4 OccSampleMask(float4 grabPos)
+{
+    float2 vp = OccViewportUV(grabPos);
+    float2 m = float2(dot(_SegScreenToMaskX.xy, vp) + _SegScreenToMaskX.z,
+                      dot(_SegScreenToMaskY.xy, vp) + _SegScreenToMaskY.z);
+    return tex2D(_SegMask, m);
+}
+
+// 표준 게이트 — 최종 알파(불투명 셰이더는 lerp 가중)에 곱하는 값 [0,1].
+inline float OccludeGate(float4 grabPos)
+{
+    float faceSkin = OccSampleMask(grabPos).r;
+    // smoothstep 페더: 확률 경계가 부드러워 하드 엣지·플리커 없이 사라진다.
+    return lerp(1.0, smoothstep(_OccLo, _OccHi, faceSkin), _SegOn);
+}
+
+// 입안 변형 게이트 — 치아 미백 전용. SelfieMulticlass의 face-skin이 열린 입 안(치아)을
+// 커버하는지 미확인 — 커버하지 않으면 표준 게이트가 미백을 통째로 지운다(세그 없던
+// 때보다 후퇴). 치아가 "기타"(A) 클래스로 잡히는 경우까지 통과시키도록 max(face, 기타).
+// 실기기에서 표준 게이트로 충분하면 OccludeGate로 교체. // 실기기 튜닝 대상
+inline float OccludeGateMouth(float4 grabPos)
+{
+    half4 m = OccSampleMask(grabPos);
+    return lerp(1.0, smoothstep(_OccLo, _OccHi, max(m.r, m.a)), _SegOn);
+}
+
+#endif // ARMAKEUP_OCCLUSION_INCLUDED

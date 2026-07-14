@@ -1,5 +1,5 @@
 import {createContext, type ReactNode, useContext} from 'react';
-import {ScrollView, StyleSheet, type ScrollViewProps} from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'tamagui';
 
@@ -99,7 +99,6 @@ type AppScreenProps = {
   scroll?: boolean;
   contentGap?: number;
   horizontalPadding?: number;
-  keyboardShouldPersistTaps?: ScrollViewProps['keyboardShouldPersistTaps'];
   topPadding?: AppScreenTopPadding;
 };
 
@@ -110,7 +109,6 @@ export function AppScreen({
   scroll = true,
   contentGap = spacing.sectionGap,
   horizontalPadding = spacing.screenX,
-  keyboardShouldPersistTaps,
   topPadding = 'standalone',
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
@@ -137,7 +135,6 @@ export function AppScreen({
       contentContainerStyle={contentStyle}
       contentInset={{bottom: 0, left: 0, right: 0, top: 0}}
       contentInsetAdjustmentBehavior="never"
-      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
       showsVerticalScrollIndicator={false}
       scrollIndicatorInsets={{bottom: 0, left: 0, right: 0, top: 0}}
       style={[styles.screen, {backgroundColor}]}

@@ -64,7 +64,6 @@ import {
   MakeupFeedbackResultsListRouteScreen,
   MakeupCorrectionTipRouteScreen,
 } from './routes/makeupFeedbackRoutes';
-import {MakeupRecommendationRouteScreen} from './routes/makeupRecommendationRoutes';
 import {
   AuradinSearchRouteScreen,
   LikedProductListRouteScreen,
@@ -153,7 +152,6 @@ export function RootNavigator() {
       <Stack.Screen name="SavedHairSimulations" component={SavedHairSimulationsRouteScreen} />
       <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
       <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
-      <Stack.Screen name="MakeupRecommendation" component={MakeupRecommendationRouteScreen} />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />
       <Stack.Screen name="CommunityThreadDetail" component={CommunityThreadDetailRouteScreen} />

@@ -667,7 +667,14 @@ public sealed class RNBridge : MonoBehaviour
                             ? Mathf.Clamp01(layer.Intensity > 0.01f ? layer.Intensity : 0.85f)
                             : 0f;
                         ARMakeup.Face.LipRenderer.Instance.ApplyLipParams(
-                            layer.ColorHex, lipIntensity);
+                            layer.ColorHex,
+                            lipIntensity,
+                            0,
+                            0f,
+                            0f,
+                            layer.ColorHex,
+                            0f,
+                            0);
                         if (regionMaskOverlay != null)
                         {
                             regionMaskOverlay.HideRegionOverlay("lip");
