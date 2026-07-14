@@ -7,6 +7,7 @@ from typing import Any
 from .attribute_evaluator import evaluate_attribute
 from .preference_policy import EXPLICIT_PREFERENCE_SOURCES, resolve_preferences
 from .quality_policy import quality_caveats
+from .taste_profile import CAP_PROFILE, PROFILE_ANCHOR_TOP_K, profile_raw_score
 from .title_keyword_extractor import normalize_product_name
 
 
@@ -871,6 +872,66 @@ def assign_roles(
   return roled[:top_n]
 
 
+def select_anchor_with_profile(
+  reranked: list[dict[str, Any]],
+  taste_profile: dict[str, Any] | None,
+  *,
+  enabled: bool = False,
+  explicit_attributes: frozenset[str] | set[str] = frozenset(),
+  top_k: int = PROFILE_ANCHOR_TOP_K,
+) -> dict[str, Any]:
+  """B7 §7.3 — profileScore의 **유일한** 랭킹 개입 지점 (anchor-only, 새도 지원).
+
+  MMR 상위 K개 한정으로 ``_row_score_raw + clip(profile_raw, ±CAP_PROFILE)``이
+  가장 큰 행을 anchor 후보로 고른다. ``enabled=False``(새도 모드)면 순위는 절대
+  바꾸지 않고 wouldBeAnchor만 계산해 로깅용으로 돌려준다. ``enabled=True``면
+  reranked[0]과 스왑한다 — diverse/discovery 선정(assign_roles)·floor(passes_floor)·
+  전체 정렬에는 profile 인자 자체가 없어 구조적으로 격리된다.
+  """
+  if not reranked or not isinstance(taste_profile, dict) or not taste_profile:
+    return {"reranked": reranked, "profileAnchor": None}
+  window = reranked[: max(1, int(top_k))]
+  candidates: list[dict[str, Any]] = []
+  best_index = 0
+  best_adjusted: float | None = None
+  for index, row in enumerate(window):
+    raw = profile_raw_score(
+      row.get("item") or {},
+      taste_profile,
+      explicit_attributes=explicit_attributes,
+    )
+    delta = max(-CAP_PROFILE, min(CAP_PROFILE, raw))
+    adjusted = _row_score_raw(row) + delta
+    candidates.append(
+      {
+        "id": _clean((row.get("item") or {}).get("id")),
+        "baseScore": round(_row_score_raw(row), 6),
+        "profileDelta": round(delta, 6),
+        "adjustedScore": round(adjusted, 6),
+      },
+    )
+    # 동점은 현행 anchor(선순위) 유지 — 새도/실적용 모두 결정론적.
+    if best_adjusted is None or adjusted > best_adjusted:
+      best_adjusted = adjusted
+      best_index = index
+
+  shadow = {
+    "enabled": bool(enabled),
+    "topK": len(window),
+    "anchorId": candidates[0]["id"],
+    "wouldBeAnchorId": candidates[best_index]["id"],
+    "wouldBeAnchorIndex": best_index,
+    "swapped": False,
+    "profileDeltas": candidates,
+  }
+  if not enabled or best_index == 0:
+    return {"reranked": reranked, "profileAnchor": shadow}
+  swapped = list(reranked)
+  swapped[0], swapped[best_index] = swapped[best_index], swapped[0]
+  shadow["swapped"] = True
+  return {"reranked": swapped, "profileAnchor": shadow}
+
+
 def _has_hard_topic_lock(hard_filters: list[dict[str, Any]] | None) -> bool:
   """사용자가 category/priceKrw를 명시적으로 잠갔는가 — 잠갔다면 랭크셋 전체가 on-topic."""
   for filter_delta in hard_filters or []:
@@ -891,8 +952,15 @@ def build_slice_result(
   hard_filters: list[dict[str, Any]] | None = None,
   extra_caveats: list[str] | None = None,
   top_n: int = 3,
+  taste_profile: dict[str, Any] | None = None,
+  profile_score_enabled: bool = False,
+  profile_explicit_attributes: frozenset[str] | set[str] | None = None,
 ) -> dict[str, Any]:
-  """floor → MMR → 3역할 → 구조화 근거 합성 (§5/§6 계약 검증 진입점)."""
+  """floor → MMR → (B7 anchor-only profile) → 3역할 → 구조화 근거 합성 (§5/§6 계약 검증 진입점).
+
+  ``taste_profile``은 floor·MMR·역할 함수의 입력이 아니다 — MMR이 끝난 뒤
+  select_anchor_with_profile 한 지점에서만 소비된다 (§7.3 구조적 격리).
+  """
   # A4 must run before floor/MMR.  In particular the hard-topic fallback below
   # may only draw from guarded rows; otherwise a rejected contradiction silently
   # returns without its conflict label.
@@ -912,6 +980,17 @@ def build_slice_result(
   # F17: 역할 배치는 상위 소수만 소비하는데 floor 통과 전체를 O(n³) 재랭킹하면
   # 카탈로그 확장(618→2천+) 시 지연이 직결된다 — 역할 수 대비 여유 있는 12로 캡.
   reranked = mmr_rerank(floored, lambda_=lambda_, top_n=max(12, top_n * 4))
+  profile_anchor = None
+  if taste_profile:
+    # B7: flag off(새도)면 wouldBeAnchor 계산·로깅만, on이면 anchor 스왑.
+    selection = select_anchor_with_profile(
+      reranked,
+      taste_profile,
+      enabled=profile_score_enabled,
+      explicit_attributes=frozenset(profile_explicit_attributes or ()),
+    )
+    reranked = selection["reranked"]
+    profile_anchor = selection["profileAnchor"]
   roled = assign_roles(reranked, top_n=top_n)
   products = [
     to_result_product(
@@ -932,6 +1011,7 @@ def build_slice_result(
     "topScoreGap": round(top_score_gap(reranked), 6),
     "lambda": lambda_,
     "sFloor": s_floor,
+    "profileAnchor": profile_anchor,
     "products": products,
   }
 

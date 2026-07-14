@@ -105,6 +105,12 @@ class Settings(BaseSettings):
   # 익명식별 RFC §2.1 — 클라이언트 anon token을 HMAC해 anon:v1:<digest> owner를 만들 서버 비밀키.
   # 미설정이면 anon owner를 만들 수 없어 익명 이벤트는 fail-open으로 건너뛴다.
   auradin_anon_token_secret: str | None = None
+  # B7 (§7.3) 최소 개인화 루프 — 기본 새도 모드: False면 profileScore를 계산·로깅만 하고
+  # 순위 무영향(wouldBeAnchor 세션 로그), True면 anchor-only 스왑 실행. diverse/discovery·floor 미적용.
+  auradin_profile_score_enabled: bool = False
+  # 배치 산출 user_taste_profile jsonl 경로 (scripts/build_auradin_taste_profiles.py 출력).
+  # 미설정이면 프로필 조회 자체가 없다 — 테이블 생성은 B7 비범위.
+  auradin_taste_profiles_path: str | None = None
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None

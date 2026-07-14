@@ -18,6 +18,7 @@ from .enrichment import enrich_question, enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
 from .report_profile import personal_color_to_soft_preferences
+from .taste_profile import get_taste_profile
 from .ranking import attribute_similarity, build_slice_result, normalized_brand, price_filter_label
 from .retrieval_service import FilterDeltaContractViolation, retrieve_and_rank
 
@@ -379,6 +380,25 @@ def _ranked_from_cache(state: dict[str, Any]) -> list[dict[str, Any]]:
   return rows
 
 
+def _profile_suppressed_attributes(state: dict[str, Any]) -> frozenset[str]:
+  """B7 §7.3 위계(프롬프트>리포트>프로필) — 세션 선호·하드필터가 이미 다루는 attribute 집합.
+
+  이 attribute들의 프로필 신호는 profile_raw_score에서 억제된다.
+  """
+  attributes: set[str] = set()
+  for preference in state.get("softPreferences") or []:
+    attribute = str(preference.get("attribute") or "").strip()
+    if attribute:
+      attributes.add(attribute)
+  for filter_delta in state.get("hardFilters") or []:
+    if str(filter_delta.get("op") or "").strip() in {"", "noop"}:
+      continue
+    attribute = str(filter_delta.get("attribute") or "").strip()
+    if attribute:
+      attributes.add(attribute)
+  return frozenset(attributes)
+
+
 def _build_result(
   state: dict[str, Any],
   ranked: list[dict[str, Any]],
@@ -390,6 +410,9 @@ def _build_result(
   # §5/§6: floor → MMR → 3역할 → 구조화 근거. 단일 shape = Top3 (§4). 세트/비교는 이후 단계.
   # lambda_override는 B6 similar의 일회성 λ=0.9 — 세션 mmrLambda 누적과 분리한다.
   merged_caveats = [*(_interpretation_caveats(state) or []), *(extra_caveats or [])]
+  # B7 §7.3: 프로필은 여기서 조회만 하고 build_slice_result의 anchor 선정 지점에만 전달된다.
+  # softPreferences에는 절대 주입하지 않는다(단일 설계 — 비협상).
+  taste_profile = get_taste_profile(str(state.get("ownerSubject") or ""), settings=settings)
   slice_result = build_slice_result(
     ranked,
     lambda_=lambda_override if lambda_override is not None else _session_lambda(state, settings),
@@ -397,7 +420,14 @@ def _build_result(
     hard_filters=state.get("hardFilters", []),
     extra_caveats=merged_caveats or None,
     top_n=3,
+    taste_profile=taste_profile,
+    profile_score_enabled=bool(getattr(settings, "auradin_profile_score_enabled", False)),
+    profile_explicit_attributes=_profile_suppressed_attributes(state),
   )
+  profile_anchor = slice_result.get("profileAnchor")
+  if profile_anchor:
+    # B7 새도 로깅 — flag off에서도 wouldBeAnchor를 세션 로그에 남긴다 (평가 사다리 ④).
+    state.setdefault("logs", []).append({"stage": "profileAnchor", **profile_anchor})
   products = [
     product
     for product in slice_result["products"]
