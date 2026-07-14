@@ -69,10 +69,7 @@ def is_purchasable(item: dict[str, Any]) -> bool:
   live_offer = item.get("liveOffer") if isinstance(item.get("liveOffer"), dict) else {}
   return bool(
     int(live_offer.get("priceKrw") or 0) > 0
-    and (
-      str(live_offer.get("purchaseUrl") or "").strip()
-      or str(live_offer.get("offerId") or "").strip()
-    )
+    and str(live_offer.get("purchaseUrl") or "").strip()
     and str(live_offer.get("imageUrl") or "").strip()
   )
 
@@ -113,3 +110,4 @@ def get_catalog() -> AuradinCatalog:
 
 def reset_catalog_cache() -> None:
   get_catalog.cache_clear()
+

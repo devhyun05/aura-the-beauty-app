@@ -34,7 +34,6 @@ import {
   OverlayPanelSection,
   OverlaySaveButton,
   OverlayTopBar,
-  useTransientToast,
 } from '../../../shared/ui';
 import {
   getMakeupFilterOptionState,
@@ -75,7 +74,7 @@ type MakeupFilterEditScreenProps = {
   onSave?: (
     savedContract?: FullFaceMakeupSavedContract,
     selectedMakeupFilterId?: string,
-  ) => void | Promise<void>;
+  ) => void;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
 };
 
@@ -256,9 +255,7 @@ function FullFaceMakeupFilterEditScreen({
   const filter = getDefaultMakeupFilter(arGuideData);
   const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
   const cameraSessionActive = useCameraSessionActive();
-  const [isSaving, setIsSaving] = useState(false);
   const [optionState, setOptionState] = useState<MakeupFilterOptionState>(getMakeupFilterOptionState());
-  const {showToast, toast} = useTransientToast(2200);
   const fullFaceEditState = useFullFaceMakeupEditState({sourceFrameMetadata});
   const {activeFullFaceControl, fullFaceRecipe, fullFaceState} = fullFaceEditState;
   const selectedColor = getMakeupFilterEditSelectedColor(
@@ -315,27 +312,16 @@ function FullFaceMakeupFilterEditScreen({
     );
   };
 
-  const handleSave = async () => {
-    if (isSaving) {
-      return;
-    }
-
+  const handleSave = () => {
     if (!isFullFaceMode) {
-      await onSave?.();
+      onSave?.();
       return;
     }
 
     postUnityMakeupRecipe(fullFaceRecipe);
-    setIsSaving(true);
-    try {
-      await onSave?.(
-        createFullFaceMakeupSavedContract({editState: fullFaceState, recipe: fullFaceRecipe}),
-      );
-    } catch {
-      showToast('메이크업 룩을 저장하지 못했어요. 다시 시도해 주세요.');
-    } finally {
-      setIsSaving(false);
-    }
+    onSave?.(
+      createFullFaceMakeupSavedContract({editState: fullFaceState, recipe: fullFaceRecipe}),
+    );
   };
 
   return (
@@ -367,8 +353,8 @@ function FullFaceMakeupFilterEditScreen({
           }
           rightSlot={
             <OverlayIconButton
-              accessibilityLabel={isSaving ? '현재 필터 저장 중' : '현재 필터 저장'}
-              onPress={isSaving ? undefined : () => void handleSave()}>
+              accessibilityLabel="현재 필터 저장"
+              onPress={handleSave}>
               <Save color={colors.white} size={iconSize.sm} strokeWidth={2} />
             </OverlayIconButton>
           }
@@ -471,7 +457,6 @@ function FullFaceMakeupFilterEditScreen({
           onPress={handleSave}
         />
       </BottomOverlayPanel>
-      {toast}
     </FullscreenOverlayScreen>
   );
 }

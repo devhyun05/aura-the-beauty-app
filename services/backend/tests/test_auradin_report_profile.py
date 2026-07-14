@@ -38,7 +38,6 @@ def test_soft_pref_is_never_a_hard_filter() -> None:
 
 def _client(**overrides) -> TestClient:
   clear_sessions()
-  overrides.setdefault("legacy_naver_product_search", True)
   return TestClient(create_app(Settings(database_url=None, **overrides)))
 
 

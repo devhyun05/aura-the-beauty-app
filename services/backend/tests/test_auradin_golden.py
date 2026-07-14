@@ -38,11 +38,7 @@ REASON_KEYS = {"matchedOn", "inferred", "caveat"}
 
 def _client(**settings_overrides) -> TestClient:
   clear_sessions()
-  return TestClient(create_app(Settings(
-    database_url=None,
-    legacy_naver_product_search=True,
-    **settings_overrides,
-  )))
+  return TestClient(create_app(Settings(database_url=None, **settings_overrides)))
 
 
 def _run_to_results(client: TestClient, prompt: str) -> tuple[str, dict]:

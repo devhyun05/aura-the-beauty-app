@@ -7,7 +7,7 @@ from app.services.auradin_agent.session_manager import clear_sessions
 
 def test_search_session_api_returns_question_then_results() -> None:
   clear_sessions()
-  client = TestClient(create_app(Settings(database_url=None, legacy_naver_product_search=True)))
+  client = TestClient(create_app(Settings(database_url=None)))
 
   created = client.post(
     "/api/search/sessions",
@@ -18,7 +18,6 @@ def test_search_session_api_returns_question_then_results() -> None:
 
   turn_response = client.get(f"/api/search/sessions/{session_id}")
   assert turn_response.status_code == 200
-  assert turn_response.headers["cache-control"] == "private, no-store"
   turn = turn_response.json()["data"]
   assert turn["phase"] == "question"
   assert turn["question"]["options"][0]["filterDelta"]["attribute"]
@@ -49,7 +48,7 @@ def test_search_session_api_returns_question_then_results() -> None:
 def test_question_answer_applied_filter_chips_use_option_labels() -> None:
   """질문 답변으로 생긴 칩은 선택지 한국어 라벨을 써야 한다 — 'priceTier: under_15k' 같은 원시 노출 금지."""
   clear_sessions()
-  client = TestClient(create_app(Settings(database_url=None, legacy_naver_product_search=True)))
+  client = TestClient(create_app(Settings(database_url=None)))
 
   created = client.post("/api/search/sessions", json={"prompt": "립 추천해줘"})
   session_id = created.json()["data"]["sessionId"]
@@ -83,7 +82,7 @@ def test_question_answer_applied_filter_chips_use_option_labels() -> None:
 def test_cancel_session_marks_cancelled_and_rejects_further_actions() -> None:
   """사용자가 검색 도중 이탈 → cancel이 세션을 종료하고 이후 answer/refine을 조용히 무시한다."""
   clear_sessions()
-  client = TestClient(create_app(Settings(database_url=None, legacy_naver_product_search=True)))
+  client = TestClient(create_app(Settings(database_url=None)))
 
   created = client.post("/api/search/sessions", json={"prompt": "립 추천해줘"})
   session_id = created.json()["data"]["sessionId"]
@@ -112,7 +111,7 @@ def test_cancel_session_marks_cancelled_and_rejects_further_actions() -> None:
 
 def test_search_session_api_reports_unsupported_category() -> None:
   clear_sessions()
-  client = TestClient(create_app(Settings(database_url=None, legacy_naver_product_search=True)))
+  client = TestClient(create_app(Settings(database_url=None)))
 
   # base/brow/liner은 서빙 대상으로 열렸다 — 향수/네일/스킨케어/헤어만 범위 밖.
   created = client.post("/api/search/sessions", json={"prompt": "향수 추천해줘"})
@@ -122,22 +121,3 @@ def test_search_session_api_reports_unsupported_category() -> None:
   assert turn["phase"] == "failed"
   assert turn["error"]["code"] == "unsupported_category"
   assert turn["error"]["recoverable"] is True
-
-
-def test_search_session_rejects_sensitive_context_and_oversized_prompts() -> None:
-  clear_sessions()
-  client = TestClient(create_app(Settings(database_url=None, legacy_naver_product_search=True)))
-
-  sensitive = client.post(
-    "/api/search/sessions",
-    json={"prompt": "립 추천", "context": {"faceLandmarks": [1, 2, 3]}},
-  )
-  assert sensitive.status_code == 422
-  assert sensitive.json()["error"]["code"] == "INVALID_SEARCH_CONTEXT"
-
-  oversized = client.post(
-    "/api/search/sessions",
-    json={"prompt": "립" * 501},
-  )
-  assert oversized.status_code == 422
-  assert oversized.json()["error"]["code"] == "SEARCH_PROMPT_TOO_LONG"

@@ -47,13 +47,13 @@ export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> =
     return profileSummaryRequest;
   }
 
-  profileSummaryRequest = getUserProfileFromService()
-    .then(async profile => {
-      const [beautyProfile, faceAnalysisReports, likedProducts] = await Promise.all([
-        getBeautyProfile(),
-        getFaceAnalysisReports({limit: 3}),
-        getLikedProductPreviews(3),
-      ]);
+  profileSummaryRequest = Promise.all([
+    getUserProfileFromService(),
+    getBeautyProfile(),
+    getFaceAnalysisReports({limit: 3}),
+    getLikedProductPreviews(3),
+  ])
+    .then(([profile, beautyProfile, faceAnalysisReports, likedProducts]) => {
       const summary: MyPageProfileSummary = {
         profile,
         beautyProfile,

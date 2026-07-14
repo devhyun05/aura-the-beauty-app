@@ -13,11 +13,6 @@ class AppDelegate: ExpoAppDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-#if DEBUG
-    // Fast Refresh stays available, but its blue "Refreshing..." banner must
-    // never cover the product UI on a physical-device development build.
-    RCTDevLoadingViewSetEnabled(false)
-#endif
     let delegate = ReactNativeDelegate()
     let factory = ExpoReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()

@@ -16,7 +16,6 @@ REASON_KEYS = {"matchedOn", "inferred", "caveat"}
 
 def _first_turn(prompt: str, **settings_overrides):
   clear_sessions()
-  settings_overrides.setdefault("legacy_naver_product_search", True)
   client = TestClient(create_app(Settings(database_url=None, **settings_overrides)))
   created = client.post("/api/search/sessions", json={"prompt": prompt})
   assert created.status_code == 200

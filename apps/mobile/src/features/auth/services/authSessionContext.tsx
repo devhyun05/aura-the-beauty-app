@@ -11,9 +11,6 @@
 import * as SecureStore from '../../../shared/services/localSecureStore';
 
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
-import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
-import {clearCachedUserProfile} from '../../../shared/services/userService';
-import {resetProductEventCollection} from '../../recommendation/services/productEventService';
 import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
 
@@ -137,15 +134,6 @@ export function AuthSessionProvider({
   const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
 
   const setSession = useCallback(async (nextSession: AuthSession | null) => {
-    const previousUserId = sessionRef.current?.user.id ?? null;
-    const nextUserId = nextSession?.user.id ?? null;
-
-    if (previousUserId !== nextUserId) {
-      resetProductEventCollection();
-      clearMyPageProfileSummaryCache();
-      await clearCachedUserProfile();
-    }
-
     sessionRef.current = nextSession;
     setSessionState(nextSession);
     await saveSessionToSecureStore(nextSession);
@@ -183,11 +171,6 @@ export function AuthSessionProvider({
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
-
-  useEffect(() => {
-    // Optional product events must never cross an account switch or logout.
-    resetProductEventCollection();
-  }, [session?.user.id]);
 
   useEffect(() => {
     setBackendAuthTokenProvider(() => getTokenFromSession(sessionRef.current));

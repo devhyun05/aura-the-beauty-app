@@ -381,7 +381,6 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
 
 export function MakeupFilterSaveCompleteRouteScreen({
   navigation,
-  route,
 }: RootScreenProps<'MakeupFilterSaveComplete'>) {
   const {savedMakeupLook, selectedRecommendedMakeupFilterId} = useNavigationFlowState();
 
@@ -400,15 +399,9 @@ export function MakeupFilterSaveCompleteRouteScreen({
 
   return (
     <MakeupFilterSaveCompleteScreen
-      onApplyNow={route.params?.arStyleId ? undefined : handleApplyNow}
+      onApplyNow={handleApplyNow}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
-      onViewMatchingProducts={route.params?.arStyleId
-        ? () => navigation.navigate('ProductRecommendation', {
-            arStyleId: route.params?.arStyleId,
-            initialSection: 'ar',
-          })
-        : undefined}
-      savedMakeupLookTitle={route.params?.arStyleId ? '저장한 AR 메이크업 룩' : savedMakeupLook?.title}
+      savedMakeupLookTitle={savedMakeupLook?.title}
     />
   );
 }

@@ -1,7 +1,4 @@
-import {
-  getHomeProductRecommendationRouteName,
-  getHomeRecommendedFilterMoreRouteName,
-} from './homeRoutes';
+import {getHomeRecommendedFilterMoreRouteName} from './homeRoutes';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -13,10 +10,4 @@ expectEqual(
   getHomeRecommendedFilterMoreRouteName(),
   'HomeFilterStore',
   'home recommended filter more route',
-);
-
-expectEqual(
-  getHomeProductRecommendationRouteName(),
-  'ProductRecommendation',
-  'home product recommendation opens the hub instead of Auradin',
 );

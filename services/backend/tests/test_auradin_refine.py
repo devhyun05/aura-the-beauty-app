@@ -13,7 +13,6 @@ def _client(**settings_overrides) -> TestClient:
   # 20260708 시드에선 '글리터' 상위가 동점이라 기본 θ에선 질문을 타므로, 즉답 종료를 강제(θ=0)해
   # 결과 세션을 확보한다(refine 로직 자체는 결정성과 무관).
   settings_overrides.setdefault("auradin_score_gap_threshold", 0.0)
-  settings_overrides.setdefault("legacy_naver_product_search", True)
   return TestClient(create_app(Settings(database_url=None, **settings_overrides)))
 
 

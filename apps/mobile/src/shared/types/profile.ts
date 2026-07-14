@@ -62,16 +62,11 @@ export type MakeupLookPreview = MakeupLook;
 
 export interface Product {
   id: string;
-  shadeId?: string | null;
   brandName: string;
   productName: string;
   price: number;
-  imageSource?: ImageSourcePropType;
+  imageSource: ImageSourcePropType;
   isLiked: boolean;
-  status?: 'active' | 'soldOut' | 'unavailable';
-  canUnlike?: boolean;
-  externalSource?: string | null;
-  purchaseUrl?: string | null;
 }
 
 export type LikedProductPreview = Product;

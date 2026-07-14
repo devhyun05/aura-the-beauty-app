@@ -8,7 +8,6 @@ import {
   productListScrollAxis,
   productRecommendationHeaderCopy,
 } from './ProductRecommendationScreen';
-import {isTrustedCatalogProductId} from '../services/productRecommendationService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -53,16 +52,6 @@ expectEqual(
   productListScrollAxis,
   'vertical',
   'product list scroll axis',
-);
-expectEqual(
-  isTrustedCatalogProductId('9d6421bb-b2a6-4c79-9ff5-2bc4fca87c85'),
-  true,
-  'trusted catalog UUID',
-);
-expectEqual(
-  isTrustedCatalogProductId('naver-1234567890'),
-  false,
-  'external shopping product is not trusted catalog',
 );
 
 <ProductRecommendationScreen />;

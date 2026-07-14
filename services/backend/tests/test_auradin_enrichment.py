@@ -32,7 +32,6 @@ PRODUCT = {
 
 def _client(**settings_overrides) -> TestClient:
   clear_sessions()
-  settings_overrides.setdefault("legacy_naver_product_search", True)
   return TestClient(create_app(Settings(database_url=None, **settings_overrides)))
 
 

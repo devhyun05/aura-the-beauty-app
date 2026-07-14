@@ -1,11 +1,11 @@
 import * as SecureStore from './localSecureStore';
 import type {ImageSourcePropType} from 'react-native';
 
-import {profileEditFieldsMock} from '../mocks/user.mock';
+import {beautyProfileMock, profileEditFieldsMock, userProfileMock} from '../mocks/user.mock';
 import type {BeautyProfile, ProfileEditField, UserProfile} from '../types/profile';
 import {getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
-const USER_PROFILE_STORAGE_KEY = 'aura.user.profile.v2';
+const USER_PROFILE_STORAGE_KEY = 'aura.user.profile.v1';
 const HIDDEN_PROFILE_EDIT_FIELD_IDS = new Set(['phone', 'interest']);
 const DEV_BACKEND_PROFILE_PLACEHOLDER_VALUES = new Set(['Local Dev', 'dev@example.com']);
 
@@ -34,39 +34,14 @@ type BackendUser = {
   name?: string | null;
   nickname?: string | null;
   phone?: string | null;
-  personalColor?: string | null;
-  personal_color?: string | null;
-  skinTone?: string | null;
-  skin_tone?: string | null;
-  skinType?: string | null;
-  skin_type?: string | null;
-  tags?: string[] | null;
 };
 
 type BackendUserResponse = {
   user?: BackendUser | null;
 };
 
-const EMPTY_USER_PROFILE: UserProfile = {
-  id: '',
-  name: '',
-  nickname: '',
-  phone: '',
-  email: '',
-  birthDate: '',
-  gender: '',
-  interest: '',
-};
-
-const EMPTY_BEAUTY_PROFILE: BeautyProfile = {
-  personalColor: '',
-  skinType: '',
-  skinTone: '',
-  tags: [],
-};
-
-let currentUserProfile: UserProfile = {...EMPTY_USER_PROFILE};
-let currentBeautyProfile: BeautyProfile = {...EMPTY_BEAUTY_PROFILE};
+let currentUserProfile: UserProfile = userProfileMock;
+let currentBeautyProfile: BeautyProfile = beautyProfileMock;
 
 function mapBackendGenderToProfile(gender: string | null | undefined): string | undefined {
   switch (gender) {
@@ -145,34 +120,13 @@ function mapBackendUserToProfile(
       backendUser.birthDate ??
       backendUser.birth_date ??
       fallbackProfile.birthDate,
-    email: resolveBackendProfileText(backendUser.email, fallbackProfile.email, ''),
+    email: resolveBackendProfileText(backendUser.email, fallbackProfile.email, userProfileMock.email),
     gender: mapBackendGenderToProfile(backendUser.gender) ?? fallbackProfile.gender,
     id: backendUser.id ?? fallbackProfile.id,
     interest: backendUser.interest ?? fallbackProfile.interest,
-    name: resolveBackendProfileText(backendUser.name, fallbackProfile.name, ''),
-    nickname: resolveBackendProfileText(backendUser.nickname, fallbackProfile.nickname, ''),
+    name: resolveBackendProfileText(backendUser.name, fallbackProfile.name, userProfileMock.name),
+    nickname: resolveBackendProfileText(backendUser.nickname, fallbackProfile.nickname, userProfileMock.nickname),
     phone: backendUser.phone ?? fallbackProfile.phone,
-  };
-}
-
-function mapBackendUserToBeautyProfile(
-  backendUser: BackendUser,
-  fallbackProfile: BeautyProfile,
-): BeautyProfile {
-  return {
-    personalColor:
-      backendUser.personalColor ??
-      backendUser.personal_color ??
-      fallbackProfile.personalColor,
-    skinTone:
-      backendUser.skinTone ??
-      backendUser.skin_tone ??
-      fallbackProfile.skinTone,
-    skinType:
-      backendUser.skinType ??
-      backendUser.skin_type ??
-      fallbackProfile.skinType,
-    tags: backendUser.tags ?? fallbackProfile.tags,
   };
 }
 
@@ -202,7 +156,7 @@ function getProfileEditFieldsForProfile(profile: UserProfile): ProfileEditField[
     .filter((field) => !HIDDEN_PROFILE_EDIT_FIELD_IDS.has(field.id))
     .map((field) => ({
       ...field,
-      value: getProfileFieldValue(profile, field.id),
+      value: getProfileFieldValue(profile, field.id) || field.value,
     }));
 }
 
@@ -275,12 +229,7 @@ async function fetchBackendUserProfile(
 
   const {user} = await requestBackendJson<BackendUserResponse>('/users/me');
 
-  if (!user) {
-    return null;
-  }
-
-  currentBeautyProfile = mapBackendUserToBeautyProfile(user, currentBeautyProfile);
-  return mapBackendUserToProfile(user, fallbackProfile);
+  return user ? mapBackendUserToProfile(user, fallbackProfile) : null;
 }
 
 async function updateBackendUserProfile(
@@ -366,10 +315,10 @@ export const updateBeautyProfile = async (
 };
 
 export async function clearCachedUserProfile(): Promise<void> {
-  currentUserProfile = {...EMPTY_USER_PROFILE};
+  currentUserProfile = {...userProfileMock};
   currentBeautyProfile = {
-    ...EMPTY_BEAUTY_PROFILE,
-    tags: [],
+    ...beautyProfileMock,
+    tags: [...beautyProfileMock.tags],
   };
   await SecureStore.deleteItemAsync(USER_PROFILE_STORAGE_KEY);
 }
