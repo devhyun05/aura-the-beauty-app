@@ -64,7 +64,7 @@ function inferKnownDimensions(prompt: string): MakeupQuestionDimension[] {
   if (/출근|결혼식|데이트|약속|사진|콘서트|페스티벌|야구장/.test(normalized)) known.push('occasion');
   if (/우아|힙|차분|생기|무드|분위기/.test(normalized)) known.push('mood');
   if (/과감|자연스럽|또렷|선명/.test(normalized)) known.push('boldness');
-  if (/\b5분\b|빠르|최소 단계/.test(normalized)) known.push('timeSkill');
+  if (/5분|빠르|최소 단계/.test(normalized)) known.push('timeSkill');
 
   return known;
 }

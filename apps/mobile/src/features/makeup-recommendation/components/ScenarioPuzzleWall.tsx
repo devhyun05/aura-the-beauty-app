@@ -56,7 +56,7 @@ export function ScenarioPuzzleWall({onSelect, scenarios}: {
         return (
           <View
             key={`measure-${scenario.id}`}
-            onLayout={event => setMeasurements(previous => previous[scenario.id]
+            onLayout={event => setMeasurements(previous => scenario.id in previous
               ? previous
               : {...previous, [scenario.id]: event.nativeEvent.layout.height})}
             pointerEvents="none"

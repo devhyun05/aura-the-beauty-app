@@ -18,6 +18,14 @@ const placements = packScenarioPuzzle({
     {id: 'next', columnSpan: 4, rowSpan: 1},
   ],
 });
+
+expectEqual(
+  JSON.stringify(packScenarioPuzzle({columnCount: 0, items: [{id: 'empty', columnSpan: 2, rowSpan: 1}]})),
+  '[]',
+  'zero columns return no placements',
+);
+const clamped = packScenarioPuzzle({columnCount: 3, items: [{id: 'wide', columnSpan: 99, rowSpan: 0}]});
+expectEqual(JSON.stringify(clamped[0]), JSON.stringify({id: 'wide', columnSpan: 3, rowSpan: 1, column: 0, row: 0}), 'invalid spans are clamped');
 const byId = Object.fromEntries(placements.map(item => [item.id, item]));
 expectEqual(byId['gap-filler'].row, 1, 'short-card gap is filled');
 expectEqual(byId['gap-filler'].column, 7, 'gap filler uses right-side hole');
