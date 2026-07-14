@@ -45,14 +45,19 @@ def build_index(
     dimension = max(16, min(settings.embedding_dimension, 1024))
     embedding_client = HashEmbeddingClient(dimension=dimension)
     model_label = "hash-fallback"
-  elif backend == "bedrock":
+  elif backend in {"embedding", "bedrock"}:
     embedding_client = build_embedding_client(settings)
     dimension = settings.embedding_dimension
     model_label = settings.effective_embedding_model_id or "bedrock"
     if not isinstance(embedding_client, BedrockEmbeddingClient):
+      if backend == "embedding":
+        raise RuntimeError(
+          "--backend embedding requires configured AWS credentials or IAM role; "
+          "refusing to build a hash fallback index",
+        )
       model_label = "hash-fallback-no-aws"
   else:
-    raise ValueError("backend must be either hash or bedrock")
+    raise ValueError("backend must be hash, embedding, or bedrock")
 
   index = EmbeddingVectorIndex.build(
     chunks,
@@ -83,7 +88,7 @@ def main() -> None:
     description="Build the Auradin MVP product knowledge embedding vector index.",
   )
   parser.add_argument("--run-date", required=True)
-  parser.add_argument("--backend", choices=["hash", "bedrock"], default="hash")
+  parser.add_argument("--backend", choices=["hash", "embedding", "bedrock"], default="hash")
   parser.add_argument("--catalog-path", type=Path, required=True)
   parser.add_argument("--chunks-path", type=Path, required=True)
   parser.add_argument("--output-path", "--output", dest="output_path", type=Path, required=True)
