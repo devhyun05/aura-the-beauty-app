@@ -148,6 +148,8 @@ export type AuradinCandidateProduct = {
   purchaseUrl?: string;
   imageUrl?: string;
   category?: string;
+  // 서버 찜(like) 어댑터가 소비하는 숫자 가격 — priceText는 표시용이라 별도 보존.
+  priceKrw?: number;
 };
 
 export type AuradinSearchPhase = 'searching' | 'question' | 'results' | 'failed' | 'expired';

@@ -207,6 +207,12 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
   const matchSummary =
     reason.matchedOn.join(' · ') || (product.tags ?? []).filter(Boolean).join(' · ') || '조건에 가까운 후보';
   const imageUrl = product.imageUrl ?? undefined;
+  const priceKrw =
+    typeof product.price === 'number'
+      ? product.price
+      : typeof product.priceKrw === 'number'
+        ? product.priceKrw
+        : undefined;
   const role = VALID_ROLES.includes(product.role as AuradinProductRole)
     ? (product.role as AuradinProductRole)
     : undefined;
@@ -229,6 +235,7 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
     purchaseUrl: product.purchaseUrl ?? undefined,
     imageUrl,
     category: product.category ?? undefined,
+    priceKrw,
   };
 }
 

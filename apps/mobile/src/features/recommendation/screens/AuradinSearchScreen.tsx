@@ -30,6 +30,11 @@ import {
   pollAuradinSearchTurn,
   refineAuradinSearch,
 } from '../services/auradinSearchService';
+import {
+  fetchAuradinSavedProducts,
+  persistAuradinSave,
+  removeAuradinSave,
+} from '../services/auradinSavedProducts';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import type {
   AuradinCandidateProduct,
@@ -287,11 +292,36 @@ export function AuradinSearchScreen({
     setPhase('detail');
   };
 
+  // R1 게이트 1: 보관함 서버 영속화 — 마운트 시 서버 찜 목록으로 복원(재마운트 소실 방지).
+  // 진행 중 세션 상태와 무관한 read-only 시드라 phase 머신을 건드리지 않는다.
+  useEffect(() => {
+    let alive = true;
+    void fetchAuradinSavedProducts().then((products) => {
+      if (!alive || products.length === 0) {
+        return;
+      }
+      setSaved((current) => {
+        const currentIds = new Set(current.map((item) => item.id));
+        return [...current, ...products.filter((item) => !currentIds.has(item.id))];
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const toggleSave = (product: AuradinCandidateProduct) => {
+    const exists = saved.some((item) => item.id === product.id);
+    // R1 게이트 1: 레거시 찜 API 재사용(user_product_likes) — best-effort, 로컬 상태가 즉답.
+    if (exists) {
+      void removeAuradinSave(product.id);
+    } else {
+      void persistAuradinSave(product);
+    }
     setSaved((current) =>
-      current.some((item) => item.id === product.id)
+      exists
         ? current.filter((item) => item.id !== product.id)
-        : [...current, product],
+        : [...current.filter((item) => item.id !== product.id), product],
     );
   };
 
