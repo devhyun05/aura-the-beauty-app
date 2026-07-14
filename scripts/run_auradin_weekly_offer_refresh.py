@@ -221,15 +221,27 @@ def load_review_decisions(
   csv_path: Path,
   template_rows: list[dict[str, str]],
 ) -> dict[str, str]:
-  """검토 CSV에서 decision을 읽는다 — 비결정 열이 원본 큐와 다르면 거부."""
+  """검토 CSV에서 decision을 읽는다 — 완결성(교차 리뷰 [중]) + 비결정 열 무결성 검증.
+
+  헤더는 원본과 완전 일치, 행 집합은 원본 큐와 정확히 1:1(누락·추가·중복 금지),
+  모든 행은 명시적 terminal decision과 reviewedBy를 가져야 한다 — 불완전한 검토가
+  조용히 승격 단계로 흘러가는 경로를 차단한다(keep_old도 명시적으로 기입).
+  """
   template_by_id = {row["catalogItemId"]: row for row in template_rows}
   decisions: dict[str, str] = {}
+  seen_ids: set[str] = set()
   with csv_path.open(encoding="utf-8", newline="") as handle:
-    for row in csv.DictReader(handle):
+    reader = csv.DictReader(handle)
+    if reader.fieldnames != REVIEW_COLUMNS:
+      raise RunnerAbort(f"review CSV header mismatch: {reader.fieldnames}")
+    for row in reader:
       item_id = (row.get("catalogItemId") or "").strip()
       template = template_by_id.get(item_id)
       if template is None:
         raise RunnerAbort(f"review row not in original queue: {item_id}")
+      if item_id in seen_ids:
+        raise RunnerAbort(f"duplicate review row: {item_id}")
+      seen_ids.add(item_id)
       for column in REVIEW_COLUMNS:
         if column in REVIEW_EDITABLE_COLUMNS:
           continue
@@ -239,8 +251,17 @@ def load_review_decisions(
             f"{sorted(REVIEW_EDITABLE_COLUMNS)} may be edited",
           )
       decision = (row.get("decision") or "").strip()
-      if decision:
-        decisions[item_id] = decision
+      if decision not in {"accept_new", "keep_old", "mark_stale"}:
+        raise RunnerAbort(
+          f"review row {item_id} needs an explicit terminal decision "
+          "(accept_new|keep_old|mark_stale) — blank is not accepted on apply",
+        )
+      if not (row.get("reviewedBy") or "").strip():
+        raise RunnerAbort(f"review row {item_id} needs reviewedBy")
+      decisions[item_id] = decision
+  missing = set(template_by_id) - seen_ids
+  if missing:
+    raise RunnerAbort(f"review CSV missing {len(missing)} queue rows: {sorted(missing)[:3]}")
   return decisions
 
 
@@ -251,6 +272,11 @@ def assert_a6_row_set_invariant(
   # A6는 행 추가·삭제가 설계에 없다 — ID 집합·행수 완전 동일이 아니면 abort.
   old_ids = [str(r.get("catalogItemId") or r.get("id") or "") for r in old_rows]
   new_ids = [str(r.get("catalogItemId") or r.get("id") or "") for r in new_rows]
+  for label, ids in (("old", old_ids), ("new", new_ids)):
+    if any(not item_id for item_id in ids):
+      raise RunnerAbort(f"A6 row-set invariant violated: empty catalogItemId in {label} rows")
+    if len(ids) != len(set(ids)):
+      raise RunnerAbort(f"A6 row-set invariant violated: duplicate catalogItemId in {label} rows")
   if len(old_ids) != len(new_ids) or sorted(old_ids) != sorted(new_ids):
     raise RunnerAbort(
       f"A6 row-set invariant violated: {len(old_ids)} -> {len(new_ids)} rows",
@@ -440,13 +466,29 @@ def main(
     if not args.resume_run and fetcher is None:
       _load_local_env()  # cron에서도 source 없이 동작 — 기존 수집기 관례(.env 2곳, 기존 env 우선)
 
+    sealed_meta: dict[str, Any] | None = None
     if args.resume_run:
+      # 재개 봉인(교차 리뷰 [치명]): 결과 SHA뿐 아니라 원 실행의 날짜·입력 seed·active
+      # manifest·매칭 파라미터 전부에 결속한다 — 과거 결과 번들을 새 날짜/새 seed 위에
+      # 재생해 "새 스냅샷"으로 오인시키는 경로를 차단.
       run_id = args.resume_run
       run_dir = offer_root / f"run_{run_id}"
-      meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+      sealed_meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+      meta = sealed_meta
       results_path = run_dir / "results.jsonl"
       if _sha256_file(results_path) != meta["shas"]["results.jsonl"]:
         raise RunnerAbort("resume refused: results.jsonl SHA mismatch with sealed meta")
+      if str(meta.get("runDate")) != args.run_date:
+        raise RunnerAbort(
+          f"resume refused: run date {args.run_date} != sealed {meta.get('runDate')}",
+        )
+      sealed_seed = Path(str(meta.get("seedInput") or ""))
+      if not sealed_seed.is_file() or _sha256_file(sealed_seed) != meta.get("inputSeedSha"):
+        raise RunnerAbort("resume refused: input seed missing or SHA mismatch with sealed meta")
+      if meta.get("activeManifestSha") != active["sha256"]:
+        raise RunnerAbort("resume refused: active manifest changed since sealed run")
+      seed_input = sealed_seed
+      seed_rows = _read_jsonl(seed_input)
       result_rows = _read_jsonl(results_path)
       stale_state = meta.get("staleStateBefore", stale_state)
       run_ts = meta.get("runTs", run_ts)
@@ -471,7 +513,14 @@ def main(
 
     matches = results_to_matches(result_rows)
     diff_summary = build_diff_summary(seed_rows, matches)
-    _write_json(run_dir / "diff.json", diff_summary)
+    if sealed_meta is not None and (run_dir / "diff.json").is_file():
+      # 봉인 산출물은 재개 시 덮어쓰지 않는다 — 결정론 재계산 결과가 봉인과 다르면 거부.
+      if _canonical_json_sha(diff_summary) != _canonical_json_sha(
+        json.loads((run_dir / "diff.json").read_text(encoding="utf-8")),
+      ):
+        raise RunnerAbort("resume refused: recomputed diff diverges from sealed diff.json")
+    else:
+      _write_json(run_dir / "diff.json", diff_summary)
 
     template_rows = build_review_csv_rows(
       apply_refresh_to_seed(seed_rows, matches, run_ts=run_ts, stale_state=stale_state,
@@ -488,15 +537,23 @@ def main(
       seed_rows, matches, run_ts=run_ts, stale_state=stale_state, review_decisions=decisions,
     )
 
-    meta = {
-      "runId": run_id, "runDate": args.run_date, "runTs": run_ts,
-      "seedInput": str(seed_input), "activeManifestSha": active["sha256"],
-      "staleStateBefore": stale_state,
-      "shas": {"results.jsonl": _sha256_file(run_dir / "results.jsonl")},
-    }
-    if (run_dir / "review_template.csv").exists():
-      meta["shas"]["review_template.csv"] = _sha256_file(run_dir / "review_template.csv")
-    meta["shas"]["diff.json"] = _sha256_file(run_dir / "diff.json")
+    if sealed_meta is None:
+      meta = {
+        "runId": run_id, "runDate": args.run_date, "runTs": run_ts,
+        "seedInput": str(seed_input), "inputSeedSha": _sha256_file(seed_input),
+        "activeManifestSha": active["sha256"],
+        "margin": args.margin, "minScore": args.min_score,
+        "staleStateBefore": stale_state,
+        "shas": {"results.jsonl": _sha256_file(run_dir / "results.jsonl")},
+      }
+      if (run_dir / "review_template.csv").exists():
+        meta["shas"]["review_template.csv"] = _sha256_file(run_dir / "review_template.csv")
+      meta["shas"]["diff.json"] = _sha256_file(run_dir / "diff.json")
+    else:
+      # 재개는 봉인 필드를 재작성하지 않는다 — 재개 기록만 append.
+      meta.setdefault("resume", []).append(
+        {"resumedAtTs": run_ts, "appliedReview": str(args.apply_review or "")},
+      )
 
     if args.until in {"refetch", "gate"}:
       _write_json(run_dir / "meta.json", meta)

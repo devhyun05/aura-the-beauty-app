@@ -79,7 +79,7 @@ cp data/auradin/offer_refresh/run_<runId>/review_template.csv \
   --until golden
 ```
 
-재개는 봉인된 `results.jsonl`과 템플릿을 다시 검증하며 네이버 API를 재호출하지 않는다. SHA 불일치, 비결정 열 변경이 있으면 중단한다. **decision이 공란인 미결정 행은 keep_old(안전 기본값)로 처리**되고 다음 run의 검토 큐에 다시 올라온다.
+재개는 봉인된 번들 전체를 다시 검증하며 네이버 API를 재호출하지 않는다 — `results.jsonl` SHA뿐 아니라 **원 실행의 runDate·입력 seed SHA·active manifest SHA**가 하나라도 다르면 중단한다(과거 결과를 새 날짜·새 seed 위에 재생하는 경로 차단). `--apply-review` 시에는 **헤더 완전 일치 + 원본 큐와 1:1 행 집합 + 모든 행의 명시적 decision(accept_new/keep_old/mark_stale — keep_old도 직접 기입)과 reviewedBy**를 요구한다. 비결정 열 변경, 행 누락·중복, 공란 decision은 전부 중단 사유다.
 
 ## 5. 승인 및 activate
 
