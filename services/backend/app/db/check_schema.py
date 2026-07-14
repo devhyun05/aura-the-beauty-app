@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
   "media_upload_sessions",
   "photo_captures",
   "analysis_reports",
+  "analysis_stage_runs",
   "saved_makeup_styles",
   "products",
   "user_product_likes",

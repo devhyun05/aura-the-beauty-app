@@ -209,6 +209,25 @@ create table if not exists analysis_reports (
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
 
+create table if not exists analysis_stage_runs (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references analysis_reports(id) on delete cascade,
+  stage text not null check (stage in ('ai_measurement', 'ai_perception', 'ai_consulting')),
+  status text not null check (status in ('pending', 'processing', 'completed', 'partial', 'failed')),
+  schema_version text not null,
+  prompt_version text not null,
+  model text not null,
+  input_hash text not null,
+  normalized_output jsonb not null default '{}'::jsonb,
+  raw_response jsonb not null default '{}'::jsonb,
+  error_payload jsonb not null default '{}'::jsonb,
+  attempt_count integer not null default 1 check (attempt_count >= 1),
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists hair_analyses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -924,6 +943,13 @@ create index if not exists idx_account_deletion_tombstones_deleted_at on account
 create index if not exists idx_media_assets_owner_created on media_assets (owner_user_id, created_at desc);
 create index if not exists idx_photo_captures_user_type_created on photo_captures (user_id, capture_type, created_at desc);
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);
+create index if not exists idx_analysis_stage_runs_report_stage_created
+  on analysis_stage_runs (report_id, stage, created_at desc);
+create index if not exists idx_analysis_stage_runs_completed_cache
+  on analysis_stage_runs (stage, input_hash, schema_version, prompt_version, model)
+  where status = 'completed';
+create unique index if not exists uq_analysis_stage_runs_one_processing
+  on analysis_stage_runs (report_id, stage) where status = 'processing';
 create index if not exists idx_hair_analyses_user_created on hair_analyses (user_id, created_at desc);
 create index if not exists idx_hair_analyses_status_created on hair_analyses (status, created_at);
 create index if not exists idx_hair_analyses_expires on hair_analyses (expires_at) where status <> 'expired';
@@ -988,6 +1014,11 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_analysis_reports_updated_at on analysis_reports;
 create trigger trg_analysis_reports_updated_at
 before update on analysis_reports
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_analysis_stage_runs_updated_at on analysis_stage_runs;
+create trigger trg_analysis_stage_runs_updated_at
+before update on analysis_stage_runs
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_hair_analyses_updated_at on hair_analyses;
