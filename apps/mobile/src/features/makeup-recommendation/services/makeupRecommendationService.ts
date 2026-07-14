@@ -404,16 +404,18 @@ export function refineMakeupRecommendation(
 
 function mapBackendQuestions(questions: readonly BackendQuestion[]): MakeupRecommendationQuestion[] {
   return questions
-    .filter(question => question.id?.trim() && question.title?.trim() && question.options?.length)
+    .filter(question =>
+      question.id?.trim()
+      && question.title?.trim()
+      && question.options?.length === 4
+      && question.options.every(option => option.id?.trim() && option.label?.trim()),
+    )
     .slice(0, 3)
     .map((question, index) => ({
       id: question.id,
       dimension: QUESTION_PRIORITY[index] ?? 'mood',
       title: question.title.trim(),
-      options: question.options
-        .filter(option => option.id?.trim() && option.label?.trim())
-        .slice(0, 6)
-        .map(option => ({id: option.id, label: option.label.trim()})),
+      options: question.options.map(option => ({id: option.id, label: option.label.trim()})),
     }));
 }
 

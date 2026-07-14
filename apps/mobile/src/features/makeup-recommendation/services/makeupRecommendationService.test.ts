@@ -317,7 +317,7 @@ async function expectGeneratedQuestionFailureIsSurfaced() {
   expectEqual((error as Error).message, 'backend unavailable', 'question failure is not replaced by local fallback');
 }
 
-async function expectGeneratedQuestionsPreserveSixOptions() {
+async function expectGeneratedQuestionsRejectSixOptions() {
   async function sixOptionBackendRequest<T>(): Promise<T> {
     return {
       questions: [{
@@ -331,13 +331,23 @@ async function expectGeneratedQuestionsPreserveSixOptions() {
     } as T;
   }
 
-  const session = await startGeneratedMakeupRecommendation(
-    {prompt: '긴 하루 뒤 약속', useProfile: false},
-    [],
-    sixOptionBackendRequest,
-  );
+  let error: unknown;
+  try {
+    await startGeneratedMakeupRecommendation(
+      {prompt: '긴 하루 뒤 약속', useProfile: false},
+      [],
+      sixOptionBackendRequest,
+    );
+  } catch (caught) {
+    error = caught;
+  }
 
-  expectEqual(session.questions[0].options.length, 6, 'all six backend options remain visible');
+  expectEqual(error instanceof Error, true, 'six-option backend question is rejected');
+  expectEqual(
+    (error as Error).message,
+    '추천 질문을 준비하지 못했어요. 잠시 후 다시 시도해주세요.',
+    'malformed option count is surfaced instead of displayed',
+  );
 }
 
 async function expectAuthFailureDoesNotMasqueradeAsFallback() {
@@ -516,7 +526,7 @@ async function expectGeneratedRecommendationFailureIsSurfaced() {
 
 async function runAsyncContracts() {
   await expectGeneratedQuestionFailureIsSurfaced();
-  await expectGeneratedQuestionsPreserveSixOptions();
+  await expectGeneratedQuestionsRejectSixOptions();
   await expectAuthFailureDoesNotMasqueradeAsFallback();
   await expectAbortSignalIsForwarded();
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();

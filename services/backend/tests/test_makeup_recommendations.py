@@ -712,7 +712,7 @@ async def test_makeup_generators_route_to_configured_model_ids(monkeypatch: pyte
             {"id": "soft", "label": "은은하게"},
             {"id": "clear", "label": "또렷하게"},
             {"id": "bold", "label": "과감하게"},
-            {"id": "ai", "label": "AI가 골라줘"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
           ],
         }],
       }
@@ -795,7 +795,15 @@ async def test_question_prompt_asks_for_story_direction_instead_of_makeup_specs(
   assert "평소보다 얼마나 과감해지고 싶은지" in captured["system"]
   assert "시간과 난이도를 어느 정도 감수할지" in captured["system"]
   assert "색상, 질감, 강조 부위" in captured["system"]
+  assert "정확히 4개" in captured["system"]
+  assert "서로 배타적" in captured["system"]
+  assert "피부톤" in captured["system"]
+  assert "언더톤" in captured["system"]
+  assert "퍼스널컬러" in captured["system"]
+  assert "밝은 톤/중간 톤/어두운 톤/쿨 톤/웜 톤" in captured["system"]
+  assert "재미" in captured["system"]
   assert "공항 출국 레전드" in captured["prompt"]
+  assert "exactly 4 options" in captured["prompt"]
 
 
 @pytest.mark.asyncio
@@ -1195,6 +1203,59 @@ async def test_questions_reject_malformed_option_counts(monkeypatch: pytest.Monk
 
   with pytest.raises(AppError) as exc_info:
     await generate_questions(Settings(), "퇴근 후 약속", ["차분"])
+
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
+
+
+@pytest.mark.asyncio
+async def test_questions_reject_more_than_four_options(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "questions": [
+        {
+          "id": "story_direction",
+          "title": "오늘의 반전은 어느 쪽이에요?",
+          "options": [
+            {"id": "quiet", "label": "조용히 시선 끌기"},
+            {"id": "entrance", "label": "등장부터 장면 만들기"},
+            {"id": "afterimage", "label": "돌아선 뒤 여운 남기기"},
+            {"id": "closeup", "label": "가까이서 반전 보이기"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_questions(Settings(), "퇴근 후 약속", ["반전"])
+
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
+
+
+@pytest.mark.asyncio
+async def test_questions_reject_skin_tone_and_undertone_axes(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "questions": [
+        {
+          "id": "skin_tone",
+          "title": "피부톤은 어디에 가까워요?",
+          "options": [
+            {"id": "light", "label": "밝은 톤"},
+            {"id": "cool", "label": "쿨 톤"},
+            {"id": "warm", "label": "웜 톤"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_questions(Settings(), "공항 출국 레전드", ["사진"])
 
   assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
 

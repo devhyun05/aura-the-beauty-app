@@ -6,6 +6,21 @@ from pydantic import Field, model_validator
 from app.schemas.base import CamelModel
 
 
+FORBIDDEN_QUESTION_AXES = (
+  "피부톤",
+  "피부색",
+  "피부밝기",
+  "언더톤",
+  "퍼스널컬러",
+  "얼굴형",
+  "쿨톤",
+  "웜톤",
+  "밝은톤",
+  "중간톤",
+  "어두운톤",
+)
+
+
 class MakeupScenarioRequest(CamelModel):
   count: int = Field(default=8, ge=3, le=12)
   exclude_texts: list[str] = Field(default_factory=list, alias="excludeTexts", max_length=100)
@@ -43,7 +58,7 @@ class GeneratedQuestionOption(CamelModel):
 class GeneratedQuestion(CamelModel):
   id: str = Field(min_length=1, max_length=80)
   title: str = Field(min_length=1, max_length=160)
-  options: list[GeneratedQuestionOption] = Field(min_length=4, max_length=6)
+  options: list[GeneratedQuestionOption] = Field(min_length=4, max_length=4)
 
   @model_validator(mode="after")
   def includes_delegate_option_and_unique_choices(self):
@@ -51,9 +66,12 @@ class GeneratedQuestion(CamelModel):
       raise ValueError("Question option ids must be unique.")
     if len({option.label.casefold() for option in self.options}) != len(self.options):
       raise ValueError("Question option labels must be unique.")
-    delegate_words = ("ai", "골라", "맡길", "알아서", "추천")
-    if not any(any(word in option.label.casefold() for word in delegate_words) for option in self.options):
-      raise ValueError("Every question must include an AI delegation option.")
+    delegate = self.options[-1]
+    if delegate.id != "ai_pick" or delegate.label != "AI가 골라줘":
+      raise ValueError("The last option must be the exact AI delegation option.")
+    content = "".join([self.title, *[option.label for option in self.options]]).replace(" ", "").casefold()
+    if any(axis in content for axis in FORBIDDEN_QUESTION_AXES):
+      raise ValueError("Questions must not ask users to classify skin tone, undertone, or face shape.")
     return self
 
 
