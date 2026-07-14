@@ -338,10 +338,25 @@ export function ProductRecommendationScreen({
   }, [isReportListLoaded, recommendationReportId, selectedLookIndex, sourceReportId]);
 
   useFocusEffect(useCallback(() => {
+    let isMounted = true;
     if (hasFocusedHubRef.current) setHubRefreshKey(current => current + 1);
     else hasFocusedHubRef.current = true;
-    if (!isLegacyExpanded) return undefined;
-    return loadRecommendations();
+    getLikedProducts()
+      .then(nextProducts => {
+        if (isMounted) {
+          setLikedProductIds(new Set(nextProducts.map(product => product.id)));
+        }
+      })
+      .catch(error => {
+        console.info('[aura:products] likes:load-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    const cleanupRecommendations = isLegacyExpanded ? loadRecommendations() : undefined;
+    return () => {
+      isMounted = false;
+      cleanupRecommendations?.();
+    };
   }, [isLegacyExpanded, loadRecommendations]));
 
   useEffect(() => {
@@ -480,6 +495,7 @@ export function ProductRecommendationScreen({
           ? {label: '보기', onPress: onOpenLikedProducts}
           : undefined);
       }
+      setHubRefreshKey(current => current + 1);
     } catch {
       setLikedProductIds(likedProductIds);
     }
@@ -811,7 +827,13 @@ function LookSummaryCard({
   return (
     <View style={styles.makeupLookCard}>
       <View style={[styles.makeupLookImageFrame, {height: imageSize, width: imageSize}]}>
-        <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
+        {makeupLook.imageUrl ? (
+          <Image resizeMode="cover" source={makeupLook.imageSource} style={styles.makeupLookImage} />
+        ) : (
+          <View style={[styles.makeupLookImage, styles.missingImagePlaceholder]}>
+            <ImagePlus color={colors.textTertiary} size={iconSize.sm} strokeWidth={1.8} />
+          </View>
+        )}
         <View style={styles.makeupLookCheck}>
           <CheckCircle2 color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
         </View>
@@ -905,11 +927,17 @@ function LookPickerModal({
                   key={`${option.index}-${option.title}`}
                   onPress={() => onSelectLookOption(option)}
                   style={isSelected ? styles.lookOptionCardActive : styles.lookOptionCard}>
-                  <Image
-                    resizeMode="cover"
-                    source={option.imageSource}
-                    style={styles.lookOptionImage}
-                  />
+                  {option.imageUrl ? (
+                    <Image
+                      resizeMode="cover"
+                      source={option.imageSource}
+                      style={styles.lookOptionImage}
+                    />
+                  ) : (
+                    <View style={[styles.lookOptionImage, styles.missingImagePlaceholder]}>
+                      <ImagePlus color={colors.textTertiary} size={iconSize.sm} strokeWidth={1.8} />
+                    </View>
+                  )}
                   <Text numberOfLines={1} style={styles.lookOptionTitle}>
                     {option.title}
                   </Text>
@@ -1296,6 +1324,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     width: 74,
+  },
+  missingImagePlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    justifyContent: 'center',
   },
   makeupLookTags: {
     flexDirection: 'row',

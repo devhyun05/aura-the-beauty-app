@@ -82,14 +82,14 @@ export function ProductRecommendationHubContent({
     getPersonalizedRecommendations()
       .then(data => {if (requestRefs.current.personalized === requestId) setPersonalized({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.personalized === requestId) setPersonalized(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '개인화 추천을 불러오지 못했어요.'});});
-  }, []);
+  }, [refreshKey]);
   const loadCohort = useCallback(() => {
     const requestId = ++requestRefs.current.cohort;
     setCohort(current => current.data ? current : {status: 'loading'});
     getCohortRecommendations()
       .then(data => {if (requestRefs.current.cohort === requestId) setCohort({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.cohort === requestId) setCohort(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '컬러 취향 추천을 불러오지 못했어요.'});});
-  }, []);
+  }, [refreshKey]);
   const openLookPicker = useCallback(() => {
     const requestId = ++requestRefs.current.looks;
     setLookPickerVisible(true);
@@ -207,11 +207,12 @@ function queuePreferenceEvent(section: 'personalized' | 'cohort', data: Personal
 }
 
 function PersonalizedBody({section, state, onRetry, likedProductIds, onOpenProduct, onOpenSettings, onToggleLike}: {section: 'personalized' | 'cohort'; state: SectionLoad<PersonalizedRecommendationData>; onRetry: () => void; likedProductIds: Set<string>; onOpenProduct: (product: CatalogProduct) => void; onOpenSettings: () => void; onToggleLike: (product: CatalogProduct) => void}) {
+  const minimumCohortSize = state.data?.minimumCohortSize ?? 5;
   if (state.status === 'loading') return <RecommendationSectionState kind="loading" message={section === 'cohort' ? '익명 컬러 취향 모수를 확인하고 있어요.' : '동의한 활동에서 취향을 정리하고 있어요.'} />;
   if (state.status === 'error') return <RecommendationSectionState kind="error" message={state.message ?? '추천을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={onRetry} />;
   if (state.data?.status === 'personalizationOff') return <RecommendationSectionState kind="off" message={section === 'cohort' ? '유사 취향 추천 동의가 꺼져 있어요.' : '좋아요·검색·클릭 기반 개인화 동의가 꺼져 있어요.'} actionLabel="설정하기" onAction={onOpenSettings} />;
   if (state.data?.status === 'control') return <RecommendationSectionState kind="off" message="추천 품질을 검증하는 비교 그룹이에요." />;
-  if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? '같은 컬러 취향의 실제 동의 사용자가 100명 이상 모이면 추천을 시작해요.' : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
+  if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? `같은 컬러 취향의 동의 사용자가 ${minimumCohortSize}명 이상 모이면 추천을 시작해요.` : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
   const items = state.data.items.map(item => ({...item, viewerState: {liked: item.canLike === false ? false : likedProductIds.has(item.productId)}}));
   return <View style={styles.stack}>{state.data.description ? <Text style={styles.meta}>{state.data.description}</Text> : null}{section === 'cohort' && state.data.cohortSizeBand ? <Text style={styles.meta}>익명 집계 모수 {state.data.cohortSizeBand}</Text> : null}<ProductRail items={items} onImpression={(product, position) => queuePreferenceEvent(section, state.data, 'impression', product, position)} onOpen={(product, position) => {queuePreferenceEvent(section, state.data, 'product_open', product, position); onOpenProduct(product);}} onToggleLike={onToggleLike} /></View>;
 }

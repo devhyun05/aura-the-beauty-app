@@ -94,8 +94,16 @@ requireContract(
 requireContract(
   hubContent.includes('actionLabel="설정하기"') &&
     recommendationScreen.includes('hasFocusedHubRef') &&
-    recommendationScreen.includes('setHubRefreshKey(current => current + 1)'),
-  'personalization must expose consent settings and refresh shelves once per page re-entry.',
+    recommendationScreen.includes('getLikedProducts()') &&
+    recommendationScreen.includes('setLikedProductIds(new Set(nextProducts.map(product => product.id)))') &&
+    recommendationScreen.includes('setHubRefreshKey(current => current + 1)') &&
+    hubContent.includes('}, [refreshKey]);'),
+  'modular shelves must load shared likes, expose consent settings, and refresh after re-entry or like changes.',
+);
+requireContract(
+  hubContent.includes('state.data?.minimumCohortSize ?? 5') &&
+    !hubContent.includes('100명 이상'),
+  'the cohort empty state must use the configured five-user local threshold instead of hard-coding 100 users.',
 );
 requireContract(
   homeRoutes.includes("getHomeProductRecommendationRouteName(): 'ProductRecommendation'") &&
