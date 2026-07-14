@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -13,7 +13,6 @@ from app.schemas.auradin_search import (
   AnswerSearchSessionRequest,
   CreateSearchSessionRequest,
   RefineSearchSessionRequest,
-  SimilarSearchSessionRequest,
 )
 from app.services.auradin_agent.session_manager import (
   ANSWER_ACCEPTED,
@@ -30,9 +29,6 @@ from app.services.auradin_agent.session_manager import (
   MUTATION_VERSION_CONFLICT,
   REFINE_ACCEPTED,
   REFINE_DIALS,
-  SIMILAR_ACCEPTED,
-  SIMILAR_INTENTS,
-  SIMILAR_UNKNOWN_PRODUCT,
   SessionVersionConflictError,
   IdempotencyKeyReuseError,
   IdempotentSessionExpiredError,
@@ -41,13 +37,22 @@ from app.services.auradin_agent.session_manager import (
   create_session_persisted,
   get_session_persisted,
   refine_session_persisted,
-  similar_session_persisted,
   to_search_turn,
+)
+from app.services.auradin_agent.event_logger import (
+  ANON_TOKEN_HEADER,
+  derive_event_owner,
+  record_search_turn_events,
 )
 from app.services.auradin_agent.retrieval_service import FilterDeltaContractViolation
 
 
 router = APIRouter(prefix="/search/sessions", tags=["search"])
+
+
+def _event_owner(request: Request, auth: AuthContext, settings: Settings) -> str | None:
+  # A5 서버사이드 수집 — dev fallback subject면 None이 되어 기록을 fail-open으로 건너뛴다.
+  return derive_event_owner(auth, settings, anon_token=request.headers.get(ANON_TOKEN_HEADER))
 
 # A9 판정 → HTTP 매핑 (계획 Stage 0-3). 전송 오류는 세션 state에 저장하지 않는다.
 _ANSWER_ERROR_MAP = {
@@ -63,6 +68,7 @@ _ANSWER_ERROR_MAP = {
 @router.post("")
 async def create_search_session(
   payload: Annotated[CreateSearchSessionRequest, Body()],
+  request: Request,
   auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
@@ -108,6 +114,15 @@ async def create_search_session(
       "FILTER_DELTA_CONTRACT_VIOLATION",
       "검색 조건 처리 계약을 확인해야 해요.",
     )
+  # A5 §7.2 수집 지점 — state["logs"]에 이미 있는 결정의 영속화(session_start + 즉답 시 impression).
+  # 기록은 부수 작업: state/version을 바꾸지 않고, 실패해도 응답을 막지 않는다(fail-open).
+  await record_search_turn_events(
+    state,
+    trigger="create",
+    owner_subject=_event_owner(request, auth, settings),
+    settings=settings,
+    db=db,
+  )
   return success(
     {
       "sessionId": state["sessionId"],
@@ -143,6 +158,7 @@ async def get_search_session(
 async def answer_search_session(
   session_id: str,
   payload: Annotated[AnswerSearchSessionRequest, Body()],
+  request: Request,
   auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
@@ -167,6 +183,18 @@ async def answer_search_session(
 
   # duplicate = 멱등 재시도 no-op — 최초 accepted와 같은 200 ack (클라이언트는 폴링 지속)
   if outcome in {ANSWER_ACCEPTED, ANSWER_DUPLICATE}:
+    if outcome == ANSWER_ACCEPTED:
+      # A5 수집 지점 — question_answered(+결과 도달 시 impression). duplicate는 기록하지 않지만,
+      # 기록해도 결정론적 client_event_id가 (owner, client_event_id) 유니크에서 dedup된다.
+      await record_search_turn_events(
+        state,
+        trigger="answer",
+        owner_subject=_event_owner(request, auth, settings),
+        settings=settings,
+        db=db,
+        question_id=question_id,
+        option_id=option_id,
+      )
     return success(
       {
         "sessionId": session_id,
@@ -212,6 +240,7 @@ async def cancel_search_session(
 async def refine_search_session(
   session_id: str,
   payload: Annotated[RefineSearchSessionRequest, Body()],
+  request: Request,
   auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
@@ -245,59 +274,16 @@ async def refine_search_session(
       "지금은 조건을 다듬을 수 없는 상태예요. 결과 화면에서 다시 시도해 주세요.",
     )
 
-  return success(
-    {
-      "sessionId": session_id,
-      "phase": "searching",
-      "retryAfterMs": 350,
-    },
-  )
-
-
-@router.post("/{session_id}/similar")
-async def similar_search_session(
-  session_id: str,
-  payload: Annotated[SimilarSearchSessionRequest, Body()],
-  auth: AuthContext = Depends(get_current_user),
-  settings: Settings = Depends(get_settings),
-  db: Database = Depends(get_database),
-) -> dict:
-  # B6 §10.3-2: 신규 검색이 아니라 rankedCache 내 λ=0.9 재랭킹 — refine과 같은
-  # ack/poll 계약(200 + searching + retryAfterMs)이며, M1 phase 계약(results에서만)을 따른다.
-  product_id = str(payload.productId or "").strip()
-  if not product_id:
-    raise AppError(400, "PRODUCT_REQUIRED", "productId is required.")
-  intent = str(payload.intent or "").strip() or None
-  if intent and intent not in SIMILAR_INTENTS:
-    raise AppError(
-      400,
-      "INVALID_SIMILAR_INTENT",
-      "intent must be 'keep_color', 'cheaper' or 'other_brand'.",
-    )
-
-  outcome, state = await similar_session_persisted(
-    session_id,
-    product_id=product_id,
-    intent=intent,
-    owner_subject=auth.subject,
+  # A5 수집 지점 — refine_dial/refine_prompt(+새 결과 impression). raw prompt 원문은 싣지 않는다.
+  await record_search_turn_events(
+    state,
+    trigger="refine",
+    owner_subject=_event_owner(request, auth, settings),
     settings=settings,
     db=db,
+    dial=dial,
+    refined_with_prompt=bool(prompt),
   )
-  if state is None:
-    raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
-  if outcome != SIMILAR_ACCEPTED:
-    if outcome == SIMILAR_UNKNOWN_PRODUCT:
-      raise AppError(422, "UNKNOWN_PRODUCT", "기준 제품을 후보 카탈로그에서 찾을 수 없어요.")
-    if outcome == FILTER_DELTA_CONTRACT_VIOLATION:
-      raise AppError(500, "FILTER_DELTA_CONTRACT_VIOLATION", "검색 조건 처리 계약을 확인해야 해요.")
-    if outcome == MUTATION_VERSION_CONFLICT:
-      raise AppError(409, "CONCURRENT_UPDATE", "다른 요청이 먼저 처리됐어요. 세션을 다시 조회해 주세요.")
-    raise AppError(
-      409,
-      "SESSION_NOT_SIMILARABLE",
-      "지금은 비슷한 제품을 찾을 수 없는 상태예요. 결과 화면에서 다시 시도해 주세요.",
-    )
-
   return success(
     {
       "sessionId": session_id,

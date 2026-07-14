@@ -1,4 +1,4 @@
-from app.db.check_schema import EXPECTED_TABLES, build_schema_report
+from app.db.check_schema import EXPECTED_COLUMNS, EXPECTED_TABLES, build_schema_report
 from app.db.init_db import POST_SCHEMA_MIGRATIONS, SCHEMA_VERSION, get_schema_path
 from app.db.seed_db import SEED_VERSION, get_seed_path
 
@@ -63,6 +63,7 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
         "idempotency_expires_at",
       },
       "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+      "auradin_events": set(EXPECTED_COLUMNS["auradin_events"]),
     },
   )
 
@@ -77,6 +78,15 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     column_contracts={
       "auradin_search_sessions.owner_subject": {"is_nullable": "YES", "column_default": None},
       "auradin_search_sessions.version": {"is_nullable": "NO", "column_default": None},
+      # A5 auradin_events 계약 컬럼은 유효값으로 채워 세션 계약 위반만 검출한다.
+      "auradin_events.client_event_id": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.owner_subject": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.event_type": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.schema_version": {"is_nullable": "NO", "column_default": "1"},
+      "auradin_events.data_manifest_id": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.release_manifest_id": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.occurred_at": {"is_nullable": "NO", "column_default": None},
+      "auradin_events.received_at": {"is_nullable": "NO", "column_default": "now()"},
     },
     constraints=set(),
     indexes={
@@ -92,8 +102,16 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     "auradin_search_sessions.owner_subject.nullability",
     "auradin_search_sessions.version.default",
   ]
-  assert report["missingConstraints"] == ["chk_auradin_sessions_idempotency_fields"]
+  assert report["missingConstraints"] == [
+    "auradin_events_event_type_check",
+    "auradin_events_owner_subject_client_event_id_key",
+    "chk_auradin_sessions_idempotency_fields",
+  ]
   assert report["invalidIndexes"] == [
+    "idx_auradin_events_manifest",
+    "idx_auradin_events_owner_time",
+    "idx_auradin_events_received",
+    "idx_auradin_events_session",
     "idx_auradin_sessions_idempotency_expires",
     "uq_auradin_sessions_owner_client_request",
   ]
@@ -107,6 +125,15 @@ def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
       "chk_auradin_sessions_idempotency_fields": (
         "check (((client_request_id is null) = (request_fingerprint is null)) "
         "or ((client_request_id is null) = (idempotency_expires_at is null)))"
+      ),
+      "auradin_events_event_type_check": (
+        "check ((event_type = any (array['session_start'::text, 'question_answered'::text, "
+        "'impression'::text, 'product_open'::text, 'save'::text, 'unsave'::text, "
+        "'purchase_click'::text, 'refine_dial'::text, 'refine_prompt'::text, "
+        "'hide'::text, 'unhide'::text])))"
+      ),
+      "auradin_events_owner_subject_client_event_id_key": (
+        "unique (owner_subject, client_event_id)"
       ),
     },
   )

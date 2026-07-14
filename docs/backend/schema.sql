@@ -343,6 +343,38 @@ comment on table auradin_search_sessions is
   'client_request_id/request_fingerprint/idempotency_expires_at: A9 create 멱등성 (retention은 세션 TTL과 별개), '
   'version: mutator CAS.';
 
+create table if not exists auradin_events (
+  id bigserial primary key,
+  client_event_id text not null,           -- 재시도 멱등성 — 유니크는 (owner_subject, client_event_id) 복합
+                                           -- (클라이언트 생성 ID는 사용자 간 충돌 가능)
+  schema_version smallint not null default 1,
+  owner_subject text not null,             -- 익명 식별 계약 확정 후 사용 (dev fallback 공용 subject 금지)
+  session_id text, turn_id text, result_set_id text,   -- 세션·턴·결과셋 연결 (만료 후에도 이벤트 잔존)
+  event_type text not null check (event_type in (
+    'session_start','question_answered','impression','product_open',
+    'save','unsave','purchase_click','refine_dial','refine_prompt','hide','unhide')),
+  product_id text, category text, rank int, role text, match_rate int,
+  data_manifest_id text not null,           -- 귀속 정본 (Data Manifest)
+  release_manifest_id text not null,        -- 귀속 정본 (Release Manifest)
+  catalog_run_date text, ranker_version text,  -- 조회 편의용 중복 컬럼 (정본은 manifest ID)
+  payload jsonb,                            -- scoreSnapshot(components), filterDelta, dial 등 구조화 값만.
+                                            -- **raw query 원문은 저장하지 않는다** — 파싱된 filterDelta/softPreferences로 대체
+                                            -- (파서 개선용 원문 수집은 별도 opt-in 트랙). 앱 버전/플랫폼/locale/동의도 payload에.
+  occurred_at timestamptz not null,         -- 클라이언트 발생 시각
+  received_at timestamptz not null default now(),  -- 서버 수신 시각
+  experiment_id text, variant text,         -- Future Extension: nullable 예약 (B7 A/B 시작 시 사용)
+  unique (owner_subject, client_event_id)
+);
+
+create index if not exists idx_auradin_events_owner_time on auradin_events (owner_subject, occurred_at desc);
+create index if not exists idx_auradin_events_session on auradin_events (session_id);
+create index if not exists idx_auradin_events_manifest on auradin_events (data_manifest_id);
+create index if not exists idx_auradin_events_received on auradin_events (received_at);
+
+comment on table auradin_events is
+  'A5 (schema.sql:auradin-events-v1) — §7.2 이벤트 로깅. payload는 allowlist 구조화 값만(raw query 원문 금지). '
+  '보존: received_at 인덱스 기반 주기 배치 DELETE(비파티션 MVP). 사용자 삭제 시 이벤트와 파생 user_taste_profile을 한 트랜잭션으로 삭제.';
+
 create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,

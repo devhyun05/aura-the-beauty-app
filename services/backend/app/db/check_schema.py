@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
   "products",
   "user_product_likes",
   "auradin_search_sessions",
+  "auradin_events",
   "product_recommendation_runs",
   "ar_filters",
   "user_ar_filter_states",
@@ -72,11 +73,44 @@ EXPECTED_COLUMNS = {
     "idempotency_expires_at",
   },
   "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
+  # A5 (schema.sql:auradin-events-v1) — §7.2 이벤트 스키마 정본
+  "auradin_events": {
+    "client_event_id",
+    "schema_version",
+    "owner_subject",
+    "session_id",
+    "turn_id",
+    "result_set_id",
+    "event_type",
+    "product_id",
+    "category",
+    "rank",
+    "role",
+    "match_rate",
+    "data_manifest_id",
+    "release_manifest_id",
+    "catalog_run_date",
+    "ranker_version",
+    "payload",
+    "occurred_at",
+    "received_at",
+    "experiment_id",
+    "variant",
+  },
 }
 
 EXPECTED_COLUMN_CONTRACTS = {
   "auradin_search_sessions.owner_subject": {"is_nullable": "NO"},
   "auradin_search_sessions.version": {"is_nullable": "NO", "default_contains": "0"},
+  # A5 — MVP 필수 계약 필드(멱등성·귀속·시간)는 소급 추가 불가라 NOT NULL을 검증한다.
+  "auradin_events.client_event_id": {"is_nullable": "NO"},
+  "auradin_events.owner_subject": {"is_nullable": "NO"},
+  "auradin_events.event_type": {"is_nullable": "NO"},
+  "auradin_events.schema_version": {"is_nullable": "NO", "default_contains": "1"},
+  "auradin_events.data_manifest_id": {"is_nullable": "NO"},
+  "auradin_events.release_manifest_id": {"is_nullable": "NO"},
+  "auradin_events.occurred_at": {"is_nullable": "NO"},
+  "auradin_events.received_at": {"is_nullable": "NO", "default_contains": "now"},
 }
 
 EXPECTED_CONSTRAINT_CONTRACTS = {
@@ -84,6 +118,26 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "(client_request_id is null) = (request_fingerprint is null)",
     "(client_request_id is null) = (idempotency_expires_at is null)",
     " and ",
+  ),
+  # A5 — 이벤트 타입 정본 11종 enum (§7.2 SQL이 정본)
+  "auradin_events_event_type_check": (
+    "'session_start'",
+    "'question_answered'",
+    "'impression'",
+    "'product_open'",
+    "'save'",
+    "'unsave'",
+    "'purchase_click'",
+    "'refine_dial'",
+    "'refine_prompt'",
+    "'hide'",
+    "'unhide'",
+  ),
+  # A5 — 재시도 멱등성 유니크는 전역 ID가 아니라 (owner_subject, client_event_id) 복합
+  "auradin_events_owner_subject_client_event_id_key": (
+    "unique",
+    "owner_subject",
+    "client_event_id",
   ),
 }
 
@@ -99,6 +153,11 @@ EXPECTED_INDEX_CONTRACTS = {
     "idempotency_expires_at",
     "where (idempotency_expires_at is not null)",
   ),
+  # A5 — §7.2 인덱스 4종
+  "idx_auradin_events_owner_time": ("owner_subject", "occurred_at"),
+  "idx_auradin_events_session": ("session_id",),
+  "idx_auradin_events_manifest": ("data_manifest_id",),
+  "idx_auradin_events_received": ("received_at",),
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
@@ -150,7 +209,11 @@ async def fetch_constraints(connection: asyncpg.Connection) -> dict[str, str]:
     """
     select conname, pg_get_constraintdef(oid) as definition
     from pg_constraint
-    where conrelid = 'public.auradin_search_sessions'::regclass
+    where conrelid in (
+      select oid from pg_class
+      where relname in ('auradin_search_sessions', 'auradin_events')
+        and relnamespace = 'public'::regnamespace
+    )
     """,
   )
   return {str(row["conname"]): str(row["definition"]).lower() for row in rows}

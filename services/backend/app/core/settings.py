@@ -96,6 +96,15 @@ class Settings(BaseSettings):
   auradin_question_copy_enabled: bool = True
   auradin_live_discovery_enabled: bool = True  # 발견 슬롯 = Tier2 라이브 주력 (§5, 큐레이션은 폴백)
   auradin_enrich_timeout_seconds: float = 12.0  # enrich 전체 상한 — 초과 시 fallback으로 서빙
+  # A5 (§7.2) 이벤트 로깅 — write feature flag. 기본 OFF: 익명식별 RFC 승인·Release Manifest 준비 전
+  # 수집 시작 금지(D8). 기록 실패는 어떤 경우에도 추천 응답을 막지 않는다(fail-open).
+  auradin_events_enabled: bool = False
+  # Release Manifest 귀속 정본 — 배포 파이프라인이 앱 커밋 SHA(또는 release manifest id)를 주입.
+  # 미설정이면 이벤트에 "unknown"으로 기록된다 (M2 Release Manifest 착지 전 임시).
+  auradin_release_manifest_id: str | None = None
+  # 익명식별 RFC §2.1 — 클라이언트 anon token을 HMAC해 anon:v1:<digest> owner를 만들 서버 비밀키.
+  # 미설정이면 anon owner를 만들 수 없어 익명 이벤트는 fail-open으로 건너뛴다.
+  auradin_anon_token_secret: str | None = None
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None
