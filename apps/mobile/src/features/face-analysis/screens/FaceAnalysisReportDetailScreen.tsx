@@ -72,7 +72,7 @@ type FaceAnalysisReportDetailScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
   bottomOverlayHeight?: number;
-  // 세션 내 ARKit 라이브 측정으로 얻은 3D 프로필(온디바이스, 정규화 5지표).
+  // 세션 내 ARKit 라이브 측정으로 얻은 3D 프로필(온디바이스, 정규화 11지표).
   // 과거 보고서(id 조회)나 측정 skip/실패면 null — 섹션을 렌더하지 않는다.
   face3d?: Face3DProfile | null;
   // 세션 내 촬영에서 온디바이스로 계산한 2D 얼굴 기하 지표(로컬 전용).

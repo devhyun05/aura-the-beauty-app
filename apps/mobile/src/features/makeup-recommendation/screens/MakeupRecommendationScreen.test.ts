@@ -1,13 +1,8 @@
 import {
   getQuestionActionMode,
   getQuestionProgressSegments,
-  formatMakeupRecommendationHistoryDate,
   makeupRecommendationDiscoveryCopy,
   makeupRecommendationResultRoleLabels,
-  makeupRecommendationImageStatusCopy,
-  makeupRecommendationFallbackCopy,
-  makeupRecommendationHistoryCopy,
-  makeupRecommendationReportStatusCopy,
   shouldHandleMakeupRecommendationBack,
   toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
@@ -27,11 +22,6 @@ expectEqual(
   makeupRecommendationDiscoveryCopy.refresh,
   '새로 보기',
   'refresh copy',
-);
-expectEqual(
-  makeupRecommendationDiscoveryCopy.scenarioLoadError,
-  '새 카드를 더 만들지 못했어요. 잠시 후 다시 눌러주세요.',
-  'scenario load error copy',
 );
 expectEqual(makeupRecommendationDiscoveryCopy.profile, '내 분석 결과 반영', 'profile copy');
 expectEqual(
@@ -60,24 +50,6 @@ expectEqual(
   'discovery label',
 );
 expectEqual(
-  makeupRecommendationImageStatusCopy.failedAction,
-  '이미지 다시 만들기',
-  'failed image retry action',
-);
-expectEqual(
-  makeupRecommendationFallbackCopy.retryAction,
-  'AI 추천 다시 연결하기',
-  'local fallback retry action',
-);
-expectEqual(makeupRecommendationHistoryCopy.title, '지난 추천', 'history title');
-expectEqual(makeupRecommendationReportStatusCopy.saved, '보고서 저장됨', 'saved report status');
-expectEqual(makeupRecommendationReportStatusCopy.temporary, '임시 추천', 'temporary report status');
-expectEqual(
-  formatMakeupRecommendationHistoryDate('2026-07-14T12:34:56Z'),
-  '2026. 07. 14.',
-  'history date format',
-);
-expectEqual(
   shouldHandleMakeupRecommendationBack('discovery'),
   false,
   'discovery back exits route',
@@ -91,11 +63,6 @@ expectEqual(
   shouldHandleMakeupRecommendationBack('results'),
   true,
   'results back returns to discovery',
-);
-expectEqual(
-  shouldHandleMakeupRecommendationBack('history'),
-  true,
-  'history back returns to discovery',
 );
 expectEqual(
   getQuestionProgressSegments({currentQuestionIndex: 1, questionCount: 3}).join(','),

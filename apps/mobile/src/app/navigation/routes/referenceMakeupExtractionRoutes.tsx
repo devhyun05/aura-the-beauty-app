@@ -16,6 +16,11 @@ import {
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {createRecommendedMakeupSavedContract} from '../../../features/ar/services/recommendedMakeupEditService';
+import {
+  createSavedArLookClientRequestId,
+  saveArLook,
+} from '../../../features/ar/services/savedArLookService';
 import {
   getReferenceMakeupExtractionDataSync,
   runReferenceMakeupExtraction,
@@ -35,6 +40,7 @@ import {
   prependSavedMakeupLooks,
   type MakeupFilterSaveSettings,
 } from '../../../features/reference-makeup-extraction/services/makeupFilterSaveModel';
+import {getSavedArLookProductRecommendationRouteParams} from './arRouteActions';
 
 type HeaderShareAction = {
   cb: () => void;
@@ -324,12 +330,26 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
   );
   const [saveSettings, setSaveSettings] =
     useState<MakeupFilterSaveSettings>(initialSaveSettings);
+  const [saveError, setSaveError] = useState('');
+  const isSavingRef = React.useRef(false);
+  const saveRequestIdRef = React.useRef<string | null>(null);
+  const recommendedSavedContract = useMemo(
+    () =>
+      recommendedFilter
+        ? createRecommendedMakeupSavedContract(recommendedFilter)
+        : null,
+    [recommendedFilter],
+  );
 
   useEffect(() => {
     setSaveSettings(initialSaveSettings);
   }, [initialSaveSettings]);
 
-  const handleSave = (settings = saveSettings) => {
+  const handleSave = async (settings = saveSettings) => {
+    if (isSavingRef.current) {
+      return;
+    }
+
     const baseSavedLook = recommendedFilter
       ? mapMakeupFilterToSavedLook(recommendedFilter)
       : buildSavedMakeupLook(photo);
@@ -339,6 +359,35 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     });
 
     if (savedLooks.length === 0) {
+      return;
+    }
+
+    if (recommendedSavedContract) {
+      isSavingRef.current = true;
+      setSaveError('');
+
+      try {
+        const clientRequestId =
+          saveRequestIdRef.current ?? createSavedArLookClientRequestId();
+        saveRequestIdRef.current = clientRequestId;
+        const savedStyle = await saveArLook(
+          recommendedSavedContract,
+          clientRequestId,
+        );
+
+        setSavedMakeupLook(savedLooks[0]);
+        setSavedMakeupLooks(currentSavedLooks =>
+          prependSavedMakeupLooks(currentSavedLooks, savedLooks),
+        );
+        navigation.replace(
+          'ProductRecommendation',
+          getSavedArLookProductRecommendationRouteParams(savedStyle.id),
+        );
+      } catch {
+        setSaveError('저장하지 못했어요. 연결을 확인하고 다시 시도해 주세요.');
+      } finally {
+        isSavingRef.current = false;
+      }
       return;
     }
 
@@ -366,13 +415,13 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     <DetailRouteChrome
       routeName="MakeupFilterSave"
       onBack={handleBack}
-      onDone={() => handleSave()}>
+      onDone={() => void handleSave()}>
       <MakeupFilterSaveScreen
         imageSource={saveScreenData.imageSource}
-        onSave={handleSave}
+        onSave={settings => void handleSave(settings)}
         onSettingsChange={setSaveSettings}
         settings={saveSettings}
-        summaryDescription={saveScreenData.summaryDescription}
+        summaryDescription={saveError || saveScreenData.summaryDescription}
         summaryTitle={saveScreenData.summaryTitle}
       />
     </DetailRouteChrome>
@@ -381,8 +430,10 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
 
 export function MakeupFilterSaveCompleteRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'MakeupFilterSaveComplete'>) {
   const {savedMakeupLook, selectedRecommendedMakeupFilterId} = useNavigationFlowState();
+  const arStyleId = route.params?.arStyleId;
 
   const handleApplyNow = () => {
     if (selectedRecommendedMakeupFilterId) {
@@ -399,9 +450,16 @@ export function MakeupFilterSaveCompleteRouteScreen({
 
   return (
     <MakeupFilterSaveCompleteScreen
-      onApplyNow={handleApplyNow}
+      onApplyNow={arStyleId ? undefined : handleApplyNow}
       onGoToProfile={() => navigateMainTab(navigation, 'ProfileTab')}
-      savedMakeupLookTitle={savedMakeupLook?.title}
+      onViewMatchingProducts={arStyleId
+        ? () =>
+            navigation.navigate(
+              'ProductRecommendation',
+              getSavedArLookProductRecommendationRouteParams(arStyleId),
+            )
+        : undefined}
+      savedMakeupLookTitle={arStyleId ? '저장한 AR 메이크업 룩' : savedMakeupLook?.title}
     />
   );
 }

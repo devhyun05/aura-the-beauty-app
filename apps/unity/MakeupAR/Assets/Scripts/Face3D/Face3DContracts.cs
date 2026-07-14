@@ -9,7 +9,8 @@ namespace Aura.Face3D
 {
     /// <summary>
     /// Stable names shared by the lab app and the embedded main-app integration.
-    /// The algorithm remains provisional until a real-device semantic map is calibrated.
+    /// Semantic indices are versioned and approval-gated. Values are face-scale-normalized
+    /// product proxies, not absolute millimeters or clinical measurements.
     /// </summary>
     public static class Face3DContract
     {

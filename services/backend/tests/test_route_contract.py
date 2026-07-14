@@ -165,8 +165,9 @@ def test_products_recommendations_returns_mobile_contract_without_database() -> 
   body = response.json()
   assert body["data"]["userNickname"] == "고객"
   assert body["data"]["tabs"][0] == {"id": "all", "label": "전체"}
-  assert body["data"]["products"] == []
-  assert body["meta"]["source"] == "fallback"
+  assert body["data"]["products"]
+  assert {product["externalSource"] for product in body["data"]["products"]} == {"auradin_catalog"}
+  assert body["meta"]["source"] == "auradin_catalog"
 
 
 class ARFilterCatalogDatabase:

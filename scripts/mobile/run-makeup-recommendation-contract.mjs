@@ -13,6 +13,10 @@ const tests = [
   'features/makeup-recommendation/services/makeupRecommendationService.test.ts',
   'features/makeup-recommendation/components/scenarioPuzzleLayout.test.ts',
   'features/makeup-recommendation/screens/MakeupRecommendationScreen.test.ts',
+  'features/ar/services/recommendedMakeupEditService.test.ts',
+  'features/ar/services/savedArLookService.test.ts',
+  'app/navigation/routes/makeupRecommendationRouteActions.test.ts',
+  'app/navigation/routes/arRouteActions.test.ts',
 ];
 
 function run(command, args) {

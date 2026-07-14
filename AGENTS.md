@@ -85,7 +85,8 @@ install, run, and verify a device measurement in one pass. Each step lists the f
 
 ### Verify the measurement (arm capture BEFORE the run)
 - The app appends every Face3D event (including `face3d_analyzed` with frame counts and the
-  5 metrics) to `Documents/face3d-runtime-evidence/events.jsonl` when `__DEV__` is true.
+  11 G2 metrics when available; legacy G1 profiles contain 5) to
+  `Documents/face3d-runtime-evidence/events.jsonl` when `__DEV__` is true.
 - Set up result capture BEFORE asking for a measurement, so the user only has to run it once:
   - **WiFi (no USB) via Hermes debugger:** while the app is foregrounded and connected to
     Metro, `curl http://localhost:8081/json/list` returns a `webSocketDebuggerUrl`. Open a

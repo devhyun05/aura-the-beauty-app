@@ -4,9 +4,9 @@ import {
   MakeupRecommendationScreen,
   type MakeupRecommendationScreenHandle,
 } from '../../../features/makeup-recommendation';
-import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
+import {getMakeupRecommendationARFilterRouteParams} from './makeupRecommendationRouteActions';
 import type {RootScreenProps} from './routeUtils';
 
 export function MakeupRecommendationRouteScreen({
@@ -33,7 +33,10 @@ export function MakeupRecommendationRouteScreen({
     >
       <MakeupRecommendationScreen
         onApplyAR={look =>
-          navigation.navigate('ARFilter', getRecommendedFilterRouteParams(look.arFilterId))
+          navigation.navigate(
+            'ARFilter',
+            getMakeupRecommendationARFilterRouteParams(look.arFilterId),
+          )
         }
         personalColor={selectedFaceAnalysisReport?.personalColor}
         ref={screenRef}

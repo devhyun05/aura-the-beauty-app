@@ -13,10 +13,10 @@ from app.core.settings import Settings, get_settings
 from app.db.session import database
 from app.services.consulting_schema import ensure_consulting_runtime_schema
 from app.services.account_deletion import ensure_account_deletion_schema
+from app.services.face_analysis_schema import ensure_face_analysis_schema
 from app.services.media_deletion import ensure_media_deletion_schema
 from app.services.hair_schema import ensure_hair_schema
-from app.services.face_analysis_schema import ensure_face_analysis_schema
-from app.services.makeup_recommendation_schema import ensure_makeup_recommendation_schema
+from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
 
 
 @asynccontextmanager
@@ -27,7 +27,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
   await ensure_account_deletion_schema(database)
   await ensure_hair_schema(database)
   await ensure_face_analysis_schema(database)
-  await ensure_makeup_recommendation_schema(database)
+  await ensure_product_recommendation_runtime_schema(database)
 
   try:
     yield
