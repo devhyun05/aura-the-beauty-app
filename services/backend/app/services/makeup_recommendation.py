@@ -272,6 +272,100 @@ async def enforce_scenario_generation_limit(db: Any, user_id: Any) -> None:
     )
 
 
+async def _persist_generated_scenario(
+  db: Any,
+  item: dict[str, Any],
+  model_id: str,
+  created_by_user_id: Any,
+) -> dict[str, Any] | None:
+  text = str(item.get("text") or "").strip()[:60]
+  seed_prompt = str(item.get("seedPrompt") or "").strip()[:240]
+  normalized_text = _scenario_copy_key(text) or re.sub(r"[^0-9a-z가-힣]", "", text.casefold())
+  tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+  return await db.fetchrow(
+    """
+    with capacity_lock as materialized (
+      select pg_advisory_xact_lock(73120451)
+    ), existing as materialized (
+      select id, status
+      from makeup_scenario_library, capacity_lock
+      where normalized_text = $2
+      limit 1
+    ), reused as (
+      update makeup_scenario_library
+      set usage_count = usage_count + 1,
+          last_served_at = now(),
+          updated_at = now()
+      where id = (select id from existing where status = 'active')
+      returning id, text, seed_prompt, tags, status
+    ), capacity as materialized (
+      select count(*)::integer as ai_count
+      from makeup_scenario_library, capacity_lock
+      where source = 'ai'
+    ), inserted as (
+      insert into makeup_scenario_library
+        (text, normalized_text, seed_prompt, tags, source, model_id, prompt_version,
+         status, usage_count, last_served_at, created_by_user_id)
+      select $1, $2, $3, $4::jsonb, 'ai', $5, 'makeup-scenario-v2',
+             'active', 1, now(), $6
+      from capacity
+      where ai_count < 2000
+        and not exists (select 1 from existing)
+      on conflict (normalized_text) do nothing
+      returning id, text, seed_prompt, tags, status
+    ), replacement_candidate as materialized (
+      select library.id
+      from makeup_scenario_library library, capacity
+      where capacity.ai_count >= 2000
+        and library.source = 'ai'
+        and library.status = 'active'
+        and (
+          library.last_served_at is null
+          or library.last_served_at < now() - interval '7 days'
+        )
+        and not exists (select 1 from existing)
+      order by library.usage_count asc,
+               library.last_served_at asc nulls first,
+               library.created_at asc
+      limit 1
+      for update skip locked
+    ), replaced as (
+      update makeup_scenario_library
+      set text = $1,
+          normalized_text = $2,
+          seed_prompt = $3,
+          tags = $4::jsonb,
+          source = 'ai',
+          model_id = $5,
+          prompt_version = 'makeup-scenario-v2',
+          status = 'active',
+          usage_count = 1,
+          last_served_at = now(),
+          created_by_user_id = $6,
+          created_at = now(),
+          updated_at = now()
+      where id = (select id from replacement_candidate)
+      returning id, text, seed_prompt, tags, status
+    ), existing_blocked as (
+      select library.id, library.text, library.seed_prompt, library.tags, library.status
+      from makeup_scenario_library library
+      where library.id = (select id from existing where status = 'disabled')
+    )
+    select * from reused
+    union all select * from inserted
+    union all select * from replaced
+    union all select * from existing_blocked
+    limit 1
+    """,
+    text,
+    normalized_text,
+    seed_prompt,
+    json.dumps(tags, ensure_ascii=False),
+    model_id,
+    created_by_user_id,
+  )
+
+
 async def generate_shared_scenarios(
   settings: Settings,
   db: Any,
@@ -321,31 +415,26 @@ async def generate_shared_scenarios(
       seed_prompt = str(item.get("seedPrompt") or "").strip()[:240]
       if not text or not seed_prompt or any(_scenario_copy_is_similar(text, previous) for previous in seen):
         continue
-      normalized_text = _scenario_copy_key(text) or re.sub(r"[^0-9a-z가-힣]", "", text.casefold())
-      stored = await db.fetchrow(
-        """
-        insert into makeup_scenario_library
-          (text, normalized_text, seed_prompt, tags, source, model_id, prompt_version,
-           status, usage_count, created_by_user_id)
-        values ($1, $2, $3, $4::jsonb, 'ai', $5, 'makeup-scenario-v2', 'active', 1, $6)
-        on conflict (normalized_text) do update
-          set usage_count = makeup_scenario_library.usage_count + 1,
-              updated_at = now()
-          where makeup_scenario_library.status = 'active'
-        returning id, text, seed_prompt, tags, status
-        """,
-        text,
-        normalized_text,
-        seed_prompt,
-        json.dumps(item.get("tags") if isinstance(item.get("tags"), list) else [], ensure_ascii=False),
-        settings.effective_scenario_model_id,
-        created_by_user_id,
-      )
-      if stored is None:
+      try:
+        stored = await _persist_generated_scenario(
+          db,
+          {**item, "text": text, "seedPrompt": seed_prompt},
+          settings.effective_scenario_model_id,
+          created_by_user_id,
+        )
+      except Exception:
+        logger.exception("[aura:makeup-recommendation] shared-scenarios:persist-failed")
+        stored = None
+      if stored is not None and str(stored.get("status") or "active") != "active":
         continue
-      if str(stored.get("status") or "active") != "active":
-        continue
-      stored_item = _scenario_library_item(stored)
+      stored_item = _scenario_library_item(stored) if stored is not None else {
+        "id": str(item.get("id") or f"generated-{sha256(text.encode('utf-8')).hexdigest()[:16]}"),
+        "text": text,
+        "seedPrompt": seed_prompt,
+        "tags": [str(tag).strip() for tag in item.get("tags", []) if str(tag).strip()][:8]
+        if isinstance(item.get("tags"), list)
+        else [],
+      }
       if any(_scenario_copy_is_similar(stored_item["text"], previous) for previous in seen):
         continue
       generated_items.append(stored_item)
@@ -367,7 +456,7 @@ async def generate_shared_scenarios(
   shared_ids = [item["id"] for item in combined if item["id"] not in generated_ids]
   if shared_ids:
     await db.execute(
-      "update makeup_scenario_library set usage_count = usage_count + 1, updated_at = now() where id::text = any($1::text[])",
+      "update makeup_scenario_library set usage_count = usage_count + 1, last_served_at = now(), updated_at = now() where id::text = any($1::text[])",
       shared_ids,
     )
   return {"items": combined[:count]}

@@ -696,6 +696,78 @@ class SharedScenarioDatabase:
     return "UPDATE 1"
 
 
+class CapturingScenarioDatabase:
+  def __init__(self, result: dict | None = None) -> None:
+    self.result = result
+    self.last_query = ""
+    self.last_args: tuple = ()
+
+  async def fetchrow(self, query: str, *args):
+    self.last_query = query
+    self.last_args = args
+    return self.result
+
+
+@pytest.mark.asyncio
+async def test_persist_statement_serializes_and_caps_ai_rows() -> None:
+  db = CapturingScenarioDatabase()
+  item = {
+    "id": "generated-safe",
+    "text": "첫 발표의 집중",
+    "seedPrompt": "단정한 음영과 선명한 립 포인트",
+    "tags": ["업무"],
+  }
+
+  result = await makeup_service._persist_generated_scenario(db, item, "model-id", USER_ID)
+
+  assert result is None
+  query = db.last_query.casefold()
+  assert "pg_advisory_xact_lock" in query
+  assert "count(*)" in query
+  assert "source = 'ai'" in query
+  assert "ai_count < 2000" in query
+  assert "ai_count >= 2000" in query
+  assert "status = 'active'" in query
+  assert "last_served_at < now() - interval '7 days'" in query
+  assert "for update skip locked" in query
+  assert db.last_args[0] == item["text"]
+  assert db.last_args[-1] == USER_ID
+
+
+@pytest.mark.asyncio
+async def test_unstored_generated_card_is_returned_with_ephemeral_id(monkeypatch: pytest.MonkeyPatch) -> None:
+  class FullRecentLibraryDatabase(SharedScenarioDatabase):
+    async def fetchrow(self, _query: str, *_args):
+      return None
+
+  db = FullRecentLibraryDatabase()
+
+  async def fake_generate(_settings, _count, _exclude_texts):
+    return {
+      "items": [
+        {
+          "id": "generated-ephemeral",
+          "text": "오후 네 시 티룸",
+          "seedPrompt": "차분한 로즈 음영과 촉촉한 입술",
+          "tags": ["차분"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_scenarios", fake_generate)
+
+  result = await generate_shared_scenarios(Settings(), db, 1, [], USER_ID)
+
+  assert result["items"] == [
+    {
+      "id": "generated-ephemeral",
+      "text": "오후 네 시 티룸",
+      "seedPrompt": "차분한 로즈 음영과 촉촉한 입술",
+      "tags": ["차분"],
+    },
+  ]
+
+
 @pytest.mark.asyncio
 async def test_shared_scenarios_mix_library_with_fresh_generation_and_persist(monkeypatch: pytest.MonkeyPatch) -> None:
   stored_texts = [
@@ -754,6 +826,7 @@ async def test_shared_scenarios_mix_library_with_fresh_generation_and_persist(mo
   assert len(db.rows) == 14
   assert all(str(item["id"]) for item in result["items"])
   assert any("usage_count = usage_count + 1" in query for query, _args in db.executed)
+  assert any("last_served_at = now()" in query for query, _args in db.executed)
 
 
 @pytest.mark.asyncio
