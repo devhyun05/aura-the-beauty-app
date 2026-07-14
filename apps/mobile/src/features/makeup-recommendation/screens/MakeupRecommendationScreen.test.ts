@@ -4,6 +4,7 @@ import {
   makeupRecommendationDiscoveryCopy,
   makeupRecommendationResultRoleLabels,
   makeupRecommendationImageStatusCopy,
+  makeupRecommendationFallbackCopy,
   shouldHandleMakeupRecommendationBack,
   toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
@@ -54,6 +55,11 @@ expectEqual(
   makeupRecommendationImageStatusCopy.failedAction,
   '이미지 다시 만들기',
   'failed image retry action',
+);
+expectEqual(
+  makeupRecommendationFallbackCopy.retryAction,
+  'AI 추천 다시 연결하기',
+  'local fallback retry action',
 );
 expectEqual(
   shouldHandleMakeupRecommendationBack('discovery'),

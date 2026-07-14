@@ -1,9 +1,12 @@
 import {
+  answerGeneratedMakeupRecommendationQuestion,
   answerMakeupRecommendationQuestion,
+  getFallbackMakeupScenarios,
   getMakeupScenarioSet,
   mapBackendScenarioItems,
   mapBackendRecommendationLooks,
   refineMakeupRecommendation,
+  startGeneratedMakeupRecommendation,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
 
@@ -52,6 +55,18 @@ expectEqual(generatedScenarios.length, 2, 'backend scenarios are mapped');
 expectEqual(generatedScenarios[0].displayText, '비 오는 날', 'backend display text is preserved');
 expectEqual(generatedScenarios[0].intentTags[0], '차분', 'backend tags are preserved');
 expectEqual(generatedScenarios[0].seedPrompt, '비 오는 날 차분한 메이크업', 'backend seed prompt is preserved');
+
+const fallbackScenarios = getFallbackMakeupScenarios({
+  count: 12,
+  excludeTexts: scenarios.slice(0, 12).map(item => item.displayText),
+  seed: 12,
+});
+expectEqual(fallbackScenarios.length, 12, 'local fallback scenario count');
+expectEqual(
+  fallbackScenarios.some(item => scenarios.slice(0, 12).some(seen => seen.displayText === item.displayText)),
+  false,
+  'local fallback excludes cards already shown',
+);
 
 const generatedLooks = mapBackendRecommendationLooks({
   reportId: 'report-1',
@@ -176,3 +191,38 @@ expectEqual(
   hipAfterNatural.results[0].summary,
   'repeated refinement does not duplicate summary',
 );
+
+async function expectGeneratedFlowFallsBackLocally() {
+  async function failingBackendRequest<T>(): Promise<T> {
+    throw new Error('backend unavailable');
+  }
+
+  const fallbackStarted = await startGeneratedMakeupRecommendation(
+    {
+      prompt: scenarios[0].seedPrompt,
+      scenarioId: scenarios[0].id,
+      useProfile: false,
+    },
+    scenarios[0].intentTags,
+    failingBackendRequest,
+  );
+  expectEqual(fallbackStarted.generationMode, 'localFallback', 'question failure uses local fallback');
+
+  let fallbackCompleted = fallbackStarted;
+  for (const question of fallbackStarted.questions) {
+    fallbackCompleted = await answerGeneratedMakeupRecommendationQuestion(
+      fallbackCompleted,
+      {questionId: question.id, optionId: question.options[0].id},
+      scenarios[0].intentTags,
+      failingBackendRequest,
+    );
+  }
+  expectEqual(fallbackCompleted.phase, 'results', 'fallback flow completes');
+  expectEqual(fallbackCompleted.results.length, 3, 'fallback flow returns three looks');
+  expectEqual(fallbackCompleted.generationMode, 'localFallback', 'fallback mode remains visible');
+}
+
+void expectGeneratedFlowFallsBackLocally().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

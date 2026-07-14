@@ -8,7 +8,7 @@ import type {
   MakeupLookRecommendation,
   MakeupRecommendationRefinement,
 } from '../types';
-import {makeupRecommendationImageStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
+import {makeupRecommendationFallbackCopy, makeupRecommendationImageStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
 const difficultyLabels: Record<MakeupLookRecommendation['difficulty'], string> = {
@@ -41,6 +41,7 @@ type RecommendationResultsViewProps = {
   results: readonly MakeupLookRecommendation[];
   imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
   imageRetryError?: string;
+  generationMode?: 'backend' | 'localFallback';
   isRefining: boolean;
   onRetryImages: () => void;
 };
@@ -147,6 +148,7 @@ export function RecommendationResultsView({
   results,
   imageStatus,
   imageRetryError,
+  generationMode,
   isRefining,
   onRetryImages,
 }: RecommendationResultsViewProps) {
@@ -179,6 +181,14 @@ export function RecommendationResultsView({
         <Text style={styles.eyebrow}>세 가지 방향으로 풀어봤어요</Text>
         <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
         <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 발견까지 비교해보세요.</Text>
+        {generationMode === 'localFallback' ? (
+          <View accessibilityRole="alert" style={styles.fallbackNotice}>
+            <Text style={styles.imageStatus}>{makeupRecommendationFallbackCopy.description}</Text>
+            <Pressable accessibilityRole="button" onPress={onRetry} style={styles.imageRetryButton}>
+              <Text style={styles.imageRetryLabel}>{makeupRecommendationFallbackCopy.retryAction}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {imageStatus === 'pending' || imageStatus === 'processing' ? (
           <Text style={styles.imageStatus}>세 가지 추천 이미지를 만들고 있어요. 완성되면 자동으로 바뀌어요.</Text>
         ) : imageStatus === 'failed' ? (
@@ -268,6 +278,13 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
   },
   imageFailureRow: {alignItems: 'flex-start', gap: spacing.xs},
+  fallbackNotice: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
   imageRetryButton: {justifyContent: 'center', minHeight: 44},
   imageRetryLabel: {
     color: colors.textPrimary,

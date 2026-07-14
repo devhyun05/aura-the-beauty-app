@@ -130,6 +130,21 @@ export function getMakeupScenarioSet({seed}: {seed: number}): MakeupScenarioProm
   ].slice(0, 49);
 }
 
+export function getFallbackMakeupScenarios({
+  count,
+  excludeTexts,
+  seed,
+}: {
+  count: number;
+  excludeTexts: readonly string[];
+  seed: number;
+}): MakeupScenarioPrompt[] {
+  const excluded = new Set(excludeTexts.map(text => text.trim().toLocaleLowerCase()).filter(Boolean));
+  return getMakeupScenarioSet({seed})
+    .filter(item => !excluded.has(item.displayText.trim().toLocaleLowerCase()))
+    .slice(0, Math.max(0, count));
+}
+
 function inferKnownDimensions(prompt: string): MakeupQuestionDimension[] {
   const normalized = prompt.toLowerCase();
   const known: MakeupQuestionDimension[] = [];
@@ -400,23 +415,35 @@ export function mapBackendRecommendationLooks({
 export async function startGeneratedMakeupRecommendation(
   input: StartMakeupRecommendationInput,
   scenarioTags: readonly string[] = [],
+  backendRequest: typeof requestBackendJson = requestBackendJson,
 ): Promise<MakeupRecommendationSession> {
-  const response = await requestBackendJson<{questions: BackendQuestion[]}>(
-    '/makeup-recommendations/questions',
-    {
-      method: 'POST',
-      body: {scenarioText: input.prompt.trim(), scenarioTags},
-    },
-  );
-  const questions = mapBackendQuestions(response.questions ?? []);
-  if (questions.length === 0) throw new Error('추천 질문을 준비하지 못했어요.');
-  return buildQuestionSession({...input, useProfile: false, personalColor: undefined}, questions);
+  try {
+    const response = await backendRequest<{questions: BackendQuestion[]}>(
+      '/makeup-recommendations/questions',
+      {
+        method: 'POST',
+        body: {scenarioText: input.prompt.trim(), scenarioTags},
+      },
+    );
+    const questions = mapBackendQuestions(response.questions ?? []);
+    if (questions.length === 0) throw new Error('추천 질문을 준비하지 못했어요.');
+    return {
+      ...buildQuestionSession({...input, useProfile: false, personalColor: undefined}, questions),
+      generationMode: 'backend',
+    };
+  } catch {
+    return {
+      ...startMakeupRecommendation({...input, useProfile: false, personalColor: undefined}),
+      generationMode: 'localFallback',
+    };
+  }
 }
 
 export async function answerGeneratedMakeupRecommendationQuestion(
   session: MakeupRecommendationSession,
   answer: MakeupRecommendationAnswer,
   scenarioTags: readonly string[] = [],
+  backendRequest: typeof requestBackendJson = requestBackendJson,
 ): Promise<MakeupRecommendationSession> {
   const expected = session.questions[session.currentQuestionIndex];
   if (!expected || expected.id !== answer.questionId) throw new Error('현재 질문과 맞지 않는 답변이에요.');
@@ -430,37 +457,49 @@ export async function answerGeneratedMakeupRecommendationQuestion(
     return {...session, answers, currentQuestionIndex: nextIndex};
   }
 
-  const response = await requestBackendJson<{
-    reportId: string;
-    recommendation: BackendRecommendation;
-    imageStatus: BackendRecommendationReport['imageStatus'];
-  }>('/makeup-recommendations', {
-    method: 'POST',
-    body: {
-      scenarioText: session.prompt,
-      scenarioTags,
-      questions: session.questions,
+  if (session.generationMode === 'localFallback') {
+    return answerMakeupRecommendationQuestion(session, answer);
+  }
+
+  try {
+    const response = await backendRequest<{
+      reportId: string;
+      recommendation: BackendRecommendation;
+      imageStatus: BackendRecommendationReport['imageStatus'];
+    }>('/makeup-recommendations', {
+      method: 'POST',
+      body: {
+        scenarioText: session.prompt,
+        scenarioTags,
+        questions: session.questions,
+        answers,
+      },
+      timeoutMs: 90000,
+    });
+    return {
+      ...session,
+      phase: 'results',
+      currentQuestionIndex: session.questions.length,
       answers,
-    },
-    timeoutMs: 90000,
-  });
-  return {
-    ...session,
-    phase: 'results',
-    currentQuestionIndex: session.questions.length,
-    answers,
-    results: mapBackendRecommendationLooks({
+      results: mapBackendRecommendationLooks({
+        reportId: response.reportId,
+        recommendation: response.recommendation,
+        prompt: session.prompt,
+        questions: session.questions,
+        answers,
+      }),
       reportId: response.reportId,
-      recommendation: response.recommendation,
-      prompt: session.prompt,
-      questions: session.questions,
-      answers,
-    }),
-    reportId: response.reportId,
-    imageStatus: response.imageStatus,
-    useProfile: false,
-    personalColor: undefined,
-  };
+      imageStatus: response.imageStatus,
+      useProfile: false,
+      personalColor: undefined,
+      generationMode: 'backend',
+    };
+  } catch {
+    return {
+      ...answerMakeupRecommendationQuestion(session, answer),
+      generationMode: 'localFallback',
+    };
+  }
 }
 
 export async function refreshGeneratedMakeupRecommendation(

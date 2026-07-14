@@ -30,6 +30,10 @@ export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string
 export const makeupRecommendationImageStatusCopy = {
   failedAction: '이미지 다시 만들기',
 } as const;
+export const makeupRecommendationFallbackCopy = {
+  description: 'AI 연결이 잠시 불안정해 검수된 임시 추천을 보여드려요. 이 결과는 보고서에 저장되지 않았어요.',
+  retryAction: 'AI 추천 다시 연결하기',
+} as const;
 export function toggleExpandedLookId(previous: Set<string>, lookId: string): Set<string> {
   const next = new Set(previous);
   if (next.has(lookId)) next.delete(lookId);

@@ -115,6 +115,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Report ECS task roles
+        run: |
+          api_task_role="$(aws ecs describe-task-definition --task-definition "$ECS_TASK_DEFINITION" --query 'taskDefinition.taskRoleArn' --output text)"
+          printf 'API task role: %s\n' "$api_task_role"
+          echo "::notice title=API ECS task role::$api_task_role"
+
+          if [ -n "$AI_WORKER_TASK_DEFINITION" ]; then
+            worker_task_role="$(aws ecs describe-task-definition --task-definition "$AI_WORKER_TASK_DEFINITION" --query 'taskDefinition.taskRoleArn' --output text)"
+            printf 'AI worker task role: %s\n' "$worker_task_role"
+            echo "::notice title=AI worker ECS task role::$worker_task_role"
+          fi
+
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2

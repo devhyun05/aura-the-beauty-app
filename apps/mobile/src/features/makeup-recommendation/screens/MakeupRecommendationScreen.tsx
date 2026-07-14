@@ -6,6 +6,7 @@ import {AppScreen} from '../../../shared/ui';
 import {
   answerGeneratedMakeupRecommendationQuestion,
   fetchGeneratedMakeupScenarios,
+  getFallbackMakeupScenarios,
   getMakeupScenarioSet,
   refineGeneratedMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
@@ -55,6 +56,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const activeScenarioTags = useRef<string[]>([]);
   const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
   const scenarioRequestInFlight = useRef(false);
+  const localScenarioSeed = useRef(12);
 
   const loadScenarios = useCallback(async (mode: 'replace' | 'append') => {
     if (scenarioRequestInFlight.current) return;
@@ -71,7 +73,18 @@ export const MakeupRecommendationScreen = forwardRef<
       fresh.forEach(item => seenScenarioTexts.current.add(item.displayText));
       setScenarios(previous => mode === 'replace' ? fresh : [...previous, ...fresh]);
     } catch (error) {
-      setScenarioError(error instanceof Error ? error.message : '새 문장을 불러오지 못했어요.');
+      const fallback = getFallbackMakeupScenarios({
+        count: 12,
+        excludeTexts: [...seenScenarioTexts.current],
+        seed: localScenarioSeed.current,
+      });
+      localScenarioSeed.current += 12;
+      if (fallback.length > 0) {
+        fallback.forEach(item => seenScenarioTexts.current.add(item.displayText));
+        setScenarios(previous => mode === 'replace' ? fallback : [...previous, ...fallback]);
+      } else {
+        setScenarioError(error instanceof Error ? error.message : '새 문장을 불러오지 못했어요.');
+      }
     } finally {
       scenarioRequestInFlight.current = false;
       setIsLoadingScenarios(false);
@@ -255,6 +268,7 @@ export const MakeupRecommendationScreen = forwardRef<
         refinementError={refinementError}
         results={session.results}
         imageStatus={session.imageStatus}
+        generationMode={session.generationMode}
         imageRetryError={imageRetryError}
         isRefining={isRefining}
         onRetryImages={handleRetryImages}
