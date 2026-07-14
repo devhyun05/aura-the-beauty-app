@@ -320,7 +320,7 @@ jobs:
           wait-for-service-stability: true
           wait-max-delay-seconds: 15
       - name: Download current hair worker task definition
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         run: |
           aws ecs describe-task-definition \
             --task-definition "$HAIR_WORKER_TASK_DEFINITION" \
@@ -338,7 +338,7 @@ jobs:
           )' hair-task-definition.raw.json > hair-task-definition.json
 
       - name: Render hair worker task definition
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         id: render-hair-task-definition
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -347,7 +347,7 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
 
       - name: Deploy hair worker ECS service
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-hair-task-definition.outputs.task-definition }}
