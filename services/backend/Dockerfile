@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -10,11 +10,16 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY services/backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade "pip==26.1.2" "setuptools==83.0.0" "wheel==0.46.3"
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/backend/scripts/download_hair_segmenter.py /tmp/download_hair_segmenter.py
 RUN python /tmp/download_hair_segmenter.py --output /app/models/hair_segmenter.tflite \
   && rm /tmp/download_hair_segmenter.py
+
+COPY services/backend/scripts/download_face_landmarker.py /tmp/download_face_landmarker.py
+RUN python /tmp/download_face_landmarker.py --output /app/models/face_landmarker.task \
+  && rm /tmp/download_face_landmarker.py
 
 COPY services/backend/app ./app
 COPY docs/backend/schema.sql ./docs/backend/schema.sql

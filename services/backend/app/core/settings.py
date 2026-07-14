@@ -118,6 +118,7 @@ class Settings(BaseSettings):
   hair_worker_request_timeout_seconds: int = Field(default=180, ge=30, le=600)
   hair_generation_quality: Literal["low", "medium", "high", "auto"] = "medium"
   hair_segmenter_model_path: str = "/app/models/hair_segmenter.tflite"
+  face_landmarker_model_path: str = "/app/models/face_landmarker.task"
 
   naver_shopping_client_id: str | None = None
   naver_shopping_client_secret: str | None = None

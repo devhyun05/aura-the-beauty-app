@@ -12,6 +12,12 @@ on:
       - "data/auradin/knowledge/**"
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
+    inputs:
+      artifact_only:
+        description: Build and scan an image artifact without AWS deployment
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -26,13 +32,104 @@ env:
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
+  AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
+  AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
+  AI_WORKER_TASK_DEFINITION: ${{ vars.AI_WORKER_TASK_DEFINITION || vars.AI_WORKER_SERVICE }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
 jobs:
+  build_artifact:
+    name: Build and scan backend image artifact
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_only }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r services/backend/requirements.txt
+
+      - name: Run backend security and regression tests
+        env:
+          AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        working-directory: services/backend
+        run: python -m pytest -q
+
+      - name: Build backend image
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: docker build -f services/backend/Dockerfile -t "$LOCAL_IMAGE" .
+
+      - name: Install verified Trivy scanner
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSLO "$base_url/$archive"
+          curl -fsSLo trivy-checksums.txt "$base_url/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  $archive$" trivy-checksums.txt | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/trivy" trivy
+          echo "$RUNNER_TEMP/trivy" >> "$GITHUB_PATH"
+
+      - name: Block artifact on critical or high vulnerabilities
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          --no-progress
+          "$LOCAL_IMAGE"
+
+      - name: Export verified image
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: |
+          docker save "$LOCAL_IMAGE" --output "$RUNNER_TEMP/aura-backend.tar"
+          sha256sum "$RUNNER_TEMP/aura-backend.tar" > "$RUNNER_TEMP/aura-backend.tar.sha256"
+
+      - name: Upload verified image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-backend-image-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/aura-backend.tar
+            ${{ runner.temp }}/aura-backend.tar.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   deploy:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.artifact_only }}
     name: Build image and deploy service
     runs-on: ubuntu-latest
     services:
@@ -84,6 +181,16 @@ jobs:
             exit 1
           fi
 
+          if [ -n "$AI_WORKER_SERVICE" ] && [ -z "$AI_WORKER_TASK_DEFINITION" ]; then
+            printf 'AI_WORKER_TASK_DEFINITION is required when AI_WORKER_SERVICE is set.\n' >&2
+            exit 1
+          fi
+
+          if [ -n "$AI_WORKER_SERVICE" ] && [ -z "$AI_WORKER_CONTAINER_NAME" ]; then
+            printf 'AI_WORKER_CONTAINER_NAME is required when AI_WORKER_SERVICE is set.\n' >&2
+            exit 1
+          fi
+
           if [ -n "$HAIR_WORKER_SERVICE" ] && [ -z "$HAIR_WORKER_TASK_DEFINITION" ]; then
             printf 'HAIR_WORKER_TASK_DEFINITION is required when HAIR_WORKER_SERVICE is set.\n' >&2
             exit 1
@@ -108,7 +215,7 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push backend image
+      - name: Build backend image
         id: build-image
         env:
           IMAGE_TAG: ${{ github.sha }}
@@ -123,11 +230,39 @@ jobs:
             -t "$latest_uri" \
             .
 
-          docker push "$image_uri"
-          docker push "$latest_uri"
-
           echo "image=$image_uri" >> "$GITHUB_OUTPUT"
+          echo "latest-image=$latest_uri" >> "$GITHUB_OUTPUT"
 
+      - name: Install verified Trivy scanner
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -fsSLO "$base_url/$archive"
+          curl -fsSLo trivy-checksums.txt "$base_url/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep "  $archive$" trivy-checksums.txt | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/trivy"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/trivy" trivy
+          echo "$RUNNER_TEMP/trivy" >> "$GITHUB_PATH"
+
+      - name: Block deploy on critical or high vulnerabilities
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          --no-progress
+          "${{ steps.build-image.outputs.image }}"
+
+      - name: Push verified backend image
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+          LATEST_URI: ${{ steps.build-image.outputs.latest-image }}
+        run: |
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
       - name: Download current ECS task definition
         run: |
           aws ecs describe-task-definition \
@@ -170,7 +305,55 @@ jobs:
             CHIME_ENABLED=${{ env.CHIME_ENABLED }}
             CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
 
-      - name: Deploy ECS service
+      - name: Download current AI worker task definition
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$AI_WORKER_TASK_DEFINITION" \
+            --query taskDefinition \
+            --output json > ai-worker-task-definition.raw.json
+
+          jq '
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | .containerDefinitions |= map(
+                .environment = ((.environment // []) | map(select(
+                  .name != "CONSULTING_CALL_TRANSCRIPTION_ENABLED" and
+                  .name != "CHIME_TRANSCRIPTION_ENABLED" and
+                  .name != "CHIME_TRANSCRIBE_SUPPORTED_LANGUAGES" and
+                  .name != "CHIME_TRANSCRIBE_DEFAULT_LANGUAGE" and
+                  .name != "CHIME_TRANSCRIBE_PREFERRED_LANGUAGE" and
+                  .name != "CONSULTING_TRANSCRIPT_RETENTION_DAYS" and
+                  .name != "CONSULTING_CALL_TRANSLATION_ENABLED" and
+                  .name != "CHIME_TRANSLATE_ENABLED"
+                )))
+              )
+          ' ai-worker-task-definition.raw.json > ai-worker-task-definition.json
+
+          mv ai-worker-task-definition.json ai-worker-task-definition.base.json
+          jq --arg worker_container "$AI_WORKER_CONTAINER_NAME" '
+            .containerDefinitions |= map(
+              if .name == $worker_container then .stopTimeout = 120 else . end
+            )
+          ' ai-worker-task-definition.base.json > ai-worker-task-definition.json
+
+      - name: Render AI worker task definition
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        id: render-ai-worker-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ai-worker-task-definition.json
+          container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy API ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
@@ -179,8 +362,59 @@ jobs:
           wait-for-service-stability: true
           wait-max-delay-seconds: 15
 
+      - name: Wait for AI job queue to drain
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        run: |
+          queue_url="$(
+            jq -r --arg container "$AI_WORKER_CONTAINER_NAME" '
+              .containerDefinitions[]
+              | select(.name == $container)
+              | (.environment // [])[]
+              | select(.name == "SQS_AI_JOB_QUEUE_URL")
+              | .value
+            ' ai-worker-task-definition.json
+          )"
+
+          if [ -z "$queue_url" ] || [ "$queue_url" = "null" ]; then
+            echo "SQS_AI_JOB_QUEUE_URL was not found in the AI worker task definition." >&2
+            exit 1
+          fi
+
+          for attempt in $(seq 1 60); do
+            attributes="$(
+              aws sqs get-queue-attributes \
+                --queue-url "$queue_url" \
+                --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+                --output json
+            )"
+            visible="$(jq -r '.Attributes.ApproximateNumberOfMessages // "0"' <<< "$attributes")"
+            in_flight="$(jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible // "0"' <<< "$attributes")"
+
+            if [ "$visible" = "0" ] && [ "$in_flight" = "0" ]; then
+              echo "AI job queue is drained."
+              break
+            fi
+
+            if [ "$attempt" = "60" ]; then
+              echo "AI job queue did not drain within 10 minutes: visible=$visible inFlight=$in_flight" >&2
+              exit 1
+            fi
+
+            echo "Waiting for AI job queue: visible=$visible inFlight=$in_flight"
+            sleep 10
+          done
+
+      - name: Deploy AI worker ECS service
+        if: ${{ env.AI_WORKER_SERVICE != '' }}
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-ai-worker-task-definition.outputs.task-definition }}
+          service: ${{ env.AI_WORKER_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-max-delay-seconds: 15
       - name: Download current hair worker task definition
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         run: |
           aws ecs describe-task-definition \
             --task-definition "$HAIR_WORKER_TASK_DEFINITION" \
@@ -198,7 +432,7 @@ jobs:
           )' hair-task-definition.raw.json > hair-task-definition.json
 
       - name: Render hair worker task definition
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         id: render-hair-task-definition
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
@@ -207,7 +441,7 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
 
       - name: Deploy hair worker ECS service
-        if: ${{ env.HAIR_WORKER_SERVICE != '' }}
+        if: ${{ env.HAIR_WORKER_SERVICE != '' && github.ref == 'refs/heads/main' }}
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-hair-task-definition.outputs.task-definition }}

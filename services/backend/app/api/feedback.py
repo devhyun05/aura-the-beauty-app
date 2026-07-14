@@ -11,13 +11,20 @@ from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
-from app.schemas.analysis import FeedbackConferenceMessagesCreate, FeedbackJobCreate
+from app.schemas.analysis import (
+  FeedbackConferenceMessagesCreate,
+  FeedbackConferencePreviewCreate,
+  FeedbackJobCreate,
+)
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.makeup_feedback_analysis import (
   MODEL_VERSION,
   build_makeup_feedback_result_for_request,
 )
 from app.services.makeup_feedback_conference import build_makeup_feedback_conference_messages
+from app.services.makeup_feedback_conference_preview import (
+  build_makeup_feedback_conference_preview,
+)
 from app.services.makeup_feedback_goal_intent import normalize_feedback_goal_context_for_request
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.users import ensure_user
@@ -58,6 +65,35 @@ def normalize_feedback_report_rows(rows: list[dict]) -> list[dict]:
     for row in rows
     if (normalized := normalize_feedback_report_row(row)) is not None
   ]
+
+
+async def get_owned_feedback_report(
+  db: Database,
+  *,
+  report_id: UUID,
+  user_id: UUID,
+) -> dict[str, Any]:
+  report = await db.fetchrow(
+    """
+    select *
+    from makeup_feedback_reports
+    where id = $1 and user_id = $2
+    """,
+    report_id,
+    user_id,
+  )
+  if report is None:
+    raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
+
+  return normalize_feedback_report_row(report) or {}
+
+
+def feedback_report_context(report: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+  feedback_payload = decode_json_object(report.get("feedback_payload"))
+  request_payload = decode_json_object(feedback_payload.get("request"))
+  raw_result = feedback_payload.get("result")
+  result = dict(raw_result) if isinstance(raw_result, dict) else None
+  return request_payload, result
 
 
 def build_feedback_payload(payload: FeedbackJobCreate, request_payload: dict[str, Any]) -> dict:
@@ -316,16 +352,77 @@ async def create_feedback_job(
   return success({"job": normalize_feedback_report_row(report)})
 
 
+@router.post("/conference-preview-messages")
+async def create_feedback_conference_preview_messages(
+  payload: FeedbackConferencePreviewCreate,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  request_payload = payload.request_payload
+  if payload.report_id is not None:
+    user = await ensure_user(db, auth)
+    report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
+    stored_request, _ = feedback_report_context(report)
+    request_payload = stored_request
+    if payload.request_payload.get("conversationSeed"):
+      request_payload["conversationSeed"] = payload.request_payload["conversationSeed"]
+
+  (
+    messages,
+    summary,
+    last_speaker,
+    generation_status,
+    generation_error,
+  ) = await build_makeup_feedback_conference_preview(
+    request_payload,
+    settings,
+  )
+  logger.info(
+    "[aura:feedback-api] conference-preview:completed userSub=%s status=%s count=%s",
+    auth.subject,
+    generation_status,
+    len(messages),
+  )
+
+  return success(
+    {
+      "messages": messages,
+      "summary": summary,
+      "lastSpeaker": last_speaker,
+      "generationStatus": generation_status,
+      "generationError": generation_error,
+    },
+  )
+
+
 @router.post("/conference-messages")
 async def create_feedback_conference_messages(
   payload: FeedbackConferenceMessagesCreate,
   auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
+  result = payload.result
+  request_payload = payload.request_payload
+  if payload.report_id is not None:
+    user = await ensure_user(db, auth)
+    report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
+    stored_request, stored_result = feedback_report_context(report)
+    if stored_result is None:
+      raise AppError(
+        409,
+        "FEEDBACK_REPORT_NOT_COMPLETED",
+        "Feedback report analysis has not completed yet.",
+      )
+    request_payload = stored_request
+    result = stored_result
+
   messages, generation_status, generation_error = await build_makeup_feedback_conference_messages(
-    payload.result,
-    payload.request_payload,
+    result,
+    request_payload,
     settings,
+    preview_context=payload.preview_context,
   )
   logger.info(
     "[aura:feedback-api] conference-messages:completed userSub=%s status=%s count=%s",
@@ -354,6 +451,8 @@ async def list_feedback_reports(
     select *
     from makeup_feedback_reports
     where user_id = $1
+      and status = 'completed'
+      and score is not null
     order by created_at desc
     """,
     user["id"],

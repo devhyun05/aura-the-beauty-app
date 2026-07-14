@@ -21,6 +21,11 @@
     "test:face-geometry": "node ../../scripts/mobile/run-face-geometry-contract.mjs",
     "test:face-analysis-measurements": "node ../../scripts/mobile/run-face-analysis-measurements-contract.mjs",
     "test:face-capture-upload": "node ../../scripts/mobile/run-face-capture-upload-contract.mjs",
+    "test:makeup-feedback-camera-quality": "node ../../scripts/mobile/run-makeup-feedback-camera-quality-contract.mjs",
+    "test:makeup-feedback-cross-layer": "node ../../scripts/mobile/run-makeup-feedback-cross-layer-contract.mjs",
+    "test:realtime-face-quality-native": "node ../../scripts/mobile/check-realtime-face-quality-native-contract.mjs",
+    "test:realtime-capture-frame-native": "node ../../scripts/mobile/check-realtime-capture-frame-metadata-native-contract.mjs",
+    "test:cognito-redirect": "node ../../scripts/mobile/run-cognito-redirect-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
     "test:consulting-flow": "node ../../scripts/mobile/run-consulting-flow-contract.mjs",
@@ -70,6 +75,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
+    "@types/node": "^20.17.0",
     "@types/react": "^19.2.17",
     "@types/three": "^0.128.0",
     "typescript": "^6.0.3"

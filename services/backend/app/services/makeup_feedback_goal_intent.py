@@ -14,7 +14,6 @@ from app.services.bedrock_guardrails import assert_bedrock_guardrail_input_allow
 logger = logging.getLogger(__name__)
 
 GoalIntentType = Literal["generic_default", "needs_detail", "noise", "valid_context"]
-DEFAULT_MAKEUP_FEEDBACK_GOAL = "전체적인 메이크업 균형과 자연스러움 기준으로 피드백"
 NOISE_GOAL_MESSAGE = "의미 있는 상황을 한 문장으로 적어주세요."
 NEEDS_DETAIL_GOAL_MESSAGE = "어떤 상황에서 보일 메이크업인지 한 문장만 더 적어주세요."
 LATIN_KEYBOARD_MASH_PATTERN = re.compile(
@@ -153,6 +152,47 @@ ACTION_OR_PLACE_FRAGMENTS = [
   "데이트",
   "외출",
 ]
+USER_FACING_INTENSITY_TERMS = {
+  "light": ("가벼운", "가벼운 표현", "가벼운 표현으로"),
+  "medium": ("적당한", "적당한 강도", "적당한 강도로"),
+  "bold": ("선명한", "선명한 표현", "선명한 표현으로"),
+}
+
+
+def localize_makeup_feedback_intensity_terms(value: str) -> str:
+  """Translate raw API intensity enums when they leak into Korean UI copy."""
+  localized = value
+
+  for raw, (adjective, noun, instrumental) in USER_FACING_INTENSITY_TERMS.items():
+    token = re.escape(raw)
+    localized = re.sub(
+      rf"(?<![A-Za-z0-9_]){token}(?:으)?로(?![A-Za-z0-9_])",
+      instrumental,
+      localized,
+      flags=re.IGNORECASE,
+    )
+    localized = re.sub(
+      rf"(?<![A-Za-z0-9_]){token}한(?![A-Za-z0-9_])",
+      adjective,
+      localized,
+      flags=re.IGNORECASE,
+    )
+    localized = re.sub(
+      rf"(?<![A-Za-z0-9_]){token}인(?![A-Za-z0-9_])",
+      f"{noun}인",
+      localized,
+      flags=re.IGNORECASE,
+    )
+    localized = re.sub(
+      rf"(?<![A-Za-z0-9_]){token}(?![A-Za-z0-9_])",
+      noun,
+      localized,
+      flags=re.IGNORECASE,
+    )
+
+  return localized
+
+
 
 
 class GoalIntentResult(TypedDict):
@@ -276,7 +316,7 @@ def classify_makeup_feedback_goal_text(value: Any) -> GoalIntentResult:
   if is_generic_default_request(original_goal_text):
     return {
       "intentType": "generic_default",
-      "normalizedGoalText": DEFAULT_MAKEUP_FEEDBACK_GOAL,
+      "normalizedGoalText": original_goal_text,
       "originalGoalText": original_goal_text,
     }
 

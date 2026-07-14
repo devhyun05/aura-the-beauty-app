@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  type ImageSourcePropType,
   Pressable,
   ScrollView,
   Share,
@@ -29,10 +30,19 @@ import {
 } from '../../../shared/theme';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
+import {
+  getMakeupFeedbackAnalysisSourceLabel,
+  getMakeupFeedbackEvidenceRows,
+} from '../services/makeupFeedbackResultPresentation';
 import type {
   MakeupFeedbackCorrectionPoint,
-  MakeupFeedbackStrength,
+  MakeupFeedbackConfidenceLevel,
+  MakeupFeedbackIntensity,
+  MakeupFeedbackAnalysisImageSize,
+  MakeupFeedbackEvidenceRegion,
+  MakeupFeedbackEvaluation,
   MakeupFeedbackResult,
+  MakeupFeedbackStrength,
 } from '../types';
 
 type MakeupFeedbackResultScreenProps = {
@@ -40,6 +50,11 @@ type MakeupFeedbackResultScreenProps = {
   result: MakeupFeedbackResult;
 };
 
+type MakeupFeedbackEvidenceMedia = {
+  imageSize: MakeupFeedbackAnalysisImageSize;
+  regions: MakeupFeedbackEvidenceRegion[];
+  source: ImageSourcePropType;
+};
 type MakeupFeedbackHeaderShareAction = () => void;
 type MakeupFeedbackShareTarget = 'save-image' | 'share-report';
 type MakeupFeedbackShareFeedback = {
@@ -141,6 +156,31 @@ function getShareErrorMessage(error: unknown) {
     ? error.message
     : '공유 작업을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
+function getCaptureColorConfidenceLabel(
+  confidence: MakeupFeedbackConfidenceLevel,
+): string | undefined {
+  if (confidence === 'high') {
+    return '높음';
+  }
+
+  if (confidence === 'medium') {
+    return '보통';
+  }
+
+  return confidence === 'low' ? '낮음' : undefined;
+}
+
+const goalIntensityLabels: Record<MakeupFeedbackIntensity, string> = {
+  light: '은은한 표현',
+  medium: '균형 잡힌 표현',
+  bold: '또렷한 표현',
+};
+
+function getGoalIntensityLabel(intensity: MakeupFeedbackIntensity) {
+  return goalIntensityLabels[intensity];
+}
+
+
 
 export function MakeupFeedbackResultScreen({
   onHeaderShareActionChange,
@@ -148,12 +188,40 @@ export function MakeupFeedbackResultScreen({
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
   const captureRef = useRef<OptionalViewShotRef | null>(null);
-  const [openPointId, setOpenPointId] = useState<string | null>(result.points[0]?.id ?? null);
-  const [openStrengthId, setOpenStrengthId] = useState<string | null>(result.strengths[0]?.id ?? null);
+  const evaluationByTopicId = new Map(
+    result.evaluations.map(evaluation => [evaluation.topicId, evaluation]),
+  );
+  const goalCriteriaById = new Map(
+    (result.interpretedGoal?.dynamicCriteria ?? []).map(criterion => [
+      criterion.id,
+      criterion.criterion,
+    ]),
+  );
+  const [openPointIds, setOpenPointIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
+  const [openStrengthIds, setOpenStrengthIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
   const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
   const [shareFeedback, setShareFeedback] = useState<MakeupFeedbackShareFeedback | null>(null);
+  const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const photoWidth = width;
   const photoHeight = Math.round(photoWidth);
+  const captureQuality = result.captureQuality;
+  const evidenceMedia: MakeupFeedbackEvidenceMedia | undefined =
+    result.analysisImageSize && result.evidenceRegions?.length
+      ? {
+          imageSize: result.analysisImageSize,
+          regions: result.evidenceRegions,
+          source: result.uploadedImage,
+        }
+      : undefined;
+  const shouldShowCaptureQualityNotice = Boolean(
+    captureQuality &&
+      (captureQuality.issues.length > 0 || captureQuality.colorConfidence !== 'high'),
+  );
+
 
   const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
     if (activeShareTarget) {
@@ -214,6 +282,13 @@ export function MakeupFeedbackResultScreen({
   }, [activeShareTarget, handleShareAction]);
 
   useEffect(() => {
+    setOpenPointIds(new Set<string>());
+    setOpenStrengthIds(new Set<string>());
+    setActiveShareTarget(null);
+    setShareFeedback(null);
+  }, [result.id]);
+
+  useEffect(() => {
     onHeaderShareActionChange?.(handleOpenShareOptions);
 
     return () => {
@@ -234,51 +309,194 @@ export function MakeupFeedbackResultScreen({
             style={styles.captureArea}>
             <View style={[styles.resultCard, {width: photoWidth}]}>
               <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
-                <Image resizeMode="cover" source={result.uploadedImage} style={styles.photo} />
+                <Image
+                  accessibilityLabel="분석에 사용한 메이크업 사진"
+                  resizeMode="cover"
+                  source={result.uploadedImage}
+                  style={styles.photo}
+                />
               </View>
 
               <View style={styles.scorePanel}>
-                <View style={styles.scoreBox}>
-                  <Text style={styles.scoreLabel}>종합 점수</Text>
-                  <Text style={styles.scoreNumber}>
-                    {result.score}
-                    <Text style={styles.scoreUnit}> 점</Text>
-                  </Text>
+                <View style={styles.scoreHeader}>
+                  <View
+                    accessibilityLabel={`분석 출처 ${analysisSourceLabel}`}
+                    style={styles.analysisSourceBadge}
+                    testID={'makeup-feedback-analysis-source'}>
+                    <Text style={styles.analysisSourceText}>{analysisSourceLabel}</Text>
+                  </View>
+                  <View style={styles.scoreBox}>
+                    <Text style={styles.scoreLabel}>참고 점수</Text>
+                    <Text style={styles.scoreNumber}>
+                      {result.score}
+                      <Text style={styles.scoreUnit}>/100</Text>
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.overallJudgment}>
+                  <Text style={styles.overallJudgmentLabel}>종합 판단</Text>
+                  <Text style={styles.scoreReason}>{result.scoreReason}</Text>
                 </View>
               </View>
             </View>
 
-            <Text style={styles.sectionTitle}>보완 포인트</Text>
-            <View style={styles.accordionList}>
-              {result.points.map((point) => (
-                <PointAccordionItem
-                  isOpen={openPointId === point.id}
-                  key={point.id}
-                  onPress={() => {
-                    setOpenPointId((currentId) =>
-                      currentId === point.id ? null : point.id,
+            {shouldShowCaptureQualityNotice && captureQuality ? (
+              <View style={styles.captureQualityCard}>
+                <Text style={styles.captureQualityTitle}>사진 조건 참고</Text>
+                {captureQuality.issues.map(issue => (
+                  <FeedbackBulletRow key={issue.code} text={issue.message} variant="capture" />
+                ))}
+                <Text style={styles.captureQualityMeta}>
+                  색상 신뢰도 {getCaptureColorConfidenceLabel(captureQuality.colorConfidence)}
+                </Text>
+                <Text style={styles.captureQualityDisclaimer}>
+                  사진 조건은 결과의 확실성을 설명하기 위한 정보이며 점수 감점에는
+                  사용하지 않았어요.
+                </Text>
+              </View>
+            ) : null}
+
+
+            {result.interpretedGoal ? (
+              <View style={styles.analysisCriteriaCard}>
+                <View style={styles.analysisCriteriaHeader}>
+                  <View style={styles.analysisCriteriaHeading}>
+                    <View style={styles.analysisCriteriaIcon}>
+                      <Sparkles color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
+                    </View>
+                    <View style={styles.analysisCriteriaHeadingText}>
+                      <Text style={styles.analysisCriteriaLabel}>분석 기준</Text>
+                      <Text style={styles.analysisCriteriaTitle}>
+                        사진과 목적을 함께 확인했어요
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.goalIntensityChip}>
+                    <Text style={styles.goalIntensityText}>
+                      {getGoalIntensityLabel(result.interpretedGoal.intensity)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.goalContextCard}>
+                  <Text style={styles.goalContextLabel}>분석한 상황·목적</Text>
+                  <Text style={styles.goalContextText}>{result.interpretedGoal.label}</Text>
+                </View>
+                {result.interpretedGoal.dynamicCriteria &&
+                result.interpretedGoal.dynamicCriteria.length > 0 ? (
+                  <View style={styles.criteriaSection}>
+                    <Text style={styles.criteriaSectionLabel}>핵심 기준</Text>
+                    <View style={styles.criteriaList}>
+                      {result.interpretedGoal.dynamicCriteria.map((criterion, index) => (
+                        <View key={criterion.id} style={styles.criterionItem}>
+                          <View style={styles.criterionIndexBadge}>
+                            <Text style={styles.criterionIndexText}>{index + 1}</Text>
+                          </View>
+                          <Text style={styles.criterionText}>{criterion.criterion}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View style={styles.coachingSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>잘한 점</Text>
+                <Text style={styles.sectionCount}>{result.strengths.length}개</Text>
+              </View>
+              {result.strengths.length > 0 ? (
+                <View style={styles.accordionList}>
+                  {result.strengths.map(strength => {
+                    const evaluation = evaluationByTopicId.get(strength.topicId);
+                    const criteria = (evaluation?.goalCriterionIds ?? []).flatMap(criterionId => {
+                      const criterion = goalCriteriaById.get(criterionId);
+                      return criterion ? [criterion] : [];
+                    });
+
+                    return (
+                      <StrengthAccordionItem
+                        criteria={criteria}
+                        evaluation={evaluation}
+                        evidenceMedia={evidenceMedia}
+                        isOpen={openStrengthIds.has(strength.id)}
+                        key={strength.id}
+                        onPress={() => {
+                          setOpenStrengthIds(currentIds => {
+                            const nextIds = new Set(currentIds);
+
+                            if (nextIds.has(strength.id)) {
+                              nextIds.delete(strength.id);
+                            } else {
+                              nextIds.add(strength.id);
+                            }
+
+                            return nextIds;
+                          });
+                        }}
+                        strength={strength}
+                      />
                     );
-                  }}
-                  point={point}
-                />
-              ))}
+                  })}
+                </View>
+              ) : (
+                <View style={styles.coachingEmptyState}>
+                  <Text style={styles.coachingEmptyText}>
+                    이번 분석에서는 확실하게 확인된 잘한 점이 없어요. 부족하다는 뜻이 아니라,
+                    사진에서 확인 가능한 근거만 보여드렸어요.
+                  </Text>
+                </View>
+              )}
             </View>
 
-            <Text style={styles.sectionTitle}>잘한 포인트</Text>
-            <View style={styles.accordionList}>
-              {result.strengths.map((strength) => (
-                <StrengthAccordionItem
-                  isOpen={openStrengthId === strength.id}
-                  key={strength.id}
-                  onPress={() => {
-                    setOpenStrengthId((currentId) =>
-                      currentId === strength.id ? null : strength.id,
+            <View style={styles.coachingSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>보완할 점</Text>
+                <Text style={styles.sectionCount}>{result.points.length}개</Text>
+              </View>
+              {result.points.length > 0 ? (
+                <View style={styles.accordionList}>
+                  {result.points.map(point => {
+                    const evaluation = evaluationByTopicId.get(point.topicId);
+                    const criteria = (evaluation?.goalCriterionIds ?? []).flatMap(criterionId => {
+                      const criterion = goalCriteriaById.get(criterionId);
+                      return criterion ? [criterion] : [];
+                    });
+
+                    return (
+                      <PointAccordionItem
+                        criteria={criteria}
+                        evaluation={evaluation}
+                        evidenceMedia={evidenceMedia}
+                        isOpen={openPointIds.has(point.id)}
+                        key={point.id}
+                        onPress={() => {
+                          setOpenPointIds(currentIds => {
+                            const nextIds = new Set(currentIds);
+
+                            if (nextIds.has(point.id)) {
+                              nextIds.delete(point.id);
+                            } else {
+                              nextIds.add(point.id);
+                            }
+
+                            return nextIds;
+                          });
+                        }}
+                        point={point}
+                      />
                     );
-                  }}
-                  strength={strength}
-                />
-              ))}
+                  })}
+                </View>
+              ) : (
+                <View style={styles.coachingEmptyState}>
+                  <Text style={styles.coachingEmptyText}>
+                    지금 사진에서는 꼭 바꿔야 할 점을 찾지 못했어요. 현재 표현을 유지해도 좋아요.
+                  </Text>
+                </View>
+              )}
             </View>
+
           </OptionalViewShot>
 
           <FeedbackShareActions
@@ -293,10 +511,16 @@ export function MakeupFeedbackResultScreen({
 }
 
 function PointAccordionItem({
+  criteria,
+  evaluation,
+  evidenceMedia,
   isOpen,
   onPress,
   point,
 }: {
+  criteria: readonly string[];
+  evaluation?: MakeupFeedbackEvaluation;
+  evidenceMedia?: MakeupFeedbackEvidenceMedia;
   isOpen: boolean;
   onPress: () => void;
   point: MakeupFeedbackCorrectionPoint;
@@ -327,10 +551,26 @@ function PointAccordionItem({
       </Pressable>
       {isOpen ? (
         <View style={styles.accordionDetail}>
-          {point.title !== point.topicLabel ? (
-            <Text style={styles.accordionDetailTitle}>{point.title}</Text>
-          ) : null}
-          <Text style={styles.accordionText}>{point.description}</Text>
+          <EvaluationEvidence evaluation={evaluation} evidenceMedia={evidenceMedia} />
+          <View style={styles.coachingInterpretation}>
+            <Text style={styles.coachingInterpretationLabel}>왜 보완하면 좋은가</Text>
+            {point.title !== point.topicLabel ? (
+              <Text style={styles.accordionDetailTitle}>{point.title}</Text>
+            ) : null}
+            <Text style={styles.accordionText}>{point.description}</Text>
+            {criteria.length > 0 ? (
+              <View style={styles.coachingCriteria}>
+                <Text style={styles.coachingCriteriaLabel}>목적과 연결</Text>
+                {criteria.map((criterion, index) => (
+                  <FeedbackBulletRow key={`${index}-${criterion}`} text={criterion} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+          <EvaluationActionSteps
+            actionSteps={point.actionSteps}
+            label="이렇게 해보세요"
+          />
         </View>
       ) : null}
     </View>
@@ -338,10 +578,16 @@ function PointAccordionItem({
 }
 
 function StrengthAccordionItem({
+  criteria,
+  evaluation,
+  evidenceMedia,
   isOpen,
   onPress,
   strength,
 }: {
+  criteria: readonly string[];
+  evaluation?: MakeupFeedbackEvaluation;
+  evidenceMedia?: MakeupFeedbackEvidenceMedia;
   isOpen: boolean;
   onPress: () => void;
   strength: MakeupFeedbackStrength;
@@ -372,12 +618,211 @@ function StrengthAccordionItem({
       </Pressable>
       {isOpen ? (
         <View style={styles.accordionDetail}>
-          {strength.title !== strength.topicLabel ? (
-            <Text style={styles.accordionDetailTitle}>{strength.title}</Text>
-          ) : null}
-          <Text style={styles.accordionText}>{strength.description}</Text>
+          <EvaluationEvidence evaluation={evaluation} evidenceMedia={evidenceMedia} />
+          <View style={styles.coachingInterpretation}>
+            <Text style={styles.coachingInterpretationLabel}>왜 좋은가</Text>
+            {strength.title !== strength.topicLabel ? (
+              <Text style={styles.accordionDetailTitle}>{strength.title}</Text>
+            ) : null}
+            <Text style={styles.accordionText}>{strength.description}</Text>
+            {criteria.length > 0 ? (
+              <View style={styles.coachingCriteria}>
+                <Text style={styles.coachingCriteriaLabel}>목적과 연결</Text>
+                {criteria.map((criterion, index) => (
+                  <FeedbackBulletRow key={`${index}-${criterion}`} text={criterion} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+          <EvaluationActionSteps
+            actionSteps={strength.actionSteps}
+            label="이렇게 유지해보세요"
+          />
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function EvaluationEvidence({
+  evaluation,
+  evidenceMedia,
+}: {
+  evaluation?: MakeupFeedbackEvaluation;
+  evidenceMedia?: MakeupFeedbackEvidenceMedia;
+}) {
+  if (!evaluation) {
+    return null;
+  }
+
+  const evidenceRows = getMakeupFeedbackEvidenceRows(evaluation);
+  const requestedRegionIds = new Set(
+    (evaluation.observations ?? []).flatMap(observation => observation.evidenceRegionIds ?? []),
+  );
+  const visibleRegions = evidenceMedia?.regions.filter(region =>
+    requestedRegionIds.has(region.id),
+  ) ?? [];
+
+  if (!evaluation.visibilityReason && evidenceRows.length === 0 && visibleRegions.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {evidenceMedia && visibleRegions.length > 0 ? (
+        <EvidenceRegionStrip media={evidenceMedia} regions={visibleRegions} />
+      ) : null}
+      {evidenceRows.length > 0 ? (
+        <View style={styles.evidenceBlock}>
+          <Text style={styles.evidenceLabel}>사진에서 확인한 점</Text>
+          {evidenceRows.map(row => (
+            <FeedbackBulletRow key={row.id} text={row.text} />
+          ))}
+        </View>
+      ) : null}
+      {evaluation.visibilityReason ? (
+        <View style={styles.evidenceBlock}>
+          <Text style={styles.evidenceLabel}>판단할 때 참고</Text>
+          <Text style={styles.evidenceText}>{evaluation.visibilityReason}</Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+const EVIDENCE_REGION_FRAME_WIDTH = 126;
+const EVIDENCE_REGION_FRAME_HEIGHT = 88;
+
+function getEvidenceRegionLabel(regionId: MakeupFeedbackEvidenceRegion['id']) {
+  switch (regionId) {
+    case 'left_eye':
+      return '눈 주변 1';
+    case 'right_eye':
+      return '눈 주변 2';
+    case 'left_cheek':
+      return '볼 주변 1';
+    case 'right_cheek':
+      return '볼 주변 2';
+    case 'lips':
+      return '입술';
+    default:
+      return '전체 얼굴';
+  }
+}
+
+function EvidenceRegionStrip({
+  media,
+  regions,
+}: {
+  media: MakeupFeedbackEvidenceMedia;
+  regions: MakeupFeedbackEvidenceRegion[];
+}) {
+  return (
+    <View style={styles.evidenceRegionBlock}>
+      <Text style={styles.evidenceLabel}>AI가 함께 확인한 영역</Text>
+      <ScrollView
+        contentContainerStyle={styles.evidenceRegionRow}
+        horizontal
+        showsHorizontalScrollIndicator={false}>
+        {regions.map(region => {
+          const cropWidth = (region.box.right - region.box.left) * media.imageSize.width;
+          const cropHeight = (region.box.bottom - region.box.top) * media.imageSize.height;
+          const scale = Math.max(
+            EVIDENCE_REGION_FRAME_WIDTH / cropWidth,
+            EVIDENCE_REGION_FRAME_HEIGHT / cropHeight,
+          );
+          const renderedWidth = media.imageSize.width * scale;
+          const renderedHeight = media.imageSize.height * scale;
+          const cropRenderedWidth = cropWidth * scale;
+          const cropRenderedHeight = cropHeight * scale;
+
+          return (
+            <View key={region.id} style={styles.evidenceRegionItem}>
+              <View
+                accessibilityLabel={getEvidenceRegionLabel(region.id) + ' 분석 사진'}
+                style={styles.evidenceRegionFrame}>
+                <Image
+                  resizeMode="stretch"
+                  source={media.source}
+                  style={{
+                    height: renderedHeight,
+                    left:
+                      (EVIDENCE_REGION_FRAME_WIDTH - cropRenderedWidth) / 2
+                      - region.box.left * media.imageSize.width * scale,
+                    position: 'absolute',
+                    top:
+                      (EVIDENCE_REGION_FRAME_HEIGHT - cropRenderedHeight) / 2
+                      - region.box.top * media.imageSize.height * scale,
+                    width: renderedWidth,
+                  }}
+                />
+              </View>
+              <Text style={styles.evidenceRegionCaption}>
+                {getEvidenceRegionLabel(region.id)}
+              </Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+function FeedbackBulletRow({
+  text,
+  variant = 'evidence',
+}: {
+  text: string;
+  variant?: 'capture' | 'evidence';
+}) {
+  const isCaptureVariant = variant === 'capture';
+
+  return (
+    <View style={styles.feedbackBulletRow}>
+      <Text
+        accessibilityElementsHidden
+        accessible={false}
+        importantForAccessibility="no"
+        style={[
+          styles.feedbackBulletMarker,
+          isCaptureVariant ? styles.feedbackBulletMarkerCapture : undefined,
+        ]}>
+        ·
+      </Text>
+      <Text
+        style={[
+          isCaptureVariant ? styles.captureQualityText : styles.evidenceText,
+          styles.feedbackBulletBody,
+        ]}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+
+function EvaluationActionSteps({
+  actionSteps,
+  label,
+}: {
+  actionSteps: readonly string[];
+  label: string;
+}) {
+  if (actionSteps.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.actionSteps}>
+      <Text style={styles.actionStepsLabel}>{label}</Text>
+      {actionSteps.map((step, index) => (
+        <View key={`${index}-${step}`} style={styles.actionStepRow}>
+          <View style={styles.actionStepNumber}>
+            <Text style={styles.actionStepNumberText}>{index + 1}</Text>
+          </View>
+          <Text style={styles.actionStepText}>{step}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -457,6 +902,47 @@ const sharedCardShadow = {
 } as const;
 
 const styles = StyleSheet.create({
+  actionStepNumber: {
+    alignItems: 'center',
+    backgroundColor: feedbackColors.text,
+    borderRadius: radius.pill,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  actionStepNumberText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
+  },
+  actionStepRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionStepText: {
+    color: feedbackColors.textMuted,
+    flex: 1,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+  },
+  actionSteps: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.sm,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+  },
+  actionStepsLabel: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
   accordionButton: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -483,6 +969,45 @@ const styles = StyleSheet.create({
   accordionList: {
     gap: spacing.sm,
   },
+  coachingCriteria: {
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  coachingCriteriaLabel: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  coachingEmptyState: {
+    backgroundColor: feedbackColors.surface,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: feedbackRadius.card,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  coachingEmptyText: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
+  coachingInterpretation: {
+    gap: spacing.xs,
+    paddingTop: spacing.xs,
+  },
+  coachingInterpretationLabel: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  coachingSection: {
+    gap: spacing.sm,
+  },
   accordionDetailTitle: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
@@ -491,6 +1016,84 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
+  evidenceBlock: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.sm,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    padding: spacing.md,
+  },
+  evidenceRegionBlock: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.sm,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    padding: spacing.md,
+  },
+  evidenceRegionCaption: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  evidenceRegionFrame: {
+    backgroundColor: feedbackColors.surface,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    height: EVIDENCE_REGION_FRAME_HEIGHT,
+    overflow: 'hidden',
+    width: EVIDENCE_REGION_FRAME_WIDTH,
+  },
+  evidenceRegionItem: {
+    gap: spacing.xs,
+    width: EVIDENCE_REGION_FRAME_WIDTH,
+  },
+  evidenceRegionRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.xs,
+  },  evidenceLabel: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  evidenceText: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+  },
+  feedbackBulletBody: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  feedbackBulletMarker: {
+    color: feedbackColors.textMuted,
+    flexShrink: 0,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+    width: 12,
+  },
+  feedbackBulletMarkerCapture: {
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  feedbackBulletRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    width: '100%',
+  },
+
   accordionText: {
     color: feedbackColors.textMuted,
     fontFamily: typography.fontFamily.medium,
@@ -501,6 +1104,7 @@ const styles = StyleSheet.create({
   },
   accordionTitle: {
     color: feedbackColors.text,
+    flexShrink: 1,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
@@ -513,6 +1117,187 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     minWidth: 0,
+  },
+  analysisSourceBadge: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  analysisSourceText: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  captureQualityCard: {
+    backgroundColor: feedbackColors.surface,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: feedbackRadius.card,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.lg,
+    ...sharedCardShadow,
+  },
+  captureQualityDisclaimer: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+    marginTop: spacing.xs,
+  },
+  captureQualityMeta: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  captureQualityText: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
+  captureQualityTitle: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+
+  analysisCriteriaCard: {
+    backgroundColor: feedbackColors.surface,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: feedbackRadius.card,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+    ...sharedCardShadow,
+  },
+  analysisCriteriaHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  analysisCriteriaHeading: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+  analysisCriteriaHeadingText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  analysisCriteriaIcon: {
+    alignItems: 'center',
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  analysisCriteriaLabel: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  analysisCriteriaTitle: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  criteriaList: {
+    gap: spacing.sm,
+  },
+  criteriaSection: {
+    gap: spacing.sm,
+  },
+  criteriaSectionLabel: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  criterionIndexBadge: {
+    alignItems: 'center',
+    backgroundColor: feedbackColors.text,
+    borderRadius: radius.pill,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  criterionIndexText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: 12,
+  },
+  criterionItem: {
+    alignItems: 'flex-start',
+    backgroundColor: feedbackColors.accentSoft,
+    borderColor: feedbackColors.borderSoft,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  criterionText: {
+    color: feedbackColors.text,
+    flex: 1,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  goalContextCard: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.sm,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  goalContextLabel: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  goalContextText: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  goalIntensityChip: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.pill,
+    flexShrink: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  goalIntensityText: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
   },
 
   captureArea: {
@@ -542,13 +1327,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
+  overallJudgment: {
+    alignItems: 'flex-start',
+    borderTopColor: feedbackColors.borderSoft,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+    maxWidth: 360,
+    paddingTop: spacing.sm,
+    width: '100%',
+  },
+  overallJudgmentLabel: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+
   resultCard: {
     alignSelf: 'center',
     backgroundColor: 'transparent',
   },
-  scoreBox: {
+  scoreHeader: {
     alignItems: 'center',
-    gap: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  scoreBox: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   scoreLabel: {
     color: feedbackColors.textMuted,
@@ -561,26 +1369,37 @@ const styles = StyleSheet.create({
   scoreNumber: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xxl,
+    fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.xxl,
+    lineHeight: typography.lineHeight.lg,
   },
   scorePanel: {
     alignItems: 'center',
     backgroundColor: feedbackColors.surface,
+    gap: spacing.md,
     justifyContent: 'center',
     marginTop: 0,
     paddingHorizontal: feedbackSpacing.screenX,
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  scoreReason: {
+    alignSelf: 'stretch',
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+    maxWidth: 360,
+    textAlign: 'left',
   },
   scoreUnit: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
+    lineHeight: typography.lineHeight.xs,
   },
   screen: {
     backgroundColor: feedbackColors.background,
@@ -588,6 +1407,18 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  sectionCount: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  sectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   sectionTitle: {
     color: feedbackColors.text,

@@ -80,6 +80,20 @@ export type RealtimeCameraStabilityPayload = {
   };
 };
 
+// Optional native frame-quality evidence. The makeup-feedback live policy treats
+// every field as required (fail-closed), while existing capture types ignore it.
+// Metric definitions mirror the backend deterministic vision gate:
+// exposureMean=8-bit luminance mean, shadow/highlight ratios in [0,1], and
+// blurScore=Laplacian variance on the face quality sample.
+export type RealtimeImageQualityPayload = {
+  blurScore?: number;
+  exposureMean?: number;
+  faceAreaRatio?: number;
+  faceWidthRatio?: number;
+  highlightRatio?: number;
+  shadowRatio?: number;
+};
+
 export type NativeCameraCaptureMetadata = RealtimeCameraStabilityPayload & {
   captureLockedAtMs?: number;
   exposureLocked?: boolean;
@@ -97,8 +111,19 @@ export type SemanticMatteAvailability = {
   skin: boolean;
 };
 
+export type RealtimeCaptureFrameMetadata = {
+  // This is the latest analyzed video frame frozen at the photo request. It is
+  // not evidence from the encoded photo pixels.
+  frame: RealtimeFaceCaptureLandmarkPayload;
+  frameAgeMsAtCaptureRequest: number;
+  isStale: boolean;
+  photoPixelsAnalyzed: false;
+  source: 'latest_pre_shutter_video_frame';
+};
+
 export type RealtimeCameraCaptureResult = {
   cameraMetadata?: NativeCameraCaptureMetadata;
+  captureFrameMetadata?: RealtimeCaptureFrameMetadata;
   format?: 'jpg' | 'png' | 'heic';
   height?: number;
   // matte:capability probe 결과 (rung/device/preset/availableTypes...) — 로깅용
@@ -123,6 +148,7 @@ export type RealtimeFaceCaptureLandmarkPayload = {
   frameRotationDetected?: 'upright' | 'rot90cw' | 'rot90ccw' | 'rot180' | 'unknown';
   frameRotationLocked?: boolean;
   imageHeight?: number;
+  imageQuality?: RealtimeImageQualityPayload;
   imageWidth?: number;
   landmarks?: FaceLandmarkMap;
   mediaPipe?: RealtimeMediaPipePayload;

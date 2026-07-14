@@ -68,6 +68,14 @@ import {
   type FaceLandmarkPoint,
 } from '../services/faceCaptureValidation';
 import {
+  MAKEUP_FEEDBACK_REALTIME_QUALITY_LIMITS,
+  advanceMakeupFeedbackRealtimeQualitySnapshot,
+  evaluateMakeupFeedbackCaptureFrameMetadata,
+  evaluateMakeupFeedbackRealtimeCaptureSnapshot,
+  shouldRequireMakeupFeedbackRealtimeQuality,
+  type MakeupFeedbackRealtimeFrameSnapshot,
+} from '../services/makeupFeedbackRealtimeQuality';
+import {
   uploadFaceCaptureImage,
   type FaceCaptureUploadResult,
   type FaceCaptureImageInput,
@@ -108,6 +116,7 @@ type CameraFaceCaptureScreenProps = {
   captureMode?: CameraFaceCaptureMode;
   captureType?: FaceCaptureUploadCaptureType;
   checks?: FaceCaptureCheckState;
+  imageQuality?: number;
   onCapture?: (
     result?: FaceCaptureUploadResult,
     greenlightReport?: FaceCaptureGreenlightReport,
@@ -353,6 +362,7 @@ function getScreenLandmarkPoint(
 function createLocalFaceCaptureResult({
   cameraMetadata,
   contentType,
+  fileName,
   height,
   semanticMattes,
   source,
@@ -366,6 +376,7 @@ function createLocalFaceCaptureResult({
     cameraMetadata,
     cdnUrl: null,
     contentType: contentType ?? 'image/jpeg',
+    fileName: fileName ?? null,
     height: height ?? null,
     imageUri: uri,
     mediaId: localId,
@@ -385,6 +396,7 @@ export function CameraFaceCaptureScreen({
   captureMode = 'face',
   captureType,
   checks,
+  imageQuality = FACE_CAPTURE_UPLOAD_IMAGE_QUALITY,
   onCapture,
   onClose,
   onPickImage,
@@ -413,9 +425,15 @@ export function CameraFaceCaptureScreen({
     useState<RealtimeCameraStabilityPayload | undefined>();
   const [latestMediaPipe, setLatestMediaPipe] =
     useState<RealtimeMediaPipePayload | undefined>();
+  const [latestRealtimeFrameSnapshot, setLatestRealtimeFrameSnapshot] =
+    useState<MakeupFeedbackRealtimeFrameSnapshot | null>(null);
+  const [makeupFeedbackEvaluationNowMs, setMakeupFeedbackEvaluationNowMs] =
+    useState(() => Date.now());
   const [uploadError, setUploadError] = useState<string | null>(null);
   const landmarkScanInFlightRef = useRef(false);
   const lastRealtimeLogAtRef = useRef(0);
+  const latestRealtimeFrameSnapshotRef =
+    useRef<MakeupFeedbackRealtimeFrameSnapshot | null>(null);
   const hasAutoOpenedGalleryRef = useRef(false);
   // 안내 문구 깜빡임 방지: 최신 목표 문구는 ref에 담고, 표시는 interval로 제한 갱신.
   const guidanceMessageTargetRef = useRef<string | null>(null);
@@ -552,6 +570,60 @@ export function CameraFaceCaptureScreen({
   );
   const shouldBlockForGreenlight =
     requireGreenlight && !greenlightReport.finalCaptureGreenlight;
+  // 메이크업 피드백은 서버 deterministic hard-retake 기준보다 좁은 실시간
+  // 안전 구간과 모든 품질 증거를 요구한다. 네이티브 분석기가 없거나 값이 빠지면 이
+  // 촬영 타입에서만 fail-closed하며 다른 얼굴 촬영 흐름은 기존 정책을 유지한다.
+  const requireMakeupFeedbackRealtimeQuality =
+    shouldValidateFace &&
+    shouldRequireMakeupFeedbackRealtimeQuality(effectiveCaptureType);
+  const makeupFeedbackRealtimeQuality = useMemo(
+    () =>
+      evaluateMakeupFeedbackRealtimeCaptureSnapshot({
+        analyzerAvailable: realtimeCaptureAvailable,
+        guide: screenGuideBounds,
+        nowMs: makeupFeedbackEvaluationNowMs,
+        snapshot: latestRealtimeFrameSnapshot,
+      }),
+    [
+      latestRealtimeFrameSnapshot,
+      makeupFeedbackEvaluationNowMs,
+      realtimeCaptureAvailable,
+      screenGuideBounds,
+    ],
+  );
+  const shouldBlockForMakeupFeedbackQuality =
+    requireMakeupFeedbackRealtimeQuality &&
+    !makeupFeedbackRealtimeQuality.isCaptureEnabled;
+
+  useEffect(() => {
+    latestRealtimeFrameSnapshotRef.current = null;
+    setLatestRealtimeFrameSnapshot(null);
+    setMakeupFeedbackEvaluationNowMs(Date.now());
+  }, [cameraDirection, requireMakeupFeedbackRealtimeQuality, screenGuideBounds]);
+
+  useEffect(() => {
+    if (
+      !requireMakeupFeedbackRealtimeQuality ||
+      latestRealtimeFrameSnapshot === null
+    ) {
+      return;
+    }
+
+    const staleAtMs =
+      latestRealtimeFrameSnapshot.receivedAtMs +
+      MAKEUP_FEEDBACK_REALTIME_QUALITY_LIMITS.maxFrameAgeMs +
+      1;
+    const timeoutId = setTimeout(() => {
+      if (
+        latestRealtimeFrameSnapshotRef.current?.receivedAtMs ===
+        latestRealtimeFrameSnapshot.receivedAtMs
+      ) {
+        setMakeupFeedbackEvaluationNowMs(staleAtMs);
+      }
+    }, Math.max(0, staleAtMs - Date.now()));
+
+    return () => clearTimeout(timeoutId);
+  }, [latestRealtimeFrameSnapshot, requireMakeupFeedbackRealtimeQuality]);
   // 얼굴 세로 비율 촬영에서만 실시간 pitch(고개 숙임/젖힘) 게이트 적용.
   // 세로 비율 최대 왜곡원인데 greenlight는 pitch를 안 보므로 여기서 보강한다.
   const requirePitchGate = requireGreenlight && effectiveCaptureType === 'face_analysis';
@@ -599,17 +671,19 @@ export function CameraFaceCaptureScreen({
   // 프레임마다 값이 바뀌므로 아래 stableGuidanceMessage로 갱신 빈도를 제한한다.
   const rawGuidanceMessage = !shouldValidateFace
     ? null
-    : requireGreenlight
-      ? !greenlightReport.finalCaptureGreenlight
-        ? greenlightReport.message
-        : shouldBlockForPitch
-          ? FACE_PITCH_GATE_MESSAGE
-          : shouldBlockForColorLighting
-            ? colorLightingReport.message
-            : null
-      : guidance.status === 'blocked'
-        ? guidance.message
-        : null;
+    : shouldBlockForMakeupFeedbackQuality
+      ? makeupFeedbackRealtimeQuality.message
+      : requireGreenlight
+        ? !greenlightReport.finalCaptureGreenlight
+          ? greenlightReport.message
+          : shouldBlockForPitch
+            ? FACE_PITCH_GATE_MESSAGE
+            : shouldBlockForColorLighting
+              ? colorLightingReport.message
+              : null
+        : guidance.status === 'blocked'
+          ? guidance.message
+          : null;
   // 렌더 단계에서 ref.current를 직접 수정하면 렌더 순수성을 해치므로, 값이 바뀔 때만
   // effect로 안전하게 갱신한다. 표시는 위 interval이 이 ref를 읽어 제한 갱신한다.
   useEffect(() => {
@@ -633,6 +707,7 @@ export function CameraFaceCaptureScreen({
       : captureValidationMessage ?? stableGuidanceMessage);
   const isCaptureDisabled =
     isUploading ||
+    shouldBlockForMakeupFeedbackQuality ||
     shouldBlockForGreenlight ||
     shouldBlockForPitch ||
     shouldBlockForColorLighting;
@@ -688,6 +763,7 @@ export function CameraFaceCaptureScreen({
       : uploadError ||
           !isCameraReady ||
           shouldBlockForScreenGuide ||
+          shouldBlockForMakeupFeedbackQuality ||
           shouldBlockForGreenlight ||
           shouldBlockForPitch ||
           shouldBlockForColorLighting
@@ -797,10 +873,22 @@ export function CameraFaceCaptureScreen({
       );
       setLandmarkDetection(detection);
       setLiveCaptureChecks(nextChecks);
+      const now = Date.now();
       setLatestCameraStability(nativeEvent.cameraStability);
       setLatestMediaPipe(nativeEvent.mediaPipe);
+      if (requireMakeupFeedbackRealtimeQuality) {
+        const snapshot = advanceMakeupFeedbackRealtimeQualitySnapshot({
+          analyzerAvailable: realtimeCaptureAvailable,
+          frame: nativeEvent,
+          guide: screenGuideBounds,
+          previousSnapshot: latestRealtimeFrameSnapshotRef.current,
+          receivedAtMs: now,
+        });
+        latestRealtimeFrameSnapshotRef.current = snapshot;
+        setLatestRealtimeFrameSnapshot(snapshot);
+        setMakeupFeedbackEvaluationNowMs(now);
+      }
 
-      const now = Date.now();
       if (now - lastRealtimeLogAtRef.current > 500) {
         lastRealtimeLogAtRef.current = now;
         const chinScreenPoint = formatScreenLandmarkPoint(nextChinDot);
@@ -864,7 +952,16 @@ export function CameraFaceCaptureScreen({
         });
       }
     },
-    [cameraDirection, guideBounds, height, realtimePoseGate, screenGuideBounds, width],
+    [
+      cameraDirection,
+      guideBounds,
+      height,
+      realtimeCaptureAvailable,
+      realtimePoseGate,
+      requireMakeupFeedbackRealtimeQuality,
+      screenGuideBounds,
+      width,
+    ],
   );
 
   useEffect(() => {
@@ -1063,13 +1160,16 @@ export function CameraFaceCaptureScreen({
     setLiveCaptureChecks(null);
     setLatestCameraStability(undefined);
     setLatestMediaPipe(undefined);
+    latestRealtimeFrameSnapshotRef.current = null;
+    setLatestRealtimeFrameSnapshot(null);
+    setMakeupFeedbackEvaluationNowMs(Date.now());
     setCaptureValidationMessage(null);
     setUploadError(null);
     onToggleCamera?.(nextDirection);
   };
 
   const handleCapture = async () => {
-    if (isCaptureDisabled) {
+    if (isUploading) {
       return;
     }
 
@@ -1078,7 +1178,29 @@ export function CameraFaceCaptureScreen({
       return;
     }
 
+    const captureStartedAtMs = Date.now();
+    let frozenMakeupFeedbackSnapshot: MakeupFeedbackRealtimeFrameSnapshot | null =
+      null;
+
     if (shouldValidateFace) {
+      if (requireMakeupFeedbackRealtimeQuality) {
+        frozenMakeupFeedbackSnapshot = latestRealtimeFrameSnapshotRef.current;
+        const preCaptureQuality =
+          evaluateMakeupFeedbackRealtimeCaptureSnapshot({
+            analyzerAvailable: realtimeCaptureAvailable,
+            guide: screenGuideBounds,
+            nowMs: captureStartedAtMs,
+            snapshot: frozenMakeupFeedbackSnapshot,
+          });
+        if (!preCaptureQuality.isCaptureEnabled) {
+          triggerBlockedCaptureFeedback(
+            preCaptureQuality.message ??
+              '얼굴과 촬영 환경을 확인하고 있어요. 잠시만 기다려주세요',
+          );
+          return;
+        }
+      }
+
       if (requireGreenlight && !greenlightReport.finalCaptureGreenlight) {
         triggerBlockedCaptureFeedback(greenlightReport.message);
         return;
@@ -1120,12 +1242,37 @@ export function CameraFaceCaptureScreen({
       const picture = realtimeCaptureAvailable
         ? await realtimeCameraRef.current?.capture()
         : await cameraRef.current?.takePictureAsync({
-            quality: FACE_CAPTURE_UPLOAD_IMAGE_QUALITY,
+            quality: imageQuality,
             skipProcessing: false,
           });
 
       if (!picture?.uri) {
         throw new Error('Camera did not return an image file.');
+      }
+
+      if (requireMakeupFeedbackRealtimeQuality) {
+        const captureFrameMetadata =
+          'captureFrameMetadata' in picture
+            ? picture.captureFrameMetadata
+            : undefined;
+        // Native freezes the analyzed video frame at the photo request. This is
+        // stronger than checking a later JS event, but it does not analyze the
+        // encoded JPEG/HEIC pixels (photoPixelsAnalyzed is deliberately false).
+        const postCaptureQuality =
+          evaluateMakeupFeedbackCaptureFrameMetadata({
+            analyzerAvailable: realtimeCaptureAvailable,
+            captureFrameMetadata,
+            guide: screenGuideBounds,
+            minimumSequence: frozenMakeupFeedbackSnapshot?.frame.sequence,
+          });
+
+        if (!postCaptureQuality.isCaptureEnabled) {
+          triggerBlockedCaptureFeedback(
+            postCaptureQuality.message ??
+              '촬영 순간 얼굴 상태가 달라졌어요. 가이드 안에서 잠시 멈춰주세요',
+          );
+          return;
+        }
       }
 
       const nativeCameraMetadata =
@@ -1208,7 +1355,7 @@ export function CameraFaceCaptureScreen({
       const pickerResult = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: false,
         mediaTypes: ['images'],
-        quality: FACE_CAPTURE_UPLOAD_IMAGE_QUALITY,
+        quality: imageQuality,
       });
 
       if (pickerResult.canceled || pickerResult.assets.length === 0) {
@@ -1381,7 +1528,7 @@ export function CameraFaceCaptureScreen({
             accessibilityLabel={
               isUploading
                 ? '촬영 처리 중'
-                : shouldBlockForGreenlight
+                : shouldBlockForMakeupFeedbackQuality || shouldBlockForGreenlight
                   ? '촬영 조건 확인 중'
                   : '사진 촬영'
             }

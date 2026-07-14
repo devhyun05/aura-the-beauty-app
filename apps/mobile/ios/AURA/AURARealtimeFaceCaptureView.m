@@ -57,6 +57,245 @@ static CGFloat AURARealtimeClamp(CGFloat value)
   return fmax(0.0, fmin(1.0, value));
 }
 
+// Live quality telemetry uses the same 8-bit luminance domain and field names
+// as services/backend/app/services/makeup_feedback_vision.py. Vision/MediaPipe
+// already run on this serial queue, so the ROI is deterministically sampled at
+// no more than 512 points on either axis and 65,536 points total.
+static size_t const AURARealtimeQualitySampleMaxEdge = 512;
+static size_t const AURARealtimeQualitySampleMaxPixels = 65536;
+static NSTimeInterval const AURARealtimeCaptureFrameMaxAgeMs = 500.0;
+static NSString *const AURARealtimeFrameTimestampPayloadKey =
+    @"_auraNativeFrameTimestampSeconds";
+
+static NSNumber *AURARealtimeRoundedMetric(double value, double scale)
+{
+  return @(round(value * scale) / scale);
+}
+
+static CGPoint AURARealtimeRawTopLeftPointFromOrientedTopLeft(
+    CGPoint point,
+    CGImagePropertyOrientation orientation)
+{
+  // Inverse EXIF orientation: Vision reports in the upright/oriented image,
+  // while CVPixelBuffer rows below remain raw and unmirrored.
+  switch (orientation) {
+    case kCGImagePropertyOrientationRight:
+      return CGPointMake(point.y, 1.0 - point.x);
+    case kCGImagePropertyOrientationLeft:
+      return CGPointMake(1.0 - point.y, point.x);
+    case kCGImagePropertyOrientationDown:
+      return CGPointMake(1.0 - point.x, 1.0 - point.y);
+    case kCGImagePropertyOrientationUp:
+    default:
+      return point;
+  }
+}
+
+static CGRect AURARealtimeRawFaceRect(VNFaceObservation *face,
+                                      CGImagePropertyOrientation orientation)
+{
+  // VNFaceObservation uses normalized lower-left coordinates in the oriented
+  // image. Convert its four corners to oriented top-left first, then invert the
+  // EXIF rotation. Four-corner min/max avoids assuming portrait/raw dimensions.
+  const CGRect box = CGRectIntersection(
+      CGRectStandardize(face.boundingBox),
+      CGRectMake(0.0, 0.0, 1.0, 1.0));
+  if (CGRectIsNull(box) || CGRectIsEmpty(box)) {
+    return CGRectNull;
+  }
+
+  const CGFloat left = CGRectGetMinX(box);
+  const CGFloat right = CGRectGetMaxX(box);
+  const CGFloat top = 1.0 - CGRectGetMaxY(box);
+  const CGFloat bottom = 1.0 - CGRectGetMinY(box);
+  const CGPoint orientedCorners[4] = {
+    CGPointMake(left, top),
+    CGPointMake(right, top),
+    CGPointMake(left, bottom),
+    CGPointMake(right, bottom),
+  };
+  CGFloat minX = 1.0;
+  CGFloat minY = 1.0;
+  CGFloat maxX = 0.0;
+  CGFloat maxY = 0.0;
+
+  for (NSUInteger index = 0; index < 4; index += 1) {
+    const CGPoint raw = AURARealtimeRawTopLeftPointFromOrientedTopLeft(
+        orientedCorners[index], orientation);
+    minX = fmin(minX, raw.x);
+    minY = fmin(minY, raw.y);
+    maxX = fmax(maxX, raw.x);
+    maxY = fmax(maxY, raw.y);
+  }
+
+  minX = AURARealtimeClamp(minX);
+  minY = AURARealtimeClamp(minY);
+  maxX = AURARealtimeClamp(maxX);
+  maxY = AURARealtimeClamp(maxY);
+  if (maxX <= minX || maxY <= minY) {
+    return CGRectNull;
+  }
+
+  return CGRectMake(minX, minY, maxX - minX, maxY - minY);
+}
+
+static inline double AURARealtimeBGRALuminance(const uint8_t *baseAddress,
+                                               size_t bytesPerRow,
+                                               size_t x,
+                                               size_t y)
+{
+  // AVCaptureVideoDataOutput is configured as 32BGRA. Memory order is B,G,R,A;
+  // coefficients match Pillow RGB -> L and the backend's 8-bit gray domain.
+  const uint8_t *pixel = baseAddress + y * bytesPerRow + x * 4;
+  return 0.299 * pixel[2] + 0.587 * pixel[1] + 0.114 * pixel[0];
+}
+
+static NSDictionary *AURARealtimeFaceQualityMetrics(
+    CVPixelBufferRef pixelBuffer,
+    VNFaceObservation *face,
+    CGImagePropertyOrientation orientation)
+{
+  if (!pixelBuffer || !face) {
+    return nil;
+  }
+
+  const size_t imageWidth = CVPixelBufferGetWidth(pixelBuffer);
+  const size_t imageHeight = CVPixelBufferGetHeight(pixelBuffer);
+  const CGRect normalizedVisionFace = CGRectIntersection(
+      CGRectStandardize(face.boundingBox),
+      CGRectMake(0.0, 0.0, 1.0, 1.0));
+  const CGRect normalizedRawFace = AURARealtimeRawFaceRect(face, orientation);
+  if (imageWidth == 0 || imageHeight == 0 ||
+      CGRectIsNull(normalizedVisionFace) || CGRectIsNull(normalizedRawFace)) {
+    return nil;
+  }
+
+  // The server evaluates an upright detector bbox, so width comes from the
+  // oriented Vision box. Area is invariant under the raw Left/Right transform.
+  const double faceWidthRatio = normalizedVisionFace.size.width;
+  const double faceAreaRatio =
+      normalizedVisionFace.size.width * normalizedVisionFace.size.height;
+  size_t minX =
+      (size_t)floor(CGRectGetMinX(normalizedRawFace) * imageWidth);
+  size_t maxX =
+      (size_t)ceil(CGRectGetMaxX(normalizedRawFace) * imageWidth);
+  size_t minY =
+      (size_t)floor(CGRectGetMinY(normalizedRawFace) * imageHeight);
+  size_t maxY =
+      (size_t)ceil(CGRectGetMaxY(normalizedRawFace) * imageHeight);
+  minX = MIN(minX, imageWidth);
+  maxX = MIN(maxX, imageWidth);
+  minY = MIN(minY, imageHeight);
+  maxY = MIN(maxY, imageHeight);
+  if (maxX <= minX || maxY <= minY) {
+    return nil;
+  }
+
+  const size_t roiWidth = maxX - minX;
+  const size_t roiHeight = maxY - minY;
+  size_t sampleStride = MAX(
+      (roiWidth + AURARealtimeQualitySampleMaxEdge - 1) /
+          AURARealtimeQualitySampleMaxEdge,
+      (roiHeight + AURARealtimeQualitySampleMaxEdge - 1) /
+          AURARealtimeQualitySampleMaxEdge);
+  sampleStride = MAX(sampleStride, (size_t)1);
+  while (((roiWidth + sampleStride - 1) / sampleStride) *
+             ((roiHeight + sampleStride - 1) / sampleStride) >
+         AURARealtimeQualitySampleMaxPixels) {
+    sampleStride += 1;
+  }
+
+  NSMutableDictionary *metrics = [@{
+    @"faceWidthRatio": AURARealtimeRoundedMetric(faceWidthRatio, 1000000.0),
+    @"faceAreaRatio": AURARealtimeRoundedMetric(faceAreaRatio, 1000000.0),
+  } mutableCopy];
+  if (CVPixelBufferGetPixelFormatType(pixelBuffer) != kCVPixelFormatType_32BGRA) {
+    return metrics;
+  }
+
+  const CVReturn lockResult =
+      CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+  if (lockResult != kCVReturnSuccess) {
+    return metrics;
+  }
+
+  const uint8_t *baseAddress =
+      (const uint8_t *)CVPixelBufferGetBaseAddress(pixelBuffer);
+  const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+  if (!baseAddress || bytesPerRow < imageWidth * 4) {
+    CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+    return metrics;
+  }
+
+  double luminanceSum = 0.0;
+  size_t luminanceCount = 0;
+  size_t shadowCount = 0;
+  size_t highlightCount = 0;
+  for (size_t y = minY; y < maxY; y += sampleStride) {
+    for (size_t x = minX; x < maxX; x += sampleStride) {
+      const double luminance =
+          AURARealtimeBGRALuminance(baseAddress, bytesPerRow, x, y);
+      luminanceSum += luminance;
+      luminanceCount += 1;
+      shadowCount += luminance <= 20.0 ? 1 : 0;
+      highlightCount += luminance >= 235.0 ? 1 : 0;
+    }
+  }
+
+  // Welford population variance (M2/N), matching numpy.var in the backend.
+  // Neighbors are one sampleStride apart, making this a bounded deterministic
+  // nearest-neighbor reduction instead of a second full-resolution image.
+  double laplacianMean = 0.0;
+  double laplacianM2 = 0.0;
+  size_t laplacianCount = 0;
+  if (roiWidth > sampleStride * 2 && roiHeight > sampleStride * 2) {
+    for (size_t y = minY + sampleStride;
+         y + sampleStride < maxY;
+         y += sampleStride) {
+      for (size_t x = minX + sampleStride;
+           x + sampleStride < maxX;
+           x += sampleStride) {
+        const double center =
+            AURARealtimeBGRALuminance(baseAddress, bytesPerRow, x, y);
+        const double laplacian =
+            AURARealtimeBGRALuminance(
+                baseAddress, bytesPerRow, x - sampleStride, y) +
+            AURARealtimeBGRALuminance(
+                baseAddress, bytesPerRow, x + sampleStride, y) +
+            AURARealtimeBGRALuminance(
+                baseAddress, bytesPerRow, x, y - sampleStride) +
+            AURARealtimeBGRALuminance(
+                baseAddress, bytesPerRow, x, y + sampleStride) -
+            4.0 * center;
+        laplacianCount += 1;
+        const double delta = laplacian - laplacianMean;
+        laplacianMean += delta / laplacianCount;
+        laplacianM2 += delta * (laplacian - laplacianMean);
+      }
+    }
+  }
+
+  CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
+  if (luminanceCount == 0) {
+    return metrics;
+  }
+
+  const double exposureMean = luminanceSum / luminanceCount;
+  const double shadowRatio = (double)shadowCount / luminanceCount;
+  const double highlightRatio = (double)highlightCount / luminanceCount;
+  const double blurScore =
+      laplacianCount > 0 ? laplacianM2 / laplacianCount : 0.0;
+  metrics[@"exposureMean"] =
+      AURARealtimeRoundedMetric(exposureMean, 10000.0);
+  metrics[@"shadowRatio"] =
+      AURARealtimeRoundedMetric(shadowRatio, 1000000.0);
+  metrics[@"highlightRatio"] =
+      AURARealtimeRoundedMetric(highlightRatio, 1000000.0);
+  metrics[@"blurScore"] =
+      AURARealtimeRoundedMetric(blurScore, 10000.0);
+  return metrics;
+}
+
 static BOOL AURARealtimeSemanticMatteTypesContain(
     NSArray<AVSemanticSegmentationMatteType> *types,
     AVSemanticSegmentationMatteType type)
@@ -851,6 +1090,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
 - (void)captureWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
 - (void)stopSessionWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
+- (void)associateLatestEmittedFrameWithPhotoSettings:(AVCapturePhotoSettings *)settings;
 - (void)restoreCameraAutoModes;
 - (void)startCameraStabilityMonitoringForDevice:(AVCaptureDevice *)device;
 - (void)stopCameraStabilityMonitoring;
@@ -866,6 +1106,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   AVCaptureDevice *_observedCameraDevice;
   dispatch_queue_t _sessionQueue;
   dispatch_queue_t _visionQueue;
+  dispatch_queue_t _frameMetadataQueue;
   BOOL _isProcessingFrame;
   BOOL _isSessionConfigured;
   BOOL _isSessionRunning;
@@ -923,6 +1164,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   CFTimeInterval _cameraAdjustingSince;
   CFTimeInterval _lastScreenLandmarksTimestamp;
   CFTimeInterval _lastFrameTimestamp;
+  NSDictionary *_latestEmittedFrame;
+  CFTimeInterval _latestEmittedFrameTimestamp;
+  NSMutableDictionary<NSNumber *, NSDictionary *> *_captureFrameMetadataBySettingsID;
   NSInteger _sequence;
   NSInteger _lastMediaPipeTimestampMs;
   RCTPromiseResolveBlock _captureResolve;
@@ -936,6 +1180,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     _facing = @"front";
     _sessionQueue = dispatch_queue_create("aura.realtimeFaceCapture.session", DISPATCH_QUEUE_SERIAL);
     _visionQueue = dispatch_queue_create("aura.realtimeFaceCapture.vision", DISPATCH_QUEUE_SERIAL);
+    _frameMetadataQueue =
+        dispatch_queue_create("aura.realtimeFaceCapture.frameMetadata", DISPATCH_QUEUE_SERIAL);
+    _captureFrameMetadataBySettingsID = [NSMutableDictionary dictionary];
     _session = [AVCaptureSession new];
     _previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:_session];
     _previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
@@ -1125,6 +1372,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   _pendingSemanticMattes = nil;
   _pendingCaptureFormat = nil;
   _pendingCaptureIsFallback = NO;
+  [_captureFrameMetadataBySettingsID removeAllObjects];
   _hasPendingCapture = NO;
   ++_captureGeneration;
   [self restoreCameraAutoModes];
@@ -1867,6 +2115,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       @"sequence": @(_sequence++),
       @"mediaPipe": mediaPipePayload,
       @"cameraStability": cameraStabilityPayload,
+      AURARealtimeFrameTimestampPayloadKey: @(now),
     }];
     _isProcessingFrame = NO;
     return;
@@ -1921,7 +2170,13 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       : @{@"status": @"no_face", @"landmarkCount": @0};
 #endif  // AURA_HAS_MEDIAPIPE
 
+  NSDictionary *imageQuality =
+      AURARealtimeFaceQualityMetrics(imageBuffer, primaryFace, orientation);
+  if (imageQuality.count > 0) {
+    payload[@"imageQuality"] = imageQuality;
+  }
   payload[@"cameraStability"] = cameraStabilityPayload;
+  payload[AURARealtimeFrameTimestampPayloadKey] = @(now);
   [self emitPayload:payload];
   _isProcessingFrame = NO;
 }
@@ -2224,12 +2479,58 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   return AURARealtimeScreenPoint(layerPoint.x, layerPoint.y);
 }
 
+- (void)recordLatestEmittedFrame:(NSDictionary *)frame
+                       timestamp:(CFTimeInterval)timestamp
+{
+  // Called after screen projection on the main queue. A dedicated serial queue
+  // makes this compact snapshot safe to read from the photo/session queue.
+  dispatch_sync(_frameMetadataQueue, ^{
+    self->_latestEmittedFrame = [frame copy];
+    self->_latestEmittedFrameTimestamp = timestamp;
+  });
+}
+
+- (void)associateLatestEmittedFrameWithPhotoSettings:(AVCapturePhotoSettings *)settings
+{
+  // Called on _sessionQueue immediately before capturePhotoWithSettings. The
+  // nested frame is the last fully emitted preview event (including projected
+  // screenLandmarks), never an analysis of the saved JPEG/HEIC pixels.
+  __block NSDictionary *latestFrame = nil;
+  __block CFTimeInterval frameTimestamp = 0;
+  dispatch_sync(_frameMetadataQueue, ^{
+    latestFrame = [self->_latestEmittedFrame copy];
+    frameTimestamp = self->_latestEmittedFrameTimestamp;
+  });
+  if (!latestFrame || frameTimestamp <= 0) {
+    return;
+  }
+
+  const NSTimeInterval ageMs =
+      fmax(0.0, (CACurrentMediaTime() - frameTimestamp) * 1000.0);
+  const BOOL isStale = ageMs > AURARealtimeCaptureFrameMaxAgeMs;
+  NSDictionary *snapshot = @{
+    @"source": @"latest_pre_shutter_video_frame",
+    @"photoPixelsAnalyzed": @NO,
+    @"frameAgeMsAtCaptureRequest": AURARealtimeRoundedMetric(ageMs, 10.0),
+    @"isStale": @(isStale),
+    @"frame": latestFrame,
+  };
+  _captureFrameMetadataBySettingsID[@(settings.uniqueID)] = snapshot;
+}
 - (void)emitPayload:(NSDictionary *)payload
 {
   dispatch_async(dispatch_get_main_queue(), ^{
     NSMutableDictionary *payloadWithScreenPoints = [payload mutableCopy];
     [self attachScreenLandmarksToPayload:payloadWithScreenPoints];
     [self attachMediaPipeScreenLandmarksToPayload:payloadWithScreenPoints];
+
+    NSNumber *frameTimestamp =
+        payloadWithScreenPoints[AURARealtimeFrameTimestampPayloadKey];
+    [payloadWithScreenPoints removeObjectForKey:AURARealtimeFrameTimestampPayloadKey];
+    if ([frameTimestamp respondsToSelector:@selector(doubleValue)]) {
+      [self recordLatestEmittedFrame:payloadWithScreenPoints
+                             timestamp:frameTimestamp.doubleValue];
+    }
 
     if (self.onLandmarksDetected) {
       self.onLandmarksDetected(payloadWithScreenPoints);
@@ -2252,6 +2553,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
     self->_hasPendingCapture = YES;
     self->_pendingCaptureIsFallback = NO;
+    [self->_captureFrameMetadataBySettingsID removeAllObjects];
     NSUInteger captureGeneration = ++self->_captureGeneration;
     self->_captureResolve = resolve;
     self->_captureReject = reject;
@@ -2291,6 +2593,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
             self->_pendingCaptureFormat);
     }
 
+    [self associateLatestEmittedFrameWithPhotoSettings:settings];
     [self->_photoOutput capturePhotoWithSettings:settings delegate:self];
 
     // Watchdog: the semantic-segmentation-matte (depth/portrait) capture
@@ -2330,6 +2633,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     // fallback 이 유효 요청이 된다 — 이후 원(matte) 요청의 지연 콜백은 uniqueID
     // 불일치로 무시된다.
     _pendingCaptureUniqueID = settings.uniqueID;
+    [self associateLatestEmittedFrameWithPhotoSettings:settings];
     [_photoOutput capturePhotoWithSettings:settings delegate:self];
 
     dispatch_after(
@@ -2351,6 +2655,7 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
   _pendingSemanticMattes = nil;
   _pendingCaptureFormat = nil;
   _pendingCaptureIsFallback = NO;
+  [_captureFrameMetadataBySettingsID removeAllObjects];
   _hasPendingCapture = NO;
   [self restoreCameraAutoModes];
   NSLog(@"[aura:face-capture] capture:timeout restored camera; rejecting stalled capture");
@@ -2384,6 +2689,10 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
     NSDictionary *cameraMetadata = self->_pendingCaptureCameraMetadata;
     NSDictionary *pendingSemanticMattes = self->_pendingSemanticMattes;
     NSString *pendingFormat = self->_pendingCaptureFormat ?: @"jpg";
+    NSNumber *settingsID = @(photo.resolvedSettings.uniqueID);
+    NSDictionary *captureFrameMetadata =
+        [self->_captureFrameMetadataBySettingsID[settingsID] copy];
+    [self->_captureFrameMetadataBySettingsID removeAllObjects];
     self->_captureResolve = nil;
     self->_captureReject = nil;
     self->_pendingCaptureCameraMetadata = nil;
@@ -2456,6 +2765,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
       @"format": pendingFormat,
       @"cameraMetadata": cameraMetadata ?: @{},
     } mutableCopy];
+    if (captureFrameMetadata) {
+      payload[@"captureFrameMetadata"] = captureFrameMetadata;
+    }
 
     if (self->_semanticMatteCapture || pendingSemanticMattes) {
       payload[@"semanticMattes"] = AURARealtimeSemanticMatteAvailability(

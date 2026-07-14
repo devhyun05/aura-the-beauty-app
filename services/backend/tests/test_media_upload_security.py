@@ -144,6 +144,8 @@ async def test_presign_binds_server_generated_locations_to_user_and_single_uploa
   assert upload["thumbnail_upload"]["object_key"].startswith("uploads/community-thread-thumbnail/")
   assert s3.created_kinds == ["community-thread", "community-thread-thumbnail"]
   assert "insert into media_upload_sessions" in db.query
+  assert "status,\n      expires_at" in db.query
+  assert "'pending',\n      now()" in db.query
   assert db.args[1] == owner_user_id
   assert db.args[5:8] == (
     "media-bucket",

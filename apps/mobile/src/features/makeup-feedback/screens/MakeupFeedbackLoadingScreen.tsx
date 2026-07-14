@@ -1,29 +1,54 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Easing, Image, Pressable, ScrollView, StyleSheet} from 'react-native';
-import {ArrowRight, Brush, Palette, ShieldCheck, Sparkles} from 'lucide-react-native';
+import {ArrowRight, Camera, CircleCheck, Search, Target} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {makeupFeedbackLoadingPreviewSource} from '../services/makeupFeedbackLoadingService';
+import {getMakeupFeedbackRetakeActionLabels} from '../services/makeupFeedbackResultPresentation';
 import {
   analyzeMakeupForFeedback,
   getMakeupFeedbackAnalysisErrorMessage,
 } from '../services/makeupFeedbackService';
 import {
-  MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES,
+  MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
   buildMakeupFeedbackClosingConferenceMessages,
+  buildMakeupFeedbackConferencePreviewContext,
   buildMakeupFeedbackSafeConferenceMessages,
+  buildMakeupFeedbackWaitingConferenceMessages,
+  canCommitMakeupFeedbackConferenceMessage,
+  canRevealMakeupFeedbackResult,
+  getNextMakeupFeedbackConferenceMessage,
+  getMakeupFeedbackInitialTypingDelayMs,
+  getMakeupFeedbackMessageExposureDelayMs,
+  getMakeupFeedbackTypingDelayMs,
   requestMakeupFeedbackGeneratedConferenceMessages,
+  requestMakeupFeedbackGeneratedPreviewMessagesWithPrefetch,
   type MakeupFeedbackAgentConferenceMessage,
   type MakeupFeedbackAgentId,
+  type MakeupFeedbackConferencePreviewContext,
 } from '../services/makeupFeedbackAgentConferenceService';
-import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
+import {MAKEUP_FEEDBACK_TOPICS} from '../types';
+import type {
+  MakeupFeedbackPhotoSelection,
+  MakeupFeedbackResult,
+  MakeupFeedbackRetakeOutcome,
+} from '../types';
 
-const FIRST_CONFERENCE_MESSAGE_DELAY_MS = 720;
-const SAFE_CONFERENCE_MESSAGE_INTERVAL_MS = 1540;
-const CLOSING_CONFERENCE_MESSAGE_INTERVAL_MS = 1720;
-const EXPECTED_CLOSING_CONFERENCE_MESSAGE_COUNT = 4;
+const CLOSING_GENERATION_GRACE_MS = 9500;
+const EXPECTED_PREVIEW_CONFERENCE_MESSAGE_COUNT = 4;
+const EXPECTED_CLOSING_CONFERENCE_MESSAGE_COUNT = 6;
+// 대기(waiting) 진행 대화는 분석이 끝나기 전 침묵을 메우는 용도라, 기본 노출
+// 간격에 이 값을 더해 풀 소진 속도를 늦춘다(10개 기준 약 60~80초 커버).
+const WAITING_MESSAGE_EXTRA_EXPOSURE_DELAY_MS = 3200;
+const PRE_RESULT_PROGRESS_INITIAL = 0.08;
+const PRE_RESULT_PROGRESS_CAP = 0.58;
+const PRE_RESULT_PROGRESS_TICK_MS = 1000;
+const PRE_RESULT_PROGRESS_EASING = 0.035;
+const makeupTopicLabelById = new Map(
+  MAKEUP_FEEDBACK_TOPICS.map(topic => [topic.id, topic.label]),
+);
 type AgentIconComponent = React.ComponentType<{
   color?: string;
   size?: number;
@@ -40,32 +65,28 @@ const agentProfiles: Record<
     tint: string;
   }
 > = {
-  tone: {
-    Icon: Sparkles,
+  photo: {
+    Icon: Camera,
     avatarBackground: '#F8E8EC',
-    name: 'Tone Agent',
-    role: '톤 기준',
+    ...MAKEUP_FEEDBACK_REVIEW_CREW_LABELS.photo,
     tint: '#9F5B68',
   },
-  color: {
-    Icon: Palette,
+  goal: {
+    Icon: Target,
     avatarBackground: '#FFF1DD',
-    name: 'Color Agent',
-    role: '색감 균형',
+    ...MAKEUP_FEEDBACK_REVIEW_CREW_LABELS.goal,
     tint: '#A05F2C',
   },
-  style: {
-    Icon: Brush,
+  detail: {
+    Icon: Search,
     avatarBackground: '#EAF3EE',
-    name: 'Style Agent',
-    role: '실행 포인트',
+    ...MAKEUP_FEEDBACK_REVIEW_CREW_LABELS.detail,
     tint: '#596F62',
   },
-  quality: {
-    Icon: ShieldCheck,
+  coach: {
+    Icon: CircleCheck,
     avatarBackground: '#E8EEF7',
-    name: 'Quality Agent',
-    role: '최종 검토',
+    ...MAKEUP_FEEDBACK_REVIEW_CREW_LABELS.coach,
     tint: '#445A75',
   },
 };
@@ -75,6 +96,8 @@ type MakeupFeedbackLoadingScreenProps = {
   selection: MakeupFeedbackPhotoSelection;
   onBack?: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
+  onChooseDifferentPhoto: () => void;
+  onRetake: () => void;
 };
 
 export function resolveMakeupFeedbackLoadingPreviewSource(
@@ -94,29 +117,48 @@ function countMessagesByPhase(
   return messages.filter(message => message.phase === phase).length;
 }
 
+function isPreviewConferenceMessage(message: MakeupFeedbackAgentConferenceMessage) {
+  return message.phase === 'preview' || message.phase === 'safe';
+}
+
+function countPreviewConferenceMessages(
+  messages: readonly MakeupFeedbackAgentConferenceMessage[],
+) {
+  return messages.filter(isPreviewConferenceMessage).length;
+}
+
 function getNextTypingAgentId({
   analysisResult,
   closingMessages,
+  isPreviewGenerationSettled,
   messages,
-  safeMessages,
+  previewMessages,
+  waitingMessages,
 }: {
   analysisResult: MakeupFeedbackResult | null;
   closingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  isPreviewGenerationSettled: boolean;
   messages: readonly MakeupFeedbackAgentConferenceMessage[];
-  safeMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  previewMessages: readonly MakeupFeedbackAgentConferenceMessage[];
+  waitingMessages: readonly MakeupFeedbackAgentConferenceMessage[];
 }): MakeupFeedbackAgentId {
-  const safeMessageCount = countMessagesByPhase(messages, 'safe');
-  const closingMessageCount = countMessagesByPhase(messages, 'closing');
-  const canShowClosing =
-    Boolean(analysisResult) &&
-    closingMessages.length > 0 &&
-    safeMessageCount >= MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES;
+  const previewMessageCount = countPreviewConferenceMessages(messages);
+  const nextPreviewMessage = previewMessages[previewMessageCount];
 
-  if (canShowClosing) {
-    return closingMessages[closingMessageCount]?.agentId ?? 'quality';
+  if (nextPreviewMessage || !isPreviewGenerationSettled) {
+    return nextPreviewMessage?.agentId ?? 'photo';
   }
 
-  return safeMessages[safeMessageCount]?.agentId ?? 'quality';
+  // 대기 진행 대화 구간 — 다음 대기 메시지의 화자가 타이핑 중인 것으로 보여준다.
+  if (!analysisResult || closingMessages.length === 0) {
+    const waitingMessageCount = countMessagesByPhase(messages, 'waiting');
+
+    return waitingMessages[waitingMessageCount]?.agentId ?? 'photo';
+  }
+
+  const closingMessageCount = countMessagesByPhase(messages, 'closing');
+
+  return closingMessages[closingMessageCount]?.agentId ?? 'coach';
 }
 
 function getConferenceProgress({
@@ -134,41 +176,52 @@ function getConferenceProgress({
     return 1;
   }
 
-  const safeMessageCount = Math.min(
-    countMessagesByPhase(messages, 'safe'),
-    MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES,
+  const previewMessageCount = Math.min(
+    countPreviewConferenceMessages(messages),
+    EXPECTED_PREVIEW_CONFERENCE_MESSAGE_COUNT,
   );
+  const previewProgress =
+    PRE_RESULT_PROGRESS_INITIAL +
+    (previewMessageCount / EXPECTED_PREVIEW_CONFERENCE_MESSAGE_COUNT) * 0.28;
+
+  if (!analysisResult) {
+    return previewProgress;
+  }
+
   const closingMessageCount = countMessagesByPhase(messages, 'closing');
   const expectedClosingCount =
     closingMessages.length || EXPECTED_CLOSING_CONFERENCE_MESSAGE_COUNT;
-  const totalMessageCount =
-    MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES + expectedClosingCount;
-  const rawProgress = (safeMessageCount + closingMessageCount) / totalMessageCount;
-  const progress = 0.08 + rawProgress * 0.84;
+  const closingRatio = Math.min(closingMessageCount / expectedClosingCount, 1);
 
-  if (!analysisResult) {
-    return Math.min(progress, 0.58);
-  }
-
-  if (closingMessages.length === 0) {
-    return Math.min(progress, 0.72);
-  }
-
-  return Math.min(progress, 0.96);
+  return Math.min(0.62 + closingRatio * 0.34, 0.96);
 }
 
 export function MakeupFeedbackLoadingScreen({
   selection,
-  onBack,
   onComplete,
+  onChooseDifferentPhoto,
+  onRetake,
 }: MakeupFeedbackLoadingScreenProps) {
   const conversationRef = useRef<ScrollView | null>(null);
+  const analysisRunIdRef = useRef(0);
+  const conferenceRunIdRef = useRef(0);
+  const conferenceMessagesRef = useRef<MakeupFeedbackAgentConferenceMessage[]>([]);
+  const lastMessageShownAtRef = useRef(0);
+  const hasCompletedRef = useRef(false);
+  const retryRequestedRef = useRef(false);
   const [analysisResult, setAnalysisResult] = useState<MakeupFeedbackResult | null>(null);
+  const [retakeOutcome, setRetakeOutcome] = useState<MakeupFeedbackRetakeOutcome | null>(null);
   const [analysisErrorMessage, setAnalysisErrorMessage] = useState<string | null>(null);
-  const [safeConferenceMessages, setSafeConferenceMessages] = useState<
+  const [previewConferenceMessages, setPreviewConferenceMessages] = useState<
     readonly MakeupFeedbackAgentConferenceMessage[]
-  >(() => buildMakeupFeedbackSafeConferenceMessages(selection));
+  >([]);
+  const [closingPreviewContext, setClosingPreviewContext] =
+    useState<MakeupFeedbackConferencePreviewContext | null>(null);
+  const [isPreviewGenerationSettled, setIsPreviewGenerationSettled] = useState(false);
   const [closingConferenceMessages, setClosingConferenceMessages] = useState<
+    readonly MakeupFeedbackAgentConferenceMessage[]
+  >([]);
+  const [waitingConferenceMessages, setWaitingConferenceMessages] = useState<
     readonly MakeupFeedbackAgentConferenceMessage[]
   >([]);
   const [conferenceMessages, setConferenceMessages] = useState<
@@ -176,7 +229,8 @@ export function MakeupFeedbackLoadingScreen({
   >([]);
   const [isConferenceTyping, setIsConferenceTyping] = useState(true);
   const [isConferenceComplete, setIsConferenceComplete] = useState(false);
-  const [hasCompleted, setHasCompleted] = useState(false);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
+  const [preResultProgress, setPreResultProgress] = useState(PRE_RESULT_PROGRESS_INITIAL);
   const selectionTitle = getSelectionTitle(selection);
 
   const typingAgentId = useMemo(
@@ -184,10 +238,19 @@ export function MakeupFeedbackLoadingScreen({
       getNextTypingAgentId({
         analysisResult,
         closingMessages: closingConferenceMessages,
+        isPreviewGenerationSettled,
         messages: conferenceMessages,
-        safeMessages: safeConferenceMessages,
+        previewMessages: previewConferenceMessages,
+        waitingMessages: waitingConferenceMessages,
       }),
-    [analysisResult, closingConferenceMessages, conferenceMessages, safeConferenceMessages],
+    [
+      analysisResult,
+      closingConferenceMessages,
+      conferenceMessages,
+      isPreviewGenerationSettled,
+      previewConferenceMessages,
+      waitingConferenceMessages,
+    ],
   );
   const conferenceProgress = useMemo(
     () =>
@@ -199,37 +262,182 @@ export function MakeupFeedbackLoadingScreen({
       }),
     [analysisResult, closingConferenceMessages, conferenceMessages, isConferenceComplete],
   );
-  const displayedConferenceProgress = analysisErrorMessage ? 1 : conferenceProgress;
+  const displayedConferenceProgress = analysisErrorMessage || retakeOutcome
+    ? 1
+    : analysisResult
+      ? conferenceProgress
+      : Math.max(conferenceProgress, preResultProgress);
+  const reviewStatusLabel = analysisErrorMessage
+    ? '다시 시도 필요'
+    : retakeOutcome
+      ? '사진 확인 완료'
+      : isConferenceComplete
+        ? '정리 완료'
+        : '함께 정리 중';
+  // 분석은 끝났지만 크루 대화가 아직 진행 중인 구간에만 결과로 건너뛸 수 있다.
+  const canSkipToResult =
+    Boolean(analysisResult) &&
+    !retakeOutcome &&
+    !analysisErrorMessage &&
+    !isConferenceComplete;
+  const reviewProgressAccessibilityLabel = analysisErrorMessage
+    ? '피드백 구성이 중단되었어요'
+    : retakeOutcome
+      ? '사진 품질 확인이 끝났어요'
+      : isConferenceComplete
+        ? '피드백 구성이 끝났어요'
+        : 'AURA 리뷰 크루가 피드백을 구성하고 있어요';
+  const reviewProgressAccessibilityText = analysisErrorMessage
+    ? '피드백 구성 중단'
+    : retakeOutcome
+      ? '사진 품질 확인 완료'
+      : isConferenceComplete
+        ? '피드백 구성 완료'
+        : analysisResult
+          ? '분석 결과를 대화로 정리 중, 예상 진행 상태예요'
+          : '피드백 구성 중, 예상 진행 상태예요';
+  const reviewBadgeLabel = analysisErrorMessage
+    ? '리뷰 멈춤'
+    : retakeOutcome
+      ? '사진 확인 완료'
+      : isConferenceComplete
+        ? '리뷰 완료'
+        : '리뷰 중';
 
-  const handleBackToGoalInput = useCallback(() => {
-    onBack?.();
-  }, [onBack]);
-
-  const handleComplete = useCallback(() => {
-    if (!analysisResult || hasCompleted) {
+  const handleRetryAnalysis = useCallback(() => {
+    if (retryRequestedRef.current) {
       return;
     }
 
-    setHasCompleted(true);
+    retryRequestedRef.current = true;
+    setAnalysisAttempt(currentAttempt => currentAttempt + 1);
+  }, []);
+
+  const handleComplete = useCallback(() => {
+    if (!analysisResult || hasCompletedRef.current) {
+      return;
+    }
+
+    hasCompletedRef.current = true;
     onComplete(analysisResult);
-  }, [analysisResult, hasCompleted, onComplete]);
+  }, [analysisResult, onComplete]);
+
+  const handleConferenceMessageDisplayed = useCallback(
+    (message: MakeupFeedbackAgentConferenceMessage) => {
+      if (!conferenceMessagesRef.current.some(item => item.id === message.id)) {
+        conferenceMessagesRef.current = [...conferenceMessagesRef.current, message];
+      }
+
+      lastMessageShownAtRef.current = Date.now();
+    },
+    [],
+  );
 
   useEffect(() => {
-    let isMounted = true;
+    const runId = analysisRunIdRef.current + 1;
+    analysisRunIdRef.current = runId;
+    conferenceRunIdRef.current += 1;
+    let isActive = true;
+    const previewController = new AbortController();
+    const isCurrentRun = () => isActive && analysisRunIdRef.current === runId;
+
+    conferenceMessagesRef.current = [];
+    lastMessageShownAtRef.current = 0;
+    hasCompletedRef.current = false;
 
     setAnalysisResult(null);
+    setRetakeOutcome(null);
     setAnalysisErrorMessage(null);
-    setSafeConferenceMessages(buildMakeupFeedbackSafeConferenceMessages(selection));
+    setPreviewConferenceMessages([]);
+    setClosingPreviewContext(null);
+    setIsPreviewGenerationSettled(false);
     setClosingConferenceMessages([]);
+    setWaitingConferenceMessages(buildMakeupFeedbackWaitingConferenceMessages(selection));
     setConferenceMessages([]);
     setIsConferenceTyping(true);
     setIsConferenceComplete(false);
-    setHasCompleted(false);
+    setPreResultProgress(PRE_RESULT_PROGRESS_INITIAL);
 
+    // 재촬영/분석 오류처럼 대화를 이어가지 않는 종단 상태 — 프리뷰를 비우고 정지.
+    const settlePreviewForTerminalState = () => {
+      setPreviewConferenceMessages([]);
+      setClosingPreviewContext(null);
+      setIsPreviewGenerationSettled(true);
+    };
+
+    // 백엔드 프리뷰 생성이 실패해도 오프닝 대화는 로컬 대본으로 항상 시작한다.
+    // 대본은 결과를 주장하지 않는 safe 문구라 이후 클로징 근거와 충돌하지 않는다.
+    const settlePreviewWithLocalScript = () => {
+      const safeMessages = buildMakeupFeedbackSafeConferenceMessages(selection);
+
+      setPreviewConferenceMessages(safeMessages);
+      setClosingPreviewContext(
+        buildMakeupFeedbackConferencePreviewContext({messages: safeMessages}),
+      );
+      setIsPreviewGenerationSettled(true);
+    };
+
+    const startGeneratedPreview = () => {
+      requestMakeupFeedbackGeneratedPreviewMessagesWithPrefetch({
+        selection,
+        signal: previewController.signal,
+      })
+        .then(preview => {
+          if (!isCurrentRun()) {
+            return;
+          }
+
+          if (
+            preview.generationStatus !== 'bedrock_completed'
+            || preview.messages.length < EXPECTED_PREVIEW_CONFERENCE_MESSAGE_COUNT
+          ) {
+            console.info('[aura:makeup-feedback] conference-preview:not-generated', {
+              count: preview.messages.length,
+              generationStatus: preview.generationStatus ?? null,
+            });
+            settlePreviewWithLocalScript();
+            return;
+          }
+
+          setPreviewConferenceMessages(preview.messages);
+          setClosingPreviewContext(
+            buildMakeupFeedbackConferencePreviewContext({
+              lastSpeaker: preview.lastSpeaker,
+              messages: preview.messages,
+              summary: preview.summary,
+            }),
+          );
+          setIsPreviewGenerationSettled(true);
+        })
+        .catch(error => {
+          // abort는 재촬영/오류 종단 경로에서 이미 상태를 정리한 뒤이므로 무시.
+          if (!isCurrentRun() || previewController.signal.aborted) {
+            return;
+          }
+
+          console.info('[aura:makeup-feedback] conference-preview:unavailable', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+          settlePreviewWithLocalScript();
+        });
+    };
+
+    startGeneratedPreview();
     analyzeMakeupForFeedback(selection)
-      .then(result => {
-        if (isMounted) {
-          setAnalysisResult(result);
+      .then(outcome => {
+        if (!isCurrentRun()) {
+          return;
+        }
+
+        if (outcome.analysisDecision === 'completed') {
+          setAnalysisResult(outcome);
+        } else {
+          previewController.abort();
+          settlePreviewForTerminalState();
+          setRetakeOutcome(outcome);
+          setIsConferenceTyping(false);
+          setIsConferenceComplete(true);
+          setClosingConferenceMessages([]);
         }
       })
       .catch(error => {
@@ -237,7 +445,10 @@ export function MakeupFeedbackLoadingScreen({
           message: error instanceof Error ? error.message : String(error),
         });
 
-        if (isMounted) {
+        if (isCurrentRun()) {
+          previewController.abort();
+          settlePreviewForTerminalState();
+          retryRequestedRef.current = false;
           setAnalysisErrorMessage(getMakeupFeedbackAnalysisErrorMessage(error));
           setIsConferenceTyping(false);
           setClosingConferenceMessages([]);
@@ -245,61 +456,128 @@ export function MakeupFeedbackLoadingScreen({
       });
 
     return () => {
-      isMounted = false;
+      isActive = false;
+      previewController.abort();
     };
-  }, [selection]);
+  }, [analysisAttempt, selection]);
 
   useEffect(() => {
-    if (!analysisResult) {
+    if (analysisResult || analysisErrorMessage || retakeOutcome) {
       return;
     }
 
-    let isMounted = true;
+    const intervalId = setInterval(() => {
+      setPreResultProgress(currentProgress => {
+        const baseline = Math.max(currentProgress, conferenceProgress);
+        const nextProgress =
+          baseline + (PRE_RESULT_PROGRESS_CAP - baseline) * PRE_RESULT_PROGRESS_EASING;
 
-    requestMakeupFeedbackGeneratedConferenceMessages({result: analysisResult, selection})
+        return Math.min(nextProgress, PRE_RESULT_PROGRESS_CAP);
+      });
+    }, PRE_RESULT_PROGRESS_TICK_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [analysisErrorMessage, analysisResult, conferenceProgress, retakeOutcome]);
+
+  useEffect(() => {
+    if (!analysisResult || !isPreviewGenerationSettled) {
+      return;
+    }
+
+    const runId = conferenceRunIdRef.current + 1;
+    conferenceRunIdRef.current = runId;
+    let isActive = true;
+    let isSettled = false;
+    const controller = new AbortController();
+    const isCurrentRun = () => isActive && conferenceRunIdRef.current === runId;
+    const useGroundedFallback = () => {
+      setClosingConferenceMessages(
+        buildMakeupFeedbackClosingConferenceMessages(
+          analysisResult,
+          closingPreviewContext?.lastSpeaker,
+        ),
+      );
+    };
+
+    setClosingConferenceMessages([]);
+    const graceTimeoutId = setTimeout(() => {
+      if (!isCurrentRun() || isSettled) {
+        return;
+      }
+
+      isSettled = true;
+      controller.abort();
+      useGroundedFallback();
+    }, CLOSING_GENERATION_GRACE_MS);
+
+    requestMakeupFeedbackGeneratedConferenceMessages({
+      previewContext: closingPreviewContext,
+      result: analysisResult,
+      selection,
+      signal: controller.signal,
+    })
       .then(generatedMessages => {
-        if (!isMounted) {
+        if (!isCurrentRun() || isSettled) {
           return;
         }
 
-        setClosingConferenceMessages(
-          generatedMessages.length >= 3
-            ? generatedMessages
-            : buildMakeupFeedbackClosingConferenceMessages(analysisResult),
-        );
+        isSettled = true;
+        clearTimeout(graceTimeoutId);
+        if (generatedMessages.length >= 3) {
+          setClosingConferenceMessages(generatedMessages);
+        } else {
+          useGroundedFallback();
+        }
       })
       .catch(error => {
+        if (!isCurrentRun() || isSettled) {
+          return;
+        }
+
+        isSettled = true;
+        clearTimeout(graceTimeoutId);
         console.info('[aura:makeup-feedback] conference-generation:fallback', {
           message: error instanceof Error ? error.message : String(error),
         });
-
-        if (isMounted) {
-          setClosingConferenceMessages(buildMakeupFeedbackClosingConferenceMessages(analysisResult));
-        }
+        useGroundedFallback();
       });
 
     return () => {
-      isMounted = false;
+      isActive = false;
+      clearTimeout(graceTimeoutId);
+      controller.abort();
     };
-  }, [analysisResult, selection]);
+  }, [analysisResult, closingPreviewContext, isPreviewGenerationSettled, selection]);
 
   useEffect(() => {
-    if (analysisErrorMessage || isConferenceComplete) {
+    if (analysisErrorMessage || retakeOutcome || isConferenceComplete) {
       return;
     }
 
-    const safeMessageCount = countMessagesByPhase(conferenceMessages, 'safe');
+    const previewMessageCount = countPreviewConferenceMessages(conferenceMessages);
     const closingMessageCount = countMessagesByPhase(conferenceMessages, 'closing');
-    const canShowClosing =
-      Boolean(analysisResult) &&
-      closingConferenceMessages.length > 0 &&
-      safeMessageCount >= MAKEUP_FEEDBACK_MIN_SAFE_CONFERENCE_MESSAGES;
-    const nextMessage = canShowClosing
-      ? closingConferenceMessages[closingMessageCount]
-      : safeConferenceMessages[safeMessageCount];
+    const nextMessage = getNextMakeupFeedbackConferenceMessage({
+      analysisReady: Boolean(analysisResult),
+      closingMessages: closingConferenceMessages,
+      displayedMessages: conferenceMessages,
+      previewGenerationSettled: isPreviewGenerationSettled,
+      previewMessages: previewConferenceMessages,
+      waitingMessages: waitingConferenceMessages,
+    });
 
     if (!nextMessage) {
-      if (canShowClosing) {
+      const previewMessagesDrained =
+        isPreviewGenerationSettled
+        && previewMessageCount >= previewConferenceMessages.length;
+
+      if (
+        analysisResult &&
+        previewMessagesDrained &&
+        closingConferenceMessages.length > 0 &&
+        closingMessageCount >= closingConferenceMessages.length
+      ) {
         setIsConferenceTyping(false);
         setIsConferenceComplete(true);
       } else {
@@ -309,27 +587,58 @@ export function MakeupFeedbackLoadingScreen({
       return;
     }
 
-    const messageDelay =
-      conferenceMessages.length === 0
-        ? FIRST_CONFERENCE_MESSAGE_DELAY_MS
-        : canShowClosing
-          ? CLOSING_CONFERENCE_MESSAGE_INTERVAL_MS
-          : SAFE_CONFERENCE_MESSAGE_INTERVAL_MS;
+    const lastMessage = conferenceMessages[conferenceMessages.length - 1];
+    const exposureDelay = lastMessage
+      ? getMakeupFeedbackMessageExposureDelayMs(lastMessage.text)
+      : 0;
+    const elapsedSinceLastMessage = lastMessage
+      ? Math.max(Date.now() - lastMessageShownAtRef.current, 0)
+      : 0;
+    // 대기 진행 대화는 침묵을 메우는 용도라 일반 메시지보다 천천히 흐르게 한다.
+    const waitingExtraDelay =
+      nextMessage.phase === 'waiting' ? WAITING_MESSAGE_EXTRA_EXPOSURE_DELAY_MS : 0;
+    const remainingExposureDelay =
+      Math.max(exposureDelay - elapsedSinceLastMessage, 0) + waitingExtraDelay;
+    const scheduledAnalysisRunId = analysisRunIdRef.current;
+    let typingTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    setIsConferenceTyping(true);
+    setIsConferenceTyping(false);
 
-    const timeoutId = setTimeout(() => {
-      setConferenceMessages(currentMessages => {
-        if (currentMessages.some(message => message.id === nextMessage.id)) {
-          return currentMessages;
+    const exposureTimeoutId = setTimeout(() => {
+      setIsConferenceTyping(true);
+      typingTimeoutId = setTimeout(() => {
+        if (!canCommitMakeupFeedbackConferenceMessage({
+          activeAnalysisRunId: analysisRunIdRef.current,
+          scheduledAnalysisRunId,
+        })) {
+          return;
         }
 
-        return [...currentMessages, nextMessage];
-      });
-    }, messageDelay);
+        setConferenceMessages(currentMessages => {
+          if (!canCommitMakeupFeedbackConferenceMessage({
+            activeAnalysisRunId: analysisRunIdRef.current,
+            scheduledAnalysisRunId,
+          })) {
+            return currentMessages;
+          }
+
+          if (currentMessages.some(message => message.id === nextMessage.id)) {
+            return currentMessages;
+          }
+
+          return [...currentMessages, nextMessage];
+        });
+        setIsConferenceTyping(false);
+      }, conferenceMessages.length === 0
+        ? getMakeupFeedbackInitialTypingDelayMs()
+        : getMakeupFeedbackTypingDelayMs());
+    }, remainingExposureDelay);
 
     return () => {
-      clearTimeout(timeoutId);
+      clearTimeout(exposureTimeoutId);
+      if (typingTimeoutId) {
+        clearTimeout(typingTimeoutId);
+      }
     };
   }, [
     analysisErrorMessage,
@@ -337,7 +646,10 @@ export function MakeupFeedbackLoadingScreen({
     closingConferenceMessages,
     conferenceMessages,
     isConferenceComplete,
-    safeConferenceMessages,
+    isPreviewGenerationSettled,
+    retakeOutcome,
+    previewConferenceMessages,
+    waitingConferenceMessages,
   ]);
 
 
@@ -350,9 +662,36 @@ export function MakeupFeedbackLoadingScreen({
       topPadding="none">
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
+          <XStack style={styles.crewHeader}>
+            <Text style={styles.crewTitle}>AURA 리뷰 크루</Text>
+            {canSkipToResult ? (
+              // 분석 완료 + 대화 진행 중 — 채팅(타이핑 효과)을 가리지 않도록
+              // 하단이 아니라 헤더 오른쪽에서 결과로 건너뛰게 한다.
+              <Pressable
+                accessibilityLabel="대화 건너뛰고 결과로 건너뛰기"
+                accessibilityRole="button"
+                onPress={handleComplete}
+                style={({pressed}) => [
+                  styles.skipToResultButton,
+                  pressed && styles.resultButtonPressed,
+                ]}>
+                <Text style={styles.skipToResultButtonText}>결과로 건너뛰기</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.crewStatus}>
+                {reviewStatusLabel}
+              </Text>
+            )}
+          </XStack>
           <View
-            accessibilityLabel={`AI \uBDF0\uD2F0\uD300 \uD68C\uC758 \uC9C4\uD589\uB960 ${Math.round(displayedConferenceProgress * 100)}%`}
+            accessibilityLabel={reviewProgressAccessibilityLabel}
             accessibilityRole="progressbar"
+            accessibilityValue={{
+              max: 100,
+              min: 0,
+              now: Math.round(displayedConferenceProgress * 100),
+              text: reviewProgressAccessibilityText,
+            }}
             style={styles.progressTrack}>
             <View
               style={[
@@ -375,7 +714,7 @@ export function MakeupFeedbackLoadingScreen({
             <PreviewScanOverlay isComplete={isConferenceComplete || Boolean(analysisErrorMessage)} />
             <XStack style={styles.previewBadge}>
               <LiveStatusDot compact />
-              <Text style={styles.previewBadgeText}>회의 중</Text>
+              <Text style={styles.previewBadgeText}>{reviewBadgeLabel}</Text>
             </XStack>
             {selectionTitle ? (
               <YStack style={styles.previewTitleBlock}>
@@ -389,10 +728,16 @@ export function MakeupFeedbackLoadingScreen({
           {analysisErrorMessage ? (
             <YStack style={styles.errorPanel}>
               <Text accessibilityLiveRegion="polite" style={styles.errorTitle}>
-                목적을 다시 확인해 주세요
+                분석을 완료하지 못했어요
               </Text>
               <Text style={styles.errorDescription}>{analysisErrorMessage}</Text>
             </YStack>
+          ) : retakeOutcome ? (
+            <RetakeRequiredPanel
+              onChooseDifferentPhoto={onChooseDifferentPhoto}
+              onRetake={onRetake}
+              outcome={retakeOutcome}
+            />
           ) : (
             <View style={styles.conversationFrame}>
               <ScrollView
@@ -404,11 +749,14 @@ export function MakeupFeedbackLoadingScreen({
                 }}
                 showsVerticalScrollIndicator={false}>
                 <YStack
-                  accessibilityLabel="AI 에이전트 회의 대화"
-                  accessibilityLiveRegion="polite"
+                  accessibilityLabel="AURA 리뷰 크루 대화"
                   style={styles.conversationList}>
                   {conferenceMessages.map(message => (
-                    <ConferenceMessageBubble key={message.id} message={message} />
+                    <ConferenceMessageBubble
+                      key={message.id}
+                      message={message}
+                      onDisplayed={handleConferenceMessageDisplayed}
+                    />
                   ))}
                   {isConferenceTyping ? <TypingBubble agentId={typingAgentId} /> : null}
                 </YStack>
@@ -417,14 +765,36 @@ export function MakeupFeedbackLoadingScreen({
           )}
 
           {analysisErrorMessage ? (
-            <Pressable
-              accessibilityLabel="메이크업 목적 다시 적기"
-              onPress={handleBackToGoalInput}
-              style={({pressed}) => [styles.resultButton, pressed && styles.resultButtonPressed]}>
-              <Text style={styles.resultButtonText}>다시 적기</Text>
-            </Pressable>
-          ) : isConferenceComplete ? (
-            <ResultRevealButton onPress={handleComplete} />
+            <YStack style={styles.retakeActions}>
+              <Pressable
+                accessibilityLabel={'AI 피드백 분석 다시 시도하기'}
+                accessibilityRole="button"
+                onPress={handleRetryAnalysis}
+                style={({pressed}) => [styles.resultButton, pressed && styles.resultButtonPressed]}>
+                <Text style={styles.resultButtonText}>다시 시도하기</Text>
+              </Pressable>
+              {selection.photoSource === 'gallery' ? (
+                <Pressable
+                  accessibilityLabel="다른 사진 선택"
+                  accessibilityRole="button"
+                  onPress={onChooseDifferentPhoto}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    pressed && styles.resultButtonPressed,
+                  ]}>
+                  <Text style={styles.secondaryButtonText}>다른 사진 선택</Text>
+                </Pressable>
+              ) : null}
+            </YStack>
+          ) : canRevealMakeupFeedbackResult({
+              analysisReady: Boolean(analysisResult),
+              conferenceComplete: isConferenceComplete,
+              retakeRequired: Boolean(retakeOutcome),
+            }) ? (
+            <ResultRevealButton
+              label="결과 보기"
+              onPress={handleComplete}
+            />
           ) : null}
         </YStack>
       </YStack>
@@ -432,19 +802,108 @@ export function MakeupFeedbackLoadingScreen({
   );
 }
 
+function RetakeRequiredPanel({
+  onChooseDifferentPhoto,
+  onRetake,
+  outcome,
+}: {
+  onChooseDifferentPhoto: () => void;
+  onRetake: () => void;
+  outcome: MakeupFeedbackRetakeOutcome;
+}) {
+  const actionLabels = getMakeupFeedbackRetakeActionLabels(outcome.photoSource);
+  const primaryAction =
+    outcome.photoSource === 'camera' ? onRetake : onChooseDifferentPhoto;
+  const secondaryAction =
+    outcome.photoSource === 'camera' ? onChooseDifferentPhoto : onRetake;
+
+  return (
+    <YStack
+      accessibilityLabel="사진 품질 확인 결과"
+      accessibilityLiveRegion="polite"
+      style={styles.retakePanel}>
+      <YStack style={styles.retakeCopy}>
+        <Text style={styles.errorTitle}>사진을 다시 준비해 주세요</Text>
+        <Text style={styles.errorDescription}>
+          이 사진으로는 정확한 메이크업 판단이 어려워 결과를 저장하지 않았어요.
+        </Text>
+      </YStack>
+
+      <ScrollView
+        contentContainerStyle={styles.retakeIssueList}
+        nestedScrollEnabled
+        style={styles.retakeIssueScroll}
+        showsVerticalScrollIndicator={false}>
+        {outcome.captureQuality.issues.map(issue => {
+          const affectedLabels = issue.affectedTopicIds
+            .map(topicId => makeupTopicLabelById.get(topicId) ?? topicId)
+            .join(', ');
+
+          return (
+            <YStack key={issue.code} style={styles.retakeIssue}>
+              <Text style={styles.retakeIssueMessage}>{issue.message}</Text>
+              {affectedLabels ? (
+                <Text style={styles.retakeAffectedTopics}>
+                  영향 부위: {affectedLabels}
+                </Text>
+              ) : null}
+            </YStack>
+          );
+        })}
+      </ScrollView>
+
+      <YStack style={styles.retakeActions}>
+        <Pressable
+          accessibilityLabel={actionLabels.primary}
+          accessibilityRole="button"
+          onPress={primaryAction}
+          style={({pressed}) => [
+            styles.resultButton,
+            pressed && styles.resultButtonPressed,
+          ]}>
+          <Text style={styles.resultButtonText}>{actionLabels.primary}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={actionLabels.secondary}
+          accessibilityRole="button"
+          onPress={secondaryAction}
+          style={({pressed}) => [
+            styles.secondaryButton,
+            pressed && styles.resultButtonPressed,
+          ]}>
+          <Text style={styles.secondaryButtonText}>{actionLabels.secondary}</Text>
+        </Pressable>
+      </YStack>
+    </YStack>
+  );
+}
+
+
 function ConferenceMessageBubble({
   message,
+  onDisplayed,
 }: {
   message: MakeupFeedbackAgentConferenceMessage;
+  onDisplayed: (message: MakeupFeedbackAgentConferenceMessage) => void;
 }) {
   const enter = useFadeIn();
   const agent = agentProfiles[message.agentId];
   const Icon = agent.Icon;
 
+  useEffect(() => {
+    onDisplayed(message);
+  }, [message, onDisplayed]);
+
   return (
-    <Animated.View style={[styles.messageRowAnimated, enter]}>
+    <Animated.View
+      accessibilityLabel={agent.name + ', ' + agent.role + ', ' + message.text}
+      accessibilityLiveRegion="polite"
+      accessible
+      style={[styles.messageRowAnimated, enter]}>
       <XStack style={styles.messageRow}>
-        <View style={[styles.agentAvatar, {backgroundColor: agent.avatarBackground}]}>
+        <View
+          accessible={false}
+          style={[styles.agentAvatar, {backgroundColor: agent.avatarBackground}]}>
           <Icon color={agent.tint} size={iconSize.xs} strokeWidth={2.2} />
         </View>
         <YStack style={styles.messageBubble}>
@@ -576,26 +1035,24 @@ function PreviewScanOverlay({isComplete}: {isComplete: boolean}) {
   );
 }
 
-function ResultRevealButton({onPress}: {onPress: () => void}) {
-  const [isInteractive, setIsInteractive] = useState(false);
+function ResultRevealButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
   const value = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animation = Animated.sequence([
-      Animated.delay(980),
-      Animated.timing(value, {
-        duration: 340,
-        easing: Easing.out(Easing.cubic),
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-    ]);
-
-    animation.start(({finished}) => {
-      if (finished) {
-        setIsInteractive(true);
-      }
+    const animation = Animated.timing(value, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
     });
+
+    animation.start();
 
     return () => {
       animation.stop();
@@ -604,7 +1061,7 @@ function ResultRevealButton({onPress}: {onPress: () => void}) {
 
   return (
     <Animated.View
-      pointerEvents={isInteractive ? 'auto' : 'none'}
+      pointerEvents="auto"
       style={[
         styles.resultButtonAnimated,
         {
@@ -617,11 +1074,15 @@ function ResultRevealButton({onPress}: {onPress: () => void}) {
         },
       ]}>
       <Pressable
-        accessibilityLabel={'\uBA54\uC774\uD06C\uC5C5 \uD53C\uB4DC\uBC31 \uACB0\uACFC \uBCF4\uAE30'}
+        accessibilityLabel={'메이크업 피드백 ' + label}
+        accessibilityRole="button"
         onPress={onPress}
-        style={({pressed}) => [styles.resultButton, pressed && styles.resultButtonPressed]}>
-        <Text style={styles.resultButtonText}>{'\uACB0\uACFC \uBCF4\uAE30'}</Text>
-        <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2.4} />
+        style={({pressed}) => [
+          styles.compactResultButton,
+          pressed && styles.resultButtonPressed,
+        ]}>
+        <Text style={styles.resultButtonText}>{label}</Text>
+        <ArrowRight color={colors.white} size={iconSize.xs} strokeWidth={2.4} />
       </Pressable>
     </Animated.View>
   );
@@ -632,8 +1093,13 @@ function TypingBubble({agentId}: {agentId: MakeupFeedbackAgentId}) {
   const Icon = agent.Icon;
 
   return (
-    <XStack style={styles.typingRow}>
-      <View style={[styles.agentAvatar, {backgroundColor: agent.avatarBackground}]}>
+    <XStack
+      accessibilityLabel={agent.name + '이 답변을 정리 중이에요'}
+      accessible
+      style={styles.typingRow}>
+      <View
+        accessible={false}
+        style={[styles.agentAvatar, {backgroundColor: agent.avatarBackground}]}>
         <Icon color={agent.tint} size={iconSize.xs} strokeWidth={2.2} />
       </View>
       <XStack style={styles.typingBubble}>
@@ -833,6 +1299,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },
+  crewHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  crewStatus: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  crewTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
   errorDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,
@@ -865,7 +1353,7 @@ const styles = StyleSheet.create({
   },
   conversationContent: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingBottom: spacing.sm,
   },
   conversationFrame: {
@@ -874,12 +1362,14 @@ const styles = StyleSheet.create({
   },
   conversationList: {
     gap: spacing.sm,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     minHeight: 0,
   },
   heroCopy: {
     alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.sm,
+    width: '100%',
   },
   liveDotCore: {
     backgroundColor: colors.heart,
@@ -1023,8 +1513,102 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
   },
+  retakeActions: {
+    gap: spacing.sm,
+    width: '100%',
+  },
+  retakeAffectedTopics: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
+  },
+  retakeCopy: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  retakeIssue: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  retakeIssueList: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  retakeIssueMessage: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  retakeIssueScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  retakePanel: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    gap: spacing.md,
+    minHeight: 210,
+    padding: spacing.lg,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.textPrimary,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: spacing.lg,
+  },
+  secondaryButtonText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+
   resultButtonAnimated: {
     width: '100%',
+  },
+  // 대화 하단의 결과 이동 버튼 2종은 대화 흐름을 가리지 않게 콤팩트 pill 로 쓴다.
+  compactResultButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+  // 헤더 우측의 결과 건너뛰기 — 결과 보기 버튼과 같은 검정 pill 형식의 축소판.
+  skipToResultButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 30,
+    paddingHorizontal: spacing.md,
+  },
+  skipToResultButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
   },
   resultButton: {
     alignItems: 'center',

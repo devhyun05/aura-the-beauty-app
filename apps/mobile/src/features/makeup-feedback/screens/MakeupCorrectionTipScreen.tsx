@@ -101,6 +101,8 @@ export function MakeupCorrectionTipScreen({
 }: MakeupCorrectionTipScreenProps) {
   const content = TIP_CONTENT[point.kind];
   const PointIcon = getPointIcon(point.kind);
+  const hasAnalysisActionSteps = point.actionSteps.length > 0;
+  const routine = hasAnalysisActionSteps ? point.actionSteps : content.routine;
 
   return (
     <MakeupFeedbackScreenScaffold topPadding="none">
@@ -110,7 +112,7 @@ export function MakeupCorrectionTipScreen({
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
           <View style={styles.heroCard}>
-            <Text style={styles.heroEyebrow}>{content.eyebrow}</Text>
+            <Text style={styles.heroEyebrow}>{content.eyebrow} · 일반 참고 설명</Text>
             <View style={styles.heroTitleRow}>
               <View style={styles.heroIcon}>
                 <PointIcon color={colors.white} size={iconSize.md} strokeWidth={2} />
@@ -131,12 +133,14 @@ export function MakeupCorrectionTipScreen({
           </View>
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>3단계 수정 루틴</Text>
-            <Text style={styles.sectionMeta}>약 3분</Text>
+            <Text style={styles.sectionTitle}>
+              {hasAnalysisActionSteps ? '분석 추천 단계' : '일반 3단계 가이드'}
+            </Text>
+            <Text style={styles.sectionMeta}>{routine.length}단계</Text>
           </View>
 
           <View style={styles.routineList}>
-            {content.routine.map((step, index) => (
+            {routine.map((step, index) => (
               <View key={step} style={styles.routineCard}>
                 <View style={styles.stepNumber}>
                   <Text style={styles.stepNumberText}>{index + 1}</Text>
