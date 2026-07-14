@@ -25,6 +25,7 @@ BACKEND_ROOT = REPO_ROOT / "services" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.auradin_agent.catalog_loader import is_purchasable  # noqa: E402
+from app.services.auradin_agent.ranking import normalized_product_key  # noqa: E402
 from app.services.auradin_catalog.brand_aliases import BRAND_PRIORITY  # noqa: E402
 from app.services.auradin_catalog.category_queries import (  # noqa: E402
   COLLECTABLE_CATEGORIES,
@@ -141,7 +142,56 @@ def build_coverage(
   }
 
 
-def _write_report(path: Path, coverage: dict[str, Any], *, source: str) -> None:
+def _row_id(row: dict[str, Any]) -> str:
+  return str(row.get("catalogItemId") or row.get("id") or "").strip()
+
+
+def _live_offer(row: dict[str, Any]) -> dict[str, Any]:
+  value = row.get("liveOffer")
+  return value if isinstance(value, dict) else {}
+
+
+def diff_catalogs(prev_rows: list[dict[str, Any]], next_rows: list[dict[str, Any]]) -> dict[str, Any]:
+  """Compare membership as a product-key multiset and mutable fields by row ID."""
+  previous_keys = Counter(
+    key for row in prev_rows if (key := normalized_product_key(row))
+  )
+  next_keys = Counter(
+    key for row in next_rows if (key := normalized_product_key(row))
+  )
+  added = sorted((next_keys - previous_keys).elements())
+  removed = sorted((previous_keys - next_keys).elements())
+
+  previous_by_id = {_row_id(row): row for row in prev_rows if _row_id(row)}
+  next_by_id = {_row_id(row): row for row in next_rows if _row_id(row)}
+  shared_ids = previous_by_id.keys() & next_by_id.keys()
+  price_changed = 0
+  price_tier_moved = 0
+  for row_id in shared_ids:
+    previous_offer = _live_offer(previous_by_id[row_id])
+    next_offer = _live_offer(next_by_id[row_id])
+    if previous_offer.get("priceKrw") != next_offer.get("priceKrw"):
+      price_changed += 1
+    if previous_offer.get("priceTier") != next_offer.get("priceTier"):
+      price_tier_moved += 1
+
+  return {
+    "added": added,
+    "removed": removed,
+    "priceChanged": price_changed,
+    "priceTierMoved": price_tier_moved,
+    "staleCount": sum(1 for row in next_rows if row.get("collectionStatus") == "stale"),
+  }
+
+
+def _write_report(
+  path: Path,
+  coverage: dict[str, Any],
+  *,
+  source: str,
+  catalog_diff: dict[str, Any] | None = None,
+  compare_source: str | None = None,
+) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   lines: list[str] = [
     f"# AURADIN 크롤 커버리지 — {source}",
@@ -166,6 +216,20 @@ def _write_report(path: Path, coverage: dict[str, Any], *, source: str) -> None:
   else:
     lines.append("- 없음 — 모든 슬롯이 최소 목표를 충족.")
   lines.append("")
+  if catalog_diff is not None:
+    lines.extend(
+      [
+        "## 스냅샷 diff",
+        "",
+        f"- 비교 기준: `{compare_source or ''}`",
+        f"- `added` 정규화 키(multiset): `{json.dumps(catalog_diff['added'], ensure_ascii=False)}`",
+        f"- `removed` 정규화 키(multiset): `{json.dumps(catalog_diff['removed'], ensure_ascii=False)}`",
+        f"- `priceChanged` 행(catalogItemId): **{catalog_diff['priceChanged']}**",
+        f"- `priceTierMoved` 행(catalogItemId): **{catalog_diff['priceTierMoved']}**",
+        f"- `staleCount`: **{catalog_diff['staleCount']}**",
+        "",
+      ],
+    )
   path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -176,6 +240,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--per-subcategory", type=int, default=15)
   parser.add_argument("--min", type=int, default=10, dest="minimum")
   parser.add_argument("--metric", choices=("count", "purchasable"), default="count")
+  parser.add_argument("--compare-to", type=Path, help="스냅샷 diff 기준이 되는 이전 catalog jsonl.")
   parser.add_argument("--report", type=Path)
   return parser.parse_args()
 
@@ -192,6 +257,10 @@ def main() -> int:
     return 2
 
   rows = _read_jsonl(input_path)
+  compare_path = args.compare_to.resolve() if args.compare_to else None
+  if compare_path is not None and not compare_path.exists():
+    print(f"compare input not found: {compare_path}", file=sys.stderr)
+    return 2
   coverage = build_coverage(
     rows,
     target=args.per_subcategory,
@@ -200,7 +269,15 @@ def main() -> int:
   )
   source = _display_path(input_path)
   report_path = args.report or REPO_ROOT / "reports" / "auradin" / f"crawl_coverage_{input_path.stem}.md"
-  _write_report(report_path, coverage, source=source)
+  catalog_diff = diff_catalogs(_read_jsonl(compare_path), rows) if compare_path is not None else None
+  compare_source = _display_path(compare_path) if compare_path is not None else None
+  _write_report(
+    report_path,
+    coverage,
+    source=source,
+    catalog_diff=catalog_diff,
+    compare_source=compare_source,
+  )
 
   print(
     json.dumps(
@@ -212,6 +289,7 @@ def main() -> int:
         "bucketedRows": coverage["bucketedRows"],
         "statusCounts": coverage["statusCounts"],
         "belowMinSlots": coverage["belowMinSlots"],
+        **({"diff": catalog_diff, "compareTo": compare_source} if catalog_diff is not None else {}),
       },
       ensure_ascii=False,
       indent=2,
