@@ -409,14 +409,18 @@ jobs:
               --task-definition "$running_task_definition" \
               --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
               --output text)"
-            start_time="$((($(date +%s) - 7200) * 1000))"
-            echo "Recent makeup recommendation logs: $running_log_group"
-            aws logs filter-log-events \
+            running_stream_prefix="$(aws ecs describe-task-definition \
+              --task-definition "$running_task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-stream-prefix\"" \
+              --output text)"
+            running_task_id="${running_task_arn##*/}"
+            running_log_stream="$running_stream_prefix/$ECS_CONTAINER_NAME/$running_task_id"
+            echo "Recent makeup recommendation logs: $running_log_group :: $running_log_stream"
+            aws logs get-log-events \
               --log-group-name "$running_log_group" \
-              --start-time "$start_time" \
-              --filter-pattern '"aura:makeup-recommendation"' \
-              --limit 200 \
-              --query 'events[*].[timestamp,message]' \
+              --log-stream-name "$running_log_stream" \
+              --limit 500 \
+              --query "events[?contains(message, 'aura:makeup-recommendation')].[timestamp,message]" \
               --output text || true
           else
             echo "No running API task was returned."
