@@ -694,7 +694,10 @@ def _score_product_match(
   profile: dict[str, Any] | None,
 ) -> tuple[int, list[str]]:
   if not profile:
-    return max(82, 96 - index * 2), []
+    # F7: 프로필(리포트)이 없으면 매치 근거가 없다 — 과거의 max(82, 96-2·index)는
+    # 근거 없는 82~96%를 "매치율"로 표시하는 과잉 확신이었다. 순위 기반임을 나타내는
+    # 보수적 값(프로필 기본치 74 미만에서 시작, 순위당 -2, 전역 하한 62)으로 낮춘다.
+    return max(62, 70 - index * 2), []
 
   targets = _target_terms(profile, category)
   matched_terms: list[str] = []
@@ -969,28 +972,6 @@ def _semantic_reason(
   return f"{reason} {semantic_copy}"
 
 
-def _color_match_adjustment(
-  product: dict[str, Any],
-  profile: dict[str, Any],
-) -> int:
-  category = _normalize_category(product.get("category"))
-  specs = product.get("productInfo")
-  specs = specs if isinstance(specs, dict) else {}
-  target_colors = set(_target_terms(profile, category)["colors"])
-  product_colors = set(specs.get("colors") or [])
-
-  if not target_colors:
-    return 0
-
-  if product_colors & target_colors:
-    return COLOR_MATCH_BONUS
-
-  if category in {"lip", "cheek", "shadow", "base"}:
-    return -COLOR_MISMATCH_PENALTY
-
-  return 0
-
-
 async def _embed_text(
   client: Any,
   settings: Settings,
@@ -1056,14 +1037,9 @@ async def _apply_semantic_product_scores(
     rule_score = rule_score if isinstance(rule_score, int) else _parse_price(rule_score)
     next_product = {
       **product,
-      "matchRate": min(
-        99,
-        max(
-          62,
-          _combine_match_rate(rule_score or 74, semantic_rate) +
-          _color_match_adjustment(product, profile),
-        ),
-      ),
+      # F7: 색상 가산·감산은 rule 단계(_score_product_match)에서 이미 반영됐다 —
+      # 시맨틱 결합 뒤 _color_match_adjustment로 재가산하던 이중 가산은 제거.
+      "matchRate": _combine_match_rate(rule_score or 74, semantic_rate),
       "semanticScore": round(similarity, 4),
       "semanticMatchRate": semantic_rate,
       "reason": _semantic_reason(product, semantic_rate),
