@@ -50,6 +50,43 @@ worker also receives `DATABASE_URL`, `SQS_AI_JOB_QUEUE_URL`, `OPENAI_API_KEY`,
 role needs Bedrock invoke and SQS send permission; the worker task role needs
 SQS receive/delete and S3 put permission.
 
+Because the makeup text models use Global inference profiles, granting access
+only to a Seoul foundation-model ARN is not sufficient. Attach the following
+least-privilege shape to the **API task role** (replace `<account-id>`). Keep the
+worker's existing Bedrock access as required by its other AI jobs.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeMakeupGlobalInferenceProfiles",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:ap-northeast-2:<account-id>:inference-profile/global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:ap-northeast-2:<account-id>:inference-profile/global.anthropic.claude-sonnet-4-6"
+      ]
+    },
+    {
+      "Sid": "InvokeMakeupGlobalFoundationModels",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:::foundation-model/anthropic.claude-sonnet-4-6"
+      ]
+    }
+  ]
+}
+```
+
+If the account belongs to AWS Organizations, also confirm that no SCP denies
+`bedrock:InvokeModel*` when `aws:RequestedRegion` is `unspecified`; Global
+cross-Region inference uses that request context.
+
 For GitHub Actions deployment, set repository variables
 `AI_WORKER_SERVICE=aura-ai-worker`, `AI_WORKER_TASK_DEFINITION` to its task
 definition family, and `AI_WORKER_CONTAINER_NAME` to the container name. When

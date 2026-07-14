@@ -1,13 +1,18 @@
 import asyncio
 import json
+import logging
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.schemas.makeup_recommendation import GeneratedMakeupRecommendation, GeneratedQuestions
+
+
+logger = logging.getLogger(__name__)
 
 
 def apply_refinement_contract(
@@ -65,7 +70,50 @@ async def generate_json(settings: Settings, model_id: str, system: str, prompt: 
   except AppError:
     raise
   except Exception as exc:
-    raise AppError(502, "BEDROCK_REQUEST_FAILED", "The Bedrock request failed.") from exc
+    error = _bedrock_app_error(exc)
+    logger.exception(
+      "[aura:makeup-recommendation] bedrock:failed modelId=%s providerCode=%s providerRequestId=%s",
+      model_id,
+      error.details.get("providerCode"),
+      error.details.get("providerRequestId"),
+    )
+    raise error from exc
+
+
+def _bedrock_app_error(exc: Exception) -> AppError:
+  if not isinstance(exc, ClientError):
+    return AppError(502, "BEDROCK_REQUEST_FAILED", "The Bedrock request failed.")
+
+  error = exc.response.get("Error", {})
+  metadata = exc.response.get("ResponseMetadata", {})
+  provider_code = str(error.get("Code") or "ClientError")
+  request_id = str(metadata.get("RequestId") or "")
+  details = {
+    "providerCode": provider_code,
+    **({"providerRequestId": request_id} if request_id else {}),
+  }
+  if provider_code in {"AccessDeniedException", "UnauthorizedException"}:
+    return AppError(
+      503,
+      "BEDROCK_ACCESS_DENIED",
+      "Bedrock access is not configured for this service.",
+      details,
+    )
+  if provider_code in {"ThrottlingException", "ServiceUnavailableException"}:
+    return AppError(
+      503,
+      "BEDROCK_TEMPORARILY_UNAVAILABLE",
+      "Bedrock is temporarily unavailable.",
+      details,
+    )
+  if provider_code in {"ValidationException", "ResourceNotFoundException"}:
+    return AppError(
+      502,
+      "BEDROCK_MODEL_REQUEST_INVALID",
+      "The configured Bedrock model request is invalid.",
+      details,
+    )
+  return AppError(502, "BEDROCK_REQUEST_FAILED", "The Bedrock request failed.", details)
 
 
 async def generate_scenarios(settings: Settings, count: int, exclude_texts: list[str]) -> dict[str, Any]:

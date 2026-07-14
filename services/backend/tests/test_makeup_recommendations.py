@@ -2,6 +2,7 @@ import json
 from uuid import UUID
 
 import pytest
+from botocore.exceptions import ClientError
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
@@ -14,6 +15,7 @@ from app.db.check_schema import EXPECTED_COLUMNS, EXPECTED_TABLES
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.core.errors import AppError
 from app.services.makeup_recommendation import (
+  _bedrock_app_error,
   _converse,
   apply_refinement_contract,
   generate_questions,
@@ -54,6 +56,26 @@ def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> No
   result = _converse(Settings(), "model-id", "system", "prompt")
 
   assert result["items"][0]["text"] == "퇴근 후 약속"
+
+
+def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:
+  provider_error = ClientError(
+    {
+      "Error": {"Code": "AccessDeniedException", "Message": "role is not authorized"},
+      "ResponseMetadata": {"RequestId": "request-123"},
+    },
+    "Converse",
+  )
+
+  error = _bedrock_app_error(provider_error)
+
+  assert error.status_code == 503
+  assert error.code == "BEDROCK_ACCESS_DENIED"
+  assert error.details == {
+    "providerCode": "AccessDeniedException",
+    "providerRequestId": "request-123",
+  }
+  assert "role is not authorized" not in error.message
 
 
 def test_product_only_refinement_preserves_makeup_and_replaces_products() -> None:
