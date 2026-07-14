@@ -56,9 +56,9 @@ class Settings(BaseSettings):
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
-  bedrock_scenario_model_id: str | None = None
-  bedrock_question_model_id: str | None = None
-  bedrock_recommendation_model_id: str | None = None
+  bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
   bedrock_analysis_region: str | None = None
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None

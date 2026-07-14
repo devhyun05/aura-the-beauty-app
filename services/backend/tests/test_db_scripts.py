@@ -63,6 +63,13 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
         "parent_report_id",
         "refinement_type",
       },
+      "makeup_scenario_library": {
+        "normalized_text",
+        "seed_prompt",
+        "status",
+        "usage_count",
+        "model_id",
+      },
     },
   )
 

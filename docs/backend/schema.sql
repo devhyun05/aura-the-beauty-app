@@ -1525,6 +1525,30 @@ alter table consulting_bookings
 create index if not exists idx_consulting_payments_user on consulting_payments (user_id, created_at desc);
 create index if not exists idx_user_consulting_memberships_user on user_consulting_memberships (user_id, status);
 
+-- Shared AI makeup situation-card library
+create table if not exists makeup_scenario_library (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  normalized_text text not null unique,
+  seed_prompt text not null,
+  tags jsonb not null default '[]'::jsonb,
+  source text not null default 'ai',
+  model_id text,
+  prompt_version text not null default 'makeup-scenario-v2',
+  status text not null default 'active',
+  usage_count integer not null default 0,
+  created_by_user_id uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_makeup_scenario_library_source check (source in ('ai', 'curated')),
+  constraint chk_makeup_scenario_library_status check (status in ('active', 'disabled')),
+  constraint chk_makeup_scenario_library_usage_count check (usage_count >= 0),
+  constraint chk_makeup_scenario_library_text_length check (char_length(text) between 1 and 60),
+  constraint chk_makeup_scenario_library_seed_prompt_length check (char_length(seed_prompt) between 1 and 240)
+);
+create index if not exists idx_makeup_scenario_library_active_usage
+  on makeup_scenario_library (status, usage_count, created_at desc);
+
 -- AI makeup recommendation reports
 create table if not exists makeup_recommendation_reports (
   id uuid primary key default gen_random_uuid(),
@@ -1553,6 +1577,11 @@ create table if not exists makeup_recommendation_reports (
 );
 create index if not exists idx_makeup_recommendation_reports_user_created on makeup_recommendation_reports (user_id, created_at desc);
 create index if not exists idx_makeup_recommendation_reports_parent on makeup_recommendation_reports (parent_report_id);
+
+drop trigger if exists trg_makeup_scenario_library_updated_at on makeup_scenario_library;
+create trigger trg_makeup_scenario_library_updated_at
+before update on makeup_scenario_library
+for each row execute function set_updated_at();
 
 -- Consulting updated_at triggers
 drop trigger if exists trg_consulting_categories_updated_at on consulting_categories;

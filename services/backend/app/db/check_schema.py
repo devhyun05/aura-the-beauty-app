@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
   "filter_extraction_reports",
   "makeup_feedback_reports",
   "makeup_recommendation_reports",
+  "makeup_scenario_library",
   "community_threads",
   "community_thread_media",
   "community_replies",
@@ -71,6 +72,13 @@ EXPECTED_COLUMNS = {
     "recommendation_model_id",
     "parent_report_id",
     "refinement_type",
+  },
+  "makeup_scenario_library": {
+    "normalized_text",
+    "seed_prompt",
+    "status",
+    "usage_count",
+    "model_id",
   },
 }
 

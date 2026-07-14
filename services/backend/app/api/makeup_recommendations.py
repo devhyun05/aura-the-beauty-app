@@ -16,7 +16,7 @@ from app.schemas.makeup_recommendation import (
   MakeupRecommendationRequest,
   MakeupScenarioRequest,
 )
-from app.services.makeup_recommendation import apply_refinement_contract, generate_questions, generate_recommendation, generate_scenarios
+from app.services.makeup_recommendation import apply_refinement_contract, generate_questions, generate_recommendation, generate_shared_scenarios
 from app.services.makeup_recommendation_image import generate_recommendation_images
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.users import ensure_user
@@ -128,8 +128,14 @@ async def dispatch_recommendation_image_job(
 
 
 @router.post("/scenarios")
-async def create_scenarios(payload: MakeupScenarioRequest, settings: Settings = Depends(get_settings), _: AuthContext = Depends(get_current_user)) -> dict:
-  return success(await generate_scenarios(settings, payload.count, payload.exclude_texts))
+async def create_scenarios(
+  payload: MakeupScenarioRequest,
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  return success(await generate_shared_scenarios(settings, db, payload.count, payload.exclude_texts, user["id"]))
 
 
 @router.post("/questions")

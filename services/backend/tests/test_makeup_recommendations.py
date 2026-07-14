@@ -21,6 +21,7 @@ from app.services.makeup_recommendation import (
   generate_questions,
   generate_recommendation,
   generate_scenarios,
+  generate_shared_scenarios,
 )
 from app.services.makeup_recommendation_image import (
   generate_recommendation_image,
@@ -192,6 +193,33 @@ def test_generation_endpoints_require_auth(path: str) -> None:
   response = client.post(path, json={})
 
   assert response.status_code == 401
+
+
+def test_scenario_endpoint_uses_shared_library_for_authenticated_user(monkeypatch: pytest.MonkeyPatch) -> None:
+  db = SharedScenarioDatabase()
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+  captured: dict = {}
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  async def fake_shared(_settings, passed_db, count, exclude_texts, user_id):
+    captured.update({"db": passed_db, "count": count, "excludeTexts": exclude_texts, "userId": user_id})
+    return {"items": [{"id": "shared-1", "text": "새벽 서점의 온도", "seedPrompt": "차분한 브라운", "tags": []}]}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "generate_shared_scenarios", fake_shared)
+
+  response = TestClient(app).post(
+    "/api/makeup-recommendations/scenarios",
+    json={"count": 6, "excludeTexts": ["공항 출국 레전드"]},
+  )
+
+  assert response.status_code == 200
+  assert response.json()["data"]["items"][0]["text"] == "새벽 서점의 온도"
+  assert captured == {"db": db, "count": 6, "excludeTexts": ["공항 출국 레전드"], "userId": USER_ID}
 
 
 def test_recommendation_saves_report_without_face_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -369,6 +397,14 @@ def test_makeup_report_is_part_of_schema_contract() -> None:
     "parent_report_id",
     "refinement_type",
   }
+  assert "makeup_scenario_library" in EXPECTED_TABLES
+  assert EXPECTED_COLUMNS["makeup_scenario_library"] >= {
+    "normalized_text",
+    "seed_prompt",
+    "status",
+    "usage_count",
+    "model_id",
+  }
 
 
 @pytest.mark.asyncio
@@ -535,6 +571,246 @@ async def test_scenarios_reject_exact_duplicates_with_generic_only_copy(monkeypa
   result = await generate_scenarios(Settings(), 2, [])
 
   assert [item["text"] for item in result["items"]] == ["오늘 하루", "첫 회의의 여유"]
+
+
+@pytest.mark.asyncio
+async def test_scenarios_reject_unsafe_copy_before_it_can_be_shared(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "items": [
+        {
+          "id": "unsafe",
+          "text": "못생긴 얼굴 탈출",
+          "seedPrompt": "반드시 얼굴을 작고 하얗게 바꿔주는 메이크업",
+          "tags": ["외모 변화"],
+        },
+        {
+          "id": "safe",
+          "text": "첫 회의의 여유",
+          "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+          "tags": ["업무", "단정"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 1, [])
+
+  assert [item["text"] for item in result["items"]] == ["첫 회의의 여유"]
+
+
+class SharedScenarioDatabase:
+  def __init__(self, rows: list[dict] | None = None) -> None:
+    self.rows = list(rows or [])
+    self.executed: list[tuple[str, tuple]] = []
+
+  async def fetch(self, query: str, *args):
+    assert "from makeup_scenario_library" in query
+    return list(self.rows)
+
+  async def fetchrow(self, query: str, *args):
+    assert "insert into makeup_scenario_library" in query
+    row = {
+      "id": UUID(f"00000000-0000-0000-0000-{len(self.rows) + 1:012d}"),
+      "text": args[0],
+      "seed_prompt": args[2],
+      "tags": json.loads(args[3]),
+    }
+    self.rows.append(row)
+    return row
+
+  async def execute(self, query: str, *args):
+    self.executed.append((query, args))
+    return "UPDATE 1"
+
+
+@pytest.mark.asyncio
+async def test_shared_scenarios_mix_library_with_fresh_generation_and_persist(monkeypatch: pytest.MonkeyPatch) -> None:
+  stored_texts = [
+    "새벽 서점의 온도",
+    "첫 회의의 여유",
+    "비 오는 창가",
+    "한강 노을 산책",
+    "일요일 브런치",
+    "밤 기차의 여운",
+    "전시 오프닝",
+    "퇴근 후 재즈바",
+    "겨울 아침 햇살",
+    "옥상 영화제",
+  ]
+  stored_rows = [
+    {
+      "id": UUID(f"10000000-0000-0000-0000-{index + 1:012d}"),
+      "text": text,
+      "seed_prompt": f"공유 메이크업 방향 {index + 1}",
+      "tags": ["공유"],
+    }
+    for index, text in enumerate(stored_texts)
+  ]
+  db = SharedScenarioDatabase(stored_rows)
+  generated_counts: list[int] = []
+  fresh_texts = ["눈 내린 극장 앞", "여름밤 루프탑", "첫 발표의 집중", "오후 네 시 티룸"]
+
+  async def fake_generate(_settings, count, _exclude_texts):
+    generated_counts.append(count)
+    return {
+      "items": [
+        {
+          "id": f"generated-{index + 1}",
+          "text": fresh_texts[index],
+          "seedPrompt": f"새 메이크업 방향 {index + 1}",
+          "tags": ["신규"],
+        }
+        for index in range(count)
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_scenarios", fake_generate)
+
+  result = await generate_shared_scenarios(
+    Settings(bedrock_scenario_model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    db,
+    12,
+    [],
+    USER_ID,
+  )
+
+  assert generated_counts == [4]
+  assert len(result["items"]) == 12
+  assert [item["text"] for item in result["items"][:8]] == stored_texts[:8]
+  assert [item["text"] for item in result["items"][8:]] == fresh_texts
+  assert len(db.rows) == 14
+  assert all(str(item["id"]) for item in result["items"])
+  assert any("usage_count = usage_count + 1" in query for query, _args in db.executed)
+
+
+@pytest.mark.asyncio
+async def test_shared_scenarios_skip_excluded_and_near_duplicate_library_cards(monkeypatch: pytest.MonkeyPatch) -> None:
+  db = SharedScenarioDatabase(
+    [
+      {
+        "id": UUID("20000000-0000-0000-0000-000000000001"),
+        "text": "공항 출국 사진 레전드",
+        "seed_prompt": "공항에서 또렷하게 보이는 메이크업",
+        "tags": ["공항"],
+      },
+      {
+        "id": UUID("20000000-0000-0000-0000-000000000002"),
+        "text": "새벽 서점의 온도",
+        "seed_prompt": "차분한 브라운 메이크업",
+        "tags": ["차분"],
+      },
+    ],
+  )
+
+  async def fake_generate(_settings, count, _exclude_texts):
+    fresh_texts = ["눈 내린 극장 앞", "여름밤 루프탑", "첫 발표의 집중", "오후 네 시 티룸"]
+    return {
+      "items": [
+        {
+          "id": f"fresh-{index}",
+          "text": fresh_texts[index],
+          "seedPrompt": f"새 장면 메이크업 {index}",
+          "tags": ["신규"],
+        }
+        for index in range(count)
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_scenarios", fake_generate)
+
+  result = await generate_shared_scenarios(Settings(), db, 5, ["공항 출국 레전드"], USER_ID)
+
+  assert "공항 출국 사진 레전드" not in [item["text"] for item in result["items"]]
+  assert "새벽 서점의 온도" in [item["text"] for item in result["items"]]
+
+
+@pytest.mark.asyncio
+async def test_shared_scenarios_never_reactivate_or_return_disabled_cards(monkeypatch: pytest.MonkeyPatch) -> None:
+  disabled_row = {
+    "id": UUID("30000000-0000-0000-0000-000000000001"),
+    "text": "차단된 카드",
+    "seed_prompt": "차단된 메이크업 방향",
+    "tags": [],
+    "status": "disabled",
+  }
+
+  class DisabledScenarioDatabase(SharedScenarioDatabase):
+    async def fetchrow(self, query: str, *args):
+      assert "insert into makeup_scenario_library" in query
+      return disabled_row
+
+  db = DisabledScenarioDatabase([disabled_row])
+
+  async def fake_generate(_settings, _count, _exclude_texts):
+    return {
+      "items": [
+        {
+          "id": "regenerated-disabled",
+          "text": "차단된 카드",
+          "seedPrompt": "차단된 메이크업 방향",
+          "tags": [],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_scenarios", fake_generate)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_shared_scenarios(Settings(), db, 1, [], USER_ID)
+
+  assert exc_info.value.code == "BEDROCK_INSUFFICIENT_SCENARIOS"
+
+
+@pytest.mark.asyncio
+async def test_shared_scenarios_reject_partial_fresh_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+  stored_texts = [
+    "새벽 서점의 온도",
+    "첫 회의의 여유",
+    "비 오는 창가",
+    "한강 노을 산책",
+    "일요일 브런치",
+    "밤 기차의 여운",
+    "전시 오프닝",
+    "퇴근 후 재즈바",
+    "겨울 아침 햇살",
+    "옥상 영화제",
+    "낮잠 뒤 산책",
+    "오래된 LP 바",
+  ]
+  db = SharedScenarioDatabase(
+    [
+      {
+        "id": UUID(f"40000000-0000-0000-0000-{index + 1:012d}"),
+        "text": text,
+        "seed_prompt": f"메이크업 방향 {index + 1}",
+        "tags": [],
+        "status": "active",
+      }
+      for index, text in enumerate(stored_texts)
+    ],
+  )
+
+  async def fake_generate(_settings, _count, _exclude_texts):
+    return {
+      "items": [
+        {
+          "id": "only-fresh",
+          "text": "눈 내린 극장 앞",
+          "seedPrompt": "차가운 광택과 또렷한 립의 메이크업",
+          "tags": ["겨울"],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_scenarios", fake_generate)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_shared_scenarios(Settings(), db, 12, [], USER_ID)
+
+  assert exc_info.value.code == "BEDROCK_INSUFFICIENT_SCENARIOS"
+  assert exc_info.value.details == {"requestedFresh": 4, "generatedFresh": 1}
 
 
 @pytest.mark.asyncio

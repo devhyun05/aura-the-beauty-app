@@ -31,6 +31,25 @@ SCENARIO_COPY_EXAMPLES = (
   "약속 없이도 특별한 기분",
 )
 SCENARIO_GENERIC_WORDS = ("메이크업", "스타일", "분위기", "느낌", "감성", "무드", "사진", "오늘", "하루", "룩")
+SCENARIO_UNSAFE_PATTERNS = (
+  "못생",
+  "추한",
+  "추해",
+  "뚱뚱",
+  "살빼",
+  "하얗게바꿔",
+  "얼굴을작게",
+  "성형",
+  "남자답",
+  "여자답",
+  "여신",
+  "남신",
+  "인종",
+  "민족",
+  "장애",
+  "효과보장",
+  "반드시예뻐",
+)
 
 
 def _scenario_copy_key(text: str) -> str:
@@ -55,6 +74,12 @@ def _scenario_copy_is_similar(left: str, right: str) -> bool:
   if len(shorter) >= 4 and shorter in longer:
     return True
   return SequenceMatcher(None, left_key, right_key).ratio() >= 0.78
+
+
+def _scenario_copy_is_safe(text: str, seed_prompt: str, tags: list[Any] | None = None) -> bool:
+  combined = "".join([text, seed_prompt, *[str(tag) for tag in tags or []]]).casefold()
+  normalized = re.sub(r"\s+", "", combined)
+  return not any(pattern in normalized for pattern in SCENARIO_UNSAFE_PATTERNS)
 
 
 def apply_refinement_contract(
@@ -185,12 +210,15 @@ async def generate_scenarios(settings: Settings, count: int, exclude_texts: list
       if not text or not seed_prompt or any(_scenario_copy_is_similar(text, previous) for previous in seen):
         continue
       tags = raw_item.get("tags")
+      clean_tags = [str(tag).strip() for tag in tags[:8] if str(tag).strip()] if isinstance(tags, list) else []
+      if not _scenario_copy_is_safe(text, seed_prompt, clean_tags):
+        continue
       items.append(
         {
           "id": f"generated-{sha256(text.encode('utf-8')).hexdigest()[:16]}",
           "text": text,
           "seedPrompt": seed_prompt,
-          "tags": [str(tag).strip() for tag in tags[:8] if str(tag).strip()] if isinstance(tags, list) else [],
+          "tags": clean_tags,
         },
       )
       seen.append(text)
@@ -200,6 +228,122 @@ async def generate_scenarios(settings: Settings, count: int, exclude_texts: list
   if not items:
     raise AppError(502, "BEDROCK_EMPTY_SCENARIOS", "Bedrock did not return any usable makeup scenarios.")
   return {"items": items[:count]}
+
+
+def _scenario_library_item(row: dict[str, Any]) -> dict[str, Any]:
+  tags = row.get("tags")
+  if isinstance(tags, str):
+    try:
+      tags = json.loads(tags)
+    except json.JSONDecodeError:
+      tags = []
+  return {
+    "id": str(row.get("id") or ""),
+    "text": str(row.get("text") or "").strip(),
+    "seedPrompt": str(row.get("seed_prompt") or "").strip(),
+    "tags": [str(tag).strip() for tag in tags if str(tag).strip()] if isinstance(tags, list) else [],
+  }
+
+
+async def generate_shared_scenarios(
+  settings: Settings,
+  db: Any,
+  count: int,
+  exclude_texts: list[str],
+  created_by_user_id: Any,
+) -> dict[str, Any]:
+  candidates = await db.fetch(
+    """
+    select id, text, seed_prompt, tags, status
+    from makeup_scenario_library
+    order by (status = 'active') desc, usage_count asc, random()
+    limit $1
+    """,
+    max(100, count * 20),
+  )
+  excluded = [text.strip()[:60] for text in exclude_texts if text.strip()][:100]
+  shared_target = max(0, count - min(4, count))
+  eligible: list[dict[str, Any]] = []
+  seen = list(excluded)
+  for row in candidates:
+    if str(row.get("status") or "active") != "active":
+      continue
+    item = _scenario_library_item(row)
+    if not item["id"] or not item["text"] or not item["seedPrompt"]:
+      continue
+    if any(_scenario_copy_is_similar(item["text"], previous) for previous in seen):
+      continue
+    eligible.append(item)
+    seen.append(item["text"])
+  selected = eligible[:shared_target]
+
+  generation_count = count - len(selected)
+  generated_items: list[dict[str, Any]] = []
+  if generation_count > 0:
+    generation_exclusions = [*excluded, *[str(row.get("text") or "") for row in candidates]]
+    try:
+      generated = await generate_scenarios(settings, generation_count, generation_exclusions)
+    except Exception:
+      if not selected:
+        raise
+      logger.exception("[aura:makeup-recommendation] shared-scenarios:generation-failed")
+      generated = {"items": []}
+
+    for item in generated.get("items", []):
+      text = str(item.get("text") or "").strip()[:60]
+      seed_prompt = str(item.get("seedPrompt") or "").strip()[:240]
+      if not text or not seed_prompt or any(_scenario_copy_is_similar(text, previous) for previous in seen):
+        continue
+      normalized_text = _scenario_copy_key(text) or re.sub(r"[^0-9a-z가-힣]", "", text.casefold())
+      stored = await db.fetchrow(
+        """
+        insert into makeup_scenario_library
+          (text, normalized_text, seed_prompt, tags, source, model_id, prompt_version,
+           status, usage_count, created_by_user_id)
+        values ($1, $2, $3, $4::jsonb, 'ai', $5, 'makeup-scenario-v2', 'active', 1, $6)
+        on conflict (normalized_text) do update
+          set usage_count = makeup_scenario_library.usage_count + 1,
+              updated_at = now()
+          where makeup_scenario_library.status = 'active'
+        returning id, text, seed_prompt, tags, status
+        """,
+        text,
+        normalized_text,
+        seed_prompt,
+        json.dumps(item.get("tags") if isinstance(item.get("tags"), list) else [], ensure_ascii=False),
+        settings.effective_scenario_model_id,
+        created_by_user_id,
+      )
+      if stored is None:
+        continue
+      if str(stored.get("status") or "active") != "active":
+        continue
+      stored_item = _scenario_library_item(stored)
+      if any(_scenario_copy_is_similar(stored_item["text"], previous) for previous in seen):
+        continue
+      generated_items.append(stored_item)
+      seen.append(stored_item["text"])
+      if len(selected) + len(generated_items) >= count:
+        break
+
+  if len(generated_items) < generation_count:
+    raise AppError(
+      502,
+      "BEDROCK_INSUFFICIENT_SCENARIOS",
+      "Bedrock did not return enough distinct makeup scenarios.",
+      {"requestedFresh": generation_count, "generatedFresh": len(generated_items)},
+    )
+
+  combined = [*selected, *generated_items]
+
+  generated_ids = {item["id"] for item in generated_items}
+  shared_ids = [item["id"] for item in combined if item["id"] not in generated_ids]
+  if shared_ids:
+    await db.execute(
+      "update makeup_scenario_library set usage_count = usage_count + 1, updated_at = now() where id::text = any($1::text[])",
+      shared_ids,
+    )
+  return {"items": combined[:count]}
 
 
 async def generate_questions(settings: Settings, scenario_text: str, tags: list[str]) -> dict[str, Any]:

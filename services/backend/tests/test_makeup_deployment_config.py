@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.core.settings import Settings
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -18,3 +20,8 @@ def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
     assert f"{name}={model_id}" in env_example
     assert f"{name}: ${{{{ vars.{name} || '{model_id}' }}}}" in workflow
     assert f"{name}=${{{{ env.{name} }}}}" in workflow
+
+  settings = Settings(bedrock_model_id="anthropic.claude-3-5-sonnet-20241022-v2:0")
+  assert settings.effective_scenario_model_id == expected["BEDROCK_SCENARIO_MODEL_ID"]
+  assert settings.effective_question_model_id == expected["BEDROCK_QUESTION_MODEL_ID"]
+  assert settings.effective_recommendation_model_id == expected["BEDROCK_RECOMMENDATION_MODEL_ID"]
