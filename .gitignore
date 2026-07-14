@@ -2,6 +2,7 @@
 
 # Dependencies and local package-manager caches
 node_modules/
+apps/mobile/node_modules
 .pnpm-store/
 .yarn/
 
