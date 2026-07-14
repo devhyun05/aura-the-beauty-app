@@ -1,4 +1,5 @@
 import {Pressable, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import {XStack} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen} from '../../../shared/ui';
@@ -109,7 +110,7 @@ function ScenarioPromptWall({
   scenarios: readonly MakeupScenarioPrompt[];
 }) {
   return (
-    <View style={styles.wall}>
+    <XStack flexWrap="wrap" gap={spacing.sm}>
       {scenarios.map((scenario, index) => {
         const emphasis = getScenarioCardEmphasis(index);
         return (
@@ -122,7 +123,7 @@ function ScenarioPromptWall({
           />
         );
       })}
-    </View>
+    </XStack>
   );
 }
 
@@ -138,7 +139,11 @@ export function ScenarioDiscoveryView({
   useProfile,
 }: ScenarioDiscoveryViewProps) {
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="belowShellHeader">
+    <AppScreen
+      contentGap={spacing.xl}
+      keyboardShouldPersistTaps="handled"
+      topPadding="belowShellHeader"
+    >
       <View style={styles.intro}>
         <Text style={styles.eyebrow}>{makeupRecommendationDiscoveryCopy.eyebrow}</Text>
         <Text style={styles.title}>{makeupRecommendationDiscoveryCopy.title}</Text>
@@ -277,11 +282,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
-  },
-  wall: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
   },
   regularCard: {
     flexBasis: '47%',
