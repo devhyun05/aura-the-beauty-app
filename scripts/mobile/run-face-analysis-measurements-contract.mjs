@@ -15,6 +15,8 @@ const featuresDir = join(repoRoot, 'apps/mobile/src/features');
 const entries = [
   'face-analysis/services/faceAnalysisMeasurements.ts',
   'face-analysis/services/faceAnalysisMeasurements.test.ts',
+  'face-analysis/services/faceAnalysisV2.ts',
+  'face-analysis/services/faceAnalysisV2.test.ts',
 ];
 
 function run(command, args) {
@@ -43,4 +45,7 @@ run(process.execPath, [
 
 run(process.execPath, [
   join(outDir, 'face-analysis/services/faceAnalysisMeasurements.test.js'),
+]);
+run(process.execPath, [
+  join(outDir, 'face-analysis/services/faceAnalysisV2.test.js'),
 ]);
