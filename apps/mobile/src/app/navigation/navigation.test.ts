@@ -69,6 +69,11 @@ expectEqual(
   'product recommendation detail route title',
 );
 expectEqual(
+  getDetailRouteTitle('ProductRecommendationShelf'),
+  '추천 제품 전체보기',
+  'product recommendation shelf route title',
+);
+expectEqual(
   getRouteChrome('MakeupRecommendation').kind,
   'detail',
   'makeup recommendation chrome',

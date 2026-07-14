@@ -34,6 +34,7 @@ export type DetailViewProps = {
   onToggleSave: () => void;
   onBack: () => void;
   onHome: () => void;
+  onOpenTrustedProduct?: () => void;
 };
 
 /** Evidence bucket rows: leading mark on the first line, hanging indent after. */
@@ -77,6 +78,7 @@ export function DetailView({
   onToggleSave,
   onBack,
   onHome,
+  onOpenTrustedProduct,
 }: DetailViewProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
@@ -99,6 +101,10 @@ export function DetailView({
 
   const r = p.reason;
   const openBuy = () => {
+    if (onOpenTrustedProduct) {
+      onOpenTrustedProduct();
+      return;
+    }
     if (p.purchaseUrl) Linking.openURL(p.purchaseUrl).catch(() => {});
   };
 
@@ -161,7 +167,6 @@ export function DetailView({
           </GlassCard>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-            {p.matchRate !== undefined ? <Badge tone="ink">{`MATCH ${p.matchRate}%`}</Badge> : null}
             {p.role ? <Badge>{p.role}</Badge> : null}
             {p.source ? <Badge>{p.source}</Badge> : null}
           </View>
@@ -285,8 +290,8 @@ export function DetailView({
               paddingBottom: 8,
             }}
           >
-            {p.purchaseUrl ? (
-              <CTAButton label="구매하러 가기 ↗" onPress={openBuy} style={{ flex: 1 }} />
+            {p.purchaseUrl || onOpenTrustedProduct ? (
+              <CTAButton label={onOpenTrustedProduct ? '제품 상세·판매처 보기' : '구매하러 가기 ↗'} onPress={openBuy} style={{ flex: 1 }} />
             ) : (
               <CTAButton label="구매 링크 준비 중" disabled style={{ flex: 1 }} />
             )}

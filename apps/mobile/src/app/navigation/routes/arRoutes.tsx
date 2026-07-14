@@ -4,6 +4,10 @@ import {ARFilterScreen} from '../../../features/ar/screens/ARFilterScreen';
 import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterEditScreen';
 import {UnityMakeupCaptureScreen} from '../../../features/ar/screens/UnityMakeupCaptureScreen';
 import type {FullFaceMakeupSavedContract} from '../../../features/ar/services/fullFaceMakeupEditService';
+import {
+  createSavedArLookClientRequestId,
+  saveArLook,
+} from '../../../features/ar/services/savedArLookService';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {useNavigationFlowState} from '../flowState';
 import {getARFilterDetailEditRouteParams} from './arRouteActions';
@@ -115,13 +119,19 @@ export function MakeupFilterEditRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'MakeupFilterEdit'>) {
-  const handleSave = (
+  const saveRequestIdsByRecipe = React.useRef(new Map<string, string>());
+  const handleSave = async (
     savedContract?: FullFaceMakeupSavedContract,
     selectedMakeupFilterId?: string,
   ) => {
     if (savedContract) {
-      navigation.navigate('ARFilter', {
-        fullFaceEditState: savedContract.editState,
+      const recipeKey = JSON.stringify(savedContract.recipe);
+      const clientRequestId = saveRequestIdsByRecipe.current.get(recipeKey)
+        ?? createSavedArLookClientRequestId();
+      saveRequestIdsByRecipe.current.set(recipeKey, clientRequestId);
+      const savedStyle = await saveArLook(savedContract, clientRequestId);
+      navigation.replace('MakeupFilterSaveComplete', {
+        arStyleId: savedStyle.id,
       });
       return;
     }

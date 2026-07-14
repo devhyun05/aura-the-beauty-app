@@ -225,6 +225,11 @@ expectEqual(
   'product recommendation path uses product naming',
 );
 expectEqual(
+  navigationLinking.config?.screens?.ProductRecommendationShelf,
+  'product-recommendation/:shelf',
+  'product recommendation shelf path preserves shelf purpose',
+);
+expectEqual(
   navigationLinking.config?.screens?.FaceAnalysisIntro,
   'face-analysis-intro',
   'face analysis intro path uses analysis naming',

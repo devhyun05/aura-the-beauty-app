@@ -125,6 +125,7 @@ async def test_postgres_session_store_can_restore_search_state() -> None:
   settings = Settings(
     auradin_session_store="postgres",
     database_url="postgres://example",
+    legacy_naver_product_search=True,
   )
 
   created = await create_session_persisted(
@@ -163,6 +164,7 @@ async def test_postgres_session_store_prefers_database_state_and_get_is_read_onl
   settings = Settings(
     auradin_session_store="postgres",
     database_url="postgres://example",
+    legacy_naver_product_search=True,
   )
 
   created = await create_session_persisted(
@@ -194,6 +196,7 @@ async def test_postgres_session_store_does_not_fall_back_to_stale_memory() -> No
   settings = Settings(
     auradin_session_store="postgres",
     database_url="postgres://example",
+    legacy_naver_product_search=True,
   )
 
   created = await create_session_persisted(

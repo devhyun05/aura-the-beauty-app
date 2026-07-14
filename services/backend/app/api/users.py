@@ -1,4 +1,5 @@
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends
 
@@ -15,13 +16,33 @@ from app.services.users import ensure_user
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-async def attach_avatar_media(db: Database, user: dict) -> dict:
+def get_auth_avatar_url(auth: AuthContext) -> str | None:
+  picture = auth.claims.get("picture")
+
+  if not isinstance(picture, str):
+    return None
+
+  normalized = picture.strip()
+  parsed = urlparse(normalized)
+
+  if parsed.scheme != "https" or not parsed.netloc:
+    return None
+
+  return normalized
+
+
+async def attach_avatar_media(
+  db: Database,
+  user: dict,
+  *,
+  fallback_avatar_url: str | None = None,
+) -> dict:
   data = dict(user)
   avatar_media_id = data.get("avatar_media_id")
 
   if not avatar_media_id:
     data["avatar_media"] = None
-    data["avatar_url"] = None
+    data["avatar_url"] = fallback_avatar_url
     return data
 
   avatar_media = await db.fetchrow(
@@ -38,7 +59,11 @@ async def attach_avatar_media(db: Database, user: dict) -> dict:
 
   avatar_media_data = dict(avatar_media) if avatar_media else None
   data["avatar_media"] = avatar_media_data
-  data["avatar_url"] = avatar_media_data.get("cdn_url") if avatar_media_data else None
+  data["avatar_url"] = (
+    avatar_media_data.get("cdn_url")
+    if avatar_media_data and avatar_media_data.get("cdn_url")
+    else fallback_avatar_url
+  )
 
   return data
 
@@ -50,7 +75,14 @@ async def get_me(
 ) -> dict:
   user = await ensure_user(db, auth)
 
-  return success({"user": await attach_avatar_media(db, user), "auth": {"provider": auth.provider}})
+  return success({
+    "user": await attach_avatar_media(
+      db,
+      user,
+      fallback_avatar_url=get_auth_avatar_url(auth),
+    ),
+    "auth": {"provider": auth.provider},
+  })
 
 
 @router.delete("/me")
@@ -127,7 +159,13 @@ async def update_my_profile(
       updates.pop("avatar_media_id", None)
 
   if not updates:
-    return success({"user": await attach_avatar_media(db, user)})
+    return success({
+      "user": await attach_avatar_media(
+        db,
+        user,
+        fallback_avatar_url=get_auth_avatar_url(auth),
+      ),
+    })
 
   assignments = []
   values = [user["id"]]
@@ -144,4 +182,10 @@ async def update_my_profile(
   """
   updated_user = await db.fetchrow(query, *values)
 
-  return success({"user": await attach_avatar_media(db, updated_user)})
+  return success({
+    "user": await attach_avatar_media(
+      db,
+      updated_user,
+      fallback_avatar_url=get_auth_avatar_url(auth),
+    ),
+  })

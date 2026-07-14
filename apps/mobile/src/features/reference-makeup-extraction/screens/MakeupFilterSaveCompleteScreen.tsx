@@ -5,14 +5,16 @@ import {Text, View, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 type MakeupFilterSaveCompleteScreenProps = {
-  onApplyNow: () => void;
+  onApplyNow?: () => void;
   onGoToProfile: () => void;
+  onViewMatchingProducts?: () => void;
   savedMakeupLookTitle?: string;
 };
 
 export function MakeupFilterSaveCompleteScreen({
   onApplyNow,
   onGoToProfile,
+  onViewMatchingProducts,
   savedMakeupLookTitle = '추출된 메이크업 룩',
 }: MakeupFilterSaveCompleteScreenProps) {
   const insets = useSafeAreaInsets();
@@ -40,13 +42,28 @@ export function MakeupFilterSaveCompleteScreen({
       </YStack>
 
       <YStack style={[styles.footer, {paddingBottom: insets.bottom + spacing.lg}]}>
-        <Pressable
+        {onViewMatchingProducts ? (
+          <Pressable
+            accessibilityLabel="이 메이크업 룩과 맞는 제품 보기"
+            accessibilityRole="button"
+            onPress={onViewMatchingProducts}
+            style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
+            <Text style={styles.primaryButtonText}>이 룩과 맞는 제품 보기</Text>
+          </Pressable>
+        ) : null}
+        {onApplyNow ? <Pressable
           accessibilityLabel="저장된 메이크업 룩 지금 적용하기"
           accessibilityRole="button"
           onPress={onApplyNow}
-          style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-          <Text style={styles.primaryButtonText}>지금 적용해보기</Text>
-        </Pressable>
+          style={({pressed}) => [
+            onViewMatchingProducts ? styles.secondaryButton : styles.primaryButton,
+            pressed && styles.pressed,
+          ]}>
+          <Text
+            style={onViewMatchingProducts ? styles.secondaryButtonText : styles.primaryButtonText}>
+            지금 적용해보기
+          </Text>
+        </Pressable> : null}
         <Pressable
           accessibilityLabel="마이페이지로 이동"
           accessibilityRole="button"

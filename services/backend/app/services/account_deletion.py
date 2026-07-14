@@ -14,6 +14,7 @@ from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.db.session import Database
 from app.services.account_identity import hash_auth_subject, normalize_auth_provider
+from app.services.auradin_agent.session_manager import purge_in_memory_owner_sessions
 
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,12 @@ async def delete_user_account(
         "delete from consulting_expert_reviews where author_user_id = $1",
         user_id,
       )
+      # Auradin sessions intentionally have no user FK because they can run in
+      # memory/no-DB mode. Purge the authenticated owner explicitly.
+      await connection.execute(
+        "delete from auradin_search_sessions where state ->> 'ownerSubject' = $1",
+        auth.subject,
+      )
       await connection.execute(
         """
         insert into account_deletion_tombstones (subject_hash, auth_provider, deleted_at)
@@ -183,6 +190,8 @@ async def delete_user_account(
         user_id,
         json.dumps(audit_metadata),
       )
+
+  purge_in_memory_owner_sessions(auth.subject)
 
   return AccountDeletionResult(
     media_count=len(media_rows),
