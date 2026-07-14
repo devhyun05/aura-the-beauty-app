@@ -170,6 +170,9 @@ export type ThinkingStep = {label: string; state: ThinkingStepState};
 
 export type RefineDial = 'more_similar' | 'more_diverse';
 
+// B6 §10.3-2 '이 제품과 비슷한 것' 의향 3종 — 색 유지 / 더 저렴 / 다른 브랜드.
+export type AuradinSimilarIntent = 'keep_color' | 'cheaper' | 'other_brand';
+
 // 백엔드 SearchTurn을 화면이 소비하는 형태로 매핑한 결과.
 export type AuradinSearchTurn = {
   sessionId: string;

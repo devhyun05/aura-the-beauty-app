@@ -196,6 +196,26 @@ export function ResultsView({
                 {top.matchSummary}
               </Text>
             </View>
+            {/* B6 진입점 — 상세의 '이 제품과 비슷한 것' 의향 3버튼으로 이어진다 */}
+            <Pressable
+              onPress={() => onOpen(top)}
+              accessibilityRole="button"
+              accessibilityLabel="이 제품과 비슷한 것 찾기"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ alignSelf: 'flex-start', marginTop: 10 }}
+            >
+              <Text
+                style={{
+                  fontFamily: font.sans,
+                  fontSize: 12,
+                  color: color.inkSoft,
+                  textDecorationLine: 'underline',
+                }}
+                allowFontScaling={false}
+              >
+                이 제품과 비슷한 것 →
+              </Text>
+            </Pressable>
           </GlassCard>
         ) : (
           <Text

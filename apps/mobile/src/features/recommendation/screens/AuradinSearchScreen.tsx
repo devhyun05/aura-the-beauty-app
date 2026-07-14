@@ -29,6 +29,7 @@ import {
   makeClientRequestId,
   pollAuradinSearchTurn,
   refineAuradinSearch,
+  similarAuradinSearch,
 } from '../services/auradinSearchService';
 import {
   fetchAuradinSavedProducts,
@@ -40,6 +41,7 @@ import type {
   AuradinCandidateProduct,
   AuradinPhase,
   AuradinSearchTurn,
+  AuradinSimilarIntent,
   RefineDial,
 } from '../types';
 import {buildRequestParts, type AuradinAttachment} from '../attachments';
@@ -84,6 +86,7 @@ export function AuradinSearchScreen({
   const [turn, setTurn] = useState<AuradinSearchTurn | null>(null);
   const [answering, setAnswering] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [similarLoading, setSimilarLoading] = useState(false);
   const [selected, setSelected] = useState<AuradinCandidateProduct | null>(null);
   const [saved, setSaved] = useState<AuradinCandidateProduct[]>([]);
   const sessionIdRef = useRef<string | null>(null);
@@ -287,6 +290,34 @@ export function AuradinSearchScreen({
     })();
   };
 
+  // B6 §10.3-2: '이 제품과 비슷한 것' — 서버 rankedCache 재랭킹(λ=0.9) 후 results로 복귀.
+  // 재검색이 아니라 같은 후보셋의 재정렬이라 다크 몰입 없이 조용히 처리한다.
+  const similar = (product: AuradinCandidateProduct, intent: AuradinSimilarIntent) => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId || similarLoading) {
+      return;
+    }
+    setSimilarLoading(true);
+    const {signal} = beginRequest();
+    void (async () => {
+      try {
+        await similarAuradinSearch(sessionId, {productId: product.id, intent}, signal);
+        const nextTurn = await pollAuradinSearchTurn(sessionId, {signal});
+        if (!cancelled.current && !signal.aborted && nextTurn.phase === 'results') {
+          setTurn(nextTurn);
+          setSelected(null);
+          setPhase('results');
+        }
+      } catch {
+        // similar 실패(카탈로그 밖 픽 422 등)/취소는 조용히 — 상세 화면 유지 (§9 recovery는 백엔드 담당)
+      } finally {
+        if (!cancelled.current && !signal.aborted) {
+          setSimilarLoading(false);
+        }
+      }
+    })();
+  };
+
   const openDetail = (product: AuradinCandidateProduct) => {
     setSelected(product);
     setPhase('detail');
@@ -338,6 +369,7 @@ export function AuradinSearchScreen({
     setQuery(''); // 입력창 잔존 질의 초기화 — 다음 홈 진입 시 placeholder만 보이게
     setAnswering(false);
     setRefining(false);
+    setSimilarLoading(false);
     setSelected(null);
     setPhase('home');
   };
@@ -441,8 +473,15 @@ export function AuradinSearchScreen({
             liked={savedIds.has(selected.id)}
             onBack={() => setPhase('results')}
             onHome={reset}
+            // 라이브 발견 픽은 rankedCache(카탈로그) 밖 — 진입점을 숨긴다 (B6 계약).
+            onSimilar={
+              selected.source === 'live_naver' || !sessionIdRef.current
+                ? undefined
+                : (intent) => similar(selected, intent)
+            }
             onToggleSave={() => toggleSave(selected)}
             product={selected}
+            similarLoading={similarLoading}
           />
         ) : null}
 

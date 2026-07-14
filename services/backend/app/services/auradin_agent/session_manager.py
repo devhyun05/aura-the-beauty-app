@@ -18,7 +18,7 @@ from .enrichment import enrich_question, enrich_results
 from .intent_parser import parse_intent
 from .question_engine import propose_question
 from .report_profile import personal_color_to_soft_preferences
-from .ranking import build_slice_result, price_filter_label
+from .ranking import attribute_similarity, build_slice_result, normalized_brand, price_filter_label
 from .retrieval_service import FilterDeltaContractViolation, retrieve_and_rank
 
 
@@ -30,6 +30,16 @@ MAX_RESULTS = 6
 LAMBDA_MIN = 0.05
 LAMBDA_MAX = 0.95
 REFINE_DIALS = {"more_similar", "more_diverse"}
+# B6 §10.3-2 similar 액션 — 기준 제품 시그니처를 임시 soft preference로 한 고정 λ 재랭킹.
+# 세션 mmrLambda는 건드리지 않는다(일회성 뷰). 부스트 스케일은 R2 preference 축과 동급.
+SIMILAR_INTENTS = {"keep_color", "cheaper", "other_brand"}
+SIMILAR_LAMBDA = 0.9
+SIMILAR_PREF_WEIGHT = 0.35
+_SIMILAR_INTENT_LABELS = {
+  "keep_color": "색 유지",
+  "cheaper": "더 저렴하게",
+  "other_brand": "다른 브랜드",
+}
 # 종료 상태 — answer/refine을 조용히 무시하고(사용자 이탈/만료 후 늦은 요청), 에러를 노출한다.
 INACTIVE_PHASES = {"expired", "cancelled"}
 # '글리터'는 카탈로그에 없는 마감 → 아이섀도우·쉬머로 해석했음을 근거에 투명 노출 (§6/§9).
@@ -61,6 +71,9 @@ ANSWER_INVALID_OPTION = "invalid_option"
 ANSWER_NOT_ANSWERABLE = "session_not_answerable"
 REFINE_ACCEPTED = "accepted"
 REFINE_NOT_REFINABLE = "not_refinable"
+SIMILAR_ACCEPTED = "accepted"
+SIMILAR_NOT_AVAILABLE = "not_similarable"
+SIMILAR_UNKNOWN_PRODUCT = "unknown_product"
 MUTATION_VERSION_CONFLICT = "version_conflict"
 FILTER_DELTA_CONTRACT_VIOLATION = "filter_delta_contract_violation"
 CANCEL_ACCEPTED = "cancelled"
@@ -370,14 +383,19 @@ def _build_result(
   state: dict[str, Any],
   ranked: list[dict[str, Any]],
   settings: Settings,
+  *,
+  lambda_override: float | None = None,
+  extra_caveats: list[str] | None = None,
 ) -> dict[str, Any]:
   # §5/§6: floor → MMR → 3역할 → 구조화 근거. 단일 shape = Top3 (§4). 세트/비교는 이후 단계.
+  # lambda_override는 B6 similar의 일회성 λ=0.9 — 세션 mmrLambda 누적과 분리한다.
+  merged_caveats = [*(_interpretation_caveats(state) or []), *(extra_caveats or [])]
   slice_result = build_slice_result(
     ranked,
-    lambda_=_session_lambda(state, settings),
+    lambda_=lambda_override if lambda_override is not None else _session_lambda(state, settings),
     s_floor=float(settings.auradin_floor_semantic),
     hard_filters=state.get("hardFilters", []),
-    extra_caveats=_interpretation_caveats(state),
+    extra_caveats=merged_caveats or None,
     top_n=3,
   )
   products = [
@@ -848,6 +866,168 @@ def refine_session(
   return state
 
 
+def _similar_recovery(intent: str | None) -> dict[str, Any]:
+  # §9: 비슷한 후보가 없으면 조용한 완화 금지 — 이전 결과 유지 + 정직한 고지.
+  messages = {
+    "cheaper": "이 제품보다 저렴한 비슷한 후보가 지금 후보 중엔 없어요. 이전 결과를 유지할게요.",
+    "other_brand": "다른 브랜드의 비슷한 후보가 지금 후보 중엔 없어요. 이전 결과를 유지할게요.",
+    "keep_color": "같은 색 계열의 비슷한 후보가 지금 후보 중엔 없어요. 이전 결과를 유지할게요.",
+  }
+  return {
+    "kind": "similar_no_match",
+    "intent": intent,
+    "message": messages.get(intent or "", "비슷한 후보를 더 찾지 못했어요. 이전 결과를 유지할게요."),
+  }
+
+
+def similar_session(
+  session_id: str,
+  *,
+  owner_subject: str,
+  product_id: str,
+  intent: str | None = None,
+  settings: Settings | None = None,
+) -> dict[str, Any] | None:
+  """B6 §10.3-2 similar — 기준 제품 속성 시그니처를 임시 soft preference로 한 λ=0.9 재랭킹.
+
+  신규 검색이 아니라 현행 rankedCache 내 재랭킹(재검색 0, refine 인프라 재사용).
+  세션의 mmrLambda·필터·rankedCache는 불변 — 같은 후보셋의 일회성 정렬 뷰다.
+  의향(색 유지/더 저렴/다른 브랜드)은 캐시 내 필터로 반영하고, 결과 0이면
+  이전 결과를 유지하며 notice로 고지한다(조용한 완화 금지 §9).
+  """
+  settings = settings or get_settings()
+  state = get_session(session_id, owner_subject=owner_subject)
+  if not state or state.get("phase") in INACTIVE_PHASES:
+    return state
+  if state.get("phase") != "results":
+    logger.info(
+      "[aura:auradin-session] similar rejected session=%s phase=%s", session_id, state.get("phase"),
+    )
+    return state
+
+  product_id = str(product_id or "").strip()
+  intent = str(intent or "").strip() or None
+  base_item = get_catalog().get(product_id)
+  if not base_item:
+    return state  # judged wrapper가 SIMILAR_UNKNOWN_PRODUCT로 판정 — 방어적 no-op
+
+  snapshot = copy.deepcopy(state)
+
+  ranked = _ranked_from_cache(state)
+  used_cache = bool(ranked)
+  if not ranked:
+    # 캐시 소실(프로세스 재시작 등) → 동일 조건 재랭킹 폴백. 조건은 그대로라 완화 아님.
+    retrieval = retrieve_and_rank(
+      get_catalog(),
+      state["intent"],
+      state.get("answers", []),
+      settings=settings,
+      extra_hard_filters=state.get("refineHardFilters") or [],
+      extra_soft_preferences=state.get("refineSoftPreferences") or [],
+      extra_query_text=[
+        str(entry.get("text") or "")
+        for entry in state.get("refineResiduals") or []
+        if isinstance(entry, dict)
+      ],
+    )
+    ranked = retrieval["ranked"]
+
+  base_brand = normalized_brand(base_item.get("brandName"))
+  base_price = int((base_item.get("liveOffer") or {}).get("priceKrw") or 0)
+  base_color = str((base_item.get("attributes") or {}).get("colorFamily") or "").strip()
+
+  # 기준 제품 자신은 후보에서 제외 — '이 제품과 비슷한 다른 것'이 계약이다.
+  candidates = [row for row in ranked if str(row["item"].get("id") or "") != product_id]
+  extra_caveats: list[str] = []
+  if intent == "cheaper" and base_price > 0:
+    candidates = [
+      row
+      for row in candidates
+      if 0 < int((row["item"].get("liveOffer") or {}).get("priceKrw") or 0) < base_price
+    ]
+  elif intent == "other_brand" and base_brand:
+    candidates = [
+      row for row in candidates if normalized_brand(row["item"].get("brandName")) != base_brand
+    ]
+  elif intent == "keep_color":
+    if base_color:
+      candidates = [
+        row
+        for row in candidates
+        if str((row["item"].get("attributes") or {}).get("colorFamily") or "").strip() == base_color
+      ]
+    else:
+      # §9 정직성: 기준 제품에 색 정보가 없으면 '색 유지'는 보장 불가 — 숨기지 않고 고지.
+      extra_caveats.append("기준 제품의 색 정보가 없어 색 유지는 참고로만 반영했어요")
+
+  # 기준 제품 시그니처 유사도(§10.3-3 확장분 포함)를 임시 부스트로 relevance에 가산.
+  # 원본 score·components는 rankedCache에 그대로 남는다 — 이 부스트는 저장하지 않는다.
+  boosted = [
+    {
+      **row,
+      "_scoreRaw": float(row.get("score") or 0.0)
+      + SIMILAR_PREF_WEIGHT * attribute_similarity(base_item, row["item"]),
+      "components": {
+        **(row.get("components") or {}),
+        "similarToBase": round(attribute_similarity(base_item, row["item"]), 6),
+      },
+    }
+    for row in candidates
+  ]
+  boosted.sort(key=lambda row: float(row["_scoreRaw"]), reverse=True)
+
+  state.setdefault("logs", []).append(
+    {
+      "similar": {
+        "productId": product_id,
+        "intent": intent,
+        "lambda": SIMILAR_LAMBDA,
+        "usedCache": used_cache,
+        "candidateCount": len(boosted),
+      },
+    },
+  )
+
+  result = (
+    _build_result(
+      state,
+      boosted,
+      settings,
+      lambda_override=SIMILAR_LAMBDA,
+      extra_caveats=extra_caveats,
+    )
+    if boosted
+    else None
+  )
+  if not result or not result["products"]:
+    # 후보 0 — refine과 같은 계약: 상태 전체 원복 + 이전 결과 유지 + notice.
+    state.clear()
+    state.update(copy.deepcopy(snapshot))
+    if snapshot.get("result"):
+      state["result"] = {**snapshot["result"], "refineNotice": _similar_recovery(intent)}
+      state["phase"] = "results"
+    state["updatedAt"] = _now()
+    return state
+
+  base_name = " ".join(
+    part
+    for part in [
+      str(base_item.get("brandName") or "").strip(),
+      str(base_item.get("productName") or "").strip(),
+    ]
+    if part
+  )
+  intent_label = _SIMILAR_INTENT_LABELS.get(intent or "")
+  result["headerLabel"] = f"'{base_name}'와 비슷한 결로 다시 골랐어요" + (
+    f" · {intent_label}" if intent_label else ""
+  )
+  state["result"] = result
+  state["phase"] = "results"
+  state["lastQuestion"] = None
+  state["updatedAt"] = _now()
+  return state
+
+
 def to_search_turn(state: dict[str, Any]) -> dict[str, Any]:
   phase = state.get("phase", "failed")
   return {
@@ -881,6 +1061,39 @@ def refine_session_judged(
   try:
     return REFINE_ACCEPTED, refine_session(
       session_id, owner_subject=owner_subject, prompt=prompt, dial=dial, settings=settings,
+    )
+  except FilterDeltaContractViolation as error:
+    _log_contract_violation(state, error)
+    state.clear()
+    state.update(mutation_snapshot)
+    return FILTER_DELTA_CONTRACT_VIOLATION, state
+
+
+def similar_session_judged(
+  session_id: str,
+  *,
+  owner_subject: str,
+  product_id: str,
+  intent: str | None = None,
+  settings: Settings | None = None,
+) -> tuple[str, dict[str, Any] | None]:
+  state = get_session(session_id, owner_subject=owner_subject)
+  if not state:
+    return SIMILAR_NOT_AVAILABLE, None
+  # B6 phase 가드 — refine과 동일한 M1 계약: results에서만 (질문 단계 퍼널 스킵 차단).
+  if state.get("phase") in INACTIVE_PHASES or state.get("phase") != "results":
+    return SIMILAR_NOT_AVAILABLE, state
+  if not get_catalog().get(str(product_id or "").strip()):
+    # 라이브 발견 픽 등 카탈로그 밖 제품 — rankedCache 재랭킹 계약 밖이라 비파괴 거절.
+    return SIMILAR_UNKNOWN_PRODUCT, state
+  mutation_snapshot = copy.deepcopy(state)
+  try:
+    return SIMILAR_ACCEPTED, similar_session(
+      session_id,
+      owner_subject=owner_subject,
+      product_id=product_id,
+      intent=intent,
+      settings=settings,
     )
   except FilterDeltaContractViolation as error:
     _log_contract_violation(state, error)
@@ -1581,6 +1794,36 @@ async def refine_session_persisted(
     db=db,
     judge_and_mutate=_judge,
     accepted_outcomes=frozenset({REFINE_ACCEPTED}),
+  )
+
+
+async def similar_session_persisted(
+  session_id: str,
+  *,
+  owner_subject: str,
+  product_id: str,
+  intent: str | None = None,
+  settings: Settings | None = None,
+  db: Database | None = None,
+) -> tuple[str, dict[str, Any] | None]:
+  settings = settings or get_settings()
+
+  def _judge(state: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    return similar_session_judged(
+      session_id,
+      owner_subject=owner_subject,
+      product_id=product_id,
+      intent=intent,
+      settings=settings,
+    )
+
+  return await _run_session_mutation(
+    session_id,
+    owner_subject=owner_subject,
+    settings=settings,
+    db=db,
+    judge_and_mutate=_judge,
+    accepted_outcomes=frozenset({SIMILAR_ACCEPTED}),
   )
 
 

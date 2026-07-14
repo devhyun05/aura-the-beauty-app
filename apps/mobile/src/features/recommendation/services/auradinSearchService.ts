@@ -21,6 +21,7 @@ import type {
   AuradinReason,
   AuradinSearchPhase,
   AuradinSearchTurn,
+  AuradinSimilarIntent,
   AuradinSwatch,
   AuradinTextureKind,
 } from '../types';
@@ -361,6 +362,27 @@ export async function refineAuradinSearch(
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/refine`,
     {method: 'POST', signal, body: {dial: input.dial, prompt: input.prompt}},
+  );
+}
+
+export type AuradinSimilarInput = {
+  productId: string;
+  intent?: AuradinSimilarIntent;
+};
+
+// B6 §10.3-2 similar — 서버 rankedCache 내 λ=0.9 재랭킹(재검색 0). refine과 같은 ack/poll 계약.
+export async function similarAuradinSearch(
+  sessionId: string,
+  input: AuradinSimilarInput,
+  signal?: AbortSignal,
+): Promise<SessionAck> {
+  if (!getBackendApiBaseUrl()) {
+    return {sessionId, phase: 'searching', retryAfterMs: 400};
+  }
+
+  return requestBackendJson<SessionAck>(
+    `/search/sessions/${encodeURIComponent(sessionId)}/similar`,
+    {method: 'POST', signal, body: {productId: input.productId, intent: input.intent}},
   );
 }
 

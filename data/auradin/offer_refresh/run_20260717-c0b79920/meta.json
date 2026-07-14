@@ -1,0 +1,14 @@
+{
+  "activeManifestSha": "7a08fe6f23f15b3dae370c43d7fdd7e1df04136ebc9e00c7fc155cd103afa7be",
+  "runDate": "20260717",
+  "runId": "20260717-c0b79920",
+  "runTs": "2026-07-17T03:00:00+09:00",
+  "seedInput": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/catalog/catalog_items_seed_20260708.jsonl",
+  "shas": {
+    "diff.json": "9fcce9cde464dc953cbbf0c5fa7c0ef1cd3cf1e8f3f4d2d9ceda4250d2143921",
+    "results.jsonl": "6573e3b3cd62a5fa17f4fd361c171e368c1dea0173cf0a88c5863d2c72760495",
+    "review_template.csv": "d3f0335648bb336b00f3486560c8407a7c62b7d8f2973b1aadafc81257a0b779",
+    "seed.jsonl": "e3829b1ff739721eba41e59e297f2b7d64282989bcd665fabe9a5a0c046eaed9"
+  },
+  "staleStateBefore": {}
+}

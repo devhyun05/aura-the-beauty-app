@@ -14,13 +14,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, font, layout, radius, text, tracking } from '../../theme/auradinTokens';
-import type { AuradinCandidateProduct } from '../../types';
+import type { AuradinCandidateProduct, AuradinSimilarIntent } from '../../types';
 import {
   Badge,
+  Chip,
   CTAButton,
   GlassBase,
   GlassCard,
   HeartButton,
+  LoaderDots,
   PaletteSwatches,
   ProductThumb,
   Toast,
@@ -34,6 +36,10 @@ export type DetailViewProps = {
   onToggleSave: () => void;
   onBack: () => void;
   onHome: () => void;
+  // B6 §10.3-2: '이 제품과 비슷한 것' 의향 버튼 — 큐레이션 제품에서만 내려온다
+  // (라이브 발견 픽은 rankedCache 계약 밖이라 화면이 진입점을 숨긴다).
+  onSimilar?: (intent: AuradinSimilarIntent) => void;
+  similarLoading?: boolean;
 };
 
 /** Evidence bucket rows: leading mark on the first line, hanging indent after. */
@@ -77,6 +83,8 @@ export function DetailView({
   onToggleSave,
   onBack,
   onHome,
+  onSimilar,
+  similarLoading = false,
 }: DetailViewProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
@@ -275,6 +283,35 @@ export function DetailView({
               ))}
             </View>
           </View>
+
+          {/* B6 §10.3-2 — 이 제품과 비슷한 것: 세션 후보 내 재정렬(재검색 아님), 의향 3버튼 */}
+          {onSimilar ? (
+            <View style={{ marginTop: 18 }}>
+              <Text
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: 9.5,
+                  letterSpacing: tracking(9.5, 0.16),
+                  textTransform: 'uppercase',
+                  color: color.inkFaint,
+                }}
+                allowFontScaling={false}
+              >
+                이 제품과 비슷한 것
+              </Text>
+              {similarLoading ? (
+                <View style={{ marginTop: 10, alignItems: 'flex-start' }}>
+                  <LoaderDots tone="ink" label="비슷한 결로 다시 고르는 중" />
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  <Chip label="색 유지" onPress={() => onSimilar('keep_color')} />
+                  <Chip label="더 저렴하게" onPress={() => onSimilar('cheaper')} />
+                  <Chip label="다른 브랜드" onPress={() => onSimilar('other_brand')} />
+                </View>
+              )}
+            </View>
+          ) : null}
 
           <View
             style={{
