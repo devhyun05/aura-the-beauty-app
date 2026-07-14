@@ -191,7 +191,7 @@ def test_external_prompt_has_ai_text_seed_and_contract_rules():
   prompt = build_preview_prompt(payload)
 
   assert PREVIEW_PROMPT_PATH.read_text(encoding="utf-8").startswith("# 메이크업")
-  assert "4~6개 메시지" in prompt
+  assert "정확히 4개 메시지" in prompt
   assert "30~100자" in prompt
   assert "conversationSeed" in prompt
   assert _seed()["text"] in prompt
@@ -239,7 +239,7 @@ def test_normalizer_preserves_validated_ai_authored_text_and_summary():
   assert last_speaker == "coach"
 
 
-def test_normalizer_accepts_four_and_six_messages_but_rejects_seven():
+def test_normalizer_accepts_only_four_messages():
   context_by_ref = _context_by_ref(compact_preview_request_context(_request_payload()))
   four = _valid_output()
   six = _clone(four)
@@ -264,7 +264,7 @@ def test_normalizer_accepts_four_and_six_messages_but_rejects_seven():
   seven["messages"].append(_clone(six["messages"][0]))
 
   assert normalize_preview_output(four, context_by_ref) is not None
-  assert len(normalize_preview_output(six, context_by_ref)[0]) == 6
+  assert normalize_preview_output(six, context_by_ref) is None
   assert normalize_preview_output(seven, context_by_ref) is None
 
 
@@ -322,6 +322,14 @@ def test_normalizer_rejects_status_observation_injection_and_two_sentences(unsaf
   output = _valid_output()
   output["messages"][1]["text"] = unsafe_text
   context_by_ref = _context_by_ref(compact_preview_request_context(_request_payload()))
+
+  assert normalize_preview_output(output, context_by_ref) is None
+
+
+def test_normalizer_requires_exactly_four_preview_messages():
+  context_by_ref = _context_by_ref(compact_preview_request_context(_request_payload()))
+  output = _valid_output()
+  output["messages"].append(dict(output["messages"][0]))
 
   assert normalize_preview_output(output, context_by_ref) is None
 
@@ -450,6 +458,8 @@ def test_bedrock_returns_validated_ai_text_instead_of_server_variants(monkeypatc
   assert summary == output["summary"]
   assert last_speaker == "coach"
   request_body = json.loads(fake_client.calls[0]["body"])
+  assert request_body["max_tokens"] == 1100
+  assert "exactly four short prospective" in request_body["system"]
   assert "untrusted quoted data" in request_body["system"]
   assert "private.example" not in request_body["messages"][0]["content"][0]["text"]
 
@@ -567,5 +577,5 @@ def test_bedrock_client_uses_bounded_connect_and_read_timeouts(monkeypatch):
   config = captured["config"]
   assert captured["serviceName"] == "bedrock-runtime"
   assert config.connect_timeout == 2
-  assert config.read_timeout == 14
+  assert config.read_timeout == 9
   assert config.retries["total_max_attempts"] == 1
