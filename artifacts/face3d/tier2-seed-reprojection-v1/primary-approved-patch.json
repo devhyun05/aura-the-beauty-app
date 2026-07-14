@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "aura.face3d-tier2-seed-authoring.v1",
+  "reviewMode": "fixed_patch_reprojection",
+  "reviewStatus": "primary_anatomical_coverage_approved",
+  "reviewedAtUtc": "2026-07-15T00:00:00.000Z",
+  "reviewerId": "product-owner",
+  "capturePairId": "pair_face3d_semantic_1783799136465",
+  "topologyFingerprint": {
+    "algorithm": "sha256-le-v1",
+    "vertexCount": 1220,
+    "indexCount": 6912,
+    "uvCount": 1220,
+    "indicesHash": "c4bd80f9f6daef3e9bac013be387bef36ed61b7f5c088c153df64d37cb5946f1",
+    "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
+    "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
+  },
+  "groups": {
+    "nasionIndices": [15],
+    "noseBridgeMidlineIndices": [10, 11, 12, 13, 14, 36],
+    "alarLeftIndices": [202, 204, 292, 298, 325],
+    "alarRightIndices": [651, 653, 727, 733, 760],
+    "malarApexLeftIndices": [153, 155, 178, 353, 354, 377, 378, 388, 389, 390],
+    "malarApexRightIndices": [602, 604, 627, 784, 785, 808, 809, 819, 820, 821]
+  },
+  "approvalProvenance": {
+    "source": "conversation_confirmation",
+    "statement": "전부 확인했다",
+    "scope": "primary board anatomical coverage for all six Tier-2 groups"
+  }
+}

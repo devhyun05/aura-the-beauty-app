@@ -13,7 +13,7 @@ import type {MeasuredPersonalColorView} from '../services/faceAnalysisMeasuremen
 
 // 측정 데이터 3-반영 규칙의 "표시" 축 — 요약 카드(세로비율 오버레이·3D 그리드·
 // 퍼스널컬러 카드)가 보여주지 않는 나머지 실측 수치 전부를 접기식으로 노출한다.
-// 3D 5지표는 Face3DMetricGrid 가 value·신뢰도·MAD·프레임을 이미 전량 표시하므로
+// 3D 11지표는 Face3DMetricGrid 가 value·신뢰도·MAD·프레임을 이미 전량 표시하므로
 // 여기서 중복하지 않는다.
 
 type MeasurementRow = {label: string; value: string};

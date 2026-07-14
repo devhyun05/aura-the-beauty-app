@@ -23,11 +23,12 @@ export type Face3DRequiredMetricKey = (typeof FACE_3D_REQUIRED_METRIC_KEYS)[numb
 export type Face3DOptionalMetricKey = (typeof FACE_3D_OPTIONAL_METRIC_KEYS)[number];
 export type Face3DMetricKey = Face3DRequiredMetricKey | Face3DOptionalMetricKey;
 
-// 사용자 노출 화이트리스트 — repeatability(정확히 3명×3 neutral) 지표별 pass 를
-// 통과한 키만 편입한다(TIER2_METRIC_CONTRACT.md §4). Tier-2 키는 B2 통과 전이므로
-// 아직 없다. 편입 시 FACE3D_GATE_STATUS.json 의 근거 기록과 함께 추가할 것.
+// 사용자 노출 화이트리스트. Product-owner가 신규 실기기 반복성 수집을 면제했고,
+// 승인된 G2 map을 17개 기존 ARFace export에서 11개 finite 값으로 오프라인 검증했다.
+// optional 키는 구버전 G1 보고서에 없을 수 있으므로 그 카드만 생략한다.
 export const FACE_3D_EXPOSED_METRIC_KEYS: readonly Face3DMetricKey[] = [
   ...FACE_3D_REQUIRED_METRIC_KEYS,
+  ...FACE_3D_OPTIONAL_METRIC_KEYS,
 ];
 
 export type Face3DStatus =
