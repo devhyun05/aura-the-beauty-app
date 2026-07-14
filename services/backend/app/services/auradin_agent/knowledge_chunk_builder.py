@@ -259,13 +259,26 @@ def _sanitize_brand_only_undertone(
     and current_undertone not in supported_values
     and not has_non_title_evidence
   )
+  # A8 검사기 정렬: cool은 brand-clean 추론(콜라보 축약 '투쿨x', 호수명 '쿨페탈' 등 브랜드 파생
+  # 음절 매치를 배제하는 엄격 토크나이즈)이 지지할 때만 title-단독 근거로 유지할 수 있다.
+  # 느슨한 residual 재매치는 지지 근거로 인정하지 않는다 — a8_quality_summary와 동일 판정.
+  brand_clean_values = {
+    _clean(row.get("value"))
+    for row in inferred_support
+    if _clean(row.get("field")) == "undertone"
+  }
+  checker_unsupported_cool = (
+    current_undertone == "cool"
+    and "cool" not in brand_clean_values
+    and not has_non_title_evidence
+  )
 
   if (
     current_undertone not in supported_values
     and not has_non_title_evidence
     and (all_relevant_proven_brand_only or evidence_free_brand_only or cooling_only)
-  ):
-    rows_to_remove = relevant_evidence if cooling_only else proven_brand_rows
+  ) or checker_unsupported_cool:
+    rows_to_remove = relevant_evidence if (cooling_only or checker_unsupported_cool) else proven_brand_rows
     removed_evidence = rows_to_remove or [
       {
         "field": "undertone",
@@ -308,6 +321,24 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
   product_name = _clean(seed.get("productName")) or raw_title
   normalized_name = normalize_product_name(product_name, brand_name)
   residual_keywords = extract_residual_keywords(raw_title, normalized_name, brand_name)
+  # A8 검사기 정렬: residual의 느슨한 '쿨' 재매치(콜라보 축약 '투쿨x', 호수명 '쿨페탈' 등)가
+  # sanitize 이후 병합 단계에서 cool을 재주입하는 것을 차단 — brand-clean 추론이 cool을
+  # 지지할 때만 residual cool을 병합 대상으로 인정한다.
+  if any(
+    _clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool"
+    for row in residual_keywords
+  ):
+    _brand_clean_support = infer_brand_clean_undertone_evidence(
+      title=raw_title, category=category, brand=brand_name,
+    )
+    if not any(
+      _clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool"
+      for row in _brand_clean_support
+    ):
+      residual_keywords = [
+        row for row in residual_keywords
+        if not (_clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool")
+      ]
   attributes = seed.get("attributes") if isinstance(seed.get("attributes"), dict) else {}
   confidence = seed.get("attributeConfidence") if isinstance(seed.get("attributeConfidence"), dict) else {}
   hard_filter_eligible = (
