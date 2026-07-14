@@ -59,6 +59,7 @@ export type RootStackParamList = {
   SavedHairSimulations: undefined;
   SavedMakeupList: undefined;
   ProductRecommendation: {reportId?: string} | undefined;
+  MakeupRecommendation: undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
@@ -176,6 +177,7 @@ export const rootStackRoutes = [
   'SavedHairSimulations',
   'SavedMakeupList',
   'ProductRecommendation',
+  'MakeupRecommendation',
   'AuradinSearch',
   'Community',
   'CommunityThreadDetail',

@@ -272,6 +272,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '추천 제품',
   },
+  MakeupRecommendation: {
+    category: 'feature-entry',
+    contextLabel: 'MAKEUP RECOMMENDATION',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: 'AI 메이크업 추천',
+  },
   AuradinSearch: {
     category: 'list',
     depth: 'immersive',
