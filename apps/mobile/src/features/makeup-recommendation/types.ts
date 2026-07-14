@@ -76,6 +76,14 @@ export type MakeupRecommendationSession = {
   imageError?: string;
   generationMode?: 'backend' | 'localFallback';
 };
+export type MakeupRecommendationReportHistoryItem = {
+  reportId: string;
+  scenarioText: string;
+  createdAt: string;
+  imageStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  imageError?: string;
+  results: MakeupLookRecommendation[];
+};
 export type ProductRecommendationProvider = {
   recommendProducts(lookId: string): MakeupRecommendationProduct[];
 };

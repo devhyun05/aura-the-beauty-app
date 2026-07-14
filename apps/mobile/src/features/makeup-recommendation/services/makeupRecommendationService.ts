@@ -10,6 +10,7 @@ import type {
   MakeupRecommendationAnswer,
   MakeupRecommendationProduct,
   MakeupRecommendationQuestion,
+  MakeupRecommendationReportHistoryItem,
   MakeupRecommendationRefinement,
   MakeupRecommendationSession,
   MakeupScenarioPrompt,
@@ -66,10 +67,12 @@ type BackendRecommendation = {
 };
 type BackendRecommendationReport = {
   id: string;
+  scenarioText?: string;
   recommendation: BackendRecommendation;
   imageStatus: 'pending' | 'processing' | 'completed' | 'failed';
   imageUrl?: string;
   imageError?: string;
+  createdAt?: string;
 };
 
 export function mapBackendScenarioItems(items: readonly BackendScenarioItem[]): MakeupScenarioPrompt[] {
@@ -410,6 +413,62 @@ export function mapBackendRecommendationLooks({
       })),
     }];
   });
+}
+
+export function mapBackendRecommendationReports(
+  reports: readonly BackendRecommendationReport[],
+): MakeupRecommendationReportHistoryItem[] {
+  return reports.flatMap(report => {
+    const scenarioText = report.scenarioText?.trim() || '저장된 메이크업 추천';
+    const results = mapBackendRecommendationLooks({
+      reportId: report.id,
+      recommendation: report.recommendation ?? {},
+      prompt: scenarioText,
+      questions: [],
+      answers: [],
+    });
+    if (!report.id?.trim() || results.length === 0) return [];
+    return [{
+      reportId: report.id,
+      scenarioText,
+      createdAt: report.createdAt ?? '',
+      imageStatus: report.imageStatus,
+      imageError: report.imageError,
+      results,
+    }];
+  });
+}
+
+export function restoreMakeupRecommendationReport(
+  report: MakeupRecommendationReportHistoryItem,
+): MakeupRecommendationSession {
+  return {
+    id: report.reportId,
+    reportId: report.reportId,
+    phase: 'results',
+    prompt: report.scenarioText,
+    questions: [],
+    currentQuestionIndex: 0,
+    answers: [],
+    results: report.results.map(cloneLook),
+    useProfile: false,
+    imageStatus: report.imageStatus,
+    imageError: report.imageError,
+    generationMode: 'backend',
+  };
+}
+
+export async function fetchGeneratedMakeupRecommendationReports({
+  limit = 20,
+  offset = 0,
+}: {
+  limit?: number;
+  offset?: number;
+} = {}): Promise<MakeupRecommendationReportHistoryItem[]> {
+  const response = await requestBackendJson<{reports: BackendRecommendationReport[]}>(
+    `/makeup-recommendations?limit=${limit}&offset=${offset}`,
+  );
+  return mapBackendRecommendationReports(response.reports ?? []);
 }
 
 export async function startGeneratedMakeupRecommendation(

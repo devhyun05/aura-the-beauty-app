@@ -4,8 +4,10 @@ import {
   getFallbackMakeupScenarios,
   getMakeupScenarioSet,
   mapBackendScenarioItems,
+  mapBackendRecommendationReports,
   mapBackendRecommendationLooks,
   refineMakeupRecommendation,
+  restoreMakeupRecommendationReport,
   startGeneratedMakeupRecommendation,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
@@ -90,6 +92,39 @@ const generatedLooks = mapBackendRecommendationLooks({
 });
 expectEqual(generatedLooks.length, 3, 'three backend looks are mapped');
 expectEqual(generatedLooks.map(look => look.role).join(','), 'anchor,bold,discovery', 'backend look roles are preserved');
+
+const reportHistory = mapBackendRecommendationReports([
+  {
+    id: 'report-1',
+    scenarioText: '퇴근 후 약속',
+    recommendation: {
+      looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+        id: `saved-look-${index + 1}`,
+        role,
+        title: `${role} title`,
+        summary: `${role} summary`,
+        reasons: ['저장된 추천 이유'],
+        appliedConditions: ['퇴근 후 약속'],
+        durationMinutes: 20,
+        difficulty: 'medium',
+        steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
+        products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
+      })),
+    },
+    imageStatus: 'completed',
+    createdAt: '2026-07-14T12:34:56Z',
+  },
+]);
+expectEqual(reportHistory.length, 1, 'saved report history count');
+expectEqual(reportHistory[0].reportId, 'report-1', 'saved report id');
+expectEqual(reportHistory[0].scenarioText, '퇴근 후 약속', 'saved report scenario');
+expectEqual(reportHistory[0].results.length, 3, 'saved report restores three looks');
+expectEqual(reportHistory[0].results[0].title, 'anchor title', 'saved report restores look copy');
+const restoredReport = restoreMakeupRecommendationReport(reportHistory[0]);
+expectEqual(restoredReport.phase, 'results', 'saved report opens in results phase');
+expectEqual(restoredReport.reportId, 'report-1', 'restored session keeps report id');
+expectEqual(restoredReport.generationMode, 'backend', 'restored report is server-backed');
+expectEqual(restoredReport.results.length, 3, 'restored session keeps all looks');
 
 const started = startMakeupRecommendation({
   prompt: scenarios[0].seedPrompt,

@@ -6,10 +6,12 @@ import {AppScreen} from '../../../shared/ui';
 import {
   answerGeneratedMakeupRecommendationQuestion,
   fetchGeneratedMakeupScenarios,
+  fetchGeneratedMakeupRecommendationReports,
   getFallbackMakeupScenarios,
   getMakeupScenarioSet,
   refineGeneratedMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
+  restoreMakeupRecommendationReport,
   retryGeneratedMakeupRecommendationImages,
   startGeneratedMakeupRecommendation,
   type StartMakeupRecommendationInput,
@@ -19,9 +21,11 @@ import type {
   MakeupRecommendationAnswer,
   MakeupRecommendationRefinement,
   MakeupRecommendationSession,
+  MakeupRecommendationReportHistoryItem,
   MakeupScenarioPrompt,
 } from '../types';
 import {RecommendationQuestionView} from './RecommendationQuestionView';
+import {RecommendationHistoryView} from './RecommendationHistoryView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
@@ -55,6 +59,9 @@ export const MakeupRecommendationScreen = forwardRef<
   const [refinementError, setRefinementError] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [imageRetryError, setImageRetryError] = useState('');
+  const [historyItems, setHistoryItems] = useState<MakeupRecommendationReportHistoryItem[]>([]);
+  const [historyError, setHistoryError] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const activeScenarioTags = useRef<string[]>([]);
@@ -115,6 +122,28 @@ export const MakeupRecommendationScreen = forwardRef<
         setPhase('error');
       });
   }, []);
+
+  const loadHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    setHistoryError('');
+    try {
+      setHistoryItems(await fetchGeneratedMakeupRecommendationReports());
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : '지난 추천을 불러오지 못했어요.');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  const openHistory = () => {
+    setPhase('history');
+    void loadHistory();
+  };
+
+  const openHistoryReport = (report: MakeupRecommendationReportHistoryItem) => {
+    setSession(restoreMakeupRecommendationReport(report));
+    setPhase('results');
+  };
 
   const startFromPrompt = () => {
     const trimmedPrompt = prompt.trim();
@@ -223,6 +252,7 @@ export const MakeupRecommendationScreen = forwardRef<
       <ScenarioDiscoveryView
         onChangePrompt={setPrompt}
         onLoadMoreScenarios={() => void loadScenarios('append')}
+        onOpenHistory={openHistory}
         onRefreshScenarios={() => void loadScenarios('replace')}
         onSelectScenario={startFromScenario}
         onSubmitPrompt={startFromPrompt}
@@ -230,6 +260,19 @@ export const MakeupRecommendationScreen = forwardRef<
         prompt={prompt}
         scenarioError={scenarioError}
         scenarios={scenarios}
+      />
+    );
+  }
+
+  if (phase === 'history') {
+    return (
+      <RecommendationHistoryView
+        error={historyError}
+        isLoading={isLoadingHistory}
+        items={historyItems}
+        onBack={() => setPhase('discovery')}
+        onRefresh={() => void loadHistory()}
+        onSelect={openHistoryReport}
       />
     );
   }
@@ -273,6 +316,7 @@ export const MakeupRecommendationScreen = forwardRef<
         results={session.results}
         imageStatus={session.imageStatus}
         generationMode={session.generationMode}
+        isReportSaved={Boolean(session.reportId)}
         imageRetryError={imageRetryError}
         isRefining={isRefining}
         onRetryImages={handleRetryImages}

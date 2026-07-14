@@ -1,10 +1,13 @@
 import {
   getQuestionActionMode,
   getQuestionProgressSegments,
+  formatMakeupRecommendationHistoryDate,
   makeupRecommendationDiscoveryCopy,
   makeupRecommendationResultRoleLabels,
   makeupRecommendationImageStatusCopy,
   makeupRecommendationFallbackCopy,
+  makeupRecommendationHistoryCopy,
+  makeupRecommendationReportStatusCopy,
   shouldHandleMakeupRecommendationBack,
   toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
@@ -66,6 +69,14 @@ expectEqual(
   'AI 추천 다시 연결하기',
   'local fallback retry action',
 );
+expectEqual(makeupRecommendationHistoryCopy.title, '지난 추천', 'history title');
+expectEqual(makeupRecommendationReportStatusCopy.saved, '보고서 저장됨', 'saved report status');
+expectEqual(makeupRecommendationReportStatusCopy.temporary, '임시 추천', 'temporary report status');
+expectEqual(
+  formatMakeupRecommendationHistoryDate('2026-07-14T12:34:56Z'),
+  '2026. 07. 14.',
+  'history date format',
+);
 expectEqual(
   shouldHandleMakeupRecommendationBack('discovery'),
   false,
@@ -80,6 +91,11 @@ expectEqual(
   shouldHandleMakeupRecommendationBack('results'),
   true,
   'results back returns to discovery',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('history'),
+  true,
+  'history back returns to discovery',
 );
 expectEqual(
   getQuestionProgressSegments({currentQuestionIndex: 1, questionCount: 3}).join(','),

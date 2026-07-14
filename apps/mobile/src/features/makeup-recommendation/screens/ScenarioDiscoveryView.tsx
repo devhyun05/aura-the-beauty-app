@@ -5,12 +5,16 @@ import {ScenarioPuzzleWall} from '../components/ScenarioPuzzleWall';
 import type {MakeupScenarioPrompt} from '../types';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen} from '../../../shared/ui';
-import {makeupRecommendationDiscoveryCopy} from './makeupRecommendationViewContracts';
+import {
+  makeupRecommendationDiscoveryCopy,
+  makeupRecommendationHistoryCopy,
+} from './makeupRecommendationViewContracts';
 export {makeupRecommendationDiscoveryCopy} from './makeupRecommendationViewContracts';
 
 type ScenarioDiscoveryViewProps = {
   onChangePrompt: (value: string) => void;
   onLoadMoreScenarios: () => void;
+  onOpenHistory: () => void;
   onRefreshScenarios: () => void;
   onSelectScenario: (scenario: MakeupScenarioPrompt) => void;
   onSubmitPrompt: () => void;
@@ -23,6 +27,7 @@ type ScenarioDiscoveryViewProps = {
 export function ScenarioDiscoveryView({
   onChangePrompt,
   onLoadMoreScenarios,
+  onOpenHistory,
   onRefreshScenarios,
   onSelectScenario,
   onSubmitPrompt,
@@ -40,7 +45,12 @@ export function ScenarioDiscoveryView({
           {makeupRecommendationDiscoveryCopy.eyebrow ? (
             <Text style={styles.eyebrow}>{makeupRecommendationDiscoveryCopy.eyebrow}</Text>
           ) : null}
-          <Text style={styles.title}>{makeupRecommendationDiscoveryCopy.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{makeupRecommendationDiscoveryCopy.title}</Text>
+            <Pressable accessibilityRole="button" onPress={onOpenHistory} style={styles.historyButton}>
+              <Text style={styles.historyLabel}>{makeupRecommendationHistoryCopy.action}</Text>
+            </Pressable>
+          </View>
           <Text style={styles.description}>{makeupRecommendationDiscoveryCopy.description}</Text>
         </View>
 
@@ -103,8 +113,11 @@ export function ScenarioDiscoveryView({
 const styles = StyleSheet.create({
   container: {flex: 1},
   intro: {gap: spacing.sm},
+  titleRow: {alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between'},
   eyebrow: {color: colors.textTertiary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, letterSpacing: 1.2},
-  title: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xxl, lineHeight: typography.lineHeight.xxl},
+  title: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xxl, lineHeight: typography.lineHeight.xxl},
+  historyButton: {justifyContent: 'center', minHeight: 44, paddingLeft: spacing.md},
+  historyLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
   description: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   composerRow: {alignItems: 'stretch', flexDirection: 'row', gap: spacing.sm},
   composerCard: {flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm},

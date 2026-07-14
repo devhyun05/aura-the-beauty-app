@@ -8,7 +8,7 @@ import type {
   MakeupLookRecommendation,
   MakeupRecommendationRefinement,
 } from '../types';
-import {makeupRecommendationFallbackCopy, makeupRecommendationImageStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
+import {makeupRecommendationFallbackCopy, makeupRecommendationImageStatusCopy, makeupRecommendationReportStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
 const difficultyLabels: Record<MakeupLookRecommendation['difficulty'], string> = {
@@ -42,6 +42,7 @@ type RecommendationResultsViewProps = {
   imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
   imageRetryError?: string;
   generationMode?: 'backend' | 'localFallback';
+  isReportSaved: boolean;
   isRefining: boolean;
   onRetryImages: () => void;
 };
@@ -51,15 +52,13 @@ function ResultCard({
   onApplyAR,
   expanded,
   onToggleExpanded,
-  onToggleSave,
-  saved,
+  reportSaved,
 }: {
   look: MakeupLookRecommendation;
   onApplyAR: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
-  onToggleSave: () => void;
-  saved: boolean;
+  reportSaved: boolean;
 }) {
   return (
     <AppCard padded={false} style={styles.resultCard}>
@@ -67,15 +66,9 @@ function ResultCard({
       <View style={styles.cardBody}>
         <View style={styles.roleRow}>
           <Text style={styles.roleLabel}>{makeupRecommendationResultRoleLabels[look.role]}</Text>
-          <Pressable
-            accessibilityLabel={`${look.title} ${saved ? '저장 해제' : '저장'}`}
-            accessibilityRole="button"
-            accessibilityState={{selected: saved}}
-            onPress={onToggleSave}
-            style={styles.saveButton}
-          >
-            <Text style={styles.saveLabel}>{saved ? '저장됨' : '저장'}</Text>
-          </Pressable>
+          <Text accessibilityLabel={`${look.title} ${reportSaved ? '보고서 저장됨' : '임시 추천'}`} style={styles.saveLabel}>
+            {reportSaved ? makeupRecommendationReportStatusCopy.saved : makeupRecommendationReportStatusCopy.temporary}
+          </Text>
         </View>
         <View style={styles.lookHeading}>
           <Text style={styles.lookTitle}>{look.title}</Text>
@@ -149,10 +142,10 @@ export function RecommendationResultsView({
   imageStatus,
   imageRetryError,
   generationMode,
+  isReportSaved,
   isRefining,
   onRetryImages,
 }: RecommendationResultsViewProps) {
-  const [savedLookIds, setSavedLookIds] = useState<Set<string>>(() => new Set());
   const [expandedLookIds, setExpandedLookIds] = useState<Set<string>>(() => new Set());
 
   if (results.length === 0) {
@@ -165,15 +158,6 @@ export function RecommendationResultsView({
       </AppScreen>
     );
   }
-
-  const toggleSaved = (lookId: string) => {
-    setSavedLookIds(previous => {
-      const next = new Set(previous);
-      if (next.has(lookId)) next.delete(lookId);
-      else next.add(lookId);
-      return next;
-    });
-  };
 
   return (
     <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
@@ -208,9 +192,8 @@ export function RecommendationResultsView({
           expanded={expandedLookIds.has(look.id)}
           look={look}
           onApplyAR={() => onApplyAR(look)}
-          onToggleSave={() => toggleSaved(look.id)}
           onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, look.id))}
-          saved={savedLookIds.has(look.id)}
+          reportSaved={isReportSaved}
         />
       ))}
 
@@ -301,11 +284,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     letterSpacing: 0.4,
   },
-  saveButton: {justifyContent: 'center', minHeight: 48, paddingLeft: spacing.lg},
   saveLabel: {
-    color: colors.textPrimary,
+    color: colors.textTertiary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
   },
   lookHeading: {gap: spacing.xs},
   lookTitle: {
