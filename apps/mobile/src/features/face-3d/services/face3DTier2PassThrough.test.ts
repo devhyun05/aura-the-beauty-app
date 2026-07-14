@@ -2,12 +2,10 @@
 //
 // 계약: Tier-2 6키는 값이 있으면 AI 입력·DB 저장에 "키 필터 없이" 그대로 흐르고
 // (faceCaptureUploadContract.buildFaceAnalysisRequestPayload / faceAnalysisMeasurements.
-// buildFaceAnalysisMeasurementsPayload 는 face3d 프로필 전체를 스프레드한다), 동시에
-// 화면 그리드는 FACE_3D_EXPOSED_METRIC_KEYS 만 순회하므로 EXPOSED 편입 전에는 노출되지
-// 않는다. 이 "저장되되 노출 안 됨" 불변식이 B2-0 이후에도 깨지지 않도록 고정한다.
+// buildFaceAnalysisMeasurementsPayload 는 face3d 프로필 전체를 스프레드한다), 승인된
+// G2 프로필에서는 보고서 그리드에도 6키가 모두 노출된다.
 //
-// 화면 실렌더는 P0-3(jest-expo + RTL)가 검증한다. 여기서는 그리드가 사용하는 선택
-// 술어(EXPOSED ∩ 프로필 존재 키)를 데이터 레벨로 재현해 게이트 결과만 단언한다.
+// 화면 실렌더와 같은 선택 술어(EXPOSED ∩ 프로필 존재 키)를 데이터 레벨로 검증한다.
 
 import {
   buildFaceAnalysisMeasurementsPayload,
@@ -48,8 +46,7 @@ function metric(value: number): Face3DMetric {
   return {confidence: 0.8, mad: 0.002, unit: 'normalized', validFrameCount: 27, value};
 }
 
-// 필수 5키 + Tier-2 6키를 모두 채운 프로필 — 게이트가 "값 부재"가 아니라 EXPOSED
-// 미편입 때문에 Tier-2 를 감춘다는 점을 분명히 하기 위해 전부 존재시킨다.
+// 필수 5키 + Tier-2 6키를 모두 채운 G2 프로필.
 function createFullProfile(): Face3DProfile {
   const metrics = Object.fromEntries(
     [...FACE_3D_REQUIRED_METRIC_KEYS, ...FACE_3D_OPTIONAL_METRIC_KEYS].map((key, index) => [
@@ -83,13 +80,14 @@ for (const key of EXPECTED_TIER2_KEYS) {
   );
 }
 
-// EXPOSED 에는 아직 Tier-2 키가 하나도 없어야 한다(B2 통과 전).
+// 승인된 G2 보고서는 Tier-2 6키를 모두 노출해야 한다.
 for (const key of EXPECTED_TIER2_KEYS) {
   expect(
-    !FACE_3D_EXPOSED_METRIC_KEYS.includes(key),
-    `exposed keys must NOT include tier-2 key ${key} before B2`,
+    FACE_3D_EXPOSED_METRIC_KEYS.includes(key),
+    `exposed keys include tier-2 key ${key}`,
   );
 }
+expectEqual(FACE_3D_EXPOSED_METRIC_KEYS.length, 11, 'all 11 Face3D metrics exposed');
 
 const profile = createFullProfile();
 
@@ -140,14 +138,14 @@ expectEqual(
   'restored tier-2 value equals original',
 );
 
-// ── 5. 화면 게이트: 그리드 선택 술어가 Tier-2 를 전부 배제 ────────────────────
+// ── 5. 화면 게이트: G2 프로필의 11지표를 전부 선택 ──────────────────────────
 // Face3DMetricGrid 은 FACE_3D_EXPOSED_METRIC_KEYS 를 순회하고 프로필에 없는 키만
 // 조용히 건너뛴다. 그 선택 결과를 데이터 레벨로 재현한다.
 const shownKeys = FACE_3D_EXPOSED_METRIC_KEYS.filter(key => profile.metrics[key] != null);
 for (const key of EXPECTED_TIER2_KEYS) {
   expect(
-    !shownKeys.includes(key),
-    `grid must hide tier-2 key ${key} even though profile has a value`,
+    shownKeys.includes(key),
+    `grid shows tier-2 key ${key}`,
   );
 }
 // 필수 5키는 값이 있으니 전부 노출된다(회귀 안전망).

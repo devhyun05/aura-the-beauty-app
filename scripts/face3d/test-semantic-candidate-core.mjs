@@ -15,6 +15,8 @@ import {
   MEASUREMENT_LANDMARK_GROUP_KEYS,
   REFERENCE_PLANE_GROUP_KEYS,
   SEMANTIC_GROUPS,
+  TIER2_BILATERAL_GROUP_PAIRS,
+  TIER2_SEMANTIC_GROUPS,
   buildApprovedRuntimeMap,
   buildReviewHtml,
   buildSemanticCandidate,
@@ -274,6 +276,81 @@ assert.equal(runtimeMap.schemaVersion, 'aura.face3d-semantic-map.v1');
 assert.equal(runtimeMap.mapId, 'arkit-face3d-reviewed-v1');
 assert.deepEqual(runtimeMap.noseTipIndices, candidate.groups.noseTipIndices);
 assert.equal(runtimeMap.topologyFingerprint.fingerprint, 'c'.repeat(64));
+
+// G2 promotion keeps every reviewed Tier-2 group and expands the bilateral UV
+// contract only for G2 candidates. Legacy G1 candidates above remain unchanged.
+const usedCandidateIndices = new Set(Object.values(candidate.groups).flat());
+const centerlineFreeIndices = [];
+const freeMirrorPairs = [];
+for (let row = 0; row < 35; row += 1) {
+  const centerIndex = (row * 35) + 17;
+  if (!usedCandidateIndices.has(centerIndex)) centerlineFreeIndices.push(centerIndex);
+  for (let column = 0; column < 17; column += 1) {
+    const leftIndex = (row * 35) + column;
+    const rightIndex = (row * 35) + (34 - column);
+    if (!usedCandidateIndices.has(leftIndex) && !usedCandidateIndices.has(rightIndex)) {
+      freeMirrorPairs.push([leftIndex, rightIndex]);
+    }
+  }
+}
+assert.ok(centerlineFreeIndices.length >= 7);
+assert.ok(freeMirrorPairs.length >= 15);
+const tier2Groups = {
+  nasionIndices: [centerlineFreeIndices[0]],
+  noseBridgeMidlineIndices: centerlineFreeIndices.slice(1, 7),
+  alarLeftIndices: freeMirrorPairs.slice(0, 5).map(pair => pair[0]),
+  alarRightIndices: freeMirrorPairs.slice(0, 5).map(pair => pair[1]),
+  malarApexLeftIndices: freeMirrorPairs.slice(5, 15).map(pair => pair[0]),
+  malarApexRightIndices: freeMirrorPairs.slice(5, 15).map(pair => pair[1]),
+};
+const g2ApprovedCandidate = structuredClone(approvedCandidate);
+Object.assign(g2ApprovedCandidate.groups, tier2Groups);
+for (const {leftGroupKey, rightGroupKey} of TIER2_BILATERAL_GROUP_PAIRS) {
+  g2ApprovedCandidate.bilateralSymmetryPolicy.groupPairs.push({
+    leftGroupKey,
+    rightGroupKey,
+    pairs: g2ApprovedCandidate.groups[leftGroupKey].map((leftIndex, index) => [
+      leftIndex,
+      g2ApprovedCandidate.groups[rightGroupKey][index],
+    ]),
+  });
+}
+assert.deepEqual(
+  validateCandidateGroups(g2ApprovedCandidate.groups, payload.localVertices.length),
+  [],
+);
+assert.deepEqual(validateBilateralSymmetryPolicy(g2ApprovedCandidate, payload.uvs), []);
+const g2RuntimeMap = buildApprovedRuntimeMap(
+  g2ApprovedCandidate,
+  'arkit-face3d-g2-product-approved-v1',
+);
+for (const {key} of TIER2_SEMANTIC_GROUPS) {
+  assert.deepEqual(g2RuntimeMap[key], tier2Groups[key], `${key} must survive G2 promotion`);
+}
+
+const partialTier2Groups = structuredClone(candidate.groups);
+partialTier2Groups.nasionIndices = [centerlineFreeIndices[0]];
+assert.equal(
+  validateCandidateGroups(partialTier2Groups, payload.localVertices.length)
+    .some(error => error.includes('여섯 그룹은 모두 함께')),
+  true,
+);
+
+const crossTier2OverlapGroups = structuredClone(g2ApprovedCandidate.groups);
+crossTier2OverlapGroups.alarRightIndices[0] = crossTier2OverlapGroups.alarLeftIndices[0];
+assert.equal(
+  validateCandidateGroups(crossTier2OverlapGroups, payload.localVertices.length)
+    .some(error => error.includes('다른 Tier-2 그룹')),
+  true,
+);
+
+const unauthorizedG1Tier2OverlapGroups = structuredClone(g2ApprovedCandidate.groups);
+unauthorizedG1Tier2OverlapGroups.nasionIndices = [candidate.groups.noseTipIndices[0]];
+assert.equal(
+  validateCandidateGroups(unauthorizedG1Tier2OverlapGroups, payload.localVertices.length)
+    .some(error => error.includes('승인되지 않은 G1 overlap')),
+  true,
+);
 
 const asymmetricGroupsCandidate = structuredClone(approvedCandidate);
 asymmetricGroupsCandidate.groups.midfaceReferenceRightIndices[0] =

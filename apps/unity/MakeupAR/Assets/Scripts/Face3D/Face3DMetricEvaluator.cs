@@ -209,8 +209,25 @@ namespace Aura.Face3D
                     faceScale);
             }
 
-            if (TryCentroid(vertices, semanticMap.AlarLeftIndices, out Vector3 alarLeft)
-                && TryCentroid(vertices, semanticMap.AlarRightIndices, out Vector3 alarRight))
+            // alare는 patch centroid가 아니라 각 콧방울의 해부학적 최외측점이다.
+            // local lateral 부호는 Left<0, Right>0. 전역 최댓값에서 1e-6 이내 동률은
+            // 작은 vertex index를 골라 프레임/순회 순서와 무관하게 결정한다.
+            if (TryExtremeSignedPlaneProjectionPoint(
+                    vertices,
+                    semanticMap.AlarLeftIndices,
+                    midfaceOrigin,
+                    midsagittalNormal,
+                    faceScale,
+                    false,
+                    out Vector3 alarLeft)
+                && TryExtremeSignedPlaneProjectionPoint(
+                    vertices,
+                    semanticMap.AlarRightIndices,
+                    midfaceOrigin,
+                    midsagittalNormal,
+                    faceScale,
+                    true,
+                    out Vector3 alarRight))
             {
                 alarWidth = NormalizedDistance(alarLeft, alarRight, faceScale);
             }
@@ -442,6 +459,76 @@ namespace Aura.Face3D
             return selectedVertexIndex != int.MaxValue
                 && Face3DNumeric.IsFinite(selectedPoint)
                 && Face3DNumeric.IsFinite(selectedProjection);
+        }
+
+        private static bool TryExtremeSignedPlaneProjectionPoint(
+            IReadOnlyList<Vector3> vertices,
+            IReadOnlyList<int> indices,
+            Vector3 planeOrigin,
+            Vector3 planeNormal,
+            float faceScale,
+            bool selectMaximum,
+            out Vector3 selectedPoint)
+        {
+            selectedPoint = Vector3.zero;
+            if (vertices == null || indices == null || indices.Count == 0)
+            {
+                return false;
+            }
+
+            float extremeScore = float.NegativeInfinity;
+            for (int index = 0; index < indices.Count; index += 1)
+            {
+                int vertexIndex = indices[index];
+                if (vertexIndex < 0 || vertexIndex >= vertices.Count)
+                {
+                    return false;
+                }
+
+                Vector3 point = vertices[vertexIndex];
+                if (!Face3DNumeric.IsFinite(point))
+                {
+                    return false;
+                }
+
+                float projection = SignedPlaneProjection(
+                    point,
+                    planeOrigin,
+                    planeNormal,
+                    faceScale);
+                float score = selectMaximum ? projection : -projection;
+                if (!Face3DNumeric.IsFinite(score))
+                {
+                    return false;
+                }
+
+                if (score > extremeScore)
+                {
+                    extremeScore = score;
+                }
+            }
+
+            int selectedVertexIndex = int.MaxValue;
+            for (int index = 0; index < indices.Count; index += 1)
+            {
+                int vertexIndex = indices[index];
+                Vector3 point = vertices[vertexIndex];
+                float projection = SignedPlaneProjection(
+                    point,
+                    planeOrigin,
+                    planeNormal,
+                    faceScale);
+                float score = selectMaximum ? projection : -projection;
+                if (extremeScore - score <= GeometryEpsilon
+                    && vertexIndex < selectedVertexIndex)
+                {
+                    selectedPoint = point;
+                    selectedVertexIndex = vertexIndex;
+                }
+            }
+
+            return selectedVertexIndex != int.MaxValue
+                && Face3DNumeric.IsFinite(selectedPoint);
         }
 
         // 그룹 부재(null)·빈 그룹·범위 밖·비유한 vertex 는 전부 null 반환 — Tier-2 는

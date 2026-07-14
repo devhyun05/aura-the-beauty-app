@@ -85,7 +85,7 @@ export function buildFaceAnalysisRequestPayload<
   return {
     bucket: capture.bucket ?? null,
     contentType: capture.contentType ?? 'image/jpeg',
-    // ARKit 3D 측정 프로필(정규화 5지표, <1KB) — 있으면 AI 요약 입력에 함께 실린다.
+    // ARKit 3D 측정 프로필(정규화 11지표, <2KB) — 있으면 AI 요약 입력에 함께 실린다.
     ...(face3d ? {face3d} : {}),
     // 2D 얼굴 기하 요약(무차원 비율/도, <1KB) — 있으면 함께 실린다.
     ...(faceGeometry2d ? {faceGeometry2d} : {}),

@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 import pytest
@@ -17,6 +18,42 @@ MEDIA_ID = UUID("22222222-2222-2222-2222-222222222222")
 REPORT_ID = UUID("33333333-3333-3333-3333-333333333333")
 UPLOAD_ID = UUID("44444444-4444-4444-4444-444444444444")
 QUEUE_URL = "https://sqs.ap-northeast-2.amazonaws.com/123456789012/aura-ai-jobs"
+
+FACE3D_METRIC_KEYS = [
+  "noseTipProjection",
+  "chinProjection",
+  "upperLipToELine",
+  "lowerLipToELine",
+  "centralProjectionScore",
+  "noseLength",
+  "nasalBridgeStraightness",
+  "nasalAxisDeviation",
+  "alarWidth",
+  "malarProjectionLeft",
+  "malarProjectionRight",
+]
+
+
+def face3d_profile() -> dict:
+  return {
+    "gateVersion": "face3d-gate-v1",
+    "metrics": {
+      key: {
+        "confidence": 0.91,
+        "mad": 0.002,
+        "unit": "normalized",
+        "validFrameCount": 30,
+        "value": 0.1 + (index * 0.01),
+      }
+      for index, key in enumerate(FACE3D_METRIC_KEYS)
+    },
+    "schemaVersion": "aura.face3d-profile.v1",
+    "source": "arkit_face_mesh",
+    "targetFrameCount": 30,
+    "topologyFingerprint": "face3d-g2-test-topology",
+    "validFrameCount": 30,
+    "warnings": [],
+  }
 
 
 def auth_context() -> AuthContext:
@@ -84,6 +121,7 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls: dict[str, object] = {}
+  face3d = face3d_profile()
 
   class Publisher:
     def __init__(self, _settings: Settings) -> None:
@@ -106,6 +144,12 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
         "sourceMediaId": str(MEDIA_ID),
         "requestPayload": {
           "bucket": "untrusted-bucket",
+          "face3d": face3d,
+          "measurements": {
+            "captureId": str(REPORT_ID),
+            "face3d": face3d,
+            "schemaVersion": "aura.face-analysis-measurements.v1",
+          },
           "objectKey": "untrusted/object.jpg",
           "task": "face_makeup_recommendation_report_v1",
         },
@@ -129,6 +173,12 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   assert stored_request["bucket"] == "media-bucket"
   assert stored_request["objectKey"] == "uploads/capture/owned-photo.jpg"
   assert stored_request["mediaId"] == str(MEDIA_ID)
+  assert list(stored_request["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+  assert list(stored_request["measurements"]["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+  assert db.insert_args is not None
+  inserted_request = json.loads(db.insert_args[-1])["request"]
+  assert inserted_request["face3d"] == face3d
+  assert inserted_request["measurements"]["face3d"] == face3d
 
 
 @pytest.mark.asyncio

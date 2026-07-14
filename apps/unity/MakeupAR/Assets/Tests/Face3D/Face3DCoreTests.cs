@@ -409,25 +409,48 @@ namespace Aura.Face3D.Tests
 
             // 범위 밖 인덱스
             Face3DSemanticMapData data = CreateTier2SemanticMapData(topology);
-            data.nasionIndices = new[] { 73, 74, 9999 };
+            data.nasionIndices = new[] { 9999 };
             Assert.That(Face3DSemanticMap.TryCreate(data, out _, out string reason), Is.False);
             Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
 
             // 기존 그룹과 겹침 (noseTip 24 재사용)
             data = CreateTier2SemanticMapData(topology);
-            data.nasionIndices = new[] { 24, 73, 74 };
+            data.nasionIndices = new[] { 24 };
             Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
             Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
 
             // tier2 그룹끼리 겹침
             data = CreateTier2SemanticMapData(topology);
-            data.alarLeftIndices = new[] { 80, 81, 76 };
+            data.alarLeftIndices = new[] { 78, 79, 80, 81, 74 };
             Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
             Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
 
             // 콧대 중앙선 최소 4점 미달
             data = CreateTier2SemanticMapData(topology);
             data.noseBridgeMidlineIndices = new[] { 76, 77, 78 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // alar/malar surface patch 최소 5점 미달
+            data = CreateTier2SemanticMapData(topology);
+            data.malarApexLeftIndices = new[] { 88, 89, 90, 91 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // G1과의 overlap은 제품 승인 allowlist에 든 nasal midline만 허용한다.
+            data = CreateTier2SemanticMapData(topology);
+            data.nasionIndices = new[] { 15 };
+            data.noseBridgeMidlineIndices = new[] { 10, 11, 12, 14 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.True, reason);
+
+            data = CreateTier2SemanticMapData(topology);
+            data.noseBridgeMidlineIndices = new[] { 10, 11, 12, 13 };
+            Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
+
+            // legacy G1은 여섯 그룹이 모두 null이어야 하며, 일부만 빠진 G2는 거부한다.
+            data = CreateTier2SemanticMapData(topology);
+            data.malarApexRightIndices = null;
             Assert.That(Face3DSemanticMap.TryCreate(data, out _, out reason), Is.False);
             Assert.That(reason, Is.EqualTo("semantic_map_tier2_indices_invalid"));
         }
@@ -477,11 +500,13 @@ namespace Aura.Face3D.Tests
             Assert.That(
                 evaluation.Metrics.NasalAxisDeviation.Value,
                 Is.EqualTo(0.1f).Within(0.0001f));
-            // alarWidth = 0.6/2
+            // alarWidth는 centroid가 아니라 face-local 최외측점 pair다.
+            // 양쪽 extreme이 두 점씩 동률이어도 작은 vertex index(79, 84)를 골라
+            // y/z가 같은 두 점 사이 0.85/2가 된다.
             Assert.That(evaluation.Metrics.AlarWidth.HasValue, Is.True);
             Assert.That(
                 evaluation.Metrics.AlarWidth.Value,
-                Is.EqualTo(0.3f).Within(0.0001f));
+                Is.EqualTo(0.425f).Within(0.0001f));
             // malar = ROI 내 전후 투영 "최댓값" (z 최대 vertex): 0.62/2, 0.55/2
             Assert.That(evaluation.Metrics.MalarProjectionLeft.HasValue, Is.True);
             Assert.That(
@@ -514,7 +539,7 @@ namespace Aura.Face3D.Tests
             Assert.That(tier2Profile.Metrics.AlarWidth.Value.HasValue, Is.True);
             Assert.That(
                 tier2Profile.Metrics.AlarWidth.Value.Value,
-                Is.EqualTo(0.3f).Within(0.0001f));
+                Is.EqualTo(0.425f).Within(0.0001f));
             Assert.That(tier2Profile.Metrics.AlarWidth.ValidFrameCount, Is.EqualTo(30));
 
             // g1 맵: tier2 는 value:null 이고, 부재는 경고를 만들지 않는다.
@@ -586,25 +611,39 @@ namespace Aura.Face3D.Tests
             AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 0.5f), 8);
             AppendRepeated(vertices, new Vector3(0.0f, 0.5f, 0.5f), 3);
 
-            // 73-75: nasion
-            AppendRepeated(vertices, new Vector3(0.0f, 0.8f, 0.4f), 3);
-            // 76-79: 콧대 중앙선 — nasion→noseTip 직선을 x+0.2 평행 이동한 4점
+            // 73: nasion 고정 중앙점
+            vertices.Add(new Vector3(0.0f, 0.8f, 0.4f));
+            // 74-77: 콧대 중앙선 — nasion→noseTip 직선을 x+0.2 평행 이동한 4점
             for (int step = 1; step <= 4; step += 1)
             {
                 float t = step * 0.2f;
                 vertices.Add(new Vector3(0.2f, 0.8f - (0.3f * t), 0.4f + (0.6f * t)));
             }
 
-            // 80-85: alar 좌/우
-            AppendRepeated(vertices, new Vector3(-0.3f, 0.2f, 0.6f), 3);
-            AppendRepeated(vertices, new Vector3(0.3f, 0.2f, 0.6f), 3);
-            // 86-91: malar 좌/우 ROI (z 최대가 각각 0.62 / 0.55)
+            // 78-87: alar 좌/우 5점 patch. extreme 동률 후보는 y/z를 다르게 해
+            // 작은 vertex index tie-break가 실제 width 결과로 검증되게 한다.
+            vertices.Add(new Vector3(-0.30f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(-0.40f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(-0.25f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(-0.40f, 0.9f, 0.9f));
+            vertices.Add(new Vector3(-0.20f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(0.30f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(0.45f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(0.20f, 0.2f, 0.6f));
+            vertices.Add(new Vector3(0.45f, 0.9f, 0.9f));
+            vertices.Add(new Vector3(0.25f, 0.2f, 0.6f));
+
+            // 88-97: malar 좌/우 ROI (z 최대가 각각 0.62 / 0.55)
             vertices.Add(new Vector3(-0.8f, 0.1f, 0.5f));
             vertices.Add(new Vector3(-0.8f, 0.1f, 0.62f));
             vertices.Add(new Vector3(-0.8f, 0.1f, 0.3f));
+            vertices.Add(new Vector3(-0.8f, 0.1f, 0.61f));
+            vertices.Add(new Vector3(-0.8f, 0.1f, 0.4f));
             vertices.Add(new Vector3(0.8f, 0.1f, 0.4f));
             vertices.Add(new Vector3(0.8f, 0.1f, 0.55f));
             vertices.Add(new Vector3(0.8f, 0.1f, 0.2f));
+            vertices.Add(new Vector3(0.8f, 0.1f, 0.54f));
+            vertices.Add(new Vector3(0.8f, 0.1f, 0.3f));
 
             int[] indices = { 0, 8, 16, 24, 27, 30, 24, 30, 38, 46, 54, 62 };
             Vector2[] uvs = new Vector2[vertices.Count];
@@ -635,12 +674,12 @@ namespace Aura.Face3D.Tests
             Face3DTopologyFingerprint topology)
         {
             Face3DSemanticMapData data = CreateSemanticMapData(topology);
-            data.nasionIndices = CreateIndexRange(73, 3);
-            data.noseBridgeMidlineIndices = CreateIndexRange(76, 4);
-            data.alarLeftIndices = CreateIndexRange(80, 3);
-            data.alarRightIndices = CreateIndexRange(83, 3);
-            data.malarApexLeftIndices = CreateIndexRange(86, 3);
-            data.malarApexRightIndices = CreateIndexRange(89, 3);
+            data.nasionIndices = new[] { 73 };
+            data.noseBridgeMidlineIndices = CreateIndexRange(74, 4);
+            data.alarLeftIndices = CreateIndexRange(78, 5);
+            data.alarRightIndices = CreateIndexRange(83, 5);
+            data.malarApexLeftIndices = CreateIndexRange(88, 5);
+            data.malarApexRightIndices = CreateIndexRange(93, 5);
             return data;
         }
 

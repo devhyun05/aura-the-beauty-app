@@ -156,6 +156,59 @@ export const SEMANTIC_GROUPS = Object.freeze([
   },
 ]);
 
+// Tier-2 is not auto-authored from a screen band. These fixed topology patches were
+// anatomically reviewed on the primary board and are reprojected unchanged onto every
+// capture. A candidate either has all six groups or none (legacy G1 compatibility).
+export const TIER2_SEMANTIC_GROUPS = Object.freeze([
+  Object.freeze({
+    fixedIndices: Object.freeze([15]),
+    key: 'nasionIndices',
+    label: '코뿌리 고정 중앙점',
+    minimumCount: 1,
+    requiredCount: 1,
+  }),
+  Object.freeze({
+    fixedIndices: Object.freeze([10, 11, 12, 13, 14, 36]),
+    key: 'noseBridgeMidlineIndices',
+    label: '콧대 중앙선',
+    minimumCount: 4,
+  }),
+  Object.freeze({
+    fixedIndices: Object.freeze([202, 204, 292, 298, 325]),
+    key: 'alarLeftIndices',
+    label: '콧볼 패치 · 해부학적 Left',
+    minimumCount: 5,
+  }),
+  Object.freeze({
+    fixedIndices: Object.freeze([651, 653, 727, 733, 760]),
+    key: 'alarRightIndices',
+    label: '콧볼 패치 · 해부학적 Right',
+    minimumCount: 5,
+  }),
+  Object.freeze({
+    fixedIndices: Object.freeze([153, 155, 178, 353, 354, 377, 378, 388, 389, 390]),
+    key: 'malarApexLeftIndices',
+    label: '앞광대 패치 · 해부학적 Left',
+    minimumCount: 5,
+  }),
+  Object.freeze({
+    fixedIndices: Object.freeze([602, 604, 627, 784, 785, 808, 809, 819, 820, 821]),
+    key: 'malarApexRightIndices',
+    label: '앞광대 패치 · 해부학적 Right',
+    minimumCount: 5,
+  }),
+]);
+
+export const RUNTIME_SEMANTIC_GROUPS = Object.freeze([
+  ...SEMANTIC_GROUPS,
+  ...TIER2_SEMANTIC_GROUPS,
+]);
+
+export const TIER2_ALLOWED_G1_OVERLAPS = Object.freeze({
+  nasionIndices: Object.freeze([15]),
+  noseBridgeMidlineIndices: Object.freeze([10, 11, 12, 14, 36]),
+});
+
 export const MEASUREMENT_LANDMARK_GROUP_KEYS = Object.freeze([
   'noseTipIndices',
   'chinIndices',
@@ -185,6 +238,17 @@ export const BILATERAL_REFERENCE_GROUP_PAIRS = Object.freeze([
   Object.freeze({
     leftGroupKey: 'chinReferenceLeftIndices',
     rightGroupKey: 'chinReferenceRightIndices',
+  }),
+]);
+
+export const TIER2_BILATERAL_GROUP_PAIRS = Object.freeze([
+  Object.freeze({
+    leftGroupKey: 'alarLeftIndices',
+    rightGroupKey: 'alarRightIndices',
+  }),
+  Object.freeze({
+    leftGroupKey: 'malarApexLeftIndices',
+    rightGroupKey: 'malarApexRightIndices',
   }),
 ]);
 
@@ -228,9 +292,23 @@ function requireCondition(condition, message) {
 }
 
 function cloneGroups(groups) {
+  const definitions = hasAnyTier2Group(groups)
+    ? RUNTIME_SEMANTIC_GROUPS
+    : SEMANTIC_GROUPS;
   return Object.fromEntries(
-    SEMANTIC_GROUPS.map(({key}) => [key, [...(groups[key] ?? [])]]),
+    definitions.map(({key}) => [key, [...(groups[key] ?? [])]]),
   );
+}
+
+function hasAnyTier2Group(groups) {
+  return TIER2_SEMANTIC_GROUPS.some(({key}) =>
+    Object.prototype.hasOwnProperty.call(groups ?? {}, key));
+}
+
+function expectedBilateralGroupPairs(candidate) {
+  return hasAnyTier2Group(candidate?.groups)
+    ? [...BILATERAL_REFERENCE_GROUP_PAIRS, ...TIER2_BILATERAL_GROUP_PAIRS]
+    : BILATERAL_REFERENCE_GROUP_PAIRS;
 }
 
 export function validateArFaceExport(payload) {
@@ -907,11 +985,59 @@ export function validateCandidateGroups(groups, vertexCount) {
       );
     }
   }
+
+
+  if (!hasAnyTier2Group(groups)) {
+    return errors;
+  }
+
+  for (const definition of TIER2_SEMANTIC_GROUPS) {
+    const indices = groups?.[definition.key];
+    if (!Array.isArray(indices)) {
+      errors.push(`${definition.key}: Tier-2 그룹이 없습니다. 여섯 그룹은 모두 함께 있어야 합니다.`);
+      continue;
+    }
+    const unique = new Set(indices);
+    if (unique.size !== indices.length) {
+      errors.push(`${definition.key}: 중복 정점이 있습니다.`);
+    }
+    if (indices.length < definition.minimumCount) {
+      errors.push(`${definition.key}: 최소 ${definition.minimumCount}개보다 적습니다.`);
+    }
+    if (definition.requiredCount !== undefined && indices.length !== definition.requiredCount) {
+      errors.push(`${definition.key}: 정확히 ${definition.requiredCount}개여야 합니다.`);
+    }
+    if (!indices.every(index => Number.isInteger(index) && index >= 0 && index < vertexCount)) {
+      errors.push(`${definition.key}: 범위를 벗어난 정점이 있습니다.`);
+    }
+  }
+
+  const g1Indices = new Set(
+    SEMANTIC_GROUPS.flatMap(({key}) => Array.isArray(groups?.[key]) ? groups[key] : []),
+  );
+  const seenTier2 = new Set();
+  for (const definition of TIER2_SEMANTIC_GROUPS) {
+    const indices = groups?.[definition.key];
+    if (!Array.isArray(indices)) {
+      continue;
+    }
+    const allowedG1Overlap = new Set(TIER2_ALLOWED_G1_OVERLAPS[definition.key] ?? []);
+    for (const index of indices) {
+      if (g1Indices.has(index) && !allowedG1Overlap.has(index)) {
+        errors.push(`${definition.key}: 승인되지 않은 G1 overlap 정점 ${index}가 있습니다.`);
+      }
+      if (seenTier2.has(index)) {
+        errors.push(`${definition.key}: 다른 Tier-2 그룹과 정점 ${index}가 겹칩니다.`);
+      }
+      seenTier2.add(index);
+    }
+  }
   return errors;
 }
 
 export function validateBilateralSymmetryPolicy(candidate, uvs = null) {
   const errors = [];
+  const expectedGroupPairs = expectedBilateralGroupPairs(candidate);
   const policy = candidate?.bilateralSymmetryPolicy;
   const topology = candidate?.topologyFingerprint ?? candidate?.topology;
   const vertexCount = topology?.vertexCount;
@@ -968,9 +1094,9 @@ export function validateBilateralSymmetryPolicy(candidate, uvs = null) {
     errors.push('bilateralSymmetryPolicy.groupPairs가 배열이 아닙니다.');
     return errors;
   }
-  if (policy.groupPairs.length !== BILATERAL_REFERENCE_GROUP_PAIRS.length) {
+  if (policy.groupPairs.length !== expectedGroupPairs.length) {
     errors.push(
-      `bilateralSymmetryPolicy.groupPairs는 정확히 ${BILATERAL_REFERENCE_GROUP_PAIRS.length}개여야 합니다.`,
+      `bilateralSymmetryPolicy.groupPairs는 정확히 ${expectedGroupPairs.length}개여야 합니다.`,
     );
   }
 
@@ -1009,7 +1135,7 @@ export function validateBilateralSymmetryPolicy(candidate, uvs = null) {
     }
   }
 
-  for (const expectedPair of BILATERAL_REFERENCE_GROUP_PAIRS) {
+  for (const expectedPair of expectedGroupPairs) {
     const matchingEntries = policy.groupPairs.filter(entry =>
       entry?.leftGroupKey === expectedPair.leftGroupKey
         && entry?.rightGroupKey === expectedPair.rightGroupKey,

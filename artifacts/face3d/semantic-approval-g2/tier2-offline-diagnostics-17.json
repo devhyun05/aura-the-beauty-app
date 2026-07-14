@@ -1,0 +1,720 @@
+{
+  "schemaVersion": "aura.face3d-semantic-candidate-diagnostics.v1",
+  "status": "provisional_candidate_diagnostics",
+  "generatedAtUtc": "2026-07-14T18:42:01.572Z",
+  "algorithm": {
+    "evaluator": "Unity Face3DMetricEvaluator formula parity (offline approximation)",
+    "geometryEpsilon": 0.000001,
+    "metricUnit": "normalized",
+    "pogonionSelection": "maximum signed projection to oriented midface plane; ties within 1e-6 choose smaller vertex index",
+    "alareSelection": "face-local lateral extreme within fixed ala patch; ties within 1e-6 choose smaller vertex index",
+    "summaryMethod": "median_and_raw_mad_without_outlier_rejection",
+    "madDefinition": "median(abs(value - median))",
+    "numericPrecision": "exported localVertices rounded to 6 decimals; JavaScript float64 differs from Unity native float32 runtime",
+    "runtimeAggregation": "not_applied; this report does not run the Unity 20-30 frame 3xMAD outlier collector"
+  },
+  "candidate": {
+    "schemaVersion": "aura.face3d-semantic-candidate.v1",
+    "candidateId": "face3d-g2-product-approved-v1-candidate",
+    "reviewStatus": "candidate_edited_not_runtime_approved",
+    "generationMethod": "g1_approved_base_plus_product_approved_tier2_fixed_patch_v1",
+    "topologyFingerprint": {
+      "algorithm": "sha256-le-v1",
+      "vertexCount": 1220,
+      "indexCount": 6912,
+      "uvCount": 1220,
+      "indicesHash": "c4bd80f9f6daef3e9bac013be387bef36ed61b7f5c088c153df64d37cb5946f1",
+      "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
+      "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
+    },
+    "groupVertexCounts": {
+      "noseTipIndices": 3,
+      "chinIndices": 3,
+      "upperLipIndices": 3,
+      "lowerLipIndices": 3,
+      "midfaceReferenceLeftIndices": 15,
+      "midfaceReferenceRightIndices": 15,
+      "midfaceReferenceUpperIndices": 13,
+      "chinReferenceLeftIndices": 15,
+      "chinReferenceRightIndices": 15,
+      "chinReferenceUpperIndices": 13,
+      "centralRegionIndices": 35,
+      "chinBottomIndices": 3,
+      "nasionIndices": 1,
+      "noseBridgeMidlineIndices": 6,
+      "alarLeftIndices": 5,
+      "alarRightIndices": 5,
+      "malarApexLeftIndices": 10,
+      "malarApexRightIndices": 10
+    }
+  },
+  "validation": {
+    "bilateralSymmetryPolicyValid": true,
+    "bilateralSymmetryValidatedAgainstCaptureUvs": true,
+    "bilateralSymmetryPolicyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+    "bilateralMirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+    "candidateSchemaValid": true,
+    "candidateTopologyValid": true,
+    "captureSchemaValid": true,
+    "captureCount": 17,
+    "allCaptureTopologiesMatchCandidate": true,
+    "allLocalVerticesFinite": true,
+    "topologyValidation": {
+      "indices": "rehashed_from_lossless_exported_indices",
+      "uvs": "matched_by_embedded_unity_exact_native_arrays_fingerprint",
+      "note": "arface_export UV coordinates are rounded to 6 decimals and cannot reproduce the native float32 UV hash"
+    },
+    "runtimeMetricGroupCount": 17,
+    "runtimeMetricGroups": [
+      "noseTipIndices",
+      "chinIndices",
+      "upperLipIndices",
+      "lowerLipIndices",
+      "midfaceReferenceLeftIndices",
+      "midfaceReferenceRightIndices",
+      "midfaceReferenceUpperIndices",
+      "chinReferenceLeftIndices",
+      "chinReferenceRightIndices",
+      "chinReferenceUpperIndices",
+      "centralRegionIndices",
+      "nasionIndices",
+      "noseBridgeMidlineIndices",
+      "alarLeftIndices",
+      "alarRightIndices",
+      "malarApexLeftIndices",
+      "malarApexRightIndices"
+    ],
+    "evaluatedMetricKeys": [
+      "noseTipProjection",
+      "chinProjection",
+      "upperLipToELine",
+      "lowerLipToELine",
+      "centralProjectionScore",
+      "noseLength",
+      "nasalBridgeStraightness",
+      "nasalAxisDeviation",
+      "alarWidth",
+      "malarProjectionLeft",
+      "malarProjectionRight"
+    ],
+    "metricGroupMapping": {
+      "noseTipProjection": [
+        "noseTipIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ],
+      "chinProjection": [
+        "chinIndices",
+        "chinReferenceLeftIndices",
+        "chinReferenceRightIndices",
+        "chinReferenceUpperIndices"
+      ],
+      "upperLipToELine": [
+        "upperLipIndices",
+        "noseTipIndices",
+        "chinIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ],
+      "lowerLipToELine": [
+        "lowerLipIndices",
+        "noseTipIndices",
+        "chinIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ],
+      "centralProjectionScore": [
+        "centralRegionIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ],
+      "noseLength": [
+        "nasionIndices",
+        "noseTipIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices"
+      ],
+      "nasalBridgeStraightness": [
+        "noseBridgeMidlineIndices",
+        "nasionIndices",
+        "noseTipIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices"
+      ],
+      "nasalAxisDeviation": [
+        "noseBridgeMidlineIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices"
+      ],
+      "alarWidth": [
+        "alarLeftIndices",
+        "alarRightIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices"
+      ],
+      "malarProjectionLeft": [
+        "malarApexLeftIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ],
+      "malarProjectionRight": [
+        "malarApexRightIndices",
+        "midfaceReferenceLeftIndices",
+        "midfaceReferenceRightIndices",
+        "midfaceReferenceUpperIndices"
+      ]
+    },
+    "validatedButUnusedByCurrentMetrics": {
+      "chinBottomIndices": "Menton (턱 최하단); current five metrics do not consume this group"
+    },
+    "chinProjectionLandmark": "chinIndices fixed candidate patch; each capture selects the maximum signed projection to the oriented midface plane as the soft-tissue Pogonion / E-line endpoint (ties within 1e-6 choose the smaller vertex index)",
+    "tier2RuntimeFormulaParity": true
+  },
+  "captures": [
+    {
+      "captureOrdinal": 1,
+      "capturePairId": "pair_face3d_semantic_1783798897441",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05604595358961153,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.340293262152771,
+        "chinProjection": 0.18859880660306316,
+        "upperLipToELine": 0.053275604524137994,
+        "lowerLipToELine": 0.09488996697754117,
+        "centralProjectionScore": 0.2617736249850655,
+        "noseLength": 0.6699510859078227,
+        "nasalBridgeStraightness": 0.028131206110697877,
+        "nasalAxisDeviation": -0.00005174771256418146,
+        "alarWidth": 0.6984094390114746,
+        "malarProjectionLeft": -0.0938074763376699,
+        "malarProjectionRight": -0.09468962493986025
+      }
+    },
+    {
+      "captureOrdinal": 2,
+      "capturePairId": "pair_face3d_semantic_1783799133170",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.0555490088398824,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.34810163972048797,
+        "chinProjection": 0.22327017235003754,
+        "upperLipToELine": 0.03980123252636144,
+        "lowerLipToELine": 0.07750328547019936,
+        "centralProjectionScore": 0.2678339000876598,
+        "noseLength": 0.6835388529014531,
+        "nasalBridgeStraightness": 0.02771747674804598,
+        "nasalAxisDeviation": -0.00016552174031722144,
+        "alarWidth": 0.6984646997166449,
+        "malarProjectionLeft": -0.09433434540317995,
+        "malarProjectionRight": -0.09523749487222788
+      }
+    },
+    {
+      "captureOrdinal": 3,
+      "capturePairId": "pair_face3d_semantic_1783799136465",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05563294214929376,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.34718350193047437,
+        "chinProjection": 0.2207394161900416,
+        "upperLipToELine": 0.038424250436956145,
+        "lowerLipToELine": 0.07599479666349639,
+        "centralProjectionScore": 0.26714570641386287,
+        "noseLength": 0.682716998587253,
+        "nasalBridgeStraightness": 0.027676733447717174,
+        "nasalAxisDeviation": -0.00018014273345189047,
+        "alarWidth": 0.6985792509287878,
+        "malarProjectionLeft": -0.09389814064482122,
+        "malarProjectionRight": -0.09474081101788585
+      }
+    },
+    {
+      "captureOrdinal": 4,
+      "capturePairId": "pair_face3d_semantic_1783799138079",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05582201512485912,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.3445498393657698,
+        "chinProjection": 0.2125024334240946,
+        "upperLipToELine": 0.03556780620538081,
+        "lowerLipToELine": 0.07198348873166384,
+        "centralProjectionScore": 0.26508853848032604,
+        "noseLength": 0.6809385195680611,
+        "nasalBridgeStraightness": 0.02739011554493652,
+        "nasalAxisDeviation": -0.000011517800111823896,
+        "alarWidth": 0.6985601674926345,
+        "malarProjectionLeft": -0.09239876620137404,
+        "malarProjectionRight": -0.09345130367382079
+      }
+    },
+    {
+      "captureOrdinal": 5,
+      "capturePairId": "pair_face3d_semantic_1783801229718",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.056651893188999235,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.34381394053047354,
+        "chinProjection": 0.17043543554750804,
+        "upperLipToELine": 0.044027802975593264,
+        "lowerLipToELine": 0.08003162823650084,
+        "centralProjectionScore": 0.26489908648508903,
+        "noseLength": 0.6880292642265141,
+        "nasalBridgeStraightness": 0.027749374665996144,
+        "nasalAxisDeviation": 0.00008512994641688935,
+        "alarWidth": 0.6952292610503403,
+        "malarProjectionLeft": -0.0935375342162144,
+        "malarProjectionRight": -0.09467621815797544
+      }
+    },
+    {
+      "captureOrdinal": 6,
+      "capturePairId": "pair_face3d_semantic_1783801231922",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.056544880259332256,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.3460690881472838,
+        "chinProjection": 0.17301245512101032,
+        "upperLipToELine": 0.04507000453289111,
+        "lowerLipToELine": 0.08089516688945704,
+        "centralProjectionScore": 0.2668309535291895,
+        "noseLength": 0.6924827280870587,
+        "nasalBridgeStraightness": 0.02771503480204753,
+        "nasalAxisDeviation": -0.00011690922309505523,
+        "alarWidth": 0.6955539894623819,
+        "malarProjectionLeft": -0.09433684050540082,
+        "malarProjectionRight": -0.09498207505933313
+      }
+    },
+    {
+      "captureOrdinal": 7,
+      "capturePairId": "pair_face3d_semantic_1783801237646",
+      "captureShotKind": "yawLeft",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.056037261036444914,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.35335292792598555,
+        "chinProjection": 0.17659554974366032,
+        "upperLipToELine": 0.05089069369548929,
+        "lowerLipToELine": 0.08749834486253302,
+        "centralProjectionScore": 0.2724672609652154,
+        "noseLength": 0.7030726669179891,
+        "nasalBridgeStraightness": 0.028449786101942594,
+        "nasalAxisDeviation": 0.0003696381213468853,
+        "alarWidth": 0.6983395544213787,
+        "malarProjectionLeft": -0.09681636607852012,
+        "malarProjectionRight": -0.09651270113664828
+      }
+    },
+    {
+      "captureOrdinal": 8,
+      "capturePairId": "pair_face3d_semantic_1783801239842",
+      "captureShotKind": "yawRight",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05611233823556297,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.34997824239884356,
+        "chinProjection": 0.17855826848177814,
+        "upperLipToELine": 0.04810336512555789,
+        "lowerLipToELine": 0.08413380484162464,
+        "centralProjectionScore": 0.2696622684415051,
+        "noseLength": 0.6968341233501435,
+        "nasalBridgeStraightness": 0.027890212276906908,
+        "nasalAxisDeviation": -0.0015215427931069751,
+        "alarWidth": 0.6955523263831294,
+        "malarProjectionLeft": -0.0975303922047557,
+        "malarProjectionRight": -0.09722407145685591
+      }
+    },
+    {
+      "captureOrdinal": 9,
+      "capturePairId": "pair_face3d_semantic_1783801550595",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05596220801556866,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.3461307278536624,
+        "chinProjection": 0.21807933029812737,
+        "upperLipToELine": 0.04867251713542094,
+        "lowerLipToELine": 0.07971995385954717,
+        "centralProjectionScore": 0.2661842876808116,
+        "noseLength": 0.678861109489962,
+        "nasalBridgeStraightness": 0.030727799985836156,
+        "nasalAxisDeviation": -0.00022081305856813853,
+        "alarWidth": 0.7018846544179989,
+        "malarProjectionLeft": -0.09756267064571295,
+        "malarProjectionRight": -0.09767901217971685
+      }
+    },
+    {
+      "captureOrdinal": 10,
+      "capturePairId": "pair_face3d_semantic_1783801552908",
+      "captureShotKind": "yawLeft",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05567217824012277,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.34588024761379293,
+        "chinProjection": 0.2135206853739309,
+        "upperLipToELine": 0.056273504952257546,
+        "lowerLipToELine": 0.08918396371941743,
+        "centralProjectionScore": 0.26594128084059643,
+        "noseLength": 0.6806429050782157,
+        "nasalBridgeStraightness": 0.030995158772115925,
+        "nasalAxisDeviation": 0.00018240880275001306,
+        "alarWidth": 0.702865488596855,
+        "malarProjectionLeft": -0.09823525959730459,
+        "malarProjectionRight": -0.09777145388068147
+      }
+    },
+    {
+      "captureOrdinal": 11,
+      "capturePairId": "pair_face3d_semantic_1783801555305",
+      "captureShotKind": "yawRight",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05592411111950432,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.3458595479750278,
+        "chinProjection": 0.21943474498217536,
+        "upperLipToELine": 0.047016066203335295,
+        "lowerLipToELine": 0.07847857751970934,
+        "centralProjectionScore": 0.2659493504393598,
+        "noseLength": 0.678378114030442,
+        "nasalBridgeStraightness": 0.030527552140182965,
+        "nasalAxisDeviation": -0.00026554655339666445,
+        "alarWidth": 0.7017370580923058,
+        "malarProjectionLeft": -0.09656829800825577,
+        "malarProjectionRight": -0.09748846858487813
+      }
+    },
+    {
+      "captureOrdinal": 12,
+      "capturePairId": "pair_face3d_semantic_1783839298585",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.055020502803712484,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 292,
+        "selectedAlarRightVertexIndex": 727
+      },
+      "metrics": {
+        "noseTipProjection": 0.35366900855399375,
+        "chinProjection": 0.11641028386012897,
+        "upperLipToELine": 0.03986717517931249,
+        "lowerLipToELine": 0.06161307219940298,
+        "centralProjectionScore": 0.2686743410624206,
+        "noseLength": 0.6625901673660441,
+        "nasalBridgeStraightness": 0.01755433821973909,
+        "nasalAxisDeviation": 0.00022081291656763836,
+        "alarWidth": 0.6479770219980767,
+        "malarProjectionLeft": -0.11685242339474732,
+        "malarProjectionRight": -0.11715854012579198
+      }
+    },
+    {
+      "captureOrdinal": 13,
+      "capturePairId": "pair_face3d_semantic_1783839315132",
+      "captureShotKind": "yawLeft",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05462087946649462,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 292,
+        "selectedAlarRightVertexIndex": 727
+      },
+      "metrics": {
+        "noseTipProjection": 0.3452882696843081,
+        "chinProjection": 0.10821952800811956,
+        "upperLipToELine": 0.046189244214194555,
+        "lowerLipToELine": 0.0653011210075159,
+        "centralProjectionScore": 0.2611430499855464,
+        "noseLength": 0.6624489512128653,
+        "nasalBridgeStraightness": 0.01925214392791223,
+        "nasalAxisDeviation": 0.00019539266704034696,
+        "alarWidth": 0.6480491263999165,
+        "malarProjectionLeft": -0.11579893062393602,
+        "malarProjectionRight": -0.11555599362482638
+      }
+    },
+    {
+      "captureOrdinal": 14,
+      "capturePairId": "pair_face3d_semantic_1783839318477",
+      "captureShotKind": "yawRight",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05457863746917022,
+        "selectedPogonionVertexIndex": 34,
+        "selectedAlarLeftVertexIndex": 292,
+        "selectedAlarRightVertexIndex": 727
+      },
+      "metrics": {
+        "noseTipProjection": 0.3433494639572117,
+        "chinProjection": 0.09671234659720204,
+        "upperLipToELine": 0.043779041399236426,
+        "lowerLipToELine": 0.0632429156389633,
+        "centralProjectionScore": 0.2600687269030066,
+        "noseLength": 0.6642916732229336,
+        "nasalBridgeStraightness": 0.019331479395893688,
+        "nasalAxisDeviation": -0.00033145719839482494,
+        "alarWidth": 0.6497055560856605,
+        "malarProjectionLeft": -0.1149518404926449,
+        "malarProjectionRight": -0.11587104642578794
+      }
+    },
+    {
+      "captureOrdinal": 15,
+      "capturePairId": "pair_face3d_semantic_1783839381863",
+      "captureShotKind": "neutral",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05429718471154833,
+        "selectedPogonionVertexIndex": 35,
+        "selectedAlarLeftVertexIndex": 292,
+        "selectedAlarRightVertexIndex": 727
+      },
+      "metrics": {
+        "noseTipProjection": 0.3497871649319835,
+        "chinProjection": 0.24738138626823053,
+        "upperLipToELine": -0.04659488691471827,
+        "lowerLipToELine": -0.037019727184571735,
+        "centralProjectionScore": 0.26715187748127606,
+        "noseLength": 0.6767273823049124,
+        "nasalBridgeStraightness": 0.026307289146902522,
+        "nasalAxisDeviation": 0.0007482413730672818,
+        "alarWidth": 0.6743464876469925,
+        "malarProjectionLeft": -0.12615249120303348,
+        "malarProjectionRight": -0.12730009042651355
+      }
+    },
+    {
+      "captureOrdinal": 16,
+      "capturePairId": "pair_face3d_semantic_1783839388370",
+      "captureShotKind": "yawLeft",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05402749885871906,
+        "selectedPogonionVertexIndex": 35,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 727
+      },
+      "metrics": {
+        "noseTipProjection": 0.3592939333219709,
+        "chinProjection": 0.251781432164381,
+        "upperLipToELine": -0.03501425659534768,
+        "lowerLipToELine": -0.0243481491119834,
+        "centralProjectionScore": 0.27561365705034785,
+        "noseLength": 0.6926119373373045,
+        "nasalBridgeStraightness": 0.027378696166501428,
+        "nasalAxisDeviation": -0.0005289738034222033,
+        "alarWidth": 0.6799567960319934,
+        "malarProjectionLeft": -0.12715348912189114,
+        "malarProjectionRight": -0.12601281969240133
+      }
+    },
+    {
+      "captureOrdinal": 17,
+      "capturePairId": "pair_face3d_semantic_1783839393013",
+      "captureShotKind": "yawRight",
+      "topologyMatch": true,
+      "localVerticesFinite": true,
+      "derivedGeometry": {
+        "faceScale": 0.05415782127986892,
+        "selectedPogonionVertexIndex": 35,
+        "selectedAlarLeftVertexIndex": 325,
+        "selectedAlarRightVertexIndex": 760
+      },
+      "metrics": {
+        "noseTipProjection": 0.36488621018177336,
+        "chinProjection": 0.26046916836898826,
+        "upperLipToELine": -0.037319809656162155,
+        "lowerLipToELine": -0.024864576384060387,
+        "centralProjectionScore": 0.28027523376075897,
+        "noseLength": 0.697492899806587,
+        "nasalBridgeStraightness": 0.027019426746315342,
+        "nasalAxisDeviation": 0.0006759145627133677,
+        "alarWidth": 0.6812876762493446,
+        "malarProjectionLeft": -0.12644602233205038,
+        "malarProjectionRight": -0.12710240954581872
+      }
+    }
+  ],
+  "metricSummary": {
+    "noseTipProjection": {
+      "sampleCount": 17,
+      "median": 0.3461307278536624,
+      "mad": 0.0023167873231888514,
+      "min": 0.340293262152771,
+      "max": 0.36488621018177336,
+      "range": 0.02459294802900236
+    },
+    "chinProjection": {
+      "sampleCount": 17,
+      "median": 0.2125024334240946,
+      "mad": 0.03487895284413592,
+      "min": 0.09671234659720204,
+      "max": 0.26046916836898826,
+      "range": 0.16375682177178622
+    },
+    "upperLipToELine": {
+      "sampleCount": 17,
+      "median": 0.044027802975593264,
+      "mad": 0.004644714159827673,
+      "min": -0.04659488691471827,
+      "max": 0.056273504952257546,
+      "range": 0.10286839186697581
+    },
+    "lowerLipToELine": {
+      "sampleCount": 17,
+      "median": 0.07750328547019936,
+      "mad": 0.009995059392333666,
+      "min": -0.037019727184571735,
+      "max": 0.09488996697754117,
+      "range": 0.1319096941621129
+    },
+    "centralProjectionScore": {
+      "sampleCount": 17,
+      "median": 0.2668309535291895,
+      "mad": 0.0018433875332311,
+      "min": 0.2600687269030066,
+      "max": 0.28027523376075897,
+      "range": 0.020206506857752382
+    },
+    "noseLength": {
+      "sampleCount": 17,
+      "median": 0.6809385195680611,
+      "mad": 0.010987433660238355,
+      "min": 0.6624489512128653,
+      "max": 0.7030726669179891,
+      "range": 0.0406237157051238
+    },
+    "nasalBridgeStraightness": {
+      "sampleCount": 17,
+      "median": 0.02771503480204753,
+      "mad": 0.0006956080557321866,
+      "min": 0.01755433821973909,
+      "max": 0.030995158772115925,
+      "range": 0.013440820552376834
+    },
+    "nasalAxisDeviation": {
+      "sampleCount": 17,
+      "median": -0.00005174771256418146,
+      "mad": 0.0002341565153141945,
+      "min": -0.0015215427931069751,
+      "max": 0.0007482413730672818,
+      "range": 0.002269784166174257
+    },
+    "alarWidth": {
+      "sampleCount": 17,
+      "median": 0.6955539894623819,
+      "mad": 0.006183068629923905,
+      "min": 0.6479770219980767,
+      "max": 0.702865488596855,
+      "range": 0.05488846659877833
+    },
+    "malarProjectionLeft": {
+      "sampleCount": 17,
+      "median": -0.0975303922047557,
+      "mad": 0.0037229158670857992,
+      "min": -0.12715348912189114,
+      "max": -0.09239876620137404,
+      "range": 0.03475472292051711
+    },
+    "malarProjectionRight": {
+      "sampleCount": 17,
+      "median": -0.09748846858487813,
+      "mad": 0.0027988436450178816,
+      "min": -0.12730009042651355,
+      "max": -0.09345130367382079,
+      "range": 0.03384878675269276
+    }
+  },
+  "warnings": [
+    "provisional_candidate_diagnostics: 이 결과는 후보 정점의 수치 진단이며 human overlay 승인이나 runtime map 승인이 아닙니다.",
+    "chinProjection과 E-line은 chinIndices 고정 후보 패치에서 캡처별로 선택한 동일한 soft-tissue Pogonion 정점을 사용합니다. chinBottomIndices(Menton)는 검증만 하며 현재 5개 metric 계산에는 사용하지 않습니다.",
+    "오프라인 수식은 Unity와 같지만 JSON localVertices 반올림과 JavaScript/Unity 수치 정밀도 차이로 bit-identical runtime 결과는 아닙니다.",
+    "포즈가 다른 소수 캡처의 median/MAD/range는 실험용 안정성 지표이며 모집단 일반화 근거가 아닙니다.",
+    "Tier-2 여섯 값은 faceScale로 정규화된 상대값이며 절대 mm 또는 임상 진단값이 아닙니다.",
+    "nasalAxisDeviation은 해부학적 Left가 음수, Right가 양수입니다."
+  ]
+}

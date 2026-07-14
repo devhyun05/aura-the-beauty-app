@@ -4,9 +4,9 @@
 - Pogonion 동반 결정 반영일: 2026-07-15
 - 대상 topology: ARKit 고정 face mesh, 1220 vertices
 - 대상 그룹: `malarApexLeftIndices`, `malarApexRightIndices`, `alarLeftIndices`, `alarRightIndices`, `nasionIndices`; 동반 G1 결정: `chinIndices`
-- Tier-2 상태: **정의·사람 검수 도구 준비 / 현재 자동 후보는 기각 / 두 reviewer 합의·최종 index 목록·지표 노출은 아직 미승인**
-- Pogonion 계약: **`[31..35]` 고정 patch / 패치 내 전방 max / 동일 winner E-line endpoint / Menton 미사용**
-- 변경 범위: 2026-07-14 Tier-2 조사에서는 결정 문서와 검수 도구·검증 core·테스트·검수 가이드를 추가/보강했고 Unity evaluator, live semantic map, 캡처 원본, approval pipeline은 수정하지 않았다(`scripts/face3d/build-tier2-seed-review.mjs:209-1068`, `scripts/face3d/tier2-seed-review-core.mjs:312-898`, `scripts/face3d/test-tier2-seed-review.mjs:1-614`, `docs/face3d/TIER2_SEED_REVIEW_GUIDE_KO.md:1-121`). 2026-07-15 Pogonion 동반 결정은 evaluator 계약과 live semantic map의 `chinIndices`를 갱신하며 캡처 원본과 Tier-2 승인 결과는 바꾸지 않는다.
+- Tier-2 상태: **제품 오너 해부 검수·고정 patch 확정·17캡처 오프라인 승격·11지표 제품 경로 연결 완료**
+- Pogonion 계약: **`[34,35,975]` 고정 patch / 패치 내 전방 max / 동일 winner E-line endpoint / Menton 미사용**
+- 변경 범위: 원본 캡처는 수정하지 않았다. Unity evaluator·live semantic map·approval pipeline·오프라인 evaluator·모바일/AI/DB/보고서 경로를 G2 계약으로 함께 갱신했다. 신규 실기기 반복성 수집은 제품 오너 결정으로 면제했으며, 기존 17개 export의 topology exact match와 11지표 finite 계산을 승격 증거로 보존한다.
 
 ### 쉽게 말하면
 
@@ -15,7 +15,7 @@
 - 광대는 얼굴 폭이 아니라 앞광대 영역의 상대적 전방 돌출을 잰다.
 - 콧볼은 콧방울 양쪽의 가장 바깥점을 잡아 상대 폭을 잰다.
 - nasion은 제품 오너가 확인한 코뿌리 중앙 vertex `15`를 고정 proxy로 쓴다.
-- reviewer의 허용 해부 영역(ROI)과 target은 해부 판정 증거라 g1과 겹쳐도 된다. live map에 들어갈 고정 runtime patch만 g1-disjoint여야 한다. ROI 안에서 안전한 free patch를 일관되게 만들 수 없으면 증거는 보존하고 runtime patch만 `unsupported/null`로 남긴다.
+- reviewer의 허용 해부 영역(ROI)과 target은 해부 판정 증거라 G1과 겹쳐도 된다. runtime patch끼리는 disjoint이며, G1과는 해부 위치 보존을 위해 nasion `15`와 bridge `10,11,12,14,36`만 controlled overlap으로 허용한다.
 
 여기서 “상대값”은 우선 각 거리·돌출을 같은 얼굴의 `faceScale`로 나눠 기기 거리와 얼굴 크기 영향을 줄인 값이다. 이것만으로 “평균보다 광대가 많이 나왔다”거나 “콧볼이 상위 몇 %로 넓다”는 뜻은 아니다. 그런 표현은 시드·반복성 검증 뒤 별도의 모집단 기준분포가 있어야 한다.
 
@@ -24,11 +24,11 @@
 | 그룹 | 결정 | 표준·제품 의미 | 런타임 대표점/값 | 현재 구현과의 관계 |
 |---|---|---|---|---|
 | `malarApexLeft/Right` | **A** | soft-tissue maxillozygion 인접 영역의 **전방 malar prominence proxy** | 고정 해부 패치 안에서 midface 기준면 전방 투영 `max` | 기존 evaluator 식을 유지할 수 있다. |
-| `alarLeft/Right` | **A** | Farkas 계열 `alare(al)`: nasal ala의 최외측점 | 고정 ala 패치 안에서 face-local 좌우축의 외측 극값을 각각 선택 | 현재 patch centroid 식은 표준과 충돌하므로 evaluator 변경이 선행돼야 한다. |
+| `alarLeft/Right` | **A** | Farkas 계열 `alare(al)`: nasal ala의 최외측점 | 고정 ala 패치 안에서 face-local 좌우축의 외측 극값을 각각 선택 | evaluator와 오프라인 진단 모두 lateral-extreme pair로 변경했다. |
 | `nasion` | **C** | frontonasal suture 위의 **soft-tissue nasion proxy** | 중앙 self-mirror vertex `15` 한 점 고정; 극값 탐색 없음 | 한 점 centroid는 그 점 자체다. deepest concavity는 사용하지 않는다. |
-| `chinIndices` (G1) | **A** | 옆에서 가장 앞으로 나온 중앙 턱 볼록면의 **soft-tissue Pogonion proxy** | 고정 connected patch `[31,32,33,34,35]` 안에서 방향이 고정된 midface plane signed projection `max` | winner를 `chinProjection`과 두 E-line 지표의 동일한 턱 endpoint로 사용한다. Menton은 별도다. |
+| `chinIndices` (G1) | **A** | 옆에서 가장 앞으로 나온 중앙 턱 볼록면의 **soft-tissue Pogonion proxy** | 고정 connected patch `[34,35,975]` 안에서 방향이 고정된 midface plane signed projection `max` | winner를 `chinProjection`과 두 E-line 지표의 동일한 턱 endpoint로 사용한다. Menton은 별도다. |
 
-Tier-2 다섯 그룹 모두 **B(얼굴 전체 또는 화면 밴드에서 사람별 무제약 극값)**는 기각한다. ARKit의 고정 topology는 같은 index/UV 슬롯을 재사용할 근거는 되지만, 한 index가 모든 사람에서 임상적 landmark와 정확히 일치한다는 보장은 아니다. 따라서 해부 패치를 먼저 고정하고, 필요한 극값은 그 패치 안에서만 구한다. Pogonion도 얼굴 전체를 탐색하지 않고 고정 `[31..35]` patch 안에서만 winner를 고른다.
+Tier-2 다섯 그룹 모두 **B(얼굴 전체 또는 화면 밴드에서 사람별 무제약 극값)**는 기각한다. ARKit의 고정 topology는 같은 index/UV 슬롯을 재사용할 근거는 되지만, 한 index가 모든 사람에서 임상적 landmark와 정확히 일치한다는 보장은 아니다. 따라서 해부 패치를 먼저 고정하고, 필요한 극값은 그 패치 안에서만 구한다. Pogonion도 얼굴 전체를 탐색하지 않고 고정 `[34,35,975]` patch 안에서만 winner를 고른다.
 
 광대 지표의 제품 해석은 다음처럼 동결한다.
 
@@ -68,16 +68,16 @@ malarProjection_s = max { p(v) | v in P_malar,s }
 ```text
 q(v) = dot(v - midfaceOrigin, midsagittalNormal) / faceScale
 
-alareLeft  = argmax { q(v)  | v in P_alar,Left  }  # 피사체 해부학적 왼쪽
-alareRight = argmax { -q(v) | v in P_alar,Right }  # 피사체 해부학적 오른쪽
+alareLeft  = argmin { q(v) | v in P_alar,Left  }   # 피사체 해부학적 왼쪽(음수 외측)
+alareRight = argmax { q(v) | v in P_alar,Right }  # 피사체 해부학적 오른쪽(양수 외측)
 alarWidth  = distance(alareLeft, alareRight) / faceScale
 ```
 
 동률은 비교 함수 안에서 pairwise epsilon을 쓰지 않고 다음처럼 결정한다. side별 외측 score의 전역 최댓값을 `M`이라 하고 `{v | score(v) >= M - 1e-6}`를 먼저 만든 뒤, 그 집합에서 가장 작은 vertex index를 택한다. runtime map에 별도 core 필드가 없으므로 tie-break가 authoring 메타데이터에 의존하지 않게 한다.
 
-현재 evaluator는 각 alar 그룹의 centroid 사이 거리를 사용한다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DMetricEvaluator.cs:203-207`; 계약도 `docs/face3d/TIER2_METRIC_CONTRACT.md:45-51`). 이 식은 `alare`의 “최외측점” 정의와 일치하지 않는다. 현재 17개 자동 3점 후보를 그대로 대입해 비교하면 lateral-extreme 폭이 centroid 폭보다 17/17 크게 나왔고, 차이는 `0.0103–0.1092 faceScale`, 중앙값 `0.0705`였다. 현재 neutral faceScale 약 55.8 mm를 적용하면 중앙값 약 3.9 mm다. 후보의 해부학적 정답 여부와 별개로 centroid가 폭을 안쪽으로 축소하는 구조적 효과다.
+초기 evaluator는 각 alar 그룹의 centroid 사이 거리를 사용했으며, 이 식은 `alare`의 “최외측점” 정의와 일치하지 않았다. 17개 자동 3점 후보를 그대로 대입한 비교에서도 lateral-extreme 폭이 centroid 폭보다 17/17 크게 나왔고, 차이는 `0.0103–0.1092 faceScale`, 중앙값 `0.0705`였다. 후보의 해부학적 정답 여부와 별개로 centroid가 폭을 안쪽으로 축소하는 구조적 효과다.
 
-따라서 **evaluator를 위 argmax pair 식으로 바꾸기 전에는 결과를 `al-al width` 또는 표준 alar width로 노출하지 않는다.** 코드를 유지해야 한다면 명칭을 `alarPatchCentroidWidthProxy`로 낮춰야 하며, 그것은 본 결정의 표준 alare 지표가 아니다.
+따라서 evaluator와 오프라인 evaluator를 위 lateral-extreme pair 식으로 변경했고, tie 범위 `1e-6` 안에서는 작은 vertex index를 택하도록 통일했다. 보고서의 `alarWidth`는 이 구현만 사용한다.
 
 ### 1.3 `nasion`: C — 중앙 vertex `15` 고정 proxy
 
@@ -158,11 +158,11 @@ Apple은 `ARFaceGeometry` 인스턴스 사이에서 face mesh topology와 triang
 
 이 repo의 fingerprint도 vertex 좌표가 아니라 vertex/index/UV count와 index/UV hash를 묶는다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DTopologyFingerprint.cs:54-84,168-181`). 따라서 fingerprint 일치는 topology 슬롯 대응의 증거이지 임상적 semantic correspondence의 증거가 아니다.
 
-live g1 맵은 1220 vertices, 6912 indices, 1220 UV 및 fingerprint `57bdaf...f3f`를 동결한다(`apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json:2-13`). Pogonion 갱신 후 현재 `mapId`는 `arkit-face3d-g1-reviewed-v2-pogonion`이다. 기존 12개 g1 그룹은 `apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json:15-174`에 있고, Tier-2 그룹은 존재할 때 최소 개수·범위·중복 및 g1/Tier-2 상호 disjoint를 통과해야 한다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DSemanticMap.cs:323-334,391-470`).
+live G2 맵은 1220 vertices, 6912 indices, 1220 UV 및 fingerprint `57bdaf...f3f`를 동결하며 `mapId`는 `arkit-face3d-g2-product-approved-v1`이다. 기존 12개 G1 그룹과 Tier-2 여섯 그룹을 함께 갖고, runtime validator는 nasion=1, bridge≥4, alar/malar≥5, Tier-2 상호 disjoint 및 위 controlled G1 overlap만 허용한다.
 
 ### 2.3 현재 다른 부위의 측정 체계와 Tier-2가 따라야 할 계약
 
-현재 g1도 “사람마다 얼굴 전체에서 최고점을 다시 찾는” 방식이 아니다. live map은 12개 의미 그룹마다 고정 vertex index 배열을 저장한다(`apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json:15-174`). nose tip·입술·기준면 그룹은 centroid를 쓰지만, `chinIndices`는 고정 connected patch `[31,32,33,34,35]` 안에서만 oriented midface plane signed projection max를 찾는다. `chinBottomIndices`는 이 evaluator 단계에서 사용하지 않는다. 후보 생성 파이프라인도 검수된 고정 seed 또는 triangle-adjacency connected patch를 사용하고, 양측 reference patch에는 UV mutual-nearest mirror pair를 함께 성장시킨다(`scripts/face3d/semantic-candidate-core.mjs:315-327,364-451,493-641`). 코드는 후보 입력을 neutral 캡처로 강제하며, warning으로 yaw 캡처에는 같은 index를 재투영해 사람이 확인하라고 명시한다(`scripts/face3d/semantic-candidate-core.mjs:792-824,865-870`). 즉 Tier-2의 A/C와 Pogonion 결정은 기존 시스템의 고정-topology + 사람 overlay 승인 철학을 연장하고, 얼굴 전체의 무제약 극값 B는 도입하지 않는다.
+현재 G1도 “사람마다 얼굴 전체에서 최고점을 다시 찾는” 방식이 아니다. live map은 의미 그룹마다 고정 vertex index 배열을 저장한다. nose tip·입술·기준면 그룹은 centroid를 쓰지만, `chinIndices`는 고정 connected patch `[34,35,975]` 안에서만 oriented midface plane signed projection max를 찾는다. `chinBottomIndices`는 이 evaluator 단계에서 사용하지 않는다. 후보 생성 파이프라인도 검수된 고정 seed 또는 triangle-adjacency connected patch를 사용한다. 즉 Tier-2의 A/C와 Pogonion 결정은 기존 시스템의 고정-topology + 사람 overlay 승인 철학을 연장하고, 얼굴 전체의 무제약 극값 B는 도입하지 않는다.
 
 기존 수식은 다음 구조다.
 
@@ -171,9 +171,9 @@ live g1 맵은 1220 vertices, 6912 indices, 1220 UV 및 fingerprint `57bdaf...f3
 - 한 세션은 기본 3초 동안 30 valid frame을 목표로 하고 최소 20개를 요구한다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DProfileCollector.cs:7-20,242-307`). 각 지표는 median과 MAD를 이용해 `3×MAD` 밖 값을 제거하고 inlier median·MAD·coverage로 confidence를 만든다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DProfileCollector.cs:401-462`).
 - 수집 전에는 yaw `5°`, pitch `7°`, roll `5°`, neutral-expression activation `0.5`, 연속 stable gate 5 frame을 적용한다(`apps/unity/MakeupAR/Assets/Scripts/Face3DSessionController.cs:18-30,150,357-425`). 이는 자세·표정 노이즈를 줄이지만 잘못 정의된 해부 patch를 고쳐 주지는 않는다.
 
-현재 Tier-2 공식도 이미 분명하다. 한 점 nasion 배열의 centroid(즉 vertex `15`)–nose-tip 거리가 `noseLength`, alar 좌우 patch centroid 거리가 `alarWidth`, malar patch의 vertex별 전방 투영 max가 `malarProjectionLeft/Right`다(`apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DMetricEvaluator.cs:176-180,203-221`). 본 결정은 nasion 계산 구조와 malar max는 유지하고, 표준 `alare` 의미와 충돌하는 alar centroid만 외측 argmax pair로 바꾼다.
+현재 Tier-2 공식은 한 점 nasion `15`–nose-tip 거리인 `noseLength`, 콧대 중앙선의 straight-line RMS와 lateral signed mean, alar 두 패치의 외측 extreme 사이 거리, malar 패치별 전방 projection max다. Unity와 오프라인 evaluator가 같은 수식과 tie-break를 사용한다.
 
-현재 모바일 표시 경로는 `metric.value`를 소수 3자리의 `normalized` scalar로 그대로 보여 주며 “기기 거리와 얼굴 크기 영향을 줄인 상대값”이라고 설명한다. 이 경로에는 인구집단 percentile이나 “넓다/좁다” 보정이 적용되지 않는다(`apps/mobile/src/features/face-3d/components/Face3DMetricGrid.tsx:27-60`; `apps/mobile/src/features/face-3d/types.ts:42-48`). 그러므로 **landmark 정의**, **동일인 반복성**, **사람 사이 구분력**, **사용자 해석용 기준분포**를 서로 다른 승인 단계로 유지한다.
+모바일 보고서는 값이 존재하는 11지표를 소수 3자리 normalized scalar와 쉬운 방향 설명으로 표시한다. 전체 프로필은 AI 요청과 `measurements.face3d`에 전달되고 백엔드 detail JSONB에 보존·복원된다. 이 경로에는 인구집단 percentile이나 “넓다/좁다” 등급 보정이 적용되지 않는다.
 
 ### 2.4 좌우 기준: Tier-2는 피사체의 해부학적 `Left/Right`로 고정한다
 
@@ -341,7 +341,7 @@ d_ab(v_a,v_b) = ||x_a(v_a) - x_b(v_b)||_2
 9. A 그룹은 primary frame에서 `E_s = ROI_A ∩ ROI_B − g1 − 이미 배정된 Tier-2 runtime patch`를 만든다. `E_s` 안에서 malar는 face-local anterior score, alar는 해당 side의 face-local lateral score의 전역 argmax를 초기 winner로 잡고, `1e-6` tie 집합에서 가장 작은 index를 택한다. 이 winner의 closed one-ring과 `E_s`의 교집합을 raw patch 시작점으로 삼아 최소 5개와 내부 winner 여유를 만족할 때까지 `E_s` 안에서 graph ring을 확장한다. 좌우 UV mirror pair union을 취한 뒤 disjoint와 연결성을 검사한다. `E_s`가 부족하거나 해부 coverage가 깨지면 해당 bilateral family를 unsupported로 둔다. target은 patch에 반드시 포함할 필요가 없다.
 10. 독립 authoring을 계속할 때 후보 JSON을 다른 capture의 보드에 `--patch`로 불러오면 고정 groups만 전달하고 blind stage를 유지하며 reviewer ID, registration, ROI, target, selection evidence, coverage verdict/note를 초기화한다. 반면 primary authoring에서 후보가 승인된 뒤 같은 고정 patch의 pose/subject coverage만 확인할 때는 `--patch ... --reprojection`을 사용한다. 이 모드는 patch를 처음부터 표시하고 vertex 편집을 잠그며 reviewer·registration·coverage만 초기화한다. Export는 `reviewMode=fixed_patch_reprojection`, `blindReviewCompleted=false`로 기록한다. 따라서 어느 모드에서도 다른 capture의 `Registration=pass`나 coverage 판정이 복사되지 않는다.
 11. raw patch를 17개에 동일 index로 재투영하고 각 capture에서 registration·framing·blind ROI/target·공개 후 coverage를 새로 판정한다. patch 안 runtime winner가 mesh-boundary vertex인 capture가 하나라도 있으면 ROI 안의 free 해부 surface로 patch를 확장한 뒤 17개를 다시 검토한다. 확장할 surface가 없으면 해당 그룹을 `unsupported_null`로 남긴다.
-12. export의 `reviewOutcome`과 `validation.completionStatus`가 `candidate_structural_pass`면 unsupported 없이 한 캡처의 구조 후보 조건을 통과한 상태다. `complete_with_unsupported`는 근거와 함께 검수 기록을 마쳤지만 완전한 runtime seed PASS가 아니다. 어느 상태도 두 reviewer 합의나 live 승인이 아니다. 최종 candidate에는 topology fingerprint, source 17 capture IDs, reviewer ID/시각, 좌우 UV pair hash, g1/Tier-2 disjoint audit, patch adjacency hash를 저장하고 단일 capture export를 바로 live map에 넣지 않는다.
+12. export의 `reviewOutcome`과 `validation.completionStatus`가 `candidate_structural_pass`면 unsupported 없이 한 캡처의 구조 후보 조건을 통과한 상태다. `complete_with_unsupported`는 근거와 함께 검수 기록을 마쳤지만 완전한 runtime seed PASS가 아니다. 보드 상태만으로 live 승인을 뜻하지 않으며, 최종 승격은 17-capture diagnostics·waiver manifest·promotion receipt를 함께 통과해야 한다.
 
 ### 3.3 malar patch의 해부 경계와 런타임 함수
 
@@ -382,7 +382,7 @@ Reviewer가 클릭할 target:
 - alar crease/ac(ala-cheek insertion fold).
 - cheek, nasal sidewall, columella, nostril 내부/후연.
 
-최종 `P_alar,Left/Right`는 각 최소 5 vertices, UV exact-paired, connected, g1/Tier-2-disjoint다. 런타임은 §1.2의 face-local lateral argmax를 사용한다. 조사 시작 시 legacy screen-space auto picker와 evaluator의 centroid 식은 폐기 대상이며, 현 reviewer의 face-local suggestion도 사람 검수를 돕는 보조 레이어일 뿐 runtime 승인값은 아니다.
+최종 `P_alar,Left/Right`는 각 최소 5 vertices, UV exact-paired, connected이며 Tier-2 그룹끼리 disjoint다. G1과의 overlap도 없다. 런타임은 §1.2의 face-local lateral extreme을 사용한다. 조사 시작 시 legacy screen-space auto picker와 evaluator의 centroid 식은 폐기했고, 제품 오너가 확인한 고정 patch만 runtime 승인값으로 사용한다.
 
 ### 3.5 nasion 중앙 1점 확정
 
@@ -398,21 +398,39 @@ Reviewer target은 다음 세 조건을 동시에 만족해야 한다.
 
 ### 3.6 구현 lockstep
 
-현재 authoring 단계에는 anatomical L/R, ROI/target/runtime patch 분리, rotatable 3D/subnasal preset, 고정 patch 재투영, mesh adjacency, g1/Tier-2 runtime patch disjoint, UV mirror, winner boundary, unsupported/null 및 capture별 coverage 기록이 구현돼 있다(`scripts/face3d/build-tier2-seed-review.mjs:683-1068`; `scripts/face3d/tier2-seed-review-core.mjs:312-898`). 이 도구의 PASS는 authoring 구조 판정일 뿐 runtime 변경이 아니다.
+authoring 보드는 anatomical L/R, ROI/target/runtime patch 분리, rotatable 3D/subnasal preset, 고정 patch 재투영, mesh adjacency, UV mirror, unsupported/null 및 capture별 coverage 기록을 제공했다. 제품 오너는 이 보드에서 해부 위치를 확인했고, 다음 lockstep 변경을 완료했다.
 
-사람 검수 뒤의 runtime 구현은 다음을 한 변경 묶음으로 처리해야 한다.
-
-- batch validation: 두 reviewer JSON의 blind ROI/target 합의도, capture별 coverage verdict/note, registration/framing, 17-capture gate를 계산한다. 현재 보드는 이를 자동 합의하지 않는다.
-- `Face3DMetricEvaluator.cs`: alar centroid를 patch-local lateral argmax pair로 변경하고, `chinIndices=[31..35]`의 oriented-midface signed-projection argmax를 `chinProjection`과 E-line이 같은 winner로 공유하도록 unit/formula test를 추가. malar와 nasion 식은 유지하고 Menton은 현재 projection에서 제외한다.
-- `Face3DSemanticMap.cs`: optional null 허용은 유지하되 nasion=1, bridge≥4, alar/malar≥5를 그룹별로 검증하고 controlled g1-overlap/null/disjoint/minimum-count test를 추가.
-- approval pipeline: 현재 `SEMANTIC_GROUPS`는 g1 12개에서 끝나고, runtime map clone도 그 목록만 복사한다(`scripts/face3d/semantic-candidate-core.mjs:7-157,230-233,1098-1115`). 승인 receipt는 groups를 직접 나열하지 않고 runtime map SHA-256·schema·topology를 기록해 semantic content를 간접 결박한다(`scripts/face3d/approve-semantic-map.mjs:432-478`). 따라서 Tier-2 정의·clone·검증과 receipt가 가리키는 runtime map을 함께 확장해야 한다.
-- live asset: Pogonion 동반 변경은 g1 asset을 `arkit-face3d-g1-reviewed-v2-pogonion`으로 갱신한다. Tier-2 필드를 포함한 g2 교체는 이와 분리하고 최종 사람 승인·17-capture gate 후에만 새 `mapId`와 receipt로 수행한다.
+- `Face3DMetricEvaluator.cs`: alar centroid를 patch-local lateral extreme pair로 변경하고, `chinIndices=[34,35,975]`의 oriented-midface signed-projection winner를 `chinProjection`과 E-line이 공유하게 했다. malar와 nasion 식은 유지하고 Menton은 projection에서 제외했다.
+- `Face3DSemanticMap.cs`: optional null의 G1 하위 호환을 유지하면서 nasion=1, bridge≥4, alar/malar≥5, Tier-2 상호 disjoint와 controlled G1 overlap을 검증한다.
+- approval pipeline: Tier-2 여섯 그룹을 candidate clone·검증·오프라인 evaluator·promotion receipt에 포함했다. 여섯 그룹은 G2에서 all-or-none이며 receipt가 live map SHA-256과 semantic content를 결박한다.
+- live asset: `arkit-face3d-g2-product-approved-v1`로 승격했고 exact index를 `TIER2_METRIC_CONTRACT.md`와 promotion receipt에 기록했다.
+- 제품 경로: 11지표를 모바일 AI 입력, 보고서 카드, DB detail payload 저장·복원까지 연결했다. legacy G1 프로필은 다섯 지표만 있어도 계속 처리한다.
 
 ---
 
 ## 4. 검증 계획과 합격 기준
 
-### 4.1 17-capture seed gate
+### 4.0 최종 승격 결과
+
+최종 승격은 임상 정확도 판정이 아니라 제품 오너의 해부 위치 승인과 오프라인 계산 계약을 묶는 engineering gate로 수행했다.
+
+| Gate | 결과 |
+|---|---|
+| Topology | 17/17에서 vertex 1220, index 6912, UV 1220, fingerprint exact match |
+| Index contract | nasion 1, bridge 6, alar 각 5, malar 각 10; 범위·그룹 내 중복 오류 0 |
+| Overlap | Tier-2 상호 overlap 0; G1 overlap은 nasion `15`, bridge `10,11,12,14,36`만 존재 |
+| 해부 coverage | 제품 오너가 2D 얼굴 overlay와 3D mesh 보드에서 모든 대상 부위를 직접 확인하고 승인 |
+| Formula parity | Unity와 오프라인 evaluator가 alar lateral extreme, malar max, nasal line 공식을 동일하게 계산 |
+| Finite coverage | 17/17에서 기존 G1 5개와 Tier-2 6개, 총 11지표가 모두 finite |
+| 승격 결박 | candidate, 17-capture diagnostics, waiver manifest, live map SHA-256을 promotion receipt로 결박 |
+
+17개 전체 값의 범위는 사람과 pose가 섞인 **gross sanity 범위**이며 동일인 반복 오차가 아니다. `noseLength 0.04062`, `nasalBridgeStraightness 0.01344`, `nasalAxisDeviation 0.00227`, `alarWidth 0.05489`, `malarProjectionLeft 0.03475`, `malarProjectionRight 0.03385`였다. 원 수치는 `artifacts/face3d/semantic-approval-g2/tier2-offline-diagnostics-17.json`에 보존한다.
+
+초기 계획의 별도 **3명 × 각 3회 neutral** 신규 반복성 촬영과 새 G2 실기기 runtime smoke는 제품 오너가 이번 통합에서 명시적으로 면제했다. 이를 통과했다고 기록하지 않으며, 11지표는 `faceScale` 상대값으로만 노출한다. 절대 mm·의료 진단·모집단 등급은 지원하지 않는다.
+
+### 4.1 초기 17-capture seed gate 계획(보관)
+
+아래 4.1–4.2는 자동 후보를 기각하고 사람 검수를 시작할 때 세운 원래 계획이다. 최종 제품 승격 판정은 위 4.0과 promotion manifest가 우선한다.
 
 아래 수치는 이 데이터에서 안정 사례의 점프가 대체로 `0.001–0.009 faceScale`, 명백한 screen-band 오선택이 `0.18–0.55`였던 분리를 이용한 **engineering gate**다. 임상 정확도나 모집단 기준이 아니다. 17개 faceScale 범위는 `0.0540–0.0567 m`라 `0.02/0.04/0.05 faceScale`은 각각 약 1.1/2.2/2.8 mm다.
 
@@ -444,7 +462,7 @@ Reviewer target은 다음 세 조건을 동시에 만족해야 한다.
 
 제품 오너의 첫 ROI 검수에서 만든 provisional 고정안에 `nasionIndices=[15]`를 적용해 17개 캡처를 다시 계산했다. 구조 오류는 `0/17`, 모든 그룹의 connected component는 `1`, bilateral exact mirror는 `17/17`이었다. nasion 위치 이동량은 pose 9 pair에서 median `0.00246`, max `0.01464 faceScale`, subject-01 neutral 6 pair에서 median `0.00742`, max `0.01477`로 위 engineering gate를 통과했다. `noseLength` pose range는 subject-01 `0.00226`, subject-02 `0.00184`, subject-03 `0.02077`이므로 subject-03은 기준 `≤0.02`를 소폭 초과한다. 또한 winner boundary hit는 alar L `4/17`, alar R `5/17`, malar L/R 각각 `17/17`이므로 현재 alar/malar patch는 확장·재검수가 필요하다. 재현 파일은 `/tmp/tier2-seed-analysis/candidate-validation.json`(SHA-256 `187cd16201ab9d664c60a65c19e16e9557d65453d6a71381c0e86f847c05f2ee`)과 `/tmp/tier2-seed-analysis/candidate-metrics.json`(SHA-256 `eaa452d7f036f1a0d846438019e5a4f4a465aa755168e2d548eea44f47faf622`)이다. 이는 1차 candidate precheck이며 두 reviewer의 17-capture 해부 coverage 승인이 아니다.
 
-### 4.2 별도 repeatability·노출 gate
+### 4.2 초기 repeatability·노출 계획(제품 오너 면제로 대체)
 
 17개 seed gate는 index/patch의 해부 타당성과 pose 강건성을 보는 것이지 제품 노출 승인이 아니다. repo 계약은 별도 **3명 × 각 3회 neutral**을 정확히 요구한다(`docs/face3d/TIER2_METRIC_CONTRACT.md:81-90`; `scripts/face3d/analyze-repeatability.mjs:57-103`). 분석기의 기본 합격은 between-subject MAD / within-subject MAD인 `discriminability >= 2.0`이며, Tier-2는 지표별 pass한 key만 노출 후보가 된다(`scripts/face3d/analyze-repeatability.mjs:108-120,145-183`).
 
@@ -456,7 +474,7 @@ Reviewer target은 다음 세 조건을 동시에 만족해야 한다.
 4. 사람 overlay approval, g2 map/receipt, Unity runtime finite event 증거 확인.
 5. 통과한 metric만 `FACE_3D_EXPOSED_METRIC_KEYS`에 편입.
 
-현재 17개는 세 사람의 pose triplet과 같은 사람 반복이 섞였으므로 2번을 대체하지 못한다. 따라서 이 문서로 그룹 정의는 결정하지만 **Tier-2 제품 노출은 UNVERIFIED/미승인**이다.
+현재 17개는 세 사람의 pose triplet과 같은 사람 반복이 섞였으므로 별도 3×3 repeatability를 대체하지 못한다. 제품 오너는 이 한계를 인지하고 신규 반복성·실기기 검증을 이번 통합에서 면제했으며, Tier-2 여섯 지표는 임상·백분위 라벨 없이 상대값으로 제품 경로에 편입했다.
 
 ---
 
@@ -467,16 +485,16 @@ Reviewer target은 다음 세 조건을 동시에 만족해야 한다.
 1. **Topology ≠ 임상적 homology.** Apple은 고정 topology를 보장하지만 alare/nasion/mz vertex를 보장하지 않는다. 3명 overlay와 이후 인구집단 확장이 필수다.
 2. **nasion의 controlled g1 overlap.** 중앙 vertex `15`는 `midfaceReferenceUpperIndices`와 공유된다. 이는 해부 위치를 옆 정점으로 왜곡하지 않기 위한 의도적 예외이며 approval receipt에 기록해야 한다.
 3. **legacy L/R 반전 artifact.** 현 authoring 도구는 피사체 해부 좌우를 강제하지만 교정 전 suggestions/index page는 반대 naming을 포함할 수 있다. legacy JSON을 승인 근거로 직접 import하지 않고 현 validation을 다시 통과시킨다.
-4. **alar 공식 불일치.** centroid width를 표준 al-al로 노출할 수 없다.
-5. **frame registration 상태.** capture 자체가 coordinate-space validation을 pending으로 기록한다. 기존 g1 승인 board와 별개로 Tier-2 17/17 registration attest가 필요하다.
+4. **alar 공식은 변경 완료.** centroid width를 폐기하고 고정 patch 내부 lateral extreme pair로 통일했다. 향후 회귀 시 표준 al-al 의미가 다시 깨지므로 Unity·오프라인 parity test를 유지한다.
+5. **registration 증거의 성격.** 캡처 JSON의 자동 coordinate-space flag는 pending이지만 제품 오너가 실제 2D 얼굴 overlay를 직접 확인했다. 이는 한 명의 제품 검수 증거이지 독립된 두 reviewer 임상 합의는 아니다.
 6. **표정·콧볼 flare.** FaceBase도 alare가 표정에 민감하다고 지적한다. neutral 표정 및 blendshape gate 없이 alarWidth를 비교하면 생체 형태와 표정이 섞인다.
 7. **표본 일반화 한계.** 해부 검증의 distinct subject는 3명뿐이다. ancestry, sex, age, nose/zygomatic morphology 범위를 대표하지 않는다.
-8. **기존 approval pipeline 누락.** 현 `semantic-candidate-core.mjs`는 Tier-2를 보존하지 않는다. 구현자가 live map만 편집하면 승인 receipt와 pipeline이 어긋난다.
+8. **approval pipeline lockstep 유지 필요.** 현재는 Tier-2 clone·검증·promotion receipt까지 구현했다. 향후 live map만 수동 편집하면 receipt가 실패하도록 테스트를 유지한다.
 9. **기존 tier2 index page는 승인 근거가 아니다.** 페이지는 두 capture의 공통 index만으로 해부 대응을 실증했다고 주장한다(`artifacts/face3d/tier2-seed-review/index.html:94-95`). 이는 Apple 보장과 17-capture 결과보다 강한 주장이라 본 결정문으로 폐기한다. 같은 페이지의 old 후보(`artifacts/face3d/tier2-seed-review/index.html:65-90`)도 현재 생성기 suggestions와 다르다.
-10. **실영상 alare subnasal 정보 한계.** 현 reviewer는 rotatable local-mesh 3D와 subnasal preset을 제공하지만 texture나 새 촬영 정보를 만들지는 않는다. convex ala와 crease/nostril 경계가 geometry만으로 모호하면 별도 textured pitch-up/subnasal capture 전까지 해당 exact alar indices를 승인할 수 없다.
+10. **실영상 alare subnasal 정보 한계.** 현 reviewer는 rotatable local-mesh 3D와 subnasal preset을 제공하지만 새 textured subnasal 촬영을 만들지는 않는다. 제품 오너가 현재 patch를 승인했어도 더 다양한 코 형태에서 crease/nostril 경계 일반화는 미확인이다.
 11. **작은 metric range의 거짓 안정성.** 서로 다른 오선택 vertex가 비슷한 전방 투영을 내면 malar 값만 안정적으로 보일 수 있다. point-distance·해부 ROI·boundary gate를 metric range보다 먼저 통과시킨다.
-12. **현재 runtime minimum 불일치.** 현 optional landmark validator는 3개만 있어도 받으므로 alar/malar 5개 authoring 계약을 runtime이 강제하지 못한다. g2 전환은 validator·approval·evaluator·receipt를 lockstep으로 바꾼 뒤에만 한다.
-13. **두 reviewer consensus 자동화 미완료.** 현 보드는 reviewer별 annotation과 한 캡처의 구조 gate를 만든다. 독립 JSON 간 ROI/target 합의도, coverage/gross-miss 17-board 집계, blind-review provenance를 계산하는 batch validator는 사람 검수와 함께 후속 구현해야 한다.
+12. **runtime minimum은 해결 완료.** G2 validator가 nasion=1, bridge≥4, alar/malar≥5를 강제한다. optional 그룹이 모두 없는 legacy G1만 하위 호환으로 허용한다.
+13. **독립 두 reviewer consensus는 수행하지 않음.** 제품 오너 한 명이 전 보드를 확인하고 승인했다. 제품 결정으로는 충분하다고 보았지만 rater 간 재현성 증거가 아니며 임상 정확도를 주장할 수 없다.
 14. **곡률 QA는 아직 미검증.** Katina식 곡률 후보를 ARKit 17개에 적용하는 실험은 이번 산출물에 포함하지 않았다. 해부 ROI가 없는 curvature extreme은 다른 landmark를 안정적으로 고를 수 있어 현재 A/C 결정의 근거로 쓰지 않는다. 두 reviewer ROI가 생긴 뒤 ROI 내부에서만 boundary/plateau 경고 보조값으로 시험한다.
 
 ### 미해결이지만 결정을 막지 않는 질문

@@ -48,12 +48,36 @@ export const METRIC_KEYS = Object.freeze([
   'centralProjectionScore',
 ]);
 
+export const TIER2_METRIC_KEYS = Object.freeze([
+  'noseLength',
+  'nasalBridgeStraightness',
+  'nasalAxisDeviation',
+  'alarWidth',
+  'malarProjectionLeft',
+  'malarProjectionRight',
+]);
+
+export const TIER2_METRIC_GROUP_KEYS = Object.freeze([
+  'nasionIndices',
+  'noseBridgeMidlineIndices',
+  'alarLeftIndices',
+  'alarRightIndices',
+  'malarApexLeftIndices',
+  'malarApexRightIndices',
+]);
+
 const METRIC_GROUP_MAPPING = Object.freeze({
   noseTipProjection: ['noseTipIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
   chinProjection: ['chinIndices', 'chinReferenceLeftIndices', 'chinReferenceRightIndices', 'chinReferenceUpperIndices'],
   upperLipToELine: ['upperLipIndices', 'noseTipIndices', 'chinIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
   lowerLipToELine: ['lowerLipIndices', 'noseTipIndices', 'chinIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
   centralProjectionScore: ['centralRegionIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
+  noseLength: ['nasionIndices', 'noseTipIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices'],
+  nasalBridgeStraightness: ['noseBridgeMidlineIndices', 'nasionIndices', 'noseTipIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices'],
+  nasalAxisDeviation: ['noseBridgeMidlineIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices'],
+  alarWidth: ['alarLeftIndices', 'alarRightIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices'],
+  malarProjectionLeft: ['malarApexLeftIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
+  malarProjectionRight: ['malarApexRightIndices', 'midfaceReferenceLeftIndices', 'midfaceReferenceRightIndices', 'midfaceReferenceUpperIndices'],
 });
 
 export class Face3DCandidateDiagnosticsError extends Error {
@@ -351,6 +375,66 @@ function signedDistanceToLine(point, lineOrigin, lineDirection, depthAxis, faceS
   return dot(subtract(point, closestPoint), depthAxis) / faceScale;
 }
 
+function normalizedDistance(left, right, faceScale) {
+  return magnitude(subtract(right, left)) / faceScale;
+}
+
+function normalizedResidualRmsToLine(points, lineOrigin, lineAxis, faceScale) {
+  const axisLength = magnitude(lineAxis);
+  requireCondition(
+    Number.isFinite(axisLength) && axisLength > GEOMETRY_EPSILON,
+    'semantic_landmark_geometry_invalid',
+    'nasion→noseTip 콧대 기준축이 퇴화했습니다.',
+  );
+  const direction = multiply(lineAxis, 1 / axisLength);
+  const sumSquared = points.reduce((sum, point) => {
+    const offset = subtract(point, lineOrigin);
+    const residual = subtract(offset, multiply(direction, dot(offset, direction)));
+    return sum + squaredMagnitude(residual);
+  }, 0);
+  return Math.sqrt(sumSquared / points.length) / faceScale;
+}
+
+function selectLateralExtremeVertex(
+  vertices,
+  indices,
+  planeOrigin,
+  planeNormal,
+  faceScale,
+  selectMaximum,
+  key,
+) {
+  const candidates = indices.map(index => {
+    const point = vertices[index];
+    requireCondition(
+      isFiniteTuple(point, 3),
+      'semantic_landmark_geometry_invalid',
+      `${key} 정점 ${index} 좌표가 잘못되었습니다.`,
+    );
+    const projection = signedPlaneProjection(point, planeOrigin, planeNormal, faceScale);
+    const score = selectMaximum ? projection : -projection;
+    requireCondition(
+      Number.isFinite(score),
+      'semantic_landmark_geometry_invalid',
+      `${key} 정점 ${index}의 lateral projection이 유한하지 않습니다.`,
+    );
+    return {index, point, projection, score};
+  });
+  const extremeScore = Math.max(...candidates.map(({score}) => score));
+  return candidates
+    .filter(({score}) => extremeScore - score <= GEOMETRY_EPSILON)
+    .sort((left, right) => left.index - right.index)[0];
+}
+
+function maxSignedPlaneProjection(vertices, indices, planeOrigin, planeNormal, faceScale) {
+  return Math.max(...indices.map(index => signedPlaneProjection(
+    vertices[index],
+    planeOrigin,
+    planeNormal,
+    faceScale,
+  )));
+}
+
 export function evaluateMetrics(localVertices, groups) {
   const noseTip = centroid(localVertices, groups.noseTipIndices, 'noseTipIndices');
   const upperLip = centroid(localVertices, groups.upperLipIndices, 'upperLipIndices');
@@ -420,11 +504,71 @@ export function evaluateMetrics(localVertices, groups) {
     lowerLipToELine: signedDistanceToLine(lowerLip, noseTip, eLineDirection, eLineDepthAxis, faceScale),
     centralProjectionScore: signedPlaneProjection(centralRegion, midfacePlane.origin, midfaceNormal, faceScale),
   };
+  const selectedTier2Vertices = {};
+  const hasTier2 = TIER2_METRIC_GROUP_KEYS.every(key => Array.isArray(groups[key]));
+  if (hasTier2) {
+    const nasion = centroid(localVertices, groups.nasionIndices, 'nasionIndices');
+    const bridgePoints = groups.noseBridgeMidlineIndices.map(index => localVertices[index]);
+    const midsagittalNormal = multiply(midfaceHorizontal, 1 / faceScale);
+    const alarLeft = selectLateralExtremeVertex(
+      localVertices,
+      groups.alarLeftIndices,
+      midfacePlane.origin,
+      midsagittalNormal,
+      faceScale,
+      false,
+      'alarLeftIndices',
+    );
+    const alarRight = selectLateralExtremeVertex(
+      localVertices,
+      groups.alarRightIndices,
+      midfacePlane.origin,
+      midsagittalNormal,
+      faceScale,
+      true,
+      'alarRightIndices',
+    );
+
+    metrics.noseLength = normalizedDistance(nasion, noseTip, faceScale);
+    metrics.nasalBridgeStraightness = normalizedResidualRmsToLine(
+      bridgePoints,
+      nasion,
+      subtract(noseTip, nasion),
+      faceScale,
+    );
+    metrics.nasalAxisDeviation = bridgePoints.reduce(
+      (sum, point) => sum + signedPlaneProjection(
+        point,
+        midfacePlane.origin,
+        midsagittalNormal,
+        faceScale,
+      ),
+      0,
+    ) / bridgePoints.length;
+    metrics.alarWidth = normalizedDistance(alarLeft.point, alarRight.point, faceScale);
+    metrics.malarProjectionLeft = maxSignedPlaneProjection(
+      localVertices,
+      groups.malarApexLeftIndices,
+      midfacePlane.origin,
+      midfaceNormal,
+      faceScale,
+    );
+    metrics.malarProjectionRight = maxSignedPlaneProjection(
+      localVertices,
+      groups.malarApexRightIndices,
+      midfacePlane.origin,
+      midfaceNormal,
+      faceScale,
+    );
+    selectedTier2Vertices.alarLeftVertexIndex = alarLeft.index;
+    selectedTier2Vertices.alarRightVertexIndex = alarRight.index;
+  }
   requireCondition(Object.values(metrics).every(Number.isFinite), 'face3d_metric_not_finite', '계산된 Face3D metric에 유한하지 않은 값이 있습니다.');
   return {
     faceScale,
     metrics,
     selectedPogonionVertexIndex: pogonion.index,
+    ...selectedTier2Vertices,
   };
 }
 
@@ -479,6 +623,10 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       derivedGeometry: {
         faceScale: evaluation.faceScale,
         selectedPogonionVertexIndex: evaluation.selectedPogonionVertexIndex,
+        ...(evaluation.alarLeftVertexIndex === undefined ? {} : {
+          selectedAlarLeftVertexIndex: evaluation.alarLeftVertexIndex,
+          selectedAlarRightVertexIndex: evaluation.alarRightVertexIndex,
+        }),
       },
       metrics: evaluation.metrics,
     };
@@ -489,14 +637,20 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
     '같은 capturePairId를 두 번 이상 넣을 수 없습니다. 중복 입력은 안정성 범위를 거짓으로 낮춥니다.',
   );
 
+  const evaluatedMetricKeys = Object.keys(captures[0].metrics);
   const metricSummary = Object.fromEntries(
-    METRIC_KEYS.map(key => [
+    evaluatedMetricKeys.map(key => [
       key,
       summarizeMetricValues(captures.map(capture => capture.metrics[key])),
     ]),
   );
+  const hasTier2 = TIER2_METRIC_GROUP_KEYS.every(key => Array.isArray(candidate.groups[key]));
   const groupVertexCounts = Object.fromEntries(
-    [...METRIC_GROUP_KEYS, ...UNUSED_CANDIDATE_GROUP_KEYS].map(key => [key, candidate.groups[key].length]),
+    [
+      ...METRIC_GROUP_KEYS,
+      ...UNUSED_CANDIDATE_GROUP_KEYS,
+      ...(hasTier2 ? TIER2_METRIC_GROUP_KEYS : []),
+    ].map(key => [key, candidate.groups[key].length]),
   );
 
   return {
@@ -508,6 +662,9 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       geometryEpsilon: GEOMETRY_EPSILON,
       metricUnit: 'normalized',
       pogonionSelection: 'maximum signed projection to oriented midface plane; ties within 1e-6 choose smaller vertex index',
+      alareSelection: hasTier2
+        ? 'face-local lateral extreme within fixed ala patch; ties within 1e-6 choose smaller vertex index'
+        : null,
       summaryMethod: 'median_and_raw_mad_without_outlier_rejection',
       madDefinition: 'median(abs(value - median))',
       numericPrecision: 'exported localVertices rounded to 6 decimals; JavaScript float64 differs from Unity native float32 runtime',
@@ -537,13 +694,20 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
         uvs: 'matched_by_embedded_unity_exact_native_arrays_fingerprint',
         note: 'arface_export UV coordinates are rounded to 6 decimals and cannot reproduce the native float32 UV hash',
       },
-      runtimeMetricGroupCount: METRIC_GROUP_KEYS.length,
-      runtimeMetricGroups: [...METRIC_GROUP_KEYS],
-      metricGroupMapping: METRIC_GROUP_MAPPING,
+      runtimeMetricGroupCount: METRIC_GROUP_KEYS.length + (hasTier2 ? TIER2_METRIC_GROUP_KEYS.length : 0),
+      runtimeMetricGroups: [
+        ...METRIC_GROUP_KEYS,
+        ...(hasTier2 ? TIER2_METRIC_GROUP_KEYS : []),
+      ],
+      evaluatedMetricKeys,
+      metricGroupMapping: Object.fromEntries(
+        evaluatedMetricKeys.map(key => [key, METRIC_GROUP_MAPPING[key]]),
+      ),
       validatedButUnusedByCurrentMetrics: {
         chinBottomIndices: 'Menton (턱 최하단); current five metrics do not consume this group',
       },
       chinProjectionLandmark: 'chinIndices fixed candidate patch; each capture selects the maximum signed projection to the oriented midface plane as the soft-tissue Pogonion / E-line endpoint (ties within 1e-6 choose the smaller vertex index)',
+      tier2RuntimeFormulaParity: hasTier2,
     },
     captures,
     metricSummary,
@@ -552,6 +716,10 @@ export function evaluateSemanticCandidateData(candidate, captureInputs, options 
       'chinProjection과 E-line은 chinIndices 고정 후보 패치에서 캡처별로 선택한 동일한 soft-tissue Pogonion 정점을 사용합니다. chinBottomIndices(Menton)는 검증만 하며 현재 5개 metric 계산에는 사용하지 않습니다.',
       '오프라인 수식은 Unity와 같지만 JSON localVertices 반올림과 JavaScript/Unity 수치 정밀도 차이로 bit-identical runtime 결과는 아닙니다.',
       '포즈가 다른 소수 캡처의 median/MAD/range는 실험용 안정성 지표이며 모집단 일반화 근거가 아닙니다.',
+      ...(hasTier2 ? [
+        'Tier-2 여섯 값은 faceScale로 정규화된 상대값이며 절대 mm 또는 임상 진단값이 아닙니다.',
+        'nasalAxisDeviation은 해부학적 Left가 음수, Right가 양수입니다.',
+      ] : []),
     ],
   };
 }

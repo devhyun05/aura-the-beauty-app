@@ -12,9 +12,13 @@ import {
   evaluateSemanticCandidateData,
   Face3DCandidateDiagnosticsError,
   METRIC_KEYS,
+  TIER2_METRIC_KEYS,
   runCli,
 } from './evaluate-semantic-candidate.mjs';
-import {SEMANTIC_GROUPS} from './semantic-candidate-core.mjs';
+import {
+  SEMANTIC_GROUPS,
+  TIER2_BILATERAL_GROUP_PAIRS,
+} from './semantic-candidate-core.mjs';
 
 // Same geometry as Face3DCoreTests.Evaluate_ComputesNormalizedProjectionMetricsFromMappedIndices,
 // expanded to satisfy the production candidate minimum vertex counts.
@@ -43,6 +47,51 @@ for (const {key, minimumCount} of SEMANTIC_GROUPS) {
   }
 }
 
+const G2_GROUPS = {
+  nasionIndices: [],
+  noseBridgeMidlineIndices: [],
+  alarLeftIndices: [],
+  alarRightIndices: [],
+  malarApexLeftIndices: [],
+  malarApexRightIndices: [],
+};
+function appendTier2Vertex(key, point) {
+  G2_GROUPS[key].push(BASE_VERTICES.length);
+  BASE_VERTICES.push(point);
+}
+appendTier2Vertex('nasionIndices', [0, 0.8, 0.4]);
+for (let step = 1; step <= 6; step += 1) {
+  const t = step / 7;
+  appendTier2Vertex('noseBridgeMidlineIndices', [
+    0.2,
+    0.8 - (0.3 * t),
+    0.4 + (0.6 * t),
+  ]);
+}
+for (const point of [
+  [-0.30, 0.2, 0.6],
+  [-0.40, 0.2, 0.6],
+  [-0.25, 0.2, 0.6],
+  [-0.40, 0.9, 0.9],
+  [-0.20, 0.2, 0.6],
+]) appendTier2Vertex('alarLeftIndices', point);
+for (const point of [
+  [0.30, 0.2, 0.6],
+  [0.45, 0.2, 0.6],
+  [0.20, 0.2, 0.6],
+  [0.45, 0.9, 0.9],
+  [0.25, 0.2, 0.6],
+]) appendTier2Vertex('alarRightIndices', point);
+for (const z of [0.5, 0.62, 0.3, 0.61, 0.4]) {
+  appendTier2Vertex('malarApexLeftIndices', [-0.8, 0.1, z]);
+}
+for (const z of [0.4, 0.55, 0.2, 0.54, 0.3]) {
+  appendTier2Vertex('malarApexRightIndices', [0.8, 0.1, z]);
+}
+// UV mirror fixture uses exactly one centerline self-pair and therefore needs an
+// odd vertex count. This vertex is topology-only and belongs to no semantic group.
+BASE_VERTICES.push([0, 1.4, -0.2]);
+
 const chinDefinition = SEMANTIC_GROUPS.find(({key}) => key === 'chinIndices');
 assert.deepEqual(chinDefinition?.fixedIndices, [34, 35, 975]);
 assert.equal(chinDefinition?.minimumCount, 3);
@@ -62,6 +111,14 @@ function buildMirrorUvFixture(vertexCount) {
     ...GROUPS.chinReferenceLeftIndices.map((leftIndex, index) => [
       leftIndex,
       GROUPS.chinReferenceRightIndices[index],
+    ]),
+    ...G2_GROUPS.alarLeftIndices.map((leftIndex, index) => [
+      leftIndex,
+      G2_GROUPS.alarRightIndices[index],
+    ]),
+    ...G2_GROUPS.malarApexLeftIndices.map((leftIndex, index) => [
+      leftIndex,
+      G2_GROUPS.malarApexRightIndices[index],
     ]),
   ];
   const used = new Set(desiredPairs.flat());
@@ -131,12 +188,21 @@ function transformVertices(vertices, scale, translation) {
   });
 }
 
-function buildCandidate(topology) {
+function buildCandidate(topology, includeTier2 = false) {
+  const groups = structuredClone(GROUPS);
+  if (includeTier2) Object.assign(groups, structuredClone(G2_GROUPS));
   const selectedPairs = (leftGroupKey, rightGroupKey) =>
-    GROUPS[leftGroupKey].map((leftIndex, index) => [
+    groups[leftGroupKey].map((leftIndex, index) => [
       leftIndex,
-      GROUPS[rightGroupKey][index],
+      groups[rightGroupKey][index],
     ]);
+  const tier2GroupPairs = includeTier2
+    ? TIER2_BILATERAL_GROUP_PAIRS.map(({leftGroupKey, rightGroupKey}) => ({
+        leftGroupKey,
+        rightGroupKey,
+        pairs: selectedPairs(leftGroupKey, rightGroupKey),
+      }))
+    : [];
   return {
     schemaVersion: 'aura.face3d-semantic-candidate.v1',
     candidateId: 'focused-offline-evaluator-fixture',
@@ -177,9 +243,10 @@ function buildCandidate(topology) {
             'chinReferenceRightIndices',
           ),
         },
+        ...tier2GroupPairs,
       ],
     },
-    groups: structuredClone(GROUPS),
+    groups,
   };
 }
 
@@ -291,6 +358,50 @@ for (const [key, expected] of Object.entries(unityGoldenMetrics)) {
     `${key} must match the Unity Face3DCoreTests golden value`,
   );
 }
+
+const g2Candidate = buildCandidate(topology, true);
+const g2Diagnostics = evaluateSemanticCandidateData(
+  g2Candidate,
+  [{payload: captureA}, {payload: captureB}],
+  {generatedAtUtc: '2026-01-01T00:00:00.000Z'},
+);
+assert.equal(g2Diagnostics.validation.tier2RuntimeFormulaParity, true);
+assert.equal(g2Diagnostics.validation.runtimeMetricGroupCount, 17);
+assert.deepEqual(
+  g2Diagnostics.validation.evaluatedMetricKeys,
+  [...METRIC_KEYS, ...TIER2_METRIC_KEYS],
+);
+const tier2GoldenMetrics = {
+  noseLength: Math.sqrt(0.45) / 2,
+  nasalBridgeStraightness: 0.1,
+  nasalAxisDeviation: 0.1,
+  alarWidth: 0.425,
+  malarProjectionLeft: 0.31,
+  malarProjectionRight: 0.275,
+};
+for (const [key, expected] of Object.entries(tier2GoldenMetrics)) {
+  assert.ok(
+    Math.abs(g2Diagnostics.captures[0].metrics[key] - expected) < 1e-12,
+    `${key} must match the Unity Tier-2 golden value`,
+  );
+  assert.ok(
+    Math.abs(
+      g2Diagnostics.captures[0].metrics[key]
+        - g2Diagnostics.captures[1].metrics[key],
+    ) < 1e-12,
+    `${key} should be invariant under translation and uniform scale`,
+  );
+}
+assert.equal(
+  g2Diagnostics.captures[0].derivedGeometry.selectedAlarLeftVertexIndex,
+  G2_GROUPS.alarLeftIndices[1],
+  'left alare ties must choose the smaller vertex index',
+);
+assert.equal(
+  g2Diagnostics.captures[0].derivedGeometry.selectedAlarRightVertexIndex,
+  G2_GROUPS.alarRightIndices[1],
+  'right alare ties must choose the smaller vertex index',
+);
 
 const clearlyForwardPogonionIndex = GROUPS.chinIndices.at(-1);
 const clearlyForwardVertices = structuredClone(BASE_VERTICES);

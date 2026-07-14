@@ -1,95 +1,92 @@
-# Face3D Tier-2 지표 계약 (코 형태 · 광대) — 코드 착수 전 동결 문서
+# Face3D G2 지표 계약 — 코 형태·앞광대·기존 G1
 
-> Wave B0 산출물. 이 문서가 동결되기 전에는 Tier-2 코드(B1)를 시작하지 않는다.
-> 근거: 얼굴 측정 통합 도입 계획 v2(Codex REWORK 병합본). 기존 v1 계약
-> (`aura.face3d-profile.v1`, gateVersion `face3d-gate-v1`, live 맵
-> `arkit-face3d-g1-reviewed-v2-pogonion`)은 그대로 유지되며, Tier-2는 전부 **optional**이다.
+상태: **구현·제품 오너 해부 검수·17캡처 오프라인 승격 완료**
+live map: `arkit-face3d-g2-product-approved-v1`
+프로필 스키마: `aura.face3d-profile.v1` (하위 호환 유지)
 
-## 0. 원칙
+## 0. 제품 경계
 
-1. **schemaVersion v1 유지.** 신규 지표·그룹은 optional — g1 맵(신규 그룹 없음)으로도
-   로드·검증·직렬화·RN 파싱이 전부 통과해야 한다(회귀 테스트 필수).
-2. **정규화는 한 곳에서 1회.** `SignedPlaneProjection`은 이미 `faceScale`
-   (= `|midfaceRight − midfaceLeft|`, `Face3DMetricEvaluator.cs:57-58`)로 나눈 값을
-   반환한다. **호출부에서 다시 나누지 않는다.** 신규 헬퍼(정규화 점간거리·선적합
-   잔차 RMS)도 나눗셈을 헬퍼 내부 1곳으로 통일한다.
-3. **노출 게이트 = repeatability 지표별 pass.** 오프라인 diagnostics(median/MAD/range)는
-   후보 sanity 확인용일 뿐 노출 근거가 아니다. B2 강화판(3명×3 neutral 강제)의
-   지표별 pass만 RN `FACE_3D_EXPOSED_METRIC_KEYS` 편입 근거가 된다.
-4. 사용자 표현은 외관 trait 언어만 사용한다(의료·해부학 단정 금지).
+- 이 값들은 ARKit/TrueDepth 얼굴 mesh의 local 3D 좌표를 `faceScale`로 나눈 **무차원 상대값**이다.
+- 절대 mm, 의료 진단, 모집단 백분위가 아니다. 보고서에서는 값과 방향 설명만 제공한다.
+- 기존 G1 프로필에는 Tier-2 여섯 키가 없을 수 있다. 파서·DB 복원·보고서는 이 경우 기존 다섯 키만 정상 처리한다.
+- 제품 오너 결정에 따라 신규 `3명 × 각 3회 neutral` 실기기 반복성 수집은 이번 G2 승격에서 면제했다. 대신 기존 17개 ARFace export의 topology exact match와 11지표 finite 계산을 승격 gate로 사용했다. 이 면제는 임상 정확도나 인구집단 일반화를 뜻하지 않는다.
 
-## 1. 신규 시맨틱 그룹 (전부 optional)
+## 1. 고정 topology 그룹
 
-| 그룹 | 용도 | disjointness |
+| 그룹 | index 계약 | 런타임 역할 |
+|---|---:|---|
+| `nasionIndices` | `[15]` 정확히 1점 | 코뿌리 고정 proxy |
+| `noseBridgeMidlineIndices` | `[10,11,12,13,14,36]`, 최소 4점 | 콧대 중앙선 점열 |
+| `alarLeftIndices` | `[202,204,292,298,325]`, 최소 5점 | 해부학적 Left 콧볼 surface patch |
+| `alarRightIndices` | `[651,653,727,733,760]`, 최소 5점 | 해부학적 Right 콧볼 surface patch |
+| `malarApexLeftIndices` | `[153,155,178,353,354,377,378,388,389,390]`, 최소 5점 | 해부학적 Left 앞광대 patch |
+| `malarApexRightIndices` | `[602,604,627,784,785,808,809,819,820,821]`, 최소 5점 | 해부학적 Right 앞광대 patch |
+
+Tier-2 그룹끼리는 교집합이 없어야 한다. G1과는 해부 위치를 왜곡하지 않기 위해 다음만 controlled overlap으로 허용한다.
+
+- `nasionIndices`: `15`
+- `noseBridgeMidlineIndices`: `10,11,12,14,36`
+
+그 밖의 G1/Tier-2 overlap은 runtime validator와 승인 파이프라인이 거부한다. 모든 optional 그룹이 없는 G1 맵은 계속 허용한다. 하나라도 존재하는 G2 승인 후보는 여섯 그룹을 전부 갖춰야 한다.
+
+## 2. 좌우·기준계
+
+- 해부학적 Left = 셀피 화면에서 사용자가 보는 자신의 왼쪽 = face-local lateral 음수.
+- 해부학적 Right = 셀피 화면에서 자신의 오른쪽 = face-local lateral 양수.
+- `midfaceOrigin`과 전방 `midfaceNormal`은 기존 G1 중안면 기준면을 재사용한다.
+- lateral normal은 `normalize(midfaceRight - midfaceLeft)`다.
+- `faceScale = |midfaceRight - midfaceLeft|`다.
+- 동률은 정규화 projection 차이 `≤ 1e-6`이면 작은 vertex index를 선택한다.
+
+## 3. 11개 측정 공식
+
+기존 G1 다섯 지표는 `noseTipProjection`, `chinProjection`, `upperLipToELine`, `lowerLipToELine`, `centralProjectionScore`다. `chinProjection`과 E-line은 `[34,35,975]` patch에서 중안면 기준면 전방 projection이 가장 큰 soft-tissue Pogonion proxy를 공유한다.
+
+Tier-2 여섯 지표는 다음과 같다.
+
+| 지표 | 공식 | 사용자 해석 |
 |---|---|---|
-| `nasionIndices` | 코 뿌리(nasion) 중심 | 기존 12그룹과 교집합 금지 |
-| `noseBridgeMidlineIndices` | 콧대 중앙선 점열(nasion→noseTip 순서 무관, ≥4점) | 〃 |
-| `alarLeftIndices` / `alarRightIndices` | 콧볼 좌/우 외측 | 〃 |
-| `malarApexLeftIndices` / `malarApexRightIndices` | 광대 최고점 후보 ROI 좌/우 | 〃 |
+| `noseLength` | `distance(nasion[15], noseTipCentroid) / faceScale` | 클수록 얼굴 폭 대비 코뿌리–코끝 길이가 길다 |
+| `nasalBridgeStraightness` | nasion–noseTip 고정 3D 직선에 대한 bridge 점들의 RMS 잔차 `/ faceScale` | 작을수록 기준선에 가깝다 |
+| `nasalAxisDeviation` | bridge 점들의 lateral signed projection 평균 `/ faceScale` | 0 중앙, 음수 Left, 양수 Right |
+| `alarWidth` | Left patch의 lateral minimum과 Right patch의 lateral maximum 사이 3D 거리 `/ faceScale` | 클수록 얼굴 폭 대비 콧볼이 넓다 |
+| `malarProjectionLeft` | Left patch의 전방 signed projection 최댓값 | 클수록 왼쪽 앞광대가 더 전방이다 |
+| `malarProjectionRight` | Right patch의 전방 signed projection 최댓값 | 클수록 오른쪽 앞광대가 더 전방이다 |
 
-- `Face3DSemanticMap.cs`의 기존 12그룹(noseTip/chin/chinBottom/upperLip/lowerLip/
-  midfaceReference L·R·Upper/chinReference L·R·Upper/centralRegion)은 **필수 유지**.
-- 신규 그룹 검증 규칙: 존재하면 "비어있지 않음 + 유효 vertex 범위 + 기존·신규 그룹과
-  disjoint"를 검증하고, 없으면 게터가 null을 반환한다(로드는 성공).
+`alarWidth`는 patch centroid 거리가 아니다. 표준 alare의 “콧방울 최외측점” 의미를 유지하기 위해 사람별 mesh 좌표에서 고정 patch 내부 lateral extreme을 고른다. `malarProjection`은 `zy-zy` 옆광대 폭이 아니라 maxillozygomatic 인접 **앞광대 전방 돌출 proxy**다.
 
-## 2. Tier-2 지표 정의
+## 4. 수집·직렬화·저장·표시
 
-기준계 정의(기존 evaluator 명칭 그대로):
+1. Unity evaluator가 한 frame의 11지표를 계산한다. Tier-2 그룹 부재·퇴화는 해당 optional 값만 null이며 기본 frame을 차단하지 않는다.
+2. `Face3DProfileCollector`가 각 지표의 median/MAD/confidence/validFrameCount를 집계한다.
+3. canonical profile JSON은 여섯 optional 키도 직렬화하며, 계산 불가는 `value:null`이다.
+4. 모바일은 프로필 전체를 AI 요청의 `face3d`와 원본 `measurements.face3d`에 필터 없이 전달한다.
+5. 백엔드는 전체 request payload를 detail JSONB에 저장하고 상세 GET에서 그대로 돌려준다. 목록 응답만 용량을 위해 measurements를 제외한다.
+6. 보고서 상세 화면은 세션 프로필 또는 DB에서 복원한 `measurements.face3d`를 사용해 값이 존재하는 11개 카드를 표시한다. 각 카드는 숫자와 쉬운 방향 설명을 함께 표시한다.
+7. AI prompt는 여섯 Tier-2 의미·좌우 부호·null·비임상 상대값 경계를 명시한다.
 
-- `midfaceOrigin`, `midfaceNormal`: 기존 전후(anterior) 기준면 (`Face3DMetricEvaluator.cs:64-90`).
-- **중선(midsagittal) 평면 [신설]**: origin = `midfaceOrigin`,
-  normal = `normalize(midfaceHorizontal)` (= 좌→우 축). 기존 `midfaceNormal`(전후)과
-  혼동 금지 — 좌/우 부호를 갖는 유일한 평면이다.
-- `faceScale` = `|midfaceRight − midfaceLeft|`.
+## 5. 승인 및 재현 증거
 
-| 지표 키 | 필요 그룹 | 식 (local vertex, 무차원) | L/R |
-|---|---|---|---|
-| `noseLength` | nasion + noseTip(기존) | `dist(centroid(nasion), centroid(noseTip)) / faceScale` | 단일 |
-| `nasalBridgeStraightness` | noseBridgeMidline | nasion중심→noseTip중심 3D 직선에 대한 중앙선 점들의 **잔차 RMS / faceScale** (0 = 완전 직선) | 단일 |
-| `nasalAxisDeviation` | noseBridgeMidline | 중앙선 점들의 **중선 평면 부호거리 평균 / faceScale** (양수 = 피사체 왼쪽으로 치우침) | 단일(부호) |
-| `alarWidth` | alarLeft + alarRight | `dist(centroid(alarLeft), centroid(alarRight)) / faceScale` | 단일 |
-| `malarProjectionLeft` / `Right` | malarApexLeft / Right | ROI 내 각 vertex의 `SignedPlaneProjection(v, midfaceOrigin, midfaceNormal, faceScale)` **최댓값** — 추가 나눗셈 금지 | **2지표(평균 금지)** |
+- 제품 오너 primary 승인: `artifacts/face3d/tier2-seed-reprojection-v1/primary-approved-patch.json`
+- 재현 가능한 G2 후보: `artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.candidate.json`
+- 17캡처 11지표 진단: `artifacts/face3d/semantic-approval-g2/tier2-offline-diagnostics-17.json`
+- 면제·승격 manifest: `artifacts/face3d/semantic-approval-g2/tier2-promotion-manifest.json`
+- live map을 hash로 결박한 receipt: `artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.promotion-receipt.json`
 
-- 신규 헬퍼 2개(B1에서 구현): ① `NormalizedDistance(a, b, faceScale)`,
-  ② `LineFitResidualRms(points, faceScale)` (최소자승 3D 직선, 반환 전 1회만 정규화).
-- 그룹 부재(g1 맵) 또는 표본 부족 시 해당 지표는 **null** — 프레임 finite 계약은
-  "존재하는 지표만 finite"로 완화한다(`Face3DProfileCollector` Tier-2 optional 집계).
+재현 명령:
 
-## 3. 데이터·코드 lockstep 체크리스트 (B1)
+```bash
+npm run face3d:test:tier2-promotion
+npm run face3d:test:semantic-diagnostics
+npm run mobile:test:face3d
+npm run mobile:typecheck
+services/backend/.venv/bin/pytest services/backend/tests/test_analysis_measurements_payload.py -q
+```
 
-한 커밋에서 함께 움직여야 하는 지점 — 하나라도 빠지면 v1 회귀 또는 조용한 미노출:
+## 6. 남은 제품 리스크
 
-1. Unity: `Face3DSemanticMap.cs`(optional 분기·disjointness) ·
-   `Face3DMetricEvaluator.cs`(중선 평면 + 헬퍼 2개) ·
-   `Face3DContracts.cs`(신규 키 nullable 직렬화, `IsFinite`는 기본 5지표만 유지) ·
-   `Face3DProfileCollector.cs`(optional 집계).
-2. **live 자산 + 로더**: template(`docs/face3d/ARKitFaceSemanticMapV1.template.json`)뿐
-   아니라 live 리소스 `Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json`
-   (mapId `arkit-face3d-g1-reviewed-v2-pogonion`)과 `Face3DSessionController.cs` 로더 경로
-   (`SemanticMapResourcePath`) 기준으로 **g1 맵이 신규 그룹 없이 로드 통과**함을
-   회귀 테스트로 증명. g2 전환 = live 리소스 교체 + mapId 갱신 + receipt.
-3. RN: `face-3d/types.ts`를 3-리스트로 분리 —
-   `FACE_3D_REQUIRED_METRIC_KEYS`(기존 5) / `FACE_3D_OPTIONAL_METRIC_KEYS`(Tier-2 6) /
-   `FACE_3D_EXPOSED_METRIC_KEYS`(B2 pass 화이트리스트). `Face3DMetrics`는
-   required Record + optional Partial 교차 타입. `Face3DMetricGrid`는 exposed 순회.
-   `face3DContract.ts` 파서는 신규 키 optional 파싱 + **v1 프로필 파싱 회귀 테스트**.
-4. 오프라인: `semantic-candidate-core.mjs`/`evaluate-semantic-candidate.mjs` SEED 기하
-   line-parity, `Face3DCoreTests.cs`, `test-evaluate-semantic-candidate.mjs`.
-5. 선택(같은 재빌드 편승): `FinishSession`에서 ARSession 비활성화 — A0 lease의
-   "로딩 중 카메라 재점등" 제거. AR 필터 흐름 세션 재시작 비용 검증 후에만.
-
-## 4. 승인·노출 사이클 (B2)
-
-1. 시드 정의 → 기기 캡처: ① 오버레이 3명×(neutral/yaw L/R) ② **반복성 3명×3 neutral(별도 세트)**.
-2. candidates → diagnostics(sanity) → validate(재투영) → review-board → 사람 오버레이
-   검수 → 매니페스트(3명 attest) → approve → **g2 mapId** + receipt.
-3. `analyze-repeatability` **강화판**: 매니페스트 검증에서 정확히 **피험자 3명 ×
-   각 3 neutral 캡처**를 강제(미달·초과·비-neutral → 실행 거부). 산출된 지표별
-   pass만 `FACE_3D_EXPOSED_METRIC_KEYS`에 편입하고 `FACE3D_GATE_STATUS.json`에 기록.
-4. 실기기(B3, 사용자): UnityFramework 재빌드 → events.jsonl로 신규 지표 finite·수집
-   확인 → g2 전환. 그 전까지 프로덕션은 g1 + 신규 지표 null.
-
-## 5. 제외·경계 (재확인)
-
-- 콧볼(오블리크 각도 의존)·광대는 confidence 하향 라벨로 노출한다.
-- 눈밑/팔자 등 국소 굴곡, 절대 mm, 안구·지방량·이중턱은 이 계약 범위 밖(기존 판정 유지).
+- 17개 파일은 17명이 아니라 3명의 pose 세트와 같은 사람 반복을 포함한다.
+- alare·nasion·광대는 넓고 완만한 연조직 부위라 임상 landmark 재현성을 주장할 수 없다.
+- 표정, 콧볼 flare, pose, ARKit mesh fitting 오차가 값에 섞일 수 있다.
+- “넓다/좁다”, “많이/적게 나왔다” 같은 등급 표현을 추가하려면 더 다양한 모집단 기준분포가 별도로 필요하다.
+- 이번 승격에서 면제한 신규 반복성 자료는 향후 품질 개선·threshold calibration에는 여전히 유용하다.

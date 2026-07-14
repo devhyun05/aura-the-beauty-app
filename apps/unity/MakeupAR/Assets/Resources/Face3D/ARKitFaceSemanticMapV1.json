@@ -1,6 +1,6 @@
 {
   "schemaVersion": "aura.face3d-semantic-map.v1",
-  "mapId": "arkit-face3d-g1-reviewed-v2-pogonion",
+  "mapId": "arkit-face3d-g2-product-approved-v1",
   "source": "arkit_face_mesh",
   "gateVersion": "face3d-gate-v1",
   "topologyFingerprint": {
@@ -171,5 +171,54 @@
     794,
     796,
     803
+  ],
+  "nasionIndices": [
+    15
+  ],
+  "noseBridgeMidlineIndices": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    36
+  ],
+  "alarLeftIndices": [
+    202,
+    204,
+    292,
+    298,
+    325
+  ],
+  "alarRightIndices": [
+    651,
+    653,
+    727,
+    733,
+    760
+  ],
+  "malarApexLeftIndices": [
+    153,
+    155,
+    178,
+    353,
+    354,
+    377,
+    378,
+    388,
+    389,
+    390
+  ],
+  "malarApexRightIndices": [
+    602,
+    604,
+    627,
+    784,
+    785,
+    808,
+    809,
+    819,
+    820,
+    821
   ]
 }

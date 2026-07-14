@@ -1,6 +1,8 @@
 # TrueDepth Tier-2 시드 사람 검수 가이드
 
-상태: **human review handoff · runtime 미승인**
+상태: **human review 완료 · G2 runtime 승격 완료**
+
+이 문서는 검수 보드의 조작·판정 절차를 보존한다. 최종 승인 index와 제품 경로는 `TIER2_METRIC_CONTRACT.md`가 우선한다.
 결정 근거: `docs/face3d/TIER2_LANDMARK_SEED_DECISION_KO.md`
 
 ## 1. 이 검수의 목적
@@ -55,7 +57,7 @@ node scripts/face3d/build-tier2-seed-review.mjs \
 6. ROI 안에서 `대표 target 1점`을 표시한다. target도 증거이며 g1이어도 된다. 런타임 winner나 고정 index를 뜻하지 않는다.
 7. 필수 그룹마다 ROI+target이 준비됐는지 확인한다. blind 단계에서 unsupported로 판정하는 그룹은 대신 `coverageVerdict=fail`, coverage note, 구체적인 reason을 입력한다.
 8. `1차 해부 표시 완료 · 자동 후보 공개`를 누른다. 공개는 되돌릴 수 없고, 이때까지 suggestion과 imported/fixed patch는 보이지 않는다. JSON 복사·저장 버튼도 공개 전에는 비활성화돼 blind 증거만 따로 export할 수 없다.
-9. 공개된 `고정 patch`를 검토·수정한다. patch의 모든 index는 reviewer ROI 안에 있어야 하고 g1/Tier-2 runtime patch와 disjoint여야 한다. target을 반드시 포함할 필요는 없다.
+9. 공개된 `고정 patch`를 검토·수정한다. patch의 모든 index는 reviewer ROI 안에 있어야 한다. Tier-2 그룹끼리는 disjoint이며, G1과는 nasion `15` 및 bridge `10,11,12,14,36`만 controlled overlap으로 허용한다. target을 반드시 포함할 필요는 없다.
 10. 3D에서 정면, **피사체 자신의** Left/Right 쪽 45도, subnasal 보기를 바꾸며 patch의 표면 위치와 연결성을 확인한다. 3D에는 texture가 없으므로 alar crease처럼 색/주름으로 구분되는 경계를 새로 판정할 수는 없다(`scripts/face3d/build-tier2-seed-review.mjs:796-803,1004-1037`).
 11. `candidate_review` 그룹은 suggestion/fixed patch를 확인한 뒤 이 캡처의 해부 coverage를 `pass|fail`로 판정하고 coverage note를 작성한다. 자동 후보를 본 뒤 ROI/target을 바꾸면 note에 이유를 남기고 독립 검수 원칙을 훼손하지 않았는지 다시 확인한다.
 12. 빨간 검증 목록을 확인하고 `임시 검수 JSON 저장`으로 내보낸다. export의 `reviewOutcome`과 `validation.completionStatus`가 `candidate_structural_pass`면 이 캡처의 모든 runtime 후보가 로컬 구조 gate를 통과했다는 뜻이다. `complete_with_unsupported`는 unsupported 판정까지 빠짐없이 끝났지만 완전한 runtime 후보가 아니라는 뜻이다. 둘 다 두 reviewer 합의나 live map 승인을 뜻하지 않는다.
