@@ -413,6 +413,129 @@ class OpenAIAnalysisService:
 
     return result
 
+  def _structured_image_content_type(self, source_image_bytes: bytes) -> str:
+    return "image/png" if source_image_bytes.startswith(b"\x89PNG\r\n\x1a\n") else "image/jpeg"
+
+  def _analyze_structured_json_sync(
+    self,
+    developer_prompt: str,
+    user_prompt: str,
+    json_schema: dict[str, Any],
+    source_image_bytes: bytes | None,
+    max_tokens: int,
+  ) -> dict[str, Any]:
+    provider = self.settings.analysis_provider
+    schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
+
+    if provider == "bedrock":
+      model_id = self.settings.effective_analysis_model_id
+      if not model_id:
+        raise AppError(
+          503,
+          "BEDROCK_ANALYSIS_NOT_CONFIGURED",
+          "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
+        )
+      content: list[dict[str, Any]] = [
+        {
+          "type": "text",
+          "text": f"{user_prompt}\nRequired JSON schema: {schema_instruction}",
+        },
+      ]
+      if source_image_bytes is not None:
+        content.append(
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": self._structured_image_content_type(source_image_bytes),
+              "data": base64.b64encode(source_image_bytes).decode("utf-8"),
+            },
+          },
+        )
+      response = self._bedrock_runtime_client().invoke_model(
+        modelId=model_id,
+        body=json.dumps(
+          {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "temperature": 0.1,
+            "system": developer_prompt,
+            "messages": [{"role": "user", "content": content}],
+          },
+          ensure_ascii=False,
+        ),
+        accept="application/json",
+        contentType="application/json",
+      )
+      response_payload = json.loads(response["body"].read())
+      output_text = self._extract_bedrock_output_text(response_payload)
+    elif provider == "openai":
+      content = [{"type": "input_text", "text": user_prompt}]
+      if source_image_bytes is not None:
+        content.append(
+          {
+            "type": "input_image",
+            "image_url": (
+              f"data:{self._structured_image_content_type(source_image_bytes)};base64,"
+              f"{base64.b64encode(source_image_bytes).decode('utf-8')}"
+            ),
+          },
+        )
+      response = self._client().responses.create(
+        model=self.settings.openai_analysis_model_id,
+        input=[
+          {"role": "developer", "content": developer_prompt},
+          {"role": "user", "content": content},
+        ],
+        text={
+          "format": {
+            "type": "json_schema",
+            "name": "face_analysis_stage",
+            "strict": True,
+            "schema": json_schema,
+          },
+          "verbosity": "low",
+        },
+      )
+      output_text = getattr(response, "output_text", "")
+    else:
+      raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
+
+    if not output_text:
+      raise AppError(502, "AI_EMPTY_OUTPUT", "AI structured analysis returned an empty response.")
+    return self._parse_json_output(output_text)
+
+  async def read_source_image_bytes(self, payload: dict[str, Any]) -> bytes:
+    return await asyncio.to_thread(self._read_source_image_bytes, payload)
+
+  async def analyze_structured_json(
+    self,
+    *,
+    developer_prompt: str,
+    user_prompt: str,
+    json_schema: dict[str, Any],
+    source_image_bytes: bytes | None,
+    max_tokens: int,
+  ) -> dict[str, Any]:
+    try:
+      return await asyncio.to_thread(
+        self._analyze_structured_json_sync,
+        developer_prompt,
+        user_prompt,
+        json_schema,
+        source_image_bytes,
+        max_tokens,
+      )
+    except AppError:
+      raise
+    except (OpenAIError, BotoCoreError, ClientError) as exc:
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI structured analysis invocation failed.",
+        {"reason": exc.__class__.__name__},
+      ) from exc
+
   def _trim_text_field(self, value: Any, max_length: int) -> Any:
     if not isinstance(value, str):
       return value
