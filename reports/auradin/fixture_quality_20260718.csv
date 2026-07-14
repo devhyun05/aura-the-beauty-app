@@ -1,0 +1,3 @@
+dataset,rowCount,passed,issues
+product_candidates,1908,True,"{""duplicateIds"": [], ""missingFields"": {}, ""passed"": true, ""rowCount"": 1908}"
+enrichment_queue,20,True,"{""blockedRawPayloadFields"": [], ""missingFields"": {}, ""passed"": true, ""rowCount"": 20}"
