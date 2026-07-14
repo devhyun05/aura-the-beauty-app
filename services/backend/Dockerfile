@@ -10,6 +10,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY services/backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade "pip==26.1.2" "setuptools==83.0.0" "wheel==0.46.3"
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/backend/scripts/download_hair_segmenter.py /tmp/download_hair_segmenter.py
