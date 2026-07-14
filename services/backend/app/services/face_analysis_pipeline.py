@@ -121,12 +121,19 @@ def initialize_face_analysis_v2(request_payload: dict[str, Any]) -> FaceAnalysis
   camera_profile = normalize_camera_measurements(measurements)
   coverage = build_measurement_coverage(camera_profile)
   face_profile = with_explicit_unmeasured(camera_profile, coverage.out_of_scope_keys)
+  pipeline = FaceAnalysisPipelineState.pending()
+  requested_stage = request_payload.get("_faceAnalysisRetryStage")
+  if isinstance(requested_stage, str):
+    try:
+      pipeline.retry_requested_stage = StageName(requested_stage)
+    except ValueError:
+      pass
   return FaceAnalysisV2(
     coverage=coverage,
     ai_measurements={},
     face_profile=face_profile,
     derived=derive_face_analysis(face_profile),
-    pipeline=FaceAnalysisPipelineState.pending(),
+    pipeline=pipeline,
   )
 
 

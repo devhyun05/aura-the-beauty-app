@@ -190,7 +190,12 @@ def require_complete_makeup_recommendations(result: dict | None) -> None:
 
 
 def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> dict:
-  return {"request": payload.request_payload, "result": result}
+  request_payload = {
+    key: value
+    for key, value in payload.request_payload.items()
+    if not key.startswith("_faceAnalysis")
+  }
+  return {"request": request_payload, "result": result}
 
 
 def build_initial_analysis_detail_payload(
@@ -738,6 +743,91 @@ async def get_analysis_job(
     raise AppError(404, "ANALYSIS_JOB_NOT_FOUND", "Analysis job was not found.")
 
   return success({"job": normalize_analysis_report_row(job)})
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_analysis_job_stage(
+  job_id: UUID,
+  retry: FaceAnalysisStageRetryRequest,
+  background_tasks: BackgroundTasks,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  if not settings.face_analysis_v2_enabled:
+    raise AppError(
+      409,
+      "FACE_ANALYSIS_V2_DISABLED",
+      "Progressive face analysis is not enabled.",
+    )
+
+  user = await ensure_user(db, auth)
+  existing = await db.fetchrow(
+    """
+    select *
+    from analysis_reports
+    where id = $1 and user_id = $2 and deleted_at is null
+    """,
+    job_id,
+    user["id"],
+  )
+  if existing is None:
+    raise AppError(404, "ANALYSIS_JOB_NOT_FOUND", "Analysis job was not found.")
+
+  row = dict(existing)
+  detail = decode_json_object(row.get("detail_payload"))
+  request_payload = decode_json_object(detail.get("request"))
+  measurements = request_payload.get("measurements")
+  if not (
+    isinstance(measurements, dict)
+    and measurements.get("schemaVersion") == "aura-face-analysis-measurements-v1"
+  ):
+    raise AppError(
+      409,
+      "FACE_ANALYSIS_V2_RETRY_UNAVAILABLE",
+      "This report does not contain retryable face measurements.",
+    )
+
+  retry_payload = {
+    **request_payload,
+    "_faceAnalysisRetryStage": retry.stage.value,
+  }
+  payload = AnalysisJobCreate(
+    photo_capture_id=row.get("photo_capture_id"),
+    source_media_id=row.get("source_media_id"),
+    preview_media_id=row.get("preview_media_id"),
+    title=row.get("title") or "AI makeup analysis",
+    report_title=row.get("report_title"),
+    environment_label=row.get("environment_label"),
+    run_immediately=True,
+    request_payload=retry_payload,
+  )
+  updated = await db.fetchrow(
+    """
+    update analysis_reports
+    set status = 'pending',
+        error_message = null,
+        detail_payload = jsonb_set(
+          detail_payload,
+          '{result,faceAnalysisV2,pipeline,retryRequestedStage}',
+          to_jsonb($2::text),
+          true
+        )
+    where id = $1
+    returning *
+    """,
+    job_id,
+    retry.stage.value,
+  )
+  await dispatch_analysis_job(
+    db,
+    background_tasks,
+    job_id,
+    user["id"],
+    payload,
+    settings,
+  )
+  return success({"job": normalize_analysis_report_row(updated)})
 
 
 @router.get("/reports")
