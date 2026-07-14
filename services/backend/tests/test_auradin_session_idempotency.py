@@ -228,7 +228,8 @@ async def test_create_without_client_request_id_stays_legacy():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("client_request_id", [None, "req-enrich-failure"])
 async def test_create_enrich_failure_leaves_no_orphan(monkeypatch, client_request_id):
-  async def fail_enrich(_state, _settings):
+  async def fail_enrich(_state, _settings, **_kwargs):
+    # enrichment_policy 등 정책 키워드는 무시 — 실패 주입만 담당한다.
     raise RuntimeError("injected enrich failure")
 
   monkeypatch.setattr(sm, "_enrich_if_results", fail_enrich)
@@ -748,7 +749,8 @@ async def test_refine_enrich_failure_rolls_back_entire_memory_mutation(monkeypat
   state, _answered = _drive_to_results()
   before = copy.deepcopy(state)
 
-  async def fail_enrich(_state, _settings):
+  async def fail_enrich(_state, _settings, **_kwargs):
+    # enrichment_policy 등 정책 키워드는 무시 — 실패 주입만 담당한다.
     raise RuntimeError("injected enrich failure")
 
   monkeypatch.setattr(sm, "_enrich_if_results", fail_enrich)

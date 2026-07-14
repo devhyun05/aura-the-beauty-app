@@ -1,10 +1,14 @@
 """B6 §10.3-2 similar 계약 — rankedCache 내 λ=0.9 재랭킹(재검색 0), phase 가드(results에서만),
-의향 3종(색 유지/더 저렴/다른 브랜드) 반영, 세션 λ 불변, 후보 0은 이전 결과 유지."""
+의향 3종(색 유지/더 저렴/다른 브랜드) 반영, 세션 λ 불변, 후보 0은 이전 결과 유지.
+교차 리뷰 수정분: 재시도 멱등(receipt no-op), 캐시 부재 409(재검색 금지), live discovery 미호출."""
+
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
 from app.main import create_app
+from app.services.auradin_agent import enrichment, session_manager
 from app.services.auradin_agent.session_manager import clear_sessions
 
 
@@ -184,6 +188,112 @@ def test_similar_intent_keep_color_is_recorded_and_serves_results() -> None:
   assert turn["phase"] == "results"
   assert _similar_log(turn)["intent"] == "keep_color"
   assert turn["result"]["products"], "keep_color must keep serving results (or prior results)"
+
+
+def test_similar_retry_with_client_request_id_is_idempotent_noop() -> None:
+  """같은 clientRequestId 재전송은 무저장 200 no-op — version·similar 로그가 늘지 않는다."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  base_id = _turn(client, session_id)["result"]["products"][0]["id"]
+  body = {"productId": base_id, "clientRequestId": str(uuid4())}
+
+  first = client.post(f"/api/search/sessions/{session_id}/similar", json=body)
+  assert first.status_code == 200
+  version_after_first = session_manager._SESSIONS[session_id]["version"]
+  result_after_first = _turn(client, session_id)["result"]
+
+  retry = client.post(f"/api/search/sessions/{session_id}/similar", json=body)
+  assert retry.status_code == 200
+  assert retry.json()["data"]["phase"] == "searching"  # 최초 accepted와 같은 ack 계약
+
+  turn = _turn(client, session_id)
+  similar_logs = [log["similar"] for log in turn.get("logs", []) if log.get("similar")]
+  assert len(similar_logs) == 1  # 실프로브 결함: 재전송이 로그 2건을 만들었음
+  assert session_manager._SESSIONS[session_id]["version"] == version_after_first  # 무저장
+  assert turn["result"]["products"] == result_after_first["products"]
+
+
+def test_similar_retry_without_client_request_id_dedupes_by_fingerprint() -> None:
+  """구버전 앱(clientRequestId 없음) 재전송도 (productId, intent) fingerprint로 no-op.
+  다른 intent는 새 요청으로 처리된다."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  base_id = _turn(client, session_id)["result"]["products"][0]["id"]
+  body = {"productId": base_id, "intent": "other_brand"}
+
+  assert client.post(f"/api/search/sessions/{session_id}/similar", json=body).status_code == 200
+  assert client.post(f"/api/search/sessions/{session_id}/similar", json=body).status_code == 200
+
+  turn = _turn(client, session_id)
+  similar_logs = [log["similar"] for log in turn.get("logs", []) if log.get("similar")]
+  assert len(similar_logs) == 1
+
+  different_intent = client.post(
+    f"/api/search/sessions/{session_id}/similar",
+    json={"productId": base_id, "intent": "keep_color"},
+  )
+  assert different_intent.status_code == 200
+  turn = _turn(client, session_id)
+  similar_logs = [log["similar"] for log in turn.get("logs", []) if log.get("similar")]
+  assert len(similar_logs) == 2  # fingerprint가 intent를 구분한다
+
+
+def test_similar_cache_empty_returns_409_without_research(monkeypatch) -> None:
+  """rankedCache 부재(프로세스 재시작 등) — 재검색 폴백 금지, 비파괴 409 SIMILAR_CACHE_EMPTY."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  before = _turn(client, session_id)
+  base_id = before["result"]["products"][0]["id"]
+
+  def _no_research(*_args, **_kwargs):
+    raise AssertionError("similar must not re-run retrieve_and_rank when cache is empty")
+
+  monkeypatch.setattr(session_manager, "retrieve_and_rank", _no_research)
+  session_manager._SESSIONS[session_id].pop("rankedCache", None)  # 캐시 소실 시뮬레이션
+  version_before = session_manager._SESSIONS[session_id]["version"]
+
+  response = client.post(
+    f"/api/search/sessions/{session_id}/similar", json={"productId": base_id},
+  )
+  assert response.status_code == 409
+  assert response.json()["error"]["code"] == "SIMILAR_CACHE_EMPTY"
+
+  turn = _turn(client, session_id)
+  assert turn["phase"] == "results"  # 비파괴 — 이전 결과 유지
+  assert [p["id"] for p in turn["result"]["products"]] == [
+    p["id"] for p in before["result"]["products"]
+  ]
+  assert session_manager._SESSIONS[session_id]["version"] == version_before  # 무저장
+  assert not [log for log in turn.get("logs", []) if log.get("similar")]
+
+
+def test_similar_skips_live_discovery_but_refine_keeps_it(monkeypatch) -> None:
+  """/similar enrichment은 cache-only 정책 — live discovery 미실행. refine 경로는 불변."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  base_id = _turn(client, session_id)["result"]["products"][0]["id"]
+
+  live_calls: list[str] = []
+
+  async def _live_spy(_state, _settings, _result, _extra_caveats):
+    live_calls.append("called")
+    return {"status": "disabled"}
+
+  monkeypatch.setattr(enrichment, "_enrich_live_discovery", _live_spy)
+
+  assert (
+    client.post(
+      f"/api/search/sessions/{session_id}/similar", json={"productId": base_id},
+    ).status_code
+    == 200
+  )
+  assert live_calls == []  # cache-only — rankedCache 밖 후보 유입 금지
+  turn = _turn(client, session_id)
+  assert turn["result"]["enrichment"]["liveDiscovery"]["status"] == "skipped_policy"
+
+  refined = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
+  assert refined.status_code == 200
+  assert live_calls == ["called"]  # refine 등 기존 경로 enrichment 동작 불변
 
 
 def test_similar_does_not_mutate_session_lambda_or_cache() -> None:

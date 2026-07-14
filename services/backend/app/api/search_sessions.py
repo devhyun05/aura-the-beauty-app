@@ -31,6 +31,8 @@ from app.services.auradin_agent.session_manager import (
   REFINE_ACCEPTED,
   REFINE_DIALS,
   SIMILAR_ACCEPTED,
+  SIMILAR_CACHE_EMPTY,
+  SIMILAR_DUPLICATE,
   SIMILAR_INTENTS,
   SIMILAR_UNKNOWN_PRODUCT,
   SessionVersionConflictError,
@@ -323,15 +325,24 @@ async def similar_search_session(
     session_id,
     product_id=product_id,
     intent=intent,
+    client_request_id=str(payload.clientRequestId) if payload.clientRequestId else None,
     owner_subject=auth.subject,
     settings=settings,
     db=db,
   )
   if state is None:
     raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
-  if outcome != SIMILAR_ACCEPTED:
+  # duplicate = 재시도 멱등 no-op — answer duplicate와 같은 200 ack (무저장, version 불변)
+  if outcome not in {SIMILAR_ACCEPTED, SIMILAR_DUPLICATE}:
     if outcome == SIMILAR_UNKNOWN_PRODUCT:
       raise AppError(422, "UNKNOWN_PRODUCT", "기준 제품을 후보 카탈로그에서 찾을 수 없어요.")
+    if outcome == SIMILAR_CACHE_EMPTY:
+      # rankedCache 부재 — 재검색으로 대체하지 않는다(비파괴). 새 검색으로 안내.
+      raise AppError(
+        409,
+        "SIMILAR_CACHE_EMPTY",
+        "이전 후보 목록이 만료돼 비슷한 제품을 계산할 수 없어요. 새 검색으로 다시 시작해 주세요.",
+      )
     if outcome == FILTER_DELTA_CONTRACT_VIOLATION:
       raise AppError(500, "FILTER_DELTA_CONTRACT_VIOLATION", "검색 조건 처리 계약을 확인해야 해요.")
     if outcome == MUTATION_VERSION_CONFLICT:

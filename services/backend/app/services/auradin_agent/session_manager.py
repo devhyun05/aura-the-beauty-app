@@ -36,6 +36,12 @@ REFINE_DIALS = {"more_similar", "more_diverse"}
 SIMILAR_INTENTS = {"keep_color", "cheaper", "other_brand"}
 SIMILAR_LAMBDA = 0.9
 SIMILAR_PREF_WEIGHT = 0.35
+# B6 재시도 멱등성 — similar receipt는 세션 state에 남아 같은 키 재전송을 무저장 no-op으로 만든다.
+SIMILAR_RECEIPT_LIMIT = 50
+# B6 enrichment policy — /similar은 rankedCache 내 λ=0.9 재랭킹만 허용(live discovery·재검색 금지).
+# refine/answer 등 기존 경로는 default(라이브 발견 포함)로 불변.
+ENRICH_POLICY_DEFAULT = "default"
+ENRICH_POLICY_CACHE_ONLY = "cache_only"
 _SIMILAR_INTENT_LABELS = {
   "keep_color": "색 유지",
   "cheaper": "더 저렴하게",
@@ -73,8 +79,10 @@ ANSWER_NOT_ANSWERABLE = "session_not_answerable"
 REFINE_ACCEPTED = "accepted"
 REFINE_NOT_REFINABLE = "not_refinable"
 SIMILAR_ACCEPTED = "accepted"
+SIMILAR_DUPLICATE = "duplicate"
 SIMILAR_NOT_AVAILABLE = "not_similarable"
 SIMILAR_UNKNOWN_PRODUCT = "unknown_product"
+SIMILAR_CACHE_EMPTY = "cache_empty"
 MUTATION_VERSION_CONFLICT = "version_conflict"
 FILTER_DELTA_CONTRACT_VIOLATION = "filter_delta_contract_violation"
 CANCEL_ACCEPTED = "cancelled"
@@ -886,6 +894,8 @@ def refine_session(
   result["headerLabel"] = _refine_header(prompt, dial, lambda_moved=lambda_moved)
   if dial and not prompt and not lambda_moved:
     result["refineNotice"] = _refine_saturation_notice(dial)
+  # 결과 뷰가 바뀌면 같은 (productId, intent) similar 재요청은 새 의도다 — receipt 무효화.
+  state.pop("similarReceipts", None)
   state["rankedCache"] = _ranked_cache(ranked)
   state["currentCandidateIds"] = [row["item"]["id"] for row in ranked]
   state["rankedCandidateIds"] = [row["item"]["id"] for row in ranked]
@@ -894,6 +904,49 @@ def refine_session(
   state["lastQuestion"] = None
   state["updatedAt"] = _now()
   return state
+
+
+def _similar_receipt_key(
+  client_request_id: str | None,
+  product_id: str,
+  intent: str | None,
+) -> str:
+  """B6 재시도 멱등 키 — clientRequestId 우선, 없으면 (productId, intent) fingerprint.
+
+  M1 create 멱등성과 같은 원칙: 서버가 정규화를 담당하고, 같은 의미 요청이면 같은 키.
+  clientRequestId는 optional(구버전 앱 호환) — 값이 없어도 fingerprint로 재전송을 막는다.
+  """
+  if client_request_id:
+    return f"client:{client_request_id}"
+  payload = json.dumps(
+    {"productId": str(product_id or "").strip(), "intent": str(intent or "").strip() or None},
+    ensure_ascii=False,
+    sort_keys=True,
+    separators=(",", ":"),
+  )
+  return "fp:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _similar_receipt_seen(state: dict[str, Any], receipt_key: str) -> bool:
+  return any(
+    isinstance(entry, dict) and entry.get("key") == receipt_key
+    for entry in state.get("similarReceipts") or []
+  )
+
+
+def _record_similar_receipt(
+  state: dict[str, Any],
+  receipt_key: str,
+  *,
+  product_id: str,
+  intent: str | None,
+) -> None:
+  # jsonb는 키 순서를 보존하지 않으므로 dict 대신 리스트로 저장 — 오래된 것부터 잘라낸다.
+  receipts = [entry for entry in state.get("similarReceipts") or [] if isinstance(entry, dict)]
+  receipts.append(
+    {"key": receipt_key, "productId": product_id, "intent": intent, "at": _now()},
+  )
+  state["similarReceipts"] = receipts[-SIMILAR_RECEIPT_LIMIT:]
 
 
 def _similar_recovery(intent: str | None) -> dict[str, Any]:
@@ -916,6 +969,7 @@ def similar_session(
   owner_subject: str,
   product_id: str,
   intent: str | None = None,
+  client_request_id: str | None = None,
   settings: Settings | None = None,
 ) -> dict[str, Any] | None:
   """B6 §10.3-2 similar — 기준 제품 속성 시그니처를 임시 soft preference로 한 λ=0.9 재랭킹.
@@ -924,6 +978,7 @@ def similar_session(
   세션의 mmrLambda·필터·rankedCache는 불변 — 같은 후보셋의 일회성 정렬 뷰다.
   의향(색 유지/더 저렴/다른 브랜드)은 캐시 내 필터로 반영하고, 결과 0이면
   이전 결과를 유지하며 notice로 고지한다(조용한 완화 금지 §9).
+  캐시가 없으면 재검색하지 않는다 — judged wrapper가 SIMILAR_CACHE_EMPTY로 비파괴 거절.
   """
   settings = settings or get_settings()
   state = get_session(session_id, owner_subject=owner_subject)
@@ -941,26 +996,16 @@ def similar_session(
   if not base_item:
     return state  # judged wrapper가 SIMILAR_UNKNOWN_PRODUCT로 판정 — 방어적 no-op
 
-  snapshot = copy.deepcopy(state)
-
   ranked = _ranked_from_cache(state)
-  used_cache = bool(ranked)
   if not ranked:
-    # 캐시 소실(프로세스 재시작 등) → 동일 조건 재랭킹 폴백. 조건은 그대로라 완화 아님.
-    retrieval = retrieve_and_rank(
-      get_catalog(),
-      state["intent"],
-      state.get("answers", []),
-      settings=settings,
-      extra_hard_filters=state.get("refineHardFilters") or [],
-      extra_soft_preferences=state.get("refineSoftPreferences") or [],
-      extra_query_text=[
-        str(entry.get("text") or "")
-        for entry in state.get("refineResiduals") or []
-        if isinstance(entry, dict)
-      ],
-    )
-    ranked = retrieval["ranked"]
+    # rankedCache 계약: similar는 캐시 내 재랭킹만이다. 캐시 소실(프로세스 재시작 등) 시
+    # retrieve_and_rank 재검색은 계약 위반(라이브 조건과 다른 후보셋 생성) — 방어적 no-op,
+    # judged wrapper가 SIMILAR_CACHE_EMPTY로 비파괴 거절해 새 검색을 안내한다.
+    logger.info("[aura:auradin-session] similar cache empty session=%s", session_id)
+    return state
+
+  snapshot = copy.deepcopy(state)
+  receipt_key = _similar_receipt_key(client_request_id, product_id, intent)
 
   base_brand = normalized_brand(base_item.get("brandName"))
   base_price = int((base_item.get("liveOffer") or {}).get("priceKrw") or 0)
@@ -1012,7 +1057,7 @@ def similar_session(
         "productId": product_id,
         "intent": intent,
         "lambda": SIMILAR_LAMBDA,
-        "usedCache": used_cache,
+        "usedCache": True,  # 캐시 부재는 위에서 SIMILAR_CACHE_EMPTY로 종료 — 재검색 경로 없음
         "candidateCount": len(boosted),
       },
     },
@@ -1036,6 +1081,8 @@ def similar_session(
     if snapshot.get("result"):
       state["result"] = {**snapshot["result"], "refineNotice": _similar_recovery(intent)}
       state["phase"] = "results"
+    # 원복 뒤에 기록 — 이 no-match 판정도 저장되는 mutation이므로 재전송은 duplicate no-op이어야 한다.
+    _record_similar_receipt(state, receipt_key, product_id=product_id, intent=intent)
     state["updatedAt"] = _now()
     return state
 
@@ -1051,6 +1098,7 @@ def similar_session(
   result["headerLabel"] = f"'{base_name}'와 비슷한 결로 다시 골랐어요" + (
     f" · {intent_label}" if intent_label else ""
   )
+  _record_similar_receipt(state, receipt_key, product_id=product_id, intent=intent)
   state["result"] = result
   state["phase"] = "results"
   state["lastQuestion"] = None
@@ -1105,14 +1153,29 @@ def similar_session_judged(
   owner_subject: str,
   product_id: str,
   intent: str | None = None,
+  client_request_id: str | None = None,
   settings: Settings | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
   state = get_session(session_id, owner_subject=owner_subject)
   if not state:
     return SIMILAR_NOT_AVAILABLE, None
-  # B6 phase 가드 — refine과 동일한 M1 계약: results에서만 (질문 단계 퍼널 스킵 차단).
-  if state.get("phase") in INACTIVE_PHASES or state.get("phase") != "results":
+  if state.get("phase") in INACTIVE_PHASES:
     return SIMILAR_NOT_AVAILABLE, state
+  # B6 재시도 멱등성 — answer duplicate와 같은 M1 계약: 기처리 receipt 재전송은
+  # phase 검사보다 먼저 duplicate(무저장 no-op)로 흡수한다(늦은 재전송 포함).
+  receipt_key = _similar_receipt_key(
+    client_request_id, str(product_id or "").strip(), str(intent or "").strip() or None,
+  )
+  if _similar_receipt_seen(state, receipt_key):
+    return SIMILAR_DUPLICATE, state
+  # B6 phase 가드 — refine과 동일한 M1 계약: results에서만 (질문 단계 퍼널 스킵 차단).
+  if state.get("phase") != "results":
+    return SIMILAR_NOT_AVAILABLE, state
+  if not _ranked_from_cache(state):
+    # rankedCache 부재/카탈로그 조인 실패(프로세스 재시작·카탈로그 교체 등) —
+    # similar는 캐시 내 재랭킹만이므로 재검색 대신 비파괴 거절:
+    # 세션·version 불변, API가 409 SIMILAR_CACHE_EMPTY로 새 검색을 안내한다.
+    return SIMILAR_CACHE_EMPTY, state
   if not get_catalog().get(str(product_id or "").strip()):
     # 라이브 발견 픽 등 카탈로그 밖 제품 — rankedCache 재랭킹 계약 밖이라 비파괴 거절.
     return SIMILAR_UNKNOWN_PRODUCT, state
@@ -1123,6 +1186,7 @@ def similar_session_judged(
       owner_subject=owner_subject,
       product_id=product_id,
       intent=intent,
+      client_request_id=client_request_id,
       settings=settings,
     )
   except FilterDeltaContractViolation as error:
@@ -1163,10 +1227,21 @@ def cancel_session(session_id: str, *, owner_subject: str) -> dict[str, Any] | N
   return state
 
 
-async def _enrich_if_results(state: dict[str, Any] | None, settings: Settings) -> None:
+async def _enrich_if_results(
+  state: dict[str, Any] | None,
+  settings: Settings,
+  *,
+  enrichment_policy: str = ENRICH_POLICY_DEFAULT,
+) -> None:
   # §11 6/7단계: 랭킹(동기·순수) 뒤 비동기 enrich — 라이브 Naver 발견 + reasonCopy (가산).
+  # cache_only(/similar)는 live discovery를 건너뛴다 — rankedCache 밖 후보 유입·재검색 금지.
   if state and state.get("phase") == "results":
-    await enrich_results(state, settings=settings, extra_caveats=_interpretation_caveats(state))
+    await enrich_results(
+      state,
+      settings=settings,
+      extra_caveats=_interpretation_caveats(state),
+      allow_live_discovery=enrichment_policy != ENRICH_POLICY_CACHE_ONLY,
+    )
 
 
 async def _enrich_if_question(state: dict[str, Any] | None, settings: Settings) -> None:
@@ -1710,12 +1785,15 @@ async def _run_session_mutation(
   db: Database | None,
   judge_and_mutate,
   accepted_outcomes: frozenset[str],
+  enrichment_policy: str = ENRICH_POLICY_DEFAULT,
 ) -> tuple[str, dict[str, Any] | None]:
   """A9 mutator 공통 원자 구간 — lock(load→판정→enrich→CAS save→메모리 교체) + bounded retry.
 
   단일 워커의 asyncio 인터리빙 경합은 세션별 Lock이, 멀티 워커는 version CAS가 막는다.
   거절 판정은 저장하지 않는다(state/version 불변). CAS 2회 실패 시 version_conflict를
   반환하고 authoritative state를 다시 로드해 준다.
+  enrichment_policy: /similar은 cache_only — rankedCache 밖 live discovery·재검색을
+  금지한다(λ=0.9 고정 재랭킹만). 그 외 mutator는 default(기존 동작 불변).
   """
   async with _session_guard(session_id):
     for _attempt in range(2):
@@ -1732,7 +1810,7 @@ async def _run_session_mutation(
         if outcome not in accepted_outcomes:
           return outcome, state  # 비파괴 거절 — 저장 없음
 
-        await _enrich_if_results(state, settings)
+        await _enrich_if_results(state, settings, enrichment_policy=enrichment_policy)
         await _enrich_if_question(state, settings)
 
         if not _postgres_enabled(settings, db):
@@ -1833,6 +1911,7 @@ async def similar_session_persisted(
   owner_subject: str,
   product_id: str,
   intent: str | None = None,
+  client_request_id: str | None = None,
   settings: Settings | None = None,
   db: Database | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
@@ -1844,6 +1923,7 @@ async def similar_session_persisted(
       owner_subject=owner_subject,
       product_id=product_id,
       intent=intent,
+      client_request_id=client_request_id,
       settings=settings,
     )
 
@@ -1854,6 +1934,8 @@ async def similar_session_persisted(
     db=db,
     judge_and_mutate=_judge,
     accepted_outcomes=frozenset({SIMILAR_ACCEPTED}),
+    # B6 cache-only 계약 — /similar 경로는 live discovery·재검색 금지 (λ=0.9 캐시 재랭킹만).
+    enrichment_policy=ENRICH_POLICY_CACHE_ONLY,
   )
 
 

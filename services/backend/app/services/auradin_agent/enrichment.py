@@ -965,9 +965,19 @@ def _annotate_question_filter_coverage(state: dict[str, Any], result: dict[str, 
 # ---------------------------------------------------------------------------
 
 
-async def _enrich(state: dict[str, Any], settings: Settings, extra_caveats: list[str] | None) -> None:
+async def _enrich(
+  state: dict[str, Any],
+  settings: Settings,
+  extra_caveats: list[str] | None,
+  *,
+  allow_live_discovery: bool = True,
+) -> None:
   result = state["result"]
-  live_status = await _enrich_live_discovery(state, settings, result, extra_caveats)
+  if allow_live_discovery:
+    live_status = await _enrich_live_discovery(state, settings, result, extra_caveats)
+  else:
+    # B6 /similar cache-only 계약 — live discovery(재검색·세션 mmrLambda MMR)를 실행하지 않는다.
+    live_status = {"status": "skipped_policy"}
   _annotate_question_filter_coverage(state, result)
   copy_status = await _enrich_reason_copy(state, settings, result.get("products") or [])
   result["enrichment"] = {"liveDiscovery": live_status, "reasonCopy": copy_status}
@@ -978,13 +988,14 @@ async def enrich_results(
   *,
   settings: Settings,
   extra_caveats: list[str] | None = None,
+  allow_live_discovery: bool = True,
 ) -> None:
   """결과를 가산 보강한다 — 실패·타임아웃이어도 서빙 결과는 항상 유효(§9, 턴키)."""
   if state.get("phase") != "results" or not isinstance(state.get("result"), dict):
     return
   try:
     await asyncio.wait_for(
-      _enrich(state, settings, extra_caveats),
+      _enrich(state, settings, extra_caveats, allow_live_discovery=allow_live_discovery),
       timeout=float(settings.auradin_enrich_timeout_seconds),
     )
   except TimeoutError:

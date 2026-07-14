@@ -36,8 +36,11 @@ class RefineSearchSessionRequest(CamelModel):
 
 class SimilarSearchSessionRequest(CamelModel):
   # B6 §10.3-2 — 기준 제품 id + 사용자 의향(색 유지/더 저렴/다른 브랜드, optional).
+  # clientRequestId는 재시도 멱등 키 — optional(구버전 앱 호환, create와 같은 rollout gate).
+  # 값이 없으면 서버가 (productId, intent) fingerprint로 재전송을 dedup한다.
   productId: str
   intent: str | None = None
+  clientRequestId: UUID | None = None
 
 
 # A5 (§7.2) — 이벤트 타입 정본 11종. SQL enum과 1:1 (test_auradin_events가 동기화를 검증).
