@@ -34,6 +34,7 @@ export type DetailViewProps = {
   onToggleSave: () => void;
   onBack: () => void;
   onHome: () => void;
+  onOpenTrustedProduct?: () => void;
 };
 
 /** Evidence bucket rows: leading mark on the first line, hanging indent after. */
@@ -77,12 +78,14 @@ export function DetailView({
   onToggleSave,
   onBack,
   onHome,
+  onOpenTrustedProduct,
 }: DetailViewProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
 
   // "보관함에 담김" toast on the save rising edge
   const [toast, setToast] = React.useState(false);
+  const [buyError, setBuyError] = React.useState(false);
   const prevLiked = React.useRef(liked);
   React.useEffect(() => {
     if (liked && !prevLiked.current) {
@@ -96,10 +99,23 @@ export function DetailView({
   React.useEffect(() => {
     prevLiked.current = liked;
   });
+  React.useEffect(() => {
+    if (!buyError) return undefined;
+    const timer = setTimeout(() => setBuyError(false), 2200);
+    return () => clearTimeout(timer);
+  }, [buyError]);
 
   const r = p.reason;
   const openBuy = () => {
-    if (p.purchaseUrl) Linking.openURL(p.purchaseUrl).catch(() => {});
+    if (onOpenTrustedProduct) {
+      onOpenTrustedProduct();
+      return;
+    }
+    if (!p.purchaseUrl) {
+      setBuyError(true);
+      return;
+    }
+    Linking.openURL(p.purchaseUrl).catch(() => setBuyError(true));
   };
 
   return (
@@ -161,7 +177,6 @@ export function DetailView({
           </GlassCard>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-            {p.matchRate !== undefined ? <Badge tone="ink">{`MATCH ${p.matchRate}%`}</Badge> : null}
             {p.role ? <Badge>{p.role}</Badge> : null}
             {p.source ? <Badge>{p.source}</Badge> : null}
           </View>
@@ -285,8 +300,8 @@ export function DetailView({
               paddingBottom: 8,
             }}
           >
-            {p.purchaseUrl ? (
-              <CTAButton label="구매하러 가기 ↗" onPress={openBuy} style={{ flex: 1 }} />
+            {p.purchaseUrl || onOpenTrustedProduct ? (
+              <CTAButton label={onOpenTrustedProduct ? '제품 상세·판매처 보기' : '구매하러 가기 ↗'} onPress={openBuy} style={{ flex: 1 }} />
             ) : (
               <CTAButton label="구매 링크 준비 중" disabled style={{ flex: 1 }} />
             )}
@@ -296,7 +311,11 @@ export function DetailView({
           </View>
         </ScrollView>
       </Animated.View>
-      <Toast show={toast} label="보관함에 담김" bottom={Math.max(insets.bottom, 18) + 10} />
+      <Toast
+        show={toast || buyError}
+        label={buyError ? '판매처 페이지를 열 수 없어요' : '보관함에 담김'}
+        bottom={Math.max(insets.bottom, 18) + 10}
+      />
     </View>
   );
 }

@@ -4,6 +4,10 @@ export type ARFilterDetailEditRouteParams = NonNullable<
   RootStackParamList['MakeupFilterEdit']
 >;
 
+export type SavedArLookProductRecommendationRouteParams = NonNullable<
+  RootStackParamList['ProductRecommendation']
+>;
+
 type ARFilterDetailEditRouteParamsInput = Pick<
   ARFilterDetailEditRouteParams,
   | 'editSourceImageUri'
@@ -24,5 +28,14 @@ export function getARFilterDetailEditRouteParams(
     ...(input.initialMakeupFilterId ? {initialMakeupFilterId: input.initialMakeupFilterId} : {}),
     mode: 'preset',
     ...(input.source ? {source: input.source} : {}),
+  };
+}
+
+export function getSavedArLookProductRecommendationRouteParams(
+  arStyleId: string,
+): SavedArLookProductRecommendationRouteParams {
+  return {
+    arStyleId,
+    initialSection: 'ar',
   };
 }
