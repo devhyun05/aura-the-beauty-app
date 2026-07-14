@@ -46,6 +46,7 @@ export type FaceCaptureUploadResult = {
   cameraMetadata?: FaceCaptureCameraMetadata | null;
   cdnUrl?: string | null;
   contentType?: string | null;
+  fileName?: string | null;
   height?: number | null;
   imageUri: string;
   mediaId: string;
@@ -285,6 +286,7 @@ export async function uploadFaceCaptureImage({
     cameraMetadata,
     cdnUrl: media.cdnUrl ?? null,
     contentType,
+    fileName: originalFilename,
     height: height ?? null,
     imageUri: uri,
     mediaId: media.id,
