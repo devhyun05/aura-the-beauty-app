@@ -1,4 +1,4 @@
-import {requestBackendJson} from '../../../shared/services/backendApi';
+import {BackendApiError, requestBackendJson} from '../../../shared/services/backendApi';
 import {
   buildFaceCaptureCompleteUploadBody,
 } from './faceCaptureUploadContract';
@@ -158,30 +158,39 @@ async function readImageBlob(uri: string): Promise<Blob> {
   return readImageBlobWithXhr(uri);
 }
 
-export async function uploadFaceCaptureImage({
-  cameraMetadata,
-  captureType = 'face_analysis',
-  contentType: providedContentType,
-  fileName,
+// RN(특히 Android)에서 파일 기반 Blob의 size 메타가 실제 전송 바이트와 간헐적으로
+// 어긋나 백엔드 무결성 검사(409 UPLOAD_*_MISMATCH)에 걸릴 수 있다. 이 경우에만
+// Blob을 새로 읽어 새 업로드 세션으로 1회 재시도한다.
+function isRetryableUploadMismatch(error: unknown): boolean {
+  return (
+    error instanceof BackendApiError &&
+    error.status === 409 &&
+    (error.code === 'UPLOAD_SIZE_MISMATCH' || error.code === 'UPLOAD_CONTENT_TYPE_MISMATCH')
+  );
+}
+
+type UploadedMediaObject = {
+  media: CompleteUploadResponse['media'];
+  byteSize: number;
+};
+
+async function uploadImageObjectOnce({
+  contentType,
   height,
-  mediaKind = 'capture',
-  semanticMattes,
+  mediaKind,
+  originalFilename,
   source,
   uri,
   width,
-}: FaceCaptureImageInput): Promise<FaceCaptureUploadResult> {
-  const startedAt = Date.now();
-  const contentType = inferFaceCaptureContentType(uri, providedContentType);
-  const originalFilename = getFaceCaptureFilename(uri, fileName);
-
-  console.info('[aura:capture-upload] start', {
-    contentType,
-    height: height ?? null,
-    hasLocalUri: Boolean(uri),
-    source,
-    width: width ?? null,
-  });
-
+}: {
+  contentType: string;
+  height?: number | null;
+  mediaKind: string;
+  originalFilename: string;
+  source: FaceCaptureImageSource;
+  uri: string;
+  width?: number | null;
+}): Promise<UploadedMediaObject> {
   const readStartedAt = Date.now();
   const imageBlob = await readImageBlob(uri);
 
@@ -257,6 +266,66 @@ export async function uploadFaceCaptureImage({
     hasCdnUrl: Boolean(media.cdnUrl),
     mediaId: media.id,
   });
+
+  return {media, byteSize: imageBlob.size};
+}
+
+export async function uploadFaceCaptureImage({
+  cameraMetadata,
+  captureType = 'face_analysis',
+  contentType: providedContentType,
+  fileName,
+  height,
+  mediaKind = 'capture',
+  semanticMattes,
+  source,
+  uri,
+  width,
+}: FaceCaptureImageInput): Promise<FaceCaptureUploadResult> {
+  const startedAt = Date.now();
+  const contentType = inferFaceCaptureContentType(uri, providedContentType);
+  const originalFilename = getFaceCaptureFilename(uri, fileName);
+
+  console.info('[aura:capture-upload] start', {
+    contentType,
+    height: height ?? null,
+    hasLocalUri: Boolean(uri),
+    source,
+    width: width ?? null,
+  });
+
+  let uploadedObject: UploadedMediaObject;
+
+  try {
+    uploadedObject = await uploadImageObjectOnce({
+      contentType,
+      height,
+      mediaKind,
+      originalFilename,
+      source,
+      uri,
+      width,
+    });
+  } catch (error) {
+    if (!isRetryableUploadMismatch(error)) {
+      throw error;
+    }
+
+    console.info('[aura:capture-upload] mismatch-retry', {
+      code: (error as BackendApiError).code ?? null,
+    });
+    uploadedObject = await uploadImageObjectOnce({
+      contentType,
+      height,
+      mediaKind,
+      originalFilename,
+      source,
+      uri,
+      width,
+    });
+  }
+
+  const {media} = uploadedObject;
 
   console.info('[aura:capture-upload] photo-capture:start');
   const {photoCapture} = await requestBackendJson<PhotoCaptureResponse>('/photo-captures', {

@@ -31,7 +31,12 @@ def _validate_uploaded_object(
   if actual_byte_size <= 0 or actual_byte_size > MAX_MEDIA_UPLOAD_BYTES:
     raise AppError(413, "UPLOAD_SIZE_INVALID", "The uploaded object size is not allowed.")
   if expected_byte_size is not None and actual_byte_size != expected_byte_size:
-    raise AppError(409, "UPLOAD_SIZE_MISMATCH", "The uploaded object size does not match the upload session.")
+    raise AppError(
+      409,
+      "UPLOAD_SIZE_MISMATCH",
+      "The uploaded object size does not match the upload session.",
+      {"actualByteSize": actual_byte_size, "expectedByteSize": expected_byte_size},
+    )
   if _normalized_content_type(str(actual["content_type"])) != _normalized_content_type(expected_content_type):
     raise AppError(409, "UPLOAD_CONTENT_TYPE_MISMATCH", "The uploaded object type does not match the upload session.")
 
