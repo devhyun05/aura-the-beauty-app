@@ -78,14 +78,38 @@ namespace ARMakeup.Face
 
         // 넓은 면 보정 영역 (canonical UV, 블러셔 v≈0.38 기준 상대 배치 — 실기기 튜닝값).
         // 하이라이터=가산(광채), 컨투어/섀딩=감산(그림자), 컨실러=밝힘(눈밑).
-        static readonly Ellipse[] HighlightRegion =
+        static readonly Ellipse[] HighlightCheekRegion =
         {
             new Ellipse(0.305f, 0.42f, 0.078f, 0.058f, 0.5f), // 광대뼈 위 L
             new Ellipse(0.695f, 0.42f, 0.078f, 0.058f, 0.5f), // 광대뼈 위 R
+        };
+        static readonly Ellipse[] HighlightNoseBridgeRegion =
+        {
             new Ellipse(0.50f, 0.46f, 0.035f, 0.120f, 0.5f),  // 콧대
+        };
+        static readonly Ellipse[] HighlightNoseTipRegion =
+        {
+            new Ellipse(0.50f, 0.335f, 0.038f, 0.030f, 0.55f), // 코끝 포인트
+        };
+        static readonly Ellipse[] HighlightCupidRegion =
+        {
             new Ellipse(0.50f, 0.28f, 0.055f, 0.030f, 0.5f),  // 큐피드보우
+        };
+        static readonly Ellipse[] HighlightBrowBoneRegion =
+        {
             new Ellipse(0.35f, 0.55f, 0.058f, 0.040f, 0.5f),  // 눈썹뼈 L
             new Ellipse(0.65f, 0.55f, 0.058f, 0.040f, 0.5f),  // 눈썹뼈 R
+        };
+        // legacy 전체 마스크 + 디자이너 마스크 기본 게이트. 코끝을 포함해 5존의 합집합이다.
+        static readonly Ellipse[] HighlightRegion =
+        {
+            new Ellipse(0.305f, 0.42f, 0.078f, 0.058f, 0.5f),
+            new Ellipse(0.695f, 0.42f, 0.078f, 0.058f, 0.5f),
+            new Ellipse(0.50f, 0.46f, 0.035f, 0.120f, 0.5f),
+            new Ellipse(0.50f, 0.335f, 0.038f, 0.030f, 0.55f),
+            new Ellipse(0.50f, 0.28f, 0.055f, 0.030f, 0.5f),
+            new Ellipse(0.35f, 0.55f, 0.058f, 0.040f, 0.5f),
+            new Ellipse(0.65f, 0.55f, 0.058f, 0.040f, 0.5f),
         };
         static readonly Ellipse[] ContourRegion =
         {
@@ -119,6 +143,11 @@ namespace ARMakeup.Face
         static readonly Texture2D[] _blushIgariBuckets = new Texture2D[SoftnessBuckets]; // 모양 1(이가리)
         static readonly Texture2D[] _blushDrapeBuckets = new Texture2D[SoftnessBuckets]; // 모양 2(드레이핑)
         static readonly Texture2D[] _highlightBuckets = new Texture2D[SoftnessBuckets];
+        static readonly Texture2D[] _highlightCheekBuckets = new Texture2D[SoftnessBuckets];
+        static readonly Texture2D[] _highlightNoseBridgeBuckets = new Texture2D[SoftnessBuckets];
+        static readonly Texture2D[] _highlightNoseTipBuckets = new Texture2D[SoftnessBuckets];
+        static readonly Texture2D[] _highlightBrowBoneBuckets = new Texture2D[SoftnessBuckets];
+        static readonly Texture2D[] _highlightCupidBuckets = new Texture2D[SoftnessBuckets];
         static readonly Texture2D[] _contourBuckets = new Texture2D[SoftnessBuckets];
 
         public static Texture2D LipMask => _lip != null ? _lip : _lip = LoadOrGenerate("lips", LipRegion, 0f);
@@ -139,6 +168,16 @@ namespace ARMakeup.Face
         /// softnessScale 0 = 기존 마스크(버킷 0)와 바이트 동일.</summary>
         public static Texture2D HighlightShapeMask(float softnessScale) =>
             Bucketed(_highlightBuckets, "highlight", HighlightRegion, softnessScale);
+        public static Texture2D HighlightCheekShapeMask(float softnessScale) =>
+            Bucketed(_highlightCheekBuckets, "highlight_cheek", HighlightCheekRegion, softnessScale);
+        public static Texture2D HighlightNoseBridgeShapeMask(float softnessScale) =>
+            Bucketed(_highlightNoseBridgeBuckets, "highlight_nose_bridge", HighlightNoseBridgeRegion, softnessScale);
+        public static Texture2D HighlightNoseTipShapeMask(float softnessScale) =>
+            Bucketed(_highlightNoseTipBuckets, "highlight_nose_tip", HighlightNoseTipRegion, softnessScale);
+        public static Texture2D HighlightBrowBoneShapeMask(float softnessScale) =>
+            Bucketed(_highlightBrowBoneBuckets, "highlight_brow_bone", HighlightBrowBoneRegion, softnessScale);
+        public static Texture2D HighlightCupidShapeMask(float softnessScale) =>
+            Bucketed(_highlightCupidBuckets, "highlight_cupid", HighlightCupidRegion, softnessScale);
         public static Texture2D ContourShapeMask(float softnessScale) =>
             Bucketed(_contourBuckets, "contour", ContourRegion, softnessScale);
         // 아이섀도우는 IrisRenderer의 동적 밴드로 분리됨 (정적 마스크 경로 제거)

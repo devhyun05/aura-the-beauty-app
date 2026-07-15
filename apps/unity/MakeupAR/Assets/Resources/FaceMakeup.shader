@@ -49,6 +49,16 @@ Shader "ARMakeup/FaceMakeup"
         _HighlightMask ("Highlight Mask", 2D) = "black" {}
         _HighlightColor ("Highlight Color", Color) = (1.0, 0.95, 0.86, 1)
         _HighlightIntensity ("Highlight Intensity", Range(0, 1)) = 0
+        _HighlightCheekMask ("Highlight Cheek Mask", 2D) = "black" {}
+        _HighlightNoseBridgeMask ("Highlight Nose Bridge Mask", 2D) = "black" {}
+        _HighlightNoseTipMask ("Highlight Nose Tip Mask", 2D) = "black" {}
+        _HighlightBrowBoneMask ("Highlight Brow Bone Mask", 2D) = "black" {}
+        _HighlightCupidMask ("Highlight Cupid Mask", 2D) = "black" {}
+        _HighlightCheekIntensity ("Highlight Cheek Intensity", Range(0, 1)) = 0
+        _HighlightNoseBridgeIntensity ("Highlight Nose Bridge Intensity", Range(0, 1)) = 0
+        _HighlightNoseTipIntensity ("Highlight Nose Tip Intensity", Range(0, 1)) = 0
+        _HighlightBrowBoneIntensity ("Highlight Brow Bone Intensity", Range(0, 1)) = 0
+        _HighlightCupidIntensity ("Highlight Cupid Intensity", Range(0, 1)) = 0
         // 하이라이터/컨투어 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머).
         // ApplyFinish 레거시 경로(세부 0)라 0=새틴=기존 출력과 바이트 동일(하위호환).
         _HighlightFinish ("Highlight Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -195,6 +205,16 @@ Shader "ARMakeup/FaceMakeup"
             sampler2D _HighlightMask;
             fixed4 _HighlightColor;
             float _HighlightIntensity;
+            sampler2D _HighlightCheekMask;
+            sampler2D _HighlightNoseBridgeMask;
+            sampler2D _HighlightNoseTipMask;
+            sampler2D _HighlightBrowBoneMask;
+            sampler2D _HighlightCupidMask;
+            float _HighlightCheekIntensity;
+            float _HighlightNoseBridgeIntensity;
+            float _HighlightNoseTipIntensity;
+            float _HighlightBrowBoneIntensity;
+            float _HighlightCupidIntensity;
             float _HighlightFinish;   // 0 새틴(기존) 1 매트 2 글로시 3 시머
             float _HighlightShimmer;
             // 제형 스튜디오(#21) 하이라이터/컨투어 세부 — 0 = enum 기존 동작(하위호환).
@@ -495,7 +515,25 @@ Shader "ARMakeup/FaceMakeup"
                                        _ContourShimmerDensity, _ContourMatte, _ContourSheen,
                                        screenUV, _PearlLightGain);
                 col = lerp(col, shTarget, shAmt);
-                float hlAmt = tex2D(_HighlightMask, huv).r * _HighlightIntensity;
+                float legacyHighlightMask = tex2D(_HighlightMask, huv).r;
+                float cheekMask = tex2D(_HighlightCheekMask, huv).r;
+                float bridgeMask = tex2D(_HighlightNoseBridgeMask, huv).r;
+                float tipMask = tex2D(_HighlightNoseTipMask, huv).r;
+                float browMask = tex2D(_HighlightBrowBoneMask, huv).r;
+                float cupidMask = tex2D(_HighlightCupidMask, huv).r;
+                float zonePeak = max(max(_HighlightCheekIntensity, _HighlightNoseBridgeIntensity),
+                                     max(max(_HighlightNoseTipIntensity, _HighlightBrowBoneIntensity),
+                                         _HighlightCupidIntensity));
+                float zoneHighlight = max(max(cheekMask * _HighlightCheekIntensity,
+                                              bridgeMask * _HighlightNoseBridgeIntensity),
+                                          max(max(tipMask * _HighlightNoseTipIntensity,
+                                                  browMask * _HighlightBrowBoneIntensity),
+                                              cupidMask * _HighlightCupidIntensity));
+                // 기본 합성 마스크는 5존 합집합, 임포트 시에는 공통 디자이너 게이트가 된다.
+                // 새 존이 하나라도 켜지면 legacy 강도는 무시해 구 저장물과 중복 광택을 막는다.
+                float hlAmt = zonePeak > 1e-5
+                            ? zoneHighlight * legacyHighlightMask
+                            : legacyHighlightMask * _HighlightIntensity;
                 fixed3 hlTarget = 1.0 - (1.0 - col) * (1.0 - _HighlightColor.rgb);
                 hlTarget = ApplyFinish(hlTarget, wideLuma, i.uv, _HighlightFinish, _HighlightShimmer,
                                        _HighlightGlossLo, _HighlightGlossGain, _HighlightShimmerSize,
