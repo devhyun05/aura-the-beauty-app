@@ -18,8 +18,11 @@ expect(
   upperLiner.every(def => def.pickerScope === 'standalone'),
   '상위 눈 룩의 내부 아이라이너가 세부부위 카드에 노출되면 안 된다',
 );
+const parentEyeLookNames = new Set(
+  regionDefsForSlot(library, '눈').map(def => def.name),
+);
 expect(
-  !upperLiner.some(def => /로지|로즈골드|스모키/.test(def.name)),
+  !upperLiner.some(def => parentEyeLookNames.has(def.name)),
   '상위 눈 룩 이름이 아이라인 세부부위 카드에 섞이면 안 된다',
 );
 

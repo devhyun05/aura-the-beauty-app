@@ -122,6 +122,7 @@ Do not commit a permanently failing tree. Leave this task uncommitted until Task
 - Modify: `apps/mobile/src/features/ar/stencil/src/composer/multiUse.ts`
 - Modify: `apps/mobile/src/features/ar/stencil/src/composer/fitSheets.ts`
 - Modify: `apps/mobile/src/features/ar/stencil/src/composer/stencilSteps.ts`
+- Modify: `apps/mobile/src/features/ar/stencil/StencilARApp.tsx`
 - Modify: `apps/mobile/src/features/ar/stencil/src/composer/lookVariants.ts`
 - Modify: `apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Bridge/BridgeMessages.cs`
 - Test: `apps/mobile/src/features/ar/stencil/src/composer/eyeHighlightAegyoContract.test.ts`
@@ -196,6 +197,8 @@ Filter picker-hidden regions in:
 - `ComposerSheet.tsx` before rendering group region cells.
 - `multiUseTargets()`.
 - `fitCapableRegions()`.
+
+Register all five new highlighter intensities and `aegyoShadowIntensity` in `StencilARApp.tsx`'s `INTENSITY_KEYS` so global/slot opacity scales the new layers exactly like their legacy equivalents.
 
 Map each new highlighter region to the existing `highlighter` guide key in `stencilSteps.ts`. Keep legacy `highlighter` mapping for saved trees.
 

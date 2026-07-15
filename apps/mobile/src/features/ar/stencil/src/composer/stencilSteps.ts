@@ -42,6 +42,11 @@ const REGION_TO_STENCIL: Partial<Record<RegionKey, StencilKey>> = {
   aegyo: 'aegyo',
   blush: 'blush',
   highlighter: 'highlighter',
+  highlightCheek: 'highlighter',
+  highlightNoseBridge: 'highlighter',
+  highlightNoseTip: 'highlighter',
+  highlightBrowBone: 'highlighter',
+  highlightCupid: 'highlighter',
   contour: 'contour',
 };
 

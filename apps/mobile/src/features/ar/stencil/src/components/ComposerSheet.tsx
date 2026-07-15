@@ -38,6 +38,7 @@ import {
   isLensRegion,
   LENS_BLEND_MODES,
   readFinishBundle,
+  pickerVisibleRegionDefs,
   REGION_GROUPS,
   REGION_MAP,
 } from '../composer/regions';
@@ -1081,7 +1082,7 @@ export default function ComposerSheet({
             <View key={group.title}>
               <Text style={styles.groupTitle}>{group.title}</Text>
               <View style={styles.regionGrid}>
-                {group.regions.map(def => {
+                {pickerVisibleRegionDefs(group.regions).map(def => {
                   const full = isDecoRegion(def.key) && decoFull;
                   return (
                     <TouchableOpacity
