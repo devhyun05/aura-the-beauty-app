@@ -12,6 +12,7 @@ import {
   isRequestAbortedError,
   requestBackendJson,
 } from '../../../shared/services/backendApi';
+import {auradinAnonEventHeaders} from './auradinAnonToken';
 import {auradinDraftMock} from '../mocks/auradin.mock';
 import type {
   AuradinAppliedFilter,
@@ -316,9 +317,11 @@ export async function createAuradinSearchSession(
     return {sessionId: `mock-${mockSessionCounter}`, phase: 'searching', retryAfterMs: 400};
   }
 
+  // A5 익명식별 — create는 서버사이드 session_start 수집 지점. 토큰 실패는 헤더 생략(fail-open).
   return requestBackendJson<SessionAck>('/search/sessions', {
     method: 'POST',
     signal,
+    headers: await auradinAnonEventHeaders(),
     body: {
       prompt: request.prompt,
       reportId: request.reportId,
@@ -359,9 +362,15 @@ export async function refineAuradinSearch(
     return {sessionId, phase: 'searching', retryAfterMs: 400};
   }
 
+  // A5 익명식별 — refine은 서버사이드 refine_dial/refine_prompt 수집 지점.
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/refine`,
-    {method: 'POST', signal, body: {dial: input.dial, prompt: input.prompt}},
+    {
+      method: 'POST',
+      signal,
+      headers: await auradinAnonEventHeaders(),
+      body: {dial: input.dial, prompt: input.prompt},
+    },
   );
 }
 
@@ -397,9 +406,15 @@ export async function answerAuradinQuestion(
     return {sessionId, phase: 'searching', retryAfterMs: 400};
   }
 
+  // A5 익명식별 — answer는 서버사이드 question_answered 수집 지점.
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/answer`,
-    {method: 'POST', signal, body: {questionId, optionId}},
+    {
+      method: 'POST',
+      signal,
+      headers: await auradinAnonEventHeaders(),
+      body: {questionId, optionId},
+    },
   );
 }
 
@@ -469,16 +484,20 @@ export type AuradinClientEvent = {
 
 // A5 §7.2 — POST /search/events fire-and-forget 배치. 실패·오프라인·백엔드 미설정은
 // 조용히 삼킨다(fail-open): 이벤트 기록이 추천 UX에 영향을 주면 안 된다.
-// dev fallback 인증이면 서버가 skip 후 204를 돌려준다 (익명식별 RFC).
+// 익명 token은 X-Auradin-Anon-Token 헤더로 첨부한다 — token이 없으면 헤더가 생략되고
+// 서버가 owner를 만들 수 없어 skip 후 204를 돌려준다 (익명식별 RFC §2.1/§2.2).
 export function postAuradinEvents(events: AuradinClientEvent[]): void {
   if (!getBackendApiBaseUrl() || events.length === 0) {
     return;
   }
-  void requestBackendJson<{accepted?: number}>('/search/events', {
-    method: 'POST',
-    timeoutMs: 4000,
-    body: {events},
-  }).catch(() => {
+  void (async () => {
+    await requestBackendJson<{accepted?: number}>('/search/events', {
+      method: 'POST',
+      timeoutMs: 4000,
+      headers: await auradinAnonEventHeaders(),
+      body: {events},
+    });
+  })().catch(() => {
     // best-effort — 재전송은 상위 UX 이벤트가 다시 발생할 때 새 clientEventId로 이뤄진다.
   });
 }

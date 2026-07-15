@@ -5,10 +5,12 @@
 - 알 수 없는 이벤트 타입·형식 위반은 Pydantic 422로 거부한다 (RFC §3.1).
 - dev fallback subject 등 계약 owner가 없으면 이벤트를 skip하고 204 (fail-open).
 - 기록 실패(DB 예외 포함)는 record_events가 삼킨다 — 서버 오류가 아닌 한 5xx를 내지 않는다.
+- POST /search/events/token — 익명 opaque token 발급 (RFC §2.1). 서버는 저장하지 않는다.
 """
 
 from __future__ import annotations
 
+import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Request, Response
@@ -18,7 +20,7 @@ from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, get_database
-from app.schemas.auradin_search import PostSearchEventsRequest
+from app.schemas.auradin_search import AnonTokenResponse, PostSearchEventsRequest
 from app.services.auradin_agent.event_logger import (
   ANON_TOKEN_HEADER,
   derive_event_owner,
@@ -27,6 +29,20 @@ from app.services.auradin_agent.event_logger import (
 
 
 router = APIRouter(prefix="/search/events", tags=["search"])
+
+# RFC §2.1-1 — 최소 128-bit 무작위. 32바이트(256-bit)로 여유 있게 발급한다.
+ANON_TOKEN_BYTES = 32
+
+
+@router.post("/token")
+async def issue_anon_token() -> dict:
+  """익명 opaque token 발급 (RFC §2.1) — 로그인 전 사용자가 이벤트 owner를 얻는 유일한 경로.
+
+  - IDFA/기기식별자 파생값이 아니라 서버 무작위 발급(RFC §2.1-1). 인증 불요.
+  - 서버는 token을 저장하지 않는다(stateless) — 이벤트 수신 시 HMAC으로 owner만 파생.
+  - 클라이언트가 잃어버리면(앱 삭제 등) 새 token = 새 익명 ID다(RFC §2.1-5).
+  """
+  return success(AnonTokenResponse(token=secrets.token_urlsafe(ANON_TOKEN_BYTES)).model_dump())
 
 
 @router.post("")

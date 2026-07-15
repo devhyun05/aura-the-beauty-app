@@ -215,3 +215,13 @@ class AuradinEventIn(CamelModel):
 
 class PostSearchEventsRequest(CamelModel):
   events: list[AuradinEventIn] = Field(min_length=1, max_length=50)
+
+
+class AnonTokenResponse(CamelModel):
+  """익명식별 RFC §2.1 — 서버 발급 opaque token 응답.
+
+  서버는 token을 어디에도 저장하지 않는다(stateless) — 이벤트 수신 시
+  ``auradin_anon_token_secret`` HMAC으로 ``anon:v1:<digest>`` owner만 만든다.
+  """
+
+  token: str = Field(min_length=22)  # base64url 22자 = 128-bit 최소 엔트로피 하한
