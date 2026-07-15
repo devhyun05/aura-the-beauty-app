@@ -555,7 +555,6 @@ EXTERNAL_QUERY_SIGNAL_TERMS = {
   "top5",
   "top10",
   "리스트",
-  "코스",
   "일정",
   "가격",
   "시세",
@@ -575,12 +574,16 @@ EXTERNAL_QUERY_SIGNAL_TERMS = {
   "주문",
   "갈만한곳",
   "가볼만한곳",
+  "몇군데",
   "뭐가좋아",
   "어느",
   "무슨",
   "어떤",
 }
-EXTERNAL_QUERY_ENDING_TERMS = {"정보", "위치", "픽"}
+EXTERNAL_QUERY_TOKEN_TERMS = {"코스", "몇"}
+EXTERNAL_QUERY_ENDING_TERMS = {
+  "정보", "위치", "픽", "가면돼", "괜찮니", "있나",
+}
 EXTERNAL_REQUEST_TERMS = GENERAL_REQUEST_TERMS | {
   "골라",
   "정해",
@@ -605,13 +608,17 @@ FINANCIAL_CONTEXT_TERMS = {
   "etf",
   "보험",
   "부동산",
+  "나스닥",
+  "코스피",
+  "배당",
+  "매수",
   "가상자산",
   "암호화폐",
-  "연금",
   "재테크",
   "세금",
   "대출",
 }
+FINANCIAL_EXACT_TOKEN_TERMS = {"연금"}
 PROMPT_CONTROL_TERMS = {
   "이전지시",
   "지시무시",
@@ -634,15 +641,15 @@ PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?82|0)\s*[-.)]?\s*\d{1,3}(?:\s*[-.]?\s*
 LONG_IDENTIFIER_PATTERN = re.compile(r"(?<!\d)(?:\d[\s-]?){12,18}\d(?!\d)")
 PASSPORT_PATTERN = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]\d{8}(?![A-Za-z0-9])")
 PROMPT_CONTROL_PATTERN = re.compile(
-  r"(?:규칙|지시|명령|프롬프트|비밀).{0,24}(?:무시|출력|변경|공개|보여|알려)",
+  r"(?:규칙|지시|명령|프롬프트|비밀|제한|문장).{0,24}(?:무시|출력|변경|공개|보여|알려|제거)",
 )
 ENGLISH_PROMPT_CONTROL_PATTERN = re.compile(
   r"(?:ignore|forget|disregard|override).{0,40}(?:instruction|rule|prompt|message)|"
-  r"(?:act|behave).{0,20}\bas\b",
+  r"(?:act|behave).{0,20}\bas\b|(?:respond|output)\s+only",
   re.IGNORECASE,
 )
 KOREAN_ROLE_CONTROL_PATTERN = re.compile(
-  r"(?:시스템|관리자|개발자).{0,16}(?:역할|행동)|역할.{0,12}행동",
+  r"(?:시스템|관리자|개발자|루트).{0,16}(?:권한|역할|행동)|역할.{0,12}행동",
 )
 DIRECT_PII_TERMS = {
   "이메일",
@@ -684,6 +691,9 @@ MEDICAL_CONDITION_TERMS = {
   "우울증",
   "아토피",
   "피부염",
+  "알레르기",
+  "편두통",
+  "백혈병",
   "천식",
   "간염",
 }
@@ -696,9 +706,12 @@ SENSITIVE_ATTRIBUTE_TERMS = {
   "성정체성",
   "성적지향",
   "성적취향",
+  "동성애",
+  "양성애",
   "성소수자",
   "트랜스젠더",
   "레즈비언",
+  "정치",
   "정치성향",
   "임신",
   "성별",
@@ -926,6 +939,9 @@ def _looks_like_high_risk_goal_request(value: str) -> bool:
   if any(_security_compact_text(term) in finance_compact for term in FINANCIAL_CONTEXT_TERMS):
     return True
 
+  if _contains_token_term(value, FINANCIAL_EXACT_TOKEN_TERMS):
+    return True
+
   prompt_terms = PROMPT_CONTROL_TERMS | {
     "ignorepreviousinstructions",
     "ignoreallinstructions",
@@ -981,15 +997,19 @@ def _looks_like_general_search_request(value: str) -> bool:
   if _contains_compact_term(value, EXTERNAL_QUERY_SIGNAL_TERMS):
     return True
 
+  has_makeup_domain = _contains_makeup_domain_term(value)
+  if not has_makeup_domain and _contains_token_term(value, EXTERNAL_QUERY_TOKEN_TERMS):
+    return True
+
   compact = _security_compact_text(value)
-  if compact.endswith(tuple(EXTERNAL_QUERY_ENDING_TERMS)):
+  if not has_makeup_domain and compact.endswith(tuple(EXTERNAL_QUERY_ENDING_TERMS)):
     return True
 
   request_spans = _term_spans(value, EXTERNAL_REQUEST_TERMS)
   if not request_spans:
     return False
 
-  if not _contains_makeup_domain_term(value):
+  if not has_makeup_domain:
     return True
 
   makeup_spans = _term_spans(value, MAKEUP_DOMAIN_TERMS)
@@ -1072,7 +1092,7 @@ def _looks_like_declarative_context_label(
 
 
 def _is_makeup_context_statement(value: str, classification: GoalIntentResult) -> bool:
-  if classification["intentType"] != "valid_context":
+  if classification["intentType"] not in {"valid_context", "generic_default"}:
     return False
 
   if _looks_like_high_risk_goal_request(value) or _looks_like_general_search_request(value):
@@ -1080,6 +1100,9 @@ def _is_makeup_context_statement(value: str, classification: GoalIntentResult) -
 
   if _contains_makeup_domain_term(value):
     return True
+
+  if classification["intentType"] == "generic_default":
+    return False
 
   return _looks_like_declarative_context_label(value, classification)
 
@@ -1144,6 +1167,9 @@ def _resolve_guardrail_general_search_analysis_goal_text(
 
   if not _is_makeup_context_statement(raw_goal_text, classification):
     return None
+
+  if classification["intentType"] == "generic_default":
+    return GENERIC_DEFAULT_ANALYSIS_GOAL_TEXT
 
   return _select_safe_analysis_goal_text(raw_goal_text) or GENERIC_ANALYSIS_GOAL_TEXT
 
@@ -1214,13 +1240,11 @@ async def normalize_feedback_goal_context_for_request(
 
   if classification["intentType"] == "generic_default":
     analysis_goal_text = GENERIC_DEFAULT_ANALYSIS_GOAL_TEXT
-  elif _looks_like_declarative_context_label(raw_goal_text, classification):
+  else:
     analysis_goal_text = (
       _select_safe_analysis_goal_text(raw_goal_text)
       or GENERIC_ANALYSIS_GOAL_TEXT
     )
-  else:
-    analysis_goal_text = None
   try:
     await assert_bedrock_guardrail_input_allowed(
       raw_goal_text,
