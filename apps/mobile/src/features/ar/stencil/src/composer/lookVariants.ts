@@ -53,6 +53,7 @@ function addRegionLook(
       level: 'sub',
       slot,
       owner: 'system',
+      pickerScope: exposeAtRegionLevel ? 'internal' : 'standalone',
       kids: sub.leaves.map(leaf => ({
         label: leaf.label,
         region: leaf.region,
@@ -500,6 +501,19 @@ export function buildVariantLibrary(): LookLibrary {
       }],
     },
   ]);
+
+  // 피부 전체 룩의 내부 프라이머를 세부부위 카드에 재사용하지 않는다. 피부결에서
+  // 직접 고르는 두 카드는 별도 standalone 정의로 제공한다.
+  addRegionLook(lib, 'skin-primer', 'pore', '모공 프라이머', '피부',
+    single('모공 프라이머', 'skin', {
+      skinSmoothing: 0.5,
+      skinGlow: 0,
+    }), false);
+  addRegionLook(lib, 'skin-primer', 'glow', '윤광 프라이머', '피부',
+    single('윤광 프라이머', 'skin', {
+      skinSmoothing: 0.35,
+      skinGlow: 0.5,
+    }), false);
 
   // ── 세부부위 룩 — BasicMode의 세부부위 탭은 level='sub' 정의를 직접 조회한다.
   //    기존 '전체' 탭의 슬롯 룩 목록과 섞이지 않도록 region 래퍼는 만들지 않는다.

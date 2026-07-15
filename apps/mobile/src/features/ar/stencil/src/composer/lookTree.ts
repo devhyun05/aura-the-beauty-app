@@ -153,6 +153,9 @@ export interface LeafDef {
   technique?: { strength: number };
 }
 
+/** 세부부위 선택기 노출 범위. internal은 상위 룩 조립 전용, standalone만 직접 선택. */
+export type SubPickerScope = 'internal' | 'standalone';
+
 export interface LookDef {
   id: string;
   name: string;
@@ -164,6 +167,8 @@ export interface LookDef {
    *  인스턴스화된다(instantiateGroup). 미지정=일반 룩 정의. 하위호환: 옛 라이브러리엔
    *  이 필드가 없어 undefined로 로드되며 일반 정의로 동작한다. */
   kind?: 'group';
+  /** sub 정의 전용. 옛 사용자 정의(undefined)는 하위호환상 standalone으로 취급한다. */
+  pickerScope?: SubPickerScope;
   /** face/region 레벨: 하위 정의 id 배열 · sub 레벨: 잎 정의 배열 */
   kids: string[] | LeafDef[];
 }
@@ -223,6 +228,7 @@ export function buildSystemLibrary(): LookLibrary {
           level: 'sub',
           slot,
           owner: 'system',
+          pickerScope: 'internal',
           kids: [
             {
               label,
@@ -572,6 +578,8 @@ export function subDefsForRegion(lib: LookLibrary, region: RegionKey): LookDef[]
     .filter(
       d =>
         d.level === 'sub' &&
+        (d.pickerScope === 'standalone' ||
+          (d.pickerScope == null && d.owner === 'user')) &&
         (d.kids as LeafDef[]).some(leaf => leaf.region === region),
     )
     .sort((a, b) =>
@@ -1545,6 +1553,7 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
     level: 'sub',
     slot: node.slot,
     owner: 'user',
+    pickerScope: 'internal',
     kids: node.kids.filter(isLeaf).map(lf => ({
       label: lf.label,
       region: lf.region,
