@@ -76,6 +76,10 @@ expect(
   '내추럴 기본 보정을 강화한다',
 );
 expect(presetsById.rosy.params.skinSmoothing === 0.63, '로지 기본 보정을 강화한다');
+expect(
+  presetsById.rosy.params.skinBrightening === 0.3,
+  '파운데이션 톤업 상한의 로지 기준값은 0.3이어야 한다',
+);
 expect(presetsById.peach.params.skinSmoothing === 0.58, '피치 기본 보정을 강화한다');
 expect(presetsById.glam.params.skinSmoothing === 0.68, '글램 기본 보정을 강화한다');
 expect(presetsById.smoky.params.skinSmoothing === 0.58, '스모키 기본 보정을 강화한다');

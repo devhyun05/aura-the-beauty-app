@@ -228,6 +228,20 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 return dot(color, float3(0.299, 0.587, 0.114));
             }
 
+            float3 ClampFoundationToRosyReference(float3 cameraColor, float3 candidateColor)
+            {
+                // The rosy preset's 0.3 brightening is the approved visual ceiling.
+                // Preserve the candidate hue and darker shades; only scale down a
+                // foundation result whose final luma would exceed that reference.
+                const float rosyStrength = 0.3;
+                float3 rosyReference = saturate(
+                    cameraColor * (1.0 + 0.18 * rosyStrength) + 0.04 * rosyStrength);
+                float maxLuma = FoundationLuma(rosyReference);
+                float candidateLuma = max(FoundationLuma(candidateColor), 1e-4);
+                float lumaScale = min(1.0, maxLuma / candidateLuma);
+                return saturate(candidateColor * lumaScale);
+            }
+
             sampler2D _HandOcclusionMaskTex;
             float _HandOcclusionEnabled;
             float _HandOcclusionUseRect;
@@ -345,7 +359,8 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 adjusted.y = saturate(adjusted.y * (1.0 - evenLift * shadowWeight * 0.08));
 
                 float3 correctedRgb = saturate(HsvToRgb(adjusted));
-                return lerp(cameraColor, correctedRgb, saturate(amount));
+                float3 mixedColor = lerp(cameraColor, correctedRgb, saturate(amount));
+                return ClampFoundationToRosyReference(cameraColor, mixedColor);
             }
 
             // Blemish smoothing (잡티 제거): a 12-tap two-ring JOINT bilateral on
