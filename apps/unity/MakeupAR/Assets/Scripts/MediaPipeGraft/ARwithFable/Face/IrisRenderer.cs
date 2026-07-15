@@ -80,6 +80,7 @@ namespace ARMakeup.Face
         const int TailSubdiv = 6;              // 눈꼬리 꼬리 테셀레이션 점 수
         const int MainPts = 9 + 8 * LashSubdiv; // 세분된 안쪽 체인 점 수 = 33
         const int ChainPts = MainPts + TailSubdiv; // 꼬리 + 메인 = 39
+        const int EyelinerStyleCount = 6;
         // 두께: 두꺼우면 눈두덩(아이섀도우 자리)을 덮고 꼬리가 스파이크로 보인다(실기기).
         const float EyelinerThickness = 0.26f; // 눈 반경 대비 리본 최대 두께
         // 세그먼트 좌표축(uv.y): 눈꺼풀 파라메트릭 t = 앞머리(안쪽) 0 → 바깥 눈꼬리
@@ -108,9 +109,10 @@ namespace ARMakeup.Face
         const float EyeClosedSnapFloor = 0.25f; // 눈폭 대비 스냅 스케일 하한
         const float InnerCornerLiftImg = 0.055f; // 앞머리 끝 리프트(눈 높이 대비) — 눈구석 접합점보다 살짝 위에서 끝나게(0.05→0.055 실기기 튜닝)
         float _innerLiftOverride = -1f;          // (임시 디버그) 브리지 오버라이드 — 음수=미설정
-        // 스타일 0=윙업(캣아이), 1=다운턴(퍼피), 2=가로롱. 각도>0 = 위로(눈썹 방향).
-        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f };
-        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f }; // eyeRadius 배수
+        // 0 윙업, 1 퍼피, 2 롱, 3 캣, 4 스트레이트, 5 소프트 드롭.
+        // 각도>0 = 눈썹 방향. 두 배열은 EyelinerStyleCount와 1:1이다.
+        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f, 36f, 2f, -12f };
+        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f, 0.58f, 0.55f, 0.5f };
 
         // ── 아이섀도우 밴드 (동적) ──
         // 안쪽 경계=lash 라인(감아도 경계까지·아래로 안 샘), 위로만 눈썹 방향 확장.
@@ -118,6 +120,11 @@ namespace ARMakeup.Face
         const float ShadowHeightMult = 1.0f;   // 눈 반경 대비 밴드 최대 높이(눈썹쪽) — 정적 마스크 커버리지에 맞춤
         const float ShadowInnerWeight = 0.45f; // 안쪽 앞머리 농도·높이 가중 (바깥=1.0)
         const float BrowBias = 0.5f;           // 확장 방향을 로컬법선↔눈썹방향 사이로 평활
+        const int EyeshadowShapeCount = 12;
+        const int EyeshadowTailSubdiv = 6;
+        const int EyeshadowPts = MainPts + EyeshadowTailSubdiv;
+        const float EyeshadowTailAnatomicalX = 1.28f;
+        const float EyeshadowTailLength = 0.28f; // 눈 폭 대비 관자 방향 확장
 
         const float DistanceFromCamera = 0.5f; // CanonicalFaceMesh와 동일
         const float DepthScale = 1.0f;
@@ -324,7 +331,7 @@ namespace ARMakeup.Face
                 _esLayerParams[slot] = new Vector4(
                     cutoff,
                     Mathf.Clamp(layer.finish, 0, 3),
-                    Mathf.Clamp(layer.shape, 0, 3),
+                    Mathf.Clamp(layer.shape, 0, EyeshadowShapeCount - 1),
                     Mathf.Clamp01(layer.gradient));
             }
             _eyeshadowLayerCount = count;
@@ -478,7 +485,7 @@ namespace ARMakeup.Face
         {
             _irisIntensity = Mathf.Clamp01(p.irisIntensity);
             _eyelinerIntensity = Mathf.Clamp01(p.eyelinerIntensity);
-            _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, StyleAngleDeg.Length - 1);
+            _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, EyelinerStyleCount - 1);
             _eyeCornerLift = Mathf.Clamp01(p.eyeCornerLift);
             // 배수 핸들 — JsonUtility 생략 필드는 0이므로 0 이하 = 미설정 → 1(원래).
             _linerThickness = p.eyelinerThickness <= 0f ? 1f : Mathf.Clamp(p.eyelinerThickness, 0.3f, 2.5f);
@@ -520,9 +527,9 @@ namespace ARMakeup.Face
                 if (!string.IsNullOrEmpty(esStopB) && ColorUtility.TryParseHtmlString(esStopB, out var esc2))
                     esMat.SetColor(EyeshadowColor2Id, esc2);
                 esMat.SetFloat(EyeshadowGradientId, Mathf.Clamp01(p.eyeshadowGradient));
-                // 모양(#19b) — 0=리드 전체(기존) 1=크리스 집중 2=스모키 3=꼬리 포인트.
-                // Eyeshadow.shader가 세로·가로 프로파일을 분기(생략 0 = 기존 출력).
-                esMat.SetFloat(EyeshadowShapeId, Mathf.Clamp(p.eyeshadowShape, 0, 3));
+                // 모양 — 베이스/메인/포인트의 안쪽·중앙·바깥 + 크리스/스모키/와이드 12종.
+                esMat.SetFloat(EyeshadowShapeId,
+                    Mathf.Clamp(p.eyeshadowShape, 0, EyeshadowShapeCount - 1));
                 // 제형 스튜디오(#21) — 마감 세부(전부 0=미지정=enum 기존 동작). Finish.cginc가
                 // 다섯 값 합이 0이면 레거시 enum 경로로 분기(하위호환 대수 검증).
                 esMat.SetFloat(EyeshadowGlossLoId, Mathf.Clamp01(p.eyeshadowGlossLo));
@@ -568,7 +575,9 @@ namespace ARMakeup.Face
             // 스텐실 소비자: 렌즈(Equal — 눈 안만) + 하안검 밴드(NotEqual — 눈알 침범 방지).
             var stencilOn = irisOn ||
                             (visible && LowerLidRenderer.Instance != null &&
-                             LowerLidRenderer.Instance.NeedsEyeMask);
+                             LowerLidRenderer.Instance.NeedsEyeMask) ||
+                            (visible && AegyoRenderer.Instance != null &&
+                             AegyoRenderer.Instance.NeedsEyeMask);
 
             if (_stencil.renderer.enabled != stencilOn) _stencil.renderer.enabled = stencilOn;
             if (_iris.renderer.enabled != irisOn) _iris.renderer.enabled = irisOn;
@@ -1232,6 +1241,29 @@ namespace ARMakeup.Face
                 _fitEyeshadowFrame[e] = Time.frameCount;
                 _fitEyeshadowValid[e] = true;
 
+                // 기존 바깥 눈꼬리보다 관자 방향으로 0.28 eye-width 연장한다. 양쪽 눈 모두
+                // lash[0]이 해부학적 바깥점이라 화면 좌우 분기 없이 자동 미러링된다.
+                var eyeWidth = Vector2.Distance(lash[0], lash[MainPts - 1]);
+                var tailTangent = lash[0] - lash[1];
+                if (tailTangent.sqrMagnitude < 1e-12f) tailTangent = new Vector2(1f, 0f);
+                tailTangent.Normalize();
+                var tailDir = Vector2.Lerp(tailTangent, browUp, 0.14f).normalized;
+                var outerTangent = lash[1] - lash[0];
+                if (outerTangent.sqrMagnitude < 1e-12f) outerTangent = new Vector2(1f, 0f);
+                outerTangent.Normalize();
+                var outerNormal = Perp(outerTangent);
+                if (Vector2.Dot(outerNormal, browUp) < 0f) outerNormal = -outerNormal;
+                var outerUp = Vector2.Lerp(outerNormal, browUp, BrowBias).normalized;
+                var outerHeight = eyeRadius * ShadowHeightMult * heightMult;
+                for (var j = 0; j < EyeshadowTailSubdiv; j++)
+                {
+                    var tailT = (EyeshadowTailSubdiv - j) / (float)EyeshadowTailSubdiv;
+                    var p = lash[0] + tailDir * (eyeWidth * EyeshadowTailLength * tailT);
+                    var heightFade = Mathf.Lerp(1f, 0.48f, tailT);
+                    v[vi++] = IsoToWorld(p, aspect, depth);
+                    v[vi++] = IsoToWorld(p + outerUp * outerHeight * heightFade, aspect, depth);
+                }
+
                 for (var i = 0; i < MainPts; i++)
                 {
                     var p = lash[i];
@@ -1344,22 +1376,28 @@ namespace ARMakeup.Face
 
         (int[], Vector2[]) BuildEyeshadowTopology(out int vertCount)
         {
-            var perEye = 2 * MainPts; // inner(lash)/outer(위) 쌍
+            var perEye = 2 * EyeshadowPts; // tail + inner(lash)/outer(위) 쌍
             vertCount = UpperLids.Length * perEye;
             var tris = new List<int>();
             var uvs = new Vector2[vertCount];
             for (var e = 0; e < UpperLids.Length; e++)
             {
                 var b = e * perEye;
+                for (var j = 0; j < EyeshadowTailSubdiv; j++)
+                {
+                    uvs[b + 2 * j] = new Vector2(0f, 1f);
+                    uvs[b + 2 * j + 1] = new Vector2(1f, 1f);
+                }
                 for (var i = 0; i < MainPts; i++)
                 {
                     var s = i / (float)(MainPts - 1);
                     var weight = Mathf.Lerp(1f, ShadowInnerWeight, s); // 가로 농도(바깥1→앞머리0.45)
                     // uv.x = 세로(0 lash 진함 → 1 위 페이드), uv.y = 가로 가중
-                    uvs[b + 2 * i] = new Vector2(0f, weight);     // 안쪽(lash)
-                    uvs[b + 2 * i + 1] = new Vector2(1f, weight); // 바깥(위)
+                    var q = b + 2 * (EyeshadowTailSubdiv + i);
+                    uvs[q] = new Vector2(0f, weight);     // 안쪽(lash)
+                    uvs[q + 1] = new Vector2(1f, weight); // 바깥(위)
                 }
-                for (var k = 0; k < MainPts - 1; k++)
+                for (var k = 0; k < EyeshadowPts - 1; k++)
                 {
                     var q = b + 2 * k;
                     tris.Add(q); tris.Add(q + 1); tris.Add(q + 2);
@@ -1379,16 +1417,24 @@ namespace ARMakeup.Face
         //  u=0/u=1은 스트립 양 끝(자연 경계)일 뿐 이음새가 아니다.
         Vector2[] BuildEyeshadowBandUV(int vertCount)
         {
-            var perEye = 2 * MainPts;
+            var perEye = 2 * EyeshadowPts;
             var uv2 = new Vector2[vertCount];
             for (var e = 0; e < UpperLids.Length; e++)
             {
                 var b = e * perEye;
+                for (var j = 0; j < EyeshadowTailSubdiv; j++)
+                {
+                    var tailT = (EyeshadowTailSubdiv - j) / (float)EyeshadowTailSubdiv;
+                    var u = Mathf.Lerp(1f, EyeshadowTailAnatomicalX, tailT);
+                    uv2[b + 2 * j] = new Vector2(u, 0f);
+                    uv2[b + 2 * j + 1] = new Vector2(u, 1f);
+                }
                 for (var i = 0; i < MainPts; i++)
                 {
                     var u = 1f - i / (float)(MainPts - 1); // 눈앞 0 → 눈꼬리 1
-                    uv2[b + 2 * i] = new Vector2(u, 0f);     // 안쪽(lash, v=0 안검연)
-                    uv2[b + 2 * i + 1] = new Vector2(u, 1f); // 바깥(위,  v=1 눈썹쪽)
+                    var q = b + 2 * (EyeshadowTailSubdiv + i);
+                    uv2[q] = new Vector2(u, 0f);     // 안쪽(lash, v=0 안검연)
+                    uv2[q + 1] = new Vector2(u, 1f); // 바깥(위,  v=1 눈썹쪽)
                 }
             }
             return uv2;
