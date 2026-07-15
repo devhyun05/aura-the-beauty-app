@@ -120,8 +120,9 @@ async def create_search_session(
   try:
     state = await create_session_persisted(
       prompt=prompt,
-      report_id=str(payload.reportId or "").strip() or None,
-      source=str(payload.source or "").strip() or None,
+      # dev 길이 제한 유지(100/40) — 우리 Pydantic 모델은 상한이 없어 dev 검증을 명시 적용한다.
+      report_id=_bounded_optional_text(payload.reportId, field="reportId", max_length=100),
+      source=_bounded_optional_text(payload.source, field="source", max_length=40),
       context=context,
       report_context=report_context,
       owner_subject=auth.subject,

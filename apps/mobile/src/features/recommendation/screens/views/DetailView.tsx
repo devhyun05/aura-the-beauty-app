@@ -121,6 +121,7 @@ export function DetailView({
   const openBuy = () => {
     // dev 우선 경로: 신뢰제품 상세/판매처가 연결돼 있으면 그쪽으로 위임한다.
     if (onOpenTrustedProduct) {
+      onPurchase?.(); // A5 purchase_click — trusted 위임이든 일반 링크든 구매 의도는 기록돼야 함
       onOpenTrustedProduct();
       return;
     }

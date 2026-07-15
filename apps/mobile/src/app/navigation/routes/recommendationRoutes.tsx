@@ -56,7 +56,12 @@ export function ProductRecommendationRouteScreen({
           })
         }
         onCreateArLook={() => navigation.navigate('UnityMakeupCapture')}
-        onOpenAuradin={() => navigation.navigate('AuradinSearch')}
+        onOpenAuradin={() =>
+          navigation.navigate(
+            'AuradinSearch',
+            sourceReportId ? {reportId: sourceReportId} : undefined,
+          )
+        }
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
         onOpenPersonalizationSettings={() =>
           navigation.navigate('ProductPersonalizationSettings')

@@ -379,7 +379,11 @@ export function AuradinSearchScreen({
     // dev의 queueProductEvent는 /products/events(레거시)로 가고 save/unsave/purchase_click을
     // 담지 못해 A5 계약과 어긋나므로, dev 스키마의 position만 A5 rank로 흡수한다.
     const position = candidates.findIndex(candidate => candidate.id === product.id);
-    emitProductEvent('product_open', product, {rank: Math.max(0, position)});
+    // 서버 impression rank는 1-based(event_logger.py index+1) — position(0-based)에 +1.
+    // 후보에서 못 찾으면(-1) rank를 싣지 않는다(오염된 0 방지, emitProductEvent가 undefined 생략).
+    emitProductEvent('product_open', product, {
+      rank: position >= 0 ? position + 1 : undefined,
+    });
     setSelected(product);
     setPhase('detail');
   };

@@ -21,8 +21,14 @@ import type {AuradinCandidateProduct} from '../types';
 // (services/backend/app/api/products.py: /products/external/{source}/{id}/like)
 const AURADIN_CATALOG_SOURCE = 'auradin_catalog';
 
-function auradinLikePath(productId: string): string {
-  return `/products/external/${encodeURIComponent(AURADIN_CATALOG_SOURCE)}/${encodeURIComponent(productId)}/like`;
+// 후보의 출처로 external_source를 정한다 — 큐레이션 카탈로그 픽은 auradin_catalog,
+// 라이브 발견 픽은 auradin_search. 백엔드가 각각 해당 소스로 상품을 resolve한다.
+function likeSourceFor(product: AuradinCandidateProduct): string {
+  return product.externalSource || AURADIN_CATALOG_SOURCE;
+}
+
+function auradinLikePath(productId: string, source: string): string {
+  return `/products/external/${encodeURIComponent(source)}/${encodeURIComponent(productId)}/like`;
 }
 
 // 서버 찜 반영 — 실패는 조용히 (보관함 UX는 로컬 상태가 즉답, 서버는 영속화 계층).
@@ -32,7 +38,7 @@ export async function persistAuradinSave(product: AuradinCandidateProduct): Prom
   }
 
   try {
-    await requestBackendJson(auradinLikePath(product.id), {method: 'POST'});
+    await requestBackendJson(auradinLikePath(product.id, likeSourceFor(product)), {method: 'POST'});
   } catch (error) {
     console.info('[aura:auradin] save:persist-failed', {
       id: product.id,
@@ -41,13 +47,19 @@ export async function persistAuradinSave(product: AuradinCandidateProduct): Prom
   }
 }
 
-export async function removeAuradinSave(productId: string): Promise<void> {
+export async function removeAuradinSave(
+  productId: string,
+  externalSource?: string | null,
+): Promise<void> {
   if (!getBackendApiBaseUrl()) {
     return;
   }
 
   try {
-    await requestBackendJson(auradinLikePath(productId), {method: 'DELETE'});
+    await requestBackendJson(
+      auradinLikePath(productId, externalSource || AURADIN_CATALOG_SOURCE),
+      {method: 'DELETE'},
+    );
   } catch (error) {
     console.info('[aura:auradin] save:remove-failed', {
       id: productId,
@@ -56,40 +68,54 @@ export async function removeAuradinSave(productId: string): Promise<void> {
   }
 }
 
-// /products/liked 응답 행(services/backend _map_db_product 계약) — 필요한 필드만 느슨하게.
+// /products/liked 응답 행. dev 머지: 외부 제품 스냅샷은 productId(id 아님) + 객체형 price
+// (_map_external_like_snapshot). 레거시 UUID 제품은 id + 숫자 price라 양쪽을 느슨하게 수용한다.
 type BackendLikedRow = {
   id?: string | null;
+  productId?: string | null;
   brandName?: string | null;
   productName?: string | null;
   shadeName?: string | null;
   category?: string | null;
   matchRate?: number | null;
-  price?: number | null;
+  price?: number | {amount?: number | null; currency?: string | null} | null;
   tags?: string[] | null;
   palette?: string[] | null;
   imageUrl?: string | null;
   purchaseUrl?: string | null;
   reason?: string | null;
+  externalSource?: string | null;
+  status?: string | null;
 };
 
-// 찜 행 → 화면 소비 타입. 레거시 행의 reason은 문자열이라 reasonCopy로 옮긴다.
+function likedRowPrice(price: BackendLikedRow['price']): number | null {
+  if (typeof price === 'number') {
+    return price;
+  }
+  return typeof price?.amount === 'number' ? price.amount : null;
+}
+
+// 찜 행 → 화면 소비 타입. external 스냅샷의 productId·객체형 price·source를 흡수한다.
 export function mapLikedRowToCandidate(row: BackendLikedRow): AuradinCandidateProduct | null {
-  if (!row.id || !row.productName) {
+  const id = row.id || row.productId;
+  // 판매처 스냅샷이 안전하지 않아 unavailable로 내려온 행은 복원에서 제외.
+  if (!id || !row.productName || row.status === 'unavailable') {
     return null;
   }
 
   return mapCandidate({
-    id: row.id,
+    id,
     brandName: row.brandName,
     productName: row.productName,
     shadeName: row.shadeName,
     category: row.category,
     matchRate: row.matchRate,
-    price: row.price,
+    price: likedRowPrice(row.price),
     tags: row.tags,
     palette: row.palette,
     imageUrl: row.imageUrl,
     purchaseUrl: row.purchaseUrl,
+    externalSource: row.externalSource ?? null,
     reason: null,
     reasonCopy: row.reason ?? null,
   });
