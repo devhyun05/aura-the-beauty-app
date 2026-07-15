@@ -298,6 +298,30 @@ def check_supplement_invariant(
     raise RunnerAbort(f"supplement seed drops {len(missing)} active items — additions only")
 
 
+def load_provenance_manifest(path: Path) -> dict[str, Any]:
+  """supplement 승격용 provenance manifest 로드 + 실검증.
+
+  형식: {"files": {경로: sha256}} — 경로는 저장소 루트 기준 상대 또는 절대.
+  파일 누락·SHA 불일치·빈 체인은 전부 거부한다(빈 승인 체인 템플릿 발행 금지).
+  """
+  try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+  except (OSError, json.JSONDecodeError) as exc:
+    raise RunnerAbort(f"invalid provenance manifest: {path}: {exc}") from exc
+  files = payload.get("files") if isinstance(payload, dict) else None
+  if not isinstance(files, dict) or not files:
+    raise RunnerAbort(f"provenance manifest requires a non-empty files map: {path}")
+  for name, expected_sha in files.items():
+    file_path = Path(str(name))
+    if not file_path.is_absolute():
+      file_path = REPO_ROOT / file_path
+    if not file_path.is_file():
+      raise RunnerAbort(f"provenance file missing: {name}")
+    if _sha256_file(file_path) != str(expected_sha):
+      raise RunnerAbort(f"provenance SHA mismatch: {name}")
+  return {"files": {str(name): str(sha) for name, sha in files.items()}}
+
+
 def _run_subprocess(command: list[str], runner: Callable[..., Any]) -> None:
   completed = runner(command, cwd=REPO_ROOT)
   code = getattr(completed, "returncode", 0)
@@ -361,32 +385,41 @@ def write_pending_approval(
   diff_summary: dict[str, Any],
   results_sha: str,
   review_decisions_sha: str,
+  provenance: dict[str, Any] | None = None,
 ) -> Path:
-  """승인 증거를 pending까지만 작성한다 — approvedBy/reviewedAt/approvalConclusion은 사람 몫."""
+  """승인 증거를 pending까지만 작성한다 — approvedBy/reviewedAt/approvalConclusion은 사람 몫.
+
+  승인 체인 공백 금지: resultsSha+reviewDecisionsSha 또는 provenance 체인 중
+  하나는 반드시 있어야 한다. 빈 체인 템플릿은 발행하지 않는다.
+  """
+  if not (results_sha and review_decisions_sha) and not (provenance or {}).get("files"):
+    raise RunnerAbort(
+      "approval template refused: resultsSha+reviewDecisionsSha 또는 provenance 체인이 필요하다",
+    )
   manifest_sha = _sha256_file(manifest_path)
   approval_path = REPO_ROOT / "reports" / "auradin" / "approvals" / f"offer_refresh_{run_date}_approval.json"
-  _write_json(
-    approval_path,
-    {
-      "runId": run_id,
-      "runDate": run_date,
-      "snapshotManifestSha256": manifest_sha,
-      "golden": {
-        "status": golden_summary.get("status", ""),
-        "passed": golden_summary.get("passed", 0),
-        "total": golden_summary.get("total", 0),
-      },
-      "a8": {"status": "PASS" if golden_summary else "", "passed": bool(golden_summary)},
-      "coverageClassification": golden_summary.get("coverageClassification", "see_diff_report"),
-      "diffSummary": {key: diff_summary[key] for key in
-                      ("counts", "priceChanged", "priceTierChanged", "linkChanged")},
-      "resultsSha": results_sha,
-      "reviewDecisionsSha": review_decisions_sha,
-      "approvedBy": "",
-      "reviewedAt": "",
-      "approvalConclusion": "pending",
+  payload: dict[str, Any] = {
+    "runId": run_id,
+    "runDate": run_date,
+    "snapshotManifestSha256": manifest_sha,
+    "golden": {
+      "status": golden_summary.get("status", ""),
+      "passed": golden_summary.get("passed", 0),
+      "total": golden_summary.get("total", 0),
     },
-  )
+    "a8": {"status": "PASS" if golden_summary else "", "passed": bool(golden_summary)},
+    "coverageClassification": golden_summary.get("coverageClassification", "see_diff_report"),
+    "diffSummary": {key: diff_summary[key] for key in
+                    ("counts", "priceChanged", "priceTierChanged", "linkChanged")},
+    "resultsSha": results_sha,
+    "reviewDecisionsSha": review_decisions_sha,
+    "approvedBy": "",
+    "reviewedAt": "",
+    "approvalConclusion": "pending",
+  }
+  if provenance is not None:
+    payload["provenance"] = provenance
+  _write_json(approval_path, payload)
   active_sha = _sha256_file(REPO_ROOT / "data" / "auradin" / "active_snapshot.json")
   print(
     "\n[STOP — 사람 게이트] 승인 증거가 pending 상태로 생성됨:"
@@ -417,6 +450,10 @@ def main(
   parser.add_argument("--seed-path", type=Path, default=None)
   parser.add_argument("--resume-run", default=None)
   parser.add_argument("--apply-review", type=Path, default=None)
+  parser.add_argument(
+    "--provenance", type=Path, default=None,
+    help='supplement(--from preprocess) 승격용 provenance manifest JSON — {"files": {경로: sha256}}',
+  )
   parser.add_argument("--margin", type=float, default=0.15)
   parser.add_argument("--min-score", type=float, default=0.5)
   parser.add_argument("--delay-seconds", type=float, default=1.0)
@@ -449,6 +486,15 @@ def main(
 
     # 보충 모드: ①~⑤ 스킵, 병합 seed로 ⑥부터. 기존 ID 보존 게이트만 적용.
     if args.start_from == "preprocess":
+      provenance: dict[str, Any] | None = None
+      if args.until == "golden":
+        # supplement 승인 체인 공백 금지 — provenance 없이는 승인 템플릿을 만들지 않는다.
+        if args.provenance is None:
+          raise RunnerAbort(
+            "supplement promotion requires --provenance — "
+            "scripts/build_auradin_provenance.py로 입력 산출물의 provenance manifest를 먼저 생성하라",
+          )
+        provenance = load_provenance_manifest(args.provenance)
       check_supplement_invariant(_read_jsonl(active_seed_path), seed_rows)
       built = run_build_and_prepare(
         run_date=args.run_date, seed_path=seed_input, data_root=data_root,
@@ -459,7 +505,7 @@ def main(
           run_id=f"{args.run_date}-supplement", run_date=args.run_date,
           manifest_path=built["manifestPath"], golden_summary=built["goldenSummary"],
           diff_summary={"counts": {}, "priceChanged": 0, "priceTierChanged": 0, "linkChanged": 0},
-          results_sha="", review_decisions_sha="",
+          results_sha="", review_decisions_sha="", provenance=provenance,
         )
       return 0
 

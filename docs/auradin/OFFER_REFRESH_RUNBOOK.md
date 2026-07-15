@@ -108,9 +108,34 @@ golden까지 통과하면 러너는 다음을 출력한다.
 - `reviewedAt`
 - `approvalConclusion`: `pending`에서 `approved`로 변경
 
-git user 또는 러너가 이 값을 대신 채워서는 안 된다. 승인 증거에는 해당 run의 `runId`, `resultsSha`, `reviewDecisionsSha`, `snapshotManifestSha256`이 포함돼야 한다. 승인 파일이 완성된 뒤에만 러너가 출력한 activate 명령을 그대로 실행한다. 활성화 후 active pointer와 golden 6/6을 다시 확인한다.
+git user 또는 러너가 이 값을 대신 채워서는 안 된다. 승인 증거에는 해당 run의 `runId`, `runDate`, `resultsSha`, `reviewDecisionsSha`, `snapshotManifestSha256`이 포함돼야 한다. activate의 승인 검증기는 `runId`·`runDate`·`reviewedAt`이 비어 있지 않고, `resultsSha`+`reviewDecisionsSha` 체인 **또는** §5.1의 provenance 체인 중 하나가 있어야만 통과시킨다 — 빈 체인 승인은 거부된다. 승인 파일이 완성된 뒤에만 러너가 출력한 activate 명령을 그대로 실행한다. 활성화 후 active pointer와 golden 6/6을 다시 확인한다.
 
 승인하지 않는 경우 activate를 실행하지 않는다. **승격 거부는 롤백이 아니다.** active pointer가 바뀌지 않았으므로 기존 스냅샷이 계속 서빙된다.
+
+### 5.1 supplement 승격의 provenance 체인 (--from preprocess)
+
+supplement 승격(§9 ⑤ promote-prep, `--from preprocess`)은 주간 run bundle이 없어 `resultsSha`/`reviewDecisionsSha`를 만들 수 없다. 대신 **provenance manifest**로 승인 체인을 만든다. provenance 없이 supplement `--until golden`을 실행하면 러너가 승인 템플릿 생성을 거부한다(빈 체인 템플릿 발행 금지).
+
+1. 승격 입력 산출물(병합 seed, 스팟체크 CSV 등)의 SHA-256 manifest를 생성한다.
+
+   ```bash
+   ./.venv/bin/python scripts/build_auradin_provenance.py \
+     --files data/auradin/catalog/catalog_items_seed_merged_<RUN_DATE>.jsonl \
+             data/auradin/review/<category>_supplement_spotcheck_<RUN_DATE>.csv \
+     --output reports/auradin/approvals/provenance_<RUN_DATE>.json
+   ```
+
+2. 러너에 `--provenance`로 전달한다. 러너는 manifest의 각 파일 존재와 SHA를 실검증한 뒤 승인 템플릿의 `provenance` 필드에 봉인한다.
+
+   ```bash
+   ./.venv/bin/python scripts/run_auradin_weekly_offer_refresh.py \
+     --from preprocess --seed-path <merged_seed> --until golden \
+     --provenance reports/auradin/approvals/provenance_<RUN_DATE>.json
+   ```
+
+3. activate 시 검증기가 `provenance.files`의 각 파일 존재와 SHA를 다시 실검증한다. provenance에 기록된 파일을 이동·수정하면 activate가 거부되므로, 승인 완료까지 입력 산출물을 보존한다.
+
+승인자 기입 규칙(`approvedBy`/`reviewedAt`/`approvalConclusion`)은 §5와 동일하다.
 
 ## 6. 실패 대응
 

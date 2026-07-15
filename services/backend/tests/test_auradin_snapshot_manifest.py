@@ -86,11 +86,16 @@ def _snapshot_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 def _approval_evidence(path: Path, manifest_sha: str, **overrides) -> Path:
   payload = {
+    "runId": "20260715-test0001",
+    "runDate": "20260715",
     "snapshotManifestSha256": manifest_sha,
     "golden": {"status": "PASS", "passed": 6, "total": 6},
     "a8": {"status": "PASS"},
     "coverageClassification": {"allQueries": "expected"},
+    "resultsSha": "1" * 64,
+    "reviewDecisionsSha": "2" * 64,
     "approvedBy": "test-reviewer",
+    "reviewedAt": "2026-07-15T12:00:00+09:00",
     "approvalConclusion": "approved",
   }
   payload.update(overrides)

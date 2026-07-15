@@ -13,12 +13,18 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-_SPEC = importlib.util.spec_from_file_location(
-  "run_auradin_weekly_offer_refresh",
-  REPO_ROOT / "scripts" / "run_auradin_weekly_offer_refresh.py",
-)
-runner = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(runner)
+
+
+def _load_script(name: str):
+  spec = importlib.util.spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
+  module = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(module)
+  return module
+
+
+runner = _load_script("run_auradin_weekly_offer_refresh")
+promote = _load_script("promote_auradin_snapshot")
+provenance_builder = _load_script("build_auradin_provenance")
 
 
 SEED_ROWS = [
@@ -336,3 +342,162 @@ def test_supplement_invariant_requires_all_active_ids():
   runner.check_supplement_invariant(SEED_ROWS, supplement)
   with pytest.raises(runner.RunnerAbort):
     runner.check_supplement_invariant(SEED_ROWS, SEED_ROWS[1:])
+
+
+# ─── 치명 2: supplement 승인 체인 (provenance) ───────────────────────────────
+
+
+def test_supplement_golden_requires_provenance(tmp_path):
+  # provenance 없이 supplement --until golden → 빈 체인 템플릿 발행 금지, 즉시 abort.
+  data_root = _make_data_root(tmp_path)
+  seed_path = data_root / "catalog" / "catalog_items_seed_20260716.jsonl"
+  code = runner.main(
+    ["--run-date", "20260717", "--until", "golden", "--from", "preprocess",
+     "--seed-path", str(seed_path), "--data-root", str(data_root)],
+    fetcher=_forbidden_fetcher, subprocess_runner=_forbidden_subprocess,
+  )
+  assert code == 1
+
+
+def test_load_provenance_manifest_verifies_files(tmp_path):
+  artifact = tmp_path / "merged_seed.jsonl"
+  artifact.write_text('{"id": "x"}\n', encoding="utf-8")
+  good_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+  manifest = tmp_path / "prov.json"
+
+  manifest.write_text(json.dumps({"files": {str(artifact): good_sha}}), encoding="utf-8")
+  loaded = runner.load_provenance_manifest(manifest)
+  assert loaded["files"][str(artifact)] == good_sha
+
+  manifest.write_text(json.dumps({"files": {str(artifact): "0" * 64}}), encoding="utf-8")
+  with pytest.raises(runner.RunnerAbort, match="SHA mismatch"):
+    runner.load_provenance_manifest(manifest)
+
+  manifest.write_text(json.dumps({"files": {}}), encoding="utf-8")
+  with pytest.raises(runner.RunnerAbort, match="non-empty"):
+    runner.load_provenance_manifest(manifest)
+
+
+def test_build_provenance_manifest_script(tmp_path):
+  artifact = tmp_path / "a.jsonl"
+  artifact.write_text("x\n", encoding="utf-8")
+  output = tmp_path / "prov.json"
+  assert provenance_builder.main(["--files", str(artifact), "--output", str(output)]) == 0
+  payload = json.loads(output.read_text(encoding="utf-8"))
+  assert len(payload["files"]) == 1
+  key, sha = next(iter(payload["files"].items()))
+  assert key.endswith("a.jsonl")
+  assert sha == hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+
+def _approval_payload(manifest_sha: str, **overrides) -> dict:
+  payload = {
+    "runId": "20260717-c0b79920",
+    "runDate": "20260717",
+    "snapshotManifestSha256": manifest_sha,
+    "golden": {"status": "PASS", "passed": 6, "total": 6},
+    "a8": {"passed": True, "status": "PASS"},
+    "coverageClassification": "see_diff_report",
+    "diffSummary": {"counts": {}, "priceChanged": 0, "priceTierChanged": 0, "linkChanged": 0},
+    "resultsSha": "a" * 64,
+    "reviewDecisionsSha": "b" * 64,
+    "approvedBy": "human-reviewer",
+    "reviewedAt": "2026-07-15T08:55:00+09:00",
+    "approvalConclusion": "approved",
+  }
+  payload.update(overrides)
+  return payload
+
+
+def _write_approval(path: Path, payload: dict) -> str:
+  path.write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+  )
+  return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _validate_approval(path: Path, sha: str, manifest_sha: str) -> dict:
+  return promote.validate_approval_evidence(
+    path, expected_evidence_sha256=sha, expected_manifest_sha256=manifest_sha,
+  )
+
+
+def test_promote_validator_rejects_empty_chain(tmp_path):
+  # (f) resultsSha/reviewDecisionsSha 공백 + provenance 없음 → 거부.
+  manifest_sha = "c" * 64
+  path = tmp_path / "approval.json"
+  sha = _write_approval(path, _approval_payload(manifest_sha, resultsSha="", reviewDecisionsSha=""))
+  with pytest.raises(promote.SnapshotValidationError, match="provenance chain"):
+    _validate_approval(path, sha, manifest_sha)
+
+
+@pytest.mark.parametrize("field", ["runId", "runDate", "reviewedAt"])
+def test_promote_validator_requires_run_identity_fields(tmp_path, field):
+  manifest_sha = "c" * 64
+  path = tmp_path / "approval.json"
+  sha = _write_approval(path, _approval_payload(manifest_sha, **{field: ""}))
+  with pytest.raises(promote.SnapshotValidationError, match=field):
+    _validate_approval(path, sha, manifest_sha)
+
+
+def test_promote_validator_verifies_provenance_files(tmp_path):
+  # (f) provenance 실검증 — 파일 존재 + SHA 일치.
+  manifest_sha = "c" * 64
+  artifact = tmp_path / "merged_seed.jsonl"
+  artifact.write_text('{"id": "x"}\n', encoding="utf-8")
+  good_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+  ok_path = tmp_path / "ok.json"
+  ok_sha = _write_approval(
+    ok_path,
+    _approval_payload(manifest_sha, resultsSha="", reviewDecisionsSha="",
+                      provenance={"files": {str(artifact): good_sha}}),
+  )
+  assert _validate_approval(ok_path, ok_sha, manifest_sha)["approvedBy"] == "human-reviewer"
+
+  bad_path = tmp_path / "bad_sha.json"
+  bad_sha = _write_approval(
+    bad_path,
+    _approval_payload(manifest_sha, resultsSha="", reviewDecisionsSha="",
+                      provenance={"files": {str(artifact): "0" * 64}}),
+  )
+  with pytest.raises(promote.SnapshotValidationError, match="provenance SHA mismatch"):
+    _validate_approval(bad_path, bad_sha, manifest_sha)
+
+  missing_path = tmp_path / "missing.json"
+  missing_sha = _write_approval(
+    missing_path,
+    _approval_payload(manifest_sha, resultsSha="", reviewDecisionsSha="",
+                      provenance={"files": {str(tmp_path / "ghost.jsonl"): good_sha}}),
+  )
+  with pytest.raises(promote.SnapshotValidationError, match="provenance file missing"):
+    _validate_approval(missing_path, missing_sha, manifest_sha)
+
+  empty_path = tmp_path / "empty.json"
+  empty_sha = _write_approval(
+    empty_path,
+    _approval_payload(manifest_sha, resultsSha="", reviewDecisionsSha="",
+                      provenance={"files": {}}),
+  )
+  with pytest.raises(promote.SnapshotValidationError, match="non-empty"):
+    _validate_approval(empty_path, empty_sha, manifest_sha)
+
+
+def test_promote_validator_accepts_existing_20260717_style_chain(tmp_path):
+  # (f) 기존 활성 20260717 승인처럼 resultsSha+reviewDecisionsSha 체인이 있는
+  # 승인은 강화된 검증을 계속 통과한다(하위호환).
+  manifest_sha = "1dbf1617d260e7bb327de7f57c34d0fc76801c8ef7a6bc34bf0e84a31eb02581"
+  payload = _approval_payload(
+    manifest_sha,
+    runId="20260717-c0b79920",
+    runDate="20260717",
+    resultsSha="6573e3b3cd62a5fa17f4fd361c171e368c1dea0173cf0a88c5863d2c72760495",
+    reviewDecisionsSha="89adb3cc1cecb35d116c5676c1b5035190e794da8ac48a5d7477c7f6c03665c5",
+    diffSummary={
+      "counts": {"ambiguous": 13, "fetch_failed": 0, "matched": 566, "no_match": 39},
+      "linkChanged": 6, "priceChanged": 149, "priceTierChanged": 21,
+    },
+  )
+  path = tmp_path / "approval.json"
+  sha = _write_approval(path, payload)
+  assert _validate_approval(path, sha, manifest_sha)["sha256"] == sha

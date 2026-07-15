@@ -313,6 +313,36 @@ def validate_approval_evidence(
     raise SnapshotValidationError("approval evidence approvedBy is required")
   if str(payload.get("approvalConclusion") or "").strip().lower() != "approved":
     raise SnapshotValidationError("approval evidence conclusion must be approved")
+
+  # 승인 체인 공백 금지: runId·runDate·reviewedAt 필수 + (resultsSha+reviewDecisionsSha)
+  # 또는 provenance.files 체인 필수. provenance는 파일 존재·SHA를 실검증한다.
+  for field in ("runId", "runDate", "reviewedAt"):
+    if not _nonempty_approval_value(payload.get(field)):
+      raise SnapshotValidationError(f"approval evidence {field} is required")
+  provenance = payload.get("provenance")
+  provenance_files: dict[str, Any] = {}
+  if provenance is not None:
+    if (
+      not isinstance(provenance, dict)
+      or not isinstance(provenance.get("files"), dict)
+      or not provenance["files"]
+    ):
+      raise SnapshotValidationError("approval evidence provenance.files must be a non-empty object")
+    provenance_files = provenance["files"]
+    for name, expected_sha in provenance_files.items():
+      file_path = Path(str(name))
+      if not file_path.is_absolute():
+        file_path = REPO_ROOT / file_path
+      if not file_path.is_file():
+        raise SnapshotValidationError(f"approval evidence provenance file missing: {name}")
+      if sha256_file(file_path) != str(expected_sha):
+        raise SnapshotValidationError(f"approval evidence provenance SHA mismatch: {name}")
+  results_sha = str(payload.get("resultsSha") or "").strip()
+  review_decisions_sha = str(payload.get("reviewDecisionsSha") or "").strip()
+  if not ((results_sha and review_decisions_sha) or provenance_files):
+    raise SnapshotValidationError(
+      "approval evidence requires resultsSha+reviewDecisionsSha or a verified provenance chain",
+    )
   return {"path": str(evidence_path), "sha256": actual_sha, "approvedBy": payload["approvedBy"]}
 
 
