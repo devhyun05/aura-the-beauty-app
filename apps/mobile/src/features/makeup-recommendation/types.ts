@@ -72,6 +72,14 @@ export type MakeupRecommendationSession = {
   useProfile: boolean;
   personalColor?: string;
 };
+
+export type MakeupRecommendationReportHistoryItem = {
+  reportId: string;
+  createdAt: string;
+  scenarioText: string;
+  results: MakeupLookRecommendation[];
+};
+
 export type ProductRecommendationProvider = {
   recommendProducts(lookId: string): MakeupRecommendationProduct[];
 };
