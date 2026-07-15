@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import hashlib
 import hmac
 import json
@@ -68,9 +69,13 @@ EVENT_WRITE_FAILURES = {"count": 0}
 EVENT_ATTRIBUTION_DROPS = {"count": 0}
 # 교차 리뷰 A5-3 — background 큐 상한 초과로 drop된 수집 지점 수.
 EVENT_QUEUE_DROPS = {"count": 0}
+# 교차 리뷰 A5-6 — graceful shutdown flush 상한 초과로 drop된 미완료 task 수.
+EVENT_FLUSH_DROPS = {"count": 0}
 
 # 세션 API 수집 지점의 background 기록 큐 상한 — 초과분은 drop + 카운터(fail-open 유지).
 EVENT_TASK_QUEUE_LIMIT = 64
+# graceful shutdown 시 대기 중 이벤트 insert를 기다리는 상한(초). 초과분은 drop + 카운터.
+EVENT_SHUTDOWN_FLUSH_TIMEOUT = 5.0
 _PENDING_EVENT_TASKS: set[asyncio.Task[None]] = set()
 
 _EVENTS_TABLE_READY = False
@@ -516,6 +521,26 @@ async def record_search_turn_events(
     logger.warning("[aura:auradin-events] turn event capture failed (fail-open)", exc_info=True)
 
 
+async def _record_prebuilt_events(
+  events: list[dict[str, Any]],
+  *,
+  owner_subject: str | None,
+  settings: Settings | None = None,
+  db: Database | None = None,
+) -> None:
+  """스케줄 시점에 확정·deep-copy된 불변 이벤트 행을 삽입만 한다 — 빌드/state 접근 없음.
+
+  build_search_turn_events는 schedule_search_turn_events가 동기적으로 미리 실행한다.
+  이 task는 넘어온 스냅샷을 record_events로 insert만 하므로, 스케줄과 실제 insert 사이에
+  세션 state가 변조돼도 이 행들은 오염되지 않는다(교차 리뷰 A5-5).
+  """
+  try:
+    await record_events(events, owner_subject=owner_subject, settings=settings, db=db)
+  except Exception:
+    EVENT_WRITE_FAILURES["count"] += 1
+    logger.warning("[aura:auradin-events] turn event insert failed (fail-open)", exc_info=True)
+
+
 def schedule_search_turn_events(
   state: dict[str, Any] | None,
   *,
@@ -530,12 +555,34 @@ def schedule_search_turn_events(
 ) -> asyncio.Task[None] | None:
   """세션 API 수집 지점용 — CAS 완료 후 이벤트 기록을 bounded background 큐로 넘긴다.
 
-  응답은 이벤트 insert를 기다리지 않는다(교차 리뷰 A5-3). 동시 대기 task가
-  ``EVENT_TASK_QUEUE_LIMIT``를 넘으면 drop + 카운터(fail-open 유지). 배치 엔드포인트
-  (POST /search/events)는 전용 경로라 동기(record_events)를 유지한다.
+  이벤트 행은 **스케줄 시점에 동기적으로 확정**하고 deep-copy한 불변 스냅샷만 task에
+  넘긴다(교차 리뷰 A5-5). task는 삽입만 하므로, 스케줄과 실제 insert 사이에 세션 state가
+  변조돼도(예: 다음 refine/answer가 같은 dict를 in-place 갱신) 기록 값은 오염되지 않는다.
+  응답은 이벤트 insert를 기다리지 않는다(A5-3). 동시 대기 task가 ``EVENT_TASK_QUEUE_LIMIT``를
+  넘으면 drop + 카운터(fail-open 유지). 배치 엔드포인트(POST /search/events)는 전용 경로라
+  동기(record_events)를 유지한다.
   """
   if not state:
     return None
+  # ① 스케줄 시점에 행을 확정한다 — 빌더 오류도 응답으로 전파하지 않는다(fail-open).
+  try:
+    events = build_search_turn_events(
+      state,
+      trigger=trigger,
+      question_id=question_id,
+      option_id=option_id,
+      dial=dial,
+      refined_with_prompt=refined_with_prompt,
+    )
+  except Exception:
+    EVENT_WRITE_FAILURES["count"] += 1
+    logger.warning("[aura:auradin-events] turn event build failed (fail-open)", exc_info=True)
+    return None
+  if not events:
+    return None
+  # ② state의 중첩 참조(answers[].filterDelta·scoreSnapshot components 등)를 deep-copy로
+  #    끊는다 — task가 보는 것은 이 불변 스냅샷뿐이다.
+  snapshot = copy.deepcopy(events)
   if len(_PENDING_EVENT_TASKS) >= EVENT_TASK_QUEUE_LIMIT:
     EVENT_QUEUE_DROPS["count"] += 1
     logger.warning(
@@ -547,17 +594,7 @@ def schedule_search_turn_events(
     return None
   try:
     task = asyncio.create_task(
-      record_search_turn_events(
-        state,
-        trigger=trigger,
-        owner_subject=owner_subject,
-        settings=settings,
-        db=db,
-        question_id=question_id,
-        option_id=option_id,
-        dial=dial,
-        refined_with_prompt=refined_with_prompt,
-      ),
+      _record_prebuilt_events(snapshot, owner_subject=owner_subject, settings=settings, db=db),
     )
   except RuntimeError:
     # 실행 중인 이벤트 루프 밖(동기 컨텍스트) — fail-open: drop + 카운터.
@@ -573,10 +610,40 @@ def schedule_search_turn_events(
   return task
 
 
-async def flush_search_turn_event_tasks() -> None:
-  """테스트·graceful shutdown용 — background 큐에 남은 이벤트 기록을 모두 완료한다."""
+async def flush_search_turn_event_tasks(*, timeout: float | None = None) -> int:
+  """background 큐에 남은 이벤트 기록을 완료한다(테스트·graceful shutdown용).
+
+  ``timeout``(초)을 주면 그 상한까지만 기다린다 — 초과 시 남은 미완료 task는 cancel +
+  drop + 카운터(``EVENT_FLUSH_DROPS``)로 처리하고 종료가 진행되게 한다(교차 리뷰 A5-6).
+  timeout이 없으면(기본) 모두 소진한다. 반환값은 상한 초과로 drop된 미완료 task 수.
+  """
+  if timeout is None:
+    while _PENDING_EVENT_TASKS:
+      await asyncio.gather(*tuple(_PENDING_EVENT_TASKS), return_exceptions=True)
+    return 0
+
+  loop = asyncio.get_running_loop()
+  deadline = loop.time() + max(0.0, timeout)
   while _PENDING_EVENT_TASKS:
-    await asyncio.gather(*tuple(_PENDING_EVENT_TASKS), return_exceptions=True)
+    remaining = deadline - loop.time()
+    if remaining <= 0:
+      break
+    await asyncio.wait(tuple(_PENDING_EVENT_TASKS), timeout=remaining)
+
+  dropped = 0
+  for task in tuple(_PENDING_EVENT_TASKS):
+    if not task.done():
+      task.cancel()
+      dropped += 1
+  if dropped:
+    EVENT_FLUSH_DROPS["count"] += dropped
+    logger.warning(
+      "[aura:auradin-events] flush timeout (%.1fs) — %d task(s) unflushed at shutdown drops=%d",
+      timeout,
+      dropped,
+      EVENT_FLUSH_DROPS["count"],
+    )
+  return dropped
 
 
 def reset_event_queue_state() -> None:
@@ -584,3 +651,4 @@ def reset_event_queue_state() -> None:
   _PENDING_EVENT_TASKS.clear()
   EVENT_QUEUE_DROPS["count"] = 0
   EVENT_ATTRIBUTION_DROPS["count"] = 0
+  EVENT_FLUSH_DROPS["count"] = 0

@@ -4,8 +4,11 @@
 
 import {
   AURADIN_ANON_TOKEN_HEADER,
+  anonEventHeadersImmediateFrom,
   auradinAnonEventHeaders,
+  createAnonTokenState,
   getOrCreateAnonTokenWith,
+  resolveAnonTokenWith,
   type AnonTokenDeps,
 } from './auradinAnonToken';
 
@@ -129,6 +132,71 @@ async function main() {
       0,
       'no token → header omitted (server skips events, fail-open)',
     );
+  }
+
+  // --- negative cache: 발급 실패 후 backoff 동안 재발급 없이 즉시 null ---
+  {
+    const negLog: CallLog = {loads: 0, saves: [], issues: 0};
+    const state = createAnonTokenState();
+    const clock = {now: 1000};
+    const backoffMs = 30000;
+    const failingDeps = fakeDeps(
+      {
+        loadToken: async () => null,
+        issueToken: async () => {
+          negLog.issues += 1;
+          return null; // 발급 실패
+        },
+      },
+      negLog,
+    );
+
+    const first = await resolveAnonTokenWith(state, failingDeps, () => clock.now, backoffMs);
+    expectEqual(first, null, 'issuance failure resolves to null');
+    expectEqual(negLog.issues, 1, 'issuance attempted once on failure');
+
+    // backoff 이내 재호출 — 재발급 없이 즉시 null (negative cache)
+    const second = await resolveAnonTokenWith(state, failingDeps, () => clock.now, backoffMs);
+    expectEqual(second, null, 'within backoff resolves to null');
+    expectEqual(negLog.issues, 1, 'no re-issuance within negative-cache backoff');
+
+    // backoff 경과 후 — 다시 발급을 시도한다
+    clock.now += backoffMs + 1;
+    await resolveAnonTokenWith(state, failingDeps, () => clock.now, backoffMs);
+    expectEqual(negLog.issues, 2, 'issuance retried after backoff expires');
+  }
+
+  // --- 성공 발급은 캐시되고, 즉시 헤더가 그 토큰을 붙인다 ---
+  {
+    const okLog: CallLog = {loads: 0, saves: [], issues: 0};
+    const state = createAnonTokenState();
+    const okDeps = fakeDeps({loadToken: async () => null}, okLog); // issueToken → 'issued-token'
+
+    const resolved = await resolveAnonTokenWith(state, okDeps);
+    expectEqual(resolved, 'issued-token', 'successful issuance resolves token');
+    expectEqual(state.cachedToken, 'issued-token', 'issued token cached in state');
+
+    const again = await resolveAnonTokenWith(state, okDeps);
+    expectEqual(again, 'issued-token', 'cached token reused without re-issuance');
+    expectEqual(okLog.issues, 1, 'no second issuance when cached');
+
+    const headers = anonEventHeadersImmediateFrom(state);
+    expectEqual(
+      headers[AURADIN_ANON_TOKEN_HEADER],
+      'issued-token',
+      'immediate header attaches cached token synchronously',
+    );
+  }
+
+  // --- 즉시 헤더: 캐시 없으면 대기 없이 생략 + prewarm(onMiss) 트리거 ---
+  {
+    const emptyState = createAnonTokenState();
+    let prewarmCalls = 0;
+    const headers = anonEventHeadersImmediateFrom(emptyState, () => {
+      prewarmCalls += 1;
+    });
+    expectEqual(Object.keys(headers).length, 0, 'no cached token → immediate header omitted');
+    expectEqual(prewarmCalls, 1, 'missing token triggers background prewarm (onMiss)');
   }
 
   console.log('auradinAnonToken contract assertions passed');

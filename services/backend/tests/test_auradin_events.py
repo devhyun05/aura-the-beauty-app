@@ -718,3 +718,93 @@ async def test_background_queue_drops_over_limit(monkeypatch: pytest.MonkeyPatch
   # 상한 내 task는 기록 완료 — 같은 결정적 clientEventId라 (owner, id) dedup으로 1행.
   assert len(db.rows) == 1
   assert db.rows[0][ARG_EVENT_TYPE] == "session_start"
+
+
+# ------------------------------------------------------------------ ⑪ 스케줄 시점 스냅샷 (중5-1)
+
+
+@pytest.mark.asyncio
+async def test_scheduled_events_snapshot_state_before_async_insert() -> None:
+  # 이벤트 행은 스케줄 시점에 확정된다 — 이후 state를 파괴적으로 변조해도 기록 값은 불변.
+  gate = asyncio.Event()
+  db = GatedEventsDb(gate)
+  settings = _enabled_settings()
+  state = {
+    "sessionId": "auradin-snapshot",
+    "phase": "results",
+    "context": {"source": "freePrompt"},
+    "result": {"products": [{"id": "p1", "category": "lip", "role": "anchor", "matchRate": 88}]},
+    "rankedCache": [{"id": "p1", "score": 0.88, "components": {"semantic": 0.7}}],
+  }
+
+  task = event_logger.schedule_search_turn_events(
+    state, trigger="create", owner_subject=ANON_OWNER, settings=settings, db=db,
+  )
+  assert task is not None
+
+  # 스케줄 직후 insert는 gate에서 대기 중 — 그 사이 state를 in-place로 파괴적 변조한다.
+  state["sessionId"] = "MUTATED"
+  state["context"]["source"] = "MUTATED"
+  state["result"]["products"][0]["id"] = "MUTATED"
+  state["result"]["products"].clear()
+  state["rankedCache"][0]["components"]["semantic"] = 0.0  # 중첩 참조 변조 (deep-copy 검증)
+
+  gate.set()
+  await event_logger.flush_search_turn_event_tasks()
+
+  types = [row[ARG_EVENT_TYPE] for row in db.rows]
+  assert types.count("session_start") == 1
+  assert types.count("impression") == 1  # 스냅샷 시점 products 1건 (이후 clear 무영향)
+  serialized = json.dumps([[str(value) for value in row] for row in db.rows], ensure_ascii=False)
+  assert "MUTATED" not in serialized  # 스케줄 이후 변조 값은 어디에도 새지 않는다
+
+  session_start = next(r for r in db.rows if r[ARG_EVENT_TYPE] == "session_start")
+  assert session_start[ARG_CLIENT_EVENT_ID] == "srv:auradin-snapshot:session_start"
+  impression = next(r for r in db.rows if r[ARG_EVENT_TYPE] == "impression")
+  payload = json.loads(impression[ARG_PAYLOAD])
+  assert payload["scoreSnapshot"]["components"] == {"semantic": 0.7}  # 변조 전 값 보존
+
+
+# ------------------------------------------------------------------ ⑫ bounded flush (중5-2)
+
+
+@pytest.mark.asyncio
+async def test_bounded_flush_drains_within_timeout() -> None:
+  gate = asyncio.Event()
+  gate.set()  # 즉시 통과 — 상한 내 완료.
+  db = GatedEventsDb(gate)
+  settings = _enabled_settings()
+  state = {"sessionId": "auradin-fast", "phase": "searching", "context": {"source": "freePrompt"}}
+
+  event_logger.schedule_search_turn_events(
+    state, trigger="create", owner_subject=ANON_OWNER, settings=settings, db=db,
+  )
+  dropped = await event_logger.flush_search_turn_event_tasks(timeout=5.0)
+
+  assert dropped == 0
+  assert [row[ARG_EVENT_TYPE] for row in db.rows] == ["session_start"]
+
+
+@pytest.mark.asyncio
+async def test_bounded_flush_drops_unflushed_over_timeout_and_proceeds() -> None:
+  # gate를 열지 않아 insert가 상한을 넘긴다 — flush는 drop + 카운터 후 반환(종료 진행).
+  gate = asyncio.Event()
+  db = GatedEventsDb(gate)
+  settings = _enabled_settings()
+  state = {"sessionId": "auradin-slow", "phase": "searching", "context": {"source": "freePrompt"}}
+  drops = event_logger.EVENT_FLUSH_DROPS["count"]
+
+  task = event_logger.schedule_search_turn_events(
+    state, trigger="create", owner_subject=ANON_OWNER, settings=settings, db=db,
+  )
+  assert task is not None
+
+  dropped = await event_logger.flush_search_turn_event_tasks(timeout=0.05)
+
+  assert dropped == 1  # 상한 초과 미완료 1건
+  assert event_logger.EVENT_FLUSH_DROPS["count"] == drops + 1
+  assert db.rows == []  # gate 미개방 — insert 미완료지만 종료는 그래도 진행됐다
+  # 미완료 task는 cancel되어 매달리지 않는다 — cancel 전파를 확정한다.
+  with contextlib.suppress(asyncio.CancelledError):
+    await task
+  assert task.cancelled()
