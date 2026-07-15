@@ -119,6 +119,13 @@ const PASSTHROUGH_KEYS = (Object.keys(BARE) as (keyof FilterParams)[]).filter(
   k => !REGION_OWNED.has(k),
 );
 
+/** 구형 하단 아이라인 저장물은 전용 색 없이 공유 eyelinerColor만 소유한다. */
+function legacyLowerLinerColor(p: Partial<FilterParams>): string | undefined {
+  return p.eyelinerLowerColor == null && typeof p.eyelinerColor === 'string'
+    ? p.eyelinerColor
+    : undefined;
+}
+
 /**
  * 레이어 스택 → 브리지 재료로 컴파일. BARE에서 시작해 보이는 레이어를 순서대로
  * 병합한다(부위 필드가 겹치면 위 레이어가 이긴다). 데코 레이어는 오버레이 배열로
@@ -162,6 +169,14 @@ export function compileLayers(
     if (layer.region === 'eyeshadow') {
       eyeshadowLeaves.push(layer.params);
       continue; // params 병합은 아래에서 겹 수로 분기
+    }
+    if (layer.region === 'eyelinerLower') {
+      const legacyColor = legacyLowerLinerColor(layer.params);
+      const normalizedParams = { ...layer.params };
+      delete normalizedParams.eyelinerColor;
+      if (legacyColor !== undefined) normalizedParams.eyelinerLowerColor = legacyColor;
+      Object.assign(params, normalizedParams);
+      continue;
     }
     Object.assign(params, layer.params);
   }
@@ -208,6 +223,10 @@ export function seedLayers(
       if (params[k] !== undefined) {
         (own as Record<string, unknown>)[k] = params[k];
       }
+    }
+    if (def.key === 'eyelinerLower') {
+      const legacyColor = legacyLowerLinerColor(params);
+      if (legacyColor !== undefined) own.eyelinerLowerColor = legacyColor;
     }
     layers.push({ id: `c${++seq}`, region: def.key, visible: true, params: own });
   }

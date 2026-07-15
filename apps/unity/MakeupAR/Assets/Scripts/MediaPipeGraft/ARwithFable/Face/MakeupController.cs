@@ -50,6 +50,16 @@ namespace ARMakeup.Face
         static readonly int HighlightMaskId = Shader.PropertyToID("_HighlightMask");
         static readonly int HighlightColorId = Shader.PropertyToID("_HighlightColor");
         static readonly int HighlightIntensityId = Shader.PropertyToID("_HighlightIntensity");
+        static readonly int HighlightCheekMaskId = Shader.PropertyToID("_HighlightCheekMask");
+        static readonly int HighlightNoseBridgeMaskId = Shader.PropertyToID("_HighlightNoseBridgeMask");
+        static readonly int HighlightNoseTipMaskId = Shader.PropertyToID("_HighlightNoseTipMask");
+        static readonly int HighlightBrowBoneMaskId = Shader.PropertyToID("_HighlightBrowBoneMask");
+        static readonly int HighlightCupidMaskId = Shader.PropertyToID("_HighlightCupidMask");
+        static readonly int HighlightCheekIntensityId = Shader.PropertyToID("_HighlightCheekIntensity");
+        static readonly int HighlightNoseBridgeIntensityId = Shader.PropertyToID("_HighlightNoseBridgeIntensity");
+        static readonly int HighlightNoseTipIntensityId = Shader.PropertyToID("_HighlightNoseTipIntensity");
+        static readonly int HighlightBrowBoneIntensityId = Shader.PropertyToID("_HighlightBrowBoneIntensity");
+        static readonly int HighlightCupidIntensityId = Shader.PropertyToID("_HighlightCupidIntensity");
         // 하이라이터/컨투어 마감 — 블러셔와 동일 enum(0 새틴=기존 출력, 하위호환).
         static readonly int HighlightFinishId = Shader.PropertyToID("_HighlightFinish");
         static readonly int HighlightShimmerId = Shader.PropertyToID("_HighlightShimmer");
@@ -187,6 +197,11 @@ namespace ARMakeup.Face
             mat.renderQueue = MakeupQueues.Face;
             mat.SetTexture(BlushMaskId, MaskGenerator.BlushMask);
             mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightMask);
+            mat.SetTexture(HighlightCheekMaskId, MaskGenerator.HighlightCheekShapeMask(0f));
+            mat.SetTexture(HighlightNoseBridgeMaskId, MaskGenerator.HighlightNoseBridgeShapeMask(0f));
+            mat.SetTexture(HighlightNoseTipMaskId, MaskGenerator.HighlightNoseTipShapeMask(0f));
+            mat.SetTexture(HighlightBrowBoneMaskId, MaskGenerator.HighlightBrowBoneShapeMask(0f));
+            mat.SetTexture(HighlightCupidMaskId, MaskGenerator.HighlightCupidShapeMask(0f));
             mat.SetTexture(ContourMaskId, MaskGenerator.ContourMask);
             // 임포트 전엔 투명 텍스처라 오버레이가 얼굴을 덮지 않는다. 슬롯0 강도만 1 —
             // 단일 임포트(setFaceOverlay) 경로가 마스터 강도만으로 기존과 동일하게 돌게.
@@ -413,7 +428,7 @@ namespace ARMakeup.Face
         // enterPhotoEdit 등 로컬 미디어는 MediaEditController 소관이라 이 switch에 없음).
         static readonly HashSet<string> PathBearingTypes = new HashSet<string>
         {
-            "setBrowStyle", "setEyelinerStyle", "setLipStyle", "setBlushStyle", "setAegyoStyle",
+            "setBrowStyle", "setEyelinerStyle", "setLipStyle", "setBlushStyle",
             "setRegionMask", "setTextureMap", "setFaceOverlay", "setOverlayLayers", "setLensLayers",
         };
 
@@ -471,8 +486,8 @@ namespace ARMakeup.Face
                         BlushStyleRenderer.Instance.SetTextureFromFile(msg.path);
                     break;
                 case "setAegyoStyle":
-                    if (LowerLidRenderer.Instance != null)
-                        LowerLidRenderer.Instance.SetAegyoTextureFromFile(msg.path);
+                    // 구 클라이언트 호환: 메시지는 받아들이되 새 전용 렌더러에는 데칼 경로가 없다.
+                    Debug.Log("[MakeupController] setAegyoStyle ignored by dedicated aegyo renderer");
                     break;
                 case "setRegionMask":
                     SetRegionMaskFromFile(msg.region, msg.path);
@@ -906,6 +921,11 @@ namespace ARMakeup.Face
             // A14 재베이크(배치 A ③) — softness 0이면 버킷 0 = 기존 마스크(하위호환).
             mat.SetTexture(BlushMaskId, MaskGenerator.BlushShapeMask(p.blushShape, p.blushEdgeSoftness));
             mat.SetFloat(HighlightIntensityId, Mathf.Clamp01(p.highlightIntensity));
+            mat.SetFloat(HighlightCheekIntensityId, Mathf.Clamp01(p.highlightCheekIntensity));
+            mat.SetFloat(HighlightNoseBridgeIntensityId, Mathf.Clamp01(p.highlightNoseBridgeIntensity));
+            mat.SetFloat(HighlightNoseTipIntensityId, Mathf.Clamp01(p.highlightNoseTipIntensity));
+            mat.SetFloat(HighlightBrowBoneIntensityId, Mathf.Clamp01(p.highlightBrowBoneIntensity));
+            mat.SetFloat(HighlightCupidIntensityId, Mathf.Clamp01(p.highlightCupidIntensity));
             SetColor(mat, HighlightColorId, p.highlightColor);
             // 마감 — 블러셔와 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             mat.SetFloat(HighlightFinishId, p.highlightFinish);
@@ -936,6 +956,16 @@ namespace ARMakeup.Face
             // (highlight/contour는 CreateMaterial 1회 세팅뿐이라 여기서 확장). 임포트 오버라이드는
             // ApplyTo 뒤 ReassertMaskOverrides가 복원하므로 순서상 자동 정합. softness 0=버킷 0=기존.
             mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightShapeMask(p.highlightEdgeSoftness));
+            mat.SetTexture(HighlightCheekMaskId,
+                MaskGenerator.HighlightCheekShapeMask(p.highlightEdgeSoftness));
+            mat.SetTexture(HighlightNoseBridgeMaskId,
+                MaskGenerator.HighlightNoseBridgeShapeMask(p.highlightEdgeSoftness));
+            mat.SetTexture(HighlightNoseTipMaskId,
+                MaskGenerator.HighlightNoseTipShapeMask(p.highlightEdgeSoftness));
+            mat.SetTexture(HighlightBrowBoneMaskId,
+                MaskGenerator.HighlightBrowBoneShapeMask(p.highlightEdgeSoftness));
+            mat.SetTexture(HighlightCupidMaskId,
+                MaskGenerator.HighlightCupidShapeMask(p.highlightEdgeSoftness));
             mat.SetTexture(ContourMaskId, MaskGenerator.ContourShapeMask(p.contourEdgeSoftness));
             // 컨실러 — FaceMakeup 머티리얼은 붉은기 자동(shape=1)만 소비한다. 눈밑
             // 존(shape=0)은 아래 하안검 밴드로 라우팅(§08). Color/Intensity/Shape는
@@ -1013,13 +1043,15 @@ namespace ARMakeup.Face
             if (EyelinerStyleRenderer.Instance != null)
                 EyelinerStyleRenderer.Instance.ApplyParams(
                     p.eyelinerColor, p.eyelinerStyleIntensity, p.eyeCornerLift);
-            // 하안검 밴드 — 애교살(구 캐노니컬 마스크에서 이관) + 아이라인(하, 색은 라이너 공용).
+            // 하안검 밴드 — 아이라인(하, 전용 색 + legacy 상단 색 폴백) + 하단 제품들.
             if (LowerLidRenderer.Instance != null)
             {
+                var lowerLinerColor = string.IsNullOrEmpty(p.eyelinerLowerColor)
+                    ? p.eyelinerColor
+                    : p.eyelinerLowerColor;
                 LowerLidRenderer.Instance.ApplyParams(
-                    p.aegyoIntensity, p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift,
-                    p.aegyoHeight, p.aegyoStyleIntensity, p.aegyoColor,
-                    p.aegyoFinish, p.aegyoShimmer);
+                    lowerLinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift, p.eyelinerLowerStyle,
+                    p.eyelinerLowerFinish, p.eyelinerLowerShimmer);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도 독립, 0=끔).
                 LowerLidRenderer.Instance.ApplyTriangleZone(p.triangleZoneColor, p.triangleZoneIntensity);
                 // 눈밑 컨실러(§08) — shape=0만 밴드로 브라이튼(언더아이 홀로우). shape=1
@@ -1029,7 +1061,20 @@ namespace ARMakeup.Face
                 // A3 아이섀도 하 — 하안검 lash 아래로 페이드하는 섀도 밴드(애교살보다 아래 깔림). 0=끔.
                 LowerLidRenderer.Instance.ApplyLowerShadow(
                     p.eyeshadowLowerColor, p.eyeshadowLowerIntensity,
-                    p.eyeshadowLowerFinish, p.eyeshadowLowerShimmer);
+                    p.eyeshadowLowerShape, p.eyeshadowLowerFinish, p.eyeshadowLowerShimmer);
+            }
+            if (AegyoRenderer.Instance != null)
+            {
+                var isNewAegyo = p.aegyoRendererVersion >= 1f;
+                var normalizedAegyoMode = isNewAegyo
+                    ? (p.aegyoMode >= 0.5f ? 1 : 0)
+                    : (p.aegyoFinish == 3 ? 1 : 0);
+                var normalizedShadow = isNewAegyo
+                    ? Mathf.Clamp01(p.aegyoShadowIntensity)
+                    : Mathf.Clamp01(p.aegyoIntensity * 0.68f);
+                AegyoRenderer.Instance.ApplyParams(
+                    p.aegyoIntensity, p.aegyoColor, p.aegyoHeight, normalizedAegyoMode,
+                    normalizedShadow, p.aegyoShimmer);
             }
             // 쌍꺼풀 크리스(#19b) — 상안검 위 얇은 음영(색은 자연 음영 고정, 강도 0=끔).
             if (DoubleLidRenderer.Instance != null)

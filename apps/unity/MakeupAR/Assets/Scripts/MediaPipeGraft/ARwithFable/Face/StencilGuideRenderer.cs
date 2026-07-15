@@ -915,7 +915,7 @@ namespace ARMakeup.Face
 
             // 눈 부위 앵커 — e=1(EyeOuterL=263)=L, e=0(EyeOuterR=33)=R (const 규약).
             var irisRenderer = IrisRenderer.Instance;
-            var lowerLidRenderer = LowerLidRenderer.Instance;
+            var aegyoRenderer = AegyoRenderer.Instance;
             for (var e = 0; e < 2; e++)
             {
                 var side = e == 1 ? "L" : "R";
@@ -931,8 +931,8 @@ namespace ARMakeup.Face
                     haveEyeliner ? innerVp : EyelinerInnerHandleVp(lm, e));
 
                 var aegyoVp = Vector2.zero;
-                if (lowerLidRenderer != null &&
-                    lowerLidRenderer.TryGetAegyoFitHandle(e, out aegyoVp))
+                if (aegyoRenderer != null &&
+                    aegyoRenderer.TryGetAegyoFitHandle(e, out aegyoVp))
                     Add("aegyo" + side, aegyoVp);
                 else
                     Add("aegyo" + side, ToVp(AegyoCenterImg(lm, e)));

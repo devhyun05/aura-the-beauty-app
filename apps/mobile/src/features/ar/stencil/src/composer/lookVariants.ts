@@ -53,6 +53,7 @@ function addRegionLook(
       level: 'sub',
       slot,
       owner: 'system',
+      pickerScope: exposeAtRegionLevel ? 'internal' : 'standalone',
       kids: sub.leaves.map(leaf => ({
         label: leaf.label,
         region: leaf.region,
@@ -436,7 +437,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '윤광 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.35, skinGlow: 0.5 },
+        params: { skinSmoothing: 0.45, skinGlow: 0.5 },
       }],
     },
     {
@@ -454,7 +455,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '모공 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.5 },
+        params: { skinSmoothing: 0.6 },
       }],
     },
     {
@@ -501,46 +502,58 @@ export function buildVariantLibrary(): LookLibrary {
     },
   ]);
 
+  // 피부 전체 룩의 내부 프라이머를 세부부위 카드에 재사용하지 않는다. 피부결에서
+  // 직접 고르는 두 카드는 별도 standalone 정의로 제공한다.
+  addRegionLook(lib, 'skin-primer', 'pore', '모공 프라이머', '피부',
+    single('모공 프라이머', 'skin', {
+      skinSmoothing: 0.6,
+      skinGlow: 0,
+    }), false);
+  addRegionLook(lib, 'skin-primer', 'glow', '윤광 프라이머', '피부',
+    single('윤광 프라이머', 'skin', {
+      skinSmoothing: 0.45,
+      skinGlow: 0.5,
+    }), false);
+
   // ── 세부부위 룩 — BasicMode의 세부부위 탭은 level='sub' 정의를 직접 조회한다.
   //    기존 '전체' 탭의 슬롯 룩 목록과 섞이지 않도록 region 래퍼는 만들지 않는다.
 
-  // 하이라이터 4종 — 기본 광채 존에서 색·마감·퍼짐 차이만 사용(별도 마스크 불필요).
-  addRegionLook(lib, 'highlighter', 'soft-champagne', '은은 샴페인', '컨투어',
-    single('은은 샴페인', 'highlighter', {
-      highlightColor: '#FFF2DB',
-      highlightIntensity: 0.18,
-      highlightFinish: 0,
-      highlightEdgeSoftness: 0.72,
-    }), false);
-  addRegionLook(lib, 'highlighter', 'dewy-glow', '듀이 글로우', '컨투어',
-    single('듀이 글로우', 'highlighter', {
-      highlightColor: '#FFE9C8',
-      highlightIntensity: 0.28,
-      highlightFinish: 2,
-      highlightLift: 0.02,
-      highlightSpread: 0.03,
-      highlightEdgeSoftness: 0.65,
-    }), false);
-  addRegionLook(lib, 'highlighter', 'pink-pearl', '핑크 펄', '컨투어',
-    single('핑크 펄', 'highlighter', {
-      highlightColor: '#F5DDE2',
-      highlightIntensity: 0.24,
-      highlightFinish: 3,
-      highlightShimmer: 0.45,
-      highlightLift: 0.01,
-      highlightSpread: 0.01,
-      highlightEdgeSoftness: 0.55,
-    }), false);
-  addRegionLook(lib, 'highlighter', 'lilac-beam', '라일락 빔', '컨투어',
-    single('라일락 빔', 'highlighter', {
-      highlightColor: '#EFE6F2',
-      highlightIntensity: 0.32,
-      highlightFinish: 3,
-      highlightShimmer: 0.62,
-      highlightLift: 0.03,
-      highlightSpread: -0.02,
-      highlightEdgeSoftness: 0.48,
-    }), false);
+  // 하이라이터 5부위 × 은은/펄. 각 룩은 자기 부위 강도만 소유해 독립 토글된다.
+  const highlighterLooks: Array<{
+    slug: string;
+    name: string;
+    region: Extract<RegionKey,
+      | 'highlightCheek'
+      | 'highlightNoseBridge'
+      | 'highlightNoseTip'
+      | 'highlightBrowBone'
+      | 'highlightCupid'>;
+    intensityKey: keyof FilterParams;
+    soft: [number, string];
+    pearl: [number, string, number];
+  }> = [
+    {slug: 'cheek', name: '광대', region: 'highlightCheek', intensityKey: 'highlightCheekIntensity', soft: [0.42, '#F6D6C7'], pearl: [0.52, '#FFE2C2', 0.58]},
+    {slug: 'bridge', name: '콧대', region: 'highlightNoseBridge', intensityKey: 'highlightNoseBridgeIntensity', soft: [0.32, '#F4D9CB'], pearl: [0.42, '#FFE4C7', 0.48]},
+    {slug: 'tip', name: '코끝', region: 'highlightNoseTip', intensityKey: 'highlightNoseTipIntensity', soft: [0.3, '#F6D8C9'], pearl: [0.48, '#FFE3C2', 0.62]},
+    {slug: 'brow-bone', name: '눈썹뼈', region: 'highlightBrowBone', intensityKey: 'highlightBrowBoneIntensity', soft: [0.3, '#F2D7CA'], pearl: [0.4, '#F7DECF', 0.44]},
+    {slug: 'cupid', name: '입술산', region: 'highlightCupid', intensityKey: 'highlightCupidIntensity', soft: [0.28, '#F4D5C9'], pearl: [0.44, '#FFE0C4', 0.54]},
+  ];
+  for (const look of highlighterLooks) {
+    addRegionLook(lib, `highlighter-${look.slug}`, 'soft', `${look.name} 은은`, '컨투어',
+      single(`${look.name} 은은`, look.region, {
+        [look.intensityKey]: look.soft[0],
+        highlightColor: look.soft[1],
+        highlightFinish: 0,
+        highlightShimmer: 0.1,
+      }), false);
+    addRegionLook(lib, `highlighter-${look.slug}`, 'pearl', `${look.name} 펄`, '컨투어',
+      single(`${look.name} 펄`, look.region, {
+        [look.intensityKey]: look.pearl[0],
+        highlightColor: look.pearl[1],
+        highlightFinish: 3,
+        highlightShimmer: look.pearl[2],
+      }), false);
+  }
 
   // 컨투어 4종 — 존을 과장해 이름 붙이지 않고 톤·농도·블렌딩 차이로 구분.
   addRegionLook(lib, 'contour', 'soft-taupe', '소프트 토프', '컨투어',
@@ -577,81 +590,118 @@ export function buildVariantLibrary(): LookLibrary {
       contourEdgeSoftness: 0.58,
     }), false);
 
-  // 아이섀도 하 4종 — 애교살 아래에 깔리는 하안검 음영.
-  addRegionLook(lib, 'eyeshadow-lower', 'daily-beige', '데일리 베이지', '눈',
-    single('데일리 베이지', 'eyeshadowLower', {
-      eyeshadowLowerColor: '#C29A7B',
-      eyeshadowLowerIntensity: 0.16,
-      eyeshadowLowerFinish: 0,
-    }), false);
-  addRegionLook(lib, 'eyeshadow-lower', 'coral-shadow', '코랄 그늘', '눈',
-    single('코랄 그늘', 'eyeshadowLower', {
-      eyeshadowLowerColor: '#B06A4E',
-      eyeshadowLowerIntensity: 0.22,
-      eyeshadowLowerFinish: 0,
-    }), false);
-  addRegionLook(lib, 'eyeshadow-lower', 'rosy-under', '로지 언더', '눈',
-    single('로지 언더', 'eyeshadowLower', {
-      eyeshadowLowerColor: '#D89AA0',
-      eyeshadowLowerIntensity: 0.23,
-      eyeshadowLowerFinish: 0,
-    }), false);
-  addRegionLook(lib, 'eyeshadow-lower', 'mauve-shimmer', '모브 시머', '눈',
-    single('모브 시머', 'eyeshadowLower', {
-      eyeshadowLowerColor: '#6E5A8A',
-      eyeshadowLowerIntensity: 0.27,
-      eyeshadowLowerFinish: 3,
-      eyeshadowLowerShimmer: 0.35,
-    }), false);
+  // 아이섀도 상 12종 — 각 shape가 standalone 카드에 정확히 한 번씩 등장한다.
+  const upperShadows: Array<{
+    slug: string; name: string; shape: number; color: string; color2: string;
+    intensity: number; gradient: number; finish: number; shimmer: number; height?: number;
+  }> = [
+    {slug: 'base-full', name: '베이스 전체', shape: 0, color: '#C99186', color2: '#E5B4AA', intensity: 0.42, gradient: 0.35, finish: 0, shimmer: 0.1},
+    {slug: 'base-inner', name: '베이스 앞쪽', shape: 1, color: '#D7A39B', color2: '#F1C7BC', intensity: 0.4, gradient: 0.3, finish: 0, shimmer: 0.08},
+    {slug: 'base-outer', name: '베이스 뒤쪽', shape: 2, color: '#9B645F', color2: '#C88A82', intensity: 0.48, gradient: 0.45, finish: 1, shimmer: 0},
+    {slug: 'main-inner', name: '메인 앞쪽', shape: 3, color: '#B87773', color2: '#D99A92', intensity: 0.52, gradient: 0.35, finish: 0, shimmer: 0.12},
+    {slug: 'main-center', name: '메인 중앙', shape: 4, color: '#B77A86', color2: '#E2A7AF', intensity: 0.55, gradient: 0.45, finish: 3, shimmer: 0.38},
+    {slug: 'main-outer', name: '메인 뒤쪽', shape: 5, color: '#85515B', color2: '#B9787E', intensity: 0.58, gradient: 0.5, finish: 0, shimmer: 0.15},
+    {slug: 'point-inner', name: '포인트 앞머리', shape: 6, color: '#F0CDB6', color2: '#FFE7CD', intensity: 0.5, gradient: 0.55, finish: 3, shimmer: 0.58},
+    {slug: 'point-center', name: '포인트 눈동자 위', shape: 7, color: '#E7B3A9', color2: '#FFD9C8', intensity: 0.56, gradient: 0.6, finish: 3, shimmer: 0.68},
+    {slug: 'point-outer', name: '포인트 눈꼬리', shape: 8, color: '#7D4658', color2: '#B66B7A', intensity: 0.62, gradient: 0.55, finish: 0, shimmer: 0.18},
+    {slug: 'crease', name: '크리스', shape: 9, color: '#795B59', color2: '#A77B75', intensity: 0.5, gradient: 0.25, finish: 1, shimmer: 0},
+    {slug: 'smoky', name: '스모키', shape: 10, color: '#554B52', color2: '#846F75', intensity: 0.62, gradient: 0.6, finish: 1, shimmer: 0, height: 1.15},
+    {slug: 'wide-gradient', name: '와이드 그라데', shape: 11, color: '#B36F7B', color2: '#E0A4A7', intensity: 0.56, gradient: 0.75, finish: 0, shimmer: 0.2, height: 1.25},
+  ];
+  for (const look of upperShadows) {
+    addRegionLook(lib, 'eyeshadow-upper', look.slug, look.name, '눈',
+      single(look.name, 'eyeshadow', {
+        eyeshadowShape: look.shape,
+        eyeshadowColor: look.color,
+        eyeshadowColor2: look.color2,
+        eyeshadowIntensity: look.intensity,
+        eyeshadowGradient: look.gradient,
+        eyeshadowFinish: look.finish,
+        eyeshadowShimmer: look.shimmer,
+        eyeshadowHeight: look.height ?? 1,
+      }), false);
+  }
 
-  // 아이라인 하 3종 — 색은 상·하 라인이 공유하는 계약을 그대로 따른다.
-  addRegionLook(lib, 'eyeliner-lower', 'soft-brown', '소프트 브라운', '눈',
-    single('소프트 브라운', 'eyelinerLower', {
-      eyelinerColor: '#5A4433',
-      eyelinerLowerIntensity: 0.16,
-    }), false);
-  addRegionLook(lib, 'eyeliner-lower', 'deep-brown', '딥 브라운', '눈',
-    single('딥 브라운', 'eyelinerLower', {
-      eyelinerColor: '#3A2A20',
-      eyelinerLowerIntensity: 0.23,
-    }), false);
-  addRegionLook(lib, 'eyeliner-lower', 'burgundy-under', '버건디 언더', '눈',
-    single('버건디 언더', 'eyelinerLower', {
-      eyelinerColor: '#5A2A3A',
-      eyelinerLowerIntensity: 0.2,
-    }), false);
+  const lowerShadows = [
+    ['peach-satin', '피치 새틴', 0, '#D79A85', 0.34, 0, 0.08],
+    ['taupe-matte', '토프 매트', 0, '#826C67', 0.42, 1, 0],
+    ['rosy-shimmer', '로지 시머', 2, '#C98291', 0.38, 3, 0.48],
+    ['inner-bright', '앞머리 밝힘', 1, '#EBC7B2', 0.3, 3, 0.38],
+    ['outer-shadow', '바깥 음영', 3, '#77555C', 0.46, 1, 0],
+    ['under-smoky', '언더 스모키', 4, '#514A50', 0.52, 1, 0],
+  ] as const;
+  for (const [slug, name, shape, color, intensity, finish, shimmer] of lowerShadows) {
+    addRegionLook(lib, 'eyeshadow-lower', slug, name, '눈',
+      single(name, 'eyeshadowLower', {
+        eyeshadowLowerShape: shape,
+        eyeshadowLowerColor: color,
+        eyeshadowLowerIntensity: intensity,
+        eyeshadowLowerFinish: finish,
+        eyeshadowLowerShimmer: shimmer,
+      }), false);
+  }
 
-  // 애교살 4종 — 임포트 강도 없이 내장 밴드의 톤·펄·두께 축만 사용.
-  addRegionLook(lib, 'aegyo', 'natural-ivory', '내추럴 아이보리', '눈',
-    single('내추럴 아이보리', 'aegyo', {
-      aegyoColor: '#FFF3E2',
-      aegyoIntensity: 0.25,
-      aegyoFinish: 0,
-      aegyoHeight: 0.85,
-    }), false);
-  addRegionLook(lib, 'aegyo', 'champagne-pearl', '샴페인 펄', '눈',
-    single('샴페인 펄', 'aegyo', {
-      aegyoColor: '#F7E7CE',
-      aegyoIntensity: 0.34,
-      aegyoFinish: 3,
-      aegyoShimmer: 0.4,
-      aegyoHeight: 0.95,
-    }), false);
-  addRegionLook(lib, 'aegyo', 'plump-pink', '핑크 도톰', '눈',
-    single('핑크 도톰', 'aegyo', {
-      aegyoColor: '#FFD9E0',
-      aegyoIntensity: 0.38,
-      aegyoFinish: 0,
-      aegyoHeight: 1.12,
-    }), false);
-  addRegionLook(lib, 'aegyo', 'lilac-pearl', '라일락 펄', '눈',
-    single('라일락 펄', 'aegyo', {
-      aegyoColor: '#E8E6F5',
-      aegyoIntensity: 0.3,
-      aegyoFinish: 3,
-      aegyoShimmer: 0.5,
-      aegyoHeight: 0.9,
-    }), false);
+  const upperLiners = [
+    ['thin-brown', '얇은 브라운', 4, 0, 0, 0, '#4A302A', 0.46],
+    ['sharp-black-wing', '샤프 블랙 윙', 0, 0, 0, 1, '#171416', 0.72],
+    ['puppy-brown', '퍼피 브라운', 1, 0, 1, 0, '#55352F', 0.58],
+    ['horizontal-long', '가로 롱', 2, 0, 0, 1, '#272126', 0.64],
+    ['tail-point', '꼬리 포인트', 3, 1, 0, 1, '#20191D', 0.7],
+    ['inner-tail', '앞머리+꼬리', 4, 2, 0, 0, '#3A2525', 0.6],
+    ['smoky-gel', '스모키 젤', 5, 0, 1, 0, '#46383E', 0.55],
+    ['color-pearl', '컬러 펄', 0, 3, 2, 3, '#6F486D', 0.52],
+  ] as const;
+  for (const [slug, name, style, segment, texture, finish, color, intensity] of upperLiners) {
+    addRegionLook(lib, 'eyeliner-upper', slug, name, '눈',
+      single(name, 'eyelinerUpper', {
+        eyelinerStyle: style,
+        eyelinerSegment: segment,
+        eyelinerTexture: texture,
+        eyelinerFinish: finish,
+        eyelinerColor: color,
+        eyelinerIntensity: intensity,
+      }), false);
+  }
+
+  const lowerLiners = [
+    ['soft-brown', '소프트 브라운', 0, 0, 0, '#5B3D35', 0.36],
+    ['deep-brown', '딥 브라운', 0, 1, 0, '#34241F', 0.48],
+    ['burgundy', '버건디', 0, 0, 0.05, '#63313D', 0.44],
+    ['tight-waterline', '얇은 점막', 1, 1, 0, '#292023', 0.4],
+    ['outer-third', '바깥 1/3', 2, 0, 0.05, '#493036', 0.5],
+    ['soft-pearl', '소프트 펄', 2, 3, 0.48, '#8A647F', 0.38],
+  ] as const;
+  for (const [slug, name, style, finish, shimmer, color, intensity] of lowerLiners) {
+    addRegionLook(lib, 'eyeliner-lower', slug, name, '눈',
+      single(name, 'eyelinerLower', {
+        eyelinerLowerStyle: style,
+        eyelinerLowerFinish: finish,
+        eyelinerLowerShimmer: shimmer,
+        eyelinerLowerColor: color,
+        eyelinerLowerIntensity: intensity,
+      }), false);
+  }
+
+  const aegyoLooks = [
+    ['natural-soft', '내추럴 소프트', 0, '#F1D2C7', 0.36, 0.26, 0, 0.85],
+    ['rosy-volume', '로지 볼륨', 0, '#E9BFC0', 0.44, 0.32, 0, 1],
+    ['plump-volume', '도톰 볼륨', 0, '#F0CBBB', 0.52, 0.38, 0, 1.18],
+    ['champagne-pearl', '샴페인 펄', 1, '#FFE0B8', 0.44, 0.28, 0.54, 0.95],
+    ['pink-pearl', '핑크 펄', 1, '#F2BDD0', 0.46, 0.3, 0.58, 1],
+    ['lilac-pearl', '라일락 펄', 1, '#DCC8F2', 0.42, 0.28, 0.62, 0.96],
+  ] as const;
+  for (const [slug, name, mode, color, intensity, shadow, shimmer, height] of aegyoLooks) {
+    addRegionLook(lib, 'aegyo', slug, name, '눈',
+      single(name, 'aegyo', {
+        aegyoMode: mode,
+        aegyoColor: color,
+        aegyoIntensity: intensity,
+        aegyoShadowIntensity: shadow,
+        aegyoShimmer: shimmer,
+        aegyoHeight: height,
+        aegyoRendererVersion: 1,
+      }), false);
+  }
 
   // 속눈썹 상 5종 — 내장 스트로크 프로파일(MASCARA_STYLES_UPPER) 조합.
   addRegionLook(lib, 'mascara', 'natural-brown', '내추럴 브라운', '눈',

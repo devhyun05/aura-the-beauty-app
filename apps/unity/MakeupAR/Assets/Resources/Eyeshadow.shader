@@ -45,8 +45,8 @@ Shader "ARMakeup/Eyeshadow"
         // _EyeshadowGradient 기본 0 = 끔 = 기존 출력.
         _EyeshadowColor2 ("Eyeshadow Gradient Stop B (lid)", Color) = (0.69, 0.42, 0.31, 1)
         _EyeshadowGradient ("Eyeshadow Gradient", Range(0, 1)) = 0
-        // 모양(#19b): 0=리드 전체(기존) 1=크리스 집중 2=스모키(위 확장) 3=꼬리 포인트
-        _EyeshadowShape ("Shape (0 lid 1 crease 2 smoky 3 tail)", Float) = 0
+        // 모양: 0..8 베이스/메인/포인트×안쪽·중앙·바깥, 9 크리스, 10 스모키, 11 와이드.
+        _EyeshadowShape ("Shape (0..11 anatomical presets)", Float) = 0
         // 디자이너 모양 마스크(§16) — 밴드-로컬 UV(uv2: u=눈앞0→눈꼬리1, v=안검연0→눈썹1)로
         // 샘플하는 흑백/알파 존 스텐실. .r = 존 세기 → 커버리지(amt)에 곱해 절차 밴드 위에
         // 디자이너 그라데/글리터 형태를 얹는다. 기본 white + _HasDesign 0 = 변조 없음
@@ -98,7 +98,7 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowHasFinishMap;    // 0 = 맵 없음(스칼라 그대로, 하위호환)
             fixed4 _EyeshadowColor2;   // R2 그라데 스톱B (리드=속눈썹 라인 진한 색)
             float _EyeshadowGradient;  // R2 그라데 강도 0..1 (0=끔=기존)
-            float _EyeshadowShape;     // 모양(#19b): 0리드 1크리스 2스모키 3꼬리
+            float _EyeshadowShape;     // 모양: 0..11 해부학적 위치 프리셋
             sampler2D _EyeshadowDesign; // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 샘플
             float _EyeshadowHasDesign;  // 0 = 마스크 없음(절차 밴드 그대로, 하위호환)
 
@@ -143,6 +143,66 @@ Shader "ARMakeup/Eyeshadow"
                 return o;
             }
 
+            float EyeshadowBell(float center, float width, float x)
+            {
+                float d = abs(x - center) / max(width, 1e-4);
+                return 1.0 - smoothstep(0.45, 1.0, d);
+            }
+
+            // vertical = lash 0 → brow 1, anatomicalX = inner 0 → outer corner 1 → tail 1.28.
+            // 양쪽 눈 모두 같은 해부학 축을 쓰므로 앞/중앙/뒤 프리셋이 자동 미러링된다.
+            float EyeshadowShapeWeight(float shape, float vertical, float anatomicalX)
+            {
+                float baseV = 1.0 - smoothstep(0.62, 1.0, vertical);
+                float mainV = EyeshadowBell(0.42, 0.58, vertical);
+                float pointV = EyeshadowBell(0.34, 0.3, vertical);
+                float innerW = EyeshadowBell(0.18, 0.42, anatomicalX);
+                float centerW = EyeshadowBell(0.52, 0.42, anatomicalX);
+                float outerW = EyeshadowBell(0.84, 0.52, anatomicalX);
+
+                float verticalWeight = baseV;
+                float horizontalWeight = 1.0;
+                if (shape < 2.5)
+                {
+                    horizontalWeight = shape < 0.5 ? 1.0 : (shape < 1.5 ? innerW : outerW);
+                }
+                else if (shape < 5.5)
+                {
+                    verticalWeight = mainV;
+                    horizontalWeight = shape < 3.5 ? innerW : (shape < 4.5 ? centerW : outerW);
+                }
+                else if (shape < 8.5)
+                {
+                    verticalWeight = pointV;
+                    horizontalWeight = shape < 6.5 ? innerW : (shape < 7.5 ? centerW : outerW);
+                }
+                else if (shape < 9.5)
+                {
+                    verticalWeight = smoothstep(0.3, 0.5, vertical)
+                                   * (1.0 - smoothstep(0.68, 0.92, vertical));
+                    horizontalWeight = EyeshadowBell(0.52, 0.62, anatomicalX);
+                }
+                else if (shape < 10.5)
+                {
+                    verticalWeight = 1.0 - smoothstep(0.82, 1.1, vertical);
+                    horizontalWeight = lerp(0.72, 1.0, saturate(anatomicalX));
+                }
+                else
+                {
+                    verticalWeight = 1.0 - smoothstep(0.72, 1.04, vertical);
+                    horizontalWeight = lerp(0.78, 1.0, saturate(anatomicalX));
+                }
+
+                float tailT = saturate((anatomicalX - 1.0) / 0.28);
+                float tailFade = 1.0 - smoothstep(0.0, 1.0, tailT);
+                float usesTail = (abs(shape - 2.0) < 0.25 || abs(shape - 5.0) < 0.25
+                               || abs(shape - 8.0) < 0.25 || abs(shape - 10.0) < 0.25
+                               || abs(shape - 11.0) < 0.25) ? 1.0 : 0.0;
+                float noTailGate = 1.0 - smoothstep(0.96, 1.02, anatomicalX);
+                return verticalWeight * horizontalWeight * tailFade
+                     * lerp(noTailGate, 1.0, usesTail);
+            }
+
             // 마감(finish)은 Finish.cginc의 ApplyFinish 공용 함수로 이관(립·아이섀도·블러셔
             // 공유). sparkleUV는 눈두덩 메시 uv(2D)라 시머가 눈꺼풀에 접착된다(스크린 고정 아님).
 
@@ -157,7 +217,6 @@ Shader "ARMakeup/Eyeshadow"
                 if (_EsLayerCount > 0)
                 {
                     float vxm = saturate(i.uv.x);   // 0 lash → 1 위(브로우 쪽)
-                    float hbase = saturate(i.uv.y); // 가로 농도 가중(바깥 꼬리 1 → 앞머리 0.45)
                     float lumaM = dot(feed, fixed3(0.299, 0.587, 0.114));
 
                     // 질감 맵(#22)·디자인 마스크(§16) — 밴드 공통(단일 경로와 동일 계산).
@@ -165,7 +224,8 @@ Shader "ARMakeup/Eyeshadow"
                     float esGlossGainM = _EyeshadowGlossGain;
                     float esShimmerDensityM = _EyeshadowShimmerDensity;
                     ModulateFinishByMap(esFinishMapM, _EyeshadowHasFinishMap, esGlossGainM, esShimmerDensityM);
-                    float designGate = _EyeshadowHasDesign > 0.5 ? tex2D(_EyeshadowDesign, i.bandUV).r : 1.0;
+                    float2 designUV = float2(saturate(i.bandUV.x), saturate(i.bandUV.y));
+                    float designGate = _EyeshadowHasDesign > 0.5 ? tex2D(_EyeshadowDesign, designUV).r : 1.0;
 
                     fixed3 accum = fixed3(0, 0, 0); // over 프리멀티 누적색
                     float accumA = 0.0;             // over 누적 알파
@@ -178,24 +238,9 @@ Shader "ARMakeup/Eyeshadow"
                         float shapeB = _EsLayerParam[b].z;  // 모양 enum(0리드..3꼬리)
                         float gradB = _EsLayerParam[b].w;   // 그라데 강도
 
-                        // 세로 프로파일 — shape 0 = cutoff+페더 일반화(현 smoothstep(0.55,1,vx)),
-                        // 1/2/3 = 밴드 cutoff에 비례 스케일한 크리스/스모키/꼬리 분기(:129-140 일반화).
-                        float vfall = 1.0 - smoothstep(cutoff - _EdgeFeather, cutoff, vxm);
-                        float hweight = hbase;
-                        if (shapeB > 2.5)        // 3 = 꼬리 포인트 (바깥 가중 강조)
-                        {
-                            hweight = pow(hweight, 2.4);
-                        }
-                        else if (shapeB > 1.5)   // 2 = 스모키 (위로 확장)
-                        {
-                            vfall = 1.0 - smoothstep(0.78 * cutoff, 1.12 * cutoff, vxm);
-                        }
-                        else if (shapeB > 0.5)   // 1 = 크리스 집중 (중상단 밴드)
-                        {
-                            vfall = smoothstep(0.28 * cutoff, 0.5 * cutoff, vxm)
-                                  * (1.0 - smoothstep(0.62 * cutoff, 0.95 * cutoff, vxm));
-                        }
-                        float amt = vfall * hweight * _EsLayerColor[b].a; // a = 밴드 강도
+                        float localV = vxm / max(cutoff, 1e-4);
+                        float shapeMask = EyeshadowShapeWeight(shapeB, localV, i.bandUV.x);
+                        float amt = shapeMask * _EsLayerColor[b].a; // a = 밴드 강도
 
                         // 색·세로 그라데(§3.1) — 리드(uv.x=0)=스톱B 진한 색 → 위=스톱A.
                         // gradB=0이면 lerp 항등 → 단색.
@@ -218,34 +263,17 @@ Shader "ARMakeup/Eyeshadow"
                     return fixed4(outColor, accumA * designGate * OccludeGate(i.grabPos));
                 }
 
-                // 세로 프로파일: 눈두덩 대부분(lash~55%)을 꽉 채우고 눈썹쪽 상단만 페이드.
-                // 좁게 집중시키면 영역이 작아 보이므로(실기기) 넓게 채운다. lash 근처
-                // 진한 부분은 얇은 라이너 위로 드러난다. (모양 0=리드 전체=기존 기준선)
                 float vx = saturate(i.uv.x); // 0 lash → 1 위(브로우 쪽)
-                float vfall = 1.0 - smoothstep(0.55, 1.0, vx);
-                float hweight = saturate(i.uv.y); // 바깥 꼬리 1 → 안쪽 앞머리 0.45
-
-                // 모양(#19b) — 세로·가로 프로파일 분기. 실기기 튜닝 대상.
-                if (_EyeshadowShape > 2.5)        // 3 = 꼬리 포인트 (바깥 가중 강조)
-                {
-                    hweight = pow(hweight, 2.4);
-                }
-                else if (_EyeshadowShape > 1.5)   // 2 = 스모키 (위로 확장)
-                {
-                    vfall = 1.0 - smoothstep(0.78, 1.12, vx);
-                }
-                else if (_EyeshadowShape > 0.5)   // 1 = 크리스 집중 (중상단 밴드)
-                {
-                    vfall = smoothstep(0.28, 0.5, vx) * (1.0 - smoothstep(0.62, 0.95, vx));
-                }
-                float amt = vfall * hweight * _EyeshadowIntensity;
+                float amt = EyeshadowShapeWeight(_EyeshadowShape, vx, i.bandUV.x)
+                          * _EyeshadowIntensity;
 
                 // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 존 스텐실을 샘플해 커버리지에
                 // 곱한다(디자이너 그라데/글리터 형태를 절차 밴드 위에 얹음). _HasDesign=0이면
                 // 분기 스킵 → 절차 밴드 그대로(하위호환, 미임포트 시 바이트 동일).
                 if (_EyeshadowHasDesign > 0.5)
                 {
-                    amt *= tex2D(_EyeshadowDesign, i.bandUV).r;
+                    amt *= tex2D(_EyeshadowDesign,
+                                 float2(saturate(i.bandUV.x), saturate(i.bandUV.y))).r;
                 }
 
                 // 루마 보존 색소 (FaceMakeup.Tint와 동일). 알파 블렌드가 단일 amt로

@@ -57,6 +57,11 @@ namespace ARMakeup.Bridge
         // 넓은 면 보정 (얼굴 셰이더, 가·감산 블렌드)
         public string highlightColor = "#FFF2DB";   // 하이라이터(가산/광채)
         public float highlightIntensity = 0f;
+        public float highlightCheekIntensity = 0f;
+        public float highlightNoseBridgeIntensity = 0f;
+        public float highlightNoseTipIntensity = 0f;
+        public float highlightBrowBoneIntensity = 0f;
+        public float highlightCupidIntensity = 0f;
         public int highlightFinish = 0;             // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float highlightShimmer = 0.5f;       // 시머 게인 0..1 (highlightFinish=3일 때)
         // 제형 스튜디오(#21) — 하이라이터 마감 세부. 전부 0 = enum 기존 동작(하위호환).
@@ -106,6 +111,9 @@ namespace ARMakeup.Bridge
         public string aegyoColor = "";               // 애교살 틴트: 하이라이트=이 색, 섀도=파생 톤다운. ""=기본색 유지(룩 전환 누수 방지)
         public int aegyoFinish = 0;                  // 애교살 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머(펄)
         public float aegyoShimmer = 0.5f;            // 시머 게인 0..1 (aegyoFinish=3일 때)
+        public float aegyoMode = 0f;                 // 전용 렌더 모드: 0=자연 볼륨 1=펄 포인트
+        public float aegyoShadowIntensity = 0f;      // 볼륨광 아래 부드러운 음영 강도
+        public float aegyoRendererVersion = 0f;      // 1=신규 mode 명시, 0=legacy finish 이관
         public string eyeshadowColor = "#B06A4E";
         public float eyeshadowIntensity = 0.3f;
         public int eyeshadowFinish = 0;            // 아이섀도 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
@@ -125,6 +133,7 @@ namespace ARMakeup.Bridge
         // A3 아이섀도 하 — 하안검 lash 아래로 페이드하는 섀도 밴드(LowerLid 밴드 확장). 애교살보다 아래 깔림. 0=끔.
         public string eyeshadowLowerColor = "";
         public float eyeshadowLowerIntensity;
+        public int eyeshadowLowerShape = 0;
         public int eyeshadowLowerFinish = 0;       // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float eyeshadowLowerShimmer = 0.5f; // 시머 게인 0..1 (finish=3일 때)
         public string irisColor = "#5B7B8C";      // 컬러렌즈 색 (intensity 0 = 끔)
@@ -136,7 +145,11 @@ namespace ARMakeup.Bridge
         public int eyelinerSegment = 0;            // 아이라이너 부분: 0=전체(기본) 1=꼬리만 2=앞머리+꼬리 3=눈동자 위만
         public int eyelinerFinish = 0;             // 아이라이너 마감: 0=새틴(기본) 1=매트 2=글로시 (시머는 리본에 과해 제외)
         public float eyelinerStyleIntensity = 0f;  // 임포트 아이라인 텍스처 강도(색은 eyelinerColor 공용)
-        public float eyelinerLowerIntensity = 0f;  // 아이라인(하) — 하안검 밴드, 색은 eyelinerColor 공용 (0=끔)
+        public string eyelinerLowerColor = "";    // 아이라인(하) 색. 빈 legacy payload는 eyelinerColor로 폴백
+        public float eyelinerLowerIntensity = 0f;  // 아이라인(하) — 하안검 밴드 (0=끔)
+        public float eyelinerLowerStyle = 0f;      // 0=전체 소프트 1=점막 밀착 2=바깥 1/3
+        public float eyelinerLowerFinish = 0f;     // 0=새틴 1=매트 2=글로시 3=펄
+        public float eyelinerLowerShimmer = 0f;    // 하단 펄 강도
         public float eyeCornerLift = 0f;           // 눈꼬리 띄우기(R7 명명 워프): 바깥 눈꼬리 리프트 0..1 (0=원래)
         public string mascaraColor = "#181418";    // 마스카라(속눈썹 스트로크) 색
         public float mascaraIntensity = 0f;        // 0 = 끔
