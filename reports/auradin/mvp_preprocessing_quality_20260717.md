@@ -4,7 +4,7 @@
 
 - Catalog MVP: `/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/.staging/20260717/catalog/catalog_items_mvp_20260717.jsonl`
 - Knowledge chunks MVP: `/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/.staging/20260717/knowledge/product_knowledge_chunks_mvp_20260717.jsonl`
-- Seed SHA-256: `e3829b1ff739721eba41e59e297f2b7d64282989bcd665fabe9a5a0c046eaed9`
+- Seed SHA-256: `f8c1464858973c4bae55c458b5d19e10e8d9462769d849a12126efe4dfc92257`
 
 ## Row Counts
 

@@ -1,9 +1,10 @@
 {
-  "appCommitSha": "10fe46449250e9cc124acb60586d3cf98deb2d07",
+  "appCommitSha": "ed5fecd49621c7a9044a57e48f9fd09f23464c93",
   "results": [
     {
       "askedAttributes": [
-        "channel"
+        "channel",
+        "texture"
       ],
       "errorCode": null,
       "finalPhase": "results",
@@ -14,7 +15,7 @@
           "answer": {
             "filterDelta": {
               "attribute": "channel",
-              "confidence": 0.7363,
+              "confidence": 0.74,
               "displayLabel": "올리브영에서 바로 보기",
               "locked": false,
               "mode": "hard",
@@ -27,8 +28,8 @@
             "optionId": "channel-oliveyoung",
             "questionId": "q-1-channel"
           },
-          "candidateCountAfter": 75,
-          "candidateCountBefore": 75,
+          "candidateCountAfter": 74,
+          "candidateCountBefore": 74,
           "proposedAttributes": [
             {
               "actionability": 1.0,
@@ -36,25 +37,25 @@
               "confidence": 0.9,
               "coverage": 1.0,
               "excludedReason": "locked_by_prompt",
-              "gain": 0.961241,
+              "gain": 0.924727,
               "questionMode": "hard",
               "uxPriority": 1.1,
               "valueDistribution": {
-                "15k_25k": 16,
-                "under_15k": 24
+                "15k_25k": 14,
+                "under_15k": 26
               }
             },
             {
               "actionability": 1.0,
               "attribute": "channel",
-              "confidence": 0.7363,
+              "confidence": 0.74,
               "coverage": 1.0,
               "excludedReason": null,
-              "gain": 0.855126,
+              "gain": 0.88484,
               "questionMode": "hard",
               "uxPriority": 0.95,
               "valueDistribution": {
-                "department_store": 5,
+                "department_store": 6,
                 "naver": 40,
                 "oliveyoung": 18
               }
@@ -64,30 +65,30 @@
               "attribute": "texture",
               "confidence": 0.775,
               "coverage": 0.9,
-              "excludedReason": "dominant_value",
-              "gain": 0.72497,
+              "excludedReason": null,
+              "gain": 0.822414,
               "questionMode": "hard",
               "uxPriority": 1.15,
               "valueDistribution": {
-                "balm": 1,
+                "balm": 2,
                 "gel": 1,
                 "gloss": 1,
                 "lipstick": 1,
                 "powder": 1,
-                "tint": 31
+                "tint": 30
               }
             },
             {
               "actionability": 1.0,
               "attribute": "finish",
-              "confidence": 0.614,
-              "coverage": 0.875,
+              "confidence": 0.6203,
+              "coverage": 0.85,
               "excludedReason": "locked_by_prompt",
-              "gain": 0.580073,
+              "gain": 0.578936,
               "questionMode": "hard",
               "uxPriority": 1.2,
               "valueDistribution": {
-                "glossy": 27,
+                "glossy": 26,
                 "matte": 1,
                 "velvet": 7
               }
@@ -146,7 +147,24 @@
           ]
         },
         {
-          "candidateCountBefore": 75,
+          "answer": {
+            "filterDelta": {
+              "attribute": "texture",
+              "confidence": 0.775,
+              "displayLabel": "틴트",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "tint"
+              ]
+            },
+            "optionId": "texture-tint",
+            "questionId": "q-2-texture"
+          },
+          "candidateCountAfter": 71,
+          "candidateCountBefore": 74,
           "proposedAttributes": [
             {
               "actionability": 1.0,
@@ -154,25 +172,25 @@
               "confidence": 0.9,
               "coverage": 1.0,
               "excludedReason": "locked_by_prompt",
-              "gain": 0.961241,
+              "gain": 0.924727,
               "questionMode": "hard",
               "uxPriority": 1.1,
               "valueDistribution": {
-                "15k_25k": 16,
-                "under_15k": 24
+                "15k_25k": 14,
+                "under_15k": 26
               }
             },
             {
               "actionability": 1.0,
               "attribute": "channel",
-              "confidence": 0.7363,
+              "confidence": 0.74,
               "coverage": 1.0,
               "excludedReason": "already_asked",
-              "gain": 0.855126,
+              "gain": 0.88484,
               "questionMode": "hard",
               "uxPriority": 0.95,
               "valueDistribution": {
-                "department_store": 5,
+                "department_store": 6,
                 "naver": 40,
                 "oliveyoung": 18
               }
@@ -182,30 +200,30 @@
               "attribute": "texture",
               "confidence": 0.775,
               "coverage": 0.9,
-              "excludedReason": "dominant_value",
-              "gain": 0.72497,
+              "excludedReason": null,
+              "gain": 0.822414,
               "questionMode": "hard",
               "uxPriority": 1.15,
               "valueDistribution": {
-                "balm": 1,
+                "balm": 2,
                 "gel": 1,
                 "gloss": 1,
                 "lipstick": 1,
                 "powder": 1,
-                "tint": 31
+                "tint": 30
               }
             },
             {
               "actionability": 1.0,
               "attribute": "finish",
-              "confidence": 0.614,
-              "coverage": 0.875,
+              "confidence": 0.6203,
+              "coverage": 0.85,
               "excludedReason": "locked_by_prompt",
-              "gain": 0.580073,
+              "gain": 0.578936,
               "questionMode": "hard",
               "uxPriority": 1.2,
               "valueDistribution": {
-                "glossy": 27,
+                "glossy": 26,
                 "matte": 1,
                 "velvet": 7
               }
@@ -240,10 +258,127 @@
             }
           ],
           "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.0,
+          "selectedQuestion": {
+            "attribute": "texture",
+            "questionId": "q-2-texture",
+            "type": "hard"
+          },
+          "step": 2,
+          "topScoresAfter": [
+            0.82102,
+            0.82102,
+            0.82102
+          ],
+          "topScoresBefore": [
+            0.82102,
+            0.82102,
+            0.82102
+          ]
+        },
+        {
+          "candidateCountBefore": 71,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.924727,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 14,
+                "under_15k": 26
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7363,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.855126,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 5,
+                "naver": 40,
+                "oliveyoung": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6254,
+              "coverage": 0.875,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.654808,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 25,
+                "matte": 1,
+                "velvet": 9
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7689,
+              "coverage": 0.9,
+              "excludedReason": "already_asked",
+              "gain": 0.434425,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "gel": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "tint": 33
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.675,
+              "coverage": 0.1,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.07533,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 1,
+                "peach": 1,
+                "pink": 1,
+                "plum": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
           "retrievalDegradedReason": null,
           "retrievalStatus": "ok",
           "scoreGap": 0.0,
-          "step": 2,
+          "step": 3,
           "topScoresBefore": [
             0.82102,
             0.82102,
@@ -267,24 +402,24 @@
           "category": "lip",
           "hasImage": true,
           "hasPurchase": true,
-          "id": "auradin-seed-241384e5e3b9658e",
-          "matchRate": 81,
-          "priceKrw": 10000,
-          "productName": "[꿀먹광 글로스]컬러그램 탕후루 탱글 꿀로스 3COLOR"
+          "id": "auradin-seed-eea9ead93440c922",
+          "matchRate": 72,
+          "priceKrw": 6300,
+          "productName": "[립&치크 블러팟]컬러그램 틴토리 블러 잼 4COLOR"
         },
         {
-          "brandName": "롬앤",
+          "brandName": "더샘",
           "category": "lip",
           "hasImage": true,
           "hasPurchase": true,
-          "id": "auradin-seed-531551996bf5ef8a",
-          "matchRate": 78,
-          "priceKrw": 8500,
-          "productName": "롬앤 블러 퍼지 틴트 11 푸시아 바이브"
+          "id": "auradin-seed-683102e99d8bf8b1",
+          "matchRate": 73,
+          "priceKrw": 7560,
+          "productName": "[온누리상품] 더샘 새미스 젤리 샷 틴트 3.2g 05 포도"
         }
       ],
       "prompt": "쿨톤인데 너무 진하지 않은 글로시 핑크 립 2만원 이하",
-      "questionCount": 1,
+      "questionCount": 2,
       "recoverable": null,
       "status": "PASS"
     },
@@ -292,7 +427,7 @@
       "askedAttributes": [
         "category",
         "priceTier",
-        "channel"
+        "finish"
       ],
       "errorCode": null,
       "finalPhase": "results",
@@ -464,7 +599,7 @@
             "optionId": "priceTier-under_15k",
             "questionId": "q-2-priceTier"
           },
-          "candidateCountAfter": 50,
+          "candidateCountAfter": 52,
           "candidateCountBefore": 106,
           "proposedAttributes": [
             {
@@ -586,23 +721,38 @@
         {
           "answer": {
             "filterDelta": {
-              "attribute": "channel",
-              "confidence": 0.7137,
-              "displayLabel": "올리브영에서 바로 보기",
+              "attribute": "finish",
+              "confidence": 0.6367,
+              "displayLabel": "블러/벨벳",
               "locked": false,
               "mode": "hard",
               "op": "eq",
               "source": "question",
               "values": [
-                "oliveyoung"
+                "velvet"
               ]
             },
-            "optionId": "channel-oliveyoung",
-            "questionId": "q-3-channel"
+            "optionId": "finish-velvet",
+            "questionId": "q-3-finish"
           },
-          "candidateCountAfter": 50,
-          "candidateCountBefore": 50,
+          "candidateCountAfter": 43,
+          "candidateCountBefore": 52,
           "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6367,
+              "coverage": 0.75,
+              "excludedReason": null,
+              "gain": 0.735305,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 13,
+                "matte": 2,
+                "velvet": 15
+              }
+            },
             {
               "actionability": 1.0,
               "attribute": "channel",
@@ -616,21 +766,6 @@
                 "department_store": 3,
                 "naver": 40,
                 "oliveyoung": 14
-              }
-            },
-            {
-              "actionability": 1.0,
-              "attribute": "finish",
-              "confidence": 0.6414,
-              "coverage": 0.725,
-              "excludedReason": null,
-              "gain": 0.716906,
-              "questionMode": "hard",
-              "uxPriority": 1.2,
-              "valueDistribution": {
-                "glossy": 12,
-                "matte": 2,
-                "velvet": 15
               }
             },
             {
@@ -701,15 +836,15 @@
           "retrievalStatusAfter": "ok",
           "scoreGap": 0.000305,
           "selectedQuestion": {
-            "attribute": "channel",
-            "questionId": "q-3-channel",
+            "attribute": "finish",
+            "questionId": "q-3-finish",
             "type": "hard"
           },
           "step": 3,
           "topScoresAfter": [
-            0.736627,
-            0.736338,
-            0.735314
+            0.742872,
+            0.741624,
+            0.734328
           ],
           "topScoresBefore": [
             0.73731,
@@ -718,51 +853,50 @@
           ]
         },
         {
-          "candidateCountBefore": 50,
+          "candidateCountBefore": 43,
           "proposedAttributes": [
             {
               "actionability": 1.0,
               "attribute": "channel",
-              "confidence": 0.7137,
+              "confidence": 0.7063,
               "coverage": 1.0,
-              "excludedReason": "already_asked",
-              "gain": 0.732067,
+              "excludedReason": null,
+              "gain": 0.670839,
               "questionMode": "hard",
               "uxPriority": 0.95,
               "valueDistribution": {
-                "department_store": 3,
+                "department_store": 2,
                 "naver": 40,
-                "oliveyoung": 14
+                "oliveyoung": 13
               }
             },
             {
               "actionability": 1.0,
               "attribute": "finish",
-              "confidence": 0.6414,
-              "coverage": 0.725,
-              "excludedReason": null,
-              "gain": 0.716906,
+              "confidence": 0.6204,
+              "coverage": 0.675,
+              "excludedReason": "already_asked",
+              "gain": 0.565141,
               "questionMode": "hard",
               "uxPriority": 1.2,
               "valueDistribution": {
-                "glossy": 12,
-                "matte": 2,
-                "velvet": 15
+                "glossy": 9,
+                "matte": 1,
+                "velvet": 17
               }
             },
             {
               "actionability": 1.0,
               "attribute": "texture",
-              "confidence": 0.7826,
-              "coverage": 0.95,
+              "confidence": 0.7881,
+              "coverage": 0.925,
               "excludedReason": "dominant_value",
-              "gain": 0.696536,
+              "gain": 0.550247,
               "questionMode": "hard",
               "uxPriority": 1.15,
               "valueDistribution": {
                 "balm": 2,
                 "gloss": 1,
-                "lipstick": 1,
                 "powder": 1,
                 "tint": 33
               }
@@ -813,45 +947,45 @@
           "retrievalBackend": "embedding_file_hash",
           "retrievalDegradedReason": null,
           "retrievalStatus": "ok",
-          "scoreGap": 0.000289,
+          "scoreGap": 0.001248,
           "step": 4,
           "topScoresBefore": [
-            0.736627,
-            0.736338,
-            0.735314
+            0.742872,
+            0.741624,
+            0.734328
           ]
         }
       ],
       "products": [
         {
+          "brandName": "투쿨포스쿨",
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-7af6718710923048",
+          "matchRate": 74,
+          "priceKrw": 13770,
+          "productName": "투쿨포스쿨 스웨이 립 벨벳 기획/단품"
+        },
+        {
           "brandName": "롬앤",
           "category": "lip",
           "hasImage": true,
           "hasPurchase": true,
-          "id": "auradin-seed-cd74ee5c27ab209e",
-          "matchRate": 74,
-          "priceKrw": 9900,
-          "productName": "롬앤 컬러 립 매트"
-        },
-        {
-          "brandName": "페리페라",
-          "category": "lip",
-          "hasImage": true,
-          "hasPurchase": true,
-          "id": "auradin-seed-f5dff067d0251c15",
+          "id": "auradin-seed-b42e1671e5e51e9b",
           "matchRate": 72,
-          "priceKrw": 7180,
-          "productName": "페리페라 오버 블러 틴트 04 코랄랄라"
+          "priceKrw": 9900,
+          "productName": "롬앤 듀이풀 워터 틴트 | 올리브영"
         },
         {
           "brandName": "컬러그램",
           "category": "lip",
           "hasImage": true,
           "hasPurchase": true,
-          "id": "auradin-seed-241384e5e3b9658e",
+          "id": "auradin-seed-b74177660a25452a",
           "matchRate": 72,
-          "priceKrw": 10000,
-          "productName": "[꿀먹광 글로스]컬러그램 탕후루 탱글 꿀로스 3COLOR"
+          "priceKrw": 6700,
+          "productName": "[컬러립밤]컬러그램 틴토리 잼 6COLOR"
         }
       ],
       "prompt": "데일리로 쓸 만한 제품 추천해줘",
@@ -2122,7 +2256,7 @@
             "optionId": "priceTier-under_15k",
             "questionId": "q-1-priceTier"
           },
-          "candidateCountAfter": 59,
+          "candidateCountAfter": 60,
           "candidateCountBefore": 91,
           "proposedAttributes": [
             {
@@ -2131,14 +2265,14 @@
               "confidence": 0.9,
               "coverage": 1.0,
               "excludedReason": null,
-              "gain": 1.357381,
+              "gain": 1.305845,
               "questionMode": "hard",
               "uxPriority": 1.1,
               "valueDistribution": {
-                "15k_25k": 7,
+                "15k_25k": 6,
                 "25k_40k": 4,
                 "over_40k": 2,
-                "under_15k": 27
+                "under_15k": 28
               }
             },
             {
@@ -2241,7 +2375,7 @@
           "answer": {
             "filterDelta": {
               "attribute": "channel",
-              "confidence": 0.7213,
+              "confidence": 0.7175,
               "displayLabel": "올리브영에서 바로 보기",
               "locked": false,
               "mode": "hard",
@@ -2254,37 +2388,37 @@
             "optionId": "channel-oliveyoung",
             "questionId": "q-2-channel"
           },
-          "candidateCountAfter": 59,
-          "candidateCountBefore": 59,
+          "candidateCountAfter": 60,
+          "candidateCountBefore": 60,
           "proposedAttributes": [
             {
               "actionability": 1.0,
               "attribute": "channel",
-              "confidence": 0.7213,
+              "confidence": 0.7175,
               "coverage": 1.0,
               "excludedReason": null,
-              "gain": 0.804645,
+              "gain": 0.789397,
               "questionMode": "hard",
               "uxPriority": 0.95,
               "valueDistribution": {
                 "department_store": 5,
                 "naver": 40,
-                "oliveyoung": 14
+                "oliveyoung": 13
               }
             },
             {
               "actionability": 0.62,
               "attribute": "texture",
-              "confidence": 0.6593,
-              "coverage": 0.75,
+              "confidence": 0.6639,
+              "coverage": 0.775,
               "excludedReason": null,
-              "gain": 0.538208,
+              "gain": 0.558568,
               "questionMode": "soft",
               "uxPriority": 1.15,
               "valueDistribution": {
                 "balm": 1,
                 "mascara": 15,
-                "pencil": 11,
+                "pencil": 12,
                 "powder": 3
               }
             },
@@ -2370,7 +2504,7 @@
           "answer": {
             "filterDelta": {
               "attribute": "texture",
-              "confidence": 0.6593,
+              "confidence": 0.6667,
               "displayLabel": "파우더",
               "locked": false,
               "mode": "soft",
@@ -2383,8 +2517,8 @@
             "optionId": "texture-powder",
             "questionId": "q-3-texture"
           },
-          "candidateCountAfter": 59,
-          "candidateCountBefore": 59,
+          "candidateCountAfter": 60,
+          "candidateCountBefore": 60,
           "proposedAttributes": [
             {
               "actionability": 1.0,
@@ -2404,16 +2538,16 @@
             {
               "actionability": 0.62,
               "attribute": "texture",
-              "confidence": 0.6593,
+              "confidence": 0.6667,
               "coverage": 0.75,
               "excludedReason": null,
-              "gain": 0.538208,
+              "gain": 0.54817,
               "questionMode": "soft",
               "uxPriority": 1.15,
               "valueDistribution": {
                 "balm": 1,
-                "mascara": 15,
-                "pencil": 11,
+                "mascara": 14,
+                "pencil": 12,
                 "powder": 3
               }
             },
@@ -2496,7 +2630,7 @@
           ]
         },
         {
-          "candidateCountBefore": 59,
+          "candidateCountBefore": 60,
           "earlyTermination": {
             "gap": 0.045249,
             "reason": "decisive_score_gap"
@@ -2520,16 +2654,16 @@
             {
               "actionability": 0.62,
               "attribute": "texture",
-              "confidence": 0.6593,
+              "confidence": 0.6667,
               "coverage": 0.75,
               "excludedReason": "already_asked",
-              "gain": 0.538208,
+              "gain": 0.54817,
               "questionMode": "soft",
               "uxPriority": 1.15,
               "valueDistribution": {
                 "balm": 1,
-                "mascara": 15,
-                "pencil": 11,
+                "mascara": 14,
+                "pencil": 12,
                 "powder": 3
               }
             },
@@ -2639,9 +2773,9 @@
   ],
   "snapshot": {
     "catalogPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/catalog/catalog_items_mvp_20260717.jsonl",
-    "catalogSha256": "1cfb22314c701e143d7fc4be91974b38c9657166d7a90bbd9bc49b3cc68fd0a8",
+    "catalogSha256": "02366c4fa57ecf49c6e36743fd0e3a2b901ebfac682b75e65ee7478780e30f11",
     "chunksPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/knowledge/product_knowledge_chunks_mvp_20260717.jsonl",
-    "chunksSha256": "151a46c5b4dcc3636ad67cadabfa56446a87a0952fe67c75c3383bdc1078bdba",
+    "chunksSha256": "6b633fa82bd0a50d6d52ee67eacd4d1fde396fb7b9cd51c376842c26b0b2e945",
     "degradedReason": null,
     "retrievalBackend": "embedding_file_hash",
     "retrievalBackends": [
@@ -2653,11 +2787,11 @@
     ],
     "scoreWeightsV2": false,
     "snapshotManifestPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/manifests/snapshot_20260717.json",
-    "snapshotManifestSha256": "cef9bad88fec80f96a3a419dd44468475863a806d105392a014e73ebf045e480",
+    "snapshotManifestSha256": "1dbf1617d260e7bb327de7f57c34d0fc76801c8ef7a6bc34bf0e84a31eb02581",
     "snapshotRunDate": "20260717",
     "snapshotSource": "manifest_override",
     "vectorPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/vector/product_knowledge_vector_index_mvp_20260717.json",
-    "vectorSha256": "e1e865f22ec99f7a6a2025696ec1ca5bb514349d4314d100eec96bf0eca819d8"
+    "vectorSha256": "48334afd7a0bb6c3b883611378006be2bb9076255ae310648e27fb601e0774b9"
   },
   "summary": {
     "failed": 0,
