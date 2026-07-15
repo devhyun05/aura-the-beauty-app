@@ -75,8 +75,10 @@ export function getBackendApiBaseUrl(): string | null {
   return ensureApiBasePath(rawUrl);
 }
 
-export function buildBackendApiUrl(path: string): string {
-  const apiBaseUrl = getBackendApiBaseUrl();
+export function buildBackendApiUrl(path: string, baseUrl?: string | null): string {
+  const apiBaseUrl = baseUrl?.trim()
+    ? ensureApiBasePath(baseUrl.trim())
+    : getBackendApiBaseUrl();
 
   if (!apiBaseUrl) {
     throw new Error('EXPO_PUBLIC_API_BASE_URL is required for backend API calls.');
@@ -104,6 +106,7 @@ function ensureApiBasePath(rawUrl: string): string {
 }
 
 type BackendJsonRequestInit = Omit<RequestInit, 'body' | 'headers'> & {
+  baseUrl?: string | null;
   authToken?: string | null;
   body?: unknown;
   headers?: HeadersInit;
@@ -136,6 +139,7 @@ export async function requestBackendJson<T>(
   init: BackendJsonRequestInit = {},
 ): Promise<T> {
   const {
+    baseUrl,
     authToken,
     body,
     headers,
@@ -146,7 +150,7 @@ export async function requestBackendJson<T>(
   const resolvedAuthToken = resolveAuthToken(authToken);
   const startedAt = Date.now();
   const method = requestInit.method ?? 'GET';
-  const url = buildBackendApiUrl(path);
+  const url = buildBackendApiUrl(path, baseUrl);
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
   const handleExternalAbort = () => abortController.abort();

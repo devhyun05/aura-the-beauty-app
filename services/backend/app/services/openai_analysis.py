@@ -2,6 +2,7 @@ import asyncio
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
+from ipaddress import ip_address
 import json
 import logging
 import re
@@ -9,9 +10,11 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import boto3
+import httpx
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -46,6 +49,93 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
   "hairstyleDirection, finalFormula."
 )
+
+MAKEUP_RECOMMENDATION_ROLES = ("anchor",)
+MAKEUP_RECOMMENDATION_AR_FILTERS = {
+  "anchor": "filter-milky-strawberry-pink",
+  "bold": "filter-clean-smoky-city",
+  "discovery": "filter-plum-syrup-gloss",
+}
+MAKEUP_RECOMMENDATION_OUTPUT_SCHEMA = {
+  "type": "object",
+  "properties": {
+    "looks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {"type": "string", "enum": list(MAKEUP_RECOMMENDATION_ROLES)},
+          "title": {"type": "string"},
+          "subtitle": {"type": "string"},
+          "summary": {"type": "string"},
+          "tags": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 4,
+            "items": {"type": "string"},
+          },
+          "reasons": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {"type": "string"},
+          },
+          "durationMinutes": {"type": "integer", "minimum": 5, "maximum": 60},
+          "difficulty": {"type": "string", "enum": ["easy", "medium", "advanced"]},
+          "steps": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "area": {"type": "string", "enum": ["base", "brow", "eye", "cheek", "lip"]},
+                "instruction": {"type": "string"},
+                "order": {"type": "integer", "minimum": 1, "maximum": 5},
+              },
+              "required": ["area", "instruction", "order"],
+              "additionalProperties": False,
+            },
+          },
+          "products": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "area": {"type": "string", "enum": ["base", "brow", "eye", "cheek", "lip"]},
+                "brandName": {"type": "string"},
+                "productName": {"type": "string"},
+                "shadeName": {"type": "string"},
+                "reason": {"type": "string"},
+              },
+              "required": ["area", "brandName", "productName", "shadeName", "reason"],
+              "additionalProperties": False,
+            },
+          },
+        },
+        "required": [
+          "role",
+          "title",
+          "subtitle",
+          "summary",
+          "tags",
+          "reasons",
+          "durationMinutes",
+          "difficulty",
+          "steps",
+          "products",
+        ],
+        "additionalProperties": False,
+      },
+    },
+  },
+  "required": ["looks"],
+  "additionalProperties": False,
+}
 
 
 class OpenAIAnalysisService:
@@ -325,6 +415,183 @@ class OpenAIAnalysisService:
     )
 
     return image_bytes
+
+  def _allowed_makeup_recommendation_source_hosts(self) -> set[str]:
+    hosts = {
+      host.strip().lower()
+      for host in (self.settings.makeup_recommendation_source_hosts or "").split(",")
+      if host.strip()
+    }
+
+    for value in (self.settings.cdn_base_url, self.settings.cloudfront_domain):
+      normalized = str(value or "").strip()
+
+      if not normalized:
+        continue
+
+      parsed = urlparse(normalized if "://" in normalized else f"https://{normalized}")
+
+      if parsed.hostname:
+        hosts.add(parsed.hostname.lower())
+
+    return hosts
+
+  def _read_makeup_recommendation_source(
+    self,
+    source_image_url: str,
+  ) -> tuple[bytes, str]:
+    normalized_url = str(source_image_url or "").strip()
+
+    if normalized_url.startswith("s3://"):
+      payload = {"imageUrl": normalized_url}
+      return self._read_source_image_bytes(payload), self._infer_content_type(payload)
+
+    parsed = urlparse(normalized_url)
+    hostname = (parsed.hostname or "").lower()
+    allowed_hosts = self._allowed_makeup_recommendation_source_hosts()
+
+    try:
+      ip_address(hostname)
+    except ValueError:
+      is_ip_address = False
+    else:
+      is_ip_address = True
+
+    if parsed.scheme != "https" or not hostname or is_ip_address or hostname not in allowed_hosts:
+      raise AppError(
+        400,
+        "MAKEUP_RECOMMENDATION_SOURCE_NOT_ALLOWED",
+        "The source image must use an approved HTTPS media host.",
+      )
+
+    try:
+      response = httpx.get(normalized_url, timeout=30, follow_redirects=False)
+      response.raise_for_status()
+    except httpx.HTTPError as exc:
+      raise AppError(
+        502,
+        "MAKEUP_RECOMMENDATION_SOURCE_UNAVAILABLE",
+        "The source face image could not be downloaded.",
+      ) from exc
+
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+
+    if not content_type.startswith("image/"):
+      raise AppError(
+        400,
+        "MAKEUP_RECOMMENDATION_SOURCE_INVALID",
+        "The source URL did not return an image.",
+      )
+
+    if not response.content or len(response.content) > 15 * 1024 * 1024:
+      raise AppError(
+        400,
+        "MAKEUP_RECOMMENDATION_SOURCE_SIZE_INVALID",
+        "The source image must be between 1 byte and 15 MB.",
+      )
+
+    return response.content, content_type
+
+  def _build_personalized_makeup_recommendation_prompt(
+    self,
+    payload: dict[str, Any],
+  ) -> str:
+    profile = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
+    refinement = str(payload.get("refinement") or "").strip()
+    refinement_guide = {
+      "natural": "이전보다 색과 음영을 한 단계 덜어 자연스럽게 조정해.",
+      "hip": "질감이나 라인에 감각적인 포인트를 더해 힙하게 조정해.",
+      "differentColor": "기존 조건을 유지하면서 주조색을 다른 계열로 바꿔.",
+      "replaceProducts": "룩 방향은 유지하되 제품 타입과 색상 제안을 새롭게 바꿔.",
+    }.get(refinement, "")
+    context = {
+      "request": payload.get("prompt"),
+      "conditions": payload.get("conditions") if isinstance(payload.get("conditions"), list) else [],
+      "personalColor": payload.get("personalColor"),
+      "profile": profile,
+      "refinement": refinement or None,
+    }
+
+    return (
+      "사진 속 동일 사용자에게 가장 잘 어울리는 실제 적용 가능한 K-뷰티 메이크업 룩을 정확히 1개만 추천해. "
+      "룩의 role은 반드시 anchor로 반환해. 여러 대안이나 비교용 룩을 만들지 말고 가장 적합한 한 가지를 선택해. "
+      "사진 속 얼굴 특징, 성별 표현, 피부 표현과 사용자 조건을 보존해. "
+      "title은 12자 이내, subtitle은 20자 이내, summary는 두 문장 이내로 한국어로 작성해. "
+      "각 룩은 base, brow, eye, cheek, lip 순서의 단계 5개와 제품 타입 5개를 포함해. "
+      "실재 여부를 확인할 수 없는 브랜드나 상품을 만들지 말고 모든 brandName은 반드시 '추천 타입'으로 써. "
+      "productName에는 쿠션, 팔레트, 브로우, 블러셔, 립처럼 일반 제품 유형을 작성하고 shadeName에는 구체적인 색조를 써. "
+      "의학적 진단이나 피부 치료 주장은 하지 마. JSON Schema에 정확히 맞는 결과만 반환해. "
+      f"{refinement_guide} "
+      f"사용자 컨텍스트: {json.dumps(context, ensure_ascii=False)}"
+    )
+
+  def _generate_personalized_makeup_text_sync(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+    source_content_type: str,
+  ) -> list[dict[str, Any]]:
+    source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
+    response = self._client().responses.create(
+      model=self.settings.openai_analysis_model_id,
+      input=[
+        {
+          "role": "developer",
+          "content": "You are a concise professional K-beauty makeup artist. Return schema-valid Korean recommendations only.",
+        },
+        {
+          "role": "user",
+          "content": [
+            {"type": "input_text", "text": self._build_personalized_makeup_recommendation_prompt(payload)},
+            {
+              "type": "input_image",
+              "image_url": f"data:{source_content_type};base64,{source_image_base64}",
+            },
+          ],
+        },
+      ],
+      text={
+        "format": {
+          "type": "json_schema",
+          "name": "makeup_recommendations",
+          "strict": True,
+          "schema": MAKEUP_RECOMMENDATION_OUTPUT_SCHEMA,
+        },
+      },
+    )
+    output_text = getattr(response, "output_text", "")
+
+    if not output_text:
+      raise AppError(
+        502,
+        "OPENAI_MAKEUP_RECOMMENDATION_EMPTY",
+        "OpenAI returned no makeup recommendations.",
+      )
+
+    parsed = self._parse_json_output(output_text)
+    looks = parsed.get("looks")
+
+    if not isinstance(looks, list):
+      raise AppError(
+        502,
+        "OPENAI_MAKEUP_RECOMMENDATION_INVALID",
+        "OpenAI returned an invalid makeup recommendation payload.",
+      )
+
+    by_role = {
+      str(look.get("role")): look
+      for look in looks
+      if isinstance(look, dict) and str(look.get("role")) in MAKEUP_RECOMMENDATION_ROLES
+    }
+
+    if any(role not in by_role for role in MAKEUP_RECOMMENDATION_ROLES):
+      raise AppError(
+        502,
+        "OPENAI_MAKEUP_RECOMMENDATION_INCOMPLETE",
+        "OpenAI must return one anchor makeup look.",
+      )
+
+    return [dict(by_role[role]) for role in MAKEUP_RECOMMENDATION_ROLES]
 
   def _build_analysis_prompt(self, payload: dict[str, Any]) -> str:
     metadata = {
@@ -831,7 +1098,7 @@ class OpenAIAnalysisService:
       "imageUrl": f"{cdn_base_url}/{object_key}" if cdn_base_url else f"s3://{self.settings.s3_bucket_name}/{object_key}",
     }
 
-  def _generate_single_makeup_image(
+  def _edit_makeup_image_bytes(
     self,
     source_image_bytes: bytes,
     source_content_type: str,
@@ -877,8 +1144,26 @@ class OpenAIAnalysisService:
 
     generated_image_bytes = base64.b64decode(image_base64)
     generated_image_bytes = self._optimize_generated_image_for_upload(generated_image_bytes)
-    upload = self._upload_generated_image(generated_image_bytes, index + 1)
     duration_ms = round((time.monotonic() - started_at) * 1000)
+
+    return generated_image_bytes, duration_ms
+
+  def _generate_single_makeup_image(
+    self,
+    source_image_bytes: bytes,
+    source_content_type: str,
+    analysis_result: dict[str, Any],
+    card: dict[str, Any],
+    index: int,
+  ) -> dict[str, Any]:
+    generated_image_bytes, duration_ms = self._edit_makeup_image_bytes(
+      source_image_bytes,
+      source_content_type,
+      analysis_result,
+      card,
+      index,
+    )
+    upload = self._upload_generated_image(generated_image_bytes, index + 1)
     logger.info(
       "[aura:openai] image-generation:item-success index=%s bytes=%s durationMs=%s imageUrl=%s",
       index + 1,
@@ -1268,6 +1553,152 @@ class OpenAIAnalysisService:
     )
 
     return result
+
+  def _generate_personalized_makeup_recommendations_sync(
+    self,
+    payload: dict[str, Any],
+  ) -> dict[str, Any]:
+    total_started_at = time.monotonic()
+    source_image_bytes, source_content_type = self._read_makeup_recommendation_source(
+      str(payload.get("sourceImageUrl") or ""),
+    )
+    source_image_bytes, source_content_type = self._prepare_source_image_for_generation(
+      source_image_bytes,
+      source_content_type,
+    )
+    text_started_at = time.monotonic()
+    looks = self._generate_personalized_makeup_text_sync(
+      payload,
+      source_image_bytes,
+      source_content_type,
+    )
+    text_duration_ms = round((time.monotonic() - text_started_at) * 1000)
+    profile = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
+    analysis_result = {
+      "personalColor": payload.get("personalColor"),
+      "faceShape": profile.get("faceShape"),
+      "toneSummary": profile.get("toneSummary"),
+      "recommendedMood": profile.get("recommendedMood"),
+    }
+    image_cards = [
+      {
+        **look,
+        "description": look.get("summary"),
+      }
+      for look in looks
+    ]
+    generated: list[tuple[bytes, int] | None] = [None] * len(image_cards)
+    image_started_at = time.monotonic()
+
+    with ThreadPoolExecutor(max_workers=len(image_cards)) as executor:
+      futures = {
+        executor.submit(
+          self._edit_makeup_image_bytes,
+          source_image_bytes,
+          source_content_type,
+          analysis_result,
+          card,
+          index,
+        ): index
+        for index, card in enumerate(image_cards)
+      }
+
+      for future in as_completed(futures):
+        index = futures[future]
+        generated[index] = future.result()
+
+    results: list[dict[str, Any]] = []
+    conditions = [
+      str(condition).strip()
+      for condition in payload.get("conditions", [])
+      if str(condition).strip()
+    ] if isinstance(payload.get("conditions"), list) else []
+    _, _, _, output_content_type = self._resolve_makeup_image_output()
+
+    for index, look in enumerate(looks):
+      generated_item = generated[index]
+
+      if generated_item is None:
+        raise AppError(
+          502,
+          "OPENAI_MAKEUP_IMAGE_INCOMPLETE",
+          "OpenAI did not generate every requested makeup image.",
+        )
+
+      image_bytes, image_duration_ms = generated_item
+
+      if self.settings.s3_bucket_name:
+        upload = self._upload_generated_image(image_bytes, index + 1)
+        image_url = upload["imageUrl"]
+      else:
+        image_url = f"data:{output_content_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+
+      role = str(look.get("role") or MAKEUP_RECOMMENDATION_ROLES[index])
+      products = [
+        {
+          **product,
+          "id": f"openai-{role}-{product.get('area')}-{product_index + 1}",
+        }
+        for product_index, product in enumerate(look.get("products", []))
+        if isinstance(product, dict)
+      ]
+      results.append(
+        {
+          "id": f"openai-{role}-{uuid4()}",
+          "arFilterId": MAKEUP_RECOMMENDATION_AR_FILTERS[role],
+          "role": role,
+          "title": look.get("title"),
+          "summary": look.get("summary"),
+          "imageUrl": image_url,
+          "reasons": look.get("reasons", []),
+          "appliedConditions": conditions,
+          "durationMinutes": look.get("durationMinutes"),
+          "difficulty": look.get("difficulty"),
+          "steps": look.get("steps", []),
+          "products": products,
+          "imageGenerationDurationMs": image_duration_ms,
+        },
+      )
+
+    return {
+      "results": results,
+      "provider": "openai",
+      "textModel": self.settings.openai_analysis_model_id,
+      "imageModel": self.settings.openai_image_model_id,
+      "timing": {
+        "textMs": text_duration_ms,
+        "imagesMs": round((time.monotonic() - image_started_at) * 1000),
+        "totalMs": round((time.monotonic() - total_started_at) * 1000),
+      },
+    }
+
+  async def generate_personalized_makeup_recommendations(
+    self,
+    payload: dict[str, Any],
+  ) -> dict[str, Any]:
+    try:
+      return await asyncio.to_thread(
+        self._generate_personalized_makeup_recommendations_sync,
+        payload,
+      )
+    except AppError:
+      raise
+    except (OpenAIError, BotoCoreError, ClientError, httpx.HTTPError) as exc:
+      logger.exception("[aura:openai] makeup-recommendation:failed")
+      raise AppError(
+        502,
+        "OPENAI_MAKEUP_RECOMMENDATION_FAILED",
+        "OpenAI makeup recommendation generation failed.",
+        details={"reason": exc.__class__.__name__, "message": str(exc)},
+      ) from exc
+    except Exception as exc:
+      logger.exception("[aura:openai] makeup-recommendation:failed")
+      raise AppError(
+        502,
+        "OPENAI_MAKEUP_RECOMMENDATION_FAILED",
+        "OpenAI makeup recommendation generation failed.",
+        details={"reason": exc.__class__.__name__},
+      ) from exc
 
   async def analyze_image(self, payload: dict[str, Any]) -> dict[str, Any]:
     try:

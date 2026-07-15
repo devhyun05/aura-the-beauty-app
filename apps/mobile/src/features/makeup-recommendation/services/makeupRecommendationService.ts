@@ -1,19 +1,18 @@
 import {
-  MAKEUP_LOOK_FIXTURES,
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
-} from '../mocks/makeupRecommendation.mock';
+} from '../data/makeupRecommendationCatalog';
+import {getLatestFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
+import {requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupLookRecommendation,
   MakeupQuestionDimension,
   MakeupRecommendationAnswer,
-  MakeupRecommendationProduct,
   MakeupRecommendationQuestion,
   MakeupRecommendationRefinement,
   MakeupRecommendationSession,
   MakeupScenarioPrompt,
   MakeupScenarioTone,
-  ProductRecommendationProvider,
 } from '../types';
 
 export type StartMakeupRecommendationInput = {
@@ -21,6 +20,17 @@ export type StartMakeupRecommendationInput = {
   scenarioId?: string;
   useProfile: boolean;
   personalColor?: string;
+};
+
+type BackendMakeupLookRecommendation = Omit<MakeupLookRecommendation, 'imageSource'> & {
+  imageUrl: string;
+};
+
+type GenerateMakeupRecommendationResponse = {
+  imageModel: string;
+  provider: 'openai';
+  results: BackendMakeupLookRecommendation[];
+  textModel: string;
 };
 
 const QUESTION_PRIORITY: readonly MakeupQuestionDimension[] = [
@@ -92,25 +102,6 @@ function buildQuestionSession(
   };
 }
 
-function cloneLook(look: MakeupLookRecommendation): MakeupLookRecommendation {
-  return {
-    ...look,
-    reasons: [...look.reasons],
-    appliedConditions: [...look.appliedConditions],
-    steps: look.steps.map(step => ({...step})),
-    products: look.products.map(product => ({...product})),
-  };
-}
-
-export class FixtureProductRecommendationProvider implements ProductRecommendationProvider {
-  recommendProducts(lookId: string): MakeupRecommendationProduct[] {
-    const fixture = MAKEUP_LOOK_FIXTURES.find(look => look.id === lookId) ?? MAKEUP_LOOK_FIXTURES[0];
-    return fixture.products.map(product => ({...product}));
-  }
-}
-
-const fixtureProductProvider = new FixtureProductRecommendationProvider();
-
 function selectedAnswerLabels(
   questions: MakeupRecommendationQuestion[],
   answers: MakeupRecommendationAnswer[],
@@ -142,34 +133,85 @@ function buildAppliedConditions(
   return [...new Set([...directConditions, ...inferredConditions])];
 }
 
-function completeSession(
+function imageSourceUri(source: unknown): string | undefined {
+  if (Array.isArray(source)) {
+    return source.map(imageSourceUri).find(Boolean);
+  }
+
+  if (
+    source &&
+    typeof source === 'object' &&
+    'uri' in source &&
+    typeof source.uri === 'string'
+  ) {
+    return source.uri;
+  }
+
+  return undefined;
+}
+
+async function completeSession(
   session: MakeupRecommendationSession,
   answers: MakeupRecommendationAnswer[],
   additionalConstraints?: string,
-): MakeupRecommendationSession {
+  refinement?: MakeupRecommendationRefinement,
+): Promise<MakeupRecommendationSession> {
   const conditions = buildAppliedConditions(session, answers, additionalConstraints);
+  const latestReport = await getLatestFaceAnalysisReport();
+  const sourceImageUrl = imageSourceUri(latestReport?.imageSource);
+
+  if (!latestReport || !sourceImageUrl?.startsWith('https://')) {
+    throw new Error('먼저 얼굴 분석을 완료한 뒤 메이크업 추천을 다시 시도해 주세요.');
+  }
+
+  const response = await requestBackendJson<GenerateMakeupRecommendationResponse>(
+    '/makeup-recommendations/generate',
+    {
+      baseUrl: process.env.EXPO_PUBLIC_MAKEUP_RECOMMENDATION_API_BASE_URL?.trim() || undefined,
+      body: {
+        conditions,
+        personalColor: session.useProfile
+          ? session.personalColor ?? latestReport.personalColor
+          : undefined,
+        profile: {
+          faceShape: latestReport.faceShape,
+          recommendedMood: latestReport.recommendedMood,
+          skinType: latestReport.skinType,
+          summary: latestReport.summary,
+          toneSummary: latestReport.toneSummary,
+        },
+        prompt: session.prompt,
+        refinement,
+        sourceImageUrl,
+      },
+      method: 'POST',
+      timeoutMs: 240000,
+    },
+  );
+
   return {
     ...session,
     phase: 'results',
     currentQuestionIndex: session.questions.length,
     answers,
     additionalConstraints,
-    results: MAKEUP_LOOK_FIXTURES.map(fixture => ({
-      ...cloneLook(fixture),
-      appliedConditions: [...conditions],
-      products: fixtureProductProvider.recommendProducts(fixture.id),
+    results: response.results.slice(0, 1).map(result => ({
+      ...result,
+      imageSource: {uri: result.imageUrl},
     })),
   };
 }
 
-function buildCompletedSession(
+async function buildCompletedSession(
   input: StartMakeupRecommendationInput,
   answers: MakeupRecommendationAnswer[],
-): MakeupRecommendationSession {
+): Promise<MakeupRecommendationSession> {
   return completeSession(buildQuestionSession(input, []), answers);
 }
 
-export function startMakeupRecommendation(input: StartMakeupRecommendationInput): MakeupRecommendationSession {
+export async function startMakeupRecommendation(
+  input: StartMakeupRecommendationInput,
+): Promise<MakeupRecommendationSession> {
   const scenario = MAKEUP_SCENARIOS.find(item => item.id === input.scenarioId);
   const inferredDimensions = inferKnownDimensions(input.prompt);
   const known = new Set(scenario?.knownDimensions ?? inferredDimensions);
@@ -183,10 +225,10 @@ export function startMakeupRecommendation(input: StartMakeupRecommendationInput)
     : buildQuestionSession(input, questions);
 }
 
-export function answerMakeupRecommendationQuestion(
+export async function answerMakeupRecommendationQuestion(
   session: MakeupRecommendationSession,
   answer: MakeupRecommendationAnswer,
-): MakeupRecommendationSession {
+): Promise<MakeupRecommendationSession> {
   const expected = session.questions[session.currentQuestionIndex];
   if (!expected || expected.id !== answer.questionId) {
     throw new Error('현재 질문과 맞지 않는 답변이에요.');
@@ -202,51 +244,22 @@ export function answerMakeupRecommendationQuestion(
   const nextIndex = session.currentQuestionIndex + 1;
   const additionalConstraints =
     answer.additionalConstraints?.trim() || session.additionalConstraints;
-  return nextIndex >= session.questions.length
-    ? completeSession(session, answers, additionalConstraints)
-    : {...session, answers, currentQuestionIndex: nextIndex, additionalConstraints};
-}
-
-function applyFixtureRefinement(
-  results: MakeupLookRecommendation[],
-  refinement: MakeupRecommendationRefinement,
-): MakeupLookRecommendation[] {
-  if (refinement === 'replaceProducts') {
-    return results.map(look => {
-      const currentProductId = look.products[0]?.id;
-      const currentFixtureIndex = MAKEUP_LOOK_FIXTURES.findIndex(fixture =>
-        fixture.products.some(product => product.id === currentProductId),
-      );
-      const nextFixtureIndex = (Math.max(currentFixtureIndex, 0) + 1) % MAKEUP_LOOK_FIXTURES.length;
-      const nextFixture = MAKEUP_LOOK_FIXTURES[nextFixtureIndex];
-      return {...cloneLook(look), products: fixtureProductProvider.recommendProducts(nextFixture.id)};
-    });
+  if (nextIndex >= session.questions.length) {
+    return completeSession(session, answers, additionalConstraints);
   }
 
-  const copy = {
-    natural: {summary: '색감과 음영을 한 단계 덜어낸 자연스러운 조정', condition: '더 자연스럽게'},
-    hip: {summary: '질감과 선에 포인트를 더한 힙한 조정', condition: '더 힙하게'},
-    differentColor: {summary: '주조색을 반대 온도로 바꾼 새로운 색 조합', condition: '다른 색으로'},
-  }[refinement];
-
-  const refinementConditions = ['더 자연스럽게', '더 힙하게', '다른 색으로'];
-  return results.map(look => {
-    const baseSummary = MAKEUP_LOOK_FIXTURES.find(fixture => fixture.id === look.id)?.summary ?? look.summary;
-    return {
-      ...cloneLook(look),
-      summary: `${baseSummary} · ${copy.summary}`,
-      appliedConditions: [
-        copy.condition,
-        ...look.appliedConditions.filter(item => !refinementConditions.includes(item)),
-      ],
-    };
-  });
+  return {...session, answers, currentQuestionIndex: nextIndex, additionalConstraints};
 }
 
-export function refineMakeupRecommendation(
+export async function refineMakeupRecommendation(
   session: MakeupRecommendationSession,
   refinement: MakeupRecommendationRefinement,
-): MakeupRecommendationSession {
+): Promise<MakeupRecommendationSession> {
   if (session.phase !== 'results') throw new Error('추천 결과가 나온 뒤에 조정할 수 있어요.');
-  return {...session, results: applyFixtureRefinement(session.results, refinement)};
+  return completeSession(
+    {...session, phase: 'question', results: []},
+    session.answers,
+    session.additionalConstraints,
+    refinement,
+  );
 }
