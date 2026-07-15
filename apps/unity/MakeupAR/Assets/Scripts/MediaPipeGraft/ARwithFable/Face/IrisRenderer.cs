@@ -369,6 +369,13 @@ namespace ARMakeup.Face
             ApplyEyeParams(new FilterParams());
         }
 
+        /// <summary>눈 geometry가 등방 좌표에 쓰는 실제 카메라 aspect.</summary>
+        public bool TryGetIsoAspect(out float aspect)
+        {
+            aspect = _camera != null ? _camera.aspect : 0f;
+            return aspect > 1e-5f && !float.IsNaN(aspect) && !float.IsInfinity(aspect);
+        }
+
         static Material LoadMaterial(string shaderName)
         {
             var shader = Resources.Load<Shader>(shaderName);
@@ -611,6 +618,9 @@ namespace ARMakeup.Face
             return _camera.ViewportToWorldPoint(new Vector3(vp.x, vp.y, depth));
         }
 
+        static Vector2 IsoToViewport(Vector2 iso, float aspect) =>
+            new Vector2(iso.x / aspect, iso.y);
+
         float Depth(float z) => DistanceFromCamera * (1f + z * DepthScale);
 
         static Vector2 Perp(Vector2 v) => new Vector2(-v.y, v.x);
@@ -827,6 +837,47 @@ namespace ARMakeup.Face
         readonly Vector2[] _lashTmp = new Vector2[MainPts];   // BuildLashLine 세분 lash 라인
         readonly Vector2[] _chainTmp = new Vector2[ChainPts]; // BuildEyelinerChain 꼬리+메인
 
+        // 핏 핸들은 원시 랜드마크를 재계산하지 않고 실제 메시가 쓴 최종 점을 노출한다.
+        // IrisRenderer는 실행 순서 -10이라 StencilGuideRenderer가 같은 프레임 값을 읽는다.
+        readonly Vector2[] _fitWingVp = new Vector2[2];
+        readonly Vector2[] _fitLinerBoundaryVp = new Vector2[2];
+        readonly Vector2[] _fitInnerEndpointVp = new Vector2[2];
+        readonly int[] _fitEyelinerFrame = { -1, -1 };
+        readonly bool[] _fitEyelinerValid = new bool[2];
+        readonly Vector2[] _fitEyeshadowBaseVp = new Vector2[2];
+        readonly int[] _fitEyeshadowFrame = { -1, -1 };
+        readonly bool[] _fitEyeshadowValid = new bool[2];
+
+        /// <summary>현재/직전 프레임 실제 아이라이너 메시의 윙 팁, 중앙 바깥 경계,
+        /// 눈머리 끝점(뷰포트 좌표). 얼굴 소실·스테일 값은 반환하지 않는다.</summary>
+        public bool TryGetEyelinerFitHandles(
+            int eye, out Vector2 wingVp, out Vector2 boundaryVp, out Vector2 innerVp)
+        {
+            wingVp = boundaryVp = innerVp = Vector2.zero;
+            if (eye < 0 || eye >= _fitEyelinerFrame.Length ||
+                _source == null || !_source.HasFace || FramePresenter.Instance == null ||
+                !_fitEyelinerValid[eye]) return false;
+            var frame = _fitEyelinerFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            wingVp = _fitWingVp[eye];
+            boundaryVp = _fitLinerBoundaryVp[eye];
+            innerVp = _fitInnerEndpointVp[eye];
+            return true;
+        }
+
+        /// <summary>현재/직전 프레임 실제 아이섀도 메시의 안정된 하단(lash) 중앙점.</summary>
+        public bool TryGetEyeshadowFitHandle(int eye, out Vector2 baseVp)
+        {
+            baseVp = Vector2.zero;
+            if (eye < 0 || eye >= _fitEyeshadowFrame.Length ||
+                _source == null || !_source.HasFace || FramePresenter.Instance == null ||
+                !_fitEyeshadowValid[eye]) return false;
+            var frame = _fitEyeshadowFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            baseVp = _fitEyeshadowBaseVp[eye];
+            return true;
+        }
+
         void UpdateIris(Vector3[] lm, float aspect)
         {
             var v = _iris.vertices;
@@ -1037,6 +1088,7 @@ namespace ARMakeup.Face
                 var cornerNormal = Perp(cornerTangent);
                 if (Vector2.Dot(cornerNormal, browUp) < 0f) cornerNormal = -cornerNormal;
                 var cornerTop = corner + cornerNormal * cornerThick;
+                var middleBoundary = cornerTop;
 
                 for (var j = 0; j < ChainPts; j++)
                 {
@@ -1066,9 +1118,17 @@ namespace ARMakeup.Face
                         outer = p + nrm * (cornerThick * taper);
                     }
 
+                    if (j == TailSubdiv + MainPts / 2) middleBoundary = outer;
+
                     v[vi++] = IsoToWorld(p, aspect, depth);          // 안쪽(라인)
                     v[vi++] = IsoToWorld(outer, aspect, depth);      // 바깥(테두리)
                 }
+
+                _fitWingVp[e] = IsoToViewport(tip, aspect);
+                _fitLinerBoundaryVp[e] = IsoToViewport(middleBoundary, aspect);
+                _fitInnerEndpointVp[e] = IsoToViewport(chain[ChainPts - 1], aspect);
+                _fitEyelinerFrame[e] = Time.frameCount;
+                _fitEyelinerValid[e] = true;
             }
             Commit(_eyeliner);
         }
@@ -1168,6 +1228,9 @@ namespace ARMakeup.Face
 
                 var lash = BuildLashLine(lm, aspect, e); // MainPts점, [0]=바깥꼬리
                 var depth = Depth(lm[UpperLids[e][0]].z);
+                _fitEyeshadowBaseVp[e] = IsoToViewport(lash[MainPts / 2], aspect);
+                _fitEyeshadowFrame[e] = Time.frameCount;
+                _fitEyeshadowValid[e] = true;
 
                 for (var i = 0; i < MainPts; i++)
                 {

@@ -135,12 +135,14 @@ Shader "ARMakeup/LowerLid"
                 // 가로 가중: 코너 페이드(라인용).
                 float edge = smoothstep(0.0, 0.08, along) * (1.0 - smoothstep(0.92, 1.0, along));
 
-                // 초승달 두께 프로파일 — 애교살은 눈 중앙이 가장 도톰하고 앞머리(안쪽,
-                // along=0)로 갈수록 lash 라인에 수렴하며 뾰족해진다. 꼬리(바깥)는 1/3만
-                // 좁혀 스타일 여지를 남긴다. 알파 페이드만으로는 균일 두께 리본("멜론
-                // 조각")으로 보여서 세로 좌표를 두께로 나눠 기하 자체를 테이퍼한다.
-                float thick = smoothstep(0.0, 0.5, along)
-                              * (1.0 - 0.35 * smoothstep(0.72, 1.0, along));
+                // 초승달 두께 프로파일 — 애교살은 눈 중앙이 가장 도톰하고 양 끝(앞머리
+                // along=0·꼬리 along=1)에서 lash 라인에 수렴하며 자연 소멸한다. 좌우
+                // 대칭 벨(0→0.28 진입 · 0.72→1 소멸, 중앙 0.28~0.72 평탄)이라 한쪽만
+                // 두꺼운 "보트/멜론 조각"이 안 생긴다(구 프로파일은 안쪽만 길게 테이퍼하고
+                // 꼬리는 35%만 좁혀 바깥이 뭉툭한 보트가 됐다). 알파 페이드만으로는 균일
+                // 두께 리본으로 보여서 세로 좌표를 두께로 나눠(vv) 기하 자체를 테이퍼한다.
+                float thick = smoothstep(0.0, 0.28, along)
+                              * (1.0 - smoothstep(0.72, 1.0, along));
                 float vv = v / max(thick, 1e-3);
                 // 밝기는 은은한 중앙 강조만 — 모양은 위 두께 테이퍼가 담당.
                 float soft = 0.5 + 0.5 * sin(3.14159 * along);
@@ -149,10 +151,12 @@ Shader "ARMakeup/LowerLid"
                 float lnAmt = (1.0 - smoothstep(0.10, 0.22, v)) * edge * _LinerIntensity;
                 // 애교살 하이라이트: 라인 아래 도톰한 밴드. edge를 곱해 꼬리(바깥)
                 // 메시 경계에서 알파가 하드 엣지로 끊기지 않게 한다(안쪽은 thick→0).
-                float hiAmt = smoothstep(0.06, 0.28, vv) * (1.0 - smoothstep(0.45, 0.70, vv))
+                float hiAmt = smoothstep(0.06, 0.24, vv) * (1.0 - smoothstep(0.40, 0.58, vv))
                               * soft * edge * _AegyoIntensity;
-                // 애교살 섀도: 볼록 경계의 얇은 줄 — 0.7배로 은은하게(구 브랜치와 동일 비율).
-                float shAmt = smoothstep(0.52, 0.64, vv) * (1.0 - smoothstep(0.70, 0.82, vv))
+                // 애교살 섀도: 볼록 아래 경계의 얇은 줄 — 하이라이트보다 아래(vv 큼)에
+                // 살짝 간격을 두고 깔려 "위 밝은 도톰함 + 아래 그림자" 2줄로 볼록을
+                // 정의한다. 0.7배로 은은하게(구 브랜치와 동일 비율).
+                float shAmt = smoothstep(0.52, 0.66, vv) * (1.0 - smoothstep(0.78, 0.92, vv))
                               * soft * edge * _AegyoIntensity * 0.7;
 
                 // 삼각존: 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 애교살과 무관한

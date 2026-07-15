@@ -99,27 +99,6 @@ export function stencilStepsFromTree(tree: LookNode | null): StencilStep[] {
 }
 
 /**
- * 룩에 없는 부위 강제 끔 — 안 올린 부위엔 가이드가 뜨지 않게(부위별 수동 토글·기본 ON
- * 부위 모두 이 마스크를 통과). keys = 현재 룩에 있는 가이드 부위 집합. 연출·농도는 유지.
- */
-export function maskStencilByKeys(
-  p: StencilParams,
-  keys: Set<string>,
-): StencilParams {
-  return {
-    ...p,
-    lips: p.lips && keys.has('lips'),
-    brows: p.brows && keys.has('brows'),
-    eyeshadow: p.eyeshadow && keys.has('eyeshadow'),
-    eyeliner: p.eyeliner && keys.has('eyeliner'),
-    aegyo: p.aegyo && keys.has('aegyo'),
-    blush: p.blush && keys.has('blush'),
-    highlighter: p.highlighter && keys.has('highlighter'),
-    contour: p.contour && keys.has('contour'),
-  };
-}
-
-/**
  * 특정 스텝(부위) 하나만 켠 StencilParams — 나머지 부위 끔, opacity·연출(pulse/dash) 유지.
  * key=null이면 전 부위 끔(가이드 없음).
  */

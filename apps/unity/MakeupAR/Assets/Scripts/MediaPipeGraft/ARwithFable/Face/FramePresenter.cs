@@ -266,9 +266,26 @@ namespace ARMakeup.Face
         public Vector2 ImageToViewport(Vector2 imageUV)
         {
             if (FaceWarpField.Instance != null)
-                imageUV = FaceWarpField.Instance.Forward(imageUV);
+            {
+                var warped = FaceWarpField.Instance.Forward(imageUV);
+                // 유한한 원본을 NaN/Infinity 워프로 덮지 않는다. 원본 자체가 비유한이면
+                // 기존 계약대로 Forward 결과를 그대로 흘려 raw 매핑에서도 비유한 상태를 보존한다.
+                if (IsFinite(warped) || !IsFinite(imageUV)) imageUV = warped;
+            }
             return ImageToViewportRaw(imageUV);
         }
+
+        /// <summary>
+        /// FaceWarpField.Forward가 이미 적용된 이미지 UV → 화면 뷰포트.
+        /// BrowWarp.WarpAndLiftDroopingTail처럼 최종 워프 공간에서 기하를 만든 경로만
+        /// 사용한다. ImageToViewport를 호출하면 얼굴형 워프가 두 번 적용되므로 금지한다.
+        /// </summary>
+        public Vector2 WarpedImageToViewport(Vector2 warpedImageUV) =>
+            ImageToViewportRaw(warpedImageUV);
+
+        static bool IsFinite(Vector2 value) =>
+            !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y);
 
         /// <summary>워프 미적용 매핑 — 배경 쿼드 코너 배치용(픽셀 워프는 셰이더 담당).</summary>
         Vector2 ImageToViewportRaw(Vector2 imageUV)

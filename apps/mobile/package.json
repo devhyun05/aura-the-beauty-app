@@ -22,6 +22,8 @@
     "test:face-analysis-measurements": "node ../../scripts/mobile/run-face-analysis-measurements-contract.mjs",
     "test:face-capture-upload": "node ../../scripts/mobile/run-face-capture-upload-contract.mjs",
     "test:unity-bridge": "node ../../scripts/mobile/run-unity-makeup-bridge-contract.mjs",
+    "test:ar-guide-all": "node ../../scripts/mobile/run-ar-guide-all-contract.mjs",
+    "test:ar-skin-primer": "node ../../scripts/mobile/run-ar-skin-primer-contract.mjs",
     "test:auradin-theme-scope": "node ../../scripts/mobile/run-auradin-theme-scope-guard.mjs",
     "test:product-recommendation": "node ../../scripts/mobile/run-product-recommendation-contract.mjs",
     "test:consulting-flow": "node ../../scripts/mobile/run-consulting-flow-contract.mjs",

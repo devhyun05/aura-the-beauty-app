@@ -289,16 +289,19 @@ namespace ARMakeup.Face
                 {
                     _loW[i] = _lo[i];
                     _upW[i] = _up[i];
+                    var along = i / (float)(Seg - 1);
                     BrowWarp.ShapeBand(
-                        ref _loW[i], ref _upW[i], i / (float)(Seg - 1), _thickness, _arch, _shape);
+                        ref _loW[i], ref _upW[i], along, _thickness, _arch, _shape);
+                    BrowWarp.TaperTail(ref _loW[i], ref _upW[i], along);
                 }
-                BrowWarp.LiftDroopingTail(_loW, _upW, Seg);
+                var browWarped = BrowWarp.WarpAndLiftDroopingTail(
+                    _loW, _upW, Seg, lm, FramePresenter.Instance.ImageAspect);
                 var depth = Depth(lm[BrowUpper[e][2]].z);
                 var b = e * Seg * 2;
                 for (var i = 0; i < Seg; i++)
                 {
-                    _vertices[b + 2 * i] = ImageToWorld(_loW[i], depth);
-                    _vertices[b + 2 * i + 1] = ImageToWorld(_upW[i], depth);
+                    _vertices[b + 2 * i] = ImageToWorld(_loW[i], depth, browWarped);
+                    _vertices[b + 2 * i + 1] = ImageToWorld(_upW[i], depth, browWarped);
 
                     // 컨실 밴드 — §15: 셰이핑(_thickness/_arch) 미반영(반영하면 그린
                     // 모양 밖으로 삐친 자연 털을 또 놓침). 원시 아크(_lo/_up)를 위·
@@ -363,9 +366,11 @@ namespace ARMakeup.Face
         static Vector2 ImgPt(Vector3[] lm, int idx) => new Vector2(lm[idx].x, lm[idx].y);
         float Depth(float z) => DistanceFromCamera * (1f + z * DepthScale);
 
-        Vector3 ImageToWorld(Vector2 img, float depth)
+        Vector3 ImageToWorld(Vector2 img, float depth, bool alreadyWarped = false)
         {
-            var vp = FramePresenter.Instance.ImageToViewport(img);
+            var vp = alreadyWarped
+                ? FramePresenter.Instance.WarpedImageToViewport(img)
+                : FramePresenter.Instance.ImageToViewport(img);
             return _camera.ViewportToWorldPoint(new Vector3(vp.x, vp.y, depth));
         }
     }

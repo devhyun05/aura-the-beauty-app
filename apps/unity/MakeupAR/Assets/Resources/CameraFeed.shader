@@ -20,6 +20,8 @@ Shader "ARMakeup/CameraFeed"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
+            #include "Finish.cginc"     // FaceMakeup과 동일 파운데이션 마감
+            #include "Foundation.cginc" // 얼굴·목 파운데이션 색 파이프라인 공용
 
             sampler2D _MainTex;
 
@@ -69,16 +71,6 @@ Shader "ARMakeup/CameraFeed"
             float _FoundationIntensity; // 커버리지(0=끔)
             float _FoundationFinish;    // 0=새틴 1=매트 2=듀이
             float _FoundationTexture;   // 제형 텍스처(①) 0=리퀴드 1=쿠션 2=스킨틴트 — 이마·목 일치
-            #define FND_LUMA_GAIN 1.5   // FaceMakeup과 동일 공식 // 실기기 튜닝 대상
-            #define FND_LUMA_LIFT 0.15  // 실기기 튜닝 대상
-            #define FND_CHROMA 0.5      // 실기기 튜닝 대상
-            // 제형 텍스처(①) — FaceMakeup과 동일 배수(쿠션↑·스킨틴트↓). 0=리퀴드는 배수 1.
-            #define FND_TEX_CUSHION_GAIN 0.12    // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_GAIN 0.15   // 실기기 튜닝 대상
-            #define FND_TEX_CUSHION_CHROMA 0.20  // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_CHROMA 0.30 // 실기기 튜닝 대상
-            #define FND_TEX_CUSHION_COV 0.15     // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_COV 0.30    // 실기기 튜닝 대상
 
             // 세그 확장 GPU 예산 상수 — 배경 전체 화면 패스라 프래그먼트당 예산이 빠듯하다.
             // 스무딩이 켜지면 전화면 8탭(유니폼 분기 — frag의 divergent gradient 주석 참조)
@@ -257,28 +249,23 @@ Shader "ARMakeup/CameraFeed"
                     //    폴백(_SegOn=0)이면 이 블록을 건너뛰어 목은 원본.
                     if (_FoundationIntensity > 0.001)
                     {
-                        // 제형 텍스처(①) — 목(body-skin)도 이마(FaceMakeup 메시)와 동일 분기로
-                        // 정합(이마·목 일치). 텍스처 0이면 배수 전부 1 → 곱셈 항등 → 바이트 동일.
-                        float fTexCushion = saturate(1.0 - abs(_FoundationTexture - 1.0));
-                        float fTexSkintint = saturate(_FoundationTexture - 1.0);
-                        float fGain = FND_LUMA_GAIN * (1.0 + fTexCushion * FND_TEX_CUSHION_GAIN - fTexSkintint * FND_TEX_SKINTINT_GAIN);
-                        float fChroma = FND_CHROMA * (1.0 + fTexCushion * FND_TEX_CUSHION_CHROMA - fTexSkintint * FND_TEX_SKINTINT_CHROMA);
-                        float cov = _FoundationIntensity * smoothstep(
-                            SEG_SMOOTH_SKIN_LO, SEG_SMOOTH_SKIN_HI, seg.b)
-                            * (1.0 + fTexCushion * FND_TEX_CUSHION_COV - fTexSkintint * FND_TEX_SKINTINT_COV);
                         float fLuma = dot(col, fixed3(0.299, 0.587, 0.114));
-                        fixed3 found = _FoundationColor.rgb * (fLuma * fGain + FND_LUMA_LIFT);
-                        // 마감(새틴 기준 — 매트=스펙 억제, 듀이=소폭 증폭). 시머 없음(피부 배경).
-                        float spec = smoothstep(0.55, 1.0, fLuma);
-                        if (_FoundationFinish > 0.5 && _FoundationFinish < 1.5)
-                            found *= (1.0 - 0.38 * spec);
-                        else if (_FoundationFinish > 1.5)
-                        {
-                            float hot = smoothstep(0.78, 1.0, fLuma);
-                            found = found * 0.9 + (0.5 * spec + 0.35 * hot);
-                        }
-                        fixed3 desat = lerp(col, fLuma.xxx, fChroma * cov);
-                        col = lerp(desat, saturate(found), cov);
+                        float fGain;
+                        float fChroma;
+                        float fCov;
+                        FoundationTextureParams(_FoundationTexture, _FoundationIntensity,
+                                                fGain, fChroma, fCov);
+                        fCov *= smoothstep(SEG_SMOOTH_SKIN_LO, SEG_SMOOTH_SKIN_HI, seg.b);
+                        fixed3 found = FoundationTarget(_FoundationColor.rgb, fLuma, fGain);
+                        found = FoundationSoftClip(found);
+                        found = ApplyFinish(found, fLuma, src, _FoundationFinish, 0.0,
+                                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                            src, _PearlLightGain);
+                        // 듀이의 가산광만 재클립한다. 새틴·매트까지 재클립하면 비멱등
+                        // softclip이 얼굴/목 파운데이션을 불필요하게 한 번 더 압축한다.
+                        if (_FoundationFinish > 1.5 && _FoundationFinish < 2.5)
+                            found = FoundationSoftClip(found);
+                        col = FoundationBlend(col, found, fLuma, fChroma, fCov);
                     }
                 }
 

@@ -3,13 +3,13 @@
 @protocol NativeCallsProtocol
 @required
 
-- (void)sendMessageToMobileApp:(NSString *)message;
+- (void) sendMessageToMobileApp:(NSString*)message;
 
 @end
 
-__attribute__((visibility("default")))
+__attribute__ ((visibility("default")))
 @interface FrameworkLibAPI : NSObject
 
-+ (void)registerAPIforNativeCalls:(id<NativeCallsProtocol>)api;
++(void) registerAPIforNativeCalls:(id<NativeCallsProtocol>) aApi;
 
 @end

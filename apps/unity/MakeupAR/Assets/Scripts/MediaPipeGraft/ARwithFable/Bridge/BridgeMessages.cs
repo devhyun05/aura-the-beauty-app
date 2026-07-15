@@ -455,5 +455,17 @@ namespace ARMakeup.Bridge
         public float browConf;
         public string iris;          // 홍채 색 (RN이 자연 눈색 vs 컬러렌즈 게이팅)
         public float irisConf;
+        public float lipGloss;       // 립 광택도 0..1 (낮음=매트, 높음=글로시)
+        public float lipGlossConf;
+        public float blushLiftHint;  // 기본 광대 위치 대비 수직 오프셋
+        public float blushSpreadHint; // 기본 광대 위치 대비 수평 오프셋
+        public float blushPositionConf;
+        public int browShape;        // 0내추럴 1일자 2아치 3각진 4상승 5반달
+        public float browArch;
+        public float browThickness;  // 실측 눈썹 밴드 대비 배수 (1=실측 그대로)
+        public float browShapeConf;
+        public int eyelinerStyle;    // 0윙업 1퍼피 2롱
+        public float eyelinerWingLength;
+        public float eyelinerWingConf;
     }
 }
