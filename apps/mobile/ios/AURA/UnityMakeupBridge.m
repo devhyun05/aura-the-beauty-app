@@ -148,7 +148,8 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 {
   NSString *safeMessage = message ?: @"";
   BOOL didInitialize = [safeMessage containsString:@"\"type\":\"unity_initialized\""] ||
-      [safeMessage containsString:@"unity_initialized"];
+      [safeMessage containsString:@"unity_initialized"] ||
+      [safeMessage containsString:@"\"type\":\"ready\""];
 
   dispatch_async(dispatch_get_main_queue(), ^{
     if (didInitialize) {

@@ -15,6 +15,7 @@ type BackendProductCategory = Exclude<ProductRecommendationCategory, 'all'>;
 type BackendRecommendedProduct = {
   brandName?: string | null;
   category?: string | null;
+  externalSource?: string | null;
   id?: string | null;
   imageUrl?: string | null;
   matchRate?: number | null;
@@ -54,7 +55,15 @@ const productCategories = new Set<BackendProductCategory>([
   'shadow',
   'liner',
   'base',
+  'brow',
 ]);
+
+const internalCatalogProductIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isTrustedCatalogProductId(productId: string): boolean {
+  return internalCatalogProductIdPattern.test(productId.trim());
+}
 
 function firstText(...values: Array<string | null | undefined>): string | undefined {
   return values.find((value) => Boolean(value?.trim()))?.trim();
@@ -79,66 +88,57 @@ function normalizeTextArray(
   return normalized.length > 0 ? normalized : fallback;
 }
 
-function getFallbackProduct(index: number, category?: BackendProductCategory): RecommendedProduct {
-  const categoryFallback = category
-    ? productRecommendationMock.products.find((product) => product.category === category)
-    : undefined;
-
-  return (
-    categoryFallback ??
-    productRecommendationMock.products[index % productRecommendationMock.products.length] ??
-    productRecommendationMock.products[0]
-  );
-}
-
-function mapProduct(product: BackendRecommendedProduct, index: number): RecommendedProduct {
+function mapProduct(product: BackendRecommendedProduct): RecommendedProduct {
   const category = normalizeCategory(product.category);
-  const fallbackProduct = getFallbackProduct(index, category);
-  const imageUrl = firstText(product.imageUrl);
+  const imageUrl = firstText(product.imageUrl)!;
 
   return {
-    ...fallbackProduct,
-    id: firstText(product.id) ?? fallbackProduct.id,
-    brandName: firstText(product.brandName) ?? fallbackProduct.brandName,
-    productName: firstText(product.productName) ?? fallbackProduct.productName,
-    shadeName: firstText(product.shadeName) ?? fallbackProduct.shadeName,
+    id: firstText(product.id) ?? '',
+    externalSource: firstText(product.externalSource),
+    brandName: firstText(product.brandName) ?? '',
+    productName: firstText(product.productName) ?? '',
+    shadeName: firstText(product.shadeName) ?? '',
     category,
     matchRate:
-      typeof product.matchRate === 'number' ? product.matchRate : fallbackProduct.matchRate,
+      typeof product.matchRate === 'number' ? product.matchRate : 0,
     price:
       typeof product.price === 'number'
         ? product.price
         : typeof product.priceKrw === 'number'
           ? product.priceKrw
-          : fallbackProduct.price,
-    tags: normalizeTextArray(product.tags, fallbackProduct.tags),
+          : 0,
+    tags: normalizeTextArray(product.tags, []),
     imageUrl,
-    imageSource: imageUrl ? {uri: imageUrl} : fallbackProduct.imageSource,
-    purchaseUrl: firstText(product.purchaseUrl, fallbackProduct.purchaseUrl),
-    palette: normalizeTextArray(product.palette, fallbackProduct.palette),
-    productInfo: product.productInfo ?? fallbackProduct.productInfo,
-    reason: firstText(product.reason) ?? fallbackProduct.reason,
+    imageSource: {uri: imageUrl},
+    purchaseUrl: firstText(product.purchaseUrl),
+    palette: normalizeTextArray(product.palette, []),
+    productInfo: product.productInfo ?? undefined,
+    reason: firstText(product.reason) ?? '추천 조건을 확인했어요.',
   };
 }
 
 function isPurchasableBackendProduct(product: BackendRecommendedProduct): boolean {
-  return Boolean(firstText(product.imageUrl) && firstText(product.purchaseUrl));
+  return Boolean(
+    firstText(product.id) &&
+    firstText(product.brandName) &&
+    firstText(product.productName) &&
+    firstText(product.imageUrl) &&
+    firstText(product.purchaseUrl),
+  );
 }
 
 function mapMakeupLook(
   makeupLook: BackendProductRecommendationLook | null | undefined,
 ): ProductRecommendationLook {
-  const fallbackLook = productRecommendationMock.makeupLook;
   const imageUrl = firstText(makeupLook?.imageUrl);
 
   return {
-    ...fallbackLook,
-    title: firstText(makeupLook?.title) ?? fallbackLook.title,
-    description: firstText(makeupLook?.description) ?? fallbackLook.description,
+    title: firstText(makeupLook?.title) ?? '분석 기준 없음',
+    description: firstText(makeupLook?.description) ?? '연결된 분석이나 추천 기준 룩이 없어요.',
     imageUrl,
-    imageSource: imageUrl ? {uri: imageUrl} : fallbackLook.imageSource,
-    tags: normalizeTextArray(makeupLook?.tags, fallbackLook.tags),
-    palette: normalizeTextArray(makeupLook?.palette, fallbackLook.palette),
+    imageSource: imageUrl ? {uri: imageUrl} : {uri: ''},
+    tags: normalizeTextArray(makeupLook?.tags, []),
+    palette: normalizeTextArray(makeupLook?.palette, []),
   };
 }
 
@@ -166,23 +166,6 @@ function mapMakeupLookOptions(
   return [{...makeupLook, index: 0}];
 }
 
-function buildFallbackSets(products: RecommendedProduct[]): ProductRecommendationSet[] {
-  const productIds = products.slice(0, 3).map((product) => product.id);
-
-  if (productIds.length === 0) {
-    return [];
-  }
-
-  return [
-    {
-      id: 'api-recommendation-set',
-      title: '국내 구매 가능 추천 조합',
-      description: '쇼핑 API에서 가져온 상품 중 룩과 잘 맞는 제품을 묶었어요.',
-      productIds,
-    },
-  ];
-}
-
 function mapProductRecommendationData(
   response: BackendProductRecommendationData,
 ): ProductRecommendationData {
@@ -192,27 +175,49 @@ function mapProductRecommendationData(
   const makeupLook = mapMakeupLook(response.makeupLook);
 
   return {
-    userNickname: firstText(response.userNickname) ?? productRecommendationMock.userNickname,
+    userNickname: firstText(response.userNickname) ?? '회원',
     makeupLook,
     makeupLookOptions: mapMakeupLookOptions(response, makeupLook),
     tabs:
       Array.isArray(response.tabs) && response.tabs.length > 0
         ? response.tabs
-        : productRecommendationMock.tabs,
+        : [
+          {id: 'all', label: '전체'},
+          {id: 'lip', label: '립'},
+          {id: 'cheek', label: '치크'},
+          {id: 'shadow', label: '아이'},
+          {id: 'base', label: '베이스'},
+          {id: 'brow', label: '브로우'},
+          {id: 'liner', label: '아이라이너'},
+        ],
     products,
     sets:
       Array.isArray(response.sets) && response.sets.length > 0
         ? response.sets
-        : buildFallbackSets(products),
+        : [],
   };
 }
 
 function buildEmptyApiRecommendationData(): ProductRecommendationData {
   return {
-    userNickname: productRecommendationMock.userNickname,
-    makeupLook: productRecommendationMock.makeupLook,
-    makeupLookOptions: [{...productRecommendationMock.makeupLook, index: 0}],
-    tabs: productRecommendationMock.tabs,
+    userNickname: '회원',
+    makeupLook: {
+      title: '분석 기준 없음',
+      description: '연결된 분석이나 추천 기준 룩이 없어요.',
+      imageSource: {uri: ''},
+      tags: [],
+      palette: [],
+    },
+    makeupLookOptions: [],
+    tabs: [
+      {id: 'all', label: '전체'},
+      {id: 'lip', label: '립'},
+      {id: 'cheek', label: '치크'},
+      {id: 'shadow', label: '아이'},
+      {id: 'base', label: '베이스'},
+      {id: 'brow', label: '브로우'},
+      {id: 'liner', label: '아이라이너'},
+    ],
     products: [],
     sets: [],
   };
@@ -228,40 +233,24 @@ export const getProductRecommendations = async ({
   reportId,
 }: ProductRecommendationRequest = {}): Promise<ProductRecommendationData> => {
   if (!getBackendApiBaseUrl()) {
-    return productRecommendationMock;
+    return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
+      ? productRecommendationMock
+      : buildEmptyApiRecommendationData();
   }
 
-  try {
-    const searchParams = new URLSearchParams();
+  const searchParams = new URLSearchParams();
 
-    if (reportId) {
-      searchParams.set('report_id', reportId);
-    }
-
-    if (typeof lookIndex === 'number' && lookIndex >= 0) {
-      searchParams.set('look_index', String(lookIndex));
-    }
-
-    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const response = await requestBackendJson<BackendProductRecommendationData>(
-      `/products/recommendations${query}`,
-    );
-
-    const recommendations = mapProductRecommendationData(response);
-
-    console.info('[aura:products] recommendations:loaded', {
-      backendProducts: Array.isArray(response.products) ? response.products.length : 0,
-      lookIndex,
-      mappedProducts: recommendations.products.length,
-      reportLinked: Boolean(reportId),
-    });
-
-    return recommendations;
-  } catch (error) {
-    console.info('[aura:products] recommendations:fallback', {
-      message: error instanceof Error ? error.message : String(error),
-    });
-
-    return buildEmptyApiRecommendationData();
+  if (reportId) {
+    searchParams.set('report_id', reportId);
   }
+
+  if (typeof lookIndex === 'number' && lookIndex >= 0) {
+    searchParams.set('look_index', String(lookIndex));
+  }
+
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  const response = await requestBackendJson<BackendProductRecommendationData>(
+    `/products/recommendations${query}`,
+  );
+  return mapProductRecommendationData(response);
 };

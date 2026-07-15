@@ -165,6 +165,9 @@ async def test_live_path_applies_guard_floor_seeded_mmr_dedupe_role_fill_and_cac
   }
   settings = Settings(
     database_url=None,
+    # dev 병합: 배포 기본은 trusted-catalog 서빙(라이브 네이버 발견 비활성)이다. 라이브
+    # 발견 경로(M1 §5 floor·MMR·role-fill)를 검증하려면 legacy 플래그를 명시 활성화한다.
+    legacy_naver_product_search=True,
     auradin_live_discovery_enabled=True,
     naver_shopping_client_id="test-id",
     naver_shopping_client_secret="test-secret",

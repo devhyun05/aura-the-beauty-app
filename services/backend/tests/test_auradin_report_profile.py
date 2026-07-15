@@ -119,6 +119,7 @@ def test_session_merges_skin_type_report_preferences() -> None:
 
 def _client(**overrides) -> TestClient:
   clear_sessions()
+  overrides.setdefault("legacy_naver_product_search", True)
   return TestClient(create_app(Settings(database_url=None, **overrides)))
 
 

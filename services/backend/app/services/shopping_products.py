@@ -1,11 +1,13 @@
 import asyncio
 import hashlib
 import html
+from ipaddress import ip_address
 import json
 import logging
 import math
 import re
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import boto3
@@ -19,22 +21,40 @@ from app.db.session import Database
 
 logger = logging.getLogger(__name__)
 
-PRODUCT_CATEGORIES = ("lip", "cheek", "shadow", "liner", "base")
-# R1: 저장 카탈로그(products.category enum)는 brow 포함 6종 — Auradin 브로우 찜의
-# like→liked 왕복이 여기서 유실되면 안 된다. 추천 fan-out은 PRODUCT_CATEGORIES(5종) 유지.
-STORED_PRODUCT_CATEGORIES = (*PRODUCT_CATEGORIES, "brow")
+PRODUCT_CATEGORIES = ("base", "shadow", "brow", "cheek", "lip", "liner")
+# R1: 저장 카탈로그(products.category enum)와 동기 — Auradin 브로우 찜의 like→liked 왕복이
+# 여기서 유실되면 안 된다. dev Shelf 추천 fan-out도 brow 포함 6종을 쓴다(별칭 유지).
+STORED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES
 SEMANTIC_MATCH_WEIGHT = 0.35
 MAX_EMBEDDING_TEXT_LENGTH = 6000
 COLOR_MATCH_BONUS = 10
 COLOR_MISMATCH_PENALTY = 12
 
+
+def _safe_naver_result_url(value: Any) -> str | None:
+  """Accept only public HTTPS URLs before a Naver result reaches a device."""
+  parsed = urlparse(str(value or "").strip())
+  host = (parsed.hostname or "").lower().rstrip(".")
+  if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+    return None
+  try:
+    ip_address(host)
+  except ValueError:
+    pass
+  else:
+    return None
+  if "." not in host or host.endswith(".local"):
+    return None
+  return parsed.geturl()
+
 TABS = [
   {"id": "all", "label": "전체"},
-  {"id": "lip", "label": "립"},
-  {"id": "cheek", "label": "블러셔"},
-  {"id": "shadow", "label": "아이섀도우"},
-  {"id": "liner", "label": "아이라이너"},
   {"id": "base", "label": "베이스"},
+  {"id": "shadow", "label": "아이섀도우"},
+  {"id": "brow", "label": "아이브로우"},
+  {"id": "cheek", "label": "치크"},
+  {"id": "lip", "label": "립"},
+  {"id": "liner", "label": "아이라이너"},
 ]
 
 CATEGORY_CONFIG = {
@@ -56,6 +76,12 @@ CATEGORY_CONFIG = {
     "palette": ["#D6A394", "#C98082", "#8B5F55", "#5F4039"],
     "reason": "눈매 음영과 추천 무드를 같이 살리기 좋은 아이 제품이에요.",
   },
+  "brow": {
+    "query": "아이브로우 브로우 펜슬 화장품",
+    "label": "아이브로우",
+    "palette": ["#6A5146", "#8A7165"],
+    "reason": "눈썹 결을 자연스럽게 채우고 전체 인상을 정돈하기 좋은 브로우 후보예요.",
+  },
   "liner": {
     "query": "아이라이너 화장품",
     "label": "아이라이너",
@@ -67,13 +93,6 @@ CATEGORY_CONFIG = {
     "label": "베이스",
     "palette": ["#E4C5A8", "#F4DDC8"],
     "reason": "추천 메이크업의 피부 표현을 맞추기 좋은 베이스 후보예요.",
-  },
-  # R1: 저장 전용(찜 왕복 서빙) — 추천 fan-out(PRODUCT_CATEGORIES)에는 포함되지 않는다.
-  "brow": {
-    "query": "아이브로우 브로우 펜슬 화장품",
-    "label": "브로우",
-    "palette": ["#6B4A3A", "#8A6A52"],
-    "reason": "눈썹 결과 모발 컬러를 자연스럽게 맞추기 좋은 브로우 후보예요.",
   },
 }
 
@@ -152,6 +171,7 @@ CATEGORY_GUIDE_KEYS = {
   "liner": ("makeupGuideline.eyeliner",),
   "lip": ("makeupGuideline.lip",),
   "shadow": ("makeupGuideline.eyeshadow",),
+  "brow": ("makeupGuideline.brow",),
 }
 CATEGORY_MATCH_TERMS = {
   "base": (
@@ -168,6 +188,7 @@ CATEGORY_MATCH_TERMS = {
     "파우더",
   ),
   "cheek": ("blush", "블러셔", "블러쉬", "볼터치", "치크"),
+  "brow": ("brow", "eyebrow", "브로우", "아이브로우", "눈썹", "브로우펜슬"),
   "liner": ("eyeliner", "라이너", "리퀴드라이너", "아이라이너", "젤라이너", "펜라이너"),
   "lip": ("gloss", "lip", "립", "립글로스", "립밤", "립스틱", "립틴트", "틴트"),
   "shadow": ("eyeshadow", "섀도우", "아이섀도우", "아이팔레트", "팔레트"),
@@ -185,6 +206,7 @@ CATEGORY_STRICT_PRODUCT_TERMS = {
     "파운데이션",
   ),
   "cheek": ("blusher", "블러셔", "볼터치", "치크 팝", "치크팝"),
+  "brow": ("brow pencil", "eyebrow", "브로우 마스카라", "브로우펜슬", "아이브로우", "아이브로우 펜슬"),
   "liner": (
     "eyeliner",
     "리퀴드 아이라이너",
@@ -207,6 +229,7 @@ CATEGORY_STRICT_PRODUCT_TERMS = {
 CATEGORY_FALLBACK_QUERIES = {
   "base": ("쿠션 파운데이션 화장품", "베이스메이크업 파운데이션", "톤업 쿠션 화장품"),
   "cheek": ("블러셔 화장품", "치크 블러셔", "볼터치 블러셔"),
+  "brow": ("아이브로우 화장품", "브로우 펜슬", "아이브로우 마스카라"),
   "liner": ("아이라이너 화장품", "리퀴드 아이라이너", "젤 아이라이너"),
   "lip": ("립틴트 화장품", "립스틱 화장품", "립글로스 화장품"),
   "shadow": ("아이섀도우 화장품", "아이섀도우 팔레트", "섀도우 팔레트"),
@@ -752,7 +775,7 @@ def _score_product_match(
 
   if has_color_match:
     score += COLOR_MATCH_BONUS
-  elif has_color_target and category in {"lip", "cheek", "shadow", "base"}:
+  elif has_color_target and category in {"lip", "cheek", "shadow", "base", "brow"}:
     score -= COLOR_MISMATCH_PENALTY
 
   score -= min(index, 6)
@@ -1188,6 +1211,10 @@ def _map_naver_item(
 
   if not title or not link or not image_url or not product_id:
     return None
+  link = _safe_naver_result_url(link)
+  image_url = _safe_naver_result_url(image_url)
+  if not link or not image_url:
+    return None
 
   if not _is_naver_cosmetic_item_for_category(item, category):
     return None
@@ -1218,6 +1245,7 @@ def _map_naver_item(
   return {
     "id": f"naver-{product_id}" if product_id else _stable_external_id("naver", link),
     "brandName": brand_name,
+    "sellerName": mall_name or (urlparse(link).hostname or "외부 판매처"),
     "productName": _localized_product_name(title, category),
     "shadeName": "",
     "category": category,
@@ -1332,6 +1360,66 @@ async def _fetch_naver_products(
   return unique_products
 
 
+async def fetch_live_naver_products_for_queries(
+  settings: Settings,
+  queries_by_category: dict[str, str],
+  *,
+  per_category: int = 3,
+) -> list[dict[str, Any]]:
+  """Fetch real Naver Shopping items for a local live-discovery shelf.
+
+  This stays behind the production-safe Auradin discovery flag and never writes
+  external records into the trusted catalog.
+  """
+  if not (
+    settings.auradin_live_discovery_enabled
+    and settings.naver_shopping_client_id
+    and settings.naver_shopping_client_secret
+  ):
+    return []
+  category_queries = [
+    (category, query.strip())
+    for category, query in queries_by_category.items()
+    if category in PRODUCT_CATEGORIES and query.strip()
+  ]
+  if not category_queries:
+    return []
+  async with httpx.AsyncClient(timeout=6.0) as client:
+    results = await asyncio.gather(
+      *(
+        _fetch_naver_category_products(
+          client,
+          settings,
+          category,
+          None,
+          query_override=query,
+        )
+        for category, query in category_queries
+      ),
+      return_exceptions=True,
+    )
+  products: list[dict[str, Any]] = []
+  seen_ids: set[str] = set()
+  successful_results: list[list[dict[str, Any]]] = []
+  for result in results:
+    if isinstance(result, Exception):
+      logger.info("live seasonal product query failed", exc_info=result)
+      continue
+    successful_results.append(result[:per_category])
+  # Round-robin keeps a 12-item hub shelf balanced across all six categories
+  # instead of exhausting the first four category queries before truncation.
+  for position in range(per_category):
+    for result in successful_results:
+      if position >= len(result):
+        continue
+      product = result[position]
+      if product["id"] in seen_ids:
+        continue
+      seen_ids.add(product["id"])
+      products.append(product)
+  return products
+
+
 def _map_db_product(
   row: dict[str, Any],
   index: int,
@@ -1357,9 +1445,10 @@ def _map_db_product(
   brand_name = _clean_text(row.get("brand_name")) or "AURA"
   product_name = _clean_text(row.get("product_name"))
   shade_name = _clean_text(row.get("shade_name"))
-  purchase_url = _clean_text(payload.get("purchaseUrl") or payload.get("purchase_url"))
+  purchase_url = _clean_text(row.get("trusted_purchase_url"))
+  image_url = _clean_text(row.get("trusted_image_url"))
 
-  if not purchase_url:
+  if not purchase_url or not image_url:
     return None
 
   specs = _extract_product_specs(
@@ -1381,7 +1470,7 @@ def _map_db_product(
   match_rate, matched_terms = _score_product_match(specs, category, index, profile)
 
   return {
-    "id": str(row.get("external_key") or row.get("id") or _stable_external_id("db", purchase_url)),
+    "id": str(row.get("id") or _stable_external_id("db", purchase_url)),
     "brandName": brand_name,
     "productName": _localized_product_name(product_name, category),
     "shadeName": shade_name,
@@ -1389,7 +1478,7 @@ def _map_db_product(
     "matchRate": _parse_price(payload.get("matchRate")) or match_rate,
     "price": _parse_price(row.get("price_krw")),
     "tags": _product_tags(row.get("tags") or [], specs, matched_terms, [config["label"]]),
-    "imageUrl": payload.get("imageUrl") or payload.get("image_url"),
+    "imageUrl": image_url,
     "purchaseUrl": purchase_url,
     "palette": row.get("palette") or config["palette"],
     "productInfo": specs,
@@ -1410,10 +1499,31 @@ async def _fetch_db_products(
   if normalized_category:
     rows = await db.fetch(
       """
-      select *
-      from products
-      where is_active = true and category = $1
-      order by created_at desc
+      select p.*, asset.asset_url as trusted_image_url,
+        offer.purchase_url as trusted_purchase_url
+      from products p
+      join lateral (
+        select a.asset_url from product_assets a
+        where a.product_id=p.id and a.is_active=true and a.asset_type='packshot'
+          and a.license_status='valid' and a.allowed_uses @> array['mobile_display']::text[]
+          and (a.valid_from is null or a.valid_from<=now())
+          and (a.valid_until is null or a.valid_until>now())
+        order by a.reviewed_at desc nulls last limit 1
+      ) asset on true
+      join lateral (
+        select o.purchase_url from product_offers o
+        where o.product_id=p.id and o.is_active=true
+          and o.availability_status in ('in_stock','limited')
+          and o.license_status='valid' and o.allowed_uses @> array['mobile_display']::text[]
+          and (o.valid_until is null or o.valid_until>now())
+        order by o.price_updated_at desc nulls last limit 1
+      ) offer on true
+      where p.is_active = true and p.category = $1
+        and p.catalog_status = 'published' and p.license_status = 'valid'
+        and p.allowed_uses @> array['mobile_display', 'recommendation']::text[]
+        and (p.license_valid_from is null or p.license_valid_from <= now())
+        and (p.license_valid_until is null or p.license_valid_until > now())
+      order by p.created_at desc
       limit 50
       """,
       normalized_category,
@@ -1421,10 +1531,31 @@ async def _fetch_db_products(
   else:
     rows = await db.fetch(
       """
-      select *
-      from products
-      where is_active = true
-      order by created_at desc
+      select p.*, asset.asset_url as trusted_image_url,
+        offer.purchase_url as trusted_purchase_url
+      from products p
+      join lateral (
+        select a.asset_url from product_assets a
+        where a.product_id=p.id and a.is_active=true and a.asset_type='packshot'
+          and a.license_status='valid' and a.allowed_uses @> array['mobile_display']::text[]
+          and (a.valid_from is null or a.valid_from<=now())
+          and (a.valid_until is null or a.valid_until>now())
+        order by a.reviewed_at desc nulls last limit 1
+      ) asset on true
+      join lateral (
+        select o.purchase_url from product_offers o
+        where o.product_id=p.id and o.is_active=true
+          and o.availability_status in ('in_stock','limited')
+          and o.license_status='valid' and o.allowed_uses @> array['mobile_display']::text[]
+          and (o.valid_until is null or o.valid_until>now())
+        order by o.price_updated_at desc nulls last limit 1
+      ) offer on true
+      where p.is_active = true
+        and p.catalog_status = 'published' and p.license_status = 'valid'
+        and p.allowed_uses @> array['mobile_display', 'recommendation']::text[]
+        and (p.license_valid_from is null or p.license_valid_from <= now())
+        and (p.license_valid_until is null or p.license_valid_until > now())
+      order by p.created_at desc
       limit 50
       """,
     )
@@ -1438,6 +1569,68 @@ async def _fetch_db_products(
       products.append(product)
 
   return sorted(products, key=lambda product: product["matchRate"], reverse=True)
+
+
+async def _fetch_packaged_auradin_products(
+  db: Database,
+  category: str | None = None,
+  profile: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+  """Adapt the packaged external catalog to the compatibility endpoint shape."""
+
+  # Local import avoids making the adapter -> URL validator dependency circular.
+  from app.services.product_external_catalog import get_auradin_catalog_products
+
+  normalized_category = _normalize_category(category)
+  categories = [normalized_category] if normalized_category else list(PRODUCT_CATEGORIES)
+  cards = await get_auradin_catalog_products(
+    db,
+    user_id=None,
+    limit=48,
+    categories=categories,
+    strategy="popular",
+  )
+  products: list[dict[str, Any]] = []
+  for index, card in enumerate(cards):
+    product_category = _normalize_category(card.get("category"))
+    if not product_category:
+      continue
+    specs = _extract_product_specs(
+      brand=_clean_text(card.get("brandName")),
+      category=product_category,
+      maker="",
+      product_id=_clean_text(card.get("productId")),
+      raw_text=" ".join(
+        [
+          _clean_text(card.get("productName")),
+          _clean_text(card.get("finish")),
+          _clean_text(card.get("colorFamily")),
+          _clean_text(card.get("texture")),
+        ]
+      ),
+      source=card,
+    )
+    match_rate, matched_terms = _score_product_match(specs, product_category, index, profile)
+    price = card.get("price") if isinstance(card.get("price"), dict) else {}
+    products.append(
+      {
+        "id": card["productId"],
+        "externalSource": card["externalSource"],
+        "brandName": card["brandName"],
+        "productName": card["productName"],
+        "shadeName": "",
+        "category": product_category,
+        "matchRate": match_rate,
+        "price": _parse_price(price.get("amount")),
+        "tags": _product_tags([], specs, matched_terms, [CATEGORY_CONFIG[product_category]["label"]]),
+        "imageUrl": card["imageUrl"],
+        "purchaseUrl": card["purchaseUrl"],
+        "palette": card.get("palette") or CATEGORY_CONFIG[product_category]["palette"],
+        "productInfo": specs,
+        "reason": _match_reason(product_category, matched_terms, profile),
+      }
+    )
+  return products
 
 
 async def _fetch_report_profile(
@@ -1516,22 +1709,28 @@ async def build_product_recommendation_data(
   if profile is not None and isinstance(look_index, int) and look_index >= 0:
     profile["selectedRecommendedMakeupIndex"] = look_index
 
-  try:
-    products = await _fetch_naver_products(
-      settings,
-      category,
-      profile,
-      query_override=query_override,
-    )
-    if products:
-      source = "naver_shopping_matched" if profile else "naver_shopping"
-  except (httpx.HTTPError, ValueError):
-    products = []
+  if settings.legacy_naver_product_search:
+    try:
+      products = await _fetch_naver_products(
+        settings,
+        category,
+        profile,
+        query_override=query_override,
+      )
+      if products:
+        source = "naver_shopping_matched" if profile else "naver_shopping"
+    except (httpx.HTTPError, ValueError):
+      products = []
 
   if not products:
     products = await _fetch_db_products(db, category, profile)
     if products:
       source = "database_matched" if profile else "database"
+
+  if not products:
+    products = await _fetch_packaged_auradin_products(db, category, profile)
+    if products:
+      source = "auradin_catalog_matched" if profile else "auradin_catalog"
 
   if products and profile:
     products, semantic_applied = await _apply_semantic_product_scores(
@@ -1543,14 +1742,17 @@ async def build_product_recommendation_data(
     if semantic_applied:
       source = f"{source}_semantic"
 
-  if not products:
-    products = _fallback_products(category)
-
   return (
     {
       "userNickname": "고객",
-      "makeupLook": _build_makeup_look(profile),
-      "makeupLookOptions": _build_makeup_look_options(profile),
+      "makeupLook": _build_makeup_look(profile) if profile else {
+        "title": "분석 기준 없음",
+        "description": "연결된 분석이나 추천 기준 룩이 없어요.",
+        "imageUrl": None,
+        "palette": [],
+        "tags": [],
+      },
+      "makeupLookOptions": _build_makeup_look_options(profile) if profile else [],
       "tabs": TABS,
       "products": products,
       "sets": _build_sets(products),

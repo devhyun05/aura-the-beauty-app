@@ -22,6 +22,7 @@ from app.services.auradin_agent.event_logger import (
   flush_search_turn_event_tasks,
 )
 from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
+from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_media_deletion_schema(database)
     await ensure_account_deletion_schema(database)
     await ensure_hair_schema(database)
+    await ensure_product_recommendation_runtime_schema(database)
     yield
   finally:
     # graceful shutdown — DB를 닫기 전에 대기 중인 A5 이벤트 insert를 상한 내에서 flush한다.

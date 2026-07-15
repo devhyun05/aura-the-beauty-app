@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "aura.face3d-tier2-promotion-receipt.v1",
+  "generatedAtUtc": "2026-07-14T19:09:44.010Z",
+  "approval": {
+    "approved": true,
+    "reviewer": "product-owner",
+    "reviewedAtUtc": "2026-07-15T00:00:00.000Z",
+    "scope": "G1 runtime map + Pogonion v2 + six Tier-2 fixed topology groups"
+  },
+  "candidate": {
+    "candidateId": "face3d-g2-product-approved-v1-candidate",
+    "semanticContentSha256": "167cd9436f95b2f09c0625cd79b3a771bfe734d4350d8125e20cddd442153366",
+    "bilateralSymmetryPolicySha256": "3c6bef90907c797b4ce43675e8e5c8ddc6c414a6eacf172e4eaaa1dacb0cff4c",
+    "groupVertexCounts": {
+      "noseTipIndices": 3,
+      "chinIndices": 3,
+      "chinBottomIndices": 3,
+      "upperLipIndices": 3,
+      "lowerLipIndices": 3,
+      "midfaceReferenceLeftIndices": 15,
+      "midfaceReferenceRightIndices": 15,
+      "midfaceReferenceUpperIndices": 13,
+      "chinReferenceLeftIndices": 15,
+      "chinReferenceRightIndices": 15,
+      "chinReferenceUpperIndices": 13,
+      "centralRegionIndices": 35,
+      "nasionIndices": 1,
+      "noseBridgeMidlineIndices": 6,
+      "alarLeftIndices": 5,
+      "alarRightIndices": 5,
+      "malarApexLeftIndices": 10,
+      "malarApexRightIndices": 10
+    }
+  },
+  "runtimeMap": {
+    "mapId": "arkit-face3d-g2-product-approved-v1",
+    "runtimeMapSha256": "dcbba16fb0ebb6439c18b8ea4534e52dea65c3a4c33b95b250b20cc4a83f6806",
+    "schemaVersion": "aura.face3d-semantic-map.v1",
+    "topologyFingerprint": {
+      "algorithm": "sha256-le-v1",
+      "vertexCount": 1220,
+      "indexCount": 6912,
+      "uvCount": 1220,
+      "indicesHash": "c4bd80f9f6daef3e9bac013be387bef36ed61b7f5c088c153df64d37cb5946f1",
+      "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
+      "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
+    }
+  },
+  "evidence": {
+    "baseG1ApprovalReceipt": {
+      "file": "ARKitFaceSemanticMapV1.v7.approval-receipt.json",
+      "sha256": "58b04b5af2d8c28407a8caecf430fbce00c00c6575c890a5f32b73c8dd466e4b"
+    },
+    "pogonionDecision": {
+      "file": "TIER2_LANDMARK_SEED_DECISION_KO.md",
+      "sha256": "ae944cefc181f00dd06f383dbee8558bc1e1198b181325ec02b48cf04dcf2ae7"
+    },
+    "tier2PrimaryApproval": {
+      "file": "primary-approved-patch.json",
+      "sha256": "f497181a5f99f32a183469d05462e3ef3f68fd46aac5c45c29ec8d03112abed9"
+    },
+    "offlineDiagnostics17": {
+      "file": "tier2-offline-diagnostics-17.json",
+      "sha256": "db8d106f0ff75c042335700ce74ec3796eb36c40d1ec79085164371392619004",
+      "captureCount": 17,
+      "finiteMetricCount": 11,
+      "topologyExact": true
+    },
+    "deviceRepeatability": {
+      "status": "waived_by_product_owner",
+      "decision": "실기기 검증은 생략한다",
+      "waivedScope": "new 3 people x 3 neutral repeatability dataset",
+      "retainedEvidence": "existing 17 ARFace exports: topology exact and all 11 metrics finite"
+    }
+  }
+}

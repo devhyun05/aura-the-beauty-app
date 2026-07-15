@@ -51,7 +51,7 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'consent_type') then
-    create type consent_type as enum ('privacy_policy', 'camera_analysis', 'ai_processing', 'third_party_ai', 'marketing');
+    create type consent_type as enum ('privacy_policy', 'camera_analysis', 'ai_processing', 'third_party_ai', 'marketing', 'engagement_personalization', 'color_cohort');
   end if;
 end
 $$;
@@ -59,6 +59,8 @@ $$;
 alter type capture_type add value if not exists 'hair_analysis';
 -- R1 (schema.sql:product-category-brow-v1): 기존 DB 소급 — add value if not exists = 멱등.
 alter type product_category add value if not exists 'brow';
+alter type consent_type add value if not exists 'engagement_personalization';
+alter type consent_type add value if not exists 'color_cohort';
 
 -- -----------------------------------------------------------------------------
 -- Tables
@@ -268,6 +270,7 @@ comment on table hair_simulations is 'One generated hairstyle per selected catal
 create table if not exists saved_makeup_styles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
+  client_request_id uuid not null default gen_random_uuid(),
   style_type makeup_style_type not null default 'look',
   source_analysis_report_id uuid,
   source_filter_extraction_id uuid,
@@ -282,10 +285,33 @@ create table if not exists saved_makeup_styles (
   saved_at timestamptz not null default now(),
   archived_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint uq_saved_makeup_styles_user_request unique (user_id, client_request_id),
+  constraint chk_saved_makeup_styles_payload_object check (jsonb_typeof(style_payload) = 'object')
 );
 
 comment on table saved_makeup_styles is 'MakeupStyleList plus saved filters and saved recipes from the filter extraction flow.';
+
+create table if not exists product_recommendation_operators (
+  user_id uuid primary key,
+  roles text[] not null,
+  is_active boolean not null default true,
+  granted_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_product_recommendation_operator_roles check (
+    cardinality(roles) > 0 and roles <@ array[
+      'catalog_admin',
+      'seasonal_editor',
+      'seasonal_reviewer',
+      'seasonal_publisher',
+      'seasonal_operator'
+    ]::text[]
+  )
+);
+
+comment on table product_recommendation_operators is
+  'Explicit internal RBAC grants for signed catalog and seasonal operations.';
 
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
@@ -299,10 +325,22 @@ create table if not exists products (
   tags text[],
   palette text[],
   product_payload jsonb not null default '{}'::jsonb,
+  source_provider text,
+  source_license_type text,
+  source_reference text,
+  license_status text not null default 'unverified',
+  license_valid_from timestamptz,
+  license_valid_until timestamptz,
+  allowed_uses text[] not null default '{}',
+  catalog_status text not null default 'draft',
+  catalog_version text not null default 'catalog_v2',
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint chk_products_price_krw check (price_krw >= 0)
+  constraint chk_products_price_krw check (price_krw >= 0),
+  constraint chk_products_license_status check (license_status in ('unverified', 'valid', 'expired', 'blocked')),
+  constraint chk_products_catalog_status check (catalog_status in ('draft', 'reviewed', 'published', 'blocked')),
+  constraint chk_products_license_window check (license_valid_until is null or license_valid_from is null or license_valid_until > license_valid_from)
 );
 
 comment on table products is 'ProductRecommendation and LikedProductList product catalog.';
@@ -310,11 +348,58 @@ comment on table products is 'ProductRecommendation and LikedProductList product
 create table if not exists user_product_likes (
   user_id uuid not null,
   product_id uuid not null,
+  source_shade_id uuid,
   liked_at timestamptz not null default now(),
   primary key (user_id, product_id)
 );
 
 comment on table user_product_likes is 'LikedProductList and product heart state.';
+
+create table if not exists external_product_likes (
+  user_id uuid not null,
+  external_source text not null,
+  external_product_id text not null,
+  brand_name text not null,
+  product_name text not null,
+  category text not null,
+  image_url text not null,
+  purchase_url text not null,
+  price_amount numeric(12,2),
+  price_currency char(3) not null default 'KRW',
+  source_updated_at timestamptz,
+  liked_at timestamptz not null default now(),
+  primary key (user_id, external_source, external_product_id),
+  constraint chk_external_product_likes_source check (
+    external_source in ('naver_shopping_search', 'auradin_search', 'auradin_catalog')
+  ),
+  constraint chk_external_product_likes_identity check (
+    char_length(external_product_id) between 1 and 160
+    and char_length(brand_name) between 1 and 200
+    and char_length(product_name) between 1 and 500
+  ),
+  constraint chk_external_product_likes_price check (price_amount is null or price_amount >= 0)
+);
+
+comment on table external_product_likes is
+  'User bookmarks for server-verified external shopping results; rows are never trusted catalog products.';
+
+alter table external_product_likes
+  drop constraint if exists chk_external_product_likes_source,
+  add constraint chk_external_product_likes_source
+    check (external_source in ('naver_shopping_search', 'auradin_search', 'auradin_catalog'));
+
+insert into external_product_likes (
+  user_id,external_source,external_product_id,brand_name,product_name,category,
+  image_url,purchase_url,price_amount,price_currency,source_updated_at,liked_at
+)
+select user_id,'auradin_catalog',external_product_id,brand_name,product_name,category,
+  image_url,purchase_url,price_amount,price_currency,source_updated_at,liked_at
+from external_product_likes
+where external_source='auradin_search' and external_product_id like 'auradin-seed-%'
+on conflict (user_id,external_source,external_product_id) do nothing;
+
+delete from external_product_likes
+where external_source='auradin_search' and external_product_id like 'auradin-seed-%';
 
 create table if not exists auradin_search_sessions (
   session_id text primary key,
@@ -340,6 +425,9 @@ create unique index if not exists uq_auradin_sessions_owner_client_request
 create index if not exists idx_auradin_sessions_idempotency_expires
   on auradin_search_sessions (idempotency_expires_at)
   where idempotency_expires_at is not null;
+
+create index if not exists idx_auradin_search_sessions_owner_subject
+  on auradin_search_sessions ((state ->> 'ownerSubject'));
 
 comment on table auradin_search_sessions is
   'Temporary Auradin conversation state. Product likes are stored separately in user_product_likes. '
@@ -386,12 +474,281 @@ create table if not exists product_recommendation_runs (
   look_title text,
   look_description text,
   look_media_id uuid,
+  source_style_id uuid,
+  strategy text not null default 'legacy_v1',
+  algorithm_version text,
+  consent_snapshot jsonb not null default '{}'::jsonb,
   product_ids uuid[],
   recommendation_payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '30 days'),
+  constraint chk_product_recommendation_runs_strategy check (strategy in ('legacy_v1', 'ar_v1', 'seasonal_v1', 'personalized_v1', 'cohort_v1'))
 );
 
 comment on table product_recommendation_runs is 'ProductRecommendationData. tabs, products, sets, matchRate, reason are kept in recommendation_payload for v1 API flexibility.';
+
+create table if not exists product_shades (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null,
+  external_shade_key text not null,
+  shade_name text not null,
+  product_region text not null,
+  srgb_hex text,
+  lab_l double precision,
+  lab_a double precision,
+  lab_b double precision,
+  color_family text,
+  finish text,
+  coverage text,
+  opacity double precision,
+  evidence_type text not null,
+  evidence_reference text,
+  evidence_confidence double precision not null default 0,
+  license_status text not null default 'unverified',
+  license_valid_from timestamptz,
+  license_valid_until timestamptz,
+  allowed_uses text[] not null default '{}',
+  measured_at timestamptz,
+  reviewed_at timestamptz,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_product_shades_product_key unique (product_id, external_shade_key),
+  constraint uq_product_shades_id_product unique (id, product_id),
+  constraint chk_product_shades_region check (product_region in ('lip', 'cheek', 'liner', 'base', 'brow')),
+  constraint chk_product_shades_hex check (srgb_hex is null or srgb_hex ~ '^#[0-9A-Fa-f]{6}$'),
+  constraint chk_product_shades_lab check (
+    (lab_l is null and lab_a is null and lab_b is null)
+    or (lab_l between 0 and 100 and lab_a between -160 and 160 and lab_b between -160 and 160)
+  ),
+  constraint chk_product_shades_opacity check (opacity is null or opacity between 0 and 1),
+  constraint chk_product_shades_confidence check (evidence_confidence between 0 and 1),
+  constraint chk_product_shades_evidence check (evidence_type in ('measured_swatch', 'licensed_partner_feed', 'brand_official_swatch', 'manual_review', 'title_inferred')),
+  constraint chk_product_shades_license_status check (license_status in ('unverified', 'valid', 'expired', 'blocked')),
+  constraint chk_product_shades_license_window check (license_valid_until is null or license_valid_from is null or license_valid_until > license_valid_from)
+);
+
+create table if not exists product_assets (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null,
+  shade_id uuid,
+  asset_type text not null,
+  media_id uuid,
+  asset_url text,
+  checksum_sha256 text,
+  source_provider text not null,
+  source_reference text,
+  license_type text,
+  license_status text not null default 'unverified',
+  allowed_uses text[] not null default '{}',
+  valid_from timestamptz,
+  valid_until timestamptz,
+  reviewed_at timestamptz,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_product_assets_type check (asset_type in ('packshot', 'swatch', 'thumbnail')),
+  constraint chk_product_assets_source check ((media_id is not null) <> (asset_url is not null)),
+  constraint chk_product_assets_license_status check (license_status in ('unverified', 'valid', 'expired', 'blocked')),
+  constraint chk_product_assets_validity check (valid_until is null or valid_from is null or valid_until > valid_from),
+  constraint uq_product_assets_source unique (source_provider, source_reference, asset_type)
+);
+
+create table if not exists product_offers (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null,
+  shade_id uuid,
+  seller_name text not null,
+  seller_domain text not null,
+  purchase_url text not null,
+  currency text not null default 'KRW',
+  price_amount integer,
+  availability_status text not null default 'unknown',
+  availability_checked_at timestamptz,
+  price_updated_at timestamptz,
+  affiliate_type text not null default 'none',
+  disclosure_label text,
+  source_provider text not null,
+  source_reference text,
+  license_status text not null default 'unverified',
+  allowed_uses text[] not null default '{}',
+  valid_until timestamptz,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_product_offers_price check (price_amount is null or price_amount >= 0),
+  constraint chk_product_offers_url check (purchase_url ~ '^https://'),
+  constraint chk_product_offers_availability check (availability_status in ('in_stock', 'limited', 'out_of_stock', 'discontinued', 'unknown')),
+  constraint chk_product_offers_affiliate check (affiliate_type in ('none', 'affiliate', 'sponsored')),
+  constraint chk_product_offers_license_status check (license_status in ('unverified', 'valid', 'expired', 'blocked')),
+  constraint uq_product_offers_source unique (source_provider, source_reference)
+);
+
+create table if not exists product_seasonal_collections (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null,
+  title text not null,
+  summary text not null,
+  locale text not null default 'ko-KR',
+  trend_window text not null,
+  source_labels text[] not null default '{}',
+  source_payload jsonb not null default '{}'::jsonb,
+  valid_from timestamptz not null,
+  valid_until timestamptz not null,
+  reviewed_at timestamptz,
+  published_at timestamptz,
+  status text not null default 'draft',
+  revision integer not null default 1,
+  created_by uuid,
+  reviewed_by uuid,
+  published_by uuid,
+  previous_revision_id uuid,
+  suspension_reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_product_seasonal_collection_revision unique (slug, revision),
+  constraint chk_product_seasonal_collection_window check (valid_until > valid_from),
+  constraint chk_product_seasonal_collection_status check (status in ('draft', 'in_review', 'published', 'suspended', 'expired')),
+  constraint chk_product_seasonal_two_person_publish check (status <> 'published' or (reviewed_by is not null and published_by is not null and created_by <> published_by and reviewed_by <> published_by))
+);
+
+create table if not exists product_seasonal_collection_items (
+  collection_id uuid not null,
+  product_id uuid not null,
+  shade_id uuid,
+  position integer not null,
+  reason_code text not null,
+  sponsorship_type text not null default 'organic',
+  created_at timestamptz not null default now(),
+  primary key (collection_id, product_id),
+  constraint uq_product_seasonal_item_position unique (collection_id, position),
+  constraint chk_product_seasonal_item_position check (position >= 0),
+  constraint chk_product_seasonal_sponsorship check (sponsorship_type in ('organic', 'affiliate', 'sponsored'))
+);
+
+create table if not exists product_catalog_imports (
+  id uuid primary key default gen_random_uuid(),
+  manifest_id uuid not null unique,
+  manifest_sha256 text not null,
+  source_provider text not null,
+  catalog_version text not null,
+  actor_user_id uuid,
+  status text not null default 'validated',
+  summary jsonb not null default '{}'::jsonb,
+  imported_at timestamptz not null default now(),
+  constraint chk_product_catalog_import_status check (status in ('validated', 'applied', 'rejected', 'rolled_back'))
+);
+
+create table if not exists product_engagement_events (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null,
+  user_id uuid not null,
+  run_id uuid,
+  collection_id uuid,
+  search_request_id uuid,
+  product_id uuid,
+  external_source text,
+  external_product_id text,
+  shade_id uuid,
+  event_type text not null,
+  section text not null,
+  position integer,
+  occurred_at timestamptz not null,
+  received_at timestamptz not null default now(),
+  context jsonb not null default '{}'::jsonb,
+  constraint uq_product_engagement_event unique (user_id, event_id),
+  constraint chk_product_engagement_event_type check (event_type in ('impression','product_open','search_submit','search_result_open','like','unlike','seller_outbound','hide')),
+  constraint chk_product_engagement_section check (section in ('legacy','ar','seasonal','search','personalized','cohort','auradin')),
+  constraint chk_product_engagement_position check (position is null or position between 0 and 1000),
+  constraint chk_product_engagement_source check (
+    (
+      event_type = 'search_submit'
+      and search_request_id is not null
+      and product_id is null
+      and shade_id is null
+      and external_source is null
+      and external_product_id is null
+    )
+    or (
+      event_type <> 'search_submit'
+      and (
+        (product_id is not null and external_source is null and external_product_id is null)
+        or (product_id is null and external_source is not null and external_product_id is not null)
+      )
+      and (shade_id is null or product_id is not null)
+    )
+  ),
+  constraint chk_product_engagement_external_source check (
+    (external_source is null and external_product_id is null)
+    or (
+      external_source in ('naver_shopping_search', 'auradin_search', 'auradin_catalog')
+      and char_length(external_product_id) between 1 and 160
+    )
+  )
+);
+
+alter table product_engagement_events
+  add column if not exists external_source text,
+  add column if not exists external_product_id text;
+
+alter table product_engagement_events
+  drop constraint if exists chk_product_engagement_source,
+  drop constraint if exists chk_product_engagement_external_source,
+  add constraint chk_product_engagement_source check (
+    (
+      event_type = 'search_submit'
+      and search_request_id is not null
+      and product_id is null
+      and shade_id is null
+      and external_source is null
+      and external_product_id is null
+    )
+    or (
+      event_type <> 'search_submit'
+      and (
+        (product_id is not null and external_source is null and external_product_id is null)
+        or (product_id is null and external_source is not null and external_product_id is not null)
+      )
+      and (shade_id is null or product_id is not null)
+    )
+  ),
+  add constraint chk_product_engagement_external_source check (
+    (external_source is null and external_product_id is null)
+    or (
+      external_source in ('naver_shopping_search', 'auradin_search', 'auradin_catalog')
+      and char_length(external_product_id) between 1 and 160
+    )
+  );
+
+create table if not exists product_preference_profiles (
+  user_id uuid primary key,
+  profile_version text not null,
+  preference_payload jsonb not null default '{}'::jsonb,
+  source_event_count integer not null default 0,
+  refreshed_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  constraint chk_product_preference_event_count check (source_event_count >= 0)
+);
+
+create table if not exists product_request_rate_limits (
+  user_id uuid not null,
+  scope text not null,
+  window_started_at timestamptz not null,
+  request_count integer not null default 0,
+  primary key (user_id, scope),
+  constraint chk_product_request_rate_scope check (scope in ('recommendation','search','like','event','detail','outbound','privacy')),
+  constraint chk_product_request_rate_count check (request_count >= 0)
+);
+
+create table if not exists product_color_cohort_memberships (
+  user_id uuid primary key,
+  cohort_key text not null,
+  bucket_version text not null,
+  contribution_count integer not null default 0,
+  refreshed_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  constraint chk_product_cohort_contribution check (contribution_count between 0 and 100)
+);
 
 create table if not exists ar_filters (
   id uuid primary key default gen_random_uuid(),
@@ -555,8 +912,12 @@ create table if not exists user_consents (
   accepted boolean not null,
   accepted_at timestamptz,
   revoked_at timestamptz,
+  recorded_at timestamptz not null default clock_timestamp(),
   metadata jsonb not null default '{}'::jsonb
 );
+
+alter table user_consents
+  add column if not exists recorded_at timestamptz not null default clock_timestamp();
 
 comment on table user_consents is 'Privacy, camera analysis, AI processing, third-party AI, marketing consent history.';
 
@@ -571,7 +932,7 @@ create table if not exists data_deletion_requests (
   reason text
 );
 
-comment on table data_deletion_requests is 'Account/photo/report/feedback/filter deletion request tracking.';
+comment on table data_deletion_requests is 'Account/photo/report/feedback/filter/product-personalization deletion request tracking.';
 
 create table if not exists account_deletion_tombstones (
   subject_hash text primary key,
@@ -722,6 +1083,35 @@ comment on table community_events is 'Community behavior events for look recomme
 alter table community_threads add column if not exists embedding vector(1024);
 alter table analysis_reports add column if not exists embedding vector(1024);
 -- -----------------------------------------------------------------------------
+-- Product recommendation V2 forward migration for existing installations.
+alter table saved_makeup_styles add column if not exists client_request_id uuid;
+update saved_makeup_styles set client_request_id = gen_random_uuid() where client_request_id is null;
+alter table saved_makeup_styles alter column client_request_id set default gen_random_uuid();
+alter table saved_makeup_styles alter column client_request_id set not null;
+create unique index if not exists uq_saved_makeup_styles_user_request_idx
+  on saved_makeup_styles (user_id, client_request_id);
+
+alter table products add column if not exists source_provider text;
+alter table products add column if not exists source_license_type text;
+alter table products add column if not exists source_reference text;
+alter table products add column if not exists license_status text not null default 'unverified';
+alter table products add column if not exists license_valid_from timestamptz;
+alter table products add column if not exists license_valid_until timestamptz;
+alter table products add column if not exists allowed_uses text[] not null default '{}';
+alter table products add column if not exists catalog_status text not null default 'draft';
+alter table products add column if not exists catalog_version text not null default 'catalog_v2';
+
+alter table user_product_likes add column if not exists source_shade_id uuid;
+
+alter table product_recommendation_runs add column if not exists source_style_id uuid;
+alter table product_recommendation_runs add column if not exists strategy text not null default 'legacy_v1';
+alter table product_recommendation_runs add column if not exists algorithm_version text;
+alter table product_recommendation_runs add column if not exists consent_snapshot jsonb not null default '{}'::jsonb;
+alter table product_recommendation_runs add column if not exists expires_at timestamptz;
+update product_recommendation_runs set expires_at = created_at + interval '30 days' where expires_at is null;
+alter table product_recommendation_runs alter column expires_at set default (now() + interval '30 days');
+alter table product_recommendation_runs alter column expires_at set not null;
+
 -- Foreign keys
 -- -----------------------------------------------------------------------------
 alter table users
@@ -809,7 +1199,21 @@ alter table user_product_likes
   foreign key (user_id) references users(id) on delete cascade,
   drop constraint if exists fk_user_product_likes_product,
   add constraint fk_user_product_likes_product
-  foreign key (product_id) references products(id) on delete cascade;
+  foreign key (product_id) references products(id) on delete cascade,
+  drop constraint if exists fk_user_product_likes_source_shade,
+  add constraint fk_user_product_likes_source_shade
+  foreign key (source_shade_id) references product_shades(id) on delete set null;
+
+alter table user_product_likes
+  drop constraint if exists fk_user_product_likes_shade_product,
+  add constraint fk_user_product_likes_shade_product
+  foreign key (source_shade_id, product_id) references product_shades(id, product_id)
+  on delete set null (source_shade_id);
+
+alter table external_product_likes
+  drop constraint if exists fk_external_product_likes_user,
+  add constraint fk_external_product_likes_user
+    foreign key (user_id) references users(id) on delete cascade;
 
 alter table product_recommendation_runs
   drop constraint if exists fk_product_recommendation_runs_user,
@@ -820,7 +1224,111 @@ alter table product_recommendation_runs
   foreign key (source_analysis_report_id) references analysis_reports(id) on delete set null,
   drop constraint if exists fk_product_recommendation_runs_look_media,
   add constraint fk_product_recommendation_runs_look_media
-  foreign key (look_media_id) references media_assets(id) on delete set null;
+  foreign key (look_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_product_recommendation_runs_source_style,
+  add constraint fk_product_recommendation_runs_source_style
+  foreign key (source_style_id) references saved_makeup_styles(id) on delete cascade;
+
+alter table product_shades
+  drop constraint if exists fk_product_shades_product,
+  add constraint fk_product_shades_product foreign key (product_id) references products(id) on delete cascade;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname='uq_product_shades_id_product') then
+    alter table product_shades
+      add constraint uq_product_shades_id_product unique (id, product_id);
+  end if;
+end $$;
+
+alter table product_assets
+  drop constraint if exists fk_product_assets_product,
+  add constraint fk_product_assets_product foreign key (product_id) references products(id) on delete cascade,
+  drop constraint if exists fk_product_assets_shade,
+  add constraint fk_product_assets_shade foreign key (shade_id) references product_shades(id) on delete cascade,
+  drop constraint if exists fk_product_assets_media,
+  add constraint fk_product_assets_media foreign key (media_id) references media_assets(id) on delete set null;
+
+alter table product_assets
+  drop constraint if exists fk_product_assets_shade_product,
+  add constraint fk_product_assets_shade_product
+  foreign key (shade_id, product_id) references product_shades(id, product_id) on delete cascade;
+
+alter table product_offers
+  drop constraint if exists fk_product_offers_product,
+  add constraint fk_product_offers_product foreign key (product_id) references products(id) on delete cascade,
+  drop constraint if exists fk_product_offers_shade,
+  add constraint fk_product_offers_shade foreign key (shade_id) references product_shades(id) on delete set null;
+
+alter table product_offers
+  drop constraint if exists fk_product_offers_shade_product,
+  add constraint fk_product_offers_shade_product
+  foreign key (shade_id, product_id) references product_shades(id, product_id)
+  on delete set null (shade_id);
+
+alter table product_seasonal_collections
+  drop constraint if exists fk_product_seasonal_created_by,
+  add constraint fk_product_seasonal_created_by foreign key (created_by) references users(id) on delete set null,
+  drop constraint if exists fk_product_seasonal_reviewed_by,
+  add constraint fk_product_seasonal_reviewed_by foreign key (reviewed_by) references users(id) on delete set null,
+  drop constraint if exists fk_product_seasonal_published_by,
+  add constraint fk_product_seasonal_published_by foreign key (published_by) references users(id) on delete set null,
+  drop constraint if exists fk_product_seasonal_previous_revision,
+  add constraint fk_product_seasonal_previous_revision foreign key (previous_revision_id) references product_seasonal_collections(id) on delete set null;
+
+alter table product_recommendation_operators
+  drop constraint if exists fk_product_recommendation_operator_user,
+  add constraint fk_product_recommendation_operator_user foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_product_recommendation_operator_granted_by,
+  add constraint fk_product_recommendation_operator_granted_by foreign key (granted_by) references users(id) on delete set null;
+
+alter table product_seasonal_collection_items
+  drop constraint if exists fk_product_seasonal_items_collection,
+  add constraint fk_product_seasonal_items_collection foreign key (collection_id) references product_seasonal_collections(id) on delete cascade,
+  drop constraint if exists fk_product_seasonal_items_product,
+  add constraint fk_product_seasonal_items_product foreign key (product_id) references products(id) on delete restrict,
+  drop constraint if exists fk_product_seasonal_items_shade,
+  add constraint fk_product_seasonal_items_shade foreign key (shade_id) references product_shades(id) on delete set null;
+
+alter table product_seasonal_collection_items
+  drop constraint if exists fk_product_seasonal_items_shade_product,
+  add constraint fk_product_seasonal_items_shade_product
+  foreign key (shade_id, product_id) references product_shades(id, product_id)
+  on delete set null (shade_id);
+
+alter table product_catalog_imports
+  drop constraint if exists fk_product_catalog_imports_actor,
+  add constraint fk_product_catalog_imports_actor foreign key (actor_user_id) references users(id) on delete set null;
+
+alter table product_engagement_events
+  drop constraint if exists fk_product_engagement_user,
+  add constraint fk_product_engagement_user foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_product_engagement_run,
+  add constraint fk_product_engagement_run foreign key (run_id) references product_recommendation_runs(id) on delete set null,
+  drop constraint if exists fk_product_engagement_collection,
+  add constraint fk_product_engagement_collection foreign key (collection_id) references product_seasonal_collections(id) on delete set null,
+  drop constraint if exists fk_product_engagement_product,
+  add constraint fk_product_engagement_product foreign key (product_id) references products(id) on delete cascade,
+  drop constraint if exists fk_product_engagement_shade,
+  add constraint fk_product_engagement_shade foreign key (shade_id) references product_shades(id) on delete set null;
+
+alter table product_engagement_events
+  drop constraint if exists fk_product_engagement_shade_product,
+  add constraint fk_product_engagement_shade_product
+  foreign key (shade_id, product_id) references product_shades(id, product_id)
+  on delete set null (shade_id);
+
+alter table product_preference_profiles
+  drop constraint if exists fk_product_preference_profile_user,
+  add constraint fk_product_preference_profile_user foreign key (user_id) references users(id) on delete cascade;
+
+alter table product_request_rate_limits
+  drop constraint if exists fk_product_request_rate_user,
+  add constraint fk_product_request_rate_user foreign key (user_id) references users(id) on delete cascade;
+
+alter table product_color_cohort_memberships
+  drop constraint if exists fk_product_cohort_user,
+  add constraint fk_product_cohort_user foreign key (user_id) references users(id) on delete cascade;
 
 alter table ar_filters
   drop constraint if exists fk_ar_filters_preview_media,
@@ -904,52 +1412,69 @@ alter table home_recommended_looks
   foreign key (image_media_id) references media_assets(id) on delete set null;
 
 alter table community_threads
+  drop constraint if exists fk_community_threads_author,
   add constraint fk_community_threads_author
   foreign key (author_user_id) references users(id) on delete cascade;
 
 alter table community_thread_media
+  drop constraint if exists fk_community_thread_media_thread,
   add constraint fk_community_thread_media_thread
   foreign key (thread_id) references community_threads(id) on delete cascade,
+  drop constraint if exists fk_community_thread_media_media,
   add constraint fk_community_thread_media_media
   foreign key (media_id) references media_assets(id) on delete restrict;
 
 alter table community_replies
+  drop constraint if exists fk_community_replies_thread,
   add constraint fk_community_replies_thread
   foreign key (thread_id) references community_threads(id) on delete cascade,
+  drop constraint if exists fk_community_replies_parent,
   add constraint fk_community_replies_parent
   foreign key (parent_reply_id) references community_replies(id) on delete cascade,
+  drop constraint if exists fk_community_replies_author,
   add constraint fk_community_replies_author
   foreign key (author_user_id) references users(id) on delete cascade;
 
 alter table community_thread_likes
+  drop constraint if exists fk_community_thread_likes_user,
   add constraint fk_community_thread_likes_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_community_thread_likes_thread,
   add constraint fk_community_thread_likes_thread
   foreign key (thread_id) references community_threads(id) on delete cascade;
 
 alter table community_thread_saves
+  drop constraint if exists fk_community_thread_saves_user,
   add constraint fk_community_thread_saves_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_community_thread_saves_thread,
   add constraint fk_community_thread_saves_thread
   foreign key (thread_id) references community_threads(id) on delete cascade;
 
 alter table community_reply_likes
+  drop constraint if exists fk_community_reply_likes_user,
   add constraint fk_community_reply_likes_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_community_reply_likes_reply,
   add constraint fk_community_reply_likes_reply
   foreign key (reply_id) references community_replies(id) on delete cascade;
 
 alter table community_reports
+  drop constraint if exists fk_community_reports_reporter,
   add constraint fk_community_reports_reporter
   foreign key (reporter_user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_community_reports_thread,
   add constraint fk_community_reports_thread
   foreign key (target_thread_id) references community_threads(id) on delete cascade,
+  drop constraint if exists fk_community_reports_reply,
   add constraint fk_community_reports_reply
   foreign key (target_reply_id) references community_replies(id) on delete cascade;
 
 alter table community_events
+  drop constraint if exists fk_community_events_user,
   add constraint fk_community_events_user
   foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_community_events_thread,
   add constraint fk_community_events_thread
   foreign key (thread_id) references community_threads(id) on delete cascade;
 alter table user_consents
@@ -989,10 +1514,35 @@ create index if not exists idx_saved_makeup_styles_user_saved on saved_makeup_st
 create index if not exists idx_saved_makeup_styles_source_analysis on saved_makeup_styles (source_analysis_report_id);
 create index if not exists idx_saved_makeup_styles_source_filter on saved_makeup_styles (source_filter_extraction_id);
 create index if not exists idx_products_category_active on products (category, is_active);
+create index if not exists idx_products_catalog_eligible on products (catalog_status, license_status, category) where is_active = true;
+create index if not exists idx_products_name_trgm on products using gin (product_name gin_trgm_ops);
+create index if not exists idx_products_brand_trgm on products using gin (brand_name gin_trgm_ops);
 create index if not exists idx_user_product_likes_user_liked on user_product_likes (user_id, liked_at desc);
+create index if not exists idx_external_product_likes_user_liked on external_product_likes (user_id, liked_at desc);
+create index if not exists idx_external_product_likes_source_product on external_product_likes (external_source, external_product_id, liked_at desc);
+create index if not exists idx_product_shades_candidate on product_shades (product_region, finish, lab_l) where is_active = true;
+create index if not exists idx_product_shades_product_active on product_shades (product_id, is_active);
+create index if not exists idx_product_assets_product_active on product_assets (product_id, asset_type, is_active);
+create index if not exists idx_product_assets_valid_until on product_assets (valid_until) where is_active = true;
+create index if not exists idx_product_offers_product_active on product_offers (product_id, availability_status, is_active);
+create index if not exists idx_product_offers_valid_until on product_offers (valid_until) where is_active = true;
+create index if not exists idx_product_seasonal_public on product_seasonal_collections (locale, status, valid_from, valid_until);
+create index if not exists idx_product_recommendation_operators_active_roles
+  on product_recommendation_operators using gin (roles) where is_active=true;
+create index if not exists idx_product_seasonal_items_order on product_seasonal_collection_items (collection_id, position);
+create index if not exists idx_product_engagement_user_occurred on product_engagement_events (user_id, occurred_at desc);
+create index if not exists idx_product_engagement_occurred on product_engagement_events (occurred_at);
+create index if not exists idx_product_engagement_product_type on product_engagement_events (product_id, event_type, occurred_at desc);
+create index if not exists idx_product_engagement_external_product_type
+  on product_engagement_events (external_source, external_product_id, event_type, occurred_at desc)
+  where external_source is not null;
+create index if not exists idx_product_request_rate_window on product_request_rate_limits (window_started_at);
+create index if not exists idx_product_preference_expires on product_preference_profiles (expires_at);
+create index if not exists idx_product_cohort_key_expires on product_color_cohort_memberships (cohort_key, expires_at);
 create index if not exists idx_auradin_search_sessions_expires_at on auradin_search_sessions (expires_at);
 create index if not exists idx_product_recommendation_runs_user_created on product_recommendation_runs (user_id, created_at desc);
 create index if not exists idx_product_recommendation_runs_source_analysis on product_recommendation_runs (source_analysis_report_id);
+create index if not exists idx_product_recommendation_runs_expires on product_recommendation_runs (expires_at);
 create index if not exists idx_ar_filters_category_public on ar_filters (category, is_public);
 create index if not exists idx_user_ar_filter_states_user_created on user_ar_filter_states (user_id, created_at desc);
 create index if not exists idx_filter_extraction_reports_user_created on filter_extraction_reports (user_id, created_at desc);
@@ -1007,6 +1557,7 @@ create index if not exists idx_home_filter_store_items_active_order on home_filt
 create index if not exists idx_home_recommended_looks_active_order on home_recommended_looks (is_active, sort_order);
 create index if not exists idx_home_recommended_looks_display_date on home_recommended_looks (display_date);
 create index if not exists idx_user_consents_user_type_version on user_consents (user_id, consent_type, version);
+create index if not exists idx_user_consents_user_type_recorded on user_consents (user_id, consent_type, recorded_at desc);
 create index if not exists idx_data_deletion_requests_user_requested on data_deletion_requests (user_id, requested_at desc);
 create index if not exists idx_audit_logs_entity on audit_logs (entity_type, entity_id);
 create index if not exists idx_audit_logs_actor_created on audit_logs (actor_user_id, created_at desc);
@@ -1442,7 +1993,7 @@ alter table consulting_summaries
 alter table consulting_call_sessions
   drop constraint if exists fk_consulting_call_sessions_booking,
   add constraint fk_consulting_call_sessions_booking
-  foreign key (booking_id) references consulting_bookings(id) on delete cascade;
+  foreign key (booking_id) references consulting_bookings(id) on delete cascade not valid;
 
 alter table consulting_call_sessions
   drop constraint if exists fk_consulting_call_sessions_user,

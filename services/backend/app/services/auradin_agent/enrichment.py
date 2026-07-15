@@ -736,6 +736,11 @@ async def _enrich_live_discovery(
   result: dict[str, Any],
   extra_caveats: list[str] | None,
 ) -> dict[str, Any]:
+  # The live Naver adapter produces title-inferred, non-licensed candidates.
+  # It is retained only for explicit local legacy regression. Deployed settings
+  # reject that legacy flag, so production AURADIN remains catalog-grounded.
+  if not settings.legacy_naver_product_search:
+    return {"status": "trusted_catalog_only"}
   if not settings.auradin_live_discovery_enabled:
     return {"status": "disabled"}
   if not settings.naver_shopping_client_id or not settings.naver_shopping_client_secret:

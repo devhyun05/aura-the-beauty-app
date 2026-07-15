@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Animated, StyleSheet} from 'react-native';
+import {Animated, Pressable, StyleSheet} from 'react-native';
 import {Text} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../theme';
@@ -14,15 +14,28 @@ const HIDE_DURATION_MS = 200;
  */
 export function useTransientToast(durationMs = 1500) {
   const [message, setMessage] = useState<string | null>(null);
+  const [action, setAction] = useState<{label: string; onPress: () => void} | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = useCallback((nextMessage: string) => {
+  const dismissToast = useCallback(() => {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    hideTimeout.current = null;
+    opacity.setValue(0);
+    setMessage(null);
+    setAction(null);
+  }, [opacity]);
+
+  const showToast = useCallback((
+    nextMessage: string,
+    nextAction?: {label: string; onPress: () => void},
+  ) => {
     if (hideTimeout.current) {
       clearTimeout(hideTimeout.current);
     }
 
     setMessage(nextMessage);
+    setAction(nextAction ?? null);
     Animated.timing(opacity, {
       duration: SHOW_DURATION_MS,
       toValue: 1,
@@ -34,7 +47,10 @@ export function useTransientToast(durationMs = 1500) {
         duration: HIDE_DURATION_MS,
         toValue: 0,
         useNativeDriver: true,
-      }).start(() => setMessage(null));
+      }).start(() => {
+        setMessage(null);
+        setAction(null);
+      });
     }, durationMs);
   }, [durationMs, opacity]);
 
@@ -45,8 +61,21 @@ export function useTransientToast(durationMs = 1500) {
   }, []);
 
   const toast = message ? (
-    <Animated.View pointerEvents="none" style={[styles.toast, {opacity}]}>
+    <Animated.View pointerEvents={action ? 'auto' : 'none'} style={[styles.toast, {opacity}]}>
       <Text style={styles.toastText}>{message}</Text>
+      {action ? (
+        <Pressable
+          accessibilityLabel={action.label}
+          accessibilityRole="button"
+          onPress={() => {
+            const onPress = action.onPress;
+            dismissToast();
+            onPress();
+          }}
+          style={styles.action}>
+          <Text style={styles.actionText}>{action.label}</Text>
+        </Pressable>
+      ) : null}
     </Animated.View>
   ) : null;
 
@@ -59,14 +88,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17, 17, 17, 0.88)',
     borderRadius: radius.pill,
     bottom: 104,
+    flexDirection: 'row',
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     position: 'absolute',
+    zIndex: 200,
   },
   toastText: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
+  },
+  action: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  actionText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+    textDecorationLine: 'underline',
   },
 });

@@ -248,7 +248,7 @@ def _live_offer_score(item: dict[str, Any]) -> float:
   score = 0.0
   if live_offer.get("imageUrl"):
     score += 0.34
-  if live_offer.get("purchaseUrl"):
+  if live_offer.get("purchaseUrl") or live_offer.get("offerId"):
     score += 0.33
   if int(live_offer.get("priceKrw") or 0) > 0:
     score += 0.33
@@ -1076,6 +1076,14 @@ def _shade_name(item: dict[str, Any]) -> str:
   return ATTRIBUTE_LABELS["colorFamily"].get(color_family, "") if color_family else ""
 
 
+def _shade_id(item: dict[str, Any]) -> str | None:
+  shade_options = _as_list(item.get("shadeOptions"))
+  if shade_options and isinstance(shade_options[0], dict):
+    value = _clean(shade_options[0].get("shadeId"))
+    return value or None
+  return None
+
+
 def _tags(item: dict[str, Any], matched_labels: list[str]) -> list[str]:
   attrs = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
   tags = [label for label in matched_labels if label]
@@ -1124,10 +1132,18 @@ def to_result_product(
     match_rate = max(1, min(99, int(round(float(row["score"]) * 100))))
   return {
     "id": item["id"],
+    "externalSource": (
+      "auradin_catalog"
+      if str(item.get("id") or "").startswith("auradin-seed-")
+      else "auradin_search"
+      if source == "live_naver"
+      else None
+    ),
     "role": role,  # §5 3역할: anchor | diverse | discovery (미배치 시 None)
     "source": source,  # curated | live_naver
     "brandName": item.get("brandName"),
     "productName": item.get("productName"),
+    "shadeId": _shade_id(item),
     "shadeName": _shade_name(item),
     "category": item.get("category"),
     "matchRate": match_rate,
@@ -1136,6 +1152,7 @@ def to_result_product(
     "tags": tags,
     "imageUrl": live_offer.get("imageUrl"),
     "purchaseUrl": live_offer.get("purchaseUrl"),
+    "offerId": live_offer.get("offerId"),
     "palette": item.get("palette") or [],
     "productInfo": {
       "brand": item.get("brandName"),

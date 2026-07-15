@@ -94,3 +94,4 @@ apps/unity/MakeupAR/Assets/XR/Temp.meta
 apps/unity/MakeupAR/Packages/local/
 data/auradin/.active_snapshot.lock
 logs/
+apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite

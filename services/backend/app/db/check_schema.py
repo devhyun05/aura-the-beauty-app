@@ -17,11 +17,23 @@ EXPECTED_TABLES = {
   "photo_captures",
   "analysis_reports",
   "saved_makeup_styles",
+  "product_recommendation_operators",
   "products",
   "user_product_likes",
+  "external_product_likes",
   "auradin_search_sessions",
   "auradin_events",
   "product_recommendation_runs",
+  "product_shades",
+  "product_assets",
+  "product_offers",
+  "product_seasonal_collections",
+  "product_seasonal_collection_items",
+  "product_catalog_imports",
+  "product_engagement_events",
+  "product_preference_profiles",
+  "product_request_rate_limits",
+  "product_color_cohort_memberships",
   "ar_filters",
   "user_ar_filter_states",
   "filter_extraction_reports",
@@ -58,6 +70,19 @@ EXPECTED_TABLES = {
 }
 
 EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
+
+EXPECTED_CONSTRAINTS = {
+  "product_recommendation_operators": {
+    "fk_product_recommendation_operator_user",
+    "fk_product_recommendation_operator_granted_by",
+  },
+  "user_product_likes": {"fk_user_product_likes_shade_product"},
+  "product_shades": {"uq_product_shades_id_product"},
+  "product_assets": {"fk_product_assets_shade_product"},
+  "product_offers": {"fk_product_offers_shade_product"},
+  "product_seasonal_collection_items": {"fk_product_seasonal_items_shade_product"},
+  "product_engagement_events": {"fk_product_engagement_shade_product"},
+}
 
 EXPECTED_COLUMNS = {
   "analysis_reports": {"embedding"},
@@ -97,6 +122,14 @@ EXPECTED_COLUMNS = {
     "experiment_id",
     "variant",
   },
+  "saved_makeup_styles": {"client_request_id", "style_payload", "archived_at"},
+  "products": {"catalog_status", "catalog_version", "license_status", "allowed_uses"},
+  "product_recommendation_operators": {"roles", "is_active", "granted_by"},
+  "user_product_likes": {"source_shade_id"},
+  "external_product_likes": {"external_source", "external_product_id", "purchase_url", "liked_at"},
+  "product_engagement_events": {"external_source", "external_product_id"},
+  "product_recommendation_runs": {"source_style_id", "strategy", "algorithm_version", "expires_at"},
+  "user_consents": {"recorded_at"},
 }
 
 EXPECTED_COLUMN_CONTRACTS = {
@@ -253,6 +286,21 @@ async def fetch_extensions(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch("select extname from pg_extension")
   return {row["extname"] for row in rows}
 
+async def fetch_table_constraints(connection: asyncpg.Connection) -> dict[str, set[str]]:
+  rows = await connection.fetch(
+    """
+    select relation.relname as table_name, constraint_row.conname as constraint_name
+    from pg_constraint constraint_row
+    join pg_class relation on relation.oid=constraint_row.conrelid
+    join pg_namespace namespace_row on namespace_row.oid=relation.relnamespace
+    where namespace_row.nspname='public'
+    """,
+  )
+  constraints: dict[str, set[str]] = {}
+  for row in rows:
+    constraints.setdefault(row["table_name"], set()).add(row["constraint_name"])
+  return constraints
+
 async def fetch_applied_versions(connection: asyncpg.Connection) -> set[str]:
   if "schema_migrations" not in await fetch_table_names(connection):
     return set()
@@ -272,6 +320,7 @@ def build_schema_report(
   constraints: set[str] | dict[str, str] | None = None,
   indexes: dict[str, str] | None = None,
   enum_values: dict[str, set[str]] | None = None,
+  table_constraints: dict[str, set[str]] | None = None,
 ) -> dict[str, object]:
   expected_versions = {SCHEMA_VERSION, *POST_SCHEMA_MIGRATIONS}
 
@@ -323,6 +372,15 @@ def build_schema_report(
       for enum_name, expected in EXPECTED_ENUM_VALUES.items()
       if expected - enum_values.get(enum_name, set())
     }
+  # dev: per-table named constraints (EXPECTED_CONSTRAINTS) — distinct from the
+  # A5 constraint-contract check above, so it keeps its own report key.
+  missing_table_constraints = {}
+  if table_constraints is not None:
+    missing_table_constraints = {
+      table: sorted(expected - table_constraints.get(table, set()))
+      for table, expected in EXPECTED_CONSTRAINTS.items()
+      if expected - table_constraints.get(table, set())
+    }
 
   return {
     "ok": not any((
@@ -335,6 +393,7 @@ def build_schema_report(
       invalid_constraints,
       invalid_indexes,
       missing_enum_values,
+      missing_table_constraints,
     )),
     "expectedTables": sorted(EXPECTED_TABLES),
     "missingTables": missing_tables,
@@ -348,6 +407,8 @@ def build_schema_report(
     "missingConstraints": missing_constraints,
     "invalidConstraints": sorted(invalid_constraints),
     "invalidIndexes": sorted(invalid_indexes),
+    "expectedConstraints": {table: sorted(constraints) for table, constraints in EXPECTED_CONSTRAINTS.items()},
+    "missingTableConstraints": missing_table_constraints,
     "appliedVersions": sorted(applied_versions),
     "missingVersions": missing_versions,
   }
@@ -373,6 +434,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     indexes = await fetch_indexes(connection)
     installed_extensions = await fetch_extensions(connection)
     enum_values = await fetch_enum_values(connection)
+    table_constraints = await fetch_table_constraints(connection)
     applied_versions = await fetch_applied_versions(connection)
   finally:
     await connection.close()
@@ -387,6 +449,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     constraints=constraints,
     indexes=indexes,
     enum_values=enum_values,
+    table_constraints=table_constraints,
   )
 
 
@@ -403,6 +466,7 @@ def format_schema_report(report: dict[str, object]) -> str:
   invalid_indexes = report["invalidIndexes"]
   invalid_constraints = report["invalidConstraints"]
   missing_versions = report["missingVersions"]
+  missing_table_constraints = report["missingTableConstraints"]
 
   if missing_tables:
     lines.append("Missing tables:")
@@ -434,6 +498,11 @@ def format_schema_report(report: dict[str, object]) -> str:
     lines.append("Missing constraints:")
     lines.extend(f"- {name}" for name in missing_constraints)
 
+  if missing_table_constraints:
+    lines.append("Missing table constraints:")
+    for table, constraints in missing_table_constraints.items():
+      lines.extend(f"- {table}.{constraint}" for constraint in constraints)
+
   if invalid_constraints:
     lines.append("Invalid constraints:")
     lines.extend(f"- {name}" for name in invalid_constraints)
@@ -452,6 +521,7 @@ def format_schema_report(report: dict[str, object]) -> str:
     missing_constraints,
     invalid_constraints,
     invalid_indexes,
+    missing_table_constraints,
   )):
     lines.append("All expected tables and migration markers are present.")
 

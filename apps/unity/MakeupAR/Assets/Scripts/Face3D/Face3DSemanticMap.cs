@@ -30,8 +30,9 @@ namespace Aura.Face3D
         public int[] centralRegionIndices;
 
         // Tier-2 optional groups (docs/face3d/TIER2_METRIC_CONTRACT.md §1).
-        // JsonUtility 는 JSON 에 없는 배열 필드를 null 로 둔다 — null = 부재(g1, 허용),
-        // 존재하면 기존 그룹과 동일한 검증(비어있지 않음·범위·disjoint)을 통과해야 한다.
+        // JsonUtility 는 JSON 에 없는 배열 필드를 null 로 둔다 — 여섯 필드가 모두 null인
+        // legacy g1만 허용하고, g2는 여섯 그룹을 모두 제공해 범위·개수·controlled
+        // G1 overlap·Tier-2 상호 disjoint 검증을 통과해야 한다.
         public int[] nasionIndices;
         public int[] noseBridgeMidlineIndices;
         public int[] alarLeftIndices;
@@ -45,6 +46,8 @@ namespace Aura.Face3D
         private const int LandmarkMinimumCount = 3;
         private const int ReferenceMinimumCount = 8;
         private const int CentralRegionMinimumCount = 16;
+        private const int NasionRequiredCount = 1;
+        private const int SurfacePatchMinimumCount = 5;
         // 콧대 중앙선은 선적합 잔차의 자유도를 위해 landmark 급보다 많이 요구한다.
         private const int MidlineMinimumCount = 4;
 
@@ -320,13 +323,16 @@ namespace Aura.Face3D
                 return false;
             }
 
-            // Tier-2 optional 그룹: 부재(null)는 허용(g1 호환), 존재하면 기존 규칙으로 검증.
-            if (!TryValidateOptionalIndexGroup(data.nasionIndices, topology.VertexCount, LandmarkMinimumCount)
+            // Tier-2 optional 그룹: 부재(null)는 허용(g1 호환). G2에서는 해부 역할별
+            // 최소 개수를 적용한다: nasion은 고정 중앙점 하나, bridge는 선 점열,
+            // alar/malar는 사람별 극값을 찾을 수 있는 surface patch다.
+            if (!HasCompleteTier2GroupSet(data)
+                || !TryValidateOptionalExactIndexGroup(data.nasionIndices, topology.VertexCount, NasionRequiredCount)
                 || !TryValidateOptionalIndexGroup(data.noseBridgeMidlineIndices, topology.VertexCount, MidlineMinimumCount)
-                || !TryValidateOptionalIndexGroup(data.alarLeftIndices, topology.VertexCount, LandmarkMinimumCount)
-                || !TryValidateOptionalIndexGroup(data.alarRightIndices, topology.VertexCount, LandmarkMinimumCount)
-                || !TryValidateOptionalIndexGroup(data.malarApexLeftIndices, topology.VertexCount, LandmarkMinimumCount)
-                || !TryValidateOptionalIndexGroup(data.malarApexRightIndices, topology.VertexCount, LandmarkMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.alarLeftIndices, topology.VertexCount, SurfacePatchMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.alarRightIndices, topology.VertexCount, SurfacePatchMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.malarApexLeftIndices, topology.VertexCount, SurfacePatchMinimumCount)
+                || !TryValidateOptionalIndexGroup(data.malarApexRightIndices, topology.VertexCount, SurfacePatchMinimumCount)
                 || !TryValidateTier2Disjointness(data))
             {
                 reason = "semantic_map_tier2_indices_invalid";
@@ -423,8 +429,36 @@ namespace Aura.Face3D
                 || TryValidateIndexGroup(indices, vertexCount, minimumCount);
         }
 
-        // Tier-2 그룹은 서로·기존 12그룹 전부와 겹치면 안 된다(계약 §1) —
-        // 겹침은 authoring 실수이며 지표 간 독립성이 깨진다.
+        private static bool TryValidateOptionalExactIndexGroup(
+            int[] indices,
+            int vertexCount,
+            int requiredCount)
+        {
+            return indices == null
+                || (indices.Length == requiredCount
+                    && TryValidateIndexGroup(indices, vertexCount, requiredCount));
+        }
+
+        private static bool HasCompleteTier2GroupSet(Face3DSemanticMapData data)
+        {
+            bool anyPresent = data.nasionIndices != null
+                || data.noseBridgeMidlineIndices != null
+                || data.alarLeftIndices != null
+                || data.alarRightIndices != null
+                || data.malarApexLeftIndices != null
+                || data.malarApexRightIndices != null;
+            bool allPresent = data.nasionIndices != null
+                && data.noseBridgeMidlineIndices != null
+                && data.alarLeftIndices != null
+                && data.alarRightIndices != null
+                && data.malarApexLeftIndices != null
+                && data.malarApexRightIndices != null;
+            return !anyPresent || allPresent;
+        }
+
+        // Tier-2 그룹은 서로 겹치지 않는다. G1과는 제품 오너가 해부 위치로 승인한
+        // nasal midline 슬롯만 제한적으로 공유한다. 임의의 overlap을 허용하면 승인되지
+        // 않은 index가 reference/measurement 역할을 동시에 갖게 되므로 exact allowlist다.
         private static bool TryValidateTier2Disjointness(Face3DSemanticMapData data)
         {
             HashSet<int> baseIndices = new HashSet<int>();
@@ -463,7 +497,8 @@ namespace Aura.Face3D
                 for (int index = 0; index < indices.Length; index += 1)
                 {
                     int vertexIndex = indices[index];
-                    if (baseIndices.Contains(vertexIndex)
+                    if ((baseIndices.Contains(vertexIndex)
+                            && !IsAllowedTier2BaseOverlap(group, vertexIndex))
                         || !seenTier2Indices.Add(vertexIndex))
                     {
                         return false;
@@ -472,6 +507,26 @@ namespace Aura.Face3D
             }
 
             return true;
+        }
+
+        private static bool IsAllowedTier2BaseOverlap(int tier2GroupIndex, int vertexIndex)
+        {
+            // tier2Groups 순서: nasion, bridge, alar L/R, malar L/R.
+            if (tier2GroupIndex == 0)
+            {
+                return vertexIndex == 15;
+            }
+
+            if (tier2GroupIndex == 1)
+            {
+                return vertexIndex == 10
+                    || vertexIndex == 11
+                    || vertexIndex == 12
+                    || vertexIndex == 14
+                    || vertexIndex == 36;
+            }
+
+            return false;
         }
 
         private static bool TryValidateLandmarkReferenceDisjointness(

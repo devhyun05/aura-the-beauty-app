@@ -5,7 +5,7 @@
 // AuradinCandidateProduct)으로 그대로 매핑해 render 코드는 손대지 않는다.
 // role/source/구조화 reason은 데이터로만 관통시켜 두고, 시각화(3역할·근거 카드)는 다음 단계.
 //
-// 백엔드 URL(EXPO_PUBLIC_API_BASE_URL)이 없으면 dev의 오프라인 mock 데모 흐름을 유지한다.
+// 백엔드 URL이 없을 때 fixture는 명시적으로 켠 개발 환경에서만 노출한다.
 
 import {
   getBackendApiBaseUrl,
@@ -49,6 +49,8 @@ type BackendQuestion = {
 
 type BackendProduct = {
   id?: string | null;
+  externalSource?: string | null;
+  shadeId?: string | null;
   role?: string | null;
   source?: string | null;
   brandName?: string | null;
@@ -62,6 +64,7 @@ type BackendProduct = {
   palette?: string[] | null;
   imageUrl?: string | null;
   purchaseUrl?: string | null;
+  offerId?: string | null;
   reason?: Partial<AuradinReason> | null;
   reasonCopy?: string | null; // §6 가산 카피 (구조화 reason이 권위값)
 };
@@ -157,6 +160,7 @@ const VALID_PHASES: readonly AuradinSearchPhase[] = [
 ];
 
 const VALID_ROLES: readonly AuradinProductRole[] = ['anchor', 'diverse', 'discovery'];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizePhase(phase: string | null | undefined): AuradinSearchPhase {
   return VALID_PHASES.includes(phase as AuradinSearchPhase)
@@ -219,8 +223,10 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
     ? (product.role as AuradinProductRole)
     : undefined;
 
+  const id = String(product.id ?? '');
   return {
-    id: String(product.id ?? ''),
+    id,
+    shadeId: product.shadeId ? String(product.shadeId) : undefined,
     brandName: String(product.brandName ?? ''),
     productName: String(product.productName ?? ''),
     shadeName: String(product.shadeName ?? ''),
@@ -231,10 +237,16 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
     imageSource: {uri: imageUrl},
     role,
     source: product.source === 'live_naver' ? 'live_naver' : 'curated',
+    externalSource: UUID_PATTERN.test(id)
+      ? undefined
+      : product.externalSource === 'auradin_catalog'
+        ? 'auradin_catalog'
+        : 'auradin_search',
     reason,
     reasonCopy: typeof product.reasonCopy === 'string' && product.reasonCopy ? product.reasonCopy : undefined,
     matchRate: typeof product.matchRate === 'number' ? product.matchRate : undefined,
     purchaseUrl: product.purchaseUrl ?? undefined,
+    offerId: product.offerId ?? undefined,
     imageUrl,
     category: product.category ?? undefined,
     priceKrw,
@@ -269,7 +281,7 @@ export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
       : undefined,
     // 구매 가능한 카드만 (백엔드도 보장하지만 방어적으로).
     candidates: products
-      .filter((product) => product.imageUrl && product.purchaseUrl)
+      .filter((product) => product.imageUrl && (product.purchaseUrl || product.offerId))
       .map(mapCandidate),
     headerLabel: turn.result?.headerLabel ?? undefined,
     appliedFilters: mapAppliedFilters(turn.appliedFilters),
@@ -281,6 +293,7 @@ export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
 
 let mockSessionCounter = 0;
 let mockAnswered = false;
+const fixtureEnabled = __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1';
 
 function buildMockTurn(sessionId: string): AuradinSearchTurn {
   if (!mockAnswered) {
@@ -312,6 +325,9 @@ export async function createAuradinSearchSession(
   signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
+    if (!fixtureEnabled) {
+      return {sessionId: 'backend-unavailable', phase: 'searching', retryAfterMs: 0};
+    }
     mockAnswered = false;
     mockSessionCounter += 1;
     return {sessionId: `mock-${mockSessionCounter}`, phase: 'searching', retryAfterMs: 400};
@@ -360,6 +376,9 @@ export async function refineAuradinSearch(
   signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
+    if (!fixtureEnabled) {
+      return {sessionId, phase: 'searching', retryAfterMs: 0};
+    }
     return {sessionId, phase: 'searching', retryAfterMs: 400};
   }
 
@@ -414,6 +433,9 @@ export async function answerAuradinQuestion(
   signal?: AbortSignal,
 ): Promise<SessionAck> {
   if (!getBackendApiBaseUrl()) {
+    if (!fixtureEnabled) {
+      return {sessionId, phase: 'searching', retryAfterMs: 0};
+    }
     mockAnswered = true;
     return {sessionId, phase: 'searching', retryAfterMs: 400};
   }
@@ -437,6 +459,15 @@ export async function pollAuradinSearchTurn(
   {maxAttempts = 6, signal}: {maxAttempts?: number; signal?: AbortSignal} = {},
 ): Promise<AuradinSearchTurn> {
   if (!getBackendApiBaseUrl()) {
+    if (!fixtureEnabled) {
+      return {
+        sessionId,
+        phase: 'failed',
+        thinking: [],
+        candidates: [],
+        error: {message: '제품 catalog 서버가 연결되지 않았어요. 연결 후 다시 시도해 주세요.'},
+      };
+    }
     return buildMockTurn(sessionId);
   }
 

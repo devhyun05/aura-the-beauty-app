@@ -1,13 +1,17 @@
 services:
   postgres:
-    image: postgres:16
+    # The application schema uses the vector extension; keep local/CI parity
+    # with production instead of relying on a plain Postgres image.
+    image: pgvector/pgvector:pg16
     container_name: aura-backend-postgres
     environment:
       POSTGRES_DB: aura_backend
       POSTGRES_USER: aura
       POSTGRES_PASSWORD: aura
     ports:
-      - "5432:5432"
+      # Override when the host already runs Postgres, for example
+      # `AURA_POSTGRES_PORT=5434 docker compose up -d postgres`.
+      - "${AURA_POSTGRES_PORT:-5432}:5432"
     volumes:
       - aura_backend_postgres:/var/lib/postgresql/data
     healthcheck:

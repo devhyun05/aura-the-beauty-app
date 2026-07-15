@@ -58,7 +58,27 @@ export type RootStackParamList = {
   HairSimulationResult: {simulationId: string; sourceImageUri?: string};
   SavedHairSimulations: undefined;
   SavedMakeupList: undefined;
-  ProductRecommendation: {reportId?: string} | undefined;
+  ProductRecommendation: {
+    reportId?: string;
+    arStyleId?: string;
+    initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort';
+  } | undefined;
+  ProductRecommendationShelf: {
+    shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
+    title?: string;
+    arStyleId?: string;
+  };
+  ProductSearchResult: {query: string};
+  ProductDetail: {
+    productId: string;
+    shadeId?: string;
+    disclosureLabel?: string;
+    reasonLabels?: string[];
+    sponsored?: boolean;
+    sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
+  };
+  ProductPersonalizationSettings: undefined;
+  MakeupRecommendation: undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
@@ -130,7 +150,7 @@ export type RootStackParamList = {
   ReferenceMakeupExtractionResult: undefined;
   ExtractedMakeupLookAdjust: undefined;
   MakeupFilterSave: undefined;
-  MakeupFilterSaveComplete: undefined;
+  MakeupFilterSaveComplete: {arStyleId?: string; saveError?: string} | undefined;
   MakeupRecipeList: undefined;
   MakeupRecipeDetail: undefined;
   MakeupRecipeSaveComplete: undefined;
@@ -176,6 +196,11 @@ export const rootStackRoutes = [
   'SavedHairSimulations',
   'SavedMakeupList',
   'ProductRecommendation',
+  'ProductRecommendationShelf',
+  'ProductSearchResult',
+  'ProductDetail',
+  'ProductPersonalizationSettings',
+  'MakeupRecommendation',
   'AuradinSearch',
   'Community',
   'CommunityThreadDetail',

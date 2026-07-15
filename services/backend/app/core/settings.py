@@ -1,6 +1,8 @@
 import logging
 from functools import lru_cache
+from ipaddress import ip_address
 from pathlib import Path
+import re
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -23,6 +25,8 @@ def _resolve_repo_root(backend_root: Path) -> Path:
 
 REPO_ROOT = _resolve_repo_root(BACKEND_ROOT)
 ENV_FILES = (REPO_ROOT / ".env", BACKEND_ROOT / ".env")
+DOMAIN_PATTERN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+PUBLIC_SUFFIX_ONLY = {"com", "net", "org", "kr", "co.kr", "or.kr", "ne.kr", "go.kr"}
 
 
 class Settings(BaseSettings):
@@ -147,6 +151,46 @@ class Settings(BaseSettings):
 
   naver_shopping_client_id: str | None = None
   naver_shopping_client_secret: str | None = None
+  naver_api_hub_client_id: str | None = None
+  naver_api_hub_client_secret: str | None = None
+
+  # Product recommendation V2 rollout.  Data-dependent sections still enforce
+  # catalog rights, consent and minimum cohort size even when their flag is on.
+  product_hub_v2: bool = True
+  seasonal_recommendations_v1: bool = True
+  ar_recipe_persistence_v1: bool = True
+  ar_product_recommendations_v1: bool = True
+  engagement_personalization_v1: bool = False
+  cohort_recommendations_v1: bool = False
+  legacy_naver_product_search: bool = False
+  naver_shopping_insight_enabled: bool = False
+  naver_shopping_insight_endpoint: str | None = None
+  product_live_seasonal_cache_seconds: int = Field(default=300, ge=60, le=3600)
+  product_catalog_allowed_seller_domains: str = ""
+  product_catalog_allowed_image_domains: str = ""
+  product_event_signing_secret: str | None = None
+  product_catalog_manifest_signing_secret: str | None = None
+  product_seasonal_manifest_signing_secret: str | None = None
+  product_event_batch_limit: int = Field(default=50, ge=1, le=100)
+  product_event_clock_skew_hours: int = Field(default=24, ge=1, le=168)
+  product_exposure_token_ttl_seconds: int = Field(default=1800, ge=60, le=86400)
+  product_ar_max_delta_e: float = Field(default=18.0, gt=0, le=100)
+  product_offer_max_age_hours: int = Field(default=168, ge=1, le=2160)
+  product_seasonal_source_max_age_days: int = Field(default=30, ge=1, le=180)
+  product_event_retention_days: int = Field(default=90, ge=1, le=365)
+  product_profile_retention_days: int = Field(default=180, ge=1, le=730)
+  product_run_retention_days: int = Field(default=30, ge=1, le=180)
+  product_raw_search_retention_days: int = Field(default=30, ge=1, le=90)
+  product_cohort_min_size: int = Field(default=100, ge=2, le=10000)
+  product_cohort_min_item_support: int = Field(default=5, ge=1, le=1000)
+  product_personalization_experiment_percent: int = Field(default=50, ge=0, le=100)
+  product_cohort_experiment_percent: int = Field(default=50, ge=0, le=100)
+  product_personalization_require_age_14: bool = True
+  product_recommendation_rate_limit_per_minute: int = Field(default=120, ge=1, le=10000)
+  product_search_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
+  product_write_rate_limit_per_minute: int = Field(default=120, ge=1, le=10000)
+  product_event_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
+  product_outbound_rate_limit_per_minute: int = Field(default=30, ge=1, le=10000)
 
   chime_enabled: bool = False
   chime_control_region: str | None = None
@@ -179,6 +223,47 @@ class Settings(BaseSettings):
         "[aura:auradin-events] auradin_events_enabled=True but auradin_release_manifest_id "
         "is unset — every event will be dropped (no 'unknown' attribution is persisted)",
       )
+    return self
+
+  @field_validator(
+    "product_catalog_allowed_seller_domains",
+    "product_catalog_allowed_image_domains",
+  )
+  @classmethod
+  def validate_product_domain_allowlist(cls, value: str) -> str:
+    domains = [domain.strip().lower() for domain in str(value or "").split(",") if domain.strip()]
+    for domain in domains:
+      try:
+        ip_address(domain)
+      except ValueError:
+        address = None
+      else:
+        address = domain
+      if (
+        address is not None
+        or domain in PUBLIC_SUFFIX_ONLY
+        or not DOMAIN_PATTERN.fullmatch(domain)
+      ):
+        raise ValueError("product catalog allowlists require exact registrable DNS domains")
+    return ",".join(dict.fromkeys(domains))
+
+  @model_validator(mode="after")
+  def validate_product_privacy_thresholds(self) -> "Settings":
+    environment = self.environment.strip().lower()
+    if environment in {"staging", "stage", "production", "prod"} and self.legacy_naver_product_search:
+      raise ValueError("legacy product-search fixtures cannot be enabled outside local/test")
+    if (
+      environment in {"staging", "stage", "production", "prod"}
+      and self.cohort_recommendations_v1
+      and self.product_cohort_min_size < 100
+    ):
+      raise ValueError("enabled color cohort recommendations require k >= 100 outside local/test")
+    if (
+      environment in {"staging", "stage", "production", "prod"}
+      and self.cohort_recommendations_v1
+      and self.product_cohort_min_item_support < 5
+    ):
+      raise ValueError("enabled color cohort recommendations require at least 5 item supporters outside local/test")
     return self
 
   @property
@@ -309,6 +394,22 @@ class Settings(BaseSettings):
   @property
   def cors_origins(self) -> list[str]:
     return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
+
+  @property
+  def product_allowed_seller_domains(self) -> tuple[str, ...]:
+    return tuple(
+      domain.strip().lower()
+      for domain in self.product_catalog_allowed_seller_domains.split(",")
+      if domain.strip()
+    )
+
+  @property
+  def product_allowed_image_domains(self) -> tuple[str, ...]:
+    return tuple(
+      domain.strip().lower()
+      for domain in self.product_catalog_allowed_image_domains.split(",")
+      if domain.strip()
+    )
 
   def public_config_status(self) -> dict[str, object]:
     analysis_provider = self.analysis_provider

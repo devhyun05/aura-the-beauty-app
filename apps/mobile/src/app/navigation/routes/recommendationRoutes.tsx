@@ -4,10 +4,13 @@ import {
   AuradinSearchScreen,
   LikedProductListScreen,
   MakeupLookListScreen,
+  ProductDetailScreen,
+  ProductPersonalizationSettingsScreen,
   ProductRecommendationScreen,
+  ProductRecommendationShelfScreen,
+  ProductSearchResultScreen,
 } from '../../../features/recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
-import {isAuradinPrimarySurfaceEnabled} from '../../../shared/config/featureFlags';
 import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisService';
 import {
   getLikedMakeupFilterLooks,
@@ -24,9 +27,10 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
-// R1(B1) 표면 전환 — auradinPrimarySurface가 켜지면 얼굴분석 완료·리포트 상세의 추천
-// 랜딩을 Auradin(personalColor 자동 첨부)으로 바꾼다. 진입 경로 전부가 이 라우트로
-// 수렴하므로 분기는 여기 1지점이다. 기본 false — 레거시 유지 (§13 R1).
+// 얼굴분석 완료·리포트 상세의 추천 랜딩 (Shelf 정본 — dev 진열/스폰서십/신뢰제품 표면).
+// Auradin은 이 화면의 진입점(onOpenAuradin → AuradinSearch)에서 하위 라우트로 도달하고,
+// personalColor 첨부 해석(R1 게이트 2)은 AuradinSearchRouteScreen이 담당한다
+// (resolveAuradinLandingReport·getFaceAnalysisReportById). 뒤로가기는 다시 이 랜딩.
 export function ProductRecommendationRouteScreen({
   navigation,
   route,
@@ -34,20 +38,14 @@ export function ProductRecommendationRouteScreen({
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
   const sourceReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
 
-  if (isAuradinPrimarySurfaceEnabled()) {
-    return (
-      <AuradinPrimaryLandingScreen
-        paramReportId={route.params?.reportId ?? null}
-        selectedReport={selectedFaceAnalysisReport}
-      />
-    );
-  }
-
   return (
     <DetailRouteChrome
+      headerMode="standard"
       routeName="ProductRecommendation"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationScreen
+        arStyleId={route.params?.arStyleId}
+        initialSection={route.params?.initialSection}
         onCapturePhoto={() =>
           navigation.navigate('FaceCapture', {afterAnalysisRoute: 'ProductRecommendation'})
         }
@@ -57,26 +55,118 @@ export function ProductRecommendationRouteScreen({
             initialSource: 'gallery',
           })
         }
+        onCreateArLook={() => navigation.navigate('UnityMakeupCapture')}
+        onOpenAuradin={() => navigation.navigate('AuradinSearch')}
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenPersonalizationSettings={() =>
+          navigation.navigate('ProductPersonalizationSettings')
+        }
+        onOpenProduct={(productId, shadeId, recommendationContext) =>
+          navigation.navigate('ProductDetail', {
+            productId,
+            ...(shadeId ? {shadeId} : {}),
+            ...(recommendationContext?.disclosureLabel
+              ? {disclosureLabel: recommendationContext.disclosureLabel}
+              : {}),
+            ...(recommendationContext?.reasonLabels?.length
+              ? {reasonLabels: recommendationContext.reasonLabels}
+              : {}),
+            ...(recommendationContext?.sponsored !== undefined
+              ? {sponsored: recommendationContext.sponsored}
+              : {}),
+            ...(recommendationContext?.sponsorshipType
+              ? {sponsorshipType: recommendationContext.sponsorshipType}
+              : {}),
+          })
+        }
+        onOpenShelf={(shelf, title, selectedArStyleId) =>
+          navigation.navigate('ProductRecommendationShelf', {
+            shelf,
+            title,
+            ...(selectedArStyleId ? {arStyleId: selectedArStyleId} : {}),
+          })
+        }
+        onSearch={query => navigation.navigate('ProductSearchResult', {query})}
         sourceReportId={sourceReportId}
       />
     </DetailRouteChrome>
   );
 }
 
-// R1 게이트 2: Auradin 랜딩의 리포트 첨부 해석.
-// AuradinSearchScreen은 마운트 시점에만 availableReport를 첨부로 시드하므로,
-// 과거 리포트 상세 → 추천 진입(fetch 필요)은 personalColor 해석이 끝난 뒤 마운트한다.
-function AuradinPrimaryLandingScreen({
-  paramReportId,
-  selectedReport,
-}: {
-  paramReportId: string | null;
-  selectedReport: {id: string; personalColor?: string | null} | null;
-}) {
-  const resolution = resolveAuradinLandingReport(paramReportId, selectedReport);
+// dev Shelf 라우트 — 진열/스폰서십/신뢰제품(TrustedProduct) 진입. 얼굴분석 랜딩에서
+// onOpenShelf로 도달하고, 뒤로가기는 랜딩으로 복귀한다.
+export function ProductRecommendationShelfRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductRecommendationShelf'>) {
+  return (
+    <DetailRouteChrome
+      headerMode="standard"
+      routeName="ProductRecommendationShelf"
+      onBack={() => navigation.goBack()}>
+      <ProductRecommendationShelfScreen
+        arStyleId={route.params.arStyleId}
+        initialTitle={route.params.title}
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenProduct={product =>
+          navigation.navigate('ProductDetail', {
+            productId: product.productId,
+            ...(product.shadeId ? {shadeId: product.shadeId} : {}),
+            ...(product.disclosureLabel ? {disclosureLabel: product.disclosureLabel} : {}),
+            ...(product.reasonLabels?.length ? {reasonLabels: product.reasonLabels} : {}),
+            ...(product.sponsored !== undefined ? {sponsored: product.sponsored} : {}),
+            ...(product.sponsorshipType ? {sponsorshipType: product.sponsorshipType} : {}),
+          })
+        }
+        shelf={route.params.shelf}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+// AURADIN 검색 — 자체 글라스 지반·워드마크를 갖는 풀스크린 경험 (DetailRouteChrome 미사용).
+// EXPO_PUBLIC_AURADIN_DEMO_DRIVE(질의 텍스트)가 설정되면 검색→상세→다이얼→상세 시퀀스를
+// 탭과 동일한 핸들러로 자동 구동한다 (시뮬레이터 QA·데모 전용).
+// __DEV__ 가드 — 릴리즈/실기기 테스트 빌드에는 절대 반영되지 않는다 (실기기 이슈: 데모가 홈을 강탈).
+const DEMO_DRIVE_PROMPT = __DEV__ ? process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE : undefined;
+const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> = [
+  {delayMs: 6000, step: {prompt: DEMO_DRIVE_PROMPT ?? '', ts: 'demo-1'}},
+  {delayMs: 22000, step: {open: 'discovery', ts: 'demo-2'}},
+  {delayMs: 30000, step: {dial: 'more_diverse', ts: 'demo-3'}},
+  {delayMs: 38000, step: {open: 'anchor', ts: 'demo-4'}},
+];
+
+export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'AuradinSearch'>) {
+  const [drive, setDrive] = React.useState(route.params);
+  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+
+  // R1 게이트 2: Auradin 진입 시 리포트 첨부(personalColor) 해석. 한 곳에서
+  // 동기 확보(ready) / 과거 리포트 서버 조회(fetch) / 첨부 없음을 판정한다. 과거 리포트
+  // 상세로 들어온 경우(fetch)는 personalColor 해석이 끝난 뒤 AuradinSearchScreen을 마운트한다
+  // — availableReport 첨부 시드가 마운트 시점에 확정돼야 하기 때문(§13 R1).
+  const resolution = resolveAuradinLandingReport(
+    route.params?.reportId ?? null,
+    selectedFaceAnalysisReport,
+  );
   const fetchReportId = resolution.kind === 'fetch' ? resolution.reportId : null;
   const [fetchedReport, setFetchedReport] = React.useState<AuradinLandingReport | null>(null);
   const [resolving, setResolving] = React.useState(fetchReportId != null);
+
+  React.useEffect(() => {
+    if (route.params) {
+      setDrive(route.params);
+    }
+  }, [route.params]);
+
+  React.useEffect(() => {
+    if (!DEMO_DRIVE_PROMPT) {
+      return;
+    }
+    const timers = DEMO_DRIVE_STEPS.map(({delayMs, step}) =>
+      setTimeout(() => setDrive(step), delayMs),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   React.useEffect(() => {
     if (!fetchReportId) {
@@ -110,50 +200,88 @@ function AuradinPrimaryLandingScreen({
 
   const availableReport = resolution.kind === 'ready' ? resolution.report : fetchedReport;
 
-  return <AuradinSearchScreen availableReport={availableReport} />;
+  return (
+    <AuradinSearchScreen
+      availableReport={availableReport}
+      drive={drive}
+      onBack={() =>
+        navigation.canGoBack()
+          ? navigation.goBack()
+          : navigation.navigate('ProductRecommendation')
+      }
+      onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+      onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
+        productId,
+        ...(shadeId ? {shadeId} : {}),
+      })}
+    />
+  );
 }
 
-// AURADIN 검색 — 자체 글라스 지반·워드마크를 갖는 풀스크린 경험 (DetailRouteChrome 미사용).
-// EXPO_PUBLIC_AURADIN_DEMO_DRIVE(질의 텍스트)가 설정되면 검색→상세→다이얼→상세 시퀀스를
-// 탭과 동일한 핸들러로 자동 구동한다 (시뮬레이터 QA·데모 전용).
-// __DEV__ 가드 — 릴리즈/실기기 테스트 빌드에는 절대 반영되지 않는다 (실기기 이슈: 데모가 홈을 강탈).
-const DEMO_DRIVE_PROMPT = __DEV__ ? process.env.EXPO_PUBLIC_AURADIN_DEMO_DRIVE : undefined;
-const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> = [
-  {delayMs: 6000, step: {prompt: DEMO_DRIVE_PROMPT ?? '', ts: 'demo-1'}},
-  {delayMs: 22000, step: {open: 'discovery', ts: 'demo-2'}},
-  {delayMs: 30000, step: {dial: 'more_diverse', ts: 'demo-3'}},
-  {delayMs: 38000, step: {open: 'anchor', ts: 'demo-4'}},
-];
-
-export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch'>) {
-  const [drive, setDrive] = React.useState(route.params);
-  // 리포트 첨부: nav state의 선택된 얼굴분석 리포트 → availableReport (첨부 트레이가 소비).
-  const {selectedFaceAnalysisReport} = useNavigationFlowState();
-  const availableReport = React.useMemo(
-    () =>
-      selectedFaceAnalysisReport?.personalColor
-        ? {id: selectedFaceAnalysisReport.id, personalColor: selectedFaceAnalysisReport.personalColor}
-        : null,
-    [selectedFaceAnalysisReport],
+export function ProductSearchResultRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductSearchResult'>) {
+  return (
+    <DetailRouteChrome routeName="ProductSearchResult" onBack={() => navigation.goBack()}>
+      <ProductSearchResultScreen
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenProduct={product =>
+          navigation.navigate('ProductDetail', {
+            productId: product.productId,
+            ...(product.shadeId ? {shadeId: product.shadeId} : {}),
+            ...(product.disclosureLabel ? {disclosureLabel: product.disclosureLabel} : {}),
+            ...(product.reasonLabels?.length ? {reasonLabels: product.reasonLabels} : {}),
+            ...(product.sponsored !== undefined ? {sponsored: product.sponsored} : {}),
+            ...(product.sponsorshipType ? {sponsorshipType: product.sponsorshipType} : {}),
+          })
+        }
+        query={route.params.query}
+      />
+    </DetailRouteChrome>
   );
+}
 
-  React.useEffect(() => {
-    if (route.params) {
-      setDrive(route.params);
-    }
-  }, [route.params]);
+export function ProductDetailRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductDetail'>) {
+  const recommendationContext = React.useMemo(
+    () => ({
+      disclosureLabel: route.params.disclosureLabel,
+      reasonLabels: route.params.reasonLabels,
+      sponsored: route.params.sponsored,
+      sponsorshipType: route.params.sponsorshipType,
+    }),
+    [
+      route.params.disclosureLabel,
+      route.params.reasonLabels,
+      route.params.sponsored,
+      route.params.sponsorshipType,
+    ],
+  );
+  return (
+    <DetailRouteChrome routeName="ProductDetail" onBack={() => navigation.goBack()}>
+      <ProductDetailScreen
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        productId={route.params.productId}
+        shadeId={route.params.shadeId}
+        recommendationContext={recommendationContext}
+      />
+    </DetailRouteChrome>
+  );
+}
 
-  React.useEffect(() => {
-    if (!DEMO_DRIVE_PROMPT) {
-      return;
-    }
-    const timers = DEMO_DRIVE_STEPS.map(({delayMs, step}) =>
-      setTimeout(() => setDrive(step), delayMs),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  return <AuradinSearchScreen availableReport={availableReport} drive={drive} />;
+export function ProductPersonalizationSettingsRouteScreen({
+  navigation,
+}: RootScreenProps<'ProductPersonalizationSettings'>) {
+  return (
+    <DetailRouteChrome
+      routeName="ProductPersonalizationSettings"
+      onBack={() => navigation.goBack()}>
+      <ProductPersonalizationSettingsScreen />
+    </DetailRouteChrome>
+  );
 }
 
 export function MakeupLookListRouteScreen({
@@ -209,7 +337,12 @@ export function LikedProductListRouteScreen({
     <DetailRouteChrome
       routeName="LikedProductList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <LikedProductListScreen />
+      <LikedProductListScreen
+        onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
+          productId,
+          ...(shadeId ? {shadeId} : {}),
+        })}
+      />
     </DetailRouteChrome>
   );
 }

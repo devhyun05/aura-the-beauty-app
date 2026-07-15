@@ -42,6 +42,8 @@ export type DetailViewProps = {
   // (라이브 발견 픽은 rankedCache 계약 밖이라 화면이 진입점을 숨긴다).
   onSimilar?: (intent: AuradinSimilarIntent) => void;
   similarLoading?: boolean;
+  // dev: 신뢰제품(TrustedProduct) 상세·판매처로 이동 — 있으면 구매 CTA가 이 경로를 우선한다.
+  onOpenTrustedProduct?: () => void;
 };
 
 /** Evidence bucket rows: leading mark on the first line, hanging indent after. */
@@ -88,12 +90,14 @@ export function DetailView({
   onHome,
   onSimilar,
   similarLoading = false,
+  onOpenTrustedProduct,
 }: DetailViewProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
 
   // "보관함에 담김" toast on the save rising edge
   const [toast, setToast] = React.useState(false);
+  const [buyError, setBuyError] = React.useState(false);
   const prevLiked = React.useRef(liked);
   React.useEffect(() => {
     if (liked && !prevLiked.current) {
@@ -107,13 +111,25 @@ export function DetailView({
   React.useEffect(() => {
     prevLiked.current = liked;
   });
+  React.useEffect(() => {
+    if (!buyError) return undefined;
+    const timer = setTimeout(() => setBuyError(false), 2200);
+    return () => clearTimeout(timer);
+  }, [buyError]);
 
   const r = p.reason;
   const openBuy = () => {
-    if (p.purchaseUrl) {
-      onPurchase?.(); // A5 purchase_click — 링크 이동을 막지 않는 fire-and-forget
-      Linking.openURL(p.purchaseUrl).catch(() => {});
+    // dev 우선 경로: 신뢰제품 상세/판매처가 연결돼 있으면 그쪽으로 위임한다.
+    if (onOpenTrustedProduct) {
+      onOpenTrustedProduct();
+      return;
     }
+    if (!p.purchaseUrl) {
+      setBuyError(true);
+      return;
+    }
+    onPurchase?.(); // A5 purchase_click — 링크 이동을 막지 않는 fire-and-forget
+    Linking.openURL(p.purchaseUrl).catch(() => setBuyError(true));
   };
 
   return (
@@ -175,7 +191,6 @@ export function DetailView({
           </GlassCard>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-            {p.matchRate !== undefined ? <Badge tone="ink">{`MATCH ${p.matchRate}%`}</Badge> : null}
             {p.role ? <Badge>{p.role}</Badge> : null}
             {p.source ? <Badge>{p.source}</Badge> : null}
           </View>
@@ -328,8 +343,8 @@ export function DetailView({
               paddingBottom: 8,
             }}
           >
-            {p.purchaseUrl ? (
-              <CTAButton label="구매하러 가기 ↗" onPress={openBuy} style={{ flex: 1 }} />
+            {p.purchaseUrl || onOpenTrustedProduct ? (
+              <CTAButton label={onOpenTrustedProduct ? '제품 상세·판매처 보기' : '구매하러 가기 ↗'} onPress={openBuy} style={{ flex: 1 }} />
             ) : (
               <CTAButton label="구매 링크 준비 중" disabled style={{ flex: 1 }} />
             )}
@@ -339,7 +354,11 @@ export function DetailView({
           </View>
         </ScrollView>
       </Animated.View>
-      <Toast show={toast} label="보관함에 담김" bottom={Math.max(insets.bottom, 18) + 10} />
+      <Toast
+        show={toast || buyError}
+        label={buyError ? '판매처 페이지를 열 수 없어요' : '보관함에 담김'}
+        bottom={Math.max(insets.bottom, 18) + 10}
+      />
     </View>
   );
 }

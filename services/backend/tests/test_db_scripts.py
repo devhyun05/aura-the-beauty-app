@@ -1,5 +1,6 @@
 from app.db.check_schema import (
   EXPECTED_COLUMNS,
+  EXPECTED_CONSTRAINTS,
   EXPECTED_ENUM_VALUES,
   EXPECTED_TABLES,
   build_schema_report,
@@ -16,7 +17,7 @@ def test_schema_path_exists() -> None:
 
   assert path.name == "schema.sql"
   assert path.exists()
-  assert SCHEMA_VERSION == "schema.sql:v3"
+  assert SCHEMA_VERSION == "schema.sql:v5-external-product-likes"
 
 
 def test_seed_path_exists() -> None:
@@ -56,19 +57,8 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
     set(EXPECTED_TABLES),
     EXPECTED_SCHEMA_VERSIONS,
     table_columns={
+      **{table: set(columns) for table, columns in EXPECTED_COLUMNS.items()},
       "analysis_reports": set(),
-      "community_threads": {"embedding"},
-      "auradin_search_sessions": {
-        "state",
-        "expires_at",
-        "owner_subject",
-        "version",
-        "client_request_id",
-        "request_fingerprint",
-        "idempotency_expires_at",
-      },
-      "media_upload_sessions": {"media_asset_id", "owner_user_id", "partner_account_id"},
-      "auradin_events": set(EXPECTED_COLUMNS["auradin_events"]),
     },
   )
 
@@ -146,6 +136,108 @@ def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
   assert report["ok"] is False
   assert report["missingConstraints"] == []
   assert report["invalidConstraints"] == ["chk_auradin_sessions_idempotency_fields"]
+
+
+def test_schema_report_requires_external_product_event_identity_columns() -> None:
+  columns = {table: set(values) for table, values in EXPECTED_COLUMNS.items()}
+  columns["product_engagement_events"] = {"external_source"}
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    table_columns=columns,
+  )
+
+  assert report["ok"] is False
+  assert report["missingColumns"] == {"product_engagement_events": ["external_product_id"]}
+
+
+def test_schema_report_lists_missing_product_shade_parent_constraint() -> None:
+  constraints = {table: set(values) for table, values in EXPECTED_CONSTRAINTS.items()}
+  constraints["product_offers"] = set()
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    table_constraints=constraints,
+  )
+
+  assert report["ok"] is False
+  assert report["missingTableConstraints"] == {
+    "product_offers": ["fk_product_offers_shade_product"],
+  }
+
+
+def test_user_product_like_shade_parent_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:user-product-like-shade-parent-v1"]
+  assert "fk_user_product_likes_shade_product" in migration_sql
+  assert "foreign key (source_shade_id, product_id)" in migration_sql
+  assert "not valid" in migration_sql
+
+
+def test_product_event_shade_parent_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-event-shade-parent-v1"]
+  assert "fk_product_engagement_shade_product" in migration_sql
+  assert "foreign key (shade_id, product_id)" in migration_sql
+  assert "not valid" in migration_sql
+
+
+def test_product_brow_category_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-category-brow-v1"]
+  assert "alter type product_category add value if not exists 'brow'" in migration_sql
+
+
+def test_product_event_query_minimization_migration_removes_raw_query_context() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-event-query-minimization-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+  assert "update product_engagement_events" in normalized
+  assert "context = context - 'query'" in normalized
+  assert "where context ? 'query'" in normalized
+
+
+def test_external_catalog_event_identity_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:external-product-catalog-events-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+  assert "add column if not exists external_source text" in normalized
+  assert "add column if not exists external_product_id text" in normalized
+  assert "'auradin_catalog'" in normalized
+  assert "drop constraint if exists chk_product_engagement_source" in normalized
+  assert "idx_product_engagement_external_product_type" in normalized
+
+
+def test_legacy_auradin_seed_likes_migrate_to_packaged_catalog_identity() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS[
+    "schema.sql:external-product-legacy-auradin-seed-likes-v1"
+  ]
+  normalized = " ".join(migration_sql.lower().split())
+  assert "select user_id,'auradin_catalog',external_product_id" in normalized
+  assert "external_source='auradin_search'" in normalized
+  assert "external_product_id like 'auradin-seed-%'" in normalized
+  assert "on conflict (user_id,external_source,external_product_id) do nothing" in normalized
+  assert "delete from external_product_likes" in normalized
+
+
+def test_existing_consulting_call_session_orphans_do_not_block_schema_upgrade() -> None:
+  schema = get_schema_path().read_text(encoding="utf-8")
+  constraint_sql = schema.split(
+    "add constraint fk_consulting_call_sessions_booking",
+    maxsplit=1,
+  )[1].split(";", maxsplit=1)[0]
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:consulting-call-sessions-v1"]
+  migration_constraint_sql = migration_sql.split(
+    "add constraint fk_consulting_call_sessions_booking",
+    maxsplit=1,
+  )[1].split(";", maxsplit=1)[0]
+
+  assert "not valid" in constraint_sql
+  assert "not valid" in migration_constraint_sql
+
+
+def test_product_operator_rbac_migration_is_idempotent_and_role_bounded() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-operator-rbac-v1"]
+  assert "create table if not exists product_recommendation_operators" in migration_sql
+  assert "catalog_admin" in migration_sql
+  assert "seasonal_publisher" in migration_sql
+  assert "references users(id) on delete cascade" in migration_sql
+
 
 def test_schema_report_lists_missing_vector_extension() -> None:
   report = build_schema_report(

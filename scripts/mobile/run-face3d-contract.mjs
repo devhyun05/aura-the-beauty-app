@@ -12,6 +12,7 @@ const srcRoot = join(repoRoot, 'apps/mobile/src');
 const testPaths = [
   'features/face-3d/services/face3DContract.test.ts',
   'features/face-3d/services/face3DSemanticCaptureContract.test.ts',
+  'features/face-3d/services/face3DTier2PassThrough.test.ts',
 ];
 
 const result = spawnSync(

@@ -8,8 +8,11 @@
 //
 // 팔레트는 features/recommendation 로컬 토큰만 사용 (가드: test:auradin-theme-scope).
 
-import {useEffect, useMemo, useRef, useState} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
+import {Pressable, StyleSheet, View} from 'react-native';
+import {ChevronLeft} from 'lucide-react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {AuradinGround, PersistentOrb, useHostPause} from '../components/ds';
 import {
@@ -46,6 +49,9 @@ import type {
   RefineDial,
 } from '../types';
 import {buildRequestParts, type AuradinAttachment} from '../attachments';
+import {getLikedProducts} from '../../../shared/services/productService';
+import {initializeProductEventCollection} from '../services/productEventService';
+import {useTransientToast} from '../../../shared/ui';
 
 // 첨부만(리포트/필터)으로 보낼 때의 중립 broad 시드 — 백엔드가 '어느 부위' 스코프 질문을 묻게 한다(§4).
 const BROAD_SEED = '추천해줘';
@@ -68,7 +74,17 @@ export type AuradinDriveParams = {
 export function AuradinSearchScreen({
   drive,
   availableReport,
-}: {drive?: AuradinDriveParams; availableReport?: AuradinAvailableReport | null} = {}) {
+  onBack,
+  onOpenProduct,
+  onOpenLikedProducts,
+}: {
+  drive?: AuradinDriveParams;
+  availableReport?: AuradinAvailableReport | null;
+  onBack?: () => void;
+  onOpenProduct?: (productId: string, shadeId?: string) => void;
+  onOpenLikedProducts?: () => void;
+} = {}) {
+  const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<AuradinPhase>('home');
   // 3-3 게이팅: 앱 백그라운드·키보드 표시 중엔 오브 GL 루프를 멈춘다(GPU·배터리 절약).
   const orbPaused = useHostPause();
@@ -90,6 +106,8 @@ export function AuradinSearchScreen({
   const [similarLoading, setSimilarLoading] = useState(false);
   const [selected, setSelected] = useState<AuradinCandidateProduct | null>(null);
   const [saved, setSaved] = useState<AuradinCandidateProduct[]>([]);
+  const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
+  const {toast} = useTransientToast(2600);
   const sessionIdRef = useRef<string | null>(null);
   // A9 create 멱등 키 — 논리적 submit 단위로 보존: 같은 fingerprint의 네트워크 재시도는
   // 같은 id, 요청 내용이 바뀌면 새 id. 410(만료)·409(키 재사용) 수신 시 ref를 비운다.
@@ -117,6 +135,20 @@ export function AuradinSearchScreen({
       }
     };
   }, []);
+
+  useEffect(() => {
+    void initializeProductEventCollection();
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    getLikedProducts()
+      .then(products => {
+        if (active) setLikedProductIds(new Set(products.map(product => product.id)));
+      })
+      .catch(() => undefined);
+    return () => {active = false;};
+  }, []));
 
   // 새 세션 요청을 위한 컨트롤러 발급 — 직전 요청은 중단한다.
   const beginRequest = (): AbortController => {
@@ -320,9 +352,12 @@ export function AuradinSearchScreen({
   };
 
   // A5 이벤트 방출 — fire-and-forget. 실패·백엔드 미설정·dev 인증은 조용히 무시된다(fail-open).
+  // A5 계약(익명 owner·payload 새니타이즈)은 서버가 처리한다. rank는 dev queueProductEvent
+  // 스키마의 position을 A5 rank 필드로 흡수한 것 — product_open에서 노출 위치를 함께 싣는다.
   const emitProductEvent = (
     eventType: 'product_open' | 'purchase_click' | 'save' | 'unsave',
     product: AuradinCandidateProduct,
+    extra?: {rank?: number},
   ) => {
     postAuradinEvents([
       {
@@ -334,18 +369,24 @@ export function AuradinSearchScreen({
         category: product.category,
         role: product.role,
         matchRate: product.matchRate,
+        ...(extra?.rank !== undefined ? {rank: extra.rank} : {}),
       },
     ]);
   };
 
   const openDetail = (product: AuradinCandidateProduct) => {
-    emitProductEvent('product_open', product);
+    // product_open은 A5 배치(postAuradinEvents=/search/events)로 전송해 실제 기록을 보장한다.
+    // dev의 queueProductEvent는 /products/events(레거시)로 가고 save/unsave/purchase_click을
+    // 담지 못해 A5 계약과 어긋나므로, dev 스키마의 position만 A5 rank로 흡수한다.
+    const position = candidates.findIndex(candidate => candidate.id === product.id);
+    emitProductEvent('product_open', product, {rank: Math.max(0, position)});
     setSelected(product);
     setPhase('detail');
   };
 
   // R1 게이트 1: 보관함 서버 영속화 — 마운트 시 서버 찜 목록으로 복원(재마운트 소실 방지).
   // 진행 중 세션 상태와 무관한 read-only 시드라 phase 머신을 건드리지 않는다.
+  // (likedProductIds 세트는 useFocusEffect의 getLikedProducts가 같은 백엔드 찜 소스에서 채운다.)
   useEffect(() => {
     let alive = true;
     void fetchAuradinSavedProducts().then((products) => {
@@ -363,18 +404,30 @@ export function AuradinSearchScreen({
   }, []);
 
   const toggleSave = (product: AuradinCandidateProduct) => {
-    const exists = saved.some((item) => item.id === product.id);
-    // R1 게이트 1: 레거시 찜 API 재사용(user_product_likes) — best-effort, 로컬 상태가 즉답.
-    if (exists) {
+    // 방향은 화면이 보여주는 하트 상태(savedIds=likedProductIds) 기준으로 정한다.
+    const wasSaved = likedProductIds.has(product.id);
+    // R1 게이트 1: Auradin 보관함 서버 영속화(persistAuradinSave/removeAuradinSave) — best-effort.
+    // 어댑터가 실패를 조용히 삼키므로(로컬 상태가 즉답) 롤백 없이 낙관적 갱신만 한다.
+    if (wasSaved) {
       void removeAuradinSave(product.id);
     } else {
       void persistAuradinSave(product);
     }
+    // saved(상품 객체)와 likedProductIds(하트 소스) 둘 다 갱신 — visibleSaved·하트 표시가 즉답.
     setSaved((current) =>
-      exists
+      wasSaved
         ? current.filter((item) => item.id !== product.id)
         : [...current.filter((item) => item.id !== product.id), product],
     );
+    setLikedProductIds((current) => {
+      const next = new Set(current);
+      if (wasSaved) {
+        next.delete(product.id);
+      } else {
+        next.add(product.id);
+      }
+      return next;
+    });
   };
 
   const reset = () => {
@@ -397,7 +450,8 @@ export function AuradinSearchScreen({
 
   const question = turn?.question;
   const candidates = turn?.candidates ?? [];
-  const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const savedIds = likedProductIds;
+  const visibleSaved = saved.filter(product => savedIds.has(product.id));
 
   // 딥링크·QA 드라이브: prompt=검색 자동 시작, open=상세 열기, dial=refine.
   // 탭과 동일한 핸들러(submit/openDetail/refine)를 그대로 태운다.
@@ -436,6 +490,15 @@ export function AuradinSearchScreen({
     <View style={styles.shell}>
       <AuradinGround dark={phase === 'searching'}>
         <PersistentOrb phase={phase} paused={orbPaused} />
+        {onBack ? (
+          <Pressable
+            accessibilityLabel="제품 추천으로 돌아가기"
+            accessibilityRole="button"
+            onPress={onBack}
+            style={[styles.backButton, {top: insets.top + 8}]}>
+            <ChevronLeft color="#2D2940" size={24} />
+          </Pressable>
+        ) : null}
 
         {phase === 'home' ? (
           <HomeView
@@ -448,7 +511,7 @@ export function AuradinSearchScreen({
                   : null
             }
             onAddAttachment={addAttachment}
-            onOpenSaved={saved.length ? () => setPhase('saved') : undefined}
+            onOpenSaved={visibleSaved.length ? () => setPhase('saved') : undefined}
             onPickSuggestion={(pickedQuery) => submit(pickedQuery)}
             onSuggestionChange={(shownQuery) => {
               currentSuggestionRef.current = shownQuery;
@@ -456,7 +519,7 @@ export function AuradinSearchScreen({
             onRemoveAttachment={removeAttachment}
             onSubmit={() => submit()}
             query={query}
-            savedCount={saved.length}
+            savedCount={visibleSaved.length}
             setQuery={setQuery}
           />
         ) : null}
@@ -481,10 +544,10 @@ export function AuradinSearchScreen({
             candidates={candidates}
             onHome={reset}
             onOpen={openDetail}
-            onOpenSaved={saved.length ? () => setPhase('saved') : undefined}
+            onOpenSaved={visibleSaved.length ? () => setPhase('saved') : undefined}
             onRefine={refine}
             refining={refining}
-            savedCount={saved.length}
+            savedCount={visibleSaved.length}
             subtitle={turn?.headerLabel ?? '조건에 가까운 제품'}
           />
         ) : null}
@@ -499,6 +562,12 @@ export function AuradinSearchScreen({
               selected.source === 'live_naver' || !sessionIdRef.current
                 ? undefined
                 : (intent) => similar(selected, intent)
+            }
+            // dev: offerId 있는 큐레이션 픽은 신뢰제품(TrustedProduct) 상세로 라우팅.
+            onOpenTrustedProduct={
+              selected.offerId && onOpenProduct
+                ? () => onOpenProduct(selected.id, selected.shadeId)
+                : undefined
             }
             onPurchase={() => emitProductEvent('purchase_click', selected)}
             onToggleSave={() => {
@@ -516,16 +585,28 @@ export function AuradinSearchScreen({
             onBack={() => setPhase(turn?.phase === 'results' ? 'results' : 'home')}
             onHome={reset}
             onOpen={openDetail}
-            products={saved}
+            products={visibleSaved}
           />
         ) : null}
 
         {phase === 'failed' ? <ErrorView message={turn?.error?.message ?? undefined} onHome={reset} /> : null}
       </AuradinGround>
+      {toast}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   shell: {flex: 1},
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
+    left: 12,
+    position: 'absolute',
+    width: 44,
+    zIndex: 200,
+  },
 });

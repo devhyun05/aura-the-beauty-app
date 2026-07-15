@@ -30,6 +30,15 @@ const candidate = mapCandidate({
 
 expectEqual(candidate.role, 'anchor', 'candidate role passthrough');
 expectEqual(candidate.source, 'curated', 'candidate source');
+expectEqual(candidate.externalSource, 'auradin_search', 'non-UUID session candidates use the server-owned external like route');
+
+const catalogCandidate = mapCandidate({
+  id: 'auradin-seed-catalog-candidate',
+  externalSource: 'auradin_catalog',
+  brandName: '네이밍',
+  productName: '컬러 립 제품',
+});
+expectEqual(catalogCandidate.externalSource, 'auradin_catalog', 'packaged catalog candidates retain one cross-screen like identity');
 expectEqual(candidate.priceText, '18,000원', 'candidate priceText formatting (DS: 원 suffix)');
 expectEqual(candidate.matchSummary, '아이섀도우 · 플럼', 'candidate matchSummary from matchedOn');
 expectEqual(candidate.matchRate, 90, 'candidate matchRate');
@@ -42,6 +51,8 @@ expectEqual(candidate.category, 'shadow', 'candidate category passthrough');
 // reasonCopy 빈 문자열은 undefined로 정규화 (fallback은 백엔드가 보장)
 const noCopy = mapCandidate({id: 'x', brandName: 'B', productName: 'P', reasonCopy: ''});
 expectEqual(noCopy.reasonCopy, undefined, 'empty reasonCopy → undefined');
+const internalCandidate = mapCandidate({id: '169fec46-f3e0-4ea1-9c63-0a2ed3aa6cdb'});
+expectEqual(internalCandidate.externalSource, undefined, 'UUID catalog candidates retain the internal like route');
 
 // --- 질문 옵션 스와치: colorFamily→3색 그라데이션(§8.2-3), finish/texture→질감(§8.2-1), noop→skip ---
 const colorOption = mapQuestionOption({
