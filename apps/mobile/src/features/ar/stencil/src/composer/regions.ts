@@ -532,7 +532,7 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🌤️',
         productName: '톤업크림',
         onKeys: ['skinBrightening'],
-        defaults: { skinBrightening: 0.4 },
+        defaults: { skinBrightening: 0.2 },
         axes: {
           color: [
             { type: 'swatches', key: 'toneBaseColor', palette: TONE_BASE_COLORS },
@@ -546,7 +546,7 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '✨',
         productName: '모공 프라이머',
         onKeys: ['skinSmoothing', 'skinSmoothingExtended'],
-        defaults: { skinSmoothing: 0.5 },
+        defaults: { skinSmoothing: 0.55, skinSmoothingExtended: 0.2 },
         axes: {
           opacity: [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
@@ -561,7 +561,7 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🫙',
         productName: '쿠션 파운데이션',
         onKeys: ['foundationIntensity'],
-        defaults: { foundationIntensity: 0.4, matteGrain: 0 },
+        defaults: { foundationIntensity: 0.28, matteGrain: 0 },
         note: '세그 face-skin 채널로 이마·목까지 — 세그 폴백 시 얼굴 메시만',
         axes: {
           texture: [

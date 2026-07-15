@@ -132,7 +132,8 @@ export const PRESETS: FilterPreset[] = [
     name: '내추럴',
     params: {
       skinSmoothing: 0.45,
-      skinBrightening: 0.2,
+      skinSmoothingExtended: 0.18,
+      skinBrightening: 0.1,
       lipColor: '#D96C7B',
       lipIntensity: 0.35,
       blushColor: '#F2A0AC',
@@ -173,7 +174,8 @@ export const PRESETS: FilterPreset[] = [
     name: '로지',
     params: {
       skinSmoothing: 0.55,
-      skinBrightening: 0.3,
+      skinSmoothingExtended: 0.22,
+      skinBrightening: 0.14,
       lipColor: '#E04E68',
       lipIntensity: 0.55,
       blushColor: '#F08698',
@@ -214,7 +216,8 @@ export const PRESETS: FilterPreset[] = [
     name: '피치',
     params: {
       skinSmoothing: 0.5,
-      skinBrightening: 0.35,
+      skinSmoothingExtended: 0.2,
+      skinBrightening: 0.16,
       lipColor: '#F2846B',
       lipIntensity: 0.5,
       blushColor: '#F7A98C',
@@ -255,7 +258,8 @@ export const PRESETS: FilterPreset[] = [
     name: '글램',
     params: {
       skinSmoothing: 0.6,
-      skinBrightening: 0.25,
+      skinSmoothingExtended: 0.24,
+      skinBrightening: 0.12,
       lipColor: '#B01E3C',
       lipIntensity: 0.7,
       blushColor: '#D97386',
@@ -311,7 +315,8 @@ export const PRESETS: FilterPreset[] = [
     name: '스모키',
     params: {
       skinSmoothing: 0.5,
-      skinBrightening: 0.15,
+      skinSmoothingExtended: 0.2,
+      skinBrightening: 0.08,
       lipColor: '#A65560',
       lipIntensity: 0.4,
       blushColor: '#C98A93',

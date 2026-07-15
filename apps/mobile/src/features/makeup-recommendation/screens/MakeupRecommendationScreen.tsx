@@ -1,5 +1,5 @@
 import {forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
+import {Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
@@ -10,6 +10,10 @@ import {
   startMakeupRecommendation,
   type StartMakeupRecommendationInput,
 } from '../services/makeupRecommendationService';
+import {
+  type MakeupRecommendationAnswerKeyword,
+  type MakeupRecommendationLoadingContext,
+} from '../services/makeupRecommendationAgentConversation';
 import type {
   MakeupLookRecommendation,
   MakeupRecommendationAnswer,
@@ -18,6 +22,7 @@ import type {
   MakeupScenarioPrompt,
 } from '../types';
 import {RecommendationQuestionView} from './RecommendationQuestionView';
+import {RecommendationAgentLoadingView} from './RecommendationAgentLoadingView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {shouldHandleMakeupRecommendationBack, type MakeupRecommendationScreenPhase} from './makeupRecommendationViewContracts';
@@ -32,6 +37,43 @@ export type MakeupRecommendationScreenProps = {
   personalColor?: string;
 };
 
+function getAnswerKeyword(
+  session: MakeupRecommendationSession,
+  answer: MakeupRecommendationAnswer,
+): MakeupRecommendationAnswerKeyword | null {
+  const question = session.questions.find(item => item.id === answer.questionId);
+
+  if (!question) {
+    return null;
+  }
+
+  const optionLabel = question.options.find(option => option.id === answer.optionId)?.label;
+  const label = optionLabel ?? answer.freeText?.trim();
+
+  return label ? {dimension: question.dimension, label} : null;
+}
+
+function buildLoadingContextFromSession(
+  session: MakeupRecommendationSession,
+  nextAnswer?: MakeupRecommendationAnswer,
+  refinement?: MakeupRecommendationRefinement,
+): MakeupRecommendationLoadingContext {
+  const answers = nextAnswer ? [...session.answers, nextAnswer] : session.answers;
+  const answerKeywords = answers
+    .map(answer => getAnswerKeyword(session, answer))
+    .filter((keyword): keyword is MakeupRecommendationAnswerKeyword => Boolean(keyword));
+
+  return {
+    additionalConstraints:
+      nextAnswer?.additionalConstraints?.trim() || session.additionalConstraints,
+    answerKeywords,
+    personalColor: session.personalColor,
+    prompt: session.prompt,
+    refinement,
+    useProfile: session.useProfile,
+  };
+}
+
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
@@ -43,6 +85,8 @@ export const MakeupRecommendationScreen = forwardRef<
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [errorMessage, setErrorMessage] = useState('');
   const [refinementError, setRefinementError] = useState('');
+  const [loadingContext, setLoadingContext] =
+    useState<MakeupRecommendationLoadingContext | null>(null);
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const scenarios = useMemo(
@@ -52,6 +96,12 @@ export const MakeupRecommendationScreen = forwardRef<
 
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
     lastStartInput.current = input;
+    setLoadingContext({
+      answerKeywords: [],
+      personalColor: input.personalColor,
+      prompt: input.prompt,
+      useProfile: input.useProfile,
+    });
     setPhase('loading');
     setErrorMessage('');
 
@@ -85,6 +135,7 @@ export const MakeupRecommendationScreen = forwardRef<
 
   const handleAnswer = (answer: MakeupRecommendationAnswer) => {
     if (!session) return;
+    setLoadingContext(buildLoadingContextFromSession(session, answer));
     setPhase('loading');
     setErrorMessage('');
 
@@ -104,16 +155,20 @@ export const MakeupRecommendationScreen = forwardRef<
     if (!session) return;
     lastRefinement.current = refinement;
     setRefinementError('');
+    setLoadingContext(buildLoadingContextFromSession(session, undefined, refinement));
+    setPhase('loading');
 
     Promise.resolve()
       .then(() => refineMakeupRecommendation(session, refinement))
       .then(nextSession => {
         setSession(nextSession);
+        setPhase(nextSession.phase);
       })
       .catch(error => {
         setRefinementError(
           error instanceof Error ? error.message : '조정하지 못했어요. 기존 추천은 그대로 두었어요.',
         );
+        setPhase('results');
       });
   };
 
@@ -123,6 +178,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setPrompt('');
     setErrorMessage('');
     setRefinementError('');
+    setLoadingContext(null);
     lastStartInput.current = undefined;
     lastRefinement.current = undefined;
   }, []);
@@ -162,13 +218,7 @@ export const MakeupRecommendationScreen = forwardRef<
   }
 
   if (phase === 'loading') {
-    return (
-      <AppScreen contentGap={spacing.md} scroll={false} topPadding="belowShellHeader">
-        <ActivityIndicator color={colors.textPrimary} size="small" />
-        <Text style={styles.loadingTitle}>당신의 오늘을 읽고 있어요</Text>
-        <Text style={styles.loadingDescription}>상황과 무드가 자연스럽게 만나는 지점을 찾는 중이에요.</Text>
-      </AppScreen>
-    );
+    return loadingContext ? <RecommendationAgentLoadingView context={loadingContext} /> : null;
   }
 
   if (phase === 'question' && session) {
@@ -217,14 +267,6 @@ export const MakeupRecommendationScreen = forwardRef<
 });
 
 const styles = StyleSheet.create({
-  loadingTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
-    marginTop: spacing.lg,
-    textAlign: 'center',
-  },
   loadingDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,

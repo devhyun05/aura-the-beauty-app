@@ -105,7 +105,7 @@ function ensureApiBasePath(rawUrl: string): string {
   }
 }
 
-type BackendJsonRequestInit = Omit<RequestInit, 'body' | 'headers'> & {
+export type BackendJsonRequestInit = Omit<RequestInit, 'body' | 'headers'> & {
   baseUrl?: string | null;
   authToken?: string | null;
   body?: unknown;

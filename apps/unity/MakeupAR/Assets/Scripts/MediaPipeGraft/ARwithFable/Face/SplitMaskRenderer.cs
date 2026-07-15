@@ -1,5 +1,7 @@
 using ARMakeup.Bridge;
 using UnityEngine;
+using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
 
 namespace ARMakeup.Face
 {
@@ -25,6 +27,7 @@ namespace ARMakeup.Face
 
         Camera _camera;
         FaceLandmarkSource _source;
+        ARFaceManager _arFaceManager;
         Mesh _quad;
         MeshRenderer _renderer;
         Material _material;
@@ -51,6 +54,7 @@ namespace ARMakeup.Face
         {
             _camera = cam;
             _source = source;
+            _arFaceManager = FindFirstObjectByType<ARFaceManager>();
 
             var shader = Resources.Load<Shader>("SplitMask");
             if (shader == null) shader = Shader.Find("ARMakeup/SplitMask");
@@ -83,24 +87,20 @@ namespace ARMakeup.Face
 
         void LateUpdate()
         {
-            var hasFace = _source != null && _source.HasFace && FramePresenter.Instance != null;
-            if (!hasFace)
+            if (_mode == 0)
             {
-                Shader.SetGlobalFloat(SplitModeId, 0f); // 얼굴 없으면 아무것도 안 자름
+                Shader.SetGlobalFloat(SplitModeId, 0f);
                 if (_renderer.enabled) _renderer.enabled = false;
                 return;
             }
 
-            // 얼굴 중심축(이마→턱)을 화면 UV로 투영 → 분할선 전역 기록.
-            var lm = _source.Landmarks;
-            var fp = FramePresenter.Instance;
-            var fore = fp.ImageToViewport(new Vector2(lm[ForeheadTop].x, lm[ForeheadTop].y));
-            var chin = fp.ImageToViewport(new Vector2(lm[Chin].x, lm[Chin].y));
-            var mid = (fore + chin) * 0.5f;
-            var dir = chin - fore;
-            if (dir.sqrMagnitude < 1e-8f) dir = new Vector2(0f, -1f);
-            dir.Normalize();
-            var normal = new Vector2(-dir.y, dir.x); // 화면 오른쪽(+)
+            if (!TryResolveSplitLine(out var mid, out var normal))
+            {
+                Shader.SetGlobalFloat(SplitModeId, 0f);
+                if (_renderer.enabled) _renderer.enabled = false;
+                return;
+            }
+
             Shader.SetGlobalVector(SplitLineId, new Vector4(mid.x, mid.y, normal.x, normal.y));
             Shader.SetGlobalFloat(SplitModeId, _mode);
 
@@ -120,6 +120,56 @@ namespace ARMakeup.Face
                 _quad.vertices = _verts;
                 _quad.RecalculateBounds();
             }
+        }
+
+        bool TryResolveSplitLine(out Vector2 mid, out Vector2 normal)
+        {
+            // MediaPipe: 실제 이마(10)→턱(152) 랜드마크 중심축.
+            if (_source != null && _source.HasFace && FramePresenter.Instance != null)
+            {
+                var lm = _source.Landmarks;
+                var fp = FramePresenter.Instance;
+                var fore = fp.ImageToViewport(new Vector2(lm[ForeheadTop].x, lm[ForeheadTop].y));
+                var chin = fp.ImageToViewport(new Vector2(lm[Chin].x, lm[Chin].y));
+                return BuildLine(fore, chin, out mid, out normal);
+            }
+
+            // iOS ARKit: 기존 코드는 여기서 렌더러 자체를 만들지 않아 setSplit이 완전
+            // no-op이었다. 추적 중인 ARFace의 local up 축을 화면에 투영해 얼굴을 따라가는
+            // 이마→턱 중심선을 만든다.
+            if (_arFaceManager == null)
+                _arFaceManager = FindFirstObjectByType<ARFaceManager>();
+            if (_arFaceManager != null && _camera != null)
+            {
+                foreach (var face in _arFaceManager.trackables)
+                {
+                    if (face.trackingState != TrackingState.Tracking) continue;
+                    var center = face.transform.position;
+                    var up = face.transform.up;
+                    var fore3 = _camera.WorldToViewportPoint(center + up * 0.085f);
+                    var chin3 = _camera.WorldToViewportPoint(center - up * 0.105f);
+                    if (fore3.z <= 0f || chin3.z <= 0f) continue;
+                    return BuildLine(fore3, chin3, out mid, out normal);
+                }
+            }
+
+            mid = default;
+            normal = default;
+            return false;
+        }
+
+        static bool BuildLine(Vector2 fore, Vector2 chin, out Vector2 mid, out Vector2 normal)
+        {
+            mid = (fore + chin) * 0.5f;
+            var dir = chin - fore;
+            if (dir.sqrMagnitude < 1e-8f)
+            {
+                normal = Vector2.right;
+                return false;
+            }
+            dir.Normalize();
+            normal = new Vector2(-dir.y, dir.x); // 화면 오른쪽(+)
+            return true;
         }
 
         Vector3 ToLocal(float vx, float vy, float depth)

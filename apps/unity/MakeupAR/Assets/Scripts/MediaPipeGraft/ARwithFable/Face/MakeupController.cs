@@ -147,6 +147,7 @@ namespace ARMakeup.Face
         static readonly int[] MaskSlotIds = { BlushMaskId, HighlightMaskId, ContourMaskId };
         static readonly int MakeupOverlayIntensityId = Shader.PropertyToID("_MakeupOverlayIntensity");
         static readonly int SmoothingId = Shader.PropertyToID("_Smoothing");
+        static readonly int BlurRadiusId = Shader.PropertyToID("_BlurRadius");
         static readonly int BrighteningId = Shader.PropertyToID("_Brightening");
         // 세그 확장(§11 P3·§14) — CameraFeed(배경) 셰이더가 소비하는 전역 유니폼.
         // 머티리얼이 아니라 전역인 이유: CameraFeed 머티리얼은 FramePresenter 소유라
@@ -230,16 +231,15 @@ namespace ARMakeup.Face
                 var symmetryGO = new GameObject("Symmetry Guide Renderer");
                 symmetryGO.AddComponent<SymmetryGuideRenderer>().Init(Camera.main, FaceLandmarkSource.Instance);
 
-                // 반반 모드 — 맨얼굴 쪽 절반에 원본 피드 복원 + 얼굴 중심축 전역 기록.
-                // 랜드마크로 중심축을 잡으므로 MediaPipe 경로 전용.
-                var splitGO = new GameObject("Split Mask Renderer");
-                splitGO.AddComponent<SplitMaskRenderer>().Init(Camera.main, FaceLandmarkSource.Instance);
             }
 
-            // 조명 시뮬레이션(#4) — 화면 그레이드라 랜드마크가 필요 없다(Camera.main만).
-            // 랜드마크 가드 밖에 두어 MediaPipe/ARKit 경로 모두에서 동작한다.
+            // 반반 모드와 조명은 MediaPipe/ARKit 양쪽에서 동작해야 한다. 반반 렌더러는
+            // MediaPipe 랜드마크가 없으면 ARFace transform으로 얼굴 중심축을 계산한다.
             if (Camera.main != null)
             {
+                var splitGO = new GameObject("Split Mask Renderer");
+                splitGO.AddComponent<SplitMaskRenderer>().Init(Camera.main, FaceLandmarkSource.Instance);
+
                 var lightingGO = new GameObject("Lighting Sim Renderer");
                 lightingGO.AddComponent<LightingSimRenderer>().Init(Camera.main);
             }
@@ -862,11 +862,23 @@ namespace ARMakeup.Face
 
         static void ApplyTo(Material mat, FilterParams p)
         {
-            mat.SetFloat(SmoothingId, Mathf.Clamp01(p.skinSmoothing));
+            float foundationStrength = Mathf.Clamp01(p.foundationIntensity);
+            float smoothingStrength = Mathf.Clamp01(p.skinSmoothing);
+            // 파운데이션은 색만 올리는 레이어가 아니라 가벼운 잡티 제거를 포함한다.
+            // RN 룩/제품이 skinSmoothing을 생략해도 베이스가 켜지면 최소 보정값을 보장한다.
+            if (foundationStrength > 0.001f)
+                smoothingStrength = Mathf.Max(smoothingStrength, 0.52f);
+            mat.SetFloat(SmoothingId, smoothingStrength);
+            // 기존 고정 2.5px 반경은 실기기 해상도에서 거의 보이지 않았다. 강도에 따라
+            // 2.5~5px로 넓혀 모공·작은 잡티만 낮추고 bilateral edge 보호는 유지한다.
+            mat.SetFloat(BlurRadiusId, Mathf.Lerp(2.5f, 5.0f, smoothingStrength));
             mat.SetFloat(BrighteningId, Mathf.Clamp01(p.skinBrightening));
             // 세그 확장(①이마·목 스무딩 ②헤어 염색) — CameraFeed.shader가 소비하는 전역.
             // _SegOn=0이면 셰이더가 블록째 건너뛰므로 여기선 값만 기록한다.
-            Shader.SetGlobalFloat(SkinSmoothExtId, Mathf.Clamp01(p.skinSmoothingExtended));
+            float extendedSmoothing = Mathf.Clamp01(p.skinSmoothingExtended);
+            if (foundationStrength > 0.001f)
+                extendedSmoothing = Mathf.Max(extendedSmoothing, 0.16f);
+            Shader.SetGlobalFloat(SkinSmoothExtId, extendedSmoothing);
             // 그레인(매트 파우더 입자감) — 전역 1회. 전 부위 마감이 공유(0=무변조).
             Shader.SetGlobalFloat(MatteGrainId, Mathf.Clamp01(p.matteGrain));
             Shader.SetGlobalFloat(HairTintIntensityId, Mathf.Clamp01(p.hairTintIntensity));
@@ -963,12 +975,12 @@ namespace ARMakeup.Face
             mat.SetFloat(PowderFinishId, p.powderFinish);
             mat.SetFloat(PowderShimmerId, Mathf.Clamp01(p.powderShimmer));
             // 파운데이션 — 얼굴 메시(머티리얼) + 이마·목 세그 확장(전역, CameraFeed 소비).
-            mat.SetFloat(FoundationIntensityId, Mathf.Clamp01(p.foundationIntensity));
+            mat.SetFloat(FoundationIntensityId, foundationStrength);
             mat.SetFloat(FoundationFinishId, p.foundationFinish);
             // 제형 텍스처(배치 A ①) — 0=리퀴드(기존). 얼굴 메시(mat) + 이마·목 세그(전역) 둘 다 미러.
             mat.SetFloat(FoundationTextureId, p.foundationTexture);
             SetColor(mat, FoundationColorId, p.foundationColor);
-            Shader.SetGlobalFloat(FoundationIntensityId, Mathf.Clamp01(p.foundationIntensity));
+            Shader.SetGlobalFloat(FoundationIntensityId, foundationStrength);
             Shader.SetGlobalFloat(FoundationFinishId, p.foundationFinish);
             Shader.SetGlobalFloat(FoundationTextureId, p.foundationTexture);
             if (!string.IsNullOrEmpty(p.foundationColor) &&

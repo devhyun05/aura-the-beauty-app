@@ -5,6 +5,8 @@ import {
   UNITY_MAKEUP_LAYER_ORDER,
   UNITY_STILL_FACE_LANDMARKS_TARGET,
   buildAnalyzeFaceLandmarksStillRequest,
+  buildFilterParamsFromARFilterSelections,
+  buildUnitySplitModeMessage,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
   getUnityGeneratedMaskBridgeRoute,
@@ -119,6 +121,50 @@ const allRegionRecipe = createUnityMakeupRecipeBatchFromARFilterSelections(
     },
   ],
   2000,
+);
+
+const baseFilterParams = buildFilterParamsFromARFilterSelections([
+  {
+    selectedColor: {hex: '#F0E7DB', label: '포슬린 쿨'},
+    selectedColorId: 'porcelain-cool-110c',
+    selectedMakeupArea: 'base',
+    selectedMakeupFilter: mockFilter,
+    selectedPointMakeupLookId: 'custom',
+    selectedShapeId: 'base-default',
+    selectedTextureId: 'natural',
+    selectedTotalMakeupLookId: null,
+    selectedTypeId: 'foundation',
+  },
+]);
+expectEqual(baseFilterParams.skinSmoothing, 0.58, 'base skin smoothing');
+expectEqual(baseFilterParams.skinSmoothingExtended, 0.24, 'base extended skin smoothing');
+expectEqual(baseFilterParams.foundationIntensity, 0.24, 'base tone-up intensity');
+
+const lipOnlyFilterParams = buildFilterParamsFromARFilterSelections([
+  {
+    selectedColor: {hex: '#C94F6D', label: '로즈'},
+    selectedColorId: 'rose',
+    selectedMakeupArea: 'lip',
+    selectedMakeupFilter: mockFilter,
+    selectedPointMakeupLookId: 'custom',
+    selectedShapeId: 'lip-gradient',
+    selectedTextureId: 'matte',
+    selectedTotalMakeupLookId: null,
+    selectedTypeId: 'lip',
+  },
+]);
+expectEqual(lipOnlyFilterParams.skinSmoothing, 0.48, 'general makeup skin smoothing');
+expectEqual(lipOnlyFilterParams.skinSmoothingExtended, 0.2, 'general extended skin smoothing');
+
+expectEqual(
+  buildUnitySplitModeMessage(1),
+  JSON.stringify({split: {mode: 1}, type: 'setSplit'}),
+  'left half makeup split message',
+);
+expectEqual(
+  buildUnitySplitModeMessage(9),
+  JSON.stringify({split: {mode: 2}, type: 'setSplit'}),
+  'split message clamps invalid mode',
 );
 
 expectEqual(allRegionRecipe.layerCount, 5, 'all region recipe layer count');

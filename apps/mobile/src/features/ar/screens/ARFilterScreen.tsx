@@ -95,6 +95,7 @@ import {
   hideUnityMakeupView,
   postUnityFilterParams,
   postUnityMakeupRecipe,
+  postUnitySplitMode,
   setUnityMakeupPlayerPaused,
 } from '../services/unityMakeupBridge';
 
@@ -267,7 +268,10 @@ export function ARFilterScreen({
     // 보고서/얼굴촬영 화면이 Unity 플레이어를 pause했을 수 있으니 AR 필터 진입 시
     // 재개한다. 네이티브 pause:0은 idempotent(이미 실행 중이면 no-op)라 안전.
     setUnityMakeupPlayerPaused(false);
-    return () => hideUnityMakeupView();
+    return () => {
+      postUnitySplitMode(0);
+      hideUnityMakeupView();
+    };
   }, []);
 
   useEffect(() => {
@@ -421,6 +425,9 @@ export function ARFilterScreen({
     postUnityFilterParams(
       buildFilterParamsFromARFilterSelections(unitySelections, halfFaceMode),
     );
+    // ARwithFable의 반반 렌더러는 FilterParams 필드가 아니라 setSplit 메시지를
+    // 구독한다. 별도 메시지로 보내야 실제 원본/메이크업 절반 복원이 동작한다.
+    postUnitySplitMode(halfFaceMode);
   }, [
     arFilterSelectionState.selectionStatesByArea,
     arFilterSelectionState.guideMode,

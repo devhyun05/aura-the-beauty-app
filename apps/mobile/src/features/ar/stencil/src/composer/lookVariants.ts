@@ -418,7 +418,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '톤업크림',
         region: 'tone',
-        params: { skinBrightening: 0.3, toneBaseColor: '#FBE6D8' },
+        params: { skinBrightening: 0.15, toneBaseColor: '#FBE6D8' },
       }],
     },
     {
@@ -426,7 +426,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '윤광 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.35, skinGlow: 0.5 },
+        params: { skinSmoothing: 0.48, skinSmoothingExtended: 0.18, skinGlow: 0.5 },
       }],
     },
     {
@@ -434,7 +434,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '스킨틴트',
         region: 'foundation',
-        params: { foundationColor: '#EFD0BC', foundationIntensity: 0.3, foundationFinish: 2 },
+        params: { foundationColor: '#EFD0BC', foundationIntensity: 0.22, foundationFinish: 2 },
       }],
     },
   ]);
@@ -444,7 +444,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '모공 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.5 },
+        params: { skinSmoothing: 0.55, skinSmoothingExtended: 0.22 },
       }],
     },
     {
@@ -452,7 +452,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '쿠션 파운데이션',
         region: 'foundation',
-        params: { foundationColor: '#E8C4A8', foundationIntensity: 0.5, foundationFinish: 0 },
+        params: { foundationColor: '#E8C4A8', foundationIntensity: 0.32, foundationFinish: 0 },
       }],
     },
     {
@@ -470,7 +470,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '리퀴드 파운데이션',
         region: 'foundation',
-        params: { foundationColor: '#DFB79A', foundationIntensity: 0.65, foundationFinish: 0 },
+        params: { foundationColor: '#DFB79A', foundationIntensity: 0.4, foundationFinish: 0 },
       }],
     },
     {

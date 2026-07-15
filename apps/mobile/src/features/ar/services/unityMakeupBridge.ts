@@ -273,6 +273,7 @@ export function getUnityMakeupLayerRegionsForMakeupArea(
 // color selections are mapped onto FilterParams here.
 export type ArwFilterParams = {
   skinSmoothing: number;
+  skinSmoothingExtended: number;
   skinBrightening: number;
   // AURA 스크린스페이스 파운데이션 (FaceMakeup.shader에 이식): 선택 shade가
   // foundationColor, skinSmoothing이 잡티제거, foundationIntensity가 HSV 톤 강도.
@@ -324,6 +325,7 @@ export type ArwFilterParams = {
 // Matches ARwithFable src/presets.ts BARE (all intensities 0).
 export const ARW_BARE_FILTER_PARAMS: ArwFilterParams = {
   skinSmoothing: 0,
+  skinSmoothingExtended: 0,
   skinBrightening: 0,
   foundationColor: '#D6B09A',
   userSkinBaseColor: '#C79A82',
@@ -402,6 +404,13 @@ export function buildFilterParamsFromARFilterSelections(
   const params: ArwFilterParams = {...ARW_BARE_FILTER_PARAMS};
   params.halfFaceMode = halfFaceMode;
 
+  // 피부 결 보정은 베이스 탭에 종속시키지 않는다. 메이크업이 하나라도
+  // 적용되면 얼굴 전체와 이마 경계에 자연스러운 기본 보정을 함께 켠다.
+  if (selections.some(shouldEnableUnityMakeupSelection)) {
+    params.skinSmoothing = 0.48;
+    params.skinSmoothingExtended = 0.2;
+  }
+
   selections.forEach(selection => {
     if (!shouldEnableUnityMakeupSelection(selection)) {
       return;
@@ -452,10 +461,11 @@ export function buildFilterParamsFromARFilterSelections(
             // AURA 스크린스페이스 base (FaceMakeup.shader에 이식). 선택한 shade가
             // 파운데이션 색(HSV 가산광채 톤), skinSmoothing이 잡티제거. 기존
             // ARwithFable flat brighten/concealer 매핑은 폐기.
-            // intensity는 셰이더 자연 기본값(0.45)에 맞춘다 — 0.7은 gentle 톤보정을
-            // 통째로 과구동해 "쨍한/부자연"으로 보였다(AURA 원본 대비 과함).
-            params.skinSmoothing = 0.35;
-            params.foundationIntensity = 0.45;
+            // 피부 보정은 확실히 보이되, 밝은 베이스 색의 톤업은 낮춰 원래 피부
+            // 명암을 보존한다.
+            params.skinSmoothing = 0.58;
+            params.skinSmoothingExtended = 0.24;
+            params.foundationIntensity = 0.24;
             if (hex) {
               params.foundationColor = hex;
             }
@@ -484,6 +494,21 @@ export function postUnityFilterParams(params: ArwFilterParams): boolean {
     JSON.stringify({filter: params, type: 'applyFilter'}),
   );
   return true;
+}
+
+export function buildUnitySplitModeMessage(mode: number): string {
+  return JSON.stringify({
+    split: {mode: Math.max(0, Math.min(2, Math.round(mode)))},
+    type: 'setSplit',
+  });
+}
+
+export function postUnitySplitMode(mode: number): boolean {
+  return postUnityMessage(
+    'NativeBridge',
+    'OnMessageFromRN',
+    buildUnitySplitModeMessage(mode),
+  );
 }
 
 // Generic UnitySendMessage entry point used by the exact stencil-0710 screen.
@@ -770,7 +795,7 @@ function createUnityMakeupControlsForRegions({
               // specular field (same transport as the capture screen's blemish
               // control). The finish-preset specular is ~0, which is why the
               // AR filter base showed no blur at all.
-              specular: 0.32,
+              specular: 0.55,
             }
           : {}),
       },
