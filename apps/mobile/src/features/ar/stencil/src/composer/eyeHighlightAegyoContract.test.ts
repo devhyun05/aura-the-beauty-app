@@ -48,6 +48,14 @@ expect(
   '아이섀도 상 standalone 룩은 12개 모양을 정확히 한 번씩 사용해야 한다',
 );
 
+const lowerShadowShapes = subDefsForRegion(library, 'eyeshadowLower')
+  .map(def => firstParams(def).eyeshadowLowerShape)
+  .sort((a, b) => Number(a) - Number(b));
+expect(
+  JSON.stringify(lowerShadowShapes) === JSON.stringify([0, 0, 1, 2, 3, 4]),
+  '하단 아이섀도 룩은 전체·앞·중앙·뒤·스모키 위치를 명시해야 한다',
+);
+
 const upperLinerStyles = new Set(
   subDefsForRegion(library, 'eyelinerUpper').map(
     def => firstParams(def).eyelinerStyle,
@@ -70,6 +78,14 @@ expect(
     def => firstParams(def).eyelinerFinish == null,
   ),
   '하단 아이라인 룩은 상단 eyelinerFinish를 소유하면 안 된다',
+);
+
+expect(
+  subDefsForRegion(library, 'eyelinerLower').every(def => {
+    const params = firstParams(def);
+    return typeof params.eyelinerLowerColor === 'string' && params.eyelinerColor == null;
+  }),
+  '하단 아이라인 룩은 전용 색만 소유해야 한다',
 );
 
 const aegyoModes = subDefsForRegion(library, 'aegyo').map(

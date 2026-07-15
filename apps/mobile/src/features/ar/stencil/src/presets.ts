@@ -109,8 +109,10 @@ export const BARE: FilterParams = {
   aegyoShimmer: 0.5,
   eyeshadowLowerColor: '#7A5A4E', // 아이섀도 하(A3) 기본 브라운
   eyeshadowLowerIntensity: 0,
+  eyeshadowLowerShape: 0,
   eyeshadowLowerFinish: 0, // 새틴(기본)
   eyeshadowLowerShimmer: 0.5,
+  eyelinerLowerColor: '#181418',
   eyeEnlarge: 0,
   chinScale: 0,
   jawWidth: 0,

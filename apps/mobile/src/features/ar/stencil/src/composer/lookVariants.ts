@@ -623,16 +623,17 @@ export function buildVariantLibrary(): LookLibrary {
   }
 
   const lowerShadows = [
-    ['peach-satin', '피치 새틴', '#D79A85', 0.34, 0, 0.08],
-    ['taupe-matte', '토프 매트', '#826C67', 0.42, 1, 0],
-    ['rosy-shimmer', '로지 시머', '#C98291', 0.38, 3, 0.48],
-    ['inner-bright', '앞머리 밝힘', '#EBC7B2', 0.3, 3, 0.38],
-    ['outer-shadow', '바깥 음영', '#77555C', 0.46, 1, 0],
-    ['under-smoky', '언더 스모키', '#514A50', 0.52, 1, 0],
+    ['peach-satin', '피치 새틴', 0, '#D79A85', 0.34, 0, 0.08],
+    ['taupe-matte', '토프 매트', 0, '#826C67', 0.42, 1, 0],
+    ['rosy-shimmer', '로지 시머', 2, '#C98291', 0.38, 3, 0.48],
+    ['inner-bright', '앞머리 밝힘', 1, '#EBC7B2', 0.3, 3, 0.38],
+    ['outer-shadow', '바깥 음영', 3, '#77555C', 0.46, 1, 0],
+    ['under-smoky', '언더 스모키', 4, '#514A50', 0.52, 1, 0],
   ] as const;
-  for (const [slug, name, color, intensity, finish, shimmer] of lowerShadows) {
+  for (const [slug, name, shape, color, intensity, finish, shimmer] of lowerShadows) {
     addRegionLook(lib, 'eyeshadow-lower', slug, name, '눈',
       single(name, 'eyeshadowLower', {
+        eyeshadowLowerShape: shape,
         eyeshadowLowerColor: color,
         eyeshadowLowerIntensity: intensity,
         eyeshadowLowerFinish: finish,
@@ -676,7 +677,7 @@ export function buildVariantLibrary(): LookLibrary {
         eyelinerLowerStyle: style,
         eyelinerLowerFinish: finish,
         eyelinerLowerShimmer: shimmer,
-        eyelinerColor: color,
+        eyelinerLowerColor: color,
         eyelinerLowerIntensity: intensity,
       }), false);
   }

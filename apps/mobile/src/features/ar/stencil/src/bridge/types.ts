@@ -132,6 +132,7 @@ export interface FilterParams {
   /** 아이섀도 하(A3, 하안검 아래 섀도 밴드) — 곱 블렌드. 생략 시 0(끔) */
   eyeshadowLowerColor?: string;
   eyeshadowLowerIntensity?: number;
+  eyeshadowLowerShape?: number;
   /** 아이섀도 하 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   eyeshadowLowerFinish?: number;
   /** 시머 게인 0..1 (eyeshadowLowerFinish=3일 때). 생략 시 Unity 기본 0.5 */
@@ -170,7 +171,8 @@ export interface FilterParams {
   eyelinerFinish?: number;
   /** 임포트 아이라인 텍스처(밴드 워프) 강도. 색은 eyelinerColor 공용 */
   eyelinerStyleIntensity: number;
-  /** 아이라인(하) — 하안검 밴드. 색은 eyelinerColor 공용. 생략 시 0(끔) */
+  /** 아이라인(하) — 하안검 밴드. 생략 시 0(끔) */
+  eyelinerLowerColor?: string;
   eyelinerLowerIntensity?: number;
   /** 아이라인(하) 모양: 0=전체 소프트, 1=점막 밀착, 2=바깥 1/3 */
   eyelinerLowerStyle?: number;

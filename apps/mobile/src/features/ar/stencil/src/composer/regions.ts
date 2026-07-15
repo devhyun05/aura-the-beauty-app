@@ -249,6 +249,15 @@ export const EYESHADOW_SHAPES = [
   { value: 11, label: '와이드 그라데' },
 ];
 
+// 하단 아이섀도 위치 — LowerLid 영역 프로파일 분기
+export const EYESHADOW_LOWER_SHAPES = [
+  {value: 0, label: '전체'},
+  {value: 1, label: '앞쪽'},
+  {value: 2, label: '중앙'},
+  {value: 3, label: '뒤쪽'},
+  {value: 4, label: '스모키'},
+];
+
 // 눈썹 모양 (#19b, 슬롯 공통) — BrowWarp 밴드 형태 분기(일자화 파라미터)
 export const BROW_SHAPES = [
   { value: 0, label: '내추럴' },
@@ -1042,6 +1051,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { eyeshadowLowerIntensity: 0.3 },
         note: '하안검 아래 섀도(곱 블렌드) — 언더 스모키·그늘. 애교살 아래 깔림',
         axes: {
+          shape: [
+            {
+              type: 'segments',
+              key: 'eyeshadowLowerShape',
+              options: EYESHADOW_LOWER_SHAPES,
+            },
+          ],
           color: [
             {
               type: 'swatches',
@@ -1139,7 +1155,6 @@ export const REGION_GROUPS: RegionGroup[] = [
         productName: '펜슬 라이너',
         onKeys: ['eyelinerLowerIntensity'],
         defaults: { eyelinerLowerIntensity: 0.4 },
-        note: '색은 아이라인 상과 공용 — 여기서 바꾸면 함께 반영',
         axes: {
           shape: [
             {
@@ -1148,9 +1163,12 @@ export const REGION_GROUPS: RegionGroup[] = [
               options: EYELINER_LOWER_STYLES,
             },
           ],
-          // 공유색 재노출(눈썹 BROW_SHAPE_AXIS 선례) — 하 부위에서도 색을 만질 수 있게.
           color: [
-            { type: 'swatches', key: 'eyelinerColor', palette: EYELINER_COLORS },
+            {
+              type: 'swatches',
+              key: 'eyelinerLowerColor',
+              palette: EYELINER_COLORS,
+            },
           ],
           finish: [
             {
