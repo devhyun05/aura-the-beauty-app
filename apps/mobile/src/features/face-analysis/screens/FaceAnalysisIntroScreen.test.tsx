@@ -2,6 +2,7 @@ import React from 'react';
 
 import {
   FaceAnalysisIntroScreen,
+  getFaceAnalysisCapturePlanTitles,
   getFaceAnalysisIntroContent,
   getFaceAnalysisIntroStepTitles,
 } from './FaceAnalysisIntroScreen';
@@ -18,6 +19,16 @@ const primaryAction: '시작하기' = content.primaryActionLabel;
 
 expectEqual(introTitle, '얼굴 분석으로\n나에게 맞는 룩을 찾아요', 'face analysis intro title');
 expectEqual(primaryAction, '시작하기', 'face analysis intro primary action');
+expectEqual(
+  getFaceAnalysisCapturePlanTitles().join(','),
+  '정면 사진 촬영,3D 얼굴 측정',
+  'face analysis capture plan titles',
+);
+expectEqual(
+  content.captureDuration,
+  '보통 10초 내외이며, 얼굴을 맞추는 시간에 따라 더 걸릴 수 있어요.',
+  'face analysis capture duration',
+);
 expectEqual(
   getFaceAnalysisIntroStepTitles().join(','),
   '취향 설문,사진 촬영,맞춤 추천',

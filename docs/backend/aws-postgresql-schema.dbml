@@ -52,6 +52,7 @@ Enum product_category {
   shadow
   liner
   base
+  brow
 }
 
 Enum filter_category {
@@ -75,6 +76,8 @@ Enum consent_type {
   ai_processing
   third_party_ai
   marketing
+  engagement_personalization
+  color_cohort
 }
 
 Table users {
@@ -225,6 +228,31 @@ Table analysis_reports {
   Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
 }
 
+Table analysis_stage_runs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  report_id uuid [not null]
+  stage text [not null, note: 'ai_measurement | ai_perception | ai_consulting']
+  status text [not null, note: 'pending | processing | completed | partial | failed']
+  schema_version text [not null]
+  prompt_version text [not null]
+  model text [not null]
+  input_hash text [not null]
+  normalized_output jsonb [not null, default: '{}']
+  raw_response jsonb [not null, default: '{}']
+  error_payload jsonb [not null, default: '{}']
+  attempt_count integer [not null, default: 1]
+  started_at timestamptz
+  completed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (report_id, stage, created_at)
+    (stage, input_hash, schema_version, prompt_version, model)
+    (report_id, stage) [unique, note: 'Partial unique index where status = processing']
+  }
+}
+
 Table makeup_recommendation_reports {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
@@ -345,6 +373,7 @@ Table hair_simulations {
 Table saved_makeup_styles {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
+  client_request_id uuid [not null, default: `gen_random_uuid()`]
   style_type makeup_style_type [not null, default: 'look']
   source_analysis_report_id uuid
   source_filter_extraction_id uuid
@@ -362,12 +391,28 @@ Table saved_makeup_styles {
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
+    (user_id, client_request_id) [unique]
     (user_id, saved_at)
     (source_analysis_report_id)
     (source_filter_extraction_id)
   }
 
   Note: 'MakeupStyleList plus saved filters and saved recipes from the filter extraction flow.'
+}
+
+Table product_recommendation_operators {
+  user_id uuid [pk]
+  roles text[] [not null, note: 'catalog_admin | seasonal_editor | seasonal_reviewer | seasonal_publisher | seasonal_operator']
+  is_active boolean [not null, default: true]
+  granted_by uuid
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    roles [type: gin, note: 'Partial in SQL where is_active=true']
+  }
+
+  Note: 'Explicit internal RBAC grants for signed catalog and seasonal operations.'
 }
 
 Table products {
@@ -382,6 +427,15 @@ Table products {
   tags text[]
   palette text[]
   product_payload jsonb [not null, default: '{}']
+  source_provider text
+  source_license_type text
+  source_reference text
+  license_status text [not null, default: 'unverified', note: 'unverified | valid | expired | blocked']
+  license_valid_from timestamptz
+  license_valid_until timestamptz
+  allowed_uses text[] [not null, default: '{}']
+  catalog_status text [not null, default: 'draft', note: 'draft | reviewed | published | blocked']
+  catalog_version text [not null, default: 'catalog_v2']
   is_active boolean [not null, default: true]
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -396,6 +450,7 @@ Table products {
 Table user_product_likes {
   user_id uuid [not null]
   product_id uuid [not null]
+  source_shade_id uuid [note: 'Optional recommendation context; the heart remains product-family scoped.']
   liked_at timestamptz [not null, default: `now()`]
 
   indexes {
@@ -404,6 +459,29 @@ Table user_product_likes {
   }
 
   Note: 'LikedProductList and product heart state.'
+}
+
+Table external_product_likes {
+  user_id uuid [not null]
+  external_source text [not null, note: 'Allowlisted server-resolved provider identifier: naver_shopping_search | auradin_search | auradin_catalog.']
+  external_product_id text [not null]
+  brand_name text [not null]
+  product_name text [not null]
+  category text [not null]
+  image_url text [not null]
+  purchase_url text [not null]
+  price_amount numeric(12,2)
+  price_currency char(3) [not null, default: 'KRW']
+  source_updated_at timestamptz
+  liked_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, external_source, external_product_id) [pk]
+    (user_id, liked_at)
+    (external_source, external_product_id, liked_at)
+  }
+
+  Note: 'User bookmarks for server-verified external shopping results or owner-bound Auradin results; legacy auradin_search rows with auradin-seed-* IDs are normalized to auradin_catalog; never part of the trusted catalog.'
 }
 
 Table auradin_search_sessions {
@@ -427,9 +505,14 @@ Table product_recommendation_runs {
   look_title text
   look_description text
   look_media_id uuid
+  source_style_id uuid
+  strategy text [not null, default: 'legacy_v1']
+  algorithm_version text
+  consent_snapshot jsonb [not null, default: '{}']
   product_ids uuid[]
   recommendation_payload jsonb [not null, default: '{}']
   created_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [not null, default: `now() + interval '30 days'`]
 
   indexes {
     (user_id, created_at)
@@ -437,6 +520,217 @@ Table product_recommendation_runs {
   }
 
   Note: 'ProductRecommendationData. tabs, products, sets, matchRate, reason are kept in recommendation_payload for v1 API flexibility.'
+}
+
+Table product_shades {
+  id uuid [pk, default: `gen_random_uuid()`]
+  product_id uuid [not null]
+  external_shade_key text [not null]
+  shade_name text [not null]
+  product_region text [not null, note: 'lip | cheek | liner | base | brow']
+  srgb_hex text
+  lab_l double
+  lab_a double
+  lab_b double
+  color_family text
+  finish text
+  coverage text
+  opacity double
+  evidence_type text [not null]
+  evidence_reference text
+  evidence_confidence double [not null, default: 0]
+  license_status text [not null, default: 'unverified']
+  license_valid_from timestamptz
+  license_valid_until timestamptz
+  allowed_uses text[] [not null, default: '{}']
+  measured_at timestamptz
+  reviewed_at timestamptz
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (product_id, external_shade_key) [unique]
+    (id, product_id) [unique]
+    (product_region, finish, lab_l)
+    (product_id, is_active)
+  }
+}
+
+Table product_assets {
+  id uuid [pk, default: `gen_random_uuid()`]
+  product_id uuid [not null]
+  shade_id uuid
+  asset_type text [not null, note: 'packshot | swatch | thumbnail']
+  media_id uuid
+  asset_url text
+  checksum_sha256 text
+  source_provider text [not null]
+  source_reference text
+  license_type text
+  license_status text [not null, default: 'unverified']
+  allowed_uses text[] [not null, default: '{}']
+  valid_from timestamptz
+  valid_until timestamptz
+  reviewed_at timestamptz
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (source_provider, source_reference, asset_type) [unique]
+    (product_id, asset_type, is_active)
+    valid_until
+  }
+}
+
+Table product_offers {
+  id uuid [pk, default: `gen_random_uuid()`]
+  product_id uuid [not null]
+  shade_id uuid
+  seller_name text [not null]
+  seller_domain text [not null]
+  purchase_url text [not null]
+  currency text [not null, default: 'KRW']
+  price_amount integer
+  availability_status text [not null, default: 'unknown']
+  availability_checked_at timestamptz
+  price_updated_at timestamptz
+  affiliate_type text [not null, default: 'none']
+  disclosure_label text
+  source_provider text [not null]
+  source_reference text
+  license_status text [not null, default: 'unverified']
+  allowed_uses text[] [not null, default: '{}']
+  valid_until timestamptz
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (source_provider, source_reference) [unique]
+    (product_id, availability_status, is_active)
+    valid_until
+  }
+}
+
+Table product_seasonal_collections {
+  id uuid [pk, default: `gen_random_uuid()`]
+  slug text [not null]
+  title text [not null]
+  summary text [not null]
+  locale text [not null, default: 'ko-KR']
+  trend_window text [not null]
+  source_labels text[] [not null, default: '{}']
+  source_payload jsonb [not null, default: '{}']
+  valid_from timestamptz [not null]
+  valid_until timestamptz [not null]
+  reviewed_at timestamptz
+  published_at timestamptz
+  status text [not null, default: 'draft']
+  revision integer [not null, default: 1]
+  created_by uuid
+  reviewed_by uuid
+  published_by uuid
+  previous_revision_id uuid
+  suspension_reason text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (slug, revision) [unique]
+    (locale, status, valid_from, valid_until)
+  }
+}
+
+Table product_seasonal_collection_items {
+  collection_id uuid [not null]
+  product_id uuid [not null]
+  shade_id uuid
+  position integer [not null]
+  reason_code text [not null]
+  sponsorship_type text [not null, default: 'organic']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (collection_id, product_id) [pk]
+    (collection_id, position) [unique]
+  }
+}
+
+Table product_catalog_imports {
+  id uuid [pk, default: `gen_random_uuid()`]
+  manifest_id uuid [not null, unique]
+  manifest_sha256 text [not null]
+  source_provider text [not null]
+  catalog_version text [not null]
+  actor_user_id uuid
+  status text [not null, default: 'validated']
+  summary jsonb [not null, default: '{}']
+  imported_at timestamptz [not null, default: `now()`]
+}
+
+Table product_engagement_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event_id uuid [not null]
+  user_id uuid [not null]
+  run_id uuid
+  collection_id uuid
+  search_request_id uuid
+  product_id uuid
+  external_source text [note: 'Allowlisted server-resolved provider identifier; paired with external_product_id and mutually exclusive with product_id.']
+  external_product_id text [note: '1..160 characters when external_source is present.']
+  shade_id uuid
+  event_type text [not null]
+  section text [not null]
+  position integer
+  occurred_at timestamptz [not null]
+  received_at timestamptz [not null, default: `now()`]
+  context jsonb [not null, default: '{}']
+
+  indexes {
+    (user_id, event_id) [unique]
+    (user_id, occurred_at)
+    occurred_at
+    (product_id, event_type, occurred_at)
+    (external_source, external_product_id, event_type, occurred_at)
+  }
+
+  Note: 'Non-search-submit events contain exactly one trusted catalog product_id or one complete server-verified external product identity.'
+}
+
+Table product_preference_profiles {
+  user_id uuid [pk]
+  profile_version text [not null]
+  preference_payload jsonb [not null, default: '{}']
+  source_event_count integer [not null, default: 0]
+  refreshed_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [not null]
+}
+
+Table product_request_rate_limits {
+  user_id uuid [not null]
+  scope text [not null]
+  window_started_at timestamptz [not null]
+  request_count integer [not null, default: 0]
+
+  indexes {
+    (user_id, scope) [pk]
+    window_started_at
+  }
+}
+
+Table product_color_cohort_memberships {
+  user_id uuid [pk]
+  cohort_key text [not null]
+  bucket_version text [not null]
+  contribution_count integer [not null, default: 0]
+  refreshed_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [not null]
+
+  indexes {
+    (cohort_key, expires_at)
+  }
 }
 
 Table ar_filters {
@@ -1086,10 +1380,12 @@ Table user_consents {
   accepted boolean [not null]
   accepted_at timestamptz
   revoked_at timestamptz
+  recorded_at timestamptz [not null, default: `clock_timestamp()`]
   metadata jsonb [not null, default: '{}']
 
   indexes {
     (user_id, consent_type, version)
+    (user_id, consent_type, recorded_at)
   }
 
   Note: 'Privacy, camera analysis, AI processing, third-party AI, marketing consent history.'
@@ -1109,7 +1405,7 @@ Table data_deletion_requests {
     (user_id, requested_at)
   }
 
-  Note: 'Account/photo/report/feedback/filter deletion request tracking.'
+  Note: 'Account/photo/report/feedback/filter/product-personalization deletion request tracking.'
 }
 
 Table audit_logs {
@@ -1142,6 +1438,7 @@ Ref: analysis_reports.user_id > users.id
 Ref: analysis_reports.photo_capture_id > photo_captures.id
 Ref: analysis_reports.source_media_id > media_assets.id
 Ref: analysis_reports.preview_media_id > media_assets.id
+Ref: analysis_stage_runs.report_id > analysis_reports.id [delete: cascade]
 Ref: makeup_recommendation_reports.user_id > users.id
 Ref: makeup_recommendation_reports.parent_report_id > makeup_recommendation_reports.id
 Ref: makeup_scenario_library.created_by_user_id > users.id
@@ -1162,12 +1459,41 @@ Ref: saved_makeup_styles.source_media_id > media_assets.id
 Ref: saved_makeup_styles.thumbnail_media_id > media_assets.id
 
 Ref: products.image_media_id > media_assets.id
+Ref: product_recommendation_operators.user_id > users.id
+Ref: product_recommendation_operators.granted_by > users.id
 Ref: user_product_likes.user_id > users.id
 Ref: user_product_likes.product_id > products.id
+Ref: user_product_likes.source_shade_id > product_shades.id
+Ref: user_product_likes.(source_shade_id, product_id) > product_shades.(id, product_id)
+Ref: external_product_likes.user_id > users.id
 
 Ref: product_recommendation_runs.user_id > users.id
 Ref: product_recommendation_runs.source_analysis_report_id > analysis_reports.id
 Ref: product_recommendation_runs.look_media_id > media_assets.id
+Ref: product_recommendation_runs.source_style_id > saved_makeup_styles.id
+Ref: product_shades.product_id > products.id
+Ref: product_assets.product_id > products.id
+Ref: product_assets.(shade_id, product_id) > product_shades.(id, product_id)
+Ref: product_assets.media_id > media_assets.id
+Ref: product_offers.product_id > products.id
+Ref: product_offers.(shade_id, product_id) > product_shades.(id, product_id)
+Ref: product_seasonal_collections.created_by > users.id
+Ref: product_seasonal_collections.reviewed_by > users.id
+Ref: product_seasonal_collections.published_by > users.id
+Ref: product_seasonal_collections.previous_revision_id > product_seasonal_collections.id
+Ref: product_seasonal_collection_items.collection_id > product_seasonal_collections.id
+Ref: product_seasonal_collection_items.product_id > products.id
+Ref: product_seasonal_collection_items.(shade_id, product_id) > product_shades.(id, product_id)
+Ref: product_catalog_imports.actor_user_id > users.id
+Ref: product_engagement_events.user_id > users.id
+Ref: product_engagement_events.run_id > product_recommendation_runs.id
+Ref: product_engagement_events.collection_id > product_seasonal_collections.id
+Ref: product_engagement_events.product_id > products.id
+Ref: product_engagement_events.shade_id > product_shades.id
+Ref: product_engagement_events.(shade_id, product_id) > product_shades.(id, product_id)
+Ref: product_preference_profiles.user_id > users.id
+Ref: product_request_rate_limits.user_id > users.id
+Ref: product_color_cohort_memberships.user_id > users.id
 
 Ref: ar_filters.preview_media_id > media_assets.id
 Ref: ar_filters.source_analysis_report_id > analysis_reports.id

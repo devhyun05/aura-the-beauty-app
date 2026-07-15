@@ -8,6 +8,7 @@ import {
   toBackendCamelKey,
   type PersonalColorMeasurementInput,
 } from './faceAnalysisMeasurements';
+import {buildFaceAnalysisRequestPayload} from '../../face-capture/services/faceCaptureUploadContract';
 import type {Face3DProfile} from '../../face-3d/types';
 import type {FaceGeometryResult} from '../../face-geometry/types';
 import {FACE_GEOMETRY_METRIC_KEYS} from '../../face-geometry/types';
@@ -460,6 +461,62 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   const status = derivePersonalColorCorrectionStatus(buildPersonalColorFixture());
   expectEqual(status.applied, true, 'derive applied');
   expectEqual(status.reasons.includes('wb_low_confidence'), true, 'derive reasons 병합');
+}
+
+// ── 8. P0-1: 4표면 종단 일관성 (AI 입력 == DB 저장 == 복원) ───────────────────
+// 측정 데이터 3-반영 규칙: AI 프롬프트에 실리는 measurements 객체와 DB detail_payload
+// 에 저장되는 객체가 "동일 출처"(키 필터·재구성 없음)여야 하고, 백엔드 camelize 왕복
+// 후에도 16개 geometry 키가 값까지 그대로 복원돼야 한다.
+{
+  const geometry = buildGeometryFixture();
+  const dbMeasurements = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'cap-3way',
+      face3d: buildFace3dFixture(),
+      faceGeometry2d: geometry,
+      faceVerticalThirds: buildThirdsFixture(),
+      personalColor: buildPersonalColorFixture(),
+    }),
+    '3way db measurements',
+  );
+
+  // AI 요청 payload 는 같은 measurements 객체를 그대로 싣는다(동일 출처).
+  const aiPayload = buildFaceAnalysisRequestPayload(
+    {bucket: 'b', objectKey: 'k'},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    dbMeasurements,
+  );
+  expectEqual(
+    (aiPayload as {measurements?: unknown}).measurements,
+    dbMeasurements,
+    'AI 입력과 DB 저장이 동일 measurements 출처',
+  );
+
+  // DB → 백엔드 camelize → 복원: 16 geometry 키가 값까지 보존.
+  const restored = expectDefined(
+    parseFaceAnalysisMeasurements(simulateBackendCamelize(dbMeasurements), {
+      imageUrl: 'https://cdn/y.jpg',
+    }),
+    '3way decode',
+  );
+  const restoredGeometry = expectDefined(restored.faceGeometry2d, '복원 geometry 축');
+  for (const key of FACE_GEOMETRY_METRIC_KEYS) {
+    expectEqual(
+      restoredGeometry.metrics[key].value,
+      geometry.metrics[key].value,
+      `geometry ${key} 값 3표면 일치`,
+    );
+  }
+  expectEqual(
+    Object.keys(restoredGeometry.metrics).length,
+    FACE_GEOMETRY_METRIC_KEYS.length,
+    '복원 geometry 키 개수 == 16',
+  );
+  expectDefined(restored.face3d, '복원 face3d 축');
+  expectDefined(restored.faceVerticalThirds, '복원 thirds 축');
 }
 
 console.log('faceAnalysisMeasurements.test.ts passed');

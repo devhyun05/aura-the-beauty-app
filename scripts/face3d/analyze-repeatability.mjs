@@ -11,12 +11,29 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
+// Required (g1) 5지표 — overallPass/노출 게이트는 이 5키만으로 판정한다(계약 불변).
 export const FACE3D_METRIC_KEYS = [
   'noseTipProjection',
   'chinProjection',
   'upperLipToELine',
   'lowerLipToELine',
   'centralProjectionScore',
+];
+
+// Tier-2 optional 6지표(코 형태·광대) — g1 맵에서는 null 이라 데이터가 없다.
+// overallPass 에 영향을 주지 않고, 데이터가 충분한 것만 별도 pass(=노출 후보)를 낸다.
+export const FACE3D_OPTIONAL_METRIC_KEYS = [
+  'noseLength',
+  'nasalBridgeStraightness',
+  'nasalAxisDeviation',
+  'alarWidth',
+  'malarProjectionLeft',
+  'malarProjectionRight',
+];
+
+export const FACE3D_ALL_METRIC_KEYS = [
+  ...FACE3D_METRIC_KEYS,
+  ...FACE3D_OPTIONAL_METRIC_KEYS,
 ];
 
 export function median(values) {
@@ -114,7 +131,7 @@ export function analyzeRepeatability(captures, options = {}) {
   }
 
   const metrics = {};
-  for (const key of FACE3D_METRIC_KEYS) {
+  for (const key of FACE3D_ALL_METRIC_KEYS) {
     const subjectMedians = [];
     const withinSpreads = [];
     for (const metricsList of bySubject.values()) {
@@ -146,6 +163,8 @@ export function analyzeRepeatability(captures, options = {}) {
     };
   }
 
+  // 노출 게이트는 required 5키만으로 판정한다(g1 계약 불변) — Tier-2 optional 키가
+  // 데이터 부재(g1)여도 overallPass 는 영향받지 않는다.
   const evaluable = FACE3D_METRIC_KEYS.filter(
     k =>
       metrics[k].repeatedSubjectCount >= minRepeatedSubjects &&
@@ -153,6 +172,15 @@ export function analyzeRepeatability(captures, options = {}) {
   );
   const overallPass = evaluable.length === FACE3D_METRIC_KEYS.length &&
     FACE3D_METRIC_KEYS.every(k => metrics[k].pass);
+
+  // B2 노출 화이트리스트 후보 — Tier-2 키 중 표본이 충분(evaluable)하고 pass 한 것만.
+  // 여기 오른 키만 RN FACE_3D_EXPOSED_METRIC_KEYS 편입 + GATE_STATUS 기록 대상이 된다.
+  const exposableOptionalKeys = FACE3D_OPTIONAL_METRIC_KEYS.filter(
+    k =>
+      metrics[k].repeatedSubjectCount >= minRepeatedSubjects &&
+      metrics[k].subjectCount >= minSubjects &&
+      metrics[k].pass,
+  );
 
   return {
     schemaVersion: 'aura.face3d-repeatability.v1',
@@ -165,6 +193,7 @@ export function analyzeRepeatability(captures, options = {}) {
     metrics,
     overallPass,
     evaluableMetricCount: evaluable.length,
+    exposableOptionalKeys,
   };
 }
 
@@ -201,7 +230,9 @@ export function extractMetricsFromCaptureFile(path) {
   }
 
   const metrics = {};
-  for (const key of FACE3D_METRIC_KEYS) {
+  // required 5 + Tier-2 optional 6. Tier-2 가 프로필에 없거나 value:null 이면 NaN 이
+  // 되어 분석기의 finite 필터에서 자동 제외된다(g1 캡처 그대로 통과).
+  for (const key of FACE3D_ALL_METRIC_KEYS) {
     const metric = profile.metrics[key];
     metrics[key] = metric && typeof metric.value === 'number' ? metric.value : Number.NaN;
   }

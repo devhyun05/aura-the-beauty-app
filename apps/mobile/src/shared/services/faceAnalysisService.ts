@@ -6,6 +6,10 @@ import {
   parseFaceAnalysisMeasurements,
   type PersonalColorMeasurementInput,
 } from '../../features/face-analysis/services/faceAnalysisMeasurements';
+import {
+  hasRenderableCameraReport as hasRenderableFaceAnalysisV2,
+  parseFaceAnalysisV2,
+} from '../../features/face-analysis/services/faceAnalysisV2';
 import type {FaceGeometryAnalysisPayload} from '../../features/face-geometry/services/faceGeometryAiPayload';
 import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
@@ -52,6 +56,7 @@ type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
   baseMakeupGuide?: string | null;
   faceShape?: string | null;
+  faceAnalysisV2?: unknown;
   makeupGuideline?: BackendMakeupGuideline | null;
   personalColor?: string | null;
   imageGenerationStatus?: string | null;
@@ -442,6 +447,10 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   );
 }
 
+function hasRenderableCameraReport(job: BackendAnalysisJob): boolean {
+  return hasRenderableFaceAnalysisV2(job.detailPayload?.result?.faceAnalysisV2);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => {
     setTimeout(resolve, ms);
@@ -560,6 +569,7 @@ function mapBackendJobToFaceAnalysisReport(
 ): FaceAnalysisReport {
   const fallback = buildFallbackReportFromCapture(capture);
   const result = job.detailPayload?.result ?? {};
+  const faceAnalysisV2 = parseFaceAnalysisV2(result.faceAnalysisV2);
   const reportId = firstText(job.id, fallback.id) ?? fallback.id;
   const reportImageSource = resolveFaceAnalysisReportImageSource(job, capture);
   const personalColor =
@@ -580,6 +590,7 @@ function mapBackendJobToFaceAnalysisReport(
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
       imageUrl: resolveFaceAnalysisReportImageUrl(job, capture),
     }),
+    faceAnalysisV2,
     baseMakeupGuide:
       firstText(result.baseMakeupGuide, job.baseMakeupGuide, fallback.baseMakeupGuide) ??
       fallback.baseMakeupGuide,
@@ -591,12 +602,15 @@ function mapBackendJobToFaceAnalysisReport(
       fallback.makeupGuideline,
     ),
     personalColor,
-    recommendedMakeups: mergeMakeupCards(
-      reportId,
-      result.recommendedMakeups,
-      fallback.recommendedMakeups,
-      false,
-    ),
+    recommendedMakeups:
+      faceAnalysisV2 && !faceAnalysisV2.consulting && !result.recommendedMakeups?.length
+        ? []
+        : mergeMakeupCards(
+            reportId,
+            result.recommendedMakeups,
+            fallback.recommendedMakeups,
+            false,
+          ),
     recommendedMood,
     avoidedMakeups: [],
     reportTitle:
@@ -741,7 +755,7 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
-  // ARKit 3D 측정 프로필(정규화 5지표) — 측정 성공 세션에서만 전달된다.
+  // ARKit 3D 측정 프로필(정규화 11지표; 구버전 G1은 5지표) — 측정 성공 세션에서만 전달된다.
   face3d?: Face3DProfile,
   // 2D 얼굴 기하 요약 — 산출 성공 세션에서만 전달된다.
   faceGeometry2d?: FaceGeometryAnalysisPayload,
@@ -836,6 +850,14 @@ export async function createFaceAnalysisReportFromCapture(
     jobId: job.id ?? null,
     status: job.status ?? null,
   });
+
+  if (hasRenderableCameraReport(job)) {
+    console.info('[aura:analysis] analysis-report:camera-ready', {
+      durationMs: Date.now() - startedAt,
+      jobId: job.id ?? null,
+    });
+    return mapBackendJobToFaceAnalysisReport(job, capture);
+  }
 
   return waitForCompleteAnalysisReport(job, capture, startedAt);
 }

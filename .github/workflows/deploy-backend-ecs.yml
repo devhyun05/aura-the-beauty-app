@@ -12,19 +12,14 @@ on:
       - "data/auradin/knowledge/**"
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
-    inputs:
-      mode:
-        description: Deploy services or only read recent ECS failure evidence
-        required: true
-        default: deploy
-        type: choice
-        options:
-          - deploy
-          - diagnose
 
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: aura-backend-dev-deploy
+  cancel-in-progress: false
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
@@ -35,12 +30,14 @@ env:
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
+  ENGAGEMENT_PERSONALIZATION_V1: ${{ vars.ENGAGEMENT_PERSONALIZATION_V1 || 'true' }}
+  COHORT_RECOMMENDATIONS_V1: ${{ vars.COHORT_RECOMMENDATIONS_V1 || 'true' }}
+  PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT: ${{ vars.PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT || '100' }}
+  PRODUCT_COHORT_EXPERIMENT_PERCENT: ${{ vars.PRODUCT_COHORT_EXPERIMENT_PERCENT || '100' }}
   BEDROCK_SCENARIO_MODEL_ID: ${{ vars.BEDROCK_SCENARIO_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
   BEDROCK_QUESTION_MODEL_ID: ${{ vars.BEDROCK_QUESTION_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
   BEDROCK_RECOMMENDATION_MODEL_ID: ${{ vars.BEDROCK_RECOMMENDATION_MODEL_ID || 'global.anthropic.claude-sonnet-4-6' }}
-  AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
-  AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
-  AI_WORKER_TASK_DEFINITION: ${{ vars.AI_WORKER_TASK_DEFINITION || vars.AI_WORKER_SERVICE }}
+  BACKEND_PUBLIC_BASE_URL: ${{ vars.BACKEND_PUBLIC_BASE_URL || 'https://d3t1pbvtir1lj.cloudfront.net' }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
@@ -48,7 +45,6 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'deploy' }}
     name: Build image and deploy service
     runs-on: ubuntu-latest
     services:
@@ -105,11 +101,6 @@ jobs:
             exit 1
           fi
 
-          if [ -n "$AI_WORKER_SERVICE" ] && [ -z "$AI_WORKER_TASK_DEFINITION" ]; then
-            printf 'AI_WORKER_TASK_DEFINITION is required when AI_WORKER_SERVICE is set.\n' >&2
-            exit 1
-          fi
-
       - name: Configure AWS credentials with OIDC
         if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -124,18 +115,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Report ECS task roles
-        run: |
-          api_task_role="$(aws ecs describe-task-definition --task-definition "$ECS_TASK_DEFINITION" --query 'taskDefinition.taskRoleArn' --output text)"
-          printf 'API task role: %s\n' "$api_task_role"
-          echo "::notice title=API ECS task role::$api_task_role"
-
-          if [ -n "$AI_WORKER_TASK_DEFINITION" ]; then
-            worker_task_role="$(aws ecs describe-task-definition --task-definition "$AI_WORKER_TASK_DEFINITION" --query 'taskDefinition.taskRoleArn' --output text)"
-            printf 'AI worker task role: %s\n' "$worker_task_role"
-            echo "::notice title=AI worker ECS task role::$worker_task_role"
-          fi
 
       - name: Log in to Amazon ECR
         id: login-ecr
@@ -161,12 +140,34 @@ jobs:
 
           echo "image=$image_uri" >> "$GITHUB_OUTPUT"
 
-      - name: Download current ECS task definition
+      - name: Download current ECS service and task definition
+        id: current-api-task
         run: |
+          set -euo pipefail
+
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --output json > current-api-service.json
+
+          if ! jq -e '
+            (.failures | length) == 0
+            and (.services | length) == 1
+            and .services[0].status == "ACTIVE"
+            and ((.services[0].taskDefinition // "") | length > 0)
+          ' current-api-service.json > /dev/null; then
+            printf 'Unable to resolve the active ECS service and its task definition.\n' >&2
+            exit 1
+          fi
+
+          current_task_definition="$(jq -r '.services[0].taskDefinition' current-api-service.json)"
+
           aws ecs describe-task-definition \
-            --task-definition "$ECS_TASK_DEFINITION" \
+            --task-definition "$current_task_definition" \
             --query taskDefinition \
             --output json > task-definition.raw.json
+
+          echo "arn=$current_task_definition" >> "$GITHUB_OUTPUT"
 
           jq '
             del(
@@ -202,138 +203,351 @@ jobs:
           environment-variables: |
             CHIME_ENABLED=${{ env.CHIME_ENABLED }}
             CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
+            ENGAGEMENT_PERSONALIZATION_V1=${{ env.ENGAGEMENT_PERSONALIZATION_V1 }}
+            COHORT_RECOMMENDATIONS_V1=${{ env.COHORT_RECOMMENDATIONS_V1 }}
+            PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT=${{ env.PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT }}
+            PRODUCT_COHORT_EXPERIMENT_PERCENT=${{ env.PRODUCT_COHORT_EXPERIMENT_PERCENT }}
             BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
             BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
             BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
+
+      - name: Validate and register ECS task definition
+        id: register-api-task
+        env:
+          RENDERED_TASK_DEFINITION: ${{ steps.render-task-definition.outputs.task-definition }}
+        run: |
+          set -euo pipefail
+
+          if ! jq -e \
+            --arg container "$ECS_CONTAINER_NAME" \
+            --slurpfile base task-definition.json '
+            def selected_container($definition; $name):
+              [$definition.containerDefinitions[] | select(.name == $name)][0];
+            def retained_environment:
+              map(select(.name as $name | [
+                "CHIME_ENABLED",
+                "CONSULTING_CALL_ENFORCE_EARLY_WINDOW",
+                "ENGAGEMENT_PERSONALIZATION_V1",
+                "COHORT_RECOMMENDATIONS_V1",
+                "PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT",
+                "PRODUCT_COHORT_EXPERIMENT_PERCENT"
+              ] | index($name) | not))
+              | sort_by(.name);
+
+            $base[0] as $base_definition
+            | selected_container($base_definition; $container) as $base_container
+            | selected_container(.; $container) as $rendered_container
+            | (.taskRoleArn // null) == ($base_definition.taskRoleArn // null)
+            and (.executionRoleArn // null) == ($base_definition.executionRoleArn // null)
+            and (
+              (($rendered_container.secrets // []) | sort_by(.name, .valueFrom))
+              == (($base_container.secrets // []) | sort_by(.name, .valueFrom))
+            )
+            and (
+              (($rendered_container.environmentFiles // []) | sort_by(.type, .value))
+              == (($base_container.environmentFiles // []) | sort_by(.type, .value))
+            )
+            and (
+              (($rendered_container.environment // []) | retained_environment)
+              == (($base_container.environment // []) | retained_environment)
+            )
+          ' "$RENDERED_TASK_DEFINITION" > /dev/null; then
+            printf 'Rendered task definition did not preserve the existing IAM roles or container configuration.\n' >&2
+            exit 1
+          fi
+
+          if ! jq -e --arg container "$ECS_CONTAINER_NAME" '
+            [.containerDefinitions[] | select(.name == $container)] as $containers
+            | ($containers | length) == 1
+            and (
+              $containers[0]
+              | (
+                  any(
+                    (.environment // [])[];
+                    .name == "PRODUCT_EVENT_SIGNING_SECRET"
+                    and (((.value // "") | length) > 0)
+                  )
+                  or any(
+                    (.secrets // [])[];
+                    .name == "PRODUCT_EVENT_SIGNING_SECRET"
+                    and (((.valueFrom // "") | length) > 0)
+                  )
+                )
+            )
+          ' "$RENDERED_TASK_DEFINITION" > /dev/null; then
+            printf '%s must define PRODUCT_EVENT_SIGNING_SECRET in environment or secrets.\n' \
+              "$ECS_CONTAINER_NAME" >&2
+            exit 1
+          fi
+
+          aws ecs register-task-definition \
+            --cli-input-json "file://$RENDERED_TASK_DEFINITION" \
+            --output json > registered-api-task.json
+
+          registered_task_definition="$(
+            jq -er '.taskDefinition.taskDefinitionArn' registered-api-task.json
+          )"
+          echo "arn=$registered_task_definition" >> "$GITHUB_OUTPUT"
+
+      - name: Apply and verify production database schema
+        env:
+          REGISTERED_TASK_DEFINITION: ${{ steps.register-api-task.outputs.arn }}
+        run: |
+          set -euo pipefail
+
+          migration_task_arn=""
+          stop_migration_on_error() {
+            status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ] && [ -n "$migration_task_arn" ]; then
+              aws ecs stop-task \
+                --cluster "$ECS_CLUSTER" \
+                --task "$migration_task_arn" \
+                --reason "Schema migration workflow did not complete successfully" \
+                > /dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap stop_migration_on_error EXIT
+
+          jq -n --arg container "$ECS_CONTAINER_NAME" '{
+            containerOverrides: [{
+              name: $container,
+              command: [
+                "/bin/sh",
+                "-c",
+                "python -m app.db.init_db && python -m app.db.check_schema"
+              ]
+            }]
+          }' > migration-overrides.json
+
+          run_task_args=(
+            ecs run-task
+            --cluster "$ECS_CLUSTER"
+            --task-definition "$REGISTERED_TASK_DEFINITION"
+            --count 1
+            --started-by "github-actions-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --overrides file://migration-overrides.json
+          )
+
+          network_mode="$(jq -r '.taskDefinition.networkMode // "bridge"' registered-api-task.json)"
+          if [ "$network_mode" = "awsvpc" ]; then
+            if ! jq -e '
+              .services[0].networkConfiguration.awsvpcConfiguration
+              and ((.services[0].networkConfiguration.awsvpcConfiguration.subnets // []) | length > 0)
+            ' current-api-service.json > /dev/null; then
+              printf 'The active service does not expose a usable awsvpc network configuration.\n' >&2
+              exit 1
+            fi
+            jq '.services[0].networkConfiguration' \
+              current-api-service.json > migration-network-configuration.json
+            run_task_args+=(
+              --network-configuration file://migration-network-configuration.json
+            )
+          fi
+
+          capacity_provider_count="$(
+            jq '(.services[0].capacityProviderStrategy // []) | length' current-api-service.json
+          )"
+          if [ "$capacity_provider_count" -gt 0 ]; then
+            jq '.services[0].capacityProviderStrategy' \
+              current-api-service.json > migration-capacity-provider-strategy.json
+            run_task_args+=(
+              --capacity-provider-strategy file://migration-capacity-provider-strategy.json
+            )
+          else
+            launch_type="$(jq -r '.services[0].launchType // empty' current-api-service.json)"
+            if [ -n "$launch_type" ]; then
+              run_task_args+=(--launch-type "$launch_type")
+            fi
+          fi
+
+          platform_version="$(jq -r '.services[0].platformVersion // empty' current-api-service.json)"
+          if [ -n "$platform_version" ]; then
+            run_task_args+=(--platform-version "$platform_version")
+          fi
+
+          aws "${run_task_args[@]}" --output json > migration-run-task.json
+          migration_task_arn="$(jq -r '.tasks[0].taskArn // empty' migration-run-task.json)"
+          if ! jq -e '
+            ((.failures // []) | length) == 0
+            and (.tasks | length) == 1
+            and ((.tasks[0].taskArn // "") | length > 0)
+          ' migration-run-task.json > /dev/null; then
+            printf 'ECS did not start the database schema migration task.\n' >&2
+            exit 1
+          fi
+
+          if ! aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$migration_task_arn"; then
+            printf 'Timed out waiting for the database schema migration task.\n' >&2
+            exit 1
+          fi
+
+          aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$migration_task_arn" \
+            --output json > migration-task-result.json
+
+          if ! jq -e --arg container "$ECS_CONTAINER_NAME" '
+            ((.failures // []) | length) == 0
+            and (.tasks | length) == 1
+            and .tasks[0].lastStatus == "STOPPED"
+            and (
+              [.tasks[0].containers[] | select(.name == $container)] as $containers
+              | ($containers | length) == 1
+              and $containers[0].lastStatus == "STOPPED"
+              and $containers[0].exitCode == 0
+            )
+          ' migration-task-result.json > /dev/null; then
+            exit_code="$(jq -r --arg container "$ECS_CONTAINER_NAME" '
+              [.tasks[0].containers[]? | select(.name == $container)][0].exitCode // "missing"
+            ' migration-task-result.json)"
+            printf 'Database schema migration failed; API container exit code: %s.\n' \
+              "$exit_code" >&2
+            exit 1
+          fi
+
+          trap - EXIT
+          printf 'Database schema migration and schema verification succeeded.\n'
 
       - name: Deploy ECS service
-        id: deploy-api-service
-        continue-on-error: true
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-          wait-max-delay-seconds: 15
-
-      - name: Verify deployed API image and stability
+        id: deploy-api
         env:
-          EXPECTED_IMAGE: ${{ steps.build-image.outputs.image }}
+          REGISTERED_TASK_DEFINITION: ${{ steps.register-api-task.outputs.arn }}
         run: |
+          set -euo pipefail
+
+          deployed_task_definition="$(
+            aws ecs update-service \
+              --cluster "$ECS_CLUSTER" \
+              --service "$ECS_SERVICE" \
+              --task-definition "$REGISTERED_TASK_DEFINITION" \
+              --query service.taskDefinition \
+              --output text
+          )"
+          if [ "$deployed_task_definition" != "$REGISTERED_TASK_DEFINITION" ]; then
+            printf 'ECS service did not accept the verified task definition.\n' >&2
+            exit 1
+          fi
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+      - name: Smoke test deployed API contracts
+        id: smoke-api
+        continue-on-error: true
+        run: |
+          base_url="${BACKEND_PUBLIC_BASE_URL%/}"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 15 \
+              "$base_url/health?deployment=$GITHUB_SHA" > health.json \
+              && curl --fail --silent --show-error --max-time 20 \
+                "$base_url/openapi.json?deployment=$GITHUB_SHA" > openapi.json \
+              && jq -e '
+                .paths["/api/users/me"]
+                and .paths["/api/analysis/reports"]
+                and .paths["/api/community/threads"]
+                and .paths["/api/makeup-styles"]
+                and .paths["/api/products/liked"]
+                and .paths["/api/products/features"]
+                and .paths["/api/products/recommendations/ar"]
+                and .paths["/api/products/recommendations/seasonal"]
+                and .paths["/api/products/recommendations/personalized"]
+                and .paths["/api/products/recommendations/cohort"]
+              ' openapi.json > /dev/null \
+              && curl --fail --silent --show-error --max-time 20 \
+                "$base_url/api/products/features?deployment=$GITHUB_SHA" > product-features.json \
+              && curl --fail --silent --show-error --max-time 30 \
+                "$base_url/api/products/recommendations/seasonal?limit=18&deployment=$GITHUB_SHA" > seasonal-products.json \
+              && curl --fail --silent --show-error --max-time 30 \
+                "$base_url/api/products/recommendations/seasonal?limit=60&category=lip&deployment=$GITHUB_SHA" > seasonal-lip-products.json \
+              && jq -e '
+                .data.flags.productHubV2 == true
+                and .data.externalDataReady == true
+                and .data.readiness.auradinCatalogReady == true
+                and (.data.readiness.auradinCatalogProducts >= 500)
+                and (.data.readiness.auradinCatalogDisplayableProducts >= 500)
+                and (
+                  (.data.readiness.auradinCatalogCategoryCounts // {}) as $category_counts
+                  | ["base", "shadow", "brow", "cheek", "lip", "liner"]
+                  | all(. as $category | (($category_counts[$category] // 0) > 0))
+                )
+                and (
+                  (.data.readiness.auradinCatalogDisplayableCategoryCounts // {}) as $displayable_category_counts
+                  | ["base", "shadow", "brow", "cheek", "lip", "liner"]
+                  | all(. as $category | (($displayable_category_counts[$category] // 0) > 0))
+                )
+              ' product-features.json > /dev/null \
+              && jq -e '
+                (.data.items | type == "array")
+                and .data.status == "ready"
+                and (.data.items | length >= 12)
+                and (
+                  [
+                    .data.items[]
+                    | select((.productId | type) == "string" and (.productId | length > 0))
+                    | [(.externalSource // "trusted_catalog"), .productId]
+                    | @tsv
+                  ]
+                  | unique
+                  | length >= 12
+                )
+                and (
+                  [
+                    .data.items[].category
+                    | select(
+                        . == "base"
+                        or . == "shadow"
+                        or . == "brow"
+                        or . == "cheek"
+                        or . == "lip"
+                        or . == "liner"
+                      )
+                  ]
+                  | unique
+                  | length >= 4
+                )
+              ' seasonal-products.json > /dev/null; then
+              if ! jq -e '
+                .data.status == "ready"
+                and (.data.items | type == "array")
+                and (.data.items | length >= 50)
+                and ([.data.items[].category] | all(. == "lip"))
+                and (
+                  [
+                    .data.items[]
+                    | [(.externalSource // "trusted_catalog"), .productId]
+                    | @tsv
+                  ]
+                  | unique
+                  | length >= 50
+                )
+              ' seasonal-lip-products.json > /dev/null; then
+                sleep 10
+                continue
+              fi
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Roll back API task after smoke-test failure
+        if: ${{ steps.smoke-api.outcome == 'failure' }}
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.current-api-task.outputs.arn }}" \
+            --force-new-deployment > /dev/null
           aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
-          current_task_definition="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query 'services[0].taskDefinition' \
-            --output text)"
-          current_image="$(aws ecs describe-task-definition \
-            --task-definition "$current_task_definition" \
-            --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].image" \
-            --output text)"
-          desired_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query 'services[0].desiredCount' \
-            --output text)"
-          running_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query 'services[0].runningCount' \
-            --output text)"
-          pending_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query 'services[0].pendingCount' \
-            --output text)"
 
-          printf 'Expected API image: %s\n' "$EXPECTED_IMAGE"
-          printf 'Current API image: %s\n' "$current_image"
-          printf 'API tasks: desired=%s running=%s pending=%s\n' "$desired_count" "$running_count" "$pending_count"
-          test "$current_image" = "$EXPECTED_IMAGE"
-          test "$running_count" = "$desired_count"
-          test "$pending_count" = "0"
-
-      - name: Download current AI worker task definition
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition "$AI_WORKER_TASK_DEFINITION" \
-            --query taskDefinition \
-            --output json > ai-worker-task-definition.raw.json
-
-          jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' ai-worker-task-definition.raw.json > ai-worker-task-definition.json
-
-      - name: Render AI worker task definition
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        id: render-ai-worker-task-definition
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ai-worker-task-definition.json
-          container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
-          image: ${{ steps.build-image.outputs.image }}
-          environment-variables: |
-            BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
-            BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
-            BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
-
-      - name: Deploy AI worker ECS service
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        id: deploy-ai-worker-service
-        continue-on-error: true
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-ai-worker-task-definition.outputs.task-definition }}
-          service: ${{ env.AI_WORKER_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
-          wait-max-delay-seconds: 15
-
-      - name: Verify deployed AI worker image and stability
-        if: ${{ env.AI_WORKER_SERVICE != '' }}
-        env:
-          EXPECTED_IMAGE: ${{ steps.build-image.outputs.image }}
-        run: |
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$AI_WORKER_SERVICE"
-          current_task_definition="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$AI_WORKER_SERVICE" \
-            --query 'services[0].taskDefinition' \
-            --output text)"
-          current_image="$(aws ecs describe-task-definition \
-            --task-definition "$current_task_definition" \
-            --query "taskDefinition.containerDefinitions[?name=='$AI_WORKER_CONTAINER_NAME']|[0].image" \
-            --output text)"
-          desired_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$AI_WORKER_SERVICE" \
-            --query 'services[0].desiredCount' \
-            --output text)"
-          running_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$AI_WORKER_SERVICE" \
-            --query 'services[0].runningCount' \
-            --output text)"
-          pending_count="$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$AI_WORKER_SERVICE" \
-            --query 'services[0].pendingCount' \
-            --output text)"
-
-          printf 'Expected AI worker image: %s\n' "$EXPECTED_IMAGE"
-          printf 'Current AI worker image: %s\n' "$current_image"
-          printf 'AI worker tasks: desired=%s running=%s pending=%s\n' "$desired_count" "$running_count" "$pending_count"
-          test "$current_image" = "$EXPECTED_IMAGE"
-          test "$running_count" = "$desired_count"
-          test "$pending_count" = "0"
+      - name: Fail deployment after rollback
+        if: ${{ steps.smoke-api.outcome == 'failure' }}
+        run: exit 1
 
       - name: Download current hair worker task definition
         if: ${{ env.HAIR_WORKER_SERVICE != '' }}

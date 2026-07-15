@@ -228,6 +228,20 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 return dot(color, float3(0.299, 0.587, 0.114));
             }
 
+            float3 ClampFoundationToRosyReference(float3 cameraColor, float3 candidateColor)
+            {
+                // The rosy preset's 0.3 brightening is the approved visual ceiling.
+                // Preserve the candidate hue and darker shades; only scale down a
+                // foundation result whose final luma would exceed that reference.
+                const float rosyStrength = 0.3;
+                float3 rosyReference = saturate(
+                    cameraColor * (1.0 + 0.18 * rosyStrength) + 0.04 * rosyStrength);
+                float maxLuma = FoundationLuma(rosyReference);
+                float candidateLuma = max(FoundationLuma(candidateColor), 1e-4);
+                float lumaScale = min(1.0, maxLuma / candidateLuma);
+                return saturate(candidateColor * lumaScale);
+            }
+
             sampler2D _HandOcclusionMaskTex;
             float _HandOcclusionEnabled;
             float _HandOcclusionUseRect;
@@ -345,7 +359,8 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 adjusted.y = saturate(adjusted.y * (1.0 - evenLift * shadowWeight * 0.08));
 
                 float3 correctedRgb = saturate(HsvToRgb(adjusted));
-                return lerp(cameraColor, correctedRgb, saturate(amount));
+                float3 mixedColor = lerp(cameraColor, correctedRgb, saturate(amount));
+                return ClampFoundationToRosyReference(cameraColor, mixedColor);
             }
 
             // Blemish smoothing (잡티 제거): a 12-tap two-ring JOINT bilateral on
@@ -373,9 +388,11 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // the high end is a wide, soft, over-smoothed look for users who
                 // want heavy blur — cranking the slider does far more than the
                 // old fixed kernel (where even 1.0 stayed mild).
-                float radiusScale = 0.7 + 2.3 * strength;            // ~0.7x .. 3.0x
+                float smoothStrength = saturate(strength);
+                float highStrength = smoothStrength * smoothStrength * smoothStrength;
+                float radiusScale = 0.8 + 2.4 * smoothStrength + 2.0 * highStrength;
                 float2 radius = float2(0.0090, 0.0090 * aspect) * radiusScale;
-                float rangeSharpness = lerp(150.0, 12.0, strength);  // edge-safe .. heavy
+                float rangeSharpness = lerp(140.0, 6.0, smoothStrength);
                 // Per-pixel rotation of the sparse ring so a 12-tap kernel does
                 // not band/donut at the wide high-strength radius.
                 float jitter = frac(sin(dot(floor(uv * 480.0),
@@ -965,7 +982,7 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // read strong; the additional heaviness past the midpoint comes
                 // from the widening kernel in SkinSmoothedCamera (not just more
                 // blend, which caps at fully replacing the pixel).
-                float blendCurve = saturate(_SkinSmoothStrength * 1.7);
+                float blendCurve = saturate(_SkinSmoothStrength * 1.85);
                 float skinWeight = saturate(finalMask * blendCurve);
                 if (_SkinSmoothStrength > 0.0001)
                 {

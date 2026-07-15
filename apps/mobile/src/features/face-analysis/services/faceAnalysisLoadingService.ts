@@ -23,23 +23,23 @@ export const faceAnalysisLoadingPreviewSource =
 export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
   {
     id: 'face-map',
-    title: '얼굴 균형을 확인하고 있어요',
-    description: '촬영한 이미지를 기준으로 윤곽과 주요 포인트를 정렬합니다.',
+    title: '카메라 측정을 정리하고 있어요',
+    description: '정면 사진과 3D 측정값을 하나의 얼굴 프로필로 합칩니다.',
   },
   {
     id: 'tone',
-    title: '피부 톤을 분석하고 있어요',
-    description: '밝기와 채도를 비교해 자연스럽게 어울리는 톤을 찾습니다.',
+    title: '1차 보고서를 만들고 있어요',
+    description: '측정값만으로 바로 확인할 수 있는 균형 결과를 준비합니다.',
   },
   {
     id: 'mood',
-    title: '추천 메이크업을 생성하고 있어요',
-    description: '촬영 사진 기준으로 보고서와 데일리 추천 룩 1개를 준비합니다.',
+    title: 'AI 분석을 연결하고 있어요',
+    description: '1차 보고서를 먼저 열고 상세 분석은 보고서에 이어서 추가합니다.',
   },
 ];
 
 export const faceAnalysisLoadingTip =
-  '정확한 맞춤 필터 생성을 위해 정면 사진과 자연광에 가까운 밝기를 기준으로 분석해요.';
+  '카메라 측정 보고서는 먼저 볼 수 있고, AI 분석 결과는 보고서에 자동으로 추가돼요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / FACE_ANALYSIS_LOADING_TOTAL_MS, 0), 1);

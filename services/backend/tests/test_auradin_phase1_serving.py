@@ -16,6 +16,7 @@ REASON_KEYS = {"matchedOn", "inferred", "caveat"}
 
 def _first_turn(prompt: str, **settings_overrides):
   clear_sessions()
+  settings_overrides.setdefault("legacy_naver_product_search", True)
   client = TestClient(create_app(Settings(database_url=None, **settings_overrides)))
   created = client.post("/api/search/sessions", json={"prompt": prompt})
   assert created.status_code == 200
@@ -38,6 +39,7 @@ def test_decisive_query_skips_question_and_serves_roles_and_reason() -> None:
   for product in products:
     assert product["role"] in VALID_ROLES
     assert product["source"] == "curated"  # 라이브 Naver는 §11 7단계
+    assert product["externalSource"] == "auradin_catalog"
     assert product["category"] == "lip"  # 카테고리 드리프트 0
     assert isinstance(product["reason"], dict)
     assert set(product["reason"].keys()) == REASON_KEYS

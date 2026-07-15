@@ -2,7 +2,6 @@
 
 # Dependencies and local package-manager caches
 node_modules/
-apps/mobile/node_modules
 .pnpm-store/
 .yarn/
 
@@ -24,7 +23,6 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 .codex-logs/
-.worktrees/
 
 # Python local state
 __pycache__/
@@ -52,6 +50,8 @@ apps/mobile/screenshots/
 output/
 playwright-report/
 test-results/
+.superpowers/
+.codegraph/
 
 # Local Face3D calibration captures and reviews (may embed raw face frames)
 /artifacts/face3d/
@@ -78,3 +78,4 @@ tmp-debug/
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
 apps/unity/MakeupAR/Packages/local/
+apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite

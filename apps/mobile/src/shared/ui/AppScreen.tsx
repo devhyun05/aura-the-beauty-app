@@ -1,4 +1,4 @@
-import {createContext, type ReactNode, useContext} from 'react';
+import {createContext, type ReactNode, type Ref, useContext, useEffect, useRef} from 'react';
 import {ScrollView, StyleSheet, type ScrollViewProps} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'tamagui';
@@ -99,8 +99,12 @@ type AppScreenProps = {
   scroll?: boolean;
   contentGap?: number;
   horizontalPadding?: number;
+  horizontalPaddingLeft?: number;
+  horizontalPaddingRight?: number;
   keyboardShouldPersistTaps?: ScrollViewProps['keyboardShouldPersistTaps'];
   topPadding?: AppScreenTopPadding;
+  scrollViewRef?: Ref<ScrollView>;
+  onScrollActivityChange?: (active: boolean, fast: boolean) => void;
 };
 
 export function AppScreen({
@@ -110,16 +114,45 @@ export function AppScreen({
   scroll = true,
   contentGap = spacing.sectionGap,
   horizontalPadding = spacing.screenX,
+  horizontalPaddingLeft = horizontalPadding,
+  horizontalPaddingRight = horizontalPadding,
   keyboardShouldPersistTaps,
   topPadding = 'standalone',
+  scrollViewRef,
+  onScrollActivityChange,
 }: AppScreenProps) {
   const insets = useSafeAreaInsets();
   const overlayHeaderHeight = useContext(AppScreenOverlayHeaderHeightContext);
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollActiveRef = useRef(false);
+  const lastScrollSampleRef = useRef({time: 0, y: 0});
+  const fastScrollRef = useRef(false);
+  const setScrollActive = (active: boolean, delayed = false) => {
+    if (scrollIdleTimerRef.current) {
+      clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = null;
+    }
+    if (delayed) {
+      scrollIdleTimerRef.current = setTimeout(() => {
+        scrollActiveRef.current = false;
+        fastScrollRef.current = false;
+        onScrollActivityChange?.(false, false);
+      }, 180);
+      return;
+    }
+    scrollActiveRef.current = active;
+    fastScrollRef.current = false;
+    onScrollActivityChange?.(active, false);
+  };
+  useEffect(() => () => {
+    if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+  }, []);
   const contentStyle = {
     flexGrow: 1,
     gap: contentGap,
     paddingBottom: getAppScreenBottomPadding(bottomPadding, insets.bottom),
-    paddingHorizontal: horizontalPadding,
+    paddingLeft: horizontalPaddingLeft,
+    paddingRight: horizontalPaddingRight,
     paddingTop: getAppScreenResolvedTopPadding(
       topPadding,
       insets.top,
@@ -134,10 +167,30 @@ export function AppScreen({
     <ScrollView
       automaticallyAdjustContentInsets={false}
       automaticallyAdjustsScrollIndicatorInsets={false}
+      ref={scrollViewRef}
       contentContainerStyle={contentStyle}
       contentInset={{bottom: 0, left: 0, right: 0, top: 0}}
       contentInsetAdjustmentBehavior="never"
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+      onMomentumScrollBegin={() => setScrollActive(true)}
+      onMomentumScrollEnd={() => setScrollActive(false)}
+      onScroll={event => {
+        if (!onScrollActivityChange || !scrollActiveRef.current) return;
+        const now = Date.now();
+        const y = event.nativeEvent.contentOffset.y;
+        const previous = lastScrollSampleRef.current;
+        lastScrollSampleRef.current = {time: now, y};
+        if (!previous.time) return;
+        const elapsed = Math.max(1, now - previous.time);
+        const fast = Math.abs(y - previous.y) / elapsed >= 1.4;
+        if (fast !== fastScrollRef.current) {
+          fastScrollRef.current = fast;
+          onScrollActivityChange(true, fast);
+        }
+      }}
+      onScrollBeginDrag={() => setScrollActive(true)}
+      onScrollEndDrag={() => setScrollActive(false, true)}
+      scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
       scrollIndicatorInsets={{bottom: 0, left: 0, right: 0, top: 0}}
       style={[styles.screen, {backgroundColor}]}

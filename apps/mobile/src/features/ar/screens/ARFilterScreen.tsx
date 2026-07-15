@@ -26,6 +26,7 @@ import type {
 import {
   BottomOverlayPanel,
   FullscreenOverlayScreen,
+  useTransientToast,
 } from '../../../shared/ui';
 import {FullFaceMakeupEditPanel} from '../components/FullFaceMakeupEditPanel';
 import {
@@ -66,7 +67,11 @@ import {
 } from '../components/ARFilterEditModeTabs';
 import {useARFilterSelectionState} from '../hooks/useARFilterSelectionState';
 import {useFullFaceMakeupEditState} from '../hooks/useFullFaceMakeupEditState';
-import type {FullFaceMakeupEditState} from '../services/fullFaceMakeupEditService';
+import {
+  createFullFaceMakeupSavedContract,
+  type FullFaceMakeupEditState,
+  type FullFaceMakeupSavedContract,
+} from '../services/fullFaceMakeupEditService';
 import {
   getARFilterInitialColorId,
   getARFilterOptionGroupLabels,
@@ -112,7 +117,10 @@ type ARFilterScreenProps = {
     selectedMakeupFilterId?: string,
     editSourceImageUri?: string,
   ) => void;
-  onSave?: (selectedMakeupFilterId?: string) => void;
+  onSave?: (
+    selectedMakeupFilterId?: string,
+    savedContract?: FullFaceMakeupSavedContract,
+  ) => void | Promise<void>;
 };
 
 const AR_FILTER_FALLBACK_COLOR = {
@@ -239,6 +247,8 @@ export function ARFilterScreen({
   const [isFilterSheetExpanded, setIsFilterSheetExpanded] = useState(true);
   const [sourceImageUri, setSourceImageUri] = useState<string | null>(null);
   const [isGalleryPickerOpen, setIsGalleryPickerOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const {showToast, toast} = useTransientToast(2200);
   const cameraSessionActive = useCameraSessionActive();
   const selectedColor = getARFilterSelectedColor(
     resolveAreaColorOptions(
@@ -329,11 +339,35 @@ export function ARFilterScreen({
     );
   };
 
-  const handleSave = () => {
-    onSave?.(
+  const handleSave = async () => {
+    if (isSaving) {
+      return;
+    }
+
+    const selectedMakeupFilterId =
       arFilterSelectionState.selectedTotalMakeupLookId ??
-        arFilterSelectionState.selectedMakeupFilter.id,
-    );
+      arFilterSelectionState.selectedMakeupFilter.id;
+
+    if (!isFullFaceMode) {
+      await onSave?.(selectedMakeupFilterId);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSave?.(
+        selectedMakeupFilterId,
+        createFullFaceMakeupSavedContract({
+          editState: fullFaceEdit.fullFaceState,
+          recipe: fullFaceEdit.fullFaceRecipe,
+          source: initialSource === 'recommendedFilter' ? 'preset' : 'ar_editor',
+        }),
+      );
+    } catch {
+      showToast('메이크업 룩을 저장하지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -435,7 +469,7 @@ export function ARFilterScreen({
 
             handleOpenShapeAdjust();
           }}
-          onSave={handleSave}
+          onSave={() => void handleSave()}
           topInset={insets.top}
         />
       ) : (
@@ -476,10 +510,13 @@ export function ARFilterScreen({
           !isPhotoEditMode ? (
             <View style={styles.floatingSheetActions}>
               <ARFilterBottomActions
-                hasUnsavedMakeupChanges={arFilterSelectionState.hasUnsavedMakeupChanges}
-                onOpenDetailEdit={handleOpenDetailEdit}
-                onOpenShapeAdjust={handleOpenShapeAdjust}
-                onSave={handleSave}
+                hasUnsavedMakeupChanges={
+                  !isSaving &&
+                  (isFullFaceMode || arFilterSelectionState.hasUnsavedMakeupChanges)
+                }
+                onOpenDetailEdit={isFullFaceMode ? undefined : handleOpenDetailEdit}
+                onOpenShapeAdjust={isFullFaceMode ? undefined : handleOpenShapeAdjust}
+                onSave={() => void handleSave()}
               />
             </View>
           ) : null}
@@ -559,6 +596,7 @@ export function ARFilterScreen({
           ) : null}
         </BottomOverlayPanel>
       </View>
+      {toast}
     </FullscreenOverlayScreen>
   );
 }

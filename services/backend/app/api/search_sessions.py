@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Response
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -21,6 +21,29 @@ from app.services.auradin_agent.session_manager import (
 
 
 router = APIRouter(prefix="/search/sessions", tags=["search"])
+MAX_SEARCH_PROMPT_LENGTH = 500
+MAX_SEARCH_CONTEXT_VALUE_LENGTH = 80
+
+
+def _validated_search_context(value: Any) -> dict[str, str]:
+  if value is None:
+    return {}
+  if not isinstance(value, dict) or any(key != "personalColor" for key in value):
+    raise AppError(422, "INVALID_SEARCH_CONTEXT", "Search context only accepts personalColor.")
+  if "personalColor" not in value:
+    return {}
+  personal_color = value["personalColor"]
+  if not isinstance(personal_color, str) or len(personal_color.strip()) > MAX_SEARCH_CONTEXT_VALUE_LENGTH:
+    raise AppError(422, "INVALID_SEARCH_CONTEXT", "personalColor must be a short string.")
+  return {"personalColor": personal_color.strip()} if personal_color.strip() else {}
+
+
+def _bounded_optional_text(value: Any, *, field: str, max_length: int) -> str | None:
+  if value is None:
+    return None
+  if not isinstance(value, str) or len(value.strip()) > max_length:
+    raise AppError(422, "INVALID_SEARCH_REQUEST", f"{field} must be a short string.")
+  return value.strip() or None
 
 
 @router.post("")
@@ -33,15 +56,17 @@ async def create_search_session(
   prompt = str(payload.get("prompt") or "").strip()
   if not prompt:
     raise AppError(400, "PROMPT_REQUIRED", "Search prompt is required.")
+  if len(prompt) > MAX_SEARCH_PROMPT_LENGTH:
+    raise AppError(422, "SEARCH_PROMPT_TOO_LONG", "Search prompt is too long.")
 
-  context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+  context = _validated_search_context(payload.get("context"))
   # §3: 리포트 톤은 client-relay context.personalColor로 받는다 (로컬/무DB에서도 동작).
   # 서버 로드(db+auth+reportId) 경로는 배포 환경에서 추가 배선 — 지금은 relay만.
   report_context = {"personalColor": str(context.get("personalColor") or "").strip()} if context.get("personalColor") else None
   state = await create_session_persisted(
     prompt=prompt,
-    report_id=str(payload.get("reportId") or "").strip() or None,
-    source=str(payload.get("source") or "").strip() or None,
+    report_id=_bounded_optional_text(payload.get("reportId"), field="reportId", max_length=100),
+    source=_bounded_optional_text(payload.get("source"), field="source", max_length=40),
     context=context,
     report_context=report_context,
     owner_subject=auth.subject,
@@ -60,6 +85,7 @@ async def create_search_session(
 @router.get("/{session_id}")
 async def get_search_session(
   session_id: str,
+  response: Response,
   auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
@@ -73,6 +99,7 @@ async def get_search_session(
   if not state:
     raise AppError(404, "SESSION_NOT_FOUND", "Search session was not found.")
 
+  response.headers["Cache-Control"] = "private, no-store"
   return success(to_search_turn(state))
 
 
@@ -140,6 +167,8 @@ async def refine_search_session(
   # §7: dial은 기존 후보 재랭킹(λ 조절)만, prompt는 §3 파서로 hard/soft 병합.
   prompt = str(payload.get("prompt") or "").strip()
   dial = str(payload.get("dial") or "").strip() or None
+  if len(prompt) > MAX_SEARCH_PROMPT_LENGTH:
+    raise AppError(422, "SEARCH_PROMPT_TOO_LONG", "Search prompt is too long.")
   if dial and dial not in REFINE_DIALS:
     raise AppError(400, "INVALID_DIAL", "dial must be 'more_similar' or 'more_diverse'.")
   if not prompt and not dial:

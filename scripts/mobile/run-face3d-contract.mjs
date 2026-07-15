@@ -12,12 +12,15 @@ const srcRoot = join(repoRoot, 'apps/mobile/src');
 const testPaths = [
   'features/face-3d/services/face3DContract.test.ts',
   'features/face-3d/services/face3DSemanticCaptureContract.test.ts',
+  'features/face-3d/services/face3DTier2PassThrough.test.ts',
+  'features/face-analysis/services/faceAnalysisCaptureGuidance.test.ts',
 ];
 
 const result = spawnSync(
   process.execPath,
   [
     tscPath,
+    '--ignoreConfig',
     '--module',
     'commonjs',
     '--target',

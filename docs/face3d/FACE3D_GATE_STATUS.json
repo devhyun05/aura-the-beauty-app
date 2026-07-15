@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "aura.face3d-gate-status.v1",
-  "recordedAtUtc": "2026-07-12T14:05:00Z",
+  "schemaVersion": "aura.face3d-gate-status.v2",
+  "recordedAtUtc": "2026-07-14T20:10:05Z",
   "source": "arkit_face_mesh",
-  "gateVersion": "face3d-gate-v1",
+  "profileSchemaVersion": "aura.face3d-profile.v1",
   "topologyFingerprint": {
     "algorithm": "sha256-le-v1",
     "vertexCount": 1220,
@@ -12,240 +12,101 @@
     "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
     "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
   },
-  "localValidation": {
-    "unityVersion": "6000.3.18f1",
-    "unityEditorCompile": "passed",
-    "unityEditModeTests": {
-      "total": 21,
-      "passed": 21,
-      "failed": 0
-    },
-    "semanticCandidateTests": "passed",
-    "semanticValidationTests": "passed",
-    "semanticReviewBoardTests": "passed",
-    "semanticApprovalTests": "passed",
-    "semanticDiagnosticsTests": "passed",
-    "mobileFace3DContractTests": "passed",
-    "mobileSemanticCaptureSetContractTests": "passed",
-    "unityFrameworkBuild": "passed",
-    "signedFace3DLabAppBuild": "passed"
+  "liveRuntimeMap": {
+    "mapId": "arkit-face3d-g2-product-approved-v1",
+    "path": "apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json",
+    "sha256": "dcbba16fb0ebb6439c18b8ea4534e52dea65c3a4c33b95b250b20cc4a83f6806",
+    "g1GroupCount": 12,
+    "tier2GroupCount": 6,
+    "chinIndices": [34, 35, 975],
+    "nasionIndices": [15],
+    "noseBridgeMidlineIndices": [10, 11, 12, 13, 14, 36],
+    "alarLeftIndices": [202, 204, 292, 298, 325],
+    "alarRightIndices": [651, 653, 727, 733, 760],
+    "malarApexLeftIndices": [153, 155, 178, 353, 354, 377, 378, 388, 389, 390],
+    "malarApexRightIndices": [602, 604, 627, 784, 785, 808, 809, 819, 820, 821]
   },
-  "latestOfflineDiagnostics": {
-    "status": "reviewed_v7_candidate_diagnostics",
-    "candidateId": "face3d-consensus-1783842642466-candidate-v1",
-    "semanticContentSha256": "819fbe282252a06b3e4f474536ce51db9154c8c7b5eac52a3e9e713a32a6ce75",
-    "subjectCount": 3,
-    "captureCount": 9,
-    "topologyMatchedAllCaptures": true,
-    "bilateralSymmetryValidation": {
-      "status": "passed",
-      "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
-      "policySha256": "045f5e2f7c9c4f4912e78e2d05af4f5fa81198ffd717905b61377fe65c447e42",
-      "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
-      "selectedMirrorPairCount": 30,
-      "maximumUvResidual": 0.0010260531175334165,
-      "minimumAmbiguityRatio": 10.516401186392146
-    },
-    "rawFaceFramesOrVerticesIncludedInReport": false,
-    "runtimeApprovalEvidence": false,
-    "finding": "v7_overlay_and_symmetry_contract_approved_runtime_smoke_pending"
+  "tier2Promotion": {
+    "status": "product_owner_approved_offline_promoted",
+    "productOwnerAnatomyReview": "passed",
+    "newDeviceRuntimeSmoke": "waived_not_run",
+    "newThreeByThreeRepeatability": "waived_not_run",
+    "waiverAuthority": "product-owner",
+    "candidatePath": "artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.candidate.json",
+    "candidateSha256": "850fc7f7a4ada8288586af3a591630c7bfa6f78c63ab657a7e22163844da4a4b",
+    "diagnosticsPath": "artifacts/face3d/semantic-approval-g2/tier2-offline-diagnostics-17.json",
+    "diagnosticsSha256": "db8d106f0ff75c042335700ce74ec3796eb36c40d1ec79085164371392619004",
+    "manifestPath": "artifacts/face3d/semantic-approval-g2/tier2-promotion-manifest.json",
+    "manifestSha256": "6ff14b053bc6163b7d425463c3a1a5d6d36ab1e11759dd60d6b4e1cc2c679ef0",
+    "receiptPath": "artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.promotion-receipt.json",
+    "receiptSha256": "79329bdf7a037b23d70e1e03a7438998b3b224dca23d0ca9abd6ee5291945e8a"
   },
-  "semanticApproval": {
-    "approved": true,
-    "approvedAtUtc": "2026-07-12T08:07:09Z",
-    "reviewer": "workspace-owner",
-    "distinctPeopleConfirmed": true,
-    "runtimeMapId": "arkit-face3d-g1-reviewed-v1",
-    "runtimeMapSha256": "2c3c1a1c32275163f71d573ad68d92a09531465a57c65f493a014896a7f97861",
-    "approvalReceipt": "artifacts/face3d/semantic-approval/ARKitFaceSemanticMapV1.v7.approval-receipt.json",
-    "claudeContractReview": {
-      "model": "fable-5-xhigh",
-      "verdict": "PROCEED_WITH_CAVEATS",
-      "scope": "abstract_algorithm_contract_only",
-      "rawFaceDataShared": false,
-      "workspaceFilesShared": false
-    }
+  "offlineDiagnostics17": {
+    "captureCount": 17,
+    "topologyExactMatchCount": 17,
+    "metricKeyCount": 11,
+    "allMetricsFiniteCaptureCount": 17,
+    "metricKeys": [
+      "noseTipProjection",
+      "chinProjection",
+      "upperLipToELine",
+      "lowerLipToELine",
+      "centralProjectionScore",
+      "noseLength",
+      "nasalBridgeStraightness",
+      "nasalAxisDeviation",
+      "alarWidth",
+      "malarProjectionLeft",
+      "malarProjectionRight"
+    ],
+    "scopeWarning": "The 17 captures mix three subjects, poses, and repeats. Overall ranges are gross sanity evidence, not within-person repeatability or population norms."
   },
-  "runtimeDeployment": {
-    "approvedSemanticMapPresent": true,
-    "unityFrameworkIncludesApprovedSemanticMap": true,
-    "signedLabAppIncludesApprovedSemanticMap": true,
-    "labBundleIdentifier": "<local-dev-bundle>",
-    "labAppInstalledOnIphone": true,
-    "runtimeExtractionVerified": true,
-    "metroMode": "face-capture-lab_lan_8081",
-    "iphoneStateAtRecordedTime": "wifi_connected_metro_lan_8081",
-    "installBlocker": "resolved_wifi_install_local_team_signing",
-    "installNotes": "Signed Debug with local team <local-dev-team> / bundle <local-dev-bundle> (committed team G7X4226T2Q has no account on this Mac). App loaded JS over WiFi after the Mac LAN IP changed; recovered by re-aliasing the baked packager IP. See AGENTS.md iOS Real-Device Build & Verify."
+  "endToEndProductPath": {
+    "actualUnityMeasurement": "implemented",
+    "canonicalProfileSerialization": "implemented_backward_compatible",
+    "mobileAiRequestPassThrough": "implemented_tested",
+    "backendAiPromptSemantics": "implemented_tested",
+    "reportElevenMetricCards": "implemented_tested",
+    "databaseDetailJsonbStorage": "implemented_tested",
+    "databaseDetailRestore": "implemented_tested",
+    "listResponseMeasurements": "intentionally_omitted_for_payload_size",
+    "interpretationBoundary": "faceScale-normalized relative values; not millimeters, medical diagnosis, percentiles, or population grades"
   },
-  "gates": {
-    "G0": {
-      "status": "passed",
-      "evidence": {
-        "trackingState": "Tracking",
-        "capturePairIds": [
-          "pair_face3d_semantic_1783801550595",
-          "pair_face3d_semantic_1783801552908",
-          "pair_face3d_semantic_1783801555305"
-        ],
-        "captureShotKinds": [
-          "neutral",
-          "yawLeft",
-          "yawRight"
-        ],
-        "fullMeshInFrame": true,
-        "projectedMeshOverlayReviewed": true
-      }
-    },
-    "G1": {
-      "status": "passed",
-      "reason": "v7_three_subject_human_approval_plus_iphone_runtime_smoke_verified_2026_07_12",
-      "runtimeSmoke": {
-        "status": "passed",
-        "verifiedAtUtc": "2026-07-12T14:05:00Z",
-        "device": "iPhone 16 (iPhone17,3), iOS 26.5",
-        "labBundleIdentifier": "<local-dev-bundle>",
-        "semanticMapMissing": false,
-        "topologyFingerprintMatched": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f",
-        "meshVertexCount": 1220,
-        "meshIndexCount": 6912,
-        "meshUvCount": 1220,
-        "validFrameCount": 30,
-        "targetFrameCount": 30,
-        "faceCountCurrent": 2,
-        "faceCountSupported": 3,
-        "metrics": {
-          "noseTipProjection": { "value": 0.316, "confidence": 0.49, "validFrameCount": 21 },
-          "chinProjection": { "value": 0.064, "confidence": 0.36, "validFrameCount": 18 },
-          "upperLipToELine": { "value": 0.015, "confidence": 0.53, "validFrameCount": 22 },
-          "lowerLipToELine": { "value": 0.036, "confidence": 0.57, "validFrameCount": 23 },
-          "centralProjectionScore": { "value": 0.239, "confidence": 0.49, "validFrameCount": 21 }
-        },
-        "warnings": [
-          "centralProjectionScore_outliers_rejected:9",
-          "chinProjection_inliers_below_minimum",
-          "chinProjection_outliers_rejected:12",
-          "g5_multiple_face_gate_pending",
-          "lowerLipToELine_outliers_rejected:7",
-          "neutral_expression_gate_pending_g2",
-          "noseTipProjection_outliers_rejected:9",
-          "pose_gate_stabilizing",
-          "upperLipToELine_outliers_rejected:8"
-        ],
-        "poseGateFix": "Replaced session-space trackingFace.localEulerAngles with camera-relative deviation (new Aura.Face3D.Face3DHeadPose) that auto-resolves the ARFoundation 0-vs-180 frontal convention; frontal capture that previously stalled at 0/30 now reaches 30/30. Also raised RN result grace to clear the 12s Unity acquisition timeout and stopped the G5 status message from starving pose guidance.",
-        "qualityNote": "chinProjection aggregated only 18 inliers (<20 minimum) at 0.36 confidence; least-reliable metric this run. Low confidences (0.36-0.57) are the expected consequence of the confirmed 3xMAD outlier rule biting a very tight MAD, not bad data. Aggregation is a confirmed boundary and was left unchanged."
-      },
-      "latestCandidate": {
-        "candidateId": "face3d-consensus-1783842642466-candidate-v1",
-        "semanticContentSha256": "819fbe282252a06b3e4f474536ce51db9154c8c7b5eac52a3e9e713a32a6ce75",
-        "semanticGroupCount": 12,
-        "forbiddenLandmarkReferenceOverlapCount": 0,
-        "reviewStatus": "human_approved_runtime_map_generated"
-      },
-      "differentPeopleCapturedAndReprojected": 3,
-      "differentPeopleHumanApproved": 3,
-      "differentPeopleRequired": 3,
-      "subjectCaptureSets": {
-        "subject-01": {
-          "sameCaptureSet": false,
-          "samePersonConfirmed": true
-        },
-        "subject-02": {
-          "sameCaptureSet": true,
-          "samePersonConfirmed": true
-        },
-        "subject-03": {
-          "sameCaptureSet": true,
-          "samePersonConfirmed": true
-        }
-      },
-      "allSubjectsHaveNeutralYawLeftYawRight": true,
-      "allNineCapturesTopologyMatch": true,
-      "allNineCapturesFullMeshInFrame": true,
-      "validationArtifactsContentHashed": true,
-      "bilateralSymmetryValidated": true,
-      "runtimeSemanticMapGenerated": true,
-      "runtimeSemanticMapIncludedInSignedApp": true,
-      "runtimeSemanticMapExecutedOnIphone": true
-    },
-    "G2": {
-      "status": "passed",
-      "deviceEvidence": {
-        "verifiedAtUtc": "2026-07-12T14:55:00Z",
-        "device": "iPhone 16 (iPhone17,3)",
-        "neutralExpressionGateActive": true,
-        "nonNeutralFramesRejected": 41,
-        "exampleRejection": "neutral_expression_gate_blocked jawOpen=0.74",
-        "neutralStillCollected30of30": true,
-        "finding": "Open jaw / expression frames rejected on device; neutral face still reaches 30/30. No regression."
-      },
-      "implementation": "Aura.Face3D.Face3DNeutralExpressionGate (pure, fail-open) plus Face3DSessionController reading ARKit blend shapes (jawOpen, mouthSmile, mouthFrown, mouthPucker, mouthClose, browInnerUp, browDown, cheekPuff) and rejecting a frame whose strongest distorting signal exceeds 0.5. When blend shapes are unavailable the gate fails open so the G1 extraction cannot regress to 0/30.",
-      "localTests": "Face3DNeutralExpressionGateTests (7 cases) within the 52-case EditMode suite (passed)"
-    },
-    "G3": {
-      "status": "passed",
-      "deviceEvidence": {
-        "verifiedAtUtc": "2026-07-12T14:55:00Z",
-        "maxSessionSequence": 19,
-        "requiredRoundTrips": 10,
-        "processRestartsObserved": 0,
-        "finding": "sessionSequence advanced monotonically to 19 within a single app process (no reset), so >=10 native<->Unity round trips completed with 0 crash/jetsam/freeze."
-      },
-      "implementation": "sessionSequence counter incremented per StartFace3DAnalysisJson and emitted on every face3d_status event (RN type and parser updated), so a stress run is countable from the evidence log."
-    },
-    "G4": {
-      "status": "partial_device_evidence",
-      "deviceEvidence": {
-        "verifiedAtUtc": "2026-07-12T14:55:00Z",
-        "method": "Auto-clustered recent device captures into 3 groups (no subject labels in the log; G3 same-person repeats inflate one cluster), then within/between MAD discriminability.",
-        "discriminability": {
-          "noseTipProjection": 5.4,
-          "chinProjection": 0.5,
-          "upperLipToELine": 6.1,
-          "lowerLipToELine": 4.3,
-          "centralProjectionScore": 5.7
-        },
-        "threshold": 2.0,
-        "finding": "4 of 5 metrics separate people well (>=4.3). chinProjection does NOT discriminate (0.5): between-person spread is smaller than repeat noise, consistent with its low-inlier / low-confidence behavior in the G1 smoke. Do NOT expose chinProjection as a user-facing trait until improved. A clean, subject-labelled 3x3 capture set (no G3 repeats mixed in) should confirm.",
-        "recommendation": "For a rigorous pass, recapture 3 people x 3 neutral measurements in a fresh session, label subjects in a manifest, and run npm run face3d:repeatability."
-      },
-      "implementation": "scripts/face3d/analyze-repeatability.mjs computes per-metric within-subject vs between-subject MAD and discriminability = between/within (npm run face3d:repeatability).",
-      "localTests": "scripts/face3d/test-analyze-repeatability.mjs (5 cases, npm run face3d:test:repeatability, passed)"
-    },
-    "G5": {
-      "status": "passed",
-      "deviceEvidence": {
-        "verifiedAtUtc": "2026-07-12T14:55:00Z",
-        "multipleFacesDetectedEvents": 191,
-        "message": "얼굴은 한 명만 프레임 안에 두어야 합니다.",
-        "collectionProceededWithMultipleFaces": false,
-        "finding": "Two people in frame produced 191 multiple_faces_detected blocks on device and collection never proceeded."
-      },
-      "implementation": "Face3DTrackingFaceGate classifies >=2 tracking faces as Multiple; ProcessLatestFaceFrame rejects with multiple_faces_detected and never collects. requestedMaximumFaceCount=2 lets ARKit actually surface a second face to block.",
-      "localTests": "Face3DMultipleFaceGateTests (7 cases) plus the existing TrackingFaceGate cases (passed)"
-    }
-  },
-  "chinMetricRedefinition": {
-    "adopted": "C1_midface_plane",
-    "adoptedAtUtc": "2026-07-13T01:30:00Z",
-    "change": "chinProjection now projects the fixed-index chin centroid onto the face-spanning midface plane (like noseTip/central), replacing the chin's own neighbor plane, in both Face3DMetricEvaluator.cs and evaluate-semantic-candidate.mjs.",
-    "evidence": "Labelled 3-subject offline test (raw-vertex captures): chin between-person discriminability improved to 23.7 (C1) vs 16.5 (old); dispelled the earlier confounded on-device G4=0.5 and the ARKit chin-capacity-ceiling worry. Unity EditMode 52/52 + offline evaluator + repeatability tests pass with updated golden (chin 0.25->0.5).",
-    "deferred": "Device rebuild/verify skipped per user; jaw-translation gate hardening (jawForward/jawLeft/jawRight) deferred to next device cycle.",
-    "confirmedBoundaryChange": true
-  },
-  "localValidationG2ToG5": {
-    "unityEditModeTests": { "total": 52, "passed": 52, "failed": 0 },
+  "currentValidation": {
+    "face3dNodeContractSuite": "passed",
+    "mobileFace3dAndMeasurementTests": "passed",
+    "mobileCleanInstall": "passed_after_origin_dev_lockfile_sync",
+    "mobileCiContractSuite": "passed",
     "mobileTypecheck": "passed",
-    "mobileFace3DContractTests": "passed",
-    "repeatabilityAnalyzerTests": "passed",
-    "note": "Every gate stays device-evidence-pending per the project rule that code existence never passes a gate. See ARKit_FACE3D_LAB_IMPLEMENTATION_KO.md for the consolidated one-pass device protocol.",
-    "g2ToG5BuildInstalledOnIphone": true,
-    "g2ToG5BuildInstallMethod": "devicectl direct install (expo WiFi connect hung); app baked with REACT_NATIVE_PACKAGER_HOSTNAME set to the current Mac IP; launched on device and connected to Metro."
+    "backendFullPytest": {
+      "passed": 563,
+      "skipped": 1,
+      "warnings": 78
+    },
+    "gitDiffCheck": "passed",
+    "unityEditModeCurrentG2Changes": {
+      "status": "passed",
+      "total": 59,
+      "passed": 59,
+      "failed": 0,
+      "resultPath": "/tmp/face3d-g2-devbase-editmode-results.xml",
+      "note": "All 59 Aura.Face3D.Tests ran against the latest origin/dev AR stencil integration base."
+    }
   },
-  "privacy": {
-    "rawFaceFramesTrackedByGit": false,
-    "localFace3DArtifactsIgnoredByGit": true,
-    "offDeviceUpload": false,
-    "claudeReceivedOnlyAbstractContract": true
-  }
+  "historicalDeviceEvidence": {
+    "status": "preserved_not_reused_for_g2_landmarks",
+    "date": "2026-07-12",
+    "g1RuntimeSmoke": "passed_30_of_30_five_metrics",
+    "neutralExpressionGate": "passed",
+    "roundTripTenOrMore": "passed",
+    "multipleFaceBlock": "passed",
+    "note": "These runs predate the current G2 landmark map and do not prove current G2 runtime extraction."
+  },
+  "remainingRisks": [
+    "ARKit fixed topology does not guarantee clinical landmark homology.",
+    "The anatomy review was performed by the product owner, not two independent trained raters.",
+    "The 17-capture cohort is too small and unbalanced for population generalization.",
+    "New G2 device runtime and 3x3 repeatability were explicitly waived, not passed.",
+    "Population labels such as wide or protruding require a separate reference distribution."
+  ]
 }

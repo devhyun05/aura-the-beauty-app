@@ -452,9 +452,9 @@ export function buildFilterParamsFromARFilterSelections(
             // AURA 스크린스페이스 base (FaceMakeup.shader에 이식). 선택한 shade가
             // 파운데이션 색(HSV 가산광채 톤), skinSmoothing이 잡티제거. 기존
             // ARwithFable flat brighten/concealer 매핑은 폐기.
-            // intensity는 셰이더 자연 기본값(0.45)에 맞춘다 — 0.7은 gentle 톤보정을
-            // 통째로 과구동해 "쨍한/부자연"으로 보였다(AURA 원본 대비 과함).
-            params.skinSmoothing = 0.35;
+            // 파운데이션을 고르는 순간에도 결 보정이 분명하게 느껴지도록 하되,
+            // foundation intensity는 gentle 톤보정 기본값을 유지한다.
+            params.skinSmoothing = 0.45;
             params.foundationIntensity = 0.45;
             if (hex) {
               params.foundationColor = hex;
@@ -483,6 +483,24 @@ export function postUnityFilterParams(params: ArwFilterParams): boolean {
     'OnMessageFromRN',
     JSON.stringify({filter: params, type: 'applyFilter'}),
   );
+  return true;
+}
+
+// Generic UnitySendMessage entry point used by the exact stencil-0710 screen.
+// The host native bridge already supports arbitrary GameObject/method targets,
+// so the standalone @azesmway native package must not be installed as a second
+// Unity runtime owner.
+export function postUnityMessage(
+  gameObject: string,
+  method: string,
+  payload: string,
+): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  if (!nativeBridge?.postMessage) {
+    return false;
+  }
+
+  nativeBridge.postMessage(gameObject, method, payload);
   return true;
 }
 

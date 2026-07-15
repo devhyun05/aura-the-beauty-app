@@ -25,17 +25,28 @@ raw TrueDepth depth map은 메시 품질을 대조하는 Lab 전용 후속 검�
 ## 첫 MVP metric
 
 - `noseTipProjection`: 코끝과 국소 중안면 기준면 사이 signed distance / 3D 얼굴 폭
-- `chinProjection`: 턱 전방점과 국소 하관 기준면 사이 signed distance / 3D 얼굴 폭
-- `upperLipToELine`: 코끝-턱 전방점 E-line과 윗입술 사이 signed distance / 3D 얼굴 폭
-- `lowerLipToELine`: 코끝-턱 전방점 E-line과 아랫입술 사이 signed distance / 3D 얼굴 폭
+- `chinProjection`: 중앙 턱 표면 patch 안에서 고른 연조직 Pogonion과 방향이 고정된 중안면 기준면 사이 signed distance / 3D 얼굴 폭
+- `upperLipToELine`: 코끝-연조직 Pogonion E-line과 윗입술 사이 signed distance / 3D 얼굴 폭
+- `lowerLipToELine`: 코끝-연조직 Pogonion E-line과 아랫입술 사이 signed distance / 3D 얼굴 폭
 - `centralProjectionScore`: 중앙 얼굴 ROI와 좌우 볼 기준의 전후 차 / 3D 얼굴 폭
 
 이는 해부학·의료 계측값이 아니라 ARKit template-fit 표면의 상대적인 외관 trait다.
 
-`chinIndices`는 E-line과 돌출도에 쓰는 턱 전방점(Pogonion)이고,
-`chinBottomIndices`는 얼굴 윤곽이 끝나는 턱 최하단(Menton)이다. 둘을 같은 `턱끝`으로
-취급하지 않는다. Menton은 semantic map에 보존하지만 위 첫 5개 metric에는 아직
-직접 사용하지 않으며 이후 3D 얼굴 길이·수직 비율 metric의 기준점으로 사용한다.
+현재 G2 제품 프로필은 위 G1 다섯 지표에 `noseLength`, `nasalBridgeStraightness`,
+`nasalAxisDeviation`, `alarWidth`, `malarProjectionLeft`, `malarProjectionRight`를 더한
+11지표다. 정확한 index·공식·하위 호환·AI/보고서/DB 경로는
+`docs/face3d/TIER2_METRIC_CONTRACT.md`가 현재 source of truth다.
+
+`chinIndices=[34,35,975]`는 아랫입술 아래의 labiomental fold(`31..33`)를 제외하고
+턱의 볼록면만 덮는 **연결된 중앙 턱 표면 patch**다. 런타임은 코끝 쪽이 양의 전방이
+되도록 방향을 고정한 중안면 기준면에 대해
+patch 각 정점의 signed projection을 계산하고, 그 값이 가장 큰 정점 하나를 연조직
+Pogonion으로 고른다. `chinProjection`은 이 최댓값을 사용하며, 같은 winner 정점을
+윗입술·아랫입술 E-line의 턱 쪽 endpoint로 재사용한다.
+
+`chinBottomIndices=[913,914,1047]`는 얼굴 윤곽이 끝나는 턱 최하단(Menton)이다. Pogonion과 Menton을 같은
+`턱끝`으로 취급하지 않는다. Menton은 semantic map에 그대로 보존하지만 위 첫 5개 metric과
+현재 턱 돌출도에는 사용하지 않으며 이후 3D 얼굴 길이·수직 비율 metric의 기준점으로 사용한다.
 
 ## 런타임 흐름
 
@@ -76,6 +87,12 @@ events: face3d_status, face3d_analyzed
 상태 전이를 자동 검증한다. 각 gate는 iPhone 실기기 증거가 없으면 `blocked` 또는
 `pending`으로 남기며 코드가 존재한다는 이유만으로 통과 처리하지 않는다.
 
+2026-07-15 제품 결정으로 **신규 G2 실기기 smoke와 신규 3명×3회 neutral 반복성 촬영은
+이번 11지표 통합에서 면제**했다. 이를 통과했다고 소급 기록하지 않는다. live map은
+`arkit-face3d-g2-product-approved-v1`이며, 제품 오너의 해부 overlay 승인과 기존 17개
+export의 topology exact match·11지표 finite 계산으로 오프라인 승격했다. 아래 2026-07-12
+G1/G2-G5 기록은 당시 실기기 이력이며 새 G2 landmark 자산의 실기기 증거가 아니다.
+
 2026-07-12 기준 G0는 iPhone 실기기 정면/약한 좌우 회전 캡처에서 `Tracking`,
 vertex 1,220 / index 6,912 / UV 1,220, 전체 메시 프레임 내 포함, 동일 topology
 fingerprint를 확인해 통과했다. G1 v7은 서로 다른 세 사람의 정면/좌/우 9개 오버레이를
@@ -93,6 +110,11 @@ upperLip 0.015, lowerLip 0.036, central 0.239)을 확인했다. 이 실행은 po
 `gates.G1.runtimeSmoke`, 실기기 빌드 절차는 리포지토리 `AGENTS.md`의
 "iOS Real-Device Build & Verify" 참고. 참고: chin metric은 inlier 18개(<20)로
 이번 회차 신뢰도가 가장 낮았다(품질 노트, 집계 확정 경계는 미변경).
+
+후속 Pogonion 계약과 Tier-2 여섯 그룹을 반영한 현재 live semantic map의 `mapId`는
+`arkit-face3d-g2-product-approved-v1`이다. 이는 `[34,35,975]` Pogonion patch와 G2 index를
+식별하는 현재 자산 계약이며, 위 2026-07-12 G1 실기기 smoke 결과를 G2 실행 증거로
+소급 해석하지 않는다.
 
 ## 구현 상태
 
@@ -112,20 +134,19 @@ upperLip 0.015, lowerLip 0.036, central 0.239)을 확인했다. 이 실행은 po
 - 중안면 기준군의 안쪽 경계(`left u <= 0.405`, `right u >= 0.595`) 잠금
 - 후보 semantic content와 검수 matrix/SVG를 SHA-256으로 결박하는 승인 gate
 - 세 사람 × 세 자세를 한 화면에서 비교하는 독립 검수 보드와 v7 승인 receipt
-- 로컬 캡처의 5개 metric을 같은 수식으로 비교하는 승인 전 오프라인 진단 도구
+- G1 다섯 지표와 G2 여섯 지표를 Unity와 같은 수식으로 비교하는 오프라인 진단 도구
 - 차단 상태에서도 fingerprint, vertex/index/UV count, 지원 얼굴 수 표시
 - RN 계약/parser/reducer/진입 gate 자동 테스트
 
-의도적으로 미완료인 항목:
+이번 G2 변경에서 수행하지 않은 항목:
 
-- 승인 map을 사용한 G1 iPhone runtime smoke
-- G2 전의 blend shape neutral-expression gate
-- G2-G5의 남은 iPhone 실기기 증거
+- 새 G2 live map을 포함한 iPhone runtime smoke(제품 오너 면제)
+- 별도 3명×3회 neutral 신규 반복성 촬영(제품 오너 면제)
 - Lab 전용 raw TrueDepth depth-map 대조 캡처
 
 초기 캘리브레이션 앱은 semantic map이 없어서 `semantic_map_missing`으로 멈추는 것이
-정상이었다. v7 승인 이후에는 다음 경로에 검증 완료 map이 있으며, 새 UnityFramework와
-서명된 Lab 앱에도 동일한 `mapId`와 fingerprint가 들어 있다.
+정상이었다. 현재 다음 경로의 live map은 `arkit-face3d-g2-product-approved-v1`이며,
+새 UnityFramework와 서명된 Lab 앱도 이 `mapId`와 동일한 fingerprint를 포함해야 한다.
 
 ```text
 apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json
@@ -181,7 +202,7 @@ face3d-semantic-review/
 추가·제거할 수 있다. 번호는 사용자가 받아 적지 않고 도구가 자동 저장한다.
 
 - 빨강: 코끝
-- 파랑: 턱 전방점(Pogonion/E-line)
+- 파랑: 중앙 턱 표면 patch(Pogonion 탐색/E-line)
 - 분홍: 턱 최하단(Menton)
 - 노랑/주황: 윗입술/아랫입술 중앙
 - 초록/청록: 중안면 기준 영역
@@ -197,7 +218,7 @@ face3d-semantic-review/
 apps/unity/MakeupAR/Assets/Resources/Face3D/ARKitFaceSemanticMapV1.json
 ```
 
-현재 v7 후보 생성 규칙은 코끝·턱 전방점·턱 최하단·입술 중앙의 검토된 topology seed와,
+현재 후보 생성 규칙은 코끝·Pogonion용 중앙 턱 표면 patch·턱 최하단·입술 중앙의 검토된 topology seed와,
 화면 정규화 위치·카메라 깊이·삼각형 연결 관계로 고른 기준 영역 patch를 결합한다.
 좌우 중안면/턱 기준군은 독립적으로 고르지 않는다. topology UV를 `u -> 1-u`로 반사해
 상호 최근접인 정점쌍만 만들고, 왼쪽과 오른쪽 원본 mesh edge가 모두 존재하는 pair
@@ -210,8 +231,11 @@ intersection graph에서 15쌍씩 연결 성장시킨다. 정책 버전은
 승인만으로 G1을 통과하지 않으며, 최소 서로 다른 얼굴 3명과 각 사람의 정면/약한 좌우
 회전 오버레이를 대조한 뒤 mapId를 고정한다.
 
-v7에서 측정 landmark는 코끝 `7,8,9`, Pogonion `31,32,33`, Menton
-`913,914,1047`, 윗입술 `1,21,22`, 아랫입술 `26,27,28`로 고정했다. 이 다섯 측정군은
+v7 승인 당시 측정 landmark는 코끝 `7,8,9`, Pogonion 후보 `31,32,33`, Menton
+`913,914,1047`, 윗입술 `1,21,22`, 아랫입술 `26,27,28`로 고정했다. 후속 Pogonion 결정은
+`chinIndices`를 labiomental fold를 제외한 연결된 중앙 턱 볼록면 patch `34,35,975`로 확정하고, 그 안의 중안면
+기준면 signed projection 최댓값 정점을 런타임 Pogonion 및 E-line endpoint로 사용한다.
+Menton 배열은 변경하지 않으며 현재 턱 돌출도에는 사용하지 않는다. 이 다섯 측정군은
 중안면/턱 기준면 6개 그룹에 들어갈 수 없다. 코끝과 `centralRegionIndices`처럼 기준면이
 아닌 ROI의 의도된 overlap은 허용한다. 이 정책과 좌우 exact pair 계약은 후보 생성기,
 수동 후보 validator, 재투영/진단, 승인 변환기, Unity runtime loader에서 검사한다.
@@ -244,7 +268,7 @@ npm run face3d:semantic:diagnostics -- \
   --output /path/to/semantic_candidate_metric_diagnostics.json
 ```
 
-이 결과는 캡처별 5개 metric과 median/MAD/min/max/range를 기록하고 원시 frame·vertex는
+이 결과는 G1 candidate에서는 5개, G2 candidate에서는 11개 metric과 median/MAD/min/max/range를 기록하고 원시 frame·vertex는
 출력하지 않는다. 중복 캡처는 거부하고 입력 candidate/ARFace JSON을 출력 경로로 지정해
 덮어쓰는 것도 차단한다. 수식은 Unity `Face3DMetricEvaluator`와 같지만 JSON 정점은 소수
 6자리이며 JavaScript float64와 Unity native float32의 정밀도가 다르므로 bit-identical
@@ -294,7 +318,10 @@ v7 승인 map과 강화된 Unity loader를 포함한 UnityFramework 빌드, Medi
 완료했다(위 "현재 실행 원칙" 문단 참고). CoreDevice tunnel `unavailable` 설치 차단은
 로컬 팀 서명 + Wi-Fi 로드로 우회했다.
 
-## 다음 게이트 (G2-G5)
+## 과거 게이트 기록 (G2-G5, 2026-07-12)
+
+아래 제한과 프로토콜은 당시 G1 기반 gate 이력이다. 현재 G2 제품 결정은 위
+2026-07-15 면제·오프라인 승격 문단과 `TIER2_METRIC_CONTRACT.md`를 따른다.
 
 G0·G1은 통과했다. 남은 하드 게이트는 각각 iPhone 실기기 증거가 필요하다.
 

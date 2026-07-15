@@ -8,8 +8,14 @@
 
 import json
 
-from app.api.analysis import ANALYSIS_MEDIA_LIST_SELECT, ANALYSIS_MEDIA_SELECT
+from app.api.analysis import (
+  ANALYSIS_MEDIA_LIST_SELECT,
+  ANALYSIS_MEDIA_SELECT,
+  build_analysis_detail_payload,
+  build_initial_analysis_detail_payload,
+)
 from app.core.settings import Settings
+from app.schemas.analysis import AnalysisJobCreate
 from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.owned_media import trusted_media_request_payload
 
@@ -164,6 +170,8 @@ def test_trusted_media_payload_keeps_measurement_fields() -> None:
   assert trusted["measurements"]["captureId"] == "11111111-1111-1111-1111-111111111111"
   assert trusted["measuredPersonalColor"]["tone"]["top"] == "autumn_muted"
   assert trusted["measurements"]["personalColor"]["correctionReport"]["sclera"]["sampleCount"] == 140
+  assert list(trusted["measurements"]["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+  assert list(trusted["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
 
 
 def test_prompt_injects_and_explains_measurements() -> None:
@@ -181,6 +189,13 @@ def test_prompt_injects_and_explains_measurements() -> None:
   assert '"autumn_muted"' in prompt
   # 원본 4축이 프롬프트에서 제외되지 않는다(측정 데이터 3-반영 규칙).
   assert '"faceVerticalThirds"' in prompt
+  for metric_key in FACE3D_METRIC_KEYS:
+    assert metric_key in prompt
+  assert "작을수록 기준선에 가까움" in prompt
+  assert "피사체 기준 음수=Left, 양수=Right" in prompt
+  assert "alare-alare 콧볼 폭" in prompt
+  assert "좌우 앞광대의 전방 돌출" in prompt
+  assert "절대 mm·임상 진단·모집단 백분위가 아니고" in prompt
   # 이미지 위치 필드는 여전히 제외된다.
   assert "https://cdn.example.com/x.jpg" not in prompt
 
@@ -196,6 +211,36 @@ def test_prompt_metadata_size_is_bounded() -> None:
 
 def test_list_select_strips_measurements_but_detail_keeps() -> None:
   assert "#- '{request,measurements}'" in ANALYSIS_MEDIA_LIST_SELECT
+  assert "#- '{result,faceAnalysisV2,faceProfile}'" in ANALYSIS_MEDIA_LIST_SELECT
+  assert "#- '{result,faceAnalysisV2,pipeline}'" not in ANALYSIS_MEDIA_LIST_SELECT
   assert "#- '{request,measurements}'" not in ANALYSIS_MEDIA_SELECT
   # 축약본이 dict(row) 변환에서 원본을 덮도록 같은 별칭으로 뒤에 온다.
   assert ANALYSIS_MEDIA_LIST_SELECT.rstrip().endswith("as detail_payload")
+
+
+def test_detail_jsonb_round_trip_preserves_all_face3d_metrics() -> None:
+  request_payload = build_worst_case_request_payload()
+  job = AnalysisJobCreate(requestPayload=request_payload)
+
+  # 실제 INSERT/UPDATE도 이 함수를 json.dumps 한 값을 jsonb로 저장한다.
+  encoded = json.dumps(build_analysis_detail_payload(job, {"shortSummary": "ok"}))
+  restored = json.loads(encoded)["request"]
+
+  assert list(restored["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+  assert list(restored["measurements"]["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+
+
+def test_initial_v2_payload_makes_camera_report_immediately_renderable() -> None:
+  request = AnalysisJobCreate(
+    requestPayload=build_worst_case_request_payload(),
+  )
+
+  detail = build_initial_analysis_detail_payload(
+    request,
+    face_analysis_v2_enabled=True,
+  )
+
+  result = detail["result"]
+  assert result["faceAnalysisV2"]["schemaVersion"] == "aura-face-analysis-v2"
+  assert result["faceAnalysisV2"]["pipeline"]["overall"] == "processing"
+  assert result["faceShape"]

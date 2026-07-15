@@ -369,9 +369,13 @@ class OpenAIAnalysisService:
       "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
       "요청 메타데이터에 faceVerticalThirds(기기에서 실측한 얼굴 세로 3분할 비율: 상안부/중안부/하안부, dominantPart, summary)가 있으면 "
       "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 이 실측 비율을 근거로 자연스럽게 반영해. "
-      "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 3D 지표: noseTipProjection 코끝 돌출, chinProjection 턱끝 돌출, "
-      "upperLipToELine/lowerLipToELine 입술-E라인 거리, centralProjectionScore 얼굴 중앙부 입체감 — 얼굴 크기로 정규화한 무차원 상대값, "
-      "value가 null이면 미측정)가 있으면 얼굴 입체감 표현과 makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. "
+      "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 정규화 3D 지표)가 있으면 얼굴 입체감 표현과 "
+      "makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. 기본 지표는 noseTipProjection 코끝 돌출, "
+      "chinProjection 턱 전방 볼록면(Pogonion) 돌출, upperLipToELine/lowerLipToELine 입술-E라인 signed 거리 "
+      "(양수는 앞, 음수는 뒤), centralProjectionScore 얼굴 중앙부 입체감이야. Tier-2 지표는 noseLength 코뿌리-코끝 길이, "
+      "nasalBridgeStraightness 코뿌리-코끝 선에 대한 콧대 RMS 이탈량(작을수록 기준선에 가까움), nasalAxisDeviation 코축 좌우 편위 "
+      "(피사체 기준 음수=Left, 양수=Right), alarWidth alare-alare 콧볼 폭, malarProjectionLeft/Right 좌우 앞광대의 전방 돌출이야. "
+      "모든 face3d 값은 얼굴 크기로 나눈 무차원 상대값이며 절대 mm·임상 진단·모집단 백분위가 아니고, value가 null이면 미측정이야. "
       "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
       "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
       "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "
@@ -412,6 +416,129 @@ class OpenAIAnalysisService:
       )
 
     return result
+
+  def _structured_image_content_type(self, source_image_bytes: bytes) -> str:
+    return "image/png" if source_image_bytes.startswith(b"\x89PNG\r\n\x1a\n") else "image/jpeg"
+
+  def _analyze_structured_json_sync(
+    self,
+    developer_prompt: str,
+    user_prompt: str,
+    json_schema: dict[str, Any],
+    source_image_bytes: bytes | None,
+    max_tokens: int,
+  ) -> dict[str, Any]:
+    provider = self.settings.analysis_provider
+    schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
+
+    if provider == "bedrock":
+      model_id = self.settings.effective_analysis_model_id
+      if not model_id:
+        raise AppError(
+          503,
+          "BEDROCK_ANALYSIS_NOT_CONFIGURED",
+          "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
+        )
+      content: list[dict[str, Any]] = [
+        {
+          "type": "text",
+          "text": f"{user_prompt}\nRequired JSON schema: {schema_instruction}",
+        },
+      ]
+      if source_image_bytes is not None:
+        content.append(
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "media_type": self._structured_image_content_type(source_image_bytes),
+              "data": base64.b64encode(source_image_bytes).decode("utf-8"),
+            },
+          },
+        )
+      response = self._bedrock_runtime_client().invoke_model(
+        modelId=model_id,
+        body=json.dumps(
+          {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "temperature": 0.1,
+            "system": developer_prompt,
+            "messages": [{"role": "user", "content": content}],
+          },
+          ensure_ascii=False,
+        ),
+        accept="application/json",
+        contentType="application/json",
+      )
+      response_payload = json.loads(response["body"].read())
+      output_text = self._extract_bedrock_output_text(response_payload)
+    elif provider == "openai":
+      content = [{"type": "input_text", "text": user_prompt}]
+      if source_image_bytes is not None:
+        content.append(
+          {
+            "type": "input_image",
+            "image_url": (
+              f"data:{self._structured_image_content_type(source_image_bytes)};base64,"
+              f"{base64.b64encode(source_image_bytes).decode('utf-8')}"
+            ),
+          },
+        )
+      response = self._client().responses.create(
+        model=self.settings.openai_analysis_model_id,
+        input=[
+          {"role": "developer", "content": developer_prompt},
+          {"role": "user", "content": content},
+        ],
+        text={
+          "format": {
+            "type": "json_schema",
+            "name": "face_analysis_stage",
+            "strict": True,
+            "schema": json_schema,
+          },
+          "verbosity": "low",
+        },
+      )
+      output_text = getattr(response, "output_text", "")
+    else:
+      raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
+
+    if not output_text:
+      raise AppError(502, "AI_EMPTY_OUTPUT", "AI structured analysis returned an empty response.")
+    return self._parse_json_output(output_text)
+
+  async def read_source_image_bytes(self, payload: dict[str, Any]) -> bytes:
+    return await asyncio.to_thread(self._read_source_image_bytes, payload)
+
+  async def analyze_structured_json(
+    self,
+    *,
+    developer_prompt: str,
+    user_prompt: str,
+    json_schema: dict[str, Any],
+    source_image_bytes: bytes | None,
+    max_tokens: int,
+  ) -> dict[str, Any]:
+    try:
+      return await asyncio.to_thread(
+        self._analyze_structured_json_sync,
+        developer_prompt,
+        user_prompt,
+        json_schema,
+        source_image_bytes,
+        max_tokens,
+      )
+    except AppError:
+      raise
+    except (OpenAIError, BotoCoreError, ClientError) as exc:
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI structured analysis invocation failed.",
+        {"reason": exc.__class__.__name__},
+      ) from exc
 
   def _trim_text_field(self, value: Any, max_length: int) -> Any:
     if not isinstance(value, str):
