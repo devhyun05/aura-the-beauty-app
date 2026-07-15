@@ -53,3 +53,19 @@ export function getFace3DRemainingSeconds(
 export function getFace3DStatusCopy(status: Face3DStatus): string {
   return FACE_3D_STATUS_COPY[status];
 }
+
+export function getFace3DFailureAction(attemptCount: number): 'retry' | 'review' {
+  return attemptCount >= 2 ? 'review' : 'retry';
+}
+
+export function shouldStartFace3DMeasurement({
+  attemptCount,
+  instructionsAccepted,
+  nativeViewReady,
+}: {
+  attemptCount: number;
+  instructionsAccepted: boolean;
+  nativeViewReady: boolean;
+}): boolean {
+  return instructionsAccepted && nativeViewReady && attemptCount === 0;
+}

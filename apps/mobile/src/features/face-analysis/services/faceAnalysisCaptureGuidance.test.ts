@@ -1,8 +1,10 @@
 import {
   FACE_ANALYSIS_CAPTURE_PLAN,
   FACE_3D_PREFLIGHT_COPY,
+  getFace3DFailureAction,
   getFace3DRemainingSeconds,
   getFace3DStatusCopy,
+  shouldStartFace3DMeasurement,
 } from './faceAnalysisCaptureGuidance';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -38,4 +40,34 @@ expectEqual(
   getFace3DStatusCopy('collecting'),
   '좋아요. 표정과 고개를 그대로 유지해 주세요.',
   'actionable collecting copy',
+);
+expectEqual(getFace3DFailureAction(1), 'retry', 'first failure retries');
+expectEqual(getFace3DFailureAction(2), 'review', 'second failure reviews guidance');
+expectEqual(getFace3DFailureAction(3), 'review', 'later failures keep guidance review');
+expectEqual(
+  shouldStartFace3DMeasurement({
+    attemptCount: 0,
+    instructionsAccepted: false,
+    nativeViewReady: true,
+  }),
+  false,
+  'instructions gate measurement start',
+);
+expectEqual(
+  shouldStartFace3DMeasurement({
+    attemptCount: 0,
+    instructionsAccepted: true,
+    nativeViewReady: true,
+  }),
+  true,
+  'accepted ready measurement starts',
+);
+expectEqual(
+  shouldStartFace3DMeasurement({
+    attemptCount: 1,
+    instructionsAccepted: true,
+    nativeViewReady: true,
+  }),
+  false,
+  'existing attempt does not auto-start twice',
 );
