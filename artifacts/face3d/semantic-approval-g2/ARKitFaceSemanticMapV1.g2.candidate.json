@@ -1,0 +1,669 @@
+{
+  "schemaVersion": "aura.face3d-semantic-candidate.v1",
+  "candidateId": "face3d-g2-product-approved-v1-candidate",
+  "createdAtUtc": "2026-07-15T00:00:00.000Z",
+  "source": "arkit_face_mesh",
+  "gateVersion": "face3d-gate-v1",
+  "reviewStatus": "candidate_edited_not_runtime_approved",
+  "generationMethod": "g1_approved_base_plus_product_approved_tier2_fixed_patch_v1",
+  "groupOverlapPolicy": {
+    "policyVersion": "measurement-landmark-reference-plane-disjoint-v1",
+    "measurementLandmarkGroupKeys": [
+      "noseTipIndices",
+      "chinIndices",
+      "chinBottomIndices",
+      "upperLipIndices",
+      "lowerLipIndices"
+    ],
+    "referencePlaneGroupKeys": [
+      "midfaceReferenceLeftIndices",
+      "midfaceReferenceRightIndices",
+      "midfaceReferenceUpperIndices",
+      "chinReferenceLeftIndices",
+      "chinReferenceRightIndices",
+      "chinReferenceUpperIndices"
+    ]
+  },
+  "topologyFingerprint": {
+    "algorithm": "sha256-le-v1",
+    "vertexCount": 1220,
+    "indexCount": 6912,
+    "uvCount": 1220,
+    "indicesHash": "c4bd80f9f6daef3e9bac013be387bef36ed61b7f5c088c153df64d37cb5946f1",
+    "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
+    "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
+  },
+  "bilateralSymmetryPolicy": {
+    "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+    "mirrorSource": "topology_uv_reflection",
+    "residualCap": 0.00125,
+    "minimumAmbiguityRatioRequired": 2,
+    "maximumResidual": 0.0010260531175334165,
+    "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+    "minimumAmbiguityRatio": 10.516401186392146,
+    "topologyMirrorPairCount": 587,
+    "topologySelfPairCount": 46,
+    "groupPairs": [
+      {
+        "leftGroupKey": "midfaceReferenceLeftIndices",
+        "pairs": [
+          [
+            150,
+            599
+          ],
+          [
+            281,
+            716
+          ],
+          [
+            311,
+            746
+          ],
+          [
+            313,
+            748
+          ],
+          [
+            314,
+            749
+          ],
+          [
+            317,
+            752
+          ],
+          [
+            318,
+            753
+          ],
+          [
+            320,
+            755
+          ],
+          [
+            321,
+            756
+          ],
+          [
+            322,
+            757
+          ],
+          [
+            433,
+            861
+          ],
+          [
+            434,
+            862
+          ],
+          [
+            435,
+            863
+          ],
+          [
+            436,
+            864
+          ],
+          [
+            437,
+            865
+          ]
+        ],
+        "rightGroupKey": "midfaceReferenceRightIndices",
+        "uvSideBounds": {
+          "maximumLeftU": 0.405,
+          "minimumRightU": 0.595
+        }
+      },
+      {
+        "leftGroupKey": "chinReferenceLeftIndices",
+        "pairs": [
+          [
+            193,
+            642
+          ],
+          [
+            194,
+            643
+          ],
+          [
+            195,
+            644
+          ],
+          [
+            196,
+            645
+          ],
+          [
+            280,
+            715
+          ],
+          [
+            282,
+            717
+          ],
+          [
+            283,
+            718
+          ],
+          [
+            284,
+            719
+          ],
+          [
+            285,
+            720
+          ],
+          [
+            336,
+            769
+          ],
+          [
+            337,
+            770
+          ],
+          [
+            338,
+            771
+          ],
+          [
+            339,
+            772
+          ],
+          [
+            340,
+            773
+          ],
+          [
+            341,
+            774
+          ]
+        ],
+        "rightGroupKey": "chinReferenceRightIndices"
+      },
+      {
+        "leftGroupKey": "alarLeftIndices",
+        "rightGroupKey": "alarRightIndices",
+        "pairs": [
+          [
+            202,
+            651
+          ],
+          [
+            204,
+            653
+          ],
+          [
+            292,
+            727
+          ],
+          [
+            298,
+            733
+          ],
+          [
+            325,
+            760
+          ]
+        ]
+      },
+      {
+        "leftGroupKey": "malarApexLeftIndices",
+        "rightGroupKey": "malarApexRightIndices",
+        "pairs": [
+          [
+            153,
+            602
+          ],
+          [
+            155,
+            604
+          ],
+          [
+            178,
+            627
+          ],
+          [
+            353,
+            784
+          ],
+          [
+            354,
+            785
+          ],
+          [
+            377,
+            808
+          ],
+          [
+            378,
+            809
+          ],
+          [
+            388,
+            819
+          ],
+          [
+            389,
+            820
+          ],
+          [
+            390,
+            821
+          ]
+        ]
+      }
+    ],
+    "topologyUvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a"
+  },
+  "sourceCapturePairIds": [
+    "pair_face3d_semantic_1783799133170",
+    "pair_face3d_semantic_1783799136465",
+    "pair_face3d_semantic_1783799138079",
+    "pair_face3d_semantic_1783801550595"
+  ],
+  "sourceCaptureShotKinds": [
+    "neutral",
+    "neutral",
+    "neutral",
+    "neutral"
+  ],
+  "sourceCaptureCount": 4,
+  "projectedFaceBoundsByCapture": [
+    {
+      "height": 458.55699999999996,
+      "maxX": 690.043,
+      "maxY": 758.847,
+      "minX": 358.718,
+      "minY": 300.29,
+      "width": 331.325
+    },
+    {
+      "height": 458.39599999999996,
+      "maxX": 696.581,
+      "maxY": 754.372,
+      "minX": 365.334,
+      "minY": 295.976,
+      "width": 331.247
+    },
+    {
+      "height": 457.85299999999995,
+      "maxX": 692.392,
+      "maxY": 756.328,
+      "minX": 361.737,
+      "minY": 298.475,
+      "width": 330.65500000000003
+    },
+    {
+      "height": 483.09700000000004,
+      "maxX": 707.39,
+      "maxY": 808.474,
+      "minX": 356.282,
+      "minY": 325.377,
+      "width": 351.108
+    }
+  ],
+  "captureFramingByCapture": [
+    {
+      "frameHeight": 960,
+      "frameWidth": 1059,
+      "fullMeshInFrame": true,
+      "outOfFrameVertexCount": 0
+    },
+    {
+      "frameHeight": 960,
+      "frameWidth": 1059,
+      "fullMeshInFrame": true,
+      "outOfFrameVertexCount": 0
+    },
+    {
+      "frameHeight": 960,
+      "frameWidth": 1059,
+      "fullMeshInFrame": true,
+      "outOfFrameVertexCount": 0
+    },
+    {
+      "frameHeight": 960,
+      "frameWidth": 1059,
+      "fullMeshInFrame": true,
+      "outOfFrameVertexCount": 0
+    }
+  ],
+  "groups": {
+    "noseTipIndices": [
+      7,
+      8,
+      9
+    ],
+    "chinIndices": [
+      34,
+      35,
+      975
+    ],
+    "chinBottomIndices": [
+      913,
+      914,
+      1047
+    ],
+    "upperLipIndices": [
+      1,
+      21,
+      22
+    ],
+    "lowerLipIndices": [
+      26,
+      27,
+      28
+    ],
+    "midfaceReferenceLeftIndices": [
+      150,
+      281,
+      311,
+      313,
+      314,
+      317,
+      318,
+      320,
+      321,
+      322,
+      433,
+      434,
+      435,
+      436,
+      437
+    ],
+    "midfaceReferenceRightIndices": [
+      599,
+      716,
+      746,
+      748,
+      749,
+      752,
+      753,
+      755,
+      756,
+      757,
+      861,
+      862,
+      863,
+      864,
+      865
+    ],
+    "midfaceReferenceUpperIndices": [
+      14,
+      15,
+      16,
+      36,
+      347,
+      360,
+      427,
+      780,
+      790,
+      791,
+      797,
+      818,
+      855
+    ],
+    "chinReferenceLeftIndices": [
+      193,
+      194,
+      195,
+      196,
+      280,
+      282,
+      283,
+      284,
+      285,
+      336,
+      337,
+      338,
+      339,
+      340,
+      341
+    ],
+    "chinReferenceRightIndices": [
+      642,
+      643,
+      644,
+      645,
+      715,
+      717,
+      718,
+      719,
+      720,
+      769,
+      770,
+      771,
+      772,
+      773,
+      774
+    ],
+    "chinReferenceUpperIndices": [
+      29,
+      30,
+      258,
+      259,
+      260,
+      261,
+      262,
+      263,
+      268,
+      269,
+      270,
+      695,
+      696
+    ],
+    "centralRegionIndices": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      72,
+      74,
+      125,
+      126,
+      127,
+      128,
+      129,
+      156,
+      157,
+      300,
+      302,
+      362,
+      363,
+      365,
+      372,
+      430,
+      431,
+      575,
+      576,
+      578,
+      605,
+      606,
+      735,
+      737,
+      793,
+      794,
+      796,
+      803
+    ],
+    "nasionIndices": [
+      15
+    ],
+    "noseBridgeMidlineIndices": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      36
+    ],
+    "alarLeftIndices": [
+      202,
+      204,
+      292,
+      298,
+      325
+    ],
+    "alarRightIndices": [
+      651,
+      653,
+      727,
+      733,
+      760
+    ],
+    "malarApexLeftIndices": [
+      153,
+      155,
+      178,
+      353,
+      354,
+      377,
+      378,
+      388,
+      389,
+      390
+    ],
+    "malarApexRightIndices": [
+      602,
+      604,
+      627,
+      784,
+      785,
+      808,
+      809,
+      819,
+      820,
+      821
+    ]
+  },
+  "groupDefinitions": {
+    "noseTipIndices": {
+      "color": "#ff3b30",
+      "label": "코끝",
+      "minimumCount": 3,
+      "selectionMethod": "reviewed_topology_seed_v1"
+    },
+    "chinIndices": {
+      "color": "#007aff",
+      "label": "턱 전방 후보 패치(Pogonion/E-line)",
+      "minimumCount": 3,
+      "selectionMethod": "product_owner_reviewed_topology_patch_v2"
+    },
+    "chinBottomIndices": {
+      "color": "#ff2d55",
+      "label": "턱 최하단(Menton)",
+      "minimumCount": 3,
+      "selectionMethod": "reviewed_topology_seed_v1"
+    },
+    "upperLipIndices": {
+      "color": "#ffd60a",
+      "label": "윗입술 중앙",
+      "minimumCount": 3,
+      "selectionMethod": "reviewed_topology_seed_v1"
+    },
+    "lowerLipIndices": {
+      "color": "#ff9500",
+      "label": "아랫입술 중앙",
+      "minimumCount": 3,
+      "selectionMethod": "reviewed_topology_seed_v1"
+    },
+    "midfaceReferenceLeftIndices": {
+      "color": "#34c759",
+      "label": "중안면 기준 왼쪽",
+      "minimumCount": 8,
+      "selectionMethod": "bilateral_uv_mirror_pair_connected_patch_v1"
+    },
+    "midfaceReferenceRightIndices": {
+      "color": "#30d158",
+      "label": "중안면 기준 오른쪽",
+      "minimumCount": 8,
+      "selectionMethod": "bilateral_uv_mirror_pair_connected_patch_v1"
+    },
+    "midfaceReferenceUpperIndices": {
+      "color": "#00c7be",
+      "label": "중안면 기준 상단",
+      "minimumCount": 8,
+      "selectionMethod": "connected_screen_patch_v1"
+    },
+    "chinReferenceLeftIndices": {
+      "color": "#af52de",
+      "label": "턱 기준 왼쪽",
+      "minimumCount": 8,
+      "selectionMethod": "bilateral_uv_mirror_pair_connected_patch_v1"
+    },
+    "chinReferenceRightIndices": {
+      "color": "#bf5af2",
+      "label": "턱 기준 오른쪽",
+      "minimumCount": 8,
+      "selectionMethod": "bilateral_uv_mirror_pair_connected_patch_v1"
+    },
+    "chinReferenceUpperIndices": {
+      "color": "#5856d6",
+      "label": "턱 기준 상단(아래 입술밑고랑)",
+      "minimumCount": 8,
+      "selectionMethod": "connected_screen_patch_v1"
+    },
+    "centralRegionIndices": {
+      "color": "#64d2ff",
+      "label": "코 중앙부 ROI(콧등~코끝)",
+      "minimumCount": 16,
+      "selectionMethod": "connected_screen_patch_v1"
+    },
+    "nasionIndices": {
+      "label": "코뿌리 고정 중앙점",
+      "minimumCount": 1,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    },
+    "noseBridgeMidlineIndices": {
+      "label": "콧대 중앙선",
+      "minimumCount": 4,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    },
+    "alarLeftIndices": {
+      "label": "콧볼 패치 · 해부학적 Left",
+      "minimumCount": 5,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    },
+    "alarRightIndices": {
+      "label": "콧볼 패치 · 해부학적 Right",
+      "minimumCount": 5,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    },
+    "malarApexLeftIndices": {
+      "label": "앞광대 패치 · 해부학적 Left",
+      "minimumCount": 5,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    },
+    "malarApexRightIndices": {
+      "label": "앞광대 패치 · 해부학적 Right",
+      "minimumCount": 5,
+      "selectionMethod": "product_owner_reviewed_fixed_topology_patch_v1"
+    }
+  },
+  "warnings": [
+    "이 파일은 여러 정면 neutral 캡처의 평균 위치로 만든 자동 합의 후보이며 런타임 시맨틱 맵이 아닙니다.",
+    "좌우 회전 캡처는 후보 생성에 섞지 말고 동일 정점 집합을 재투영해 검증하세요.",
+    "서로 다른 얼굴과 약한 좌우 회전 오버레이를 사람이 검수한 뒤에만 승인 맵으로 변환하세요.",
+    "파란 턱 전방점은 E-line 용도의 soft-tissue Pogonion 영역인지 확인하세요.",
+    "분홍 턱 최하단은 얼굴 윤곽의 Menton 영역인지 확인하세요.",
+    "Tier-2 여섯 그룹은 product-owner가 primary board에서 승인한 고정 topology patch다.",
+    "실제 지표는 faceScale 정규화 상대값이며 절대 mm 또는 임상 진단값이 아니다.",
+    "새로운 3명×3회 neutral 실기기 반복성 검증은 product-owner 결정으로 이번 승격에서 면제됐다."
+  ],
+  "tier2Approval": {
+    "approvalFile": "primary-approved-patch.json",
+    "approvalSha256": "f497181a5f99f32a183469d05462e3ef3f68fd46aac5c45c29ec8d03112abed9",
+    "approvedAtUtc": "2026-07-15T00:00:00.000Z",
+    "approvalScope": "primary board anatomical coverage for all six Tier-2 groups",
+    "reviewerId": "product-owner",
+    "sourceCapturePairId": "pair_face3d_semantic_1783799136465"
+  },
+  "baseCandidate": {
+    "candidateFile": "ARKitFaceSemanticMapV1.consensus.candidate.json",
+    "candidateId": "face3d-consensus-1783842642466-candidate-v1",
+    "candidateSha256": "25be09d670a9f757892b1918eb7d9ffd49777154d35c3ce45f5c1159bafd3afe"
+  }
+}

@@ -22,6 +22,8 @@
     "face3d:semantic:review-board": "node scripts/face3d/build-three-subject-review-board.mjs",
     "face3d:semantic:approve": "node scripts/face3d/approve-semantic-map.mjs",
     "face3d:semantic:diagnostics": "node scripts/face3d/evaluate-semantic-candidate.mjs",
+    "face3d:semantic:build-g2-candidate": "node scripts/face3d/build-tier2-runtime-candidate.mjs",
+    "face3d:semantic:promote-g2": "node scripts/face3d/promote-tier2-semantic-map.mjs",
     "face3d:vertex-overlay": "node scripts/face3d/build-vertex-index-overlay.mjs",
     "face3d:repeatability": "node scripts/face3d/analyze-repeatability.mjs",
     "face3d:test:repeatability": "node scripts/face3d/test-analyze-repeatability.mjs",
@@ -35,6 +37,7 @@
     "mobile:test:realtime-face-quality-native": "npm --prefix apps/mobile run test:realtime-face-quality-native",
     "mobile:test:realtime-capture-frame-native": "npm --prefix apps/mobile run test:realtime-capture-frame-native",
     "mobile:test:cognito-redirect": "npm --prefix apps/mobile run test:cognito-redirect",
+    "face3d:test:tier2-promotion": "node scripts/face3d/test-tier2-promotion.mjs",
     "mobile:test:unity-bridge": "npm --prefix apps/mobile run test:unity-bridge",
     "mobile:test:ios-privacy": "npm --prefix apps/mobile run test:ios-privacy",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck"

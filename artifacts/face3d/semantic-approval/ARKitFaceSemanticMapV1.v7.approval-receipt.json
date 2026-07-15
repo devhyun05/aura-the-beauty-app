@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "aura.face3d-semantic-approval-receipt.v1",
+  "generatedAtUtc": "2026-07-12T08:09:03.591Z",
+  "approval": {
+    "approved": true,
+    "distinctPeopleConfirmed": true,
+    "reviewer": "workspace-owner",
+    "reviewedAtUtc": "2026-07-12T08:07:09Z"
+  },
+  "candidate": {
+    "candidateId": "face3d-consensus-1783842642466-candidate-v1",
+    "candidateFile": "ARKitFaceSemanticMapV1.consensus.candidate.json",
+    "candidateSha256": "25be09d670a9f757892b1918eb7d9ffd49777154d35c3ce45f5c1159bafd3afe",
+    "semanticContentSha256": "819fbe282252a06b3e4f474536ce51db9154c8c7b5eac52a3e9e713a32a6ce75",
+    "schemaVersion": "aura.face3d-semantic-candidate.v1",
+    "bilateralSymmetry": {
+      "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+      "policySha256": "045f5e2f7c9c4f4912e78e2d05af4f5fa81198ffd717905b61377fe65c447e42",
+      "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+      "selectedMirrorPairCount": 30
+    }
+  },
+  "runtimeMap": {
+    "mapId": "arkit-face3d-g1-reviewed-v1",
+    "runtimeMapSha256": "2c3c1a1c32275163f71d573ad68d92a09531465a57c65f493a014896a7f97861",
+    "schemaVersion": "aura.face3d-semantic-map.v1",
+    "topologyFingerprint": {
+      "algorithm": "sha256-le-v1",
+      "vertexCount": 1220,
+      "indexCount": 6912,
+      "uvCount": 1220,
+      "indicesHash": "c4bd80f9f6daef3e9bac013be387bef36ed61b7f5c088c153df64d37cb5946f1",
+      "uvHash": "106bce51d4585a646eec42e3d9cbc1279afeff449bfdca0f5c77762f1766e07a",
+      "fingerprint": "57bdaf554d270e1a2f708120ced12ab4ed2207ad1f87a915d04a02d1c6ee1f3f"
+    }
+  },
+  "evidence": {
+    "approvalManifestFile": "semantic-approval-v7.json",
+    "approvalManifestSha256": "ce05fb14ef3ffd88a77ece28c35349fefd35a468b2bd6b724aa7d0b908b0054b",
+    "requiredShotKinds": [
+      "neutral",
+      "yawLeft",
+      "yawRight"
+    ],
+    "subjectCount": 3,
+    "subjects": [
+      {
+        "bilateralSymmetryValidation": {
+          "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+          "policySha256": "045f5e2f7c9c4f4912e78e2d05af4f5fa81198ffd717905b61377fe65c447e42",
+          "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+          "selectedMirrorPairCount": 30,
+          "status": "passed"
+        },
+        "captureSetIds": [
+          "face3d-semantic-g1-1783801550595",
+          "face3d-semantic-g1-1783801552908",
+          "face3d-semantic-g1-1783801555305"
+        ],
+        "samePersonConfirmed": true,
+        "subjectId": "subject-01",
+        "validationSummaryReference": "../semantic-validation/subject-01-clean-fixed-neutral-v7/semantic_validation_summary.json",
+        "validationSummarySha256": "d3b71056f5e166d566356efb78296cd5ba799071a7d3e78562000c05604e9868",
+        "captures": [
+          {
+            "capturePairId": "pair_face3d_semantic_1783801550595",
+            "captureSetId": "face3d-semantic-g1-1783801550595",
+            "captureShotKind": "neutral",
+            "overlay": {
+              "file": "semantic_validation_01_neutral.svg",
+              "sha256": "0f40dd5fd04d7846d98f86b08f8ab30d1a9098ffb67c823f6a8ce2a00697f678"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783801552908",
+            "captureSetId": "face3d-semantic-g1-1783801552908",
+            "captureShotKind": "yawLeft",
+            "overlay": {
+              "file": "semantic_validation_02_yawLeft.svg",
+              "sha256": "c377bc55a831f9897704a69a9468f5fd6f89590ac6474607ecf6537957e4061c"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783801555305",
+            "captureSetId": "face3d-semantic-g1-1783801555305",
+            "captureShotKind": "yawRight",
+            "overlay": {
+              "file": "semantic_validation_03_yawRight.svg",
+              "sha256": "c27199039fda95a21a44539c67cf9db42bcac49f813d2f9ea35779368207ff3b"
+            }
+          }
+        ],
+        "reviewMatrix": {
+          "file": "semantic_validation_matrix.html",
+          "sha256": "133d36892536239b3055357ad70f98ccfb7f51576c8257b97fa124ae966b032e"
+        }
+      },
+      {
+        "bilateralSymmetryValidation": {
+          "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+          "policySha256": "045f5e2f7c9c4f4912e78e2d05af4f5fa81198ffd717905b61377fe65c447e42",
+          "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+          "selectedMirrorPairCount": 30,
+          "status": "passed"
+        },
+        "captureSetIds": [
+          "face3d-semantic-subject-1783839254046"
+        ],
+        "samePersonConfirmed": true,
+        "subjectId": "subject-02",
+        "validationSummaryReference": "../semantic-validation/subject-02-fixed-v7/semantic_validation_summary.json",
+        "validationSummarySha256": "b1c1176552a41602b084a15da357fe1682eb920c060dc7c543f6d7484d076a73",
+        "captures": [
+          {
+            "capturePairId": "pair_face3d_semantic_1783839298585",
+            "captureSetId": "face3d-semantic-subject-1783839254046",
+            "captureShotKind": "neutral",
+            "overlay": {
+              "file": "semantic_validation_01_neutral.svg",
+              "sha256": "69f8935086d90968a905516fc598006f98b50012ee033f35b8e57dc3a021d4a1"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783839315132",
+            "captureSetId": "face3d-semantic-subject-1783839254046",
+            "captureShotKind": "yawLeft",
+            "overlay": {
+              "file": "semantic_validation_02_yawLeft.svg",
+              "sha256": "4ac91421cea22e46a05cd58a9222ac63abf4e5f35429bec349dee83e6a81b479"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783839318477",
+            "captureSetId": "face3d-semantic-subject-1783839254046",
+            "captureShotKind": "yawRight",
+            "overlay": {
+              "file": "semantic_validation_03_yawRight.svg",
+              "sha256": "362ab905bc1f212a1fd220ee47f973aeed37207c70df2c3b87884568e396587d"
+            }
+          }
+        ],
+        "reviewMatrix": {
+          "file": "semantic_validation_matrix.html",
+          "sha256": "adfced48ab7da33e6d5fa439c402f70813a9e1fdd749dba39df156a72bde9a86"
+        }
+      },
+      {
+        "bilateralSymmetryValidation": {
+          "mirrorMapSha256": "ce17237f58f107911506d199d3403cf22bccda0af3ed07a17794e8cd815638e9",
+          "policySha256": "045f5e2f7c9c4f4912e78e2d05af4f5fa81198ffd717905b61377fe65c447e42",
+          "policyVersion": "uv-reflection-mutual-nearest-paired-connected-v2",
+          "selectedMirrorPairCount": 30,
+          "status": "passed"
+        },
+        "captureSetIds": [
+          "face3d-semantic-subject-1783839366413"
+        ],
+        "samePersonConfirmed": true,
+        "subjectId": "subject-03",
+        "validationSummaryReference": "../semantic-validation/subject-03-fixed-v7/semantic_validation_summary.json",
+        "validationSummarySha256": "a95a1670257b466058e3ad8a29a40c555c6d6ea10d8076e43a648371c63c5e8c",
+        "captures": [
+          {
+            "capturePairId": "pair_face3d_semantic_1783839381863",
+            "captureSetId": "face3d-semantic-subject-1783839366413",
+            "captureShotKind": "neutral",
+            "overlay": {
+              "file": "semantic_validation_01_neutral.svg",
+              "sha256": "5be1add236b66211d4c4459528bb8712e160e99de61ba6da6e8de69aee1369bc"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783839388370",
+            "captureSetId": "face3d-semantic-subject-1783839366413",
+            "captureShotKind": "yawLeft",
+            "overlay": {
+              "file": "semantic_validation_02_yawLeft.svg",
+              "sha256": "50215ef5dd6fb2a19a2385dafdd114570f184519a199250ba1bda0e71981ef62"
+            }
+          },
+          {
+            "capturePairId": "pair_face3d_semantic_1783839393013",
+            "captureSetId": "face3d-semantic-subject-1783839366413",
+            "captureShotKind": "yawRight",
+            "overlay": {
+              "file": "semantic_validation_03_yawRight.svg",
+              "sha256": "0bbeef89e82ceb77bbaac8e7d2f68932c298228afefe08194a873f39e5b83e6f"
+            }
+          }
+        ],
+        "reviewMatrix": {
+          "file": "semantic_validation_matrix.html",
+          "sha256": "8fbcbbcf1d0cc17bf27cfaf8cb38bdbb411e0cf37940796d3331c5cd72ec582e"
+        }
+      }
+    ]
+  }
+}

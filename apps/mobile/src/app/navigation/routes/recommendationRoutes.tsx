@@ -4,7 +4,11 @@ import {
   AuradinSearchScreen,
   LikedProductListScreen,
   MakeupLookListScreen,
+  ProductDetailScreen,
+  ProductPersonalizationSettingsScreen,
   ProductRecommendationScreen,
+  ProductRecommendationShelfScreen,
+  ProductSearchResultScreen,
 } from '../../../features/recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {
@@ -27,9 +31,12 @@ export function ProductRecommendationRouteScreen({
 
   return (
     <DetailRouteChrome
+      headerMode="standard"
       routeName="ProductRecommendation"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationScreen
+        arStyleId={route.params?.arStyleId}
+        initialSection={route.params?.initialSection}
         onCapturePhoto={() =>
           navigation.navigate('FaceCapture', {afterAnalysisRoute: 'ProductRecommendation'})
         }
@@ -39,7 +46,68 @@ export function ProductRecommendationRouteScreen({
             initialSource: 'gallery',
           })
         }
+        onCreateArLook={() => navigation.navigate('UnityMakeupCapture')}
+        onOpenAuradin={() => navigation.navigate('AuradinSearch')}
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenPersonalizationSettings={() =>
+          navigation.navigate('ProductPersonalizationSettings')
+        }
+        onOpenProduct={(productId, shadeId, recommendationContext) =>
+          navigation.navigate('ProductDetail', {
+            productId,
+            ...(shadeId ? {shadeId} : {}),
+            ...(recommendationContext?.disclosureLabel
+              ? {disclosureLabel: recommendationContext.disclosureLabel}
+              : {}),
+            ...(recommendationContext?.reasonLabels?.length
+              ? {reasonLabels: recommendationContext.reasonLabels}
+              : {}),
+            ...(recommendationContext?.sponsored !== undefined
+              ? {sponsored: recommendationContext.sponsored}
+              : {}),
+            ...(recommendationContext?.sponsorshipType
+              ? {sponsorshipType: recommendationContext.sponsorshipType}
+              : {}),
+          })
+        }
+        onOpenShelf={(shelf, title, selectedArStyleId) =>
+          navigation.navigate('ProductRecommendationShelf', {
+            shelf,
+            title,
+            ...(selectedArStyleId ? {arStyleId: selectedArStyleId} : {}),
+          })
+        }
+        onSearch={query => navigation.navigate('ProductSearchResult', {query})}
         sourceReportId={sourceReportId}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ProductRecommendationShelfRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductRecommendationShelf'>) {
+  return (
+    <DetailRouteChrome
+      headerMode="standard"
+      routeName="ProductRecommendationShelf"
+      onBack={() => navigation.goBack()}>
+      <ProductRecommendationShelfScreen
+        arStyleId={route.params.arStyleId}
+        initialTitle={route.params.title}
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenProduct={product =>
+          navigation.navigate('ProductDetail', {
+            productId: product.productId,
+            ...(product.shadeId ? {shadeId: product.shadeId} : {}),
+            ...(product.disclosureLabel ? {disclosureLabel: product.disclosureLabel} : {}),
+            ...(product.reasonLabels?.length ? {reasonLabels: product.reasonLabels} : {}),
+            ...(product.sponsored !== undefined ? {sponsored: product.sponsored} : {}),
+            ...(product.sponsorshipType ? {sponsorshipType: product.sponsorshipType} : {}),
+          })
+        }
+        shelf={route.params.shelf}
       />
     </DetailRouteChrome>
   );
@@ -57,7 +125,7 @@ const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> =
   {delayMs: 38000, step: {open: 'anchor', ts: 'demo-4'}},
 ];
 
-export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch'>) {
+export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'AuradinSearch'>) {
   const [drive, setDrive] = React.useState(route.params);
   // 리포트 첨부: nav state의 선택된 얼굴분석 리포트 → availableReport (첨부 트레이가 소비).
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
@@ -85,7 +153,88 @@ export function AuradinSearchRouteScreen({route}: RootScreenProps<'AuradinSearch
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  return <AuradinSearchScreen availableReport={availableReport} drive={drive} />;
+  return (
+    <AuradinSearchScreen
+      availableReport={availableReport}
+      drive={drive}
+      onBack={() =>
+        navigation.canGoBack()
+          ? navigation.goBack()
+          : navigation.navigate('ProductRecommendation')
+      }
+      onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+      onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
+        productId,
+        ...(shadeId ? {shadeId} : {}),
+      })}
+    />
+  );
+}
+
+export function ProductSearchResultRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductSearchResult'>) {
+  return (
+    <DetailRouteChrome routeName="ProductSearchResult" onBack={() => navigation.goBack()}>
+      <ProductSearchResultScreen
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenProduct={product =>
+          navigation.navigate('ProductDetail', {
+            productId: product.productId,
+            ...(product.shadeId ? {shadeId: product.shadeId} : {}),
+            ...(product.disclosureLabel ? {disclosureLabel: product.disclosureLabel} : {}),
+            ...(product.reasonLabels?.length ? {reasonLabels: product.reasonLabels} : {}),
+            ...(product.sponsored !== undefined ? {sponsored: product.sponsored} : {}),
+            ...(product.sponsorshipType ? {sponsorshipType: product.sponsorshipType} : {}),
+          })
+        }
+        query={route.params.query}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ProductDetailRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'ProductDetail'>) {
+  const recommendationContext = React.useMemo(
+    () => ({
+      disclosureLabel: route.params.disclosureLabel,
+      reasonLabels: route.params.reasonLabels,
+      sponsored: route.params.sponsored,
+      sponsorshipType: route.params.sponsorshipType,
+    }),
+    [
+      route.params.disclosureLabel,
+      route.params.reasonLabels,
+      route.params.sponsored,
+      route.params.sponsorshipType,
+    ],
+  );
+  return (
+    <DetailRouteChrome routeName="ProductDetail" onBack={() => navigation.goBack()}>
+      <ProductDetailScreen
+        onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        productId={route.params.productId}
+        shadeId={route.params.shadeId}
+        recommendationContext={recommendationContext}
+      />
+    </DetailRouteChrome>
+  );
+}
+
+export function ProductPersonalizationSettingsRouteScreen({
+  navigation,
+}: RootScreenProps<'ProductPersonalizationSettings'>) {
+  return (
+    <DetailRouteChrome
+      routeName="ProductPersonalizationSettings"
+      onBack={() => navigation.goBack()}>
+      <ProductPersonalizationSettingsScreen />
+    </DetailRouteChrome>
+  );
 }
 
 export function MakeupLookListRouteScreen({
@@ -141,7 +290,12 @@ export function LikedProductListRouteScreen({
     <DetailRouteChrome
       routeName="LikedProductList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
-      <LikedProductListScreen />
+      <LikedProductListScreen
+        onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
+          productId,
+          ...(shadeId ? {shadeId} : {}),
+        })}
+      />
     </DetailRouteChrome>
   );
 }

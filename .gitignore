@@ -77,3 +77,4 @@ tmp-debug/
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
 apps/unity/MakeupAR/Packages/local/
+apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite

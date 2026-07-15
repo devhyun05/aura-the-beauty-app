@@ -230,6 +230,7 @@ jobs:
           node ../../scripts/face3d/test-approve-semantic-map.mjs
           node ../../scripts/face3d/test-evaluate-semantic-candidate.mjs
           node ../../scripts/face3d/test-analyze-repeatability.mjs
+          node ../../scripts/face3d/test-tier2-promotion.mjs
 
   ios-native-geometry-golden:
     name: iOS native geometry golden

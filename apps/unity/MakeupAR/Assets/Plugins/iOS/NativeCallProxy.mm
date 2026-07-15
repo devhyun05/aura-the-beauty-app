@@ -4,17 +4,17 @@
 @implementation FrameworkLibAPI
 
 id<NativeCallsProtocol> api = NULL;
-
-+ (void)registerAPIforNativeCalls:(id<NativeCallsProtocol>)aApi
++(void) registerAPIforNativeCalls:(id<NativeCallsProtocol>) aApi
 {
-  api = aApi;
+    api = aApi;
 }
 
 @end
 
-extern "C" {
-void sendMessageToMobileApp(const char *message)
+extern "C"
 {
-  return [api sendMessageToMobileApp:[NSString stringWithUTF8String:message]];
-}
+    void sendMessageToMobileApp(const char* message)
+    {
+        return [api sendMessageToMobileApp:[NSString stringWithUTF8String:message]];
+    }
 }

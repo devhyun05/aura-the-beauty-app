@@ -1,4 +1,7 @@
-import {getARFilterDetailEditRouteParams} from './arRouteActions';
+import {
+  getARFilterDetailEditRouteParams,
+  getSavedArLookProductRecommendationRouteParams,
+} from './arRouteActions';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -54,4 +57,18 @@ expectEqual(
   getARFilterDetailEditRouteParams({initialEditMode: 'fit'}).initialEditMode,
   'fit',
   'AR filter detail edit fit tab mode',
+);
+
+const savedLookProductRouteParams =
+  getSavedArLookProductRecommendationRouteParams('style-recommended-1');
+
+expectEqual(
+  savedLookProductRouteParams.arStyleId,
+  'style-recommended-1',
+  'saved AR look product recommendation style id',
+);
+expectEqual(
+  savedLookProductRouteParams.initialSection,
+  'ar',
+  'saved AR look product recommendation initial section',
 );

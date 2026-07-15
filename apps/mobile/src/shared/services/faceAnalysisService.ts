@@ -741,7 +741,7 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
-  // ARKit 3D 측정 프로필(정규화 5지표) — 측정 성공 세션에서만 전달된다.
+  // ARKit 3D 측정 프로필(정규화 11지표; 구버전 G1은 5지표) — 측정 성공 세션에서만 전달된다.
   face3d?: Face3DProfile,
   // 2D 얼굴 기하 요약 — 산출 성공 세션에서만 전달된다.
   faceGeometry2d?: FaceGeometryAnalysisPayload,

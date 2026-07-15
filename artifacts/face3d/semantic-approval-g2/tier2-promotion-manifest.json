@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "aura.face3d-tier2-promotion.v1",
+  "candidateId": "face3d-g2-product-approved-v1-candidate",
+  "mapId": "arkit-face3d-g2-product-approved-v1",
+  "reviewer": "product-owner",
+  "reviewedAtUtc": "2026-07-15T00:00:00.000Z",
+  "approved": true,
+  "evidence": {
+    "baseG1ApprovalReceipt": "../semantic-approval/ARKitFaceSemanticMapV1.v7.approval-receipt.json",
+    "pogonionDecision": "../../../docs/face3d/TIER2_LANDMARK_SEED_DECISION_KO.md",
+    "tier2PrimaryApproval": "../tier2-seed-reprojection-v1/primary-approved-patch.json",
+    "offlineDiagnostics17": "tier2-offline-diagnostics-17.json"
+  },
+  "deviceRepeatability": {
+    "status": "waived_by_product_owner",
+    "decision": "실기기 검증은 생략한다",
+    "waivedScope": "new 3 people x 3 neutral repeatability dataset",
+    "retainedEvidence": "existing 17 ARFace exports: topology exact and all 11 metrics finite"
+  }
+}

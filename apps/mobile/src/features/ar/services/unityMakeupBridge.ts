@@ -486,6 +486,24 @@ export function postUnityFilterParams(params: ArwFilterParams): boolean {
   return true;
 }
 
+// Generic UnitySendMessage entry point used by the exact stencil-0710 screen.
+// The host native bridge already supports arbitrary GameObject/method targets,
+// so the standalone @azesmway native package must not be installed as a second
+// Unity runtime owner.
+export function postUnityMessage(
+  gameObject: string,
+  method: string,
+  payload: string,
+): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  if (!nativeBridge?.postMessage) {
+    return false;
+  }
+
+  nativeBridge.postMessage(gameObject, method, payload);
+  return true;
+}
+
 // Pause/resume the ARwithFable Unity AR session. The Unity player is a persistent
 // singleton — its ARSession keeps holding the FRONT camera even after the AR
 // filter view is hidden, which blocks the face-capture (report) camera from

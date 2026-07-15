@@ -3,10 +3,18 @@ import React from 'react';
 import {ARFilterScreen} from '../../../features/ar/screens/ARFilterScreen';
 import {MakeupFilterEditScreen} from '../../../features/ar/screens/MakeupFilterEditScreen';
 import {UnityMakeupCaptureScreen} from '../../../features/ar/screens/UnityMakeupCaptureScreen';
+import StencilARApp from '../../../features/ar/stencil/StencilARApp';
 import type {FullFaceMakeupSavedContract} from '../../../features/ar/services/fullFaceMakeupEditService';
+import {
+  createSavedArLookClientRequestId,
+  saveArLook,
+} from '../../../features/ar/services/savedArLookService';
 import type {GuideMode} from '../../../shared/types/makeupGuide';
 import {useNavigationFlowState} from '../flowState';
-import {getARFilterDetailEditRouteParams} from './arRouteActions';
+import {
+  getARFilterDetailEditRouteParams,
+  getSavedArLookProductRecommendationRouteParams,
+} from './arRouteActions';
 import {navigateARBack, navigateMainTab, type RootScreenProps} from './routeUtils';
 
 const DEFAULT_AR_GUIDE_MODE: GuideMode = 'basic';
@@ -15,6 +23,7 @@ export function ARFilterRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ARFilter'>) {
+  const saveRequestIdsByRecipe = React.useRef(new Map<string, string>());
   const {selectedFaceCapture, setSelectedRecommendedMakeupFilterId} =
     useNavigationFlowState();
   const initialMakeupFilterId = route.params?.initialMakeupFilterId;
@@ -22,6 +31,12 @@ export function ARFilterRouteScreen({
   const initialGuideMode =
     route.params?.initialGuideMode ??
     (initialSource === 'recommendedFilter' ? 'half' : DEFAULT_AR_GUIDE_MODE);
+  const shouldUseStencilExperience =
+    route.params == null ||
+    (initialSource === 'homeServiceShortcut' &&
+      !route.params.fullFaceEditState &&
+      !route.params.initialGuideMode &&
+      !route.params.initialMakeupFilterId);
 
   const rememberSelectedRecommendedFilter = (selectedMakeupFilterId?: string) => {
     if (initialSource === 'recommendedFilter') {
@@ -69,11 +84,40 @@ export function ARFilterRouteScreen({
     );
   };
 
-  const handleSave = (selectedMakeupFilterId?: string) => {
+  const handleSave = async (
+    selectedMakeupFilterId?: string,
+    savedContract?: FullFaceMakeupSavedContract,
+  ) => {
     rememberSelectedRecommendedFilter(selectedMakeupFilterId);
+
+    if (savedContract) {
+      const recipeKey = JSON.stringify(savedContract.recipe);
+      const clientRequestId =
+        saveRequestIdsByRecipe.current.get(recipeKey) ??
+        createSavedArLookClientRequestId();
+      saveRequestIdsByRecipe.current.set(recipeKey, clientRequestId);
+      const savedStyle = await saveArLook(savedContract, clientRequestId);
+
+      if (initialSource === 'recommendedFilter') {
+        navigation.replace(
+          'ProductRecommendation',
+          getSavedArLookProductRecommendationRouteParams(savedStyle.id),
+        );
+        return;
+      }
+
+      navigation.replace('MakeupFilterSaveComplete', {
+        arStyleId: savedStyle.id,
+      });
+      return;
+    }
 
     navigation.navigate('MakeupFilterSave');
   };
+
+  if (shouldUseStencilExperience) {
+    return <StencilARApp onBack={() => navigateMainTab(navigation, 'HomeTab')} />;
+  }
 
   return (
     <ARFilterScreen
@@ -115,13 +159,19 @@ export function MakeupFilterEditRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'MakeupFilterEdit'>) {
-  const handleSave = (
+  const saveRequestIdsByRecipe = React.useRef(new Map<string, string>());
+  const handleSave = async (
     savedContract?: FullFaceMakeupSavedContract,
     selectedMakeupFilterId?: string,
   ) => {
     if (savedContract) {
-      navigation.navigate('ARFilter', {
-        fullFaceEditState: savedContract.editState,
+      const recipeKey = JSON.stringify(savedContract.recipe);
+      const clientRequestId = saveRequestIdsByRecipe.current.get(recipeKey)
+        ?? createSavedArLookClientRequestId();
+      saveRequestIdsByRecipe.current.set(recipeKey, clientRequestId);
+      const savedStyle = await saveArLook(savedContract, clientRequestId);
+      navigation.replace('MakeupFilterSaveComplete', {
+        arStyleId: savedStyle.id,
       });
       return;
     }
