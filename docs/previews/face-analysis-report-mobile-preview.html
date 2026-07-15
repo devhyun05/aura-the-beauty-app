@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AURA 얼굴 분석 보고서 · 모바일 미리보기</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --accent: #ad626d;
+      --accent-deep: #79434b;
+      --accent-soft: #f3dfe2;
+      --ink: #171516;
+      --muted: #706a6c;
+      --line: rgba(29, 22, 24, 0.12);
+      --paper: #f7f3ef;
+      --surface: #fffdfa;
+      --success: #486b57;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: #ded9d3;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, summary, a { -webkit-tap-highlight-color: transparent; }
+
+    button, a { font: inherit; }
+
+    .report-shell {
+      margin: 28px auto;
+      width: min(100%, 430px);
+      background: var(--paper);
+      box-shadow: 0 30px 90px rgba(34, 28, 29, 0.16);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .demo-note {
+      background: #211e1f;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      line-height: 1.5;
+      padding: 10px 18px;
+      text-align: center;
+    }
+
+    .hero {
+      min-height: 545px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero img {
+      height: 100%;
+      inset: 0;
+      object-fit: cover;
+      object-position: center 27%;
+      position: absolute;
+      width: 100%;
+      animation: hero-in 900ms cubic-bezier(.2,.7,.2,1) both;
+    }
+
+    .hero::after {
+      background: linear-gradient(180deg, rgba(18, 13, 15, 0.04) 30%, rgba(18, 13, 15, 0.76) 100%);
+      content: "";
+      inset: 0;
+      position: absolute;
+    }
+
+    .hero-copy {
+      bottom: 0;
+      color: white;
+      left: 0;
+      padding: 32px 24px 30px;
+      position: absolute;
+      right: 0;
+      z-index: 1;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 750;
+      letter-spacing: 0.16em;
+      margin: 0 0 8px;
+      text-transform: uppercase;
+    }
+
+    .hero .eyebrow { color: rgba(255,255,255,.72); }
+
+    .hero h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(42px, 11vw, 54px);
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 0.98;
+      margin: 0;
+      max-width: 310px;
+    }
+
+    .hero-date {
+      color: rgba(255,255,255,.75);
+      font-size: 12px;
+      margin: 15px 0 0;
+    }
+
+    .section {
+      border-top: 1px solid var(--line);
+      padding: 34px 22px;
+    }
+
+    .section:first-of-type { border-top: 0; }
+
+    .section-heading {
+      align-items: end;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+
+    .section-heading h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.035em;
+      line-height: 1.08;
+      margin: 0;
+    }
+
+    .section-index {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .profile-grid {
+      border-bottom: 1px solid var(--line);
+      border-top: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .profile-item {
+      min-height: 92px;
+      padding: 16px 0;
+    }
+
+    .profile-item:nth-child(odd) {
+      border-right: 1px solid var(--line);
+      padding-right: 16px;
+    }
+
+    .profile-item:nth-child(even) { padding-left: 16px; }
+    .profile-item:nth-child(n+3) { border-top: 1px solid var(--line); }
+
+    .label {
+      color: var(--muted);
+      display: block;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-size: 18px;
+      font-weight: 720;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+    }
+
+    .lead {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 25px;
+      letter-spacing: -0.025em;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .body-copy {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.75;
+      margin: 12px 0 0;
+    }
+
+    .photo-stage {
+      aspect-ratio: 4 / 5;
+      background: #ead9d7;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .photo-stage img {
+      height: 100%;
+      object-fit: cover;
+      width: 100%;
+    }
+
+    .third-line {
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 0 0 1px rgba(24,17,19,.15);
+      height: 1px;
+      left: 10%;
+      position: absolute;
+      right: 10%;
+    }
+
+    .third-line.one { top: 34%; }
+    .third-line.two { top: 57%; }
+    .third-line.three { top: 79%; }
+
+    .third-label {
+      background: rgba(25,20,21,.76);
+      border-radius: 999px;
+      color: white;
+      font-size: 10px;
+      padding: 5px 8px;
+      position: absolute;
+      right: 12%;
+      transform: translateY(-50%);
+    }
+
+    .third-label.one { top: 34%; }
+    .third-label.two { top: 57%; }
+    .third-label.three { top: 79%; }
+
+    .ratio-row {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 14px;
+    }
+
+    .ratio-item { text-align: center; }
+    .ratio-item strong { display: block; font-size: 20px; }
+    .ratio-item span { color: var(--muted); font-size: 10px; }
+
+    .metric-feature {
+      align-items: end;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      padding: 15px 0;
+    }
+
+    .metric-feature:first-child { border-top: 1px solid var(--line); }
+    .metric-feature span { color: var(--muted); font-size: 12px; }
+
+    .metric-feature strong {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 27px;
+      font-weight: 500;
+    }
+
+    .metric-caption {
+      align-items: center;
+      color: var(--success);
+      display: flex;
+      font-size: 11px;
+      gap: 7px;
+      margin: 14px 0 0;
+    }
+
+    .metric-caption::before {
+      background: var(--success);
+      border-radius: 50%;
+      content: "";
+      height: 6px;
+      width: 6px;
+    }
+
+    details {
+      border-bottom: 1px solid var(--line);
+      margin-top: 18px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      list-style: none;
+      min-height: 48px;
+      padding: 15px 30px 15px 0;
+      position: relative;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    summary::after {
+      content: "+";
+      font-size: 20px;
+      font-weight: 400;
+      position: absolute;
+      right: 4px;
+      top: 12px;
+      transition: transform 180ms ease;
+    }
+
+    details[open] summary::after { transform: rotate(45deg); }
+
+    .detail-list { padding-bottom: 12px; }
+
+    .detail-row {
+      align-items: start;
+      display: grid;
+      font-size: 12px;
+      gap: 10px;
+      grid-template-columns: 1fr auto;
+      padding: 9px 0;
+    }
+
+    .detail-row span { color: var(--muted); }
+    .detail-row b { font-variant-numeric: tabular-nums; }
+
+    .palette {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: repeat(5, 1fr);
+      margin: 20px 0;
+    }
+
+    .swatch {
+      aspect-ratio: 1;
+      border: 1px solid rgba(28,20,22,.08);
+      border-radius: 50%;
+    }
+
+    .tone-result {
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      padding: 17px 0;
+    }
+
+    .tone-result strong { font-size: 21px; }
+
+    .status {
+      color: var(--success);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .pipeline {
+      border-bottom: 1px solid var(--line);
+      border-top: 1px solid var(--line);
+    }
+
+    .pipeline-row {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+      min-height: 52px;
+    }
+
+    .pipeline-row + .pipeline-row { border-top: 1px solid var(--line); }
+    .pipeline-row span { font-size: 13px; }
+
+    .pipeline-row b {
+      color: var(--success);
+      font-size: 11px;
+    }
+
+    .ai-estimates {
+      display: grid;
+      gap: 1px;
+      grid-template-columns: repeat(3, 1fr);
+      margin: 22px 0 0;
+    }
+
+    .estimate {
+      background: rgba(255,255,255,.56);
+      min-height: 98px;
+      padding: 13px 10px;
+    }
+
+    .estimate span { color: var(--muted); display: block; font-size: 10px; }
+    .estimate strong { display: block; font-size: 14px; margin-top: 10px; }
+    .estimate em { color: var(--accent-deep); display: block; font-size: 10px; font-style: normal; margin-top: 5px; }
+
+    .insight-list { border-top: 1px solid var(--line); }
+
+    .insight {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 92px 1fr;
+      padding: 16px 0;
+    }
+
+    .insight + .insight { border-top: 1px solid var(--line); }
+    .insight > span { color: var(--muted); font-size: 11px; }
+    .insight strong { display: block; font-size: 14px; }
+    .insight p { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 5px 0 0; }
+
+    .quote {
+      background: var(--accent-soft);
+      border-radius: 2px;
+      margin-top: 24px;
+      padding: 20px;
+    }
+
+    .quote b { color: var(--accent-deep); display: block; font-size: 11px; margin-bottom: 8px; }
+    .quote p { font-family: Georgia, "Times New Roman", serif; font-size: 20px; line-height: 1.5; margin: 0; }
+
+    .compare {
+      aspect-ratio: 4 / 5;
+      background: #ead5d5;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .compare img {
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 160ms ease, transform 320ms ease;
+      width: 100%;
+    }
+
+    .compare.is-changing img { opacity: .55; transform: scale(1.012); }
+
+    .compare-badge {
+      background: rgba(24,18,20,.7);
+      border-radius: 999px;
+      color: white;
+      font-size: 10px;
+      left: 14px;
+      padding: 6px 10px;
+      position: absolute;
+      top: 14px;
+    }
+
+    .compare-controls {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+      margin-top: 12px;
+    }
+
+    .compare-controls button {
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      cursor: pointer;
+      min-height: 44px;
+    }
+
+    .compare-controls button[aria-pressed="true"] {
+      background: var(--ink);
+      color: white;
+    }
+
+    .recommendation-copy { margin-top: 22px; }
+    .recommendation-copy h3 { font-family: Georgia, "Times New Roman", serif; font-size: 25px; font-weight: 500; margin: 0; }
+
+    .tag-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+
+    .tag {
+      background: rgba(255,255,255,.7);
+      border-radius: 999px;
+      color: var(--accent-deep);
+      font-size: 10px;
+      padding: 7px 10px;
+    }
+
+    .tips { counter-reset: tip; }
+
+    .tip {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 34px 1fr;
+      padding: 17px 0;
+    }
+
+    .tip::before {
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      content: counter(tip, decimal-leading-zero);
+      counter-increment: tip;
+      display: flex;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 11px;
+      height: 30px;
+      justify-content: center;
+      width: 30px;
+    }
+
+    .tip b { display: block; font-size: 14px; }
+    .tip p { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 5px 0 0; }
+
+    .notice {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.6;
+      margin: 26px 0 80px;
+      text-align: center;
+    }
+
+    .sticky-action {
+      bottom: 0;
+      left: 50%;
+      padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+      position: fixed;
+      transform: translateX(-50%);
+      width: min(100%, 430px);
+      z-index: 10;
+    }
+
+    .sticky-action a {
+      align-items: center;
+      background: rgba(24, 21, 22, .94);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(30,22,24,.25);
+      color: white;
+      display: flex;
+      font-size: 14px;
+      font-weight: 750;
+      justify-content: center;
+      min-height: 54px;
+      text-decoration: none;
+      backdrop-filter: blur(14px);
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 520ms ease, transform 520ms cubic-bezier(.2,.7,.2,1);
+    }
+
+    .reveal.is-visible { opacity: 1; transform: none; }
+
+    @keyframes hero-in {
+      from { opacity: .35; transform: scale(1.035); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @media (max-width: 520px) {
+      .report-shell { margin: 0; width: 100%; box-shadow: none; }
+      .sticky-action { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="report-shell">
+    <div class="demo-note">화면 구조 검토용 가상 데이터입니다 · 실제 측정 결과가 아닙니다</div>
+
+    <header class="hero" id="report-hero">
+      <img src="../../apps/mobile/src/assets/images/makeup-filters/filter-lovely-pink-actress-before.png" alt="정면 얼굴 분석 예시">
+      <div class="hero-copy">
+        <p class="eyebrow">Personal Beauty Report</p>
+        <h1>Soft Rose<br>Harmony</h1>
+        <p class="hero-date">2026년 7월 15일 · AURA 분석</p>
+      </div>
+    </header>
+
+    <section class="section reveal" id="beauty-profile">
+      <div class="section-heading">
+        <div><p class="eyebrow">Beauty Profile</p><h2>얼굴 무드 핵심값</h2></div>
+        <span class="section-index">01</span>
+      </div>
+      <div class="profile-grid">
+        <div class="profile-item"><span class="label">퍼스널 컬러</span><strong class="value">봄 라이트</strong></div>
+        <div class="profile-item"><span class="label">얼굴형</span><strong class="value">타원형</strong></div>
+        <div class="profile-item"><span class="label">톤 요약</span><strong class="value">맑은 피치</strong></div>
+        <div class="profile-item"><span class="label">추천 무드</span><strong class="value">소프트 로즈</strong></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="analysis-summary">
+      <div class="section-heading">
+        <div><p class="eyebrow">AI Tone Reading</p><h2>분석 요약</h2></div>
+        <span class="section-index">02</span>
+      </div>
+      <p class="lead">상·중·하안부의 흐름이 안정적이고, 얼굴 중앙의 부드러운 입체감이 맑은 인상을 만듭니다.</p>
+      <p class="body-copy">선명한 대비보다 피부의 투명감과 눈가의 가벼운 음영을 살릴 때 고유한 분위기가 가장 자연스럽게 드러나요.</p>
+    </section>
+
+    <section class="section reveal" id="vertical-thirds">
+      <div class="section-heading">
+        <div><p class="eyebrow">S1 Measurement</p><h2>얼굴 세로 비율</h2></div>
+        <span class="section-index">03</span>
+      </div>
+      <div class="photo-stage">
+        <img src="../../apps/mobile/src/assets/images/makeup-filters/filter-lovely-pink-actress-before.png" alt="얼굴 세로 비율 가이드 예시">
+        <span class="third-line one"></span><span class="third-label one">상안부</span>
+        <span class="third-line two"></span><span class="third-label two">중안부</span>
+        <span class="third-line three"></span><span class="third-label three">하안부</span>
+      </div>
+      <div class="ratio-row" aria-label="상중하안부 비율">
+        <div class="ratio-item"><strong>31</strong><span>상안부</span></div>
+        <div class="ratio-item"><strong>34</strong><span>중안부</span></div>
+        <div class="ratio-item"><strong>35</strong><span>하안부</span></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="face3d-depth">
+      <div class="section-heading">
+        <div><p class="eyebrow">3D Facial Depth</p><h2>입체 특성</h2></div>
+        <span class="section-index">04</span>
+      </div>
+      <div class="metric-feature"><span>중앙부 입체감</span><strong>0.176</strong></div>
+      <div class="metric-feature"><span>코끝 돌출</span><strong>0.214</strong></div>
+      <div class="metric-feature"><span>턱 전방 돌출</span><strong>0.126</strong></div>
+      <p class="metric-caption">유효 프레임 30/30 · ARKit 얼굴 메시 측정</p>
+      <details>
+        <summary>3D 측정값 11개 자세히 보기</summary>
+        <div class="detail-list">
+          <div class="detail-row"><span>코끝 돌출</span><b>0.214 · 97%</b></div>
+          <div class="detail-row"><span>턱 전방 돌출</span><b>0.126 · 95%</b></div>
+          <div class="detail-row"><span>윗입술 · E-line</span><b>-0.018 · 96%</b></div>
+          <div class="detail-row"><span>아랫입술 · E-line</span><b>0.006 · 96%</b></div>
+          <div class="detail-row"><span>중앙부 입체감</span><b>0.176 · 95%</b></div>
+          <div class="detail-row"><span>코 길이</span><b>0.321 · 93%</b></div>
+          <div class="detail-row"><span>콧대 직선 이탈량</span><b>0.011 · 92%</b></div>
+          <div class="detail-row"><span>코축 좌우 치우침</span><b>0.004 · 94%</b></div>
+          <div class="detail-row"><span>콧볼 폭</span><b>0.286 · 93%</b></div>
+          <div class="detail-row"><span>앞광대 돌출 · 왼쪽</span><b>0.098 · 91%</b></div>
+          <div class="detail-row"><span>앞광대 돌출 · 오른쪽</span><b>0.102 · 92%</b></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="section reveal" id="face-geometry">
+      <div class="section-heading">
+        <div><p class="eyebrow">Face Geometry</p><h2>얼굴 형태 비율</h2></div>
+        <span class="section-index">05</span>
+      </div>
+      <div class="metric-feature"><span>하악 폭 비율</span><strong>0.782</strong></div>
+      <div class="metric-feature"><span>미간 비율</span><strong>0.284</strong></div>
+      <div class="metric-feature"><span>입 폭 비율</span><strong>0.374</strong></div>
+      <details>
+        <summary>정면 2D 측정값 16개 보기</summary>
+        <div class="detail-list">
+          <div class="detail-row"><span>눈썹 기울기 · 왼쪽 / 오른쪽</span><b>8.2° / 8.7°</b></div>
+          <div class="detail-row"><span>눈꼬리 기울기 · 왼쪽 / 오른쪽</span><b>4.1° / 4.4°</b></div>
+          <div class="detail-row"><span>눈–눈썹 간격 · 왼쪽 / 오른쪽</span><b>0.116 / 0.119</b></div>
+          <div class="detail-row"><span>눈 개방도 · 왼쪽 / 오른쪽</span><b>0.284 / 0.279</b></div>
+          <div class="detail-row"><span>눈 폭 비율 · 왼쪽 / 오른쪽</span><b>0.238 / 0.241</b></div>
+          <div class="detail-row"><span>미간 비율</span><b>0.284</b></div>
+          <div class="detail-row"><span>하악 폭 / 아래턱 폭</span><b>0.782 / 0.648</b></div>
+          <div class="detail-row"><span>입술 상하 두께비</span><b>0.742</b></div>
+          <div class="detail-row"><span>입 폭 비율</span><b>0.374</b></div>
+          <div class="detail-row"><span>입꼬리 높이차</span><b>0.006</b></div>
+        </div>
+      </details>
+      <p class="body-copy">정면 사진 2D 실측 · 좌우는 본인 기준 · 비율은 얼굴 크기로 정규화</p>
+    </section>
+
+    <section class="section reveal" id="personal-color">
+      <div class="section-heading">
+        <div><p class="eyebrow">Personal Color</p><h2>퍼스널 컬러 진단</h2></div>
+        <span class="section-index">06</span>
+      </div>
+      <div class="tone-result"><span><small class="label">TOP MATCH</small><strong>봄 라이트</strong></span><span class="status">조명 보정 적용</span></div>
+      <div class="palette" aria-label="추천 컬러 팔레트">
+        <span class="swatch" style="background:#f5b7a8"></span>
+        <span class="swatch" style="background:#ef9f9f"></span>
+        <span class="swatch" style="background:#f3c8ad"></span>
+        <span class="swatch" style="background:#d98784"></span>
+        <span class="swatch" style="background:#f2d7bc"></span>
+      </div>
+      <p class="body-copy">밝고 맑은 피치 계열에서 피부의 투명감이 살아납니다. 탁하고 무거운 색보다 얇게 겹치는 로즈·코랄이 잘 어울려요.</p>
+    </section>
+
+    <section class="section reveal" id="ai-analysis">
+      <div class="section-heading">
+        <div><p class="eyebrow">AI Analysis</p><h2>통합 분석 결과</h2></div>
+        <span class="section-index">07</span>
+      </div>
+      <div class="pipeline" aria-label="AI 분석 단계">
+        <div class="pipeline-row"><span>AI 보완 측정</span><b>완료</b></div>
+        <div class="pipeline-row"><span>AI 인상 분석</span><b>완료</b></div>
+        <div class="pipeline-row"><span>맞춤 컨설팅</span><b>완료</b></div>
+      </div>
+      <div class="ai-estimates" aria-label="AI 보완 측정 예시">
+        <div class="estimate"><span>피부결</span><strong>매끈함</strong><em>추정 91%</em></div>
+        <div class="estimate"><span>눈썹 결</span><strong>부드러운 직선</strong><em>추정 88%</em></div>
+        <div class="estimate"><span>홍조 위치</span><strong>볼 중앙</strong><em>추정 86%</em></div>
+      </div>
+
+      <p class="eyebrow" style="margin-top:30px">Measurement Reading</p>
+      <div class="insight-list">
+        <div class="insight"><span>얼굴형</span><div><strong>타원형</strong><p>광대와 턱 폭이 부드럽게 이어져요.</p></div></div>
+        <div class="insight"><span>세로 균형</span><div><strong>균형형</strong><p>상·중·하안부 차이가 작고 안정적이에요.</p></div></div>
+        <div class="insight"><span>눈·눈썹</span><div><strong>부드러운 상승형</strong><p>눈꼬리와 눈썹선이 가볍게 올라가 있어요.</p></div></div>
+        <div class="insight"><span>홍채 노출</span><div><strong>안정적</strong><p>흰자와 홍채의 노출이 정면에서 고르게 보여요.</p></div></div>
+        <div class="insight"><span>컬러 축</span><div><strong>라이트 웜–뉴트럴</strong><p>밝고 맑은 색에서 얼굴빛이 정돈돼요.</p></div></div>
+        <div class="insight"><span>피부 컬러</span><div><strong>맑은 피치 베이지</strong><p>볼 중앙에 자연스러운 혈색이 있어요.</p></div></div>
+        <div class="insight"><span>코·인중·입술</span><div><strong>정돈된 중심축</strong><p>입술과 코 중심선의 흐름이 안정적이에요.</p></div></div>
+        <div class="insight"><span>좌우 균형</span><div><strong>자연스러운 균형</strong><p>작은 좌우 차이는 표정 안에서 자연스럽게 보여요.</p></div></div>
+        <div class="insight"><span>광대·E-line</span><div><strong>부드러운 전방감</strong><p>중앙부 입체감과 입술선이 매끄럽게 이어져요.</p></div></div>
+      </div>
+
+      <div class="quote"><b>AI 인상 분석 · 맑고 부드러운 인상</b><p>선의 존재감보다 피부의 빛과 중앙부의 은은한 볼륨이 먼저 느껴지는 얼굴이에요.</p></div>
+      <div class="quote"><b>맞춤 컨설팅</b><p>색은 맑게, 윤곽은 얇게. 눈가와 볼을 같은 로즈 온도로 연결하면 가장 자연스럽습니다.</p></div>
+    </section>
+
+    <section class="section reveal" id="makeup-recommendation">
+      <div class="section-heading">
+        <div><p class="eyebrow">Best Route</p><h2>추천 메이크업</h2></div>
+        <span class="section-index">08</span>
+      </div>
+      <div class="compare" id="compare-stage">
+        <img id="compare-image" src="../../apps/mobile/src/assets/images/makeup-filters/filter-lovely-pink-actress.png" alt="추천 메이크업 적용 후 예시">
+        <span class="compare-badge" id="compare-badge">AFTER</span>
+      </div>
+      <div class="compare-controls" aria-label="메이크업 전후 비교">
+        <button type="button" data-view="before" aria-pressed="false">메이크업 전</button>
+        <button type="button" data-view="after" aria-pressed="true">메이크업 후</button>
+      </div>
+      <div class="recommendation-copy">
+        <p class="eyebrow">Recommended Look</p>
+        <h3>투명한 소프트 로즈</h3>
+        <p class="body-copy">피부의 맑은 톤은 유지하고 눈가·볼·입술을 같은 온도의 로즈로 얇게 연결한 룩이에요.</p>
+        <div class="tag-row"><span class="tag">얇은 윤광 베이스</span><span class="tag">로즈 베이지 음영</span><span class="tag">글로시 코랄 립</span></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="makeup-tips">
+      <div class="section-heading">
+        <div><p class="eyebrow">Makeup Tips</p><h2>부위별 적용 포인트</h2></div>
+        <span class="section-index">09</span>
+      </div>
+      <div class="tips">
+        <div class="tip"><div><b>베이스</b><p>볼 중앙은 얇게 비치게 두고 콧방울 주변만 정돈해 주세요.</p></div></div>
+        <div class="tip"><div><b>눈썹</b><p>현재 기울기를 살려 눈썹산을 높이지 않고 결만 정리해요.</p></div></div>
+        <div class="tip"><div><b>아이</b><p>눈꼬리를 길게 빼기보다 로즈 베이지 음영을 가볍게 연결해요.</p></div></div>
+        <div class="tip"><div><b>블러셔</b><p>앞광대 중심에서 바깥으로 넓고 투명하게 퍼뜨려 주세요.</p></div></div>
+        <div class="tip"><div><b>립</b><p>입술선을 꽉 채우지 않고 중앙의 맑은 광을 남겨 주세요.</p></div></div>
+      </div>
+      <p class="notice">분석 결과는 AI 기반의 뷰티 가이드이며 개인차가 있을 수 있습니다.</p>
+    </section>
+
+    <div class="sticky-action" id="create-filter-action"><a href="#makeup-recommendation">메이크업 필터 만들기</a></div>
+  </main>
+
+  <script>
+    const images = {
+      before: '../../apps/mobile/src/assets/images/makeup-filters/filter-lovely-pink-actress-before.png',
+      after: '../../apps/mobile/src/assets/images/makeup-filters/filter-lovely-pink-actress.png',
+    };
+    const compareStage = document.querySelector('#compare-stage');
+    const compareImage = document.querySelector('#compare-image');
+    const compareBadge = document.querySelector('#compare-badge');
+    const compareButtons = [...document.querySelectorAll('[data-view]')];
+
+    compareButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const view = button.dataset.view;
+        compareStage.classList.add('is-changing');
+        compareImage.src = images[view];
+        compareImage.alt = view === 'before' ? '추천 메이크업 적용 전 예시' : '추천 메이크업 적용 후 예시';
+        compareBadge.textContent = view.toUpperCase();
+        compareButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        window.setTimeout(() => compareStage.classList.remove('is-changing'), 170);
+      });
+    });
+
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, {threshold: 0.08});
+      document.querySelectorAll('.reveal').forEach((section) => observer.observe(section));
+    } else {
+      document.querySelectorAll('.reveal').forEach((section) => section.classList.add('is-visible'));
+    }
+  </script>
+</body>
+</html>
