@@ -556,7 +556,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
   args = parse_args(argv)
-  _load_local_env()
+  if not args.dry_run:
+    # dry-run은 Bedrock 자격증명이 불필요하다. .env 주입은 실호출에만 —
+    # 테스트가 main()을 호출할 때 프로세스 env(BEDROCK_*)를 오염시켜
+    # 이후 생성되는 Settings의 분기(질문 카피 등)를 바꾸는 사고 방지.
+    _load_local_env()
   try:
     input_rows = read_jsonl(args.input)
     vocab_path = args.vocab_source or resolve_active_catalog_path(args.data_root)
