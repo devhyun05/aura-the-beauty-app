@@ -105,6 +105,39 @@ function checkEyeliner() {
   mustHave(shader, 'LowerLinerHorizontalMask');
 }
 
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function lowerShadowMask(shape, along) {
+  const edge = smoothstep(0, 0.08, along) * (1 - smoothstep(0.92, 1, along));
+  if (shape < 0.5) return edge;
+  if (shape < 1.5) return edge * (1 - smoothstep(0.22, 0.5, along));
+  if (shape < 2.5) {
+    return edge * smoothstep(0.18, 0.4, along) * (1 - smoothstep(0.6, 0.82, along));
+  }
+  if (shape < 3.5) return edge * smoothstep(0.5, 0.78, along);
+  return edge * (0.55 + (1 - 0.55) * smoothstep(0.2, 0.86, along));
+}
+
+function checkLowerEyeIndependence() {
+  const bridge = read('Scripts/MediaPipeGraft/ARwithFable/Bridge/BridgeMessages.cs');
+  const controller = read('Scripts/MediaPipeGraft/ARwithFable/Face/MakeupController.cs');
+  const lower = read('Scripts/MediaPipeGraft/ARwithFable/Face/LowerLidRenderer.cs');
+  const shader = read('Resources/LowerLid.shader');
+  mustHave(bridge, 'public int eyeshadowLowerShape = 0;');
+  mustHave(bridge, 'public string eyelinerLowerColor = "";');
+  mustHave(lower, 'LowerShadowShapeId');
+  mustHave(shader, '_LowerShadowShape');
+  mustHave(shader, 'LowerShadowHorizontalMask');
+  mustHave(controller, 'string.IsNullOrEmpty(p.eyelinerLowerColor)');
+  assert.ok(lowerShadowMask(1, 0.18) > lowerShadowMask(1, 0.82));
+  assert.ok(lowerShadowMask(2, 0.5) > lowerShadowMask(2, 0.15));
+  assert.ok(lowerShadowMask(3, 0.82) > lowerShadowMask(3, 0.18));
+  assert.ok(lowerShadowMask(4, 0.82) > lowerShadowMask(4, 0.18));
+}
+
 function checkHighlighter() {
   const masks = read('Scripts/MediaPipeGraft/ARwithFable/Face/MaskGenerator.cs');
   const controller = read('Scripts/MediaPipeGraft/ARwithFable/Face/MakeupController.cs');
@@ -205,6 +238,7 @@ if (!mobileOnly) {
   checkBridge();
   if (section == null || section === 'eyeshadow') checkEyeshadow();
   if (section == null || section === 'eyeliner') checkEyeliner();
+  if (section == null || section === 'lower-eye') checkLowerEyeIndependence();
   if (section == null || section === 'highlighter') checkHighlighter();
   if (section == null || section === 'aegyo') checkAegyo();
 }

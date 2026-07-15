@@ -10,7 +10,7 @@ Shader "ARMakeup/LowerLid"
 {
     Properties
     {
-        // 아이라인(하) — 색은 상안검 아이라이너와 공용(eyelinerColor).
+        // 아이라인(하) — 전용 색(legacy payload는 컨트롤러에서 상안검 색으로 폴백).
         _LinerColor ("Lower Liner Color", Color) = (0.09, 0.08, 0.09, 1)
         _LinerIntensity ("Lower Liner Intensity", Range(0, 1)) = 0
         _LowerLinerStyle ("Lower Liner Style (0 soft 1 waterline 2 outer third)", Float) = 0
@@ -28,6 +28,7 @@ Shader "ARMakeup/LowerLid"
         // 라인/애교살보다 아래(먼저)에 곱(감산) 블렌드로 깔린다. _LowerShadowIntensity 0 = 끔.
         _LowerShadowColor ("Lower Shadow Color", Color) = (0.55, 0.42, 0.40, 1)
         _LowerShadowIntensity ("Lower Shadow Intensity", Range(0, 1)) = 0
+        _LowerShadowShape ("Lower Shadow Shape (0 full 1 inner 2 center 3 outer 4 gradient)", Float) = 0
         // 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머). ApplyFinish 레거시
         // 경로(세부 0 상수)라 0=새틴=기존 출력과 바이트 동일(하위호환).
         _LowerShadowFinish ("Lower Shadow Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -70,6 +71,7 @@ Shader "ARMakeup/LowerLid"
             float _ConcealerIntensity;
             fixed4 _LowerShadowColor;
             float _LowerShadowIntensity;
+            float _LowerShadowShape;
             // 마감 — 아이섀도 하. 0=새틴=기존 출력(하위호환).
             float _LowerShadowFinish;
             float _LowerShadowShimmer;
@@ -124,6 +126,19 @@ Shader "ARMakeup/LowerLid"
                 return edgeFade;
             }
 
+            float LowerShadowHorizontalMask(float shape, float along)
+            {
+                float edge = smoothstep(0.0, 0.08, along)
+                           * (1.0 - smoothstep(0.92, 1.0, along));
+                if (shape < 0.5) return edge;
+                if (shape < 1.5) return edge * (1.0 - smoothstep(0.22, 0.5, along));
+                if (shape < 2.5)
+                    return edge * smoothstep(0.18, 0.4, along)
+                                * (1.0 - smoothstep(0.6, 0.82, along));
+                if (shape < 3.5) return edge * smoothstep(0.5, 0.78, along);
+                return edge * lerp(0.55, 1.0, smoothstep(0.2, 0.86, along));
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
@@ -163,7 +178,8 @@ Shader "ARMakeup/LowerLid"
                 // 페이드하는 섀도 밴드. hiAmt/shAmt 프로파일과 동형(edge 코너 접기·원시 v
                 // 기준). 라인·애교살보다 아래에 곱 블렌드로 깔린다(아래 comb 단계). 강도 0 = 무영향.
                 float esBand = 1.0 - smoothstep(0.0, ES_V_FADE, v);
-                float esAmt = esBand * edge * _LowerShadowIntensity;
+                float esAmt = esBand * LowerShadowHorizontalMask(_LowerShadowShape, along)
+                            * _LowerShadowIntensity;
 
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트.
                 fixed3 pigLn = _LinerColor.rgb * (luma * 1.2 + 0.08);

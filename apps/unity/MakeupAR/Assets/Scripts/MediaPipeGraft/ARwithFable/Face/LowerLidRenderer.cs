@@ -69,6 +69,7 @@ namespace ARMakeup.Face
         static readonly int ConcealerIntensityId = Shader.PropertyToID("_ConcealerIntensity");
         static readonly int LowerShadowColorId = Shader.PropertyToID("_LowerShadowColor");
         static readonly int LowerShadowIntensityId = Shader.PropertyToID("_LowerShadowIntensity");
+        static readonly int LowerShadowShapeId = Shader.PropertyToID("_LowerShadowShape");
         // 마감 — 아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
         static readonly int LowerShadowFinishId = Shader.PropertyToID("_LowerShadowFinish");
         static readonly int LowerShadowShimmerId = Shader.PropertyToID("_LowerShadowShimmer");
@@ -168,7 +169,8 @@ namespace ARMakeup.Face
         /// <summary>A3 아이섀도 하 — 하안검 lash 라인 아래로 부드럽게 페이드하는 섀도 밴드.
         /// 애교살/아이라인보다 아래(먼저)에 곱 블렌드로 깔려 위 제품이 섀도 위로 뜬다. 색·강도
         /// 독립(0=끔, 기존 룩 불변). ApplyConcealer와 동일 패턴.</summary>
-        public void ApplyLowerShadow(string colorHex, float intensity, int finish, float shimmer)
+        public void ApplyLowerShadow(
+            string colorHex, float intensity, int shape, int finish, float shimmer)
         {
             _lowerShadowIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -176,12 +178,13 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(LowerShadowColorId, c);
             _material.SetFloat(LowerShadowIntensityId, _lowerShadowIntensity);
+            _material.SetFloat(LowerShadowShapeId, Mathf.Clamp(shape, 0, 4));
             // 마감 — 블러셔와 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             _material.SetFloat(LowerShadowFinishId, finish);
             _material.SetFloat(LowerShadowShimmerId, Mathf.Clamp01(shimmer));
         }
 
-        /// <summary>아이라인(하) 색은 상안검 아이라이너와 공용(eyelinerColor).</summary>
+        /// <summary>아이라인(하) 색은 전용 색을 사용하며 legacy payload는 컨트롤러에서 폴백한다.</summary>
         public void ApplyParams(
             string linerColorHex, float linerIntensity, float cornerLift, float linerStyle,
             float linerFinish, float linerShimmer)

@@ -1043,11 +1043,14 @@ namespace ARMakeup.Face
             if (EyelinerStyleRenderer.Instance != null)
                 EyelinerStyleRenderer.Instance.ApplyParams(
                     p.eyelinerColor, p.eyelinerStyleIntensity, p.eyeCornerLift);
-            // 하안검 밴드 — 아이라인(하, 색은 라이너 공용) + 하단 제품들.
+            // 하안검 밴드 — 아이라인(하, 전용 색 + legacy 상단 색 폴백) + 하단 제품들.
             if (LowerLidRenderer.Instance != null)
             {
+                var lowerLinerColor = string.IsNullOrEmpty(p.eyelinerLowerColor)
+                    ? p.eyelinerColor
+                    : p.eyelinerLowerColor;
                 LowerLidRenderer.Instance.ApplyParams(
-                    p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift, p.eyelinerLowerStyle,
+                    lowerLinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift, p.eyelinerLowerStyle,
                     p.eyelinerLowerFinish, p.eyelinerLowerShimmer);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도 독립, 0=끔).
                 LowerLidRenderer.Instance.ApplyTriangleZone(p.triangleZoneColor, p.triangleZoneIntensity);
@@ -1058,7 +1061,7 @@ namespace ARMakeup.Face
                 // A3 아이섀도 하 — 하안검 lash 아래로 페이드하는 섀도 밴드(애교살보다 아래 깔림). 0=끔.
                 LowerLidRenderer.Instance.ApplyLowerShadow(
                     p.eyeshadowLowerColor, p.eyeshadowLowerIntensity,
-                    p.eyeshadowLowerFinish, p.eyeshadowLowerShimmer);
+                    p.eyeshadowLowerShape, p.eyeshadowLowerFinish, p.eyeshadowLowerShimmer);
             }
             if (AegyoRenderer.Instance != null)
             {
