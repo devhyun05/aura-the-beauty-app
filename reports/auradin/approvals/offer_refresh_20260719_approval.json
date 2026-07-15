@@ -3,8 +3,9 @@
     "passed": true,
     "status": "PASS"
   },
-  "approvalConclusion": "pending",
-  "approvedBy": "",
+  "approvalConclusion": "approved",
+  "approvedBy": "위승철 (대리기입: claude — 사용자 명시 승인 지시, 세션 기록 2026-07-15)",
+  "cGradeReview": "골든 6질의 Top3 전부 20260717과 동일(baseline 보존), 카탈로그 618→1,835(base 1,320 편중은 후속 큐레이션 항목), A8 클린",
   "coverageClassification": "see_diff_report",
   "diffSummary": {
     "counts": {},
@@ -19,7 +20,7 @@
   },
   "resultsSha": "",
   "reviewDecisionsSha": "",
-  "reviewedAt": "",
+  "reviewedAt": "2026-07-15T09:05:00+09:00",
   "runDate": "20260719",
   "runId": "20260719-supplement",
   "snapshotManifestSha256": "62a8d91505fa2d05ad7bffc0485f1641a8f8800feeecc94394412610ba86a64e"
