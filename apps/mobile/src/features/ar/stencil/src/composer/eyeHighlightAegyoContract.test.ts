@@ -1,4 +1,12 @@
-import {buildSystemLibrary, subDefsForRegion} from './lookTree';
+import type {FilterParams} from '../bridge/types';
+import {BARE} from '../presets';
+import {compileLayers} from './model';
+import {
+  buildSystemLibrary,
+  decomposeToTree,
+  flattenTree,
+  subDefsForRegion,
+} from './lookTree';
 import {buildVariantLibrary} from './lookVariants';
 import {
   pickerVisibleRegionDefs,
@@ -86,6 +94,42 @@ expect(
     return typeof params.eyelinerLowerColor === 'string' && params.eyelinerColor == null;
   }),
   '하단 아이라인 룩은 전용 색만 소유해야 한다',
+);
+
+const legacySharedLinerColor = '#6B3A45';
+const legacyLowerLinerParams: FilterParams = {
+  ...BARE,
+  eyelinerColor: legacySharedLinerColor,
+  eyelinerLowerIntensity: 0.4,
+};
+delete legacyLowerLinerParams.eyelinerLowerColor;
+
+const seededLegacyTree = decomposeToTree(
+  legacyLowerLinerParams,
+  [],
+  'legacy lower liner',
+);
+const seededLegacyResult = compileLayers(flattenTree(seededLegacyTree)).params;
+expect(
+  seededLegacyResult.eyelinerLowerColor === legacySharedLinerColor,
+  '구형 하단 아이라인 payload를 상세 트리로 시드해도 공유 색을 보존해야 한다',
+);
+
+const savedLegacyTree = decomposeToTree(legacyLowerLinerParams, [], 'saved legacy tree');
+const savedLegacyLowerLeaf = flattenTree(savedLegacyTree).find(
+  layer => layer.region === 'eyelinerLower',
+);
+expect(savedLegacyLowerLeaf != null, '구형 하단 아이라인 저장 트리에 잎이 있어야 한다');
+savedLegacyLowerLeaf!.params.eyelinerColor = legacySharedLinerColor;
+delete savedLegacyLowerLeaf!.params.eyelinerLowerColor;
+const savedLegacyResult = compileLayers(flattenTree(savedLegacyTree)).params;
+expect(
+  savedLegacyResult.eyelinerLowerColor === legacySharedLinerColor,
+  '구형 하단 아이라인 저장 트리를 재컴파일해도 공유 색을 보존해야 한다',
+);
+expect(
+  BARE.eyelinerLowerColor === '#181418',
+  '새 클라이언트의 하단 아이라인 기본색은 유지해야 한다',
 );
 
 const aegyoModes = subDefsForRegion(library, 'aegyo').map(
