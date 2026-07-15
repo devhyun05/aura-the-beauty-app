@@ -3,10 +3,10 @@ using UnityEngine;
 namespace ARMakeup.Face
 {
     /// <summary>
-    /// R7 명명 워프 — 눈썹 두께/아치. 밴드 상단(up)을 하단(lo) 기준으로 배율·중앙
-    /// 볼록 오프셋해 "두껍게 / 아치 올림"을 만든다. BrowRenderer(제품 스택)·
-    /// StyleRenderer(텍스처)·PencilRenderer(개별 털)가 같은 함수를 쓰므로
-    /// 세 제품이 함께 움직인다(핸들 조작 시 제품 분리 방지 — 설계 섹션 12 정정 1).
+    /// R7 명명 워프 — 눈썹 두께/아치. 실제 상·하 랜드마크 간격을 측정 두께로 삼고,
+    /// shape/arch 중심선 주위로 그 간격×thickness의 밴드를 만든다. BrowRenderer(제품 스택)·
+    /// StyleRenderer(텍스처)·PencilRenderer(개별 털)·StencilGuideRenderer(가이드)가
+    /// 같은 함수를 쓰므로 네 렌더러가 함께 움직인다(핸들 조작 시 제품 분리 방지 — 설계 섹션 12 정정 1).
     ///
     /// 정규화 규약(섹션 09): 오프셋은 밴드 자체 높이(up-lo)의 배수라 얼굴 크기와
     /// 무관. thickness 1 = 원래, arch 0 = 원래(0=baseline 규약). 좌우 대칭은
@@ -33,42 +33,51 @@ namespace ARMakeup.Face
         const float RiseTopPeak = 0.42f;       // 상승: 꼬리 상단 리프트
         const float RiseBottomLift = 0.22f;    // 상승: 꼬리 하단도 리프트 → 밴드 전체 상승
 
-        // ── 과변형 가드 ──────────────────────────────────────────────────────
+        // ── 과변형·퇴화 가드 ────────────────────────────────────────────────
         const float MaxEdgeShift = 0.55f;      // 엣지별 이동 상한(밴드 높이 배수)
-        const float MinBandFrac = 0.35f;       // 밴드 최소 높이(반전·붕괴 방지)
+        const float GeometryEpsilon = 1e-6f;   // 정규화/나눗셈 가능한 최소 길이
 
         // ── 꼬리 안티-드룹(전역, 모든 shape 공통) ─────────────────────────────
         // 미용 규칙: 눈썹 꼬리 끝(바깥·along 0)은 앞머리(안쪽·along 1) 높이 이상에서
-        // 끝나야 한다(처진 눈썹 불가). LiftDroopingTail가 ShapeBand 프로파일 적용 후
-        // 얹는 후처리 가드로 이를 강제한다. 이미 꼬리가 앞머리보다 높은 shape(상승 등)는
-        // no-op. 앞머리 높이를 '하한'으로만 삼아 그 이상 과도 리프트는 하지 않는다.
-        const float AntiDroopStrength = 1.0f;   // 꼬리 부족분을 앞머리 높이까지 보정하는 비율
-                                                // (1=끝이 정확히 앞머리 높이, 구 0.85=15% 잔여 처짐)
-        const float AntiDroopHeadMargin = 0f;   // 보정 시 앞머리 위로 더 올릴 여유(밴드 높이 배수, 튜닝용)
-        const float AntiDroopTailRegion = 0.6f; // 보정 대상 꼬리 반쪽 경계(along) — 접합부 매끈
+        // 끝나야 한다(처진 눈썹 불가). WarpAndLiftDroopingTail가 ShapeBand와 꼬리 폭 테이퍼 적용
+        // 후 얹는 가드로 이를 강제한다. 이미 목표 floor보다 높은 shape(상승 등)는 no-op.
+        const float AntiDroopHeadMargin = 0.05f; // 목표 floor를 앞머리보다 올릴 여유(밴드 높이 배수)
+        const float AntiDroopFullRegion = 0.20f; // 꼬리 끝 20%는 목표 floor까지 완전 보정
+        const float AntiDroopTailRegion = 0.80f; // 이후 이 지점까지 가중치를 부드럽게 0으로 감쇠
+        const int FaceUpForeheadLandmark = 10;   // 안정 얼굴축 상단(MediaPipe forehead top)
+        const int FaceUpChinLandmark = 152;      // 안정 얼굴축 하단(MediaPipe chin)
+
+        // ── 꼬리 폭 테이퍼(밴드 채움·텍스처·가이드 공통) ─────────────────────
+        const float TailTaperRegion = 0.50f;
+        const float TailTaperStrength = 1.25f;
+        const float TailTipMinimumWidth = 0.08f;
 
         /// <summary>along: 가로 0(꼬리)→1(앞머리). shape(#19b, 슬롯 공통):
         /// 0=내추럴(무변경) 1=일자(중앙 평탄) 2=아치(중앙 뾰족 텐트) 3=각진(앞 1/3 꺾임)
         /// 4=상승(꼬리 전체 리프트) 5=반달(넓고 둥근 돔). 강화판은 상단·하단(lo) 두
-        /// 엣지를 ref로 함께 이동시켜 실루엣 변화를 키운다(구버전은 상단만). 연속 핸들
-        /// thickness/arch는 기존 규약대로 lo를 앵커로 상단만 조작하며, 프리셋 이동은 그
-        /// 위에 합산되므로 default 핸들에서 프리셋이 단독 실루엣을 만든다. 모양 이동은
-        /// 밴드 높이(원본 up-lo) 배수라 얼굴 크기 무관(섹션 09). 세 눈썹 제품이 같은
-        /// shape/thickness/arch를 공유하고 along 규약이 좌우 동일하므로 대칭이 잠긴다.</summary>
+        /// 엣지를 ref로 함께 이동시켜 중심선 실루엣을 만든다(구버전은 상단만). thickness는
+        /// 중심선과 독립적으로 원본 측정 간격에 한 번만 곱하고, arch·프리셋 이동은 원본
+        /// 밴드 높이 배수라 얼굴 크기 무관(섹션 09). 네 렌더러가 같은 값과 along 규약을
+        /// 공유하므로 좌우 대칭과 제품 동조가 잠긴다.</summary>
         public static void ShapeBand(
             ref Vector2 lo, ref Vector2 up, float along, float thickness, float arch, int shape)
         {
-            var band = up - lo;            // 원본 밴드 벡터(하단→상단)
-            var h = band.magnitude;
-            if (h < 1e-6f) return;         // 퇴화(밴드 높이 0) — 무변경
-            var n = band / h;              // 단위 '위' 방향
+            var measuredBand = up - lo;       // 사용자의 실제 하단→상단 랜드마크 간격
+            var measuredH = measuredBand.magnitude;
+            if (!IsFinite(lo) || !IsFinite(up) || !IsFinite(along) ||
+                !IsFinite(thickness) || !IsFinite(arch) || !IsFinite(measuredH) ||
+                measuredH < GeometryEpsilon)
+                return;
+            var n = measuredBand / measuredH; // 단위 '위' 방향
 
-            // 연속 핸들(thickness/arch) — 기존 규약 유지: lo 앵커로 상단만 스케일·볼록.
-            if (thickness != 1f) up = lo + band * thickness;
+            // 아치·shape는 원본 측정 밴드에서 실루엣 중심선만 결정한다. thickness는 아래
+            // 최종 재구성에서 실제 측정 간격의 배수로 한 번만 적용하므로 중심선에 영향 없음.
+            var shapedLo = lo;
+            var shapedUp = up;
             if (arch != 0f)
             {
                 var midH = 1f - Mathf.Abs(along * 2f - 1f);
-                up += band * (arch * midH);
+                shapedUp += measuredBand * (arch * midH);
             }
 
             // 모양 프리셋 — 상·하단 엣지 각각의 이동량(밴드 높이 h 배수)을 누적.
@@ -110,49 +119,141 @@ namespace ARMakeup.Face
             // 과변형 클램프 — 엣지별 이동을 밴드 높이 배수로 상한(마스크 밖 오버플로 가드).
             upK = Mathf.Clamp(upK, -MaxEdgeShift, MaxEdgeShift);
             loK = Mathf.Clamp(loK, -MaxEdgeShift, MaxEdgeShift);
-            up += n * (h * upK);
-            lo += n * (h * loK);
+            shapedUp += n * (measuredH * upK);
+            shapedLo += n * (measuredH * loK);
 
-            // 밴드 붕괴·반전 방지 — 상단이 하단 아래로 내려가지 않게 최소 높이 확보(하단 고정).
-            var newH = Vector2.Dot(up - lo, n);
-            if (newH < h * MinBandFrac) up += n * (h * MinBandFrac - newH);
+            // 최종 폭 불변식: up-lo == 원본 measuredBand * thickness. shape/arch가 만든
+            // 중심선 주위로 대칭 재구성해 slider=1이면 사용자의 실제 눈썹 두께 그대로다.
+            var shapedCenter = 0.5f * (shapedLo + shapedUp);
+            var halfBand = 0.5f * measuredBand * thickness;
+            lo = shapedCenter - halfBand;
+            up = shapedCenter + halfBand;
+        }
+
+        /// <summary>꼬리 폭 테이퍼 — 중심선은 유지하고 along 0(꼬리)에서 최소 폭으로
+        /// 좁힌 뒤 along 0.5까지 원래 폭으로 복원한다. 최소 폭이 양수라 strip 삼각형과
+        /// 텍스처 UV가 꼬리 끝에서 퇴화하지 않는다.</summary>
+        public static void TaperTail(ref Vector2 lo, ref Vector2 up, float along)
+        {
+            var clampedAlong = Mathf.Clamp01(along);
+            var t = Mathf.Clamp01(clampedAlong / TailTaperRegion);
+            var eased = Mathf.SmoothStep(0f, 1f, Mathf.Pow(t, TailTaperStrength));
+            var widthScale = Mathf.Lerp(TailTipMinimumWidth, 1f, eased);
+            var center = 0.5f * (lo + up);
+            var halfBand = 0.5f * (up - lo) * widthScale;
+            lo = center - halfBand;
+            up = center + halfBand;
         }
 
         /// <summary>꼬리 안티-드룹(전역 미용 가드) — 눈썹 꼬리 끝이 앞머리보다 아래에서
-        /// 끝나지 않도록, 밴드 중심선 높이가 앞머리보다 낮은 꼬리 반쪽 점을 부족분만큼
-        /// 위로 올린다. MediaPipe 랜드마크는 꼬리가 앞머리보다 처지는 경향(실기기: "끝이
-        /// 앞머리보다 내려가며 그려짐")이라 모든 shape에 공통으로 필요하다. '위' 방향은
-        /// 밴드 중앙의 (상단−하단) = 이마 쪽 = 화면상 위(원래 처짐 수정으로 실기기 검증된
-        /// 부호). AntiDroopStrength=1이면 꼬리 끝(along 0, 가중 1)이 정확히 앞머리 높이에
-        /// 닿는다. 이미 앞머리 이상인 점(deficit≤0, 상승 등)은 무변경(no-op)이라 모양
-        /// 실루엣과 충돌하지 않고, 앞머리 높이를 하한으로만 삼아 과도 리프트도 없다.
-        /// 꼬리로 갈수록 강한 SmoothStep 가중으로 접합부가 매끈하다(급격한 꺾임 없음).
-        /// 네 눈썹 제품(제품 스택·펜슬·텍스처·스텐실 가이드)이 공유한다.
-        /// 배열 순서 규약: [0]=꼬리 → [n-1]=앞머리(BrowUpper/BrowLower 순서).</summary>
-        public static void LiftDroopingTail(Vector2[] lo, Vector2[] up, int n)
+        /// 끝나지 않도록, 각 단면에서 실제로 가장 낮은 엣지를 앞머리의 가장 낮은 엣지와
+        /// 비교해 부족분만큼 위로 올린다. 높이축은 대각선으로 짝지어진 BrowUpper−BrowLower가
+        /// 아니라 live landmark의 forehead(10)−chin(152) 얼굴축이다. 최종 표시와 동일하게
+        /// FaceWarpField.Forward를 통과한 최종 표시 공간에서 floor를 판정하고 직접 올린다.
+        /// 성공하면 lo/up 전체가 이미 Forward 적용된 이미지 UV가 되므로 호출자는 반드시
+        /// FramePresenter.WarpedImageToViewport로 표시해야 한다(두 번째 얼굴 워프 금지).
+        /// false면 배열은 전혀 바꾸지 않아 기존 ImageToViewport 경로로 안전하게 폴백할 수 있다.
+        /// x에 imageAspect를 곱한 등방 metric에서 계산하므로 얼굴 롤과 정규화 이미지 UV의
+        /// x/y 단위 차이를 모두 보존한다. 꼬리 끝 20%는 완전 보정하고 이후 along 0.8까지
+        /// SmoothStep으로 감쇠한다. 네 눈썹 렌더러가 공유하며 배열 순서는 [0]=꼬리 →
+        /// [n-1]=앞머리다.</summary>
+        public static bool WarpAndLiftDroopingTail(
+            Vector2[] lo, Vector2[] up, int n, Vector3[] landmarks, float imageAspect)
         {
-            if (n < 2) return;
-            var head = 0.5f * (lo[n - 1] + up[n - 1]);
+            if (lo == null || up == null || landmarks == null || n < 2 ||
+                lo.Length < n || up.Length < n || landmarks.Length <= FaceUpChinLandmark ||
+                !IsFinite(imageAspect) || imageAspect <= GeometryEpsilon)
+                return false;
+
+            var forehead = landmarks[FaceUpForeheadLandmark];
+            var chin = landmarks[FaceUpChinLandmark];
+            if (!IsFinite(forehead) || !IsFinite(chin)) return false;
+            var warp = FaceWarpField.Instance;
+
+            // 두 단계 커밋: 모든 입력과 Forward 결과를 먼저 검증한다. 하나라도 잘못되면
+            // raw UV 배열을 그대로 두고 false를 반환해 호출자의 기존 매핑 폴백과 맞춘다.
+            for (var i = 0; i < n; i++)
+            {
+                if (!IsFinite(lo[i]) || !IsFinite(up[i])) return false;
+                if (!IsFinite(ForwardWarp(lo[i], warp)) || !IsFinite(ForwardWarp(up[i], warp)))
+                    return false;
+            }
+
+            var foreheadWarped = ForwardWarp(new Vector2(forehead.x, forehead.y), warp);
+            var chinWarped = ForwardWarp(new Vector2(chin.x, chin.y), warp);
+            if (!IsFinite(foreheadWarped) || !IsFinite(chinWarped)) return false;
+            var faceUp = new Vector2(
+                (foreheadWarped.x - chinWarped.x) * imageAspect,
+                foreheadWarped.y - chinWarped.y);
+            var faceUpH = faceUp.magnitude;
+            if (!IsFinite(faceUpH) || faceUpH < GeometryEpsilon) return false;
+            var upAxis = faceUp / faceUpH;
+
             var mid = (n - 1) / 2;
-            var band = up[mid] - lo[mid]; // 밴드 중앙의 '위' 방향(하단→상단=이마쪽=화면상 위)
+            var midLoWarped = ForwardWarp(lo[mid], warp);
+            var midUpWarped = ForwardWarp(up[mid], warp);
+            var band = new Vector2(
+                (midUpWarped.x - midLoWarped.x) * imageAspect,
+                midUpWarped.y - midLoWarped.y);
             var bandH = band.magnitude;
-            if (bandH < 1e-6f) return;
-            var upAxis = band / bandH;
-            var hHead = Vector2.Dot(head, upAxis); // 앞머리 중심선 높이(하한)
+            if (!IsFinite(bandH) || bandH < GeometryEpsilon) return false;
+            var headLoWarped = ForwardWarp(lo[n - 1], warp);
+            var headUpWarped = ForwardWarp(up[n - 1], warp);
+            var headLo = ToMetric(headLoWarped, imageAspect);
+            var headUp = ToMetric(headUpWarped, imageAspect);
+            var headFloor = Mathf.Min(Vector2.Dot(headLo, upAxis), Vector2.Dot(headUp, upAxis));
+            var targetFloor = headFloor + bandH * AntiDroopHeadMargin;
+            if (!IsFinite(headFloor) || !IsFinite(targetFloor)) return false;
+            var fadeSpan = Mathf.Max(AntiDroopTailRegion - AntiDroopFullRegion, GeometryEpsilon);
+
+            // 여기서부터 배열 좌표계는 최종 FaceWarp 공간이다. 호출자는 반환값 true일 때
+            // raw viewport affine만 적용해야 한다.
+            for (var i = 0; i < n; i++)
+            {
+                lo[i] = ForwardWarp(lo[i], warp);
+                up[i] = ForwardWarp(up[i], warp);
+            }
+
             for (var i = 0; i < n; i++)
             {
                 var along = i / (float)(n - 1);
-                if (along > AntiDroopTailRegion) continue; // 앞머리 반쪽은 손대지 않음
-                var c = 0.5f * (lo[i] + up[i]);
-                var deficit = hHead - Vector2.Dot(c, upAxis);
-                if (deficit <= 0f) continue; // 앞머리 이상이면 정상 — 무변경(상승 등 no-op)
-                // 꼬리로 갈수록 강하게(경계에서 0 → 꼬리 1): 접합부 매끈.
-                var w = Mathf.SmoothStep(0f, 1f, (AntiDroopTailRegion - along) / AntiDroopTailRegion);
-                var lift = deficit * AntiDroopStrength + bandH * AntiDroopHeadMargin;
-                var liftV = upAxis * (lift * w);
-                lo[i] += liftV;
-                up[i] += liftV;
+                if (along >= AntiDroopTailRegion) continue;
+
+                var loMetric = ToMetric(lo[i], imageAspect);
+                var upMetric = ToMetric(up[i], imageAspect);
+                var floor = Mathf.Min(Vector2.Dot(loMetric, upAxis), Vector2.Dot(upMetric, upAxis));
+                var deficit = targetFloor - floor;
+                if (deficit <= 0f) continue;
+
+                var weight = 1f;
+                if (along > AntiDroopFullRegion)
+                {
+                    var fade = Mathf.Clamp01(
+                        (along - AntiDroopFullRegion) / fadeSpan);
+                    weight = 1f - Mathf.SmoothStep(0f, 1f, fade);
+                }
+                // along=0은 weight=1: 최종 워프 공간의 lower tail floor 목표가 targetFloor다.
+                // 조절 가능한 strength를 두지 않아 tip 불변식이 튜닝으로 약화되지 않는다.
+                var liftMetric = upAxis * (deficit * weight);
+                var liftUv = new Vector2(liftMetric.x / imageAspect, liftMetric.y);
+                lo[i] += liftUv;
+                up[i] += liftUv;
             }
+
+            return true;
         }
+
+        static Vector2 ToMetric(Vector2 point, float imageAspect) =>
+            new Vector2(point.x * imageAspect, point.y);
+
+        static Vector2 ForwardWarp(Vector2 point, FaceWarpField warp) =>
+            warp != null ? warp.Forward(point) : point;
+
+        static bool IsFinite(float value) =>
+            !float.IsNaN(value) && !float.IsInfinity(value);
+
+        static bool IsFinite(Vector2 value) => IsFinite(value.x) && IsFinite(value.y);
+        static bool IsFinite(Vector3 value) =>
+            IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
     }
 }

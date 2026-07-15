@@ -38,6 +38,7 @@ import {
   isLensRegion,
   LENS_BLEND_MODES,
   readFinishBundle,
+  pickerVisibleRegionDefs,
   REGION_GROUPS,
   REGION_MAP,
 } from '../composer/regions';
@@ -246,6 +247,18 @@ function decoLeafCount(tree: LookNode | null): number {
 
 const dn = (node: LookNode) => `${node.name}${node.dirty ? '*' : ''}`;
 
+/** 피부결은 skinGlow 값이 곧 프라이머 종류다. 프리셋의 일반 '피부결' 라벨보다
+ * 실제 선택된 제품명을 우선해 상세 트리와 경로가 같은 정체성을 말하게 한다. */
+function leafDisplayName(leaf: ProductLeaf): string {
+  if (leaf.region === 'skin') {
+    return ((leaf.params.skinGlow as number | undefined) ?? 0) > 0
+      ? '윤광 프라이머'
+      : '모공 프라이머';
+  }
+  const rdef = REGION_MAP[leaf.region];
+  return leaf.label === rdef.label ? rdef.productName ?? '커스텀' : leaf.label;
+}
+
 /** 잎까지의 경로 표시줄 — `루트* › 부위룩* › 세부룩* › 제품` */
 function pathToLeaf(root: LookNode, leafId: string): string | null {
   const segs: string[] = [];
@@ -254,7 +267,7 @@ function pathToLeaf(root: LookNode, leafId: string): string | null {
     for (const kid of node.kids) {
       if (isLeaf(kid)) {
         if (kid.id === leafId) {
-          segs.push(kid.label + (kid.dirty ? '*' : ''));
+          segs.push(leafDisplayName(kid) + (kid.dirty ? '*' : ''));
           return true;
         }
       } else if (walk(kid)) {
@@ -456,7 +469,6 @@ export default function ComposerSheet({
     total: number,
   ) => {
     const isSel = leaf.id === selectedLeafId;
-    const rdef = REGION_MAP[leaf.region];
     // 유일 겹은 sub.visible도 함께 봐야 유령 행(켜 보이는데 렌더 안 됨) 방지.
     const shown = soleLeaf ? leaf.visible && sub.visible : leaf.visible;
     return (
@@ -472,7 +484,7 @@ export default function ComposerSheet({
       >
         <Text style={styles.rowName} numberOfLines={1}>
           {/* 겹 이름 = 제형/제품명(부위는 헤더 칩이 말함). 라벨=부위명이면 폴백. */}
-          {leaf.label === rdef.label ? rdef.productName ?? '커스텀' : leaf.label}
+          {leafDisplayName(leaf)}
           {leaf.dirty && <Text style={styles.dirtyStar}>*</Text>}
           {total > 1 && <Text style={styles.rowSub}>  {li + 1}/{total}겹</Text>}
         </Text>
@@ -1070,7 +1082,7 @@ export default function ComposerSheet({
             <View key={group.title}>
               <Text style={styles.groupTitle}>{group.title}</Text>
               <View style={styles.regionGrid}>
-                {group.regions.map(def => {
+                {pickerVisibleRegionDefs(group.regions).map(def => {
                   const full = isDecoRegion(def.key) && decoFull;
                   return (
                     <TouchableOpacity

@@ -153,6 +153,9 @@ export interface LeafDef {
   technique?: { strength: number };
 }
 
+/** 세부부위 선택기 노출 범위. internal은 상위 룩 조립 전용, standalone만 직접 선택. */
+export type SubPickerScope = 'internal' | 'standalone';
+
 export interface LookDef {
   id: string;
   name: string;
@@ -164,6 +167,8 @@ export interface LookDef {
    *  인스턴스화된다(instantiateGroup). 미지정=일반 룩 정의. 하위호환: 옛 라이브러리엔
    *  이 필드가 없어 undefined로 로드되며 일반 정의로 동작한다. */
   kind?: 'group';
+  /** sub 정의 전용. 옛 사용자 정의(undefined)는 하위호환상 standalone으로 취급한다. */
+  pickerScope?: SubPickerScope;
   /** face/region 레벨: 하위 정의 id 배열 · sub 레벨: 잎 정의 배열 */
   kids: string[] | LeafDef[];
 }
@@ -223,6 +228,7 @@ export function buildSystemLibrary(): LookLibrary {
           level: 'sub',
           slot,
           owner: 'system',
+          pickerScope: 'internal',
           kids: [
             {
               label,
@@ -572,6 +578,8 @@ export function subDefsForRegion(lib: LookLibrary, region: RegionKey): LookDef[]
     .filter(
       d =>
         d.level === 'sub' &&
+        (d.pickerScope === 'standalone' ||
+          (d.pickerScope == null && d.owner === 'user')) &&
         (d.kids as LeafDef[]).some(leaf => leaf.region === region),
     )
     .sort((a, b) =>
@@ -926,6 +934,132 @@ export function setSlotRegion(
   return addRegionNode(base, fresh);
 }
 
+/** 노드 하위 전체 잎의 세부부위(RegionKey) 집합 — 세부부위 단위 스왑의 충돌 판별용. */
+function leafRegionsOf(node: LookNode): Set<RegionKey> {
+  const out = new Set<RegionKey>();
+  const walk = (n: LookNode) => {
+    for (const c of n.kids) {
+      if (isLeaf(c)) out.add(c.region);
+      else walk(c);
+    }
+  };
+  walk(node);
+  return out;
+}
+
+/** 슬롯 안에서 이 세부부위(RegionKey) 잎을 소유한 sub 노드 (첫 번째, 없으면 null).
+ *  기본 모드 세부부위 탭의 활성 표시·존재 조회용 — 슬롯 전체가 아닌 세부부위 단위. */
+export function subRegionNode(
+  root: LookNode | null,
+  slot: SlotKey,
+  region: RegionKey,
+): LookNode | null {
+  for (const rn of slotRegionNodes(root, slot)) {
+    const sub = rn.kids.find(
+      (c): c is LookNode =>
+        !isLeaf(c) && c.kids.some(k => isLeaf(k) && k.region === region),
+    );
+    if (sub) return sub;
+  }
+  return null;
+}
+
+/**
+ * 기본 모드 — 슬롯 안의 한 세부부위(RegionKey)만 교체/제거한다. setSlotRegion이
+ * 슬롯 전체를 갈아끼우는 것과 달리, 같은 슬롯의 다른 세부부위(파운데·컨실러 등)는
+ * 보존한다("언더톤만 바꿔도 파운데는 그대로" — 부위룩/세부부위룩 구분의 핵심).
+ *  - subDefId 지정: 그 세부부위(및 새 sub가 건드리는 세부부위)를 소유하던 기존 sub
+ *    전부 제거 후, 슬롯의 첫 region 노드에 새 sub 하나를 얹는다(빈 슬롯이면 region
+ *    노드를 새로 만들어 담는다). last-writer-wins 필드 충돌을 막으려 겹치는 세부부위를
+ *    함께 걷어낸다.
+ *  - subDefId=null(없음): 그 세부부위 sub만 제거(비어진 region 노드는 정리).
+ * 불변 반환 — 트리가 null이면 emptyFaceLook에서 시작(첫 선택이 트리를 만든다).
+ */
+export function setSubRegion(
+  root: LookNode | null,
+  lib: LookLibrary,
+  slot: SlotKey,
+  region: RegionKey,
+  subDefId: string | null,
+): LookNode | null {
+  // 슬롯의 region 노드들에서 `regions` 세부부위를 소유한 sub를 걷어낸다(빈 region은 제거).
+  const stripSubs = (base: LookNode, regions: Set<RegionKey>): LookNode => {
+    let changed = false;
+    const kids: TreeChild[] = [];
+    for (const c of base.kids) {
+      if (isLeaf(c) || c.slot !== slot) {
+        kids.push(c);
+        continue;
+      }
+      const keptSubs: TreeChild[] = [];
+      for (const sub of c.kids) {
+        if (isLeaf(sub)) {
+          keptSubs.push(sub);
+          continue;
+        }
+        const keptLeaves = sub.kids.filter(k => {
+          if (!isLeaf(k) || !regions.has(k.region)) return true;
+          changed = true;
+          return false;
+        });
+        if (keptLeaves.length === sub.kids.length) {
+          keptSubs.push(sub);
+        } else if (keptLeaves.length > 0) {
+          keptSubs.push({ ...sub, kids: keptLeaves, dirty: true });
+        }
+      }
+      const regionChanged =
+        keptSubs.length !== c.kids.length ||
+        keptSubs.some((sub, i) => sub !== c.kids[i]);
+      if (!regionChanged) {
+        kids.push(c); // 이 region 노드엔 해당 세부부위 없음 — 그대로
+      } else if (keptSubs.length === 0) {
+        changed = true; // 마지막 sub까지 빠짐 — 빈 region 껍데기 제거
+      } else {
+        kids.push({ ...c, kids: keptSubs, dirty: true });
+      }
+    }
+    return changed ? pruneGroups({ ...base, kids, dirty: true }) : base;
+  };
+
+  if (subDefId === null) {
+    if (!root) return root;
+    return stripSubs(root, new Set([region]));
+  }
+
+  const fresh = instantiate(lib, subDefId);
+  if (!fresh || fresh.level !== 'sub') return root;
+  const freshRegions = leafRegionsOf(fresh);
+  freshRegions.add(region);
+  const base = stripSubs(root ?? emptyFaceLook(), freshRegions);
+  // host = 슬롯의 첫 region 노드에 얹는다(다른 세부부위 보존). 없으면 새 region 노드.
+  const host = base.kids.find(
+    (c): c is LookNode => !isLeaf(c) && c.slot === slot,
+  );
+  if (host) {
+    return {
+      ...base,
+      kids: base.kids.map(c =>
+        c === host ? { ...host, kids: [...host.kids, fresh], dirty: true } : c,
+      ),
+      dirty: true,
+    };
+  }
+  const regionNode: LookNode = {
+    kind: 'look',
+    id: nid('lk'),
+    ref: null,
+    name: `${SLOT_LABEL[slot]} 커스텀`,
+    level: 'region',
+    slot,
+    owner: 'user',
+    visible: true,
+    dirty: false,
+    kids: [fresh],
+  };
+  return addRegionNode(base, regionNode);
+}
+
 /**
  * region 정의(라이브러리)의 대표 색 — 첫 잎 params/overlay의 첫 '#…' 색.
  * 기본 모드 스타일 칩 썸네일 스와치용(인스턴스화 없이 정의만 훑는다).
@@ -1085,8 +1219,12 @@ export interface LeafSnapshot {
   label: string;
   region: RegionKey;
   visible: boolean;
+  /** 편집 히스토리용 — 부재(옛 저장물)=깨끗한 상태. */
+  dirty?: boolean;
   params: Partial<FilterParams>;
   overlay?: OverlayLayer;
+  /** 렌즈 세부 payload — 부재=비렌즈/옛 스냅샷. */
+  lens?: LensLayer;
   /** 역할 태그(§5 A13) — 부재=미태그(옛 스냅샷과 바이트 동일 유지) */
   role?: string;
   /** 잎 인스턴스 id(§5 A13) — 핏 시트 '#겹id' 셀렉터가 저장/재로드를 견디게
@@ -1115,6 +1253,8 @@ export interface LookSnapshot {
   slot: SlotKey;
   owner: 'system' | 'user';
   visible: boolean;
+  /** 편집 히스토리용 — dirty ref는 라이브 해석 대신 스냅샷 값으로 복원한다. */
+  dirty?: boolean;
   kids: (LookSnapshot | LeafSnapshot)[];
   /** face 루트에만 — 사용자 그룹 메타 */
   groups?: GroupSnapshot[];
@@ -1132,8 +1272,10 @@ export function snapshotTree(root: LookNode): LookSnapshot {
           label: c.label,
           region: c.region,
           visible: c.visible,
+          ...(c.dirty ? { dirty: true } : {}),
           params: { ...c.params },
           ...(c.overlay ? { overlay: { ...c.overlay } } : {}),
+          ...(c.lens ? { lens: { ...c.lens } } : {}),
           ...(c.role ? { role: c.role } : {}),
           ...(c.productId ? { productId: c.productId } : {}),
           ...(c.technique ? { technique: { ...c.technique } } : {}),
@@ -1146,6 +1288,7 @@ export function snapshotTree(root: LookNode): LookSnapshot {
           slot: c.slot,
           owner: c.owner,
           visible: c.visible,
+          ...(c.dirty ? { dirty: true } : {}),
           kids: c.kids.map(snapChild),
           ...(c.fitRef ? { fitRef: c.fitRef } : {}),
         };
@@ -1205,13 +1348,36 @@ function reviveGroups(node: LookNode, snapGroups?: GroupSnapshot[]): void {
   if (groups.length > 0) node.groups = groups;
 }
 
+// 2026-07 혼합 SubSpec 분리 전에는 이 4개 :s0가 서로 다른
+// RegionKey 잎 2개를 소유했다. 익명 region 아래의 clean sub ref로 저장된
+// 스냅샷을 신규 단일 잎 :s0으로 live 해석하면 두 번째 겹이 유실된다.
+// 구 혼합 모양이 스냅샷에 실제로 남아 있는 경우만 동결 복원해,
+// 같은 ref의 신규 단일 잎 저장본은 기존 live 전파 규칙을 그대로 따른다.
+const LEGACY_MIXED_SUB_REFS = new Set([
+  'sys:var:eye:lens-gray-circle:s0',
+  'sys:var:eye:lens-hazel:s0',
+  'sys:var:brow:natural:s0',
+  'sys:var:brow:soft-lighten:s0',
+]);
+
+function containsLegacyMixedSub(snap: LookSnapshot): boolean {
+  if (snap.level === 'sub' && snap.ref && LEGACY_MIXED_SUB_REFS.has(snap.ref)) {
+    const regions = new Set(
+      snap.kids.filter((k): k is LeafSnapshot => k.kind === 'app').map(k => k.region),
+    );
+    if (regions.size > 1) return true;
+  }
+  return snap.kids.some(k => k.kind === 'look' && containsLegacyMixedSub(k));
+}
+
 /**
- * 스냅샷 → 작업본. ref가 라이브러리에 살아있으면 라이브 해석(공유 룩 '원본 반영'
- * 전파 — 목업 v2 검증 의미론), 수정분(ref=null)만 스냅샷 값으로 동결 복원.
+ * 스냅샷 → 작업본. ref가 라이브러리에 살아있고 dirty가 아니면 라이브 해석(공유 룩
+ * '원본 반영' 전파 — 목업 v2 검증 의미론), ref=null 또는 dirty=true인 노드는
+ * 스냅샷 값으로 동결 복원한다(dirty ref 자체는 저장 의미론을 위해 그대로 보존).
  * 그룹 메타는 두 경로 모두에서 순번 기반으로 복원한다(루트 ref 유무와 무관).
  */
 export function reviveTree(snap: LookSnapshot, lib: LookLibrary): LookNode {
-  if (snap.ref && lib[snap.ref]) {
+  if (snap.ref && !snap.dirty && lib[snap.ref] && !containsLegacyMixedSub(snap)) {
     const live = instantiate(lib, snap.ref);
     if (live) {
       copyVisibility(snap, live);
@@ -1227,9 +1393,10 @@ export function reviveTree(snap: LookSnapshot, lib: LookLibrary): LookNode {
           label: k.label,
           region: k.region,
           visible: k.visible,
-          dirty: false,
+          dirty: k.dirty ?? false,
           params: { ...k.params },
           ...(k.overlay ? { overlay: { ...k.overlay } } : {}),
+          ...(k.lens ? { lens: { ...k.lens } } : {}),
           ...(k.role ? { role: k.role } : {}),
           ...(k.productId ? { productId: k.productId } : {}),
           ...(k.technique ? { technique: { ...k.technique } } : {}),
@@ -1245,7 +1412,7 @@ export function reviveTree(snap: LookSnapshot, lib: LookLibrary): LookNode {
     slot: snap.slot,
     owner: snap.owner,
     visible: snap.visible,
-    dirty: false,
+    dirty: snap.dirty ?? false,
     kids,
     ...(snap.fitRef ? { fitRef: snap.fitRef } : {}),
   };
@@ -1386,11 +1553,16 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
     level: 'sub',
     slot: node.slot,
     owner: 'user',
+    pickerScope: 'internal',
     kids: node.kids.filter(isLeaf).map(lf => ({
       label: lf.label,
       region: lf.region,
       params: { ...lf.params },
       ...(lf.overlay ? { overlay: { ...lf.overlay } } : {}),
+      ...(lf.lens ? { lens: { ...lf.lens } } : {}),
+      ...(lf.role ? { role: lf.role } : {}),
+      ...(lf.productId ? { productId: lf.productId } : {}),
+      ...(lf.technique ? { technique: { ...lf.technique } } : {}),
     })),
   };
   return id;

@@ -5,8 +5,8 @@
  *
  * 순수 함수 — 부작용 없음, RN 컴포넌트 무의존. 강도는 각 부위 색을 맨피부(skinBase)와
  * 비교한 색차(chromaDelta) 기반 휴리스틱이라 실제 제품 강도와 오차가 있고, 상수를 export해
- * 실기기 튜닝을 전제한다. 마감(글로시/매트/시머)·글리터·재질은 단일 사진에서 신뢰 추정이
- * 불가하므로 v1은 색+강도만 뽑고 전부 satin(0, BARE 기본) 유지한다.
+ * 실기기 튜닝을 전제한다. 마감·위치·랜드마크 형태는 높은 신뢰도에서만 선택적으로 반영하고,
+ * 글리터처럼 단일 사진에서 안정적으로 추정하기 어려운 재질은 BARE 기본을 유지한다.
  *
  * 파운데이션·컨실러는 "그 사람 피부색"이라 룩이 아니어서 v1에서 제외한다.
  */
@@ -46,9 +46,45 @@ export const EXTRACT_K = {
   irisSatMin: 0.18,
 };
 
+/**
+ * 형태 번역 튜닝 상수 — 오탐이 기본값 유지보다 나쁘므로 부위별 신뢰도 문턱을 높게 둔다.
+ * 범위는 composer/regions.ts의 UI 축과 일치하며, 사진 측정 노이즈가 범위를 넘지 않게 막는다.
+ */
+const SHAPE_EXTRACT_K = {
+  // 립 광택: 양끝만 매트/글로시로 확정하고 중간 대역은 baseline 새틴으로 둔다.
+  lipGlossConfMin: 0.55,
+  lipMatteMax: 0.35,
+  lipGlossyMin: 0.65,
+  lipFinishSatin: 0,
+  lipFinishMatte: 1,
+  lipFinishGlossy: 2,
+  // 블러셔 centroid 오프셋은 현재 UI 핏 축의 보수적 공통 범위로 제한한다.
+  blushPositionConfMin: 0.6,
+  blushOffsetMin: -0.08,
+  blushOffsetMax: 0.08,
+  // 눈썹 연속축 범위. thickness=1은 실측 밴드 그대로이며 별도 +1 보정하지 않는다.
+  browShapeConfMin: 0.6,
+  browShapeMin: 0,
+  browShapeMax: 5,
+  browArchMin: 0,
+  browArchMax: 0.7,
+  browThicknessMin: 0.5,
+  browThicknessMax: 1.8,
+  // 픽셀 trace 오탐을 줄이기 위해 아이라인은 가장 높은 신뢰도 문턱을 사용한다.
+  eyelinerWingConfMin: 0.8,
+  eyelinerStyleMin: 0,
+  eyelinerStyleMax: 2,
+  eyelinerWingLengthMin: 0.2,
+  eyelinerWingLengthMax: 2,
+  // 고신뢰 trace도 기본 아이라인 강도보다 보수적으로 켜는 leaf 활성화 seed.
+  eyelinerIntensitySeed: 0.06,
+} as const;
+
 const clamp = (n: number, lo: number, hi: number): number =>
   n < lo ? lo : n > hi ? hi : n;
 const round3 = (n: number): number => Math.round(n * 1000) / 1000;
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
 
 /** 색상환 위 두 색상(H, [0,1] 순환)의 최단 거리 0..0.5. */
 function hueDist(a: number, b: number): number {
@@ -152,6 +188,21 @@ export function measurementToLook(
     params.lipGradient = EXTRACT_K.lipGradient;
   }
 
+  // 립 마감 — 명확한 저/고 광택만 매트/글로시, 경계 사이는 baseline 새틴으로 번역한다.
+  if (
+    isFiniteNumber(m.lipGloss) &&
+    isFiniteNumber(m.lipGlossConf) &&
+    m.lipGlossConf >= SHAPE_EXTRACT_K.lipGlossConfMin
+  ) {
+    const gloss = clamp(m.lipGloss, 0, 1);
+    params.lipFinish =
+      gloss <= SHAPE_EXTRACT_K.lipMatteMax
+        ? SHAPE_EXTRACT_K.lipFinishMatte
+        : gloss >= SHAPE_EXTRACT_K.lipGlossyMin
+          ? SHAPE_EXTRACT_K.lipFinishGlossy
+          : SHAPE_EXTRACT_K.lipFinishSatin;
+  }
+
   // 블러셔.
   const blushIntensity = estimateIntensity(
     m.blush,
@@ -162,6 +213,29 @@ export function measurementToLook(
   if (blushIntensity > 0 && validHex(m.blush)) {
     params.blushColor = m.blush;
     params.blushIntensity = g(blushIntensity);
+  }
+
+  // 블러셔 위치 — Unity가 기본 광대 UV 대비로 정규화한 centroid 오프셋을 그대로 쓴다.
+  if (
+    isFiniteNumber(m.blushLiftHint) &&
+    isFiniteNumber(m.blushSpreadHint) &&
+    isFiniteNumber(m.blushPositionConf) &&
+    m.blushPositionConf >= SHAPE_EXTRACT_K.blushPositionConfMin
+  ) {
+    params.blushLift = round3(
+      clamp(
+        m.blushLiftHint,
+        SHAPE_EXTRACT_K.blushOffsetMin,
+        SHAPE_EXTRACT_K.blushOffsetMax,
+      ),
+    );
+    params.blushSpread = round3(
+      clamp(
+        m.blushSpreadHint,
+        SHAPE_EXTRACT_K.blushOffsetMin,
+        SHAPE_EXTRACT_K.blushOffsetMax,
+      ),
+    );
   }
 
   // 아이섀도(눈두덩 리드~크리스 밴드).
@@ -185,6 +259,60 @@ export function measurementToLook(
       params.browIntensity = g(browIntensity);
       params.browPowderIntensity = g(browIntensity);
     }
+  }
+
+  // 눈썹 형태 — 세 값이 모두 유효할 때만 하나의 기하 측정 묶음으로 반영한다.
+  if (
+    isFiniteNumber(m.browShape) &&
+    isFiniteNumber(m.browArch) &&
+    isFiniteNumber(m.browThickness) &&
+    isFiniteNumber(m.browShapeConf) &&
+    m.browShapeConf >= SHAPE_EXTRACT_K.browShapeConfMin
+  ) {
+    params.browShape = clamp(
+      Math.round(m.browShape),
+      SHAPE_EXTRACT_K.browShapeMin,
+      SHAPE_EXTRACT_K.browShapeMax,
+    );
+    params.browArch = round3(
+      clamp(
+        m.browArch,
+        SHAPE_EXTRACT_K.browArchMin,
+        SHAPE_EXTRACT_K.browArchMax,
+      ),
+    );
+    params.browThickness = round3(
+      clamp(
+        m.browThickness,
+        SHAPE_EXTRACT_K.browThicknessMin,
+        SHAPE_EXTRACT_K.browThicknessMax,
+      ),
+    );
+  }
+
+  // 아이라인 윙 — 보수적 trace 문턱을 넘고 style/length가 모두 유효할 때만 leaf를 켠다.
+  if (
+    isFiniteNumber(m.eyelinerStyle) &&
+    isFiniteNumber(m.eyelinerWingLength) &&
+    isFiniteNumber(m.eyelinerWingConf) &&
+    m.eyelinerWingConf >= SHAPE_EXTRACT_K.eyelinerWingConfMin
+  ) {
+    const wingConf = clamp(m.eyelinerWingConf, 0, 1);
+    params.eyelinerStyle = clamp(
+      Math.round(m.eyelinerStyle),
+      SHAPE_EXTRACT_K.eyelinerStyleMin,
+      SHAPE_EXTRACT_K.eyelinerStyleMax,
+    );
+    params.eyelinerWingLength = round3(
+      clamp(
+        m.eyelinerWingLength,
+        SHAPE_EXTRACT_K.eyelinerWingLengthMin,
+        SHAPE_EXTRACT_K.eyelinerWingLengthMax,
+      ),
+    );
+    params.eyelinerIntensity = g(
+      SHAPE_EXTRACT_K.eyelinerIntensitySeed * wingConf,
+    );
   }
 
   // 홍채 — 뚜렷한 색(파랑/초록/회청) + 높은 신뢰도일 때만 컬러렌즈 1장. 아니면 없음.

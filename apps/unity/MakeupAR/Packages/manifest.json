@@ -15,8 +15,9 @@
     "com.unity.modules.unitywebrequestassetbundle": "1.0.0",
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
-    "com.unity.xr.arfoundation": "6.3.5",
-    "com.unity.xr.arkit": "6.3.5",
+    "com.unity.xr.arcore": "6.4.0",
+    "com.unity.xr.arfoundation": "6.4.0",
+    "com.unity.xr.arkit": "6.4.0",
     "com.unity.xr.management": "4.5.4"
   }
 }

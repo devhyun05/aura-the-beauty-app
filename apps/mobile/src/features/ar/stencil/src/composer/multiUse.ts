@@ -16,7 +16,12 @@
  */
 import type { FilterParams } from '../bridge/types';
 import { BARE } from '../presets';
-import { isDecoRegion, REGION_DEFS, REGION_MAP } from './regions';
+import {
+  isDecoRegion,
+  pickerVisibleRegionDefs,
+  REGION_DEFS,
+  REGION_MAP,
+} from './regions';
 import type { RegionDef, RegionKey } from './regions';
 import { newRegionNode } from './lookTree';
 import type { LookNode, ProductLeaf } from './lookTree';
@@ -71,7 +76,9 @@ export function canMultiUse(source: RegionKey, target: RegionKey): boolean {
 
 /** 소스 부위 제품을 쓸 수 있는 타깃 부위 목록 (카탈로그 순서). */
 export function multiUseTargets(source: RegionKey): RegionKey[] {
-  return REGION_DEFS.filter(d => canMultiUse(source, d.key)).map(d => d.key);
+  return pickerVisibleRegionDefs(REGION_DEFS)
+    .filter(d => canMultiUse(source, d.key))
+    .map(d => d.key);
 }
 
 /**
