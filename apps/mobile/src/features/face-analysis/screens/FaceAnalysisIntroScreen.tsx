@@ -5,6 +5,10 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {
+  FACE_ANALYSIS_CAPTURE_DURATION_COPY,
+  FACE_ANALYSIS_CAPTURE_PLAN,
+} from '../services/faceAnalysisCaptureGuidance';
 
 type FaceAnalysisIntroScreenProps = {
   onStartAnalysisGuide?: () => void;
@@ -15,6 +19,7 @@ const faceAnalysisIntroContent = {
   title: '얼굴 분석으로\n나에게 맞는 룩을 찾아요',
   description:
     '톤, 윤곽, 분위기를 함께 확인해 추천 필터와 제품을 더 정확하게 맞춰드려요.',
+  captureDuration: FACE_ANALYSIS_CAPTURE_DURATION_COPY,
   primaryActionLabel: '시작하기',
 } as const;
 
@@ -49,6 +54,10 @@ export function getFaceAnalysisIntroStepTitles() {
   return faceAnalysisIntroSteps.map(step => step.title);
 }
 
+export function getFaceAnalysisCapturePlanTitles() {
+  return FACE_ANALYSIS_CAPTURE_PLAN.map(step => step.title);
+}
+
 export function FaceAnalysisIntroScreen({
   onStartAnalysisGuide,
 }: FaceAnalysisIntroScreenProps) {
@@ -66,6 +75,26 @@ export function FaceAnalysisIntroScreen({
           <Text style={styles.title}>{faceAnalysisIntroContent.title}</Text>
           <Text style={styles.description}>{faceAnalysisIntroContent.description}</Text>
         </YStack>
+      </YStack>
+
+      <YStack style={styles.capturePlan}>
+        <Text style={styles.capturePlanTitle}>카메라는 두 단계로 진행돼요</Text>
+        <YStack style={styles.capturePlanList}>
+          {FACE_ANALYSIS_CAPTURE_PLAN.map((step, index) => (
+            <XStack key={step.id} style={styles.capturePlanRow}>
+              <View style={styles.capturePlanNumber}>
+                <Text style={styles.capturePlanNumberText}>{index + 1}</Text>
+              </View>
+              <YStack style={styles.capturePlanCopy}>
+                <Text style={styles.capturePlanStepTitle}>{step.title}</Text>
+                <Text style={styles.capturePlanDescription}>{step.description}</Text>
+              </YStack>
+            </XStack>
+          ))}
+        </YStack>
+        <Text style={styles.captureDuration}>
+          {faceAnalysisIntroContent.captureDuration}
+        </Text>
       </YStack>
 
       <YStack style={styles.stepList}>
@@ -96,6 +125,66 @@ export function FaceAnalysisIntroScreen({
 }
 
 const styles = StyleSheet.create({
+  captureDuration: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  capturePlan: {
+    gap: spacing.md,
+  },
+  capturePlanCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  capturePlanDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
+  capturePlanList: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+  },
+  capturePlanNumber: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  capturePlanNumberText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  capturePlanRow: {
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  capturePlanStepTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.md,
+  },
+  capturePlanTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
+  },
   description: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,

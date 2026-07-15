@@ -51,6 +51,8 @@ apps/mobile/screenshots/
 output/
 playwright-report/
 test-results/
+.superpowers/
+.codegraph/
 
 # Local Face3D calibration captures and reviews (may embed raw face frames)
 /artifacts/face3d/

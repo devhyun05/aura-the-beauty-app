@@ -10,6 +10,26 @@ export const makeupRecommendationDiscoveryCopy = {
   refresh: '새로 보기',
 } as const;
 
+export const makeupRecommendationHistoryCopy = {
+  title: '지난 추천',
+  description: '저장한 메이크업 추천을 다시 확인해보세요.',
+  empty: '아직 저장된 추천이 없어요.',
+  error: '추천 기록을 불러오지 못했어요.',
+} as const;
+
+export function formatMakeupRecommendationHistoryDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
 export type MakeupRecommendationScreenPhase = 'discovery' | 'loading' | 'question' | 'results' | 'error';
 export function shouldHandleMakeupRecommendationBack(phase: MakeupRecommendationScreenPhase): boolean {
   return phase !== 'discovery';

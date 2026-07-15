@@ -210,6 +210,16 @@ def test_pending_embedding_migration_is_registered() -> None:
   assert "alter table community_threads add column if not exists embedding" in migration_sql
   assert "alter table analysis_reports add column if not exists embedding" in migration_sql
 
+
+def test_face_analysis_stage_run_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:analysis-stage-runs-v1"]
+
+  assert "create table if not exists analysis_stage_runs" in migration_sql
+  assert "on delete cascade" in migration_sql
+  assert "idx_analysis_stage_runs_completed_cache" in migration_sql
+  assert "uq_analysis_stage_runs_one_processing" in migration_sql
+
+
 def test_pending_search_migration_is_registered() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:community-search-v1"]
 

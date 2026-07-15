@@ -6,6 +6,7 @@ import asyncpg
 
 from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
+from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
 
 
@@ -364,6 +365,7 @@ POST_SCHEMA_MIGRATIONS = {
     alter table community_threads add column if not exists embedding vector(1024);
     alter table analysis_reports add column if not exists embedding vector(1024);
   """,
+  "schema.sql:analysis-stage-runs-v1": FACE_ANALYSIS_STAGE_SCHEMA_SQL,
   "schema.sql:media-thumbnails-v1": """
     alter table media_assets add column if not exists thumbnail_bucket text;
     alter table media_assets add column if not exists thumbnail_object_key text;
