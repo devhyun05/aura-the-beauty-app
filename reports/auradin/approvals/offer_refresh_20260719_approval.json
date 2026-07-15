@@ -18,9 +18,17 @@
     "status": "PASS",
     "total": 6
   },
-  "resultsSha": "",
-  "reviewDecisionsSha": "",
-  "reviewedAt": "2026-07-15T09:05:00+09:00",
+  "provenance": {
+    "files": {
+      "data/auradin/catalog/base_supplement_seed_20260718.jsonl": "3d9fe28049fc3e60d19fb0b496a2973368c302b2ab598b008b57d593596bd526",
+      "data/auradin/catalog/catalog_items_seed_20260719.jsonl": "23e8e17304339b998e9f6e41f56a9c428127c15666333b1b095d67c01f470563",
+      "data/auradin/review/base_supplement_spotcheck_20260718.csv": "09aed7e986198a12c8e3e2a0deaaf056e7bee8b868373f418da2bc53b86a3613",
+      "data/auradin/review/base_supplement_sweep_20260718.jsonl": "2d4d4621da2267f4fc4cdfcab52703c9edd8b147ecaad90752ffbfea5e669779",
+      "data/auradin/review/listing_corrections_20260718.jsonl": "0d77e8bb3be5ad1da4d1270a3e1976315ee4a618c6e822f8884328292eacf329",
+      "reports/auradin/seed_merge_20260719.md": "2a804d4228d29689a5b5ac7640cda5e307bcecf51743e01795d7366735bc5d19"
+    }
+  },
+  "reviewedAt": "2026-07-15T10:30:00+09:00",
   "runDate": "20260719",
   "runId": "20260719-supplement",
   "snapshotManifestSha256": "62a8d91505fa2d05ad7bffc0485f1641a8f8800feeecc94394412610ba86a64e"
