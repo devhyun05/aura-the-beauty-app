@@ -15,41 +15,14 @@ import {
 import {mapCandidate} from './auradinSearchService';
 import type {AuradinCandidateProduct} from '../types';
 
-// R1 어댑터는 dev의 productService(likeProduct(id, shadeId))에 의존하지 않는다 —
-// 그 경로는 상품 payload를 보내지 않아 Auradin catalogItemId의 external_key 업서트가 불가능하다.
-// 백엔드 /products/{id}/like 계약(payload.product → products 테이블 upsert 후 like)에 직접 POST한다.
-type AuradinLikePayload = {
-  id: string;
-  brandName: string;
-  productName: string;
-  shadeName?: string;
-  category: string;
-  price: number;
-  imageUrl?: string | null;
-  purchaseUrl?: string | null;
-  matchRate?: number | null;
-  tags?: string[] | null;
-  palette?: string[] | null;
-  reason?: string | null;
-};
+// dev 머지: 레거시 /products/{id}/like는 UUID 전용이 됐고, Auradin catalogItemId(non-UUID)는
+// dev의 external-product like 경로를 탄다. external_source='auradin_catalog'로 like하면 백엔드가
+// resolve_auradin_catalog_product로 활성 스냅샷 카탈로그에서 상품을 조회하므로 payload가 불필요하다.
+// (services/backend/app/api/products.py: /products/external/{source}/{id}/like)
+const AURADIN_CATALOG_SOURCE = 'auradin_catalog';
 
-// 레거시 like 업서트 계약(services/backend/app/api/products.py)의 category enum.
-// Auradin 6-카테고리 중 벗어나는 값은 백엔드가 'lip'으로 정규화하므로 그대로 통과시킨다.
-export function toAuradinLikePayload(product: AuradinCandidateProduct): AuradinLikePayload {
-  return {
-    id: product.id,
-    brandName: product.brandName || 'AURADIN',
-    productName: product.productName,
-    shadeName: product.shadeName || undefined,
-    category: String(product.category),
-    price: product.priceKrw ?? 0,
-    imageUrl: product.imageUrl,
-    purchaseUrl: product.purchaseUrl,
-    matchRate: product.matchRate,
-    tags: product.tags,
-    palette: product.palette,
-    reason: product.reasonCopy ?? product.matchSummary,
-  };
+function auradinLikePath(productId: string): string {
+  return `/products/external/${encodeURIComponent(AURADIN_CATALOG_SOURCE)}/${encodeURIComponent(productId)}/like`;
 }
 
 // 서버 찜 반영 — 실패는 조용히 (보관함 UX는 로컬 상태가 즉답, 서버는 영속화 계층).
@@ -59,10 +32,7 @@ export async function persistAuradinSave(product: AuradinCandidateProduct): Prom
   }
 
   try {
-    await requestBackendJson(`/products/${encodeURIComponent(product.id)}/like`, {
-      method: 'POST',
-      body: JSON.stringify({product: toAuradinLikePayload(product)}),
-    });
+    await requestBackendJson(auradinLikePath(product.id), {method: 'POST'});
   } catch (error) {
     console.info('[aura:auradin] save:persist-failed', {
       id: product.id,
@@ -77,9 +47,7 @@ export async function removeAuradinSave(productId: string): Promise<void> {
   }
 
   try {
-    await requestBackendJson(`/products/${encodeURIComponent(productId)}/like`, {
-      method: 'DELETE',
-    });
+    await requestBackendJson(auradinLikePath(productId), {method: 'DELETE'});
   } catch (error) {
     console.info('[aura:auradin] save:remove-failed', {
       id: productId,

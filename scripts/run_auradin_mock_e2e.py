@@ -174,11 +174,8 @@ def run_flows() -> tuple[str, str]:
   catalog = [json.loads(l) for l in open(REPO_ROOT / "data/auradin/catalog/catalog_items_mvp_20260719.jsonl", encoding="utf-8")]
   served = [r for r in catalog if not is_quality_cut(r)]  # 실사용 이벤트는 서빙된 카드에서만 발생
   brow = next(r for r in served if r["category"] == "brow")
-  like_payload = {"product": {
-    "id": brow["id"], "productName": brow["productName"], "brandName": brow["brandName"],
-    "price": brow["liveOffer"]["priceKrw"], "category": "brow",
-    "imageUrl": brow["liveOffer"]["imageUrl"], "purchaseUrl": brow["liveOffer"]["purchaseUrl"]}}
-  lr = api(client, "POST", f"/products/{brow['id']}/like", headers=headers, json=like_payload)
+  # dev 머지: Auradin catalogItemId(non-UUID)는 external-product like 경로를 탄다.
+  lr = api(client, "POST", f"/products/external/auradin_catalog/{brow['id']}/like", headers=headers)
   liked = unwrap(api(client, "GET", "/products/liked", headers=headers))
   liked_list = liked.get("products") or liked.get("items") or (liked if isinstance(liked, list) else [])
   match = [p for p in liked_list if p.get("id") == brow["id"] or p.get("productId") == brow["id"]]
