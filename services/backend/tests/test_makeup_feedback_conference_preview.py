@@ -144,6 +144,26 @@ def test_compact_context_uses_only_goal_source_and_non_judgmental_metadata():
   assert "private.example" not in serialized
 
 
+def test_compact_context_prefers_server_analysis_goal_without_raw_duplicate():
+  payload = _request_payload()
+  payload["feedbackContext"].update(
+    {
+      "analysisGoalText": "외출 상황",
+      "userGoalText": "처음 가는 야시장",
+      "originalGoalText": "처음 가는 야시장",
+    },
+  )
+
+  compact = compact_preview_request_context(payload)
+  context_by_ref = _context_by_ref(compact)
+  serialized = json.dumps(compact, ensure_ascii=False)
+
+  assert "외출 상황" in context_by_ref["goal:user-input"]
+  assert "처음 가는 야시장" not in serialized
+  assert "goal:original-input" not in context_by_ref
+  assert "처음 가는 야시장" not in build_preview_prompt(payload)
+
+
 @pytest.mark.parametrize(
   "attack",
   [

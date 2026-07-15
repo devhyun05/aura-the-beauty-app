@@ -369,7 +369,9 @@ def _compact_feedback_result(
   context = _feedback_context(request_payload)
   payload = _as_mapping(request_payload)
   user_goal_text = _clean_text(
-    context.get("userGoalText")
+    context.get("analysisGoalText")
+    or context.get("analysis_goal_text")
+    or context.get("userGoalText")
     or context.get("user_goal_text")
     or payload.get("userGoalText")
     or payload.get("user_goal_text"),

@@ -78,6 +78,95 @@ async def test_preview_uses_owned_report_request_as_canonical_context(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_direct_preview_normalizes_goal_before_model_build(monkeypatch):
+  captured = {}
+  normalize_calls = 0
+
+  async def fake_normalize(request_payload, _settings):
+    nonlocal normalize_calls
+    normalize_calls += 1
+    request_payload.pop("analysisGoalText", None)
+    request_payload["feedbackContext"]["analysisGoalText"] = "외출 상황"
+
+  async def fake_build(request_payload, _settings):
+    captured.update(request_payload)
+    return [], "summary", "coach", "bedrock_completed", None
+
+  monkeypatch.setattr(
+    feedback_api,
+    "normalize_feedback_goal_context_for_request",
+    fake_normalize,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "build_makeup_feedback_conference_preview",
+    fake_build,
+  )
+
+  await feedback_api.create_feedback_conference_preview_messages(
+    payload=feedback_api.FeedbackConferencePreviewCreate(
+      requestPayload={
+        "analysisGoalText": "client injection",
+        "feedbackContext": {"userGoalText": "처음 가는 야시장"},
+      },
+    ),
+    auth=type("Auth", (), {"subject": "sub-1"})(),
+    db=object(),
+    settings=object(),
+  )
+
+  assert normalize_calls == 1
+  assert "analysisGoalText" not in captured
+  assert captured["feedbackContext"]["analysisGoalText"] == "외출 상황"
+
+
+@pytest.mark.asyncio
+async def test_direct_conference_normalizes_goal_before_model_build(monkeypatch):
+  captured = {}
+  normalize_calls = 0
+
+  async def fake_normalize(request_payload, _settings):
+    nonlocal normalize_calls
+    normalize_calls += 1
+    request_payload["feedbackContext"]["analysisGoalText"] = "외출 상황"
+
+  async def fake_build(result, request_payload, _settings, *, preview_context):
+    captured["result"] = result
+    captured["request"] = request_payload
+    captured["preview"] = preview_context
+    return [], "bedrock_completed", None
+
+  monkeypatch.setattr(
+    feedback_api,
+    "normalize_feedback_goal_context_for_request",
+    fake_normalize,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "build_makeup_feedback_conference_messages",
+    fake_build,
+  )
+
+  await feedback_api.create_feedback_conference_messages(
+    payload=feedback_api.FeedbackConferenceMessagesCreate(
+      result={"score": 80},
+      requestPayload={
+        "feedbackContext": {"userGoalText": "처음 가는 야시장"},
+      },
+      previewContext={"summary": "preview"},
+    ),
+    auth=type("Auth", (), {"subject": "sub-1"})(),
+    db=object(),
+    settings=object(),
+  )
+
+  assert normalize_calls == 1
+  assert captured["request"]["feedbackContext"]["analysisGoalText"] == "외출 상황"
+  assert captured["result"] == {"score": 80}
+  assert captured["preview"] == {"summary": "preview"}
+
+
+@pytest.mark.asyncio
 async def test_closing_uses_completed_owned_report_result(monkeypatch):
   report_id = "12345678-1234-5678-1234-567812345678"
   captured = {}

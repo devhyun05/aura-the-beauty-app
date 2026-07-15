@@ -128,7 +128,7 @@ class BedrockGuardrailService:
       guardrailIdentifier=(self.settings.bedrock_guardrail_id or "").strip(),
       guardrailVersion=(self.settings.bedrock_guardrail_version or "").strip(),
       source="INPUT",
-      content=[{"text": {"text": text}}],
+      content=[{"text": {"text": text, "qualifiers": ["guard_content"]}}],
     )
 
   async def apply_input_text(self, text: str, *, context: str) -> dict[str, Any] | None:

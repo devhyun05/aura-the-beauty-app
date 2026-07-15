@@ -41,6 +41,14 @@ export function isMakeupFeedbackGoalValidationError(error: unknown): error is Ba
   return error instanceof BackendApiError && FEEDBACK_GOAL_VALIDATION_ERROR_CODES.has(error.code ?? '');
 }
 
+export type MakeupFeedbackAnalysisErrorAction = 'edit_goal' | 'retry';
+
+export function getMakeupFeedbackAnalysisErrorAction(
+  error: unknown,
+): MakeupFeedbackAnalysisErrorAction {
+  return isMakeupFeedbackGoalValidationError(error) ? 'edit_goal' : 'retry';
+}
+
 export function getMakeupFeedbackAnalysisErrorMessage(error: unknown): string {
   if (error instanceof BackendApiError) {
     if (

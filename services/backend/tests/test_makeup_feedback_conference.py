@@ -248,6 +248,27 @@ def test_compact_feedback_result_builds_bounded_visible_evidence_catalog():
   assert '"status"' not in serialized
 
 
+def test_compact_feedback_result_prefers_server_analysis_goal():
+  payload = _request_payload()
+  payload["feedbackContext"].update(
+    {
+      "analysisGoalText": "외출 상황",
+      "userGoalText": "처음 가는 야시장",
+    },
+  )
+
+  compact = _compact_feedback_result(_full_result(), payload)
+  serialized = json.dumps(compact, ensure_ascii=False)
+  goal_evidence = next(
+    item
+    for item in compact["evidenceCatalog"]
+    if item["ref"] == "goal:user-input"
+  )
+
+  assert "외출 상황" in goal_evidence["text"]
+  assert "처음 가는 야시장" not in serialized
+
+
 def _many_title_result() -> dict:
   result = _full_result()
   result["strengths"] = [

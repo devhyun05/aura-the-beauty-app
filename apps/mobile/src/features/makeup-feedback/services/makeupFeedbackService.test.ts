@@ -2,6 +2,7 @@ import {BackendApiError} from '../../../shared/services/backendApi';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 import {
+  getMakeupFeedbackAnalysisErrorAction,
   getMakeupFeedbackAnalysisErrorMessage,
   mapBackendJobToFeedbackOutcome as mapBackendJobToFeedbackResult,
 } from './makeupFeedbackService';
@@ -26,6 +27,34 @@ expectEqual(
   ),
   '입력한 메이크업 목적을 조금 더 구체적으로 적어 주세요.',
   'actionable backend validation message is preserved',
+);
+
+for (const code of [
+  'FEEDBACK_GOAL_INVALID',
+  'FEEDBACK_GOAL_NEEDS_DETAIL',
+  'FEEDBACK_GOAL_GUARDRAIL_BLOCKED',
+]) {
+  expectEqual(
+    getMakeupFeedbackAnalysisErrorAction(
+      new BackendApiError('메이크업 목적을 다시 확인해 주세요.', 400, code),
+    ),
+    'edit_goal',
+    `${code} opens goal editing`,
+  );
+}
+
+expectEqual(
+  getMakeupFeedbackAnalysisErrorAction(
+    new BackendApiError('Backend request failed with HTTP 500.', 500),
+  ),
+  'retry',
+  'server errors remain retryable',
+);
+
+expectEqual(
+  getMakeupFeedbackAnalysisErrorAction(new Error('Network request failed')),
+  'retry',
+  'network errors remain retryable',
 );
 
 function expectBackendError(

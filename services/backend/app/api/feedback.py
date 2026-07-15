@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 from typing import Any
@@ -359,7 +360,7 @@ async def create_feedback_conference_preview_messages(
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  request_payload = payload.request_payload
+  request_payload = copy.deepcopy(payload.request_payload)
   if payload.report_id is not None:
     user = await ensure_user(db, auth)
     report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
@@ -367,6 +368,8 @@ async def create_feedback_conference_preview_messages(
     request_payload = stored_request
     if payload.request_payload.get("conversationSeed"):
       request_payload["conversationSeed"] = payload.request_payload["conversationSeed"]
+  else:
+    await normalize_feedback_goal_context_for_request(request_payload, settings)
 
   (
     messages,
@@ -404,7 +407,7 @@ async def create_feedback_conference_messages(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   result = payload.result
-  request_payload = payload.request_payload
+  request_payload = copy.deepcopy(payload.request_payload)
   if payload.report_id is not None:
     user = await ensure_user(db, auth)
     report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
@@ -417,6 +420,8 @@ async def create_feedback_conference_messages(
       )
     request_payload = stored_request
     result = stored_result
+  else:
+    await normalize_feedback_goal_context_for_request(request_payload, settings)
 
   messages, generation_status, generation_error = await build_makeup_feedback_conference_messages(
     result,

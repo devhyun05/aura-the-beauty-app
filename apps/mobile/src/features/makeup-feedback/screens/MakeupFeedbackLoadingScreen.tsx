@@ -9,7 +9,9 @@ import {makeupFeedbackLoadingPreviewSource} from '../services/makeupFeedbackLoad
 import {getMakeupFeedbackRetakeActionLabels} from '../services/makeupFeedbackResultPresentation';
 import {
   analyzeMakeupForFeedback,
+  getMakeupFeedbackAnalysisErrorAction,
   getMakeupFeedbackAnalysisErrorMessage,
+  type MakeupFeedbackAnalysisErrorAction,
 } from '../services/makeupFeedbackService';
 import {
   MAKEUP_FEEDBACK_REVIEW_CREW_LABELS,
@@ -198,6 +200,7 @@ function getConferenceProgress({
 
 export function MakeupFeedbackLoadingScreen({
   selection,
+  onBack,
   onComplete,
   onChooseDifferentPhoto,
   onRetake,
@@ -212,6 +215,8 @@ export function MakeupFeedbackLoadingScreen({
   const [analysisResult, setAnalysisResult] = useState<MakeupFeedbackResult | null>(null);
   const [retakeOutcome, setRetakeOutcome] = useState<MakeupFeedbackRetakeOutcome | null>(null);
   const [analysisErrorMessage, setAnalysisErrorMessage] = useState<string | null>(null);
+  const [analysisErrorAction, setAnalysisErrorAction] =
+    useState<MakeupFeedbackAnalysisErrorAction | null>(null);
   const [previewConferenceMessages, setPreviewConferenceMessages] = useState<
     readonly MakeupFeedbackAgentConferenceMessage[]
   >([]);
@@ -310,8 +315,19 @@ export function MakeupFeedbackLoadingScreen({
     }
 
     retryRequestedRef.current = true;
+    setAnalysisErrorAction(null);
     setAnalysisAttempt(currentAttempt => currentAttempt + 1);
   }, []);
+
+  const shouldEditGoal = analysisErrorAction === 'edit_goal' && Boolean(onBack);
+  const handleAnalysisErrorAction = useCallback(() => {
+    if (analysisErrorAction === 'edit_goal' && onBack) {
+      onBack();
+      return;
+    }
+
+    handleRetryAnalysis();
+  }, [analysisErrorAction, handleRetryAnalysis, onBack]);
 
   const handleComplete = useCallback(() => {
     if (!analysisResult || hasCompletedRef.current) {
@@ -348,6 +364,7 @@ export function MakeupFeedbackLoadingScreen({
     setAnalysisResult(null);
     setRetakeOutcome(null);
     setAnalysisErrorMessage(null);
+    setAnalysisErrorAction(null);
     setPreviewConferenceMessages([]);
     setClosingPreviewContext(null);
     setIsPreviewGenerationSettled(false);
@@ -449,6 +466,7 @@ export function MakeupFeedbackLoadingScreen({
           previewController.abort();
           settlePreviewForTerminalState();
           retryRequestedRef.current = false;
+          setAnalysisErrorAction(getMakeupFeedbackAnalysisErrorAction(error));
           setAnalysisErrorMessage(getMakeupFeedbackAnalysisErrorMessage(error));
           setIsConferenceTyping(false);
           setClosingConferenceMessages([]);
@@ -728,7 +746,9 @@ export function MakeupFeedbackLoadingScreen({
           {analysisErrorMessage ? (
             <YStack style={styles.errorPanel}>
               <Text accessibilityLiveRegion="polite" style={styles.errorTitle}>
-                분석을 완료하지 못했어요
+                {shouldEditGoal
+                  ? '피드백 목적을 다시 확인해 주세요'
+                  : '분석을 완료하지 못했어요'}
               </Text>
               <Text style={styles.errorDescription}>{analysisErrorMessage}</Text>
             </YStack>
@@ -767,11 +787,15 @@ export function MakeupFeedbackLoadingScreen({
           {analysisErrorMessage ? (
             <YStack style={styles.retakeActions}>
               <Pressable
-                accessibilityLabel={'AI 피드백 분석 다시 시도하기'}
+                accessibilityLabel={
+                  shouldEditGoal ? '메이크업 피드백 목적 수정하기' : 'AI 피드백 분석 다시 시도하기'
+                }
                 accessibilityRole="button"
-                onPress={handleRetryAnalysis}
+                onPress={handleAnalysisErrorAction}
                 style={({pressed}) => [styles.resultButton, pressed && styles.resultButtonPressed]}>
-                <Text style={styles.resultButtonText}>다시 시도하기</Text>
+                <Text style={styles.resultButtonText}>
+                  {shouldEditGoal ? '목적 수정하기' : '다시 시도하기'}
+                </Text>
               </Pressable>
               {selection.photoSource === 'gallery' ? (
                 <Pressable

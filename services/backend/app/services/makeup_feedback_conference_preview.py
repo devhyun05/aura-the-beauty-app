@@ -190,6 +190,10 @@ def compact_preview_request_context(request_payload: dict[str, Any]) -> dict[str
     payload.get("feedbackContext") or payload.get("feedback_context"),
   )
   catalog: list[dict[str, str]] = []
+  analysis_goal = _clean_text(
+    feedback_context.get("analysisGoalText")
+    or feedback_context.get("analysis_goal_text"),
+  )
   goal_text = _clean_text(
     feedback_context.get("userGoalText")
     or feedback_context.get("user_goal_text")
@@ -205,7 +209,8 @@ def compact_preview_request_context(request_payload: dict[str, Any]) -> dict[str
 
   if original_goal and PROMPT_INJECTION_PATTERN.search(original_goal):
     original_goal = ""
-  selected_goal = goal_text or original_goal
+
+  selected_goal = analysis_goal or goal_text or original_goal
 
   if selected_goal:
     _append_context(
@@ -222,7 +227,7 @@ def compact_preview_request_context(request_payload: dict[str, Any]) -> dict[str
       "사용자가 구체적인 상황이나 목적을 입력하지 않았습니다.",
     )
 
-  if original_goal and original_goal != selected_goal:
+  if not analysis_goal and original_goal and original_goal != selected_goal:
     _append_context(
       catalog,
       "goal:original-input",

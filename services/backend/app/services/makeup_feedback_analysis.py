@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import re
+import secrets
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,10 @@ from app.services.makeup_feedback_vision import (
 logger = logging.getLogger(__name__)
 
 MODEL_VERSION = "makeup-feedback:bedrock-v7-korean-goal-copy"
+
+BEDROCK_GUARDRAIL_TAG_PREFIX = "amazon-bedrock-guardrails-guardContent"
+BEDROCK_GUARDRAIL_TAG_SUFFIX_BYTES = 10
+BEDROCK_GUARDRAIL_VALIDATED_MARKER = "validated"
 
 PROMPT_DIRECTORY = Path(__file__).with_name("prompts")
 SYSTEM_PROMPT_PATH = PROMPT_DIRECTORY / "makeup_feedback_system.md"
@@ -278,8 +283,13 @@ def _get_feedback_context(payload: dict[str, Any]) -> dict[str, str]:
     or payload.get("profile_gender"),
     "unknown",
   )
+  analysis_goal_text = _clean_text(
+    context.get("analysisGoalText")
+    or context.get("analysis_goal_text"),
+  )
 
   return {
+    "analysisGoalText": analysis_goal_text,
     "goalIntentType": goal_intent_type,
     "originalGoalText": original_goal_text,
     "profileGender": profile_gender,
@@ -1103,18 +1113,22 @@ def _normalize_evaluations(
 def _normalize_interpreted_goal(raw_goal: Any, payload: dict[str, Any]) -> dict[str, Any]:
   goal = _require_mapping(raw_goal, "interpretedGoal")
   dynamic_criteria = _normalize_dynamic_criteria(goal.get("dynamicCriteria"))
-  original_goal_text = _get_feedback_context(payload)["originalGoalText"]
-  normalized_original_goal = " ".join(original_goal_text.casefold().split())
+  feedback_context = _get_feedback_context(payload)
+  trusted_goal_text = (
+    feedback_context["analysisGoalText"]
+    or feedback_context["originalGoalText"]
+  )
+  normalized_trusted_goal = " ".join(trusted_goal_text.casefold().split())
 
   for index, criterion in enumerate(dynamic_criteria):
     normalized_derived_from = " ".join(
       criterion["derivedFrom"].casefold().split(),
     )
 
-    if normalized_derived_from not in normalized_original_goal:
+    if normalized_derived_from not in normalized_trusted_goal:
       raise _invalid_live_result(
         f"interpretedGoal.dynamicCriteria[{index}].derivedFrom",
-        "must be a substring of the user's original goal text",
+        "must be a substring of the trusted analysis goal text",
       )
 
   intensity = _require_enum(goal, "intensity", "interpretedGoal.intensity", VALID_INTENSITIES)
@@ -1368,17 +1382,24 @@ def _build_user_prompt_values(payload: dict[str, Any]) -> dict[str, str]:
     for topic in FEEDBACK_TOPICS
   )
   topic_label_list = "\n".join(f"- {topic['label']}" for topic in FEEDBACK_TOPICS)
+  analysis_goal_text = feedback_context["analysisGoalText"]
+  prompt_original_goal_text = analysis_goal_text or feedback_context["originalGoalText"]
+  prompt_user_goal_text = (
+    f"메이크업 상황: {analysis_goal_text}"
+    if analysis_goal_text
+    else feedback_context["userGoalText"]
+  )
 
   return {
     "GOAL_INTENT_TYPE_JSON": json.dumps(feedback_context["goalIntentType"], ensure_ascii=False),
-    "ORIGINAL_GOAL_TEXT_JSON": json.dumps(feedback_context["originalGoalText"], ensure_ascii=False),
+    "ORIGINAL_GOAL_TEXT_JSON": json.dumps(prompt_original_goal_text, ensure_ascii=False),
     "OUTPUT_CONTRACT_JSON": json.dumps(_build_output_contract(), ensure_ascii=False, indent=2),
     "PROFILE_GENDER_JSON": json.dumps(feedback_context["profileGender"], ensure_ascii=False),
     "REQUEST_METADATA_JSON": json.dumps(metadata, ensure_ascii=False),
     "TOPIC_COUNT": str(len(FEEDBACK_TOPICS)),
     "TOPIC_ID_LIST": topic_id_list,
     "TOPIC_LABEL_LIST": topic_label_list,
-    "USER_GOAL_TEXT_JSON": json.dumps(feedback_context["userGoalText"], ensure_ascii=False),
+    "USER_GOAL_TEXT_JSON": json.dumps(prompt_user_goal_text, ensure_ascii=False),
   }
 
 
@@ -1530,6 +1551,18 @@ class MakeupFeedbackBedrockService:
       },
       *_build_bedrock_region_content(selected_regions),
     ]
+    guardrail_kwargs = build_bedrock_guardrail_invoke_kwargs(self.settings)
+
+    if guardrail_kwargs:
+      tag_suffix = secrets.token_hex(BEDROCK_GUARDRAIL_TAG_SUFFIX_BYTES)
+      tag_name = f"{BEDROCK_GUARDRAIL_TAG_PREFIX}_{tag_suffix}"
+      content.append(
+        {
+          "type": "text",
+          "text": f"<{tag_name}>{BEDROCK_GUARDRAIL_VALIDATED_MARKER}</{tag_name}>",
+        },
+      )
+
     request_payload = {
       "anthropic_version": "bedrock-2023-05-31",
       "max_tokens": 6400,
@@ -1537,6 +1570,10 @@ class MakeupFeedbackBedrockService:
       "system": self._build_system_prompt(),
       "messages": [{"role": "user", "content": content}],
     }
+
+    if guardrail_kwargs:
+      request_payload["amazon-bedrock-guardrailConfig"] = {"tagSuffix": tag_suffix}
+
     request_body = json.dumps(
       request_payload,
       ensure_ascii=False,
@@ -1563,7 +1600,6 @@ class MakeupFeedbackBedrockService:
       request_bytes,
       [name for name, _ in selected_regions],
     )
-    guardrail_kwargs = build_bedrock_guardrail_invoke_kwargs(self.settings)
     response = self._bedrock_runtime_client().invoke_model(
       modelId=model_id,
       body=request_body,
@@ -1572,6 +1608,14 @@ class MakeupFeedbackBedrockService:
       **guardrail_kwargs,
     )
     response_payload = json.loads(response["body"].read())
+
+    if response_payload.get("amazon-bedrock-guardrailAction") == "INTERVENED":
+      logger.warning("[aura:feedback-bedrock] analyze:guardrail-intervened")
+      raise AppError(
+        502,
+        "FEEDBACK_BEDROCK_GUARDRAIL_INTERVENED",
+        "Bedrock guardrail intervened during feedback analysis.",
+      )
 
     if response_payload.get("stop_reason") == "max_tokens":
       raise AppError(

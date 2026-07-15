@@ -53,6 +53,8 @@ async def test_guardrail_allows_input_when_action_is_none(monkeypatch: pytest.Mo
   assert fake_client.calls[0]["guardrailIdentifier"] == "gr-123"
   assert fake_client.calls[0]["guardrailVersion"] == "1"
   assert fake_client.calls[0]["source"] == "INPUT"
+  assert fake_client.calls[0]["content"][0]["text"]["qualifiers"] == ["guard_content"]
+  del fake_client.calls[0]["content"][0]["text"]["qualifiers"]
   assert fake_client.calls[0]["content"] == [
     {"text": {"text": "여자친구랑 카페가야하는 상황"}},
   ]
