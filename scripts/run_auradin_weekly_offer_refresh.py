@@ -4,9 +4,12 @@
 → ⑦vector → ⑧prepare → ⑨golden → ⑩activate 커맨드+승인 pending 템플릿 출력.
 activate는 사람만 실행한다 — 이 러너는 승인 증거를 pending까지만 만들고 멈춘다.
 
-run bundle 봉인: runId를 fetch 전에 발급하고 산출물 4종(results/review/diff/seed)을
+run bundle 봉인: runId를 fetch 전에 발급하고 산출물(results/review/diff/seed/decisions)을
 data/auradin/offer_refresh/run_{runId}/ 아래 격리, meta.json에 SHA를 봉인한다.
 재개(--resume-run)는 SHA 일치 시에만 진행하며 네트워크를 재호출하지 않는다.
+
+A6 검토 게이트: 검토 큐가 1건 이상인데 --apply-review가 없으면 seed/golden/approval로
+진행하지 않고 `review_required` 상태로 즉시 중단한다(exit 0 — 실패 아님, 런북 §2·§4).
 """
 
 from __future__ import annotations
@@ -475,9 +478,19 @@ def main(
       run_dir = offer_root / f"run_{run_id}"
       sealed_meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
       meta = sealed_meta
+      sealed_shas = dict(meta.get("shas") or {})
+      if "results.jsonl" not in sealed_shas:
+        raise RunnerAbort("resume refused: sealed meta lacks results.jsonl SHA")
+      # 봉인 파일 전수 검증 — 누락 시 재생성하지 않고 거부한다(run 폐기 후 새 run).
+      for sealed_name, sealed_sha in sealed_shas.items():
+        sealed_file = run_dir / sealed_name
+        if not sealed_file.is_file():
+          raise RunnerAbort(
+            f"resume refused: sealed file missing ({sealed_name}) — 재생성 금지, run을 폐기하고 새 run을 시작",
+          )
+        if _sha256_file(sealed_file) != sealed_sha:
+          raise RunnerAbort(f"resume refused: {sealed_name} SHA mismatch with sealed meta")
       results_path = run_dir / "results.jsonl"
-      if _sha256_file(results_path) != meta["shas"]["results.jsonl"]:
-        raise RunnerAbort("resume refused: results.jsonl SHA mismatch with sealed meta")
       if str(meta.get("runDate")) != args.run_date:
         raise RunnerAbort(
           f"resume refused: run date {args.run_date} != sealed {meta.get('runDate')}",
@@ -513,8 +526,11 @@ def main(
 
     matches = results_to_matches(result_rows)
     diff_summary = build_diff_summary(seed_rows, matches)
-    if sealed_meta is not None and (run_dir / "diff.json").is_file():
-      # 봉인 산출물은 재개 시 덮어쓰지 않는다 — 결정론 재계산 결과가 봉인과 다르면 거부.
+    if sealed_meta is not None:
+      # 봉인 산출물은 재개 시 덮어쓰지도 재생성하지도 않는다 — 누락이면 거부,
+      # 결정론 재계산 결과가 봉인과 다르면 거부.
+      if not (run_dir / "diff.json").is_file():
+        raise RunnerAbort("resume refused: sealed diff.json missing — 재생성 금지, run 폐기")
       if _canonical_json_sha(diff_summary) != _canonical_json_sha(
         json.loads((run_dir / "diff.json").read_text(encoding="utf-8")),
       ):
@@ -530,7 +546,7 @@ def main(
     decisions: dict[str, str] = {}
     if args.apply_review:
       decisions = load_review_decisions(args.apply_review, template_rows)
-    elif not (run_dir / "review_template.csv").exists():
+    elif sealed_meta is None and not (run_dir / "review_template.csv").exists():
       write_review_csv(run_dir / "review_template.csv", template_rows)
 
     new_seed, queue, next_state = apply_refresh_to_seed(
@@ -551,18 +567,66 @@ def main(
       meta["shas"]["diff.json"] = _sha256_file(run_dir / "diff.json")
     else:
       # 재개는 봉인 필드를 재작성하지 않는다 — 재개 기록만 append.
+      # resumedAtTs는 봉인된 runTs가 아니라 실제 재개 시각이다.
       meta.setdefault("resume", []).append(
-        {"resumedAtTs": run_ts, "appliedReview": str(args.apply_review or "")},
+        {"resumedAtTs": datetime.now(tz=UTC).isoformat(),
+         "appliedReview": str(args.apply_review or "")},
       )
+
+    if args.apply_review:
+      # 결정 CSV도 bundle 내부로 복사·봉인 — 승격에 쓰인 결정의 원본을 증거로 남긴다.
+      decisions_bytes = args.apply_review.read_bytes()
+      sealed_decisions = run_dir / "review_decisions.csv"
+      if sealed_decisions.exists() and sealed_decisions.read_bytes() != decisions_bytes:
+        raise RunnerAbort(
+          "apply refused: review decisions differ from sealed review_decisions.csv — "
+          "다른 결정으로 seed를 재작성할 수 없다",
+        )
+      if not sealed_decisions.exists():
+        sealed_decisions.write_bytes(decisions_bytes)
+      decisions_sha = hashlib.sha256(decisions_bytes).hexdigest()
+      sealed_decisions_sha = meta["shas"].get("review_decisions.csv")
+      if sealed_decisions_sha is None:
+        meta["shas"]["review_decisions.csv"] = decisions_sha  # 신규 키 추가만 허용
+      elif sealed_decisions_sha != decisions_sha:
+        raise RunnerAbort("apply refused: review_decisions.csv SHA mismatch with sealed meta")
 
     if args.until in {"refetch", "gate"}:
       _write_json(run_dir / "meta.json", meta)
       print(f"[until={args.until}] run {run_id}: 검토 큐 {len(queue)}건 — {run_dir}")
       return 0
 
+    if queue and not decisions:
+      # A6 검토 게이트 — 검토 큐가 있으면 seed/golden/approval로 진행하지 않는다.
+      _write_json(run_dir / "meta.json", meta)
+      print(
+        f"[review_required] run {run_id}: 검토 큐 {len(queue)}건 — 승격 중단(실패 아님)."
+        f"\n  {run_dir / 'review_template.csv'} 를 별도 결정 CSV로 검토한 뒤 재개:"
+        f"\n  ./.venv/bin/python scripts/run_auradin_weekly_offer_refresh.py"
+        f" --resume-run {run_id} --apply-review <decisions.csv> --until {args.until}",
+      )
+      return 0
+
     assert_a6_row_set_invariant(seed_rows, new_seed)
-    _write_jsonl(run_dir / "seed.jsonl", new_seed)
-    meta["shas"]["seed.jsonl"] = _sha256_file(run_dir / "seed.jsonl")
+    # 재개 봉인 강화: 기존 seed.jsonl이 있으면 byte-identical이 아닌 한 덮어쓰기 거부,
+    # meta["shas"]의 기존 봉인 값은 절대 갱신하지 않는다.
+    seed_out = run_dir / "seed.jsonl"
+    seed_bytes = "".join(
+      json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in new_seed
+    ).encode("utf-8")
+    if seed_out.exists():
+      if seed_out.read_bytes() != seed_bytes:
+        raise RunnerAbort(
+          "resume refused: recomputed seed differs from sealed seed.jsonl — 덮어쓰기 거부",
+        )
+    else:
+      seed_out.write_bytes(seed_bytes)
+    seed_sha = _sha256_file(seed_out)
+    sealed_seed_sha = meta["shas"].get("seed.jsonl")
+    if sealed_seed_sha is None:
+      meta["shas"]["seed.jsonl"] = seed_sha
+    elif sealed_seed_sha != seed_sha:
+      raise RunnerAbort("resume refused: seed.jsonl SHA mismatch with sealed meta")
     _write_json(run_dir / "meta.json", meta)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(state_path, next_state)
@@ -579,7 +643,10 @@ def main(
       until=args.until, subprocess_runner=subprocess_runner,
     )
     if args.until == "golden":
-      review_sha = _sha256_file(args.apply_review) if args.apply_review else meta["shas"].get("review_template.csv", "")
+      review_sha = (
+        meta["shas"].get("review_decisions.csv")
+        or meta["shas"].get("review_template.csv", "")
+      )
       write_pending_approval(
         run_id=run_id, run_date=args.run_date, manifest_path=built["manifestPath"],
         golden_summary=built["goldenSummary"], diff_summary=diff_summary,

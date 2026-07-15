@@ -25,7 +25,7 @@ crontab -l
 tail -n 200 logs/offer_refresh.log
 ```
 
-cron이 `review_required`에서 종료되는 것은 실패가 아니다. 사람 검토가 필요한 가격 급변 또는 `possible_stale` 항목을 발견해 안전하게 멈춘 상태다.
+**`review_required` 중단이 기본 동작이다.** cron 기본 실행(`--until golden`)도 검토 큐가 1건 이상이면 seed·golden·승인 템플릿으로 진행하지 않고 `review_template.csv` 작성과 meta 봉인까지만 수행한 뒤 `review_required` 상태로 즉시 중단한다(exit 0). 이는 실패가 아니라, 사람 검토가 필요한 가격 급변 또는 `possible_stale` 항목을 발견해 안전하게 멈춘 상태다. seed 이후 단계는 §4의 검토 완료 후 `--apply-review` 재개로만 진행된다.
 
 ## 3. 실행 결과와 runId 찾기
 
@@ -42,8 +42,9 @@ data/auradin/offer_refresh/run_<runId>/
 - `meta.json`: `resultsSha`와 `reviewTemplateSha`, 단계 상태
 - `diff.json`: 검토 큐가 없거나 검토 재개가 끝난 뒤의 최종 diff
 - `seed.jsonl`: 검토 큐가 없거나 검토 재개가 끝난 뒤의 승격 후보 seed
+- `review_decisions.csv`: `--apply-review`에 사용된 결정 CSV의 봉인 사본 (재개 시 자동 복사)
 
-`meta.json`의 SHA와 실제 파일이 다르면 해당 run을 폐기하고 새 run을 시작한다. SHA 불일치를 수동으로 고치거나 봉인을 다시 계산하지 않는다.
+`meta.json`의 SHA와 실제 파일이 다르거나 봉인된 파일이 누락되면 해당 run을 폐기하고 새 run을 시작한다. 러너는 봉인 파일을 재생성하지 않으며, `meta.json`의 기존 봉인 값을 갱신하지 않는다(신규 키 추가만). SHA 불일치를 수동으로 고치거나 봉인을 다시 계산하지 않는다.
 
 ## 4. `review_required` 처리
 

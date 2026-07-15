@@ -7,6 +7,7 @@ import csv
 import hashlib
 import importlib.util
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -214,6 +215,114 @@ def test_run_date_regression_rejected(tmp_path):
     fetcher=_happy_fetcher, subprocess_runner=_forbidden_subprocess,
   )
   assert code == 1                                       # (g) 날짜 역행 거부
+
+
+def _queue_fetcher(query: str):
+  if "3CE" in query:
+    return [_offer("100", "3CE 베어 커버 쿠션", 60000)]     # +200% → price_jump 검토 큐
+  return [_offer("200", "롬앤 쥬시 래스팅 틴트", 9500)]
+
+
+def _gate_run_with_queue(data_root: Path) -> tuple[Path, str]:
+  code = runner.main(
+    ["--run-date", "20260717", "--until", "gate", "--data-root", str(data_root)],
+    fetcher=_queue_fetcher, subprocess_runner=_forbidden_subprocess,
+  )
+  assert code == 0
+  run_dir = _run_dir(data_root)
+  run_id = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))["runId"]
+  return run_dir, run_id
+
+
+def _write_decisions(run_dir: Path, path: Path, decision: str = "accept_new") -> Path:
+  with (run_dir / "review_template.csv").open(encoding="utf-8", newline="") as handle:
+    rows = list(csv.DictReader(handle))
+  assert rows, "review queue expected"
+  for row in rows:
+    row["decision"] = decision
+    row["reviewedBy"] = "human"
+  with path.open("w", encoding="utf-8", newline="") as handle:
+    writer = csv.DictWriter(handle, fieldnames=runner.REVIEW_COLUMNS)
+    writer.writeheader()
+    writer.writerows(rows)
+  return path
+
+
+def _resume(data_root: Path, run_id: str, decisions_path: Path | None = None) -> int:
+  argv = ["--run-date", "20260717", "--until", "seed", "--data-root", str(data_root),
+          "--resume-run", run_id]
+  if decisions_path is not None:
+    argv += ["--apply-review", str(decisions_path)]
+  return runner.main(argv, fetcher=_forbidden_fetcher, subprocess_runner=_forbidden_subprocess)
+
+
+def test_unreviewed_queue_halts_review_required_before_seed(tmp_path, capsys):
+  # (a) 큐>0 + --apply-review 없음 → seed/golden 진행 금지, review_required로 exit 0.
+  data_root = _make_data_root(tmp_path)
+  code = runner.main(
+    ["--run-date", "20260717", "--until", "golden", "--data-root", str(data_root)],
+    fetcher=_queue_fetcher, subprocess_runner=_forbidden_subprocess,
+  )
+  assert code == 0
+  assert "review_required" in capsys.readouterr().out
+  run_dir = _run_dir(data_root)
+  assert (run_dir / "review_template.csv").is_file()
+  assert (run_dir / "meta.json").is_file()                # meta 봉인은 남긴다
+  assert not (run_dir / "seed.jsonl").exists()
+  assert not (data_root / "catalog" / "catalog_items_seed_20260717.jsonl").exists()
+
+
+def test_resume_rejects_decisions_differing_from_sealed_seed(tmp_path):
+  # (b) 이미 봉인된 seed와 다른 결정 CSV로 재개 → 거부(덮어쓰기·SHA 갱신 금지).
+  data_root = _make_data_root(tmp_path)
+  run_dir, run_id = _gate_run_with_queue(data_root)
+  first = _write_decisions(run_dir, run_dir / "review_a.csv", decision="accept_new")
+  assert _resume(data_root, run_id, first) == 0
+  sealed_seed = (run_dir / "seed.jsonl").read_bytes()
+  sealed_meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+
+  second = _write_decisions(run_dir, run_dir / "review_b.csv", decision="keep_old")
+  assert _resume(data_root, run_id, second) == 1
+  assert (run_dir / "seed.jsonl").read_bytes() == sealed_seed
+  meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+  assert meta["shas"] == sealed_meta["shas"]              # 봉인 값 미갱신
+
+
+def test_resume_rejects_missing_sealed_diff(tmp_path):
+  # (c) 봉인 파일(diff.json) 삭제 후 재개 → 재생성 없이 거부.
+  data_root = _make_data_root(tmp_path)
+  run_dir, run_id = _gate_run_with_queue(data_root)
+  (run_dir / "diff.json").unlink()
+  decisions = _write_decisions(run_dir, run_dir / "review_a.csv")
+  assert _resume(data_root, run_id, decisions) == 1
+  assert not (run_dir / "diff.json").exists()             # 재생성 금지
+  assert not (run_dir / "seed.jsonl").exists()
+
+
+def test_resume_records_actual_resume_time(tmp_path):
+  # (d) resumedAtTs는 봉인된 runTs가 아니라 실제 재개 시각(UTC ISO)이다.
+  data_root = _make_data_root(tmp_path)
+  run_dir, run_id = _gate_run_with_queue(data_root)
+  decisions = _write_decisions(run_dir, run_dir / "review_a.csv")
+  assert _resume(data_root, run_id, decisions) == 0
+  meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+  assert meta["resume"], "resume record missing"
+  resumed_at = meta["resume"][0]["resumedAtTs"]
+  assert resumed_at != meta["runTs"]
+  parsed = datetime.fromisoformat(resumed_at)
+  assert parsed.utcoffset() == timedelta(0)               # UTC 실시각
+
+
+def test_apply_review_seals_decision_csv_into_bundle(tmp_path):
+  # (e) --apply-review 적용 시 결정 CSV를 run bundle로 복사하고 SHA 봉인.
+  data_root = _make_data_root(tmp_path)
+  run_dir, run_id = _gate_run_with_queue(data_root)
+  decisions = _write_decisions(run_dir, run_dir / "review_a.csv")
+  assert _resume(data_root, run_id, decisions) == 0
+  sealed = run_dir / "review_decisions.csv"
+  assert sealed.read_bytes() == decisions.read_bytes()
+  meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
+  assert meta["shas"]["review_decisions.csv"] == hashlib.sha256(sealed.read_bytes()).hexdigest()
 
 
 def test_a6_row_set_invariant_guard():
