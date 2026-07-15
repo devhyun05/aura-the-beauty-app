@@ -45,6 +45,7 @@ import {
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import {PersonalColorTypeCard} from '../../personal-color/components/PersonalColorTypeCard';
 import {MeasurementDetailSection} from '../components/MeasurementDetailSection';
+import {FaceAnalysisV2ReportSections} from '../components/FaceAnalysisV2ReportSections';
 import {shouldUseSessionMeasurements} from '../services/faceAnalysisMeasurements';
 import type {
   AuraPersonalColorResult,
@@ -495,9 +496,14 @@ export function FaceAnalysisReportDetailScreen({
     () => countPendingRecommendedMakeupImages(report),
     [report],
   );
+  const isFaceAnalysisPipelinePending =
+    report?.faceAnalysisV2?.pipeline.overall === 'processing';
 
   useEffect(() => {
-    if (!report?.id || pendingRecommendedMakeupImageCount === 0) {
+    if (
+      !report?.id ||
+      (pendingRecommendedMakeupImageCount === 0 && !isFaceAnalysisPipelinePending)
+    ) {
       return;
     }
 
@@ -539,7 +545,7 @@ export function FaceAnalysisReportDetailScreen({
         clearTimeout(pollTimeoutId);
       }
     };
-  }, [pendingRecommendedMakeupImageCount, report?.id]);
+  }, [isFaceAnalysisPipelinePending, pendingRecommendedMakeupImageCount, report?.id]);
 
   const handleShareAction = useCallback(async (target: FaceAnalysisReportShareTarget) => {
     if (!report || activeShareTarget) {
@@ -848,6 +854,10 @@ export function FaceAnalysisReportDetailScreen({
               verticalThirds={effectiveVerticalThirds}
             />
           </ReportSection>
+        ) : null}
+
+        {report.faceAnalysisV2 ? (
+          <FaceAnalysisV2ReportSections analysis={report.faceAnalysisV2} />
         ) : null}
 
         {primaryMakeupRecommendation ? (

@@ -1,0 +1,183 @@
+export type FaceAnalysisStageStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'partial'
+  | 'failed';
+
+export type FaceAnalysisStageState = {
+  cacheHit: boolean;
+  errorCode?: string | null;
+  runId?: string | null;
+  status: FaceAnalysisStageStatus;
+  updatedAt?: string | null;
+};
+
+export type FaceAnalysisPipelineState = {
+  aiConsulting: FaceAnalysisStageState;
+  aiMeasurement: FaceAnalysisStageState;
+  aiPerception: FaceAnalysisStageState;
+  overall: 'processing' | 'partial' | 'completed' | 'failed';
+  retryRequestedStage?: 'ai_measurement' | 'ai_perception' | 'ai_consulting' | null;
+};
+
+export type FaceAnalysisMetricEnvelope = {
+  confidence: number;
+  derivedFrom: string[];
+  reason?: string | null;
+  sensitivity: 0 | 1 | 2 | 3;
+  shots: Array<'S1' | 'FACE3D'>;
+  source: 'landmark' | 'pixel' | 'depth' | 'ai';
+  status: 'measured' | 'estimated' | 'unmeasured' | 'blocked';
+  unit?: 'mm' | 'deg' | 'ratio' | 'lab' | 'score' | 'label' | null;
+  value: unknown;
+  warnings: string[];
+};
+
+export type FaceAnalysisInsight = {
+  confidence: number;
+  description: string;
+  label: string;
+  rationaleMetricKeys: string[];
+  sensitivity: 0 | 1 | 2 | 3;
+};
+
+export type FaceAnalysisDerivedResult = {
+  asymmetry: FaceAnalysisInsight;
+  cheekboneAndEline: FaceAnalysisInsight;
+  colorAxes: FaceAnalysisInsight;
+  eyeBrow: FaceAnalysisInsight;
+  faceShape: FaceAnalysisInsight;
+  irisExposure: FaceAnalysisInsight;
+  nosePhiltrumLips: FaceAnalysisInsight;
+  rulesVersion: string;
+  skinColor: FaceAnalysisInsight;
+  verticalBalance: FaceAnalysisInsight;
+};
+
+export type FaceAnalysisV2 = {
+  aiMeasurements: Record<string, FaceAnalysisMetricEnvelope>;
+  consulting?: Record<string, unknown> | null;
+  coverage: {
+    authoritativeKeys: string[];
+    blockedKeys: Array<{key: string; reason: string}>;
+    missingObservableKeys: string[];
+    outOfScopeKeys: string[];
+  };
+  derived: FaceAnalysisDerivedResult;
+  faceProfile: Record<string, FaceAnalysisMetricEnvelope>;
+  perception?: Record<string, unknown> | null;
+  pipeline: FaceAnalysisPipelineState;
+  schemaVersion: 'aura-face-analysis-v2';
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+function isStageState(value: unknown): value is FaceAnalysisStageState {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    ['pending', 'processing', 'completed', 'partial', 'failed'].includes(
+      String(value.status),
+    ) && typeof value.cacheHit === 'boolean'
+  );
+}
+
+function isMetric(value: unknown): value is FaceAnalysisMetricEnvelope {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.confidence === 'number' &&
+    typeof value.sensitivity === 'number' &&
+    isStringArray(value.shots) &&
+    isStringArray(value.warnings) &&
+    isStringArray(value.derivedFrom) &&
+    ['landmark', 'pixel', 'depth', 'ai'].includes(String(value.source)) &&
+    ['measured', 'estimated', 'unmeasured', 'blocked'].includes(String(value.status))
+  );
+}
+
+function parseMetrics(value: unknown): Record<string, FaceAnalysisMetricEnvelope> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const entries = Object.entries(value);
+  return entries.every(([, metric]) => isMetric(metric))
+    ? Object.fromEntries(entries) as Record<string, FaceAnalysisMetricEnvelope>
+    : null;
+}
+
+function isInsight(value: unknown): value is FaceAnalysisInsight {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.label === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.confidence === 'number' &&
+    typeof value.sensitivity === 'number' &&
+    isStringArray(value.rationaleMetricKeys)
+  );
+}
+
+const derivedInsightKeys = [
+  'asymmetry',
+  'cheekboneAndEline',
+  'colorAxes',
+  'eyeBrow',
+  'faceShape',
+  'irisExposure',
+  'nosePhiltrumLips',
+  'skinColor',
+  'verticalBalance',
+] as const;
+
+export function parseFaceAnalysisV2(value: unknown): FaceAnalysisV2 | undefined {
+  if (!isRecord(value) || value.schemaVersion !== 'aura-face-analysis-v2') {
+    return undefined;
+  }
+  const coverage = value.coverage;
+  const derived = value.derived;
+  const pipeline = value.pipeline;
+  const aiMeasurements = parseMetrics(value.aiMeasurements);
+  const faceProfile = parseMetrics(value.faceProfile);
+  if (
+    !isRecord(coverage) ||
+    !isStringArray(coverage.authoritativeKeys) ||
+    !isStringArray(coverage.missingObservableKeys) ||
+    !isStringArray(coverage.outOfScopeKeys) ||
+    !Array.isArray(coverage.blockedKeys) ||
+    !isRecord(derived) ||
+    typeof derived.rulesVersion !== 'string' ||
+    !derivedInsightKeys.every(key => isInsight(derived[key])) ||
+    !isRecord(pipeline) ||
+    !isStageState(pipeline.aiMeasurement) ||
+    !isStageState(pipeline.aiPerception) ||
+    !isStageState(pipeline.aiConsulting) ||
+    !['processing', 'partial', 'completed', 'failed'].includes(String(pipeline.overall)) ||
+    !aiMeasurements ||
+    !faceProfile
+  ) {
+    return undefined;
+  }
+  if (value.perception != null && !isRecord(value.perception)) {
+    return undefined;
+  }
+  if (value.consulting != null && !isRecord(value.consulting)) {
+    return undefined;
+  }
+  return value as FaceAnalysisV2;
+}
+
+export function hasRenderableCameraReport(value: unknown): boolean {
+  const result = parseFaceAnalysisV2(value);
+  return Boolean(result && Object.keys(result.faceProfile).length > 0);
+}

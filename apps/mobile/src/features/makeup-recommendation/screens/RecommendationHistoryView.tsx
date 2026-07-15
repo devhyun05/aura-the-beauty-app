@@ -1,0 +1,125 @@
+import {ActivityIndicator, Image, Pressable, StyleSheet, Text, View} from 'react-native';
+
+import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {AppCard, AppScreen} from '../../../shared/ui';
+import type {MakeupRecommendationReportHistoryItem} from '../types';
+import {
+  formatMakeupRecommendationHistoryDate,
+  makeupRecommendationHistoryCopy,
+} from './makeupRecommendationViewContracts';
+
+type RecommendationHistoryViewProps = {
+  error?: string;
+  isLoading: boolean;
+  items: readonly MakeupRecommendationReportHistoryItem[];
+  onBack: () => void;
+  onRefresh: () => void;
+  onSelect: (item: MakeupRecommendationReportHistoryItem) => void;
+};
+
+export function RecommendationHistoryView({
+  error,
+  isLoading,
+  items,
+  onBack,
+  onRefresh,
+  onSelect,
+}: RecommendationHistoryViewProps) {
+  return (
+    <AppScreen contentGap={spacing.xl} topPadding="belowShellHeader">
+      <View style={styles.topRow}>
+        <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backLabel}>추천 찾기</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{disabled: isLoading}}
+          disabled={isLoading}
+          onPress={onRefresh}
+          style={styles.refreshButton}
+        >
+          <Text style={styles.refreshLabel}>{isLoading ? '불러오는 중…' : '새로고침'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.heading}>
+        <Text style={styles.title}>{makeupRecommendationHistoryCopy.title}</Text>
+        <Text style={styles.description}>{makeupRecommendationHistoryCopy.description}</Text>
+      </View>
+
+      {isLoading && items.length === 0 ? (
+        <View accessibilityLabel="지난 추천 불러오는 중" style={styles.centerState}>
+          <ActivityIndicator color={colors.textPrimary} size="small" />
+        </View>
+      ) : error && items.length === 0 ? (
+        <View accessibilityRole="alert" style={styles.stateCard}>
+          <Text style={styles.stateTitle}>{makeupRecommendationHistoryCopy.error}</Text>
+          <Text style={styles.stateDescription}>{error}</Text>
+          <Pressable accessibilityRole="button" onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryLabel}>다시 불러오기</Text>
+          </Pressable>
+        </View>
+      ) : items.length === 0 ? (
+        <View style={styles.stateCard}>
+          <Text style={styles.stateTitle}>{makeupRecommendationHistoryCopy.empty}</Text>
+          <Text style={styles.stateDescription}>새 추천을 받으면 이곳에서 언제든 다시 볼 수 있어요.</Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {error ? <Text accessibilityRole="alert" style={styles.inlineError}>{error}</Text> : null}
+          {items.map(item => {
+            const preview = item.results[0];
+            const date = formatMakeupRecommendationHistoryDate(item.createdAt);
+            return (
+              <AppCard
+                accessibilityLabel={`${item.scenarioText} 저장된 추천 열기`}
+                key={item.reportId}
+                onPress={() => onSelect(item)}
+                padded={false}
+                style={styles.reportCard}
+              >
+                <Image resizeMode="cover" source={preview.imageSource} style={styles.previewImage} />
+                <View style={styles.cardBody}>
+                  <View style={styles.cardMetaRow}>
+                    <Text style={styles.cardMeta}>{date || '저장된 추천'}</Text>
+                    <Text style={styles.cardMeta}>{item.results.length}가지 메이크업</Text>
+                  </View>
+                  <Text style={styles.scenario}>{item.scenarioText}</Text>
+                  <Text style={styles.lookNames} numberOfLines={2}>
+                    {item.results.map(look => look.title).join(' · ')}
+                  </Text>
+                </View>
+              </AppCard>
+            );
+          })}
+        </View>
+      )}
+    </AppScreen>
+  );
+}
+
+const styles = StyleSheet.create({
+  topRow: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
+  backButton: {justifyContent: 'center', minHeight: 44, paddingRight: spacing.lg},
+  backLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
+  refreshButton: {justifyContent: 'center', minHeight: 44, paddingLeft: spacing.lg},
+  refreshLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
+  heading: {gap: spacing.sm},
+  title: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xxl, lineHeight: typography.lineHeight.xxl},
+  description: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  centerState: {alignItems: 'center', justifyContent: 'center', minHeight: 180},
+  stateCard: {backgroundColor: colors.surfaceMuted, borderRadius: radius.lg, gap: spacing.sm, padding: spacing.xl},
+  stateTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg},
+  stateDescription: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  retryButton: {alignSelf: 'flex-start', justifyContent: 'center', minHeight: 44},
+  retryLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
+  list: {gap: spacing.lg},
+  inlineError: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.xs},
+  reportCard: {overflow: 'hidden'},
+  previewImage: {backgroundColor: colors.surfaceMuted, height: 160, width: '100%'},
+  cardBody: {gap: spacing.sm, padding: spacing.lg},
+  cardMetaRow: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
+  cardMeta: {color: colors.textTertiary, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs},
+  scenario: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg, lineHeight: typography.lineHeight.lg},
+  lookNames: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+});

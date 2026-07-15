@@ -11,7 +11,8 @@ using Debug = UnityEngine.Debug;
 /// it into the React Native iOS app:
 ///   1. Export the Unity iOS project        -> apps/unity-builds/ios-export
 ///   2. xcodebuild the UnityFramework scheme -> apps/unity-builds/framework
-///   3. Copy UnityFramework.framework + Data -> apps/mobile/ios/UnityBuild
+///   3. Copy UnityFramework.framework + Data + MediaPipeUnity.framework
+///      -> apps/mobile/ios/UnityBuild
 /// After this, rebuilding the AURA app (expo run:ios --device or Xcode Run)
 /// embeds the fresh framework via the existing "Embed UnityFramework" phase.
 ///
@@ -45,7 +46,7 @@ public static class MakeupARBuildPipeline
         Debug.Log("[BuildPipeline] step 2/3: building UnityFramework with xcodebuild...");
         BuildUnityFramework();
 
-        Debug.Log("[BuildPipeline] step 3/3: installing framework + Data into the RN app...");
+        Debug.Log("[BuildPipeline] step 3/3: installing frameworks + Data into the RN app...");
         InstallIntoReactNative();
 
         Debug.Log(
@@ -96,10 +97,25 @@ public static class MakeupARBuildPipeline
                 "Exported Data folder not found at " + exportedData);
         }
 
+        string mediaPipeFramework = Path.Combine(
+            ExportPath,
+            "Frameworks",
+            "com.github.homuler.mediapipe",
+            "Runtime",
+            "Plugins",
+            "iOS",
+            "MediaPipeUnity.framework");
+        if (!Directory.Exists(mediaPipeFramework))
+        {
+            throw new InvalidOperationException(
+                "Exported MediaPipeUnity.framework not found at " + mediaPipeFramework);
+        }
+
         Directory.CreateDirectory(RnUnityBuildDir);
 
         string frameworkDestination = Path.Combine(RnUnityBuildDir, "UnityFramework.framework");
         string dataDestination = Path.Combine(RnUnityBuildDir, "Data");
+        string mediaPipeDestination = Path.Combine(RnUnityBuildDir, "MediaPipeUnity.framework");
 
         // ditto preserves symlinks, permissions and code-signature layout.
         RunProcess(
@@ -108,9 +124,12 @@ public static class MakeupARBuildPipeline
         RunProcess(
             "/usr/bin/ditto",
             "\"" + exportedData + "\" \"" + dataDestination + "\"");
+        RunProcess(
+            "/usr/bin/ditto",
+            "\"" + mediaPipeFramework + "\" \"" + mediaPipeDestination + "\"");
 
         Debug.Log(
-            "[BuildPipeline] installed UnityFramework.framework and Data into "
+            "[BuildPipeline] installed UnityFramework.framework, MediaPipeUnity.framework and Data into "
             + RnUnityBuildDir);
     }
 

@@ -1,0 +1,345 @@
+from dataclasses import dataclass
+import math
+from typing import Any
+
+from app.schemas.face_analysis_v2 import (
+  BlockedMetricKey,
+  MeasurementCoveragePlan,
+  MeasurementShot,
+  MeasurementSource,
+  MeasurementStatus,
+  MetricEnvelope,
+)
+
+
+AI_OBSERVABLE_METRICS: dict[str, tuple[int, str]] = {
+  "eyes.innerCornerOpenness": (1, "label"),
+  "eyes.irisExposure": (1, "label"),
+  "eyes.irisToAperture": (1, "label"),
+  "eyes.upperLidCurve": (1, "label"),
+  "eyes.lowerLidCurve": (1, "label"),
+  "eyes.scleraIrisContrast": (1, "score"),
+  "eyes.heightAsymmetry": (2, "label"),
+  "eyes.eyelidType": (1, "label"),
+  "eyes.eyelidThickness": (1, "label"),
+  "eyes.eyelidStability": (2, "label"),
+  "eyes.epicanthalFold": (2, "label"),
+  "eyes.aegyoSal": (1, "label"),
+  "brows.lengthType": (0, "label"),
+  "brows.archPosition": (0, "label"),
+  "brows.archHeight": (0, "label"),
+  "brows.heightAsymmetry": (2, "label"),
+  "brows.hairTexture": (1, "label"),
+  "brows.density": (1, "label"),
+  "lashes.direction": (1, "label"),
+  "lashes.density": (1, "label"),
+  "lips.upperThicknessType": (0, "label"),
+  "lips.lowerThicknessType": (0, "label"),
+  "lips.cupidsBowShape": (0, "label"),
+  "lips.cornerImpression": (1, "label"),
+  "nose.nostrilExposure": (1, "label"),
+  "nose.nostrilAsymmetry": (2, "label"),
+  "nose.tipSkinThickness": (2, "label"),
+  "nose.alarFleshiness": (2, "label"),
+  "philtrum.visualLength": (1, "label"),
+  "philtrum.definition": (1, "label"),
+  "contour.foreheadWidthType": (1, "label"),
+  "contour.cheekboneWidthType": (1, "label"),
+  "contour.chinWidthType": (1, "label"),
+  "contour.jawAngleType": (1, "label"),
+  "contour.outlineStrength": (1, "label"),
+  "contour.fiveEyeBalanceSupplement": (2, "label"),
+  "asymmetry.regionalObservations": (2, "label"),
+  "color.browTone": (1, "label"),
+  "color.irisTone": (1, "label"),
+  "skin.toneUniformity": (1, "score"),
+  "skin.rednessMap": (2, "label"),
+  "skin.darkCircleColor": (1, "label"),
+  "skin.lipLineColor": (1, "label"),
+  "skin.relativeContrast": (1, "label"),
+  "skin.texture": (1, "label"),
+  "skin.pores": (1, "label"),
+  "skin.sebumDryness": (1, "label"),
+  "skin.shineDistribution": (1, "label"),
+  "skin.shineType": (1, "label"),
+  "skin.thicknessImpression": (2, "label"),
+  "skin.elasticityImpression": (2, "label"),
+  "skin.pigmentationDistribution": (2, "label"),
+  "skin.marksAndScarsMap": (2, "label"),
+}
+
+OUT_OF_SCOPE_METRICS = frozenset(
+  {
+    "profile.fullSideProfile",
+    "profile.hairlineGeometry",
+    "head.cranialRatios",
+    "ears.sizeAndAngle",
+    "neck.lengthAndThickness",
+    "neck.trapezius",
+    "neck.jawConnection",
+    "body.faceToHeightRatio",
+    "smile.eyeChange",
+    "smile.mouthCornerChange",
+    "teeth.dynamicExposure",
+    "gums.dynamicExposure",
+    "draping.temperatureResponse",
+    "draping.valueResponse",
+    "draping.chromaResponse",
+    "draping.clarityResponse",
+  },
+)
+
+SUCCESS_STATUSES = {"full_success", "partial_success", "completed", "definitive"}
+
+
+@dataclass(frozen=True)
+class MergeResult:
+  profile: dict[str, MetricEnvelope]
+  rejected_authoritative_keys: list[str]
+  rejected_unknown_keys: list[str]
+
+
+def _record(value: Any) -> dict[str, Any]:
+  return value if isinstance(value, dict) else {}
+
+
+def _finite(value: Any) -> float | None:
+  if isinstance(value, bool) or not isinstance(value, (int, float)):
+    return None
+  number = float(value)
+  return number if math.isfinite(number) else None
+
+
+def _warnings(*values: Any) -> list[str]:
+  result: list[str] = []
+  for value in values:
+    if isinstance(value, list):
+      result.extend(str(item) for item in value if isinstance(item, str) and item.strip())
+  return list(dict.fromkeys(result))
+
+
+def _camera_metric(
+  *,
+  value: float | str | dict[str, float] | None,
+  confidence: float,
+  source: MeasurementSource,
+  shot: MeasurementShot,
+  unit: str | None,
+  usable: bool,
+  reason: str | None = None,
+  warnings: list[str] | None = None,
+  sensitivity: int = 0,
+) -> MetricEnvelope:
+  has_value = value is not None and (not isinstance(value, str) or bool(value.strip()))
+  measured = usable and has_value and confidence >= 0.5
+  return MetricEnvelope.model_validate(
+    {
+      "value": value if measured else None,
+      "unit": unit,
+      "confidence": max(0.0, min(1.0, confidence)),
+      "source": source.value,
+      "status": "measured" if measured else "blocked",
+      "shots": [shot.value],
+      "sensitivity": sensitivity,
+      "reason": None if measured else (reason or "camera_measurement_unavailable"),
+      "warnings": warnings or [],
+    },
+  )
+
+
+def _normalize_vertical(
+  output: dict[str, MetricEnvelope],
+  raw: dict[str, Any],
+) -> None:
+  if not raw:
+    return
+  ratio = _record(raw.get("verticalThirds"))
+  quality = _record(raw.get("quality"))
+  confidence = _finite(ratio.get("confidence")) or 0.0
+  usable = raw.get("status") in SUCCESS_STATUSES and quality.get("usable", True) is not False
+  warnings = _warnings(ratio.get("warnings"), quality.get("warnings"))
+  reason = raw.get("statusReason") if isinstance(raw.get("statusReason"), str) else None
+  for key in ("upperNormalized", "middleNormalized", "lowerNormalized"):
+    output[f"verticalThirds.{key}"] = _camera_metric(
+      value=_finite(ratio.get(key)), confidence=confidence, source=MeasurementSource.LANDMARK,
+      shot=MeasurementShot.S1, unit="ratio", usable=usable, reason=reason, warnings=warnings,
+    )
+  face_length = _record(raw.get("faceLength"))
+  for key, unit in (("heightPx", "score"), ("widthPx", "score"), ("ratio", "ratio")):
+    value = _finite(face_length.get(key))
+    if value is not None:
+      output[f"verticalThirds.face{key[0].upper()}{key[1:]}"] = _camera_metric(
+        value=value, confidence=confidence, source=MeasurementSource.PIXEL,
+        shot=MeasurementShot.S1, unit=unit, usable=usable, reason=reason, warnings=warnings,
+      )
+
+
+def _normalize_geometry(
+  output: dict[str, MetricEnvelope],
+  raw: dict[str, Any],
+) -> None:
+  if not raw:
+    return
+  usable = raw.get("status") in SUCCESS_STATUSES
+  reason = raw.get("statusReason") if isinstance(raw.get("statusReason"), str) else None
+  for key, metric_value in _record(raw.get("metrics")).items():
+    metric = _record(metric_value)
+    output[f"geometry2d.{key}"] = _camera_metric(
+      value=_finite(metric.get("value")), confidence=1.0,
+      source=MeasurementSource.PIXEL, shot=MeasurementShot.S1,
+      unit=metric.get("unit") if metric.get("unit") in {"ratio", "deg"} else "ratio",
+      usable=usable, reason=reason, warnings=_warnings(metric.get("warnings")),
+    )
+
+
+def _normalize_face3d(
+  output: dict[str, MetricEnvelope],
+  raw: dict[str, Any],
+) -> None:
+  if not raw:
+    return
+  profile_warnings = _warnings(raw.get("warnings"))
+  for key, metric_value in _record(raw.get("metrics")).items():
+    metric = _record(metric_value)
+    output[f"face3d.{key}"] = _camera_metric(
+      value=_finite(metric.get("value")), confidence=_finite(metric.get("confidence")) or 0.0,
+      source=MeasurementSource.DEPTH, shot=MeasurementShot.FACE3D, unit="ratio",
+      usable=True, warnings=_warnings(profile_warnings, metric.get("warnings")),
+    )
+
+
+def _normalize_personal_color(
+  output: dict[str, MetricEnvelope],
+  raw: dict[str, Any],
+) -> None:
+  reported = _record(raw.get("reported"))
+  if not reported:
+    return
+  overall_confidence = _finite(reported.get("measurementConfidence")) or 0.0
+  usable = reported.get("status") not in {"insufficient", "failed", "blocked"}
+  warnings = _warnings(reported.get("warnings"))
+  for key, axis_value in _record(reported.get("axes")).items():
+    axis = _record(axis_value)
+    output[f"personalColor.axes.{key}"] = _camera_metric(
+      value=_finite(axis.get("value")), confidence=_finite(axis.get("confidence")) or overall_confidence,
+      source=MeasurementSource.PIXEL, shot=MeasurementShot.S1, unit="score",
+      usable=usable, warnings=warnings,
+    )
+  tone = _record(reported.get("tone"))
+  for key in ("top", "secondary", "season"):
+    value = tone.get(key)
+    if isinstance(value, str) and value.strip():
+      output[f"personalColor.tone.{key}"] = _camera_metric(
+        value=value, confidence=overall_confidence, source=MeasurementSource.PIXEL,
+        shot=MeasurementShot.S1, unit="label", usable=usable, warnings=warnings,
+      )
+  for key, value in _record(reported.get("relations")).items():
+    numeric = _finite(value)
+    if numeric is not None:
+      output[f"personalColor.relations.{key}"] = _camera_metric(
+        value=numeric, confidence=overall_confidence, source=MeasurementSource.PIXEL,
+        shot=MeasurementShot.S1, unit="score", usable=usable, warnings=warnings,
+      )
+
+
+def normalize_camera_measurements(measurements: Any) -> dict[str, MetricEnvelope]:
+  raw = _record(measurements)
+  if raw.get("schemaVersion") != "aura-face-analysis-measurements-v1":
+    return {}
+  output: dict[str, MetricEnvelope] = {}
+  _normalize_vertical(output, _record(raw.get("faceVerticalThirds")))
+  _normalize_geometry(output, _record(raw.get("faceGeometry2d")))
+  _normalize_face3d(output, _record(raw.get("face3d")))
+  _normalize_personal_color(output, _record(raw.get("personalColor")))
+  return output
+
+
+def build_measurement_coverage(
+  profile: dict[str, MetricEnvelope],
+) -> MeasurementCoveragePlan:
+  blocked = [
+    BlockedMetricKey(key=key, reason=metric.reason or "camera_measurement_unavailable")
+    for key, metric in sorted(profile.items())
+    if metric.status is MeasurementStatus.BLOCKED
+  ]
+  return MeasurementCoveragePlan(
+    authoritative_keys=sorted(profile),
+    missing_observable_keys=sorted(AI_OBSERVABLE_METRICS),
+    out_of_scope_keys=sorted(OUT_OF_SCOPE_METRICS),
+    blocked_keys=blocked,
+  )
+
+
+def merge_measurements(
+  camera: dict[str, MetricEnvelope],
+  ai: dict[str, Any],
+  coverage: MeasurementCoveragePlan,
+) -> MergeResult:
+  merged = dict(camera)
+  rejected_authoritative: list[str] = []
+  rejected_unknown: list[str] = []
+  authoritative = set(coverage.authoritative_keys)
+  allowed = set(coverage.missing_observable_keys)
+
+  for key, raw_metric in ai.items():
+    if key in authoritative:
+      rejected_authoritative.append(key)
+      continue
+    if key not in allowed:
+      rejected_unknown.append(key)
+      continue
+    metric = MetricEnvelope.model_validate(raw_metric)
+    if metric.confidence < 0.55:
+      metric = MetricEnvelope.model_validate(
+        {
+          **metric.model_dump(by_alias=True, mode="json"),
+          "value": None,
+          "status": "blocked",
+          "reason": "confidence_below_threshold",
+        },
+      )
+    merged[key] = metric
+
+  return MergeResult(
+    profile=merged,
+    rejected_authoritative_keys=sorted(rejected_authoritative),
+    rejected_unknown_keys=sorted(rejected_unknown),
+  )
+
+
+def with_explicit_unmeasured(
+  profile: dict[str, MetricEnvelope],
+  keys: list[str],
+) -> dict[str, MetricEnvelope]:
+  result = dict(profile)
+  for key in keys:
+    result.setdefault(
+      key,
+      MetricEnvelope.model_validate(
+        {
+          "value": None,
+          "confidence": 0,
+          "source": "ai",
+          "status": "unmeasured",
+          "shots": [],
+          "sensitivity": 1,
+          "reason": "required_shot_missing",
+          "warnings": [],
+        },
+      ),
+    )
+  return result
+
+
+def filter_metrics_for_audience(
+  metrics: dict[str, MetricEnvelope],
+  include_sensitive: bool,
+) -> dict[str, MetricEnvelope]:
+  sensitivity_limit = 2 if include_sensitive else 1
+  return {
+    key: metric
+    for key, metric in metrics.items()
+    if metric.status not in {MeasurementStatus.UNMEASURED, MeasurementStatus.BLOCKED}
+    and metric.sensitivity <= sensitivity_limit
+    and metric.sensitivity < 3
+  }
