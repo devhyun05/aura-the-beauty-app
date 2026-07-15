@@ -1,29 +1,36 @@
 {
-  "subject": "A10 per-flag quality policy 발효 — B급(의도된 국소 변경) diff 승인",
+  "approvalConclusion": "approved",
+  "approvedBy": "위승철 (대리기입: claude — 사용자 명시 승인 지시, 세션 기록 2026-07-15)",
   "candidateCommitSha": "7b5a418e",
+  "evidence": {
+    "goldenWithA10Active": "reports/auradin/mvp_agent_eval_20260717_offer_refresh.json (6/6 PASS)",
+    "unitTests": "test_auradin_quality_policy.py 5건 — 로드 필터·chunks 동기·라이브 대칭·caveat·reason 키 불변"
+  },
+  "expectedDiff": {
+    "baseCushionTop3": "anchor(refill 포함) 제거로 재구성 — 골든 단언은 제품 ID 비고정",
+    "glitterTop3": "전원 생존(플래그가 전부 bundle_or_set_copy — 실측 예측과 일치)",
+    "servingCandidates": "컷 대상 flag 보유 아이템 0건(test_auradin_quality_policy 단언)"
+  },
+  "policy": {
+    "chunksSyncFilter": true,
+    "cut": [
+      "refill_copy",
+      "mini_or_sample_copy",
+      "bonus_tool_copy",
+      "case_copy"
+    ],
+    "keepWithCaveat": [
+      "bundle_or_set_copy"
+    ],
+    "liveDiscoverySymmetric": true
+  },
+  "postMergeSha": "dcdfe19d",
+  "reviewedAt": "2026-07-15T08:58:00+09:00",
+  "subject": "A10 per-flag quality policy 발효 — B급(의도된 국소 변경) diff 승인",
   "wiringFiles": [
     "services/backend/app/services/auradin_agent/quality_policy.py",
     "services/backend/app/services/auradin_agent/catalog_loader.py",
     "services/backend/app/services/auradin_agent/enrichment.py",
     "services/backend/app/services/auradin_agent/ranking.py"
-  ],
-  "policy": {
-    "cut": ["refill_copy", "mini_or_sample_copy", "bonus_tool_copy", "case_copy"],
-    "keepWithCaveat": ["bundle_or_set_copy"],
-    "chunksSyncFilter": true,
-    "liveDiscoverySymmetric": true
-  },
-  "expectedDiff": {
-    "glitterTop3": "전원 생존(플래그가 전부 bundle_or_set_copy — 실측 예측과 일치)",
-    "baseCushionTop3": "anchor(refill 포함) 제거로 재구성 — 골든 단언은 제품 ID 비고정",
-    "servingCandidates": "컷 대상 flag 보유 아이템 0건(test_auradin_quality_policy 단언)"
-  },
-  "evidence": {
-    "goldenWithA10Active": "reports/auradin/mvp_agent_eval_20260717_offer_refresh.json (6/6 PASS)",
-    "unitTests": "test_auradin_quality_policy.py 5건 — 로드 필터·chunks 동기·라이브 대칭·caveat·reason 키 불변"
-  },
-  "postMergeSha": "",
-  "approvedBy": "",
-  "reviewedAt": "",
-  "approvalConclusion": "pending"
+  ]
 }

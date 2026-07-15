@@ -1,0 +1,26 @@
+{
+  "a8": {
+    "passed": true,
+    "status": "PASS"
+  },
+  "approvalConclusion": "pending",
+  "approvedBy": "",
+  "coverageClassification": "see_diff_report",
+  "diffSummary": {
+    "counts": {},
+    "linkChanged": 0,
+    "priceChanged": 0,
+    "priceTierChanged": 0
+  },
+  "golden": {
+    "passed": 6,
+    "status": "PASS",
+    "total": 6
+  },
+  "resultsSha": "",
+  "reviewDecisionsSha": "",
+  "reviewedAt": "",
+  "runDate": "20260719",
+  "runId": "20260719-supplement",
+  "snapshotManifestSha256": "62a8d91505fa2d05ad7bffc0485f1641a8f8800feeecc94394412610ba86a64e"
+}
