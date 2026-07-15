@@ -1,6 +1,5 @@
 // 하안검 밴드 — 하안검 lash 라인에서 아래로 확장한 밴드 메시(LowerLidRenderer)에
-// 아이라인(하) + 애교살 2줄(하이라이트/섀도)을 GrabPass 피드 위에 그린다.
-// 캐노니컬 UV 추정 마스크(구 FaceMakeup aegyo 브랜치)의 정식판 — 랜드마크 정밀.
+// 아이라인(하)·아이섀도 하·삼각존·컨실러를 GrabPass 피드 위에 그린다.
 //
 // 정점 uv: x = 가로(0 안쪽 눈머리 → 1 바깥 눈꼬리), y = 세로(0 lash 라인 → 1 아래 끝).
 // 제품별 프로파일(세로 밴드 위치·가로 가중)은 전부 여기 상수 — 실기기 튜닝 대상.
@@ -17,13 +16,6 @@ Shader "ARMakeup/LowerLid"
         _LowerLinerStyle ("Lower Liner Style (0 soft 1 waterline 2 outer third)", Float) = 0
         _LowerLinerFinish ("Lower Liner Finish (0 satin 1 matte 2 gloss 3 pearl)", Float) = 0
         _LowerLinerShimmer ("Lower Liner Shimmer", Range(0, 1)) = 0
-        // 애교살 — 상=하이라이트(가산/스크린, 통통 광채), 하=섀도(감산/곱, 볼록 정의).
-        _AegyoHiColor ("Aegyo Highlight Color", Color) = (1.0, 0.95, 0.88, 1)
-        _AegyoShColor ("Aegyo Shadow Color", Color) = (0.69, 0.54, 0.41, 1)
-        _AegyoIntensity ("Aegyo Intensity", Range(0, 1)) = 0
-        // 임포트 애교살 그림(데칼) — 밴드 (가로×세로) UV에 워프. 알파=그린 영역.
-        _AegyoTex ("Aegyo Art", 2D) = "black" {}
-        _AegyoStyleIntensity ("Aegyo Art Intensity", Range(0, 1)) = 0
         // 삼각존(하안검 밴드 확장) — 눈꼬리 바로 아래 좁은 삼각 음영. 꼬리(along
         // 바깥 1/3) 가중, 라인 근처 세로 집중. 감산(곱) 섀도. _TriIntensity 0 = 끔.
         _TriColor ("Triangle Zone Color", Color) = (0.29, 0.20, 0.16, 1) // 딥브라운 #4A342A 계열
@@ -38,8 +30,6 @@ Shader "ARMakeup/LowerLid"
         _LowerShadowIntensity ("Lower Shadow Intensity", Range(0, 1)) = 0
         // 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머). ApplyFinish 레거시
         // 경로(세부 0 상수)라 0=새틴=기존 출력과 바이트 동일(하위호환).
-        _AegyoFinish ("Aegyo Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
-        _AegyoShimmer ("Aegyo Shimmer Gain", Range(0, 1)) = 0.5
         _LowerShadowFinish ("Lower Shadow Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _LowerShadowShimmer ("Lower Shadow Shimmer Gain", Range(0, 1)) = 0.5
     }
@@ -74,20 +64,13 @@ Shader "ARMakeup/LowerLid"
             float _LowerLinerStyle;
             float _LowerLinerFinish;
             float _LowerLinerShimmer;
-            fixed4 _AegyoHiColor;
-            fixed4 _AegyoShColor;
-            float _AegyoIntensity;
-            sampler2D _AegyoTex;
-            float _AegyoStyleIntensity;
             fixed4 _TriColor;
             float _TriIntensity;
             fixed4 _ConcealerColor;
             float _ConcealerIntensity;
             fixed4 _LowerShadowColor;
             float _LowerShadowIntensity;
-            // 마감 — 애교살(하이라이트 밴드)·아이섀도 하. 0=새틴=기존 출력(하위호환).
-            float _AegyoFinish;
-            float _AegyoShimmer;
+            // 마감 — 아이섀도 하. 0=새틴=기존 출력(하위호환).
             float _LowerShadowFinish;
             float _LowerShadowShimmer;
 
@@ -153,34 +136,12 @@ Shader "ARMakeup/LowerLid"
                 // 가로 가중: 코너 페이드(라인용).
                 float edge = smoothstep(0.0, 0.08, along) * (1.0 - smoothstep(0.92, 1.0, along));
 
-                // 초승달 두께 프로파일 — 애교살은 눈 중앙이 가장 도톰하고 양 끝(앞머리
-                // along=0·꼬리 along=1)에서 lash 라인에 수렴하며 자연 소멸한다. 좌우
-                // 대칭 벨(0→0.28 진입 · 0.72→1 소멸, 중앙 0.28~0.72 평탄)이라 한쪽만
-                // 두꺼운 "보트/멜론 조각"이 안 생긴다(구 프로파일은 안쪽만 길게 테이퍼하고
-                // 꼬리는 35%만 좁혀 바깥이 뭉툭한 보트가 됐다). 알파 페이드만으로는 균일
-                // 두께 리본으로 보여서 세로 좌표를 두께로 나눠(vv) 기하 자체를 테이퍼한다.
-                float thick = smoothstep(0.0, 0.28, along)
-                              * (1.0 - smoothstep(0.72, 1.0, along));
-                float vv = v / max(thick, 1e-3);
-                // 밝기는 은은한 중앙 강조만 — 모양은 위 두께 테이퍼가 담당.
-                float soft = 0.5 + 0.5 * sin(3.14159 * along);
-
                 // 아이라인(하): lash 바로 아래 얇은 라인 (초승달 테이퍼와 무관).
                 float linerWidth = (_LowerLinerStyle > 0.5 && _LowerLinerStyle < 1.5)
                                  ? 0.13 : 0.22;
                 float lnAmt = (1.0 - smoothstep(0.08, linerWidth, v))
                             * LowerLinerHorizontalMask(_LowerLinerStyle, along)
                             * _LinerIntensity;
-                // 애교살 하이라이트: 라인 아래 도톰한 밴드. edge를 곱해 꼬리(바깥)
-                // 메시 경계에서 알파가 하드 엣지로 끊기지 않게 한다(안쪽은 thick→0).
-                float hiAmt = smoothstep(0.06, 0.24, vv) * (1.0 - smoothstep(0.40, 0.58, vv))
-                              * soft * edge * _AegyoIntensity;
-                // 애교살 섀도: 볼록 아래 경계의 얇은 줄 — 하이라이트보다 아래(vv 큼)에
-                // 살짝 간격을 두고 깔려 "위 밝은 도톰함 + 아래 그림자" 2줄로 볼록을
-                // 정의한다. 0.7배로 은은하게(구 브랜치와 동일 비율).
-                float shAmt = smoothstep(0.52, 0.66, vv) * (1.0 - smoothstep(0.78, 0.92, vv))
-                              * soft * edge * _AegyoIntensity * 0.7;
-
                 // 삼각존: 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 애교살과 무관한
                 // 별도 텀 — 꼬리(u 바깥 1/3)에서 상승, 코너에서 페더, 세로는 lash 라인(v=0)
                 // 근처에 집중(위 라인↔아래로 잇는 음영). 초승달 테이퍼 vv가 아닌 원시 v를
@@ -204,17 +165,10 @@ Shader "ARMakeup/LowerLid"
                 float esBand = 1.0 - smoothstep(0.0, ES_V_FADE, v);
                 float esAmt = esBand * edge * _LowerShadowIntensity;
 
-                // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트, 하이라이트=스크린(가산),
-                // 섀도=곱(감산) — FaceMakeup 가·감산 브랜치와 동일 공식.
+                // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트.
                 fixed3 pigLn = _LinerColor.rgb * (luma * 1.2 + 0.08);
                 pigLn = ApplyFinish(pigLn, luma, i.uv, _LowerLinerFinish, _LowerLinerShimmer,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
-                fixed3 pigHi = 1.0 - (1.0 - feed) * (1.0 - _AegyoHiColor.rgb);
-                // 애교살 마감 — 하이라이트 밴드에 ApplyFinish(시머=펄 애교살, 매트=톤다운).
-                // sparkleUV는 밴드 로컬 uv라 시머가 밴드에 접착. 0=새틴=무변형(하위호환).
-                pigHi = ApplyFinish(pigHi, luma, i.uv, _AegyoFinish, _AegyoShimmer,
-                                    0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
-                fixed3 pigSh = feed * _AegyoShColor.rgb;
                 fixed3 pigTri = feed * _TriColor.rgb; // 삼각존 = 곱(감산) 딥브라운 섀도
                 // 컨실러 = 스크린(가산) 브라이튼 — FaceMakeup 눈밑 존 마스크 경로와 동일 공식.
                 fixed3 pigCc = 1.0 - (1.0 - feed) * (1.0 - _ConcealerColor.rgb);
@@ -222,10 +176,9 @@ Shader "ARMakeup/LowerLid"
                 pigEs = ApplyFinish(pigEs, luma, i.uv, _LowerShadowFinish, _LowerShadowShimmer,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
 
-                float total = lnAmt + hiAmt + shAmt + triAmt + ccAmt;
+                float total = lnAmt + triAmt + ccAmt;
                 float procA = saturate(total);
-                fixed3 procPig = (pigLn * lnAmt + pigHi * hiAmt + pigSh * shAmt
-                                  + pigTri * triAmt + pigCc * ccAmt)
+                fixed3 procPig = (pigLn * lnAmt + pigTri * triAmt + pigCc * ccAmt)
                                  / max(total, 1e-4);
 
                 // A3 아이섀도 하 — 아래 깔린 섀도(ES) 위에 TOP(라인/애교살/삼각존/컨실러 =
@@ -235,15 +188,8 @@ Shader "ARMakeup/LowerLid"
                 fixed3 combPig = (procPig * procA + pigEs * esAmt * (1.0 - procA))
                                  / max(combA, 1e-4);
 
-                // 임포트 애교살 그림 — (가로×세로) 밴드에 워프된 스티커(그린 색 그대로).
-                // 절차적 애교살 위에 "over" 합성한다(둘 다 SrcAlpha로 피드 위에 얹힘).
-                fixed4 art = tex2D(_AegyoTex, i.uv);
-                float artA = art.a * _AegyoStyleIntensity;
-                float outA = artA + combA * (1.0 - artA);
-                fixed3 outRGB = (art.rgb * artA + combPig * combA * (1.0 - artA))
-                                / max(outA, 1e-4);
                 // §11 오클루전 — 손·머리카락이 앞이면 그 픽셀 색소 제외(세그 없으면 1).
-                return fixed4(outRGB, outA * OccludeGate(i.grabPos));
+                return fixed4(combPig, combA * OccludeGate(i.grabPos));
             }
             ENDCG
         }

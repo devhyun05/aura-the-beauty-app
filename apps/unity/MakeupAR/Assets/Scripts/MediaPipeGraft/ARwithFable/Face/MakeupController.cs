@@ -428,7 +428,7 @@ namespace ARMakeup.Face
         // enterPhotoEdit 등 로컬 미디어는 MediaEditController 소관이라 이 switch에 없음).
         static readonly HashSet<string> PathBearingTypes = new HashSet<string>
         {
-            "setBrowStyle", "setEyelinerStyle", "setLipStyle", "setBlushStyle", "setAegyoStyle",
+            "setBrowStyle", "setEyelinerStyle", "setLipStyle", "setBlushStyle",
             "setRegionMask", "setTextureMap", "setFaceOverlay", "setOverlayLayers", "setLensLayers",
         };
 
@@ -486,8 +486,8 @@ namespace ARMakeup.Face
                         BlushStyleRenderer.Instance.SetTextureFromFile(msg.path);
                     break;
                 case "setAegyoStyle":
-                    if (LowerLidRenderer.Instance != null)
-                        LowerLidRenderer.Instance.SetAegyoTextureFromFile(msg.path);
+                    // 구 클라이언트 호환: 메시지는 받아들이되 새 전용 렌더러에는 데칼 경로가 없다.
+                    Debug.Log("[MakeupController] setAegyoStyle ignored by dedicated aegyo renderer");
                     break;
                 case "setRegionMask":
                     SetRegionMaskFromFile(msg.region, msg.path);
@@ -1043,13 +1043,11 @@ namespace ARMakeup.Face
             if (EyelinerStyleRenderer.Instance != null)
                 EyelinerStyleRenderer.Instance.ApplyParams(
                     p.eyelinerColor, p.eyelinerStyleIntensity, p.eyeCornerLift);
-            // 하안검 밴드 — 애교살(구 캐노니컬 마스크에서 이관) + 아이라인(하, 색은 라이너 공용).
+            // 하안검 밴드 — 아이라인(하, 색은 라이너 공용) + 하단 제품들.
             if (LowerLidRenderer.Instance != null)
             {
                 LowerLidRenderer.Instance.ApplyParams(
-                    p.aegyoIntensity, p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift,
-                    p.aegyoHeight, p.aegyoStyleIntensity, p.aegyoColor,
-                    p.aegyoFinish, p.aegyoShimmer, p.eyelinerLowerStyle,
+                    p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift, p.eyelinerLowerStyle,
                     p.eyelinerLowerFinish, p.eyelinerLowerShimmer);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도 독립, 0=끔).
                 LowerLidRenderer.Instance.ApplyTriangleZone(p.triangleZoneColor, p.triangleZoneIntensity);
@@ -1061,6 +1059,19 @@ namespace ARMakeup.Face
                 LowerLidRenderer.Instance.ApplyLowerShadow(
                     p.eyeshadowLowerColor, p.eyeshadowLowerIntensity,
                     p.eyeshadowLowerFinish, p.eyeshadowLowerShimmer);
+            }
+            if (AegyoRenderer.Instance != null)
+            {
+                var isNewAegyo = p.aegyoRendererVersion >= 1f;
+                var normalizedAegyoMode = isNewAegyo
+                    ? (p.aegyoMode >= 0.5f ? 1 : 0)
+                    : (p.aegyoFinish == 3 ? 1 : 0);
+                var normalizedShadow = isNewAegyo
+                    ? Mathf.Clamp01(p.aegyoShadowIntensity)
+                    : Mathf.Clamp01(p.aegyoIntensity * 0.68f);
+                AegyoRenderer.Instance.ApplyParams(
+                    p.aegyoIntensity, p.aegyoColor, p.aegyoHeight, normalizedAegyoMode,
+                    normalizedShadow, p.aegyoShimmer);
             }
             // 쌍꺼풀 크리스(#19b) — 상안검 위 얇은 음영(색은 자연 음영 고정, 강도 0=끔).
             if (DoubleLidRenderer.Instance != null)
