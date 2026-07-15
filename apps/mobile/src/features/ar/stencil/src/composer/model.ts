@@ -170,11 +170,16 @@ export function compileLayers(
       eyeshadowLeaves.push(layer.params);
       continue; // params 병합은 아래에서 겹 수로 분기
     }
-    Object.assign(params, layer.params);
     if (layer.region === 'eyelinerLower') {
       const legacyColor = legacyLowerLinerColor(layer.params);
-      if (legacyColor !== undefined) params.eyelinerLowerColor = legacyColor;
+      if (legacyColor !== undefined) {
+        const migratedParams = { ...layer.params, eyelinerLowerColor: legacyColor };
+        delete migratedParams.eyelinerColor;
+        Object.assign(params, migratedParams);
+        continue;
+      }
     }
+    Object.assign(params, layer.params);
   }
   // 아이섀도 겹 수 분기(A14): 1개 이하 = legacy(params 스칼라·배열 빈값 → Unity 스칼라
   // 경로), 2개 이상 = 멀티밴드 배열(params엔 안 실어 Unity가 배열 경로로 감).

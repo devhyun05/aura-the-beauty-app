@@ -122,7 +122,23 @@ const savedLegacyLowerLeaf = flattenTree(savedLegacyTree).find(
 expect(savedLegacyLowerLeaf != null, '구형 하단 아이라인 저장 트리에 잎이 있어야 한다');
 savedLegacyLowerLeaf!.params.eyelinerColor = legacySharedLinerColor;
 delete savedLegacyLowerLeaf!.params.eyelinerLowerColor;
-const savedLegacyResult = compileLayers(flattenTree(savedLegacyTree)).params;
+const independentUpperLinerColor = '#263A5C';
+const savedLegacyResult = compileLayers([
+  {
+    id: 'upper-liner',
+    region: 'eyelinerUpper',
+    visible: true,
+    params: {
+      eyelinerColor: independentUpperLinerColor,
+      eyelinerIntensity: 0.6,
+    },
+  },
+  ...flattenTree(savedLegacyTree),
+]).params;
+expect(
+  savedLegacyResult.eyelinerColor === independentUpperLinerColor,
+  '구형 하단 아이라인 저장 잎이 독립된 상단 아이라인 색을 덮으면 안 된다',
+);
 expect(
   savedLegacyResult.eyelinerLowerColor === legacySharedLinerColor,
   '구형 하단 아이라인 저장 트리를 재컴파일해도 공유 색을 보존해야 한다',
