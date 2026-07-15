@@ -420,7 +420,9 @@ def _build_result(
   merged_caveats = [*(_interpretation_caveats(state) or []), *(extra_caveats or [])]
   # B7 §7.3: 프로필은 여기서 조회만 하고 build_slice_result의 anchor 선정 지점에만 전달된다.
   # softPreferences에는 절대 주입하지 않는다(단일 설계 — 비협상).
-  taste_profile = get_taste_profile(str(state.get("ownerSubject") or ""), settings=settings)
+  taste_profile = get_taste_profile(
+    str(state.get("profileOwner") or state.get("ownerSubject") or ""), settings=settings,
+  )
   slice_result = build_slice_result(
     ranked,
     lambda_=lambda_override if lambda_override is not None else _session_lambda(state, settings),
@@ -553,6 +555,7 @@ def create_session(
   context: dict[str, Any] | None = None,
   report_context: dict[str, Any] | None = None,
   settings: Settings | None = None,
+  profile_owner: str | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
   owner_subject = owner_subject.strip()
@@ -573,6 +576,9 @@ def create_session(
   state = {
     "sessionId": session_id,
     "ownerSubject": owner_subject,
+    # B7: 프로필 조회 키 — 이벤트 owner와 동일 파생(익명은 anon:v1:*). 인증 세션은
+    # auth subject와 같아 미지정 시 ownerSubject로 폴백된다.
+    "profileOwner": (profile_owner or owner_subject).strip(),
     "phase": "searching",
     "prompt": prompt,
     "context": {
@@ -1597,6 +1603,7 @@ async def create_session_persisted(
   settings: Settings | None = None,
   db: Database | None = None,
   client_request_id: str | None = None,
+  profile_owner: str | None = None,
 ) -> dict[str, Any]:
   settings = settings or get_settings()
 
@@ -1611,6 +1618,7 @@ async def create_session_persisted(
         context=context,
         report_context=report_context,
         settings=settings,
+        profile_owner=profile_owner,
       )
       await _enrich_if_results(state, settings)
       await _enrich_if_question(state, settings)

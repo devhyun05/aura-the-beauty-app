@@ -102,6 +102,7 @@ async def create_search_session(
       settings=settings,
       db=db,
       client_request_id=str(payload.clientRequestId) if payload.clientRequestId else None,
+      profile_owner=_event_owner(request, auth, settings),
     )
   except IdempotencyKeyReuseError:
     raise AppError(

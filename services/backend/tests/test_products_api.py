@@ -180,3 +180,30 @@ async def test_auradin_like_requires_product_payload() -> None:
     await _resolve_product_id_for_like(db, "auradin-lip-0007", {})
 
   assert exc_info.value.status_code == 400
+
+
+def test_map_db_product_parses_jsonb_string_payload() -> None:
+  """실DB(asyncpg, 코덱 미설정)는 jsonb를 str로 돌려준다 — str payload에서도
+  purchaseUrl을 읽어 liked 행이 통째로 drop되지 않는다 (mock E2E에서 발견된 실버그)."""
+  import json as _json
+  from app.services.shopping_products import _map_db_product
+
+  row = {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "external_key": "auradin-seed-jsonbtest0001",
+    "brand_name": "데이지크",
+    "product_name": "프로 디테일 브로우 펜슬",
+    "shade_name": "",
+    "category": "brow",
+    "price_krw": 26200,
+    "tags": [],
+    "palette": [],
+    "product_payload": _json.dumps({
+      "purchaseUrl": "https://example.com/buy/jsonbtest",
+      "imageUrl": "https://example.com/img/jsonbtest.jpg",
+    }),
+  }
+  product = _map_db_product(row, 0)
+  assert product is not None
+  assert product["category"] == "brow"
+  assert product["purchaseUrl"] == "https://example.com/buy/jsonbtest"

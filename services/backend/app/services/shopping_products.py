@@ -1343,6 +1343,13 @@ def _map_db_product(
     return None
 
   payload = row.get("product_payload") or {}
+  if isinstance(payload, str):
+    # asyncpg는 jsonb를 코덱 미설정 시 str로 돌려준다 — 실DB에서 liked 목록이
+    # 통째로 비던 원인(purchaseUrl을 못 읽어 전 행 drop). fake DB dict 테스트만 있었음.
+    try:
+      payload = json.loads(payload)
+    except (TypeError, ValueError):
+      payload = {}
   if not isinstance(payload, dict):
     payload = {}
 

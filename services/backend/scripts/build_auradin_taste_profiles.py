@@ -90,7 +90,10 @@ def _load_catalog(catalog_jsonl: str | None) -> Any:
     return items
   from app.services.auradin_agent.catalog_loader import get_catalog
 
-  return get_catalog()
+  catalog = get_catalog()
+  # AuradinCatalog에는 dict.get 인터페이스가 없다 — build_taste_profile의
+  # `getter = catalog.get` 계약에 맞춰 id→item 매핑(by_id)을 넘긴다.
+  return catalog.by_id if hasattr(catalog, "by_id") else catalog
 
 
 def _owner_of(event: dict[str, Any]) -> str:
