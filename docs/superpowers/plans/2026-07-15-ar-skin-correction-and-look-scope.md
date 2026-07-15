@@ -311,4 +311,3 @@ git log -4 --oneline
 ~~~
 
 Expected: no whitespace errors; only pre-existing iOS/Unity build-local edits remain uncommitted; all implementation commits use Conventional Commit messages.
-
