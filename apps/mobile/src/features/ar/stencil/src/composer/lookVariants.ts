@@ -437,7 +437,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '윤광 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.35, skinGlow: 0.5 },
+        params: { skinSmoothing: 0.45, skinGlow: 0.5 },
       }],
     },
     {
@@ -455,7 +455,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '모공 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.5 },
+        params: { skinSmoothing: 0.6 },
       }],
     },
     {
@@ -506,12 +506,12 @@ export function buildVariantLibrary(): LookLibrary {
   // 직접 고르는 두 카드는 별도 standalone 정의로 제공한다.
   addRegionLook(lib, 'skin-primer', 'pore', '모공 프라이머', '피부',
     single('모공 프라이머', 'skin', {
-      skinSmoothing: 0.5,
+      skinSmoothing: 0.6,
       skinGlow: 0,
     }), false);
   addRegionLook(lib, 'skin-primer', 'glow', '윤광 프라이머', '피부',
     single('윤광 프라이머', 'skin', {
-      skinSmoothing: 0.35,
+      skinSmoothing: 0.45,
       skinGlow: 0.5,
     }), false);
 

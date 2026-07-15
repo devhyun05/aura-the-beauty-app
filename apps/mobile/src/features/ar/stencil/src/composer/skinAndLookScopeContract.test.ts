@@ -5,6 +5,7 @@ import {
   subDefsForRegion,
 } from './lookTree';
 import {buildVariantLibrary} from './lookVariants';
+import {PRESETS} from '../presets';
 
 function expect(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
@@ -63,5 +64,20 @@ expect(
   subDefsForRegion(legacyUser, 'eyelinerUpper').length === 1,
   '기존 사용자 세부부위 룩은 유지한다',
 );
+
+const presetsById = Object.fromEntries(PRESETS.map(preset => [preset.id, preset]));
+expect(presetsById.bare.params.skinSmoothing === 0, '원본은 피부 보정이 없어야 한다');
+expect(
+  presetsById.custom.params.skinSmoothing === 0,
+  '직접 시작점은 피부 보정이 없어야 한다',
+);
+expect(
+  presetsById.natural.params.skinSmoothing === 0.53,
+  '내추럴 기본 보정을 강화한다',
+);
+expect(presetsById.rosy.params.skinSmoothing === 0.63, '로지 기본 보정을 강화한다');
+expect(presetsById.peach.params.skinSmoothing === 0.58, '피치 기본 보정을 강화한다');
+expect(presetsById.glam.params.skinSmoothing === 0.68, '글램 기본 보정을 강화한다');
+expect(presetsById.smoky.params.skinSmoothing === 0.58, '스모키 기본 보정을 강화한다');
 
 console.log('AR skin and look-scope contract passed');

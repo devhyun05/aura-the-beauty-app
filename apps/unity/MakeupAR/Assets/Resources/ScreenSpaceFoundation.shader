@@ -373,9 +373,11 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // the high end is a wide, soft, over-smoothed look for users who
                 // want heavy blur — cranking the slider does far more than the
                 // old fixed kernel (where even 1.0 stayed mild).
-                float radiusScale = 0.7 + 2.3 * strength;            // ~0.7x .. 3.0x
+                float smoothStrength = saturate(strength);
+                float highStrength = smoothStrength * smoothStrength * smoothStrength;
+                float radiusScale = 0.8 + 2.4 * smoothStrength + 2.0 * highStrength;
                 float2 radius = float2(0.0090, 0.0090 * aspect) * radiusScale;
-                float rangeSharpness = lerp(150.0, 12.0, strength);  // edge-safe .. heavy
+                float rangeSharpness = lerp(140.0, 6.0, smoothStrength);
                 // Per-pixel rotation of the sparse ring so a 12-tap kernel does
                 // not band/donut at the wide high-strength radius.
                 float jitter = frac(sin(dot(floor(uv * 480.0),
@@ -965,7 +967,7 @@ Shader "Hidden/MakeupAR/ScreenSpaceFoundation"
                 // read strong; the additional heaviness past the midpoint comes
                 // from the widening kernel in SkinSmoothedCamera (not just more
                 // blend, which caps at fully replacing the pixel).
-                float blendCurve = saturate(_SkinSmoothStrength * 1.7);
+                float blendCurve = saturate(_SkinSmoothStrength * 1.85);
                 float skinWeight = saturate(finalMask * blendCurve);
                 if (_SkinSmoothStrength > 0.0001)
                 {

@@ -131,7 +131,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'natural',
     name: '내추럴',
     params: {
-      skinSmoothing: 0.45,
+      skinSmoothing: 0.53,
       skinBrightening: 0.2,
       lipColor: '#D96C7B',
       lipIntensity: 0.35,
@@ -172,7 +172,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'rosy',
     name: '로지',
     params: {
-      skinSmoothing: 0.55,
+      skinSmoothing: 0.63,
       skinBrightening: 0.3,
       lipColor: '#E04E68',
       lipIntensity: 0.55,
@@ -213,7 +213,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'peach',
     name: '피치',
     params: {
-      skinSmoothing: 0.5,
+      skinSmoothing: 0.58,
       skinBrightening: 0.35,
       lipColor: '#F2846B',
       lipIntensity: 0.5,
@@ -254,7 +254,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'glam',
     name: '글램',
     params: {
-      skinSmoothing: 0.6,
+      skinSmoothing: 0.68,
       skinBrightening: 0.25,
       lipColor: '#B01E3C',
       lipIntensity: 0.7,
@@ -310,7 +310,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'smoky',
     name: '스모키',
     params: {
-      skinSmoothing: 0.5,
+      skinSmoothing: 0.58,
       skinBrightening: 0.15,
       lipColor: '#A65560',
       lipIntensity: 0.4,

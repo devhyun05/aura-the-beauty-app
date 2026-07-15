@@ -1,4 +1,5 @@
-import {mkdtempSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -13,6 +14,38 @@ const contractTest = join(
   srcRoot,
   'features/ar/stencil/src/composer/skinAndLookScopeContract.test.ts',
 );
+const shaderSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Resources/ScreenSpaceFoundation.shader',
+  ),
+  'utf8',
+);
+const unityBridgeSource = readFileSync(
+  join(repoRoot, 'apps/mobile/src/features/ar/services/unityMakeupBridge.ts'),
+  'utf8',
+);
+
+assert.match(
+  shaderSource,
+  /float highStrength = smoothStrength \* smoothStrength \* smoothStrength;/,
+  '피부 결 보정은 슬라이더 후반부를 위한 cubic 강도 항을 가져야 한다',
+);
+assert.match(
+  shaderSource,
+  /float radiusScale = 0\.8 \+ 2\.4 \* smoothStrength \+ 2\.0 \* highStrength;/,
+  '최대 피부 결 보정 반경은 약 5.2배까지 확장되어야 한다',
+);
+assert.match(
+  unityBridgeSource,
+  /params\.skinSmoothing = 0\.45;/,
+  '파운데이션 선택 직후의 기본 피부 보정을 한 단계 강화해야 한다',
+);
+
+const oldRadius = strength => 0.7 + 2.3 * strength;
+const newRadius = strength => 0.8 + 2.4 * strength + 2.0 * strength ** 3;
+assert.ok(newRadius(0.55) >= oldRadius(0.55) * 1.15);
+assert.ok(newRadius(1) >= oldRadius(1) * 1.7);
 
 const result = spawnSync(
   process.execPath,
