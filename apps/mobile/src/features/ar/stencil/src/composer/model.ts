@@ -172,12 +172,11 @@ export function compileLayers(
     }
     if (layer.region === 'eyelinerLower') {
       const legacyColor = legacyLowerLinerColor(layer.params);
-      if (legacyColor !== undefined) {
-        const migratedParams = { ...layer.params, eyelinerLowerColor: legacyColor };
-        delete migratedParams.eyelinerColor;
-        Object.assign(params, migratedParams);
-        continue;
-      }
+      const normalizedParams = { ...layer.params };
+      delete normalizedParams.eyelinerColor;
+      if (legacyColor !== undefined) normalizedParams.eyelinerLowerColor = legacyColor;
+      Object.assign(params, normalizedParams);
+      continue;
     }
     Object.assign(params, layer.params);
   }

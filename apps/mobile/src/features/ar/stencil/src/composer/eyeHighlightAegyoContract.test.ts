@@ -143,6 +143,38 @@ expect(
   savedLegacyResult.eyelinerLowerColor === legacySharedLinerColor,
   '구형 하단 아이라인 저장 트리를 재컴파일해도 공유 색을 보존해야 한다',
 );
+
+const staleLegacyLowerColor = '#7C4B52';
+const explicitLowerLinerColor = '#8F6571';
+const mixedFieldResult = compileLayers([
+  {
+    id: 'mixed-upper-liner',
+    region: 'eyelinerUpper',
+    visible: true,
+    params: {
+      eyelinerColor: independentUpperLinerColor,
+      eyelinerIntensity: 0.6,
+    },
+  },
+  {
+    id: 'mixed-lower-liner',
+    region: 'eyelinerLower',
+    visible: true,
+    params: {
+      eyelinerColor: staleLegacyLowerColor,
+      eyelinerLowerColor: explicitLowerLinerColor,
+      eyelinerLowerIntensity: 0.4,
+    },
+  },
+]).params;
+expect(
+  mixedFieldResult.eyelinerColor === independentUpperLinerColor,
+  '혼합 필드 하단 아이라인 잎이 독립된 상단 아이라인 색을 덮으면 안 된다',
+);
+expect(
+  mixedFieldResult.eyelinerLowerColor === explicitLowerLinerColor,
+  '혼합 필드 하단 아이라인 잎은 명시된 전용 색을 우선해야 한다',
+);
 expect(
   BARE.eyelinerLowerColor === '#181418',
   '새 클라이언트의 하단 아이라인 기본색은 유지해야 한다',
