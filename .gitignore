@@ -92,3 +92,4 @@ tmp-debug/
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
 apps/unity/MakeupAR/Packages/local/
+data/auradin/.active_snapshot.lock
