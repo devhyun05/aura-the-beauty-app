@@ -58,6 +58,8 @@ namespace ARMakeup.Face
         void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            if (_mesh != null) Destroy(_mesh);
+            if (_material != null) Destroy(_material);
         }
 
         public void Init(Camera cam, FaceLandmarkSource source)
