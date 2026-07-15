@@ -280,9 +280,9 @@ def read_spotcheck_decisions(path: Path, *, expected_ids: set[str]) -> list[dict
       raise SupplementBuildError("every spotcheck row requires checkedBy")
     if verdict == "fix":
       field = str(row.get("correctedField") or "").strip().removeprefix("attributes.")
-      value = str(row.get("correctedValue") or "").strip()
-      if field not in INFERRED_FIELDS or not value:
-        raise SupplementBuildError("fix verdict requires an inferred correctedField and correctedValue")
+      if field not in INFERRED_FIELDS:
+        raise SupplementBuildError("fix verdict requires an inferred correctedField")
+      # correctedValue 공란은 허용 — "오추출 필드 제거" fix(증정품·에디션 카피 유래 속성 무효화).
   return decisions
 
 
@@ -308,9 +308,15 @@ def apply_spotcheck(
     attributes = dict(row.get("attributes") or {})
     confidence = dict(row.get("attributeConfidence") or {})
     hard_filter_eligible = dict(row.get("hardFilterEligible") or {})
-    attributes[field] = value
-    confidence[field] = 1.0
-    hard_filter_eligible[field] = False
+    if not value:
+      # 빈 correctedValue = 필드 제거(오추출 무효화 — 증정품·에디션명 유래 속성 등).
+      attributes.pop(field, None)
+      confidence.pop(field, None)
+      hard_filter_eligible.pop(field, None)
+    else:
+      attributes[field] = value
+      confidence[field] = 1.0
+      hard_filter_eligible[field] = False
     row["attributes"] = attributes
     row["attributeConfidence"] = confidence
     row["hardFilterEligible"] = hard_filter_eligible
