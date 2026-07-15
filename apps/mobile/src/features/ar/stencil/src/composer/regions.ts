@@ -272,6 +272,13 @@ export const FOUNDATION_FINISHES = [
   { value: 2, label: '듀이' },
 ];
 
+// 피부결 제품은 "모공 프라이머에 윤광을 추가"하는 슬라이더가 아니라 서로 다른
+// 프라이머 선택이다. skinGlow는 기존 Unity 브리지 값을 그대로 선택 id로 재사용한다.
+export const SKIN_PRIMER_OPTIONS = [
+  { value: 0, label: '모공 프라이머' },
+  { value: 0.5, label: '윤광 프라이머' },
+];
+
 // 제형 텍스처(§5 테크닉) — 커버리지 곡선·엣지 하드니스를 갈아끼운다(마감=빛반응과 별개).
 // value 0=기본(하위호환 바이트 동일). 부위 축 감사 (b) 해소 v1: 파운데·립만.
 export const FOUNDATION_TEXTURES = [
@@ -530,14 +537,16 @@ export const REGION_GROUPS: RegionGroup[] = [
         key: 'tone',
         label: '언더톤',
         emoji: '🌤️',
-        productName: '톤업크림',
+        // 정본 §3: 언더톤 = 색 캐스트 보정(메이크업 베이스/컬러 코렉터).
+        // '톤업크림'은 브라이트닝 제품이라 정체성이 어긋나 정정(분류체계 정합).
+        productName: '메이크업 베이스',
         onKeys: ['skinBrightening'],
         defaults: { skinBrightening: 0.4 },
         axes: {
           color: [
             { type: 'swatches', key: 'toneBaseColor', palette: TONE_BASE_COLORS },
           ],
-          opacity: [{ type: 'slider', label: '톤업', key: 'skinBrightening' }],
+          opacity: [{ type: 'slider', label: '보정 강도', key: 'skinBrightening' }],
         },
       },
       {
@@ -552,7 +561,9 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
             { type: 'slider', label: '이마·목 확장 (세그)', key: 'skinSmoothingExtended' },
           ],
-          finish: [{ type: 'slider', label: '윤광', key: 'skinGlow' }],
+          finish: [
+            { type: 'segments', key: 'skinGlow', options: SKIN_PRIMER_OPTIONS },
+          ],
         },
       },
       {

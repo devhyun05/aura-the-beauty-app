@@ -149,6 +149,10 @@ namespace ARMakeup.Face
         readonly float[][] _lipFitK = { new float[2], new float[2] };
         bool _lipFitPrimed;
         Vector2 _lipCenter; // 립 중심(이미지) — 내곽 구멍 축소 방향 기준. ComputeOuterSnap이 갱신.
+        Vector2 _fitLipOuterVp;
+        Vector2 _fitLipLinerVp;
+        int _fitLipFrame = -1;
+        bool _fitLipValid;
 
         // 윗입술 채움 가중: 링 인덱스 1..9 = 윗입술. 코너(0,10)·아랫입술(11..19)=0.
         // 내곽 구멍 축소(마우스라인)용 — 넓게 균일. 잘 맞아 유지.
@@ -393,6 +397,19 @@ namespace ARMakeup.Face
             _linerMaterial.SetFloat(LipIntensityId, _linerIntensity);
         }
 
+        /// <summary>실제 립 메시의 윗입술 중앙 외곽과 실제 라이너 밴드 중앙
+        /// (뷰포트 좌표). 현재/직전 프레임만 허용하고 얼굴 소실 시 거부한다.</summary>
+        public bool TryGetLipFitHandles(out Vector2 outerVp, out Vector2 linerVp)
+        {
+            outerVp = linerVp = Vector2.zero;
+            if (_source == null || !_source.HasFace || FramePresenter.Instance == null ||
+                !_fitLipValid || _fitLipFrame < Time.frameCount - 1 ||
+                _fitLipFrame > Time.frameCount) return false;
+            outerVp = _fitLipOuterVp;
+            linerVp = _fitLipLinerVp;
+            return true;
+        }
+
         void LateUpdate()
         {
             var tracked = _source != null && _source.HasFace && FramePresenter.Instance != null;
@@ -456,6 +473,17 @@ namespace ARMakeup.Face
                                           LinerWidthFrac * _linerWidthMult);
                     _linerVertices[2 * f] = _vertices[2 * f];
                     _linerVertices[2 * f + 1] = ImageToWorld(lp, op.z);
+                    // k=5,j=0은 LipsOuter[5]=랜드마크 0의 실제 스냅된 윗입술 중앙.
+                    // 라이너 핸들은 외곽~내곽 사이 실제 밴드 중앙에 둔다.
+                    if (k == 5 && j == 0)
+                    {
+                        var outerImg = new Vector2(op.x, op.y);
+                        _fitLipOuterVp = FramePresenter.Instance.ImageToViewport(outerImg);
+                        _fitLipLinerVp = FramePresenter.Instance.ImageToViewport(
+                            Vector2.Lerp(outerImg, lp, 0.5f));
+                        _fitLipFrame = Time.frameCount;
+                        _fitLipValid = true;
+                    }
                 }
             }
             _mesh.vertices = _vertices;

@@ -15,7 +15,7 @@
  *    병합 순서) — 위 겹을 끄면 아래 겹이 드러나는 스택 의미론.
  */
 import type { FilterParams, LensLayer } from '../bridge/types';
-import type { LookLibrary, SlotKey } from './lookTree';
+import type { LeafDef, LookLibrary, SlotKey } from './lookTree';
 import type { RegionKey } from './regions';
 
 interface LeafSpec {
@@ -26,6 +26,8 @@ interface LeafSpec {
   lens?: LensLayer;
   /** 역할 태그(§5 A13) — 같은 부위 다겹의 배치 역할(핏 '.부위[역할]' 셀렉터 대상) */
   role?: string;
+  /** 자유 배치 데코 payload — FilterParams 무소유 부위가 직접 캐리한다. */
+  overlay?: LeafDef['overlay'];
 }
 
 interface SubSpec {
@@ -40,6 +42,7 @@ function addRegionLook(
   name: string,
   slot: SlotKey,
   subs: SubSpec[],
+  exposeAtRegionLevel = true,
 ): void {
   const regionId = `sys:var:${slotSlug}:${nameSlug}`;
   const subIds = subs.map((sub, i) => {
@@ -56,18 +59,21 @@ function addRegionLook(
         params: { ...leaf.params },
         ...(leaf.lens ? { lens: { ...leaf.lens } } : {}),
         ...(leaf.role ? { role: leaf.role } : {}),
+        ...(leaf.overlay ? { overlay: { ...leaf.overlay } } : {}),
       })),
     };
     return subId;
   });
-  lib[regionId] = {
-    id: regionId,
-    name,
-    level: 'region',
-    slot,
-    owner: 'system',
-    kids: subIds,
-  };
+  if (exposeAtRegionLevel) {
+    lib[regionId] = {
+      id: regionId,
+      name,
+      level: 'region',
+      slot,
+      owner: 'system',
+      kids: subIds,
+    };
+  }
 }
 
 /** 잎 1장짜리 sub 하나 — 립/블러셔처럼 단순한 룩의 축약 */
@@ -275,39 +281,41 @@ export function buildVariantLibrary(): LookLibrary {
   addRegionLook(lib, 'eye', 'lens-gray-circle', '그레이 서클렌즈', '렌즈', [
     {
       name: '렌즈',
-      leaves: [
-        {
-          label: '베이스 컬러',
-          region: 'lensBase',
-          params: {},
-          lens: { part: 0, color: '#8A8F96', blendMode: 1, intensity: 0.5, inner: 0, outer: 1 },
-        },
-        {
-          label: '테두리 림',
-          region: 'lensRim',
-          params: {},
-          lens: { part: 2, color: '#2A2A2E', blendMode: 1, intensity: 0.65, inner: 0.8, outer: 1 },
-        },
-      ],
+      leaves: [{
+        label: '베이스 컬러',
+        region: 'lensBase',
+        params: {},
+        lens: { part: 0, color: '#8A8F96', blendMode: 1, intensity: 0.5, inner: 0, outer: 1 },
+      }],
+    },
+    {
+      name: '렌즈',
+      leaves: [{
+        label: '테두리 림',
+        region: 'lensRim',
+        params: {},
+        lens: { part: 2, color: '#2A2A2E', blendMode: 1, intensity: 0.65, inner: 0.8, outer: 1 },
+      }],
     },
   ]);
   addRegionLook(lib, 'eye', 'lens-hazel', '헤이즐 그라데', '렌즈', [
     {
       name: '렌즈',
-      leaves: [
-        {
-          label: '베이스 컬러',
-          region: 'lensBase',
-          params: {},
-          lens: { part: 0, color: '#8A6A4A', blendMode: 3, intensity: 0.45, inner: 0, outer: 1 },
-        },
-        {
-          label: '내부 디테일',
-          region: 'lensDetail',
-          params: {},
-          lens: { part: 1, color: '#B79A5A', blendMode: 2, intensity: 0.4, inner: 0, outer: 0.5 },
-        },
-      ],
+      leaves: [{
+        label: '베이스 컬러',
+        region: 'lensBase',
+        params: {},
+        lens: { part: 0, color: '#8A6A4A', blendMode: 3, intensity: 0.45, inner: 0, outer: 1 },
+      }],
+    },
+    {
+      name: '렌즈',
+      leaves: [{
+        label: '내부 디테일',
+        region: 'lensDetail',
+        params: {},
+        lens: { part: 1, color: '#B79A5A', blendMode: 2, intensity: 0.4, inner: 0, outer: 0.5 },
+      }],
     },
   ]);
   addRegionLook(lib, 'eye', 'lens-brown', '브라운 내추럴', '렌즈', [
@@ -364,19 +372,20 @@ export function buildVariantLibrary(): LookLibrary {
   addRegionLook(lib, 'brow', 'natural', '내추럴 브로우', '눈썹', [
     {
       name: '결+채움',
-      leaves: [
-        {
-          label: '브로우 마스카라',
-          region: 'brow', // 결(browColor/browIntensity)
-          params: { browColor: '#4A3428', browIntensity: 0.3 },
-        },
-        {
-          // 별도 부위(채움) — 제품 합성으로 병합된다
-          label: '브로우 파우더',
-          region: 'browPowder',
-          params: { browPowderColor: '#4A3628', browPowderIntensity: 0.2 },
-        },
-      ],
+      leaves: [{
+        label: '브로우 마스카라',
+        region: 'brow', // 결(browColor/browIntensity)
+        params: { browColor: '#4A3428', browIntensity: 0.3 },
+      }],
+    },
+    {
+      name: '결+채움',
+      leaves: [{
+        // 별도 부위(채움) — 제품 합성으로 병합된다
+        label: '브로우 파우더',
+        region: 'browPowder',
+        params: { browPowderColor: '#4A3628', browPowderIntensity: 0.2 },
+      }],
     },
   ]);
   addRegionLook(lib, 'brow', 'powder-full', '파우더 풀브로우', '눈썹',
@@ -393,18 +402,19 @@ export function buildVariantLibrary(): LookLibrary {
   addRegionLook(lib, 'brow', 'soft-lighten', '소프트 라이트닝', '눈썹', [
     {
       name: '라이트너+결',
-      leaves: [
-        {
-          label: '브로우 라이트너',
-          region: 'browLightener',
-          params: { browLightenerIntensity: 0.5 },
-        },
-        {
-          label: '라이트 마스카라',
-          region: 'brow',
-          params: { browColor: '#6B5240', browIntensity: 0.22 },
-        },
-      ],
+      leaves: [{
+        label: '브로우 라이트너',
+        region: 'browLightener',
+        params: { browLightenerIntensity: 0.5 },
+      }],
+    },
+    {
+      name: '라이트너+결',
+      leaves: [{
+        label: '라이트 마스카라',
+        region: 'brow',
+        params: { browColor: '#6B5240', browIntensity: 0.22 },
+      }],
     },
   ]);
 
@@ -416,13 +426,13 @@ export function buildVariantLibrary(): LookLibrary {
     {
       name: '톤 베이스',
       leaves: [{
-        label: '톤업크림',
+        label: '피치 베이스', // 언더톤=색 캐스트 보정(메이크업 베이스) — 정본 정합
         region: 'tone',
         params: { skinBrightening: 0.3, toneBaseColor: '#FBE6D8' },
       }],
     },
     {
-      name: '질감 베이스',
+      name: '윤광 프라이머',
       leaves: [{
         label: '윤광 프라이머',
         region: 'skin',
@@ -440,7 +450,7 @@ export function buildVariantLibrary(): LookLibrary {
   ]);
   addRegionLook(lib, 'skin', 'semi-matte', '세미매트 스킨', '피부', [
     {
-      name: '질감 베이스',
+      name: '모공 프라이머',
       leaves: [{
         label: '모공 프라이머',
         region: 'skin',
@@ -490,6 +500,479 @@ export function buildVariantLibrary(): LookLibrary {
       }],
     },
   ]);
+
+  // ── 세부부위 룩 — BasicMode의 세부부위 탭은 level='sub' 정의를 직접 조회한다.
+  //    기존 '전체' 탭의 슬롯 룩 목록과 섞이지 않도록 region 래퍼는 만들지 않는다.
+
+  // 하이라이터 4종 — 기본 광채 존에서 색·마감·퍼짐 차이만 사용(별도 마스크 불필요).
+  addRegionLook(lib, 'highlighter', 'soft-champagne', '은은 샴페인', '컨투어',
+    single('은은 샴페인', 'highlighter', {
+      highlightColor: '#FFF2DB',
+      highlightIntensity: 0.18,
+      highlightFinish: 0,
+      highlightEdgeSoftness: 0.72,
+    }), false);
+  addRegionLook(lib, 'highlighter', 'dewy-glow', '듀이 글로우', '컨투어',
+    single('듀이 글로우', 'highlighter', {
+      highlightColor: '#FFE9C8',
+      highlightIntensity: 0.28,
+      highlightFinish: 2,
+      highlightLift: 0.02,
+      highlightSpread: 0.03,
+      highlightEdgeSoftness: 0.65,
+    }), false);
+  addRegionLook(lib, 'highlighter', 'pink-pearl', '핑크 펄', '컨투어',
+    single('핑크 펄', 'highlighter', {
+      highlightColor: '#F5DDE2',
+      highlightIntensity: 0.24,
+      highlightFinish: 3,
+      highlightShimmer: 0.45,
+      highlightLift: 0.01,
+      highlightSpread: 0.01,
+      highlightEdgeSoftness: 0.55,
+    }), false);
+  addRegionLook(lib, 'highlighter', 'lilac-beam', '라일락 빔', '컨투어',
+    single('라일락 빔', 'highlighter', {
+      highlightColor: '#EFE6F2',
+      highlightIntensity: 0.32,
+      highlightFinish: 3,
+      highlightShimmer: 0.62,
+      highlightLift: 0.03,
+      highlightSpread: -0.02,
+      highlightEdgeSoftness: 0.48,
+    }), false);
+
+  // 컨투어 4종 — 존을 과장해 이름 붙이지 않고 톤·농도·블렌딩 차이로 구분.
+  addRegionLook(lib, 'contour', 'soft-taupe', '소프트 토프', '컨투어',
+    single('소프트 토프', 'contour', {
+      contourColor: '#9E806B',
+      contourIntensity: 0.16,
+      contourFinish: 1,
+      contourSpread: 0.03,
+      contourEdgeSoftness: 0.75,
+    }), false);
+  addRegionLook(lib, 'contour', 'daily-warm', '데일리 웜', '컨투어',
+    single('데일리 웜', 'contour', {
+      contourColor: '#A88A70',
+      contourIntensity: 0.22,
+      contourFinish: 0,
+      contourEdgeSoftness: 0.65,
+    }), false);
+  addRegionLook(lib, 'contour', 'cool-sculpt', '쿨 조각', '컨투어',
+    single('쿨 조각', 'contour', {
+      contourColor: '#7A6250',
+      contourIntensity: 0.28,
+      contourFinish: 1,
+      contourLift: 0.02,
+      contourSpread: -0.02,
+      contourEdgeSoftness: 0.5,
+    }), false);
+  addRegionLook(lib, 'contour', 'deep-bronze', '딥 브론즈', '컨투어',
+    single('딥 브론즈', 'contour', {
+      contourColor: '#6E584A',
+      contourIntensity: 0.32,
+      contourFinish: 1,
+      contourLift: -0.03,
+      contourSpread: 0.02,
+      contourEdgeSoftness: 0.58,
+    }), false);
+
+  // 아이섀도 하 4종 — 애교살 아래에 깔리는 하안검 음영.
+  addRegionLook(lib, 'eyeshadow-lower', 'daily-beige', '데일리 베이지', '눈',
+    single('데일리 베이지', 'eyeshadowLower', {
+      eyeshadowLowerColor: '#C29A7B',
+      eyeshadowLowerIntensity: 0.16,
+      eyeshadowLowerFinish: 0,
+    }), false);
+  addRegionLook(lib, 'eyeshadow-lower', 'coral-shadow', '코랄 그늘', '눈',
+    single('코랄 그늘', 'eyeshadowLower', {
+      eyeshadowLowerColor: '#B06A4E',
+      eyeshadowLowerIntensity: 0.22,
+      eyeshadowLowerFinish: 0,
+    }), false);
+  addRegionLook(lib, 'eyeshadow-lower', 'rosy-under', '로지 언더', '눈',
+    single('로지 언더', 'eyeshadowLower', {
+      eyeshadowLowerColor: '#D89AA0',
+      eyeshadowLowerIntensity: 0.23,
+      eyeshadowLowerFinish: 0,
+    }), false);
+  addRegionLook(lib, 'eyeshadow-lower', 'mauve-shimmer', '모브 시머', '눈',
+    single('모브 시머', 'eyeshadowLower', {
+      eyeshadowLowerColor: '#6E5A8A',
+      eyeshadowLowerIntensity: 0.27,
+      eyeshadowLowerFinish: 3,
+      eyeshadowLowerShimmer: 0.35,
+    }), false);
+
+  // 아이라인 하 3종 — 색은 상·하 라인이 공유하는 계약을 그대로 따른다.
+  addRegionLook(lib, 'eyeliner-lower', 'soft-brown', '소프트 브라운', '눈',
+    single('소프트 브라운', 'eyelinerLower', {
+      eyelinerColor: '#5A4433',
+      eyelinerLowerIntensity: 0.16,
+    }), false);
+  addRegionLook(lib, 'eyeliner-lower', 'deep-brown', '딥 브라운', '눈',
+    single('딥 브라운', 'eyelinerLower', {
+      eyelinerColor: '#3A2A20',
+      eyelinerLowerIntensity: 0.23,
+    }), false);
+  addRegionLook(lib, 'eyeliner-lower', 'burgundy-under', '버건디 언더', '눈',
+    single('버건디 언더', 'eyelinerLower', {
+      eyelinerColor: '#5A2A3A',
+      eyelinerLowerIntensity: 0.2,
+    }), false);
+
+  // 애교살 4종 — 임포트 강도 없이 내장 밴드의 톤·펄·두께 축만 사용.
+  addRegionLook(lib, 'aegyo', 'natural-ivory', '내추럴 아이보리', '눈',
+    single('내추럴 아이보리', 'aegyo', {
+      aegyoColor: '#FFF3E2',
+      aegyoIntensity: 0.25,
+      aegyoFinish: 0,
+      aegyoHeight: 0.85,
+    }), false);
+  addRegionLook(lib, 'aegyo', 'champagne-pearl', '샴페인 펄', '눈',
+    single('샴페인 펄', 'aegyo', {
+      aegyoColor: '#F7E7CE',
+      aegyoIntensity: 0.34,
+      aegyoFinish: 3,
+      aegyoShimmer: 0.4,
+      aegyoHeight: 0.95,
+    }), false);
+  addRegionLook(lib, 'aegyo', 'plump-pink', '핑크 도톰', '눈',
+    single('핑크 도톰', 'aegyo', {
+      aegyoColor: '#FFD9E0',
+      aegyoIntensity: 0.38,
+      aegyoFinish: 0,
+      aegyoHeight: 1.12,
+    }), false);
+  addRegionLook(lib, 'aegyo', 'lilac-pearl', '라일락 펄', '눈',
+    single('라일락 펄', 'aegyo', {
+      aegyoColor: '#E8E6F5',
+      aegyoIntensity: 0.3,
+      aegyoFinish: 3,
+      aegyoShimmer: 0.5,
+      aegyoHeight: 0.9,
+    }), false);
+
+  // 속눈썹 상 5종 — 내장 스트로크 프로파일(MASCARA_STYLES_UPPER) 조합.
+  addRegionLook(lib, 'mascara', 'natural-brown', '내추럴 브라운', '눈',
+    single('내추럴 브라운', 'mascara', {
+      mascaraStyle: 0,
+      mascaraColor: '#3A2A20',
+      mascaraIntensity: 0.32,
+      mascaraLength: 0.92,
+    }), false);
+  addRegionLook(lib, 'mascara', 'long-lash', '롱래시 블랙', '눈',
+    single('롱래시 블랙', 'mascara', {
+      mascaraStyle: 0,
+      mascaraColor: '#181418',
+      mascaraIntensity: 0.46,
+      mascaraLength: 1.2,
+    }), false);
+  addRegionLook(lib, 'mascara', 'dolly-volume', '돌리 볼륨', '눈',
+    single('돌리 볼륨', 'mascara', {
+      mascaraStyle: 1,
+      mascaraColor: '#141014',
+      mascaraIntensity: 0.52,
+      mascaraLength: 1.08,
+    }), false);
+  addRegionLook(lib, 'mascara', 'cat-lift', '캣 리프트', '눈',
+    single('캣 리프트', 'mascara', {
+      mascaraStyle: 2,
+      mascaraColor: '#181418',
+      mascaraIntensity: 0.48,
+      mascaraLength: 1.12,
+    }), false);
+  addRegionLook(lib, 'mascara', 'wispy-curl', '위스피 컬', '눈',
+    single('위스피 컬', 'mascara', {
+      mascaraStyle: 4,
+      mascaraColor: '#3A2A20',
+      mascaraIntensity: 0.43,
+      mascaraLength: 1.15,
+    }), false);
+
+  // 속눈썹 하 4종 — 상단과 공유하는 mascaraColor 외에는 독립 축만 사용.
+  addRegionLook(lib, 'lower-mascara', 'natural-under', '내추럴 언더', '눈',
+    single('내추럴 언더', 'lowerMascara', {
+      lowerLashStyle: 0,
+      mascaraColor: '#3A2A20',
+      lowerLashIntensity: 0.2,
+      lowerLashLength: 0.8,
+    }), false);
+  addRegionLook(lib, 'lower-mascara', 'dolly-point', '돌리 포인트', '눈',
+    single('돌리 포인트', 'lowerMascara', {
+      lowerLashStyle: 1,
+      mascaraColor: '#181418',
+      lowerLashIntensity: 0.26,
+      lowerLashLength: 0.88,
+    }), false);
+  addRegionLook(lib, 'lower-mascara', 'open-eye', '오픈아이 언더', '눈',
+    single('오픈아이 언더', 'lowerMascara', {
+      lowerLashStyle: 3,
+      mascaraColor: '#141014',
+      lowerLashIntensity: 0.28,
+      lowerLashLength: 0.92,
+    }), false);
+  addRegionLook(lib, 'lower-mascara', 'wispy-under', '위스피 언더', '눈',
+    single('위스피 언더', 'lowerMascara', {
+      lowerLashStyle: 4,
+      mascaraColor: '#3A2A20',
+      lowerLashIntensity: 0.24,
+      lowerLashLength: 0.98,
+    }), false);
+
+  // 삼각존 3종 — 좁은 눈꼬리 음영의 색·농도 단계.
+  addRegionLook(lib, 'triangle-zone', 'soft-taupe', '소프트 토프존', '눈',
+    single('소프트 토프존', 'triangleZone', {
+      triangleZoneColor: '#5A4034',
+      triangleZoneIntensity: 0.17,
+    }), false);
+  addRegionLook(lib, 'triangle-zone', 'daily-brown', '데일리 삼각존', '눈',
+    single('데일리 삼각존', 'triangleZone', {
+      triangleZoneColor: '#4A342A',
+      triangleZoneIntensity: 0.23,
+    }), false);
+  addRegionLook(lib, 'triangle-zone', 'deep-shadow', '딥 음영존', '눈',
+    single('딥 음영존', 'triangleZone', {
+      triangleZoneColor: '#3E2C24',
+      triangleZoneIntensity: 0.3,
+    }), false);
+
+  // 쌍꺼풀 3종 — 고정 자연 음영에 강도·크리스 높이만 조절.
+  addRegionLook(lib, 'double-lid', 'soft-crease', '은은 크리스', '눈',
+    single('은은 크리스', 'doubleLid', {
+      doubleLidIntensity: 0.2,
+      doubleLidHeight: 0.75,
+    }), false);
+  addRegionLook(lib, 'double-lid', 'clear-crease', '또렷 크리스', '눈',
+    single('또렷 크리스', 'doubleLid', {
+      doubleLidIntensity: 0.3,
+      doubleLidHeight: 1,
+    }), false);
+  addRegionLook(lib, 'double-lid', 'high-crease', '하이 크리스', '눈',
+    single('하이 크리스', 'doubleLid', {
+      doubleLidIntensity: 0.38,
+      doubleLidHeight: 1.3,
+    }), false);
+
+  // 눈썹 지우개 3종 — 피부톤 컨실 강도만 단계화해 다른 눈썹 제품의 밑작업으로 사용.
+  addRegionLook(lib, 'brow-conceal', 'soft-cleanup', '소프트 정돈', '눈썹',
+    single('소프트 정돈', 'browConceal', {
+      browConcealIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'brow-conceal', 'half-cover', '반톤 커버', '눈썹',
+    single('반톤 커버', 'browConceal', {
+      browConcealIntensity: 0.48,
+    }), false);
+  addRegionLook(lib, 'brow-conceal', 'clean-canvas', '클린 캔버스', '눈썹',
+    single('클린 캔버스', 'browConceal', {
+      browConcealIntensity: 0.65,
+    }), false);
+
+  // 눈썹 스타일 4종 — 임포트 없이 번들 default_brow 텍스처를 색·모양·핏으로 변주.
+  addRegionLook(lib, 'brow-style', 'natural-texture', '내추럴 결', '눈썹',
+    single('내추럴 결', 'browStyle', {
+      browStyleColor: '#4A3628',
+      browStyleIntensity: 0.3,
+      browShape: 0,
+      browThickness: 1,
+      browArch: 0.08,
+    }), false);
+  addRegionLook(lib, 'brow-style', 'soft-straight', '소프트 일자', '눈썹',
+    single('소프트 일자', 'browStyle', {
+      browStyleColor: '#5A4433',
+      browStyleIntensity: 0.34,
+      browShape: 1,
+      browThickness: 1.1,
+      browArch: 0,
+    }), false);
+  addRegionLook(lib, 'brow-style', 'slim-arch', '슬림 아치', '눈썹',
+    single('슬림 아치', 'browStyle', {
+      browStyleColor: '#3A2A20',
+      browStyleIntensity: 0.4,
+      browShape: 2,
+      browThickness: 0.82,
+      browArch: 0.42,
+    }), false);
+  addRegionLook(lib, 'brow-style', 'lifted-brow', '리프트 브로우', '눈썹',
+    single('리프트 브로우', 'browStyle', {
+      browStyleColor: '#2A1E16',
+      browStyleIntensity: 0.44,
+      browShape: 4,
+      browThickness: 0.95,
+      browArch: 0.3,
+    }), false);
+
+  // 베이스립 4종 — 본래 입술색을 정리하는 누드 톤과 커버 단계.
+  addRegionLook(lib, 'lip-base', 'soft-nude', '소프트 누드', '립',
+    single('소프트 누드', 'lipBase', {
+      lipBaseColor: '#D9A896',
+      lipBaseIntensity: 0.32,
+    }), false);
+  addRegionLook(lib, 'lip-base', 'peach-base', '피치 베이스립', '립',
+    single('피치 베이스립', 'lipBase', {
+      lipBaseColor: '#E8C3B0',
+      lipBaseIntensity: 0.38,
+    }), false);
+  addRegionLook(lib, 'lip-base', 'rosy-nude', '로지 누드', '립',
+    single('로지 누드', 'lipBase', {
+      lipBaseColor: '#CBA392',
+      lipBaseIntensity: 0.45,
+    }), false);
+  addRegionLook(lib, 'lip-base', 'full-cover', '누드 풀커버', '립',
+    single('누드 풀커버', 'lipBase', {
+      lipBaseColor: '#C99A86',
+      lipBaseIntensity: 0.55,
+    }), false);
+
+  // 립글로스 4종 — 독립 광 톱코트의 투명·피치·로즈 틴트와 광량 차이.
+  addRegionLook(lib, 'lip-gloss', 'clear-dew', '클리어 듀', '립',
+    single('클리어 듀', 'lipGloss', {
+      lipGlossColor: '#FFFFFF',
+      lipGlossIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'lip-gloss', 'peach-jelly', '피치 젤리', '립',
+    single('피치 젤리', 'lipGloss', {
+      lipGlossColor: '#F7D9D0',
+      lipGlossIntensity: 0.4,
+    }), false);
+  addRegionLook(lib, 'lip-gloss', 'rose-syrup', '로즈 시럽', '립',
+    single('로즈 시럽', 'lipGloss', {
+      lipGlossColor: '#E9B7C2',
+      lipGlossIntensity: 0.46,
+    }), false);
+  addRegionLook(lib, 'lip-gloss', 'glass-coat', '글래스 코팅', '립',
+    single('글래스 코팅', 'lipGloss', {
+      lipGlossColor: '#FFFFFF',
+      lipGlossIntensity: 0.55,
+    }), false);
+
+  // 치아 미백 3종 — 입을 벌렸을 때만 보이는 자연스러운 단계.
+  addRegionLook(lib, 'teeth', 'daily-bright', '데일리 브라이트', '립',
+    single('데일리 브라이트', 'teeth', {
+      teethWhitenIntensity: 0.25,
+    }), false);
+  addRegionLook(lib, 'teeth', 'clean-white', '클린 화이트', '립',
+    single('클린 화이트', 'teeth', {
+      teethWhitenIntensity: 0.45,
+    }), false);
+  addRegionLook(lib, 'teeth', 'photo-white', '포토 화이트', '립',
+    single('포토 화이트', 'teeth', {
+      teethWhitenIntensity: 0.65,
+    }), false);
+
+  // 헤어 컬러 6종 — 기존 HAIR_COLORS 팔레트 안에서 세그멘테이션 틴트만 사용.
+  addRegionLook(lib, 'hair', 'natural-brown', '내추럴 브라운', '헤어',
+    single('내추럴 브라운', 'hair', {
+      hairTintColor: '#5A4030',
+      hairTintIntensity: 0.28,
+    }), false);
+  addRegionLook(lib, 'hair', 'dark-chocolate', '다크 초코', '헤어',
+    single('다크 초코', 'hair', {
+      hairTintColor: '#3B2A20',
+      hairTintIntensity: 0.32,
+    }), false);
+  addRegionLook(lib, 'hair', 'ash-beige', '애쉬 베이지', '헤어',
+    single('애쉬 베이지', 'hair', {
+      hairTintColor: '#8A7A6A',
+      hairTintIntensity: 0.36,
+    }), false);
+  addRegionLook(lib, 'hair', 'blue-black', '블루 블랙', '헤어',
+    single('블루 블랙', 'hair', {
+      hairTintColor: '#1E2432',
+      hairTintIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'hair', 'wine-brown', '와인 브라운', '헤어',
+    single('와인 브라운', 'hair', {
+      hairTintColor: '#6E2A3A',
+      hairTintIntensity: 0.4,
+    }), false);
+  addRegionLook(lib, 'hair', 'rose-brown', '로즈 브라운', '헤어',
+    single('로즈 브라운', 'hair', {
+      hairTintColor: '#9A6A5A',
+      hairTintIntensity: 0.38,
+    }), false);
+
+  // 점 데코 3종 — builtin:dot만 사용. 한 sub의 여러 leaf는 함께 배치되는 한 룩이다.
+  addRegionLook(lib, 'deco-dot', 'beauty-mark', '뷰티 마크', '데코', [
+    {
+      name: '뷰티 마크',
+      leaves: [{
+        label: '브라운 포인트',
+        region: 'deco',
+        params: {},
+        overlay: {
+          path: 'builtin:dot',
+          intensity: 0.65,
+          x: 0.62,
+          y: 0.58,
+          scale: 0.055,
+          rotation: 0,
+          blendMode: 1,
+          color: '#4A2F28',
+          kind: 'deco',
+        },
+      }],
+    },
+  ], false);
+  addRegionLook(lib, 'deco-dot', 'brown-freckles', '브라운 주근깨', '데코', [
+    {
+      name: '브라운 주근깨',
+      leaves: [
+        {
+          label: '주근깨 왼쪽',
+          region: 'deco',
+          params: {},
+          overlay: {
+            path: 'builtin:dot', intensity: 0.36, x: 0.42, y: 0.48,
+            scale: 0.05, rotation: -8, blendMode: 1, color: '#765044', kind: 'deco',
+          },
+        },
+        {
+          label: '주근깨 중앙',
+          region: 'deco',
+          params: {},
+          overlay: {
+            path: 'builtin:dot', intensity: 0.4, x: 0.5, y: 0.465,
+            scale: 0.052, rotation: 5, blendMode: 1, color: '#6B463B', kind: 'deco',
+          },
+        },
+        {
+          label: '주근깨 오른쪽',
+          region: 'deco',
+          params: {},
+          overlay: {
+            path: 'builtin:dot', intensity: 0.34, x: 0.58, y: 0.49,
+            scale: 0.054, rotation: 9, blendMode: 1, color: '#835B4D', kind: 'deco',
+          },
+        },
+      ],
+    },
+  ], false);
+  addRegionLook(lib, 'deco-dot', 'rosy-duo', '로지 듀오', '데코', [
+    {
+      name: '로지 듀오',
+      leaves: [
+        {
+          label: '로지 포인트 왼쪽',
+          region: 'deco',
+          params: {},
+          overlay: {
+            path: 'builtin:dot', intensity: 0.48, x: 0.37, y: 0.56,
+            scale: 0.06, rotation: -6, blendMode: 1, color: '#8A4E52', kind: 'deco',
+          },
+        },
+        {
+          label: '로지 포인트 오른쪽',
+          region: 'deco',
+          params: {},
+          overlay: {
+            path: 'builtin:dot', intensity: 0.45, x: 0.64, y: 0.55,
+            scale: 0.055, rotation: 7, blendMode: 1, color: '#9A5960', kind: 'deco',
+          },
+        },
+      ],
+    },
+  ], false);
 
   return lib;
 }

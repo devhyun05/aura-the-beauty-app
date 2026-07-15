@@ -39,6 +39,7 @@ namespace ARMakeup.Face
         const int Seg = 25; // lash 아크 리샘플 밀도
 
         const float BandHeightFactor = 0.45f; // 밴드 높이 = 눈 가로폭 × 이 값
+        const float AegyoHighlightPeakV = 0.32f; // LowerLid.shader hiAmt 최대 구간의 대표 vv
         // 아크 계수 시간 평활. 랜드마크가 이미 필터링돼 있어 가벼운 EMA로 충분하고,
         // 잔여 미세 흔들림만 눌러 준다(값이 낮을수록 안정·반응 느림).
         const float FitEma = 0.4f;
@@ -93,6 +94,9 @@ namespace ARMakeup.Face
         readonly Vector2[] _lash = new Vector2[Seg];
         readonly float[][] _fitEma = { new float[2], new float[2] }; // [eye][k0, k1]
         bool _fitPrimed;
+        readonly Vector2[] _fitAegyoPeakVp = new Vector2[Eyes];
+        readonly int[] _fitAegyoPeakFrame = { -1, -1 };
+        readonly bool[] _fitAegyoPeakValid = new bool[Eyes];
 
         void Awake() => Instance = this;
 
@@ -154,6 +158,19 @@ namespace ARMakeup.Face
         public bool NeedsEyeMask =>
             _aegyoIntensity > 0f || _linerIntensity > 0f || _aegyoStyleIntensity > 0f ||
             _triIntensity > 0f || _concealerIntensity > 0f || _lowerShadowIntensity > 0f;
+
+        /// <summary>실제 하안검 메시에서 셰이더 하이라이트 피크(vv=0.32)에 해당하는
+        /// 중앙점(뷰포트 좌표). 현재/직전 프레임만 허용하고 얼굴 소실 시 거부한다.</summary>
+        public bool TryGetAegyoFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitAegyoPeakValid[eye]) return false;
+            var frame = _fitAegyoPeakFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitAegyoPeakVp[eye];
+            return true;
+        }
 
         /// <summary>삼각존 — 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 하안검 밴드의
         /// 꼬리 쪽(u 바깥 1/3)에 가중된 어두운 섀도 텀. 색·강도 독립(0=끔), 애교살/아이라인
@@ -310,8 +327,16 @@ namespace ARMakeup.Face
                     var tangent = (bb - a).normalized;
                     var normal = new Vector2(-tangent.y, tangent.x);
                     if (Vector2.Dot(normal, down) < 0f) normal = -normal; // 아래쪽 법선 규약
+                    var bottom = _lash[i] + normal * width;
                     _vertices[b + 2 * i] = ImageToWorld(_lash[i], depth);
-                    _vertices[b + 2 * i + 1] = ImageToWorld(_lash[i] + normal * width, depth);
+                    _vertices[b + 2 * i + 1] = ImageToWorld(bottom, depth);
+                    if (i == Seg / 2)
+                    {
+                        var peakImg = Vector2.Lerp(_lash[i], bottom, AegyoHighlightPeakV);
+                        _fitAegyoPeakVp[e] = FramePresenter.Instance.ImageToViewport(peakImg);
+                        _fitAegyoPeakFrame[e] = Time.frameCount;
+                        _fitAegyoPeakValid[e] = true;
+                    }
                 }
             }
             _mesh.vertices = _vertices;

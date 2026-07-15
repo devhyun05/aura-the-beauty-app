@@ -559,6 +559,23 @@ export interface LookMeasurement {
   /** 홍채 색 "#RRGGBB" (RN이 자연 눈색 vs 컬러렌즈 게이팅) */
   iris: string;
   irisConf: number;
+  /** 립 광택도 0..1 (낮음=매트, 높음=글로시). optional은 구형 Unity payload 호환용 */
+  lipGloss?: number;
+  lipGlossConf?: number;
+  /** 기본 광대 위치 대비 수직·수평 오프셋 */
+  blushLiftHint?: number;
+  blushSpreadHint?: number;
+  blushPositionConf?: number;
+  /** 0내추럴 1일자 2아치 3각진 4상승 5반달 */
+  browShape?: number;
+  browArch?: number;
+  /** 실측 눈썹 밴드 대비 배수 (1=실측 그대로) */
+  browThickness?: number;
+  browShapeConf?: number;
+  /** 0윙업 1퍼피 2롱 */
+  eyelinerStyle?: number;
+  eyelinerWingLength?: number;
+  eyelinerWingConf?: number;
 }
 
 export type RNToUnityMessage =
