@@ -5,17 +5,19 @@ from app.services.auradin_agent.snapshot_manifest import resolve_and_validate_sn
 
 def _active_paths():
   descriptor = resolve_and_validate_snapshot(get_settings())
-  return descriptor.catalog_path, descriptor.chunks_path
+  return descriptor.catalog_path, descriptor.chunks_path, descriptor
 
 
 def test_mvp_preprocessing_outputs_are_purchasable() -> None:
-  catalog_path, chunk_path = _active_paths()
+  catalog_path, chunk_path, descriptor = _active_paths()
   catalog = read_jsonl(catalog_path)
   chunks = read_jsonl(chunk_path)
 
-  # 618 unique products across all 6 served categories in the enriched 20260708 seed
-  # (official-name attribute extraction folded in; base/brow/liner serving opened).
-  assert len(catalog) == 618
+  # 카탈로그 행수는 활성 manifest의 catalogCount와 자기정합해야 한다 — 스냅샷 승격(C급
+  # baseline 재승인)마다 절대 수치를 고쳐 쓰지 않는다. 최초 6카테고리 시드(618) 미만으로
+  # 줄어드는 퇴행만 절대 하한으로 잡는다.
+  assert len(catalog) == descriptor.catalog_count
+  assert len(catalog) >= 618
   assert len(chunks) >= len(catalog)
   assert {item["category"] for item in catalog} == {"lip", "cheek", "shadow", "base", "brow", "liner"}
 
@@ -27,7 +29,7 @@ def test_mvp_preprocessing_outputs_are_purchasable() -> None:
 
 
 def test_title_residual_keywords_remain_soft_only() -> None:
-  catalog_path, _chunk_path = _active_paths()
+  catalog_path, _chunk_path, _descriptor = _active_paths()
   catalog = read_jsonl(catalog_path)
   inferred_items = [item for item in catalog if item.get("residualTitleKeywords")]
 
