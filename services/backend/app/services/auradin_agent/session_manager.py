@@ -38,6 +38,10 @@ SIMILAR_LAMBDA = 0.9
 SIMILAR_PREF_WEIGHT = 0.35
 # B6 재시도 멱등성 — similar receipt는 세션 state에 남아 같은 키 재전송을 무저장 no-op으로 만든다.
 SIMILAR_RECEIPT_LIMIT = 50
+# receipt 키 네임스페이스 — clientRequestId 기반은 리스트로 누적(액션마다 고유),
+# fingerprint 기반은 직전 액션 하나만 유지(개입 액션 뒤 같은 요청 재처리 허용).
+_SIMILAR_CLIENT_PREFIX = "client:"
+_SIMILAR_FINGERPRINT_PREFIX = "fp:"
 # B6 enrichment policy — /similar은 rankedCache 내 λ=0.9 재랭킹만 허용(live discovery·재검색 금지).
 # refine/answer 등 기존 경로는 default(라이브 발견 포함)로 불변.
 ENRICH_POLICY_DEFAULT = "default"
@@ -171,10 +175,19 @@ def request_fingerprint(
   report_id: str | None,
   source: str | None,
   context: dict[str, Any] | None,
+  *,
+  owner_subject: str | None = None,
+  profile_owner: str | None = None,
 ) -> str:
   """create 멱등성 fingerprint — 모든 의미 입력의 canonical JSON SHA-256.
 
   서버가 정규화(trim·기본값 통일·키 정렬)를 담당한다: 같은 의미 입력이면 같은 fingerprint.
+
+  profileOwner를 멱등 도메인에 포함한다: auth-off 공유 dev subject에서 서로 다른 익명 토큰이
+  같은 clientRequestId·내용을 제출해도 서로 다른 fingerprint가 되어, 두 번째가 첫 사용자의
+  profileOwner 세션을 되받지 않고 409(IDEMPOTENCY_KEY_REUSED)로 갈린다. 단 profileOwner가
+  ownerSubject와 같으면(또는 미지정이면) 생략한다 — 기존 인증/레거시 세션 fingerprint를
+  그대로 보존해 진행 중인 tombstone·재시도가 깨지지 않게 한다(하위호환).
   """
   canonical = {
     "schemaVersion": 1,
@@ -183,6 +196,10 @@ def request_fingerprint(
     "source": str(source or "").strip() or "freePrompt",
     "context": {str(k): context[k] for k in sorted(context)} if context else {},
   }
+  owner = str(owner_subject or "").strip()
+  owner_scoped_profile = str(profile_owner or "").strip()
+  if owner_scoped_profile and owner_scoped_profile != owner:
+    canonical["profileOwner"] = owner_scoped_profile
   payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
   return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -923,14 +940,14 @@ def _similar_receipt_key(
   clientRequestId는 optional(구버전 앱 호환) — 값이 없어도 fingerprint로 재전송을 막는다.
   """
   if client_request_id:
-    return f"client:{client_request_id}"
+    return f"{_SIMILAR_CLIENT_PREFIX}{client_request_id}"
   payload = json.dumps(
     {"productId": str(product_id or "").strip(), "intent": str(intent or "").strip() or None},
     ensure_ascii=False,
     sort_keys=True,
     separators=(",", ":"),
   )
-  return "fp:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+  return _SIMILAR_FINGERPRINT_PREFIX + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _similar_receipt_seen(state: dict[str, Any], receipt_key: str) -> bool:
@@ -949,6 +966,16 @@ def _record_similar_receipt(
 ) -> None:
   # jsonb는 키 순서를 보존하지 않으므로 dict 대신 리스트로 저장 — 오래된 것부터 잘라낸다.
   receipts = [entry for entry in state.get("similarReceipts") or [] if isinstance(entry, dict)]
+  if receipt_key.startswith(_SIMILAR_FINGERPRINT_PREFIX):
+    # fingerprint receipt는 "직전 similar 액션 하나"만 뜻한다 — 새 fingerprint 액션이 오면
+    # 이전 fingerprint receipt를 무효화해, 개입된 다른 액션 뒤 같은 (productId, intent)
+    # 재요청이 부당하게 duplicate no-op으로 막히지 않게 한다("A→B→A"의 세 번째 처리).
+    # clientRequestId receipt는 액션마다 고유 키라 리스트(상한 50)로 그대로 누적한다.
+    receipts = [
+      entry
+      for entry in receipts
+      if not str(entry.get("key") or "").startswith(_SIMILAR_FINGERPRINT_PREFIX)
+    ]
   receipts.append(
     {"key": receipt_key, "productId": product_id, "intent": intent, "at": _now()},
   )
@@ -1653,7 +1680,14 @@ async def create_session_persisted(
 
   key = (owner_subject.strip(), str(client_request_id))
   _sweep_expired_memory_idempotency()
-  fingerprint = request_fingerprint(prompt, report_id, source, context)
+  fingerprint = request_fingerprint(
+    prompt,
+    report_id,
+    source,
+    context,
+    owner_subject=owner_subject,
+    profile_owner=profile_owner,
+  )
 
   # single-flight: 기존 reservation이 있으면 같은 Future 결과에 편승 (동시 중복 create 1세션 보장).
   existing = _CREATE_RESERVATIONS.get(key)

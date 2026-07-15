@@ -199,6 +199,87 @@ async def test_create_same_key_different_payload_is_key_reuse_error():
 
 
 @pytest.mark.asyncio
+async def test_create_cross_profile_owner_same_key_is_key_reuse_error():
+  """auth-off 공유 dev subject 회귀 — 같은 (owner, clientRequestId)·내용이라도 profileOwner가
+  다르면 두 번째는 IDEMPOTENCY_KEY_REUSED. 첫 익명 사용자의 profileOwner 세션을 되받지 않는다."""
+  settings = _settings()
+  first = await sm.create_session_persisted(
+    prompt="립 추천해줘", owner_subject="dev-shared",
+    settings=settings, db=None, client_request_id="req-xtoken",
+    profile_owner="anon:v1:alice",
+  )
+  assert first["profileOwner"] == "anon:v1:alice"
+  with pytest.raises(sm.IdempotencyKeyReuseError):
+    await sm.create_session_persisted(
+      prompt="립 추천해줘", owner_subject="dev-shared",
+      settings=settings, db=None, client_request_id="req-xtoken",
+      profile_owner="anon:v1:bob",
+    )
+  # 첫 사용자의 세션은 그대로 살아 있다 (되받힘 없음)
+  assert sm._SESSIONS[first["sessionId"]]["profileOwner"] == "anon:v1:alice"
+
+
+@pytest.mark.asyncio
+async def test_create_same_profile_owner_resend_returns_same_session():
+  """같은 profileOwner의 같은 키·내용 재전송은 기존 세션을 그대로 돌려준다(정상 멱등 재시도)."""
+  settings = _settings()
+  first = await sm.create_session_persisted(
+    prompt="립 추천해줘", owner_subject="dev-shared",
+    settings=settings, db=None, client_request_id="req-same-owner",
+    profile_owner="anon:v1:alice",
+  )
+  second = await sm.create_session_persisted(
+    prompt="립 추천해줘", owner_subject="dev-shared",
+    settings=settings, db=None, client_request_id="req-same-owner",
+    profile_owner="anon:v1:alice",
+  )
+  assert first["sessionId"] == second["sessionId"]
+
+
+@pytest.mark.asyncio
+async def test_create_auth_session_profile_owner_equal_owner_is_backward_compatible():
+  """인증 세션 하위호환 회귀 — profileOwner==ownerSubject면 profileOwner를 멱등 도메인에서
+  생략한다: 재전송이 같은 세션을 돌려주고, 저장된 fingerprint가 profileOwner 도입 이전
+  (legacy) 값과 byte-identical이라 진행 중 tombstone·재시도가 깨지지 않는다."""
+  settings = _settings()
+  first = await sm.create_session_persisted(
+    prompt="립 추천해줘", owner_subject="user-abc",
+    settings=settings, db=None, client_request_id="req-auth",
+    profile_owner="user-abc",
+  )
+  second = await sm.create_session_persisted(
+    prompt="립 추천해줘", owner_subject="user-abc",
+    settings=settings, db=None, client_request_id="req-auth",
+    profile_owner="user-abc",
+  )
+  assert first["sessionId"] == second["sessionId"]
+  # 저장된 fingerprint == legacy(4-arg, profileOwner 미포함)
+  assert first["requestFingerprint"] == sm.request_fingerprint("립 추천해줘", None, None, None)
+
+
+def test_request_fingerprint_scopes_profile_owner_only_when_it_differs():
+  """fingerprint 도메인 계약 — profileOwner는 ownerSubject와 다를 때만 canonical에 들어간다.
+  같거나 미지정이면 legacy와 동일(하위호환), 다를 때만 서로 다른 fingerprint로 갈린다."""
+  legacy = sm.request_fingerprint("립 추천해줘", None, None, None)
+  # 같거나 미지정 → legacy와 byte-identical
+  assert sm.request_fingerprint(
+    "립 추천해줘", None, None, None, owner_subject="user-abc", profile_owner="user-abc",
+  ) == legacy
+  assert sm.request_fingerprint(
+    "립 추천해줘", None, None, None, owner_subject="user-abc", profile_owner=None,
+  ) == legacy
+  # 다를 때만 도메인에 반영되어 fingerprint가 갈린다
+  assert sm.request_fingerprint(
+    "립 추천해줘", None, None, None, owner_subject="dev-shared", profile_owner="anon:v1:alice",
+  ) != legacy
+  assert sm.request_fingerprint(
+    "립 추천해줘", None, None, None, owner_subject="dev-shared", profile_owner="anon:v1:alice",
+  ) != sm.request_fingerprint(
+    "립 추천해줘", None, None, None, owner_subject="dev-shared", profile_owner="anon:v1:bob",
+  )
+
+
+@pytest.mark.asyncio
 async def test_concurrent_creates_share_single_session_db_off():
   settings = _settings()
   results = await asyncio.gather(

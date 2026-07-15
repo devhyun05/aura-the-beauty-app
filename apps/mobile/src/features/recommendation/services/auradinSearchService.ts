@@ -12,7 +12,7 @@ import {
   isRequestAbortedError,
   requestBackendJson,
 } from '../../../shared/services/backendApi';
-import {auradinAnonEventHeaders} from './auradinAnonToken';
+import {auradinAnonEventHeaders, auradinAnonEventHeadersImmediate} from './auradinAnonToken';
 import {auradinDraftMock} from '../mocks/auradin.mock';
 import type {
   AuradinAppliedFilter,
@@ -317,11 +317,12 @@ export async function createAuradinSearchSession(
     return {sessionId: `mock-${mockSessionCounter}`, phase: 'searching', retryAfterMs: 400};
   }
 
-  // A5 익명식별 — create는 서버사이드 session_start 수집 지점. 토큰 실패는 헤더 생략(fail-open).
+  // A5 익명식별 — create는 서버사이드 session_start 수집 지점. 즉시 가용 토큰만 붙이고,
+  // 없으면 대기 없이 헤더 생략 + 백그라운드 prewarm(토큰 발급이 검색을 지연시키지 않는다, fail-open).
   return requestBackendJson<SessionAck>('/search/sessions', {
     method: 'POST',
     signal,
-    headers: await auradinAnonEventHeaders(),
+    headers: auradinAnonEventHeadersImmediate(),
     body: {
       prompt: request.prompt,
       reportId: request.reportId,
@@ -363,12 +364,13 @@ export async function refineAuradinSearch(
   }
 
   // A5 익명식별 — refine은 서버사이드 refine_dial/refine_prompt 수집 지점.
+  // 즉시 가용 토큰만 붙이고 없으면 대기 없이 생략 + 백그라운드 prewarm(fail-open).
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/refine`,
     {
       method: 'POST',
       signal,
-      headers: await auradinAnonEventHeaders(),
+      headers: auradinAnonEventHeadersImmediate(),
       body: {dial: input.dial, prompt: input.prompt},
     },
   );
@@ -377,9 +379,14 @@ export async function refineAuradinSearch(
 export type AuradinSimilarInput = {
   productId: string;
   intent?: AuradinSimilarIntent;
+  // B6 재시도 멱등 키 — 사용자 행동(탭)마다 새 UUID. 미지정이면 호출마다 새로 생성한다.
+  clientRequestId?: string;
 };
 
 // B6 §10.3-2 similar — 서버 rankedCache 내 λ=0.9 재랭킹(재검색 0). refine과 같은 ack/poll 계약.
+// clientRequestId는 사용자 행동마다 새 UUID를 부여한다: 서로 다른 탭(같은 productId·intent라도)은
+// 별개 요청으로 처리되고, 한 요청의 네트워크 재시도만 같은 body(=같은 id)를 재사용해 무저장 no-op이
+// 된다. 서버는 clientRequestId가 있으면 fingerprint 폴백 대신 이 키로 재시도 멱등을 판정한다.
 export async function similarAuradinSearch(
   sessionId: string,
   input: AuradinSimilarInput,
@@ -389,9 +396,14 @@ export async function similarAuradinSearch(
     return {sessionId, phase: 'searching', retryAfterMs: 400};
   }
 
+  const clientRequestId = input.clientRequestId ?? makeClientRequestId();
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/similar`,
-    {method: 'POST', signal, body: {productId: input.productId, intent: input.intent}},
+    {
+      method: 'POST',
+      signal,
+      body: {productId: input.productId, intent: input.intent, clientRequestId},
+    },
   );
 }
 
@@ -407,12 +419,13 @@ export async function answerAuradinQuestion(
   }
 
   // A5 익명식별 — answer는 서버사이드 question_answered 수집 지점.
+  // 즉시 가용 토큰만 붙이고 없으면 대기 없이 생략 + 백그라운드 prewarm(fail-open).
   return requestBackendJson<SessionAck>(
     `/search/sessions/${encodeURIComponent(sessionId)}/answer`,
     {
       method: 'POST',
       signal,
-      headers: await auradinAnonEventHeaders(),
+      headers: auradinAnonEventHeadersImmediate(),
       body: {questionId, optionId},
     },
   );

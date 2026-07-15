@@ -238,6 +238,47 @@ def test_similar_retry_without_client_request_id_dedupes_by_fingerprint() -> Non
   assert len(similar_logs) == 2  # fingerprint가 intent를 구분한다
 
 
+def test_similar_fingerprint_receipt_scopes_to_last_action_allowing_repeat() -> None:
+  """fingerprint 멱등은 '직전 similar 액션' 하나만 막는다 — 개입된 다른 액션 뒤 같은
+  (productId, intent) 재요청은 정상 처리된다('A cheaper → B other_brand → A cheaper'의
+  세 번째). 단 직전과 완전히 같은 재전송은 여전히 무저장 no-op으로 흡수한다.
+
+  판정 프록시는 세션 version: 처리(accepted)는 version을 올리고, 재시도 no-op(duplicate)은
+  올리지 않는다. match/no-match와 무관하게 성립한다(둘 다 accepted)."""
+  client = _client()
+  session_id = _create(client, "글리터 추천해줘")
+  products = _turn(client, session_id)["result"]["products"]
+  assert len(products) >= 2, "시나리오는 서로 다른 두 기준 제품이 필요하다"
+  a_id, b_id = products[0]["id"], products[1]["id"]
+
+  def _similar(product_id: str, intent: str) -> int:
+    response = client.post(
+      f"/api/search/sessions/{session_id}/similar",
+      json={"productId": product_id, "intent": intent},
+    )
+    assert response.status_code == 200
+    return session_manager._SESSIONS[session_id]["version"]
+
+  version_a1 = _similar(a_id, "cheaper")       # A cheaper — 처리됨
+  version_b = _similar(b_id, "other_brand")    # B other_brand — 처리됨(개입 액션)
+  assert version_b > version_a1
+  version_a2 = _similar(a_id, "cheaper")       # A cheaper 재요청 — 개입 액션이 fp를 무효화 → 처리됨
+  assert version_a2 > version_b, "개입 액션 뒤 같은 요청이 부당하게 duplicate no-op이 되면 안 된다"
+
+  # 직전과 동일한 재전송은 여전히 무저장 no-op (version 불변)
+  resend = client.post(
+    f"/api/search/sessions/{session_id}/similar",
+    json={"productId": a_id, "intent": "cheaper"},
+  )
+  assert resend.status_code == 200
+  assert session_manager._SESSIONS[session_id]["version"] == version_a2
+
+  # fingerprint receipt는 항상 최대 1개만 유지된다(직전 액션). clientRequestId receipt는 별개 규칙.
+  receipts = session_manager._SESSIONS[session_id].get("similarReceipts") or []
+  fingerprint_receipts = [r for r in receipts if str(r.get("key") or "").startswith("fp:")]
+  assert len(fingerprint_receipts) == 1
+
+
 def test_similar_cache_empty_returns_409_without_research(monkeypatch) -> None:
   """rankedCache 부재(프로세스 재시작 등) — 재검색 폴백 금지, 비파괴 409 SIMILAR_CACHE_EMPTY."""
   client = _client()
